@@ -83,9 +83,9 @@ KP_LAT_DEFAULT         = 60.0;   LAT_PCT_MAX     = 35.0
 KP_FORWARD_DEFAULT     = 200.0;  FWD_PCT_MAX     = 50.0
 KP_DEPTH_DEFAULT       = 0.05;   MAX_DEPTH_NUDGE = 0.02   # m / 5 Hz tick
 
-LOOP_HZ                = 20.0      # RC override write rate
-DEPTH_HZ               = 5.0       # depth setpoint write rate
-LOG_THROTTLE_S         = 0.5       # seconds between [VIS  ] log lines
+from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
+from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
+from .motion_rates import LOG_THROTTLE_S
 
 VALID_AXES = {'yaw', 'lat', 'depth', 'forward'}
 

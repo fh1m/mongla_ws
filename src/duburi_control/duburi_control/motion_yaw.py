@@ -53,10 +53,13 @@ from .motion_profiles import smootherstep
 
 
 # ---- Shared constants (apply to both variants) -----------------------
-YAW_RATE_HZ   = 10.0   # Ch4 rate-override publish rate
+# Rates / throttles come from motion_rates so we change them in one
+# place; see motion_rates.py for sizing rationale.
+from .motion_rates import YAW_RATE_HZ            # noqa: F401  (re-export)
+from .motion_rates import LOG_THROTTLE_S as LOG_THROTTLE
+
 YAW_TOL_DEG   = 2.0    # heading tolerance for "locked"
 YAW_LOCK_N    = 5      # consecutive frames within tol before success
-LOG_THROTTLE  = 0.5    # seconds between [YAW  ] log lines
 
 # ---- Rate-loop tunables (motion_vision-style proportional control) ---
 YAW_KP_PCT_PER_DEG = 1.0     # %Ch4 per degree error (90 deg -> 90%, clamped)
@@ -95,21 +98,37 @@ def _send_yaw_pct(pixhawk, yaw_pct: float) -> None:
     pixhawk.send_rc_override(yaw=Pixhawk.percent_to_pwm(yaw_pct))
 
 
-# ---------------------------------------------------------------------- #
-#  yaw_snap -- Ch4 rate loop, yaw_source drives motion AND termination  #
-# ---------------------------------------------------------------------- #
-def yaw_snap(pixhawk, start_heading, end_heading,
-             timeout, label, log, yaw_source=None):
-    turn_degrees = Pixhawk.heading_error(end_heading, start_heading)
-    log.info(
-        f'[CMD  ] yaw_{label.lower()}  {abs(turn_degrees):.0f} deg  '
-        f'cur={start_heading:.1f}  tgt={end_heading:.1f}  (SNAP)')
+def _lock_to_target(pixhawk, end_heading, timeout, label, log,
+                    yaw_source, current, last_good_mono):
+    """Hold a heading by Ch4 rate-override until locked or timed out.
 
+    Shared termination loop for ``yaw_snap`` and the second phase of
+    ``yaw_glide``. Both algorithms produce identical success/timeout
+    semantics so the lock-frame counting, "peak error" tracking and
+    MovementTimeout message live in exactly one place.
+
+    Args:
+        current:        last good heading reading from the caller's
+                        own loop (or the start heading if the caller
+                        never read one).
+        last_good_mono: monotonic timestamp of the last fresh sample
+                        from ``yaw_source`` -- used by the stale-hold
+                        guard so the safe-stop fires at the same
+                        wall-clock budget across the two phases.
+
+    Returns:
+        None on success (also writes a ``[YAW  ] OK`` log line).
+
+    Raises:
+        MovementTimeout: when ``timeout`` seconds elapse without
+                         ``YAW_LOCK_N`` consecutive in-tolerance
+                         samples. Channel 4 is parked at 1500 us
+                         before the exception so the sub stops
+                         turning even though the caller is unwinding.
+    """
     deadline       = time.time() + timeout
     frames_locked  = 0
     peak_error_deg = 0.0
-    current        = start_heading
-    last_good_mono = time.monotonic()
 
     while time.time() < deadline:
         heading = read_heading(pixhawk, yaw_source)
@@ -117,7 +136,7 @@ def yaw_snap(pixhawk, start_heading, end_heading,
 
         if heading is None:
             if (now_mono - last_good_mono) > STALE_HOLD_S:
-                _send_yaw_pct(pixhawk, 0.0)   # safe stop on dead source
+                _send_yaw_pct(pixhawk, 0.0)
             time.sleep(0.1)
             continue
         current        = heading
@@ -158,7 +177,23 @@ def yaw_snap(pixhawk, start_heading, end_heading,
 
 
 # ---------------------------------------------------------------------- #
-#  yaw_glide — smoothed setpoint sweep, ease-out IS the brake             #
+#  yaw_snap -- Ch4 rate loop, yaw_source drives motion AND termination   #
+# ---------------------------------------------------------------------- #
+def yaw_snap(pixhawk, start_heading, end_heading,
+             timeout, label, log, yaw_source=None):
+    turn_degrees = Pixhawk.heading_error(end_heading, start_heading)
+    log.info(
+        f'[CMD  ] yaw_{label.lower()}  {abs(turn_degrees):.0f} deg  '
+        f'cur={start_heading:.1f}  tgt={end_heading:.1f}  (SNAP)')
+
+    _lock_to_target(
+        pixhawk, end_heading, timeout, label, log, yaw_source,
+        current=start_heading,
+        last_good_mono=time.monotonic())
+
+
+# ---------------------------------------------------------------------- #
+#  yaw_glide -- smoothed setpoint sweep, then hand off to _lock_to_target #
 # ---------------------------------------------------------------------- #
 def yaw_glide(pixhawk, start_heading, end_heading,
               timeout, label, log, yaw_source=None):
@@ -205,52 +240,10 @@ def yaw_glide(pixhawk, start_heading, end_heading,
 
         time.sleep(1.0 / YAW_RATE_HZ)
 
-    # ---- Phase 2: lock at the final target ----------------------------
-    deadline       = time.time() + timeout
-    frames_locked  = 0
-    peak_error_deg = 0.0
-
-    while time.time() < deadline:
-        heading = read_heading(pixhawk, yaw_source)
-        now_mono = time.monotonic()
-
-        if heading is None:
-            if (now_mono - last_good_mono) > STALE_HOLD_S:
-                _send_yaw_pct(pixhawk, 0.0)
-            time.sleep(0.1)
-            continue
-        current        = heading
-        last_good_mono = now_mono
-
-        error          = Pixhawk.heading_error(end_heading, current)
-        peak_error_deg = max(peak_error_deg, abs(error))
-
-        yaw_pct = _yaw_rate_pct(error)
-        _send_yaw_pct(pixhawk, yaw_pct)
-
-        log.info(
-            f'[YAW  ] {label}  lock  cur:{current:.1f}  err:{error:+.1f}  '
-            f'pct:{yaw_pct:+5.1f}',
-            throttle_duration_sec=LOG_THROTTLE)
-
-        if abs(error) <= YAW_TOL_DEG:
-            frames_locked += 1
-            if frames_locked >= YAW_LOCK_N:
-                _send_yaw_pct(pixhawk, 0.0)
-                log.info(
-                    f'[YAW  ] OK {label} locked at {current:.1f}  '
-                    f'(peak err {peak_error_deg:.1f})')
-                return
-        else:
-            frames_locked = 0
-
-        time.sleep(1.0 / YAW_RATE_HZ)
-
-    _send_yaw_pct(pixhawk, 0.0)
-    error = Pixhawk.heading_error(end_heading, current)
-    log.info(
-        f'[YAW  ] !! {label} timeout  cur:{current:.1f}  tgt:{end_heading:.1f}  '
-        f'err:{error:+.1f}')
-    raise MovementTimeout(
-        f'yaw_{label.lower()} timeout after {timeout:.1f}s -- '
-        f'cur={current:.1f} tgt={end_heading:.1f} err={error:+.1f}')
+    # ---- Phase 2: hand off to the shared lock loop -------------------
+    # Carry the latest reading + freshness timestamp into _lock_to_target
+    # so its STALE_HOLD watchdog stays continuous with Phase 1.
+    _lock_to_target(
+        pixhawk, end_heading, timeout, label, log, yaw_source,
+        current=current,
+        last_good_mono=last_good_mono)

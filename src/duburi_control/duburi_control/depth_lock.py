@@ -60,10 +60,12 @@ import threading
 import time
 
 
-# 5 Hz matches motion_depth.SETPOINT_HZ. ArduSub's depth loop runs at
-# 400 Hz internally so 5 Hz from us is comfortably above the 1 Hz floor
-# below which it stops trusting the setpoint.
-STREAM_HZ      = 5.0
+# Sourced from motion_rates so motion_depth and DepthLock cannot drift
+# apart. ArduSub's depth loop runs at 400 Hz internally so 5 Hz from us
+# is comfortably above the 1 Hz floor below which it stops trusting the
+# setpoint.
+from .motion_rates import DEPTH_SETPOINT_HZ as STREAM_HZ
+
 DRIFT_LOG_SEC  = 1.0     # how often to print the [DEPTH] heartbeat
 SOURCE_DEAD_S  = 2.0     # warn after this many seconds with no fresh AHRS depth
 

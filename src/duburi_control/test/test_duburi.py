@@ -209,6 +209,70 @@ def test_set_depth_engages_alt_hold(duburi, monkeypatch):
         'drops the depth setpoint')
 
 
+def test_quick_settle_skips_pause_on_same_axes(monkeypatch):
+    """quick_settle=True drops the inter-command 0.6 s pause when the
+    next command writes the same axis set as the previous one and no
+    lock is active. The pause is *only* for guarding against axis
+    cross-talk; same-axis chains have no cross-talk to guard against.
+    """
+    sleeps = []
+    monkeypatch.setattr(time, 'sleep', lambda d: sleeps.append(float(d)))
+
+    pixhawk = FakePixhawk()
+    log     = ThrottleLogger(logging.getLogger('test.duburi.quick'))
+    d       = Duburi(pixhawk, log, quick_settle=True)
+
+    # First move primes _last_axes; settle pause is honoured.
+    d.move_forward(duration=0.05, gain=50.0)
+    first_pauses = sleeps.count(0.6)
+    sleeps.clear()
+
+    # Second move on the same axis should SKIP the 0.6 s pre-flight pause.
+    d.move_forward(duration=0.05, gain=50.0)
+    second_pauses = sleeps.count(0.6)
+
+    assert first_pauses >= 1, (
+        'first command must still settle (no prior axis state to compare)')
+    assert second_pauses == 0, (
+        'quick_settle=True must skip the 0.6 s pre-flight pause when the '
+        'next command writes the same axes as the previous one')
+
+
+def test_quick_settle_off_by_default_keeps_pause(monkeypatch):
+    """Default behaviour: every command pre-flight always settles."""
+    sleeps = []
+    monkeypatch.setattr(time, 'sleep', lambda d: sleeps.append(float(d)))
+
+    pixhawk = FakePixhawk()
+    log     = ThrottleLogger(logging.getLogger('test.duburi.classic'))
+    d       = Duburi(pixhawk, log)        # quick_settle defaults to False
+
+    d.move_forward(duration=0.05, gain=50.0)
+    sleeps.clear()
+    d.move_forward(duration=0.05, gain=50.0)
+
+    assert 0.6 in sleeps, (
+        'default Duburi() must always settle 0.6 s before each command')
+
+
+def test_quick_settle_pauses_when_axes_differ(monkeypatch):
+    """move_forward -> move_left differs in axis set; pause must fire."""
+    sleeps = []
+    monkeypatch.setattr(time, 'sleep', lambda d: sleeps.append(float(d)))
+
+    pixhawk = FakePixhawk()
+    log     = ThrottleLogger(logging.getLogger('test.duburi.qs.diff'))
+    d       = Duburi(pixhawk, log, quick_settle=True)
+
+    d.move_forward(duration=0.05, gain=50.0)
+    sleeps.clear()
+    d.move_left(duration=0.05, gain=50.0)
+
+    assert 0.6 in sleeps, (
+        'quick_settle must still settle when the next command writes a '
+        'different axis set')
+
+
 def test_motion_uses_translation_when_lock_active(duburi, monkeypatch):
     """When heading-lock is engaged, motion commands MUST stay off Ch4.
 

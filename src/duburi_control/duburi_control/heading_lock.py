@@ -69,7 +69,9 @@ from .pixhawk       import Pixhawk
 
 # 20 Hz matches the motion-loop rate so logs interleave cleanly and the
 # rate command is refreshed comfortably inside ArduSub's RC timeout.
-STREAM_HZ      = 20.0
+# Sourced from motion_rates so a single edit retunes every loop.
+from .motion_rates import LOCK_STREAM_HZ as STREAM_HZ
+
 DRIFT_LOG_SEC  = 1.0     # how often to print the [LOCK ] heartbeat
 SOURCE_DEAD_S  = 2.0     # warn after this many seconds with no fresh sample
 

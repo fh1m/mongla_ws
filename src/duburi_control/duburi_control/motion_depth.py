@@ -37,9 +37,10 @@ import time
 from .errors import MovementTimeout
 
 
-SETPOINT_HZ   = 5.0     # setpoint stream rate; ArduSub runs its loop at 400 Hz
+from .motion_rates import DEPTH_SETPOINT_HZ as SETPOINT_HZ
+from .motion_rates import LOG_THROTTLE_S as LOG_THROTTLE
+
 TOL_M         = 0.07    # exit tolerance (m). Achievable now we're not fighting ArduSub.
-LOG_THROTTLE  = 0.5
 PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
 
 
