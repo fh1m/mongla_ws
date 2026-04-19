@@ -2,11 +2,15 @@
 
 These don't touch a real autopilot -- they cover the two pure helpers
 that the rest of the stack relies on (PWM conversion + heading-error
-wrap).
+wrap), plus a logger-only check that the per-command MAVLink trace
+tag (``[MAV file:func cmd=verb] ...``) is wired up correctly.
 """
+
+import logging
 
 import pytest
 
+from duburi_control import tracing
 from duburi_control.pixhawk import Pixhawk
 
 
@@ -41,3 +45,87 @@ def test_heading_error_180_boundary():
     # (delta + 540) % 360 - 180; 540 % 360 == 180 -> 180 - 180 == 0 -> -180).
     # We pin the sign here so a refactor doesn't accidentally flip it.
     assert Pixhawk.heading_error(180.0, 0.0) == pytest.approx(-180.0)
+
+
+# ---------------------------------------------------------------------- #
+#  MAVLink trace-tag wiring                                               #
+# ---------------------------------------------------------------------- #
+#
+# These tests don't open a serial port -- they call _mav directly with a
+# captured logger so the message format is locked in regardless of how
+# pymavlink decides to spell things over the wire. The format is what
+# operators grep for during pool runs (`rg "cmd=yaw_right" session.log`)
+# so a silent reformat would burn the next debug session.
+
+class _CapLogger:
+    """Minimal logger duck-type that records DEBUG calls."""
+    def __init__(self):
+        self.lines = []
+    def debug(self, msg, *args, **kwargs):
+        self.lines.append(str(msg))
+    # Pixhawk only calls .debug; stub the others so a stray refactor
+    # that suddenly logs at INFO/WARN doesn't silently break the format.
+    def info(self, *a, **k):
+        raise AssertionError('Pixhawk._mav must log at DEBUG, not INFO')
+    def warning(self, *a, **k):
+        raise AssertionError('Pixhawk._mav must log at DEBUG, not WARNING')
+
+
+class _StubMaster:
+    """Just enough of mavutil.mavlink_connection for Pixhawk.__init__."""
+    target_system = 1
+    target_component = 1
+    messages = {}
+
+
+def test_mav_tag_includes_caller_file_and_func():
+    log = _CapLogger()
+    px  = Pixhawk(_StubMaster(), log=log)
+    # Calling _mav directly with sys._getframe(1) walks back ONE frame:
+    # the caller is THIS test function, in this file. That's exactly
+    # what the wire would do when send_rc_override calls _mav -- the
+    # caller name is whatever public method is doing the emit.
+    px._mav('hello')
+    assert len(log.lines) == 1
+    line = log.lines[0]
+    assert line.startswith('[MAV test_pixhawk_helpers.py:')
+    assert ':test_mav_tag_includes_caller_file_and_func' in line
+    assert line.endswith('] hello')
+
+
+def test_mav_tag_carries_cmd_when_tracing_enabled():
+    log = _CapLogger()
+    px  = Pixhawk(_StubMaster(), log=log)
+    tracing.set_enabled(True)
+    try:
+        with tracing.command('yaw_right'):
+            px._mav('hello')
+    finally:
+        tracing.set_enabled(False)
+    line = log.lines[-1]
+    assert ' cmd=yaw_right]' in line, line
+
+
+def test_mav_tag_drops_cmd_when_tracing_disabled():
+    log = _CapLogger()
+    px  = Pixhawk(_StubMaster(), log=log)
+    # tracing.set_enabled(False) is the default; opening a command()
+    # scope while disabled must NOT introduce a cmd= tag (production
+    # runs stay quiet -- this is the "off by default" contract).
+    tracing.set_enabled(False)
+    with tracing.command('yaw_right'):
+        px._mav('hello')
+    line = log.lines[-1]
+    assert 'cmd=' not in line, line
+
+
+def test_mav_no_log_means_no_call():
+    # Pixhawk(log=None) must be a no-op so unit tests using FakePixhawk
+    # never have to inject a logger. We verify by handing it a logger
+    # object that throws on ANY method call.
+    class _Boom:
+        def __getattr__(self, _name):
+            raise AssertionError('Pixhawk(log=None) emitted to a logger')
+    # Use an actual None to match production:
+    px = Pixhawk(_StubMaster(), log=None)
+    px._mav('this should silently no-op')

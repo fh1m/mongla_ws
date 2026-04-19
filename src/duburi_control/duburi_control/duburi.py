@@ -91,6 +91,7 @@ from .motion_forward import (
 from .motion_lateral import drive_lateral_constant, drive_lateral_eased
 from .motion_yaw    import yaw_glide, yaw_snap
 from .pixhawk       import Pixhawk
+from .tracing       import command as _trace_command
 
 
 # Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
@@ -188,15 +189,21 @@ class Duburi(VisionVerbs):
     # ================================================================== #
 
     def arm(self, timeout=15.0):
-        accepted, reason = self.pixhawk.arm(timeout)
+        """impl: pixhawk.py:arm (COMMAND_LONG MAV_CMD_COMPONENT_ARM_DISARM, p1=1)."""
+        with _trace_command('arm'):
+            accepted, reason = self.pixhawk.arm(timeout)
         return self._make_result(accepted, f'arm: {reason}')
 
     def disarm(self, timeout=20.0):
-        accepted, reason = self.pixhawk.disarm(timeout)
+        """impl: pixhawk.py:disarm (set_mode MANUAL -> send_neutral -> COMMAND_LONG p1=0)."""
+        with _trace_command('disarm'):
+            accepted, reason = self.pixhawk.disarm(timeout)
         return self._make_result(accepted, f'disarm: {reason}')
 
     def set_mode(self, target_name, timeout=8.0):
-        accepted, reason = self.pixhawk.set_mode(target_name, timeout)
+        """impl: pixhawk.py:set_mode (legacy SET_MODE retried until heartbeat reflects)."""
+        with _trace_command('set_mode'):
+            accepted, reason = self.pixhawk.set_mode(target_name, timeout)
         return self._make_result(
             accepted, f'set_mode {target_name}: {reason}')
 
@@ -210,8 +217,10 @@ class Duburi(VisionVerbs):
         Used between commands. Lock-aware: when a heading-lock is
         active, only the translation channels go to 1500 -- Ch4 stays
         released so the lock thread keeps authority.
+
+        impl: pixhawk.py:send_rc_override via motion_writers.neutral.
         """
-        with self._command_ctx():
+        with self._command_ctx('stop'):
             self._writers().neutral()
             self.log.info('[CMD  ] stop -- stabilising...')
             time.sleep(settle_time)
@@ -225,8 +234,10 @@ class Duburi(VisionVerbs):
         Heading-lock is auto-suspended for the pause and resumed
         after; the heartbeat is also paused (the whole point of pause
         is that nobody is writing the wire).
+
+        impl: pixhawk.py:release_rc_override (all channels = 65535).
         """
-        with self._command_ctx():
+        with self._command_ctx('pause'):
             self.log.info(
                 f'[CMD  ] pause {duration:.1f}s -- releasing override')
             with self._suspend_heading_lock():
@@ -241,13 +252,16 @@ class Duburi(VisionVerbs):
     # ================================================================== #
 
     def move_forward(self, duration, gain=80.0, settle=0.0):
+        """impl: motion_forward.drive_forward_constant/_eased -> pixhawk.send_rc_translation."""
         return self._drive_forward(+1, duration, gain, settle)
 
     def move_back(self, duration, gain=80.0, settle=0.0):
+        """impl: motion_forward.drive_forward_constant/_eased -> pixhawk.send_rc_translation."""
         return self._drive_forward(-1, duration, gain, settle)
 
     def _drive_forward(self, signed_dir, duration, gain, settle):
-        with self._command_ctx():
+        verb = 'move_forward' if signed_dir > 0 else 'move_back'
+        with self._command_ctx(verb):
             self._send_neutral_and_settle(axes=frozenset({'forward'}))
             run = (drive_forward_eased if self.smooth_translate
                    else drive_forward_constant)
@@ -268,13 +282,16 @@ class Duburi(VisionVerbs):
     # ================================================================== #
 
     def move_left(self, duration, gain=80.0, settle=0.0):
+        """impl: motion_lateral.drive_lateral_constant/_eased -> pixhawk.send_rc_translation."""
         return self._drive_lateral(-1, duration, gain, settle)
 
     def move_right(self, duration, gain=80.0, settle=0.0):
+        """impl: motion_lateral.drive_lateral_constant/_eased -> pixhawk.send_rc_translation."""
         return self._drive_lateral(+1, duration, gain, settle)
 
     def _drive_lateral(self, signed_dir, duration, gain, settle):
-        with self._command_ctx():
+        verb = 'move_right' if signed_dir > 0 else 'move_left'
+        with self._command_ctx(verb):
             self._send_neutral_and_settle(axes=frozenset({'lateral'}))
             run = (drive_lateral_eased if self.smooth_translate
                    else drive_lateral_constant)
@@ -300,8 +317,10 @@ class Duburi(VisionVerbs):
         Heading-lock is incompatible by design (`arc` changes heading).
         Auto-suspends the lock during the arc; on exit, retargets the
         lock to the new heading and resumes.
+
+        impl: motion_forward.arc -> pixhawk.send_rc_override (Ch5+Ch4 same packet).
         """
-        with self._command_ctx():
+        with self._command_ctx('arc'):
             self._send_neutral_and_settle(axes=frozenset({'forward', 'yaw'}))
             self._ensure_yaw_capable_mode()
             self.log.info(
@@ -323,14 +342,17 @@ class Duburi(VisionVerbs):
     # ================================================================== #
 
     def yaw_left(self, target, timeout=30.0, settle=0.0):
+        """impl: motion_yaw.yaw_snap/yaw_glide -> pixhawk.send_rc_override (Ch4 rate)."""
         return self._turn(-abs(target), timeout, 'LEFT', settle)
 
     def yaw_right(self, target, timeout=30.0, settle=0.0):
+        """impl: motion_yaw.yaw_snap/yaw_glide -> pixhawk.send_rc_override (Ch4 rate)."""
         return self._turn(+abs(target), timeout, 'RIGHT', settle)
 
     def _turn(self, signed_degrees, timeout, label, settle):
         """Execute a yaw turn relative to the current heading."""
-        with self._command_ctx():
+        verb = 'yaw_right' if signed_degrees > 0 else 'yaw_left'
+        with self._command_ctx(verb):
             self._send_neutral_and_settle(axes=frozenset({'yaw'}))
             self._ensure_yaw_capable_mode()
             start_heading  = self._current_heading()
@@ -388,8 +410,11 @@ class Duburi(VisionVerbs):
         setpoint forever -- subsequent commands run with depth held
         automatically as long as the mode is preserved. No background
         streamer required.
+
+        impl: pixhawk.set_target_depth (SET_POSITION_TARGET_GLOBAL_INT) +
+        motion_depth.hold_depth control loop.
         """
-        with self._command_ctx():
+        with self._command_ctx('set_depth'):
             self._send_neutral_and_settle(axes=frozenset({'depth'}))
             self.log.info(f'[CMD  ] set_depth  {target:.2f}m')
             self._ensure_alt_hold('set_depth')
@@ -419,8 +444,10 @@ class Duburi(VisionVerbs):
 
         Source-agnostic: works with `mavlink_ahrs` (Gazebo / bench),
         `bno085` (real sub), or any future YawSource. Uniform plug.
+
+        impl: heading_lock.HeadingLock daemon -> pixhawk.send_rc_override (Ch4 rate, 20 Hz).
         """
-        with self._command_ctx():
+        with self._command_ctx('lock_heading'):
             self._ensure_yaw_capable_mode()
             current = self._current_heading()
             actual_target = current if abs(target) < 1e-3 else float(target) % 360.0
@@ -447,8 +474,11 @@ class Duburi(VisionVerbs):
                 final_value=actual_target, error_value=0.0)
 
     def unlock_heading(self):
-        """Stop the heading-lock streamer and send neutral."""
-        with self._command_ctx():
+        """Stop the heading-lock streamer and send neutral.
+
+        impl: HeadingLock.stop -> pixhawk.send_neutral.
+        """
+        with self._command_ctx('unlock_heading'):
             if self._heading_lock is None:
                 return self._make_result(True, 'unlock_heading: no-op')
             self._heading_lock.stop()
@@ -478,15 +508,25 @@ class Duburi(VisionVerbs):
         return self._heading_lock is not None
 
     @contextmanager
-    def _command_ctx(self):
-        """Wrap a command body: take the serial lock + pause the heartbeat.
+    def _command_ctx(self, verb):
+        """Wrap a command body: serial lock + heartbeat pause + cmd= tag.
 
-        Combining both into one context manager keeps every command
-        body's ``with`` line uniform and guarantees the heartbeat is
-        always resumed -- even if the command raises -- so the next
-        command starts from a known wire state.
+        Combining all three into one context manager keeps every command
+        body's ``with`` line uniform and guarantees:
+
+          * the heartbeat is always resumed -- even if the command
+            raises -- so the next command starts from a known wire
+            state;
+          * the per-command ``cmd=<verb>`` trace tag (see
+            ``tracing.command``) wraps every MAVLink frame the verb
+            emits, so ``rg "cmd=<verb>"`` over a debug log returns
+            every frame the verb produced.
+
+        ``verb`` is the public method name (``'yaw_right'``,
+        ``'vision_align_yaw'``, ...) and shows up verbatim in the
+        ``[MAV file:func cmd=<verb>] ...`` line.
         """
-        with self.lock:
+        with self.lock, _trace_command(verb):
             if self._heartbeat is not None:
                 self._heartbeat.pause()
             try:

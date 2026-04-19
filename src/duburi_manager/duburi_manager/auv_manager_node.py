@@ -41,7 +41,7 @@ from duburi_interfaces.action import Move                                # noqa:
 from duburi_interfaces.msg import DuburiState                            # noqa: E402
 
 from duburi_control import (                                            # noqa: E402
-    COMMANDS, Duburi, Heartbeat, Pixhawk, fields_for,
+    COMMANDS, Duburi, Heartbeat, Pixhawk, fields_for, tracing,
 )
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
@@ -133,6 +133,11 @@ class AUVManagerNode(Node):
         self.declare_parameter('yaw_source',       'mavlink_ahrs')
         self.declare_parameter('bno085_port',      'auto')
         self.declare_parameter('bno085_baud',      115200)
+        # debug:=true flips per-command MAVLink trace tags on (and the
+        # logger to DEBUG so they actually print). Default off so
+        # production runs stay quiet. See .claude/context/mavlink-reference.md
+        # "MAVLink-trace via DEBUG logs" for the on-the-wire format.
+        self.declare_parameter('debug',            False)
         # Live-tunable defaults for every vision_* command. Operators
         # tune with `ros2 param set /duburi_manager vision.kp_yaw 80.0`
         # and the next vision goal picks up the new value.
@@ -144,6 +149,23 @@ class AUVManagerNode(Node):
         yaw_src_name     = str(self.get_parameter('yaw_source').value)
         bno085_port      = str(self.get_parameter('bno085_port').value)
         bno085_baud      = int(self.get_parameter('bno085_baud').value)
+        debug_enabled    = bool(self.get_parameter('debug').value)
+
+        # Wire MAVLink tracing on as early as possible -- we want every
+        # frame from this point on to carry the cmd= tag. set_enabled
+        # mutates a contextvar in the main thread; daemons spawned after
+        # this point still see the default (False) because contextvars
+        # don't propagate across threading.Thread, but their MAVLink
+        # frames retain the file:func half so they are still traceable.
+        if debug_enabled:
+            tracing.set_enabled(True)
+            try:
+                import rclpy.logging
+                self.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)
+            except Exception as exc:
+                self.get_logger().warning(
+                    f'debug:=true: could not raise logger level to DEBUG ({exc}); '
+                    f'tag will still apply but [MAV ] lines may not print')
         # 'auto' (the default) probes for BlueOS UDP / Pixhawk USB to
         # pick a profile; any explicit name short-circuits the probe.
         mode_name = resolve_mode(requested_mode, logger=self.get_logger())
@@ -189,6 +211,10 @@ class AUVManagerNode(Node):
 
         self.get_logger().info(SEPARATOR)
         self.get_logger().info(f' DUBURI AUV MANAGER  |  mode: {mode_name}')
+        if debug_enabled:
+            self.get_logger().info(
+                ' DEBUG TRACE: ON  -- per-command [MAV file:func cmd=verb] '
+                'lines will print on every outbound MAVLink frame')
         self.get_logger().info(
             f' MAVLink: sys={self.master.target_system} '
             f'comp={self.master.target_component}  (v2.0)')

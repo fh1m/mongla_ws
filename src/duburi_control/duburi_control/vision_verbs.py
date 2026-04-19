@@ -10,12 +10,14 @@ multiple inheritance:
         ...
 
 The mixin only references attributes the base ``Duburi`` provides
-(``self._command_ctx()``, ``self.pixhawk``, ``self.log``,
+(``self._command_ctx(verb)``, ``self.pixhawk``, ``self.log``,
 ``self._writers()``, ``self._send_neutral_and_settle()``,
 ``self._ensure_alt_hold()``, ``self._current_depth()``,
 ``self._make_result()``, ``self.vision_state_provider``) -- nothing
 rclpy-aware, identical serialisation contract as the rest of the
-facade.
+facade. Each verb passes its own name into ``_command_ctx`` so the
+``[MAV ... cmd=vision_align_yaw] ...`` trace tag (see ``tracing.py``)
+attributes every camera-driven MAVLink frame to its high-level verb.
 
 All six verbs share the same pipeline:
   1. Resolve VisionState for ``camera`` (lazy preflight in the manager).
@@ -68,13 +70,17 @@ class VisionVerbs:
         This verb is the everything-on tool; the per-axis verbs below
         are pinned wrappers for missions that want to be explicit
         about intent.
+
+        impl: motion_vision.vision_track_axes -> pixhawk.send_rc_override
+        (Ch4/Ch5/Ch6) and pixhawk.set_target_depth when 'depth' is in axes.
         """
         axis_set = _parse_axes(axes)
         gains = VisionGains(kp_yaw=float(kp_yaw), kp_lat=float(kp_lat),
                             kp_depth=float(kp_depth),
                             kp_forward=float(kp_forward))
         return self._run_vision_track(
-            label='align_3d', camera=camera, target_class=target_class,
+            verb='vision_align_3d', label='align_3d',
+            camera=camera, target_class=target_class,
             axes=axis_set, duration=float(duration),
             gains=gains, deadband=float(deadband),
             target_h_frac=float(target_bbox_h_frac),
@@ -83,9 +89,11 @@ class VisionVerbs:
 
     def vision_align_yaw(self, camera, target_class, duration, deadband,
                          kp_yaw, on_lost, stale_after):
+        """impl: motion_vision.vision_track_axes(axes={'yaw'}) -> pixhawk.send_rc_override (Ch4)."""
         gains = VisionGains(kp_yaw=float(kp_yaw))
         return self._run_vision_track(
-            label='align_yaw', camera=camera, target_class=target_class,
+            verb='vision_align_yaw', label='align_yaw',
+            camera=camera, target_class=target_class,
             axes={'yaw'}, duration=float(duration), gains=gains,
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
@@ -93,9 +101,11 @@ class VisionVerbs:
 
     def vision_align_lat(self, camera, target_class, duration, deadband,
                          kp_lat, on_lost, stale_after):
+        """impl: motion_vision.vision_track_axes(axes={'lat'}) -> pixhawk.send_rc_override (Ch6)."""
         gains = VisionGains(kp_lat=float(kp_lat))
         return self._run_vision_track(
-            label='align_lat', camera=camera, target_class=target_class,
+            verb='vision_align_lat', label='align_lat',
+            camera=camera, target_class=target_class,
             axes={'lat'}, duration=float(duration), gains=gains,
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
@@ -103,9 +113,11 @@ class VisionVerbs:
 
     def vision_align_depth(self, camera, target_class, duration, deadband,
                            kp_depth, on_lost, stale_after):
+        """impl: motion_vision.vision_track_axes(axes={'depth'}) -> pixhawk.set_target_depth."""
         gains = VisionGains(kp_depth=float(kp_depth))
         return self._run_vision_track(
-            label='align_depth', camera=camera, target_class=target_class,
+            verb='vision_align_depth', label='align_depth',
+            camera=camera, target_class=target_class,
             axes={'depth'}, duration=float(duration), gains=gains,
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
@@ -114,9 +126,11 @@ class VisionVerbs:
     def vision_hold_distance(self, camera, target_class, duration, deadband,
                              kp_forward, target_bbox_h_frac, on_lost,
                              stale_after):
+        """impl: motion_vision.vision_track_axes(axes={'forward'}) -> pixhawk.send_rc_override (Ch5)."""
         gains = VisionGains(kp_forward=float(kp_forward))
         return self._run_vision_track(
-            label='hold_distance', camera=camera, target_class=target_class,
+            verb='vision_hold_distance', label='hold_distance',
+            camera=camera, target_class=target_class,
             axes={'forward'}, duration=float(duration), gains=gains,
             deadband=float(deadband),
             target_h_frac=float(target_bbox_h_frac),
@@ -130,8 +144,11 @@ class VisionVerbs:
         ``target_name`` picks an OPTIONAL drive verb to use while
         waiting (``''`` = wait in place). ``'arc'`` uses both ``gain``
         (forward thrust) and ``yaw_rate_pct`` so you can sweep an area.
+
+        impl: motion_vision.vision_acquire + per-axis drive closure
+        from _build_acquire_drive (calls pixhawk.send_rc_override).
         """
-        with self._command_ctx():
+        with self._command_ctx('vision_acquire'):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
             drive_writer = self._build_acquire_drive(
@@ -154,10 +171,15 @@ class VisionVerbs:
 
     # ---- vision helpers (private) ----------------------------------- #
 
-    def _run_vision_track(self, *, label, camera, target_class, axes,
+    def _run_vision_track(self, *, verb, label, camera, target_class, axes,
                           duration, gains, deadband, target_h_frac,
                           visual_pid, on_lost, stale_after):
         """Common path for every vision_align_* / vision_hold_distance verb.
+
+        ``verb`` is the public method name (``'vision_align_yaw'``, ...)
+        and is what flows into ``_command_ctx`` so the MAVLink trace
+        line carries ``cmd=<verb>``. ``label`` is the (shorter) human
+        log token printed in ``[CMD  ] vision_<label>``.
 
         When ``'depth'`` is in the axis set we ensure ALT_HOLD is
         engaged so ArduSub honours our streamed depth setpoints. The
@@ -165,7 +187,7 @@ class VisionVerbs:
         exit ALT_HOLD's onboard 400 Hz controller keeps holding the
         new depth without any background streamer on our side.
         """
-        with self._command_ctx():
+        with self._command_ctx(verb):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
             depth_sign = -1 if camera in ('downward',) else +1
