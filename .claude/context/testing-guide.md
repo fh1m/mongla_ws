@@ -45,7 +45,7 @@ a `FakePixhawk`-driven test that exercises it without MAVLink.
 | [`test_motion_lateral.py`](../../src/duburi_control/test/test_motion_lateral.py)      | `drive_lateral_*` writes Ch6 only; brake/settle behave.                                                    | `motion_lateral.py`                    |
 | [`test_heading_lock.py`](../../src/duburi_control/test/test_heading_lock.py)          | Lock thread streams Ch4 at `LOCK_STREAM_HZ`, deadbands noise, releases Ch4 when source is dead, retargets cleanly. | `heading_lock.py`                      |
 | [`test_heartbeat.py`](../../src/duburi_control/test/test_heartbeat.py)                | Heartbeat streams neutral at `HEARTBEAT_HZ`; pause/resume is reentrant; `hold()` context manager works.    | `heartbeat.py`                         |
-| [`test_duburi.py`](../../src/duburi_control/test/test_duburi.py)                      | Facade serialises commands; `_command_ctx` pauses heartbeat; `lock_heading` + motion verbs cooperate cleanly. | `duburi.py`                            |
+| [`test_duburi.py`](../../src/duburi_control/test/test_duburi.py)                      | Facade serialises commands; `_command_scope` pauses heartbeat; `lock_heading` + motion verbs cooperate cleanly. | `duburi.py`                            |
 | [`test_pixhawk_helpers.py`](../../src/duburi_control/test/test_pixhawk_helpers.py)    | Pure-math helpers (`percent_to_pwm`, `heading_error`).                                                     | `pixhawk.py`                           |
 
 Run a single one:
@@ -116,7 +116,7 @@ ros2 run duburi_manager auv_manager --ros-args \
 
 `debug:=true` flips two things at once:
 
-1. The per-command MAVLink trace tag (`[MAV file:func cmd=verb] ...`)
+1. The per-command MAVLink trace tag (`[MAV <fn>[ cmd=<verb>]] <body>`)
    is enabled (off by default; production runs stay quiet).
 2. The manager's logger is raised to DEBUG so the lines actually
    print. The startup banner ends with `DEBUG TRACE: ON`.
@@ -130,17 +130,16 @@ Pipe the manager output to a file. Then for any verb:
 
 ```bash
 rg "cmd=lock_heading" session.log | head      # every frame the verb produced
-rg "pixhawk.py:set_target_depth" session.log  # every depth setpoint, regardless of verb
+rg "set_target_depth"  session.log            # every depth setpoint, regardless of verb
 rg "cmd=yaw_right .* yaw=1[0-9]{3}"  session.log
                                               # every yaw frame the right-turn produced
 ```
 
 Background daemons don't carry `cmd=` (contextvars don't cross
-threads), but they keep `file:func`, so:
+threads), but they keep the `<fn>` half, so:
 
 ```bash
-rg "pixhawk.py:send_rc_override\] RC_OVERRIDE.*yaw=14" session.log
-                                              # every Ch4 frame the lock thread emitted at <1500
+rg "send_rc_override\] yaw=14" session.log    # every Ch4 frame the lock thread emitted at <1500
 ```
 
 still works.
@@ -194,10 +193,10 @@ duburi disarm
 Expected `[MAV ]` lines with `debug:=true`:
 
 ```
-[MAV pixhawk.py:arm cmd=arm]               ARM    cmd_long(COMPONENT_ARM_DISARM, p1=1)
-[MAV pixhawk.py:set_mode cmd=set_mode]     SET_MODE custom_mode=2 (ALT_HOLD)
-[MAV pixhawk.py:set_mode cmd=set_mode]     SET_MODE custom_mode=19 (MANUAL)
-[MAV pixhawk.py:disarm cmd=disarm]         DISARM cmd_long(COMPONENT_ARM_DISARM, p1=0)
+[MAV arm cmd=arm]                COMPONENT_ARM_DISARM p1=1
+[MAV set_mode cmd=set_mode]      ALT_HOLD (id=2)
+[MAV set_mode cmd=set_mode]      MANUAL (id=19)
+[MAV disarm cmd=disarm]          COMPONENT_ARM_DISARM p1=0
 ```
 
 (`disarm` actually emits `set_mode MANUAL` -> `send_neutral` ->
@@ -259,8 +258,8 @@ duburi set_depth --target  0.0
 DEBUG (during the drive only):
 
 ```
-[MAV pixhawk.py:set_mode cmd=set_depth]         SET_MODE custom_mode=2 (ALT_HOLD)        # if not already ALT_HOLD
-[MAV pixhawk.py:set_target_depth cmd=set_depth] SET_POS_TGT depth=-0.50 m  (alt only, ...)  # at 5 Hz until we settle
+[MAV set_mode cmd=set_depth]         ALT_HOLD (id=2)        # if not already ALT_HOLD
+[MAV set_target_depth cmd=set_depth] depth=-0.50m           # at 5 Hz until we settle
 ```
 
 After the verb returns, **no more `SET_POS_TGT` traffic** -- ALT_HOLD
@@ -386,8 +385,8 @@ While it runs, watch `[LOCK ] tgt:NNN.N cur:MMM.M err:+E.E pct:+P.P`
 ticks. Both `tgt` and `cur` are in BNO degrees -- if you physically
 rotate a fake target near the BNO cable, `cur` MUST move; if you
 yank the BNO USB, the next tick MUST log `[LOCK ] yaw source silent
-for X.Xs -- releasing Ch4` and the `[MAV pixhawk.py:send_rc_override
-cmd=lock_heading]` lines for Ch4 must drop to 1500 us.
+for X.Xs -- releasing Ch4` and the `[MAV send_rc_override
+cmd=lock_heading]` lines must drop to `all=neutral`.
 
 **Check 3 -- `yaw_left / yaw_right` close on BNO.** Still locked:
 
@@ -481,7 +480,7 @@ The order of escalation:
    field name). Or `_ensure_yaw_capable_mode` failed to engage
    ALT_HOLD.
 2. **Restart the manager with `debug:=true`** and re-run the verb.
-   The `[MAV file:func cmd=verb]` trace tells you exactly what we
+   The `[MAV <fn> cmd=<verb>]` trace tells you exactly what we
    sent AND which verb caused it. `rg "cmd=<verb>"` filters the
    session to one command. If the right message went out and the
    AUV still didn't move, the problem is downstream of us (ArduSub,

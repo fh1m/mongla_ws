@@ -4,16 +4,22 @@ ONE responsibility: when an operator runs the manager with `debug:=true`,
 every MAVLink frame Pixhawk emits gets a tag in its DEBUG log line that
 names the high-level Duburi verb that caused it. That turns this:
 
-    [MAV pixhawk.py:send_rc_override] RC_OVERRIDE ... yaw=1430
-    [MAV pixhawk.py:send_rc_override] RC_OVERRIDE ... yaw=1500
+    [MAV send_rc_override] yaw=1430
+    [MAV send_rc_override] yaw=1500
 
 into this:
 
-    [MAV pixhawk.py:send_rc_override cmd=lock_heading] RC_OVERRIDE ... yaw=1430
-    [MAV pixhawk.py:send_rc_override cmd=yaw_right]    RC_OVERRIDE ... yaw=1500
+    [MAV send_rc_override cmd=lock_heading] yaw=1430
+    [MAV send_rc_override cmd=yaw_right]    yaw=1500
 
 so a single `rg "cmd=yaw_right"` over a session log shows EVERY frame
 the verb produced, across files, without any per-call boilerplate.
+
+Public surface (only three things):
+
+    command_scope(verb)  -- context manager wrapping ONE Duburi call
+    current_tag()        -- 'cmd=<verb>' or '' (read by Pixhawk._log_mavlink)
+    set_enabled(bool)    -- flip tracing on (manager calls when debug:=true)
 
 Design constraints (set by the user):
 
@@ -25,9 +31,10 @@ Design constraints (set by the user):
 * Background daemons (Heartbeat, HeadingLock) live in their own
   threads. ContextVar values do NOT propagate across `threading.Thread`
   boundaries, so their MAVLink frames will simply lack the `cmd=` tag
-  -- they'll still show `pixhawk.py:send_rc_override`, which is
-  enough to identify them. This is intentional: we trade tag breadth
-  for keeping the daemons free of tracing imports.
+  -- they'll still show their `_log_mavlink` callsite (e.g.
+  `send_rc_override`), which is enough to identify them. This is
+  intentional: we trade tag breadth for keeping the daemons free of
+  tracing imports.
 """
 
 import contextvars
@@ -39,7 +46,7 @@ _enabled = contextvars.ContextVar('duburi_tracing', default=False)
 
 
 @contextmanager
-def command(verb: str):
+def command_scope(verb: str):
     """Open a `cmd=<verb>` tag scope for the duration of one Duburi call.
 
     Use exactly once per public verb body (`Duburi.yaw_right`,
@@ -58,21 +65,22 @@ def command(verb: str):
         _cmd_id.reset(token)
 
 
-def tag() -> str:
-    """Return ` cmd=<verb>` (note leading space) or '' if no scope is open.
+def current_tag() -> str:
+    """Return ``'cmd=<verb>'`` or ``''`` if no scope is open.
 
-    `Pixhawk._mav` interpolates this directly into the log prefix so
-    the formatting stays in one place.
+    `Pixhawk._log_mavlink` reads this and decides whether to splice
+    ``' cmd=<verb>'`` into the log prefix, so the formatting (and the
+    leading-space rule) lives in one place.
     """
     cid = _cmd_id.get()
-    return f' cmd={cid}' if cid else ''
+    return f'cmd={cid}' if cid else ''
 
 
 def set_enabled(value: bool) -> None:
-    """Globally enable/disable tag emission for new `command()` scopes.
+    """Globally enable/disable tag emission for new `command_scope()` scopes.
 
     Intended to be called once at process startup from the manager
-    (when `debug:=true`). Calling this from inside a `command()`
+    (when `debug:=true`). Calling this from inside a `command_scope()`
     scope is allowed but only affects scopes opened AFTER the call.
     """
     _enabled.set(bool(value))

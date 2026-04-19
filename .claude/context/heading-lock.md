@@ -161,7 +161,7 @@ slot, including the neutral throttle/forward/lateral fields.
 | `yaw_left/right`   | Suspend lock, run yaw, retarget lock to new heading, resume.    |
 | `arc`              | Suspend lock, run arc, retarget lock, resume.                   |
 | `pause`            | Suspend lock for the duration, resume.                           |
-| `stop`             | Suspends lock briefly via `_command_ctx`, send_neutral, resume. |
+| `stop`             | Suspends lock briefly via `_command_scope`, send_neutral, resume. |
 | `unlock_heading`   | Stop the thread, send_neutral, resume Heartbeat.                |
 
 The motion modules don't know about lock state -- they receive a
@@ -203,12 +203,14 @@ Watch for these log lines:
 * `[LOCK ] retarget -> 55.0deg` after a `yaw_left 45`
 * `[LOCK ] stopped` after `unlock_heading`
 
-To inspect the per-frame MAVLink trace, raise the manager log level
-to DEBUG -- you'll see one `[MAV ] RC_OVERRIDE pitch=1500 ... yaw=1543 ...`
-line for every Ch4 write the lock makes:
+To inspect the per-frame MAVLink trace, restart the manager with
+`debug:=true` (it raises the logger to DEBUG and enables the
+per-command tag) -- you'll see one `[MAV send_rc_override] yaw=1543`
+line for every Ch4 write the lock makes (no `cmd=` because the lock
+runs in its own thread and contextvars don't cross thread boundaries):
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim --log-level duburi_manager:=DEBUG
+ros2 run duburi_manager auv_manager --ros-args -p mode:=sim -p debug:=true
 ```
 
 Bench test for source swap (verify BNO + Gazebo sync):

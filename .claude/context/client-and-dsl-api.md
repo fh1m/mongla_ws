@@ -270,19 +270,22 @@ client and CLI just work without further edits.
 ### Command-internal context manager
 
 Inside `Duburi`, every command method runs under
-`with self._command_ctx():`, which:
+`with self._command_scope(verb):`, which:
 
 1. Acquires `self.lock` (serialises commands).
-2. Pauses `self._heartbeat` (so its 5 Hz neutral writes don't race
+2. Opens a `tracing.command_scope(verb)` so every MAVLink frame the
+   verb emits carries `cmd=<verb>` in its `[MAV ]` DEBUG line when
+   the manager is started with `debug:=true`.
+3. Pauses `self._heartbeat` (so its 5 Hz neutral writes don't race
    the command's own RC writes).
-3. On exit: resumes the heartbeat (unless a different command path
+4. On exit: resumes the heartbeat (unless a different command path
    already did, e.g. `lock_heading` keeps it paused for the lifetime
    of the lock).
 
-Vision verbs in `VisionVerbs` use the same `_command_ctx()`. There
-is no branch in user code that needs to know about either the lock
-or the heartbeat -- this is the contract that makes the verbs
-composable.
+Vision verbs in `VisionVerbs` use the same `_command_scope()`. There
+is no branch in user code that needs to know about either the lock,
+the tracing tag, or the heartbeat -- this is the contract that makes
+the verbs composable.
 
 ---
 

@@ -333,7 +333,7 @@ sees us as "driving the stick to the centre", which keeps
 The key invariant: **at any one moment, exactly one Python writer
 owns the RC channels.** That writer is one of: Heartbeat, an active
 motion verb, or HeadingLock. The handoff is controlled by
-`Heartbeat.pause/resume` and by the `Duburi._command_ctx` context
+`Heartbeat.pause/resume` and by the `Duburi._command_scope` context
 manager. See [`heading-lock.md`](./heading-lock.md) and
 [`axis-isolation.md`](./axis-isolation.md).
 

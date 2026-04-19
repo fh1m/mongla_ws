@@ -1,0 +1,51 @@
+# Duburi-ws Python dependencies (pip)
+# ----------------------------------------------------------------------
+# These are the THIRD-PARTY Python packages the workspace imports
+# directly. ROS2 dependencies (rclpy, sensor_msgs, vision_msgs,
+# cv_bridge, ...) come from the ROS2 Humble apt feed -- see
+# docs/JETSON_SETUP.md for the apt one-liner.
+#
+# Install on a fresh Jetson / dev box, AFTER `apt install ros-humble-...`:
+#
+#     pip install -r requirements.txt
+#
+# ON JETSON: install `torch` and `torchvision` from NVIDIA's JetPack
+# wheel index BEFORE running the line above (the PyPI torch wheel is
+# x86_64 / desktop-CUDA only and will silently fall back to CPU). See
+# docs/JETSON_SETUP.md "PyTorch on Jetson" for the version table.
+#
+# Versions are LOWER bounds verified against ROS2 Humble + JetPack 6.0.
+# ----------------------------------------------------------------------
+
+# ---- MAVLink (autopilot link) -----------------------------------------
+# Used by `duburi_control.pixhawk` (the only file that imports pymavlink).
+# >=2.4.41 ships MAVLink2 + ArduSub mode mapping the manager relies on.
+pymavlink>=2.4.41
+
+# ---- BNO085 IMU (yaw source) ------------------------------------------
+# Used by `duburi_sensors.sources.bno085`. Talks to the ESP32-C3 bridge
+# over USB serial (see firmware/esp32c3_bno085.md).
+pyserial>=3.5
+
+# ---- Vision: arrays, image I/O, drawing -------------------------------
+# numpy is pulled in transitively by ultralytics + cv_bridge; pinning
+# explicitly so a fresh install doesn't accidentally land on numpy 2.x
+# (which torch / cv_bridge on Humble are still catching up to).
+numpy>=1.24,<2.0
+
+# OpenCV: used by camera_node, draw, ros_topic, webcam adapter.
+# On Jetson, prefer the apt package `python3-opencv` (built against the
+# system FFmpeg + CUDA backend); skip this line in that case. On x86 dev
+# boxes pip is fine.
+opencv-python>=4.8
+
+# ---- Vision: object detection (YOLO) ----------------------------------
+# Ultralytics pulls torch/torchvision as transitive deps. On Jetson
+# install torch/torchvision from NVIDIA's JetPack wheel index FIRST so
+# pip doesn't replace them with the CPU-only PyPI wheels.
+ultralytics>=8.1.0
+
+# ---- Test runner (CI + colcon test) ----------------------------------
+# Required for the duburi_control unit tests; colcon also calls into
+# pytest under the hood for `colcon test`.
+pytest>=7.0

@@ -10,13 +10,13 @@ multiple inheritance:
         ...
 
 The mixin only references attributes the base ``Duburi`` provides
-(``self._command_ctx(verb)``, ``self.pixhawk``, ``self.log``,
+(``self._command_scope(verb)``, ``self.pixhawk``, ``self.log``,
 ``self._writers()``, ``self._send_neutral_and_settle()``,
 ``self._ensure_alt_hold()``, ``self._current_depth()``,
 ``self._make_result()``, ``self.vision_state_provider``) -- nothing
 rclpy-aware, identical serialisation contract as the rest of the
-facade. Each verb passes its own name into ``_command_ctx`` so the
-``[MAV ... cmd=vision_align_yaw] ...`` trace tag (see ``tracing.py``)
+facade. Each verb passes its own name into ``_command_scope`` so the
+``[MAV <fn> cmd=vision_align_yaw] ...`` trace tag (see ``tracing.py``)
 attributes every camera-driven MAVLink frame to its high-level verb.
 
 All six verbs share the same pipeline:
@@ -148,7 +148,7 @@ class VisionVerbs:
         impl: motion_vision.vision_acquire + per-axis drive closure
         from _build_acquire_drive (calls pixhawk.send_rc_override).
         """
-        with self._command_ctx('vision_acquire'):
+        with self._command_scope('vision_acquire'):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
             drive_writer = self._build_acquire_drive(
@@ -177,7 +177,7 @@ class VisionVerbs:
         """Common path for every vision_align_* / vision_hold_distance verb.
 
         ``verb`` is the public method name (``'vision_align_yaw'``, ...)
-        and is what flows into ``_command_ctx`` so the MAVLink trace
+        and is what flows into ``_command_scope`` so the MAVLink trace
         line carries ``cmd=<verb>``. ``label`` is the (shorter) human
         log token printed in ``[CMD  ] vision_<label>``.
 
@@ -187,7 +187,7 @@ class VisionVerbs:
         exit ALT_HOLD's onboard 400 Hz controller keeps holding the
         new depth without any background streamer on our side.
         """
-        with self._command_ctx(verb):
+        with self._command_scope(verb):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
             depth_sign = -1 if camera in ('downward',) else +1

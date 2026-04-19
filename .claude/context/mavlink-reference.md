@@ -262,9 +262,10 @@ Note: We prefer `RC_CHANNELS_OVERRIDE` over `MANUAL_CONTROL` — it gives direct
 ## Per-call audit (every send_* / set_* on `pixhawk.py`)
 
 Every method on `Pixhawk` that puts a frame on the wire emits a
-single `[MAV file:func cmd=verb] ...` DEBUG line via `_mav(...)`.
-Launch the manager with `debug:=true` to flip the trace on (it also
-raises the logger level to DEBUG so the lines actually print):
+single `[MAV <fn>[ cmd=<verb>]] <body>` DEBUG line via
+`_log_mavlink(...)`. Launch the manager with `debug:=true` to flip
+the trace on (it also raises the logger level to DEBUG so the lines
+actually print):
 
 ```bash
 ros2 run duburi_manager auv_manager --ros-args -p debug:=true
@@ -290,30 +291,35 @@ trace is active.
 ### MAVLink-trace via DEBUG logs
 
 Each method above emits exactly one DEBUG line via
-`Pixhawk._mav(msg)`. With `debug:=true`, the line carries TWO tags:
+`Pixhawk._log_mavlink(body)`. With `debug:=true`, the line carries
+TWO things plus a compact body:
 
-* `file:func` -- the actual `pixhawk.py` callsite that produced the
-  frame, generated automatically by `sys._getframe(1)`. This is
-  always present, even when no Duburi verb is on the stack
-  (e.g. background daemons).
+* `<fn>` -- the Pixhawk method that produced the frame
+  (`send_rc_override`, `set_target_depth`, `arm`, ...), captured
+  automatically via `sys._getframe(1)`. Always present, even when no
+  Duburi verb is on the stack (e.g. background daemons).
 * ` cmd=<verb>` -- the high-level Duburi verb that caused the call,
-  set by `tracing.command(verb)` (a contextvar opened by every
+  set by `tracing.command_scope(verb)` (a contextvar opened by every
   public method on `Duburi` / `VisionVerbs`). Absent for daemon
   threads (`Heartbeat`, `HeadingLock`) because contextvars don't
-  cross thread boundaries -- `file:func` carries them.
+  cross thread boundaries -- the `<fn>` half still pinpoints them.
+* `<body>` -- minimum useful payload only. For RC overrides we skip
+  channels at neutral / released, so a "yaw correction only" tick is
+  one short token instead of six. Idle states get the explicit
+  shorthands `all=neutral` / `all=released`.
 
 So a single `Duburi.set_depth(-1.5)` produces (at DEBUG):
 
 ```
-[MAV pixhawk.py:set_mode cmd=set_depth] SET_MODE custom_mode=2 (ALT_HOLD)
-[MAV pixhawk.py:set_target_depth cmd=set_depth] SET_POS_TGT depth=-1.50 m  (alt only, all other axes masked)
+[MAV set_mode cmd=set_depth]         ALT_HOLD (id=2)
+[MAV set_target_depth cmd=set_depth] depth=-1.50m
 ```
 
 A heading-lock streaming Ch4 in the background, simultaneously,
 prints (no `cmd=` because the streamer is its own thread):
 
 ```
-[MAV pixhawk.py:send_rc_override] RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=1430 fwd=1500 lat=1500
+[MAV send_rc_override] yaw=1430
 ```
 
 This is the recommended way to debug "did we *send* the right

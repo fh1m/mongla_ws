@@ -156,7 +156,7 @@ class AUVManagerNode(Node):
         # mutates a contextvar in the main thread; daemons spawned after
         # this point still see the default (False) because contextvars
         # don't propagate across threading.Thread, but their MAVLink
-        # frames retain the file:func half so they are still traceable.
+        # frames retain the <fn> caller name so they are still traceable.
         if debug_enabled:
             tracing.set_enabled(True)
             try:
@@ -213,7 +213,7 @@ class AUVManagerNode(Node):
         self.get_logger().info(f' DUBURI AUV MANAGER  |  mode: {mode_name}')
         if debug_enabled:
             self.get_logger().info(
-                ' DEBUG TRACE: ON  -- per-command [MAV file:func cmd=verb] '
+                ' DEBUG TRACE: ON  -- per-command [MAV <fn> cmd=<verb>] '
                 'lines will print on every outbound MAVLink frame')
         self.get_logger().info(
             f' MAVLink: sys={self.master.target_system} '
