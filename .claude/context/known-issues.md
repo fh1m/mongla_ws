@@ -110,3 +110,15 @@ Next-up candidates not from this audit (keep here as a hand-off list):
 - **WitMotion** binary parser if we ever want a backup IMU — replace `_build_witmotion_stub`.
 - **Vision** package (`duburi_vision`, YOLOv11 + DeepSORT) per TDR — currently absent on purpose.
 - **Mission FSM** — populate `src/duburi_planner/duburi_planner/state_machines/` with YASMIN once missions outgrow `duburi_planner/missions/*.py` linear scripts.
+
+---
+
+## Forks we evaluated (so we don't revisit)
+
+### `BumblebeeAS/ardupilot_fix` — STALE DUD (evaluated 2026-04)
+
+* **Source:** https://github.com/BumblebeeAS/ardupilot_fix
+* **State vs upstream:** **1 commit ahead, 3911 commits behind** `ArduPilot/master`. 0 stars, 0 forks. No CI configured.
+* **The single commit** (`xelisce`, 2025-05-23, "hard code variables into file fix, passed all tests"): adds 9 unused declarations to `libraries/AP_DDS/AP_DDS_Client.cpp`. No semantic ArduSub change. No new mode, no new failsafe, no new MAVLink behaviour.
+* **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`ardusub-canon.md`](./ardusub-canon.md).
+* **Re-evaluate when:** the fork's `xelisce` author (or `BumblebeeAS` org) ships a second semantic commit. Until then, do not spend an evening "evaluating" this again.

@@ -201,14 +201,15 @@ class AUVManagerNode(Node):
         if yaw_src_name == 'bno085' and mode_name in ('sim', 'laptop', 'desk'):
             # Operator-visible sanity hint. In the pool the BNO is bolted
             # inside the vehicle so it rotates with it and this note is
-            # misleading -- suppress there.
+            # misleading -- suppress there. See ardusub-canon.md §4A.
             self.get_logger().info(
-                ' [HINT ] BNO is the yaw source. Translations + vision '
-                'commands work normally in sim. Absolute-yaw commands '
-                '(yaw_left / yaw_right / turn_to / lock_heading) close '
-                'on the BNO reading, so in SITL they terminate only when '
-                'the board is physically rotated to the target. For '
-                'open-loop SITL smoke tests use yaw_source:=mavlink_ahrs.')
+                ' [HINT ] BNO is the yaw source for ALL Python loops '
+                '(yaw_*, lock_heading, translation heading-hold, [STATE], '
+                'feedback). On a desk SITL the BNO chip does NOT move when '
+                'ArduSub yaws in Gazebo -- so absolute-yaw verbs terminate '
+                'only when you physically rotate the BNO board. Use '
+                'yaw_source:=mavlink_ahrs for desk SITL smoke tests; keep '
+                'bno085 for pool runs where the board moves with the AUV.')
         self.get_logger().info(SEPARATOR)
 
         # ---- VisionState pool (lazy per camera) -----------------------

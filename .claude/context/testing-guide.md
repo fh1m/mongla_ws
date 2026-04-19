@@ -307,6 +307,80 @@ p.set_servo_pwm(1, 1500)   # AUX1 neutral
 
 DEBUG: `DO_SET_SERVO ch=9 (AUX1) pwm=1900` etc.
 
+### 2.4 BNO sanity at the pool (3 checks, ~2 min)
+
+Confirms `yaw_source:=bno085` is actually closing the Python control
+loops -- *without* believing the misleading hint about needing to
+physically rotate the chip. See
+[`ardusub-canon.md`](./ardusub-canon.md) §4A for why STABILIZE-tilt
+tests are NOT a BNO test.
+
+Start the manager with the BNO source AND debug tracing on. Debug
+flips per-command MAVLink trace tags on; default is off so production
+runs stay quiet.
+
+```bash
+ros2 run duburi_manager auv_manager --ros-args \
+    -p mode:=pool -p yaw_source:=bno085 -p debug:=true
+```
+
+The startup banner must end with `Yaw source: BNO085 (...) Earth-ref
+offset: +XX.XX deg`. If you don't see the offset, the calibration
+failed -- abort and fix.
+
+**Check 1 -- telemetry shows BNO yaw.** Watch `[STATE]`:
+
+```
+[STATE] ARM | ALT_HOLD   | YAW: 124.3 (BNO085) | DEPTH: -0.42m | BAT: 15.6V
+```
+
+The `(BNO085)` label MUST be there. If it says `(AHRS)`, the yaw
+source did not start and we silently fell back -- restart and read
+the launch banner.
+
+**Check 2 -- `lock_heading` closes on BNO.** From a second terminal:
+
+```bash
+duburi arm
+duburi set_depth --target -0.4
+duburi lock_heading --target 0           # latch current heading
+```
+
+In the manager log you will see `[LOCK ] start target=NNN.N
+source=BNO085`. Now run a translation:
+
+```bash
+duburi move_forward --duration 4 --gain 50
+```
+
+While it runs, watch `[LOCK ] tgt:NNN.N cur:MMM.M err:+E.E pct:+P.P`
+ticks. Both `tgt` and `cur` are in BNO degrees -- if you physically
+rotate a fake target near the BNO cable, `cur` MUST move; if you
+yank the BNO USB, the next tick MUST log `[LOCK ] yaw source silent
+for X.Xs -- releasing Ch4` and the `[MAV pixhawk.py:send_rc_override
+cmd=lock_heading]` lines for Ch4 must drop to 1500 us.
+
+**Check 3 -- `yaw_left / yaw_right` close on BNO.** Still locked:
+
+```bash
+duburi yaw_right --target 30
+```
+
+The `[YAW ]` line and the `[STATE]` post-turn yaw must both end
+within ~2 deg of `(start_yaw + 30) mod 360`, where `start_yaw` is
+the **BNO** value from `[STATE]` before the command (not whatever
+ArduSub's compass thinks). If they disagree, BNO is being sampled
+but the loop is reading AHRS instead -- file a bug with the full
+trace.
+
+```bash
+duburi unlock_heading
+duburi disarm
+```
+
+End of recipe. If all three checks pass, BNO is genuinely the
+closed-loop yaw source for the rest of the pool day.
+
 ---
 
 ## 3. Mission smoke + dry-run

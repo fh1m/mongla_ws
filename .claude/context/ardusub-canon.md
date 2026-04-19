@@ -217,6 +217,41 @@ re-targets ArduSub's hold to whatever yaw source we picked.
 
 ---
 
+## 4A. BNO yaw source: who reads what (mental-model fix)
+
+`yaw_source:=bno085` does **NOT** push BNO yaw into ArduSub's EKF.
+It only changes which sensor our **Python** loops read. ArduSub's
+onboard 400 Hz attitude controller (the one that runs in
+STABILIZE / ALT_HOLD-stick-release / yaw-hold-sub-loop) keeps using
+its own compass-fed EKF -- it has no idea the BNO exists. To
+actually feed BNO yaw into ArduSub's EKF you need
+`EK3_SRC1_YAW=2|6` plus an `ATT_POS_MOCAP` / `GPS_INPUT.yaw` /
+`ExternalNav` stream; that is parked as a future feature in
+[`future-bno-into-ekf.md`](./future-bno-into-ekf.md).
+
+So the right mental model is:
+
+| Verb family | Reads absolute yaw? | Source today (when `yaw_source:=bno085`) |
+| --- | --- | --- |
+| `move_forward / _back / _left / _right` | yes -- heading-hold during translation | **BNO** (via `motion_writers.read_heading`) |
+| `yaw_left / yaw_right / arc` | yes -- loop termination + correction | **BNO** (via `motion_yaw.read_heading`) |
+| `lock_heading` (background daemon) | yes -- primary input | **BNO** (via `heading_lock._run`) |
+| `set_depth` / `hold_depth` | no -- depth from AHRS2 (Bar30) | n/a |
+| `vision_align_*` / `_hold_distance` / `_acquire` | no -- camera pixel error IS the closed-loop signal | n/a |
+| `[STATE]` telemetry log | yes | **BNO** (via `_effective_yaw_deg`) |
+| `Move.Feedback` pump | yes | **BNO** (via `_effective_yaw_deg`) |
+| ArduSub onboard yaw-hold sub-loop (Ch4 neutral in ALT_HOLD/STABILIZE) | yes | ArduSub's own compass-fed EKF |
+
+Three useful corollaries:
+
+1. **STABILIZE will appear to "react to yaw" even if BNO is the source.** That is ArduSub stabilising to its own IMU (gyros + compass), not BNO. The thrusters moving in STABILIZE when you tilt the sub by hand is **not** a BNO test -- it's an "ArduSub is alive" test.
+2. **The BNO test is `lock_heading` / `yaw_*`.** Run those and watch the [STATE] yaw match BNO. If you yank the BNO USB cable mid-`lock_heading`, you should see `[LOCK ] yaw source silent` and Ch4 release to neutral. That proves BNO is the closed-loop sensor.
+3. **Why prefer ALT_HOLD over STABILIZE for everything.** `ALT_HOLD` honours both our depth setpoint (`SET_POSITION_TARGET_GLOBAL_INT`) and our Ch4 rate input. `STABILIZE` honours Ch4 rate but `set_depth` is silently dropped, so the sub sinks during a turn. There is no advantage to switching to STABILIZE during yaw or translation, and there is a cost (depth drift). Our facade enforces ALT_HOLD via `_ensure_yaw_capable_mode` and `_ensure_alt_hold` for exactly this reason.
+
+For the operator-side validation recipe, see [`testing-guide.md`](./testing-guide.md) §2.4 "BNO sanity at the pool".
+
+---
+
 ## 5. The failsafes that bite us
 
 ArduSub has many failsafes (battery, EKF, GCS, GPS-glitch, ...). The
