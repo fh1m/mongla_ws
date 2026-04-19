@@ -1,24 +1,47 @@
-# Mongla — `duburi_ws`
+<h1 align="center">Mongla — <code>duburi_ws</code></h1>
 
-> **An AUV control stack named after the port that opens onto the Sundarbans.**
-> Mongla is a ROS2 Humble control, mission, and simulation stack for ArduSub
-> vehicles — one clean action surface (`/duburi/move`), one MAVLink owner,
-> and per-axis motion modules behind a single dispatch table. The code is
-> developed against an ArduSub SITL + Gazebo loop and field-tested on
-> **Duburi**, a `vectored_6dof` 8-thruster AUV.
+<p align="center">
+  <em>An AUV control stack named after the port that opens onto the Sundarbans.</em><br/>
+  ROS 2 Humble · ArduSub · YOLO 26 · one action surface, axis-isolated control,
+  vision in the same loop.
+</p>
 
-![Mongla architecture](docs/architecture.png)
+<p align="center">
+  <img src="docs/architecture.png" alt="Mongla architecture" width="92%"/>
+</p>
 
-<!-- Badges -->
-![ROS2 Humble](https://img.shields.io/badge/ROS2-Humble-blue)
-![Ubuntu 22.04](https://img.shields.io/badge/Ubuntu-22.04-E95420)
-![Python 3.10](https://img.shields.io/badge/Python-3.10-3776AB)
-![ArduSub 4.x](https://img.shields.io/badge/ArduSub-4.x-important)
-![MAVLink 2.0](https://img.shields.io/badge/MAVLink-2.0-purple)
-![Pixhawk 2.4.8](https://img.shields.io/badge/Pixhawk-2.4.8-black)
-![License MIT](https://img.shields.io/badge/License-MIT-green)
+<p align="center">
+  <img src="https://img.shields.io/badge/ROS2-Humble-blue" alt="ROS2 Humble"/>
+  <img src="https://img.shields.io/badge/Ubuntu-22.04-E95420" alt="Ubuntu 22.04"/>
+  <img src="https://img.shields.io/badge/Python-3.10-3776AB" alt="Python 3.10"/>
+  <img src="https://img.shields.io/badge/ArduSub-4.x-important" alt="ArduSub 4.x"/>
+  <img src="https://img.shields.io/badge/MAVLink-2.0-purple" alt="MAVLink 2.0"/>
+  <img src="https://img.shields.io/badge/Pixhawk-2.4.8-black" alt="Pixhawk 2.4.8"/>
+  <img src="https://img.shields.io/badge/YOLO-26-00B4D8" alt="YOLO 26"/>
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"/>
+</p>
+
+<p align="center">
+  Mongla is a ROS 2 Humble control, mission, and simulation stack for ArduSub
+  vehicles — one clean action surface (<code>/duburi/move</code>), one MAVLink
+  owner, and per-axis motion modules behind a single dispatch table. The code is
+  developed against an ArduSub SITL + Gazebo loop and field-tested on
+  <strong>Duburi</strong>, a <code>vectored_6dof</code> 8-thruster AUV.
+</p>
+
+<p align="center">
+  <a href="#quickstart-smoke-tests"><strong>Quickstart</strong></a> ·
+  <a href="#concepts-in-5-videos"><strong>Concept videos</strong></a> ·
+  <a href=".claude/context/mission-cookbook.md"><strong>Mission cookbook</strong></a> ·
+  <a href="#9-command-cookbook-duburi-cli"><strong>CLI cookbook</strong></a> ·
+  <a href="#3-architecture"><strong>Architecture</strong></a>
+</p>
 
 ---
+
+<p align="center">
+  <img src="docs/dataflow.png" alt="Mongla data flow" width="92%"/>
+</p>
 
 ## Quickstart smoke tests
 
@@ -158,21 +181,68 @@ To make the manager use BNO085 instead of ArduSub AHRS, launch with
 
 ## Concepts in 5 videos
 
-> Watch these once if any of these terms feel hand-wavy. They cover the
-> **engineering ideas** Mongla is built on; they are **not** Duburi-specific.
+> Watch these once if any of the underlying ideas feel hand-wavy. They cover
+> the **engineering concepts** Mongla is built on, not Duburi specifics.
+> Click any thumbnail to play on YouTube.
 
-| Topic | Why it matters here | Reference video |
-| ----- | ------------------- | --------------- |
-| **PID control intuition** | Every motion verb (depth, yaw, vision-yaw) is a P or PI loop. Knowing why I-term winds up saves you a pool day. | [Brian Douglas — PID Control: A Brief Introduction](https://www.youtube.com/watch?v=UR0hOmjaHp0) |
-| **YOLO object detection** | The vision pipeline runs Ultralytics YOLO 26. Understanding anchor-free detection helps you read `detector_node` logs. | [Computerphile — YOLO Object Detection](https://www.youtube.com/watch?v=MPU2HistivI) |
-| **MAVLink + ArduSub** | Every command Mongla sends is one MAVLink message. ArduPilot's overview explains the protocol and the ArduSub firmware. | [ArduPilot — Introduction to ArduSub](https://www.youtube.com/watch?v=Pkx2OWNBmkg) |
-| **ROS 2 Actions** | `/duburi/move` is a ROS 2 Action, not a topic or service. Goals can be cancelled, give feedback, and return a result. | [Articulated Robotics — ROS 2 Actions explained](https://www.youtube.com/watch?v=lNHQTHK4S-c) |
-| **BlueROV2 platform** | The Gazebo SITL target shares the `vectored_6dof` 8-thruster frame with the real Duburi vehicle. | [Blue Robotics — Meet the BlueROV2](https://www.youtube.com/watch?v=mpwUZmSKptw) |
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="https://www.youtube.com/watch?v=UR0hOmjaHp0">
+        <img src="https://img.youtube.com/vi/UR0hOmjaHp0/hqdefault.jpg" alt="PID Control" width="100%"/>
+      </a>
+      <br/>
+      <strong>PID Control</strong><br/>
+      <sub>Every motion verb (depth, yaw, vision-yaw) is a P or PI loop. Saves you a pool day.</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://www.youtube.com/watch?v=MPU2HistivI">
+        <img src="https://img.youtube.com/vi/MPU2HistivI/hqdefault.jpg" alt="YOLO Object Detection" width="100%"/>
+      </a>
+      <br/>
+      <strong>YOLO Object Detection</strong><br/>
+      <sub>The vision pipeline runs Ultralytics YOLO 26. Helps you read <code>detector_node</code> logs.</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://www.youtube.com/watch?v=Pkx2OWNBmkg">
+        <img src="https://img.youtube.com/vi/Pkx2OWNBmkg/hqdefault.jpg" alt="ArduSub" width="100%"/>
+      </a>
+      <br/>
+      <strong>MAVLink + ArduSub</strong><br/>
+      <sub>Every Mongla command is one MAVLink message. The ArduSub firmware explained.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <a href="https://www.youtube.com/watch?v=lNHQTHK4S-c">
+        <img src="https://img.youtube.com/vi/lNHQTHK4S-c/hqdefault.jpg" alt="ROS 2 Actions" width="100%"/>
+      </a>
+      <br/>
+      <strong>ROS 2 Actions</strong><br/>
+      <sub><code>/duburi/move</code> is an Action: cancellable, gives feedback, returns a result.</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://www.youtube.com/watch?v=mpwUZmSKptw">
+        <img src="https://img.youtube.com/vi/mpwUZmSKptw/hqdefault.jpg" alt="BlueROV2" width="100%"/>
+      </a>
+      <br/>
+      <strong>BlueROV2 platform</strong><br/>
+      <sub>The Gazebo SITL target — same <code>vectored_6dof</code> frame as the real Duburi.</sub>
+    </td>
+    <td align="center" width="33%" valign="middle">
+      <a href=".claude/context/mission-cookbook.md">
+        <img src="https://img.shields.io/badge/READ%20NEXT-Mission%20Cookbook-fb8500?style=for-the-badge" alt="Mission Cookbook"/>
+      </a>
+      <br/>
+      <strong>Mission Cookbook</strong><br/>
+      <sub>Working principles, every verb, ten ready-to-steal mission samples.</sub>
+    </td>
+  </tr>
+</table>
 
 For the deeper architecture story (axis isolation, vision math, heading
-lock thread model), read
-[.claude/context/](.claude/context/) — especially `axis-isolation.md`,
-`vision-architecture.md`, and the
+lock thread model), browse [.claude/context/](.claude/context/) —
+especially `axis-isolation.md`, `vision-architecture.md`, and the
 [mission cookbook](.claude/context/mission-cookbook.md).
 
 ---
