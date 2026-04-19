@@ -17,6 +17,7 @@
   <depend>duburi_control</depend>
   <depend>duburi_interfaces</depend>
   <depend>duburi_manager</depend>
+  <depend>vision_msgs</depend>
 
   <buildtool_depend>ament_python</buildtool_depend>
 

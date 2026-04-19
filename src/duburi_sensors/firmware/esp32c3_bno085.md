@@ -1,15 +1,15 @@
 # ESP32-C3 + BNO085 — Firmware Contract
 
-This is the wire spec the Jetson-side `BNO085Source` expects. Any MCU
-that ships JSON-line-over-USB-CDC matching the contract below works;
-the reference firmware target is an ESP32-C3 (Adafruit QT Py /
-Seeed XIAO ESP32-C3 / SuperMini) talking to a SparkFun or Adafruit
-BNO085 breakout over I2C.
+This is the wire spec the Jetson-side `BNO085Source` expects. The
+reference sketch [esp32c3_bno085.ino](esp32c3_bno085.ino) is verbatim
+the firmware running on our test bench (verified streaming `{"yaw":...,
+"ts":...}` lines into `duburi_sensors.sources.bno085.BNO085Source`).
 
-> **Why no magnetometer?** Eight thrusters + aluminum (Marine 5083) hull + battery
-> currents make the inside of the AUV magnetically hostile. We use the
-> BNO085's **gyro + accelerometer-only** fusion (`SH2_GAME_ROTATION_VECTOR`)
-> and let the Jetson capture a one-shot Earth-reference offset from the
+> **Why no magnetometer?** Eight thrusters + aluminum (Marine 5083)
+> hull + battery currents make the inside of the AUV magnetically
+> hostile. We use the BNO085's **gyro-integrated rotation vector**
+> (`SH2_GYRO_INTEGRATED_RV`) -- gyro-only, magnetometer DISABLED -- and
+> let the Jetson capture a one-shot Earth-reference offset from the
 > Pixhawk's magnetometer at boot (sub at the surface, clean magnetic
 > environment). After that the BNO is pure-gyro: smooth, immune to
 > in-hull magnetic interference, and the only drift is the BNO's own
@@ -43,95 +43,57 @@ free to use during bring-up.
 | Interface | USB CDC (the C3's native USB serial)               |
 | Baud      | `115200`                                           |
 | Stream    | continuous; host opens the port, then `readline()` |
-| Rate      | **50 Hz target** (20-100 Hz acceptable)            |
+| Rate      | **~50 Hz** sustained (chip runs internal at 500 Hz; sketch throttles every 20 ms) |
 
 Why 50 Hz?
-* The control loops poll yaw at 10 Hz, stale threshold is 250 ms.
+* Control loops poll yaw at 10 Hz; stale threshold is 250 ms.
 * 50 Hz gives ~12 fresh frames per stale window — comfortable headroom
   without saturating USB CDC.
-* **Avoid exactly 200 Hz.** There is a documented BNO085 firmware bug
-  where the chip stops emitting reports after a short period of
-  perfect stillness at the 200 Hz update rate (see Adafruit forum
-  thread *"BNO085 Behavior After Stillness"*). 50 Hz / 100 Hz are safe.
 
 ## Sensor mode
 
-Use `SH2_GAME_ROTATION_VECTOR` only. Do **not** enable the geomagnetic
-report and do **not** enable the magnetometer report.
+The reference sketch enables `SH2_GYRO_INTEGRATED_RV` (defined in the
+SH-2 ChipFlow protocol as the gyro-integrated rotation vector). It is
+the magnetic-interference-immune mode the AUV expects; do **not** flip
+the `#define FAST_MODE` gate to `SH2_ARVR_STABILIZED_RV` for missions
+(that mode is mag-fused).
 
-Game rotation vector outputs a 6-axis fused quaternion (gyro +
-accelerometer) with the chip's mag explicitly excluded — exactly what
-we want.
+## Wiring (matches the reference sketch)
 
-## Mounting
+| BNO085 pin | ESP32-C3 GPIO | Notes                                  |
+|------------|---------------|----------------------------------------|
+| SDA        | GPIO 4        | I²C data, 400 kHz                      |
+| SCL        | GPIO 5        | I²C clock                              |
+| RST        | GPIO 3        | optional; tie to 3.3V and use `-1` if you skip |
+| VIN        | 3V3 / 5V      | breakout has its own LDO; either works |
+| GND        | GND           |                                        |
 
-Mounting orientation **does not matter** for the AUV-side software:
-the calibration step captures whatever rotation exists between the
-BNO chip and the AUV body and bakes it into the offset. Mount the
-breakout however is convenient mechanically.
+Mounting orientation **does not matter**: the calibration step on the
+Jetson captures whatever rotation exists between the BNO chip and the
+AUV body and bakes it into the offset. Mount it **rigidly** though --
+vibration on the breakout is the most common cause of jittery yaw.
 
-That said, mount it **rigidly** — vibration on the breakout is the
-most common cause of jittery yaw. Foam-tape on a flat surface inside
-the dry hull is fine; do not let it dangle off pin headers.
+## Reference firmware
 
-## Reference firmware (Arduino, Adafruit_BNO08x)
+The canonical sketch lives at
+[`esp32c3_bno085.ino`](esp32c3_bno085.ino). Build with the Arduino IDE
+or `arduino-cli`:
 
-Tested on Adafruit QT Py ESP32-C3, BNO085 over I2C with `RST` wired
-to GPIO 5 (recommended — lets us recover from chip resets).
+```bash
+arduino-cli core install esp32:esp32
+arduino-cli lib install "Adafruit BNO08x"
+arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32C3 esp32c3_bno085.ino
+arduino-cli upload  --fqbn esp32:esp32:XIAO_ESP32C3 -p /dev/ttyACM0 esp32c3_bno085.ino
+```
+
+Snippet of the critical loop body (the full file lives next to this
+doc):
 
 ```cpp
-#include <Adafruit_BNO08x.h>
-#include <Wire.h>
-
-#define BNO_RESET_PIN  5            // wire BNO RST -> GPIO5; -1 if unused
-#define REPORT_RATE_US 20000        // 50 Hz; do NOT use 5000 us (200 Hz)
-
-Adafruit_BNO08x bno08x(BNO_RESET_PIN);
-sh2_SensorValue_t sv;
-
-static void enableReports() {
-  // Game rotation vector = gyro + accel fusion, magnetometer DISABLED.
-  // This is the only report the firmware enables, on purpose.
-  bno08x.enableReport(SH2_GAME_ROTATION_VECTOR, REPORT_RATE_US);
-}
-
-void setup() {
-  Serial.begin(115200);
-  // ESP32-C3 USB CDC: wait briefly for the host to open the port,
-  // but don't block forever — the AUV may power-cycle without USB.
-  uint32_t t0 = millis();
-  while (!Serial && (millis() - t0) < 2000) { delay(10); }
-
-  Wire.begin();                     // default SDA/SCL on the C3 board
-  while (!bno08x.begin_I2C()) {
-    Serial.println("{\"err\":\"bno085 init\"}");
-    delay(500);
-  }
-  enableReports();
-  Serial.println("boot ok");        // ignored by host parser
-}
-
-void loop() {
-  // BNO085 occasionally resets itself; re-enable reports if so.
-  if (bno08x.wasReset()) enableReports();
-  if (!bno08x.getSensorEvent(&sv)) return;
-  if (sv.sensorId != SH2_GAME_ROTATION_VECTOR) return;
-
-  const float qw = sv.un.gameRotationVector.real;
-  const float qx = sv.un.gameRotationVector.i;
-  const float qy = sv.un.gameRotationVector.j;
-  const float qz = sv.un.gameRotationVector.k;
-
-  // ZYX yaw extraction (rotation about gravity):
-  //   yaw = atan2(2(qw*qz + qx*qy), 1 - 2(qy^2 + qz^2))
-  float yaw_rad = atan2f(2.0f * (qw * qz + qx * qy),
-                         1.0f - 2.0f * (qy * qy + qz * qz));
-  float yaw_deg = yaw_rad * 57.29578f;
-  if (yaw_deg < 0) yaw_deg += 360.0f;
-
-  // Single line, single allocation, newline-terminated.
+if (millis() - lastPrint > 20) {
+  lastPrint = millis();
   Serial.printf("{\"yaw\":%.2f,\"ts\":%lu}\n",
-                yaw_deg, (unsigned long)millis());
+                ypr.yaw, (unsigned long)millis());
 }
 ```
 
@@ -142,22 +104,28 @@ void loop() {
 3. Slowly rotate the breakout 360° on a flat surface — `yaw` should
    sweep monotonically through `[0, 360)` once per rotation.
 4. Hold still for 30 s — `yaw` should drift no more than ~0.25°.
-5. Plug into the Jetson; confirm with the diagnostic node:
+5. Plug into the Jetson and let auto-detect pick the port:
 
    ```bash
    ros2 run duburi_sensors sensors_node --ros-args \
-       -p yaw_source:=bno085 -p bno085_port:=/dev/ttyACM0
+       -p yaw_source:=bno085 -p bno085_port:=auto
    ```
 
-   You should see `[SENSOR] yaw=...° healthy=True rx_hz=~50` in raw
-   mode (no Earth reference applied).
+   You should see:
+
+   ```
+   [SENSOR] BNO085 auto-detect: probing N candidate(s)...
+   [SENSOR] BNO085 auto-detect: picked /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00
+   [SENSOR] BNO085 reader started on /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00 @ 115200
+   [SENSOR] yaw=...° healthy=True rx_hz=~50
+   ```
 
 6. With ArduSub SITL or a Pixhawk attached, switch on the calibration:
 
    ```bash
    ros2 run duburi_sensors sensors_node --ros-args \
        -p yaw_source:=bno085 -p calibrate:=true \
-       -p bno085_port:=/dev/ttyACM0
+       -p bno085_port:=auto
    ```
 
    The first log line must be:
@@ -170,6 +138,20 @@ void loop() {
    yaw by the same angle, but reading the same Earth-frame as the
    Pixhawk reported at boot.
 
+## Why `port: auto` (the new default)
+
+The manager's default for `bno085_port` is now `auto`. On startup the
+host probes:
+
+1. `/dev/serial/by-id/usb-Espressif*`, `usb-Adafruit*`, `usb-Seeed*`,
+   `usb-1a86*` (CH340/CH9102) — these stay stable across reboots.
+2. `/dev/ttyACM0..3`, `/dev/ttyUSB0..3` — fallback for boards without
+   a recognisable VID/PID symlink.
+
+The first device that delivers a parseable `{"yaw":...}` line within
+1.5 s wins, and the path is logged. Pin a specific device with
+`-p bno085_port:=/dev/ttyACM0` to skip discovery.
+
 ## Definition of done
 
 * Firmware boots in <2 s after USB enumeration.
@@ -177,3 +159,5 @@ void loop() {
 * No malformed JSON lines (host parse-error counter stays at 0).
 * Survives `bno08x.wasReset()` and continues streaming.
 * `yaw` field stays in `[0, 360)`, monotonic under continuous rotation.
+* `ros2 launch duburi_bringup mongla.launch.py yaw_source:=bno085` brings
+  the sub up with no manual port specification.

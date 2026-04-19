@@ -114,31 +114,127 @@ COMMANDS = {
         'fields':   [],
         'defaults': {},
     },
+
+    # ---- Vision verbs --------------------------------------------- #
+    # All of these read the latest detection from VisionState; preflight
+    # runs once per camera the first time it's hit. Defaults are tuned
+    # for a webcam-detected 'person' but every gain is overrideable from
+    # the goal so missions can profile them in flight.
+    'vision_align_3d': {
+        'help':     'Hold the largest target_class detection centred AND '
+                    'at target_bbox_h_frac. Active axes via CSV `axes`.',
+        'fields':   ['camera', 'target_class', 'axes', 'duration',
+                     'deadband', 'kp_yaw', 'kp_lat', 'kp_depth', 'kp_forward',
+                     'target_bbox_h_frac', 'visual_pid', 'on_lost',
+                     'stale_after'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'axes': 'yaw,forward', 'duration': 30.0,
+                     'deadband': 0.10, 'kp_yaw': 60.0, 'kp_lat': 60.0,
+                     'kp_depth': 0.05, 'kp_forward': 200.0,
+                     'target_bbox_h_frac': 0.55, 'visual_pid': False,
+                     'on_lost': 'fail', 'stale_after': 0.8},
+    },
+    'vision_align_yaw': {
+        'help':     'One-axis convenience: keep target_class centred '
+                    'horizontally (Ch4 only).',
+        'fields':   ['camera', 'target_class', 'duration', 'deadband',
+                     'kp_yaw', 'on_lost', 'stale_after'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'duration': 15.0, 'deadband': 0.10,
+                     'kp_yaw': 60.0, 'on_lost': 'fail',
+                     'stale_after': 0.8},
+    },
+    'vision_align_lat': {
+        'help':     'One-axis convenience: keep target_class centred via '
+                    'lateral strafe (Ch6 only).',
+        'fields':   ['camera', 'target_class', 'duration', 'deadband',
+                     'kp_lat', 'on_lost', 'stale_after'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'duration': 15.0, 'deadband': 0.10,
+                     'kp_lat': 60.0, 'on_lost': 'fail',
+                     'stale_after': 0.8},
+    },
+    'vision_align_depth': {
+        'help':     'One-axis convenience: nudge depth so target_class '
+                    'sits at vertical centre (incremental ALT_HOLD setpoint).',
+        'fields':   ['camera', 'target_class', 'duration', 'deadband',
+                     'kp_depth', 'on_lost', 'stale_after'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'duration': 15.0, 'deadband': 0.10,
+                     'kp_depth': 0.05, 'on_lost': 'fail',
+                     'stale_after': 0.8},
+    },
+    'vision_hold_distance': {
+        'help':     'Drive forward/back so target_class bbox height matches '
+                    'target_bbox_h_frac. Bigger bbox = closer target.',
+        'fields':   ['camera', 'target_class', 'duration', 'deadband',
+                     'kp_forward', 'target_bbox_h_frac', 'on_lost',
+                     'stale_after'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'duration': 20.0, 'deadband': 0.05,
+                     'kp_forward': 200.0, 'target_bbox_h_frac': 0.55,
+                     'on_lost': 'fail', 'stale_after': 0.8},
+    },
+    'vision_acquire': {
+        'help':     'Block (optionally driving via target_name verb) until '
+                    'target_class is seen at least once. target_name in '
+                    "{'', 'yaw_left', 'yaw_right', 'move_forward', 'arc'}.",
+        'fields':   ['camera', 'target_class', 'target_name', 'timeout',
+                     'gain', 'yaw_rate_pct', 'stale_after'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'target_name': '', 'timeout': 30.0,
+                     'gain': 25.0, 'yaw_rate_pct': 25.0,
+                     'stale_after': 0.8},
+    },
 }
 
 
 # Field names that carry a string instead of a float (everything else is float).
-STRING_FIELDS = ('target_name',)
+STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'on_lost')
+
+# Field names that carry a bool. rosidl init these to False.
+BOOL_FIELDS = ('visual_pid',)
 
 
-def fields_for(cmd, request):
+def fields_for(cmd, request, *, runtime_defaults=None):
     """Pull the kwargs for `cmd` out of a Move.Goal `request`.
 
     For each field the spec lists, take the value from the request. If
-    the value is the rosidl "unset" default (0.0 for floats, '' for
-    strings) AND the spec provides a default, substitute the default.
+    the value is the rosidl "unset" default (False for bool, 0.0 for
+    floats, '' for strings), substitute in this order:
+
+        1. `runtime_defaults[field]` if set  (live ROS-param override)
+        2. `spec['defaults'][field]` if set  (hardcoded fallback)
+        3. leave the rosidl zero on the kwargs
+
+    `runtime_defaults` is the manager's `vision.*` ROS-param snapshot
+    (or None). It lets pool operators tune `vision.kp_yaw` etc. with
+    `ros2 param set` and have the next vision goal pick up the new
+    value WITHOUT touching either the spec defaults or the mission's
+    Python source.
 
     The returned dict can be passed straight to the matching `Duburi`
     method as `**kwargs` -- the dispatch never has to know what each
     command is doing.
     """
     spec = COMMANDS[cmd]
-    defaults = spec['defaults']
+    spec_defaults    = spec['defaults']
+    runtime_defaults = runtime_defaults or {}
     kwargs = {}
     for field in spec['fields']:
         value = getattr(request, field)
-        unset = (value == '' if field in STRING_FIELDS else value == 0.0)
-        if unset and field in defaults:
-            value = defaults[field]
+        if field in STRING_FIELDS:
+            unset = (value == '')
+        elif field in BOOL_FIELDS:
+            # bool unset == False; defaults explicitly set True or False.
+            unset = (value is False) and (field in spec_defaults) and \
+                    (spec_defaults[field] is True)
+        else:
+            unset = (value == 0.0)
+        if unset:
+            if field in runtime_defaults:
+                value = runtime_defaults[field]
+            elif field in spec_defaults:
+                value = spec_defaults[field]
         kwargs[field] = value
     return kwargs

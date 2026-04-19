@@ -58,6 +58,12 @@ class Pixhawk:
     def __init__(self, master):
         self.master = master
         self._boot_time = time.time()
+        # Last HEARTBEAT we saw whose `autopilot` field was NOT
+        # MAV_AUTOPILOT_INVALID -- i.e. the real autopilot, not our own
+        # heartbeat looping back via BlueOS / mavproxy. get_mode() and
+        # is_armed() prefer this so they never report the GCS's state
+        # when the loop-back arrives between autopilot frames.
+        self._last_autopilot_hb = None
 
     # ------------------------------------------------------------------ #
     #  COMMAND_ACK — fast, explicit failure reporting                     #
@@ -380,15 +386,33 @@ class Pixhawk:
         msg = self.master.messages.get('STATUSTEXT')
         return msg.text.strip() if msg else None
 
-    def get_mode(self):
+    def _autopilot_heartbeat(self):
+        """Return the latest HEARTBEAT that came from the autopilot.
+
+        Skips frames whose `autopilot` field is MAV_AUTOPILOT_INVALID
+        (those are our own heartbeats, looped back through BlueOS or
+        mavproxy). Falls back to the last good autopilot heartbeat we
+        cached so get_mode/is_armed never briefly report 'UNKNOWN' or
+        'disarmed' just because a loop-back arrived between autopilot
+        frames.
+        """
         msg = self.master.messages.get('HEARTBEAT')
+        if msg is None:
+            return self._last_autopilot_hb
+        if getattr(msg, 'autopilot', None) == mavutil.mavlink.MAV_AUTOPILOT_INVALID:
+            return self._last_autopilot_hb
+        self._last_autopilot_hb = msg
+        return msg
+
+    def get_mode(self):
+        msg = self._autopilot_heartbeat()
         if msg is None:
             return 'UNKNOWN'
         mode_map = {v: k for k, v in self.master.mode_mapping().items()}
         return mode_map.get(msg.custom_mode, str(msg.custom_mode))
 
     def is_armed(self):
-        msg = self.master.messages.get('HEARTBEAT')
+        msg = self._autopilot_heartbeat()
         if msg is None:
             return False
         return bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)

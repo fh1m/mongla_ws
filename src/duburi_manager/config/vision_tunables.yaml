@@ -1,0 +1,64 @@
+# Live-tunable defaults for every vision_* command.
+#
+# Load with:
+#   ros2 run duburi_manager auv_manager --ros-args \
+#       --params-file src/duburi_manager/config/vision_tunables.yaml
+#
+# Or override individually at any time without restart:
+#   ros2 param set /duburi_manager vision.kp_yaw 80.0
+#   ros2 param set /duburi_manager vision.deadband 0.06
+#   ros2 param set /duburi_manager vision.target_bbox_h_frac 0.65
+#
+# Resolution order at goal-dispatch time (in commands.fields_for):
+#   1. value the goal supplied (mission/cli kwarg)         -- per-call wins
+#   2. live ROS-param value (this file at startup)         -- pool tuning
+#   3. hardcoded spec default (duburi_control/commands.py) -- last resort
+#
+# Live mid-loop tuning is OUT of v1: param changes take effect on the
+# NEXT vision goal; in-flight goals keep their snapshotted values to the
+# end so we never confuse a moving sub by yanking a gain mid-tick.
+
+duburi_manager:
+  ros__parameters:
+    vision:
+      # ---- Centring gains ---------------------------------------------
+      # Raise if centring is sluggish; lower if the sub oscillates.
+      kp_yaw:      60.0   # Ch4 percent per unit normalized horizontal error
+      kp_lat:      60.0   # Ch6 percent per unit normalized horizontal error
+
+      # ---- Vertical / depth axis --------------------------------------
+      # Metres of incremental depth setpoint per unit normalized vertical
+      # error per tick. Stays small so ALT_HOLD never sees a step jump.
+      kp_depth:    0.05
+
+      # ---- Distance-keep gain (vision_hold_distance / vision_align_3d)
+      # Ch5 percent per unit bbox-height-fraction error. Big number is
+      # OK because the error itself is small (typically <= 0.1).
+      kp_forward: 200.0
+
+      # ---- Settling deadband ------------------------------------------
+      # |error| below which an axis is considered "centred" for the
+      # SETTLED_TICK_BUDGET counter. Match to your camera noise floor.
+      deadband:    0.10
+
+      # ---- Distance proxy ---------------------------------------------
+      # Bbox height as a fraction of image height that means "stop here".
+      # Tune to match your target's real size and the sub's safe approach
+      # distance (bigger number = closer).
+      target_bbox_h_frac: 0.55
+
+      # ---- Loss handling ----------------------------------------------
+      # Seconds; older detection treated as lost. Bump to ~1.5 if your
+      # detector frame-rate is bursty.
+      stale_after: 0.8
+
+      # 'fail' -- abort on lost target (LOST_TICK_BUDGET ticks).
+      # 'hold' -- ride out flickers, just stop driving until the target
+      #           comes back. Good for vision_hold_distance.
+      on_lost: "fail"
+
+      # ---- vision_acquire (search) ------------------------------------
+      # Yaw stick percent and forward-thrust percent used during sweep.
+      # The acquire verb only uses the one matching its drive verb.
+      acquire_yaw_rate_pct: 22.0
+      acquire_gain:         25.0

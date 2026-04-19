@@ -1,0 +1,28 @@
+# duburi_vision -- detector defaults
+#
+# Pick the model file (Ultralytics auto-downloads the first time it can't
+# find the path). YOLO26 ships five sizes:
+#   yolo26n.pt   ~5 MB    fastest, edge-friendly, default
+#   yolo26s.pt  ~19 MB    a notch more accurate
+#   yolo26m.pt  ~42 MB    decent accuracy on Jetson Orin
+#   yolo26l.pt  ~51 MB    desktop / training rig
+#   yolo26x.pt ~113 MB    desktop only
+#
+# device:  cuda:N -> require GPU (fail-fast). cpu -> explicit CPU. auto ->
+#          GPU if present, otherwise CPU silently (use only in CI/tests).
+# half:    FP16 inference. Off by default for determinism on RTX 2060;
+#          turn on for Jetson Orin.
+# classes: CSV string. '' (empty) means "keep all coco classes".
+
+duburi_detector:
+  ros__parameters:
+    model_path:          yolo26n.pt
+    device:              cuda:0
+    half:                false
+    conf:                0.35
+    iou:                 0.50
+    imgsz:               640
+    classes:             person
+    publish_debug_image: true
+    debug_image_hz:      5.0
+    alignment_deadband:  0.05

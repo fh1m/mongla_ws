@@ -1,12 +1,21 @@
 """BNO085Source — external yaw via ESP32-C3 over USB CDC.
 
+Plug-and-play port discovery
+----------------------------
+Pass ``port='auto'`` (the manager-node default) and the source probes
+the host for a recognisable USB CDC device, opens the first one that
+delivers a valid JSON line within the probe window, and uses that. The
+chosen path is logged loudly so operators see which device was picked.
+Pin a specific device with ``port='/dev/ttyACM0'`` to skip discovery.
+
 Why this design (no magnetometer, ever)
 ---------------------------------------
-The BNO085 ships with the chip in `SH2_GAME_ROTATION_VECTOR` mode:
-gyro + accelerometer fused, magnetometer DISABLED. That gives us a
-smooth heading immune to magnetic interference (8 thrusters + aluminum
-(Marine 5083) hull + battery currents) but with no absolute Earth reference — the
-chip's "yaw 0" is whatever direction it was facing at boot.
+The reference firmware runs the BNO085 in ``SH2_GYRO_INTEGRATED_RV``
+(``GAME_ROTATION_VECTOR``-equivalent for our purposes) — gyro +
+accelerometer fused, magnetometer DISABLED. That gives us a smooth
+heading immune to magnetic interference (8 thrusters + aluminum (Marine
+5083) hull + battery currents) but with no absolute Earth reference —
+the chip's "yaw 0" is whatever direction it was facing at boot.
 
 To get an Earth-referenced heading without ever using the BNO's mag,
 we read the Pixhawk's mag-fused yaw ONCE at startup (sub at the surface,
@@ -29,10 +38,9 @@ The MCU ships ONE JSON object per line, newline-terminated:
                 applies the calibration offset.
   ts    int     ms since MCU boot. Optional. Diagnostic only.
 
-Stream rate: 50 Hz target. Anything 20-100 Hz works; control loops
-poll at 10 Hz so we just need fresher-than-stale samples. Avoid
-exactly 200 Hz (documented BNO firmware bug — Adafruit forum thread
-"BNO085 Behavior After Stillness").
+Stream rate: 50 Hz target (firmware ships ~50 Hz from a 500 Hz internal
+loop). Anything 20-100 Hz works; control loops poll at 10 Hz so we just
+need fresher-than-stale samples.
 Baud: 115200.
 
 Design rules (from user spec, see .claude/context/sensors-pipeline.md)
@@ -45,7 +53,9 @@ Design rules (from user spec, see .claude/context/sensors-pipeline.md)
   * Calibration is one-shot at __init__; restart the node to re-zero.
 """
 
+import glob
 import json
+import os
 import threading
 import time
 
@@ -54,13 +64,124 @@ import serial          # pyserial
 
 _STALE_S = 0.25        # 12 frames @ 50 Hz; matches our 10 Hz control loop
 
+# Probe order for `port='auto'`. by-id paths come first because they're
+# stable across reboots (the Espressif USB serial number stays put even
+# if the kernel renumbers ttyACM*).
+_AUTO_PROBE_GLOBS = (
+    '/dev/serial/by-id/usb-Espressif*',
+    '/dev/serial/by-id/usb-Adafruit*',
+    '/dev/serial/by-id/usb-Seeed*',
+    '/dev/serial/by-id/usb-1a86*',          # CH340/CH9102 USB-serial
+    '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3',
+    '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3',
+)
+
+_AUTO_PROBE_TIMEOUT_S = 1.5     # per-candidate; total budget is len(globs) * this
+
+
+def _enumerate_candidate_ports():
+    """Return a de-duplicated, real-path list of ports worth probing.
+
+    Globs expand to whatever is actually plugged in; literal paths only
+    survive if the device node exists. The result preserves the
+    declaration order in `_AUTO_PROBE_GLOBS`.
+    """
+    seen = set()
+    candidates = []
+    for pattern in _AUTO_PROBE_GLOBS:
+        if any(ch in pattern for ch in '*?['):
+            matches = sorted(glob.glob(pattern))
+        else:
+            matches = [pattern] if os.path.exists(pattern) else []
+        for path in matches:
+            try:
+                real = os.path.realpath(path)
+            except OSError:
+                real = path
+            if real in seen:
+                continue
+            seen.add(real)
+            candidates.append(path)        # keep the human-friendly name
+    return candidates
+
+
+def _probe_port(path: str, baud: int, logger=None) -> bool:
+    """Open `path`, read for up to `_AUTO_PROBE_TIMEOUT_S`, return True
+    if at least one parseable `{"yaw":...}` JSON line arrives.
+    """
+    try:
+        sample = serial.Serial(port=path, baudrate=baud, timeout=0.2)
+    except (serial.SerialException, OSError) as exc:
+        if logger:
+            logger.debug(f'[SENSOR] BNO085 probe skip {path}: {exc}')
+        return False
+    try:
+        deadline = time.monotonic() + _AUTO_PROBE_TIMEOUT_S
+        while time.monotonic() < deadline:
+            raw = sample.readline()
+            if not raw:
+                continue
+            try:
+                line = raw.decode('utf-8', errors='ignore').strip()
+            except Exception:
+                continue
+            if not line or line[0] != '{':
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if 'yaw' in msg:
+                return True
+        return False
+    finally:
+        try:
+            sample.close()
+        except Exception:
+            pass
+
+
+def auto_detect_port(*, baud: int = 115200, logger=None) -> str:
+    """Probe known USB CDC devices, return the first that streams BNO085 JSON.
+
+    Raises RuntimeError with a friendly checklist if nothing answers.
+    """
+    candidates = _enumerate_candidate_ports()
+    if not candidates:
+        raise RuntimeError(
+            'BNO085 auto-detect: no candidate serial devices present. '
+            'Plug the ESP32-C3 in (USB CDC), then retry. Looked for: '
+            f'{list(_AUTO_PROBE_GLOBS)}')
+
+    if logger:
+        logger.info(
+            f'[SENSOR] BNO085 auto-detect: probing {len(candidates)} candidate(s)...')
+
+    for path in candidates:
+        if logger:
+            logger.info(f'[SENSOR]   - probe {path}')
+        if _probe_port(path, baud, logger):
+            if logger:
+                logger.info(f'[SENSOR] BNO085 auto-detect: picked {path}')
+            return path
+
+    raise RuntimeError(
+        f'BNO085 auto-detect: probed {len(candidates)} device(s), none streamed '
+        f'a parseable {{"yaw":...}} JSON line at {baud} baud within '
+        f'{_AUTO_PROBE_TIMEOUT_S:.1f}s each. '
+        'Check: (1) the MCU is powered + the firmware is flashed, '
+        '(2) the host user has dialout/uucp group access to /dev/tty*, '
+        '(3) no other process (Arduino IDE Serial Monitor, screen, ...) '
+        'is holding the port open.')
+
 
 class BNO085Source:
     """Background reader for the JSON-line protocol above.
 
-    Constructor opens the port and starts the reader thread; it raises
-    serial.SerialException if the port can't be opened (operator chose
-    this source, operator gets told — no silent fallback).
+    Constructor opens the port (or auto-detects one when ``port='auto'``)
+    and starts the reader thread; it raises ``serial.SerialException`` if
+    the port can't be opened, or ``RuntimeError`` if auto-detect fails.
+    Operator chose this source, operator gets told — no silent fallback.
 
     If `reference_yaw_provider` is supplied, __init__ also performs a
     bounded calibration: it waits for a fresh BNO sample AND a fresh
@@ -78,9 +199,13 @@ class BNO085Source:
     def __init__(self, *, port: str, baud: int = 115200, logger=None,
                  reference_yaw_provider=None,
                  calibration_timeout_s: float = 5.0):
+        self._baud = baud
+        self._log  = logger
+
+        # ``port='auto'`` (or '' / None) -> probe known USB CDC devices.
+        if not port or str(port).strip().lower() == 'auto':
+            port = auto_detect_port(baud=baud, logger=logger)
         self._port_name = port
-        self._baud      = baud
-        self._log       = logger
 
         self._latest_yaw: float | None = None
         self._latest_ts:  float        = 0.0

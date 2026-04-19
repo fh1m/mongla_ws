@@ -1,44 +1,30 @@
 #!/usr/bin/env python3
-"""Square-pattern mission -- the classic Duburi shakedown.
+"""square_pattern -- the classic Duburi shakedown.
 
-Mission (square pattern at surface):
-  arm -> MANUAL -> set_depth 0.0
-    -> forward 5s -> yaw_right 90
-    -> forward 5s -> yaw_right 90
-    -> forward 5s -> yaw_right 90
-    -> forward 5s -> disarm
+Four 5-second forward legs separated by 90deg right turns, with a
+1-second pause between each turn and the next leg to drain residual
+yaw inertia from the ArduSub heading-hold integrator
+(see .claude/context/axis-isolation.md).
 
-Each `client.send(...)` blocks until the previous command's settle
-phase has elapsed -- separation of concerns is enforced by the action
-server's single-flight `lock`. We layer an explicit `pause` between
-the turn and the next forward to drain residual yaw inertia from the
-ArduSub heading-hold integrator (see .claude/context/axis-isolation.md).
+Run: `ros2 run duburi_planner mission square_pattern`
 """
 
-
-def _step(client, log, label, cmd, **fields):
-    """Send one command and log its result. Failures propagate."""
-    result = client.send(cmd, **fields)
-    log.info(
-        f'  -> {label}: final={result.final_value:+.3f}  '
-        f'err={result.error_value:+.3f}  ({result.message})')
+LEG_DURATION_S = 5.0
+LEG_GAIN_PCT   = 60.0
+TURN_DEG       = 90.0
+PAUSE_S        = 1.0
 
 
-def run(client, log):
-    log.info('-' * 52)
-    log.info(' SQUARE PATTERN -- 4 legs of 5 s each')
-    log.info('-' * 52)
+def run(duburi, log):
+    duburi.arm()
+    duburi.set_mode('MANUAL')
+    duburi.set_depth(0.0, timeout=40.0)
 
-    _step(client, log, 'arm',       'arm')
-    _step(client, log, 'MANUAL',    'set_mode', target_name='MANUAL')
-    _step(client, log, 'depth 0.0', 'set_depth', target=-0.0, timeout=40.0)
+    for leg in range(4):
+        duburi.move_forward(LEG_DURATION_S, gain=LEG_GAIN_PCT)
+        if leg < 3:
+            duburi.pause(PAUSE_S)
+            duburi.yaw_right(TURN_DEG)
+            duburi.pause(PAUSE_S)
 
-    for leg in range(1, 5):
-        _step(client, log, f'leg {leg} fwd', 'move_forward',
-              duration=5.0, gain=60.0)
-        if leg < 4:
-            _step(client, log, f'leg {leg} pause', 'pause', duration=1.0)
-            _step(client, log, f'leg {leg} turn', 'yaw_right', target=90.0)
-            _step(client, log, f'leg {leg} pause', 'pause', duration=1.0)
-
-    _step(client, log, 'disarm', 'disarm')
+    duburi.disarm()

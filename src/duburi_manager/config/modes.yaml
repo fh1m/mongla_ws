@@ -11,7 +11,7 @@
 
 duburi_manager:
   ros__parameters:
-    mode: sim              # sim | pool | laptop | desk
+    mode: auto             # auto (default; probes UDP+USB) | sim | pool | laptop | desk
     smooth_yaw:       false   # true → yaw_glide (smootherstep setpoint sweep)
     smooth_translate: false   # true → drive_*_eased (trapezoid thrust envelope, applies to forward + lateral)
 
@@ -20,5 +20,5 @@ duburi_manager:
     # Firmware contract: src/duburi_sensors/firmware/esp32c3_bno085.md
     # Source code:       src/duburi_sensors/duburi_sensors/sources/bno085.py
     yaw_source:  mavlink_ahrs   # mavlink_ahrs (default) | bno085 | dvl | witmotion
-    bno085_port: /dev/ttyACM0   # ESP32-C3 USB CDC (only used when yaw_source==bno085)
+    bno085_port: auto           # 'auto' = probe USB CDC for an ESP32-C3 streaming JSON yaw; or pin to /dev/ttyACM0
     bno085_baud: 115200

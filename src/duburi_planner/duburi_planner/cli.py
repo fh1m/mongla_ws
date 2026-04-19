@@ -29,9 +29,34 @@ import rclpy
 from rclpy.node import Node
 
 from duburi_control import COMMANDS
-from duburi_control.commands import STRING_FIELDS
+from duburi_control.commands import BOOL_FIELDS, STRING_FIELDS
 
 from .client import DuburiClient
+
+
+def _bool_arg(value):
+    """Loose bool parser so `--visual_pid true` / `1` / `yes` all work."""
+    if isinstance(value, bool):
+        return value
+    truthy = {'1', 'true',  't', 'yes', 'y', 'on'}
+    falsy  = {'0', 'false', 'f', 'no',  'n', 'off'}
+    lower  = str(value).strip().lower()
+    if lower in truthy:
+        return True
+    if lower in falsy:
+        return False
+    raise argparse.ArgumentTypeError(
+        f'expected bool-ish value, got {value!r}')
+
+
+# Vision verbs let the manager fill defaults from `vision.*` ROS params
+# at dispatch time, so the CLI must NOT pre-fill spec defaults for these
+# commands; sending the rosidl zero is what triggers the live-param
+# substitution inside `commands.fields_for`.
+_LIVE_TUNED_COMMANDS = {
+    'vision_align_3d', 'vision_align_yaw', 'vision_align_lat',
+    'vision_align_depth', 'vision_hold_distance', 'vision_acquire',
+}
 
 
 def _build_parser():
@@ -39,23 +64,47 @@ def _build_parser():
     sub    = parser.add_subparsers(dest='cmd', required=True)
     for name, spec in COMMANDS.items():
         cmd_parser = sub.add_parser(name, help=spec['help'])
+        live_tuned = name in _LIVE_TUNED_COMMANDS
         for field in spec['fields']:
-            is_string = field in STRING_FIELDS
             has_default = field in spec['defaults']
+            if field in BOOL_FIELDS:
+                arg_type = _bool_arg
+            elif field in STRING_FIELDS:
+                arg_type = str
+            else:
+                arg_type = float
+            # For live-tuned commands, leave optional fields at None so
+            # the rosidl zero reaches the manager and `vision.*` ROS
+            # params apply. For everything else, prefill the spec default.
+            cli_default = None if live_tuned else spec['defaults'].get(field)
+            help_default = (
+                f'(default: vision.* ROS param, see vision_tunables.yaml)'
+                if live_tuned and has_default
+                else (f'(default: {spec["defaults"][field]})'
+                      if has_default else '(required)'))
             cmd_parser.add_argument(
                 f'--{field}',
-                type=str if is_string else float,
+                type=arg_type,
                 required=not has_default,
-                default=spec['defaults'].get(field),
-                help=f'(default: {spec["defaults"][field]})' if has_default
-                     else '(required)',
+                default=cli_default,
+                help=help_default,
             )
     return parser
 
 
 def _fields_from_args(cmd, args):
-    """Pick only the fields that belong to `cmd` out of the parsed args."""
-    return {field: getattr(args, field) for field in COMMANDS[cmd]['fields']}
+    """Pick only the fields that belong to `cmd` out of the parsed args.
+
+    Drops kwargs the user didn't supply for live-tuned commands so the
+    rosidl zero reaches the manager (= live ROS-param defaults apply).
+    """
+    fields = {}
+    for field in COMMANDS[cmd]['fields']:
+        value = getattr(args, field)
+        if value is None:
+            continue
+        fields[field] = value
+    return fields
 
 
 def main():

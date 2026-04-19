@@ -49,6 +49,12 @@ secrets.yaml
 *.db3
 *.mcap
 
+# ─── ML model weights (downloaded on demand by Ultralytics) ────────────
+*.pt
+*.pth
+*.onnx
+*.engine
+
 # ─── Generated package files we DO check in ────────────────────────────
 # (explicitly whitelisted below even though the rules above would skip them)
 !src/**/package.xml

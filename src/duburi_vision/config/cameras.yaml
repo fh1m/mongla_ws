@@ -1,0 +1,39 @@
+# duburi_vision -- named camera profiles (mirrors CAMERA_PROFILES in
+# duburi_vision/config.py). Edit either; keep them in sync.
+#
+# Pick a profile at launch with -p profile:=<name>. To override fields
+# inline, set the source-specific params (device / topic / width / ...).
+#
+# 'jetson_*' / 'blueos' / 'mavlink' currently raise NotImplementedError on
+# construction -- they're listed so future profiles drop in by config edit.
+
+duburi_vision:
+  cameras:
+    laptop:
+      source:   webcam
+      device:   0
+      width:    640
+      height:   480
+      fps:      30
+      frame_id: laptop_cam
+
+    sim_front:
+      source:          ros_topic
+      topic:           /duburi/sim/front_camera/image_raw
+      expected_width:  640
+      expected_height: 480
+      expected_fps:    30
+      frame_id:        front_cam
+
+    sim_bottom:
+      source:          ros_topic
+      topic:           /duburi/sim/bottom_camera/image_raw
+      expected_width:  640
+      expected_height: 480
+      expected_fps:    30
+      frame_id:        bottom_cam
+
+    jetson_front:  { source: jetson  }
+    jetson_bottom: { source: jetson  }
+    blueos:        { source: blueos  }
+    mavlink:       { source: mavlink }

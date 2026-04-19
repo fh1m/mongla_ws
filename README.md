@@ -7,6 +7,8 @@
 > developed against an ArduSub SITL + Gazebo loop and field-tested on
 > **Duburi**, a `vectored_6dof` 8-thruster AUV.
 
+![Mongla architecture](docs/architecture.png)
+
 <!-- Badges -->
 ![ROS2 Humble](https://img.shields.io/badge/ROS2-Humble-blue)
 ![Ubuntu 22.04](https://img.shields.io/badge/Ubuntu-22.04-E95420)
@@ -15,6 +17,163 @@
 ![MAVLink 2.0](https://img.shields.io/badge/MAVLink-2.0-purple)
 ![Pixhawk 2.4.8](https://img.shields.io/badge/Pixhawk-2.4.8-black)
 ![License MIT](https://img.shields.io/badge/License-MIT-green)
+
+---
+
+## Quickstart smoke tests
+
+> Seven copy-paste scenarios, in the order you would actually run them.
+> Each block lists **what success looks like** and **the exact commands**.
+> All commands assume `source /opt/ros/humble/setup.bash && source install/setup.bash`.
+
+### 0 — Bringup health check (no AUV needed)
+
+Probes USB serial ports, BlueOS UDP stream, BNO085 USB CDC, and ROS env in
+one shot. **Run this first** every session.
+
+```bash
+ros2 run duburi_manager bringup_check
+```
+
+Success: every line ends in `OK`. Failures print the missing piece (e.g.
+"no Pixhawk on /dev/ttyACM*", "BNO085 not detected") with the exact fix.
+
+### 1 — SIM only (Gazebo + ArduSub SITL, no real AUV)
+
+In separate terminals (full SIM bring-up is documented in §8.1):
+
+```bash
+# T1: ArduSub SITL
+sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
+    --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
+# T2: manager (auto-detects sim mode via UDP 14550)
+ros2 run duburi_manager auv_manager
+# T3: drive it
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi set_depth --target -0.5
+ros2 run duburi_planner duburi move_forward --duration 3 --gain 60
+ros2 run duburi_planner duburi disarm
+```
+
+Success: thrusters spin (open Gazebo for visuals — see §8.1), depth in T2
+logs converges on -0.5 m, every CLI exits 0.
+
+### 2 — Vision pipeline (webcam, no AUV)
+
+```bash
+# T1
+ros2 launch duburi_vision webcam_demo.launch.py
+# T2 -- inspect annotated frames
+ros2 run rqt_image_view rqt_image_view /duburi/vision/laptop/image_debug
+# T3 -- inspect raw detections
+ros2 topic echo /duburi/vision/laptop/detections
+```
+
+Success: rqt_image_view shows your webcam with green bounding boxes around
+people. The detector logs `in_hz=~30  with_target=>0%`.
+
+### 3 — Vision + control loop (the big one)
+
+The integration test: webcam drives the simulated BlueROV2 in Gazebo.
+
+```bash
+# T1: ArduSub SITL (see §8.1)
+sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
+    --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
+# T2: manager
+ros2 run duburi_manager auv_manager
+# T3: vision
+ros2 launch duburi_vision webcam_demo.launch.py
+# T4: drive
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi set_depth --target -0.5
+ros2 run duburi_planner duburi vision_align_yaw \
+    --camera laptop --target_class person --duration 8
+ros2 run duburi_planner duburi disarm
+```
+
+Success: when you move sideways in front of the webcam, the BlueROV2 yaws
+to keep you centred. Manager logs `[vision] err=±0.0XX  ch4=±YY%`.
+
+### 4 — Mission runner (auto-discovered)
+
+```bash
+ros2 run duburi_planner mission --list           # shows every missions/*.py
+ros2 run duburi_planner mission move_and_see     # short open-loop + vision demo
+ros2 run duburi_planner mission find_person_demo # full vision-driven walkthrough
+```
+
+Adding a new mission: drop `missions/<your_name>.py` exposing
+`def run(duburi, log)`, rebuild `duburi_planner`, and it appears in
+`--list` instantly. **No registry edit.** Full reference:
+[.claude/context/mission-cookbook.md](.claude/context/mission-cookbook.md).
+
+### 5 — Live-tune vision gains without restarting
+
+While a vision verb / mission is running:
+
+```bash
+ros2 param set /duburi_manager vision.kp_yaw 80.0
+ros2 param set /duburi_manager vision.deadband 0.06
+ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
+```
+
+Every subsequent vision goal picks up the new value automatically — mission
+files that omit those overrides use the live ROS-param value. Defaults live
+in [src/duburi_manager/config/vision_tunables.yaml](src/duburi_manager/config/vision_tunables.yaml).
+
+### 6 — BNO085 yaw source (plug-and-play)
+
+Plug the ESP32-C3 + BNO085 into any USB port. The driver auto-probes
+`/dev/serial/by-id/usb-Espressif*` and `/dev/ttyACM[0-9]` and locks onto
+the first port that streams valid `{"yaw":..,"ts":..}` JSON.
+
+Wire smoke-test (no MAVLink, no autopilot):
+
+```bash
+ros2 run duburi_sensors sensors_node --ros-args \
+    -p yaw_source:=bno085               # bno085_port defaults to "auto"
+```
+
+Pin a specific port if you want determinism:
+
+```bash
+ros2 run duburi_sensors sensors_node --ros-args \
+    -p yaw_source:=bno085 -p bno085_port:=/dev/ttyACM0
+```
+
+Calibrated, Earth-referenced (samples Pixhawk mag offset once, then
+pure-gyro yaw — same path the manager uses):
+
+```bash
+ros2 run duburi_sensors sensors_node --ros-args \
+    -p yaw_source:=bno085 -p calibrate:=true
+```
+
+Firmware + wiring contract: [src/duburi_sensors/firmware/esp32c3_bno085.md](src/duburi_sensors/firmware/esp32c3_bno085.md).
+To make the manager use BNO085 instead of ArduSub AHRS, launch with
+`-p yaw_source:=bno085` (and `-p bno085_port:=auto` is already the default).
+
+---
+
+## Concepts in 5 videos
+
+> Watch these once if any of these terms feel hand-wavy. They cover the
+> **engineering ideas** Mongla is built on; they are **not** Duburi-specific.
+
+| Topic | Why it matters here | Reference video |
+| ----- | ------------------- | --------------- |
+| **PID control intuition** | Every motion verb (depth, yaw, vision-yaw) is a P or PI loop. Knowing why I-term winds up saves you a pool day. | [Brian Douglas — PID Control: A Brief Introduction](https://www.youtube.com/watch?v=UR0hOmjaHp0) |
+| **YOLO object detection** | The vision pipeline runs Ultralytics YOLO 26. Understanding anchor-free detection helps you read `detector_node` logs. | [Computerphile — YOLO Object Detection](https://www.youtube.com/watch?v=MPU2HistivI) |
+| **MAVLink + ArduSub** | Every command Mongla sends is one MAVLink message. ArduPilot's overview explains the protocol and the ArduSub firmware. | [ArduPilot — Introduction to ArduSub](https://www.youtube.com/watch?v=Pkx2OWNBmkg) |
+| **ROS 2 Actions** | `/duburi/move` is a ROS 2 Action, not a topic or service. Goals can be cancelled, give feedback, and return a result. | [Articulated Robotics — ROS 2 Actions explained](https://www.youtube.com/watch?v=lNHQTHK4S-c) |
+| **BlueROV2 platform** | The Gazebo SITL target shares the `vectored_6dof` 8-thruster frame with the real Duburi vehicle. | [Blue Robotics — Meet the BlueROV2](https://www.youtube.com/watch?v=mpwUZmSKptw) |
+
+For the deeper architecture story (axis isolation, vision math, heading
+lock thread model), read
+[.claude/context/](.claude/context/) — especially `axis-isolation.md`,
+`vision-architecture.md`, and the
+[mission cookbook](.claude/context/mission-cookbook.md).
 
 ---
 
@@ -39,6 +198,9 @@ estuaries Mongla itself sits inside.
 
 ## Table of Contents
 
+- [Quickstart smoke tests](#quickstart-smoke-tests)
+- [Concepts in 5 videos](#concepts-in-5-videos)
+
 0. [The name](#0-the-name)
 1. [What this repo is](#1-what-this-repo-is)
 2. [Test platform at a glance](#2-test-platform-at-a-glance)
@@ -51,6 +213,8 @@ estuaries Mongla itself sits inside.
 8. [Run — three modes](#8-run--three-modes)
 9. [Command cookbook (duburi CLI)](#9-command-cookbook-duburi-cli)
 10. [Configuration guide](#10-configuration-guide)
+10A. [Yaw source — duburi_sensors](#10a-yaw-source--duburi_sensors)
+10B. [Vision — duburi_vision](#10b-vision--duburi_vision)
 11. [Tuning guide](#11-tuning-guide)
 12. [Telemetry & log cheatsheet](#12-telemetry--log-cheatsheet)
 13. [Troubleshooting](#13-troubleshooting)
@@ -346,8 +510,9 @@ duburi_ws/
     │       ├── motion_forward.py      # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
     │       ├── motion_lateral.py      # drive_lateral_* (Ch6 RC override)
     │       ├── motion_depth.py        # hold_depth (ALT_HOLD + setpoint stream, lock-aware)
+    │       ├── motion_vision.py       # vision_track_axes (Ch4/5/6 + depth, P-only) + vision_acquire
     │       ├── heading_lock.py        # background SET_ATTITUDE_TARGET streamer (yaw cousin of depth-hold)
-    │       ├── duburi.py              # Duburi facade (lock + dispatch + heading_lock owner)
+    │       ├── duburi.py              # Duburi facade (lock + dispatch + heading_lock owner + vision_state_provider)
     │       └── errors.py              # MovementError / Timeout / ModeChangeError
     ├── duburi_sensors/
     │   ├── duburi_sensors/
@@ -364,7 +529,8 @@ duburi_ws/
     │   └── config/sensors.yaml        # yaw_source / bno085_port / baud
     ├── duburi_manager/
     │   ├── duburi_manager/
-    │   │   ├── auv_manager_node.py    # ROS2 node, ActionServer, telemetry
+    │   │   ├── auv_manager_node.py    # ROS2 node, ActionServer, telemetry, VisionState pool
+    │   │   ├── vision_state.py        # per-camera Detection2DArray subscriber + bbox_error()
     │   │   └── connection_config.py   # PROFILES + NETWORK topology
     │   └── config/modes.yaml          # default ros parameters
     └── duburi_planner/
@@ -375,7 +541,8 @@ duburi_ws/
             ├── missions/
             │   ├── square_pattern.py  # the legacy test_runner choreography
             │   ├── arc_demo.py        # sharp vs curved turn comparison
-            │   └── heading_lock_demo.py
+            │   ├── heading_lock_demo.py
+            │   └── find_person_demo.py # full vision-driven 3D alignment demo
             └── state_machines/        # reserved for YASMIN-based plans
 ```
 
@@ -461,7 +628,19 @@ inside the `NETWORK` dict.
 
 ### 5.3 Sanity checks before a session
 
-Run these from whichever machine you're starting the stack on:
+The fast path is a single command:
+
+```bash
+ros2 run duburi_manager bringup_check
+```
+
+It probes the canonical Pi (`192.168.2.1`) and Jetson (`192.168.2.69`)
+IPs, looks for an active MAVLink stream on UDP `14550`, enumerates any
+Pixhawk USB CDC devices, and tests BNO085 auto-detection -- printing
+PASS / WARN / FAIL per check and a launch hint at the end. Exit code is
+`0` when nothing failed, `1` otherwise (so it composes in scripts).
+
+Manual probes if you want to double-check:
 
 ```bash
 ping -c 3 192.168.2.1             # BlueOS reachable
@@ -473,6 +652,21 @@ timeout 5 tcpdump -i any udp port 14550 -c 10  # see MAVLink bytes flowing (need
 The `auv_manager` startup banner prints the expected BlueOS peer whenever
 `mode:=pool` or `mode:=laptop` — if the printed IP doesn't match your
 BlueOS endpoint config, fix BlueOS first.
+
+### 5.4 Plug-and-play mode
+
+`mode:=auto` (the default) makes the manager pick its own connection
+profile at startup:
+
+| Probe                                                  | Picked profile |
+| ------------------------------------------------------ | -------------- |
+| UDP `14550` already in use (BlueOS pushing MAVLink)    | `pool`         |
+| Pixhawk USB CDC present (`/dev/serial/by-id/*ardupilot*` or `/dev/ttyACM0`) | `desk` |
+| Neither                                                | `sim`          |
+
+Pin a specific profile by passing `-p mode:=pool` (or `desk`/`sim`/`laptop`).
+The startup banner always prints the resolved mode so you can see what
+auto-detect picked.
 
 ---
 
@@ -625,6 +819,17 @@ ros2 run duburi_planner duburi stop
 
 # Pause (release the RC override for N seconds — autopilot takes over)
 ros2 run duburi_planner duburi pause --duration 2.0
+
+# Vision-driven verbs (need duburi_vision pipeline up; see §10B)
+ros2 run duburi_planner duburi vision_acquire --camera laptop --target_class person \
+    --target_name yaw_left --timeout 30 --gain 25 --yaw_rate_pct 25
+ros2 run duburi_planner duburi vision_align_yaw   --camera laptop --target_class person --duration 15
+ros2 run duburi_planner duburi vision_align_lat   --camera laptop --target_class person --duration 15
+ros2 run duburi_planner duburi vision_align_depth --camera laptop --target_class person --duration 15
+ros2 run duburi_planner duburi vision_hold_distance --camera laptop --target_class person \
+    --target_bbox_h_frac 0.55 --duration 20
+ros2 run duburi_planner duburi vision_align_3d --camera laptop --target_class person \
+    --axes yaw,forward,depth --duration 30 --target_bbox_h_frac 0.55
 ```
 
 > The CLI is generated from `COMMANDS`, so every command takes its parameters
@@ -654,6 +859,7 @@ ros2 run duburi_planner mission --list
 ros2 run duburi_planner mission square_pattern
 ros2 run duburi_planner mission arc_demo
 ros2 run duburi_planner mission heading_lock_demo
+ros2 run duburi_planner mission find_person_demo   # vision-driven 3D alignment demo
 ```
 
 For programmatic use from Python, import `DuburiClient` from
@@ -688,6 +894,44 @@ except MoveFailed as exc:
     node.get_logger().error(f'goal failed: {exc}')
 ```
 
+### 9.1 Mission DSL — `duburi` + `duburi.vision`
+
+For mission scripts, prefer the
+[`DuburiMission`](src/duburi_planner/duburi_planner/duburi_dsl.py) wrapper
+over the raw `DuburiClient`. Every mission file in
+`src/duburi_planner/duburi_planner/missions/` exposes one
+`run(duburi, log)` function and gets the wrapped object for free:
+
+```python
+def run(duburi, log):
+    duburi.target = 'person'                       # sticky context
+    duburi.arm()
+    duburi.set_depth(-0.5)
+    duburi.move_forward(3.0, gain=60)              # open-loop verb
+    duburi.vision.find(sweep='right')              # closed-loop, vision-driven
+    duburi.vision.lock(axes='yaw,forward',         # multi-axis simultaneous hold
+                       distance=0.55,
+                       duration=12)
+    duburi.move_back(2.0, gain=60)
+    duburi.disarm()
+```
+
+Two namespaces, one mental model:
+
+- `duburi.*` -- open-loop motion (arm, set_depth, move_*, yaw_*, arc, lock_heading, ...).
+- `duburi.vision.*` -- closed-loop motion that mirrors the SAME axis names
+  (`vision.yaw`, `vision.lateral`, `vision.depth`, `vision.forward`,
+  `vision.find`, `vision.lock`).
+
+Vision verbs read sticky `duburi.camera` / `duburi.target` and fall through
+to `auv_manager_node`'s live `vision.*` ROS params when overrides are left
+unset -- so deck-side tuning works without touching mission code. Every
+verb accepted on the action server is also reachable as
+`duburi.<name>(...)` via fall-through on the wrapper.
+
+Full design + working principles + ten ready-to-steal samples:
+[`.claude/context/mission-cookbook.md`](.claude/context/mission-cookbook.md).
+
 ---
 
 ## 10. Configuration guide
@@ -696,12 +940,18 @@ All parameters declared on `auv_manager_node`:
 
 | Parameter          | Type     | Default          | Values / effect                                                                    |
 |--------------------|----------|------------------|------------------------------------------------------------------------------------|
-| `mode`             | `string` | `sim`            | `sim`, `pool`, `laptop`, `desk` — chooses connection string                        |
+| `mode`             | `string` | `auto`           | `auto` (probes UDP 14550 + Pixhawk USB and picks `pool`/`desk`/`sim`), or pin one of `sim`, `pool`, `laptop`, `desk` |
 | `smooth_yaw`       | `bool`   | `false`          | `true` → `yaw_glide` (smootherstep setpoint sweep, no overshoot)                   |
 | `smooth_translate` | `bool`   | `false`          | `true` → `drive_*_eased` (trapezoid thrust, settle-only brake; forward + lateral)  |
 | `yaw_source`       | `string` | `mavlink_ahrs`   | `mavlink_ahrs` (ArduSub onboard) \| `bno085` (ESP32-C3 + BNO085); same source feeds `lock_heading` |
-| `bno085_port`      | `string` | `/dev/ttyACM0`   | USB CDC device path (only when `yaw_source==bno085`)                               |
+| `bno085_port`      | `string` | `auto`           | `auto` (probes `/dev/serial/by-id/usb-Espressif*` + `/dev/ttyACM*`) or explicit USB CDC path |
 | `bno085_baud`      | `int`    | `115200`         | BNO085 stream baud rate                                                            |
+| `vision.kp_yaw` / `vision.kp_lat` / `vision.kp_depth` / `vision.kp_forward` | `double` | 60 / 60 / 0.05 / 200 | Per-axis P gains used by every `vision_*` verb when the goal field is left at the rosidl zero default. Tune live with `ros2 param set /duburi_manager vision.kp_yaw 80.0`. |
+| `vision.deadband`  | `double` | `0.10`           | Per-axis settle band for vision verbs (0..1). Override per goal by passing the matching field, otherwise this lives default applies. |
+| `vision.target_bbox_h_frac` | `double` | `0.55`  | Distance proxy used by `vision_hold_distance` / `vision_align_3d` when the goal field is unset. |
+| `vision.stale_after` | `double` | `0.8`          | Seconds after which a Sample is treated as lost.                                  |
+| `vision.on_lost`   | `string` | `fail`           | `fail` (raise) or `hold` (park, never raise). Per-goal override still wins.        |
+| `vision.acquire_yaw_rate_pct` / `vision.acquire_gain` | `double` | 22 / 25 | Sweep speed and forward thrust used by `vision_acquire` (`duburi.vision.find`). |
 
 > The executable is registered under both names: `auv_manager` and `auv_manager_node` resolve to the same node.
 >
@@ -772,6 +1022,11 @@ everywhere downstream.
 ros2 run duburi_manager auv_manager_node
 
 # External — ESP32-C3 + BNO085 over USB CDC
+# Default port=auto: probes /dev/serial/by-id/usb-Espressif* + /dev/ttyACM* and
+# picks the first device that streams a valid {"yaw":..,"ts":..} JSON line.
+ros2 run duburi_manager auv_manager_node --ros-args -p yaw_source:=bno085
+
+# Pin an explicit port if you have multiple ACM devices and don't want probing.
 ros2 run duburi_manager auv_manager_node \
     --ros-args -p yaw_source:=bno085 \
                -p bno085_port:=/dev/ttyACM0 \
@@ -874,6 +1129,142 @@ reference Arduino sketch live in
 [src/duburi_sensors/firmware/esp32c3_bno085.md](src/duburi_sensors/firmware/esp32c3_bno085.md).
 Smoke-test the wire from the Jetson with `cat /dev/ttyACM0` first;
 if you don't see JSON, the Jetson side won't see it either.
+
+---
+
+## 10B. Vision — `duburi_vision`
+
+The perception package: a uniform `Camera` interface, a YOLO26 detector
+that runs GPU-first, a `draw` module of on-image overlays that turn
+"is the AUV aligned with the target?" from a guess into a single glance
+at the debug image, and **six `vision_*` verbs on `/duburi/move`** that
+let any client (CLI / mission / state machine) close the loop on a
+detection. Tracking and Kalman filtering are scoped for v2/v3 and have
+placeholder `PLAN.md` files in
+[src/duburi_vision/duburi_vision/tracking/](src/duburi_vision/duburi_vision/tracking/PLAN.md)
+and [filters/](src/duburi_vision/duburi_vision/filters/PLAN.md).
+
+### Architecture
+
+```
++------------------------+     +-------------------------+     +-----------------------+
+|  camera_node           | --> |  detector_node          | --> |  auv_manager_node     |
+|  Camera factory:       |     |  YoloDetector (YOLO26)  |     |  VisionState pool     |
+|  webcam / ros_topic /  |     |  + draw.render_all()    |     |  + motion_vision loop |
+|  jetson / blueos /     |     |  -> Detection2DArray    |     |  RC Ch4/5/6 + depth   |
+|  mavlink (stubs)       |     |  -> image_debug         |     +-----------------------+
++------------------------+     +-------------------------+              ^
+                                                                        |
+                                                       /duburi/move (vision_* verbs)
+```
+
+The closed loop runs **inside the manager** — the same node that owns
+MAVLink — so vision and control never fight for thrust. `VisionState`
+is a per-camera subscriber pool, lazily built on first `vision_*` goal
+with a one-shot `wait_vision_state_ready` preflight (logs which topic
+is missing if the pipeline isn't up).
+
+One camera per `camera_node` instance, picked by `profile:=` (matched against
+`CAMERA_PROFILES` in [config.py](src/duburi_vision/duburi_vision/config.py)
+and [config/cameras.yaml](src/duburi_vision/config/cameras.yaml)) or by an
+explicit `source:=` + source-specific overrides. Adding a new source = one
+row in `factory.BUILDERS` + a class — same UX as `duburi_sensors`.
+
+### Topics
+
+| Topic                                          | Type                          | Notes                                              |
+|------------------------------------------------|-------------------------------|----------------------------------------------------|
+| `/duburi/vision/<cam>/image_raw`               | `sensor_msgs/Image`           | Published by `camera_node` at the source's rate    |
+| `/duburi/vision/<cam>/camera_info`             | `sensor_msgs/CameraInfo`      | Size only (K/D empty until we ship a calib file)   |
+| `/duburi/vision/<cam>/detections`              | `vision_msgs/Detection2DArray`| One row per detection, hypothesis class id is str  |
+| `/duburi/vision/<cam>/image_debug`             | `sensor_msgs/Image`           | Rate-limited overlay (default 5 Hz)                |
+
+### GPU contract
+
+`detector_node` calls `select_device()` once at startup. It logs a single
+canary line you should grep for during deployment:
+
+```
+[VIS ] using cuda:0 (NVIDIA GeForce RTX 2060)  torch=2.11.0+cu128  cuda=12.8
+```
+
+`device:=cuda:0` is **fail-fast** — a missing/broken CUDA install raises
+on init with a friendly message instead of silently falling back to CPU.
+Set `device:=cpu` to opt out, or `device:=auto` for tests/CI.
+
+### Visual cues in `image_debug`
+
+Every glyph answers a specific question an operator will ask:
+
+| Glyph                                           | Question it answers                       |
+|-------------------------------------------------|-------------------------------------------|
+| Top-left status badge (src / fps / dev / det)   | Is the camera streaming? Which device?    |
+| Dashed center reticle                           | Operator's reference frame                |
+| Light-gray boxes + labels                       | What did the model see?                   |
+| Thick amber box + filled corners + crosshair    | Which target is being chased?             |
+| Arrow center -> target                          | Which way must the AUV rotate / strafe?   |
+| Bottom-left alignment readout (err_x, err_y)    | How well aligned is the AUV? (-1..+1)     |
+| Red full-width "STALE FRAME" banner             | Catastrophic state — source unhealthy     |
+
+The badge border is green when healthy and red when not, so you can spot
+breakage in a single glance. If anything looks wrong, screenshot
+`image_debug` and paste it into a bug report — every diagnostic state is
+visible in one frame.
+
+### Vision verbs (v4)
+
+The six `vision_*` verbs share the same `/duburi/move` action surface as
+every other command — same `DuburiClient`, same CLI auto-generation, same
+result envelope. See §9 for a CLI cookbook.
+
+| Verb                    | Closes the loop on …                                        | Output channels                      |
+|-------------------------|-------------------------------------------------------------|--------------------------------------|
+| `vision_align_3d`       | Centre + maintain distance on largest target_class. CSV `axes` picks subset of `yaw,lat,depth,forward`. | Ch4 / Ch5 / Ch6 + depth setpoint     |
+| `vision_align_yaw`      | Horizontal centring (yaw stick).                             | Ch4                                  |
+| `vision_align_lat`      | Horizontal centring (lateral strafe).                        | Ch6                                  |
+| `vision_align_depth`    | Vertical centring (incremental ALT_HOLD setpoint).           | Depth setpoint                       |
+| `vision_hold_distance`  | Drive forward/back so bbox height matches `target_bbox_h_frac`. | Ch5                               |
+| `vision_acquire`        | Block (optionally driving via `target_name` verb) until target seen at least once. | Drive verb of choice |
+
+Common knobs: `camera`, `target_class`, `deadband`, gain knobs (`kp_yaw`,
+`kp_lat`, `kp_depth`, `kp_forward`), `target_bbox_h_frac`, and `on_lost`
+(`'fail'` default; `'hold'` to ride out a flicker). Defaults are tuned
+for a webcam-detected `'person'` so a fresh checkout works out of the
+box. Architecture details: [`.claude/context/vision-architecture.md`](.claude/context/vision-architecture.md).
+
+### Quickstart
+
+```bash
+# Lab dev: laptop webcam + YOLO26 + rqt viewer (one terminal)
+ros2 launch duburi_vision webcam_demo.launch.py
+
+# Subscribe to a Gazebo image topic instead
+ros2 launch duburi_vision sim_demo.launch.py topic:=/your/image/topic
+
+# Single-process smoke test (no inter-node hop, mirrors sensors_node)
+ros2 run duburi_vision vision_node --ros-args -p profile:=laptop
+
+# CPU fallback if you don't have CUDA
+ros2 launch duburi_vision webcam_demo.launch.py cls_device:=cpu
+```
+
+### Pipeline diagnostics
+
+```bash
+# Topic-only health probe (no thrust, no manager required)
+ros2 run duburi_vision vision_check --camera laptop --require-class person
+
+# Detection -> RC echo: send one vision_align_yaw, watch [RC] Yaw on the manager
+ros2 run duburi_vision vision_thrust_check --camera laptop --duration 4
+
+# Full vision-driven 3D mission (acquire -> align yaw -> hold distance -> 3D align)
+ros2 run duburi_planner mission find_person_demo
+```
+
+> **Gazebo note:** the `bluerov2_gz` model used today doesn't ship a camera
+> plugin. Either add a `<sensor type="camera"/>` block + `ros_gz` image
+> bridge to the world, or point `topic:=` at any other Image publisher
+> (a re-published webcam works for end-to-end smoke tests).
 
 ---
 
@@ -1077,9 +1468,27 @@ Phase 3 — `duburi_sensors` (**done**):
   awaiting first pool run with the chip flashed.
 - `mavros` **read-only** telemetry consumer on a separate endpoint —
   pending.
-- Initial vision pipeline scaffolding (separate `duburi_vision` package).
 
-Phase 4 (queued):
+Phase 4 — `duburi_vision` (**v1 + v4 done**):
+- Camera factory (laptop webcam + Gazebo `ros_topic`; jetson/blueos/mavlink
+  stubs raise `NotImplementedError` with a friendly message). **Done.**
+- YOLO26 detector with GPU-first `select_device`, class allowlist, warmup,
+  vision_msgs converters (publishes the human label, not numeric class id). **Done.**
+- Rich on-image visualization (boxes, labels, primary highlight, crosshair,
+  alignment offset, status badge, stale banner). **Done.**
+- **v4 — vision verbs on `/duburi/move`:** six `vision_*` commands
+  (`vision_acquire`, `vision_align_yaw`/`lat`/`depth`, `vision_hold_distance`,
+  `vision_align_3d`) running the closed loop inside `auv_manager_node` so
+  vision and control share the same MAVLink owner. `VisionState` per-camera
+  subscriber pool with `wait_vision_state_ready` preflight. CLI utilities
+  `vision_check` (topic probe) and `vision_thrust_check` (detection -> RC).
+  Mission `find_person_demo` exercises the whole chain. **Done.**
+- Object tracking via `supervision.ByteTrack` -- v2, see
+  [tracking/PLAN.md](src/duburi_vision/duburi_vision/tracking/PLAN.md).
+- Per-track Kalman smoothing for visual-PID setpoints -- v3, see
+  [filters/PLAN.md](src/duburi_vision/duburi_vision/filters/PLAN.md).
+
+Phase 5 (queued):
 - `robot_localization` EKF fusing vision + AHRS2 + Bar30.
 - Mission autonomy layer (behaviour trees or simple state machines).
 - DVL integration if hardware budget allows.
@@ -1108,6 +1517,7 @@ Research notes and agent context live in `.claude/context/`:
 - [pid-theory.md](.claude/context/pid-theory.md) — PID tuning notes (after *PID without a PhD*)
 - [yaw-stability-and-fusion.md](.claude/context/yaw-stability-and-fusion.md) — yaw stabilisation + vision/Kalman roadmap
 - [mission-design.md](.claude/context/mission-design.md) — mission planning patterns (target home: `duburi_planner/state_machines/`)
+- [mission-cookbook.md](.claude/context/mission-cookbook.md) — **mission DSL cookbook** (verbs + working principles + ten samples)
 - [mavlink-reference.md](.claude/context/mavlink-reference.md) — MAVLink messages we actually use
 - [sensors-pipeline.md](.claude/context/sensors-pipeline.md) — `duburi_sensors` design rules + calibration model
 

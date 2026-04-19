@@ -1,0 +1,73 @@
+"""webcam_demo -- laptop webcam + YOLO26 person detector + debug viewer.
+
+Usage:
+    ros2 launch duburi_vision webcam_demo.launch.py
+    ros2 launch duburi_vision webcam_demo.launch.py device:=2 conf:=0.5
+    ros2 launch duburi_vision webcam_demo.launch.py rqt:=false   # headless
+    ros2 launch duburi_vision webcam_demo.launch.py device_param_type:=string device:=/dev/video2
+"""
+
+from launch                       import LaunchDescription
+from launch.actions               import DeclareLaunchArgument
+from launch.conditions            import IfCondition
+from launch.substitutions         import LaunchConfiguration, PythonExpression
+from launch_ros.actions           import Node
+
+
+def generate_launch_description():
+    args = [
+        DeclareLaunchArgument('camera',  default_value='laptop'),
+        DeclareLaunchArgument('device',  default_value='0'),
+        DeclareLaunchArgument('width',   default_value='640'),
+        DeclareLaunchArgument('height',  default_value='480'),
+        DeclareLaunchArgument('fps',     default_value='30'),
+        DeclareLaunchArgument('model',   default_value='yolo26n.pt'),
+        DeclareLaunchArgument('cls_device', default_value='cuda:0'),
+        DeclareLaunchArgument('classes', default_value='person'),
+        DeclareLaunchArgument('conf',    default_value='0.35'),
+        DeclareLaunchArgument('iou',     default_value='0.5'),
+        DeclareLaunchArgument('rqt',     default_value='true',
+                              description='Open rqt_image_view on image_debug'),
+    ]
+
+    cam_name = LaunchConfiguration('camera')
+
+    camera = Node(
+        package='duburi_vision', executable='camera_node', name='duburi_camera',
+        output='screen',
+        parameters=[{
+            'source':   'webcam',
+            'name':     cam_name,
+            'frame_id': 'laptop_cam',
+            'device':   LaunchConfiguration('device'),
+            'width':    LaunchConfiguration('width'),
+            'height':   LaunchConfiguration('height'),
+            'fps':      LaunchConfiguration('fps'),
+            'publish_rate_hz': LaunchConfiguration('fps'),
+        }],
+    )
+
+    detector = Node(
+        package='duburi_vision', executable='detector_node', name='duburi_detector',
+        output='screen',
+        parameters=[{
+            'camera':              cam_name,
+            'model_path':          LaunchConfiguration('model'),
+            'device':              LaunchConfiguration('cls_device'),
+            'classes':             LaunchConfiguration('classes'),
+            'conf':                LaunchConfiguration('conf'),
+            'iou':                 LaunchConfiguration('iou'),
+            'publish_debug_image': True,
+            'debug_image_hz':      10.0,
+        }],
+    )
+
+    image_topic = PythonExpression(["'/duburi/vision/' + '", cam_name, "' + '/image_debug'"])
+    viewer = Node(
+        package='rqt_image_view', executable='rqt_image_view',
+        name='duburi_image_view', output='screen',
+        arguments=[image_topic],
+        condition=IfCondition(LaunchConfiguration('rqt')),
+    )
+
+    return LaunchDescription(args + [camera, detector, viewer])

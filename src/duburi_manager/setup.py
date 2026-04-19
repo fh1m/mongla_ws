@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             'auv_manager      = duburi_manager.auv_manager_node:main',
             'auv_manager_node = duburi_manager.auv_manager_node:main',
+            'bringup_check    = duburi_manager.bringup_check:main',
         ],
     },
 )

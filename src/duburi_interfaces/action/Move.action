@@ -2,15 +2,32 @@
 string  cmd          # arm | disarm | set_mode | stop | pause |
                      # move_forward | move_back | move_left | move_right |
                      # yaw_left | yaw_right | arc | set_depth |
-                     # lock_heading | unlock_heading
-float32 duration     # seconds  (move_*, arc, pause)
-float32 gain         # 0-100 %  (move_*, arc)
+                     # lock_heading | unlock_heading |
+                     # vision_align_3d | vision_align_yaw | vision_align_lat |
+                     # vision_align_depth | vision_hold_distance | vision_acquire
+float32 duration     # seconds  (move_*, arc, pause, vision_*)
+float32 gain         # 0-100 %  (move_*, arc, vision_acquire drive level)
 float32 target       # metres   (set_depth, negative) or
                      # degrees  (yaw_*, lock_heading: 0=current heading)
-string  target_name  # mode string  (set_mode)
+string  target_name  # mode string  (set_mode) or
+                     # drive verb   (vision_acquire: 'yaw_left'|'yaw_right'|'move_forward'|'arc')
 float32 timeout      # max wait (all commands; lock_heading auto-release)
 float32 settle       # post-command neutral-hold seconds; 0 = axis-natural settle only
-float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc` only
+float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc` and vision_acquire('arc')
+
+# ---- vision_* fields  (ignored by every non-vision command) -----------
+string  camera             # 'laptop' | 'sim_front' | 'forward' | 'downward'
+string  target_class       # 'person' | 'gate' | ... ('' = first available)
+string  axes               # CSV: any of 'yaw,lat,depth,forward'  (vision_align_3d)
+float32 deadband           # |error| considered centered (normalized 0..1)
+float32 kp_yaw             # gain on yaw axis        (pct per unit ex)
+float32 kp_lat             # gain on lateral axis    (pct per unit ex)
+float32 kp_depth           # gain on depth axis      (m per unit ey per tick)
+float32 kp_forward         # gain on forward axis    (pct per unit h_frac error)
+float32 target_bbox_h_frac # bbox height target as fraction of image height
+bool    visual_pid         # false=P only; true=PI (anti-windup, v2 hook)
+string  on_lost            # 'fail' (default) | 'hold'
+float32 stale_after        # seconds; older detection considered lost
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]
@@ -27,6 +44,12 @@ float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc` only
 #                           error_value = 0.0
 #   arm / disarm / stop  :  final_value = current depth [m]
 #                           error_value = 0.0
+#   vision_align_*       :  final_value = composite normalized error [0..1+]
+#                           error_value = age of last detection [s] at exit
+#   vision_hold_distance :  final_value = |target_bbox_h_frac - last h_frac|
+#                           error_value = age of last detection [s]
+#   vision_acquire       :  final_value = time-to-acquire [s] on success
+#                           error_value = 0.0 on success, timeout on failure
 bool    success
 string  message
 float32 final_value

@@ -42,8 +42,15 @@ from duburi_interfaces.msg import DuburiState                            # noqa:
 
 from duburi_control import COMMANDS, Duburi, Pixhawk, fields_for         # noqa: E402
 from duburi_sensors import make_yaw_source                               # noqa: E402
+from duburi_vision  import wait_vision_state_ready                       # noqa: E402
 
-from .connection_config import DEFAULT_MODE, NETWORK, PROFILES           # noqa: E402
+from .connection_config import DEFAULT_MODE, NETWORK, PROFILES, resolve_mode  # noqa: E402
+from .vision_state     import VisionState                                # noqa: E402
+from .vision_tunables  import (                                          # noqa: E402
+    declare_vision_params,
+    runtime_defaults_for_command,
+    snapshot_from_node,
+)
 
 
 SEPARATOR = '=' * 52
@@ -111,16 +118,23 @@ class AUVManagerNode(Node):
         self.declare_parameter('smooth_yaw',       False)
         self.declare_parameter('smooth_translate', False)
         self.declare_parameter('yaw_source',       'mavlink_ahrs')
-        self.declare_parameter('bno085_port',      '/dev/ttyACM0')
+        self.declare_parameter('bno085_port',      'auto')
         self.declare_parameter('bno085_baud',      115200)
+        # Live-tunable defaults for every vision_* command. Operators
+        # tune with `ros2 param set /duburi_manager vision.kp_yaw 80.0`
+        # and the next vision goal picks up the new value.
+        declare_vision_params(self)
 
-        mode_name        = self.get_parameter('mode').value
+        requested_mode   = str(self.get_parameter('mode').value)
         smooth_yaw       = bool(self.get_parameter('smooth_yaw').value)
         smooth_translate = bool(self.get_parameter('smooth_translate').value)
         yaw_src_name     = str(self.get_parameter('yaw_source').value)
         bno085_port      = str(self.get_parameter('bno085_port').value)
         bno085_baud      = int(self.get_parameter('bno085_baud').value)
-        profile          = PROFILES.get(mode_name, PROFILES[DEFAULT_MODE])
+        # 'auto' (the default) probes for BlueOS UDP / Pixhawk USB to
+        # pick a profile; any explicit name short-circuits the probe.
+        mode_name = resolve_mode(requested_mode, logger=self.get_logger())
+        profile   = PROFILES[mode_name]
 
         # ---- MAVLink connection ----------------------------------------
         self.get_logger().info(f'Connecting ({mode_name}) -> {profile["conn"]} ...')
@@ -173,6 +187,14 @@ class AUVManagerNode(Node):
                 f'{NETWORK["jetson_ip"]}:{NETWORK["mav_port"]}')
         self.get_logger().info(SEPARATOR)
 
+        # ---- VisionState pool (lazy per camera) -----------------------
+        # The vision verbs ask for "the VisionState for camera X" and we
+        # build it the first time it's requested. Holding the pool here
+        # (one ROS2 node, one MAVLink owner) keeps subscriptions cheap
+        # and shared across goals.
+        self._vision_states: dict = {}
+        self._vision_lock           = threading.Lock()
+
         # ---- High-level facade ----------------------------------------
         self.duburi = Duburi(
             self.pixhawk,
@@ -180,6 +202,7 @@ class AUVManagerNode(Node):
             smooth_yaw=smooth_yaw,
             smooth_translate=smooth_translate,
             yaw_source=self.yaw_source,
+            vision_state_provider=self._vision_state_for,
         )
 
         # ---- Callback groups ------------------------------------------
@@ -214,6 +237,35 @@ class AUVManagerNode(Node):
         self.reader_thread   = threading.Thread(
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
+
+    # ================================================================== #
+    #  Vision state pool -- lazily built per camera, preflighted once     #
+    # ================================================================== #
+
+    def _vision_state_for(self, camera: str):
+        """Return (and build on first call) the VisionState for `camera`.
+
+        Subscriptions stay alive for the rest of the process lifetime so
+        repeat vision_* goals don't pay the preflight wait twice.
+        """
+        with self._vision_lock:
+            cached = self._vision_states.get(camera)
+            if cached is not None:
+                return cached
+            self.get_logger().info(
+                f'[VST ] building VisionState for camera={camera!r}')
+            vstate = VisionState(self, camera=camera, logger=self.get_logger())
+            self._vision_states[camera] = vstate
+
+        # Preflight outside the lock -- it just polls VisionState's diags.
+        try:
+            wait_vision_state_ready(
+                vstate, timeout=10.0, log=self.get_logger())
+        except Exception as exc:
+            self.get_logger().warning(
+                f'[VST ] preflight for {camera!r} did not pass within '
+                f'10s: {exc!r}; vision verbs will fail until pipeline is up')
+        return vstate
 
     # ================================================================== #
     #  MAVLink reader -- only place recv_match() is called                #
@@ -262,7 +314,11 @@ class AUVManagerNode(Node):
         try:
             with FeedbackPump(self.pixhawk, goal_handle):
                 method = getattr(self.duburi, cmd)
-                kwargs = fields_for(cmd, request)
+                # Re-snapshot params for every goal so freshly-set
+                # `vision.*` values land on the very next command.
+                runtime = runtime_defaults_for_command(
+                    cmd, snapshot_from_node(self))
+                kwargs = fields_for(cmd, request, runtime_defaults=runtime)
                 result = method(**kwargs)
 
             if result.success:
@@ -411,6 +467,12 @@ def main(args=None):
         except Exception as exc:
             node.get_logger().debug(
                 f'shutdown: yaw_source.close() ignored: {exc!r}')
+        for cam, vstate in list(node._vision_states.items()):
+            try:
+                vstate.close()
+            except Exception as exc:
+                node.get_logger().debug(
+                    f'shutdown: vision_state[{cam}].close() ignored: {exc!r}')
         node.destroy_node()
         rclpy.shutdown()
 
