@@ -18,6 +18,8 @@ ArduSub is ArduPilot ported for underwater vehicles. Key differences:
 
 ## Frame: vectored_6dof (Our Frame)
 
+> BRACU **Duburi 4.2** uses this same `vectored_6dof` frame type (8x T200 thrusters in the same vectored layout). The Gazebo SITL **proxy** is BlueROV2 Heavy because it ships an off-the-shelf model with the identical frame. Hull shape and exact mass differ from the real sub; control behavior matches. See [`vehicle-spec.md`](./vehicle-spec.md).
+
 BlueROV2 Heavy configuration — 8 thrusters:
 ```
           ↑ Forward

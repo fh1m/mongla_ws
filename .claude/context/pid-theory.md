@@ -1,7 +1,29 @@
 # PID Control Theory & Implementation Guide — Duburi AUV
 
+> **REFERENCE — kept for tuning intuition; not the live control path.**
+>
+> The live path delegates depth and yaw to ArduSub's onboard 400 Hz
+> stabilizer + EKF3:
+>
+> | Axis    | What we send                                | Loop that closes it           |
+> |---------|---------------------------------------------|-------------------------------|
+> | Yaw     | `SET_ATTITUDE_TARGET` @ 10 Hz               | ArduSub attitude PID          |
+> | Depth   | `SET_POSITION_TARGET_GLOBAL_INT` @ 5 Hz     | ArduSub ALT_HOLD position PID |
+> | Linear  | `RC_CHANNELS_OVERRIDE` Ch5/Ch6 @ 20 Hz      | open loop (timed thrust)      |
+>
+> Earlier revisions kept Python `DepthPID` / `YawPID` classes in
+> `movement_pids.py` as a documented fallback. That file was deleted in
+> the 2026-04 cleanup — ArduSub's onboard PID is the only loop in the
+> live path now. The Python implementation can be recovered from git
+> history if it ever becomes a hot-fix fallback.
+>
+> The rest of this file is the underlying theory; if you need to know
+> **what the live code does**, read `motion_yaw.py`, `motion_depth.py`,
+> `motion_linear.py`, and the [README's tuning guide](../../README.md#11-tuning-guide)
+> first.
+
 First-principles approach to robust AUV control. This is the theoretical foundation
-for duburi_control package.
+for any future custom control work in `duburi_control`.
 
 ---
 
@@ -341,13 +363,18 @@ class PIDController:
 
 ## 11. ArduSub Internal Control (What Firmware Does For Us)
 
-ArduSub has its own internal PIDs. Understanding when to use firmware vs custom:
+ArduSub has its own internal PIDs. The live policy in this codebase
+is "ArduSub does the inner loop everywhere":
 
-| Use ArduSub Firmware PID | Use Our Custom PID |
-|---|---|
-| ALT_HOLD depth maintenance | Fine-tuned depth for missions |
-| STABILIZE attitude hold | Position hold with DVL |
-| Motor mixing (8 thrusters) | Vision-guided centering |
-| IMU fusion (EKF3) | Heading corrections during movement |
+| Axis           | Live policy (this repo)                   | When you'd reach for a custom Python PID instead         |
+|----------------|-------------------------------------------|----------------------------------------------------------|
+| Depth          | ArduSub ALT_HOLD via `SET_POSITION_TARGET_GLOBAL_INT` (the only path) | Hot-fix only — if onboard depth-hold becomes unreliable on real hardware. The deleted `DepthPID` (recoverable from git history) is a starting point; the math earlier in this file is the rebuild guide. |
+| Yaw            | ArduSub attitude PID via `SET_ATTITUDE_TARGET`, optionally with `smoothstep` setpoint sweep (`smooth_yaw:=true`) | Vision-guided centering (out of scope here; lives in future `duburi_vision`) |
+| Motor mixing   | ArduSub (8-thruster `vectored_6dof`)      | Never — let firmware do this                             |
+| IMU fusion     | ArduSub EKF3                              | Never — let firmware do this                             |
+| Linear motion  | `RC_CHANNELS_OVERRIDE` Ch5/Ch6 @ 20 Hz, optional `trapezoid_ramp` (`smooth_linear:=true`) | When DVL lands, replace open-loop time with closed-loop distance |
 
-**Best practice**: Use ArduSub's ALT_HOLD mode for depth, combined with our heading PID via `set_attitude_target_send`. Only implement custom depth PID for DVL-based precision depth.
+**Best practice (today):** Use ArduSub's ALT_HOLD for both depth *and*
+absolute yaw setpoints. Stream setpoints; never close a Python loop
+in parallel with an ArduSub one. The two `smooth_*` ROS params shape
+the *setpoint*, not the inner loop.

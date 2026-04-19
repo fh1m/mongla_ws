@@ -6,12 +6,22 @@ float32 target       # metres   (set_depth, negative) or degrees (yaw_*)
 string  target_name  # mode string  (set_mode)
 float32 timeout      # max wait (all commands)
 ---
-# Result
+# Result — axis-correct (set on the axis the command actually moves):
+#   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]
+#                           error_value = remaining heading error [deg, signed]
+#   set_depth            :  final_value = final depth [m, negative below surface]
+#                           error_value = |target - final| [m]
+#   move_*               :  final_value = final depth [m]   (no axis odometry yet)
+#                           error_value = 0.0
+#   arm / disarm / stop  :  final_value = current depth [m]
+#                           error_value = 0.0
 bool    success
 string  message
-float32 final_value  # depth reached or heading locked
+float32 final_value
+float32 error_value
 ---
-# Feedback
+# Feedback — streamed at ~2.5 Hz while the goal is EXECUTING.
+# current_value is depth (m); status_line is a human-readable one-liner.
 string  phase        # e.g. "EXECUTING", "DONE"
 float32 current_value
 float32 error_value

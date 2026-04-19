@@ -4,65 +4,85 @@
 > **Competitions**: RoboSub (8th 2025, 2nd 2023), SAUVC
 > **This codebase**: `~/Ros_workspaces/duburi_ws` (ROS2 Humble, Ubuntu 22.04 in distrobox)
 
+> **Precedence note for agents:** if anything below contradicts the
+> actual package layout in `src/`, the package layout wins. The
+> canonical hardware reference is
+> [`.claude/context/vehicle-spec.md`](.claude/context/vehicle-spec.md);
+> tracked code bugs are in
+> [`.claude/context/known-issues.md`](.claude/context/known-issues.md).
+> Some legacy `.claude/context/*.md` files (notably `proven-patterns.md`)
+> describe historical 2023/2025 codebases, not this workspace.
+
 ---
 
-## 1. Hardware Overview
+## 1. Hardware Overview (BRACU Duburi 4.2)
 
-| Component | Spec | Notes |
-|---|---|---|
-| **Flight Controller (FC)** | Pixhawk 2.4.8 | Running ArduSub firmware (4.x) |
-| **Main SBC** | Jetson Orin Nano (Developer Kit) | Runs all ROS2 nodes, mission code |
-| **Companion** | Raspberry Pi 4B 8GB | BlueOS: monitoring, calibration, video |
-| **Thrusters** | 8× Blue Robotics T200 | vectored_6dof frame (BlueROV2 Heavy) |
-| **Cameras** | Blue Robotics Low-Light (forward + downward) | GStreamer pipelines |
-| **Depth Sensor** | Bar30 | Via ArduSub AHRS2 altitude |
-| **DVL** | Nortek Nucleus1000 | TCP/Serial at 192.168.2.201 |
-| **Frame** | BlueROV2 Heavy | 6-DOF: pitch/roll/yaw/fwd/lat/depth |
+> Full spec lives in [`.claude/context/vehicle-spec.md`](.claude/context/vehicle-spec.md). Short table here.
+
+| Component             | Spec                                                         |
+|-----------------------|--------------------------------------------------------------|
+| Hull                  | Octagonal, **Marine 5083 aluminum**, in-house                |
+| Frame type (ArduSub)  | `vectored_6dof` (8× T200) — same as BlueROV2 Heavy           |
+| Flight controller     | Pixhawk 2.4.8 running ArduSub 4.x                            |
+| Companion             | Raspberry Pi running BlueOS                                  |
+| Main SBC              | Nvidia Jetson Orin Nano (all ROS2 nodes live here)           |
+| Depth sensor          | Bar30 (read via ArduSub `AHRS2.altitude`)                    |
+| External IMU          | **ESP32-C3 + BNO085** over USB CDC, opt-in via `yaw_source`  |
+| DVL                   | Nortek Nucleus1000 @ `192.168.2.201` — **stub only**         |
+| Cameras               | Blue Robotics Low-Light HD USB (forward + downward)          |
+| Tether                | FathomX power-over-Ethernet                                  |
+| Power                 | Dual LiPo (propulsion + compute on isolated rails)           |
+| Payload               | Slingshot torpedo, aluminum grabber (current-sensed), solenoid dropper |
+
+> **Sim proxy:** Gazebo runs the BlueROV2 Heavy model because it shares the `vectored_6dof` frame. Hull shape and exact mass differ; control behavior matches.
+
+> **Why no VectorNav**: TDR Appendix A lists VN200; we use BNO085 instead — see `vehicle-spec.md` §"Why BNO085 instead of the TDR's VectorNav VN200".
 
 ---
 
 ## 2. Network Topology (AUV Internal Ethernet)
 
 ```
-[Ethernet Switch — heart of AUV comms]
-       ├── Jetson Orin Nano  → 192.168.2.69   (static, SSH/VNC from ground)
-       ├── Raspberry Pi 4B   → 192.168.2.1    (BlueOS companion)
+[Onboard Ethernet Switch]
+       ├── Jetson Orin Nano  → 192.168.2.69   (static, ROS2 host, UDP 14550 listener)
+       ├── Raspberry Pi 4B   → 192.168.2.1    (BlueOS — MAVLink router, web UI)
        │      Gateway         → 192.168.2.2
-       ├── DVL Nucleus1000   → 192.168.2.201
-       └── Pixhawk 2.4.8     → via BlueOS MAVLink endpoint
+       ├── DVL Nucleus1000   → 192.168.2.201  (driver TODO)
+       └── Pixhawk 2.4.8     → via BlueOS over USB
 
-MAVLink Endpoint (from BlueOS):
+MAVLink endpoint (configured in BlueOS web UI):
   Name: "inspector"  |  Type: UDP Client
   IP: 192.168.2.69 (Jetson)  |  Port: 14550
 
-Ground Station → Remote Desktop to Jetson (192.168.2.69)
-              → BlueOS UI via Raspberry Pi (192.168.2.1)
+Ground Station → Remote Desktop / SSH to Jetson (192.168.2.69)
+              → BlueOS UI via http://192.168.2.1
 ```
 
-**Connection string in code (POOL mode):**
-```python
-CONNECTION_STRING = "udpin:0.0.0.0:14550"  # Jetson listens, BlueOS sends
-```
+Connection strings live in `src/duburi_manager/duburi_manager/connection_config.py` under `PROFILES`. Default for every profile is `udpin:0.0.0.0:14550` (Jetson is the listener; BlueOS pushes to it).
 
 ---
 
 ## 3. Operating Modes
 
-The codebase supports three modes — default is **SIM** so development works immediately.
+The codebase exposes four `mode:=` profiles via `auv_manager_node`. Default is **`sim`** so development works immediately.
 
-| Mode | Connection String | When Used |
-|---|---|---|
-| **SIM** *(default)* | `udpin:0.0.0.0:14550` | Docker dev + Gazebo SITL |
-| **POOL** | `udpin:0.0.0.0:14550` | Pool testing (tether connected) |
-| **HARDWARE** | `udpin:0.0.0.0:14550` | Autonomous mission (tether removed) |
+| `mode:=`   | Connection string         | Use case                                         |
+|------------|---------------------------|--------------------------------------------------|
+| `sim`      | `udpin:0.0.0.0:14550`     | Docker dev + Gazebo SITL (ArduSub `--out` to us) |
+| `pool`     | `udpin:0.0.0.0:14550`     | Pool testing — Jetson on AUV, BlueOS pushes      |
+| `laptop`   | `udpin:0.0.0.0:14550`     | Tether laptop on the switch instead of Jetson    |
+| `desk`     | `udpin:0.0.0.0:14550`     | Pixhawk plugged directly via USB through BlueOS  |
+
+> All four profiles use the same listener line. The difference is documentation + the printed startup banner / sanity hints. There is **no** `HARDWARE` mode.
 
 SIM startup commands (run before ROS2 nodes):
+
 ```bash
 # Terminal 1: ArduSub SITL
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
   --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
 
-# Terminal 2: Gazebo
+# Terminal 2: Gazebo (BlueROV2 Heavy world — sim proxy for Duburi 4.2)
 cd ~/Ros_workspaces/colcon_ws
 gz sim -v 3 -r src/bluerov2_gz/worlds/bluerov2_underwater.world
 ```
@@ -71,330 +91,299 @@ gz sim -v 3 -r src/bluerov2_gz/worlds/bluerov2_underwater.world
 
 ## 4. Software Architecture
 
-### 4.1 Package Map (`duburi_ws/src/`)
+### 4.1 Package Map (real, today)
 
 ```
 duburi_ws/src/
-├── duburi_interfaces/     # Custom ROS2 msgs, srvs, actions
-├── duburi_bringup/        # Launch files, param yamls, mode configs
-├── duburi_driver/         # MAVLink driver node (pymavlink ↔ ROS2)
-│                          #   owns Pixhawk connection, publishes telemetry,
-│                          #   subscribes to control commands
-├── duburi_control/        # PID control loops (depth, heading, position)
-├── duburi_teleop/         # Joystick → RC override (manual piloting)
-└── duburi_mission/        # State machine missions (YASMIN FSM)
+├── duburi_interfaces/    # ROS2 message + action defs
+│   ├── action/Move.action        # single dispatcher action
+│   └── msg/DuburiState.msg       # typed state snapshot for /duburi/state
+├── duburi_control/       # MAVLink layer + Duburi facade
+│   └── duburi_control/
+│       ├── pixhawk.py            # Pixhawk class — arm / mode / RC / setpoints / AHRS2
+│       ├── commands.py           # COMMANDS registry (single source of truth)
+│       ├── motion_profiles.py    # smoothstep / smootherstep / trapezoid_ramp
+│       ├── motion_yaw.py         # yaw_snap + yaw_glide (SET_ATTITUDE_TARGET)
+│       ├── motion_linear.py      # drive_constant + drive_eased + brake (RC override)
+│       ├── motion_depth.py       # hold_depth + prime_alt_hold (SET_POSITION_TARGET)
+│       ├── duburi.py             # Duburi facade: lock + dispatch on smooth_* flags
+│       └── errors.py             # MovementError / MovementTimeout / ModeChangeError
+├── duburi_manager/       # ROS2 node, action server, telemetry, CLI, mission
+│   └── duburi_manager/
+│       ├── auv_manager_node.py   # owns MAVLink + /duburi/move ActionServer
+│       ├── connection_config.py  # PROFILES + NETWORK constants
+│       ├── client.py             # blocking ActionClient wrapper (DuburiClient)
+│       ├── cli.py                # argparse auto-built from COMMANDS (`duburi` entry)
+│       └── test_runner.py        # scripted mission demo
+└── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
+    ├── duburi_sensors/
+    │   ├── factory.py            # make_yaw_source(name, **kw)
+    │   ├── sensors_node.py       # standalone diagnostic node (no thrusters)
+    │   └── sources/
+    │       ├── base.py               # YawSource ABC
+    │       ├── mavlink_ahrs.py       # default — wraps Pixhawk.get_attitude
+    │       ├── bno085.py             # USB CDC reader + one-shot calibration
+    │       ├── dvl_stub.py           # Phase-4 placeholder
+    │       └── witmotion_stub.py     # Phase-4 placeholder
+    ├── firmware/
+    │   └── esp32c3_bno085.md     # MCU-side wire contract + reference Arduino
+    └── config/sensors.yaml       # yaw_source / bno085_port / bno085_baud
 ```
 
-### 4.2 Data Flow
+> **Adding a new command**: add a row in `duburi_control/commands.py` and a same-named method on `Duburi`. The action server, the `duburi` CLI, and the Python `DuburiClient` all pick it up automatically — no other file needs editing.
+
+> Packages **not** in this repo (despite older context files mentioning them): `duburi_bringup`, `duburi_driver`, `duburi_teleop`, `duburi_mission`, `duburi_vision`. They were aspirational sketches; ignore them when you read `proven-patterns.md` etc.
+
+### 4.2 Data flow (real)
 
 ```
-[Joystick Joy msg]
-       ↓
-[duburi_teleop]  ──/duburi/rc_override──→ [duburi_driver]
-                                                  │
-[duburi_control] ──/duburi/attitude_cmd──→         │ pymavlink
-[duburi_control] ──/duburi/depth_cmd────→         │ RC_CHANNELS_OVERRIDE
-[duburi_mission] ──/duburi/mission_cmd──→         │ SET_ATTITUDE_TARGET
-                                                  │ SET_POSITION_TARGET
-                                          [Pixhawk / ArduSub SITL]
-                                                  │
-                                          AHRS2 / ATTITUDE / HEARTBEAT
-                                                  │
-                                       [duburi_driver publishes]
-                                          /duburi/attitude  (RPY)
-                                          /duburi/depth     (meters)
-                                          /duburi/armed     (bool)
-                                          /duburi/mode      (string)
-                                          /duburi/battery   (voltage)
+[duburi CLI] ──┐
+               ├──/duburi/move (action goal)──→ [auv_manager_node]
+[test_runner]──┘                                      │
+                                                      │
+                                                      ├──→ Duburi facade (lock + dispatch via COMMANDS)
+                                                      │       ├── motion_yaw    (SET_ATTITUDE_TARGET ×10 Hz)
+                                                      │       ├── motion_linear (RC_CHANNELS_OVERRIDE ×20 Hz)
+                                                      │       └── motion_depth  (SET_POSITION_TARGET_GLOBAL_INT ×5 Hz)
+                                                      │
+                                                      ├──→ Pixhawk ──UDP 14550──→ [BlueOS] ──USB──→ [Pixhawk / ArduSub]
+                                                      │                                                    │
+                                                      │                                              ATTITUDE / AHRS2 (50 Hz)
+                                                      │                                              HEARTBEAT / SYS_STATUS
+                                                      │                                              BATTERY_STATUS (1 Hz)
+                                                      │                                              RC_CHANNELS (5 Hz)
+                                                      │                                              STATUSTEXT
+                                                      │                                              COMMAND_ACK
+                                                      │
+                                                      └──→ /duburi/state (duburi_interfaces/DuburiState, on change)
+
+[duburi_sensors.sensors_node]   ←── separate, diagnostic-only, never runs in mission path
 ```
 
-### 4.3 Node Responsibilities
+> Telemetry rates above are explicitly pinned at startup via `MAV_CMD_SET_MESSAGE_INTERVAL` in `auv_manager_node.MESSAGE_RATES` — without this, ArduSub picks defaults (~4 Hz for AHRS2) which silently caps loop tightness.
 
-| Node | Package | Owns |
-|---|---|---|
-| `driver_node` | duburi_driver | MAVLink connection, all sends/receives |
-| `control_node` | duburi_control | PID loops for depth/heading/position |
-| `teleop_node` | duburi_teleop | Joy → twist → RC override commands |
-| `mission_node` | duburi_mission | FSM state machine, mission logic |
+### 4.3 Node responsibilities
 
-**Rule**: Only `driver_node` touches pymavlink. All other nodes talk to it via ROS2 topics/services.
+| Node                             | Package         | Owns                                                      |
+|----------------------------------|-----------------|-----------------------------------------------------------|
+| `auv_manager_node` / `auv_manager` | `duburi_manager` | The single MAVLink connection, `/duburi/move` ActionServer, telemetry publisher, ROS params |
+| `sensors_node`                   | `duburi_sensors`| Standalone yaw-source diagnostic — does NOT touch thrusters or arming |
+
+There is exactly **one** node that touches `pymavlink` in the live mission path: `auv_manager_node`. The CLI and test_runner are ROS2 ActionClients of `/duburi/move`.
 
 ---
 
-## 5. MAVLink / ArduSub Patterns (Proven from Reference Codebases)
+## 5. MAVLink / ArduSub Patterns (live code)
 
-### 5.1 Connection (always do this first)
+The actual implementations live in `src/duburi_control/duburi_control/pixhawk.py`. The snippets below show the *shape* — for current-truth, read the file.
+
+### 5.1 Connection
 
 ```python
 import os
-os.environ['MAVLINK20'] = '1'  # Enable MAVLink 2.0 (18 RC channels)
+os.environ['MAVLINK20'] = '1'  # MAVLink 2.0 (18 RC channels)
 from pymavlink import mavutil
 
 master = mavutil.mavlink_connection("udpin:0.0.0.0:14550")
 master.wait_heartbeat()
 boot_time = time.time()
-# After wait_heartbeat(), master.target_system and target_component are set
 ```
 
 ### 5.2 Arm / Disarm
 
 ```python
-# Arm
-master.mav.command_long_send(
-    master.target_system, master.target_component,
-    mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
-    0,  1, 0, 0, 0, 0, 0, 0)   # param1=1 → arm
-master.motors_armed_wait()
-
-# Disarm (switch to MANUAL first, then wait 3s)
-_set_mode("MANUAL")
-time.sleep(3)
-master.mav.command_long_send(
-    master.target_system, master.target_component,
-    mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
-    0,  0, 0, 0, 0, 0, 0, 0)   # param1=0 → disarm
-master.motors_disarmed_wait()
+# Returns (success, reason). reason is a MAV_RESULT name or NO_ACK.
+ok, reason = pixhawk.arm()
+ok, reason = pixhawk.disarm()
 ```
 
-### 5.3 Mode Switching
+### 5.3 Mode switching (no ACK from SET_MODE — we poll the heartbeat)
 
 ```python
-def _set_mode(mode_name: str):
-    mode_id = master.mode_mapping()[mode_name]
-    master.mav.set_mode_send(
-        master.target_system,
-        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-        mode_id)
-    # Verify with COMMAND_ACK
-    ack = master.recv_match(type='COMMAND_ACK', blocking=True, timeout=3)
-
-# ArduSub mode names (use these exact strings):
+ok, reason = pixhawk.set_mode("ALT_HOLD")
+# ArduSub mode names:
 # MANUAL | STABILIZE | ALT_HOLD | POSHOLD | GUIDED | AUTO | SURFACE
 ```
 
-### 5.4 RC Channel Override (direct thruster control)
+### 5.4 RC channel override (linear motion)
 
 ```python
-# Channel mapping (1-indexed, matches Duburi AUV convention):
+# Channel mapping (1-indexed, ArduSub default):
 # Ch1=Pitch  Ch2=Roll  Ch3=Throttle(depth)  Ch4=Yaw
 # Ch5=Forward  Ch6=Lateral
-# PWM: 1100–1900 µs | 1500=neutral | 65535=no override
-
-def send_rc_override(pitch=1500, roll=1500, throttle=1500,
-                     yaw=1500, forward=1500, lateral=1500):
-    vals = [65535] * 18
-    vals[0] = pitch
-    vals[1] = roll
-    vals[2] = throttle
-    vals[3] = yaw
-    vals[4] = forward
-    vals[5] = lateral
-    master.mav.rc_channels_override_send(
-        master.target_system, master.target_component, *vals)
-
-# PWM conversion helper:
-def pct_to_pwm(pct: float) -> int:
-    """Convert -100..+100 percent to 1100..1900 PWM. 0→1500."""
-    return int(1500 + (pct / 100.0) * 400)
+# PWM: 1100..1900 µs | 1500=neutral | 65535=no override
+pixhawk.send_rc_override(forward=1700, lateral=1500, throttle=1500, yaw=1500)
+pixhawk.send_neutral()         # all six channels = 1500 (active hold)
+pixhawk.release_rc_override()  # all channels = 65535 (autopilot takes over)
 ```
 
-### 5.5 Attitude Target (yaw/heading control)
+### 5.5 Attitude target (yaw to absolute heading)
 
 ```python
-from pymavlink.quaternion import QuaternionBase
-import math
-
-def set_attitude(roll_deg=0.0, pitch_deg=0.0, yaw_deg=0.0):
-    master.mav.set_attitude_target_send(
-        int(1e3 * (time.time() - boot_time)),
-        master.target_system, master.target_component,
-        mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE,
-        QuaternionBase([math.radians(a) for a in (roll_deg, pitch_deg, yaw_deg)]),
-        0, 0, 0, 0)
+pixhawk.set_attitude_setpoint(yaw_deg=90.0)
+# Requires ALT_HOLD / POSHOLD / GUIDED. In MANUAL it's silently dropped;
+# in STABILIZE it's interpreted as a yaw RATE, which is not what we want.
+# Duburi._ensure_yaw_capable_mode() auto-engages ALT_HOLD.
 ```
 
-### 5.6 Depth Setpoint (ALT_HOLD mode required)
+### 5.6 Depth setpoint
 
 ```python
-def set_depth(depth_m: float):
-    """depth_m: negative = below surface. e.g. -0.5 = 0.5m deep"""
-    master.mav.set_position_target_global_int_send(
-        int(1e3 * (time.time() - boot_time)),
-        master.target_system, master.target_component,
-        mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
-        (mavutil.mavlink.POSITION_TARGET_TYPEMASK_X_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_Y_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_VX_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_VY_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_VZ_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_AX_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_AY_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_AZ_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_IGNORE |
-         mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE),
-        0, 0, depth_m,
-        0, 0, 0, 0, 0, 0, 0, 0)
+pixhawk.set_target_depth(-1.5)   # negative = below surface
+# Requires ALT_HOLD. motion_depth.hold_depth() does:
+#   1. set_mode("ALT_HOLD")
+#   2. prime_alt_hold(0.5 s) — drain stale I-term by streaming current depth
+#   3. wait_for_depth — stream target at 5 Hz until |error| < 0.07 m or timeout
 ```
 
-### 5.7 Reading Telemetry (AHRS2 — primary attitude source)
+### 5.7 Reading attitude
 
 ```python
-def get_attitude():
-    msg = master.recv_match(type='AHRS2', blocking=True, timeout=1.0)
-    if not msg:
-        return None
-    yaw_deg = math.degrees(msg.yaw)
-    if yaw_deg < 0:
-        yaw_deg += 360.0
-    depth_m = msg.altitude   # Negative when underwater
-    return {'yaw': yaw_deg, 'roll': math.degrees(msg.roll),
-            'pitch': math.degrees(msg.pitch), 'depth': depth_m}
+att = pixhawk.get_attitude()    # {'yaw': deg, 'roll': deg, 'pitch': deg, 'depth': m}
+# Backed by AHRS2; cached and refreshed by the single MAVLink reader thread.
 ```
 
-### 5.8 Heartbeat (mandatory — send ≥ 1 Hz or failsafe triggers)
+### 5.8 Heartbeat
+
+`auv_manager_node` ticks a heartbeat at ≥ 1 Hz from a ROS2 timer. Don't roll your own.
+
+### 5.9 Servo PWM (payload — torpedo / grabber / dropper)
+
+> `pixhawk.set_servo_pwm(aux_n, pwm)` takes the AUX index (1..6, AUX1..AUX6 silkscreen) and adds the ArduSub +8 offset internally — pwm is clamped to 1100..1900. Out-of-range `aux_n` raises `ValueError`.
+
+### 5.10 Stream rate control (MAV_CMD_SET_MESSAGE_INTERVAL)
 
 ```python
-def send_heartbeat():
-    master.mav.heartbeat_send(
-        mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
-        mavutil.mavlink.MAV_AUTOPILOT_INVALID,
-        0, 0, 0)
+# Pin telemetry rates explicitly; see auv_manager_node.MESSAGE_RATES.
+pixhawk.set_message_rate(MAVLINK_MSG_ID_AHRS2,           50)   # Hz
+pixhawk.set_message_rate(MAVLINK_MSG_ID_BATTERY_STATUS,   1)
+pixhawk.set_message_rate(MAVLINK_MSG_ID_RC_CHANNELS,      5)
 ```
 
 ---
 
-## 6. PID Control — Design Philosophy (JSF-AV Inspired)
+## 6. Control philosophy — ArduSub does the inner loop
 
-All PID controllers live in `duburi_control`. Each axis (depth, heading, position-x, position-y) has its own controller instance. Never share state between axes.
+We never close a Python control loop in the live path. ArduSub's onboard 400 Hz stabilizer + EKF3 owns yaw and depth; we only stream setpoints.
 
-### 6.1 Tuned Starting Values (from 2023/2025 reference codebases)
+| Axis    | Setpoint message                  | Loop that closes it           | Our role                     |
+|---------|-----------------------------------|-------------------------------|------------------------------|
+| Yaw     | `SET_ATTITUDE_TARGET` (10 Hz)     | ArduSub 400 Hz attitude PID   | stream + watch AHRS yaw      |
+| Depth   | `SET_POSITION_TARGET_GLOBAL_INT` (5 Hz) | ArduSub ALT_HOLD position PID | stream + watch AHRS depth    |
+| Linear  | `RC_CHANNELS_OVERRIDE` Ch5/Ch6 (20 Hz) | open loop (timed thrust)      | shape the thrust envelope    |
 
-| Axis | Kp | Ki | Kd | Output Range |
-|---|---|---|---|---|
-| Heading (yaw) | 1.0–2.0 | 0.0 | 0.1 | ±500 PWM from 1500 |
-| Depth | 0.9 | 0.01 | 0.1 | PWM 1350–1650 |
-| Position (DVL) | 0.7 | 0.0 | 0.05 | ±70 PWM delta |
+The two ROS params `smooth_yaw` / `smooth_linear` (both default `false`) optionally shape the *setpoint* (smootherstep / trapezoid_ramp) before it reaches the autopilot — they don't replace the autopilot's inner loop.
 
-### 6.2 Mandatory PID Features (robustness requirements)
-
-```python
-class PIDController:
-    def __init__(self, kp, ki, kd, out_min, out_max, integral_max):
-        ...
-    # Required:
-    # - Anti-windup: clamp integral when output saturates
-    # - Derivative on measurement (not error) → no derivative kick on setpoint change
-    # - Output clamping: hard limits on PWM output
-    # - Reset: clear integral on mode change or re-arm
-    # - Deadband: skip tiny corrections that cause thruster jitter
-```
-
-### 6.3 Heading Wrap-Around (always use this)
-
-```python
-def heading_error(target: float, current: float) -> float:
-    """Shortest-path error on circular 0-360 space."""
-    err = (target - current + 540) % 360 - 180
-    return err
-```
+> Earlier revisions kept `movement_pids.py` (`DepthPID` / `YawPID`) as a "hot-fix fallback" reference. That file has been removed — ArduSub's inner loop is the only PID in the live path. If you need the math again, see `.claude/context/pid-theory.md` or pull it from git history.
 
 ---
 
-## 7. JSF-AV Principles Applied to AUV Control
+## 7. JSF-AV Principles (still apply)
 
-JSF-AV (Joint Strike Fighter Coding Standards) adapted for our context:
+Adapted for our context:
 
-| Principle | What it means here |
-|---|---|
-| **Single Entry/Exit** | Each control function has one clear responsibility |
-| **No dynamic memory in loop** | No allocations inside ROS timer callbacks |
-| **Bounded loops** | Every `while` loop has a timeout or counter limit |
-| **Fail-safe defaults** | On any error → stop thrusters (RC neutral), surface |
-| **Clear interfaces** | Nodes communicate only through defined ROS topics/services |
-| **No global mutable state** | PID state lives in class instances, not module globals |
-| **Defensive input validation** | Clamp all incoming PWM/setpoints at node boundary |
-| **Deterministic timing** | Use ROS timers, not time.sleep() in control loops |
-
----
-
-## 8. Custom Message Types (`duburi_interfaces`)
-
-### Published by `driver_node`:
-- `/duburi/attitude` — `duburi_interfaces/Attitude` (roll, pitch, yaw in degrees, depth in m)
-- `/duburi/state` — `duburi_interfaces/VehicleState` (armed bool, mode string, battery_v float)
-
-### Subscribed by `driver_node`:
-- `/duburi/rc_override` — `duburi_interfaces/RCOverride` (6 channel PWM values)
-- `/duburi/attitude_cmd` — `duburi_interfaces/AttitudeCmd` (roll, pitch, yaw setpoints)
-- `/duburi/depth_cmd` — `std_msgs/Float32` (depth setpoint in meters, negative)
-
-### Control internal:
-- `/duburi/cmd_vel` — `geometry_msgs/Twist` (teleop velocity commands)
+| Principle                       | What it means here                                                  |
+|---------------------------------|---------------------------------------------------------------------|
+| Single entry / exit             | Each motion helper has one return path; facade is a dispatch table  |
+| No dynamic allocation in loop   | RC arrays are reused, no list-comp inside 20 Hz loops               |
+| Bounded loops                   | Every `while` has an explicit timeout                               |
+| Fail-safe defaults              | On any error → `Duburi.stop()` (active RC neutral) or `pause()` (release) |
+| Clear interfaces                | Cross-package surface = `Move.action` + `DuburiState.msg` + `Pixhawk` verbs |
+| No global mutable state         | All state lives on `Duburi` / `Pixhawk` instances                   |
+| Defensive input validation      | `percent_to_pwm` clamps; CLI argparse rejects out-of-range values   |
+| Deterministic timing            | ROS timers + `time.monotonic()`; no `time.sleep` in callbacks       |
 
 ---
 
-## 9. ArduSub Modes Reference
+## 8. ROS2 surface (real, today)
 
-| Mode | ArduSub Name | Use Case |
-|---|---|---|
-| `MANUAL` | MANUAL | Raw RC override, arm/disarm |
-| `STABILIZE` | STABILIZE | Attitude stabilized, pilot controls movement |
-| `ALT_HOLD` | ALT_HOLD | Depth-hold autopilot, lateral still manual |
-| `POSHOLD` | POSHOLD | Position hold (needs GPS/DVL) |
-| `GUIDED` | GUIDED | Waypoint following from GCS |
-| `AUTO` | AUTO | Pre-programmed mission |
-| `SURFACE` | SURFACE | Emergency surface |
+### Action
 
-**Typical mission sequence**: `MANUAL` → arm → `ALT_HOLD` → mission
+- `/duburi/move` — `duburi_interfaces/action/Move`
+  - One verb per goal; `auv_manager_node.execute_callback` dispatches via the `COMMANDS` registry.
+  - See [`.claude/context/ros2-conventions.md`](.claude/context/ros2-conventions.md) for the verb list and field semantics.
 
----
+### Topic
 
-## 10. Reference Codebases (Study These)
+- `/duburi/state` — `duburi_interfaces/msg/DuburiState`
+  - Typed snapshot (`armed`, `mode`, `yaw_deg`, `depth_m`, `battery_voltage`) with `std_msgs/Header`. Missing numerics are `NaN`, missing strings are `''`. Published only when something changes (or every ~1 s as a heartbeat).
 
-| Location | Placement | Key Lessons |
-|---|---|---|
-| `Reference CodeBase/2023/` | **2nd World 2023** | Core pymavlink patterns, heading PID, depth PID |
-| `Reference CodeBase/Robosub-2025-Duburi/` | **8th World 2025** | Full ROS2 architecture, YASMIN FSM, DVL integration |
-| `Reference CodeBase/ardusub-interface/` | BumblebeeAS research | ROS2 + behavior trees, setpoint-based control |
-| `Reference CodeBase/BareMinimum/` | Internal tool | Minimal working pymavlink, good for reference |
-| `Reference CodeBase/marzan/` | Team member | Joy → ROS2 → pymavlink bridge pattern |
-| `Reference CodeBase/mishu/` | Team member | Standalone mission scripts, time-based movements |
+### ROS params on `auv_manager_node`
 
-**The 2023 codebase is the ground truth** for proven MAVLink patterns. When in doubt, check `/2023/control/Duburi_5/BracU_Duburi_Control-main/utils.py`.
+| Param           | Type   | Default        | Notes                                                         |
+|-----------------|--------|----------------|---------------------------------------------------------------|
+| `mode`          | string | `sim`          | `sim`, `pool`, `laptop`, `desk` (see §3)                      |
+| `smooth_yaw`    | bool   | `false`        | `true` → `yaw_glide` (smootherstep setpoint sweep)            |
+| `smooth_linear` | bool   | `false`        | `true` → `drive_eased` (trapezoid thrust, settle-only brake)  |
+| `yaw_source`    | string | `mavlink_ahrs` | `mavlink_ahrs` \| `bno085`                                    |
+| `bno085_port`   | string | `/dev/ttyACM0` | USB CDC device path                                           |
+| `bno085_baud`   | int    | `115200`       | BNO085 stream baud rate                                       |
+
+> Older context files reference `/duburi/arm`, `/duburi/depth_cmd`, `/duburi/attitude`, `Attitude.msg`, `RCOverride.msg`, `VehicleState.msg`. **None of these exist.** Single action + single state topic + ROS params is the entire surface.
 
 ---
 
-## 11. Development Workflow
+## 9. ArduSub modes reference
 
-### Step 1: Always sim-first
+| Mode      | Use case in this stack                                              |
+|-----------|---------------------------------------------------------------------|
+| `MANUAL`  | Raw RC override, arm/disarm                                         |
+| `STABILIZE` | Attitude-stabilized; `SET_ATTITUDE_TARGET` is interpreted as a *rate* (so we avoid it for absolute yaw) |
+| `ALT_HOLD` | The only mode we use during a mission. Depth-hold + absolute yaw setpoints both work. |
+| `POSHOLD` | Position hold (needs GPS/DVL) — not used today                      |
+| `GUIDED`  | Waypoint following from GCS — not used today                        |
+| `SURFACE` | Emergency surface — manual fallback only                            |
+
+Typical mission sequence: `MANUAL` → `arm` → first `set_depth` engages `ALT_HOLD` → mission verbs (`yaw_left`, `move_forward`, ...) → `disarm`.
+
+---
+
+## 10. Reference codebases (study these for patterns, not for package layout)
+
+| Location                                  | Era              | Lessons                                                   |
+|-------------------------------------------|------------------|-----------------------------------------------------------|
+| `Reference CodeBase/2023/`                | RoboSub 2nd 2023 | Core pymavlink patterns, heading PID, depth PID           |
+| `Reference CodeBase/Robosub-2025-Duburi/` | RoboSub 8th 2025 | YASMIN FSM, DVL integration                                |
+| `Reference CodeBase/ardusub-interface/`   | BumblebeeAS      | ROS2 + behavior trees, setpoint-based control             |
+| `Reference CodeBase/BareMinimum/`         | Internal         | Minimal working pymavlink                                  |
+| `Reference CodeBase/` (team archives)     | BRACU Duburi     | Joy → ROS2 → pymavlink bridge; standalone mission scripts; time-based movements |
+
+> **The 2023 codebase is the ground truth for proven MAVLink patterns.** Names like `duburi_driver` etc that appear in `proven-patterns.md` come from those eras — *not* from this workspace.
+
+---
+
+## 11. Development workflow
+
+### Step 1: Sim first
+
 ```bash
-# Bring up sim (in docker terminals)
-sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
-  --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
-gz sim -v 3 -r src/bluerov2_gz/worlds/bluerov2_underwater.world
-
-# Build and run
+# Bring up sim (in docker terminals — see §3)
 cd ~/Ros_workspaces/duburi_ws
-colcon build --symlink-install
-source install/setup.zsh
-ros2 launch duburi_bringup sim.launch.py
+./build_duburi.sh
+source install/setup.bash
+ros2 run duburi_manager auv_manager_node --ros-args -p mode:=sim
 ```
 
 ### Step 2: Verify connectivity
+
 ```bash
-ros2 topic echo /duburi/state      # Should show armed=false, mode=MANUAL
-ros2 topic echo /duburi/attitude   # Should show attitude updating
+ros2 topic echo /duburi/state            # Should show armed=false, mode=MANUAL, yaw, depth, battery
+ros2 node info /duburi_manager           # ActionServer should be listed
 ```
 
-### Step 3: Test control
+### Step 3: Test control via CLI
+
 ```bash
-ros2 service call /duburi/arm std_srvs/srv/SetBool "{data: true}"
-ros2 topic pub /duburi/depth_cmd std_msgs/msg/Float32 "{data: -0.5}"
+ros2 run duburi_manager duburi arm
+ros2 run duburi_manager duburi set_depth -0.5
+ros2 run duburi_manager duburi yaw_right 90
+ros2 run duburi_manager duburi move_forward 5 80
+ros2 run duburi_manager duburi disarm
 ```
 
 ---
 
-## 12. Environment & Paths
+## 12. Environment & paths
 
 ```bash
 # Docker env
@@ -413,26 +402,30 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 
 ---
 
-## 13. Safety Rules (Non-Negotiable)
+## 13. Safety rules (non-negotiable)
 
-1. **Always have a disarm mechanism** — keyboard interrupt, ROS shutdown, or timer
-2. **Heartbeat must be maintained** — spawn a thread or timer for it; no loop can block it
-3. **Neutral on startup** — all RC channels default to 1500 (not 65535) during mission
-4. **Pool test checklist**: propellers clear? tether on? topside can see Jetson?
-5. **Autonomous mission**: timer-delayed start (run code, wait N seconds, remove tether)
-6. **DVL offset**: `dvl_depth_match = 0.78` (calibrated value from 2025 competition)
+1. **Always have a disarm path** — Ctrl-C on the manager triggers `Duburi.stop()` + `disarm()`.
+2. **Heartbeat must keep ticking** — owned by the manager's ROS2 timer; nothing in the action callback may block long enough to break it.
+3. **Neutral on startup** — RC defaults to 1500 (not 65535) until a movement is active.
+4. **Pool test checklist** — propellers clear, tether on, topside can ping the Jetson.
+5. **Autonomous mission** — timer-delayed start (run code, wait N seconds, remove tether).
+6. **DVL offset** — `dvl_depth_match = 0.78` (calibrated value from 2025 competition; will move into `duburi_sensors` when the DVL driver lands).
 
 ---
 
-## 14. Context Files (in `.claude/context/`)
+## 14. Context files (in `.claude/context/`)
 
-| File | Contents |
-|---|---|
-| `mavlink-reference.md` | All MAVLink messages, type masks, enums |
-| `ardusub-reference.md` | ArduSub-specific parameters, modes, behaviors |
-| `pid-theory.md` | PID design, anti-windup, tuning guide |
-| `proven-patterns.md` | Complete code patterns from reference codebases |
-| `sim-setup.md` | Detailed simulation bring-up guide |
-| `mission-design.md` | FSM architecture, state machine patterns |
-| `hardware-setup.md` | Pool setup, BlueOS, network topology details |
-| `ros2-conventions.md` | ROS2 coding conventions for this project |
+| File                            | Contents                                                            |
+|---------------------------------|---------------------------------------------------------------------|
+| `vehicle-spec.md`               | **Canonical** Duburi 4.2 spec + TDR-vs-implementation delta         |
+| `known-issues.md`               | Tracked code bugs from the 2026-04 audit, scoped per file           |
+| `mavlink-reference.md`          | MAVLink messages, type masks, enums                                 |
+| `ardusub-reference.md`          | ArduSub-specific parameters, modes, quirks                          |
+| `pid-theory.md`                 | PID design notes (LEGACY column = REFERENCE only)                   |
+| `proven-patterns.md`            | Patterns from 2023/2025 codebases — names are **historical**        |
+| `sim-setup.md`                  | Detailed simulation bring-up                                        |
+| `mission-design.md`             | YASMIN FSM patterns (TDR target — current repo uses `test_runner`)  |
+| `hardware-setup.md`             | Pool setup, BlueOS, network topology                                |
+| `ros2-conventions.md`           | ROS2 coding conventions for this project (real surface only)        |
+| `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |
+| `sensors-pipeline.md`           | `duburi_sensors` design rules + BNO085 calibration model            |

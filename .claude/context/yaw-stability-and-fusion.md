@@ -1,12 +1,24 @@
 # Yaw Stability & Sensor Fusion — Research Notes
 
 > Captured: 2026-04-18 · Scope: reference / roadmap, no immediate code impact.
-> Related files: [movement_yaw.py](../../src/duburi_control/duburi_control/movement_yaw.py),
-> [mavlink_api.py](../../src/duburi_control/duburi_control/mavlink_api.py),
+> Related files: [motion_yaw.py](../../src/duburi_control/duburi_control/motion_yaw.py),
+> [pixhawk.py](../../src/duburi_control/duburi_control/pixhawk.py),
 > [ardusub-reference.md](ardusub-reference.md).
 
 Living document: add findings from pool tests / hardware bring-up under the
 "Field notes" section at the bottom.
+
+> **Status update (2026-04):** Phase 3 sensor package is **done**.
+> The `duburi_sensors` package now ships a `YawSource` ABC,
+> `MavlinkAhrsSource` (default — wraps ArduSub AHRS), and
+> `BNO085Source` (ESP32-C3 over USB CDC, **gyro+accel only**, with a
+> one-shot Pixhawk-mag offset captured at boot for Earth reference).
+> See [`sensors-pipeline.md`](./sensors-pipeline.md) §"Calibration model"
+> for the BNO calibration math; see
+> [`vehicle-spec.md`](./vehicle-spec.md) §"Why BNO085 instead of the
+> TDR's VectorNav VN200" for the hardware rationale. The
+> `robot_localization` EKF is **still deferred** (Phase 4) — we don't
+> fuse anything yet.
 
 ## 1. Why this note exists
 
@@ -46,18 +58,18 @@ software is **field calibration** — it has to be done on the real vehicle
 
 These are the Python-side moves that complement ArduSub's onboard filter:
 
-* **`yaw_ramp` (opt-in)** — streams a `smootherstep`-interpolated setpoint
+* **`yaw_glide` (opt-in)** — streams a `smootherstep`-interpolated setpoint
   to ArduSub at 10 Hz, so its 400 Hz stabiliser tracks a *smoothly
   decelerating* target. Prevents setpoint-driven overshoot without
   touching PID gains. Default off; enable via `-p smooth_yaw:=true`.
-* **`linear_ramp` (opt-in)** — `trapezoid_ramp` throttle envelope:
+* **`drive_eased` (opt-in)** — `trapezoid_ramp` throttle envelope:
   smootherstep ease-in → cruise → smootherstep ease-out. Ease-out IS the
-  brake, so `linear_ramp` exits with low residual velocity and uses
-  settle-only instead of the step variant's reverse kick.
+  brake, so `drive_eased` exits with low residual velocity and uses
+  settle-only instead of the `drive_constant` variant's reverse kick.
 * **Axis-isolated exit semantics** — each variant owns its brake so
   swapping profiles doesn't mis-apply a kick tuned for a different
   envelope. See the isolation contract in
-  [movement_commands.py](../../src/duburi_control/duburi_control/movement_commands.py).
+  [duburi.py](../../src/duburi_control/duburi_control/duburi.py).
 
 ## 4. Will vision + Kalman make compass drift irrelevant?
 
@@ -90,16 +102,20 @@ the compass path clean because it's the failover.
 
 ### Recommended path
 
-1. **Now:** keep AHRS2 yaw + smootherstep setpoint shaping (just landed).
-   Do not invest in custom compass filters. Do invest time in a **real
-   hardware compass calibration flight** before first pool test.
-2. **Phase 3 (sensor package):** expose compass, IMU, depth, and eventually
-   vision pose on dedicated ROS topics via `duburi_sensors`.
-3. **When vision is online:** spin up `robot_localization`'s `ekf_node`
-   with vision pose + AHRS2 + depth. Tune Q / R so vision dominates when
-   available and compass is the failover.
-4. **Only if pool tests show >5° sustained drift:** revisit yaw-rate
-   command mode (technique #6), median filter (#8), or DVL (#9).
+1. **Now:** keep AHRS2 yaw + smootherstep setpoint shaping (`smooth_yaw:=true`).
+   The Pixhawk compass calibration flight is **fallback-only** now that BNO085
+   is wired in — only matters if the BNO can't be brought up.
+2. **Phase 3 — sensor package: DONE.** `duburi_sensors` exposes a
+   `YawSource` interface; switch to BNO085 with
+   `-p yaw_source:=bno085 -p bno085_port:=/dev/ttyACM0`. Calibration
+   model in [`sensors-pipeline.md`](./sensors-pipeline.md).
+3. **Phase 4 — when vision is online:** spin up `robot_localization`'s
+   `ekf_node` with vision pose + AHRS2 + BNO085-derived yaw + depth.
+   Tune Q / R so vision dominates when available and BNO085/compass
+   becomes the failover.
+4. **Only if pool tests show >5° sustained drift on BNO+offset:**
+   revisit yaw-rate command mode (technique #6), median filter (#8),
+   or DVL heading (#9).
 
 ## 5. Open-source references worth keeping around
 

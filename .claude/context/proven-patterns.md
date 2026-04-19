@@ -1,5 +1,21 @@
 # Proven Code Patterns — Duburi AUV Reference Codebases
 
+> **REFERENCE PATTERNS — extracted from BracU_Duburi_Control 2023/2025
+> codebases.** Do **NOT** assume the package or node names below
+> (`duburi_driver`, `duburi_bringup`, `duburi_teleop`, ...) exist in
+> *this* workspace. They don't. This file is for the *shape* of the
+> patterns (ARM sequence, RC override, AHRS reading, mode switching,
+> servo PWM, etc.) — copy the pattern, not the imports.
+>
+> For the **live** architecture, package layout, and ROS2 surface in
+> *this* workspace see:
+> * [README §3 Architecture](../../README.md#3-architecture)
+> * [`vehicle-spec.md`](./vehicle-spec.md) — canonical hardware
+> * [`ros2-conventions.md`](./ros2-conventions.md) — actual `/duburi/move` action + params
+>
+> The live MAVLink wrapper that *uses* these patterns lives at
+> `src/duburi_control/duburi_control/pixhawk.py` (class `Pixhawk`).
+
 All patterns below are battle-tested from our competition-grade codebases.
 Source priority: 2023 (2nd world) > 2025 (8th world) > ardusub-interface > others.
 
@@ -257,7 +273,7 @@ set_servo_pwm(1, 1100)   # AUX1 min (gripper close)
 
 ---
 
-## MISSION TIMING PATTERN (from mishu/pre_auv — proven at competition)
+## MISSION TIMING PATTERN (from team archive `pre_auv` — proven at competition)
 
 ```python
 def timed_move(direction: str, duration: float, speed: int = 80):

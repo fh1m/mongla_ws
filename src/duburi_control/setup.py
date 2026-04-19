@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 package_name = 'duburi_control'
 
@@ -14,8 +14,9 @@ setup(
     install_requires=['setuptools', 'pymavlink'],
     zip_safe=True,
     maintainer='BRACU Duburi',
-    description='Pure Python MAVLink API and movement commands for Duburi AUV',
+    description='Pixhawk MAVLink wrapper and Duburi command facade for Duburi AUV',
     license='MIT',
+    tests_require=['pytest'],
     entry_points={
         'console_scripts': [],
     },

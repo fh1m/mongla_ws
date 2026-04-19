@@ -14,3 +14,11 @@ duburi_manager:
     mode: sim              # sim | pool | laptop | desk
     smooth_yaw:    false   # true → yaw_ramp (smootherstep setpoint sweep)
     smooth_linear: false   # true → linear_ramp (trapezoid thrust envelope)
+
+    # External yaw source. ArduSub onboard AHRS by default; BNO085 over
+    # ESP32-C3 USB CDC for magnetic-interference-free heading.
+    # Firmware contract: src/duburi_sensors/firmware/esp32c3_bno085.md
+    # Source code:       src/duburi_sensors/duburi_sensors/sources/bno085.py
+    yaw_source:  mavlink_ahrs   # mavlink_ahrs (default) | bno085 | dvl | witmotion
+    bno085_port: /dev/ttyACM0   # ESP32-C3 USB CDC (only used when yaw_source==bno085)
+    bno085_baud: 115200

@@ -4,11 +4,18 @@
 <package format="3">
   <name>duburi_interfaces</name>
   <version>0.1.0</version>
-  <description>Custom ROS2 action/message/service types for Duburi AUV</description>
+  <description>
+    ROS2 interface definitions for Duburi AUV.
+      action/Move.action      -- unified dispatcher used by every CLI verb
+                                 and mission script.
+      msg/DuburiState.msg     -- typed state snapshot published on
+                                 /duburi/state by auv_manager_node.
+  </description>
   <maintainer email="duburi@example.com">BRACU Duburi</maintainer>
   <license>MIT</license>
 
   <depend>action_msgs</depend>
+  <depend>std_msgs</depend>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>rosidl_default_generators</buildtool_depend>

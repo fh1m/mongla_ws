@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""
-Pure-math motion profiles. No ROS / MAVLink dependencies — trivially unit-testable.
+"""Pure-math motion profiles. No ROS / MAVLink deps -- trivially unit-testable.
 
 Used by:
-  movement_yaw.yaw_ramp       → smootherstep setpoint sweep
-  movement_linear.linear_ramp → trapezoid_ramp thrust envelope
+  motion_yaw.yaw_glide      -> smootherstep setpoint sweep
+  motion_linear.drive_eased -> trapezoid_ramp thrust envelope
 """
 
 

@@ -1,0 +1,15 @@
+# duburi_sensors / duburi_manager — yaw source selection
+#
+# Pick ONE source per launch. No mid-run switching, no auto-fallback.
+#
+#   yaw_source: 'mavlink_ahrs'   ArduSub onboard AHRS (default, no extra hw)
+#   yaw_source: 'bno085'         External ESP32-C3 + BNO085 over USB CDC
+#                                Firmware contract: see src/duburi_sensors/README.md
+#
+# bno085_port / bno085_baud only matter when yaw_source=='bno085'.
+
+duburi_manager:
+  ros__parameters:
+    yaw_source:  mavlink_ahrs
+    bno085_port: /dev/ttyACM0
+    bno085_baud: 115200

@@ -1,6 +1,20 @@
 # Mission Design & State Machine Architecture — Duburi AUV
 
-Based on 2025 Robosub competition codebase (YASMIN FSM) + 2023 patterns.
+> **Top note:** **YASMIN FSM is the TDR target architecture.** It is **not**
+> what this repo runs today. Today's mission entry point is
+> [`src/duburi_manager/duburi_manager/test_runner.py`](../../src/duburi_manager/duburi_manager/test_runner.py)
+> — a plain Python script that uses `DuburiClient` (a blocking
+> `ActionClient` wrapper) against the `/duburi/move` action.
+>
+> Re-introduce YASMIN (or behavior trees, or `py_trees_ros`) when
+> missions outgrow a linear script — typically when conditional
+> branches, retries, or vision-driven detours show up.
+>
+> This file documents the *target* FSM design (good for planning) and
+> the *current* test_runner pattern (good for picking up the codebase
+> as it is today).
+
+Based on the 2025 RoboSub competition codebase (YASMIN FSM) + 2023 patterns.
 
 ---
 

@@ -1,0 +1,408 @@
+#!/usr/bin/env python3
+"""Raw MAVLink layer to the Pixhawk autopilot.
+
+This is the only file in the workspace that imports pymavlink. Everything
+else in `duburi_control` and `duburi_manager` talks to the autopilot
+through a `Pixhawk` instance.
+
+THREADING RULE: Only the reader thread (in `auv_manager_node`) calls
+`recv_match()`. Every method here reads from `master.messages` cache
+only. This prevents message-consumption races between the reader
+thread and the action / timer worker threads.
+"""
+
+import os
+import math
+import time
+
+os.environ['MAVLINK20'] = '1'
+from pymavlink import mavutil                      # noqa: E402
+from pymavlink.quaternion import QuaternionBase    # noqa: E402
+
+
+# ArduSub channel layout (zero-indexed within the 18-slot RC override array).
+CH_PITCH    = 0
+CH_ROLL     = 1
+CH_THROTTLE = 2
+CH_YAW      = 3
+CH_FORWARD  = 4
+CH_LATERAL  = 5
+NO_OVERRIDE = 65535        # MAVLink "ignore this channel" sentinel
+
+# Human-readable names for COMMAND_ACK.result values. Anything that isn't
+# ACCEPTED is surfaced straight to the action server's result.message so
+# the operator sees *why* a command failed, not just that it did.
+MAV_RESULT = {
+    0: 'ACCEPTED',
+    1: 'TEMP_REJECTED',
+    2: 'DENIED',
+    3: 'UNSUPPORTED',
+    4: 'FAILED',
+    5: 'IN_PROGRESS',
+    6: 'CANCELLED',
+}
+
+
+class Pixhawk:
+    """Thin, well-named wrapper around `pymavlink.mavutil`."""
+
+    # ArduSub maps AUX1..AUX6 to MAV_CMD_DO_SET_SERVO channels 9..14
+    # (MAIN1..MAIN8 are 1..8; AUX = MAIN_count + n). Calling set_servo_pwm
+    # with raw 1..8 would silently drive a thruster instead of the payload
+    # servo, so the public surface here is the AUX index and we add the
+    # offset internally. See `.claude/context/ardusub-reference.md`.
+    AUX_PWM_OFFSET = 8
+    AUX_MIN, AUX_MAX = 1, 6           # Pixhawk 2.4.8 exposes 6 AUX outputs
+    PWM_MIN, PWM_MAX = 1100, 1900     # safe BlueRobotics T200 / servo range
+
+    def __init__(self, master):
+        self.master = master
+        self._boot_time = time.time()
+
+    # ------------------------------------------------------------------ #
+    #  COMMAND_ACK — fast, explicit failure reporting                     #
+    # ------------------------------------------------------------------ #
+
+    def clear_ack(self):
+        """Drop any cached COMMAND_ACK so wait_ack only sees fresh replies."""
+        self.master.messages.pop('COMMAND_ACK', None)
+
+    def wait_ack(self, command_id, timeout=3.0):
+        """Poll for a COMMAND_ACK matching `command_id`.
+
+        Returns `(accepted, reason_name)` — `accepted` is True only for
+        MAV_RESULT_ACCEPTED (0). On timeout returns `(False, 'NO_ACK')`.
+        Must be paired with `clear_ack()` before the command, otherwise
+        a stale ACK from the previous command can be returned.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            ack = self.master.messages.get('COMMAND_ACK')
+            if ack is not None and ack.command == command_id:
+                name = MAV_RESULT.get(ack.result, f'RESULT_{ack.result}')
+                return ack.result == 0, name
+            time.sleep(0.05)
+        return False, 'NO_ACK'
+
+    # ------------------------------------------------------------------ #
+    #  Arm / Disarm — ACK for rejection, heartbeat poll for completion    #
+    # ------------------------------------------------------------------ #
+
+    def arm(self, timeout=15.0):
+        """Returns `(success, reason)`. Reason is a MAV_RESULT name or
+        'NO_ACK' / 'NOT_ARMED_AFTER_ACK'.
+
+        ArduSub ACKs the command before the arm actually completes
+        (pre-arm checks run in parallel), so we still poll `is_armed()`.
+        """
+        cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
+        self.clear_ack()
+        self.master.mav.command_long_send(
+            self.master.target_system, self.master.target_component,
+            cmd, 0, 1, 0, 0, 0, 0, 0, 0)
+
+        accepted, reason = self.wait_ack(cmd, timeout=3.0)
+        if not accepted:
+            return False, reason
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.is_armed():
+                return True, 'ACCEPTED'
+            time.sleep(0.1)
+        return False, 'NOT_ARMED_AFTER_ACK'
+
+    def disarm(self, timeout=15.0):
+        """Swap to MANUAL and neutralise thrusters before disarming —
+        what QGC does, avoids ArduSub's "still moving" disarm rejection.
+        """
+        self.set_mode('MANUAL')
+        time.sleep(3)
+        self.send_neutral()
+
+        cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
+        self.clear_ack()
+        self.master.mav.command_long_send(
+            self.master.target_system, self.master.target_component,
+            cmd, 0, 0, 0, 0, 0, 0, 0, 0)
+
+        accepted, reason = self.wait_ack(cmd, timeout=3.0)
+        if not accepted:
+            return False, reason
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not self.is_armed():
+                return True, 'ACCEPTED'
+            time.sleep(0.1)
+        return False, 'STILL_ARMED_AFTER_ACK'
+
+    # ------------------------------------------------------------------ #
+    #  Mode — SET_MODE is a legacy message with no COMMAND_ACK, so we     #
+    #  retry the send and poll the heartbeat cache for the actual change. #
+    # ------------------------------------------------------------------ #
+
+    def set_mode(self, mode_name, timeout=8.0):
+        """Returns `(success, reason)`. Reason is 'ACCEPTED' or 'MODE_NOT_REACHED'."""
+        mode_id = self.master.mode_mapping().get(mode_name)
+        if mode_id is None:
+            return False, f'UNKNOWN_MODE:{mode_name}'
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            self.master.mav.set_mode_send(
+                self.master.target_system,
+                mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                mode_id)
+            time.sleep(0.3)
+            if self.get_mode() == mode_name:
+                return True, 'ACCEPTED'
+        return False, 'MODE_NOT_REACHED'
+
+    # ------------------------------------------------------------------ #
+    #  RC Override                                                         #
+    # ------------------------------------------------------------------ #
+
+    def send_rc_override(self, pitch=1500, roll=1500, throttle=1500,
+                         yaw=1500, forward=1500, lateral=1500):
+        """Override the six driving channels with explicit PWM values."""
+        values = [NO_OVERRIDE] * 18
+        values[CH_PITCH]    = int(pitch)
+        values[CH_ROLL]     = int(roll)
+        values[CH_THROTTLE] = int(throttle)
+        values[CH_YAW]      = int(yaw)
+        values[CH_FORWARD]  = int(forward)
+        values[CH_LATERAL]  = int(lateral)
+        self.master.mav.rc_channels_override_send(
+            self.master.target_system, self.master.target_component, *values)
+
+    def send_rc_translation(self, throttle=1500, forward=1500, lateral=1500):
+        """Override translation channels only (Ch3 throttle, Ch5 forward, Ch6 lateral).
+
+        Leaves pitch/roll/yaw RC channels released (65535) so SET_ATTITUDE_TARGET
+        or ArduSub's internal stabilisers retain authority over attitude. Use
+        during yaw commands driven by `set_attitude_setpoint` — if Ch4 were
+        overridden here (even to 1500), ArduSub would prefer the pilot's
+        rate command over the attitude target.
+        """
+        values = [NO_OVERRIDE] * 18
+        values[CH_THROTTLE] = int(throttle)
+        values[CH_FORWARD]  = int(forward)
+        values[CH_LATERAL]  = int(lateral)
+        self.master.mav.rc_channels_override_send(
+            self.master.target_system, self.master.target_component, *values)
+
+    def send_neutral(self):
+        """Active hold: send 1500 PWM to all six driving channels.
+
+        The autopilot still sees us as "the pilot", so its onboard heading
+        and depth holds latch at the current state.
+        """
+        self.send_rc_override(1500, 1500, 1500, 1500, 1500, 1500)
+
+    def release_rc_override(self):
+        """Release: send 65535 to every channel so the autopilot runs
+        WITHOUT us on the loop.
+
+        Useful for letting ALT_HOLD / POSHOLD take over fully between
+        commands, or for A/B testing what ArduSub does on its own. This
+        is the "pause" verb's MAVLink behaviour.
+        """
+        values = [NO_OVERRIDE] * 18
+        self.master.mav.rc_channels_override_send(
+            self.master.target_system, self.master.target_component, *values)
+
+    # ------------------------------------------------------------------ #
+    #  Heartbeat (mandatory >= 1 Hz)                                      #
+    # ------------------------------------------------------------------ #
+
+    def send_heartbeat(self):
+        self.master.mav.heartbeat_send(
+            mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+            mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+            0, 0, 0)
+
+    # ------------------------------------------------------------------ #
+    #  Setpoints                                                           #
+    # ------------------------------------------------------------------ #
+
+    def set_attitude_setpoint(self, roll_deg=0.0, pitch_deg=0.0, yaw_deg=0.0):
+        """Command ArduSub's internal 400 Hz attitude stabiliser.
+
+        Works in ALT_HOLD / STABILIZE / POSHOLD when Ch4 RC override is
+        released. Stream at >= 5 Hz to keep the target active (ArduSub
+        drops it after ~1 s of silence and falls back to pilot RC).
+
+        The mask ignores body-rate fields (we're commanding an absolute
+        attitude, not rates) and throttle (so ALT_HOLD can keep depth).
+        """
+        mask = (
+            mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_BODY_ROLL_RATE_IGNORE
+            | mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_BODY_PITCH_RATE_IGNORE
+            | mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_BODY_YAW_RATE_IGNORE
+            | mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE
+        )
+        quaternion = QuaternionBase(
+            [math.radians(a) for a in (roll_deg, pitch_deg, yaw_deg)])
+        self.master.mav.set_attitude_target_send(
+            int(1e3 * (time.time() - self._boot_time)),
+            self.master.target_system, self.master.target_component,
+            mask, quaternion, 0, 0, 0, 0)
+
+    def set_target_depth(self, depth_m):
+        """Command ArduSub's onboard depth controller to an absolute depth.
+
+        `depth_m` is negative below the surface (matches AHRS2.altitude
+        used everywhere else in the stack: -0.5 = 50 cm deep).
+
+        Mirror of `set_attitude_setpoint` — same shape, just for the Z
+        axis. Requires ALT_HOLD or GUIDED. Stream at >= 1 Hz; ArduSub's
+        loop runs internally at 400 Hz so 5 Hz from us is plenty.
+
+        Reference: Blue Robotics pymavlink docs, "Set Target Depth/Attitude".
+        """
+        mask = (
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_X_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_Y_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_VX_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_VY_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_VZ_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_AX_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_AY_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_AZ_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE
+        )
+        self.master.mav.set_position_target_global_int_send(
+            int(1e3 * (time.time() - self._boot_time)),
+            self.master.target_system, self.master.target_component,
+            mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
+            mask,
+            0, 0,                       # lat_int, lon_int (ignored)
+            float(depth_m),             # alt = target depth in metres
+            0, 0, 0,                    # vx, vy, vz   (ignored)
+            0, 0, 0,                    # afx, afy, afz (ignored)
+            0, 0)                       # yaw, yaw_rate (ignored)
+
+    def set_servo_pwm(self, aux_n, pwm):
+        """Drive a Pixhawk AUX servo (torpedo, grabber, dropper, ...).
+
+        `aux_n` is the AUX output number printed on the Pixhawk silkscreen
+        (AUX1..AUX6). The +8 ArduSub offset is added internally so the
+        command lands on the correct channel. `pwm` is clamped to a safe
+        BlueRobotics T200 / servo range (1100..1900 us) to prevent stall
+        current spikes.
+        """
+        if not (self.AUX_MIN <= aux_n <= self.AUX_MAX):
+            raise ValueError(
+                f'aux_n must be {self.AUX_MIN}..{self.AUX_MAX} '
+                f'(Pixhawk AUX1..AUX6), got {aux_n}')
+        pwm = max(self.PWM_MIN, min(self.PWM_MAX, int(pwm)))
+        channel = aux_n + self.AUX_PWM_OFFSET
+        self.master.mav.command_long_send(
+            self.master.target_system, self.master.target_component,
+            mavutil.mavlink.MAV_CMD_DO_SET_SERVO,
+            0, channel, pwm, 0, 0, 0, 0, 0)
+
+    # ------------------------------------------------------------------ #
+    #  Stream rate control (MAV_CMD_SET_MESSAGE_INTERVAL)                  #
+    # ------------------------------------------------------------------ #
+
+    def set_message_rate(self, message_id, hz):
+        """Pin the streaming rate for a given MAVLink message id.
+
+        Without this, ArduSub picks a default rate (often 4 Hz for
+        AHRS2) which silently caps how tight our control loops can be.
+        Pass `hz=0` to stop the stream, `hz=-1` to reset to default.
+
+        Reference: MAVLink common/MAV_CMD_SET_MESSAGE_INTERVAL (id 511).
+        """
+        interval_us = int(1_000_000 / hz) if hz > 0 else int(hz)
+        self.master.mav.command_long_send(
+            self.master.target_system, self.master.target_component,
+            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+            0, message_id, interval_us, 0, 0, 0, 0, 0)
+
+    # ------------------------------------------------------------------ #
+    #  Telemetry reads — master.messages cache only (non-blocking)        #
+    # ------------------------------------------------------------------ #
+
+    def get_attitude(self):
+        msg = self.master.messages.get('AHRS2')
+        if msg is None:
+            return None
+        yaw_deg = math.degrees(msg.yaw)
+        if yaw_deg < 0:
+            yaw_deg += 360.0
+        return {
+            'yaw':   yaw_deg,
+            'roll':  math.degrees(msg.roll),
+            'pitch': math.degrees(msg.pitch),
+            'depth': msg.altitude,
+        }
+
+    def get_attitude_age(self):
+        """Seconds since the last AHRS2 message, or None if none arrived.
+
+        Pymavlink stamps every received message with `_timestamp` (wall
+        time). Lets sensor sources gate on freshness (see
+        `MavlinkAhrsSource` and the 250 ms staleness contract in
+        `.claude/context/sensors-pipeline.md`). When the attribute is
+        missing we return 0.0 so the sample is treated as fresh — the
+        only known cause is an in-test mock without timestamps.
+        """
+        msg = self.master.messages.get('AHRS2')
+        if msg is None:
+            return None
+        ts = getattr(msg, '_timestamp', None)
+        if ts is None:
+            return 0.0
+        return max(0.0, time.time() - ts)
+
+    def get_battery(self):
+        msg = self.master.messages.get('BATTERY_STATUS')
+        if msg is None:
+            return None
+        return {
+            'voltage': msg.voltages[0] / 1000.0,
+            'current': msg.current_battery / 100.0,
+        }
+
+    def get_rc_channels(self):
+        msg = self.master.messages.get('RC_CHANNELS')
+        if msg is None:
+            return None
+        return [
+            msg.chan1_raw, msg.chan2_raw, msg.chan3_raw, msg.chan4_raw,
+            msg.chan5_raw, msg.chan6_raw, msg.chan7_raw, msg.chan8_raw,
+        ]
+
+    def get_statustext(self):
+        msg = self.master.messages.get('STATUSTEXT')
+        return msg.text.strip() if msg else None
+
+    def get_mode(self):
+        msg = self.master.messages.get('HEARTBEAT')
+        if msg is None:
+            return 'UNKNOWN'
+        mode_map = {v: k for k, v in self.master.mode_mapping().items()}
+        return mode_map.get(msg.custom_mode, str(msg.custom_mode))
+
+    def is_armed(self):
+        msg = self.master.messages.get('HEARTBEAT')
+        if msg is None:
+            return False
+        return bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
+
+    # ------------------------------------------------------------------ #
+    #  Pure-math helpers                                                   #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def percent_to_pwm(percent):
+        """Convert -100..100 percent to 1100..1900 us PWM. 0 -> 1500."""
+        return max(1100, min(1900, int(1500 + (percent / 100.0) * 400)))
+
+    @staticmethod
+    def heading_error(target, current):
+        """Shortest-path error on 0-360 deg circle. Returns -180..180."""
+        return (target - current + 540) % 360 - 180

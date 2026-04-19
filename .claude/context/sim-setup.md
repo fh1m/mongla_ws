@@ -3,6 +3,8 @@
 Complete step-by-step guide to bring up the SITL + Gazebo simulation stack.
 All commands run inside the auv-ros2 distrobox docker.
 
+> **Sim proxy callout:** Gazebo runs the `bluerov2_heavy_underwater.world` model because it shares the BRACU Duburi 4.2's `vectored_6dof` 8-thruster ArduSub frame — so control behavior maps faithfully. The hull shape, exact mass, and payload geometry differ from the real sub. See [`vehicle-spec.md`](./vehicle-spec.md) §"Real vehicle vs sim".
+
 ---
 
 ## Architecture Overview
@@ -10,9 +12,11 @@ All commands run inside the auv-ros2 distrobox docker.
 ```
 [ArduSub SITL] ←JSON/UDP→ [ardupilot_gazebo plugin] ←→ [Gazebo Harmonic]
       ↕ UDP:14550
-[Our ROS2 nodes (duburi_ws)]
+[Our ROS2 node — auv_manager_node — owns the single MAVLink connection]
       ↕
-[MAVROS or direct pymavlink]
+[ /duburi/move action  +  /duburi/state String topic ]
+      ↕
+[duburi CLI  /  test_runner  /  any external ActionClient]
 ```
 
 The ardupilot_gazebo plugin bridges physics: Gazebo simulates buoyancy, drag, and
@@ -116,35 +120,30 @@ If Gazebo and SITL are NOT communicating:
 ```bash
 # Terminal 3
 cd ~/Ros_workspaces/duburi_ws
-colcon build --symlink-install
-source install/setup.zsh
+./build_duburi.sh
+source install/setup.bash
 
-# Run the driver node (connects to SITL)
-ros2 launch duburi_bringup sim.launch.py
+# Run the manager node (connects to SITL on udpin:0.0.0.0:14550)
+ros2 run duburi_manager auv_manager_node --ros-args -p mode:=sim
 ```
 
-**Or run nodes manually for debugging:**
-```bash
-ros2 run duburi_driver driver_node --ros-args \
-  -p connection_string:=udpin:0.0.0.0:14550 \
-  -p mode:=sim
-```
+> No `duburi_bringup` package exists. We don't use launch files yet — every entry point goes through `ros2 run ... --ros-args -p mode:=...`. See [`ros2-conventions.md`](./ros2-conventions.md) §10.
 
 ---
 
 ## Step 6: Verify Connectivity
 
 ```bash
-# Check state topic
-ros2 topic echo /duburi/state --once
-# Expected: armed=false, mode=MANUAL, battery_v=16.x
+# Watch the JSON telemetry snapshot (1 line per second-ish)
+ros2 topic echo /duburi/state
+# Expected: {"armed": false, "mode": "MANUAL", "yaw_deg": ..., "depth_m": ..., "battery_v": ...}
 
-# Check attitude topic
-ros2 topic echo /duburi/attitude
-# Expected: yaw updating, depth ~0.0 (at surface)
+# Confirm the action server is up
+ros2 action list | grep duburi
+# Expected: /duburi/move
 
-# Check topic list
-ros2 topic list | grep duburi
+ros2 action info /duburi/move
+# Expected: 1 action server, type duburi_interfaces/action/Move
 ```
 
 ---
@@ -152,18 +151,15 @@ ros2 topic list | grep duburi
 ## Step 7: Test Basic Commands
 
 ```bash
-# Arm vehicle
-ros2 service call /duburi/arm std_srvs/srv/SetBool "{data: true}"
-# → Thrusters should spin briefly in Gazebo
-
-# Set depth (requires ALT_HOLD mode first)
-ros2 service call /duburi/set_mode std_srvs/srv/SetBool  # TODO: proper service
-ros2 topic pub /duburi/depth_cmd std_msgs/msg/Float32 "{data: -0.5}" --once
-# → Vehicle should descend to 50cm in Gazebo
-
-# Disarm
-ros2 service call /duburi/arm std_srvs/srv/SetBool "{data: false}"
+# All commands go through the duburi CLI → /duburi/move action.
+ros2 run duburi_manager duburi arm           # arms via MAV_CMD_COMPONENT_ARM_DISARM
+ros2 run duburi_manager duburi set_depth -0.5  # auto-engages ALT_HOLD, then setpoint stream
+ros2 run duburi_manager duburi yaw_right 90    # SET_ATTITUDE_TARGET via ALT_HOLD
+ros2 run duburi_manager duburi move_forward 5 80  # RC_CHANNELS_OVERRIDE Ch5 for 5 s @ 80%
+ros2 run duburi_manager duburi disarm
 ```
+
+> Older notes referenced `/duburi/arm` / `/duburi/depth_cmd` as ROS services / topics — they don't exist. Single action surface only.
 
 ---
 
@@ -230,9 +226,9 @@ Two approaches available:
 | | Direct Pymavlink | MAVROS |
 |---|---|---|
 | **Connection** | `udpin:0.0.0.0:14550` | `fcu_url: udp://:14551@localhost:14550` |
-| **Used in** | Our driver_node (reference codebase pattern) | ardusub-interface reference |
+| **Used in** | `auv_manager_node` (the only MAVLink consumer in the live path) | ardusub-interface reference |
 | **Pros** | Proven, simple, direct | ROS2 native, services/actions |
 | **Cons** | More boilerplate | MAVROS overhead, extra node |
-| **Our choice** | ✅ Preferred | Available as fallback |
+| **Our choice** | ✅ Used today | Read-only telemetry consumer planned for Phase 3 (separate endpoint) |
 
-If using MAVROS alongside our node, point it at port 14551 (the second `--out` we added to SITL).
+If you bring up MAVROS alongside the manager, point it at port `14551` (the second `--out` we added to SITL). Do not have it bind `14550` — it will steal packets from the manager.

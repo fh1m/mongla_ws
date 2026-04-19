@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+            schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>duburi_sensors</name>
+  <version>0.1.0</version>
+  <description>
+    Sensor-only helper library for duburi_control. Provides a uniform YawSource
+    interface with two implementations (MAVLink AHRS and BNO085 over USB CDC,
+    with one-shot Pixhawk-mag offset calibration), DVL/WitMotion stubs for
+    future Phase 4 work, and a standalone ROS2 diagnostic node. No fusion,
+    no vision.
+  </description>
+  <maintainer email="fahim.2002.faisal@gmail.com">Muhammad Fahim Faisal</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>duburi_control</exec_depend>
+  <exec_depend>python3-serial</exec_depend>
+
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>ament_flake8</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

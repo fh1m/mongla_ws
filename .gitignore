@@ -55,3 +55,6 @@ secrets.yaml
 !src/**/setup.py
 !src/**/setup.cfg
 !src/**/pyproject.toml
+
+# Proof of Contribution
+.poc/provenance.db

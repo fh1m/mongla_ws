@@ -1,289 +1,389 @@
 #!/usr/bin/env python3
+"""AUV Manager Node -- Terminal 1.
+
+* Owns MAVLink connection + reader thread (only thread calling recv_match).
+* Exposes /duburi/move as a ROS2 ActionServer.
+* Publishes /duburi/state (typed DuburiState message) on change.
+* MultiThreadedExecutor: action callbacks + timers run in parallel threads.
+
+Dispatch is registry-driven: every entry in `duburi_control.COMMANDS`
+maps to a same-named method on `Duburi`. Adding a new command means a
+row in commands.py and a method on Duburi -- this file does not need
+to change.
+
+The MAVLINK20 env var is owned by `duburi_control.pixhawk` so we don't
+duplicate it here. The console format env is set in this file because
+it must be in place BEFORE rclpy is imported.
 """
-AUV Manager Node — Terminal 1.
 
-* Owns MAVLink connection + reader thread (only thread calling recv_match)
-* Exposes /duburi/move as a ROS2 ActionServer
-* MultiThreadedExecutor: action callbacks + timers run in parallel threads
-* Telemetry logger prints only on meaningful state changes
-"""
+import os
+import math
+import threading
+import time
 
-import os, json, threading, time
+# Drop ROS2's default `[INFO] [1776530611.533365998] [duburi_manager]:` prefix
+# in favour of a compact `[INFO] <message>` so our [CMD]/[YAW]/[STATE] tags
+# are the loudest thing on screen. Must be set BEFORE rclpy is imported.
+os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
-os.environ['MAVLINK20'] = '1'
-from pymavlink import mavutil
+from pymavlink import mavutil                                            # noqa: E402
 
-import rclpy
-from rclpy.node import Node
-from rclpy.action import ActionServer, CancelResponse, GoalResponse
-from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import String
+import rclpy                                                             # noqa: E402
+from rclpy.node import Node                                              # noqa: E402
+from rclpy.action import ActionServer, CancelResponse, GoalResponse      # noqa: E402
+from rclpy.callback_groups import (                                      # noqa: E402
+    MutuallyExclusiveCallbackGroup,
+    ReentrantCallbackGroup,
+)
+from rclpy.executors import MultiThreadedExecutor                        # noqa: E402
 
-from duburi_interfaces.action import Move
-from duburi_control import MavlinkAPI, MovementCommands
-from .connection_config import PROFILES, DEFAULT_MODE, NETWORK
+from duburi_interfaces.action import Move                                # noqa: E402
+from duburi_interfaces.msg import DuburiState                            # noqa: E402
 
-_SEP = '━' * 52
+from duburi_control import COMMANDS, Duburi, Pixhawk, fields_for         # noqa: E402
+from duburi_sensors import make_yaw_source                               # noqa: E402
 
-# How much a value must change before the status line reprints
-_YAW_THRESH   = 5.0    # degrees
-_DEPTH_THRESH = 0.08   # metres
-_BAT_THRESH   = 0.2    # volts
-_FORCE_PRINT  = 30.0   # seconds — always reprint even if nothing changed
+from .connection_config import DEFAULT_MODE, NETWORK, PROFILES           # noqa: E402
 
-# Two small maps keep each command entry trivial to read.
-#
-# ACK-bearing commands (arm/disarm/set_mode) return (success, reason) where
-# reason is a MAV_RESULT name (ACCEPTED, DENIED, NO_ACK, ...). Everything
-# else is movement — these just run to completion or raise.
-_ACK_DISPATCH = {
-    'arm':      lambda mc, r: mc._api.arm(r.timeout or 15),
-    'disarm':   lambda mc, r: mc._api.disarm(r.timeout or 20),
-    'set_mode': lambda mc, r: mc._api.set_mode(r.target_name, r.timeout or 8),
+
+SEPARATOR = '=' * 52
+
+# How much a value must change before the [STATE] log line reprints.
+YAW_CHANGE_THRESH   = 5.0    # degrees
+DEPTH_CHANGE_THRESH = 0.08   # metres
+BAT_CHANGE_THRESH   = 0.2    # volts
+FORCE_PRINT_SECONDS = 30.0   # always reprint even if nothing changed
+
+# Telemetry stream rates we explicitly request from ArduSub at startup
+# via MAV_CMD_SET_MESSAGE_INTERVAL. Without this ArduSub picks defaults
+# (typically 4 Hz for AHRS2) which silently caps how tight our control
+# loops can be.
+MESSAGE_RATES = {
+    mavutil.mavlink.MAVLINK_MSG_ID_AHRS2:          50,   # Hz -- yaw/depth source
+    mavutil.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS:  1,
+    mavutil.mavlink.MAVLINK_MSG_ID_RC_CHANNELS:     5,
 }
 
-_MOVE_DISPATCH = {
-    'stop':         lambda mc, r: mc.stop(),
-    'move_forward': lambda mc, r: mc.move_forward(r.duration, int(r.gain or 80)),
-    'move_back':    lambda mc, r: mc.move_back(r.duration, int(r.gain or 80)),
-    'move_left':    lambda mc, r: mc.move_left(r.duration, int(r.gain or 80)),
-    'move_right':   lambda mc, r: mc.move_right(r.duration, int(r.gain or 80)),
-    'set_depth':    lambda mc, r: mc.set_depth(r.target, r.timeout or 30),
-    'yaw_left':     lambda mc, r: mc.yaw_left(r.target, r.timeout or 30),
-    'yaw_right':    lambda mc, r: mc.yaw_right(r.target, r.timeout or 30),
-}
+
+class FeedbackPump:
+    """Stream Move.Feedback at ~2.5 Hz while a goal is executing.
+
+    Used as a context manager so the worker thread is guaranteed to be
+    joined no matter how the command exits (success, exception, or a
+    cancel mid-loop).
+    """
+
+    def __init__(self, pixhawk, goal_handle):
+        self._pixhawk     = pixhawk
+        self._goal_handle = goal_handle
+        self._stop        = threading.Event()
+        self._thread      = threading.Thread(target=self._run, daemon=True)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+
+    def _run(self):
+        while not self._stop.is_set():
+            attitude = self._pixhawk.get_attitude()
+            if attitude is not None:
+                feedback              = Move.Feedback()
+                feedback.phase        = 'EXECUTING'
+                feedback.current_value = float(attitude['depth'])
+                feedback.error_value   = 0.0
+                feedback.status_line   = (
+                    f'YAW:{attitude["yaw"]:.1f}  '
+                    f'DEPTH:{attitude["depth"]:+.2f}m')
+                self._goal_handle.publish_feedback(feedback)
+            self._stop.wait(timeout=0.4)
 
 
 class AUVManagerNode(Node):
     def __init__(self):
         super().__init__('duburi_manager')
 
+        # ---- ROS parameters --------------------------------------------
         self.declare_parameter('mode',          DEFAULT_MODE)
         self.declare_parameter('smooth_yaw',    False)
         self.declare_parameter('smooth_linear', False)
-        mode          = self.get_parameter('mode').value
-        smooth_yaw    = bool(self.get_parameter('smooth_yaw').value)
-        smooth_linear = bool(self.get_parameter('smooth_linear').value)
-        profile       = PROFILES.get(mode, PROFILES[DEFAULT_MODE])
+        self.declare_parameter('yaw_source',    'mavlink_ahrs')
+        self.declare_parameter('bno085_port',   '/dev/ttyACM0')
+        self.declare_parameter('bno085_baud',   115200)
 
-        self.get_logger().info(f'Connecting ({mode}) → {profile["conn"]} …')
-        kw = {'baud': profile['baud']} if profile['baud'] else {}
-        self._master = mavutil.mavlink_connection(profile['conn'], **kw)
-        self._master.wait_heartbeat()
+        mode_name      = self.get_parameter('mode').value
+        smooth_yaw     = bool(self.get_parameter('smooth_yaw').value)
+        smooth_linear  = bool(self.get_parameter('smooth_linear').value)
+        yaw_src_name   = str(self.get_parameter('yaw_source').value)
+        bno085_port    = str(self.get_parameter('bno085_port').value)
+        bno085_baud    = int(self.get_parameter('bno085_baud').value)
+        profile        = PROFILES.get(mode_name, PROFILES[DEFAULT_MODE])
 
-        sys_id  = self._master.target_system
-        comp_id = self._master.target_component
-        yaw_tag = 'ramp' if smooth_yaw    else 'step'
-        lin_tag = 'ramp' if smooth_linear else 'step'
-        self.get_logger().info(_SEP)
-        self.get_logger().info(f' DUBURI AUV MANAGER  │  mode: {mode}')
+        # ---- MAVLink connection ----------------------------------------
+        self.get_logger().info(f'Connecting ({mode_name}) -> {profile["conn"]} ...')
+        baud_kw = {'baud': profile['baud']} if profile['baud'] else {}
+        self.master = mavutil.mavlink_connection(profile['conn'], **baud_kw)
+        self.master.wait_heartbeat()
+        self.pixhawk = Pixhawk(self.master)
+
+        # Pin telemetry rates so ArduSub streams what we need at the
+        # rates we need. Done early -- the reader thread starts below.
+        for msg_id, hz in MESSAGE_RATES.items():
+            self.pixhawk.set_message_rate(msg_id, hz)
+
+        # ---- Yaw source -----------------------------------------------
+        # Fail loudly if the requested source can't init -- the operator
+        # picked it, the operator gets told. No silent fallback.
+        try:
+            self.yaw_source = make_yaw_source(
+                yaw_src_name,
+                pixhawk=self.pixhawk,
+                port=bno085_port,
+                baud=bno085_baud,
+                logger=self.get_logger(),
+            )
+        except Exception as exc:
+            self.get_logger().fatal(
+                f'[SENSOR] yaw_source={yaw_src_name!r} failed to init: {exc}')
+            raise
+
+        # ---- Banner ----------------------------------------------------
+        yaw_tag = 'glide' if smooth_yaw    else 'snap'
+        lin_tag = 'eased' if smooth_linear else 'constant'
+        yaw_src_label = self.yaw_source.name
+        if yaw_src_name == 'bno085':
+            yaw_src_label = f'{yaw_src_label} ({bno085_port} @ {bno085_baud})'
+            offset = getattr(self.yaw_source, 'offset_deg', None)
+            if offset is not None:
+                yaw_src_label += f'  Earth-ref offset: {offset:+.2f} deg'
+
+        self.get_logger().info(SEPARATOR)
+        self.get_logger().info(f' DUBURI AUV MANAGER  |  mode: {mode_name}')
         self.get_logger().info(
-            f' MAVLink: sys={sys_id} comp={comp_id}  (v2.0)')
-        self.get_logger().info(
-            f' Profiles: yaw={yaw_tag}  linear={lin_tag}')
-        if mode in ('pool', 'laptop'):
+            f' MAVLink: sys={self.master.target_system} '
+            f'comp={self.master.target_component}  (v2.0)')
+        self.get_logger().info(f' Profiles: yaw={yaw_tag}  linear={lin_tag}')
+        self.get_logger().info(f' Yaw source: {yaw_src_label}')
+        if mode_name in ('pool', 'laptop'):
             self.get_logger().info(
-                f' Expect BlueOS "{NETWORK["endpoint"]}" → UDP Client '
+                f' Expect BlueOS "{NETWORK["endpoint"]}" -> UDP Client '
                 f'{NETWORK["jetson_ip"]}:{NETWORK["mav_port"]}')
-        self.get_logger().info(_SEP)
+        self.get_logger().info(SEPARATOR)
 
-        self._api = MavlinkAPI(self._master)
-        self._mc  = MovementCommands(
-            self._api,
-            logger        = self.get_logger(),
-            smooth_yaw    = smooth_yaw,
-            smooth_linear = smooth_linear,
+        # ---- High-level facade ----------------------------------------
+        self.duburi = Duburi(
+            self.pixhawk,
+            log=self.get_logger(),
+            smooth_yaw=smooth_yaw,
+            smooth_linear=smooth_linear,
+            yaw_source=self.yaw_source,
         )
 
-        # ---- callback groups -------------------------------------------
-        # ReentrantCallbackGroup allows action execute + timers to run in
-        # parallel threads under MultiThreadedExecutor
-        self._action_cbg = ReentrantCallbackGroup()
-        self._timer_cbg  = MutuallyExclusiveCallbackGroup()
+        # ---- Callback groups ------------------------------------------
+        # ReentrantCallbackGroup lets the action execute callback and the
+        # timers run in parallel threads under MultiThreadedExecutor.
+        self.action_group = ReentrantCallbackGroup()
+        self.timer_group  = MutuallyExclusiveCallbackGroup()
 
-        # ---- action server ---------------------------------------------
-        self._cmd_active = False
-        self._action_server = ActionServer(
-            self,
-            Move,
-            '/duburi/move',
-            execute_callback=self._execute_cb,
-            goal_callback=self._goal_cb,
-            cancel_callback=self._cancel_cb,
-            callback_group=self._action_cbg,
+        # ---- Action server --------------------------------------------
+        self.command_active = False
+        self.action_server  = ActionServer(
+            self, Move, '/duburi/move',
+            execute_callback=self.execute_callback,
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback,
+            callback_group=self.action_group,
         )
 
-        # ---- telemetry publisher (for other nodes) ----------------------
-        self._pub_state = self.create_publisher(String, '/duburi/state', 10)
+        # ---- Telemetry publisher --------------------------------------
+        self.state_publisher = self.create_publisher(
+            DuburiState, '/duburi/state', 10)
 
-        # ---- timers (timer_cbg keeps them mutually exclusive) -----------
-        self.create_timer(0.5, self._heartbeat_tick,  callback_group=self._timer_cbg)
-        self.create_timer(0.5, self._telemetry_tick,  callback_group=self._timer_cbg)
+        # ---- Timers ---------------------------------------------------
+        self.create_timer(0.5, self.heartbeat_tick,  callback_group=self.timer_group)
+        self.create_timer(0.5, self.telemetry_tick,  callback_group=self.timer_group)
 
-        # ---- reader thread ---------------------------------------------
-        self._last_statustext = ''
-        self._prev_state      = {}
-        self._last_print_t    = 0.0
-        self._reader = threading.Thread(target=self._reader_loop, daemon=True)
-        self._reader.start()
+        # ---- Reader thread --------------------------------------------
+        self.last_statustext = ''
+        self.prev_state      = {}
+        self.last_print_time = 0.0
+        self.prev_rc         = None
+        self.reader_thread   = threading.Thread(
+            target=self.reader_loop, daemon=True)
+        self.reader_thread.start()
 
-    # ------------------------------------------------------------------ #
-    #  MAVLink reader — only place recv_match is called                   #
-    # ------------------------------------------------------------------ #
+    # ================================================================== #
+    #  MAVLink reader -- only place recv_match() is called                #
+    # ================================================================== #
 
-    def _reader_loop(self):
+    def reader_loop(self):
         while True:
-            # Drain ALL pending messages into master.messages cache
-            while self._master.recv_match(blocking=False) is not None:
+            while self.master.recv_match(blocking=False) is not None:
                 pass
-            # Forward new STATUSTEXT to logger
-            txt = self._api.get_statustext()
-            if txt and txt != self._last_statustext:
-                self._last_statustext = txt
-                self.get_logger().info(f'[ARDUB] {txt}')
+            text = self.pixhawk.get_statustext()
+            if text and text != self.last_statustext:
+                self.last_statustext = text
+                self.get_logger().info(f'[ARDUB] {text}')
             time.sleep(0.005)   # 200 Hz drain
 
-    # ------------------------------------------------------------------ #
-    #  Action Server callbacks                                             #
-    # ------------------------------------------------------------------ #
+    # ================================================================== #
+    #  Action Server callbacks                                            #
+    # ================================================================== #
 
-    def _goal_cb(self, goal_request):
-        if self._cmd_active:
+    def goal_callback(self, goal_request):
+        if self.command_active:
             self.get_logger().warn(
-                f'[ACT  ] Rejected {goal_request.cmd} — command already active')
+                f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
             return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
-    def _cancel_cb(self, goal_handle):
-        self.get_logger().info('[ACT  ] Cancel requested — stopping thrusters')
-        self._mc.stop(settle_time=0)
+    def cancel_callback(self, goal_handle):
+        self.get_logger().info('[ACT  ] Cancel requested -- stopping thrusters')
+        self.pixhawk.send_neutral()
         return CancelResponse.ACCEPT
 
-    def _execute_cb(self, goal_handle):
-        req = goal_handle.request
-        cmd = req.cmd
+    def execute_callback(self, goal_handle):
+        request = goal_handle.request
+        cmd     = request.cmd
 
-        result = Move.Result()
-
-        if cmd not in _ACK_DISPATCH and cmd not in _MOVE_DISPATCH:
+        if cmd not in COMMANDS:
+            result = Move.Result()
             result.success = False
             result.message = f'Unknown command: {cmd}'
             goal_handle.abort()
             return result
 
-        self._cmd_active = True
-        self.get_logger().info(f'[ACT  ] {cmd} → EXECUTING')
-
-        done_evt = threading.Event()
-
-        def _feedback_loop():
-            while not done_evt.is_set():
-                att = self._api.get_attitude()
-                if att:
-                    fb = Move.Feedback()
-                    fb.phase         = 'EXECUTING'
-                    fb.current_value = float(att['depth'])
-                    fb.error_value   = 0.0
-                    fb.status_line   = (
-                        f'YAW:{att["yaw"]:.1f}°  '
-                        f'DEPTH:{att["depth"]:+.2f}m')
-                    goal_handle.publish_feedback(fb)
-                done_evt.wait(timeout=0.4)
-
-        fb_thread = threading.Thread(target=_feedback_loop, daemon=True)
-        fb_thread.start()
+        self.command_active = True
+        self.get_logger().info(f'[ACT  ] {cmd} -> EXECUTING')
 
         try:
-            if cmd in _ACK_DISPATCH:
-                # arm/disarm/set_mode — MAVLink ACK drives success/reason
-                ok, reason = _ACK_DISPATCH[cmd](self._mc, req)
-                result.success = ok
-                result.message = f'{cmd}: {reason}'
-            else:
-                # Movement commands block until done or raise on failure
-                _MOVE_DISPATCH[cmd](self._mc, req)
-                result.success = True
-                result.message = f'{cmd}: completed'
-
-            att = self._api.get_attitude()
-            result.final_value = float(att['depth']) if att else 0.0
+            with FeedbackPump(self.pixhawk, goal_handle):
+                method = getattr(self.duburi, cmd)
+                kwargs = fields_for(cmd, request)
+                result = method(**kwargs)
 
             if result.success:
                 goal_handle.succeed()
-                self.get_logger().info(f'[ACT  ] {cmd} → DONE ({result.message})')
+                self.get_logger().info(
+                    f'[ACT  ] {cmd} -> DONE ({result.message})')
             else:
                 goal_handle.abort()
-                self.get_logger().error(f'[ACT  ] {cmd} → REJECTED ({result.message})')
+                self.get_logger().error(
+                    f'[ACT  ] {cmd} -> REJECTED ({result.message})')
+            return result
 
         except Exception as exc:
-            result.success = False
-            result.message = f'{cmd}: exception — {exc}'
+            # Best-effort: surface current depth so the operator sees
+            # *something*. Detail (target/current/error) is in
+            # result.message.
+            attitude = self.pixhawk.get_attitude()
+            result = Move.Result()
+            result.success     = False
+            result.message     = f'{cmd}: exception -- {exc}'
+            result.final_value = float(attitude['depth']) if attitude else 0.0
+            result.error_value = 0.0
             goal_handle.abort()
             self.get_logger().error(f'[ACT  ] {cmd} FAILED: {exc}')
+
+            # When a movement raises mid-loop, the per-axis cleanup
+            # `stop()` is skipped, which can leave a stale
+            # SET_ATTITUDE_TARGET / SET_POSITION_TARGET active.
+            # Neutralise explicitly so the next command starts from a
+            # known state.
+            try:
+                self.pixhawk.send_neutral()
+            except Exception as cleanup_exc:
+                self.get_logger().warn(
+                    f'[ACT  ] post-failure neutralise raised: {cleanup_exc}')
+            return result
+
         finally:
-            done_evt.set()
-            fb_thread.join(timeout=1.0)
-            self._cmd_active = False
+            self.command_active = False
 
-        return result
+    # ================================================================== #
+    #  Timers                                                             #
+    # ================================================================== #
 
-    # ------------------------------------------------------------------ #
-    #  Timers                                                              #
-    # ------------------------------------------------------------------ #
+    def heartbeat_tick(self):
+        self.pixhawk.send_heartbeat()
 
-    def _heartbeat_tick(self):
-        self._api.send_heartbeat()
+    def telemetry_tick(self):
+        attitude = self.pixhawk.get_attitude()
+        battery  = self.pixhawk.get_battery()
+        rc       = self.pixhawk.get_rc_channels()
+        mode     = self.pixhawk.get_mode()
+        armed    = self.pixhawk.is_armed()
 
-    def _telemetry_tick(self):
-        att  = self._api.get_attitude()
-        bat  = self._api.get_battery()
-        rc   = self._api.get_rc_channels()
-        mode = self._api.get_mode()
-        arm  = self._api.is_armed()
+        self._maybe_print_state(attitude, battery, mode, armed)
+        self._maybe_print_rc(rc)
+        self._publish_state(attitude, battery, mode, armed)
 
-        now = time.time()
-        ps  = self._prev_state
+    def _maybe_print_state(self, attitude, battery, mode, armed):
+        now  = time.time()
+        prev = self.prev_state
         changed = (
-            ps.get('arm')  != arm
-            or ps.get('mode') != mode
-            or abs(ps.get('yaw',   0) - (att['yaw']   if att else 0)) > _YAW_THRESH
-            or abs(ps.get('depth', 0) - (att['depth']  if att else 0)) > _DEPTH_THRESH
-            or abs(ps.get('bat',   0) - (bat['voltage'] if bat else 0)) > _BAT_THRESH
-            or (now - self._last_print_t) > _FORCE_PRINT
+            prev.get('arm')  != armed
+            or prev.get('mode') != mode
+            or abs(prev.get('yaw',   0)
+                   - (attitude['yaw']   if attitude else 0)) > YAW_CHANGE_THRESH
+            or abs(prev.get('depth', 0)
+                   - (attitude['depth'] if attitude else 0)) > DEPTH_CHANGE_THRESH
+            or abs(prev.get('bat',   0)
+                   - (battery['voltage'] if battery else 0)) > BAT_CHANGE_THRESH
+            or (now - self.last_print_time) > FORCE_PRINT_SECONDS
         )
+        if not changed:
+            return
 
-        if changed:
-            arm_s   = '✓' if arm  else '✗'
-            yaw_s   = f'{att["yaw"]:6.1f}°'    if att else '   N/A '
-            depth_s = f'{att["depth"]:+6.2f}m'  if att else '   N/A '
-            bat_s   = f'{bat["voltage"]:5.1f}V'  if bat else '  N/A '
-            self.get_logger().info(
-                f'[STATE] ARM:{arm_s} │ {mode:<10} │ '
-                f'YAW:{yaw_s} │ DEPTH:{depth_s} │ BAT:{bat_s}')
-            self._prev_state = {
-                'arm': arm, 'mode': mode,
-                'yaw':   att['yaw']    if att else 0,
-                'depth': att['depth']  if att else 0,
-                'bat':   bat['voltage'] if bat else 0,
-            }
-            self._last_print_t = now
+        arm_str   = 'ARM' if armed  else '---'
+        yaw_str   = f'{attitude["yaw"]:6.1f}'    if attitude else '   N/A'
+        depth_str = f'{attitude["depth"]:+6.2f}m' if attitude else '   N/A'
+        bat_str   = f'{battery["voltage"]:5.1f}V'  if battery else '  N/A'
+        self.get_logger().info(
+            f'[STATE] {arm_str} | {mode:<10} | '
+            f'YAW:{yaw_str} | DEPTH:{depth_str} | BAT:{bat_str}')
+        self.prev_state = {
+            'arm':   armed, 'mode': mode,
+            'yaw':   attitude['yaw']    if attitude else 0,
+            'depth': attitude['depth']  if attitude else 0,
+            'bat':   battery['voltage'] if battery else 0,
+        }
+        self.last_print_time = now
 
-        # RC line only when any drive channel is non-neutral
-        if rc and len(rc) >= 6:
-            active = any(abs(rc[i] - 1500) > 50 for i in (2, 3, 4, 5))
-            if active:
-                self.get_logger().info(
-                    f'[RC   ] Thr:{rc[2]}  Yaw:{rc[3]}  Fwd:{rc[4]}  Lat:{rc[5]}')
+    def _maybe_print_rc(self, rc):
+        """Print the RC line only when an active channel actually
+        changed -- otherwise the same line repeats every 0.5 s for the
+        duration of a forward move and drowns the log."""
+        if not rc or len(rc) < 6:
+            return
+        drive  = (rc[2], rc[3], rc[4], rc[5])
+        active = any(abs(value - 1500) > 50 for value in drive)
+        if active and drive != self.prev_rc:
+            parts = []
+            for label, value in zip(('Thr', 'Yaw', 'Fwd', 'Lat'), drive):
+                if abs(value - 1500) > 50:
+                    parts.append(f'{label}:{value}')
+            self.get_logger().info('[RC   ] ' + '  '.join(parts))
+            self.prev_rc = drive
+        elif not active and self.prev_rc is not None:
+            self.get_logger().info('[RC   ] all neutral')
+            self.prev_rc = None
 
-        # Publish JSON for other nodes
-        if att or bat:
-            self._pub_state.publish(String(data=json.dumps({
-                'armed': arm, 'mode': mode,
-                'yaw':     att['yaw']    if att else None,
-                'depth':   att['depth']  if att else None,
-                'battery': bat['voltage'] if bat else None,
-            })))
+    def _publish_state(self, attitude, battery, mode, armed):
+        if attitude is None and battery is None:
+            return
+        msg = DuburiState()
+        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'duburi'
+        msg.armed           = bool(armed)
+        msg.mode            = mode if mode else ''
+        msg.yaw_deg         = float(attitude['yaw'])    if attitude else math.nan
+        msg.depth_m         = float(attitude['depth'])  if attitude else math.nan
+        msg.battery_voltage = float(battery['voltage']) if battery  else math.nan
+        self.state_publisher.publish(msg)
 
 
 def main(args=None):
@@ -296,7 +396,12 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node._api.send_neutral()
+        node.pixhawk.send_neutral()
+        try:
+            node.yaw_source.close()
+        except Exception as exc:
+            node.get_logger().debug(
+                f'shutdown: yaw_source.close() ignored: {exc!r}')
         node.destroy_node()
         rclpy.shutdown()
 
