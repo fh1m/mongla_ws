@@ -67,10 +67,16 @@ from .pixhawk import Pixhawk
 
 
 # ---- Default knobs (override per-call from Duburi facade) ------------- #
-DEFAULT_DEADBAND       = 0.10
-DEFAULT_STALE_AFTER    = 0.8       # seconds; older detection is "lost"
-LOST_TICK_BUDGET       = 12        # consecutive lost ticks before fail
-SETTLED_TICK_BUDGET    = 4         # ticks within deadband before success
+DEFAULT_DEADBAND       = 0.18      # matches vision.deadband in vision_tunables.yaml
+DEFAULT_STALE_AFTER    = 1.5       # seconds; older detection is "lost"
+# 40 ticks at LOOP_HZ=20 = 2.0 s. Webcams drop frames in bursts; we'd
+# rather ride out a 1-2 s blackout than abort a mostly-finished command.
+# Override per-call from missions if a real AUV needs stricter bounds.
+LOST_TICK_BUDGET       = 40
+# 2 ticks at LOOP_HZ=20 = 0.1 s. Deadband is the primary noise filter;
+# the tick budget just prevents a single on-target frame from claiming
+# success. With the widened deadband below this is still safe.
+SETTLED_TICK_BUDGET    = 2
 
 KP_YAW_DEFAULT         = 60.0;   YAW_PCT_MAX     = 35.0
 KP_LAT_DEFAULT         = 60.0;   LAT_PCT_MAX     = 35.0

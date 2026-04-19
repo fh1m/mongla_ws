@@ -37,9 +37,15 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     'vision.kp_lat':              60.0,
     'vision.kp_depth':             0.05,
     'vision.kp_forward':         200.0,
-    'vision.deadband':             0.10,
-    'vision.target_bbox_h_frac':   0.55,
-    'vision.stale_after':          0.8,
+    # Loose defaults tuned for sim + webcam smoke tests: a seated person
+    # inside a reasonable "centred" zone satisfies `deadband`, fills
+    # ~30% of frame height from a normal chair distance, and webcam
+    # detection stutters up to 1.5 s without tripping the lost-target
+    # budget. Pool missions override per-call via the CLI / mission DSL
+    # or by editing vision_tunables.yaml for the run.
+    'vision.deadband':             0.18,
+    'vision.target_bbox_h_frac':   0.30,
+    'vision.stale_after':          1.5,
     'vision.on_lost':             'fail',
     'vision.acquire_yaw_rate_pct': 22.0,
     'vision.acquire_gain':         25.0,

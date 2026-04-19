@@ -15,28 +15,36 @@ The reference firmware runs the BNO085 in ``SH2_GYRO_INTEGRATED_RV``
 accelerometer fused, magnetometer DISABLED. That gives us a smooth
 heading immune to magnetic interference (8 thrusters + aluminum (Marine
 5083) hull + battery currents) but with no absolute Earth reference —
-the chip's "yaw 0" is whatever direction it was facing at boot.
+the chip's heading zero is whatever direction it was facing at boot.
 
 To get an Earth-referenced heading without ever using the BNO's mag,
 we read the Pixhawk's mag-fused yaw ONCE at startup (sub at the surface,
 clean magnetic environment) and lock the offset:
 
-    offset = pixhawk_yaw - bno_raw_yaw          # captured at __init__
-    earth_yaw(t) = (bno_raw_yaw(t) + offset) mod 360
+    offset = pixhawk_yaw - bno_yaw              # captured at __init__
+    earth_yaw(t) = (bno_yaw(t) + offset) mod 360
 
 After calibration the Pixhawk magnetometer is never read again — gyro
 drift only (~0.5 deg/min typical), no in-hull magnetic interference.
 
-Wire contract (firmware side)
------------------------------
+Wire contract (firmware side) and convention conversion
+------------------------------------------------------
 The MCU ships ONE JSON object per line, newline-terminated:
 
     {"yaw": 123.45, "ts": 12345}\n
 
-  yaw   float   degrees in [0, 360), sensor frame, +CW (right-hand rule
-                around gravity). NOT magnetic north — the Jetson side
-                applies the calibration offset.
+  yaw   float   degrees in [0, 360) as emitted by the firmware's
+                ``atan2(2*(qi*qj + qk*qr), (sqi - sqj - sqk + sqr))``.
+                That is the ENU / right-handed convention: rotating the
+                board CCW (LEFT as viewed from above, looking down +Z)
+                makes the reported yaw INCREASE.
   ts    int     ms since MCU boot. Optional. Diagnostic only.
+
+ArduSub / Pixhawk AHRS publishes in NED / compass convention, where
+rotating the vehicle CW (RIGHT) is what INCREASES yaw (N=0 E=90 S=180
+W=270). ``_reader_loop`` below negates the raw value once at ingestion
+so ``read_yaw()`` is compass-convention for the rest of the stack.
+Do not apply the negation again anywhere downstream.
 
 Stream rate: 50 Hz target (firmware ships ~50 Hz from a 500 Hz internal
 loop). Anything 20-100 Hz works; control loops poll at 10 Hz so we just
@@ -329,7 +337,12 @@ class BNO085Source:
                     continue
 
                 msg = json.loads(line)
-                yaw = float(msg['yaw']) % 360.0
+                # Firmware ships ENU-native yaw (+CCW: rotating the board
+                # LEFT increases yaw). We invert to compass / NED (+CW,
+                # N=0 E=90 S=180 W=270) here so every downstream consumer
+                # -- heading_error, motion_yaw, HeadingLock, auv_manager
+                # telemetry -- sees the same convention as Pixhawk AHRS.
+                yaw = (-float(msg['yaw'])) % 360.0
 
                 self._latest_yaw = yaw
                 self._latest_ts  = time.monotonic()

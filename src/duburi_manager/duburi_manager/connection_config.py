@@ -42,7 +42,6 @@ string, so picking ``pool`` vs ``sim`` is purely cosmetic for the
 banner -- both work without code change.
 """
 
-import os
 import socket
 from glob import glob
 
@@ -62,10 +61,13 @@ PROFILES = {
     'desk':   {'conn': '/dev/ttyACM0',        'baud': 115200}, # Pixhawk over USB
 }
 
-# Mode used when the operator passes nothing (or 'auto') to the manager.
-# 'auto' resolves to one of the four explicit modes at startup -- see
-# `resolve_mode` below.
-DEFAULT_MODE = 'auto'
+# Mode used when the operator passes nothing. We default to 'sim' because
+# every real mode (pool / laptop / sim) shares the same UDP connection
+# string, so 'sim' works out-of-box on the Jetson (BlueOS pushes to 14550),
+# inside the docker (SITL pushes to 14550), AND on a laptop on the same
+# switch -- zero config needed. Operators can still opt into 'auto',
+# 'pool', 'laptop', or 'desk' explicitly via -p mode:=...
+DEFAULT_MODE = 'sim'
 
 
 # ---------------------------------------------------------------------- #
@@ -91,17 +93,20 @@ def _udp_port_in_use(port: int) -> bool:
 
 
 def _pixhawk_serial_present() -> bool:
-    """True iff at least one /dev/ttyACM* node looks like a Pixhawk.
+    """True iff a Pixhawk / PX4 / ArduPilot / CubePilot is on USB CDC.
 
-    by-id symlinks are checked first because they survive port
-    renumbering (the Pixhawk's USB serial number is stable).
+    We deliberately do NOT fall through to any /dev/ttyACM* node --
+    ESP32-C3 boards (e.g. BNO085 yaw source firmware) enumerate as ACM
+    too and would false-positive this probe, flipping auto-mode from
+    'sim' to 'desk' the moment a BNO is plugged in. The by-id name is
+    authoritative because the USB serial number string is stable across
+    reboots and port renumbering.
     """
-    by_id = glob('/dev/serial/by-id/*Pixhawk*') + \
-            glob('/dev/serial/by-id/*PX4*')      + \
-            glob('/dev/serial/by-id/*ArduPilot*')
-    if by_id:
-        return True
-    return any(os.path.exists(p) for p in ('/dev/ttyACM0', '/dev/ttyACM1'))
+    hits = (glob('/dev/serial/by-id/*Pixhawk*')
+            + glob('/dev/serial/by-id/*PX4*')
+            + glob('/dev/serial/by-id/*ArduPilot*')
+            + glob('/dev/serial/by-id/*CubePilot*'))
+    return bool(hits)
 
 
 def resolve_mode(requested: str, *, logger=None) -> str:

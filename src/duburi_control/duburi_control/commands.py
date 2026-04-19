@@ -129,10 +129,10 @@ COMMANDS = {
                      'stale_after'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'axes': 'yaw,forward', 'duration': 30.0,
-                     'deadband': 0.10, 'kp_yaw': 60.0, 'kp_lat': 60.0,
+                     'deadband': 0.18, 'kp_yaw': 60.0, 'kp_lat': 60.0,
                      'kp_depth': 0.05, 'kp_forward': 200.0,
-                     'target_bbox_h_frac': 0.55, 'visual_pid': False,
-                     'on_lost': 'fail', 'stale_after': 0.8},
+                     'target_bbox_h_frac': 0.30, 'visual_pid': False,
+                     'on_lost': 'fail', 'stale_after': 1.5},
     },
     'vision_align_yaw': {
         'help':     'One-axis convenience: keep target_class centred '
@@ -140,9 +140,9 @@ COMMANDS = {
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_yaw', 'on_lost', 'stale_after'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
-                     'duration': 15.0, 'deadband': 0.10,
+                     'duration': 15.0, 'deadband': 0.18,
                      'kp_yaw': 60.0, 'on_lost': 'fail',
-                     'stale_after': 0.8},
+                     'stale_after': 1.5},
     },
     'vision_align_lat': {
         'help':     'One-axis convenience: keep target_class centred via '
@@ -150,9 +150,9 @@ COMMANDS = {
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_lat', 'on_lost', 'stale_after'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
-                     'duration': 15.0, 'deadband': 0.10,
+                     'duration': 15.0, 'deadband': 0.18,
                      'kp_lat': 60.0, 'on_lost': 'fail',
-                     'stale_after': 0.8},
+                     'stale_after': 1.5},
     },
     'vision_align_depth': {
         'help':     'One-axis convenience: nudge depth so target_class '
@@ -160,9 +160,9 @@ COMMANDS = {
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_depth', 'on_lost', 'stale_after'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
-                     'duration': 15.0, 'deadband': 0.10,
+                     'duration': 15.0, 'deadband': 0.18,
                      'kp_depth': 0.05, 'on_lost': 'fail',
-                     'stale_after': 0.8},
+                     'stale_after': 1.5},
     },
     'vision_hold_distance': {
         'help':     'Drive forward/back so target_class bbox height matches '
@@ -170,10 +170,12 @@ COMMANDS = {
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_forward', 'target_bbox_h_frac', 'on_lost',
                      'stale_after'],
+        # deadband stays tighter here because it measures bbox-height
+        # error, which is naturally smaller than ex/ey centring errors.
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 20.0, 'deadband': 0.05,
-                     'kp_forward': 200.0, 'target_bbox_h_frac': 0.55,
-                     'on_lost': 'fail', 'stale_after': 0.8},
+                     'kp_forward': 200.0, 'target_bbox_h_frac': 0.30,
+                     'on_lost': 'fail', 'stale_after': 1.5},
     },
     'vision_acquire': {
         'help':     'Block (optionally driving via target_name verb) until '
@@ -184,7 +186,7 @@ COMMANDS = {
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'target_name': '', 'timeout': 30.0,
                      'gain': 25.0, 'yaw_rate_pct': 25.0,
-                     'stale_after': 0.8},
+                     'stale_after': 1.5},
     },
 }
 

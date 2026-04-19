@@ -78,13 +78,20 @@ class FeedbackPump:
     Used as a context manager so the worker thread is guaranteed to be
     joined no matter how the command exits (success, exception, or a
     cancel mid-loop).
+
+    `yaw_provider` is an optional ``fn(attitude) -> (yaw_deg, label)``
+    injected by the node so the feedback line reports the same yaw the
+    control loops close on (BNO when configured, AHRS otherwise). When
+    omitted we fall back to Pixhawk AHRS so the old call site still
+    works.
     """
 
-    def __init__(self, pixhawk, goal_handle):
-        self._pixhawk     = pixhawk
-        self._goal_handle = goal_handle
-        self._stop        = threading.Event()
-        self._thread      = threading.Thread(target=self._run, daemon=True)
+    def __init__(self, pixhawk, goal_handle, yaw_provider=None):
+        self._pixhawk       = pixhawk
+        self._goal_handle   = goal_handle
+        self._yaw_provider  = yaw_provider
+        self._stop          = threading.Event()
+        self._thread        = threading.Thread(target=self._run, daemon=True)
 
     def __enter__(self):
         self._thread.start()
@@ -98,13 +105,17 @@ class FeedbackPump:
         while not self._stop.is_set():
             attitude = self._pixhawk.get_attitude()
             if attitude is not None:
+                if self._yaw_provider is not None:
+                    yaw_deg, _ = self._yaw_provider(attitude)
+                else:
+                    yaw_deg = attitude['yaw']
+                yaw_str = f'{yaw_deg:.1f}' if yaw_deg is not None else 'N/A'
                 feedback              = Move.Feedback()
                 feedback.phase        = 'EXECUTING'
                 feedback.current_value = float(attitude['depth'])
                 feedback.error_value   = 0.0
                 feedback.status_line   = (
-                    f'YAW:{attitude["yaw"]:.1f}  '
-                    f'DEPTH:{attitude["depth"]:+.2f}m')
+                    f'YAW:{yaw_str}  DEPTH:{attitude["depth"]:+.2f}m')
                 self._goal_handle.publish_feedback(feedback)
             self._stop.wait(timeout=0.4)
 
@@ -185,6 +196,17 @@ class AUVManagerNode(Node):
             self.get_logger().info(
                 f' Expect BlueOS "{NETWORK["endpoint"]}" -> UDP Client '
                 f'{NETWORK["jetson_ip"]}:{NETWORK["mav_port"]}')
+        if yaw_src_name == 'bno085' and mode_name in ('sim', 'laptop', 'desk'):
+            # Operator-visible sanity hint. In the pool the BNO is bolted
+            # inside the vehicle so it rotates with it and this note is
+            # misleading -- suppress there.
+            self.get_logger().info(
+                ' [HINT] BNO is the yaw source. Translations + vision '
+                'commands work normally in sim. Absolute-yaw commands '
+                '(yaw_left / yaw_right / turn_to / lock_heading) close '
+                'on the BNO reading, so in SITL they terminate only when '
+                'the board is physically rotated to the target. For '
+                'open-loop SITL smoke tests use yaw_source:=mavlink_ahrs.')
         self.get_logger().info(SEPARATOR)
 
         # ---- VisionState pool (lazy per camera) -----------------------
@@ -312,7 +334,8 @@ class AUVManagerNode(Node):
         self.get_logger().info(f'[ACT  ] {cmd} -> EXECUTING')
 
         try:
-            with FeedbackPump(self.pixhawk, goal_handle):
+            with FeedbackPump(self.pixhawk, goal_handle,
+                              yaw_provider=self._effective_yaw_deg):
                 method = getattr(self.duburi, cmd)
                 # Re-snapshot params for every goal so freshly-set
                 # `vision.*` values land on the very next command.
@@ -366,6 +389,30 @@ class AUVManagerNode(Node):
     def heartbeat_tick(self):
         self.pixhawk.send_heartbeat()
 
+    def _effective_yaw_deg(self, attitude):
+        """Return ``(yaw_deg, label)`` -- the SAME yaw the control loops
+        close on. Prefers ``yaw_source.read_yaw()`` when fresh, falls
+        back to Pixhawk AHRS, degrades gracefully to ``(None, 'N/A')``.
+
+        ``BNO085Source.read_yaw()`` already returns ``None`` when its
+        stream goes stale (see ``_STALE_S`` in ``bno085.py``), so a
+        yanked USB cable silently falls through to AHRS here rather
+        than holding the last stale BNO value forever.
+        """
+        source = getattr(self, 'yaw_source', None)
+        if source is not None:
+            yaw = source.read_yaw()
+            if yaw is not None:
+                # Short-label for the [STATE] line. 'MAVLINK_AHRS' ->
+                # 'AHRS' keeps the line tidy; custom sources (BNO085,
+                # DVL, WITMOTION) render as-is.
+                raw_name = getattr(source, 'name', 'SRC')
+                label = 'AHRS' if raw_name == 'MAVLINK_AHRS' else raw_name
+                return float(yaw), label
+        if attitude is not None:
+            return float(attitude['yaw']), 'AHRS'
+        return None, 'N/A'
+
     def telemetry_tick(self):
         attitude = self.pixhawk.get_attitude()
         battery  = self.pixhawk.get_battery()
@@ -373,18 +420,20 @@ class AUVManagerNode(Node):
         mode     = self.pixhawk.get_mode()
         armed    = self.pixhawk.is_armed()
 
-        self._maybe_print_state(attitude, battery, mode, armed)
-        self._maybe_print_rc(rc)
-        self._publish_state(attitude, battery, mode, armed)
+        yaw_deg, yaw_label = self._effective_yaw_deg(attitude)
 
-    def _maybe_print_state(self, attitude, battery, mode, armed):
+        self._maybe_print_state(attitude, battery, mode, armed, yaw_deg, yaw_label)
+        self._maybe_print_rc(rc)
+        self._publish_state(attitude, battery, mode, armed, yaw_deg)
+
+    def _maybe_print_state(self, attitude, battery, mode, armed, yaw_deg, yaw_label):
         now  = time.time()
         prev = self.prev_state
         changed = (
             prev.get('arm')  != armed
             or prev.get('mode') != mode
             or abs(prev.get('yaw',   0)
-                   - (attitude['yaw']   if attitude else 0)) > YAW_CHANGE_THRESH
+                   - (yaw_deg if yaw_deg is not None else 0)) > YAW_CHANGE_THRESH
             or abs(prev.get('depth', 0)
                    - (attitude['depth'] if attitude else 0)) > DEPTH_CHANGE_THRESH
             or abs(prev.get('bat',   0)
@@ -395,7 +444,12 @@ class AUVManagerNode(Node):
             return
 
         arm_str   = 'ARM' if armed  else '---'
-        yaw_str   = f'{attitude["yaw"]:6.1f}'    if attitude else '   N/A'
+        # Show the yaw source label (BNO / AHRS) so the operator can
+        # tell at a glance which sensor is actually driving the loops.
+        if yaw_deg is not None:
+            yaw_str = f'{yaw_deg:6.1f} ({yaw_label})'
+        else:
+            yaw_str = '   N/A'
         depth_str = f'{attitude["depth"]:+6.2f}m' if attitude else '   N/A'
         bat_str   = f'{battery["voltage"]:5.1f}V'  if battery else '  N/A'
         self.get_logger().info(
@@ -403,7 +457,7 @@ class AUVManagerNode(Node):
             f'YAW:{yaw_str} | DEPTH:{depth_str} | BAT:{bat_str}')
         self.prev_state = {
             'arm':   armed, 'mode': mode,
-            'yaw':   attitude['yaw']    if attitude else 0,
+            'yaw':   yaw_deg if yaw_deg is not None else 0,
             'depth': attitude['depth']  if attitude else 0,
             'bat':   battery['voltage'] if battery else 0,
         }
@@ -428,7 +482,7 @@ class AUVManagerNode(Node):
             self.get_logger().info('[RC   ] all neutral')
             self.prev_rc = None
 
-    def _publish_state(self, attitude, battery, mode, armed):
+    def _publish_state(self, attitude, battery, mode, armed, yaw_deg):
         if attitude is None and battery is None:
             return
         msg = DuburiState()
@@ -436,7 +490,10 @@ class AUVManagerNode(Node):
         msg.header.frame_id = 'duburi'
         msg.armed           = bool(armed)
         msg.mode            = mode if mode else ''
-        msg.yaw_deg         = float(attitude['yaw'])    if attitude else math.nan
+        # Publish the yaw the control loops actually use (BNO when it's
+        # the configured source, Pixhawk AHRS otherwise) so downstream
+        # consumers of /duburi/state see the same number as [STATE].
+        msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])  if attitude else math.nan
         msg.battery_voltage = float(battery['voltage']) if battery  else math.nan
         self.state_publisher.publish(msg)

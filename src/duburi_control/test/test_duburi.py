@@ -168,17 +168,29 @@ def test_lock_heading_target_zero_locks_current_heading(duburi, monkeypatch):
 
 
 def test_motion_uses_translation_when_lock_active(duburi, monkeypatch):
-    """When heading-lock is engaged, motion commands MUST avoid Ch4."""
+    """When heading-lock is engaged, motion commands MUST stay off Ch4.
+
+    With the rate-based HeadingLock the LOCK thread now writes Ch4
+    itself (``send_rc_override(yaw=...)``). Translation commands
+    (``move_forward``, ``move_lateral``) must keep using
+    ``send_rc_translation`` which touches Ch5/Ch6/Ch3 only; any Ch4
+    write from the motion path would fight the lock.
+    """
     monkeypatch.setattr(time, 'sleep', lambda *_: None)
     duburi.lock_heading(target=0.0, timeout=2.0)
     duburi.pixhawk.calls.clear()
     duburi.move_forward(duration=0.05, gain=50.0)
-    overrides = [c for c in duburi.pixhawk.calls
-                 if c[0] == 'send_rc_override']
-    translations = [c for c in duburi.pixhawk.calls
-                    if c[0] == 'send_rc_translation']
+    # Ignore packets the lock thread itself is emitting in the background
+    # -- those are *expected* Ch4 writes. We only care about packets that
+    # touch forward/lateral/throttle here, i.e. translation packets.
+    translation_calls = [c for c in duburi.pixhawk.calls
+                         if c[0] == 'send_rc_translation']
+    motion_yaw_overrides = [
+        c for c in duburi.pixhawk.calls
+        if c[0] == 'send_rc_override'
+        and ('forward' in c[1] or 'lateral' in c[1] or 'throttle' in c[1])]
     duburi.unlock_heading()
-    assert not overrides, (
-        'with heading-lock active, motion must NOT call send_rc_override '
-        '(it would clobber Ch4 = lock target)')
-    assert translations
+    assert not motion_yaw_overrides, (
+        'with heading-lock active, translation commands must NOT call '
+        'send_rc_override for fwd/lat/throttle (they would clobber Ch4)')
+    assert translation_calls, 'move_forward must emit translation packets'
