@@ -162,12 +162,24 @@ duburi.move_right  (seconds, gain=80, settle=0.0)
 #### Depth
 
 ```python
-duburi.set_depth(metres, timeout=30.0, settle=0.0)
+duburi.set_depth(metres, timeout=30.0, settle=0.0)   # drive-to-depth (blocks)
+duburi.lock_depth(metres=0.0, timeout=600.0)         # background streamer (returns)
+duburi.release_depth()                               # stop the streamer
 ```
 
-Auto-engages ALT_HOLD if not already in it. `metres` is **negative
-below surface**: `set_depth(-1.5)` = 1.5 m deep. Returns once the
-controller is within 0.05 m of the target for 0.5 s.
+`set_depth` auto-engages ALT_HOLD if not already in it. `metres` is
+**negative below surface**: `set_depth(-1.5)` = 1.5 m deep. Returns
+once the controller is within 0.05 m of the target for 0.5 s. If a
+`lock_depth` is active, its target follows the new value automatically
+on exit.
+
+`lock_depth` is the **depth cousin of `lock_heading`** -- a daemon
+thread streams `set_target_depth` at 5 Hz so ArduSub's onboard
+ALT_HOLD never falls back to a stale setpoint during long
+translations or vision verbs. `metres=0` means "lock at the current
+depth right now". The streamer auto-suspends while a vision-depth
+verb (`vision.depth`, `vision.lock(axes='...,depth,...')`) writes
+its own setpoints, then resumes at the post-verb depth.
 
 #### Yaw (sharp pivots)
 
@@ -501,7 +513,10 @@ def run(duburi, log):
    blindly is `move_forward`. A phase that lands on a target is
    `vision.lock`. Don't mix them inside one verb; chain them.
 3. **Use `lock_heading()` whenever you do open-loop translations.** It
-   keeps drift bounded for free.
+   keeps drift bounded for free. Pair it with `lock_depth()` if the
+   leg is long enough that the link could miss a few setpoints --
+   the two locks compose cleanly (different MAVLink message
+   families, different ArduSub onboard controllers).
 4. **Vision verbs first, distance second.** Settle yaw/lat/depth on
    the target *before* committing to a `forward` close-in — otherwise
    the bbox error grows as you approach.

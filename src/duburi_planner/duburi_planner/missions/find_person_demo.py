@@ -36,10 +36,13 @@ def run(duburi, log):
     duburi.camera = CAMERA
     duburi.target = TARGET_CLASS
 
-    # Power on, hover at a known shallow depth.
+    # Power on, hover at a known shallow depth, then engage the
+    # background depth-streamer so every subsequent verb runs with
+    # depth held automatically (the cousin of `lock_heading`).
     duburi.arm()
     duburi.set_mode('ALT_HOLD')
     duburi.set_depth(DIVE_DEPTH_M, settle=1.0)
+    duburi.lock_depth(DIVE_DEPTH_M)
 
     # Sweep until the target is in frame.
     duburi.vision.find(sweep='right', timeout=ACQUIRE_TIMEOUT_S)
@@ -65,7 +68,9 @@ def run(duburi, log):
                        duration=LOCK_DURATION_S,
                        on_lost='hold')
 
-    # Surface and shut down.
+    # Surface and shut down. Release the depth lock first so the
+    # final set_depth(0.0) is the sole author of the depth setpoint.
     duburi.stop()
+    duburi.release_depth()
     duburi.set_depth(0.0)
     duburi.disarm()

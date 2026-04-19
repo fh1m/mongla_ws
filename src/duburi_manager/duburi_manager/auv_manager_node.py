@@ -509,9 +509,16 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # Stop any active heading-lock thread before going neutral so
-        # the streamer doesn't fight us while we're sending the
-        # shutdown packet.
+        # Stop the depth-lock streamer FIRST so it doesn't push another
+        # SET_POSITION_TARGET packet after we've sent the shutdown
+        # neutral. Then stop the heading-lock thread for the same reason
+        # on Ch4. Order: depth -> heading -> neutral.
+        try:
+            if node.duburi._depth_lock is not None:
+                node.duburi._depth_lock.stop()
+        except Exception as exc:
+            node.get_logger().debug(
+                f'shutdown: depth_lock.stop() ignored: {exc!r}')
         try:
             if node.duburi._heading_lock is not None:
                 node.duburi._heading_lock.stop()

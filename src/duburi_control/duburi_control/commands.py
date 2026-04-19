@@ -104,13 +104,27 @@ COMMANDS = {
 
     # ---- Heading lock (depth-hold's yaw cousin) -------------------- #
     'lock_heading': {
-        'help':     'Stream SET_ATTITUDE_TARGET from yaw_source until '
+        'help':     'Stream Ch4 rate-overrides driven by yaw_source until '
                     'unlock_heading. target=0 means lock current heading.',
         'fields':   ['target', 'timeout'],
         'defaults': {'target': 0.0, 'timeout': 300.0},
     },
     'unlock_heading': {
         'help':     'Stop the heading-lock streamer, send neutral.',
+        'fields':   [],
+        'defaults': {},
+    },
+
+    # ---- Depth lock (heading-lock's depth-axis cousin) -------------- #
+    'lock_depth': {
+        'help':     'Stream set_target_depth so ArduSub holds <target> m. '
+                    'target=0 means lock current depth.',
+        'fields':   ['target', 'timeout'],
+        'defaults': {'target': 0.0, 'timeout': 600.0},
+    },
+    'unlock_depth': {
+        'help':     'Stop the depth-lock streamer (ArduSub keeps holding '
+                    'its last setpoint).',
         'fields':   [],
         'defaults': {},
     },

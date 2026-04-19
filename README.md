@@ -419,11 +419,17 @@ Design principles we actually follow:
   (`SET_ATTITUDE_TARGET`). `arc` keeps Ch5 thrust + Ch4 yaw stick in the
   same RC packet for car-style curved trajectories.
 - **Heading-lock is yaw's depth-hold cousin.** `lock_heading` spins up a
-  background `SET_ATTITUDE_TARGET` stream at 20 Hz; translations and `pause`
-  run on top of it; `yaw_*` and `arc` suspend → execute → retarget; only
-  `unlock_heading` (or shutdown) tears it down. It is **source-agnostic** —
-  the same `YawSource` that feeds the manager (MAVLink AHRS, BNO085, or a
-  Gazebo mock) also feeds the lock.
+  background Ch4-rate-override stream at 20 Hz driven by the configured
+  `YawSource`; translations and `pause` run on top of it; `yaw_*` and `arc`
+  suspend → execute → retarget; only `unlock_heading` (or shutdown) tears it
+  down. It is **source-agnostic** — the same `YawSource` that feeds the
+  manager (MAVLink AHRS, BNO085, or a Gazebo mock) also feeds the lock.
+- **Depth-lock is heading-lock's depth-axis cousin.** `lock_depth` spins up a
+  background `set_target_depth` (`SET_POSITION_TARGET_GLOBAL_INT`) stream
+  at 5 Hz so ArduSub's onboard ALT_HOLD never falls back to a stale
+  setpoint during long open-loop legs or vision-yaw verbs. `set_depth`
+  retargets the lock automatically; vision verbs that touch the depth
+  axis suspend → execute → retarget the same way `arc` does for yaw.
 - **Every cross-command boundary is a hard reset.** Locks serialise, `stop()`
   forces RC neutral + clears the ACK cache, each axis module owns its exit
   semantics, and `settle=` plus `pause` close residual-inertia gaps between
@@ -946,9 +952,14 @@ ros2 run duburi_planner duburi yaw_right --target 45
 # Curved trajectory (forward thrust + signed yaw stick in same RC packet)
 ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
 
-# Heading lock (background SET_ATTITUDE_TARGET stream until unlocked)
+# Heading lock (background Ch4-rate stream until unlocked)
 ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
 ros2 run duburi_planner duburi unlock_heading
+
+# Depth lock (background set_target_depth stream until unlocked).
+# target=0 -> "hold whatever depth you are at right now".
+ros2 run duburi_planner duburi lock_depth --target -0.5 --timeout 600
+ros2 run duburi_planner duburi unlock_depth
 
 # Emergency neutral (active hold — RC set to 1500 on every channel)
 ros2 run duburi_planner duburi stop

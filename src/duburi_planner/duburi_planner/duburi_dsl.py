@@ -13,6 +13,7 @@ Two namespaces, one mental model:
       duburi.yaw_left(degrees) / duburi.yaw_right(degrees)
       duburi.arc(seconds, gain=50, yaw_rate_pct=30)
       duburi.lock_heading(degrees)  / duburi.release_heading()
+      duburi.lock_depth(meters)     / duburi.release_depth()
       duburi.pause(seconds) / duburi.stop()
 
   Closed-loop vision verbs mirror the SAME axis names under
@@ -196,6 +197,21 @@ class DuburiMission:
 
     def release_heading(self):
         return self._send('unlock_heading')
+
+    def lock_depth(self, meters: float = 0.0, *, timeout: float = 600.0):
+        """Stream a fixed depth setpoint until `release_depth`.
+
+        ``meters=0`` means "lock at the current depth". The streamer is
+        a daemon thread, so subsequent translation / yaw verbs run with
+        depth held automatically -- mirror of `lock_heading`.
+        """
+        return self._send('lock_depth',
+                          target=float(meters), timeout=timeout)
+
+    def release_depth(self):
+        """Stop the depth-lock streamer (ArduSub keeps holding its
+        last setpoint via ALT_HOLD)."""
+        return self._send('unlock_depth')
 
     # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to the raw client BUT   #

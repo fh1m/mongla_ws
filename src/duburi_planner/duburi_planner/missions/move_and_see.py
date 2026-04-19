@@ -5,10 +5,12 @@ The shortest mission that proves vision and control compose cleanly:
 
     arm
     set_depth (-0.5 m)
-    move_forward 3 s        <- open-loop scout leg
+    lock_depth              <- background streamer holds depth from now on
+    move_forward 3 s        <- open-loop scout leg (depth held automatically)
     vision.find             <- discover the target
     vision.lock 12 s        <- investigate (yaw + distance held together)
-    move_back 3 s           <- open-loop withdraw
+    move_back 3 s           <- open-loop withdraw (depth still held)
+    release_depth           <- stop streaming setpoints
     surface
     disarm
 
@@ -39,6 +41,7 @@ def run(duburi, log):
 
     duburi.arm()
     duburi.set_depth(DIVE_DEPTH_M, settle=1.0)
+    duburi.lock_depth(DIVE_DEPTH_M)
 
     duburi.move_forward(SCOUT_DURATION_S, gain=SCOUT_GAIN_PCT)
     duburi.vision.find(sweep='right', timeout=20.0)
@@ -48,5 +51,6 @@ def run(duburi, log):
                        on_lost='hold')
     duburi.move_back(WITHDRAW_DURATION_S, gain=WITHDRAW_GAIN_PCT)
 
+    duburi.release_depth()
     duburi.set_depth(0.0)
     duburi.disarm()

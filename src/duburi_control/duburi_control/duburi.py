@@ -59,6 +59,7 @@ from contextlib import contextmanager
 
 from duburi_interfaces.action import Move
 
+from .depth_lock    import DepthLock
 from .errors        import ModeChangeError
 from .heading_lock  import HeadingLock
 from .motion_common import make_writers
@@ -87,6 +88,14 @@ from .pixhawk       import Pixhawk
 # the sub is at when the mode is engaged, and the heading-hold controller
 # tracks our absolute target.
 YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED')
+
+
+@contextmanager
+def _nullctx():
+    """Drop-in no-op context manager (Python 3.7+ alternative to
+    contextlib.nullcontext, kept inline so the conditional `with`
+    blocks below stay readable)."""
+    yield
 
 
 def _parse_axes(csv: str):
@@ -143,6 +152,7 @@ class Duburi:
         self.yaw_source        = yaw_source
         self.vision_state_provider = vision_state_provider
         self._heading_lock     = None      # HeadingLock thread or None
+        self._depth_lock       = None      # DepthLock thread or None
 
     # ================================================================== #
     #  Arm / Disarm / Mode -- ACK-bearing, no axis movement              #
@@ -183,12 +193,13 @@ class Duburi:
 
         65535 on every channel tells ArduSub we are NOT on the loop --
         the autopilot's own automation takes over for the duration.
-        Heading-lock is auto-suspended for the pause and resumed after.
+        Heading-lock and depth-lock are auto-suspended for the pause
+        and resumed after.
         """
         with self.lock:
             self.log.info(
                 f'[CMD  ] pause {duration:.1f}s -- releasing override')
-            with self._suspend_heading_lock():
+            with self._suspend_heading_lock(), self._suspend_depth_lock():
                 self.pixhawk.release_rc_override()
                 time.sleep(duration)
                 self._writers().neutral()
@@ -339,20 +350,21 @@ class Duburi:
     # ================================================================== #
 
     def set_depth(self, target, timeout=30.0, settle=0.0):
-        """Drive to `target` metres (negative = below surface) and hold."""
+        """Drive to `target` metres (negative = below surface) and hold.
+
+        If a `lock_depth` is active, its target is retargeted to the
+        new value on exit -- so the streamer follows the freshly
+        commanded depth without operator intervention.
+        """
         with self.lock:
             self._send_neutral_and_settle()
             self.log.info(f'[CMD  ] set_depth  {target:.2f}m')
-            accepted, reason = self.pixhawk.set_mode('ALT_HOLD')
-            if not accepted:
-                self.log.info(
-                    f'[DEPTH] !! set_mode ALT_HOLD failed: {reason}')
-                raise ModeChangeError(
-                    f'set_mode ALT_HOLD rejected ({reason}); '
-                    'depth controller will not engage')
-            hold_depth(self.pixhawk, target, timeout, self.log,
-                       neutral_writer=self._writers().neutral)
-            self._send_neutral_and_settle(settle_time=0.3 + settle)
+            self._ensure_alt_hold('set_depth')
+            with self._suspend_depth_lock():
+                hold_depth(self.pixhawk, target, timeout, self.log,
+                           neutral_writer=self._writers().neutral)
+                self._send_neutral_and_settle(settle_time=0.3 + settle)
+            self._retarget_depth_lock(float(target))
             depth = self._current_depth()
             return self._make_result(
                 True, 'set_depth: completed',
@@ -406,6 +418,58 @@ class Duburi:
             self._heading_lock = None
             self.pixhawk.send_neutral()
             return self._make_result(True, 'unlock_heading: released')
+
+    # ================================================================== #
+    #  Depth lock -- heading-lock's depth-axis cousin                     #
+    # ================================================================== #
+
+    def lock_depth(self, target=0.0, timeout=600.0):
+        """Engage continuous depth-hold by streaming `set_target_depth`.
+
+        `target=0` (the rosidl unset default) means "lock at the
+        current depth right now". Returns immediately -- the streamer
+        runs on a daemon thread at 5 Hz so subsequent translation /
+        yaw verbs can stack on top with depth held.
+
+        ArduSub's onboard ALT_HOLD owns the depth PID at 400 Hz; this
+        thread just keeps the setpoint fresh so a stale link doesn't
+        cause ArduSub to fall back to its last-known value.
+        """
+        with self.lock:
+            self._ensure_alt_hold('lock_depth')
+            current = self._current_depth()
+            actual_target = current if abs(target) < 1e-3 else float(target)
+
+            if self._depth_lock is not None:
+                self._depth_lock.stop()
+                self._depth_lock = None
+
+            self._depth_lock = DepthLock(
+                pixhawk=self.pixhawk,
+                target_m=actual_target,
+                log=self.log,
+                timeout=timeout,
+            )
+            self._depth_lock.start()
+
+            return self._make_result(
+                True,
+                f'lock_depth: locked at {actual_target:+.2f}m '
+                f'(timeout {timeout:.0f}s)',
+                final_value=actual_target, error_value=0.0)
+
+    def unlock_depth(self):
+        """Stop the depth-lock streamer.
+
+        ArduSub's ALT_HOLD onboard controller will keep holding its
+        last setpoint; this call only stops *us* from refreshing it.
+        """
+        with self.lock:
+            if self._depth_lock is None:
+                return self._make_result(True, 'unlock_depth: no-op')
+            self._depth_lock.stop()
+            self._depth_lock = None
+            return self._make_result(True, 'unlock_depth: released')
 
     # ================================================================== #
     #  Vision verbs  -- closed-loop, multi-axis, P-only (PI hook in v2)   #
@@ -519,25 +583,40 @@ class Duburi:
     def _run_vision_track(self, *, label, camera, target_class, axes,
                           duration, gains, deadband, target_h_frac,
                           visual_pid, on_lost, stale_after):
-        """Common path for every vision_align_* / vision_hold_distance verb."""
+        """Common path for every vision_align_* / vision_hold_distance verb.
+
+        When `'depth'` is in the axis set we (a) ensure ALT_HOLD is
+        engaged so ArduSub honours the streamed depth setpoints, and
+        (b) suspend any active `lock_depth` so the two authors of
+        depth setpoints don't fight; on exit we retarget the lock to
+        the post-verb depth so subsequent commands inherit the new hold.
+        """
         with self.lock:
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
             depth_sign = -1 if camera in ('downward',) else +1
+            touches_depth = 'depth' in axes
+            if touches_depth:
+                self._ensure_alt_hold(f'vision_{label}')
             self.log.info(
                 f'[CMD  ] vision_{label}  camera={camera!r}  '
                 f'class={target_class!r}  axes={sorted(axes)}  '
                 f'duration={duration:.1f}s  on_lost={on_lost}')
-            outcome = vision_track_axes(
-                pixhawk=self.pixhawk, vision_state=vstate,
-                target_class=target_class, axes=axes,
-                duration=duration, gains=gains,
-                target_h_frac=target_h_frac,
-                deadband=deadband, stale_after=stale_after,
-                on_lost=on_lost, depth_sign=depth_sign,
-                log=self.log, writers=self._writers(),
-                visual_pid=visual_pid)
-            self._send_neutral_and_settle()
+            depth_ctx = (self._suspend_depth_lock() if touches_depth
+                         else _nullctx())
+            with depth_ctx:
+                outcome = vision_track_axes(
+                    pixhawk=self.pixhawk, vision_state=vstate,
+                    target_class=target_class, axes=axes,
+                    duration=duration, gains=gains,
+                    target_h_frac=target_h_frac,
+                    deadband=deadband, stale_after=stale_after,
+                    on_lost=on_lost, depth_sign=depth_sign,
+                    log=self.log, writers=self._writers(),
+                    visual_pid=visual_pid)
+                self._send_neutral_and_settle()
+            if touches_depth:
+                self._retarget_depth_lock(self._current_depth())
             return self._make_result(
                 outcome.success,
                 f'vision_{label}: {outcome.reason}',
@@ -622,6 +701,52 @@ class Duburi:
         """Update the lock target to follow yaw_left/yaw_right/arc exit."""
         if self._heading_lock is not None:
             self._heading_lock.retarget(new_heading_deg)
+
+    @contextmanager
+    def _suspend_depth_lock(self):
+        """Pause the depth-lock thread for the duration of the block.
+
+        Mirror of `_suspend_heading_lock`. Used by `set_depth`,
+        `pause`, and any vision verb that streams its own depth
+        setpoints -- so two authors don't write SET_POSITION_TARGET
+        packets at the same time.
+        """
+        active = self._depth_lock is not None
+        if active:
+            self._depth_lock.suspend()
+        try:
+            yield
+        finally:
+            if active and self._depth_lock is not None:
+                self._depth_lock.resume()
+
+    def _retarget_depth_lock(self, new_depth_m):
+        """Update the lock target to follow set_depth / vision-depth exit."""
+        if self._depth_lock is not None:
+            self._depth_lock.retarget(new_depth_m)
+
+    def _ensure_alt_hold(self, reason):
+        """Engage ALT_HOLD when the autopilot isn't already in a mode
+        that honours streamed depth setpoints. Used by every verb
+        that writes a depth target (set_depth, lock_depth,
+        vision verbs touching the depth axis).
+
+        ALT_HOLD, POSHOLD and GUIDED all close the loop on the
+        Python-supplied depth setpoint via ArduSub's onboard 400 Hz
+        depth controller. MANUAL / STABILIZE silently drop it.
+        """
+        current = self.pixhawk.get_mode()
+        if current in YAW_OK_MODES:        # same set: ALT_HOLD/POSHOLD/GUIDED
+            return
+        self.log.info(
+            f'[CMD  ] {reason} needs ALT_HOLD -- '
+            f'switching {current} -> ALT_HOLD')
+        accepted, ack_reason = self.pixhawk.set_mode('ALT_HOLD')
+        if not accepted:
+            self.log.info(f'[DEPTH] !! set_mode ALT_HOLD failed: {ack_reason}')
+            raise ModeChangeError(
+                f'set_mode ALT_HOLD rejected ({ack_reason}); '
+                f'depth setpoint will not engage from {current}')
 
     def _send_neutral_and_settle(self, settle_time=0.6):
         """Stop without taking the lock (for use INSIDE a command).
