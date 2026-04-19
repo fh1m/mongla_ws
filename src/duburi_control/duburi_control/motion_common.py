@@ -8,10 +8,12 @@ logging. Centralising it here keeps the per-axis files focused on
 
 Heading-lock awareness
 ----------------------
-When a `lock_heading` is active, the lock thread streams
-SET_ATTITUDE_TARGET continuously and any RC override on Ch4 (yaw)
-would silently win against the attitude target. The `Writers` family
-below exposes two flavours:
+When a ``lock_heading`` is active, the lock thread streams Ch4
+rate-overrides continuously. Any RC override that touches Ch4 from a
+translation command -- even at the neutral 1500 us value -- would
+race against that stream because both writers share the same RC
+slot. The ``Writers`` family below exposes two flavours so the
+translation modules can stay agnostic of which writer they use:
 
   release_yaw=False  ->  pixhawk.send_rc_override(...)
                          Ch4 gets 1500 explicitly, ArduSub's internal
@@ -20,12 +22,12 @@ below exposes two flavours:
                          active heading lock.
 
   release_yaw=True   ->  pixhawk.send_rc_translation(...)
-                         Ch4 stays released (65535), the lock thread's
-                         SET_ATTITUDE_TARGET retains authority.
-                         Used while a heading lock is active.
+                         Ch4 stays released (65535) so the HeadingLock
+                         thread is the sole author of Ch4. Used while
+                         a heading lock is active.
 
-The Duburi facade picks the flavour based on `_lock_active()` and
-hands a fully-built `Writers` to the per-axis module. The per-axis
+The Duburi facade picks the flavour based on ``_lock_active()`` and
+hands a fully-built ``Writers`` to the per-axis module. The per-axis
 module never has to know about lock state.
 """
 
@@ -38,7 +40,7 @@ from .pixhawk import Pixhawk
 
 # ---- Shared constants -------------------------------------------------
 THRUST_RATE_HZ   = 20.0   # RC override publish rate (forward, lateral, arc)
-LOG_THROTTLE     = 0.5    # seconds between [FWD]/[LAT]/[ARC] log lines
+LOG_THROTTLE     = 0.5    # seconds between [FWD  ]/[LAT  ]/[ARC  ] log lines
 
 EASE_SECONDS     = 0.4    # ease-in / ease-out duration (seconds) each side
 
@@ -79,9 +81,11 @@ def make_writers(pixhawk, release_yaw=False):
 def read_heading(pixhawk, yaw_source):
     """Latest yaw in degrees [0, 360) or None when no fresh sample.
 
-    Single switchpoint between AHRS (default) and an external source
-    (BNO085, future Gazebo). Mirrors `motion_yaw.read_heading` so all
-    motion code reads heading the same way.
+    THE single switchpoint between AHRS (default) and an external
+    source (BNO085, future Gazebo). Re-imported by ``motion_yaw`` and
+    ``heading_lock`` so every code path that reads heading goes
+    through one function -- changing the freshness contract is a
+    one-place edit.
     """
     if yaw_source is not None:
         return yaw_source.read_yaw()

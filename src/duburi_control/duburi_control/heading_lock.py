@@ -55,7 +55,7 @@ Failure modes
      and logs a WARN so the operator sees it. When samples resume,
      an INFO log records the recovery and the loop closes again.
 * Operator forgets to unlock -> ``timeout`` (default 300 s) auto-stops
-  the thread with a [LOCK] log line and releases Ch4.
+  the thread with a [LOCK ] log line and releases Ch4.
 * Manager process exits -> daemon=True kills the thread; the
   manager's atexit also calls ``pixhawk.send_neutral()``.
 """
@@ -63,13 +63,14 @@ Failure modes
 import threading
 import time
 
-from .pixhawk import Pixhawk
+from .motion_common import read_heading
+from .pixhawk       import Pixhawk
 
 
 # 20 Hz matches the motion-loop rate so logs interleave cleanly and the
 # rate command is refreshed comfortably inside ArduSub's RC timeout.
 STREAM_HZ      = 20.0
-DRIFT_LOG_SEC  = 1.0     # how often to print the [LOCK] heartbeat
+DRIFT_LOG_SEC  = 1.0     # how often to print the [LOCK ] heartbeat
 SOURCE_DEAD_S  = 2.0     # warn after this many seconds with no fresh sample
 
 # Proportional rate-loop tunables. Gentler than yaw_snap because
@@ -80,7 +81,7 @@ LOCK_DEADBAND_DEG   = 1.5
 
 
 class HeadingLock:
-    """Background streamer for `SET_ATTITUDE_TARGET` at a fixed yaw.
+    """Background streamer of Ch4 rate-overrides that holds a fixed yaw.
 
     Lifecycle:
         lock = HeadingLock(pixhawk, target_deg=90, yaw_source=bno, log=...)
@@ -187,7 +188,7 @@ class HeadingLock:
             with self._target_lock:
                 target = self._target_deg
 
-            current = _read_heading(self._pixhawk, self._yaw_source)
+            current = read_heading(self._pixhawk, self._yaw_source)
 
             if current is not None:
                 last_fresh = now
@@ -233,11 +234,3 @@ class HeadingLock:
             self._pixhawk.send_rc_override(yaw=Pixhawk.percent_to_pwm(0.0))
         except Exception:
             pass
-
-
-def _read_heading(pixhawk, yaw_source):
-    """Same switchpoint the rest of the motion code uses."""
-    if yaw_source is not None:
-        return yaw_source.read_yaw()
-    attitude = pixhawk.get_attitude()
-    return None if attitude is None else attitude['yaw']

@@ -3,7 +3,7 @@
 Public surface:
   Pixhawk          -- raw MAVLink wrapper (one instance per process)
   Duburi           -- serialised, high-level command facade
-  HeadingLock      -- background Ch4-rate-override streamer (used by Duburi)
+  HeadingLock      -- background Ch4 rate-override streamer (used by Duburi)
   DepthLock        -- background set_target_depth streamer (used by Duburi)
   COMMANDS         -- single source of truth for /duburi/move commands
   fields_for       -- pull kwargs from a Move.Goal for COMMANDS dispatch

@@ -14,9 +14,9 @@ Two variants with identical signatures:
       before locking at ``end``. No overshoot because the sweep's own
       rate decays to zero at the target.
 
-Why rate-based and not SET_ATTITUDE_TARGET
------------------------------------------
-ArduSub's ``SET_ATTITUDE_TARGET`` closes the physical loop on
+Why rate-based and not absolute-attitude
+----------------------------------------
+ArduSub's absolute-attitude controller closes the physical loop on
 ArduSub's *own* compass/AHRS. On the real vehicle that compass is
 corrupted by thruster ESCs (the whole reason a BNO085 exists on the
 AUV). On Gazebo SITL it is the sim compass, which has no coupling to
@@ -47,6 +47,7 @@ park Ch4 at 1500 (safe stop) until the source recovers.
 import time
 
 from .errors          import MovementTimeout
+from .motion_common   import read_heading
 from .pixhawk         import Pixhawk
 from .motion_profiles import smootherstep
 
@@ -55,7 +56,7 @@ from .motion_profiles import smootherstep
 YAW_RATE_HZ   = 10.0   # Ch4 rate-override publish rate
 YAW_TOL_DEG   = 2.0    # heading tolerance for "locked"
 YAW_LOCK_N    = 5      # consecutive frames within tol before success
-LOG_THROTTLE  = 0.5    # seconds between [YAW] log lines
+LOG_THROTTLE  = 0.5    # seconds between [YAW  ] log lines
 
 # ---- Rate-loop tunables (motion_vision-style proportional control) ---
 YAW_KP_PCT_PER_DEG = 1.0     # %Ch4 per degree error (90 deg -> 90%, clamped)
@@ -68,16 +69,6 @@ YAW_AVG_DPS   = 30.0   # average deg/s across a glided turn
 # 90 deg -> 3.0 s, 45 deg -> 1.5 s, 180 deg -> 6.0 s.
 # Peak rate = avg x 1.875 (smootherstep peak derivative).
 YAW_MIN_DUR   = 1.5    # lower bound so small turns still get a glide
-
-
-def read_heading(pixhawk, yaw_source):
-    """Latest yaw in degrees [0, 360), or None when no fresh sample is
-    available. Single point that swaps AHRS for an external source.
-    """
-    if yaw_source is not None:
-        return yaw_source.read_yaw()
-    attitude = pixhawk.get_attitude()
-    return None if attitude is None else attitude['yaw']
 
 
 def _yaw_rate_pct(error_deg: float) -> float:

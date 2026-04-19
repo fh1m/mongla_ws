@@ -56,9 +56,9 @@ def main(argv=None):
     node = Node('vision_thrust_check')
     client = ActionClient(node, Move, '/duburi/move')
 
-    print(f'[VTHR] connecting to /duburi/move (timeout {args.connect_timeout:.0f}s)...')
+    print(f'[VTHR ] connecting to /duburi/move (timeout {args.connect_timeout:.0f}s)...')
     if not client.wait_for_server(timeout_sec=args.connect_timeout):
-        print('[VTHR] FAIL: action server /duburi/move not available')
+        print('[VTHR ] FAIL: action server /duburi/move not available')
         node.destroy_node(); rclpy.shutdown(); sys.exit(1)
 
     goal = Move.Goal()
@@ -71,16 +71,16 @@ def main(argv=None):
     goal.on_lost      = args.on_lost
     goal.stale_after  = float(args.stale_after)
 
-    print(f'[VTHR] sending vision_align_yaw  camera={args.camera}  '
+    print(f'[VTHR ] sending vision_align_yaw  camera={args.camera}  '
           f'class={args.target_class}  duration={args.duration:.1f}s  '
           f'on_lost={args.on_lost}')
-    print('[VTHR] watch the manager log for [VIS  ] lines and [RC   ] Yaw:NNN')
+    print('[VTHR ] watch the manager log for [VIS  ] lines and [RC   ] Yaw:NNN')
 
     send_future = client.send_goal_async(goal)
     rclpy.spin_until_future_complete(node, send_future)
     handle = send_future.result()
     if not handle.accepted:
-        print('[VTHR] FAIL: action server REJECTED the goal '
+        print('[VTHR ] FAIL: action server REJECTED the goal '
               '(another command running?)')
         node.destroy_node(); rclpy.shutdown(); sys.exit(1)
 
@@ -89,12 +89,12 @@ def main(argv=None):
     result = result_future.result().result
 
     print()
-    print(f'[VTHR] {"PASS" if result.success else "FAIL"}')
+    print(f'[VTHR ] {"PASS" if result.success else "FAIL"}')
     print(f'  message            : {result.message}')
     print(f'  composite_error    : {result.final_value:.3f}')
     print(f'  last detection age : {result.error_value:.2f}s')
     print()
-    print('[VTHR] If you saw [RC   ] Yaw:... in the manager log, the loop '
+    print('[VTHR ] If you saw [RC   ] Yaw:... in the manager log, the loop '
           'is closed end-to-end. If not, run `vision_check` first to confirm '
           'the detector is publishing.')
 

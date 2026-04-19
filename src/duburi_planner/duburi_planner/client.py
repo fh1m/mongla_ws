@@ -113,4 +113,4 @@ class DuburiClient:
     def _on_feedback(self, feedback_msg):
         feedback = feedback_msg.feedback
         self.node.get_logger().debug(
-            f'[FB] {feedback.phase}  {feedback.status_line}')
+            f'[FB   ] {feedback.phase}  {feedback.status_line}')

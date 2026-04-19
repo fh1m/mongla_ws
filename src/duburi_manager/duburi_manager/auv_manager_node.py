@@ -22,7 +22,7 @@ import threading
 import time
 
 # Drop ROS2's default `[INFO] [1776530611.533365998] [duburi_manager]:` prefix
-# in favour of a compact `[INFO] <message>` so our [CMD]/[YAW]/[STATE] tags
+# in favour of a compact `[INFO] <message>` so our [CMD  ]/[YAW  ]/[STATE] tags
 # are the loudest thing on screen. Must be set BEFORE rclpy is imported.
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
@@ -172,7 +172,7 @@ class AUVManagerNode(Node):
             )
         except Exception as exc:
             self.get_logger().fatal(
-                f'[SENSOR] yaw_source={yaw_src_name!r} failed to init: {exc}')
+                f'[SENS ] yaw_source={yaw_src_name!r} failed to init: {exc}')
             raise
 
         # ---- Banner ----------------------------------------------------
@@ -201,7 +201,7 @@ class AUVManagerNode(Node):
             # inside the vehicle so it rotates with it and this note is
             # misleading -- suppress there.
             self.get_logger().info(
-                ' [HINT] BNO is the yaw source. Translations + vision '
+                ' [HINT ] BNO is the yaw source. Translations + vision '
                 'commands work normally in sim. Absolute-yaw commands '
                 '(yaw_left / yaw_right / turn_to / lock_heading) close '
                 'on the BNO reading, so in SITL they terminate only when '
@@ -275,7 +275,7 @@ class AUVManagerNode(Node):
             if cached is not None:
                 return cached
             self.get_logger().info(
-                f'[VST ] building VisionState for camera={camera!r}')
+                f'[VST  ] building VisionState for camera={camera!r}')
             vstate = VisionState(self, camera=camera, logger=self.get_logger())
             self._vision_states[camera] = vstate
 
@@ -285,7 +285,7 @@ class AUVManagerNode(Node):
                 vstate, timeout=10.0, log=self.get_logger())
         except Exception as exc:
             self.get_logger().warning(
-                f'[VST ] preflight for {camera!r} did not pass within '
+                f'[VST  ] preflight for {camera!r} did not pass within '
                 f'10s: {exc!r}; vision verbs will fail until pipeline is up')
         return vstate
 
@@ -368,8 +368,8 @@ class AUVManagerNode(Node):
             self.get_logger().error(f'[ACT  ] {cmd} FAILED: {exc}')
 
             # When a movement raises mid-loop, the per-axis cleanup
-            # `stop()` is skipped, which can leave a stale
-            # SET_ATTITUDE_TARGET / SET_POSITION_TARGET active.
+            # `stop()` is skipped, which can leave a stale Ch4 RC
+            # override or SET_POSITION_TARGET setpoint active.
             # Neutralise explicitly so the next command starts from a
             # known state.
             try:

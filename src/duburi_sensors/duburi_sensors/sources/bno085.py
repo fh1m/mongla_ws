@@ -121,7 +121,7 @@ def _probe_port(path: str, baud: int, logger=None) -> bool:
         sample = serial.Serial(port=path, baudrate=baud, timeout=0.2)
     except (serial.SerialException, OSError) as exc:
         if logger:
-            logger.debug(f'[SENSOR] BNO085 probe skip {path}: {exc}')
+            logger.debug(f'[SENS ] BNO085 probe skip {path}: {exc}')
         return False
     try:
         deadline = time.monotonic() + _AUTO_PROBE_TIMEOUT_S
@@ -163,14 +163,14 @@ def auto_detect_port(*, baud: int = 115200, logger=None) -> str:
 
     if logger:
         logger.info(
-            f'[SENSOR] BNO085 auto-detect: probing {len(candidates)} candidate(s)...')
+            f'[SENS ] BNO085 auto-detect: probing {len(candidates)} candidate(s)...')
 
     for path in candidates:
         if logger:
-            logger.info(f'[SENSOR]   - probe {path}')
+            logger.info(f'[SENS ]   - probe {path}')
         if _probe_port(path, baud, logger):
             if logger:
-                logger.info(f'[SENSOR] BNO085 auto-detect: picked {path}')
+                logger.info(f'[SENS ] BNO085 auto-detect: picked {path}')
             return path
 
     raise RuntimeError(
@@ -232,7 +232,7 @@ class BNO085Source:
         self._thread.start()
 
         if self._log:
-            self._log.info(f'[SENSOR] BNO085 reader started on {port} @ {baud}')
+            self._log.info(f'[SENS ] BNO085 reader started on {port} @ {baud}')
 
         if reference_yaw_provider is not None:
             try:
@@ -260,7 +260,7 @@ class BNO085Source:
                 self._offset_deg = (ref - bno_raw) % 360.0
                 if self._log:
                     self._log.info(
-                        f'[SENSOR] BNO085 calibrated  '
+                        f'[SENS ] BNO085 calibrated  '
                         f'pixhawk={ref:.2f}°  bno_raw={bno_raw:.2f}°  '
                         f'offset={self._offset_deg:+.2f}°')
                 return
@@ -304,15 +304,15 @@ class BNO085Source:
             self._thread.join(timeout=1.0)
         except Exception as exc:
             if self._log:
-                self._log.debug(f'[SENSOR] BNO085 thread join ignored: {exc!r}')
+                self._log.debug(f'[SENS ] BNO085 thread join ignored: {exc!r}')
         try:
             self._serial.close()
         except Exception as exc:
             if self._log:
-                self._log.debug(f'[SENSOR] BNO085 serial close ignored: {exc!r}')
+                self._log.debug(f'[SENS ] BNO085 serial close ignored: {exc!r}')
         if self._log:
             self._log.info(
-                f'[SENSOR] BNO085 stopped — frames:{self._frames_rx} '
+                f'[SENS ] BNO085 stopped — frames:{self._frames_rx} '
                 f'errors:{self._parse_errors}')
 
     def __repr__(self) -> str:
@@ -352,10 +352,10 @@ class BNO085Source:
                 self._parse_errors += 1
             except serial.SerialException as exc:
                 if self._log:
-                    self._log.error(f'[SENSOR] BNO085 serial error: {exc}')
+                    self._log.error(f'[SENS ] BNO085 serial error: {exc}')
                 self._stop.set()
                 break
             except Exception as exc:
                 self._parse_errors += 1
                 if self._log and self._parse_errors % 50 == 1:
-                    self._log.warn(f'[SENSOR] BNO085 reader: {exc}')
+                    self._log.warn(f'[SENS ] BNO085 reader: {exc}')

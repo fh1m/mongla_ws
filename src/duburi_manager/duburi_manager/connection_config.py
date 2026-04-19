@@ -135,7 +135,7 @@ def resolve_mode(requested: str, *, logger=None) -> str:
         choice, why = 'sim',  'no UDP / serial evidence; assuming local SITL'
 
     if logger:
-        logger.info(f"[NET ] auto-detect picked mode={choice!r} ({why})")
+        logger.info(f"[NET  ] auto-detect picked mode={choice!r} ({why})")
     return choice
 
 

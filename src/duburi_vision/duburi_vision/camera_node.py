@@ -79,7 +79,7 @@ class CameraNode(Node):
         self.create_timer(2.0, self._log_health)
 
         self.get_logger().info(
-            f"[CAM ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
+            f"[CAM  ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
             f"{ns}/image_raw  @ {rate:.1f} Hz")
 
     def _build_camera(self):
@@ -137,7 +137,7 @@ class CameraNode(Node):
         try:
             img_msg = self._bridge.cv2_to_imgmsg(frame, encoding='bgr8')
         except Exception as exc:
-            self.get_logger().warning(f"[CAM ] cv_bridge encode failed: {exc!r}")
+            self.get_logger().warning(f"[CAM  ] cv_bridge encode failed: {exc!r}")
             self._dropped += 1
             return
 
@@ -161,7 +161,7 @@ class CameraNode(Node):
         healthy = self._cam.is_healthy()
         marker = 'OK ' if healthy else 'BAD'
         self.get_logger().info(
-            f"[CAM ] {marker}  {self._cam_name}  pub={hz:5.1f}Hz  "
+            f"[CAM  ] {marker}  {self._cam_name}  pub={hz:5.1f}Hz  "
             f"sent={self._sent}  dropped={self._dropped}")
         self._sent = 0
         self._dropped = 0

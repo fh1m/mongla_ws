@@ -56,7 +56,7 @@ class YoloDetector(Detector):
             if not self._allow_ids and allow_lower:
                 if self._log:
                     self._log.warning(
-                        f"[YOLO] class_allowlist={sorted(allow_lower)} matched 0 classes "
+                        f"[YOLO ] class_allowlist={sorted(allow_lower)} matched 0 classes "
                         f"in model. Detector will return [] for every frame. Available: "
                         f"{sorted(self._names.values())[:10]}...")
 
@@ -67,7 +67,7 @@ class YoloDetector(Detector):
 
         if self._log:
             self._log.info(
-                f"[YOLO] {model_path} ready on {self._device}  "
+                f"[YOLO ] {model_path} ready on {self._device}  "
                 f"conf={self._conf}  iou={self._iou}  imgsz={self._imgsz}  "
                 f"half={self._half}  allow={self._allowlist_repr()}")
 
@@ -84,7 +84,7 @@ class YoloDetector(Detector):
                 device=self._device, half=self._half, verbose=False)
         except Exception as exc:
             if self._log:
-                self._log.warning(f"[YOLO] warmup failed (non-fatal): {exc!r}")
+                self._log.warning(f"[YOLO ] warmup failed (non-fatal): {exc!r}")
 
     def infer(self, frame_bgr: np.ndarray) -> List[Detection]:
         if frame_bgr is None or frame_bgr.size == 0:

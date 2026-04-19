@@ -50,7 +50,7 @@ class WebcamCamera(Camera):
 
         if self._log:
             self._log.info(
-                f'[CAM ] webcam {device!r} opened: requested {width}x{height}@{fps} '
+                f'[CAM  ] webcam {device!r} opened: requested {width}x{height}@{fps} '
                 f'-> got {self._actual_w}x{self._actual_h}@{self._actual_fps:.1f}')
 
         self._idx          = 0

@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Depth hold loop -- canonical Blue Robotics pattern.
+"""Depth-drive loop -- canonical Blue Robotics pattern.
 
-We send an absolute depth setpoint via SET_POSITION_TARGET_GLOBAL_INT
-and let ArduSub's onboard 400 Hz depth controller drive the thrusters.
-This is the symmetrical mirror of how we drive yaw with
-SET_ATTITUDE_TARGET -- no Python PID stacked on top of ArduSub's loop,
-no Ch3 RC override fights.
+We send an absolute depth setpoint via ``SET_POSITION_TARGET_GLOBAL_INT``
+and let ArduSub's onboard 400 Hz depth controller drive Ch3. The yaw
+axis is the inverse pattern: there we write Ch4 rate-overrides and
+do the loop in Python because we don't trust ArduSub's compass; here
+we trust ArduSub's pressure sensor + onboard depth PID, so the Python
+side is just a setpoint streamer (5 Hz) plus a "did we get there"
+watchdog. No Python PID stacked on top of ArduSub's loop, no Ch3 RC
+override fights.
 
 Caller is expected to have already engaged ALT_HOLD (the only mode
 that honours the absolute-Z setpoint and also holds the current depth
-between frames).
+between frames). ``Duburi.set_depth`` invokes ``_ensure_alt_hold``
+first so direct callers of this function do not have to.
 
 Two phases:
 
@@ -48,7 +52,7 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
     `neutral_writer` is an optional callable that writes "neutral" --
     defaults to `pixhawk.send_neutral` which sends 1500 on all six
     channels. Heading-lock-aware callers pass `writers.neutral` so Ch4
-    stays released and the lock thread's SET_ATTITUDE_TARGET wins.
+    stays released and the HeadingLock thread's Ch4 rate-override wins.
     """
     if neutral_writer is None:
         neutral_writer = pixhawk.send_neutral

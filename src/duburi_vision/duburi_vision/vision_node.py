@@ -83,7 +83,7 @@ class VisionNode(Node):
                 logger=self.get_logger(),
             )
         except Exception as exc:
-            self.get_logger().fatal(f"[VIS ] YoloDetector init FAILED: {exc}")
+            self.get_logger().fatal(f"[VIS  ] YoloDetector init FAILED: {exc}")
             raise
 
         self._device_str = str(self.get_parameter('device').value)
@@ -110,7 +110,7 @@ class VisionNode(Node):
         self.create_timer(2.0, self._log_health)
 
         self.get_logger().info(
-            f"[VIS ] in-process camera+detector ready  cam={self._cam_name!r}  "
+            f"[VIS  ] in-process camera+detector ready  cam={self._cam_name!r}  "
             f"device={self._device_str}  classes={allowlist or '*'}  "
             f"{'(image_debug published)' if self._publish_dbg else '(no debug image)'}")
 
@@ -138,7 +138,7 @@ class VisionNode(Node):
         try:
             detections = self._det.infer(frame)
         except Exception as exc:
-            self.get_logger().error(f"[VIS ] inference failed: {exc!r}")
+            self.get_logger().error(f"[VIS  ] inference failed: {exc!r}")
             return
         dt = time.monotonic() - t0
         fps = 1.0 / dt if dt > 1e-6 else 0.0
@@ -162,7 +162,7 @@ class VisionNode(Node):
                 self._pub_dbg.publish(dbg)
                 self._last_dbg = time.monotonic()
             except Exception as exc:
-                self.get_logger().warning(f"[VIS ] debug image encode failed: {exc!r}")
+                self.get_logger().warning(f"[VIS  ] debug image encode failed: {exc!r}")
 
     def _log_health(self):
         now = time.monotonic()
@@ -173,7 +173,7 @@ class VisionNode(Node):
         cam_ok = self._cam.is_healthy()
         marker = 'OK ' if cam_ok else 'BAD'
         self.get_logger().info(
-            f"[VIS ] {marker}  loop={loop_hz:5.1f}Hz  infer_avg={avg_ms:5.1f}ms  "
+            f"[VIS  ] {marker}  loop={loop_hz:5.1f}Hz  infer_avg={avg_ms:5.1f}ms  "
             f"with_target={target_pct:4.0f}%  total={self._frames}")
         self._frames = 0
         self._with_target = 0

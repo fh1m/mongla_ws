@@ -17,7 +17,6 @@ import time
 
 os.environ['MAVLINK20'] = '1'
 from pymavlink import mavutil                      # noqa: E402
-from pymavlink.quaternion import QuaternionBase    # noqa: E402
 
 
 # ArduSub channel layout (zero-indexed within the 18-slot RC override array).
@@ -184,11 +183,11 @@ class Pixhawk:
     def send_rc_translation(self, throttle=1500, forward=1500, lateral=1500):
         """Override translation channels only (Ch3 throttle, Ch5 forward, Ch6 lateral).
 
-        Leaves pitch/roll/yaw RC channels released (65535) so SET_ATTITUDE_TARGET
-        or ArduSub's internal stabilisers retain authority over attitude. Use
-        during yaw commands driven by `set_attitude_setpoint` — if Ch4 were
-        overridden here (even to 1500), ArduSub would prefer the pilot's
-        rate command over the attitude target.
+        Leaves pitch/roll/yaw RC channels released (65535) so the
+        background HeadingLock thread keeps sole authority over Ch4
+        (yaw rate). If Ch4 were overridden here -- even to neutral
+        1500 us -- the lock thread's rate-override would arrive in
+        the same slot a moment later and the two writers would race.
         """
         values = [NO_OVERRIDE] * 18
         values[CH_THROTTLE] = int(throttle)
@@ -231,38 +230,18 @@ class Pixhawk:
     #  Setpoints                                                           #
     # ------------------------------------------------------------------ #
 
-    def set_attitude_setpoint(self, roll_deg=0.0, pitch_deg=0.0, yaw_deg=0.0):
-        """Command ArduSub's internal 400 Hz attitude stabiliser.
-
-        Works in ALT_HOLD / STABILIZE / POSHOLD when Ch4 RC override is
-        released. Stream at >= 5 Hz to keep the target active (ArduSub
-        drops it after ~1 s of silence and falls back to pilot RC).
-
-        The mask ignores body-rate fields (we're commanding an absolute
-        attitude, not rates) and throttle (so ALT_HOLD can keep depth).
-        """
-        mask = (
-            mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_BODY_ROLL_RATE_IGNORE
-            | mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_BODY_PITCH_RATE_IGNORE
-            | mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_BODY_YAW_RATE_IGNORE
-            | mavutil.mavlink.ATTITUDE_TARGET_TYPEMASK_THROTTLE_IGNORE
-        )
-        quaternion = QuaternionBase(
-            [math.radians(a) for a in (roll_deg, pitch_deg, yaw_deg)])
-        self.master.mav.set_attitude_target_send(
-            int(1e3 * (time.time() - self._boot_time)),
-            self.master.target_system, self.master.target_component,
-            mask, quaternion, 0, 0, 0, 0)
-
     def set_target_depth(self, depth_m):
         """Command ArduSub's onboard depth controller to an absolute depth.
 
         `depth_m` is negative below the surface (matches AHRS2.altitude
         used everywhere else in the stack: -0.5 = 50 cm deep).
 
-        Mirror of `set_attitude_setpoint` — same shape, just for the Z
-        axis. Requires ALT_HOLD or GUIDED. Stream at >= 1 Hz; ArduSub's
-        loop runs internally at 400 Hz so 5 Hz from us is plenty.
+        Sends SET_POSITION_TARGET_GLOBAL_INT with every field except
+        the altitude masked out, so ArduSub's onboard depth PID
+        (running at 400 Hz) is the sole consumer. Requires
+        ALT_HOLD / POSHOLD / GUIDED -- in MANUAL or STABILIZE the
+        autopilot silently drops the setpoint. Stream at >= 1 Hz;
+        the DepthLock streamer pushes 5 Hz which is plenty.
 
         Reference: Blue Robotics pymavlink docs, "Set Target Depth/Attitude".
         """

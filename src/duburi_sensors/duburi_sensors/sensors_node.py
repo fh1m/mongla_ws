@@ -51,11 +51,11 @@ def _open_mavlink(connection_string: str, get_logger):
     from pymavlink import mavutil
     from duburi_control import Pixhawk
 
-    get_logger().info(f'[SENSOR] Connecting MAVLink -> {connection_string}')
+    get_logger().info(f'[SENS ] Connecting MAVLink -> {connection_string}')
     master = mavutil.mavlink_connection(connection_string)
     master.wait_heartbeat()
     get_logger().info(
-        f'[SENSOR] MAVLink up -- sys={master.target_system}'
+        f'[SENS ] MAVLink up -- sys={master.target_system}'
         f' comp={master.target_component}')
     return Pixhawk(master)
 
@@ -90,14 +90,14 @@ class SensorsNode(Node):
                 logger=self.get_logger())
         except Exception as exc:
             self.get_logger().fatal(
-                f'[SENSOR] yaw_source={name!r} failed to init: {exc}')
+                f'[SENS ] yaw_source={name!r} failed to init: {exc}')
             raise
 
         cal_note = ''
         if name == 'bno085':
             cal_note = '  (calibrated)' if calibrate else '  (RAW — sensor-frame)'
         self.get_logger().info(
-            f'[SENSOR] reading from {self._src.name}{cal_note} '
+            f'[SENS ] reading from {self._src.name}{cal_note} '
             f'— print every {self._dt:.1f}s, Ctrl-C to stop')
 
         self._reads_total  = 0
@@ -120,11 +120,11 @@ class SensorsNode(Node):
 
         if yaw is None:
             self.get_logger().warn(
-                f'[SENSOR] yaw=STALE  healthy={healthy}  '
+                f'[SENS ] yaw=STALE  healthy={healthy}  '
                 f'rx_hz={hz:5.1f}  total={self._reads_total}')
         else:
             self.get_logger().info(
-                f'[SENSOR] yaw={yaw:6.2f}°  healthy={healthy}  '
+                f'[SENS ] yaw={yaw:6.2f}°  healthy={healthy}  '
                 f'rx_hz={hz:5.1f}  total={self._reads_total}')
 
         self._reads_window = 0

@@ -114,10 +114,10 @@ if (millis() - lastPrint > 20) {
    You should see:
 
    ```
-   [SENSOR] BNO085 auto-detect: probing N candidate(s)...
-   [SENSOR] BNO085 auto-detect: picked /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00
-   [SENSOR] BNO085 reader started on /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00 @ 115200
-   [SENSOR] yaw=...° healthy=True rx_hz=~50
+   [SENS ] BNO085 auto-detect: probing N candidate(s)...
+   [SENS ] BNO085 auto-detect: picked /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00
+   [SENS ] BNO085 reader started on /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00 @ 115200
+   [SENS ] yaw=...° healthy=True rx_hz=~50
    ```
 
 6. With ArduSub SITL or a Pixhawk attached, switch on the calibration:
@@ -131,7 +131,7 @@ if (millis() - lastPrint > 20) {
    The first log line must be:
 
    ```
-   [SENSOR] BNO085 calibrated  pixhawk=NN.NN°  bno_raw=NN.NN°  offset=±NN.NN°
+   [SENS ] BNO085 calibrated  pixhawk=NN.NN°  bno_raw=NN.NN°  offset=±NN.NN°
    ```
 
    After that, rotating the breakout by hand should rotate the printed

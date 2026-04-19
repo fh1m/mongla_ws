@@ -84,7 +84,7 @@ def main(argv=None):
     node.create_subscription(CameraInfo,       f'{ns}/camera_info', _on_info,  qos)
     node.create_subscription(Detection2DArray, f'{ns}/detections',  _on_det,   qos)
 
-    print(f'[VCHK] watching {ns} for {args.duration:.1f}s ...')
+    print(f'[VCHK ] watching {ns} for {args.duration:.1f}s ...')
     deadline = time.monotonic() + args.duration
     while time.monotonic() < deadline:
         rclpy.spin_once(node, timeout_sec=0.05)
@@ -126,7 +126,7 @@ def main(argv=None):
         all_ok = all_ok and ok
 
     print()
-    print(f'[VCHK] result: {"PASS" if all_ok else "FAIL"}')
+    print(f'[VCHK ] result: {"PASS" if all_ok else "FAIL"}')
 
     node.destroy_node()
     rclpy.shutdown()

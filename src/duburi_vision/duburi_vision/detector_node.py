@@ -77,7 +77,7 @@ class DetectorNode(Node):
                 logger=self.get_logger(),
             )
         except Exception as exc:
-            self.get_logger().fatal(f"[DET ] YoloDetector init FAILED: {exc}")
+            self.get_logger().fatal(f"[DET  ] YoloDetector init FAILED: {exc}")
             raise
 
         from vision_msgs.msg import Detection2DArray
@@ -102,21 +102,21 @@ class DetectorNode(Node):
         self._deadband   = float(self.get_parameter('alignment_deadband').value)
 
         self.get_logger().info(
-            f"[DET ] subscribed {ns_in!r} -> {ns_out}/detections  "
+            f"[DET  ] subscribed {ns_in!r} -> {ns_out}/detections  "
             f"({'+ image_debug' if self._publish_dbg else 'no debug image'})")
 
     def _on_image(self, msg: Image):
         try:
             frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         except Exception as exc:
-            self.get_logger().warning(f"[DET ] cv_bridge decode failed: {exc!r}")
+            self.get_logger().warning(f"[DET  ] cv_bridge decode failed: {exc!r}")
             return
 
         t0 = time.monotonic()
         try:
             detections = self._det.infer(frame)
         except Exception as exc:
-            self.get_logger().error(f"[DET ] inference failed: {exc!r}")
+            self.get_logger().error(f"[DET  ] inference failed: {exc!r}")
             return
         dt = time.monotonic() - t0
 
@@ -141,7 +141,7 @@ class DetectorNode(Node):
                 self._pub_dbg.publish(dbg)
                 self._last_dbg = time.monotonic()
             except Exception as exc:
-                self.get_logger().warning(f"[DET ] debug image encode failed: {exc!r}")
+                self.get_logger().warning(f"[DET  ] debug image encode failed: {exc!r}")
 
     def _log_health(self):
         now = time.monotonic()
@@ -150,7 +150,7 @@ class DetectorNode(Node):
         avg_ms  = (self._infer_total_s / max(self._frames, 1)) * 1000.0
         target_pct = 100.0 * self._with_target / max(self._frames, 1)
         self.get_logger().info(
-            f"[DET ] in_hz={in_hz:5.1f}  avg_infer={avg_ms:5.1f}ms  "
+            f"[DET  ] in_hz={in_hz:5.1f}  avg_infer={avg_ms:5.1f}ms  "
             f"with_target={target_pct:4.0f}%  total={self._frames}")
         self._frames = 0
         self._with_target = 0

@@ -71,14 +71,14 @@ def _log_gpu(torch, device, logger):
             idx = 0
     name = torch.cuda.get_device_name(idx)
     line = (
-        f"[VIS ] using {device} ({name})  torch={torch.__version__}  "
+        f"[VIS  ] using {device} ({name})  torch={torch.__version__}  "
         f"cuda={torch.version.cuda}")
     _emit(line, logger)
     return device
 
 
 def _log_cpu(torch, logger, *, note):
-    line = f"[VIS ] using cpu ({note})  torch={torch.__version__}"
+    line = f"[VIS  ] using cpu ({note})  torch={torch.__version__}"
     _emit(line, logger)
     return 'cpu'
 

@@ -56,14 +56,14 @@ class RosTopicCamera(Camera):
         self._sub = node.create_subscription(Image, self._topic, self._on_image, 10)
 
         if self._log:
-            self._log.info(f"[CAM ] subscribed to ros image topic {self._topic!r}")
+            self._log.info(f"[CAM  ] subscribed to ros image topic {self._topic!r}")
 
     def _on_image(self, msg) -> None:
         try:
             frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         except Exception as exc:
             if self._log:
-                self._log.warning(f"[CAM ] cv_bridge convert failed: {exc!r}")
+                self._log.warning(f"[CAM  ] cv_bridge convert failed: {exc!r}")
             return
         h, w = frame.shape[:2]
         with self._lock:

@@ -75,7 +75,7 @@ def assert_vision_ready(node: Node, *,
     if cached is not None:
         if log is not None:
             log.info(
-                f"[VPRE] '{camera}' preflight cached "
+                f"[VPRE ] '{camera}' preflight cached "
                 f"(image={cached.image_hz:.1f}Hz, info={'OK' if cached.info_seen else '--'})")
         return cached
 
@@ -96,7 +96,7 @@ def assert_vision_ready(node: Node, *,
 
     if log is not None:
         log.info(
-            f"[VPRE] '{camera}' waiting for image_raw>={require_image_hz:.1f}Hz"
+            f"[VPRE ] '{camera}' waiting for image_raw>={require_image_hz:.1f}Hz"
             f"{', detections>=1Hz' if require_detections else ''}  "
             f"timeout={timeout:.1f}s")
 
@@ -127,7 +127,7 @@ def assert_vision_ready(node: Node, *,
                     if log is not None:
                         W, H = status.image_size
                         log.info(
-                            f"[VPRE] '{camera}' READY  image={image_hz:.1f}Hz  "
+                            f"[VPRE ] '{camera}' READY  image={image_hz:.1f}Hz  "
                             f"det={det_hz:.1f}Hz  size={W}x{H}  "
                             f"after {elapsed:.1f}s")
                     return status
@@ -189,7 +189,7 @@ def wait_vision_state_ready(vision_state, *,
             if log is not None:
                 W, H = status.image_size
                 log.info(
-                    f"[VPRE] state preflight READY  size={W}x{H}  "
+                    f"[VPRE ] state preflight READY  size={W}x{H}  "
                     f"frames={diag['image_frames']}  "
                     f"after {elapsed:.1f}s")
             return status

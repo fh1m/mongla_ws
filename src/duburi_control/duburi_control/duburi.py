@@ -21,10 +21,10 @@ commands, state is reset via `_send_neutral_and_settle()`:
                               or "neutral on translation channels +
                               Ch4 released" when a heading-lock is
                               active so the lock thread keeps the
-                              SET_ATTITUDE_TARGET stream authoritative.
+                              Ch4 rate-override stream authoritative.
   * COMMAND_ACK cache     -> cleared per ACK-bearing command in pixhawk.
-  * Flight mode           -> persisted (set_depth/yaw_*/lock_heading
-                              auto-engage ALT_HOLD).
+  * Flight mode           -> persisted (set_depth / yaw_* / lock_heading /
+                              lock_depth all auto-engage ALT_HOLD).
   * Arm state             -> persisted (explicit arm/disarm only).
 
 Exit semantics are owned by the axis module:
@@ -47,10 +47,15 @@ Three release/hold semantics, all distinct:
                       OFF the loop -- ArduSub falls back to its own
                       automation (ALT_HOLD just sits, MANUAL drifts).
                       Use for stabilisation between mode changes.
-  * lock_heading() -> Spawn a 20 Hz SET_ATTITUDE_TARGET streamer in a
-                      background thread. Persists across other
-                      commands. Returns immediately.
+  * lock_heading() -> Spawn a 20 Hz Ch4 rate-override streamer in a
+                      background thread driven by yaw_source. Persists
+                      across other commands. Returns immediately.
   * unlock_heading -> Stop the streamer; send_neutral.
+  * lock_depth()   -> Spawn a 5 Hz set_target_depth streamer in a
+                      background thread. ArduSub's onboard ALT_HOLD
+                      closes the loop; we just keep the setpoint
+                      fresh. Mirror of lock_heading.
+  * unlock_depth   -> Stop the streamer; ALT_HOLD keeps holding.
 """
 
 import threading
@@ -77,16 +82,18 @@ from .motion_yaw    import yaw_glide, yaw_snap
 from .pixhawk       import Pixhawk
 
 
-# Modes that honour SET_ATTITUDE_TARGET as an *absolute* heading goal.
+# Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
+# setpoint (via SET_POSITION_TARGET_GLOBAL_INT) AND our Ch4 rate input
+# (via RC_CHANNELS_OVERRIDE) as the heading-hold rate command.
 #
 # MANUAL and STABILIZE both fail us:
-#   MANUAL    -- attitude target silently dropped, sub doesn't rotate.
-#   STABILIZE -- yaw channel is treated as a rate, not absolute heading;
-#                also no depth hold, so the sub sinks during the turn.
+#   MANUAL    -- depth setpoint silently dropped; sub sinks during turns.
+#   STABILIZE -- no depth hold, only attitude self-levelling; sub still
+#                sinks. Yaw rate input is honoured but you lose the dive.
 #
 # ALT_HOLD is the smallest mode that does both: holds depth at whatever
-# the sub is at when the mode is engaged, and the heading-hold controller
-# tracks our absolute target.
+# the sub is at when the mode is engaged, and accepts the lock thread's
+# Ch4 rate-override as the heading-hold rate target.
 YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED')
 
 

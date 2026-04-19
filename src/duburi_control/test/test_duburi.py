@@ -71,9 +71,6 @@ class FakePixhawk:
     def send_rc_translation(self, **kw):
         self.calls.append(('send_rc_translation', kw))
 
-    def set_attitude_setpoint(self, **kw):
-        self.calls.append(('set_attitude_setpoint', kw))
-
     def set_target_depth(self, depth):
         self.calls.append(('set_target_depth', depth))
         self._attitude['depth'] = depth

@@ -89,7 +89,7 @@ class VisionState:
             Image,            f'{ns}/image_raw',   self._on_image,      qos)
 
         self._log.info(
-            f"[VST ] subscribed camera={camera!r} -> "
+            f"[VST  ] subscribed camera={camera!r} -> "
             f"{ns}/detections (+camera_info, +image_raw counter)")
 
     # ------------------------------------------------------------------ #
@@ -201,7 +201,7 @@ class VisionState:
         return sorted(seen_class_ids)
 
     def diagnostics(self) -> dict:
-        """Snapshot for the [STATE] / [VST ] log line."""
+        """Snapshot for the [STATE] / [VST  ] log line."""
         with self._lock:
             return {
                 'camera':       self._camera,
@@ -222,7 +222,7 @@ class VisionState:
             self._node.destroy_subscription(self._sub_info)
             self._node.destroy_subscription(self._sub_img)
         except Exception as exc:
-            self._log.debug(f"[VST ] close() ignored: {exc!r}")
+            self._log.debug(f"[VST  ] close() ignored: {exc!r}")
 
 
 # ---------------------------------------------------------------------- #
