@@ -111,14 +111,39 @@ With BNO085 yaw + a peek at every MAVLink frame:
 
 ```bash
 ros2 run duburi_manager auv_manager --ros-args \
-    -p mode:=real -p yaw_source:=bno085 \
-    --log-level duburi_manager:=DEBUG
+    -p mode:=real -p yaw_source:=bno085 -p debug:=true
 ```
 
-The DEBUG level reveals the `[MAV ]` trace -- one line per outbound
-MAVLink frame from `Pixhawk._mav(...)`. This is the recommended
-"did we send what we thought we sent?" check before reaching for
-`tcpdump`.
+`debug:=true` flips two things at once:
+
+1. The per-command MAVLink trace tag (`[MAV file:func cmd=verb] ...`)
+   is enabled (off by default; production runs stay quiet).
+2. The manager's logger is raised to DEBUG so the lines actually
+   print. The startup banner ends with `DEBUG TRACE: ON`.
+
+This is the recommended "did we send what we thought we sent?"
+check before reaching for `tcpdump`.
+
+#### Greppable session logs (the point of the cmd= tag)
+
+Pipe the manager output to a file. Then for any verb:
+
+```bash
+rg "cmd=lock_heading" session.log | head      # every frame the verb produced
+rg "pixhawk.py:set_target_depth" session.log  # every depth setpoint, regardless of verb
+rg "cmd=yaw_right .* yaw=1[0-9]{3}"  session.log
+                                              # every yaw frame the right-turn produced
+```
+
+Background daemons don't carry `cmd=` (contextvars don't cross
+threads), but they keep `file:func`, so:
+
+```bash
+rg "pixhawk.py:send_rc_override\] RC_OVERRIDE.*yaw=14" session.log
+                                              # every Ch4 frame the lock thread emitted at <1500
+```
+
+still works.
 
 ### 2.2 Bringup-check helper
 
@@ -166,14 +191,18 @@ duburi set_mode --target_name MANUAL
 duburi disarm
 ```
 
-Expected `[MAV ]` lines (DEBUG):
+Expected `[MAV ]` lines with `debug:=true`:
 
 ```
-[MAV ] ARM    cmd_long(COMPONENT_ARM_DISARM, p1=1)
-[MAV ] SET_MODE custom_mode=2 (ALT_HOLD)
-[MAV ] SET_MODE custom_mode=19 (MANUAL)
-[MAV ] DISARM cmd_long(COMPONENT_ARM_DISARM, p1=0)
+[MAV pixhawk.py:arm cmd=arm]               ARM    cmd_long(COMPONENT_ARM_DISARM, p1=1)
+[MAV pixhawk.py:set_mode cmd=set_mode]     SET_MODE custom_mode=2 (ALT_HOLD)
+[MAV pixhawk.py:set_mode cmd=set_mode]     SET_MODE custom_mode=19 (MANUAL)
+[MAV pixhawk.py:disarm cmd=disarm]         DISARM cmd_long(COMPONENT_ARM_DISARM, p1=0)
 ```
+
+(`disarm` actually emits `set_mode MANUAL` -> `send_neutral` ->
+`disarm` in that order; the `cmd=disarm` tag appears on ALL three
+because the whole verb body runs under the `disarm` context.)
 
 #### Stop / pause
 
@@ -230,8 +259,8 @@ duburi set_depth --target  0.0
 DEBUG (during the drive only):
 
 ```
-[MAV ] SET_MODE custom_mode=2 (ALT_HOLD)        # if not already ALT_HOLD
-[MAV ] SET_POS_TGT depth=-0.50 m  (alt only, ...)   # at 5 Hz until we settle
+[MAV pixhawk.py:set_mode cmd=set_depth]         SET_MODE custom_mode=2 (ALT_HOLD)        # if not already ALT_HOLD
+[MAV pixhawk.py:set_target_depth cmd=set_depth] SET_POS_TGT depth=-0.50 m  (alt only, ...)  # at 5 Hz until we settle
 ```
 
 After the verb returns, **no more `SET_POS_TGT` traffic** -- ALT_HOLD
@@ -451,10 +480,12 @@ The order of escalation:
    cause is a typo in the goal (the dispatcher logs the rejected
    field name). Or `_ensure_yaw_capable_mode` failed to engage
    ALT_HOLD.
-2. **Raise the manager log level to DEBUG** and re-run the verb.
-   The `[MAV ]` trace tells you exactly what we sent. If the right
-   message went out and the AUV still didn't move, the problem is
-   downstream of us (ArduSub, ESCs, mode, parameters).
+2. **Restart the manager with `debug:=true`** and re-run the verb.
+   The `[MAV file:func cmd=verb]` trace tells you exactly what we
+   sent AND which verb caused it. `rg "cmd=<verb>"` filters the
+   session to one command. If the right message went out and the
+   AUV still didn't move, the problem is downstream of us (ArduSub,
+   ESCs, mode, parameters).
 3. **Inspect ArduSub's `STATUSTEXT`** -- it's already mirrored
    into the manager's INFO log. ArduSub announces failsafes,
    pre-arm refusals, and EKF rejections via STATUSTEXT.

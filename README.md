@@ -111,7 +111,7 @@ the [Quickstart smoke tests](#quickstart-smoke-tests) right below.
 
 ## Quickstart smoke tests
 
-> Seven copy-paste scenarios, in the order you would actually run them.
+> Eight copy-paste scenarios, in the order you would actually run them.
 > Each block lists **what success looks like** and **the exact commands**.
 > All commands assume `source /opt/ros/humble/setup.bash && source install/setup.bash`.
 
@@ -242,6 +242,29 @@ ros2 run duburi_sensors sensors_node --ros-args \
 Firmware + wiring contract: [src/duburi_sensors/firmware/esp32c3_bno085.md](src/duburi_sensors/firmware/esp32c3_bno085.md).
 To make the manager use BNO085 instead of ArduSub AHRS, launch with
 `-p yaw_source:=bno085` (and `-p bno085_port:=auto` is already the default).
+
+### 7 — Per-command MAVLink debug trace
+
+When something misbehaves and you want to know exactly which Duburi verb
+emitted which MAVLink frame, restart the manager with `debug:=true`:
+
+```bash
+ros2 run duburi_manager auv_manager --ros-args -p debug:=true
+```
+
+That single param raises the manager logger to DEBUG and tags every
+outbound MAVLink frame with both its callsite AND the verb that caused
+it:
+
+```
+[MAV pixhawk.py:set_target_depth cmd=set_depth] SET_POS_TGT depth=-0.50 m  (alt only, ...)
+[MAV pixhawk.py:send_rc_override cmd=lock_heading] RC_OVERRIDE pitch=1500 ... yaw=1430 ...
+```
+
+Then `rg "cmd=lock_heading" session.log` returns every frame the verb
+produced, across every implementation file. Off by default; production
+runs stay quiet. Full format and examples in
+[.claude/context/mavlink-reference.md](.claude/context/mavlink-reference.md#per-call-audit-every-send_--set_-on-pixhawkpy).
 
 ---
 
@@ -380,7 +403,7 @@ Four packages live inside:
 | Package             | Role                                                                                     |
 |---------------------|------------------------------------------------------------------------------------------|
 | `duburi_interfaces` | `Move.action` + `DuburiState.msg` — the only ROS surface every client talks to           |
-| `duburi_control`    | `Pixhawk` MAVLink wrapper (with `[MAV ]` DEBUG trace) + axis-split motion controllers (`motion_forward`, `motion_lateral`, `motion_yaw`, `motion_depth`, `heading_lock`) + shared helpers (`motion_writers`, `motion_easing`) + `Heartbeat` + `VisionVerbs` mixin + the `COMMANDS` registry |
+| `duburi_control`    | `Pixhawk` MAVLink wrapper (opt-in `[MAV file:func cmd=verb]` DEBUG trace via `debug:=true`) + axis-split motion controllers (`motion_forward`, `motion_lateral`, `motion_yaw`, `motion_depth`, `heading_lock`) + shared helpers (`motion_writers`, `motion_easing`) + `Heartbeat` + `VisionVerbs` mixin + the `COMMANDS` registry + `tracing` (per-command tag) |
 | `duburi_manager`    | ROS2 node, action server, telemetry logger, connection profiles                           |
 | `duburi_planner`    | `DuburiClient` Python API + `duburi` CLI + `mission` runner + `missions/*` scripts (YASMIN slot reserved under `state_machines/`) |
 | `duburi_sensors`    | `YawSource` abstraction — MAVLink AHRS default, BNO085 (ESP32-C3 USB CDC) opt-in, DVL/WitMotion stubs |
@@ -651,7 +674,8 @@ duburi_ws/
     │   └── msg/DuburiState.msg        # typed snapshot for /duburi/state
     ├── duburi_control/
     │   └── duburi_control/
-    │       ├── pixhawk.py             # pymavlink wrapper + COMMAND_ACK + [MAV ] DEBUG trace
+    │       ├── pixhawk.py             # pymavlink wrapper + COMMAND_ACK + [MAV file:func cmd=verb] DEBUG trace
+    │       ├── tracing.py             # per-command MAVLink-trace tag (off by default; debug:=true flips on)
     │       ├── commands.py            # COMMANDS registry (single source of truth)
     │       ├── motion_easing.py       # smoothstep / smootherstep / trapezoid_ramp
     │       ├── motion_writers.py      # shared constants + Writers (lock-aware) + thrust_loop
@@ -1670,7 +1694,7 @@ pillars (read these first) are bolded:
 **ArduSub & MAVLink theory:**
 - [**ardusub-canon.md**](.claude/context/ardusub-canon.md) — first-principles ArduSub: modes, depth cascade, yaw rate loop, failsafes
 - [ardusub-reference.md](.claude/context/ardusub-reference.md) — ArduSub params quick-list + quirks
-- [mavlink-reference.md](.claude/context/mavlink-reference.md) — full MAVLink message catalogue, per-call audit, `[MAV ]` DEBUG trace
+- [mavlink-reference.md](.claude/context/mavlink-reference.md) — full MAVLink message catalogue, per-call audit, `[MAV file:func cmd=verb]` DEBUG trace
 - [heading-lock.md](.claude/context/heading-lock.md) — heading-lock state diagram + Ch4 rate-override implementation
 - [axis-isolation.md](.claude/context/axis-isolation.md) — first principles: sharp vs curved turns + settle/pause
 

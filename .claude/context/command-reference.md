@@ -26,9 +26,22 @@ every verb's fields and defaults is
 If a verb is in this doc and not in `COMMANDS`, that's a bug.
 
 DEBUG-level MAVLink trace: every verb that ends in a wire-write
-emits one or more `[MAV ] ...` lines; raise the manager log level to
-DEBUG to see them (`ros2 run duburi_manager auv_manager --ros-args
---log-level duburi_manager:=DEBUG`).
+emits one or more `[MAV file:func cmd=<verb>] ...` lines. Flip them
+on with the manager's `debug` ROS-param (default off, production
+runs stay quiet):
+
+```bash
+ros2 run duburi_manager auv_manager --ros-args -p debug:=true
+```
+
+That single param sets two things: it raises the manager logger to
+DEBUG and enables the `cmd=<verb>` tag so a single
+`rg "cmd=<verb>"` over the session log returns every frame the
+verb produced. The `[MAV ]` examples below assume `debug:=true`.
+
+Each verb's `Implements` row gives the implementation breadcrumb
+(`<file>.<func>`); the same string is in the verb's docstring as
+`impl: ...` so it shows up at edit time.
 
 ---
 
@@ -43,7 +56,7 @@ DEBUG to see them (`ros2 run duburi_manager auv_manager --ros-args
 | MAVLink     | `COMMAND_LONG (MAV_CMD_COMPONENT_ARM_DISARM, p1=1)`     |
 | Implements  | `Pixhawk.arm` in `pixhawk.py` (waits for COMMAND_ACK + heartbeat-armed bit) |
 | Failure modes | `RC_FAIL` if pre-arm checks reject; `NOT_ARMED_AFTER_ACK` if ACK arrives but `is_armed()` stays False |
-| `[MAV ]`    | `ARM    cmd_long(COMPONENT_ARM_DISARM, p1=1)`           |
+| `[MAV ]`    | `[MAV pixhawk.py:arm cmd=arm] ARM    cmd_long(COMPONENT_ARM_DISARM, p1=1)` |
 
 ### `disarm`
 
@@ -53,7 +66,7 @@ DEBUG to see them (`ros2 run duburi_manager auv_manager --ros-args
 | Python      | `duburi.disarm(timeout=20.0)`                           |
 | MAVLink     | `SET_MODE -> MANUAL` then 3 s settle, then `RC neutral`, then `COMMAND_LONG (MAV_CMD_COMPONENT_ARM_DISARM, p1=0)` |
 | Implements  | `Pixhawk.disarm` in `pixhawk.py` -- mirrors what QGC does, dodges ArduSub's "still moving" disarm rejection |
-| `[MAV ]`    | `SET_MODE custom_mode=19 (MANUAL)` ... `RC_OVERRIDE pitch=1500 ...` ... `DISARM cmd_long(COMPONENT_ARM_DISARM, p1=0)` |
+| `[MAV ]`    | `[MAV pixhawk.py:set_mode cmd=disarm] SET_MODE custom_mode=19 (MANUAL)` ... `[MAV pixhawk.py:send_rc_override cmd=disarm] RC_OVERRIDE pitch=1500 ...` ... `[MAV pixhawk.py:disarm cmd=disarm] DISARM cmd_long(COMPONENT_ARM_DISARM, p1=0)` |
 
 ### `set_mode`
 
@@ -63,7 +76,7 @@ DEBUG to see them (`ros2 run duburi_manager auv_manager --ros-args
 | Python      | `duburi.set_mode('ALT_HOLD', timeout=8.0)`              |
 | Mode names  | `MANUAL`, `STABILIZE`, `ACRO`, `DEPTH_HOLD` (alias for `ALT_HOLD`), `ALT_HOLD`, `POSHOLD`, `GUIDED`, `AUTO`, `CIRCLE`, `SURFACE` |
 | MAVLink     | `SET_MODE` (legacy message, no COMMAND_ACK) -- we retry every 300 ms and poll the heartbeat for the actual change |
-| `[MAV ]`    | `SET_MODE custom_mode=<N> (<NAME>)` once before the retry loop |
+| `[MAV ]`    | `[MAV pixhawk.py:set_mode cmd=set_mode] SET_MODE custom_mode=<N> (<NAME>)` once before the retry loop |
 | Notes       | Auto-engaged by `set_depth` (-> ALT_HOLD), `yaw_left/right`, `lock_heading`. ALT_HOLD inherently holds depth + heading once Ch3/Ch4 are neutral. |
 
 ---
@@ -78,7 +91,7 @@ DEBUG to see them (`ros2 run duburi_manager auv_manager --ros-args
 | Python      | `duburi.stop()`                                         |
 | MAVLink     | `RC_CHANNELS_OVERRIDE` six 1500s for ~0.6 s            |
 | Behaviour   | **Active hold** -- ArduSub still sees us as the pilot, so its onboard heading/depth holds latch at the current state. Use between commands. |
-| `[MAV ]`    | `RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=1500 fwd=1500 lat=1500` (one per tick, ~12 frames over 0.6 s) |
+| `[MAV ]`    | `[MAV pixhawk.py:send_rc_override cmd=stop] RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=1500 fwd=1500 lat=1500` (one per tick, ~12 frames over 0.6 s) |
 
 ### `pause`
 
@@ -88,7 +101,7 @@ DEBUG to see them (`ros2 run duburi_manager auv_manager --ros-args
 | Python      | `duburi.pause(seconds=2.0)`                             |
 | MAVLink     | `RC_CHANNELS_OVERRIDE` six 65535s for `duration` s       |
 | Behaviour   | **Release** -- pilot OFF the loop. ArduSub's mode automation (ALT_HOLD, POSHOLD) runs unhindered. Use between mode changes or to A/B-test what ArduSub does on its own. Suspends `Heartbeat` for the duration. |
-| `[MAV ]`    | `RC_RELEASE  all=65535 (autopilot runs without us)`     |
+| `[MAV ]`    | `[MAV pixhawk.py:release_rc_override cmd=pause] RC_RELEASE  all=65535 (autopilot runs without us)` |
 
 ---
 
@@ -157,7 +170,7 @@ open-loop for *getting close*.
 | MAVLink     | `RC_CHANNELS_OVERRIDE` writing **Ch5 + Ch4 in the same packet** at 20 Hz |
 | Implements  | `motion_forward.arc`                                                     |
 | Behaviour   | Car-style curved motion. `gain` is forward thrust pct (signed: negative = arc in reverse). `yaw_rate_pct` is signed yaw stick (+ = right turn, - = left). Duration is open-loop seconds. Suspends `lock_heading`, retargets to the exit heading. |
-| `[MAV ]`    | `RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=<pwm> fwd=<pwm> lat=1500` (one per tick) |
+| `[MAV ]`    | `[MAV pixhawk.py:send_rc_override cmd=arc] RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=<pwm> fwd=<pwm> lat=1500` (one per tick) |
 
 ---
 
@@ -172,7 +185,7 @@ open-loop for *getting close*.
 | MAVLink     | Auto-engage `SET_MODE -> ALT_HOLD` if needed, then `SET_POSITION_TARGET_GLOBAL_INT` (alt only, all other axes masked) at `DEPTH_SETPOINT_HZ` (5 Hz) **only while driving to target** |
 | Implements  | `motion_depth.hold_depth` -> `Pixhawk.set_target_depth`                               |
 | Behaviour   | Drives the AUV to absolute depth `target` metres (negative below surface). Returns once `\|altitude - target\| < 0.05 m` for 0.5 s. After the target is reached, ArduSub's onboard ALT_HOLD (400 Hz internal PID) keeps holding -- we stop streaming. |
-| `[MAV ]`    | `SET_POS_TGT depth=-1.50 m  (alt only, all other axes masked)` per tick during the drive |
+| `[MAV ]`    | `[MAV pixhawk.py:set_target_depth cmd=set_depth] SET_POS_TGT depth=-1.50 m  (alt only, all other axes masked)` per tick during the drive |
 
 > **There is no `lock_depth` or `unlock_depth` verb.** ALT_HOLD
 > inherently holds whatever altitude is current the moment Ch3 goes
@@ -194,7 +207,7 @@ open-loop for *getting close*.
 | MAVLink     | Background daemon thread streams `RC_CHANNELS_OVERRIDE` Ch4-only (rate command) at `LOCK_STREAM_HZ` (20 Hz) |
 | Implements  | `heading_lock.HeadingLock`; owned and started by `Duburi.lock_heading`           |
 | Behaviour   | `target=0` means lock at the current heading right now. Loop reads heading from configured `yaw_source` (BNO085 / AHRS / SITL), computes proportional Ch4 yaw-rate command, clamps to `+/-LOCK_PCT_MAX`. Pauses `Heartbeat` while active (the lock IS the heartbeat). |
-| `[MAV ]`    | `RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=<pwm> fwd=1500 lat=1500` per tick |
+| `[MAV ]`    | `[MAV pixhawk.py:send_rc_override] RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=<pwm> fwd=1500 lat=1500` per tick (no `cmd=` -- the lock thread is its own thread; `lock_heading`'s own setup frames carry `cmd=lock_heading`) |
 | See         | [`heading-lock.md`](./heading-lock.md) for state diagram and failure modes.       |
 
 ### `unlock_heading`
@@ -204,7 +217,7 @@ open-loop for *getting close*.
 | CLI         | `duburi unlock_heading`                                                          |
 | Python      | `duburi.unlock_heading()` (Duburi facade) / `duburi.release_heading()` (DSL)     |
 | MAVLink     | Stops the lock thread, sends `RC_CHANNELS_OVERRIDE` six 1500s, resumes `Heartbeat` |
-| `[MAV ]`    | `RC_OVERRIDE pitch=1500 ... yaw=1500 ...` (single neutral frame)                 |
+| `[MAV ]`    | `[MAV pixhawk.py:send_rc_override cmd=unlock_heading] RC_OVERRIDE pitch=1500 ... yaw=1500 ...` (single neutral frame) |
 
 ---
 
@@ -220,6 +233,18 @@ The whole vision sub-namespace is the
 mixin on `Duburi`. The DSL exposes the same verbs under
 `duburi.vision.*` with friendlier kwarg names (`distance` instead of
 `target_bbox_h_frac`, etc.).
+
+Implementation chain for every vision verb (mirrored in each verb's
+docstring as `impl: ...`):
+
+| Verb                   | Impl chain                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `vision_align_yaw`     | `vision_verbs._run_vision_track` -> `motion_vision.vision_track_axes(axes={'yaw'})` -> `pixhawk.send_rc_override` (Ch4) |
+| `vision_align_lat`     | `vision_verbs._run_vision_track` -> `motion_vision.vision_track_axes(axes={'lat'})` -> `pixhawk.send_rc_override` (Ch6) |
+| `vision_align_depth`   | `vision_verbs._run_vision_track` -> `motion_vision.vision_track_axes(axes={'depth'})` -> `pixhawk.set_target_depth`     |
+| `vision_hold_distance` | `vision_verbs._run_vision_track` -> `motion_vision.vision_track_axes(axes={'forward'})` -> `pixhawk.send_rc_override` (Ch5) |
+| `vision_align_3d`      | `vision_verbs._run_vision_track` -> `motion_vision.vision_track_axes` -> Ch4/Ch5/Ch6 + `set_target_depth`           |
+| `vision_acquire`       | `vision_verbs.vision_acquire` -> `motion_vision.vision_acquire` + `_build_acquire_drive` closure -> `pixhawk.send_rc_override` |
 
 ### `vision_acquire`
 

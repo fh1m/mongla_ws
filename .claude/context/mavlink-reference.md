@@ -262,8 +262,16 @@ Note: We prefer `RC_CHANNELS_OVERRIDE` over `MANUAL_CONTROL` — it gives direct
 ## Per-call audit (every send_* / set_* on `pixhawk.py`)
 
 Every method on `Pixhawk` that puts a frame on the wire emits a
-single `[MAV ]` DEBUG line via `_mav(...)`. Raise the manager log
-level to DEBUG to see them live (`--log-level duburi_manager:=DEBUG`).
+single `[MAV file:func cmd=verb] ...` DEBUG line via `_mav(...)`.
+Launch the manager with `debug:=true` to flip the trace on (it also
+raises the logger level to DEBUG so the lines actually print):
+
+```bash
+ros2 run duburi_manager auv_manager --ros-args -p debug:=true
+```
+
+The banner prints `DEBUG TRACE: ON` so you can see at a glance the
+trace is active.
 
 | `pixhawk.py` method            | MAVLink message                                | Used by                            | Notes                                                                                          |
 | ------------------------------ | ---------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -281,17 +289,38 @@ level to DEBUG to see them live (`--log-level duburi_manager:=DEBUG`).
 
 ### MAVLink-trace via DEBUG logs
 
-Each method above also emits exactly one `[MAV ]` DEBUG line via
-`Pixhawk._mav(msg)`. So a single `set_depth(-1.5)` produces (at
-DEBUG):
+Each method above emits exactly one DEBUG line via
+`Pixhawk._mav(msg)`. With `debug:=true`, the line carries TWO tags:
+
+* `file:func` -- the actual `pixhawk.py` callsite that produced the
+  frame, generated automatically by `sys._getframe(1)`. This is
+  always present, even when no Duburi verb is on the stack
+  (e.g. background daemons).
+* ` cmd=<verb>` -- the high-level Duburi verb that caused the call,
+  set by `tracing.command(verb)` (a contextvar opened by every
+  public method on `Duburi` / `VisionVerbs`). Absent for daemon
+  threads (`Heartbeat`, `HeadingLock`) because contextvars don't
+  cross thread boundaries -- `file:func` carries them.
+
+So a single `Duburi.set_depth(-1.5)` produces (at DEBUG):
 
 ```
-[MAV ] SET_MODE custom_mode=2 (ALT_HOLD)
-[MAV ] SET_POS_TGT depth=-1.50 m  (alt only, all other axes masked)
+[MAV pixhawk.py:set_mode cmd=set_depth] SET_MODE custom_mode=2 (ALT_HOLD)
+[MAV pixhawk.py:set_target_depth cmd=set_depth] SET_POS_TGT depth=-1.50 m  (alt only, all other axes masked)
+```
+
+A heading-lock streaming Ch4 in the background, simultaneously,
+prints (no `cmd=` because the streamer is its own thread):
+
+```
+[MAV pixhawk.py:send_rc_override] RC_OVERRIDE pitch=1500 roll=1500 thr=1500 yaw=1430 fwd=1500 lat=1500
 ```
 
 This is the recommended way to debug "did we *send* the right
-thing?" before reaching for tcpdump on the MAVLink port.
+thing?" before reaching for tcpdump on the MAVLink port. The
+`cmd=<verb>` tag means a single
+`rg "cmd=lock_heading" session.log` returns every frame the
+high-level verb produced, across every file involved.
 
 ---
 
