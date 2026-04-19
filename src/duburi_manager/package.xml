@@ -4,8 +4,8 @@
 <package format="3">
   <name>duburi_manager</name>
   <version>0.1.0</version>
-  <description>AUV manager — connection, live logger, command dispatcher for Duburi AUV</description>
-  <maintainer email="duburi@example.com">BRACU Duburi</maintainer>
+  <description>Mongla AUV manager — MAVLink connection, live logger, action server, command dispatcher</description>
+  <maintainer email="mongla@example.com">Mongla project</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>

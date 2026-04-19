@@ -80,7 +80,7 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 |-----------------|--------|----------------|---------------------------------------------------------------|
 | `mode`          | string | `sim`          | One of `sim`, `pool`, `laptop`, `desk` (see `connection_config.PROFILES`) |
 | `smooth_yaw`    | bool   | `false`        | `true` → `yaw_glide` (smootherstep setpoint sweep)            |
-| `smooth_linear` | bool   | `false`        | `true` → `drive_eased` (trapezoid thrust + settle-only brake) |
+| `smooth_translate` | bool   | `false`        | `true` → `drive_*_eased` (trapezoid thrust + settle-only brake; forward + lateral) |
 | `yaw_source`    | string | `mavlink_ahrs` | `mavlink_ahrs` \| `bno085`                                    |
 | `bno085_port`   | string | `/dev/ttyACM0` | USB CDC device path (only when `yaw_source==bno085`)          |
 | `bno085_baud`   | int    | `115200`       | BNO085 stream baud rate                                       |

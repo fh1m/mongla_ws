@@ -39,20 +39,28 @@ LOG_THROTTLE  = 0.5
 PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
 
 
-def hold_depth(pixhawk, target_m, timeout, log):
+def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
     """Drive the sub to `target_m` (negative = below surface) and hold.
 
     Caller MUST already be in ALT_HOLD; this function does not switch
     modes itself (that's `Duburi.set_depth`'s job).
+
+    `neutral_writer` is an optional callable that writes "neutral" --
+    defaults to `pixhawk.send_neutral` which sends 1500 on all six
+    channels. Heading-lock-aware callers pass `writers.neutral` so Ch4
+    stays released and the lock thread's SET_ATTITUDE_TARGET wins.
     """
+    if neutral_writer is None:
+        neutral_writer = pixhawk.send_neutral
+
     starting = pixhawk.get_attitude()
     start_d  = starting['depth'] if starting is not None else target_m
 
-    prime_alt_hold(pixhawk, hold_at=start_d)
+    prime_alt_hold(pixhawk, hold_at=start_d, neutral_writer=neutral_writer)
     wait_for_depth(pixhawk, target_m, timeout, log)
 
 
-def prime_alt_hold(pixhawk, hold_at):
+def prime_alt_hold(pixhawk, hold_at, neutral_writer):
     """Phase 1: drain ArduSub's stale ALT_HOLD integrator.
 
     Streams `hold_at` as the depth target with a neutral RC override
@@ -63,7 +71,7 @@ def prime_alt_hold(pixhawk, hold_at):
     deadline = time.time() + PRIME_SECONDS
     while time.time() < deadline:
         pixhawk.set_target_depth(hold_at)
-        pixhawk.send_neutral()
+        neutral_writer()
         time.sleep(1.0 / SETPOINT_HZ)
 
 

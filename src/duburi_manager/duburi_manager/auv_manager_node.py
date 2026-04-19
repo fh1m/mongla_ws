@@ -107,20 +107,20 @@ class AUVManagerNode(Node):
         super().__init__('duburi_manager')
 
         # ---- ROS parameters --------------------------------------------
-        self.declare_parameter('mode',          DEFAULT_MODE)
-        self.declare_parameter('smooth_yaw',    False)
-        self.declare_parameter('smooth_linear', False)
-        self.declare_parameter('yaw_source',    'mavlink_ahrs')
-        self.declare_parameter('bno085_port',   '/dev/ttyACM0')
-        self.declare_parameter('bno085_baud',   115200)
+        self.declare_parameter('mode',             DEFAULT_MODE)
+        self.declare_parameter('smooth_yaw',       False)
+        self.declare_parameter('smooth_translate', False)
+        self.declare_parameter('yaw_source',       'mavlink_ahrs')
+        self.declare_parameter('bno085_port',      '/dev/ttyACM0')
+        self.declare_parameter('bno085_baud',      115200)
 
-        mode_name      = self.get_parameter('mode').value
-        smooth_yaw     = bool(self.get_parameter('smooth_yaw').value)
-        smooth_linear  = bool(self.get_parameter('smooth_linear').value)
-        yaw_src_name   = str(self.get_parameter('yaw_source').value)
-        bno085_port    = str(self.get_parameter('bno085_port').value)
-        bno085_baud    = int(self.get_parameter('bno085_baud').value)
-        profile        = PROFILES.get(mode_name, PROFILES[DEFAULT_MODE])
+        mode_name        = self.get_parameter('mode').value
+        smooth_yaw       = bool(self.get_parameter('smooth_yaw').value)
+        smooth_translate = bool(self.get_parameter('smooth_translate').value)
+        yaw_src_name     = str(self.get_parameter('yaw_source').value)
+        bno085_port      = str(self.get_parameter('bno085_port').value)
+        bno085_baud      = int(self.get_parameter('bno085_baud').value)
+        profile          = PROFILES.get(mode_name, PROFILES[DEFAULT_MODE])
 
         # ---- MAVLink connection ----------------------------------------
         self.get_logger().info(f'Connecting ({mode_name}) -> {profile["conn"]} ...')
@@ -151,8 +151,8 @@ class AUVManagerNode(Node):
             raise
 
         # ---- Banner ----------------------------------------------------
-        yaw_tag = 'glide' if smooth_yaw    else 'snap'
-        lin_tag = 'eased' if smooth_linear else 'constant'
+        yaw_tag = 'glide' if smooth_yaw       else 'snap'
+        tr_tag  = 'eased' if smooth_translate else 'constant'
         yaw_src_label = self.yaw_source.name
         if yaw_src_name == 'bno085':
             yaw_src_label = f'{yaw_src_label} ({bno085_port} @ {bno085_baud})'
@@ -165,7 +165,7 @@ class AUVManagerNode(Node):
         self.get_logger().info(
             f' MAVLink: sys={self.master.target_system} '
             f'comp={self.master.target_component}  (v2.0)')
-        self.get_logger().info(f' Profiles: yaw={yaw_tag}  linear={lin_tag}')
+        self.get_logger().info(f' Profiles: yaw={yaw_tag}  translate={tr_tag}')
         self.get_logger().info(f' Yaw source: {yaw_src_label}')
         if mode_name in ('pool', 'laptop'):
             self.get_logger().info(
@@ -178,7 +178,7 @@ class AUVManagerNode(Node):
             self.pixhawk,
             log=self.get_logger(),
             smooth_yaw=smooth_yaw,
-            smooth_linear=smooth_linear,
+            smooth_translate=smooth_translate,
             yaw_source=self.yaw_source,
         )
 
@@ -396,6 +396,15 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        # Stop any active heading-lock thread before going neutral so
+        # the streamer doesn't fight us while we're sending the
+        # shutdown packet.
+        try:
+            if node.duburi._heading_lock is not None:
+                node.duburi._heading_lock.stop()
+        except Exception as exc:
+            node.get_logger().debug(
+                f'shutdown: heading_lock.stop() ignored: {exc!r}')
         node.pixhawk.send_neutral()
         try:
             node.yaw_source.close()

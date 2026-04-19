@@ -1,8 +1,9 @@
-# BRACU DUBURI — AUV ROS2 Control Stack
+# Mongla — AUV ROS2 Control Stack
 
-> **Team**: BRACU Duburi, Bangladesh | [bracuduburi.com/auv/4.2](https://bracuduburi.com/auv/4.2)
-> **Competitions**: RoboSub (8th 2025, 2nd 2023), SAUVC
-> **This codebase**: `~/Ros_workspaces/duburi_ws` (ROS2 Humble, Ubuntu 22.04 in distrobox)
+> **Project**: Mongla — a ROS2 / ArduSub control stack for `vectored_6dof` AUVs.
+> **Test platform**: Duburi 4.2 (`vectored_6dof`, 8x T200, Pixhawk 2.4.8 + ArduSub 4.x).
+> **This codebase**: `~/Ros_workspaces/duburi_ws` (ROS2 Humble, Ubuntu 22.04 in distrobox).
+> Workspace folder name and the `/duburi/*` action namespace are kept for backwards compatibility with the test vehicle's tooling.
 
 > **Precedence note for agents:** if anything below contradicts the
 > actual package layout in `src/`, the package layout wins. The
@@ -15,7 +16,7 @@
 
 ---
 
-## 1. Hardware Overview (BRACU Duburi 4.2)
+## 1. Hardware Overview (test platform: Duburi 4.2)
 
 > Full spec lives in [`.claude/context/vehicle-spec.md`](.claude/context/vehicle-spec.md). Short table here.
 
@@ -103,18 +104,28 @@ duburi_ws/src/
 │       ├── pixhawk.py            # Pixhawk class — arm / mode / RC / setpoints / AHRS2
 │       ├── commands.py           # COMMANDS registry (single source of truth)
 │       ├── motion_profiles.py    # smoothstep / smootherstep / trapezoid_ramp
+│       ├── motion_common.py      # shared constants + Writers (lock-aware) + thrust_loop
 │       ├── motion_yaw.py         # yaw_snap + yaw_glide (SET_ATTITUDE_TARGET)
-│       ├── motion_linear.py      # drive_constant + drive_eased + brake (RC override)
+│       ├── motion_forward.py     # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
+│       ├── motion_lateral.py     # drive_lateral_* (Ch6 RC override)
 │       ├── motion_depth.py       # hold_depth + prime_alt_hold (SET_POSITION_TARGET)
+│       ├── heading_lock.py       # background SET_ATTITUDE_TARGET streamer (yaw cousin of depth-hold)
 │       ├── duburi.py             # Duburi facade: lock + dispatch on smooth_* flags
 │       └── errors.py             # MovementError / MovementTimeout / ModeChangeError
-├── duburi_manager/       # ROS2 node, action server, telemetry, CLI, mission
+├── duburi_manager/       # ROS2 node, action server, telemetry
 │   └── duburi_manager/
 │       ├── auv_manager_node.py   # owns MAVLink + /duburi/move ActionServer
-│       ├── connection_config.py  # PROFILES + NETWORK constants
+│       └── connection_config.py  # PROFILES + NETWORK constants
+├── duburi_planner/       # mission planner: Python client + CLI + mission scripts
+│   └── duburi_planner/
 │       ├── client.py             # blocking ActionClient wrapper (DuburiClient)
 │       ├── cli.py                # argparse auto-built from COMMANDS (`duburi` entry)
-│       └── test_runner.py        # scripted mission demo
+│       ├── mission.py            # `mission` runner that dispatches into missions/<name>.run
+│       ├── missions/
+│       │   ├── square_pattern.py
+│       │   ├── arc_demo.py
+│       │   └── heading_lock_demo.py
+│       └── state_machines/       # reserved for YASMIN-based plans
 └── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
     ├── duburi_sensors/
     │   ├── factory.py            # make_yaw_source(name, **kw)
@@ -137,14 +148,16 @@ duburi_ws/src/
 ### 4.2 Data flow (real)
 
 ```
-[duburi CLI] ──┐
-               ├──/duburi/move (action goal)──→ [auv_manager_node]
-[test_runner]──┘                                      │
+[duburi CLI]   ──┐
+[mission run]  ──┤
+[Python client]──┼──/duburi/move (action goal)──→ [auv_manager_node]
                                                       │
                                                       ├──→ Duburi facade (lock + dispatch via COMMANDS)
-                                                      │       ├── motion_yaw    (SET_ATTITUDE_TARGET ×10 Hz)
-                                                      │       ├── motion_linear (RC_CHANNELS_OVERRIDE ×20 Hz)
-                                                      │       └── motion_depth  (SET_POSITION_TARGET_GLOBAL_INT ×5 Hz)
+                                                      │       ├── motion_yaw     (SET_ATTITUDE_TARGET ×10 Hz)
+                                                      │       ├── motion_forward (Ch5 RC override; arc = Ch5+Ch4 ×20 Hz)
+                                                      │       ├── motion_lateral (Ch6 RC override ×20 Hz)
+                                                      │       ├── motion_depth   (SET_POSITION_TARGET_GLOBAL_INT ×5 Hz)
+                                                      │       └── heading_lock   (SET_ATTITUDE_TARGET ×20 Hz, background)
                                                       │
                                                       ├──→ Pixhawk ──UDP 14550──→ [BlueOS] ──USB──→ [Pixhawk / ArduSub]
                                                       │                                                    │
@@ -169,7 +182,7 @@ duburi_ws/src/
 | `auv_manager_node` / `auv_manager` | `duburi_manager` | The single MAVLink connection, `/duburi/move` ActionServer, telemetry publisher, ROS params |
 | `sensors_node`                   | `duburi_sensors`| Standalone yaw-source diagnostic — does NOT touch thrusters or arming |
 
-There is exactly **one** node that touches `pymavlink` in the live mission path: `auv_manager_node`. The CLI and test_runner are ROS2 ActionClients of `/duburi/move`.
+There is exactly **one** node that touches `pymavlink` in the live mission path: `auv_manager_node`. The `duburi` CLI, the `mission` runner, and any custom Python script are ROS2 ActionClients of `/duburi/move` -- all live in `duburi_planner`.
 
 ---
 
@@ -266,13 +279,16 @@ pixhawk.set_message_rate(MAVLINK_MSG_ID_RC_CHANNELS,      5)
 
 We never close a Python control loop in the live path. ArduSub's onboard 400 Hz stabilizer + EKF3 owns yaw and depth; we only stream setpoints.
 
-| Axis    | Setpoint message                  | Loop that closes it           | Our role                     |
-|---------|-----------------------------------|-------------------------------|------------------------------|
-| Yaw     | `SET_ATTITUDE_TARGET` (10 Hz)     | ArduSub 400 Hz attitude PID   | stream + watch AHRS yaw      |
-| Depth   | `SET_POSITION_TARGET_GLOBAL_INT` (5 Hz) | ArduSub ALT_HOLD position PID | stream + watch AHRS depth    |
-| Linear  | `RC_CHANNELS_OVERRIDE` Ch5/Ch6 (20 Hz) | open loop (timed thrust)      | shape the thrust envelope    |
+| Axis      | Setpoint message                  | Loop that closes it           | Our role                       |
+|-----------|-----------------------------------|-------------------------------|--------------------------------|
+| Yaw       | `SET_ATTITUDE_TARGET` (10 Hz)     | ArduSub 400 Hz attitude PID   | stream + watch yaw_source      |
+| Depth     | `SET_POSITION_TARGET_GLOBAL_INT` (5 Hz) | ArduSub ALT_HOLD position PID | stream + watch AHRS depth      |
+| Forward   | `RC_CHANNELS_OVERRIDE` Ch5 (20 Hz)| open loop (timed thrust)      | shape the thrust envelope      |
+| Lateral   | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz)| open loop (timed thrust)      | shape the thrust envelope      |
+| Arc       | `RC_CHANNELS_OVERRIDE` Ch5 + Ch4 (20 Hz, single packet) | open loop | curved car-style trajectory    |
+| Heading lock | `SET_ATTITUDE_TARGET` (20 Hz, background) | ArduSub 400 Hz attitude PID | continuous yaw hold across other commands |
 
-The two ROS params `smooth_yaw` / `smooth_linear` (both default `false`) optionally shape the *setpoint* (smootherstep / trapezoid_ramp) before it reaches the autopilot — they don't replace the autopilot's inner loop.
+The two ROS params `smooth_yaw` / `smooth_translate` (both default `false`) optionally shape the *setpoint* (smootherstep / trapezoid_ramp) before it reaches the autopilot — they don't replace the autopilot's inner loop.
 
 > Earlier revisions kept `movement_pids.py` (`DepthPID` / `YawPID`) as a "hot-fix fallback" reference. That file has been removed — ArduSub's inner loop is the only PID in the live path. If you need the math again, see `.claude/context/pid-theory.md` or pull it from git history.
 
@@ -310,14 +326,14 @@ Adapted for our context:
 
 ### ROS params on `auv_manager_node`
 
-| Param           | Type   | Default        | Notes                                                         |
-|-----------------|--------|----------------|---------------------------------------------------------------|
-| `mode`          | string | `sim`          | `sim`, `pool`, `laptop`, `desk` (see §3)                      |
-| `smooth_yaw`    | bool   | `false`        | `true` → `yaw_glide` (smootherstep setpoint sweep)            |
-| `smooth_linear` | bool   | `false`        | `true` → `drive_eased` (trapezoid thrust, settle-only brake)  |
-| `yaw_source`    | string | `mavlink_ahrs` | `mavlink_ahrs` \| `bno085`                                    |
-| `bno085_port`   | string | `/dev/ttyACM0` | USB CDC device path                                           |
-| `bno085_baud`   | int    | `115200`       | BNO085 stream baud rate                                       |
+| Param              | Type   | Default        | Notes                                                                  |
+|--------------------|--------|----------------|------------------------------------------------------------------------|
+| `mode`             | string | `sim`          | `sim`, `pool`, `laptop`, `desk` (see §3)                               |
+| `smooth_yaw`       | bool   | `false`        | `true` → `yaw_glide` (smootherstep setpoint sweep)                     |
+| `smooth_translate` | bool   | `false`        | `true` → `drive_*_eased` (trapezoid thrust, settle-only brake)         |
+| `yaw_source`       | string | `mavlink_ahrs` | `mavlink_ahrs` \| `bno085`; same source feeds yaw + heading_lock       |
+| `bno085_port`      | string | `/dev/ttyACM0` | USB CDC device path                                                    |
+| `bno085_baud`      | int    | `115200`       | BNO085 stream baud rate                                                |
 
 > Older context files reference `/duburi/arm`, `/duburi/depth_cmd`, `/duburi/attitude`, `Attitude.msg`, `RCOverride.msg`, `VehicleState.msg`. **None of these exist.** Single action + single state topic + ROS params is the entire surface.
 
@@ -374,11 +390,23 @@ ros2 node info /duburi_manager           # ActionServer should be listed
 ### Step 3: Test control via CLI
 
 ```bash
-ros2 run duburi_manager duburi arm
-ros2 run duburi_manager duburi set_depth -0.5
-ros2 run duburi_manager duburi yaw_right 90
-ros2 run duburi_manager duburi move_forward 5 80
-ros2 run duburi_manager duburi disarm
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi set_depth --target -0.5
+ros2 run duburi_planner duburi yaw_right --target 90
+ros2 run duburi_planner duburi move_forward --duration 5 --gain 80
+ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
+ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
+ros2 run duburi_planner duburi unlock_heading
+ros2 run duburi_planner duburi disarm
+```
+
+### Step 4: Run a scripted mission
+
+```bash
+ros2 run duburi_planner mission --list
+ros2 run duburi_planner mission square_pattern
+ros2 run duburi_planner mission arc_demo
+ros2 run duburi_planner mission heading_lock_demo
 ```
 
 ---
@@ -419,12 +447,15 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 |---------------------------------|---------------------------------------------------------------------|
 | `vehicle-spec.md`               | **Canonical** Duburi 4.2 spec + TDR-vs-implementation delta         |
 | `known-issues.md`               | Tracked code bugs from the 2026-04 audit, scoped per file           |
+| `axis-isolation.md`             | First-principles theory: sharp vs curved turns, settle/pause        |
+| `heading-lock.md`               | Heading-lock state diagram, motion interaction, failure modes       |
+| `mavlink-references.md`         | Per-call MAVLink audit + community refs + things-we-found-wrong     |
 | `mavlink-reference.md`          | MAVLink messages, type masks, enums                                 |
 | `ardusub-reference.md`          | ArduSub-specific parameters, modes, quirks                          |
 | `pid-theory.md`                 | PID design notes (LEGACY column = REFERENCE only)                   |
 | `proven-patterns.md`            | Patterns from 2023/2025 codebases — names are **historical**        |
 | `sim-setup.md`                  | Detailed simulation bring-up                                        |
-| `mission-design.md`             | YASMIN FSM patterns (TDR target — current repo uses `test_runner`)  |
+| `mission-design.md`             | YASMIN FSM patterns (target home: `duburi_planner/state_machines/`) |
 | `hardware-setup.md`             | Pool setup, BlueOS, network topology                                |
 | `ros2-conventions.md`           | ROS2 coding conventions for this project (real surface only)        |
 | `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |

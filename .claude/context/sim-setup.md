@@ -16,7 +16,7 @@ All commands run inside the auv-ros2 distrobox docker.
       ↕
 [ /duburi/move action  +  /duburi/state String topic ]
       ↕
-[duburi CLI  /  test_runner  /  any external ActionClient]
+[duburi_planner: duburi CLI  /  mission runner  /  DuburiClient script]
 ```
 
 The ardupilot_gazebo plugin bridges physics: Gazebo simulates buoyancy, drag, and

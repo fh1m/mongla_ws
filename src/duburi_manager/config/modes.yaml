@@ -12,8 +12,8 @@
 duburi_manager:
   ros__parameters:
     mode: sim              # sim | pool | laptop | desk
-    smooth_yaw:    false   # true → yaw_ramp (smootherstep setpoint sweep)
-    smooth_linear: false   # true → linear_ramp (trapezoid thrust envelope)
+    smooth_yaw:       false   # true → yaw_glide (smootherstep setpoint sweep)
+    smooth_translate: false   # true → drive_*_eased (trapezoid thrust envelope, applies to forward + lateral)
 
     # External yaw source. ArduSub onboard AHRS by default; BNO085 over
     # ESP32-C3 USB CDC for magnetic-interference-free heading.

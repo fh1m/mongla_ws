@@ -2,8 +2,8 @@
 """
 Connection + network profiles for the duburi_manager node.
 
-AUV Ethernet topology (BRACU Duburi)
-------------------------------------
+AUV Ethernet topology (test platform: Duburi 4.2)
+-------------------------------------------------
 
     Pixhawk 2.4.8 ── USB ──► Raspberry Pi (BlueOS)   192.168.2.1  / GW 192.168.2.2
                                     │

@@ -2,21 +2,24 @@
 """duburi CLI -- argparse wrapper auto-built from `COMMANDS`.
 
 Every subcommand and its flags come straight from the COMMANDS
-registry: adding a row in `commands.py` makes a new CLI verb appear
-the next time `colcon build`s.
+registry: adding a row in `duburi_control/commands.py` makes a new
+CLI verb appear the next time `colcon build`s.
 
 Usage:
-    ros2 run duburi_manager duburi <cmd> [--field value ...]
+    ros2 run duburi_planner duburi <cmd> [--field value ...]
 
 Examples:
-    ros2 run duburi_manager duburi arm
-    ros2 run duburi_manager duburi set_mode --target_name ALT_HOLD
-    ros2 run duburi_manager duburi set_depth --target -1.5
-    ros2 run duburi_manager duburi move_forward --duration 5 --gain 60
-    ros2 run duburi_manager duburi yaw_left --target 90
-    ros2 run duburi_manager duburi pause --duration 3
-    ros2 run duburi_manager duburi stop
-    ros2 run duburi_manager duburi disarm
+    ros2 run duburi_planner duburi arm
+    ros2 run duburi_planner duburi set_mode --target_name ALT_HOLD
+    ros2 run duburi_planner duburi set_depth --target -1.5
+    ros2 run duburi_planner duburi move_forward --duration 5 --gain 60
+    ros2 run duburi_planner duburi yaw_left --target 90
+    ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
+    ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
+    ros2 run duburi_planner duburi unlock_heading
+    ros2 run duburi_planner duburi pause --duration 3
+    ros2 run duburi_planner duburi stop
+    ros2 run duburi_planner duburi disarm
 """
 
 import argparse

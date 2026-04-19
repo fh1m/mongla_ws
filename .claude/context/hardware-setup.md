@@ -255,11 +255,15 @@ ros2 run duburi_manager auv_manager_node --ros-args \
 
 ```bash
 # In a second SSH session on the Jetson
-ros2 run duburi_manager test_runner
+ros2 run duburi_planner mission --list
+ros2 run duburi_planner mission square_pattern
 ```
 
-`test_runner.py` is the current mission script — edit the body to
-choreograph. The TDR target is YASMIN FSM; that's deferred until
+Mission scripts live in
+`src/duburi_planner/duburi_planner/missions/` (`square_pattern.py` is the
+legacy `test_runner` choreography; `arc_demo.py` and `heading_lock_demo.py`
+exercise the newer verbs). The TDR target is YASMIN FSM in
+`src/duburi_planner/duburi_planner/state_machines/`; that's deferred until
 missions get nontrivial (see [`mission-design.md`](./mission-design.md)).
 
 ### Emergency recovery
@@ -267,7 +271,7 @@ missions get nontrivial (see [`mission-design.md`](./mission-design.md)).
 1. SSH to Jetson: `ssh fh1m@192.168.2.69`.
 2. From the manager terminal, Ctrl-C → `Duburi.stop()` triggers
    neutral RC + disarm.
-3. From a separate terminal: `ros2 run duburi_manager duburi disarm`.
+3. From a separate terminal: `ros2 run duburi_planner duburi disarm`.
 4. From BlueOS terminal / MAVProxy: `mode surface`.
 5. Pull tether to physically guide the AUV if needed.
 

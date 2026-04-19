@@ -17,15 +17,13 @@ setup(
     ],
     install_requires=['setuptools', 'pymavlink'],
     zip_safe=True,
-    maintainer='BRACU Duburi',
-    description='AUV manager node — MAVLink connection, live logger, command dispatcher',
+    maintainer='Mongla project',
+    description='AUV manager node -- MAVLink connection, live logger, /duburi/move action server',
     license='MIT',
     entry_points={
         'console_scripts': [
-            'auv_manager       = duburi_manager.auv_manager_node:main',
-            'auv_manager_node  = duburi_manager.auv_manager_node:main',
-            'test_runner       = duburi_manager.test_runner:main',
-            'duburi            = duburi_manager.cli:main',
+            'auv_manager      = duburi_manager.auv_manager_node:main',
+            'auv_manager_node = duburi_manager.auv_manager_node:main',
         ],
     },
 )

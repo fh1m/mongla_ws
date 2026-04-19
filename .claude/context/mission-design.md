@@ -1,17 +1,22 @@
 # Mission Design & State Machine Architecture — Duburi AUV
 
 > **Top note:** **YASMIN FSM is the TDR target architecture.** It is **not**
-> what this repo runs today. Today's mission entry point is
-> [`src/duburi_manager/duburi_manager/test_runner.py`](../../src/duburi_manager/duburi_manager/test_runner.py)
-> — a plain Python script that uses `DuburiClient` (a blocking
-> `ActionClient` wrapper) against the `/duburi/move` action.
+> what this repo runs today. Today's mission entry points live in
+> [`src/duburi_planner/duburi_planner/missions/`](../../src/duburi_planner/duburi_planner/missions/)
+> — plain Python scripts (`square_pattern.py`, `arc_demo.py`,
+> `heading_lock_demo.py`) that use `DuburiClient` (a blocking
+> `ActionClient` wrapper from `duburi_planner`) against the
+> `/duburi/move` action. Run them via `ros2 run duburi_planner mission
+> <name>`.
 >
 > Re-introduce YASMIN (or behavior trees, or `py_trees_ros`) when
 > missions outgrow a linear script — typically when conditional
-> branches, retries, or vision-driven detours show up.
+> branches, retries, or vision-driven detours show up. The slot for that
+> code is [`src/duburi_planner/duburi_planner/state_machines/`](../../src/duburi_planner/duburi_planner/state_machines/),
+> which is intentionally empty until needed.
 >
 > This file documents the *target* FSM design (good for planning) and
-> the *current* test_runner pattern (good for picking up the codebase
+> the *current* mission-script pattern (good for picking up the codebase
 > as it is today).
 
 Based on the 2025 RoboSub competition codebase (YASMIN FSM) + 2023 patterns.

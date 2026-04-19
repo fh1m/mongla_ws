@@ -1,6 +1,6 @@
 """Movement-layer exceptions.
 
-Raised by the per-axis modules (motion_yaw, motion_linear, motion_depth)
+Raised by the per-axis modules (motion_yaw, motion_forward, motion_lateral, motion_depth)
 and by `Duburi` itself to fail loudly to the action server instead of
 silently returning. The ActionServer catches these in its execute
 callback, sets `Move.Result.success = False`, and aborts the goal so

@@ -134,3 +134,51 @@ def test_move_forward_short_burst_returns_depth(duburi, monkeypatch):
     assert isinstance(result, Move.Result)
     assert result.success is True
     assert math.isclose(result.final_value, -0.5, abs_tol=0.01)
+
+
+def test_arc_dispatches_to_motion_forward(duburi, monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    result = duburi.arc(duration=0.05, gain=50.0, yaw_rate_pct=30.0)
+    assert isinstance(result, Move.Result)
+    assert result.success is True
+    # arc emits packets with both forward + yaw -- this is the
+    # single-packet contract that makes curved motion possible.
+    arc_packets = [
+        c for c in duburi.pixhawk.calls
+        if c[0] == 'send_rc_override' and 'forward' in c[1] and 'yaw' in c[1]]
+    assert arc_packets, 'arc must emit Ch5 + Ch4 in the same packet'
+
+
+def test_lock_heading_starts_thread_and_unlock_stops(duburi, monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    assert duburi._heading_lock is None
+    duburi.lock_heading(target=90.0, timeout=2.0)
+    assert duburi._heading_lock is not None
+    duburi.unlock_heading()
+    assert duburi._heading_lock is None
+
+
+def test_lock_heading_target_zero_locks_current_heading(duburi, monkeypatch):
+    """target=0.0 (rosidl unset) means "lock at current heading"."""
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    result = duburi.lock_heading(target=0.0, timeout=2.0)
+    # Fixture FakePixhawk reports yaw=10.0, so locked target should be 10.0.
+    assert math.isclose(result.final_value, 10.0, abs_tol=0.1)
+    duburi.unlock_heading()
+
+
+def test_motion_uses_translation_when_lock_active(duburi, monkeypatch):
+    """When heading-lock is engaged, motion commands MUST avoid Ch4."""
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    duburi.lock_heading(target=0.0, timeout=2.0)
+    duburi.pixhawk.calls.clear()
+    duburi.move_forward(duration=0.05, gain=50.0)
+    overrides = [c for c in duburi.pixhawk.calls
+                 if c[0] == 'send_rc_override']
+    translations = [c for c in duburi.pixhawk.calls
+                    if c[0] == 'send_rc_translation']
+    duburi.unlock_heading()
+    assert not overrides, (
+        'with heading-lock active, motion must NOT call send_rc_override '
+        '(it would clobber Ch4 = lock target)')
+    assert translations

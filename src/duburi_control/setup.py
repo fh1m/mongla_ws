@@ -13,8 +13,8 @@ setup(
     ],
     install_requires=['setuptools', 'pymavlink'],
     zip_safe=True,
-    maintainer='BRACU Duburi',
-    description='Pixhawk MAVLink wrapper and Duburi command facade for Duburi AUV',
+    maintainer='Mongla project',
+    description='Mongla control stack: Pixhawk MAVLink wrapper and Duburi command facade',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

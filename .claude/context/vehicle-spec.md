@@ -109,17 +109,23 @@ src/
 │   ├── pixhawk.py              # arm/disarm/set_mode/RC/setpoints/AHRS2/set_message_rate
 │   ├── commands.py             # COMMANDS registry (single source of truth)
 │   ├── motion_profiles.py      # smoothstep / smootherstep / trapezoid_ramp
+│   ├── motion_common.py        # shared constants + Writers (lock-aware) + thrust_loop
 │   ├── motion_yaw.py           # yaw_snap + yaw_glide (SET_ATTITUDE_TARGET)
-│   ├── motion_linear.py        # drive_constant + drive_eased (RC override)
-│   ├── motion_depth.py         # hold_depth (SET_POSITION_TARGET_GLOBAL_INT)
-│   ├── duburi.py               # Duburi facade + lock + dispatch on 2 smooth flags
+│   ├── motion_forward.py       # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
+│   ├── motion_lateral.py       # drive_lateral_* (Ch6 RC override)
+│   ├── motion_depth.py         # hold_depth (SET_POSITION_TARGET_GLOBAL_INT, lock-aware)
+│   ├── heading_lock.py         # background SET_ATTITUDE_TARGET streamer (yaw cousin of depth-hold)
+│   ├── duburi.py               # Duburi facade + lock + dispatch + heading_lock owner
 │   └── errors.py               # MovementError / Timeout / ModeChangeError
-├── duburi_manager/          # Action server, telemetry, CLI, mission script
+├── duburi_manager/          # ROS2 node + action server + telemetry
 │   ├── auv_manager_node.py     # owns MAVLink reader + /duburi/move action
-│   ├── connection_config.py    # PROFILES (sim/pool/laptop/desk) + NETWORK
+│   └── connection_config.py    # PROFILES (sim/pool/laptop/desk) + NETWORK
+├── duburi_planner/          # Mission planner: Python client + CLI + missions
 │   ├── client.py               # blocking ActionClient wrapper (DuburiClient)
 │   ├── cli.py                  # argparse auto-built from COMMANDS ('duburi' entry)
-│   └── test_runner.py          # scripted mission demo
+│   ├── mission.py              # 'mission' runner — dispatches into missions/<name>.run
+│   ├── missions/               # square_pattern, arc_demo, heading_lock_demo
+│   └── state_machines/         # reserved for YASMIN-based plans
 └── duburi_sensors/          # YawSource abstraction (sensors-only, read-only)
     ├── factory.py              # make_yaw_source(name, **kw)
     ├── sensors_node.py         # standalone diagnostic node
@@ -175,7 +181,7 @@ inner loop.
 |--------------------------------------|--------------------------------------------|-------------------------------------------------------------------------------|
 | Appendix A — IMU                     | VectorNav VN200                            | **BNO085 + ESP32-C3** (gyro+accel, one-shot Pixhawk-mag offset)               |
 | §II.C.2 Autonomous — vision          | YOLOv11 + DeepSORT                         | Out of scope here. Will live in a separate `duburi_vision` package.           |
-| §II.C.3 Planning — FSM               | ROS2 finite state machine                  | Currently `test_runner.py` + `DuburiClient` against the `Move` action.        |
+| §II.C.3 Planning — FSM               | ROS2 finite state machine                  | Currently `duburi_planner/missions/*.py` + `DuburiClient`. YASMIN slot reserved at `duburi_planner/state_machines/`. |
 | §II.C.1 Control                      | ROS2 + Pixhawk + PyMavlink + EKF3 fusion   | **Implemented.** EKF3 fusion is ArduSub-side; we send setpoints over MAVLink. |
 | §II.C.1 — DVL fusion                 | Nucleus1000 → ArduSub EKF3                 | Stub only. Driver work tracked in [known-issues.md](./known-issues.md).       |
 | Appendix C — Tether                  | FathomX over Ethernet                      | Network constants in `connection_config.py`; no extra software needed.        |

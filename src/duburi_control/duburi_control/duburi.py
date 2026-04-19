@@ -12,48 +12,64 @@ the errors module; the action server catches and packages them.
 
 Cross-command isolation contract
 --------------------------------
-Every command runs under `self.lock` so only one is active at a time.
-Between commands, state is reset via `stop()` (or the variant's own
-brake+settle for linear moves):
+Every command runs under `self.lock` so only one is active at a time
+(stateful exceptions: `lock_heading` returns immediately and leaves
+a daemon thread running; `unlock_heading` joins it). Between
+commands, state is reset via `_send_neutral_and_settle()`:
 
-  * RC override channels 1..6  -> 1500 (active hold). Supersedes any
-    lingering SET_ATTITUDE_TARGET from a prior yaw.
-  * COMMAND_ACK cache  -> cleared per ACK-bearing command in pixhawk.
-  * Flight mode        -> persisted (set_depth auto-engages ALT_HOLD).
-  * Arm state          -> persisted (explicit arm/disarm only).
+  * RC override channels  -> 1500 (active hold) when no lock active,
+                              or "neutral on translation channels +
+                              Ch4 released" when a heading-lock is
+                              active so the lock thread keeps the
+                              SET_ATTITUDE_TARGET stream authoritative.
+  * COMMAND_ACK cache     -> cleared per ACK-bearing command in pixhawk.
+  * Flight mode           -> persisted (set_depth/yaw_*/lock_heading
+                              auto-engage ALT_HOLD).
+  * Arm state             -> persisted (explicit arm/disarm only).
 
 Exit semantics are owned by the axis module:
 
-  * drive_constant -> aggressive reverse kick + settle (full-velocity exit)
-  * drive_eased    -> settle only (ease-out IS the brake)
-  * yaw_*          -> neutral stop for 0.3 s (ArduSub heading-hold latches)
-  * hold_depth     -> ArduSub onboard PID drives to absolute setpoint;
-                       neutral stop for 0.3 s on exit (ALT_HOLD latches)
+  * drive_forward_constant / drive_lateral_constant
+        -> aggressive reverse kick + settle (full-velocity exit)
+  * drive_forward_eased / drive_lateral_eased
+        -> settle only (ease-out IS the brake)
+  * yaw_*                  -> neutral stop for 0.3 s (heading-hold latches)
+  * arc                    -> neutral stop for >= 0.6 s
+  * hold_depth             -> neutral stop for 0.3 s (ALT_HOLD latches)
 
-stop vs. pause
---------------
-Both are "release the goal", but they're not the same:
+stop vs. pause vs. lock_heading
+-------------------------------
+Three release/hold semantics, all distinct:
 
-  * stop()   -> SEND 1500 PWM. The autopilot still treats us as the
-                pilot, so its onboard heading-hold and depth-hold latch
-                at the current state. Use this between commands.
-  * pause(d) -> SEND 65535 (NO_OVERRIDE) for `d` seconds. Tells the
-                autopilot we are NOT on the loop -- it falls back to
-                its own automation (ALT_HOLD just sits, MANUAL drifts).
-                Use this for A/B comparison or to hand off to a future
-                higher-level autopilot mode.
+  * stop()         -> SEND 1500 PWM. Pilot-still-on-loop. Use between
+                      commands for short active hold.
+  * pause(d)       -> SEND 65535 (NO_OVERRIDE) for `d` seconds. Pilot
+                      OFF the loop -- ArduSub falls back to its own
+                      automation (ALT_HOLD just sits, MANUAL drifts).
+                      Use for stabilisation between mode changes.
+  * lock_heading() -> Spawn a 20 Hz SET_ATTITUDE_TARGET streamer in a
+                      background thread. Persists across other
+                      commands. Returns immediately.
+  * unlock_heading -> Stop the streamer; send_neutral.
 """
 
 import threading
 import time
+from contextlib import contextmanager
 
 from duburi_interfaces.action import Move
 
 from .errors        import ModeChangeError
-from .pixhawk       import Pixhawk
-from .motion_yaw    import yaw_snap, yaw_glide
-from .motion_linear import drive_constant, drive_eased
+from .heading_lock  import HeadingLock
+from .motion_common import make_writers
 from .motion_depth  import hold_depth
+from .motion_forward import (
+    arc as motion_arc,
+    drive_forward_constant, drive_forward_eased,
+)
+from .motion_lateral import drive_lateral_constant, drive_lateral_eased
+from .motion_yaw    import yaw_glide, yaw_snap
+from .pixhawk       import Pixhawk
 
 
 # Modes that honour SET_ATTITUDE_TARGET as an *absolute* heading goal.
@@ -82,28 +98,32 @@ class Duburi:
     smooth_yaw : bool
         False -> yaw_snap (bang-bang, ArduSub onboard PID profile).
         True  -> yaw_glide (smootherstep setpoint sweep, no overshoot).
-    smooth_linear : bool
-        False -> drive_constant (constant gain + reverse-kick brake).
-        True  -> drive_eased (trapezoid_ramp envelope, settle-only brake).
+    smooth_translate : bool
+        False -> *_constant (constant gain + reverse-kick brake).
+        True  -> *_eased    (trapezoid_ramp envelope, settle-only brake).
     yaw_source : duburi_sensors.YawSource | None
         None -> read yaw from `pixhawk.get_attitude()` (default).
         else -> read from the injected source (e.g. BNO085Source).
+        The same source is used for `lock_heading` so missions can
+        rehearse in Gazebo with `mavlink_ahrs` and run on the real
+        sub with `bno085`, no code change.
     """
 
     def __init__(self, pixhawk, log, *,
                  smooth_yaw=False,
-                 smooth_linear=False,
+                 smooth_translate=False,
                  yaw_source=None):
-        self.pixhawk       = pixhawk
-        self.log           = log
-        self.lock          = threading.Lock()
-        self.smooth_yaw    = smooth_yaw
-        self.smooth_linear = smooth_linear
-        self.yaw_source    = yaw_source
+        self.pixhawk          = pixhawk
+        self.log              = log
+        self.lock             = threading.Lock()
+        self.smooth_yaw       = smooth_yaw
+        self.smooth_translate = smooth_translate
+        self.yaw_source       = yaw_source
+        self._heading_lock    = None       # HeadingLock thread or None
 
-    # ================================================================= #
+    # ================================================================== #
     #  Arm / Disarm / Mode -- ACK-bearing, no axis movement              #
-    # ================================================================= #
+    # ================================================================== #
 
     def arm(self, timeout=15.0):
         accepted, reason = self.pixhawk.arm(timeout)
@@ -118,19 +138,19 @@ class Duburi:
         return self._make_result(
             accepted, f'set_mode {target_name}: {reason}')
 
-    # ================================================================= #
+    # ================================================================== #
     #  Stop / Pause                                                       #
-    # ================================================================= #
+    # ================================================================== #
 
     def stop(self, settle_time=0.6):
         """Active hold: 1500 PWM on every channel for `settle_time` seconds.
 
-        Used between commands. Internal callers (the per-axis modules
-        on entry) ignore the return value; an external `stop` command
-        gets the result back through the action server.
+        Used between commands. Lock-aware: when a heading-lock is
+        active, only the translation channels go to 1500 -- Ch4 stays
+        released so the lock thread keeps authority.
         """
         with self.lock:
-            self.pixhawk.send_neutral()
+            self._writers().neutral()
             self.log.info('[CMD  ] stop -- stabilising...')
             time.sleep(settle_time)
             return self._make_result(True, 'stop: completed')
@@ -139,79 +159,127 @@ class Duburi:
         """Release RC override for `duration` seconds.
 
         65535 on every channel tells ArduSub we are NOT on the loop --
-        the autopilot's own automation (ALT_HOLD / POSHOLD) takes over
-        for the duration. Use for A/B testing or to hand off to a
-        higher-level autopilot mode.
+        the autopilot's own automation takes over for the duration.
+        Heading-lock is auto-suspended for the pause and resumed after.
         """
         with self.lock:
             self.log.info(
                 f'[CMD  ] pause {duration:.1f}s -- releasing override')
-            self.pixhawk.release_rc_override()
-            time.sleep(duration)
-            self.pixhawk.send_neutral()
+            with self._suspend_heading_lock():
+                self.pixhawk.release_rc_override()
+                time.sleep(duration)
+                self._writers().neutral()
             return self._make_result(
                 True, f'pause: {duration:.1f}s released')
 
-    # ================================================================= #
-    #  Linear translations                                                #
-    # ================================================================= #
+    # ================================================================== #
+    #  Forward / Back  -- Ch5                                            #
+    # ================================================================== #
 
-    def move_forward(self, duration, gain=80.0):
-        return self._drive('forward', duration, gain)
+    def move_forward(self, duration, gain=80.0, settle=0.0):
+        return self._drive_forward(+1, duration, gain, settle)
 
-    def move_back(self, duration, gain=80.0):
-        return self._drive('back', duration, gain)
+    def move_back(self, duration, gain=80.0, settle=0.0):
+        return self._drive_forward(-1, duration, gain, settle)
 
-    def move_left(self, duration, gain=80.0):
-        return self._drive('left', duration, gain)
+    def _drive_forward(self, signed_dir, duration, gain, settle):
+        with self.lock:
+            self._send_neutral_and_settle()
+            run = (drive_forward_eased if self.smooth_translate
+                   else drive_forward_constant)
+            mode = 'EASED' if self.smooth_translate else 'CONSTANT'
+            label = 'forward' if signed_dir > 0 else 'back'
+            self.log.info(
+                f'[CMD  ] move_{label}  {duration:.1f}s  '
+                f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
+            run(self.pixhawk, signed_dir, duration, int(gain), self.log,
+                self._writers(), yaw_source=self.yaw_source, settle=settle)
+            depth = self._current_depth()
+            return self._make_result(
+                True, f'move_{label}: completed',
+                final_value=depth, error_value=0.0)
 
-    def move_right(self, duration, gain=80.0):
-        return self._drive('right', duration, gain)
+    # ================================================================== #
+    #  Left / Right  -- Ch6                                              #
+    # ================================================================== #
 
-    def _drive(self, direction, duration, gain):
-        """Execute a linear push.
+    def move_left(self, duration, gain=80.0, settle=0.0):
+        return self._drive_lateral(-1, duration, gain, settle)
 
-        No DVL yet, so we report current depth as `final_value` and
-        leave `error_value = 0`. When DVL lands this is where the
-        odometry-based translation error gets surfaced.
+    def move_right(self, duration, gain=80.0, settle=0.0):
+        return self._drive_lateral(+1, duration, gain, settle)
+
+    def _drive_lateral(self, signed_dir, duration, gain, settle):
+        with self.lock:
+            self._send_neutral_and_settle()
+            run = (drive_lateral_eased if self.smooth_translate
+                   else drive_lateral_constant)
+            mode = 'EASED' if self.smooth_translate else 'CONSTANT'
+            label = 'right' if signed_dir > 0 else 'left'
+            self.log.info(
+                f'[CMD  ] move_{label}  {duration:.1f}s  '
+                f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
+            run(self.pixhawk, signed_dir, duration, int(gain), self.log,
+                self._writers(), yaw_source=self.yaw_source, settle=settle)
+            depth = self._current_depth()
+            return self._make_result(
+                True, f'move_{label}: completed',
+                final_value=depth, error_value=0.0)
+
+    # ================================================================== #
+    #  arc -- forward thrust + yaw rate at the same time                  #
+    # ================================================================== #
+
+    def arc(self, duration, gain=50.0, yaw_rate_pct=30.0, settle=0.0):
+        """Curved car-style motion: Ch5 + Ch4 in the same packet.
+
+        Heading-lock is incompatible by design (`arc` changes heading).
+        Auto-suspends the lock during the arc; on exit, retargets the
+        lock to the new heading and resumes.
         """
         with self.lock:
             self._send_neutral_and_settle()
-            run_drive = drive_eased if self.smooth_linear else drive_constant
-            mode      = 'EASED'     if self.smooth_linear else 'CONSTANT'
+            self._ensure_yaw_capable_mode()
             self.log.info(
-                f'[CMD  ] move_{direction}  {duration:.1f}s  '
-                f'gain={gain:.0f}%  ({mode})')
-            run_drive(self.pixhawk, direction, duration, int(gain), self.log)
-            depth = self._current_depth()
+                f'[CMD  ] arc  {duration:.1f}s  gain={gain:.0f}%  '
+                f'yaw_rate={yaw_rate_pct:+.0f}%  settle={settle:.1f}s')
+            with self._suspend_heading_lock():
+                signed_dir = +1 if gain >= 0 else -1
+                motion_arc(self.pixhawk, signed_dir, duration, abs(int(gain)),
+                           yaw_rate_pct, self.log,
+                           yaw_source=self.yaw_source, settle=settle)
+            new_heading = self._current_heading()
+            self._retarget_heading_lock(new_heading)
             return self._make_result(
-                True, f'move_{direction}: completed',
-                final_value=depth, error_value=0.0)
+                True, 'arc: completed',
+                final_value=new_heading, error_value=0.0)
 
-    # ================================================================= #
-    #  Yaw                                                                #
-    # ================================================================= #
+    # ================================================================== #
+    #  Yaw  -- sharp pivots                                              #
+    # ================================================================== #
 
-    def yaw_left(self, target, timeout=30.0):
-        return self._turn(-abs(target), timeout, 'LEFT')
+    def yaw_left(self, target, timeout=30.0, settle=0.0):
+        return self._turn(-abs(target), timeout, 'LEFT', settle)
 
-    def yaw_right(self, target, timeout=30.0):
-        return self._turn(+abs(target), timeout, 'RIGHT')
+    def yaw_right(self, target, timeout=30.0, settle=0.0):
+        return self._turn(+abs(target), timeout, 'RIGHT', settle)
 
-    def _turn(self, signed_degrees, timeout, label):
+    def _turn(self, signed_degrees, timeout, label, settle):
         """Execute a yaw turn relative to the current heading."""
         with self.lock:
             self._send_neutral_and_settle()
             self._ensure_yaw_capable_mode()
             start_heading  = self._current_heading()
             target_heading = (start_heading + signed_degrees) % 360
-            run_yaw        = yaw_glide if self.smooth_yaw else yaw_snap
-            run_yaw(self.pixhawk, start_heading, target_heading,
-                    timeout, label, self.log,
-                    yaw_source=self.yaw_source)
-            self._send_neutral_and_settle(settle_time=0.3)
+            run_yaw = yaw_glide if self.smooth_yaw else yaw_snap
+            with self._suspend_heading_lock():
+                run_yaw(self.pixhawk, start_heading, target_heading,
+                        timeout, label, self.log,
+                        yaw_source=self.yaw_source)
+                self._send_neutral_and_settle(settle_time=0.3 + settle)
             final_heading = self._current_heading()
-            error         = Pixhawk.heading_error(target_heading, final_heading)
+            self._retarget_heading_lock(final_heading)
+            error = Pixhawk.heading_error(target_heading, final_heading)
             return self._make_result(
                 True, f'yaw_{label.lower()}: completed',
                 final_value=final_heading, error_value=float(error))
@@ -221,9 +289,6 @@ class Duburi:
         that tracks absolute yaw. ALT_HOLD also holds the current
         depth, which prevents the slow gravity-sink we'd otherwise get
         during the turn.
-
-        Raises ModeChangeError if the autopilot refuses the switch --
-        yaw cannot succeed without an attitude-tracking mode.
         """
         current = self.pixhawk.get_mode()
         if current in YAW_OK_MODES:
@@ -246,11 +311,11 @@ class Duburi:
         attitude = self.pixhawk.get_attitude()
         return attitude['yaw'] if attitude else 0.0
 
-    # ================================================================= #
+    # ================================================================== #
     #  Depth                                                              #
-    # ================================================================= #
+    # ================================================================== #
 
-    def set_depth(self, target, timeout=30.0):
+    def set_depth(self, target, timeout=30.0, settle=0.0):
         """Drive to `target` metres (negative = below surface) and hold."""
         with self.lock:
             self._send_neutral_and_settle()
@@ -262,25 +327,104 @@ class Duburi:
                 raise ModeChangeError(
                     f'set_mode ALT_HOLD rejected ({reason}); '
                     'depth controller will not engage')
-            hold_depth(self.pixhawk, target, timeout, self.log)
-            self._send_neutral_and_settle(settle_time=0.3)
+            hold_depth(self.pixhawk, target, timeout, self.log,
+                       neutral_writer=self._writers().neutral)
+            self._send_neutral_and_settle(settle_time=0.3 + settle)
             depth = self._current_depth()
             return self._make_result(
                 True, 'set_depth: completed',
                 final_value=depth, error_value=abs(target - depth))
 
-    # ================================================================= #
+    # ================================================================== #
+    #  Heading lock -- depth-hold's yaw cousin                            #
+    # ================================================================== #
+
+    def lock_heading(self, target=0.0, timeout=300.0):
+        """Engage continuous heading-hold using the configured yaw_source.
+
+        `target=0` (the rosidl unset default) means "lock at current
+        heading right now". Returns immediately -- the actual streaming
+        runs on a daemon thread so subsequent motion commands stack on
+        top with active heading correction.
+
+        Source-agnostic: works with `mavlink_ahrs` (Gazebo / bench),
+        `bno085` (real sub), or any future YawSource. Uniform plug.
+        """
+        with self.lock:
+            self._ensure_yaw_capable_mode()
+            current = self._current_heading()
+            actual_target = current if abs(target) < 1e-3 else float(target) % 360.0
+
+            if self._heading_lock is not None:
+                self._heading_lock.stop()
+                self._heading_lock = None
+
+            self._heading_lock = HeadingLock(
+                pixhawk=self.pixhawk,
+                target_deg=actual_target,
+                yaw_source=self.yaw_source,
+                log=self.log,
+                timeout=timeout,
+            )
+            self._heading_lock.start()
+
+            return self._make_result(
+                True,
+                f'lock_heading: locked at {actual_target:.1f} deg '
+                f'(timeout {timeout:.0f}s)',
+                final_value=actual_target, error_value=0.0)
+
+    def unlock_heading(self):
+        """Stop the heading-lock streamer and send neutral."""
+        with self.lock:
+            if self._heading_lock is None:
+                return self._make_result(True, 'unlock_heading: no-op')
+            self._heading_lock.stop()
+            self._heading_lock = None
+            self.pixhawk.send_neutral()
+            return self._make_result(True, 'unlock_heading: released')
+
+    # ================================================================== #
     #  Internal helpers                                                   #
-    # ================================================================= #
+    # ================================================================== #
+
+    def _writers(self):
+        """Build a `Writers` matching the current heading-lock state."""
+        return make_writers(self.pixhawk, release_yaw=self._lock_active())
+
+    def _lock_active(self):
+        return self._heading_lock is not None
+
+    @contextmanager
+    def _suspend_heading_lock(self):
+        """Pause the lock thread for the duration of the block.
+
+        Used by yaw_left / yaw_right / arc / pause -- commands whose
+        intent is to either change heading or release the override.
+        Re-arms `resume()` even if the body raises so a failed yaw
+        doesn't leave the lock paused forever.
+        """
+        active = self._heading_lock is not None
+        if active:
+            self._heading_lock.suspend()
+        try:
+            yield
+        finally:
+            if active and self._heading_lock is not None:
+                self._heading_lock.resume()
+
+    def _retarget_heading_lock(self, new_heading_deg):
+        """Update the lock target to follow yaw_left/yaw_right/arc exit."""
+        if self._heading_lock is not None:
+            self._heading_lock.retarget(new_heading_deg)
 
     def _send_neutral_and_settle(self, settle_time=0.6):
         """Stop without taking the lock (for use INSIDE a command).
 
-        `stop()` itself takes the lock, but per-axis dispatch already
-        holds it -- this is the lock-free version used as the entry
-        and exit guard within the public methods.
+        Lock-aware: uses `_writers().neutral()` so Ch4 stays released
+        when a heading-lock is active.
         """
-        self.pixhawk.send_neutral()
+        self._writers().neutral()
         self.log.info('[CMD  ] stop -- stabilising...')
         time.sleep(settle_time)
 

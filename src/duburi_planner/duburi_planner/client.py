@@ -65,8 +65,9 @@ class DuburiClient:
         `result.success == False`.
 
         `fields` map directly onto `Move.Goal` field names: any of
-        `duration`, `gain`, `target`, `target_name`, `timeout`. Unset
-        fields stay at their rosidl defaults (0.0 / '').
+        `duration`, `gain`, `target`, `target_name`, `timeout`,
+        `settle`, `yaw_rate_pct`. Unset fields stay at their rosidl
+        defaults (0.0 / '').
         """
         if cmd not in COMMANDS:
             raise ValueError(

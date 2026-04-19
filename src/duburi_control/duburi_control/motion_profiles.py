@@ -2,8 +2,9 @@
 """Pure-math motion profiles. No ROS / MAVLink deps -- trivially unit-testable.
 
 Used by:
-  motion_yaw.yaw_glide      -> smootherstep setpoint sweep
-  motion_linear.drive_eased -> trapezoid_ramp thrust envelope
+  motion_yaw.yaw_glide                          -> smootherstep setpoint sweep
+  motion_forward.drive_forward_eased / arc      -> trapezoid_ramp thrust envelope
+  motion_lateral.drive_lateral_eased            -> trapezoid_ramp thrust envelope
 """
 
 

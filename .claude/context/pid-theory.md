@@ -19,7 +19,7 @@
 >
 > The rest of this file is the underlying theory; if you need to know
 > **what the live code does**, read `motion_yaw.py`, `motion_depth.py`,
-> `motion_linear.py`, and the [README's tuning guide](../../README.md#11-tuning-guide)
+> `motion_forward.py` / `motion_lateral.py` (with shared logic in `motion_common.py`), and the [README's tuning guide](../../README.md#11-tuning-guide)
 > first.
 
 First-principles approach to robust AUV control. This is the theoretical foundation
@@ -372,7 +372,7 @@ is "ArduSub does the inner loop everywhere":
 | Yaw            | ArduSub attitude PID via `SET_ATTITUDE_TARGET`, optionally with `smoothstep` setpoint sweep (`smooth_yaw:=true`) | Vision-guided centering (out of scope here; lives in future `duburi_vision`) |
 | Motor mixing   | ArduSub (8-thruster `vectored_6dof`)      | Never — let firmware do this                             |
 | IMU fusion     | ArduSub EKF3                              | Never — let firmware do this                             |
-| Linear motion  | `RC_CHANNELS_OVERRIDE` Ch5/Ch6 @ 20 Hz, optional `trapezoid_ramp` (`smooth_linear:=true`) | When DVL lands, replace open-loop time with closed-loop distance |
+| Translation    | `RC_CHANNELS_OVERRIDE` Ch5 (forward) / Ch6 (lateral) @ 20 Hz, optional `trapezoid_ramp` (`smooth_translate:=true`); `arc` adds Ch4 yaw stick to Ch5 in the same packet | When DVL lands, replace open-loop time with closed-loop distance |
 
 **Best practice (today):** Use ArduSub's ALT_HOLD for both depth *and*
 absolute yaw setpoints. Stream setpoints; never close a Python loop

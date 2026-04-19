@@ -24,7 +24,7 @@ don't bundle. Each one is ~10–40 LOC.
 > | `mavlink_api.py` / `MavlinkAPI`               | `pixhawk.py` / `Pixhawk`                      |
 > | `movement_commands.py` / `MovementCommands`   | `duburi.py` / `Duburi`                        |
 > | `movement_yaw.py` (`yaw_step` / `yaw_ramp`)   | `motion_yaw.py` (`yaw_snap` / `yaw_glide`)    |
-> | `movement_linear.py` (`linear_step` / `linear_ramp`) | `motion_linear.py` (`drive_constant` / `drive_eased`) |
+> | `movement_linear.py` (`linear_step` / `linear_ramp`) | `motion_forward.py` + `motion_lateral.py` (`drive_*_constant` / `drive_*_eased`) — split per-axis in 2026-04 with shared logic in `motion_common.py` |
 > | `movement_depth.py` (`depth_hold`)            | `motion_depth.py` (`hold_depth`)              |
 > | `movement_pids.py` (`DepthPID` / `YawPID`)    | **deleted** — ArduSub onboard PID is the only loop |
 > | `_AUX_*` constants on `MavlinkAPI`            | `AUX_*` on `Pixhawk` (no leading underscore)  |
@@ -67,9 +67,9 @@ don't bundle. Each one is ~10–40 LOC.
 
 ## 6. `test_runner.py` exits 0 on mission failure — **FIXED 2026-04**
 
-- **File:** `src/duburi_manager/duburi_manager/test_runner.py`
-- **Resolution:** Mission body extracted into `_run_mission()`; `main()` wraps it in try/except, sets `exit_code = 1` on any `Exception`, and `sys.exit(exit_code)` after teardown. The ~10 lines of commented-out alternate mission steps are deleted, the docstring now matches the actual square-pattern mission, and the file's policy line ("if a step is disabled, delete it") is encoded in the docstring.
-- **Verify:** `ros2 run duburi_manager test_runner` against an unreachable action server prints `MISSION FAILED` and exits with `$? == 1`.
+- **File:** historically `src/duburi_manager/duburi_manager/test_runner.py`; now lives at `src/duburi_planner/duburi_planner/missions/square_pattern.py` (the legacy choreography) and the `mission` runner in `src/duburi_planner/duburi_planner/mission.py`.
+- **Resolution:** Mission body extracted into `_run_mission()`; the runner wraps it in try/except, sets `exit_code = 1` on any `Exception`, and `sys.exit(exit_code)` after teardown. The ~10 lines of commented-out alternate mission steps are deleted, the docstring now matches the actual square-pattern mission, and the file's policy line ("if a step is disabled, delete it") is encoded in the docstring.
+- **Verify:** `ros2 run duburi_planner mission square_pattern` against an unreachable action server prints `MISSION FAILED` and exits with `$? == 1`.
 
 ## 7. Silent `except Exception: pass` on shutdown — **FIXED 2026-04**
 
@@ -109,4 +109,4 @@ Next-up candidates not from this audit (keep here as a hand-off list):
 - **DVL** Nortek Nucleus1000 driver — replace `_build_dvl_stub`.
 - **WitMotion** binary parser if we ever want a backup IMU — replace `_build_witmotion_stub`.
 - **Vision** package (`duburi_vision`, YOLOv11 + DeepSORT) per TDR — currently absent on purpose.
-- **Mission FSM** — replace `test_runner.py` with YASMIN once missions outgrow a linear script.
+- **Mission FSM** — populate `src/duburi_planner/duburi_planner/state_machines/` with YASMIN once missions outgrow `duburi_planner/missions/*.py` linear scripts.

@@ -16,7 +16,7 @@ setup(
     zip_safe=True,
     maintainer='Muhammad Fahim Faisal',
     maintainer_email='fahim.2002.faisal@gmail.com',
-    description='Sensor sources + optional diagnostic node for the Duburi AUV.',
+    description='Mongla control stack: sensor sources + optional diagnostic node',
     license='MIT',
     entry_points={
         'console_scripts': [
