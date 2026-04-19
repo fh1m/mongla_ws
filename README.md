@@ -43,6 +43,72 @@
   <img src="docs/dataflow.png" alt="Mongla data flow" width="92%"/>
 </p>
 
+### One verb, end to end
+
+What actually happens when you type `ros2 run duburi_planner duburi vision_align_yaw --camera laptop --target_class person --duration 8`:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CLI as duburi CLI
+    participant AC as Action client
+    participant MGR as auv_manager_node
+    participant MV as motion_vision
+    participant DUB as Duburi facade
+    participant PIX as Pixhawk (MAVLink)
+    participant VEH as ArduSub / vehicle
+    participant CAM as camera_node
+    participant DET as detector_node
+
+    CAM->>DET: sensor_msgs/Image @ 30 Hz
+    DET-->>MGR: vision_msgs/Detection2DArray
+    CLI->>AC: build Move goal (vision_align_yaw, ...)
+    AC->>MGR: /duburi/move goal
+    MGR->>MV: vision_track_axes(axes={yaw}, ...)
+    loop closed loop @ 20 Hz
+        MV->>MGR: query VisionState (last detection)
+        MV->>DUB: yaw_pct = kp * horizontal_error
+        DUB->>PIX: MANUAL_CONTROL (r = yaw_pct)
+        PIX->>VEH: MAVLink frame
+        VEH-->>PIX: HEARTBEAT / ATTITUDE
+        MV-->>AC: feedback (err, age, settled)
+    end
+    MV-->>MGR: VisionTrackResult(success, reason)
+    MGR-->>AC: action result
+    AC-->>CLI: exit 0 / non-zero
+```
+
+Same flow runs for every verb in §9 — only the motion module and the axes change. That single contract is why missions stay readable.
+
+### What a session actually looks like
+
+A pool-deck workflow is three terminals + one CLI prompt. Drop these into
+`tmux` panes once and you never think about it again:
+
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <img src="https://img.shields.io/badge/T1-bringup_check-2ea44f?style=for-the-badge" alt="T1"/>
+      <br/><sub>Pre-flight: ports, UDP, BNO085, CUDA. <strong>~3 s.</strong></sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="https://img.shields.io/badge/T2-auv__manager-1f6feb?style=for-the-badge" alt="T2"/>
+      <br/><sub>Connects MAVLink, owns Pixhawk, runs <code>/duburi/move</code>.</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="https://img.shields.io/badge/T3-vision_pipeline-8957e5?style=for-the-badge" alt="T3"/>
+      <br/><sub>Camera + YOLO 26 + annotated debug stream. GPU-fast.</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="https://img.shields.io/badge/T4-duburi_CLI-fb8500?style=for-the-badge" alt="T4"/>
+      <br/><sub>Where you actually drive the AUV. One verb per line.</sub>
+    </td>
+  </tr>
+</table>
+
+Exact commands for every pane live in [§5 Network setup](#5-network-setup) and
+the [Quickstart smoke tests](#quickstart-smoke-tests) right below.
+
 ## Quickstart smoke tests
 
 > Seven copy-paste scenarios, in the order you would actually run them.
@@ -204,26 +270,26 @@ To make the manager use BNO085 instead of ArduSub AHRS, launch with
       <sub>The vision pipeline runs Ultralytics YOLO 26. Helps you read <code>detector_node</code> logs.</sub>
     </td>
     <td align="center" width="33%">
-      <a href="https://www.youtube.com/watch?v=Pkx2OWNBmkg">
-        <img src="https://img.youtube.com/vi/Pkx2OWNBmkg/hqdefault.jpg" alt="ArduSub" width="100%"/>
+      <a href="https://www.youtube.com/watch?v=Ha66uKC-od0">
+        <img src="https://img.youtube.com/vi/Ha66uKC-od0/hqdefault.jpg" alt="MAVLink protocol" width="100%"/>
       </a>
       <br/>
-      <strong>MAVLink + ArduSub</strong><br/>
-      <sub>Every Mongla command is one MAVLink message. The ArduSub firmware explained.</sub>
+      <strong>MAVLink protocol</strong><br/>
+      <sub>Every Mongla command is one MAVLink message — see how the bytes line up.</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="33%">
-      <a href="https://www.youtube.com/watch?v=lNHQTHK4S-c">
-        <img src="https://img.youtube.com/vi/lNHQTHK4S-c/hqdefault.jpg" alt="ROS 2 Actions" width="100%"/>
+      <a href="https://www.youtube.com/watch?v=X7YSnDbKMWo">
+        <img src="https://img.youtube.com/vi/X7YSnDbKMWo/hqdefault.jpg" alt="ROS 2 Actions crash course" width="100%"/>
       </a>
       <br/>
       <strong>ROS 2 Actions</strong><br/>
       <sub><code>/duburi/move</code> is an Action: cancellable, gives feedback, returns a result.</sub>
     </td>
     <td align="center" width="33%">
-      <a href="https://www.youtube.com/watch?v=mpwUZmSKptw">
-        <img src="https://img.youtube.com/vi/mpwUZmSKptw/hqdefault.jpg" alt="BlueROV2" width="100%"/>
+      <a href="https://www.youtube.com/watch?v=4sSxPkhI9Do">
+        <img src="https://img.youtube.com/vi/4sSxPkhI9Do/hqdefault.jpg" alt="BlueROV2 dare to explore" width="100%"/>
       </a>
       <br/>
       <strong>BlueROV2 platform</strong><br/>
@@ -1604,7 +1670,7 @@ keeps it floating.
 
 Built on the shoulders of:
 - [ArduPilot / ArduSub](https://ardupilot.org/sub/)
-- [Blue Robotics BlueOS](https://bluerobotics.com/learn/bluerov2-software-setup-with-blueos/)
+- [Blue Robotics BlueOS](https://blueos.cloud/docs/latest/)
 - [pymavlink](https://github.com/ArduPilot/pymavlink)
 - [ROS2 Humble](https://docs.ros.org/en/humble/)
 - [auv_controllers](https://github.com/Robotic-Decision-Making-Lab/auv_controllers) (reference design)
