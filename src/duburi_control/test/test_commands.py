@@ -10,8 +10,9 @@ from duburi_control.commands import COMMANDS, STRING_FIELDS, fields_for
 
 
 # All Move.Goal field names the COMMANDS registry is allowed to use.
-GOAL_FIELDS = {'duration', 'gain', 'target', 'target_name', 'timeout',
-               'settle', 'yaw_rate_pct'}
+# Built dynamically from the action definition so adding a new field to
+# Move.action automatically widens this set -- no test maintenance needed.
+GOAL_FIELDS = set(Move.Goal.get_fields_and_field_types().keys()) - {'cmd'}
 
 
 def test_every_field_is_on_move_goal():

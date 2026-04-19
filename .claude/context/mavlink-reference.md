@@ -1,6 +1,13 @@
 # MAVLink Reference — Duburi AUV
 
-Sources: mavlink.io, ardusub.com/developers/pymavlink, our reference codebases.
+> Companion docs:
+> [`ardusub-canon.md`](./ardusub-canon.md) (mode + parameter + failsafe
+> theory),
+> [`heading-lock.md`](./heading-lock.md) (Ch4 yaw-rate streamer),
+> [`axis-isolation.md`](./axis-isolation.md) (per-channel ownership).
+
+Sources: mavlink.io, ardusub.com/developers/pymavlink, ArduPilot
+ArduSub source, our own pixhawk.py.
 
 ---
 
@@ -249,6 +256,106 @@ master.mav.manual_control_send(
 ```
 
 Note: We prefer `RC_CHANNELS_OVERRIDE` over `MANUAL_CONTROL` — it gives direct per-channel PWM control and matches our reference codebase patterns.
+
+---
+
+## Per-call audit (every send_* / set_* on `pixhawk.py`)
+
+Every method on `Pixhawk` that puts a frame on the wire emits a
+single `[MAV ]` DEBUG line via `_mav(...)`. Raise the manager log
+level to DEBUG to see them live (`--log-level duburi_manager:=DEBUG`).
+
+| `pixhawk.py` method            | MAVLink message                                | Used by                            | Notes                                                                                          |
+| ------------------------------ | ---------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `arm()` / `disarm()`           | `COMMAND_LONG (MAV_CMD_COMPONENT_ARM_DISARM)`  | `Duburi.arm` / `Duburi.disarm`     | Wait for `COMMAND_ACK`; ArduSub also needs the heartbeat-armed bit before motors hot, hence we poll `is_armed()` too. |
+| `set_mode(name)`               | `SET_MODE`                                     | `Duburi.set_mode` and auto-engage in `set_depth` / yaw / `lock_heading` | Mode mapping comes from `master.mode_mapping()`; never hardcode ints. |
+| `send_rc_override(**chans)`    | `RC_CHANNELS_OVERRIDE` (all six driving channels) | constant/eased motion, `arc`, `Heartbeat`, `HeadingLock` | ArduSub trips `FS_PILOT_INPUT` after ~3 s without overrides -- we re-send at >=5 Hz. 1500 = neutral, 65535 = no-override. |
+| `send_rc_translation(**chans)` | `RC_CHANNELS_OVERRIDE` (Ch3/Ch5/Ch6 only)      | translation while `lock_heading` active | Sends 1500 on Ch3/Ch5/Ch6 (or commanded value), 65535 on Ch1/Ch2/Ch4 so the lock thread keeps Ch4 authority. |
+| `send_neutral()`               | `RC_CHANNELS_OVERRIDE` (six 1500s)             | `Duburi.stop`, brake settles, `Heartbeat` | Active hold. Use `release_rc_override` instead when you want ArduSub's automation to run unhindered. |
+| `release_rc_override()`        | `RC_CHANNELS_OVERRIDE` (six 65535s)            | `Duburi.pause`, manager shutdown   | Pilot OFF the loop. ArduSub's mode automation (`ALT_HOLD`, `POSHOLD`) runs without us. |
+| `set_target_depth(depth_m)`    | `SET_POSITION_TARGET_GLOBAL_INT`               | `motion_depth.hold_depth` (one-shot per `set_depth`) | Typemask ignores everything but Z. `alt = depth_m`, negative = below surface. ALT_HOLD or GUIDED only. After the target is reached we hand depth back to ALT_HOLD's onboard PID -- no continuous streaming. |
+| `set_servo_pwm(aux_n, pwm)`    | `COMMAND_LONG (MAV_CMD_DO_SET_SERVO)`          | payload (torpedo, grabber, dropper) | AUX1..AUX6 maps to servo channels 9..14. We add the +8 offset internally; calling with 1..8 would silently drive a thruster. PWM clamped to 1100..1900 to prevent stall current spikes. |
+| `set_message_rate(msg_id, hz)` | `COMMAND_LONG (MAV_CMD_SET_MESSAGE_INTERVAL)`  | `auv_manager_node.MESSAGE_RATES` startup | Without this ArduSub picks defaults (often 4 Hz AHRS2). Pin to 50 Hz so our control loops aren't bottlenecked. |
+| `send_heartbeat()`             | `HEARTBEAT`                                    | `auv_manager_node` 0.5 Hz timer    | Mandatory >= 1 Hz or ArduSub considers us disconnected and may drop overrides. |
+| `clear_ack()` / `wait_ack()`   | (reads `COMMAND_ACK` cache)                    | every ACK-bearing command          | Stale ACK from previous command would be a false positive -- always clear first. |
+
+### MAVLink-trace via DEBUG logs
+
+Each method above also emits exactly one `[MAV ]` DEBUG line via
+`Pixhawk._mav(msg)`. So a single `set_depth(-1.5)` produces (at
+DEBUG):
+
+```
+[MAV ] SET_MODE custom_mode=2 (ALT_HOLD)
+[MAV ] SET_POS_TGT depth=-1.50 m  (alt only, all other axes masked)
+```
+
+This is the recommended way to debug "did we *send* the right
+thing?" before reaching for tcpdump on the MAVLink port.
+
+---
+
+## Things we found wrong / risky during past audits
+
+### Fixed in earlier refactors
+
+1. **`prime_alt_hold` was sending plain `pixhawk.send_neutral()`**
+   -- when a `lock_heading` is active, that 1500 us on Ch4 would
+   override the lock thread's Ch4 yaw-rate command. **Fix:**
+   `prime_alt_hold` now takes a `neutral_writer` callable and the
+   `Duburi.set_depth` facade passes `writers.neutral` (lock-aware).
+2. **Old `motion_linear.py` returned `pixhawk.send_rc_override(forward=..., lateral=...)` even when only one axis was active**
+   -- that wrote 1500 to the *other* axis explicitly, blocking
+   another command from reusing it concurrently. **Fix:** new
+   `motion_forward.py` and `motion_lateral.py` write only their own
+   axis via the `Writers` bundle.
+3. **No way to combine forward thrust with yaw rate** -- meant
+   every "turn" was a sharp pivot, no curved trajectories possible.
+   **Fix:** `arc(...)` writes Ch5 + Ch4 in the same
+   `RC_CHANNELS_OVERRIDE` packet at 20 Hz.
+4. **No persistent heading hold** -- ArduSub's internal compass-
+   based hold is unreliable under ESC interference. **Fix:**
+   `heading_lock.py` daemon thread streams a Ch4 yaw-rate override
+   continuously, source-agnostic over the `YawSource` interface.
+5. **`DepthLock` daemon was redundant** -- ArduSub's onboard
+   ALT_HOLD already holds depth indefinitely once the target is
+   reached. **Fix:** `set_depth` now drives once via
+   `SET_POSITION_TARGET_GLOBAL_INT` and lets ALT_HOLD do the rest;
+   the always-warm `Heartbeat` daemon prevents `FS_PILOT_INPUT`
+   from disarming us.
+
+### Known good but worth flagging
+
+* **`MAVLINK20=1` env var is set inside `pixhawk.py` BEFORE pymavlink imports.**
+  Forgetting this silently downgrades us to MAVLink v1, which lacks
+  several typemask bits AND caps `RC_CHANNELS_OVERRIDE` at 8
+  channels. Any new module that imports pymavlink outside
+  `pixhawk.py` needs the same env shim.
+* **`master.messages` cache vs `recv_match()`.** Only the reader
+  thread in `auv_manager_node.reader_loop` calls `recv_match`. Every
+  other consumer reads `master.messages.get('AHRS2')` etc. from the
+  cache. Mixing the two from worker threads causes pymavlink to
+  drop messages -- consumers see stale data and we get apparent
+  telemetry freezes mid-mission.
+* **`COMMAND_ACK` collisions.** Two ACK-bearing commands fired in
+  quick succession can land on the same cached ACK. We
+  `clear_ack()` before every wait, but if a future module forgets,
+  the first command's stale ACK will satisfy the second command's
+  wait.
+
+---
+
+## Hidden gems we deliberately don't (yet) use
+
+| Feature                                | Why not (yet)                                                                                                                |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `MAV_CMD_GUIDED_CHANGE_SPEED`          | Speeds in m/s; we run open-loop in % thrust. Would require a velocity feedback source we don't have.                          |
+| `SET_POSITION_TARGET_LOCAL_NED`        | Lateral/forward position setpoints in body frame. Useful if/when we have DVL or visual odometry providing position estimate.  |
+| `STATUS_TEXT` severity filtering       | We log every STATUSTEXT at INFO. Severity-based routing (ERROR -> rclpy `logger.error`) would surface ArduSub failures louder. |
+| `MISSION_ITEM_INT` upload + AUTO mode  | ArduSub's onboard mission system. Worth exploring once we have a stable depth + heading sensor stack -- offloads timing.     |
+| `MAV_CMD_DO_REPOSITION`                | Single-shot lat/lon move in GUIDED. Same blocker as POSITION_TARGET_LOCAL_NED -- needs position estimate.                    |
+| `EKF_STATUS_REPORT`                    | Useful for surfacing ArduSub-side EKF rejections (compass disagrees with gyro etc.). Currently we infer this from `STATUSTEXT`. |
+
 
 ---
 

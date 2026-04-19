@@ -63,7 +63,7 @@ Failure modes
 import threading
 import time
 
-from .motion_common import read_heading
+from .motion_writers import read_heading
 from .pixhawk       import Pixhawk
 
 

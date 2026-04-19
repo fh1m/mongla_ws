@@ -40,7 +40,7 @@ from .pixhawk import Pixhawk
 
 # ---- Shared constants (sourced from motion_rates) ---------------------
 # Re-exported under historical names so callers can keep
-# ``from .motion_common import THRUST_RATE_HZ`` etc. without a sweep.
+# ``from .motion_writers import THRUST_RATE_HZ`` etc. without a sweep.
 from .motion_rates import THRUST_HZ as THRUST_RATE_HZ
 from .motion_rates import LOG_THROTTLE_S as LOG_THROTTLE
 

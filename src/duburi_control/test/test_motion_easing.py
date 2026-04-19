@@ -7,7 +7,7 @@ pipeline.
 
 import pytest
 
-from duburi_control.motion_profiles import (
+from duburi_control.motion_easing import (
     smoothstep, smootherstep, trapezoid_ramp,
 )
 

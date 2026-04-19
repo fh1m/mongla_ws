@@ -115,20 +115,6 @@ COMMANDS = {
         'defaults': {},
     },
 
-    # ---- Depth lock (heading-lock's depth-axis cousin) -------------- #
-    'lock_depth': {
-        'help':     'Stream set_target_depth so ArduSub holds <target> m. '
-                    'target=0 means lock current depth.',
-        'fields':   ['target', 'timeout'],
-        'defaults': {'target': 0.0, 'timeout': 600.0},
-    },
-    'unlock_depth': {
-        'help':     'Stop the depth-lock streamer (ArduSub keeps holding '
-                    'its last setpoint).',
-        'fields':   [],
-        'defaults': {},
-    },
-
     # ---- Vision verbs --------------------------------------------- #
     # All of these read the latest detection from VisionState; preflight
     # runs once per camera the first time it's hit. Defaults are tuned

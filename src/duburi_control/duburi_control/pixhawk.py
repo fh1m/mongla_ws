@@ -9,6 +9,18 @@ THREADING RULE: Only the reader thread (in `auv_manager_node`) calls
 `recv_match()`. Every method here reads from `master.messages` cache
 only. This prevents message-consumption races between the reader
 thread and the action / timer worker threads.
+
+DEBUG-LEVEL MAVLINK TRACE: Every public ``send_*`` / ``set_*`` /
+``arm`` / ``disarm`` method emits a single ``[MAV ] ...`` line at
+DEBUG level when a logger is attached. Format is one line per
+outbound MAVLink message, prefixed with the message kind (RC_OVERRIDE,
+SET_POS_TGT, COMMAND_LONG, etc.) and the human-meaningful payload.
+Bring it up live with::
+
+    ros2 run rqt_logger_level rqt_logger_level   # set duburi_manager -> DEBUG
+
+or in a launch file via ``log_level='debug'``. Tests using FakePixhawk
+keep working because ``log`` defaults to None (debug calls no-op).
 """
 
 import os
@@ -54,15 +66,30 @@ class Pixhawk:
     AUX_MIN, AUX_MAX = 1, 6           # Pixhawk 2.4.8 exposes 6 AUX outputs
     PWM_MIN, PWM_MAX = 1100, 1900     # safe BlueRobotics T200 / servo range
 
-    def __init__(self, master):
+    def __init__(self, master, log=None):
         self.master = master
         self._boot_time = time.time()
+        # Optional logger -- when provided, every outbound MAVLink frame
+        # logs one DEBUG line via _mav() so missions are debuggable
+        # frame-by-frame without a wrapper layer. Tests pass log=None
+        # (the default) so FakePixhawk fixtures stay zero-config.
+        self._log = log
         # Last HEARTBEAT we saw whose `autopilot` field was NOT
         # MAV_AUTOPILOT_INVALID -- i.e. the real autopilot, not our own
         # heartbeat looping back via BlueOS / mavproxy. get_mode() and
         # is_armed() prefer this so they never report the GCS's state
         # when the loop-back arrives between autopilot frames.
         self._last_autopilot_hb = None
+
+    def _mav(self, msg):
+        """Emit one ``[MAV ] ...`` DEBUG line iff a logger is attached.
+
+        Cheap no-op when ``self._log`` is None, so high-rate paths
+        (RC_OVERRIDE at 20 Hz) cost a single attribute load + branch
+        when DEBUG is off.
+        """
+        if self._log is not None:
+            self._log.debug('[MAV ] ' + msg)
 
     # ------------------------------------------------------------------ #
     #  COMMAND_ACK — fast, explicit failure reporting                     #
@@ -102,6 +129,7 @@ class Pixhawk:
         """
         cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
         self.clear_ack()
+        self._mav('ARM    cmd_long(COMPONENT_ARM_DISARM, p1=1)')
         self.master.mav.command_long_send(
             self.master.target_system, self.master.target_component,
             cmd, 0, 1, 0, 0, 0, 0, 0, 0)
@@ -127,6 +155,7 @@ class Pixhawk:
 
         cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
         self.clear_ack()
+        self._mav('DISARM cmd_long(COMPONENT_ARM_DISARM, p1=0)')
         self.master.mav.command_long_send(
             self.master.target_system, self.master.target_component,
             cmd, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -152,6 +181,7 @@ class Pixhawk:
         mode_id = self.master.mode_mapping().get(mode_name)
         if mode_id is None:
             return False, f'UNKNOWN_MODE:{mode_name}'
+        self._mav(f'SET_MODE custom_mode={mode_id} ({mode_name})')
         deadline = time.time() + timeout
         while time.time() < deadline:
             self.master.mav.set_mode_send(
@@ -177,6 +207,10 @@ class Pixhawk:
         values[CH_YAW]      = int(yaw)
         values[CH_FORWARD]  = int(forward)
         values[CH_LATERAL]  = int(lateral)
+        self._mav(
+            f'RC_OVERRIDE pitch={values[CH_PITCH]} roll={values[CH_ROLL]} '
+            f'thr={values[CH_THROTTLE]} yaw={values[CH_YAW]} '
+            f'fwd={values[CH_FORWARD]} lat={values[CH_LATERAL]}')
         self.master.mav.rc_channels_override_send(
             self.master.target_system, self.master.target_component, *values)
 
@@ -193,6 +227,10 @@ class Pixhawk:
         values[CH_THROTTLE] = int(throttle)
         values[CH_FORWARD]  = int(forward)
         values[CH_LATERAL]  = int(lateral)
+        self._mav(
+            f'RC_TRANS    thr={values[CH_THROTTLE]} '
+            f'fwd={values[CH_FORWARD]} lat={values[CH_LATERAL]} '
+            f'(yaw/pitch/roll released)')
         self.master.mav.rc_channels_override_send(
             self.master.target_system, self.master.target_component, *values)
 
@@ -213,6 +251,7 @@ class Pixhawk:
         is the "pause" verb's MAVLink behaviour.
         """
         values = [NO_OVERRIDE] * 18
+        self._mav('RC_RELEASE  all=65535 (autopilot runs without us)')
         self.master.mav.rc_channels_override_send(
             self.master.target_system, self.master.target_component, *values)
 
@@ -240,8 +279,9 @@ class Pixhawk:
         the altitude masked out, so ArduSub's onboard depth PID
         (running at 400 Hz) is the sole consumer. Requires
         ALT_HOLD / POSHOLD / GUIDED -- in MANUAL or STABILIZE the
-        autopilot silently drops the setpoint. Stream at >= 1 Hz;
-        the DepthLock streamer pushes 5 Hz which is plenty.
+        autopilot silently drops the setpoint. Used by
+        ``motion_depth.hold_depth`` to drive to a new target; once
+        reached, ALT_HOLD keeps holding without further refreshes.
 
         Reference: Blue Robotics pymavlink docs, "Set Target Depth/Attitude".
         """
@@ -257,6 +297,8 @@ class Pixhawk:
             | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_IGNORE
             | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE
         )
+        self._mav(f'SET_POS_TGT depth={float(depth_m):+.2f} m  '
+                  f'(alt only, all other axes masked)')
         self.master.mav.set_position_target_global_int_send(
             int(1e3 * (time.time() - self._boot_time)),
             self.master.target_system, self.master.target_component,
@@ -283,6 +325,7 @@ class Pixhawk:
                 f'(Pixhawk AUX1..AUX6), got {aux_n}')
         pwm = max(self.PWM_MIN, min(self.PWM_MAX, int(pwm)))
         channel = aux_n + self.AUX_PWM_OFFSET
+        self._mav(f'DO_SET_SERVO ch={channel} (AUX{aux_n}) pwm={pwm}')
         self.master.mav.command_long_send(
             self.master.target_system, self.master.target_component,
             mavutil.mavlink.MAV_CMD_DO_SET_SERVO,
@@ -302,6 +345,9 @@ class Pixhawk:
         Reference: MAVLink common/MAV_CMD_SET_MESSAGE_INTERVAL (id 511).
         """
         interval_us = int(1_000_000 / hz) if hz > 0 else int(hz)
+        self._mav(
+            f'SET_MSG_INTERVAL msg_id={message_id} '
+            f'interval_us={interval_us} (hz={hz})')
         self.master.mav.command_long_send(
             self.master.target_system, self.master.target_component,
             mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,

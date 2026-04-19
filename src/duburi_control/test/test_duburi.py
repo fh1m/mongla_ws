@@ -164,41 +164,6 @@ def test_lock_heading_target_zero_locks_current_heading(duburi, monkeypatch):
     duburi.unlock_heading()
 
 
-def test_lock_depth_starts_thread_and_unlock_stops(duburi, monkeypatch):
-    monkeypatch.setattr(time, 'sleep', lambda *_: None)
-    assert duburi._depth_lock is None
-    duburi.lock_depth(target=-1.5, timeout=2.0)
-    assert duburi._depth_lock is not None
-    duburi.unlock_depth()
-    assert duburi._depth_lock is None
-
-
-def test_lock_depth_target_zero_locks_current_depth(duburi, monkeypatch):
-    """target=0.0 (rosidl unset) means "lock at current depth"."""
-    monkeypatch.setattr(time, 'sleep', lambda *_: None)
-    result = duburi.lock_depth(target=0.0, timeout=2.0)
-    # Fixture FakePixhawk reports depth=-0.5, so the locked target
-    # should match.
-    assert math.isclose(result.final_value, -0.5, abs_tol=1e-3)
-    duburi.unlock_depth()
-
-
-def test_set_depth_retargets_active_depth_lock(duburi, monkeypatch):
-    """If a lock_depth is running, set_depth must update the lock's target.
-
-    Otherwise the lock would keep streaming the OLD setpoint and fight
-    the just-completed dive.
-    """
-    monkeypatch.setattr(time, 'sleep', lambda *_: None)
-    duburi.lock_depth(target=-0.5, timeout=5.0)
-    duburi.set_depth(target=-1.5, timeout=2.0)
-    assert duburi._depth_lock is not None
-    assert math.isclose(duburi._depth_lock.target_m, -1.5, abs_tol=1e-3), (
-        'set_depth must retarget the active lock_depth so the streamer '
-        'follows the freshly commanded depth')
-    duburi.unlock_depth()
-
-
 def test_set_depth_engages_alt_hold(duburi, monkeypatch):
     """set_depth must guarantee ALT_HOLD is engaged before driving."""
     monkeypatch.setattr(time, 'sleep', lambda *_: None)

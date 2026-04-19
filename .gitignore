@@ -49,6 +49,13 @@ secrets.yaml
 *.db3
 *.mcap
 
+# ─── ArduSub SITL / MAVLink runtime artefacts ──────────────────────────
+eeprom.bin
+mav.parm
+mav.tlog
+mav.tlog.raw
+logs/
+
 # ─── ML model weights (downloaded on demand by Ultralytics) ────────────
 *.pt
 *.pth

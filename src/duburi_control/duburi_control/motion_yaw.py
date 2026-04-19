@@ -47,9 +47,9 @@ park Ch4 at 1500 (safe stop) until the source recovers.
 import time
 
 from .errors          import MovementTimeout
-from .motion_common   import read_heading
+from .motion_writers  import read_heading
 from .pixhawk         import Pixhawk
-from .motion_profiles import smootherstep
+from .motion_easing  import smootherstep
 
 
 # ---- Shared constants (apply to both variants) -----------------------

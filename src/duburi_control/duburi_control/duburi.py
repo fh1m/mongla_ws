@@ -13,9 +13,9 @@ the errors module; the action server catches and packages them.
 Cross-command isolation contract
 --------------------------------
 Every command runs under `self.lock` so only one is active at a time
-(stateful exceptions: `lock_heading` returns immediately and leaves
-a daemon thread running; `unlock_heading` joins it). Between
-commands, state is reset via `_send_neutral_and_settle()`:
+(stateful exception: `lock_heading` returns immediately and leaves a
+daemon thread running; `unlock_heading` joins it). Between commands,
+state is reset via `_send_neutral_and_settle()`:
 
   * RC override channels  -> 1500 (active hold) when no lock active,
                               or "neutral on translation channels +
@@ -23,8 +23,8 @@ commands, state is reset via `_send_neutral_and_settle()`:
                               active so the lock thread keeps the
                               Ch4 rate-override stream authoritative.
   * COMMAND_ACK cache     -> cleared per ACK-bearing command in pixhawk.
-  * Flight mode           -> persisted (set_depth / yaw_* / lock_heading /
-                              lock_depth all auto-engage ALT_HOLD).
+  * Flight mode           -> persisted (set_depth / yaw_* / lock_heading
+                              auto-engage ALT_HOLD).
   * Arm state             -> persisted (explicit arm/disarm only).
 
 Exit semantics are owned by the axis module:
@@ -36,6 +36,16 @@ Exit semantics are owned by the axis module:
   * yaw_*                  -> neutral stop for 0.3 s (heading-hold latches)
   * arc                    -> neutral stop for >= 0.6 s
   * hold_depth             -> neutral stop for 0.3 s (ALT_HOLD latches)
+
+Depth strategy (no DepthLock daemon)
+------------------------------------
+``set_depth`` engages ALT_HOLD and runs a single ``hold_depth`` drive
+loop until the target is reached, then hands depth back to ArduSub's
+onboard ALT_HOLD controller. ALT_HOLD closes the depth loop at 400 Hz
+internally and keeps holding the last setpoint forever -- we do NOT
+need a 5 Hz Python streamer to refresh it. Subsequent translations,
+yaws, vision verbs etc. all run with depth held automatically as long
+as we stay in ALT_HOLD.
 
 stop vs. pause vs. lock_heading
 -------------------------------
@@ -51,11 +61,16 @@ Three release/hold semantics, all distinct:
                       background thread driven by yaw_source. Persists
                       across other commands. Returns immediately.
   * unlock_heading -> Stop the streamer; send_neutral.
-  * lock_depth()   -> Spawn a 5 Hz set_target_depth streamer in a
-                      background thread. ArduSub's onboard ALT_HOLD
-                      closes the loop; we just keep the setpoint
-                      fresh. Mirror of lock_heading.
-  * unlock_depth   -> Stop the streamer; ALT_HOLD keeps holding.
+
+Heartbeat
+---------
+A separate ``Heartbeat`` daemon (owned by the manager, injected here)
+streams an all-neutral RC override at 5 Hz whenever no other writer
+is active. That keeps ``FS_PILOT_INPUT`` from disarming the sub during
+long idle gaps between commands. Every command pauses the heartbeat
+on entry (via ``with self.lock:`` -> ``_heartbeat_hold()``) and resumes
+it on exit; ``lock_heading`` keeps it paused for the entire lock
+lifetime because the lock thread is itself writing the wire.
 """
 
 import threading
@@ -64,11 +79,10 @@ from contextlib import contextmanager
 
 from duburi_interfaces.action import Move
 
-from .depth_lock    import DepthLock
-from .duburi_vision_mixin import DuburiVisionMixin
+from .vision_verbs import VisionVerbs
 from .errors        import ModeChangeError
 from .heading_lock  import HeadingLock
-from .motion_common import make_writers
+from .motion_writers import make_writers
 from .motion_depth  import hold_depth
 from .motion_forward import (
     arc as motion_arc,
@@ -94,7 +108,7 @@ from .pixhawk       import Pixhawk
 YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED')
 
 
-class Duburi(DuburiVisionMixin):
+class Duburi(VisionVerbs):
     """Serialised movement facade.
 
     Parameters
@@ -123,6 +137,7 @@ class Duburi(DuburiVisionMixin):
                  smooth_translate=False,
                  yaw_source=None,
                  vision_state_provider=None,
+                 heartbeat=None,
                  quick_settle=False):
         """vision_state_provider(camera_name) -> VisionState | None.
 
@@ -130,6 +145,14 @@ class Duburi(DuburiVisionMixin):
         the vision verbs can ask "give me state for camera X" without
         knowing how the subscriptions were set up. Same pattern as
         `yaw_source` -- the facade never imports rclpy.
+
+        heartbeat : Heartbeat | None
+            Optional. When supplied, every command body pauses the
+            heartbeat for the duration of the command (so its 1500 us
+            packets don't race the command's per-axis writes), and
+            ``lock_heading`` / ``unlock_heading`` toggle a longer-lived
+            pause spanning the whole lock lifetime. None (the default,
+            used by unit tests) skips the cooperation entirely.
 
         quick_settle : bool
             False (default) -> every command pre-flight calls
@@ -139,8 +162,8 @@ class Duburi(DuburiVisionMixin):
                 previous command can't bleed into the next one.
             True            -> the pre-flight pause is SKIPPED when the
                 next command shares the same axis set as the previous
-                one AND no heading/depth lock is active. Cuts ~0.6 s
-                off chained ``move_forward; move_forward; move_left;
+                one AND no heading lock is active. Cuts ~0.6 s off
+                chained ``move_forward; move_forward; move_left;
                 move_left`` sequences in scripted demos. The pause is
                 still honoured around lock-bearing or mode-changing
                 commands so the autopilot has time to latch.
@@ -152,9 +175,9 @@ class Duburi(DuburiVisionMixin):
         self.smooth_translate  = smooth_translate
         self.yaw_source        = yaw_source
         self.vision_state_provider = vision_state_provider
+        self._heartbeat        = heartbeat
         self.quick_settle      = bool(quick_settle)
         self._heading_lock     = None      # HeadingLock thread or None
-        self._depth_lock       = None      # DepthLock thread or None
         # Tracks which channel set the last in-command write touched, so
         # the pre-flight pause can be skipped when the next command uses
         # the same axes. None = no recent write / lock state changed.
@@ -188,7 +211,7 @@ class Duburi(DuburiVisionMixin):
         active, only the translation channels go to 1500 -- Ch4 stays
         released so the lock thread keeps authority.
         """
-        with self.lock:
+        with self._command_ctx():
             self._writers().neutral()
             self.log.info('[CMD  ] stop -- stabilising...')
             time.sleep(settle_time)
@@ -199,13 +222,14 @@ class Duburi(DuburiVisionMixin):
 
         65535 on every channel tells ArduSub we are NOT on the loop --
         the autopilot's own automation takes over for the duration.
-        Heading-lock and depth-lock are auto-suspended for the pause
-        and resumed after.
+        Heading-lock is auto-suspended for the pause and resumed
+        after; the heartbeat is also paused (the whole point of pause
+        is that nobody is writing the wire).
         """
-        with self.lock:
+        with self._command_ctx():
             self.log.info(
                 f'[CMD  ] pause {duration:.1f}s -- releasing override')
-            with self._suspend_heading_lock(), self._suspend_depth_lock():
+            with self._suspend_heading_lock():
                 self.pixhawk.release_rc_override()
                 time.sleep(duration)
                 self._writers().neutral()
@@ -223,7 +247,7 @@ class Duburi(DuburiVisionMixin):
         return self._drive_forward(-1, duration, gain, settle)
 
     def _drive_forward(self, signed_dir, duration, gain, settle):
-        with self.lock:
+        with self._command_ctx():
             self._send_neutral_and_settle(axes=frozenset({'forward'}))
             run = (drive_forward_eased if self.smooth_translate
                    else drive_forward_constant)
@@ -250,7 +274,7 @@ class Duburi(DuburiVisionMixin):
         return self._drive_lateral(+1, duration, gain, settle)
 
     def _drive_lateral(self, signed_dir, duration, gain, settle):
-        with self.lock:
+        with self._command_ctx():
             self._send_neutral_and_settle(axes=frozenset({'lateral'}))
             run = (drive_lateral_eased if self.smooth_translate
                    else drive_lateral_constant)
@@ -277,7 +301,7 @@ class Duburi(DuburiVisionMixin):
         Auto-suspends the lock during the arc; on exit, retargets the
         lock to the new heading and resumes.
         """
-        with self.lock:
+        with self._command_ctx():
             self._send_neutral_and_settle(axes=frozenset({'forward', 'yaw'}))
             self._ensure_yaw_capable_mode()
             self.log.info(
@@ -306,7 +330,7 @@ class Duburi(DuburiVisionMixin):
 
     def _turn(self, signed_degrees, timeout, label, settle):
         """Execute a yaw turn relative to the current heading."""
-        with self.lock:
+        with self._command_ctx():
             self._send_neutral_and_settle(axes=frozenset({'yaw'}))
             self._ensure_yaw_capable_mode()
             start_heading  = self._current_heading()
@@ -358,19 +382,20 @@ class Duburi(DuburiVisionMixin):
     def set_depth(self, target, timeout=30.0, settle=0.0):
         """Drive to `target` metres (negative = below surface) and hold.
 
-        If a `lock_depth` is active, its target is retargeted to the
-        new value on exit -- so the streamer follows the freshly
-        commanded depth without operator intervention.
+        Engages ALT_HOLD (so ArduSub's onboard 400 Hz depth controller
+        owns the loop), drives ``hold_depth`` until the target is
+        reached, then exits. ALT_HOLD continues to hold the achieved
+        setpoint forever -- subsequent commands run with depth held
+        automatically as long as the mode is preserved. No background
+        streamer required.
         """
-        with self.lock:
+        with self._command_ctx():
             self._send_neutral_and_settle(axes=frozenset({'depth'}))
             self.log.info(f'[CMD  ] set_depth  {target:.2f}m')
             self._ensure_alt_hold('set_depth')
-            with self._suspend_depth_lock():
-                hold_depth(self.pixhawk, target, timeout, self.log,
-                           neutral_writer=self._writers().neutral)
-                self._send_neutral_and_settle(settle_time=0.3 + settle)
-            self._retarget_depth_lock(float(target))
+            hold_depth(self.pixhawk, target, timeout, self.log,
+                       neutral_writer=self._writers().neutral)
+            self._send_neutral_and_settle(settle_time=0.3 + settle)
             depth = self._current_depth()
             return self._make_result(
                 True, 'set_depth: completed',
@@ -388,10 +413,14 @@ class Duburi(DuburiVisionMixin):
         runs on a daemon thread so subsequent motion commands stack on
         top with active heading correction.
 
+        While the lock is engaged the heartbeat is held (the lock
+        thread is itself writing the wire). ``unlock_heading`` releases
+        that hold so the heartbeat resumes between later commands.
+
         Source-agnostic: works with `mavlink_ahrs` (Gazebo / bench),
         `bno085` (real sub), or any future YawSource. Uniform plug.
         """
-        with self.lock:
+        with self._command_ctx():
             self._ensure_yaw_capable_mode()
             current = self._current_heading()
             actual_target = current if abs(target) < 1e-3 else float(target) % 360.0
@@ -399,6 +428,7 @@ class Duburi(DuburiVisionMixin):
             if self._heading_lock is not None:
                 self._heading_lock.stop()
                 self._heading_lock = None
+                self._release_heartbeat_for_lock()
 
             self._heading_lock = HeadingLock(
                 pixhawk=self.pixhawk,
@@ -408,6 +438,7 @@ class Duburi(DuburiVisionMixin):
                 timeout=timeout,
             )
             self._heading_lock.start()
+            self._hold_heartbeat_for_lock()
 
             return self._make_result(
                 True,
@@ -417,71 +448,20 @@ class Duburi(DuburiVisionMixin):
 
     def unlock_heading(self):
         """Stop the heading-lock streamer and send neutral."""
-        with self.lock:
+        with self._command_ctx():
             if self._heading_lock is None:
                 return self._make_result(True, 'unlock_heading: no-op')
             self._heading_lock.stop()
             self._heading_lock = None
+            self._release_heartbeat_for_lock()
             self.pixhawk.send_neutral()
             return self._make_result(True, 'unlock_heading: released')
-
-    # ================================================================== #
-    #  Depth lock -- heading-lock's depth-axis cousin                     #
-    # ================================================================== #
-
-    def lock_depth(self, target=0.0, timeout=600.0):
-        """Engage continuous depth-hold by streaming `set_target_depth`.
-
-        `target=0` (the rosidl unset default) means "lock at the
-        current depth right now". Returns immediately -- the streamer
-        runs on a daemon thread at 5 Hz so subsequent translation /
-        yaw verbs can stack on top with depth held.
-
-        ArduSub's onboard ALT_HOLD owns the depth PID at 400 Hz; this
-        thread just keeps the setpoint fresh so a stale link doesn't
-        cause ArduSub to fall back to its last-known value.
-        """
-        with self.lock:
-            self._ensure_alt_hold('lock_depth')
-            current = self._current_depth()
-            actual_target = current if abs(target) < 1e-3 else float(target)
-
-            if self._depth_lock is not None:
-                self._depth_lock.stop()
-                self._depth_lock = None
-
-            self._depth_lock = DepthLock(
-                pixhawk=self.pixhawk,
-                target_m=actual_target,
-                log=self.log,
-                timeout=timeout,
-            )
-            self._depth_lock.start()
-
-            return self._make_result(
-                True,
-                f'lock_depth: locked at {actual_target:+.2f}m '
-                f'(timeout {timeout:.0f}s)',
-                final_value=actual_target, error_value=0.0)
-
-    def unlock_depth(self):
-        """Stop the depth-lock streamer.
-
-        ArduSub's ALT_HOLD onboard controller will keep holding its
-        last setpoint; this call only stops *us* from refreshing it.
-        """
-        with self.lock:
-            if self._depth_lock is None:
-                return self._make_result(True, 'unlock_depth: no-op')
-            self._depth_lock.stop()
-            self._depth_lock = None
-            return self._make_result(True, 'unlock_depth: released')
 
     # ================================================================== #
     #  Vision verbs                                                       #
     # ================================================================== #
     #
-    # Live in `DuburiVisionMixin` (mixed in via the class declaration
+    # Live in `VisionVerbs` (mixed in via the class declaration
     # above) so this file stays focused on motion-axis verbs. The
     # mixin uses only the helpers defined below + base attributes
     # set in __init__, no rclpy.
@@ -496,6 +476,37 @@ class Duburi(DuburiVisionMixin):
 
     def _lock_active(self):
         return self._heading_lock is not None
+
+    @contextmanager
+    def _command_ctx(self):
+        """Wrap a command body: take the serial lock + pause the heartbeat.
+
+        Combining both into one context manager keeps every command
+        body's ``with`` line uniform and guarantees the heartbeat is
+        always resumed -- even if the command raises -- so the next
+        command starts from a known wire state.
+        """
+        with self.lock:
+            if self._heartbeat is not None:
+                self._heartbeat.pause()
+            try:
+                yield
+            finally:
+                if self._heartbeat is not None:
+                    self._heartbeat.resume()
+
+    def _hold_heartbeat_for_lock(self):
+        """Mark the heartbeat held for the entire heading-lock lifetime.
+
+        Released by ``_release_heartbeat_for_lock`` from
+        ``unlock_heading`` (or when ``lock_heading`` swaps locks).
+        """
+        if self._heartbeat is not None:
+            self._heartbeat.pause()
+
+    def _release_heartbeat_for_lock(self):
+        if self._heartbeat is not None:
+            self._heartbeat.resume()
 
     @contextmanager
     def _suspend_heading_lock(self):
@@ -520,34 +531,11 @@ class Duburi(DuburiVisionMixin):
         if self._heading_lock is not None:
             self._heading_lock.retarget(new_heading_deg)
 
-    @contextmanager
-    def _suspend_depth_lock(self):
-        """Pause the depth-lock thread for the duration of the block.
-
-        Mirror of `_suspend_heading_lock`. Used by `set_depth`,
-        `pause`, and any vision verb that streams its own depth
-        setpoints -- so two authors don't write SET_POSITION_TARGET
-        packets at the same time.
-        """
-        active = self._depth_lock is not None
-        if active:
-            self._depth_lock.suspend()
-        try:
-            yield
-        finally:
-            if active and self._depth_lock is not None:
-                self._depth_lock.resume()
-
-    def _retarget_depth_lock(self, new_depth_m):
-        """Update the lock target to follow set_depth / vision-depth exit."""
-        if self._depth_lock is not None:
-            self._depth_lock.retarget(new_depth_m)
-
     def _ensure_alt_hold(self, reason):
         """Engage ALT_HOLD when the autopilot isn't already in a mode
         that honours streamed depth setpoints. Used by every verb
-        that writes a depth target (set_depth, lock_depth,
-        vision verbs touching the depth axis).
+        that writes a depth target (``set_depth`` and any vision verb
+        touching the depth axis).
 
         ALT_HOLD, POSHOLD and GUIDED all close the loop on the
         Python-supplied depth setpoint via ArduSub's onboard 400 Hz
@@ -575,9 +563,9 @@ class Duburi(DuburiVisionMixin):
         ``axes`` (optional) tells the quick-settle guard which channel
         set the *next* command will write. When ``self.quick_settle``
         is True AND the same set was written immediately before AND no
-        active lock is mid-stream, the 0.6 s pause is skipped -- the
-        previous command's channels are already at the values the next
-        command wants to overwrite, so the brake is redundant.
+        active heading lock is mid-stream, the 0.6 s pause is skipped --
+        the previous command's channels are already at the values the
+        next command wants to overwrite, so the brake is redundant.
 
         The neutral write itself is always issued; only the ``sleep``
         is conditional. That keeps RC override fresh (ArduSub treats
@@ -589,7 +577,6 @@ class Duburi(DuburiVisionMixin):
             and axes is not None
             and self._last_axes == axes
             and self._heading_lock is None
-            and self._depth_lock is None
         )
         if skip:
             self._last_axes = axes

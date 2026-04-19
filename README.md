@@ -380,7 +380,7 @@ Four packages live inside:
 | Package             | Role                                                                                     |
 |---------------------|------------------------------------------------------------------------------------------|
 | `duburi_interfaces` | `Move.action` + `DuburiState.msg` — the only ROS surface every client talks to           |
-| `duburi_control`    | `Pixhawk` MAVLink wrapper + axis-split motion controllers (`motion_forward`, `motion_lateral`, `motion_yaw`, `motion_depth`, `heading_lock`) + shared helpers (`motion_common`) + the `COMMANDS` registry |
+| `duburi_control`    | `Pixhawk` MAVLink wrapper (with `[MAV ]` DEBUG trace) + axis-split motion controllers (`motion_forward`, `motion_lateral`, `motion_yaw`, `motion_depth`, `heading_lock`) + shared helpers (`motion_writers`, `motion_easing`) + `Heartbeat` + `VisionVerbs` mixin + the `COMMANDS` registry |
 | `duburi_manager`    | ROS2 node, action server, telemetry logger, connection profiles                           |
 | `duburi_planner`    | `DuburiClient` Python API + `duburi` CLI + `mission` runner + `missions/*` scripts (YASMIN slot reserved under `state_machines/`) |
 | `duburi_sensors`    | `YawSource` abstraction — MAVLink AHRS default, BNO085 (ESP32-C3 USB CDC) opt-in, DVL/WitMotion stubs |
@@ -393,7 +393,7 @@ Design principles we actually follow:
   has a bang-bang default (`drive_*_constant`) and a smoothed variant
   (`drive_*_eased`). Yaw has `yaw_snap` (default) and `yaw_glide` (opt-in).
   The `Duburi` facade is a lock plus a dispatch table.
-- **Lock-aware neutrals.** `motion_common.Writers` builds axis-specific
+- **Lock-aware neutrals.** `motion_writers.Writers` builds axis-specific
   writers that automatically use `send_rc_translation` (leaving Ch4 free)
   whenever `heading_lock` is active, so a background yaw setpoint stream is
   never stomped by a translation command's neutral packet.
@@ -424,12 +424,18 @@ Design principles we actually follow:
   suspend → execute → retarget; only `unlock_heading` (or shutdown) tears it
   down. It is **source-agnostic** — the same `YawSource` that feeds the
   manager (MAVLink AHRS, BNO085, or a Gazebo mock) also feeds the lock.
-- **Depth-lock is heading-lock's depth-axis cousin.** `lock_depth` spins up a
-  background `set_target_depth` (`SET_POSITION_TARGET_GLOBAL_INT`) stream
-  at 5 Hz so ArduSub's onboard ALT_HOLD never falls back to a stale
-  setpoint during long open-loop legs or vision-yaw verbs. `set_depth`
-  retargets the lock automatically; vision verbs that touch the depth
-  axis suspend → execute → retarget the same way `arc` does for yaw.
+- **Depth is owned by ArduSub's onboard ALT_HOLD.** `set_depth` engages
+  ALT_HOLD and drives `hold_depth` to the target; once reached, ArduSub's
+  400 Hz onboard depth controller keeps the sub there indefinitely without
+  any Python-side streamer. There is no `lock_depth` / `unlock_depth` --
+  the autopilot already does the right thing whenever the mode is
+  ALT_HOLD/POSHOLD/GUIDED.
+- **A `Heartbeat` keeps the wire warm.** A 5 Hz background stream of
+  all-neutral `RC_CHANNELS_OVERRIDE` runs whenever no other writer is
+  active so ArduSub never sees > 3 s of override silence and tripping
+  `FS_PILOT_INPUT` (default action: disarm). The Duburi facade pauses
+  the heartbeat on every command entry and for the lifetime of an active
+  heading-lock so writers never race.
 - **Every cross-command boundary is a hard reset.** Locks serialise, `stop()`
   forces RC neutral + clears the ACK cache, each axis module owns its exit
   semantics, and `settle=` plus `pause` close residual-inertia gaps between
@@ -437,12 +443,13 @@ Design principles we actually follow:
 
 | Axis         | Setpoint message                  | Loop that closes it           | Our role                       |
 |--------------|-----------------------------------|-------------------------------|--------------------------------|
-| Yaw          | `SET_ATTITUDE_TARGET`             | ArduSub 400 Hz attitude PID   | stream + watch yaw_source      |
-| Depth        | `SET_POSITION_TARGET_GLOBAL_INT`  | ArduSub ALT_HOLD position PID | stream + watch AHRS depth      |
+| Yaw          | `RC_CHANNELS_OVERRIDE` Ch4 rate   | Python yaw_source loop        | stream + watch yaw_source      |
+| Depth        | `SET_POSITION_TARGET_GLOBAL_INT`  | ArduSub ALT_HOLD position PID | one-shot drive to setpoint     |
 | Forward      | `RC_CHANNELS_OVERRIDE` Ch5        | open loop (timed thrust)      | shape the thrust envelope      |
 | Lateral      | `RC_CHANNELS_OVERRIDE` Ch6        | open loop (timed thrust)      | shape the thrust envelope      |
 | Arc          | `RC_CHANNELS_OVERRIDE` Ch5+Ch4    | open loop                     | curved car-style trajectory    |
-| Heading-lock | `SET_ATTITUDE_TARGET` (background) | ArduSub 400 Hz attitude PID   | stream until unlocked          |
+| Heading-lock | `RC_CHANNELS_OVERRIDE` Ch4 (bg)   | Python yaw_source loop @20 Hz | stream until unlocked          |
+| Heartbeat    | `RC_CHANNELS_OVERRIDE` neutral    | n/a (failsafe guard only)     | stream @ 5 Hz when wire idle   |
 
 ---
 
@@ -644,17 +651,19 @@ duburi_ws/
     │   └── msg/DuburiState.msg        # typed snapshot for /duburi/state
     ├── duburi_control/
     │   └── duburi_control/
-    │       ├── pixhawk.py             # pymavlink wrapper + COMMAND_ACK + set_message_rate
+    │       ├── pixhawk.py             # pymavlink wrapper + COMMAND_ACK + [MAV ] DEBUG trace
     │       ├── commands.py            # COMMANDS registry (single source of truth)
-    │       ├── motion_profiles.py     # smootherstep, trapezoid_ramp
-    │       ├── motion_common.py       # shared constants + Writers (lock-aware) + thrust_loop
-    │       ├── motion_yaw.py          # yaw_snap / yaw_glide (sharp pivots)
+    │       ├── motion_easing.py       # smoothstep / smootherstep / trapezoid_ramp
+    │       ├── motion_writers.py      # shared constants + Writers (lock-aware) + thrust_loop
+    │       ├── motion_yaw.py          # yaw_snap / yaw_glide (Ch4 rate override)
     │       ├── motion_forward.py      # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
     │       ├── motion_lateral.py      # drive_lateral_* (Ch6 RC override)
-    │       ├── motion_depth.py        # hold_depth (ALT_HOLD + setpoint stream, lock-aware)
+    │       ├── motion_depth.py        # hold_depth (one-shot SET_POSITION_TARGET, then ALT_HOLD owns it)
     │       ├── motion_vision.py       # vision_track_axes (Ch4/5/6 + depth, P-only) + vision_acquire
-    │       ├── heading_lock.py        # background SET_ATTITUDE_TARGET streamer (yaw cousin of depth-hold)
-    │       ├── duburi.py              # Duburi facade (lock + dispatch + heading_lock owner + vision_state_provider)
+    │       ├── heading_lock.py        # background Ch4 yaw-rate streamer (yaw_source-driven)
+    │       ├── heartbeat.py           # 5 Hz neutral RC override (FS_PILOT_INPUT guard)
+    │       ├── vision_verbs.py        # VisionVerbs mixin -- vision_align_* / vision_acquire
+    │       ├── duburi.py              # Duburi facade (lock + dispatch + heading_lock + heartbeat owner)
     │       └── errors.py              # MovementError / Timeout / ModeChangeError
     ├── duburi_sensors/
     │   ├── duburi_sensors/
@@ -956,10 +965,10 @@ ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
 ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
 ros2 run duburi_planner duburi unlock_heading
 
-# Depth lock (background set_target_depth stream until unlocked).
-# target=0 -> "hold whatever depth you are at right now".
-ros2 run duburi_planner duburi lock_depth --target -0.5 --timeout 600
-ros2 run duburi_planner duburi unlock_depth
+# Depth: there is no "lock_depth" verb. set_depth engages ALT_HOLD and
+# drives to the target; ArduSub's onboard ALT_HOLD then holds it forever
+# (no Python streamer needed). Send another set_depth to change it.
+ros2 run duburi_planner duburi set_depth --target -0.5
 
 # Emergency neutral (active hold — RC set to 1500 on every channel)
 ros2 run duburi_planner duburi stop
@@ -1466,7 +1475,7 @@ Both flags are independent — you can mix and match.
 
 Each translation variant owns its own exit. The shared loop + brake-kick
 logic lives in
-[src/duburi_control/duburi_control/motion_common.py](src/duburi_control/duburi_control/motion_common.py),
+[src/duburi_control/duburi_control/motion_writers.py](src/duburi_control/duburi_control/motion_writers.py),
 and the per-axis verbs are in
 [motion_forward.py](src/duburi_control/duburi_control/motion_forward.py)
 (Ch5 + `arc`) and
@@ -1482,7 +1491,7 @@ and the per-axis verbs are in
 Per-verb `settle=` extends the post-command neutral-hold for cases where
 you want extra inertia bleed-off before the next move.
 
-Tunables at the top of `motion_common.py`:
+Tunables at the top of `motion_writers.py`:
 
 ```python
 THRUST_RATE_HZ   = 20.0    # RC override publish rate (forward + lateral + arc)
@@ -1532,7 +1541,7 @@ message on `/duburi/state` (subscribe with `ros2 topic echo /duburi/state`).
 
 | Symptom                                        | Likely cause / fix                                                                           |
 |------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `lock_heading` active but yaw still drifts mid-`move_forward` | Confirm the manager was started against an updated build — translations must use the lock-aware `Writers` (`send_rc_translation`). Check `motion_common.make_writers(release_yaw=True)` is being called. |
+| `lock_heading` active but yaw still drifts mid-`move_forward` | Confirm the manager was started against an updated build — translations must use the lock-aware `Writers` (`send_rc_translation`). Check `motion_writers.make_writers(release_yaw=True)` is being called. |
 | `arc` curves the wrong way                     | `yaw_rate_pct` is positive = clockwise from above. Flip the sign or use `yaw_left`-style verb. |
 | No `[STATE]` line after startup                | UDP 14550 not reaching Jetson. Verify BlueOS `inspector` endpoint IP matches Jetson static IP. Run `ss -lun | grep 14550`. |
 | `arm -> FAIL: DENIED`                          | ArduSub pre-arm check failed. Look at the `[ARDUB]` lines for the reason (compass, GPS, battery, ...). |
@@ -1585,7 +1594,7 @@ hardware. Only extend `Move.action` if the existing field shape
    `yaw_trapezoid` in `motion_yaw.py`). Keep the signature identical to
    the existing variants — same arguments, same exit semantics.
 2. Dispatch from the facade based on a new flag or a richer enum.
-3. Reuse math from `motion_profiles.py` where possible.
+3. Reuse math from `motion_easing.py` where possible.
 
 ### 14.3 Debugging on the vehicle
 
@@ -1649,24 +1658,37 @@ Skipped intentionally for now:
 
 ## 16. Further reading
 
-Research notes and agent context live in `.claude/context/`:
+Research notes and agent context live in `.claude/context/`. The four
+pillars (read these first) are bolded:
 
-- [vehicle-spec.md](.claude/context/vehicle-spec.md) — **canonical Duburi 4.2 spec**
-- [known-issues.md](.claude/context/known-issues.md) — tracked code bugs from the audit
+**API & verbs (start here):**
+- [**command-reference.md**](.claude/context/command-reference.md) — every verb on `/duburi/move`: CLI, Python facade, DSL, MAVLink output, implementation file
+- [**client-and-dsl-api.md**](.claude/context/client-and-dsl-api.md) — `DuburiClient`, `DuburiMission` DSL, and `Duburi` facade — what each layer is for
+- [**mission-cookbook.md**](.claude/context/mission-cookbook.md) — mission DSL cookbook (verbs + working principles + ten samples)
+- [**testing-guide.md**](.claude/context/testing-guide.md) — every test (unit, bringup, mission smoke, in-water checklist)
+
+**ArduSub & MAVLink theory:**
+- [**ardusub-canon.md**](.claude/context/ardusub-canon.md) — first-principles ArduSub: modes, depth cascade, yaw rate loop, failsafes
+- [ardusub-reference.md](.claude/context/ardusub-reference.md) — ArduSub params quick-list + quirks
+- [mavlink-reference.md](.claude/context/mavlink-reference.md) — full MAVLink message catalogue, per-call audit, `[MAV ]` DEBUG trace
+- [heading-lock.md](.claude/context/heading-lock.md) — heading-lock state diagram + Ch4 rate-override implementation
 - [axis-isolation.md](.claude/context/axis-isolation.md) — first principles: sharp vs curved turns + settle/pause
-- [heading-lock.md](.claude/context/heading-lock.md) — heading-lock state diagram + interaction contract
-- [mavlink-references.md](.claude/context/mavlink-references.md) — per-call MAVLink audit + community refs
+
+**Vehicle, hardware, sim:**
+- [vehicle-spec.md](.claude/context/vehicle-spec.md) — canonical Duburi 4.2 spec
 - [hardware-setup.md](.claude/context/hardware-setup.md) — physical vehicle
 - [sim-setup.md](.claude/context/sim-setup.md) — SITL + Gazebo details
-- [ardusub-reference.md](.claude/context/ardusub-reference.md) — ArduSub params + MAVLink
+- [sensors-pipeline.md](.claude/context/sensors-pipeline.md) — `duburi_sensors` design rules + calibration model
+
+**Method & known issues:**
 - [proven-patterns.md](.claude/context/proven-patterns.md) — known-good control patterns
 - [ros2-conventions.md](.claude/context/ros2-conventions.md) — project code style
 - [pid-theory.md](.claude/context/pid-theory.md) — PID tuning notes (after *PID without a PhD*)
 - [yaw-stability-and-fusion.md](.claude/context/yaw-stability-and-fusion.md) — yaw stabilisation + vision/Kalman roadmap
-- [mission-design.md](.claude/context/mission-design.md) — mission planning patterns (target home: `duburi_planner/state_machines/`)
-- [mission-cookbook.md](.claude/context/mission-cookbook.md) — **mission DSL cookbook** (verbs + working principles + ten samples)
-- [mavlink-reference.md](.claude/context/mavlink-reference.md) — MAVLink messages we actually use
-- [sensors-pipeline.md](.claude/context/sensors-pipeline.md) — `duburi_sensors` design rules + calibration model
+- [mission-design.md](.claude/context/mission-design.md) — mission planning patterns
+- [vision-architecture.md](.claude/context/vision-architecture.md) — vision pipeline architecture
+- [vision-roadmap.md](.claude/context/vision-roadmap.md) — vision feature roadmap
+- [known-issues.md](.claude/context/known-issues.md) — tracked code bugs from the audit
 
 Top-level [CLAUDE.md](CLAUDE.md) is the agent memory index.
 

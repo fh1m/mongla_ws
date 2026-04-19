@@ -40,7 +40,9 @@ from rclpy.executors import MultiThreadedExecutor                        # noqa:
 from duburi_interfaces.action import Move                                # noqa: E402
 from duburi_interfaces.msg import DuburiState                            # noqa: E402
 
-from duburi_control import COMMANDS, Duburi, Pixhawk, fields_for         # noqa: E402
+from duburi_control import (                                            # noqa: E402
+    COMMANDS, Duburi, Heartbeat, Pixhawk, fields_for,
+)
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
 
@@ -152,7 +154,7 @@ class AUVManagerNode(Node):
         baud_kw = {'baud': profile['baud']} if profile['baud'] else {}
         self.master = mavutil.mavlink_connection(profile['conn'], **baud_kw)
         self.master.wait_heartbeat()
-        self.pixhawk = Pixhawk(self.master)
+        self.pixhawk = Pixhawk(self.master, log=self.get_logger())
 
         # Pin telemetry rates so ArduSub streams what we need at the
         # rates we need. Done early -- the reader thread starts below.
@@ -217,6 +219,15 @@ class AUVManagerNode(Node):
         self._vision_states: dict = {}
         self._vision_lock           = threading.Lock()
 
+        # ---- Heartbeat (FS_PILOT_INPUT failsafe guard) ---------------
+        # Streams an all-neutral RC override at 5 Hz whenever no other
+        # writer is active so ArduSub never sees > 3 s of override
+        # silence and triggers FS_PILOT_INPUT (default action: disarm).
+        # The Duburi facade pauses/resumes it around every command and
+        # for the lifetime of an active heading-lock.
+        self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
+        self.heartbeat.start()
+
         # ---- High-level facade ----------------------------------------
         self.duburi = Duburi(
             self.pixhawk,
@@ -225,6 +236,7 @@ class AUVManagerNode(Node):
             smooth_translate=smooth_translate,
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
+            heartbeat=self.heartbeat,
         )
 
         # ---- Callback groups ------------------------------------------
@@ -509,22 +521,22 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # Stop the depth-lock streamer FIRST so it doesn't push another
-        # SET_POSITION_TARGET packet after we've sent the shutdown
-        # neutral. Then stop the heading-lock thread for the same reason
-        # on Ch4. Order: depth -> heading -> neutral.
-        try:
-            if node.duburi._depth_lock is not None:
-                node.duburi._depth_lock.stop()
-        except Exception as exc:
-            node.get_logger().debug(
-                f'shutdown: depth_lock.stop() ignored: {exc!r}')
+        # Stop background writers BEFORE the final send_neutral so no
+        # daemon thread races us by emitting another packet after the
+        # shutdown frame. Order:
+        #   heading-lock (Ch4 rate-override) -> heartbeat (all-neutral)
+        #     -> one final send_neutral so the wire ends in a known state.
         try:
             if node.duburi._heading_lock is not None:
                 node.duburi._heading_lock.stop()
         except Exception as exc:
             node.get_logger().debug(
                 f'shutdown: heading_lock.stop() ignored: {exc!r}')
+        try:
+            node.heartbeat.stop()
+        except Exception as exc:
+            node.get_logger().debug(
+                f'shutdown: heartbeat.stop() ignored: {exc!r}')
         node.pixhawk.send_neutral()
         try:
             node.yaw_source.close()

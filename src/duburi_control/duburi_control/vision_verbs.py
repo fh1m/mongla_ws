@@ -6,16 +6,16 @@ Split out of ``duburi.py`` so the motion-axis side of the facade
 camera-driven side lives in another. Mixed into ``Duburi`` via
 multiple inheritance:
 
-    class Duburi(DuburiVisionMixin):
+    class Duburi(VisionVerbs):
         ...
 
 The mixin only references attributes the base ``Duburi`` provides
-(``self.lock``, ``self.pixhawk``, ``self.log``, ``self._writers()``,
-``self._send_neutral_and_settle()``, ``self._suspend_depth_lock()``,
-``self._ensure_alt_hold()``, ``self._retarget_depth_lock()``,
-``self._current_depth()``, ``self._make_result()``,
-``self.vision_state_provider``) -- nothing rclpy-aware, identical
-serialisation contract as the rest of the facade.
+(``self._command_ctx()``, ``self.pixhawk``, ``self.log``,
+``self._writers()``, ``self._send_neutral_and_settle()``,
+``self._ensure_alt_hold()``, ``self._current_depth()``,
+``self._make_result()``, ``self.vision_state_provider``) -- nothing
+rclpy-aware, identical serialisation contract as the rest of the
+facade.
 
 All six verbs share the same pipeline:
   1. Resolve VisionState for ``camera`` (lazy preflight in the manager).
@@ -28,21 +28,11 @@ The single-axis convenience verbs (``vision_align_yaw``, ``_lat``,
 canonical loop, no copy-paste.
 """
 
-from contextlib import contextmanager
-
 from .motion_vision import (
     VisionGains, vision_acquire as run_vision_acquire,
     vision_track_axes,
 )
 from .pixhawk import Pixhawk
-
-
-@contextmanager
-def _nullctx():
-    """Drop-in no-op context manager (Python 3.7+ alternative to
-    contextlib.nullcontext, kept inline so the conditional ``with``
-    blocks below stay readable)."""
-    yield
 
 
 def _parse_axes(csv: str):
@@ -55,7 +45,7 @@ def _parse_axes(csv: str):
     return out
 
 
-class DuburiVisionMixin:
+class VisionVerbs:
     """Camera-driven verbs for the Duburi facade.
 
     Provides the ``vision_*`` methods plus their three private helpers
@@ -141,7 +131,7 @@ class DuburiVisionMixin:
         waiting (``''`` = wait in place). ``'arc'`` uses both ``gain``
         (forward thrust) and ``yaw_rate_pct`` so you can sweep an area.
         """
-        with self.lock:
+        with self._command_ctx():
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
             drive_writer = self._build_acquire_drive(
@@ -169,13 +159,13 @@ class DuburiVisionMixin:
                           visual_pid, on_lost, stale_after):
         """Common path for every vision_align_* / vision_hold_distance verb.
 
-        When ``'depth'`` is in the axis set we (a) ensure ALT_HOLD is
-        engaged so ArduSub honours the streamed depth setpoints, and
-        (b) suspend any active ``lock_depth`` so the two authors of
-        depth setpoints don't fight; on exit we retarget the lock to
-        the post-verb depth so subsequent commands inherit the new hold.
+        When ``'depth'`` is in the axis set we ensure ALT_HOLD is
+        engaged so ArduSub honours our streamed depth setpoints. The
+        verb is the sole author of depth packets while it runs; on
+        exit ALT_HOLD's onboard 400 Hz controller keeps holding the
+        new depth without any background streamer on our side.
         """
-        with self.lock:
+        with self._command_ctx():
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
             depth_sign = -1 if camera in ('downward',) else +1
@@ -186,21 +176,16 @@ class DuburiVisionMixin:
                 f'[CMD  ] vision_{label}  camera={camera!r}  '
                 f'class={target_class!r}  axes={sorted(axes)}  '
                 f'duration={duration:.1f}s  on_lost={on_lost}')
-            depth_ctx = (self._suspend_depth_lock() if touches_depth
-                         else _nullctx())
-            with depth_ctx:
-                outcome = vision_track_axes(
-                    pixhawk=self.pixhawk, vision_state=vstate,
-                    target_class=target_class, axes=axes,
-                    duration=duration, gains=gains,
-                    target_h_frac=target_h_frac,
-                    deadband=deadband, stale_after=stale_after,
-                    on_lost=on_lost, depth_sign=depth_sign,
-                    log=self.log, writers=self._writers(),
-                    visual_pid=visual_pid)
-                self._send_neutral_and_settle()
-            if touches_depth:
-                self._retarget_depth_lock(self._current_depth())
+            outcome = vision_track_axes(
+                pixhawk=self.pixhawk, vision_state=vstate,
+                target_class=target_class, axes=axes,
+                duration=duration, gains=gains,
+                target_h_frac=target_h_frac,
+                deadband=deadband, stale_after=stale_after,
+                on_lost=on_lost, depth_sign=depth_sign,
+                log=self.log, writers=self._writers(),
+                visual_pid=visual_pid)
+            self._send_neutral_and_settle()
             return self._make_result(
                 outcome.success,
                 f'vision_{label}: {outcome.reason}',

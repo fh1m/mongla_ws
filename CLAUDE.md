@@ -119,17 +119,19 @@ duburi_ws/src/
 │   └── msg/DuburiState.msg       # typed state snapshot for /duburi/state
 ├── duburi_control/       # MAVLink layer + Duburi facade
 │   └── duburi_control/
-│       ├── pixhawk.py            # Pixhawk class — arm / mode / RC / setpoints / AHRS2
+│       ├── pixhawk.py            # Pixhawk class — arm / mode / RC / setpoints + [MAV ] DEBUG trace
 │       ├── commands.py           # COMMANDS registry (single source of truth)
-│       ├── motion_profiles.py    # smoothstep / smootherstep / trapezoid_ramp
-│       ├── motion_common.py      # shared constants + Writers (lock-aware) + thrust_loop
-│       ├── motion_yaw.py         # yaw_snap + yaw_glide (SET_ATTITUDE_TARGET)
+│       ├── motion_easing.py      # smoothstep / smootherstep / trapezoid_ramp
+│       ├── motion_writers.py     # shared constants + Writers (lock-aware) + thrust_loop
+│       ├── motion_yaw.py         # yaw_snap + yaw_glide (Ch4 rate override)
 │       ├── motion_forward.py     # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
 │       ├── motion_lateral.py     # drive_lateral_* (Ch6 RC override)
-│       ├── motion_depth.py       # hold_depth + prime_alt_hold (SET_POSITION_TARGET)
+│       ├── motion_depth.py       # hold_depth + prime_alt_hold (one-shot SET_POSITION_TARGET, then ALT_HOLD)
 │       ├── motion_vision.py      # vision_track_axes (Ch4/5/6 + depth, P-only) + vision_acquire
-│       ├── heading_lock.py       # background SET_ATTITUDE_TARGET streamer (yaw cousin of depth-hold)
-│       ├── duburi.py             # Duburi facade: lock + dispatch on smooth_* flags + vision_state_provider
+│       ├── heading_lock.py       # background Ch4 yaw-rate streamer (yaw_source-driven)
+│       ├── heartbeat.py          # 5 Hz neutral RC override -- prevents FS_PILOT_INPUT disarm
+│       ├── vision_verbs.py       # VisionVerbs mixin -- vision_align_* / vision_acquire on Duburi
+│       ├── duburi.py             # Duburi facade: lock + dispatch + heading_lock + heartbeat owner
 │       └── errors.py             # MovementError / MovementTimeout / ModeChangeError
 ├── duburi_manager/       # ROS2 node, action server, telemetry
 │   └── duburi_manager/
@@ -564,7 +566,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `known-issues.md`               | Tracked code bugs from the 2026-04 audit, scoped per file           |
 | `axis-isolation.md`             | First-principles theory: sharp vs curved turns, settle/pause        |
 | `heading-lock.md`               | Heading-lock state diagram, motion interaction, failure modes       |
-| `mavlink-references.md`         | Per-call MAVLink audit + community refs + things-we-found-wrong     |
+| `mavlink-reference.md`          | MAVLink catalogue + per-call audit + things-we-found-wrong + community refs |
 | `mavlink-reference.md`          | MAVLink messages, type masks, enums                                 |
 | `ardusub-reference.md`          | ArduSub-specific parameters, modes, quirks                          |
 | `pid-theory.md`                 | PID design notes (LEGACY column = REFERENCE only)                   |

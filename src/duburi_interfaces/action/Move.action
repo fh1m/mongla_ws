@@ -3,16 +3,15 @@ string  cmd          # arm | disarm | set_mode | stop | pause |
                      # move_forward | move_back | move_left | move_right |
                      # yaw_left | yaw_right | arc | set_depth |
                      # lock_heading | unlock_heading |
-                     # lock_depth | unlock_depth |
                      # vision_align_3d | vision_align_yaw | vision_align_lat |
                      # vision_align_depth | vision_hold_distance | vision_acquire
 float32 duration     # seconds  (move_*, arc, pause, vision_*)
 float32 gain         # 0-100 %  (move_*, arc, vision_acquire drive level)
-float32 target       # metres   (set_depth, lock_depth: 0=current depth) or
+float32 target       # metres   (set_depth) or
                      # degrees  (yaw_*, lock_heading: 0=current heading)
 string  target_name  # mode string  (set_mode) or
                      # drive verb   (vision_acquire: 'yaw_left'|'yaw_right'|'move_forward'|'arc')
-float32 timeout      # max wait (all commands; lock_heading/lock_depth auto-release)
+float32 timeout      # max wait (all commands; lock_heading auto-releases)
 float32 settle       # post-command neutral-hold seconds; 0 = axis-natural settle only
 float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc` and vision_acquire('arc')
 
@@ -42,10 +41,6 @@ float32 stale_after        # seconds; older detection considered lost
 #   lock_heading         :  final_value = locked target heading [deg, 0..360]
 #                           error_value = 0.0
 #   unlock_heading       :  final_value = current depth [m]
-#                           error_value = 0.0
-#   lock_depth           :  final_value = locked target depth [m, negative below surface]
-#                           error_value = 0.0
-#   unlock_depth         :  final_value = current depth [m]
 #                           error_value = 0.0
 #   arm / disarm / stop  :  final_value = current depth [m]
 #                           error_value = 0.0

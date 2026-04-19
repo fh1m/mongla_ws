@@ -148,7 +148,7 @@ for the full design and failure modes.
 
 | File                                      | Responsibility                          |
 | ----------------------------------------- | --------------------------------------- |
-| `motion_common.py`                        | Constants, `Writers`, `thrust_loop`, brake/settle. |
+| `motion_writers.py`                       | Constants, `Writers`, `thrust_loop`, brake/settle. |
 | `motion_forward.py`                       | Ch5 forward/back, plus `arc` (Ch5 + Ch4). |
 | `motion_lateral.py`                       | Ch6 strafe.                             |
 | `motion_yaw.py`                           | Ch4 yaw via SET_ATTITUDE_TARGET.        |

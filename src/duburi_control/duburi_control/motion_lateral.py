@@ -16,8 +16,8 @@ Two public functions, mirror images of `motion_forward`:
 `move_right` on `Duburi` are the only public callers.
 """
 
-from .motion_profiles import trapezoid_ramp
-from .motion_common   import (
+from .motion_easing  import trapezoid_ramp
+from .motion_writers import (
     EASE_SECONDS, REVERSE_KICK_PCT,
     thrust_loop, brake_kick_then_settle, final_settle,
 )

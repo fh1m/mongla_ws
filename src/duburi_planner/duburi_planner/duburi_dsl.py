@@ -13,8 +13,12 @@ Two namespaces, one mental model:
       duburi.yaw_left(degrees) / duburi.yaw_right(degrees)
       duburi.arc(seconds, gain=50, yaw_rate_pct=30)
       duburi.lock_heading(degrees)  / duburi.release_heading()
-      duburi.lock_depth(meters)     / duburi.release_depth()
       duburi.pause(seconds) / duburi.stop()
+
+  Depth is held automatically by ArduSub's onboard ALT_HOLD whenever
+  the mode is ALT_HOLD/POSHOLD/GUIDED. ``set_depth`` engages the mode
+  and drives to the target; once it returns the autopilot keeps the
+  depth indefinitely without a Python streamer.
 
   Closed-loop vision verbs mirror the SAME axis names under
   `duburi.vision`, so it is impossible to confuse them with their
@@ -105,7 +109,7 @@ class DuburiMission:
         self.log    = log
         self.camera = camera
         self.target = target
-        self.vision = _VisionAxes(self)
+        self.vision = _VisionDSL(self)
 
     # ================================================================== #
     #  Single send + log helper -- every verb funnels through here        #
@@ -198,21 +202,6 @@ class DuburiMission:
     def release_heading(self):
         return self._send('unlock_heading')
 
-    def lock_depth(self, meters: float = 0.0, *, timeout: float = 600.0):
-        """Stream a fixed depth setpoint until `release_depth`.
-
-        ``meters=0`` means "lock at the current depth". The streamer is
-        a daemon thread, so subsequent translation / yaw verbs run with
-        depth held automatically -- mirror of `lock_heading`.
-        """
-        return self._send('lock_depth',
-                          target=float(meters), timeout=timeout)
-
-    def release_depth(self):
-        """Stop the depth-lock streamer (ArduSub keeps holding its
-        last setpoint via ALT_HOLD)."""
-        return self._send('unlock_depth')
-
     # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to the raw client BUT   #
     #  still get the one-line outcome log.                                #
@@ -251,7 +240,7 @@ class DuburiMission:
 
 # Map the human "sweep direction" knob on `vision.find` to the underlying
 # `target_name` field that motion_vision.vision_acquire understands.
-_FIND_SWEEP_TO_DRIVE = {
+_FIND_SWEEP_DRIVERS = {
     'left':    'yaw_left',
     'right':   'yaw_right',
     'forward': 'move_forward',
@@ -261,11 +250,12 @@ _FIND_SWEEP_TO_DRIVE = {
 }
 
 
-class _VisionAxes:
-    """duburi.vision.* -- same axis names as control verbs, but vision-driven.
+class _VisionDSL:
+    """duburi.vision.* -- the closed-loop sub-namespace.
 
-    All verbs send the same field shape to `/duburi/move`; only `cmd`
-    differs. Sticky camera + target come from the parent `DuburiMission`
+    Same axis names as control verbs, but vision-driven. All verbs send
+    the same field shape to `/duburi/move`; only `cmd` differs.
+    Sticky camera + target come from the parent `DuburiMission`
     instance; pass them explicitly to override per call.
 
     Pass `kp_*`, `deadband`, `on_lost`, `stale_after`, etc. as kwargs
@@ -312,15 +302,15 @@ class _VisionAxes:
         sweep: 'right' (default) | 'left' | 'forward' | 'arc' | 'still'
         """
         sweep_key = (sweep or 'still').strip().lower()
-        if sweep_key not in _FIND_SWEEP_TO_DRIVE:
+        if sweep_key not in _FIND_SWEEP_DRIVERS:
             raise ValueError(
                 f"vision.find: unknown sweep={sweep!r}; "
-                f"valid: {sorted(_FIND_SWEEP_TO_DRIVE)}")
+                f"valid: {sorted(_FIND_SWEEP_DRIVERS)}")
         return self._send(
             'vision_acquire',
             camera=self._resolved_camera(camera),
             target_class=self._resolved_target(target),
-            target_name=_FIND_SWEEP_TO_DRIVE[sweep_key],
+            target_name=_FIND_SWEEP_DRIVERS[sweep_key],
             timeout=float(timeout),
             gain=float(gain),
             yaw_rate_pct=float(yaw_rate_pct),

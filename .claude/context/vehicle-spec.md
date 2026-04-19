@@ -108,8 +108,8 @@ src/
 ├── duburi_control/          # MAVLink layer + per-axis motion + COMMANDS registry
 │   ├── pixhawk.py              # arm/disarm/set_mode/RC/setpoints/AHRS2/set_message_rate
 │   ├── commands.py             # COMMANDS registry (single source of truth)
-│   ├── motion_profiles.py      # smoothstep / smootherstep / trapezoid_ramp
-│   ├── motion_common.py        # shared constants + Writers (lock-aware) + thrust_loop
+│   ├── motion_easing.py        # smoothstep / smootherstep / trapezoid_ramp
+│   ├── motion_writers.py       # shared constants + Writers (lock-aware) + thrust_loop
 │   ├── motion_yaw.py           # yaw_snap + yaw_glide (SET_ATTITUDE_TARGET)
 │   ├── motion_forward.py       # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
 │   ├── motion_lateral.py       # drive_lateral_* (Ch6 RC override)

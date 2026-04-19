@@ -19,7 +19,7 @@
 >
 > The rest of this file is the underlying theory; if you need to know
 > **what the live code does**, read `motion_yaw.py`, `motion_depth.py`,
-> `motion_forward.py` / `motion_lateral.py` (with shared logic in `motion_common.py`), and the [README's tuning guide](../../README.md#11-tuning-guide)
+> `motion_forward.py` / `motion_lateral.py` (with shared logic in `motion_writers.py`), and the [README's tuning guide](../../README.md#11-tuning-guide)
 > first.
 
 First-principles approach to robust AUV control. This is the theoretical foundation

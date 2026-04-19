@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from duburi_control.motion_common import make_writers
+from duburi_control.motion_writers import make_writers
 from duburi_control.motion_forward import (
     arc, drive_forward_constant, drive_forward_eased,
 )

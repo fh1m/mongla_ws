@@ -38,10 +38,17 @@ Rate sizing rationale
                           command's neutral 1500 us would steal Ch4.
 
 ``DEPTH_SETPOINT_HZ = 5`` ArduSub closes the depth loop at ~400 Hz
-                          internally; we only refresh the *setpoint*.
-                          5 Hz is the published Blue Robotics
-                          recommendation; lower invites RC-timeout
-                          fallback, higher just floods the link.
+                          internally; we only refresh the *setpoint*
+                          inside ``motion_depth.hold_depth`` while it
+                          drives to a new target. Once the target is
+                          reached we hand depth back to ArduSub's
+                          onboard ALT_HOLD (no continuous streaming).
+
+``HEARTBEAT_HZ = 5``      Cadence of ``Heartbeat`` -- the all-neutral
+                          RC override stream that prevents
+                          ``FS_PILOT_INPUT`` (ArduSub disarms after
+                          ~3 s of no override). 5 Hz = 200 ms gap,
+                          comfortably inside the 0.1-3.0 s window.
 
 ``VISION_LOOP_HZ = 20``   Matches THRUST_HZ so the vision controller
                           and the per-axis writer share a tick.
@@ -55,7 +62,8 @@ Rate sizing rationale
 THRUST_HZ          = 20.0   # RC override publish rate (forward, lateral, arc)
 YAW_RATE_HZ        = 10.0   # Ch4 rate-override publish rate (yaw_snap / yaw_glide)
 LOCK_STREAM_HZ     = 20.0   # HeadingLock background refresh rate
-DEPTH_SETPOINT_HZ  = 5.0    # set_target_depth publish rate (motion_depth + DepthLock)
+DEPTH_SETPOINT_HZ  = 5.0    # set_target_depth publish rate inside motion_depth.hold_depth
+HEARTBEAT_HZ       = 5.0    # Heartbeat all-neutral RC override (FS_PILOT_INPUT guard)
 VISION_LOOP_HZ     = 20.0   # motion_vision tick rate
 LOG_THROTTLE_S     = 0.5    # seconds between motion-loop log heartbeats
 
@@ -64,6 +72,7 @@ __all__ = [
     'YAW_RATE_HZ',
     'LOCK_STREAM_HZ',
     'DEPTH_SETPOINT_HZ',
+    'HEARTBEAT_HZ',
     'VISION_LOOP_HZ',
     'LOG_THROTTLE_S',
 ]

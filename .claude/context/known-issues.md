@@ -24,7 +24,7 @@ don't bundle. Each one is ~10–40 LOC.
 > | `mavlink_api.py` / `MavlinkAPI`               | `pixhawk.py` / `Pixhawk`                      |
 > | `movement_commands.py` / `MovementCommands`   | `duburi.py` / `Duburi`                        |
 > | `movement_yaw.py` (`yaw_step` / `yaw_ramp`)   | `motion_yaw.py` (`yaw_snap` / `yaw_glide`)    |
-> | `movement_linear.py` (`linear_step` / `linear_ramp`) | `motion_forward.py` + `motion_lateral.py` (`drive_*_constant` / `drive_*_eased`) — split per-axis in 2026-04 with shared logic in `motion_common.py` |
+> | `movement_linear.py` (`linear_step` / `linear_ramp`) | `motion_forward.py` + `motion_lateral.py` (`drive_*_constant` / `drive_*_eased`) — split per-axis in 2026-04 with shared logic in `motion_writers.py` |
 > | `movement_depth.py` (`depth_hold`)            | `motion_depth.py` (`hold_depth`)              |
 > | `movement_pids.py` (`DepthPID` / `YawPID`)    | **deleted** — ArduSub onboard PID is the only loop |
 > | `_AUX_*` constants on `MavlinkAPI`            | `AUX_*` on `Pixhawk` (no leading underscore)  |

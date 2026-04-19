@@ -57,7 +57,7 @@ def _open_mavlink(connection_string: str, get_logger):
     get_logger().info(
         f'[SENS ] MAVLink up -- sys={master.target_system}'
         f' comp={master.target_component}')
-    return Pixhawk(master)
+    return Pixhawk(master, log=get_logger())
 
 
 class SensorsNode(Node):

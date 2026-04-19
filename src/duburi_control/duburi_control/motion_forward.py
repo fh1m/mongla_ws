@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Forward-axis translation (Ch5) and curved arc motion (Ch5 + Ch4).
 
-Three public functions, all using `Writers` from `motion_common`:
+Three public functions, all using `Writers` from `motion_writers`:
 
   drive_forward_constant(pixhawk, signed_dir, duration, gain, log,
                          writers, yaw_source=None, settle=0.0)
@@ -31,8 +31,8 @@ the call sites unambiguous: `move_forward` -> `drive_forward_*(+1, ...)`,
 import time
 
 from .pixhawk         import Pixhawk
-from .motion_profiles import trapezoid_ramp
-from .motion_common   import (
+from .motion_easing  import trapezoid_ramp
+from .motion_writers import (
     THRUST_RATE_HZ, LOG_THROTTLE, EASE_SECONDS, REVERSE_KICK_PCT,
     thrust_loop, brake_kick_then_settle, final_settle, read_heading,
 )
