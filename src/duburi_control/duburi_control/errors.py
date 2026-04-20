@@ -31,3 +31,13 @@ class MovementTimeout(MovementError):
 
 class ModeChangeError(MovementError):
     """Autopilot refused the requested mode within the timeout."""
+
+
+class NotArmedError(MovementError):
+    """Command rejected because the AUV is not armed.
+
+    ArduSub silently drops every RC_CHANNELS_OVERRIDE and
+    SET_POSITION_TARGET_GLOBAL_INT frame while disarmed, so motion
+    commands would appear to succeed but produce no thrust.
+    Call arm() first.
+    """

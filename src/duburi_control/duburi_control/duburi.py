@@ -80,7 +80,7 @@ from contextlib import contextmanager
 from duburi_interfaces.action import Move
 
 from .vision_verbs import VisionVerbs
-from .errors        import ModeChangeError
+from .errors        import ModeChangeError, NotArmedError
 from .heading_lock  import HeadingLock
 from .motion_writers import make_writers
 from .motion_depth  import hold_depth
@@ -92,6 +92,16 @@ from .motion_lateral import drive_lateral_constant, drive_lateral_eased
 from .motion_yaw    import yaw_glide, yaw_snap
 from .pixhawk       import Pixhawk
 from .tracing       import command_scope
+
+
+# Verbs that may run while the AUV is disarmed. Every other verb that
+# enters _command_scope requires arm() first: ArduSub silently drops all
+# RC_CHANNELS_OVERRIDE and SET_POSITION_TARGET_GLOBAL_INT frames while
+# disarmed, so motion commands would appear to succeed but move nothing.
+#
+# arm / disarm / set_mode are NOT listed here because they use the
+# tracing-only `command_scope` directly and never enter _command_scope.
+_UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading'})
 
 
 # Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
@@ -527,6 +537,9 @@ class Duburi(VisionVerbs):
         ``[MAV <fn> cmd=<verb>] ...`` line.
         """
         with self.lock, command_scope(verb):
+            if verb not in _UNARM_SAFE and not self.pixhawk.is_armed():
+                raise NotArmedError(
+                    f'{verb}: AUV is disarmed -- call arm() first')
             if self._heartbeat is not None:
                 self._heartbeat.pause()
             try:

@@ -15,6 +15,7 @@ import pytest
 from duburi_interfaces.action import Move
 
 from duburi_control.duburi import Duburi
+from duburi_control.errors import NotArmedError
 
 
 class ThrottleLogger:
@@ -43,10 +44,10 @@ class FakePixhawk:
     Duburi reaches for a method we forgot to implement here.
     """
 
-    def __init__(self, *, depth=-0.5, yaw=10.0, mode='ALT_HOLD'):
+    def __init__(self, *, depth=-0.5, yaw=10.0, mode='ALT_HOLD', armed=True):
         self._attitude = {'yaw': yaw, 'pitch': 0.0, 'roll': 0.0, 'depth': depth}
         self._mode     = mode
-        self._armed    = False
+        self._armed    = armed
         self.calls     = []
         self.lock      = threading.Lock()
 
@@ -265,3 +266,51 @@ def test_motion_uses_translation_when_lock_active(duburi, monkeypatch):
         'with heading-lock active, translation commands must NOT call '
         'send_rc_override for fwd/lat/throttle (they would clobber Ch4)')
     assert translation_calls, 'move_forward must emit translation packets'
+
+
+# ================================================================== #
+#  Arm-state guard                                                    #
+# ================================================================== #
+
+def test_motion_verb_raises_not_armed_when_disarmed(monkeypatch):
+    """Motion commands must fail loudly (NotArmedError) when disarmed.
+
+    ArduSub silently drops all RC override frames while disarmed, so a
+    silent success would be a lie. The action server catches the error
+    and returns success=False to the caller.
+    """
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    pixhawk = FakePixhawk(armed=False)
+    log     = ThrottleLogger(logging.getLogger('test.duburi.unarm'))
+    d       = Duburi(pixhawk, log)
+
+    with pytest.raises(NotArmedError):
+        d.move_forward(duration=0.05, gain=50.0)
+
+
+def test_unarm_safe_verbs_succeed_when_disarmed(monkeypatch):
+    """stop, pause, and unlock_heading must work regardless of arm state.
+
+    These are the 'safe' verbs that need to operate even when the sub
+    is disarmed (e.g. releasing an RC override after an emergency stop).
+    """
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    pixhawk = FakePixhawk(armed=False)
+    log     = ThrottleLogger(logging.getLogger('test.duburi.unarm.safe'))
+    d       = Duburi(pixhawk, log)
+
+    assert d.stop(settle_time=0).success is True
+    assert d.pause(duration=0.0).success is True
+    assert d.unlock_heading().success is True   # no-op when no lock active
+
+
+def test_motion_succeeds_after_arm(monkeypatch):
+    """Motion command must execute normally once arm() is called."""
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    pixhawk = FakePixhawk(armed=False)
+    log     = ThrottleLogger(logging.getLogger('test.duburi.arm.then.move'))
+    d       = Duburi(pixhawk, log)
+
+    d.arm()
+    result = d.move_forward(duration=0.05, gain=50.0)
+    assert result.success is True
