@@ -202,6 +202,12 @@ def vision_track_axes(*,
     last_depth_send     = 0.0
     last_good_sample    = None
 
+    # When depth axis is active, Ch3 must stay released (65535 = NO_OVERRIDE)
+    # so ArduSub's ALT_HOLD depth PID has authority over the vertical thrusters.
+    # Sending Ch3=1500 (neutral stick) every 20 Hz would tell ArduSub "hold
+    # current depth right now" and override our 5 Hz set_target_depth setpoint.
+    throttle_ch = 65535 if 'depth' in axes else 1500
+
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
 
@@ -264,7 +270,10 @@ def vision_track_axes(*,
                 axes_in_deadband.append(abs(sample.ex) <= deadband)
 
             if 'lat' in axes:
-                lat_pct = _clamp(sample.ex * gains.kp_lat,
+                # Negative ex: Ch6 > 1500 pushes LEFT on this AUV's thruster
+                # matrix, opposite to the image-frame sign of ex. Negate so
+                # "target right → strafe right" is the actual behaviour.
+                lat_pct = _clamp(-sample.ex * gains.kp_lat,
                                  -LAT_PCT_MAX, LAT_PCT_MAX)
                 axes_in_deadband.append(abs(sample.ex) <= deadband)
 
@@ -283,11 +292,14 @@ def vision_track_axes(*,
                 depth_setpoint -= depth_step
                 axes_in_deadband.append(abs(sample.ey) <= deadband)
 
-            # ONE RC packet carries Ch4 + Ch5 + Ch6 -- full 3D in one shot.
+            # ONE RC packet carries Ch3 + Ch4 + Ch5 + Ch6.
+            # throttle_ch is 65535 (released) when depth is active so
+            # ArduSub's ALT_HOLD PID honours our set_target_depth setpoint.
             pixhawk.send_rc_override(
                 forward=Pixhawk.percent_to_pwm(forward_pct),
                 lateral=Pixhawk.percent_to_pwm(lat_pct),
                 yaw=Pixhawk.percent_to_pwm(yaw_pct),
+                throttle=throttle_ch,
             )
 
             if 'depth' in axes and (now - last_depth_send) >= 1.0 / DEPTH_HZ:

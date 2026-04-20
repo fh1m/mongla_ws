@@ -46,7 +46,9 @@ from duburi_control import (                                            # noqa: 
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
 
-from .connection_config import DEFAULT_MODE, NETWORK, PROFILES, resolve_mode  # noqa: E402
+from .connection_config import (                                             # noqa: E402
+    DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
+)
 from .vision_state     import VisionState                                # noqa: E402
 from .vision_tunables  import (                                          # noqa: E402
     declare_vision_params,
@@ -128,6 +130,11 @@ class AUVManagerNode(Node):
 
         # ---- ROS parameters --------------------------------------------
         self.declare_parameter('mode',             DEFAULT_MODE)
+        # Override the profile's connection string at the CLI:
+        #   -p mav_device:=/dev/ttyACM0
+        #   -p mav_device:=udpin:0.0.0.0:14560
+        # Empty string (default) means use the resolved profile.
+        self.declare_parameter('mav_device',       '')
         self.declare_parameter('smooth_yaw',       False)
         self.declare_parameter('smooth_translate', False)
         self.declare_parameter('yaw_source',       'mavlink_ahrs')
@@ -144,6 +151,7 @@ class AUVManagerNode(Node):
         declare_vision_params(self)
 
         requested_mode   = str(self.get_parameter('mode').value)
+        mav_device       = str(self.get_parameter('mav_device').value).strip()
         smooth_yaw       = bool(self.get_parameter('smooth_yaw').value)
         smooth_translate = bool(self.get_parameter('smooth_translate').value)
         yaw_src_name     = str(self.get_parameter('yaw_source').value)
@@ -169,7 +177,8 @@ class AUVManagerNode(Node):
         # 'auto' (the default) probes for BlueOS UDP / Pixhawk USB to
         # pick a profile; any explicit name short-circuits the probe.
         mode_name = resolve_mode(requested_mode, logger=self.get_logger())
-        profile   = PROFILES[mode_name]
+        profile   = resolve_profile(
+            mode_name, mav_device=mav_device, logger=self.get_logger())
 
         # ---- MAVLink connection ----------------------------------------
         self.get_logger().info(f'Connecting ({mode_name}) -> {profile["conn"]} ...')
@@ -179,9 +188,35 @@ class AUVManagerNode(Node):
         self.pixhawk = Pixhawk(self.master, log=self.get_logger())
 
         # Pin telemetry rates so ArduSub streams what we need at the
-        # rates we need. Done early -- the reader thread starts below.
+        # rates we need. Done here -- the reader thread starts next.
         for msg_id, hz in MESSAGE_RATES.items():
             self.pixhawk.set_message_rate(msg_id, hz)
+
+        # ---- Reader thread (must start BEFORE yaw_source init) --------
+        # recv_match() is the only call that moves incoming MAVLink frames
+        # into master.messages. Without this running, pixhawk.get_attitude()
+        # always returns None -- which causes BNO085 calibration to time out
+        # with `pixhawk_fresh=False` even though the connection is healthy.
+        self.last_statustext = ''
+        self.prev_state      = {}
+        self.last_print_time = 0.0
+        self.prev_rc         = None
+        self.reader_thread   = threading.Thread(
+            target=self.reader_loop, daemon=True)
+        self.reader_thread.start()
+
+        # AHRS warmup: wait until at least one AHRS2 frame is cached so
+        # BNO calibration's reference_yaw_provider() returns a real value.
+        _warmup_deadline = time.monotonic() + 4.0
+        while time.monotonic() < _warmup_deadline:
+            if self.pixhawk.get_attitude() is not None:
+                break
+            time.sleep(0.05)
+        else:
+            self.get_logger().warning(
+                '[NET  ] AHRS2 not received within 4s after connection. '
+                'BNO085 calibration may still fail. '
+                'Check MAVLink link and ArduSub telemetry rate config.')
 
         # ---- Yaw source -----------------------------------------------
         # Fail loudly if the requested source can't init -- the operator
@@ -290,14 +325,7 @@ class AUVManagerNode(Node):
         self.create_timer(0.5, self.heartbeat_tick,  callback_group=self.timer_group)
         self.create_timer(0.5, self.telemetry_tick,  callback_group=self.timer_group)
 
-        # ---- Reader thread --------------------------------------------
-        self.last_statustext = ''
-        self.prev_state      = {}
-        self.last_print_time = 0.0
-        self.prev_rc         = None
-        self.reader_thread   = threading.Thread(
-            target=self.reader_loop, daemon=True)
-        self.reader_thread.start()
+        # reader_thread already started above (before yaw_source init).
 
     # ================================================================== #
     #  Vision state pool -- lazily built per camera, preflighted once     #
