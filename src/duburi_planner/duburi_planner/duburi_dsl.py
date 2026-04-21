@@ -24,13 +24,13 @@ Two namespaces, one mental model:
   `duburi.vision`, so it is impossible to confuse them with their
   open-loop twin:
 
-      duburi.vision.find(target)               # search until target seen
-      duburi.vision.yaw(target)                # centre on target via Ch4
-      duburi.vision.lateral(target)            # centre on target via Ch6
-      duburi.vision.depth(target)              # centre on target via depth setpoint
-      duburi.vision.forward(target,            # close to / back from target via Ch5
-                            distance=0.55)     # bbox-height fraction = distance proxy
-      duburi.vision.lock(target,               # multi-axis simultaneous hold
+      duburi.vision.find(target)               # drive + watch until target seen
+      duburi.vision.yaw(target)                # steer left/right toward horizontal centre
+      duburi.vision.lateral(target)            # strafe left/right toward horizontal centre
+      duburi.vision.depth(target)              # nudge depth up/down toward vertical centre
+      duburi.vision.forward(target,            # approach / back off by bbox fill fraction
+                            distance=0.55)
+      duburi.vision.lock(target,               # all of the above, simultaneously
                          axes='yaw,forward',
                          distance=0.55)
 
@@ -56,9 +56,9 @@ mission code.
 Mission-author contract
 -----------------------
 Every `duburi.<verb>(...)` and `duburi.vision.<verb>(...)` call is a
-blocking RPC that prints ONE line on completion -- mission files do not
-need a `_step` wrapper, banner code, or per-call logging. Just write
-the verbs in order:
+blocking call that prints ONE result line on completion -- mission files
+do not need a `_step` wrapper, banner code, or per-call logging. Just
+write the verbs in order:
 
     def run(duburi, log):
         duburi.arm()
@@ -67,6 +67,52 @@ the verbs in order:
         duburi.vision.lock(axes='yaw,forward', distance=0.55, duration=10)
         duburi.set_depth(0.0)
         duburi.disarm()
+
+Quick reference -- what each verb does at the hardware level
+------------------------------------------------------------
+OPEN-LOOP VERBS (no sensor feedback during the move):
+  arm()               Power the thrusters. Wait for autopilot confirmation.
+  disarm()            Cut thruster power.
+  set_mode(name)      Switch ArduSub flight mode (e.g. 'ALT_HOLD', 'MANUAL').
+  set_depth(m)        Drive to m metres (negative = below surface). The
+                      autopilot holds that depth until the next set_depth.
+  move_forward(s)     Push the forward thrust channel at gain% for s seconds.
+  move_back(s)        Same, reverse.
+  move_left(s)        Push the lateral thrust channel at gain% for s seconds.
+  move_right(s)       Same, opposite direction.
+  yaw_left(deg)       Spin left N degrees via the heading PID. Returns when done.
+  yaw_right(deg)      Same, right.
+  arc(s, yaw_rate_pct)  Forward thrust + continuous yaw simultaneously (curved path).
+  lock_heading(deg)   Start a background heading-hold thread. 0.0 = current heading.
+  release_heading()   Stop the background heading-hold thread.
+  pause(s)            Send neutral signals for s seconds (hold depth + heading).
+  stop()              Send neutral signals once (immediate hold).
+
+CLOSED-LOOP VISION VERBS (use camera feedback each step):
+  vision.find(target, sweep)
+      Rotate slowly while watching the camera. Return once the target
+      appears. Fails after timeout seconds if nothing is seen.
+  vision.yaw(target, duration)
+      Steer left/right to bring the target's horizontal centre into the
+      middle of the frame. Uses heading PID. Exits when centred or time up.
+  vision.lateral(target, duration)
+      Strafe left/right to centre the target horizontally. Uses the lateral
+      thrust channel directly (does not change heading).
+  vision.depth(target, duration)
+      Nudge depth setpoint up/down to bring the target to the vertical
+      centre of the frame. Exits when centred or time up.
+  vision.forward(target, distance, duration)
+      Approach or back off until the target's bounding box fills `distance`
+      fraction of the frame height. 0.55 = stop when bbox is 55% of frame.
+  vision.lock(target, axes, distance, duration)
+      Run multiple axes at once. All axes run in the same loop and the
+      vehicle settles when ALL are centred at the same time.
+      axes can be any combination of: 'yaw', 'lat', 'depth', 'forward'
+
+LIVE TUNING (between runs, no rebuild needed):
+  ros2 param set /duburi_manager vision.kp_yaw 80.0       # faster/slower yaw
+  ros2 param set /duburi_manager vision.kp_forward 150.0  # faster/slower approach
+  ros2 param set /duburi_manager vision.deadband 0.10     # tighter centering
 
 Why a class (not just module-level functions)
 ---------------------------------------------
@@ -297,9 +343,18 @@ class _VisionDSL:
              gain: float = 25.0,
              yaw_rate_pct: float = 22.0,
              stale_after: float = 0.0):
-        """Search until at least one fresh detection of `target` arrives.
+        """Rotate slowly while watching the camera. Return once the target is seen.
 
-        sweep: 'right' (default) | 'left' | 'forward' | 'arc' | 'still'
+        sweep     -- which way to rotate while searching: 'right' (default),
+                     'left', 'forward' (drive ahead), 'arc', 'still' (wait in place).
+        timeout   -- give up and abort the mission after this many seconds.
+        gain      -- forward thrust percentage used during 'forward' or 'arc' sweep.
+        yaw_rate_pct -- how fast to rotate during the sweep (default 22% yaw stick).
+        stale_after  -- how old a detection can be before it is ignored (seconds).
+                        0.0 = use the live ROS param (vision.stale_after, default 1.5 s).
+
+        Tip: if the vehicle rotates past the target before detecting it,
+        lower yaw_rate_pct. If detection is too slow to confirm, lower stale_after.
         """
         sweep_key = (sweep or 'still').strip().lower()
         if sweep_key not in _FIND_SWEEP_DRIVERS:
@@ -320,11 +375,21 @@ class _VisionDSL:
             camera: str | None = None,
             duration: float = 8.0,
             **overrides):
-        """Centre the largest `target` bbox horizontally via Ch4 (yaw).
+        """Steer left or right to bring the target horizontally into the centre of frame.
 
-        Override knobs (only pass if you want to PIN, not use the live
-        ROS-param default): `deadband`, `kp_yaw`, `on_lost`,
-        `stale_after`.
+        Uses ArduSub's heading PID -- a smooth correction that gets
+        smaller as it closes in. Only one axis moves; depth and distance
+        are untouched.
+
+        duration   -- stop after this many seconds even if not centred.
+        kp_yaw     -- correction speed: 60 = 60% yaw at full-frame offset.
+                      Raise → faster response; lower → less overshoot.
+        deadband   -- how close to centre counts as "done" (fraction of frame width).
+                      0.18 = within 18% of centre. Smaller = tighter.
+        on_lost    -- 'fail' (abort if target disappears) or 'hold' (keep last heading).
+        stale_after-- seconds before a detection is considered too old to use.
+
+        Exits: target centred within deadband for 0.1 s, OR duration runs out.
         """
         return self._send(
             'vision_align_yaw',
@@ -337,7 +402,15 @@ class _VisionDSL:
                 camera: str | None = None,
                 duration: float = 8.0,
                 **overrides):
-        """Centre via lateral strafe (Ch6). Same overrides as `yaw` plus `kp_lat`."""
+        """Strafe left or right to bring the target horizontally into the centre of frame.
+
+        Unlike vision.yaw, this does NOT change the vehicle's heading --
+        it slides the body sideways. Best used when you need to face a
+        fixed direction (e.g. aligned with a gate) and just shift position.
+
+        kp_lat    -- strafe speed: 60 = 60% lateral thrust at full offset.
+        All other tuning knobs are the same as vision.yaw.
+        """
         return self._send(
             'vision_align_lat',
             camera=self._resolved_camera(camera),
@@ -349,7 +422,23 @@ class _VisionDSL:
               camera: str | None = None,
               duration: float = 8.0,
               **overrides):
-        """Centre vertically via incremental depth setpoint nudges. Overrides include `kp_depth`."""
+        """Nudge depth up or down to bring the target to the vertical centre of frame.
+
+        Instead of a direct thrust command, this adjusts the ArduSub depth
+        setpoint in small steps. The autopilot's depth PID then drives the
+        thrusters to reach the new setpoint. This keeps depth changes smooth
+        and prevents fighting the autopilot.
+
+        kp_depth  -- depth step size per correction (metres per unit error).
+                     Default 0.05 m/step. Raise cautiously -- too large causes
+                     overshooting and oscillation.
+        deadband  -- vertical "close enough" zone (fraction of frame height).
+
+        Tip: if the target has a very tall bounding box (person upright, pole),
+        use depth_anchor_frac=0.2 to align toward the top of the box instead
+        of the centre -- prevents the controller from stalling when the bbox
+        centre is already near the middle of the frame.
+        """
         return self._send(
             'vision_align_depth',
             camera=self._resolved_camera(camera),
@@ -362,11 +451,25 @@ class _VisionDSL:
                 distance: float = 0.55,
                 duration: float = 12.0,
                 **overrides):
-        """Drive Ch5 so `target`'s bbox-height fraction matches `distance`.
+        """Approach or back away to reach the requested standoff distance.
 
-        `distance` IS the bbox height as a fraction of image height (0..1).
-        Bigger fraction = closer target. Override knobs: `kp_forward`,
-        `deadband`, `on_lost`, `stale_after`.
+        `distance` is how much of the frame the target's bounding box should
+        fill (by height), used as a distance proxy:
+          0.20 = target is small / far away
+          0.55 = medium close-up (default)
+          0.80 = very close (nearly filling the frame)
+
+        The vehicle drives forward if the target looks too small, and backs
+        off if it looks too big. Exits when the bbox fraction matches
+        `distance` within deadband, or `duration` seconds pass.
+
+        kp_forward    -- approach speed: 200 = 50% thrust at 25% size error.
+                         Raise for faster approach; lower to prevent overshoot.
+        distance_metric -- how to measure "distance" from the bounding box:
+                         'height' (default), 'area' (width × height), 'diagonal'.
+                         Use 'area' for targets that are wider than tall (gates).
+        on_lost       -- 'hold' is useful here to maintain the last thrust
+                         if the detection drops briefly.
         """
         return self._send(
             'vision_hold_distance',
@@ -382,12 +485,33 @@ class _VisionDSL:
              distance: float = 0.55,
              duration: float = 15.0,
              **overrides):
-        """Hold multiple axes simultaneously on `target`.
+        """Hold multiple axes at the same time on `target`.
 
-        `axes` is a CSV: any subset of 'yaw,lat,depth,forward'. The same
-        overrides apply for every axis (`kp_yaw`, `kp_lat`, `kp_depth`,
-        `kp_forward`, `deadband`, `target_bbox_h_frac`, `on_lost`,
-        `stale_after`, `visual_pid`).
+        All requested axes run in the same loop and fire in the same
+        ArduSub command packet. The verb exits when ALL axes are centred
+        at the same time within deadband, or `duration` seconds pass.
+
+        axes     -- which axes to control (comma-separated string):
+                    'yaw'     = steer left/right to centre horizontally
+                    'lat'     = strafe left/right to centre horizontally
+                    'depth'   = nudge depth setpoint for vertical centre
+                    'forward' = approach/back off to maintain `distance`
+                    Examples: 'yaw,forward'  'yaw,lat,depth'  'yaw,lat,depth,forward'
+        distance -- target bbox fill fraction (used only when 'forward' in axes).
+        duration -- time limit in seconds. The lock continues until settled
+                    OR this limit is hit.
+
+        lock_mode (kwarg) -- controls exit behaviour:
+                    'settle' (default) = exit as soon as all axes are centred.
+                    'follow'  = never exit on settle; track indefinitely until
+                                duration runs out. Good for moving targets.
+                    'pursue'  = keep driving forward until the target fills
+                                `distance` fraction (no backing off). Good for
+                                torpedo / ramming approaches.
+
+        kp_yaw, kp_lat, kp_depth, kp_forward -- per-axis speed gains.
+        deadband  -- centering tolerance for all axes.
+        on_lost   -- 'fail' (abort on lost target) or 'hold' (freeze setpoints).
         """
         return self._send(
             'vision_align_3d',
