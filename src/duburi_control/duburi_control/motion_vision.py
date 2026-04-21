@@ -134,6 +134,9 @@ def vision_track_axes(*,
                       stale_after: float = DEFAULT_STALE_AFTER,
                       on_lost: str = 'fail',
                       depth_sign: int = +1,
+                      depth_anchor_frac: float = 0.5,
+                      lock_mode: str = 'settle',
+                      distance_metric: str = 'height',
                       log,
                       writers,
                       visual_pid: bool = False) -> VisionTrackResult:
@@ -146,6 +149,34 @@ def vision_track_axes(*,
         `.image_size() -> (W,H)`. See duburi_manager.vision_state.VisionState.
     axes
         Subset of {'yaw','lat','depth','forward'}. Empty -> raises.
+    depth_anchor_frac
+        Which vertical point on the bounding box to align to the image
+        centre. 0.0 = top edge, 0.5 = centre (default / current behaviour),
+        1.0 = bottom edge. Values around 0.2 work well for tall objects
+        (people standing upright, poles) where the bbox centre is already
+        near the frame centre, making the depth error appear near zero.
+        Formula: ey_used = ey + (2*anchor - 1) * h_frac
+    lock_mode
+        Controls when the loop exits (in addition to duration / on_lost):
+        'settle' (default) -- exit as soon as all axes are centred and
+                              steady. Normal "align and done" behaviour.
+        'follow'           -- never exit on settle. Keep tracking until
+                              duration runs out. Good for following a
+                              moving target (swimmer, diver) for N seconds.
+        'pursue'           -- keep driving forward (never back off) until
+                              the target fills target_h_frac of the frame.
+                              Exit = target reached. Good for competition
+                              approach / torpedo firing runs.
+    distance_metric
+        Which part of the bounding box to use as the distance proxy for
+        the 'forward' axis:
+        'height'   (default) -- bbox height fraction. Works well for tall
+                                objects. Breaks for objects wider than tall.
+        'area'               -- geometric mean of width and height fractions
+                                (sqrt(w*h)). More robust for wide targets
+                                like gates and torpedo holes.
+        'diagonal'           -- normalised bounding box diagonal. Best
+                                all-rounder for targets of unknown aspect ratio.
     target_h_frac
         Required when 'forward' is in `axes`; ignored otherwise.
     depth_sign
@@ -175,11 +206,20 @@ def vision_track_axes(*,
             f"(got {target_h_frac})")
     if on_lost not in ('fail', 'hold'):
         raise ValueError(f"on_lost must be 'fail' or 'hold' (got {on_lost!r})")
+    if lock_mode not in ('settle', 'follow', 'pursue', ''):
+        raise ValueError(f"lock_mode must be 'settle', 'follow', or 'pursue' (got {lock_mode!r})")
+    if distance_metric not in ('height', 'area', 'diagonal', ''):
+        raise ValueError(f"distance_metric must be 'height', 'area', or 'diagonal' (got {distance_metric!r})")
+
+    # Normalise empty string defaults.
+    _lock_mode       = lock_mode or 'settle'
+    _distance_metric = distance_metric or 'height'
 
     controller_label = 'PI ' if visual_pid else 'P  '   # surfaced for the operator
     log.info(
         f"[VIS  ] track class={target_class!r} axes={sorted(axes)} "
         f"deadband={deadband:.2f} target_h={target_h_frac:.2f} "
+        f"anchor={depth_anchor_frac:.2f} lock={_lock_mode} dist={_distance_metric} "
         f"stale={stale_after:.2f}s on_lost={on_lost} mode={controller_label}")
 
     # Preflight: VisionState owns CameraInfo so a (0,0) here means we
@@ -278,19 +318,34 @@ def vision_track_axes(*,
                 axes_in_deadband.append(abs(sample.ex) <= deadband)
 
             if 'forward' in axes:
-                distance_error = target_h_frac - sample.h_frac
-                forward_pct = _clamp(distance_error * gains.kp_forward,
-                                     -FWD_PCT_MAX, FWD_PCT_MAX)
+                # Use the selected metric as the distance proxy.
+                # 'area' handles wide targets (gates); 'diagonal' is the
+                # best all-rounder when target shape is unknown.
+                size = _distance_size(sample, _distance_metric)
+                distance_error = target_h_frac - size
+                if _lock_mode == 'pursue':
+                    # Pursue: only allow driving forward, never backing off.
+                    # Clamp lower bound to 0 so negative error (too close)
+                    # doesn't generate reverse thrust.
+                    forward_pct = _clamp(distance_error * gains.kp_forward,
+                                         0.0, FWD_PCT_MAX)
+                else:
+                    forward_pct = _clamp(distance_error * gains.kp_forward,
+                                         -FWD_PCT_MAX, FWD_PCT_MAX)
                 axes_in_deadband.append(abs(distance_error) <= deadband)
 
             if 'depth' in axes:
-                depth_step = _clamp(sample.ey * gains.kp_depth,
+                # depth_anchor_frac shifts which point on the bbox we align
+                # to the image centre. At 0.5 (default) this equals sample.ey
+                # exactly -- no change from original behaviour.
+                # At 0.2 we align a point near the top of the box, which
+                # gives a real error signal even when the bbox centre is
+                # already at the frame centre (tall objects like people).
+                ey_depth = sample.ey + (2.0 * depth_anchor_frac - 1.0) * sample.h_frac
+                depth_step = _clamp(ey_depth * gains.kp_depth,
                                     -MAX_DEPTH_NUDGE, MAX_DEPTH_NUDGE) * depth_sign
-                # ey > 0 (target below centre) for a forward camera means
-                # we want to go DEEPER (more negative depth). The sign is
-                # the natural one once depth_sign is folded in.
                 depth_setpoint -= depth_step
-                axes_in_deadband.append(abs(sample.ey) <= deadband)
+                axes_in_deadband.append(abs(ey_depth) <= deadband)
 
             # ONE RC packet carries Ch3 + Ch4 + Ch5 + Ch6.
             # throttle_ch is 65535 (released) when depth is active so
@@ -310,21 +365,32 @@ def vision_track_axes(*,
                                    if all(axes_in_deadband) else 0)
 
             if (now - last_log_time) >= LOG_THROTTLE_S:
+                size_for_log = _distance_size(sample, _distance_metric) if 'forward' in axes else sample.h_frac
                 log.info(
                     f"[VIS  ] ex={sample.ex:+.2f} ey={sample.ey:+.2f} "
-                    f"h={sample.h_frac:.2f} (tgt {target_h_frac:.2f})  "
+                    f"size={size_for_log:.2f} (tgt {target_h_frac:.2f})  "
                     f"yaw={yaw_pct:+5.1f}% lat={lat_pct:+5.1f}% "
                     f"fwd={forward_pct:+5.1f}% dep={depth_setpoint:+.2f}m  "
-                    f"settled={settled_tick_streak}/{SETTLED_TICK_BUDGET}",
+                    f"mode={_lock_mode} settled={settled_tick_streak}/{SETTLED_TICK_BUDGET}",
                     throttle_duration_sec=LOG_THROTTLE_S)
                 last_log_time = now
 
-            if settled_tick_streak >= SETTLED_TICK_BUDGET:
-                return _build_ok_result(
-                    f"all axes within {deadband:.2f} for "
-                    f"{settled_tick_streak} ticks",
-                    elapsed, last_good_sample, settled_tick_streak,
-                    lost_tick_streak, axes, deadband, target_h_frac)
+            # pursue: exit the moment the target is close enough.
+            if _lock_mode == 'pursue' and 'forward' in axes:
+                size = _distance_size(sample, _distance_metric)
+                if size >= target_h_frac:
+                    return _build_ok_result(
+                        f"pursued to target: size={size:.2f} >= {target_h_frac:.2f}",
+                        elapsed, last_good_sample, settled_tick_streak,
+                        lost_tick_streak, axes, deadband, target_h_frac)
+
+            # settle / follow: exit on settle only in settle mode.
+            if _lock_mode != 'follow' and _lock_mode != 'pursue':
+                if settled_tick_streak >= SETTLED_TICK_BUDGET:
+                    return _build_ok_result(
+                        f"all axes within {deadband:.2f}",
+                        elapsed, last_good_sample, settled_tick_streak,
+                        lost_tick_streak, axes, deadband, target_h_frac)
 
             time.sleep(1.0 / LOOP_HZ)
 
@@ -413,6 +479,21 @@ def vision_acquire(*,
 # ---------------------------------------------------------------------- #
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _distance_size(sample, metric: str) -> float:
+    """Return the distance proxy for the 'forward' axis.
+
+    'height'   -- bbox height fraction (default; works for tall objects).
+    'area'     -- geometric mean of width and height; robust for wide targets
+                  (gates, torpedo holes, anything wider than it is tall).
+    'diagonal' -- normalised diagonal; best all-rounder for unknown shapes.
+    """
+    if metric == 'area':
+        return (sample.h_frac * sample.w_frac) ** 0.5
+    if metric == 'diagonal':
+        return ((sample.h_frac ** 2 + sample.w_frac ** 2) ** 0.5) / (2 ** 0.5)
+    return sample.h_frac  # 'height' (default)
 
 
 def _read_current_depth(pixhawk) -> Optional[float]:

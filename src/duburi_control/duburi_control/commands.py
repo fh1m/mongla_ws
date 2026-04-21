@@ -121,61 +121,72 @@ COMMANDS = {
     # for a webcam-detected 'person' but every gain is overrideable from
     # the goal so missions can profile them in flight.
     'vision_align_3d': {
-        'help':     'Hold the largest target_class detection centred AND '
-                    'at target_bbox_h_frac. Active axes via CSV `axes`.',
+        'help':     'Hold target_class centred AND at target_bbox_h_frac. '
+                    'Active axes via CSV axes. lock_mode: settle/follow/pursue. '
+                    'depth_anchor_frac: 0=top, 0.5=centre, 1=bottom of bbox. '
+                    'distance_metric: height/area/diagonal.',
         'fields':   ['camera', 'target_class', 'axes', 'duration',
                      'deadband', 'kp_yaw', 'kp_lat', 'kp_depth', 'kp_forward',
                      'target_bbox_h_frac', 'visual_pid', 'on_lost',
-                     'stale_after'],
+                     'stale_after', 'depth_anchor_frac', 'lock_mode',
+                     'distance_metric'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'axes': 'yaw,forward', 'duration': 30.0,
                      'deadband': 0.18, 'kp_yaw': 60.0, 'kp_lat': 60.0,
                      'kp_depth': 0.05, 'kp_forward': 200.0,
                      'target_bbox_h_frac': 0.30, 'visual_pid': False,
-                     'on_lost': 'fail', 'stale_after': 1.5},
+                     'on_lost': 'fail', 'stale_after': 1.5,
+                     'depth_anchor_frac': 0.0,  # 0.0 = use ROS param default (0.5)
+                     'lock_mode': '', 'distance_metric': ''},
     },
     'vision_align_yaw': {
-        'help':     'One-axis convenience: keep target_class centred '
-                    'horizontally (Ch4 only).',
+        'help':     'Steer toward horizontal centre via heading channel. '
+                    'lock_mode: settle (done when centred) / follow (until duration).',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_yaw', 'on_lost', 'stale_after'],
+                     'kp_yaw', 'on_lost', 'stale_after', 'lock_mode'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_yaw': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5},
+                     'stale_after': 1.5, 'lock_mode': ''},
     },
     'vision_align_lat': {
-        'help':     'One-axis convenience: keep target_class centred via '
-                    'lateral strafe (Ch6 only).',
+        'help':     'Strafe toward horizontal centre via lateral channel. '
+                    'lock_mode: settle / follow.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_lat', 'on_lost', 'stale_after'],
+                     'kp_lat', 'on_lost', 'stale_after', 'lock_mode'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_lat': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5},
+                     'stale_after': 1.5, 'lock_mode': ''},
     },
     'vision_align_depth': {
-        'help':     'One-axis convenience: nudge depth so target_class '
-                    'sits at vertical centre (incremental ALT_HOLD setpoint).',
+        'help':     'Nudge depth setpoint to centre target vertically. '
+                    'depth_anchor_frac: which vertical point on bbox to align '
+                    '(0=top, 0.5=centre, 1=bottom). Use 0.2 for tall objects.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_depth', 'on_lost', 'stale_after'],
+                     'kp_depth', 'on_lost', 'stale_after',
+                     'depth_anchor_frac', 'lock_mode'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_depth': 0.05, 'on_lost': 'fail',
-                     'stale_after': 1.5},
+                     'stale_after': 1.5,
+                     'depth_anchor_frac': 0.0,  # 0.0 = use ROS param default (0.5)
+                     'lock_mode': ''},
     },
     'vision_hold_distance': {
-        'help':     'Drive forward/back so target_class bbox height matches '
-                    'target_bbox_h_frac. Bigger bbox = closer target.',
+        'help':     'Drive forward/back to match target_bbox_h_frac. '
+                    'distance_metric: height (default) / area / diagonal. '
+                    'lock_mode: settle / follow / pursue (only approach).',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_forward', 'target_bbox_h_frac', 'on_lost',
-                     'stale_after'],
-        # deadband stays tighter here because it measures bbox-height
-        # error, which is naturally smaller than ex/ey centring errors.
+                     'stale_after', 'lock_mode', 'distance_metric'],
+        # deadband is tighter here because bbox-height error is naturally
+        # smaller than the centring errors on yaw/lat axes.
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 20.0, 'deadband': 0.05,
                      'kp_forward': 200.0, 'target_bbox_h_frac': 0.30,
-                     'on_lost': 'fail', 'stale_after': 1.5},
+                     'on_lost': 'fail', 'stale_after': 1.5,
+                     'lock_mode': '', 'distance_metric': ''},
     },
     'vision_acquire': {
         'help':     'Block (optionally driving via target_name verb) until '
@@ -192,7 +203,8 @@ COMMANDS = {
 
 
 # Field names that carry a string instead of a float (everything else is float).
-STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'on_lost')
+STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'on_lost',
+                 'lock_mode', 'distance_metric')
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('visual_pid',)

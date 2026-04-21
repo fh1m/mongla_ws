@@ -28,6 +28,13 @@ float32 target_bbox_h_frac # bbox height target as fraction of image height
 bool    visual_pid         # false=P only; true=PI (anti-windup, v2 hook)
 string  on_lost            # 'fail' (default) | 'hold'
 float32 stale_after        # seconds; older detection considered lost
+float32 depth_anchor_frac  # which vertical point on the bbox to centre (0=top, 0.5=centre, 1=bottom)
+                           # 0.0 on wire = use ROS param (vision.depth_anchor_frac, default 0.5)
+                           # Use 0.2 for tall objects (people, poles) to avoid depth stall
+string  lock_mode          # '' or 'settle' (default) | 'follow' | 'pursue'
+                           # follow = track until duration; pursue = approach until target_bbox_h_frac
+string  distance_metric    # '' or 'height' (default) | 'area' | 'diagonal'
+                           # area/diagonal are more robust for wide targets like gates
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

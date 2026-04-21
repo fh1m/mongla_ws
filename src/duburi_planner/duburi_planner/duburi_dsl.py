@@ -479,6 +479,27 @@ class _VisionDSL:
             duration=float(duration),
             **overrides)
 
+    def follow(self, target: str | None = None, *,
+               camera: str | None = None,
+               axes: str = 'yaw,forward',
+               distance: float = 0.55,
+               duration: float = 60.0,
+               **overrides):
+        """Track the target continuously until duration expires -- never exits on settle.
+
+        Same as vision.lock(..., lock_mode='follow'). Designed for following
+        a moving target (swimmer, diver, moving buoy) for a fixed number of
+        seconds without stopping the moment it's centred.
+
+        For a stationary target you want to just monitor, set on_lost='hold'
+        so brief detection gaps don't abort the tracking.
+
+        All tuning knobs from vision.lock apply (kp_*, deadband, on_lost, etc.).
+        """
+        return self.lock(target, camera=camera, axes=axes,
+                         distance=distance, duration=duration,
+                         lock_mode='follow', **overrides)
+
     def lock(self, target: str | None = None, *,
              camera: str | None = None,
              axes: str = 'yaw,forward',

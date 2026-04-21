@@ -63,7 +63,8 @@ class VisionVerbs:
     def vision_align_3d(self, camera, target_class, axes, duration,
                         deadband, kp_yaw, kp_lat, kp_depth, kp_forward,
                         target_bbox_h_frac, visual_pid, on_lost,
-                        stale_after):
+                        stale_after, depth_anchor_frac=0.0,
+                        lock_mode='', distance_metric=''):
         """Centre + maintain distance on the largest ``target_class`` bbox.
 
         ``axes`` is a CSV: any subset of ``'yaw,lat,depth,forward'``.
@@ -72,7 +73,8 @@ class VisionVerbs:
         about intent.
 
         impl: motion_vision.vision_track_axes -> pixhawk.send_rc_override
-        (Ch4/Ch5/Ch6) and pixhawk.set_target_depth when 'depth' is in axes.
+        (heading/lateral/forward channels) and set_target_depth when
+        'depth' is in axes.
         """
         axis_set = _parse_axes(axes)
         gains = VisionGains(kp_yaw=float(kp_yaw), kp_lat=float(kp_lat),
@@ -85,11 +87,14 @@ class VisionVerbs:
             gains=gains, deadband=float(deadband),
             target_h_frac=float(target_bbox_h_frac),
             visual_pid=bool(visual_pid),
-            on_lost=str(on_lost), stale_after=float(stale_after))
+            on_lost=str(on_lost), stale_after=float(stale_after),
+            depth_anchor_frac=float(depth_anchor_frac),
+            lock_mode=str(lock_mode),
+            distance_metric=str(distance_metric))
 
     def vision_align_yaw(self, camera, target_class, duration, deadband,
-                         kp_yaw, on_lost, stale_after):
-        """impl: motion_vision.vision_track_axes(axes={'yaw'}) -> pixhawk.send_rc_override (Ch4)."""
+                         kp_yaw, on_lost, stale_after, lock_mode=''):
+        """Steer toward horizontal centre via heading channel. lock_mode: 'settle'/'follow'."""
         gains = VisionGains(kp_yaw=float(kp_yaw))
         return self._run_vision_track(
             verb='vision_align_yaw', label='align_yaw',
@@ -97,11 +102,12 @@ class VisionVerbs:
             axes={'yaw'}, duration=float(duration), gains=gains,
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
-            stale_after=float(stale_after))
+            stale_after=float(stale_after),
+            lock_mode=str(lock_mode))
 
     def vision_align_lat(self, camera, target_class, duration, deadband,
-                         kp_lat, on_lost, stale_after):
-        """impl: motion_vision.vision_track_axes(axes={'lat'}) -> pixhawk.send_rc_override (Ch6)."""
+                         kp_lat, on_lost, stale_after, lock_mode=''):
+        """Strafe toward horizontal centre via lateral channel. lock_mode: 'settle'/'follow'."""
         gains = VisionGains(kp_lat=float(kp_lat))
         return self._run_vision_track(
             verb='vision_align_lat', label='align_lat',
@@ -109,11 +115,17 @@ class VisionVerbs:
             axes={'lat'}, duration=float(duration), gains=gains,
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
-            stale_after=float(stale_after))
+            stale_after=float(stale_after),
+            lock_mode=str(lock_mode))
 
     def vision_align_depth(self, camera, target_class, duration, deadband,
-                           kp_depth, on_lost, stale_after):
-        """impl: motion_vision.vision_track_axes(axes={'depth'}) -> pixhawk.set_target_depth."""
+                           kp_depth, on_lost, stale_after,
+                           depth_anchor_frac=0.0, lock_mode=''):
+        """Nudge depth setpoint to centre vertically.
+
+        depth_anchor_frac: which vertical point on the bbox to align (0=top,
+        0.5=centre, 1=bottom). 0.2 works well for tall objects like people.
+        """
         gains = VisionGains(kp_depth=float(kp_depth))
         return self._run_vision_track(
             verb='vision_align_depth', label='align_depth',
@@ -121,12 +133,19 @@ class VisionVerbs:
             axes={'depth'}, duration=float(duration), gains=gains,
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
-            stale_after=float(stale_after))
+            stale_after=float(stale_after),
+            depth_anchor_frac=float(depth_anchor_frac),
+            lock_mode=str(lock_mode))
 
     def vision_hold_distance(self, camera, target_class, duration, deadband,
                              kp_forward, target_bbox_h_frac, on_lost,
-                             stale_after):
-        """impl: motion_vision.vision_track_axes(axes={'forward'}) -> pixhawk.send_rc_override (Ch5)."""
+                             stale_after, lock_mode='', distance_metric=''):
+        """Approach / back off to maintain standoff distance by bbox fill fraction.
+
+        lock_mode: 'settle' (exit when at distance), 'follow' (track until
+        duration), 'pursue' (only approach, exit when close enough).
+        distance_metric: 'height' (default), 'area', 'diagonal'.
+        """
         gains = VisionGains(kp_forward=float(kp_forward))
         return self._run_vision_track(
             verb='vision_hold_distance', label='hold_distance',
@@ -135,7 +154,9 @@ class VisionVerbs:
             deadband=float(deadband),
             target_h_frac=float(target_bbox_h_frac),
             visual_pid=False, on_lost=str(on_lost),
-            stale_after=float(stale_after))
+            stale_after=float(stale_after),
+            lock_mode=str(lock_mode),
+            distance_metric=str(distance_metric))
 
     def vision_acquire(self, camera, target_class, target_name, timeout,
                        gain, yaw_rate_pct, stale_after):
@@ -173,19 +194,19 @@ class VisionVerbs:
 
     def _run_vision_track(self, *, verb, label, camera, target_class, axes,
                           duration, gains, deadband, target_h_frac,
-                          visual_pid, on_lost, stale_after):
+                          visual_pid, on_lost, stale_after,
+                          depth_anchor_frac=0.5, lock_mode='settle',
+                          distance_metric='height'):
         """Common path for every vision_align_* / vision_hold_distance verb.
 
         ``verb`` is the public method name (``'vision_align_yaw'``, ...)
-        and is what flows into ``_command_scope`` so the MAVLink trace
-        line carries ``cmd=<verb>``. ``label`` is the (shorter) human
-        log token printed in ``[CMD  ] vision_<label>``.
+        and flows into ``_command_scope`` so the MAVLink trace line
+        carries ``cmd=<verb>``. ``label`` is the shorter human log token.
 
-        When ``'depth'`` is in the axis set we ensure ALT_HOLD is
-        engaged so ArduSub honours our streamed depth setpoints. The
-        verb is the sole author of depth packets while it runs; on
-        exit ALT_HOLD's onboard 400 Hz controller keeps holding the
-        new depth without any background streamer on our side.
+        When ``'depth'`` is in the axis set we ensure ALT_HOLD is engaged
+        so ArduSub honours our streamed depth setpoints. The verb is the
+        sole author of depth packets while it runs; on exit the autopilot
+        keeps holding the new depth without any background streamer.
         """
         with self._command_scope(verb):
             self._send_neutral_and_settle()
@@ -197,7 +218,9 @@ class VisionVerbs:
             self.log.info(
                 f'[CMD  ] vision_{label}  camera={camera!r}  '
                 f'class={target_class!r}  axes={sorted(axes)}  '
-                f'duration={duration:.1f}s  on_lost={on_lost}')
+                f'duration={duration:.1f}s  on_lost={on_lost}  '
+                f'lock={lock_mode or "settle"}  anchor={depth_anchor_frac:.2f}  '
+                f'dist_metric={distance_metric or "height"}')
             outcome = vision_track_axes(
                 pixhawk=self.pixhawk, vision_state=vstate,
                 target_class=target_class, axes=axes,
@@ -205,6 +228,8 @@ class VisionVerbs:
                 target_h_frac=target_h_frac,
                 deadband=deadband, stale_after=stale_after,
                 on_lost=on_lost, depth_sign=depth_sign,
+                depth_anchor_frac=depth_anchor_frac,
+                lock_mode=lock_mode, distance_metric=distance_metric,
                 log=self.log, writers=self._writers(),
                 visual_pid=visual_pid)
             self._send_neutral_and_settle()
