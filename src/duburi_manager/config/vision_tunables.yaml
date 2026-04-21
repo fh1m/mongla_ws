@@ -66,3 +66,32 @@ duburi_manager:
       # The acquire verb only uses the one matching its drive verb.
       acquire_yaw_rate_pct: 22.0
       acquire_gain:         25.0
+
+      # ---- Depth anchor -----------------------------------------------
+      # Which vertical point on the bounding box to align to the image
+      # centre.  0.0 = top edge,  0.5 = centre (default),  1.0 = bottom.
+      # Use 0.2 for tall objects (standing people, poles) -- their bbox
+      # centre is already near the frame centre, which would make the
+      # depth correction look like zero (controller stalls). Aligning near
+      # the top gives a real error signal and lets the AUV find the right
+      # depth relative to the object.
+      depth_anchor_frac: 0.5
+
+      # ---- Continuous lock mode ---------------------------------------
+      # Controls when a vision lock exits (beyond duration / target lost):
+      #   settle  (default) -- exit as soon as all axes are centred.
+      #   follow            -- never exit on settle; track until duration.
+      #                        Good for following a moving target.
+      #   pursue            -- keep driving forward (no backing off) until
+      #                        the target fills target_bbox_h_frac of the
+      #                        frame. Good for torpedo approach / ramming.
+      lock_mode: "settle"
+
+      # ---- Distance proxy metric for forward axis --------------------
+      # How to measure "how far away" the target is from the bounding box:
+      #   height   (default) -- bbox height fraction. Good for tall targets.
+      #   area               -- geometric mean of width and height fractions.
+      #                         Better for wide targets (gates, torpedo holes).
+      #   diagonal           -- normalised diagonal. Best all-rounder when
+      #                         target shape is unknown.
+      distance_metric: "height"

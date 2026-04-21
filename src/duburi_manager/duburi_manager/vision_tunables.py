@@ -49,6 +49,17 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     'vision.on_lost':             'fail',
     'vision.acquire_yaw_rate_pct': 22.0,
     'vision.acquire_gain':         25.0,
+    # depth_anchor_frac: which vertical point on the bbox to align to centre.
+    # 0.5 = centre (default, same as before). 0.2 = near-top (use for tall
+    # objects like standing people -- prevents the controller stalling when
+    # the bbox centre is already at the frame centre).
+    'vision.depth_anchor_frac':    0.5,
+    # lock_mode: 'settle' (exit when centred), 'follow' (track until duration),
+    # 'pursue' (approach-only, exit when target fills target_bbox_h_frac).
+    'vision.lock_mode':           'settle',
+    # distance_metric: how to measure target distance from its bounding box.
+    # 'height' (default), 'area' (better for wide targets), 'diagonal'.
+    'vision.distance_metric':     'height',
 }
 
 
@@ -68,24 +79,31 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'target_bbox_h_frac':  'vision.target_bbox_h_frac',
         'stale_after':         'vision.stale_after',
         'on_lost':             'vision.on_lost',
+        'depth_anchor_frac':   'vision.depth_anchor_frac',
+        'lock_mode':           'vision.lock_mode',
+        'distance_metric':     'vision.distance_metric',
     },
     'vision_align_yaw': {
         'kp_yaw':      'vision.kp_yaw',
         'deadband':    'vision.deadband',
         'stale_after': 'vision.stale_after',
         'on_lost':     'vision.on_lost',
+        'lock_mode':   'vision.lock_mode',
     },
     'vision_align_lat': {
         'kp_lat':      'vision.kp_lat',
         'deadband':    'vision.deadband',
         'stale_after': 'vision.stale_after',
         'on_lost':     'vision.on_lost',
+        'lock_mode':   'vision.lock_mode',
     },
     'vision_align_depth': {
-        'kp_depth':    'vision.kp_depth',
-        'deadband':    'vision.deadband',
-        'stale_after': 'vision.stale_after',
-        'on_lost':     'vision.on_lost',
+        'kp_depth':           'vision.kp_depth',
+        'deadband':           'vision.deadband',
+        'stale_after':        'vision.stale_after',
+        'on_lost':            'vision.on_lost',
+        'depth_anchor_frac':  'vision.depth_anchor_frac',
+        'lock_mode':          'vision.lock_mode',
     },
     'vision_hold_distance': {
         'kp_forward':         'vision.kp_forward',
@@ -93,6 +111,8 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'deadband':           'vision.deadband',
         'stale_after':        'vision.stale_after',
         'on_lost':            'vision.on_lost',
+        'lock_mode':          'vision.lock_mode',
+        'distance_metric':    'vision.distance_metric',
     },
     'vision_acquire': {
         'gain':         'vision.acquire_gain',
