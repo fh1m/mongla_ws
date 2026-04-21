@@ -74,6 +74,9 @@ vision verbs.
 | `visual_pid`         | bool     | vision_align_3d (placeholder for v2)  |
 | `on_lost`            | string   | vision_*  ('fail' or 'hold')          |
 | `stale_after`        | float32  | vision_*                              |
+| `depth_anchor_frac`  | float32  | vision_align_depth / vision_align_3d  |
+| `lock_mode`          | string   | vision_* ('settle' / 'follow' / 'pursue') |
+| `distance_metric`    | string   | vision_hold_distance / vision_align_3d |
 
 ### `Move.Result` fields you get back
 
@@ -187,6 +190,12 @@ duburi.vision.forward (target=None, distance=0.55, duration=12.0, **overrides)
 
 duburi.vision.lock    (target=None, axes='yaw,forward',
                        distance=0.55, duration=15.0, **overrides)
+
+duburi.vision.follow  (target=None, axes='yaw,forward',
+                       distance=0.55, duration=60.0, **overrides)
+# Convenience wrapper for lock(..., lock_mode='follow').
+# Never exits on settle — tracks the target until `duration` expires
+# or the target is lost. Use for a swimmer / diver tracking window.
 ```
 
 `sweep` mapping (in `_FIND_SWEEP_DRIVERS`):
@@ -202,7 +211,8 @@ duburi.vision.lock    (target=None, axes='yaw,forward',
 
 `**overrides` are any of `kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`,
 `deadband`, `target_bbox_h_frac`, `stale_after`, `on_lost`,
-`visual_pid`. Only pass them when you want to *pin* a value -- omit
+`depth_anchor_frac`, `lock_mode`, `distance_metric`, `visual_pid`.
+Only pass them when you want to *pin* a value for that one call — omit
 them and the live `vision.*` ROS-param value applies. See the
 "Common vision overrides" table in [`command-reference.md`](./command-reference.md).
 
