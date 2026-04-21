@@ -269,11 +269,12 @@ Centre target horizontally via Ch4 yaw rate (P loop on `ex`).
 
 | Aspect      | Value                                                                            |
 | ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_yaw --target_class person [--duration 15] [--kp_yaw 60] [--deadband 0.18]` |
+| CLI         | `duburi vision_align_yaw --target_class person [--duration 15] [--kp_yaw 60] [--deadband 0.18] [--lock_mode settle]` |
 | Python      | `duburi.vision_align_yaw(camera='laptop', target_class='person', ...)`           |
 | DSL         | `duburi.vision.yaw(target='person', duration=8.0, kp_yaw=60.0, ...)`            |
 | Channel     | Ch4 only                                                                         |
 | Math        | `yaw_pct = clamp(ex * kp_yaw, ±35)` -> `RC_CHANNELS_OVERRIDE`                  |
+| New params  | `lock_mode` — controls when the verb exits (see Lock modes below)                |
 
 ### `vision_align_lat`
 
@@ -281,49 +282,52 @@ Centre horizontally via Ch6 lateral strafe (P loop on `ex`).
 
 | Aspect      | Value                                                                            |
 | ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_lat --target_class person [--duration 15] [--kp_lat 60]`    |
+| CLI         | `duburi vision_align_lat --target_class person [--duration 15] [--kp_lat 60] [--lock_mode settle]` |
 | Python      | `duburi.vision_align_lat(camera='laptop', target_class='person', ...)`           |
 | DSL         | `duburi.vision.lateral(target='person', duration=8.0, kp_lat=60.0, ...)`        |
 | Channel     | Ch6 only                                                                         |
 | Math        | `lat_pct = clamp(ex * kp_lat, ±35)` -> `RC_CHANNELS_OVERRIDE`                  |
+| New params  | `lock_mode` — controls when the verb exits (see Lock modes below)                |
 
 ### `vision_align_depth`
 
-Centre vertically via incremental ALT_HOLD setpoint nudges (P loop
-on `ey`).
+Centre vertically via incremental ALT_HOLD setpoint nudges (P loop on `ey_anchor`).
 
 | Aspect      | Value                                                                            |
 | ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_depth --target_class person [--duration 15] [--kp_depth 0.05]` |
+| CLI         | `duburi vision_align_depth --target_class person [--duration 15] [--kp_depth 0.05] [--depth_anchor_frac 0.5]` |
 | Python      | `duburi.vision_align_depth(camera='laptop', target_class='person', ...)`         |
 | DSL         | `duburi.vision.depth(target='person', duration=8.0, kp_depth=0.05, ...)`        |
 | Channel     | Depth setpoint (`SET_POSITION_TARGET_GLOBAL_INT`) at 5 Hz                        |
-| Math        | `depth_nudge = clamp(ey * kp_depth, ±0.02)` then `depth_setpoint -= nudge * sign` (sign = +1 fwd cam, -1 down cam) |
+| Math        | `ey_anchor = ey + (2×anchor - 1)×h_frac` then `depth_nudge = clamp(ey_anchor * kp_depth, ±0.02)` |
+| New params  | `depth_anchor_frac` (0=top, 0.5=centre, 1=bottom of bbox); `lock_mode`          |
 
 ### `vision_hold_distance`
 
-Drive Ch5 so the target's bbox-height fraction matches `target_bbox_h_frac`
-(P loop on `target_h_frac - h_frac`).
+Drive Ch5 so the target's size proxy matches `target_bbox_h_frac`
+(P loop on `target_h_frac - size`).
 
 | Aspect      | Value                                                                            |
 | ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55 [--duration 20] [--kp_forward 200]` |
+| CLI         | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55 [--duration 20] [--kp_forward 200] [--distance_metric height] [--lock_mode settle]` |
 | Python      | `duburi.vision_hold_distance(camera='laptop', target_class='person', ...)`       |
 | DSL         | `duburi.vision.forward(target='person', distance=0.55, duration=12.0, ...)`     |
 | Channel     | Ch5 only                                                                         |
-| Math        | `fwd_pct = clamp((target_h_frac - h_frac) * kp_forward, ±50)` -> RC_CHANNELS_OVERRIDE |
+| Math        | `size = _distance_size(sample, metric)` then `fwd_pct = clamp((target_h_frac - size) * kp_forward, ±50)` |
+| New params  | `distance_metric` (height/area/diagonal); `lock_mode`                           |
 
 ### `vision_align_3d`
 
-Hold N axes at once. **All axes settle together.**
+Hold N axes at once. All axes settle together (or run until duration in `follow`/`pursue` modes).
 
 | Aspect      | Value                                                                            |
 | ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth --target_bbox_h_frac 0.50 [--duration 20]` |
+| CLI         | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth --target_bbox_h_frac 0.50 [--duration 20] [--lock_mode settle] [--distance_metric height] [--depth_anchor_frac 0.5]` |
 | Python      | `duburi.vision_align_3d(camera='laptop', target_class='gate', axes='yaw,forward,depth', ...)` |
 | DSL         | `duburi.vision.lock(target='gate', axes='yaw,forward,depth', distance=0.50, duration=15.0, ...)` |
 | `axes`      | CSV, any subset of `'yaw,lat,depth,forward'`                                    |
 | Loop body   | Single 20 Hz tick writes Ch4+Ch5+Ch6 in one RC packet, plus a 5 Hz depth-setpoint sub-tick |
+| New params  | `lock_mode`, `distance_metric`, `depth_anchor_frac`                             |
 
 ### Common vision overrides
 
@@ -331,16 +335,65 @@ Hold N axes at once. **All axes settle together.**
 | -------------------- | ---------------------------- | --------------------------------------------------------- |
 | `kp_yaw`             | `vision.kp_yaw`              | Proportional gain on `ex`, Ch4 percent units              |
 | `kp_lat`             | `vision.kp_lat`              | Same on Ch6                                               |
-| `kp_depth`           | `vision.kp_depth`            | Metres of nudge per unit `ey` per 5 Hz tick               |
-| `kp_forward`         | `vision.kp_forward`          | Ch5 percent per unit (target_h_frac - h_frac)             |
-| `deadband`           | `vision.deadband`            | Per-axis settle band; \|err\| < deadband counts as in    |
-| `target_bbox_h_frac` | `vision.target_bbox_h_frac`  | Distance proxy used by `forward` / `lock`                 |
-| `stale_after`        | `vision.stale_after`         | Seconds after which a Sample is "lost"                    |
-| `on_lost`            | `vision.on_lost`             | `'fail'` (raises) or `'hold'` (park, never raise)         |
+| `kp_depth`           | `vision.kp_depth`            | Metres of nudge per unit `ey_anchor` per 5 Hz tick        |
+| `kp_forward`         | `vision.kp_forward`          | Ch5 percent per unit (target_h_frac - size)               |
+| `deadband`           | `vision.deadband`            | Per-axis settle band; \|err\| < deadband counts as centred |
+| `target_bbox_h_frac` | `vision.target_bbox_h_frac`  | Stop-distance threshold used by `forward` / `lock`        |
+| `stale_after`        | `vision.stale_after`         | Seconds after which a detection is treated as lost        |
+| `on_lost`            | `vision.on_lost`             | `'fail'` (abort on lost) or `'hold'` (pause, keep waiting) |
+| `depth_anchor_frac`  | `vision.depth_anchor_frac`   | Which point on the bbox to vertically centre (0=top, 0.5=centre, 1=bottom). Use **0.2** for tall objects (person standing, pole) where centering on the bbox centre stalls the depth controller. |
+| `lock_mode`          | `vision.lock_mode`           | When to exit the loop — see Lock modes below              |
+| `distance_metric`    | `vision.distance_metric`     | How "size" is measured from the bbox — see Distance metrics below |
 | `visual_pid`         | -                            | Structural placeholder for v2; body is P-only today.      |
 
 Loop body (the one place all of this lives):
 [`src/duburi_control/duburi_control/motion_vision.py`](../../src/duburi_control/duburi_control/motion_vision.py).
+
+### Lock modes (`lock_mode`)
+
+Controls when a vision verb exits, beyond duration and target-lost:
+
+| Value     | Exits on settle | Forward thrust   | Extra exit condition                                      | Best for |
+| --------- | --------------- | ---------------- | --------------------------------------------------------- | -------- |
+| `settle`  | ✅ yes          | bidirectional    | All active axes within `deadband` for 2 consecutive ticks | Standard one-shot alignment |
+| `follow`  | ❌ no           | bidirectional    | Duration only (or target lost)                            | Tracking a moving target for a fixed time window |
+| `pursue`  | ❌ no           | one-way forward only | Target `size >= target_bbox_h_frac` (fills that fraction of frame) OR timeout | Torpedo approach / contact run — vehicle keeps driving until close enough |
+
+`lock_mode=''` resolves to the `vision.lock_mode` ROS-param (default `'settle'`).
+
+DSL convenience: `duburi.vision.follow(...)` is shorthand for `lock(..., lock_mode='follow')`.
+
+### Distance metrics (`distance_metric`)
+
+How `motion_vision._distance_size(sample, metric)` measures how far away the target is:
+
+| Value      | Formula                              | Best for |
+| ---------- | ------------------------------------ | -------- |
+| `height`   | `h_frac` (bbox height / image height) | Tall uniform targets — poles, buoys, vertical markers |
+| `area`     | `sqrt(h_frac × w_frac)`              | Mixed-aspect targets — gates, torpedo holes, wide objects |
+| `diagonal` | `sqrt(h_frac² + w_frac²) / sqrt(2)` | Best all-rounder when target shape varies or is unknown |
+
+`distance_metric=''` resolves to the `vision.distance_metric` ROS-param (default `'height'`).
+
+`target_bbox_h_frac` retains the same name regardless of metric — it is the threshold value in the chosen metric's units (e.g. `target_bbox_h_frac=0.30` with `distance_metric='area'` means stop when geometric-mean size equals 0.30).
+
+### Depth anchor (`depth_anchor_frac`)
+
+Fixes a stall problem with tall bounding boxes. The depth error is normally computed from the bbox *center*, but for a person standing upright the center is already near the image center even when the AUV is at the wrong depth — giving a near-zero error that leaves the depth controller with nothing to do.
+
+`depth_anchor_frac` picks a different reference point on the bbox:
+
+```
+ey_anchor = ey + (2 × anchor − 1) × h_frac
+```
+
+| Anchor value | Reference point | When to use |
+| ------------ | --------------- | ----------- |
+| `0.5`        | Bbox centre (default, backward-compatible) | Short or compact targets |
+| `0.2`        | Near top of bbox | Tall targets: person standing, pole, post |
+| `0.0`        | Top edge of bbox | Extremely tall targets filling most of frame height |
+
+`depth_anchor_frac=0.0` on the wire resolves to `vision.depth_anchor_frac` ROS-param (default 0.5).
 
 ---
 
