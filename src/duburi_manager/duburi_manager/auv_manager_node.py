@@ -145,6 +145,11 @@ class AUVManagerNode(Node):
         # production runs stay quiet. See .claude/context/mavlink-reference.md
         # "MAVLink-trace via DEBUG logs" for the on-the-wire format.
         self.declare_parameter('debug',            False)
+        # When True, VisionState subscribes /tracks (tracker_node output)
+        # instead of /detections. Enables Kalman-smoothed, ID-stable tracking.
+        # Requires tracker_node to be running for the target camera.
+        # Toggle live: ros2 param set /duburi_manager vision.use_tracks true
+        self.declare_parameter('vision.use_tracks', False)
         # Live-tunable defaults for every vision_* command. Operators
         # tune with `ros2 param set /duburi_manager vision.kp_yaw 80.0`
         # and the next vision goal picks up the new value.
@@ -343,7 +348,10 @@ class AUVManagerNode(Node):
                 return cached
             self.get_logger().info(
                 f'[VST  ] building VisionState for camera={camera!r}')
-            vstate = VisionState(self, camera=camera, logger=self.get_logger())
+            use_tracks = bool(self.get_parameter('vision.use_tracks').value)
+            vstate = VisionState(self, camera=camera,
+                                 use_tracks=use_tracks,
+                                 logger=self.get_logger())
             self._vision_states[camera] = vstate
 
         # Preflight outside the lock -- it just polls VisionState's diags.
@@ -409,6 +417,17 @@ class AUVManagerNode(Node):
                 runtime = runtime_defaults_for_command(
                     cmd, snapshot_from_node(self))
                 kwargs = fields_for(cmd, request, runtime_defaults=runtime)
+
+                # Per-goal tracking override: if the goal sets tracking=True,
+                # flip vision.use_tracks for this goal's VisionState build.
+                # We update the param so _vision_state_for picks it up on
+                # the next new-camera build; existing cached states are unaffected.
+                if kwargs.pop('tracking', False):
+                    self.set_parameters([
+                        rclpy.parameter.Parameter(
+                            'vision.use_tracks',
+                            rclpy.Parameter.Type.BOOL, True)])
+
                 result = method(**kwargs)
 
             if result.success:

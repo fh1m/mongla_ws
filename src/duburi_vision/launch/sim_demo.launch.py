@@ -29,7 +29,10 @@ def generate_launch_description():
         DeclareLaunchArgument('classes', default_value='person'),
         DeclareLaunchArgument('conf',    default_value='0.35'),
         DeclareLaunchArgument('iou',     default_value='0.5'),
-        DeclareLaunchArgument('rqt',     default_value='true'),
+        DeclareLaunchArgument('rqt',          default_value='true'),
+        DeclareLaunchArgument('with_tracking', default_value='false',
+                              description='Start tracker_node alongside detector'),
+        DeclareLaunchArgument('track_buffer',  default_value='30'),
     ]
 
     cam_name = LaunchConfiguration('camera')
@@ -53,6 +56,16 @@ def generate_launch_description():
         }],
     )
 
+    tracker = Node(
+        package='duburi_vision', executable='tracker_node', name='duburi_tracker',
+        output='screen',
+        parameters=[{
+            'camera':       cam_name,
+            'track_buffer': LaunchConfiguration('track_buffer'),
+        }],
+        condition=IfCondition(LaunchConfiguration('with_tracking')),
+    )
+
     image_topic = PythonExpression(["'/duburi/vision/' + '", cam_name, "' + '/image_debug'"])
     viewer = Node(
         package='rqt_image_view', executable='rqt_image_view',
@@ -61,4 +74,4 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rqt')),
     )
 
-    return LaunchDescription(args + [detector, viewer])
+    return LaunchDescription(args + [detector, tracker, viewer])

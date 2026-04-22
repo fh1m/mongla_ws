@@ -35,6 +35,7 @@ string  lock_mode          # '' or 'settle' (default) | 'follow' | 'pursue'
                            # follow = track until duration; pursue = approach until target_bbox_h_frac
 string  distance_metric    # '' or 'height' (default) | 'area' | 'diagonal'
                            # area/diagonal are more robust for wide targets like gates
+bool    tracking           # false (default) = use /detections; true = use /tracks (requires tracker_node)
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]
