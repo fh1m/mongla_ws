@@ -967,674 +967,147 @@ work without water.
 
 ## 9. Command cookbook (`duburi` CLI)
 
-All commands go through the `/duburi/move` action server and block until
-the goal succeeds, fails, or times out. The CLI exits with code 0 on
-success and 1 on failure so it composes cleanly in shell pipelines.
+All commands go through `/duburi/move` and block until done. Exit code 0 = success.
 
-```bash
-# Power / mode
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_mode --target_name ALT_HOLD
-ros2 run duburi_planner duburi disarm
+| Verb | What it does | Quick example |
+|------|-------------|---------------|
+| `arm` / `disarm` | Power thrusters on / off | `duburi arm` |
+| `set_mode` | Switch ArduSub mode | `duburi set_mode --target_name ALT_HOLD` |
+| `stop` | Active hold (RC neutral) | `duburi stop` |
+| `pause` | Release RC for N seconds | `duburi pause --duration 2` |
+| `set_depth` | Dive to absolute depth (m, negative) | `duburi set_depth --target -1.5` |
+| `move_forward` / `move_back` | Open-loop thrust, duration + gain | `duburi move_forward --duration 5 --gain 80` |
+| `move_left` / `move_right` | Lateral strafe | `duburi move_right --duration 3` |
+| `yaw_left` / `yaw_right` | Sharp pivot by degrees | `duburi yaw_left --target 90` |
+| `arc` | Forward + yaw simultaneously | `duburi arc --duration 4 --gain 50 --yaw_rate_pct 30` |
+| `lock_heading` | Background yaw hold (returns immediately) | `duburi lock_heading --target 0` |
+| `unlock_heading` | Stop background yaw hold | `duburi unlock_heading` |
+| `vision_acquire` | Sweep until target detected | `duburi vision_acquire --target_class person --target_name yaw_right` |
+| `vision_align_yaw` | Centre target horizontally (yaw) | `duburi vision_align_yaw --target_class person --duration 15` |
+| `vision_align_lat` | Centre target horizontally (strafe) | `duburi vision_align_lat --target_class person --duration 15` |
+| `vision_align_depth` | Centre target vertically | `duburi vision_align_depth --target_class person --duration 15` |
+| `vision_hold_distance` | Hold standoff distance | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55` |
+| `vision_align_3d` | Multi-axis simultaneous hold | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth` |
 
-# Translations (duration seconds, optional gain %, optional settle s)
-ros2 run duburi_planner duburi move_forward --duration 5 --gain 80
-ros2 run duburi_planner duburi move_back    --duration 3 --gain 70 --settle 1.0
-ros2 run duburi_planner duburi move_left    --duration 4
-ros2 run duburi_planner duburi move_right   --duration 2 --gain 60
+Every flag: `ros2 run duburi_planner duburi <cmd> --help`
 
-# Depth (metres, negative = below surface; engages ALT_HOLD if needed)
-ros2 run duburi_planner duburi set_depth --target -1.5
-
-# Sharp pivot (degrees, signed by verb; suspends heading_lock if active)
-ros2 run duburi_planner duburi yaw_left  --target 90
-ros2 run duburi_planner duburi yaw_right --target 45
-
-# Curved trajectory (forward thrust + signed yaw stick in same RC packet)
-ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
-
-# Heading lock (background Ch4-rate stream until unlocked)
-ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
-ros2 run duburi_planner duburi unlock_heading
-
-# Depth: there is no "lock_depth" verb. set_depth engages ALT_HOLD and
-# drives to the target; ArduSub's onboard ALT_HOLD then holds it forever
-# (no Python streamer needed). Send another set_depth to change it.
-ros2 run duburi_planner duburi set_depth --target -0.5
-
-# Emergency neutral (active hold — RC set to 1500 on every channel)
-ros2 run duburi_planner duburi stop
-
-# Pause (release the RC override for N seconds — autopilot takes over)
-ros2 run duburi_planner duburi pause --duration 2.0
-
-# Vision-driven verbs (need duburi_vision pipeline up; see §10B)
-ros2 run duburi_planner duburi vision_acquire --camera laptop --target_class person \
-    --target_name yaw_left --timeout 30 --gain 25 --yaw_rate_pct 25
-ros2 run duburi_planner duburi vision_align_yaw   --camera laptop --target_class person --duration 15
-ros2 run duburi_planner duburi vision_align_lat   --camera laptop --target_class person --duration 15
-ros2 run duburi_planner duburi vision_align_depth --camera laptop --target_class person --duration 15
-ros2 run duburi_planner duburi vision_hold_distance --camera laptop --target_class person \
-    --target_bbox_h_frac 0.55 --duration 20
-ros2 run duburi_planner duburi vision_align_3d --camera laptop --target_class person \
-    --axes yaw,forward,depth --duration 30 --target_bbox_h_frac 0.55
-```
-
-> The CLI is generated from `COMMANDS`, so every command takes its parameters
-> as named flags. Field names map straight to fields on `Move.action`
-> (`duration`, `gain`, `target`, `target_name`, `timeout`, `settle`,
-> `yaw_rate_pct`). Run `ros2 run duburi_planner duburi <cmd> --help` for the
-> exact list per verb.
-
-Sensor smoke-test (no thrusters, no ArduSub interaction — see §10A):
-
-```bash
-# Default — reads ArduSub AHRS via the same UDP endpoint as the manager.
-# Stop the manager first, or this prints STALE.
-ros2 run duburi_sensors sensors_node
-
-# External BNO085 — runs without MAVLink, useful before pool runs.
-ros2 run duburi_sensors sensors_node \
-    --ros-args -p yaw_source:=bno085 -p bno085_port:=/dev/ttyACM0
-```
-
-Scripted missions live in
-[src/duburi_planner/duburi_planner/missions/](src/duburi_planner/duburi_planner/missions/).
-List and run them via the CLI:
-
-```bash
-ros2 run duburi_planner mission --list
-ros2 run duburi_planner mission square_pattern
-ros2 run duburi_planner mission arc_demo
-ros2 run duburi_planner mission heading_lock_demo
-ros2 run duburi_planner mission find_person_demo   # vision-driven 3D alignment demo
-```
-
-For programmatic use from Python, import `DuburiClient` from
-`duburi_planner`. Every command in `COMMANDS` is also accessible as a
-method on the client (via `__getattr__`), or you can use
-`client.send(cmd, **fields)` directly:
-
-```python
-from duburi_planner import DuburiClient, MoveRejected, MoveFailed
-import rclpy
-from rclpy.node import Node
-
-rclpy.init()
-node = Node('my_mission')
-dc = DuburiClient(node)
-dc.wait_for_connection()
-
-try:
-    dc.arm()                                          # uses defaults from COMMANDS
-    dc.set_mode(target_name='ALT_HOLD')
-    dc.set_depth(target=-1.5)
-    dc.lock_heading(target=0.0, timeout=120.0)        # background yaw hold
-    dc.move_forward(duration=5.0, gain=80, settle=0.8)
-    dc.arc(duration=4.0, gain=50, yaw_rate_pct=30)    # curved manoeuvre
-    dc.yaw_left(target=90.0)                          # sharp pivot, lock retargets
-    dc.send('pause', duration=2.0)                    # equivalent to dc.pause(duration=2.0)
-    dc.unlock_heading()
-    dc.disarm()
-except MoveRejected as exc:
-    node.get_logger().error(f'goal rejected by server: {exc}')
-except MoveFailed as exc:
-    node.get_logger().error(f'goal failed: {exc}')
-```
+Full parameter docs, MAVLink traces, and implementation chains:
+[`.claude/context/command-reference.md`](.claude/context/command-reference.md)
 
 ### 9.1 Mission DSL — `duburi` + `duburi.vision`
 
-For mission scripts, prefer the
-[`DuburiMission`](src/duburi_planner/duburi_planner/duburi_dsl.py) wrapper
-over the raw `DuburiClient`. Every mission file in
-`src/duburi_planner/duburi_planner/missions/` exposes one
-`run(duburi, log)` function and gets the wrapped object for free:
-
 ```python
 def run(duburi, log):
-    duburi.target = 'person'                       # sticky context
+    duburi.target = 'person'
     duburi.arm()
     duburi.set_depth(-0.5)
-    duburi.move_forward(3.0, gain=60)              # open-loop verb
-    duburi.vision.find(sweep='right')              # closed-loop, vision-driven
-    duburi.vision.lock(axes='yaw,forward',         # multi-axis simultaneous hold
-                       distance=0.55,
-                       duration=12)
+    duburi.move_forward(3.0, gain=60)
+    duburi.vision.find(sweep='right')
+    duburi.vision.lock(axes='yaw,forward', distance=0.55, duration=12)
     duburi.move_back(2.0, gain=60)
     duburi.disarm()
 ```
 
-Two namespaces, one mental model:
-
-- `duburi.*` -- open-loop motion (arm, set_depth, move_*, yaw_*, arc, lock_heading, ...).
-- `duburi.vision.*` -- closed-loop motion that mirrors the SAME axis names
-  (`vision.yaw`, `vision.lateral`, `vision.depth`, `vision.forward`,
-  `vision.find`, `vision.lock`).
-
-Vision verbs read sticky `duburi.camera` / `duburi.target` and fall through
-to `auv_manager_node`'s live `vision.*` ROS params when overrides are left
-unset -- so deck-side tuning works without touching mission code. Every
-verb accepted on the action server is also reachable as
-`duburi.<name>(...)` via fall-through on the wrapper.
-
-Full design + working principles + ten ready-to-steal samples:
-[`.claude/context/mission-cookbook.md`](.claude/context/mission-cookbook.md).
-
----
-
-## 10. Configuration guide
-
-All parameters declared on `auv_manager_node`:
-
-| Parameter          | Type     | Default          | Values / effect                                                                    |
-|--------------------|----------|------------------|------------------------------------------------------------------------------------|
-| `mode`             | `string` | `auto`           | `auto` (probes UDP 14550 + Pixhawk USB and picks `pool`/`desk`/`sim`), or pin one of `sim`, `pool`, `laptop`, `desk` |
-| `smooth_yaw`       | `bool`   | `false`          | `true` → `yaw_glide` (smootherstep setpoint sweep, no overshoot)                   |
-| `smooth_translate` | `bool`   | `false`          | `true` → `drive_*_eased` (trapezoid thrust, settle-only brake; forward + lateral)  |
-| `yaw_source`       | `string` | `mavlink_ahrs`   | `mavlink_ahrs` (ArduSub onboard) \| `bno085` (ESP32-C3 + BNO085); same source feeds `lock_heading` |
-| `bno085_port`      | `string` | `auto`           | `auto` (probes `/dev/serial/by-id/usb-Espressif*` + `/dev/ttyACM*`) or explicit USB CDC path |
-| `bno085_baud`      | `int`    | `115200`         | BNO085 stream baud rate                                                            |
-| `vision.kp_yaw` / `vision.kp_lat` / `vision.kp_depth` / `vision.kp_forward` | `double` | 60 / 60 / 0.05 / 200 | Per-axis P gains used by every `vision_*` verb when the goal field is left at the rosidl zero default. Tune live with `ros2 param set /duburi_manager vision.kp_yaw 80.0`. |
-| `vision.deadband`  | `double` | `0.10`           | Per-axis settle band for vision verbs (0..1). Override per goal by passing the matching field, otherwise this lives default applies. |
-| `vision.target_bbox_h_frac` | `double` | `0.55`  | Distance proxy used by `vision_hold_distance` / `vision_align_3d` when the goal field is unset. |
-| `vision.stale_after` | `double` | `0.8`          | Seconds after which a Sample is treated as lost.                                  |
-| `vision.on_lost`   | `string` | `fail`           | `fail` (raise) or `hold` (park, never raise). Per-goal override still wins.        |
-| `vision.acquire_yaw_rate_pct` / `vision.acquire_gain` | `double` | 22 / 25 | Sweep speed and forward thrust used by `vision_acquire` (`duburi.vision.find`). |
-
-> The executable is registered under both names: `auv_manager` and `auv_manager_node` resolve to the same node.
->
-> Yaw commands need a mode that tracks **absolute** heading. ArduSub honours `SET_ATTITUDE_TARGET` only in `ALT_HOLD` / `POSHOLD` / `GUIDED`. In `MANUAL` it's silently dropped; in `STABILIZE` it's treated as a yaw *rate* (and there's no depth hold, so the sub sinks during the turn). The node therefore auto-engages `ALT_HOLD` if you call `yaw_left` / `yaw_right` from `MANUAL` or `STABILIZE`; if you've already run `set_depth` (which engages `ALT_HOLD`) the existing mode is preserved.
-
-Examples:
+- `duburi.*` — open-loop motion (arm, set_depth, move_\*, yaw_\*, arc, lock_heading, ...)
+- `duburi.vision.*` — closed-loop vision verbs (find, yaw, lateral, depth, forward, lock, follow)
 
 ```bash
-# Defaults (both step) — proven bang-bang behaviour
-ros2 run duburi_manager auv_manager
-
-# Smoother yaw only (fight overshoot without changing linear feel)
-ros2 run duburi_manager auv_manager --ros-args -p smooth_yaw:=true
-
-# Both smoothed, pool mode
-ros2 run duburi_manager auv_manager --ros-args \
-    -p mode:=pool -p smooth_yaw:=true -p smooth_translate:=true
-```
-
-A YAML preset lives at
-[src/duburi_manager/config/modes.yaml](src/duburi_manager/config/modes.yaml).
-Use it like:
-
-```bash
-ros2 run duburi_manager auv_manager \
-    --ros-args --params-file src/duburi_manager/config/modes.yaml
-```
-
----
-
-## 10A. Yaw source — `duburi_sensors`
-
-ArduSub's onboard AHRS is the default and works fine in sim. For pool /
-real-world runs where the Pixhawk's compass is noisy near aluminium
-frames or thrusters, you can swap in an external yaw source without
-touching any control-side code. The package is **sensor-only** — no
-fusion, no fallback, no mid-run switching. You pick one source per
-launch, and if it goes silent the control loop holds its last value.
-
-### Architecture
-
-```
-+-----------------------------+         +------------------------+
-|   auv_manager_node          |         |   sensors_node         |
-|   (control + ActionServer)  |         |   (diagnostic only)    |
-+-----------------------------+         +------------------------+
-              |                                    |
-              | yaw_source param                   |
-              v                                    v
-        +-----------------------------------------------+
-        |   make_yaw_source(name, **kw)  (factory)      |
-        +-----------------------------------------------+
-          |              |              |             |
-          v              v              v             v
-   MavlinkAhrs   BNO085Source    DVLSource (stub)   WitMotion (stub)
-   (default)     (USB CDC JSON)  raises NotImpl     raises NotImpl
-```
-
-Every source implements the same three-method contract: `read_yaw()`,
-`is_healthy()`, `close()`. Yaw is always degrees in `[0, 360)`,
-Earth-referenced (magnetic north, +CW from above) — same convention
-everywhere downstream.
-
-### Switching source
-
-```bash
-# Default — ArduSub onboard AHRS (no extra hardware)
-ros2 run duburi_manager auv_manager_node
-
-# External — ESP32-C3 + BNO085 over USB CDC
-# Default port=auto: probes /dev/serial/by-id/usb-Espressif* + /dev/ttyACM* and
-# picks the first device that streams a valid {"yaw":..,"ts":..} JSON line.
-ros2 run duburi_manager auv_manager_node --ros-args -p yaw_source:=bno085
-
-# Pin an explicit port if you have multiple ACM devices and don't want probing.
-ros2 run duburi_manager auv_manager_node \
-    --ros-args -p yaw_source:=bno085 \
-               -p bno085_port:=/dev/ttyACM0 \
-               -p bno085_baud:=115200
-```
-
-If the chosen source can't initialise (e.g. wrong serial port), the node
-**fails loudly at startup** rather than silently falling back. The
-operator picked it; the operator gets told.
-
-### Bootstrap calibration (BNO085 only)
-
-The BNO085 firmware runs in `SH2_GAME_ROTATION_VECTOR` mode — gyro +
-accelerometer fusion with the magnetometer **disabled**. That gives us
-a smooth heading that is immune to the magnetic interference inside
-the AUV (8 thrusters + battery currents + aluminum (Marine 5083) hull), but with no
-absolute Earth reference: the chip's "yaw=0" is whatever direction it
-was pointing at boot.
-
-To turn that into an Earth-referenced heading without ever using the
-BNO's mag, the manager performs a **one-shot calibration** at startup:
-
-```
-offset_deg = pixhawk_yaw  -  bno_raw_yaw    # captured once, locked
-earth_yaw  = (bno_raw + offset_deg) mod 360 # applied forever after
-```
-
-* The Pixhawk magnetometer is read **once** during the first ≤5 s of
-  startup, then never again. Run the calibration at the surface, away
-  from large metal objects, with the AUV held level.
-* If either the BNO or the Pixhawk yaw stays unavailable for more than
-  the calibration timeout, the node aborts with a `RuntimeError` —
-  same loud-failure policy as the rest of `duburi_sensors`.
-* The locked offset is printed in the startup banner:
-
-  ```
-  Yaw source: BNO085 (/dev/ttyACM0 @ 115200)  Earth-ref offset: +124.30°
-  ```
-
-* Drift profile after calibration: the BNO085's bias-stabilised gyro
-  drifts ~0.5 °/min in steady conditions — for a 2-3 minute mission
-  that is well below pool-test repeatability.
-* To re-zero the offset (e.g. after the AUV has been re-mounted),
-  restart the manager. There is no mid-run recalibration on purpose;
-  see `.claude/context/sensors-pipeline.md` for the rationale.
-
-The diagnostic node accepts a `calibrate:=true` flag to exercise the
-exact same code path without launching the full manager:
-
-```bash
-ros2 run duburi_sensors sensors_node --ros-args \
-    -p yaw_source:=bno085 -p calibrate:=true \
-    -p bno085_port:=/dev/ttyACM0
-```
-
-Without `calibrate:=true`, the diagnostic node prints **raw** BNO yaw
-(sensor frame) — useful for verifying the wire, useless for navigation.
-
-### Standalone diagnostic node
-
-Before doing a mission with a new source, run the diagnostic node — it
-talks to the sensor with no thrusters, no MAVLink-arming, no autopilot
-side effects:
-
-```bash
-# AHRS via MAVLink (don't run alongside the manager — UDP port collision)
-ros2 run duburi_sensors sensors_node
-
-# BNO085 only (no MAVLink connection at all — pure desk test)
-ros2 run duburi_sensors sensors_node \
-    --ros-args -p yaw_source:=bno085 -p bno085_port:=/dev/ttyACM0
-```
-
-Output every 0.5 s:
-
-```
-[INFO] [SENSOR] yaw=123.45°  healthy=True   rx_hz= 49.8  total=1240
-```
-
-`rx_hz` is the per-second sample rate the source is producing — for a
-healthy BNO085 stream that should sit at ~50 Hz. If you see `STALE`,
-the wire is broken, the firmware crashed, or the chip is held by
-another process.
-
-### Adding a new source
-
-1. Write `src/duburi_sensors/duburi_sensors/sources/my_sensor.py`
-   subclassing `YawSource`. Mirror the threading + stale-detection
-   pattern from `bno085.py`.
-2. Add a builder + entry to `_BUILDERS` in
-   [src/duburi_sensors/duburi_sensors/factory.py](src/duburi_sensors/duburi_sensors/factory.py).
-3. Document the wire format in `src/duburi_sensors/firmware/<sensor>.md`.
-
-That's it — no changes to `duburi_control` or `duburi_manager`.
-
-### BNO085 firmware
-
-The MCU-side contract (JSON-line over USB CDC at 115200, 50 Hz) and a
-reference Arduino sketch live in
-[src/duburi_sensors/firmware/esp32c3_bno085.md](src/duburi_sensors/firmware/esp32c3_bno085.md).
-Smoke-test the wire from the Jetson with `cat /dev/ttyACM0` first;
-if you don't see JSON, the Jetson side won't see it either.
-
----
-
-## 10B. Vision — `duburi_vision`
-
-The perception package: a uniform `Camera` interface, a YOLO26 detector
-that runs GPU-first, a `draw` module of on-image overlays that turn
-"is the AUV aligned with the target?" from a guess into a single glance
-at the debug image, and **six `vision_*` verbs on `/duburi/move`** that
-let any client (CLI / mission / state machine) close the loop on a
-detection. Tracking and Kalman filtering are scoped for v2/v3 and have
-placeholder `PLAN.md` files in
-[src/duburi_vision/duburi_vision/tracking/](src/duburi_vision/duburi_vision/tracking/PLAN.md)
-and [filters/](src/duburi_vision/duburi_vision/filters/PLAN.md).
-
-### Architecture
-
-```
-+------------------------+     +-------------------------+     +-----------------------+
-|  camera_node           | --> |  detector_node          | --> |  auv_manager_node     |
-|  Camera factory:       |     |  YoloDetector (YOLO26)  |     |  VisionState pool     |
-|  webcam / ros_topic /  |     |  + draw.render_all()    |     |  + motion_vision loop |
-|  jetson / blueos /     |     |  -> Detection2DArray    |     |  RC Ch4/5/6 + depth   |
-|  mavlink (stubs)       |     |  -> image_debug         |     +-----------------------+
-+------------------------+     +-------------------------+              ^
-                                                                        |
-                                                       /duburi/move (vision_* verbs)
-```
-
-The closed loop runs **inside the manager** — the same node that owns
-MAVLink — so vision and control never fight for thrust. `VisionState`
-is a per-camera subscriber pool, lazily built on first `vision_*` goal
-with a one-shot `wait_vision_state_ready` preflight (logs which topic
-is missing if the pipeline isn't up).
-
-One camera per `camera_node` instance, picked by `profile:=` (matched against
-`CAMERA_PROFILES` in [config.py](src/duburi_vision/duburi_vision/config.py)
-and [config/cameras.yaml](src/duburi_vision/config/cameras.yaml)) or by an
-explicit `source:=` + source-specific overrides. Adding a new source = one
-row in `factory.BUILDERS` + a class — same UX as `duburi_sensors`.
-
-### Topics
-
-| Topic                                          | Type                          | Notes                                              |
-|------------------------------------------------|-------------------------------|----------------------------------------------------|
-| `/duburi/vision/<cam>/image_raw`               | `sensor_msgs/Image`           | Published by `camera_node` at the source's rate    |
-| `/duburi/vision/<cam>/camera_info`             | `sensor_msgs/CameraInfo`      | Size only (K/D empty until we ship a calib file)   |
-| `/duburi/vision/<cam>/detections`              | `vision_msgs/Detection2DArray`| One row per detection, hypothesis class id is str  |
-| `/duburi/vision/<cam>/image_debug`             | `sensor_msgs/Image`           | Rate-limited overlay (default 5 Hz)                |
-
-### GPU contract
-
-`detector_node` calls `select_device()` once at startup. It logs a single
-canary line you should grep for during deployment:
-
-```
-[VIS ] using cuda:0 (NVIDIA GeForce RTX 2060)  torch=2.11.0+cu128  cuda=12.8
-```
-
-`device:=cuda:0` is **fail-fast** — a missing/broken CUDA install raises
-on init with a friendly message instead of silently falling back to CPU.
-Set `device:=cpu` to opt out, or `device:=auto` for tests/CI.
-
-### Visual cues in `image_debug`
-
-Every glyph answers a specific question an operator will ask:
-
-| Glyph                                           | Question it answers                       |
-|-------------------------------------------------|-------------------------------------------|
-| Top-left status badge (src / fps / dev / det)   | Is the camera streaming? Which device?    |
-| Dashed center reticle                           | Operator's reference frame                |
-| Light-gray boxes + labels                       | What did the model see?                   |
-| Thick amber box + filled corners + crosshair    | Which target is being chased?             |
-| Arrow center -> target                          | Which way must the AUV rotate / strafe?   |
-| Bottom-left alignment readout (err_x, err_y)    | How well aligned is the AUV? (-1..+1)     |
-| Red full-width "STALE FRAME" banner             | Catastrophic state — source unhealthy     |
-
-The badge border is green when healthy and red when not, so you can spot
-breakage in a single glance. If anything looks wrong, screenshot
-`image_debug` and paste it into a bug report — every diagnostic state is
-visible in one frame.
-
-### Vision verbs (v4)
-
-The six `vision_*` verbs share the same `/duburi/move` action surface as
-every other command — same `DuburiClient`, same CLI auto-generation, same
-result envelope. See §9 for a CLI cookbook.
-
-| Verb                    | Closes the loop on …                                        | Output channels                      |
-|-------------------------|-------------------------------------------------------------|--------------------------------------|
-| `vision_align_3d`       | Centre + maintain distance on largest target_class. CSV `axes` picks subset of `yaw,lat,depth,forward`. | Ch4 / Ch5 / Ch6 + depth setpoint     |
-| `vision_align_yaw`      | Horizontal centring (yaw stick).                             | Ch4                                  |
-| `vision_align_lat`      | Horizontal centring (lateral strafe).                        | Ch6                                  |
-| `vision_align_depth`    | Vertical centring (incremental ALT_HOLD setpoint).           | Depth setpoint                       |
-| `vision_hold_distance`  | Drive forward/back so bbox height matches `target_bbox_h_frac`. | Ch5                               |
-| `vision_acquire`        | Block (optionally driving via `target_name` verb) until target seen at least once. | Drive verb of choice |
-
-Common knobs: `camera`, `target_class`, `deadband`, gain knobs (`kp_yaw`,
-`kp_lat`, `kp_depth`, `kp_forward`), `target_bbox_h_frac`, and `on_lost`
-(`'fail'` default; `'hold'` to ride out a flicker). Defaults are tuned
-for a webcam-detected `'person'` so a fresh checkout works out of the
-box. Architecture details: [`.claude/context/vision-architecture.md`](.claude/context/vision-architecture.md).
-
-### Quickstart
-
-```bash
-# Lab dev: laptop webcam + YOLO26 + rqt viewer (one terminal)
-ros2 launch duburi_vision webcam_demo.launch.py
-
-# Subscribe to a Gazebo image topic instead
-ros2 launch duburi_vision sim_demo.launch.py topic:=/your/image/topic
-
-# Single-process smoke test (no inter-node hop, mirrors sensors_node)
-ros2 run duburi_vision vision_node --ros-args -p profile:=laptop
-
-# CPU fallback if you don't have CUDA
-ros2 launch duburi_vision webcam_demo.launch.py cls_device:=cpu
-```
-
-### Pipeline diagnostics
-
-```bash
-# Topic-only health probe (no thrust, no manager required)
-ros2 run duburi_vision vision_check --camera laptop --require-class person
-
-# Detection -> RC echo: send one vision_align_yaw, watch [RC] Yaw on the manager
-ros2 run duburi_vision vision_thrust_check --camera laptop --duration 4
-
-# Full vision-driven 3D mission (acquire -> align yaw -> hold distance -> 3D align)
+ros2 run duburi_planner mission --list
 ros2 run duburi_planner mission find_person_demo
+ros2 run duburi_planner mission pursue_demo
 ```
 
-> **Gazebo note:** the `bluerov2_gz` model used today doesn't ship a camera
-> plugin. Either add a `<sensor type="camera"/>` block + `ros_gz` image
-> bridge to the world, or point `topic:=` at any other Image publisher
-> (a re-published webcam works for end-to-end smoke tests).
+Full DSL API + working principles + samples:
+[`.claude/context/client-and-dsl-api.md`](.claude/context/client-and-dsl-api.md) ·
+[`.claude/context/mission-cookbook.md`](.claude/context/mission-cookbook.md)
 
 ---
 
-## 11. Tuning guide
+## 10. Configuration
 
-### 11.1 Depth — onboard ArduSub controller
+Key params on `auv_manager_node`:
 
-Depth is no longer driven by a Python PID. We send an absolute depth
-setpoint via `SET_POSITION_TARGET_GLOBAL_INT` and ArduSub's onboard 400 Hz
-position controller closes the loop. This mirrors how yaw is driven via
-`SET_ATTITUDE_TARGET` — one source of truth per axis, no stacked loops.
+| Param | Default | Effect |
+|-------|---------|--------|
+| `mode` | `auto` | `auto` probes UDP 14550 + Pixhawk USB and picks `pool`/`desk`/`sim` |
+| `smooth_yaw` | `false` | `true` → smootherstep yaw setpoint sweep (reduces overshoot) |
+| `smooth_translate` | `false` | `true` → trapezoid thrust ramp (softer start/stop) |
+| `yaw_source` | `mavlink_ahrs` | `mavlink_ahrs` or `bno085` (ESP32-C3 + BNO085) |
+| `vision.kp_yaw` / `vision.kp_lat` | 60.0 | Centring P-gain — tune live with `ros2 param set` |
+| `vision.deadband` | 0.18 | Settle tolerance — tighten to 0.08–0.10 for pool |
+| `vision.lock_mode` | `settle` | `settle` / `follow` / `pursue` — vision loop exit behaviour |
+| `vision.depth_anchor_frac` | 0.5 | 0.2 for tall targets (person, pole) to prevent depth stall |
+| `vision.distance_metric` | `height` | `height` / `area` / `diagonal` — how target size is measured |
 
-The flow in [src/duburi_control/duburi_control/motion_depth.py](src/duburi_control/duburi_control/motion_depth.py):
-
-1. `Duburi.set_depth` engages `ALT_HOLD` (the only mode that honours
-   absolute Z setpoints and also holds depth between frames).
-2. **`prime_alt_hold` (0.5 s)** — stream the *current* depth as the
-   target while sending neutral RC. This drains the well-known stale
-   ALT_HOLD integrator state from the previous mode (Blue Robotics
-   forum: ["Depth Hold Problems?"](https://discuss.bluerobotics.com/t/depth-hold-problems/8993)).
-3. **`wait_for_depth`** — stream the real target at 5 Hz; exit when
-   |error| < 0.07 m or timeout, log the closest depth reached.
-
-If you need to tune depth response, do it on the **ArduSub side** via QGC
-(parameters live on the Pixhawk, not in our code):
-
-| ArduSub param   | Effect                                            |
-|-----------------|---------------------------------------------------|
-| `PSC_POSZ_P`    | Depth position gain. Default 1.0. Raise for snap. |
-| `PSC_VELZ_P`    | Depth velocity gain. Default 5.0.                 |
-| `PILOT_SPD_UP`  | Max ascend rate (cm/s). Default 50.               |
-| `PILOT_SPD_DN`  | Max descend rate (cm/s). Default 50.              |
-| `PILOT_ACCEL_Z` | Vertical accel limit. Lower = smoother profile.   |
-
-> The Python-side `DepthPID` / `YawPID` classes that used to live in
-> `movement_pids.py` have been removed — ArduSub's onboard PID is the only
-> control loop in the live path. PID theory and tuning notes are still
-> documented in [`.claude/context/pid-theory.md`](.claude/context/pid-theory.md)
-> (based on *PID without a PhD*) and the previous Python implementation can
-> be recovered from git history if it's ever needed as a hot-fix fallback.
-
-### 11.2 Smoothing flags
-
-| Flag                | Math                                                             | When to enable                               |
-|---------------------|------------------------------------------------------------------|----------------------------------------------|
-| `smooth_yaw`        | Setpoint streamed as `start + delta * smootherstep(t/dur)`       | Seeing yaw overshoot or fighting inertia     |
-| `smooth_translate`  | Thrust = `gain * trapezoid_ramp(t, dur, ramp=0.4s)`              | Seeing lurch at start or backward drift at end |
-
-Both flags are independent — you can mix and match.
-
-### 11.3 Translation brake
-
-Each translation variant owns its own exit. The shared loop + brake-kick
-logic lives in
-[src/duburi_control/duburi_control/motion_writers.py](src/duburi_control/duburi_control/motion_writers.py),
-and the per-axis verbs are in
-[motion_forward.py](src/duburi_control/duburi_control/motion_forward.py)
-(Ch5 + `arc`) and
-[motion_lateral.py](src/duburi_control/duburi_control/motion_lateral.py)
-(Ch6).
-
-| Variant                | Exit                                                                |
-|------------------------|---------------------------------------------------------------------|
-| `drive_*_constant`     | Reverse kick 25% × 0.2 s, then 1.2 s settle. Needed because constant gain exits at full velocity. |
-| `drive_*_eased`        | No reverse kick. 1.2 s settle only — the trapezoid ease-out IS the brake. |
-| `arc`                  | Streams Ch5 + Ch4 in one packet for `duration` s, then settles via the same `final_settle()` helper. |
-
-Per-verb `settle=` extends the post-command neutral-hold for cases where
-you want extra inertia bleed-off before the next move.
-
-Tunables at the top of `motion_writers.py`:
-
-```python
-THRUST_RATE_HZ   = 20.0    # RC override publish rate (forward + lateral + arc)
-EASE_SECONDS     = 0.4     # ease-in/out duration for drive_*_eased
-REVERSE_KICK_PCT = 25      # %, higher = stronger brake (too high pushes backward)
-REVERSE_KICK_SEC = 0.20    # s
-SETTLE_SEC       = 1.2     # s, default for both variants
-```
-
-### 11.4 Yaw loop rate
-
-`yaw_glide` streams `SET_ATTITUDE_TARGET` at 10 Hz. Increase only if the
-ArduSub endpoint can handle it (BlueOS default is fine at 10 Hz).
-`motion_yaw.py` top-of-file constants:
-
-```python
-YAW_RATE_HZ = 10.0   # SET_ATTITUDE_TARGET stream rate
-YAW_TOL_DEG = 2.0    # ArduSub attitude stabiliser tolerance
-YAW_LOCK_N  = 5      # consecutive frames within tol before success
-```
+Full param reference + yaw source + vision pipeline:
+**[docs/configuration.md](docs/configuration.md)**
 
 ---
 
-## 12. Telemetry & log cheatsheet
+## 11. Tuning
 
-| Tag       | Meaning                                                             |
-|-----------|---------------------------------------------------------------------|
-| `[STATE]` | Periodic status line: arm, mode, yaw, depth, battery               |
-| `[ACT  ]` | Action server state transition (EXECUTING / DONE / ABORTED)        |
-| `[CMD  ]` | Command boundary (STOP, pause, set_depth, brake, settle, ...)      |
-| `[RC   ]` | Active RC override PWM values (Thr, Yaw, Fwd, Lat)                 |
-| `[DEPTH]` | Depth tracking: target, current, error (ArduSub onboard PID drives) |
-| `[YAW  ]` | Yaw tracking: target, current, error                                |
-| `[FOR  ]` | Forward translation progress                                        |
-| `[BAC  ]` | Backward translation progress                                       |
-| `[ARDUB]` | Relayed STATUSTEXT from ArduSub (EKF switches, arming checks, ...)  |
-| `[INIT ]` | One-shot init notes (banner, message-rate pins)                    |
+Quick reference — tune vision gains live between goals:
 
-`[STATE]` throttles itself — it only prints when yaw moves > 5°, depth
-moves > 8 cm, battery moves > 0.2 V, or 30 s has passed. The same
-snapshot is also published as a typed `duburi_interfaces/DuburiState`
-message on `/duburi/state` (subscribe with `ros2 topic echo /duburi/state`).
+```bash
+ros2 param set /duburi_manager vision.kp_yaw 80.0
+ros2 param set /duburi_manager vision.deadband 0.08
+ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
+```
+
+Key constants (change in source, rebuild):
+
+| What | File | Constant |
+|------|------|----------|
+| Yaw stream rate | `motion_yaw.py` | `YAW_RATE_HZ = 10.0` |
+| Thrust rate | `motion_writers.py` | `THRUST_RATE_HZ = 20.0` |
+| Brake strength | `motion_writers.py` | `REVERSE_KICK_PCT = 25` |
+| ArduSub depth gain | QGC → Pixhawk | `PSC_POSZ_P` (default 1.0) |
+
+Full tuning guide: **[docs/tuning.md](docs/tuning.md)**
+
+---
+
+## 12. Telemetry & logs
+
+| Tag | What it means |
+|-----|---------------|
+| `[STATE]` | arm / mode / yaw / depth / battery snapshot |
+| `[RC   ]` | Active PWM values on Thr/Yaw/Fwd/Lat channels |
+| `[DEPTH]` | Depth tracking: target, current, error |
+| `[YAW  ]` | Yaw tracking: target, current, error |
+| `[VIS  ]` | Vision loop: bbox error, size, lock mode |
+| `[ARDUB]` | ArduSub STATUSTEXT (EKF events, pre-arm checks) |
+| `[MAV  ]` | Per-frame MAVLink trace (`debug:=true` only) |
+
+Full cheatsheet + one-liners: **[docs/telemetry.md](docs/telemetry.md)**
 
 ---
 
 ## 13. Troubleshooting
 
-| Symptom                                        | Likely cause / fix                                                                           |
-|------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `lock_heading` active but yaw still drifts mid-`move_forward` | Confirm the manager was started against an updated build — translations must use the lock-aware `Writers` (`send_rc_translation`). Check `motion_writers.make_writers(release_yaw=True)` is being called. |
-| `arc` curves the wrong way                     | `yaw_rate_pct` is positive = clockwise from above. Flip the sign or use `yaw_left`-style verb. |
-| No `[STATE]` line after startup                | UDP 14550 not reaching Jetson. Verify BlueOS `inspector` endpoint IP matches Jetson static IP. Run `ss -lun | grep 14550`. |
-| `arm -> FAIL: DENIED`                          | ArduSub pre-arm check failed. Look at the `[ARDUB]` lines for the reason (compass, GPS, battery, ...). |
-| `arm -> FAIL: NO_ACK`                          | Heartbeat present but no ACK. Usually pre-arm stall. Restart ArduSub or BlueOS if persistent. |
-| `set_mode -> FAIL: DENIED`                     | Trying to enter a mode that requires conditions (e.g. ALT_HOLD needs Bar30 depth lock).       |
-| Depth command times out at ~-0.5 m             | ArduSub didn't enter `ALT_HOLD` (e.g. Bar30 unhealthy). Check `[CMD  ] set_depth` is followed by no `set_mode ALT_HOLD: ...` warning, and that `[STATE]` shows mode `ALT_HOLD`. On real hardware also verify Bar30 calibration. |
-| First `set_depth` after arming lurches downward | Was the ALT_HOLD I-term-not-reset quirk. Fixed by the 0.5 s `prime_alt_hold` phase in `motion_depth.hold_depth`. If it returns, raise the prime duration in `motion_depth.py`. |
-| Yaw overshoots target                          | Enable `-p smooth_yaw:=true`. If still overshooting, reduce `ATC_ANG_YAW_P` on ArduSub side.  |
-| Small backward drift after `move_forward`      | Use `-p smooth_translate:=true` — the ramp variant uses settle-only brake instead of reverse kick. Or pass `--settle 1.0` per-command for extra neutral-hold. |
-| `/dev/ttyACM0: Permission denied` (desk mode)  | `sudo usermod -aG dialout "$USER"` then log out / back in.                                     |
-| Startup banner missing the BlueOS hint         | Hint only prints for `mode:=pool` or `mode:=laptop`. Other modes use local endpoints.          |
-| EKF3 switches compass rapidly in logs          | Expected on a freshly powered Pixhawk. If persistent underwater, recalibrate compass on land.  |
-| `BNO085 calibration timed out` at startup      | Pixhawk yaw or BNO yaw stayed unavailable for 5 s. Confirm `auv_manager_node`-style MAVLink works on its own (yaw_source=mavlink_ahrs), then confirm raw BNO works (`sensors_node` without `calibrate:=true`). Fix the missing one before retrying. |
-| BNO yaw sweeps but Earth-ref offset looks wrong| Calibration was performed with the AUV not level / inside a magnetic field. Re-run at the surface, away from metal. The offset is locked for the lifetime of the node — restart to re-zero. |
-| TDR PDF says "VectorNav VN200" but I don't see it anywhere | This codebase intentionally deviates from the TDR. We use BNO085 + ESP32-C3 instead — see [§2A](#2a-real-vehicle-vs-sim) and [.claude/context/vehicle-spec.md](.claude/context/vehicle-spec.md) for the full rationale. |
+Most common issues:
 
-For anything else, run `colcon build --packages-select duburi_manager &&
-source install/setup.bash` first — stale generated files are responsible
-for 80% of weird failures.
+| Symptom | Fix |
+|---------|-----|
+| No `[STATE]` after startup | BlueOS `inspector` endpoint IP wrong. Check `ss -lun \| grep 14550`. |
+| `arm -> FAIL: DENIED` | Pre-arm check failed — read `[ARDUB]` lines for reason. |
+| Depth times out at ~-0.5 m | ArduSub not in ALT_HOLD or Bar30 unhealthy. Check `[STATE]` mode. |
+| Yaw overshoots | `-p smooth_yaw:=true`, or lower `ATC_ANG_YAW_P` in QGC. |
+| Depth stalls on tall person | `ros2 param set /duburi_manager vision.depth_anchor_frac 0.2` |
+| `/dev/ttyACM0: Permission denied` | `sudo usermod -aG dialout "$USER"` then re-login. |
+
+Full issue list: **[docs/troubleshooting.md](docs/troubleshooting.md)**
 
 ---
 
 ## 14. Development workflow
 
-### 14.1 Add a new high-level command
+Adding a new command — two edits only:
 
-The whole loop is two edits:
+1. Add a row to `COMMANDS` in `duburi_control/commands.py` (name, help, fields, defaults).
+2. Add a same-named method on `Duburi` in `duburi_control/duburi.py` that returns a `Move.Result`.
 
-1. Add a row to `COMMANDS` in
-   [src/duburi_control/duburi_control/commands.py](src/duburi_control/duburi_control/commands.py)
-   — pick a name, write the `--help` string, list the `Move.action`
-   fields you want, and supply defaults for the optional ones.
-2. Add a same-named method on `Duburi` in
-   [src/duburi_control/duburi_control/duburi.py](src/duburi_control/duburi_control/duburi.py)
-   that acquires `self.lock`, runs whatever motion helpers it needs, and
-   returns a `Move.Result` (use `self._make_result(success, message,
-   final_value=..., error_value=...)`).
-
-That's it — the action server, the `duburi` CLI, the `mission` runner, and
-the Python `DuburiClient` all read from `COMMANDS` at runtime, so no other
-file needs to be touched. Test in sim with one of the bundled missions
-(`ros2 run duburi_planner mission square_pattern`) before touching
-hardware. Only extend `Move.action` if the existing field shape
-(`duration`, `gain`, `target`, `target_name`, `timeout`, `settle`,
-`yaw_rate_pct`) genuinely isn't enough for your verb.
-
-### 14.2 Add a new smoothing variant
-
-1. Create a new function in the relevant `motion_*.py` (e.g.
-   `yaw_trapezoid` in `motion_yaw.py`). Keep the signature identical to
-   the existing variants — same arguments, same exit semantics.
-2. Dispatch from the facade based on a new flag or a richer enum.
-3. Reuse math from `motion_easing.py` where possible.
-
-### 14.3 Debugging on the vehicle
-
-- Always have `ros2 topic echo /rosout_agg` running in a second terminal.
-- Log RC and attitude simultaneously — most bugs come from RC channels
-  fighting `SET_ATTITUDE_TARGET`.
-- When a test fails, save the full terminal output; most of the file is
-  `[ARDUB]` lines that explain the underlying reason.
+The action server, CLI, mission runner, and Python client all auto-discover `COMMANDS` — nothing else needs touching. Full dev guide: [CLAUDE.md §11](CLAUDE.md).
 
 ---
 
@@ -1690,12 +1163,19 @@ Skipped intentionally for now:
 
 ## 16. Further reading
 
+**Quick docs** (operational sub-pages):
+- [**docs/configuration.md**](docs/configuration.md) — all ROS params, yaw source, vision pipeline
+- [**docs/tuning.md**](docs/tuning.md) — vision gains, smoothing flags, ArduSub PID params
+- [**docs/telemetry.md**](docs/telemetry.md) — log tags, MAVLink debug trace, one-liners
+- [**docs/troubleshooting.md**](docs/troubleshooting.md) — full issue list with fixes
+- [**docs/JETSON_SETUP.md**](docs/JETSON_SETUP.md) — one-time Jetson/dev-box setup
+
 Research notes and agent context live in `.claude/context/`. The four
 pillars (read these first) are bolded:
 
 **API & verbs (start here):**
-- [**command-reference.md**](.claude/context/command-reference.md) — every verb on `/duburi/move`: CLI, Python facade, DSL, MAVLink output, implementation file
-- [**client-and-dsl-api.md**](.claude/context/client-and-dsl-api.md) — `DuburiClient`, `DuburiMission` DSL, and `Duburi` facade — what each layer is for
+- [**command-reference.md**](.claude/context/command-reference.md) — every verb on `/duburi/move`: CLI, Python facade, DSL, MAVLink output, lock modes, distance metrics, depth anchor
+- [**client-and-dsl-api.md**](.claude/context/client-and-dsl-api.md) — `DuburiClient`, `DuburiMission` DSL, `vision.follow()`, and `Duburi` facade
 - [**mission-cookbook.md**](.claude/context/mission-cookbook.md) — mission DSL cookbook (verbs + working principles + ten samples)
 - [**testing-guide.md**](.claude/context/testing-guide.md) — every test (unit, bringup, mission smoke, in-water checklist)
 
