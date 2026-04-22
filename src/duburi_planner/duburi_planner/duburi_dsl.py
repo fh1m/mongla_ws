@@ -132,6 +132,14 @@ def _format_outcome(cmd: str, result) -> str:
             f'err={result.error_value:+.3f}  ({result.message})')
 
 
+def _to_float(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return float(value)
+    return value
+
+
 class DuburiMission:
     """Mission-author API. Wraps DuburiClient with human verbs + sticky context.
 
@@ -162,6 +170,7 @@ class DuburiMission:
     # ================================================================== #
 
     def _send(self, cmd: str, **fields):
+        fields = {k: _to_float(v) for k, v in fields.items()}
         result = self.client.send(cmd, **fields)
         self.log.info(_format_outcome(cmd, result))
         return result

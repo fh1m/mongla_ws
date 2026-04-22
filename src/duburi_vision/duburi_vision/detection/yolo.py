@@ -13,18 +13,45 @@ Robust to:
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Iterable, List, Optional
 
 import numpy as np
 
-from .detector import Detector, Detection
-from .gpu      import select_device
+from .detector    import Detector, Detection
+from .gpu         import select_device
+from .class_index import load_class_index
+
+
+def _resolve_model_path(name: str) -> str:
+    """Resolve a bare model name to a full path.
+
+    If *name* already has a path separator or ends with ``.pt``, it is
+    returned as-is (lets callers pass absolute paths or Ultralytics
+    shorthand like ``yolo26n.pt`` directly).
+
+    Otherwise the name is treated as a model stem and looked up under the
+    package's ``models/`` share directory via ament_index.  Falls back to
+    ``name + '.pt'`` which Ultralytics will auto-download on first use.
+    """
+    if os.sep in name or name.endswith('.pt'):
+        return name
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        share = get_package_share_directory('duburi_vision')
+        candidate = Path(share) / 'models' / f'{name}.pt'
+        if candidate.exists():
+            return str(candidate)
+    except Exception:
+        pass
+    return f'{name}.pt'  # let Ultralytics auto-download
 
 
 class YoloDetector(Detector):
     name = 'yolo'
 
-    def __init__(self, *, model_path='models/yolo26n.pt', device='cuda:0',
+    def __init__(self, *, model_path='yolo26_nano_pretrained', device='cuda:0',
                  conf=0.35, iou=0.5, imgsz=640, half=False,
                  class_allowlist: Optional[Iterable[str]] = ('person',),
                  warmup=True, logger=None):
@@ -37,14 +64,29 @@ class YoloDetector(Detector):
         self._imgsz   = int(imgsz)
         self._half    = bool(half) and self._device.startswith('cuda')
 
-        self._model = YOLO(model_path)
+        resolved_path = _resolve_model_path(model_path)
+        self._model = YOLO(resolved_path)
         try:
             self._model.to(self._device)
         except Exception as exc:
             raise RuntimeError(
-                f"failed to move {model_path!r} to {self._device}: {exc!r}") from exc
+                f"failed to move {resolved_path!r} to {self._device}: {exc!r}") from exc
 
-        self._names = dict(getattr(self._model, 'names', {}) or {})
+        # Prefer class names from a sidecar YAML (e.g. yolo26_nano_pretrained.yaml)
+        # so custom models can override the embedded names table.
+        yaml_names = load_class_index(resolved_path)
+        self._names = yaml_names if yaml_names else dict(getattr(self._model, 'names', {}) or {})
+
+        if self._log and self._names:
+            cols = 5
+            rows = [list(self._names.items())[i:i+cols]
+                    for i in range(0, len(self._names), cols)]
+            table = '\n    '.join(
+                '  '.join(f'{cid:3d}: {cname:<15s}' for cid, cname in row)
+                for row in rows)
+            self._log.info(
+                f"[YOLO ] model: {Path(resolved_path).name} ({imgsz}×{imgsz})\n"
+                f"[YOLO ] available classes ({len(self._names)}):\n    {table}")
 
         self._allow_ids = None
         if class_allowlist is not None:
@@ -66,10 +108,11 @@ class YoloDetector(Detector):
         self._ready = True
 
         if self._log:
+            active = self._allowlist_repr()
             self._log.info(
-                f"[YOLO ] {model_path} ready on {self._device}  "
+                f"[YOLO ] {Path(resolved_path).name} ready on {self._device}  "
                 f"conf={self._conf}  iou={self._iou}  imgsz={self._imgsz}  "
-                f"half={self._half}  allow={self._allowlist_repr()}")
+                f"half={self._half}  active_filter={active}")
 
     def _allowlist_repr(self):
         if self._allow_ids is None:

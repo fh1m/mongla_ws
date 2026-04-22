@@ -1,88 +1,55 @@
-"""webcam_demo -- laptop webcam + YOLO26 person detector + debug viewer.
+"""webcam_demo.launch.py -- DEPRECATED. Use cameras_.launch.py instead.
 
-Usage:
-    ros2 launch duburi_vision webcam_demo.launch.py
-    ros2 launch duburi_vision webcam_demo.launch.py device:=2 conf:=0.5
-    ros2 launch duburi_vision webcam_demo.launch.py rqt:=false   # headless
-    ros2 launch duburi_vision webcam_demo.launch.py device_param_type:=string device:=/dev/video2
-    ros2 launch duburi_vision webcam_demo.launch.py with_tracking:=true   # enable ByteTrack + Kalman
+This stub delegates to cameras_.launch.py so older scripts keep working.
 """
 
-from launch                       import LaunchDescription
-from launch.actions               import DeclareLaunchArgument
-from launch.conditions            import IfCondition
-from launch.substitutions         import LaunchConfiguration, PythonExpression
-from launch_ros.actions           import Node
+from launch                              import LaunchDescription
+from launch.actions                      import DeclareLaunchArgument, LogInfo, IncludeLaunchDescription
+from launch.launch_description_sources  import PythonLaunchDescriptionSource
+from launch.substitutions               import LaunchConfiguration, ThisLaunchFileDir
+from ament_index_python.packages        import get_package_share_directory
+import os
 
 
 def generate_launch_description():
+    share = get_package_share_directory('duburi_vision')
+    cameras_launch = os.path.join(share, 'launch', 'cameras_.launch.py')
+
     args = [
-        DeclareLaunchArgument('camera',  default_value='laptop'),
-        DeclareLaunchArgument('device',  default_value='0'),
-        DeclareLaunchArgument('width',   default_value='640'),
-        DeclareLaunchArgument('height',  default_value='480'),
-        DeclareLaunchArgument('fps',     default_value='30'),
-        DeclareLaunchArgument('model',   default_value='yolo26n.pt'),
-        DeclareLaunchArgument('cls_device', default_value='cuda:0'),
-        DeclareLaunchArgument('classes', default_value='person'),
-        DeclareLaunchArgument('conf',    default_value='0.35'),
-        DeclareLaunchArgument('iou',     default_value='0.5'),
-        DeclareLaunchArgument('rqt',     default_value='true',
-                              description='Open rqt_image_view on image_debug'),
-        DeclareLaunchArgument('with_tracking', default_value='false',
-                              description='Start tracker_node (ByteTrack + Kalman) alongside detector'),
-        DeclareLaunchArgument('track_buffer', default_value='30',
-                              description='tracker_node: frames to hold lost track'),
+        DeclareLaunchArgument('camera',        default_value='laptop'),
+        DeclareLaunchArgument('device',        default_value='0'),
+        DeclareLaunchArgument('width',         default_value='640'),
+        DeclareLaunchArgument('height',        default_value='480'),
+        DeclareLaunchArgument('fps',           default_value='30'),
+        DeclareLaunchArgument('model',         default_value='yolo26_nano_pretrained'),
+        DeclareLaunchArgument('cls_device',    default_value='cuda:0'),
+        DeclareLaunchArgument('classes',       default_value='person'),
+        DeclareLaunchArgument('conf',          default_value='0.35'),
+        DeclareLaunchArgument('iou',           default_value='0.5'),
+        DeclareLaunchArgument('rqt',           default_value='true'),
+        DeclareLaunchArgument('with_tracking', default_value='false'),
+        DeclareLaunchArgument('track_buffer',  default_value='30'),
     ]
 
-    cam_name = LaunchConfiguration('camera')
+    warn = LogInfo(msg='[DEPRECATED] webcam_demo.launch.py -- use cameras_.launch.py instead')
 
-    camera = Node(
-        package='duburi_vision', executable='camera_node', name='duburi_camera',
-        output='screen',
-        parameters=[{
-            'source':   'webcam',
-            'name':     cam_name,
-            'frame_id': 'laptop_cam',
-            'device':   LaunchConfiguration('device'),
-            'width':    LaunchConfiguration('width'),
-            'height':   LaunchConfiguration('height'),
-            'fps':      LaunchConfiguration('fps'),
-            'publish_rate_hz': LaunchConfiguration('fps'),
-        }],
+    delegate = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(cameras_launch),
+        launch_arguments={
+            'camera':        LaunchConfiguration('camera'),
+            'device':        LaunchConfiguration('device'),
+            'width':         LaunchConfiguration('width'),
+            'height':        LaunchConfiguration('height'),
+            'fps':           LaunchConfiguration('fps'),
+            'model':         LaunchConfiguration('model'),
+            'cls_device':    LaunchConfiguration('cls_device'),
+            'classes':       LaunchConfiguration('classes'),
+            'conf':          LaunchConfiguration('conf'),
+            'iou':           LaunchConfiguration('iou'),
+            'rqt':           LaunchConfiguration('rqt'),
+            'with_tracking': LaunchConfiguration('with_tracking'),
+            'track_buffer':  LaunchConfiguration('track_buffer'),
+        }.items(),
     )
 
-    detector = Node(
-        package='duburi_vision', executable='detector_node', name='duburi_detector',
-        output='screen',
-        parameters=[{
-            'camera':              cam_name,
-            'model_path':          LaunchConfiguration('model'),
-            'device':              LaunchConfiguration('cls_device'),
-            'classes':             LaunchConfiguration('classes'),
-            'conf':                LaunchConfiguration('conf'),
-            'iou':                 LaunchConfiguration('iou'),
-            'publish_debug_image': True,
-            'debug_image_hz':      10.0,
-        }],
-    )
-
-    tracker = Node(
-        package='duburi_vision', executable='tracker_node', name='duburi_tracker',
-        output='screen',
-        parameters=[{
-            'camera':       cam_name,
-            'track_buffer': LaunchConfiguration('track_buffer'),
-        }],
-        condition=IfCondition(LaunchConfiguration('with_tracking')),
-    )
-
-    image_topic = PythonExpression(["'/duburi/vision/' + '", cam_name, "' + '/image_debug'"])
-    viewer = Node(
-        package='rqt_image_view', executable='rqt_image_view',
-        name='duburi_image_view', output='screen',
-        arguments=[image_topic],
-        condition=IfCondition(LaunchConfiguration('rqt')),
-    )
-
-    return LaunchDescription(args + [camera, detector, tracker, viewer])
+    return LaunchDescription(args + [warn, delegate])

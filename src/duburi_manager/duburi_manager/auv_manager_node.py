@@ -595,11 +595,15 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # Stop background writers BEFORE the final send_neutral so no
-        # daemon thread races us by emitting another packet after the
-        # shutdown frame. Order:
-        #   heading-lock (Ch4 rate-override) -> heartbeat (all-neutral)
-        #     -> one final send_neutral so the wire ends in a known state.
+        # Software kill switch: Ctrl-C → neutral all thrusters → disarm.
+        # Order matters:
+        #   1. heading-lock daemon (Ch4 rate-override) — stop so it can't
+        #      race the neutral frame we're about to send
+        #   2. heartbeat daemon (all-neutral keepalive) — stop
+        #   3. send_neutral() — one explicit all-1500 frame so the wire
+        #      ends in a known state before disarm
+        #   4. disarm() — ArduSub accepts disarm after it sees neutral RC
+        node.get_logger().warning('[KILL ] Ctrl-C received — stopping thrusters and disarming')
         try:
             if node.duburi._heading_lock is not None:
                 node.duburi._heading_lock.stop()
@@ -612,6 +616,15 @@ def main(args=None):
             node.get_logger().debug(
                 f'shutdown: heartbeat.stop() ignored: {exc!r}')
         node.pixhawk.send_neutral()
+        # Disarm — ignore if already disarmed or vehicle rejects (e.g. not armed)
+        try:
+            ok, reason = node.pixhawk.disarm()
+            if ok:
+                node.get_logger().warning('[KILL ] disarmed OK')
+            else:
+                node.get_logger().warning(f'[KILL ] disarm result: {reason} (safe to ignore if not armed)')
+        except Exception as exc:
+            node.get_logger().debug(f'shutdown: disarm ignored: {exc!r}')
         try:
             node.yaw_source.close()
         except Exception as exc:

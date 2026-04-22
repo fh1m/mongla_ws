@@ -431,7 +431,7 @@ Verifying the chain before pool day:
 
 ```bash
 ros2 run   duburi_manager bringup_check                # network + serial preflight
-ros2 launch duburi_vision webcam_demo.launch.py        # camera + detector up
+ros2 launch duburi_vision cameras_.launch.py        # camera + detector up
 ros2 run   duburi_vision vision_check                  # topic-only health probe
 ros2 run   duburi_vision vision_thrust_check           # send one vision_align_yaw, watch [RC] Yaw
 ros2 run   duburi_planner mission find_person_demo     # full vision-driven 3D mission (DSL)
@@ -517,7 +517,7 @@ ros2 run duburi_planner mission find_person_demo   # vision-driven 3D align demo
 
 ```bash
 # Terminal A: vision pipeline
-ros2 launch duburi_vision webcam_demo.launch.py
+ros2 launch duburi_vision cameras_.launch.py
 
 # Terminal B: pure topic probe (no thrust)
 ros2 run duburi_vision vision_check --camera laptop --require-class person
