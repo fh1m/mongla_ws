@@ -31,7 +31,7 @@ on with the manager's `debug` ROS-param (default off, production
 runs stay quiet):
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p debug:=true
+ros2 run duburi_manager start --ros-args -p debug:=true
 ```
 
 That single param sets two things: it raises the manager logger to
@@ -50,39 +50,81 @@ Each verb's `Implements` row gives the implementation breadcrumb
 
 ---
 
+## Quick Reference
+
+All 29 verbs at a glance. Required fields have no default listed.
+
+| Verb | Fields (→ default) | What it does |
+|---|---|---|
+| `arm` | timeout→15 s | Power on thrusters |
+| `disarm` | timeout→20 s | Safe shutdown |
+| `set_mode` | **target_name** required, timeout→8 s | Switch ArduSub mode |
+| `stop` | — | Neutral all channels (active hold) |
+| `pause` | duration→2 s | Release RC override |
+| `move_forward` | **duration** required, gain→80 %, settle→0 s | Open-loop forward thrust |
+| `move_back` | **duration** required, gain→80 %, settle→0 s | Open-loop reverse thrust |
+| `move_left` | **duration** required, gain→80 %, settle→0 s | Open-loop lateral strafe left |
+| `move_right` | **duration** required, gain→80 %, settle→0 s | Open-loop lateral strafe right |
+| `arc` | **duration** required, gain→50 %, yaw_rate_pct→30 %, settle→0 s | Curved motion: forward + yaw |
+| `yaw_left` | **target** deg required, timeout→30 s, settle→0 s | Sharp pivot left |
+| `yaw_right` | **target** deg required, timeout→30 s, settle→0 s | Sharp pivot right |
+| `set_depth` | **target** m required, timeout→30 s, settle→0 s | Drive to absolute depth |
+| `lock_heading` | target→0.0 °, timeout→300 s | Background heading correction loop |
+| `unlock_heading` | — | Stop heading lock |
+| `vision_acquire` | camera→laptop, target_class→person, target_name→'', timeout→30 s, gain→25 %, yaw_rate_pct→25 %, stale_after→1.5 s, tracking→false | Sweep until target seen |
+| `vision_align_yaw` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_yaw→60, on_lost→fail, stale_after→1.5 s, lock_mode→'', tracking→false | Centre target horizontally (heading) |
+| `vision_align_lat` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_lat→60, on_lost→fail, stale_after→1.5 s, lock_mode→'', tracking→false | Centre target horizontally (strafe) |
+| `vision_align_depth` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_depth→0.05, on_lost→fail, stale_after→1.5 s, depth_anchor_frac→0, lock_mode→'', tracking→false | Centre target vertically |
+| `vision_hold_distance` | camera→laptop, target_class→person, duration→20 s, deadband→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→1.5 s, lock_mode→'', distance_metric→'', tracking→false | Hold standoff distance |
+| `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→1.5 s, depth_anchor_frac→0, lock_mode→'', distance_metric→'', tracking→false | Multi-axis simultaneous |
+
+---
+
 ## 1. Power & mode
 
 ### `arm`
 
-| Aspect      | Value                                                   |
-| ----------- | ------------------------------------------------------- |
-| CLI         | `duburi arm [--timeout 15.0]`                           |
-| Python      | `duburi.arm(timeout=15.0)`                              |
-| MAVLink     | `COMMAND_LONG (MAV_CMD_COMPONENT_ARM_DISARM, p1=1)`     |
-| Implements  | `Pixhawk.arm` in `pixhawk.py` (waits for COMMAND_ACK + heartbeat-armed bit) |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `timeout` | float (s) | `15.0` | `1.0 – 60.0` | Max seconds to wait for armed heartbeat |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi arm [--timeout 15.0]` |
+| DSL | `duburi.arm(timeout=15.0)` |
+| MAVLink | `COMMAND_LONG (MAV_CMD_COMPONENT_ARM_DISARM, p1=1)` |
+| Result | `final_value` = current depth (m); `success=False` if timeout or pre-arm failure |
 | Failure modes | `RC_FAIL` if pre-arm checks reject; `NOT_ARMED_AFTER_ACK` if ACK arrives but `is_armed()` stays False |
-| `[MAV ]`    | `[MAV arm cmd=arm] COMPONENT_ARM_DISARM p1=1`                                |
+| `[MAV ]` | `[MAV arm cmd=arm] COMPONENT_ARM_DISARM p1=1` |
 
 ### `disarm`
 
-| Aspect      | Value                                                   |
-| ----------- | ------------------------------------------------------- |
-| CLI         | `duburi disarm [--timeout 20.0]`                        |
-| Python      | `duburi.disarm(timeout=20.0)`                           |
-| MAVLink     | `SET_MODE -> MANUAL` then 3 s settle, then `RC neutral`, then `COMMAND_LONG (MAV_CMD_COMPONENT_ARM_DISARM, p1=0)` |
-| Implements  | `Pixhawk.disarm` in `pixhawk.py` -- mirrors what QGC does, dodges ArduSub's "still moving" disarm rejection |
-| `[MAV ]`    | `[MAV set_mode cmd=disarm] MANUAL (id=19)` ... `[MAV send_rc_override cmd=disarm] all=neutral` ... `[MAV disarm cmd=disarm] COMPONENT_ARM_DISARM p1=0` |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `timeout` | float (s) | `20.0` | `5.0 – 60.0` | Extra time for the mode-switch + settle sequence |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi disarm [--timeout 20.0]` |
+| DSL | `duburi.disarm(timeout=20.0)` |
+| Sequence | `SET_MODE → MANUAL` → 3 s settle → `RC neutral` → `COMPONENT_ARM_DISARM p1=0` |
+| Result | `final_value` = current depth (m) |
+| `[MAV ]` | `[MAV set_mode cmd=disarm] MANUAL` → `[MAV disarm cmd=disarm] COMPONENT_ARM_DISARM p1=0` |
 
 ### `set_mode`
 
-| Aspect      | Value                                                   |
-| ----------- | ------------------------------------------------------- |
-| CLI         | `duburi set_mode --target_name ALT_HOLD [--timeout 8.0]` |
-| Python      | `duburi.set_mode('ALT_HOLD', timeout=8.0)`              |
-| Mode names  | `MANUAL`, `STABILIZE`, `ACRO`, `DEPTH_HOLD` (alias for `ALT_HOLD`), `ALT_HOLD`, `POSHOLD`, `GUIDED`, `AUTO`, `CIRCLE`, `SURFACE` |
-| MAVLink     | `SET_MODE` (legacy message, no COMMAND_ACK) -- we retry every 300 ms and poll the heartbeat for the actual change |
-| `[MAV ]`    | `[MAV set_mode cmd=set_mode] <NAME> (id=<N>)` once before the retry loop      |
-| Notes       | Auto-engaged by `set_depth` (-> ALT_HOLD), `yaw_left/right`, `lock_heading`. ALT_HOLD inherently holds depth + heading once Ch3/Ch4 are neutral. |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `target_name` | string | — **required** | `MANUAL`, `STABILIZE`, `ALT_HOLD`, `DEPTH_HOLD`, `POSHOLD`, `GUIDED`, `AUTO`, `SURFACE` | Case-insensitive; `DEPTH_HOLD` is an alias for `ALT_HOLD` |
+| `timeout` | float (s) | `8.0` | `1.0 – 30.0` | Max seconds polling heartbeat for mode change |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi set_mode --target_name ALT_HOLD [--timeout 8.0]` |
+| DSL | `duburi.set_mode('ALT_HOLD', timeout=8.0)` |
+| MAVLink | `SET_MODE` (legacy, no ACK) — retries every 300 ms, polls heartbeat |
+| Auto-engaged by | `set_depth` (→ ALT_HOLD), `yaw_left/right`, `lock_heading` |
+| `[MAV ]` | `[MAV set_mode cmd=set_mode] ALT_HOLD (id=2)` |
 
 ---
 
@@ -90,77 +132,77 @@ Each verb's `Implements` row gives the implementation breadcrumb
 
 ### `stop`
 
-| Aspect      | Value                                                   |
-| ----------- | ------------------------------------------------------- |
-| CLI         | `duburi stop`                                           |
-| Python      | `duburi.stop()`                                         |
-| MAVLink     | `RC_CHANNELS_OVERRIDE` six 1500s for ~0.6 s            |
-| Behaviour   | **Active hold** -- ArduSub still sees us as the pilot, so its onboard heading/depth holds latch at the current state. Use between commands. |
-| `[MAV ]`    | `[MAV send_rc_override cmd=stop] all=neutral` (one per tick, ~12 frames over 0.6 s) |
+No parameters.
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi stop` |
+| DSL | `duburi.stop()` |
+| MAVLink | `RC_CHANNELS_OVERRIDE` six 1500s for ~0.6 s |
+| Behaviour | **Active hold** — ArduSub still sees us as pilot; heading/depth hold latches at current state |
+| `[MAV ]` | `[MAV send_rc_override cmd=stop] all=neutral` |
 
 ### `pause`
 
-| Aspect      | Value                                                   |
-| ----------- | ------------------------------------------------------- |
-| CLI         | `duburi pause [--duration 2.0]`                         |
-| Python      | `duburi.pause(seconds=2.0)`                             |
-| MAVLink     | `RC_CHANNELS_OVERRIDE` six 65535s for `duration` s       |
-| Behaviour   | **Release** -- pilot OFF the loop. ArduSub's mode automation (ALT_HOLD, POSHOLD) runs unhindered. Use between mode changes or to A/B-test what ArduSub does on its own. Suspends `Heartbeat` for the duration. |
-| `[MAV ]`    | `[MAV release_rc_override cmd=pause] all=released`                              |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `duration` | float (s) | `2.0` | `0.1 – 300.0` | Seconds to release RC override |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi pause [--duration 2.0]` |
+| DSL | `duburi.pause(seconds=2.0)` |
+| MAVLink | `RC_CHANNELS_OVERRIDE` six 65535s (no override) for `duration` s |
+| Behaviour | **Release** — autopilot takes over. ALT_HOLD holds depth + heading on its own. Suspends Heartbeat. |
+| `[MAV ]` | `[MAV release_rc_override cmd=pause] all=released` |
 
 ---
 
 ## 3. Translations (Ch5 forward, Ch6 lateral)
 
-`gain` is the stick percentage (0..100) and `seconds` is open-loop
-time-of-flight. Currents and battery state change the metres-per-
-second mapping every run -- use vision verbs (§6) for precision and
-open-loop for *getting close*.
+`gain` is stick percentage (0–100). `duration` is open-loop seconds.
+Currents and battery state change the metres-per-second mapping every run — use vision verbs (§8) for closed-loop precision.
 
-| Verb           | Channel | CLI                                              | Python                          | MAVLink            |
-| -------------- | ------- | ------------------------------------------------ | ------------------------------- | ------------------ |
-| `move_forward` | Ch5 +   | `duburi move_forward --duration 5 [--gain 80]`   | `duburi.move_forward(5, gain=80)` | RC_OVERRIDE @ 20 Hz |
-| `move_back`    | Ch5 -   | `duburi move_back --duration 5 [--gain 80]`      | `duburi.move_back(5, gain=80)`    | RC_OVERRIDE @ 20 Hz |
-| `move_left`    | Ch6 -   | `duburi move_left --duration 5 [--gain 80]`      | `duburi.move_left(5, gain=80)`    | RC_OVERRIDE @ 20 Hz |
-| `move_right`   | Ch6 +   | `duburi move_right --duration 5 [--gain 80]`     | `duburi.move_right(5, gain=80)`   | RC_OVERRIDE @ 20 Hz |
+**Common fields for all four move_* verbs:**
 
-* **Profile:** constant-gain (default) or eased (smootherstep envelope
-  via `motion_easing.trapezoid_ramp`). Switch to eased by launching
-  the manager with `-p smooth_translate:=true` -- verb names don't
-  change.
-* **Lock-aware:** if `lock_heading` is active, the writer is
-  `send_rc_translation` (Ch4 released to 65535 so the lock thread
-  keeps Ch4 authority). Otherwise `send_rc_override` (Ch4 = 1500).
-* **Implementation:** `motion_forward.py` for Ch5, `motion_lateral.py`
-  for Ch6.
-* **Common kwargs:** `settle` (extra hold-still seconds after the
-  drive completes; default 0).
-* **Brake:** `_constant` profile fires a reverse-kick brake before the
-  settle. `_eased` profile uses the ease-out as the brake (no kick).
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `duration` | float (s) | — **required** | `0.1 – 300.0` | Time to thrust |
+| `gain` | float (%) | `80.0` | `0.0 – 100.0` | Thrust percentage; 100 = full stick |
+| `settle` | float (s) | `0.0` | `0.0 – 10.0` | Extra neutral hold after drive |
+
+| Verb | Channel | CLI | DSL | MAVLink |
+|---|---|---|---|---|
+| `move_forward` | Ch5 + | `duburi move_forward --duration 5 [--gain 80]` | `duburi.move_forward(5, gain=80)` | `RC_OVERRIDE` @ 20 Hz |
+| `move_back` | Ch5 − | `duburi move_back --duration 5 [--gain 80]` | `duburi.move_back(5, gain=80)` | `RC_OVERRIDE` @ 20 Hz |
+| `move_left` | Ch6 − | `duburi move_left --duration 5 [--gain 80]` | `duburi.move_left(5, gain=80)` | `RC_OVERRIDE` @ 20 Hz |
+| `move_right` | Ch6 + | `duburi move_right --duration 5 [--gain 80]` | `duburi.move_right(5, gain=80)` | `RC_OVERRIDE` @ 20 Hz |
+
+* **Profile:** constant-gain (default) or eased (`smooth_translate:=true` on manager). Verb names don't change.
+* **Lock-aware:** if `lock_heading` is active, Ch4 is released to 65535 so the lock keeps authority.
+* **Result:** `final_value` = current depth (m); `error_value` = 0.0
 
 ---
 
 ## 4. Yaw (sharp pivots)
 
-| Verb         | CLI                                              | Python                             |
-| ------------ | ------------------------------------------------ | ---------------------------------- |
-| `yaw_left`   | `duburi yaw_left  --target 90 [--timeout 30]`    | `duburi.yaw_left(90, timeout=30)`  |
-| `yaw_right`  | `duburi yaw_right --target 90 [--timeout 30]`    | `duburi.yaw_right(90, timeout=30)` |
+**Common fields for `yaw_left` / `yaw_right`:**
 
-* **Mode:** auto-engages ALT_HOLD if not already in a yaw-capable
-  mode (so ArduSub's attitude stabiliser can convert Ch4 rate
-  commands into actual yaw via the four-thruster mixer).
-* **Profile:** `yaw_snap` (default) is bang-bang Ch4 rate to a target
-  heading. `yaw_glide` is smootherstep envelope; switch with the
-  manager's `-p smooth_yaw:=true` flag.
-* **Implementation:** `motion_yaw.py`.
-* **MAVLink:** RC_CHANNELS_OVERRIDE, Ch4 only, at 10 Hz
-  (`YAW_RATE_HZ`). Sign convention: +stick = right turn (so
-  `yaw_left(90)` writes negative Ch4 percent).
-* **Lock-aware:** if `lock_heading` is active, the lock is
-  *suspended* while yaw runs, then *retargeted* to the new heading on
-  exit (so after `yaw_left(90)` the lock now holds 90 deg less than
-  before, with no extra calls).
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `target` | float (°) | — **required** | `0.1 – 360.0` | Degrees to turn; cumulative, not absolute |
+| `timeout` | float (s) | `30.0` | `1.0 – 120.0` | Abort if not reached within this time |
+| `settle` | float (s) | `0.0` | `0.0 – 10.0` | Neutral hold after yaw completes |
+
+| Verb | CLI | DSL | Result |
+|---|---|---|---|
+| `yaw_left` | `duburi yaw_left --target 90 [--timeout 30]` | `duburi.yaw_left(90, timeout=30)` | `final_value` = final yaw °; `error_value` = heading error ° |
+| `yaw_right` | `duburi yaw_right --target 90 [--timeout 30]` | `duburi.yaw_right(90, timeout=30)` | same |
+
+* **Mode:** auto-engages ALT_HOLD (required for absolute yaw setpoints)
+* **Profile:** `yaw_snap` (default, bang-bang) or `yaw_glide` (`smooth_yaw:=true`, smootherstep)
+* **Lock-aware:** heading lock suspends during yaw, retargets to new heading on exit
+* **MAVLink:** `RC_CHANNELS_OVERRIDE` Ch4 only @ 10 Hz; positive pct = right turn
 
 ---
 
@@ -168,14 +210,20 @@ open-loop for *getting close*.
 
 ### `arc`
 
-| Aspect      | Value                                                                    |
-| ----------- | ------------------------------------------------------------------------ |
-| CLI         | `duburi arc --duration 5 [--gain 50] [--yaw_rate_pct 30]`                |
-| Python      | `duburi.arc(5, gain=50, yaw_rate_pct=30)`                                |
-| MAVLink     | `RC_CHANNELS_OVERRIDE` writing **Ch5 + Ch4 in the same packet** at 20 Hz |
-| Implements  | `motion_forward.arc`                                                     |
-| Behaviour   | Car-style curved motion. `gain` is forward thrust pct (signed: negative = arc in reverse). `yaw_rate_pct` is signed yaw stick (+ = right turn, - = left). Duration is open-loop seconds. Suspends `lock_heading`, retargets to the exit heading. |
-| `[MAV ]`    | `[MAV send_rc_override cmd=arc] yaw=<pwm> fwd=<pwm>` (one per tick; `pitch/roll/thr/lat` skipped because they're at neutral) |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `duration` | float (s) | — **required** | `0.1 – 300.0` | Open-loop seconds |
+| `gain` | float (%) | `50.0` | `-100.0 – 100.0` | Forward thrust %; negative = arc in reverse |
+| `yaw_rate_pct` | float (%) | `30.0` | `-100.0 – 100.0` | Yaw stick %; positive = right curve, negative = left curve |
+| `settle` | float (s) | `0.0` | `0.0 – 10.0` | Neutral hold after arc |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi arc --duration 5 [--gain 50] [--yaw_rate_pct 30]` |
+| DSL | `duburi.arc(5, gain=50, yaw_rate_pct=30)` |
+| MAVLink | `RC_CHANNELS_OVERRIDE` Ch5 + Ch4 in one packet @ 20 Hz |
+| Result | `final_value` = final yaw °; `error_value` = heading drift ° |
+| `[MAV ]` | `[MAV send_rc_override cmd=arc] yaw=<pwm> fwd=<pwm>` |
 
 ---
 
@@ -183,21 +231,23 @@ open-loop for *getting close*.
 
 ### `set_depth`
 
-| Aspect      | Value                                                                                 |
-| ----------- | ------------------------------------------------------------------------------------- |
-| CLI         | `duburi set_depth --target -1.5 [--timeout 30] [--settle 0]`                          |
-| Python      | `duburi.set_depth(-1.5, timeout=30)`                                                  |
-| MAVLink     | Auto-engage `SET_MODE -> ALT_HOLD` if needed, then `SET_POSITION_TARGET_GLOBAL_INT` (alt only, all other axes masked) at `DEPTH_SETPOINT_HZ` (5 Hz) **only while driving to target** |
-| Implements  | `motion_depth.hold_depth` -> `Pixhawk.set_target_depth`                               |
-| Behaviour   | Drives the AUV to absolute depth `target` metres (negative below surface). Returns once `\|altitude - target\| < 0.05 m` for 0.5 s. After the target is reached, ArduSub's onboard ALT_HOLD (400 Hz internal PID) keeps holding -- we stop streaming. |
-| `[MAV ]`    | `[MAV set_target_depth cmd=set_depth] depth=-1.50m` per tick during the drive    |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `target` | float (m) | — **required** | `-50.0 – 0.0` | Absolute depth; negative = below surface (e.g. `-1.0` = 1 m down) |
+| `timeout` | float (s) | `30.0` | `1.0 – 120.0` | Abort if target not reached |
+| `settle` | float (s) | `0.0` | `0.0 – 10.0` | Hold still after reaching target |
 
-> **There is no `lock_depth` or `unlock_depth` verb.** ALT_HOLD
-> inherently holds whatever altitude is current the moment Ch3 goes
-> back to neutral. The `Heartbeat` daemon (5 Hz neutral RC override)
-> keeps the wire warm so ArduSub does not trip `FS_PILOT_INPUT` and
-> disarm. See [`ardusub-canon.md`](./ardusub-canon.md) §depth for
-> theory.
+| Aspect | Value |
+|---|---|
+| CLI | `duburi set_depth --target -1.5 [--timeout 30] [--settle 0]` |
+| DSL | `duburi.set_depth(-1.5, timeout=30)` |
+| MAVLink | Auto-engage `ALT_HOLD` → `SET_POSITION_TARGET_GLOBAL_INT` (alt only) @ 5 Hz while driving |
+| Converges when | `\|depth - target\| < 0.05 m` for 0.5 s |
+| After converge | ArduSub ALT_HOLD holds indefinitely; we stop streaming |
+| Result | `final_value` = final depth (m); `error_value` = `\|target - final\|` (m) |
+| `[MAV ]` | `[MAV set_target_depth cmd=set_depth] depth=-1.50m` per tick |
+
+> **There is no `lock_depth` / `unlock_depth` verb.** ALT_HOLD inherits the current depth whenever Ch3 goes neutral. The Heartbeat daemon (5 Hz neutral) keeps the wire warm.
 
 ---
 
@@ -205,24 +255,30 @@ open-loop for *getting close*.
 
 ### `lock_heading`
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi lock_heading [--target 0] [--timeout 300]`                              |
-| Python      | `duburi.lock_heading(degrees=0.0, timeout=300.0)` (returns immediately)         |
-| MAVLink     | Background daemon thread streams `RC_CHANNELS_OVERRIDE` Ch4-only (rate command) at `LOCK_STREAM_HZ` (20 Hz) |
-| Implements  | `heading_lock.HeadingLock`; owned and started by `Duburi.lock_heading`           |
-| Behaviour   | `target=0` means lock at the current heading right now. Loop reads heading from configured `yaw_source` (BNO085 / AHRS / SITL), computes proportional Ch4 yaw-rate command, clamps to `+/-LOCK_PCT_MAX`. Pauses `Heartbeat` while active (the lock IS the heartbeat). |
-| `[MAV ]`    | `[MAV send_rc_override] yaw=<pwm>` per tick (no `cmd=` -- the lock thread is its own thread; `lock_heading`'s own setup frames carry `cmd=lock_heading`) |
-| See         | [`heading-lock.md`](./heading-lock.md) for state diagram and failure modes.       |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `target` | float (°) | `0.0` | `0.0 – 360.0` | Target heading; **0.0 = lock at current heading right now** |
+| `timeout` | float (s) | `300.0` | `1.0 – 600.0` | Auto-unlocks after this duration |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi lock_heading [--target 0] [--timeout 300]` |
+| DSL | `duburi.lock_heading(degrees=0.0, timeout=300.0)` — returns immediately (non-blocking) |
+| MAVLink | Background thread streams `RC_CHANNELS_OVERRIDE` Ch4 only @ 20 Hz |
+| Behaviour | `target=0` = lock current heading. Reads `yaw_source` (BNO085 / AHRS), proportional Ch4 rate command. Pauses Heartbeat (the lock IS the heartbeat). |
+| `[MAV ]` | `[MAV send_rc_override] yaw=<pwm>` per tick |
+| See | [`heading-lock.md`](./heading-lock.md) for state diagram and failure modes |
 
 ### `unlock_heading`
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi unlock_heading`                                                          |
-| Python      | `duburi.unlock_heading()` (Duburi facade) / `duburi.release_heading()` (DSL)     |
-| MAVLink     | Stops the lock thread, sends `RC_CHANNELS_OVERRIDE` six 1500s, resumes `Heartbeat` |
-| `[MAV ]`    | `[MAV send_rc_override cmd=unlock_heading] all=neutral` (single neutral frame)  |
+No parameters.
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi unlock_heading` |
+| DSL | `duburi.release_heading()` |
+| MAVLink | Stops lock thread → `RC_CHANNELS_OVERRIDE` six 1500s → resumes Heartbeat |
+| `[MAV ]` | `[MAV send_rc_override cmd=unlock_heading] all=neutral` |
 
 ---
 
@@ -255,79 +311,132 @@ docstring as `impl: ...`):
 
 Scan / sweep until at least one fresh detection of `target_class` arrives.
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_acquire --target_class person [--target_name yaw_right] [--timeout 30] [--gain 25] [--yaw_rate_pct 25]` |
-| Python      | `duburi.vision_acquire(camera='laptop', target_class='person', target_name='yaw_right', ...)` |
-| DSL         | `duburi.vision.find(target='person', sweep='right', timeout=25.0, ...)`         |
-| Sweep modes | `''` / `'still'` (wait), `'yaw_left'`, `'yaw_right'`, `'move_forward'`, `'arc'` |
-| Returns     | `final_value = time-to-acquire seconds` on success, `error_value = 0` on success, timeout reason on failure |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `camera` | string | `laptop` | any camera profile name | `laptop`, `sim_front`, `forward`, `downward` |
+| `target_class` | string | `person` | any detector class label or `''` | `''` = accept any class |
+| `target_name` | string | `''` | `''`, `yaw_left`, `yaw_right`, `move_forward`, `arc` | Drive maneuver to run while searching |
+| `timeout` | float (s) | `30.0` | `1.0 – 300.0` | Abort if nothing seen |
+| `gain` | float (%) | `25.0` | `0.0 – 100.0` | Thrust during search maneuver |
+| `yaw_rate_pct` | float (%) | `25.0` | `-100.0 – 100.0` | Yaw rate for `arc` target_name |
+| `stale_after` | float (s) | `1.5` | `0.1 – 10.0` | Max detection age to count as "seen" |
+| `tracking` | bool | `false` | `true` / `false` | Subscribe `/tracks` (requires tracker_node) instead of `/detections` |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vision_acquire --target_class person [--target_name yaw_right] [--timeout 30] [--gain 25] [--tracking false]` |
+| DSL | `duburi.vision.find(target='person', sweep='right', timeout=25.0)` |
+| Sweep modes | `''`/`still` (wait in place), `yaw_left`, `yaw_right`, `move_forward`, `arc` |
+| Result | `final_value` = time-to-acquire (s); `success=False` + timeout reason on failure |
+
+**Common fields for all vision verbs** (see full tables per verb below):
+
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `camera` | string | `laptop` | any camera profile | `laptop`, `sim_front`, `forward`, `downward` |
+| `target_class` | string | `person` | any detector class or `''` | `''` = largest detection regardless of class |
+| `duration` | float (s) | varies | `0.5 – 300.0` | Max seconds for the control loop |
+| `deadband` | float | `0.18` | `0.01 – 1.0` | Normalized error ≤ deadband counts as "centred" |
+| `on_lost` | string | `fail` | `fail`, `hold` | `fail` = abort after ~2 s lost; `hold` = freeze setpoints and wait |
+| `stale_after` | float (s) | `1.5` | `0.1 – 10.0` | Detection older than this is treated as lost |
+| `tracking` | bool | `false` | `true`, `false` | `true` = subscribe `/tracks` (ByteTrack IDs + Kalman-smoothed); requires tracker_node running for this camera |
+
+---
 
 ### `vision_align_yaw`
 
 Centre target horizontally via Ch4 yaw rate (P loop on `ex`).
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_yaw --target_class person [--duration 15] [--kp_yaw 60] [--deadband 0.18] [--lock_mode settle]` |
-| Python      | `duburi.vision_align_yaw(camera='laptop', target_class='person', ...)`           |
-| DSL         | `duburi.vision.yaw(target='person', duration=8.0, kp_yaw=60.0, ...)`            |
-| Channel     | Ch4 only                                                                         |
-| Math        | `yaw_pct = clamp(ex * kp_yaw, ±35)` -> `RC_CHANNELS_OVERRIDE`                  |
-| New params  | `lock_mode` — controls when the verb exits (see Lock modes below)                |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `kp_yaw` | float | `60.0` | `1.0 – 200.0` | P gain: `yaw_pct = clamp(ex × kp_yaw, ±35)` |
+| `lock_mode` | string | `''` | `''`, `settle`, `follow` | `''` = use ROS param default (`settle`) |
+| `tracking` | bool | `false` | `true` / `false` | Enable ByteTrack stable IDs |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vision_align_yaw --target_class person [--duration 15] [--kp_yaw 60] [--deadband 0.18] [--lock_mode settle] [--tracking false]` |
+| DSL | `duburi.vision.yaw(target='person', duration=8.0, kp_yaw=60.0)` |
+| Channel | Ch4 only |
+| Result | `final_value` = composite normalized error; `error_value` = detection age (s) |
 
 ### `vision_align_lat`
 
-Centre horizontally via Ch6 lateral strafe (P loop on `ex`).
+Centre horizontally via Ch6 lateral strafe — doesn't change heading (P loop on `ex`).
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_lat --target_class person [--duration 15] [--kp_lat 60] [--lock_mode settle]` |
-| Python      | `duburi.vision_align_lat(camera='laptop', target_class='person', ...)`           |
-| DSL         | `duburi.vision.lateral(target='person', duration=8.0, kp_lat=60.0, ...)`        |
-| Channel     | Ch6 only                                                                         |
-| Math        | `lat_pct = clamp(ex * kp_lat, ±35)` -> `RC_CHANNELS_OVERRIDE`                  |
-| New params  | `lock_mode` — controls when the verb exits (see Lock modes below)                |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `kp_lat` | float | `60.0` | `1.0 – 200.0` | P gain: `lat_pct = clamp(−ex × kp_lat, ±35)` (negated — strafe right to move target right) |
+| `lock_mode` | string | `''` | `''`, `settle`, `follow` | |
+| `tracking` | bool | `false` | `true` / `false` | |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vision_align_lat --target_class person [--duration 15] [--kp_lat 60] [--tracking false]` |
+| DSL | `duburi.vision.lateral(target='person', duration=8.0, kp_lat=60.0)` |
+| Channel | Ch6 only |
 
 ### `vision_align_depth`
 
-Centre vertically via incremental ALT_HOLD setpoint nudges (P loop on `ey_anchor`).
+Centre target vertically via incremental ALT_HOLD depth setpoint nudges.
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_depth --target_class person [--duration 15] [--kp_depth 0.05] [--depth_anchor_frac 0.5]` |
-| Python      | `duburi.vision_align_depth(camera='laptop', target_class='person', ...)`         |
-| DSL         | `duburi.vision.depth(target='person', duration=8.0, kp_depth=0.05, ...)`        |
-| Channel     | Depth setpoint (`SET_POSITION_TARGET_GLOBAL_INT`) at 5 Hz                        |
-| Math        | `ey_anchor = ey + (2×anchor - 1)×h_frac` then `depth_nudge = clamp(ey_anchor * kp_depth, ±0.02)` |
-| New params  | `depth_anchor_frac` (0=top, 0.5=centre, 1=bottom of bbox); `lock_mode`          |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `kp_depth` | float (m/unit) | `0.05` | `0.001 – 0.5` | Small! Metres of nudge per unit `ey_anchor` per 5 Hz tick |
+| `depth_anchor_frac` | float | `0.0` | `0.0 – 1.0` | Which point on bbox to centre: 0=top, 0.5=centre, 1=bottom. **0.0 on wire = use ROS param (default 0.5)** |
+| `lock_mode` | string | `''` | `''`, `settle`, `follow` | |
+| `tracking` | bool | `false` | `true` / `false` | |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vision_align_depth --target_class person [--duration 15] [--kp_depth 0.05] [--depth_anchor_frac 0.5] [--tracking false]` |
+| DSL | `duburi.vision.depth(target='person', duration=8.0, kp_depth=0.05, depth_anchor_frac=0.5)` |
+| Channel | Depth setpoint (`SET_POSITION_TARGET_GLOBAL_INT`) @ 5 Hz |
+| Math | `ey_anchor = ey + (2×anchor − 1)×h_frac` → `nudge = clamp(ey_anchor × kp_depth, ±0.02 m)` |
+| Tip | Use `depth_anchor_frac=0.2` for tall targets (person, pole) — centering on bbox top avoids depth stall |
 
 ### `vision_hold_distance`
 
-Drive Ch5 so the target's size proxy matches `target_bbox_h_frac`
-(P loop on `target_h_frac - size`).
+Drive Ch5 to match target size proxy to `target_bbox_h_frac`.
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55 [--duration 20] [--kp_forward 200] [--distance_metric height] [--lock_mode settle]` |
-| Python      | `duburi.vision_hold_distance(camera='laptop', target_class='person', ...)`       |
-| DSL         | `duburi.vision.forward(target='person', distance=0.55, duration=12.0, ...)`     |
-| Channel     | Ch5 only                                                                         |
-| Math        | `size = _distance_size(sample, metric)` then `fwd_pct = clamp((target_h_frac - size) * kp_forward, ±50)` |
-| New params  | `distance_metric` (height/area/diagonal); `lock_mode`                           |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `kp_forward` | float | `200.0` | `10.0 – 500.0` | P gain: `fwd_pct = clamp((target_frac − size) × kp_fwd, ±50)` |
+| `target_bbox_h_frac` | float | `0.30` | `0.05 – 0.95` | Stop-distance: target fills this fraction of frame (in chosen metric) |
+| `distance_metric` | string | `''` | `''`, `height`, `area`, `diagonal` | `''` = ROS param default (`height`) |
+| `lock_mode` | string | `''` | `''`, `settle`, `follow`, `pursue` | `pursue` = forward-only, exits when size ≥ target |
+| `tracking` | bool | `false` | `true` / `false` | |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55 [--duration 20] [--kp_forward 200] [--distance_metric area] [--tracking false]` |
+| DSL | `duburi.vision.forward(target='person', distance=0.55, duration=12.0)` |
+| Channel | Ch5 only |
 
 ### `vision_align_3d`
 
-Hold N axes at once. All axes settle together (or run until duration in `follow`/`pursue` modes).
+Hold multiple axes simultaneously. All active axes must be within `deadband` to "settle".
 
-| Aspect      | Value                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| CLI         | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth --target_bbox_h_frac 0.50 [--duration 20] [--lock_mode settle] [--distance_metric height] [--depth_anchor_frac 0.5]` |
-| Python      | `duburi.vision_align_3d(camera='laptop', target_class='gate', axes='yaw,forward,depth', ...)` |
-| DSL         | `duburi.vision.lock(target='gate', axes='yaw,forward,depth', distance=0.50, duration=15.0, ...)` |
-| `axes`      | CSV, any subset of `'yaw,lat,depth,forward'`                                    |
-| Loop body   | Single 20 Hz tick writes Ch4+Ch5+Ch6 in one RC packet, plus a 5 Hz depth-setpoint sub-tick |
-| New params  | `lock_mode`, `distance_metric`, `depth_anchor_frac`                             |
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `axes` | string (CSV) | `yaw,forward` | any subset of `yaw`, `lat`, `depth`, `forward` | e.g. `'yaw,forward'`, `'yaw,lat,depth,forward'` |
+| `kp_yaw` | float | `60.0` | `1.0 – 200.0` | |
+| `kp_lat` | float | `60.0` | `1.0 – 200.0` | |
+| `kp_depth` | float | `0.05` | `0.001 – 0.5` | |
+| `kp_forward` | float | `200.0` | `10.0 – 500.0` | |
+| `target_bbox_h_frac` | float | `0.30` | `0.05 – 0.95` | Target size (stop distance) |
+| `depth_anchor_frac` | float | `0.0` | `0.0 – 1.0` | 0.0 on wire = use ROS param (default 0.5) |
+| `distance_metric` | string | `''` | `''`, `height`, `area`, `diagonal` | |
+| `lock_mode` | string | `''` | `''`, `settle`, `follow`, `pursue` | |
+| `visual_pid` | bool | `false` | `true` / `false` | Structural placeholder; body is P-only today |
+| `tracking` | bool | `false` | `true` / `false` | Enable ByteTrack + Kalman |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth --target_bbox_h_frac 0.50 [--duration 20] [--lock_mode settle] [--distance_metric area] [--tracking false]` |
+| DSL | `duburi.vision.lock(target='gate', axes='yaw,forward,depth', distance=0.50, duration=15.0)` |
+| Loop | Single 20 Hz tick: writes Ch4+Ch5+Ch6 in one RC packet + 5 Hz depth sub-tick |
+| Result | `final_value` = composite normalized error; `error_value` = detection age (s) |
 
 ### Common vision overrides
 
@@ -344,7 +453,8 @@ Hold N axes at once. All axes settle together (or run until duration in `follow`
 | `depth_anchor_frac`  | `vision.depth_anchor_frac`   | Which point on the bbox to vertically centre (0=top, 0.5=centre, 1=bottom). Use **0.2** for tall objects (person standing, pole) where centering on the bbox centre stalls the depth controller. |
 | `lock_mode`          | `vision.lock_mode`           | When to exit the loop — see Lock modes below              |
 | `distance_metric`    | `vision.distance_metric`     | How "size" is measured from the bbox — see Distance metrics below |
-| `visual_pid`         | -                            | Structural placeholder for v2; body is P-only today.      |
+| `visual_pid`         | -                            | Structural placeholder; body is P-only today. |
+| `tracking`           | `vision.use_tracks`          | `true` = subscribe `/tracks` (ByteTrack IDs + Kalman-smoothed bbox). Requires `tracker_node` running for that camera. Also settable globally: `ros2 param set /duburi_manager vision.use_tracks true`. |
 
 Loop body (the one place all of this lives):
 [`src/duburi_control/duburi_control/motion_vision.py`](../../src/duburi_control/duburi_control/motion_vision.py).
@@ -397,7 +507,62 @@ ey_anchor = ey + (2 × anchor − 1) × h_frac
 
 ---
 
-## 9. Cross-references
+## 9. Tracker node (optional, off by default)
+
+`tracker_node` subscribes the detector's `/detections` topic, runs **ByteTrack** (two-stage association) + a **per-track 4-state Kalman smoother** (`[cx, cy, vx, vy]`), and republishes `/tracks` — same `Detection2DArray` format but with `tracking_id` populated and bbox centers smoothed.
+
+### Start with tracking enabled
+
+```bash
+# With cameras_.launch.py
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+
+# Or start tracker_node standalone (detector must already be running)
+ros2 run duburi_vision tracker_node --ros-args -p camera:=laptop
+
+# Then tell the manager to use /tracks for all vision verbs
+ros2 param set /duburi_manager vision.use_tracks true
+# Or per-verb in CLI:
+ros2 run duburi_planner duburi vision_align_yaw --target_class person --tracking true
+```
+
+### ROS params on `tracker_node` (live-tunable via `ros2 param set`)
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `camera` | string | `laptop` | Must match the detector's camera profile |
+| `track_buffer` | int (frames) | `30` | Frames to keep a lost track alive (~1.5 s @ 20 Hz) |
+| `min_hits` | int (frames) | `3` | Confirmed frames before a new track is published |
+| `iou_threshold` | float | `0.3` | ByteTrack low-confidence association IoU threshold |
+| `enable_kalman` | bool | `true` | Apply 4-state CV Kalman smoother to cx/cy |
+| `kalman_process_noise` | float | `0.1` | Kalman Q diagonal; higher = trust measurements more |
+| `kalman_measurement_noise` | float | `1.0` | Kalman R; higher = trust predictions more |
+| `max_predict_frames` | int | `5` | Kalman-only frames before track is dropped (~0.25 s) |
+
+All params are stored in `src/duburi_vision/config/tracker.yaml`.
+
+### Topics published by `tracker_node`
+
+| Topic | Type | Notes |
+|---|---|---|
+| `/duburi/vision/<cam>/tracks` | `vision_msgs/Detection2DArray` | `tracking_id` = ByteTrack int ID; bbox smoothed |
+
+### Smoke test
+
+```bash
+ros2 run duburi_vision tracker_check --camera laptop --duration 5 --require-class person
+# Exit 0 = stable track seen; exit 1 = failure with actionable hint
+```
+
+Reports: `msg_hz`, unique IDs seen, ID stability %, predicted frame ratio, top classes.
+
+### Predicted frames (occlusion bridging)
+
+When the detector misses a frame but ByteTrack's buffer hasn't expired, `tracker_node` emits an entry with `score=0.0` and the bbox from the Kalman prediction. The manager's `stale_after` gate treats Kalman-only frames as fresh (age_s is time since last real detection) — so short occlusions bridge without triggering `on_lost`. After `max_predict_frames` consecutive Kalman frames the track is dropped.
+
+---
+
+## 10. Cross-references
 
 * `COMMANDS` registry (single source of truth for fields/defaults): [`commands.py`](../../src/duburi_control/duburi_control/commands.py)
 * Python facade (open-loop verbs): [`duburi.py`](../../src/duburi_control/duburi_control/duburi.py)

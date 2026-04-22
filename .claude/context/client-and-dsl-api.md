@@ -77,6 +77,7 @@ vision verbs.
 | `depth_anchor_frac`  | float32  | vision_align_depth / vision_align_3d  |
 | `lock_mode`          | string   | vision_* ('settle' / 'follow' / 'pursue') |
 | `distance_metric`    | string   | vision_hold_distance / vision_align_3d |
+| `tracking`           | bool     | all vision_* — `True` subscribes `/tracks` (ByteTrack IDs + Kalman-smoothed), requires tracker_node |
 
 ### `Move.Result` fields you get back
 
@@ -211,10 +212,33 @@ duburi.vision.follow  (target=None, axes='yaw,forward',
 
 `**overrides` are any of `kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`,
 `deadband`, `target_bbox_h_frac`, `stale_after`, `on_lost`,
-`depth_anchor_frac`, `lock_mode`, `distance_metric`, `visual_pid`.
+`depth_anchor_frac`, `lock_mode`, `distance_metric`, `visual_pid`,
+**`tracking`** (bool, default `False` — set `True` to use ByteTrack stable IDs + Kalman-smoothed bbox).
+
 Only pass them when you want to *pin* a value for that one call — omit
-them and the live `vision.*` ROS-param value applies. See the
-"Common vision overrides" table in [`command-reference.md`](./command-reference.md).
+them and the live `vision.*` ROS-param value applies.
+
+### Enabling tracking via DSL
+
+```python
+# Option A: per-call
+duburi.vision.lock(target='gate', axes='yaw,forward',
+                   distance=0.45, duration=20.0,
+                   tracking=True)
+
+# Option B: global ROS param (applies to all subsequent vision goals)
+import subprocess
+subprocess.run(['ros2', 'param', 'set', '/duburi_manager',
+                'vision.use_tracks', 'true'])
+
+# Option C: launch flag (cameras_.launch.py handles tracker_node startup)
+#   ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+```
+
+When `tracking=True`, the manager subscribes `/tracks` (published by `tracker_node`) instead
+of `/detections`. The `Sample.track_id` field is populated with the stable ByteTrack integer ID.
+Short occlusions (up to `max_predict_frames`, default 5 frames = ~0.25 s) are bridged by
+Kalman prediction — the control loop never sees a gap.
 
 ### Escape hatch -- raw `send`
 

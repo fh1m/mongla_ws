@@ -22,8 +22,9 @@ setup(
     license='MIT',
     entry_points={
         'console_scripts': [
-            'auv_manager      = duburi_manager.auv_manager_node:main',
-            'auv_manager_node = duburi_manager.auv_manager_node:main',
+            'start            = duburi_manager.auv_manager_node:main',
+            'auv_manager      = duburi_manager.auv_manager_node:main',  # kept for compat
+            'auv_manager_node = duburi_manager.auv_manager_node:main',  # kept for compat
             'bringup_check    = duburi_manager.bringup_check:main',
         ],
     },

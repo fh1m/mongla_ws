@@ -141,7 +141,7 @@ In separate terminals (full SIM bring-up is documented in §8.1):
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
     --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
 # T2: manager (auto-detects sim mode via UDP 14550)
-ros2 run duburi_manager auv_manager
+ros2 run duburi_manager start
 # T3: drive it
 ros2 run duburi_planner duburi arm
 ros2 run duburi_planner duburi set_depth --target -0.5
@@ -156,7 +156,7 @@ logs converges on -0.5 m, every CLI exits 0.
 
 ```bash
 # T1
-ros2 launch duburi_vision webcam_demo.launch.py
+ros2 launch duburi_vision cameras_.launch.py
 # T2 -- inspect annotated frames
 ros2 run rqt_image_view rqt_image_view /duburi/vision/laptop/image_debug
 # T3 -- inspect raw detections
@@ -175,9 +175,9 @@ The integration test: webcam drives the simulated BlueROV2 in Gazebo.
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
     --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
 # T2: manager
-ros2 run duburi_manager auv_manager
+ros2 run duburi_manager start
 # T3: vision
-ros2 launch duburi_vision webcam_demo.launch.py
+ros2 launch duburi_vision cameras_.launch.py
 # T4: drive
 ros2 run duburi_planner duburi arm
 ros2 run duburi_planner duburi set_depth --target -0.5
@@ -195,6 +195,7 @@ to keep you centred. Manager logs `[vision] err=±0.0XX  ch4=±YY%`.
 ros2 run duburi_planner mission --list           # shows every missions/*.py
 ros2 run duburi_planner mission move_and_see     # short open-loop + vision demo
 ros2 run duburi_planner mission find_person_demo # full vision-driven walkthrough
+ros2 run duburi_planner mission robosub_prequal  # RoboSub pre-qualification sequence
 ```
 
 Adding a new mission: drop `missions/<your_name>.py` exposing
@@ -254,7 +255,7 @@ When something misbehaves and you want to know exactly which Duburi verb
 emitted which MAVLink frame, restart the manager with `debug:=true`:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p debug:=true
+ros2 run duburi_manager start --ros-args -p debug:=true
 ```
 
 That single param raises the manager logger to DEBUG and tags every
@@ -913,7 +914,7 @@ Terminal 3 — manager node:
 
 ```bash
 source install/setup.bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim
+ros2 run duburi_manager start --ros-args -p mode:=sim
 ```
 
 Terminal 4 — commands via CLI (see §9).
@@ -931,7 +932,7 @@ ls -l /dev/ttyACM0                 # should show crw-rw---- root dialout
 Start the node:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=desk
+ros2 run duburi_manager start --ros-args -p mode:=desk
 ```
 
 Useful for bench-testing ESC signals, calibration, and dry MAVLink plumbing
@@ -948,7 +949,7 @@ work without water.
    ssh fh1m@192.168.2.69
    cd ~/Ros_workspaces/duburi_ws
    source install/setup.bash
-   ros2 run duburi_manager auv_manager --ros-args -p mode:=pool
+   ros2 run duburi_manager start --ros-args -p mode:=pool
    ```
 
 4. Expected startup banner:

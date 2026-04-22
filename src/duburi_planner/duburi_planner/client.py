@@ -78,6 +78,10 @@ class DuburiClient:
         for name, value in fields.items():
             if value is None:
                 continue
+            # Accept int anywhere a float is expected so mission code like
+            # duburi.yaw_left(target=90) works identically to target=90.0
+            if isinstance(value, int) and not isinstance(value, bool):
+                value = float(value)
             setattr(goal, name, value)
 
         send_future = self._client.send_goal_async(

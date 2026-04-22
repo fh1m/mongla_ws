@@ -16,7 +16,7 @@
 
 duburi_detector:
   ros__parameters:
-    model_path:          yolo26n.pt
+    model_path:          yolo26_nano_pretrained
     device:              cuda:0
     half:                false
     conf:                0.35

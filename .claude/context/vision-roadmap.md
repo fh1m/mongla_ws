@@ -24,29 +24,40 @@ status badge says `cuda:0` and the inference loop runs at >= camera FPS
 on RTX 2060. Same node binary on Jetson should work after only an
 ultralytics + matching torch install.
 
-## v2 -- Tracking
+## v2 -- Tracking (DONE)
 
-Persist `track_id` across frames. Land in `duburi_vision/tracking/`:
+Temporal continuity + occlusion bridging. Shipped in tracking integration commit.
 
-- `tracker.py` Tracker ABC, `bytetrack.py` (supervision.ByteTrack wrapper)
-- New `tracker_node.py` at package root subscribing `detections`, publishing
-  `tracks` (also Detection2DArray, with `tracking_id` populated)
-- Extend `draw.py` so each track keeps the same color
-- Tests: ID stability across two consecutive frames with overlapping boxes
+- `tracking/tracker.py` — `Tracker` ABC + `TrackedDetection` dataclass
+- `tracking/bytetrack.py` — `supervision.ByteTrack` wrapper; emits `predicted=True`
+  entries for lost-but-buffered tracks via `self._bt.lost_tracks` loop (occlusion bridging)
+- `tracking/__init__.py` — exports `Tracker`, `TrackedDetection`, `ByteTrackWrapper`, `TrackKalmanSmoother`
+- `tracker_node.py` — ROS node; subscribes `/detections` + `camera_info`, publishes `/tracks`
+  (same `Detection2DArray`, `tracking_id` populated + Kalman-smoothed cx/cy)
+- `draw.py` — `draw_track_ids()` with 12-color stable palette (track_id % 12)
+- `utils/check_tracker.py` — `tracker_check` CLI smoke test
+- `config/tracker.yaml` — all 8 tracker params; all declared as ROS params for live tuning
+- `Move.action` + `commands.py` — `tracking` bool field on all 6 vision verbs
+- `vision_state.py` — `use_tracks=True` subscribes `/tracks`; `track_id` field on `Sample`
+- `auv_manager_node.py` — `vision.use_tracks` ROS param; per-goal `tracking=True` sets it
+- Launch files (`cameras_.launch.py`, `sim_demo`) — `with_tracking:=false` opt-in arg
 
-Detailed notes: `src/duburi_vision/duburi_vision/tracking/PLAN.md`.
+Acceptance: `ros2 run duburi_vision tracker_check --camera laptop --duration 5 --require-class person`
+exits 0 with a stable track ID across ≥ 3 frames.
 
-## v3 -- Filtering
+## v3 -- Filtering (DONE, folded into tracker_node)
 
-Per-track 4-state Kalman smoother (`cx, cy, vx, vy`) so the visual-PID
-setpoint isn't chasing per-frame jitter. Land in `duburi_vision/filters/`:
+Per-track 4-state CV Kalman smoother (`cx, cy, vx, vy`) shipped inside `tracker_node`,
+not a separate node (shared per-track state, avoids extra ROS hop).
 
-- `smoother.py` ABC, `kalman.py` implementation (`filterpy` or hand-rolled)
-- Either fold into `tracker_node` or add a separate `kalman_node.py`
-  depending on measured Jetson Orin latency
-- Tests: stationary target -> smoothed center variance < raw center variance
+- `tracking/kalman.py` — `PerTrackKalman` (filterpy `KalmanFilter(dim_x=4, dim_z=2)`)
+  + `TrackKalmanSmoother` dict manager; `step()` skips measurement update on `predicted=True`
+- `tracker_node.py` — runs Kalman smoothing pass after ByteTrack association;
+  rebuilds xyxy with smoothed cx/cy; skips expired tracks (`predict_streak >= max_predict_frames`)
+- Config: `kalman_process_noise`, `kalman_measurement_noise`, `max_predict_frames` in `tracker.yaml`
 
-Detailed notes: `src/duburi_vision/duburi_vision/filters/PLAN.md`.
+Decision: particle filters skipped — underwater single-target tracking is unimodal; the 4-state
+CV Kalman is appropriate and has near-zero overhead.
 
 ## v4 -- Vision verbs in DuburiClient (DONE)
 
