@@ -250,6 +250,60 @@ def render_all(frame_bgr: np.ndarray, detections: List[Detection], *,
     return out
 
 
+def draw_track_ids(frame_bgr: np.ndarray, tracks) -> np.ndarray:
+    """Overlay stable track IDs on tracked detections.
+
+    Each track_id gets a consistent color (id % palette size), so the same
+    target keeps the same color across frames even if other tracks come and go.
+    predicted=True tracks are drawn with a dashed/dimmer style (half-alpha).
+
+    `tracks` accepts any iterable of objects with .xyxy, .track_id, .class_name,
+    .score, and .predicted attributes (TrackedDetection or compatible).
+    """
+    if frame_bgr is None or not tracks:
+        return frame_bgr
+
+    # 12-color BGR palette — perceptually distinct, distinguishable in dim pools
+    _TRACK_PALETTE = [
+        (255, 100,  50),   # blue
+        ( 50, 220, 100),   # green
+        ( 50, 100, 255),   # red
+        (255, 200,  50),   # cyan
+        (180,  50, 255),   # magenta
+        ( 50, 255, 220),   # yellow
+        (200, 130, 255),   # lavender
+        ( 80, 255, 130),   # lime
+        (255, 130, 200),   # pink
+        (130, 200, 255),   # peach
+        (255,  80, 130),   # violet
+        (130, 255,  80),   # mint
+    ]
+
+    out = frame_bgr.copy()
+    for td in tracks:
+        color = _TRACK_PALETTE[abs(int(td.track_id)) % len(_TRACK_PALETTE)]
+        x1, y1, x2, y2 = (int(v) for v in td.xyxy)
+
+        thickness = 1 if td.predicted else 2
+        alpha     = 0.45 if td.predicted else 1.0
+
+        if alpha < 1.0:
+            overlay = out.copy()
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+            cv2.addWeighted(overlay, alpha, out, 1.0 - alpha, 0, out)
+        else:
+            cv2.rectangle(out, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+
+        label = f"#{td.track_id} {td.class_name}"
+        if td.predicted:
+            label += " (pred)"
+        lx, ly = x1, max(y1 - 5, 12)
+        cv2.putText(out, label, (lx, ly),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+
+    return out
+
+
 # --------------------------------------------------------------------------- #
 #  Internal: cv2 plumbing (no third-party deps)                               #
 # --------------------------------------------------------------------------- #

@@ -5,6 +5,7 @@ Usage:
     ros2 launch duburi_vision webcam_demo.launch.py device:=2 conf:=0.5
     ros2 launch duburi_vision webcam_demo.launch.py rqt:=false   # headless
     ros2 launch duburi_vision webcam_demo.launch.py device_param_type:=string device:=/dev/video2
+    ros2 launch duburi_vision webcam_demo.launch.py with_tracking:=true   # enable ByteTrack + Kalman
 """
 
 from launch                       import LaunchDescription
@@ -28,6 +29,10 @@ def generate_launch_description():
         DeclareLaunchArgument('iou',     default_value='0.5'),
         DeclareLaunchArgument('rqt',     default_value='true',
                               description='Open rqt_image_view on image_debug'),
+        DeclareLaunchArgument('with_tracking', default_value='false',
+                              description='Start tracker_node (ByteTrack + Kalman) alongside detector'),
+        DeclareLaunchArgument('track_buffer', default_value='30',
+                              description='tracker_node: frames to hold lost track'),
     ]
 
     cam_name = LaunchConfiguration('camera')
@@ -62,6 +67,16 @@ def generate_launch_description():
         }],
     )
 
+    tracker = Node(
+        package='duburi_vision', executable='tracker_node', name='duburi_tracker',
+        output='screen',
+        parameters=[{
+            'camera':       cam_name,
+            'track_buffer': LaunchConfiguration('track_buffer'),
+        }],
+        condition=IfCondition(LaunchConfiguration('with_tracking')),
+    )
+
     image_topic = PythonExpression(["'/duburi/vision/' + '", cam_name, "' + '/image_debug'"])
     viewer = Node(
         package='rqt_image_view', executable='rqt_image_view',
@@ -70,4 +85,4 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rqt')),
     )
 
-    return LaunchDescription(args + [camera, detector, viewer])
+    return LaunchDescription(args + [camera, detector, tracker, viewer])

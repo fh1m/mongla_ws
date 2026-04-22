@@ -120,16 +120,22 @@ COMMANDS = {
     # runs once per camera the first time it's hit. Defaults are tuned
     # for a webcam-detected 'person' but every gain is overrideable from
     # the goal so missions can profile them in flight.
+    #
+    # tracking=True: subscribe to /tracks (tracker_node must be running)
+    # instead of /detections. Enables ByteTrack ID stability + Kalman
+    # smoothing. Off by default -- requires tracker_node for that camera.
+    # Can also be set persistently: ros2 param set /duburi_manager vision.use_tracks true
     'vision_align_3d': {
         'help':     'Hold target_class centred AND at target_bbox_h_frac. '
                     'Active axes via CSV axes. lock_mode: settle/follow/pursue. '
                     'depth_anchor_frac: 0=top, 0.5=centre, 1=bottom of bbox. '
-                    'distance_metric: height/area/diagonal.',
+                    'distance_metric: height/area/diagonal. '
+                    'tracking=true: use tracker_node (stable IDs + Kalman).',
         'fields':   ['camera', 'target_class', 'axes', 'duration',
                      'deadband', 'kp_yaw', 'kp_lat', 'kp_depth', 'kp_forward',
                      'target_bbox_h_frac', 'visual_pid', 'on_lost',
                      'stale_after', 'depth_anchor_frac', 'lock_mode',
-                     'distance_metric'],
+                     'distance_metric', 'tracking'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'axes': 'yaw,forward', 'duration': 30.0,
                      'deadband': 0.18, 'kp_yaw': 60.0, 'kp_lat': 60.0,
@@ -137,67 +143,71 @@ COMMANDS = {
                      'target_bbox_h_frac': 0.30, 'visual_pid': False,
                      'on_lost': 'fail', 'stale_after': 1.5,
                      'depth_anchor_frac': 0.0,  # 0.0 = use ROS param default (0.5)
-                     'lock_mode': '', 'distance_metric': ''},
+                     'lock_mode': '', 'distance_metric': '', 'tracking': False},
     },
     'vision_align_yaw': {
         'help':     'Steer toward horizontal centre via heading channel. '
-                    'lock_mode: settle (done when centred) / follow (until duration).',
+                    'lock_mode: settle (done when centred) / follow (until duration). '
+                    'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_yaw', 'on_lost', 'stale_after', 'lock_mode'],
+                     'kp_yaw', 'on_lost', 'stale_after', 'lock_mode', 'tracking'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_yaw': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5, 'lock_mode': ''},
+                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False},
     },
     'vision_align_lat': {
         'help':     'Strafe toward horizontal centre via lateral channel. '
-                    'lock_mode: settle / follow.',
+                    'lock_mode: settle / follow. tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_lat', 'on_lost', 'stale_after', 'lock_mode'],
+                     'kp_lat', 'on_lost', 'stale_after', 'lock_mode', 'tracking'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_lat': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5, 'lock_mode': ''},
+                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False},
     },
     'vision_align_depth': {
         'help':     'Nudge depth setpoint to centre target vertically. '
                     'depth_anchor_frac: which vertical point on bbox to align '
-                    '(0=top, 0.5=centre, 1=bottom). Use 0.2 for tall objects.',
+                    '(0=top, 0.5=centre, 1=bottom). Use 0.2 for tall objects. '
+                    'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_depth', 'on_lost', 'stale_after',
-                     'depth_anchor_frac', 'lock_mode'],
+                     'depth_anchor_frac', 'lock_mode', 'tracking'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_depth': 0.05, 'on_lost': 'fail',
                      'stale_after': 1.5,
                      'depth_anchor_frac': 0.0,  # 0.0 = use ROS param default (0.5)
-                     'lock_mode': ''},
+                     'lock_mode': '', 'tracking': False},
     },
     'vision_hold_distance': {
         'help':     'Drive forward/back to match target_bbox_h_frac. '
                     'distance_metric: height (default) / area / diagonal. '
-                    'lock_mode: settle / follow / pursue (only approach).',
+                    'lock_mode: settle / follow / pursue (only approach). '
+                    'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_forward', 'target_bbox_h_frac', 'on_lost',
-                     'stale_after', 'lock_mode', 'distance_metric'],
+                     'stale_after', 'lock_mode', 'distance_metric', 'tracking'],
         # deadband is tighter here because bbox-height error is naturally
         # smaller than the centring errors on yaw/lat axes.
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 20.0, 'deadband': 0.05,
                      'kp_forward': 200.0, 'target_bbox_h_frac': 0.30,
                      'on_lost': 'fail', 'stale_after': 1.5,
-                     'lock_mode': '', 'distance_metric': ''},
+                     'lock_mode': '', 'distance_metric': '', 'tracking': False},
     },
     'vision_acquire': {
         'help':     'Block (optionally driving via target_name verb) until '
                     'target_class is seen at least once. target_name in '
-                    "{'', 'yaw_left', 'yaw_right', 'move_forward', 'arc'}.",
+                    "{'', 'yaw_left', 'yaw_right', 'move_forward', 'arc'}. "
+                    'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'target_name', 'timeout',
-                     'gain', 'yaw_rate_pct', 'stale_after'],
+                     'gain', 'yaw_rate_pct', 'stale_after', 'tracking'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'target_name': '', 'timeout': 30.0,
                      'gain': 25.0, 'yaw_rate_pct': 25.0,
-                     'stale_after': 1.5},
+                     'stale_after': 1.5, 'tracking': False},
     },
 }
 
@@ -207,7 +217,7 @@ STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'on_lost',
                  'lock_mode', 'distance_metric')
 
 # Field names that carry a bool. rosidl init these to False.
-BOOL_FIELDS = ('visual_pid',)
+BOOL_FIELDS = ('visual_pid', 'tracking')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):

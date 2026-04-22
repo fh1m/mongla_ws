@@ -82,3 +82,51 @@ def detections_to_array(detections: Iterable[Detection], header) -> Detection2DA
         sub.header = header
         arr.detections.append(sub)
     return arr
+
+
+def array_to_detections(array: Detection2DArray) -> list:
+    """Inverse of detections_to_array.
+
+    Converts a Detection2DArray back to a list of Detection objects.
+    Used by tracker_node to receive raw detections from detector_node.
+
+    Returns List[Detection] in pixel space. bbox.size_x/y are width/height
+    in pixels; bbox.center is cx,cy. xyxy is reconstructed from these.
+    """
+    from .detector import Detection as _Detection
+
+    out = []
+    for msg in array.detections:
+        cx, cy = _msg_bbox_center(msg.bbox)
+        w = float(msg.bbox.size_x)
+        h = float(msg.bbox.size_y)
+        x1 = cx - w * 0.5
+        y1 = cy - h * 0.5
+        x2 = cx + w * 0.5
+        y2 = cy + h * 0.5
+
+        if not msg.results:
+            continue
+        hyp = msg.results[0]
+        if hasattr(hyp, 'hypothesis'):
+            class_name = str(hyp.hypothesis.class_id)
+            score      = float(hyp.hypothesis.score)
+        else:
+            class_name = str(getattr(hyp, 'id', ''))
+            score      = float(getattr(hyp, 'score', 0.0))
+
+        out.append(_Detection(
+            class_id=0,           # integer class_id not preserved; use 0
+            class_name=class_name,
+            score=score,
+            xyxy=(x1, y1, x2, y2),
+        ))
+    return out
+
+
+def _msg_bbox_center(bbox):
+    """Extract (cx, cy) from vision_msgs BoundingBox2D (Humble vs Iron+)."""
+    centre = bbox.center
+    if hasattr(centre, 'position'):
+        return float(centre.position.x), float(centre.position.y)
+    return float(centre.x), float(centre.y)

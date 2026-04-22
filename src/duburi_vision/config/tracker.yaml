@@ -1,0 +1,31 @@
+tracker_node:
+  ros__parameters:
+
+    # ---- ByteTrack association params --------------------------------------- #
+    # Frames to hold a lost track alive before dropping it.
+    # 30 frames at 20 Hz detector = ~1.5 s of occlusion tolerance.
+    track_buffer: 30
+
+    # Consecutive detection frames before a new track is published (filters
+    # one-shot false positives / background noise).
+    min_hits: 3
+
+    # IoU threshold for the low-confidence second-pass association.
+    # Lower = more aggressive re-association; higher = stricter.
+    iou_threshold: 0.3
+
+    # ---- Kalman smoother --------------------------------------------------- #
+    enable_kalman: true
+
+    # Process noise Q diagonal. Lower = smoother output, more lag on fast
+    # target motion. Raise for high-speed underwater targets.
+    kalman_process_noise: 0.1
+
+    # Measurement noise R diagonal. Lower = tighter tracking, more jitter.
+    # Raise if the detector produces noisy bbox centres (low-light, motion blur).
+    kalman_measurement_noise: 1.0
+
+    # After this many consecutive Kalman-predicted frames (no real detection),
+    # the track output is suppressed. Must be < track_buffer.
+    # At 20 Hz: 5 frames = 0.25 s of pure prediction before suppressing.
+    max_predict_frames: 5

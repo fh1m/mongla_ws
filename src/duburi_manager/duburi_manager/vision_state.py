@@ -52,25 +52,45 @@ class Sample:
 
     All values are normalized to [-1, +1] for ex/ey, [0, 1] for h_frac,
     so the controller math is camera-resolution-agnostic.
+
+    When tracking is enabled (VisionState.use_tracks=True), track_id is
+    the ByteTrack-assigned stable integer ID. score=0.0 + track_id set
+    means a Kalman-predicted frame (real detection absent but track alive).
+    The control loop uses age_s for stale-gate logic — predicted frames
+    inherit the age of the last real measurement, so short occlusions ride
+    through stale_after naturally.
     """
-    ex:     float    # horizontal error: -1=left edge, 0=centre, +1=right edge
-    ey:     float    # vertical error:   -1=top  edge, 0=centre, +1=bottom edge
-    h_frac: float    # bbox height as fraction of image height (0..1)
-    w_frac: float    # bbox width  as fraction of image width  (0..1)
-    age_s:  float    # how stale this detection is (monotonic seconds)
+    ex:       float    # horizontal error: -1=left edge, 0=centre, +1=right edge
+    ey:       float    # vertical error:   -1=top  edge, 0=centre, +1=bottom edge
+    h_frac:   float    # bbox height as fraction of image height (0..1)
+    w_frac:   float    # bbox width  as fraction of image width  (0..1)
+    age_s:    float    # how stale this detection is (monotonic seconds)
     class_id: str
     score:    float
+    track_id: int | None = None   # stable ID when tracking; None on raw detections
 
 
 class VisionState:
-    """One camera's worth of subscribed-and-cached vision state."""
+    """One camera's worth of subscribed-and-cached vision state.
+
+    Parameters
+    ----------
+    use_tracks : bool
+        When True, subscribe to /duburi/vision/<cam>/tracks (output of
+        tracker_node) instead of /detections. The topic carries the same
+        Detection2DArray type with tracking_id populated. Sample.track_id
+        will be set; score=0.0 frames are Kalman-predicted (no real detection).
+        Default False — raw detections, no tracking overhead.
+    """
 
     def __init__(self, node: Node, *, camera: str = 'laptop',
                  default_image_size: tuple = (640, 480),
+                 use_tracks: bool = False,
                  logger=None):
         self._node    = node
         self._camera  = camera
         self._log     = logger or node.get_logger()
+        self._use_tracks = use_tracks
 
         self._lock          = threading.Lock()
         self._latest_array: Optional[Detection2DArray] = None
@@ -81,16 +101,18 @@ class VisionState:
 
         ns = f'/duburi/vision/{camera}'
         qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
+        det_topic = f'{ns}/tracks' if use_tracks else f'{ns}/detections'
         self._sub_det  = node.create_subscription(
-            Detection2DArray, f'{ns}/detections',  self._on_detections, qos)
+            Detection2DArray, det_topic,           self._on_detections, qos)
         self._sub_info = node.create_subscription(
             CameraInfo,       f'{ns}/camera_info', self._on_info,       qos)
         self._sub_img  = node.create_subscription(
             Image,            f'{ns}/image_raw',   self._on_image,      qos)
 
+        source_label = 'tracks' if use_tracks else 'detections'
         self._log.info(
             f"[VST  ] subscribed camera={camera!r} -> "
-            f"{ns}/detections (+camera_info, +image_raw counter)")
+            f"{ns}/{source_label} (+camera_info, +image_raw counter)")
 
     # ------------------------------------------------------------------ #
     #  Subscriber callbacks                                              #
@@ -182,10 +204,11 @@ class VisionState:
 
         class_id = _hypothesis_class_id(detection)
         score    = _hypothesis_score(detection)
+        track_id = _tracking_id(detection) if self._use_tracks else None
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
                       age_s=time.monotonic() - sampled_at_monotonic,
-                      class_id=class_id, score=score)
+                      class_id=class_id, score=score, track_id=track_id)
 
     def list_classes(self) -> List[str]:
         """Sorted list of distinct class_id strings in the latest array."""
@@ -259,3 +282,14 @@ def _hypothesis_score(det: Detection2D) -> float:
 
 def _hypothesis_matches(det: Detection2D, class_name: str) -> bool:
     return _hypothesis_class_id(det).strip().lower() == class_name.strip().lower()
+
+
+def _tracking_id(det: Detection2D) -> int | None:
+    """Return integer track_id from Detection2D.tracking_id, or None."""
+    tid = getattr(det, 'tracking_id', None)
+    if tid is None or tid == '':
+        return None
+    try:
+        return int(tid)
+    except (ValueError, TypeError):
+        return None
