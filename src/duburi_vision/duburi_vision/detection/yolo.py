@@ -24,16 +24,28 @@ from .gpu         import select_device
 from .class_index import load_class_index
 
 
+# Maps our descriptive model names to Ultralytics' official short stems.
+# Used only when no custom .pt exists in models/ — lets Ultralytics auto-download
+# the right pretrained weights without the caller knowing the short stem.
+_PRETRAINED_ALIASES: dict[str, str] = {
+    'yolo26_nano_pretrained':   'yolo26n',
+    'yolo26_small_pretrained':  'yolo26s',
+    'yolo26_medium_pretrained': 'yolo26m',
+    'yolo26_large_pretrained':  'yolo26l',
+    'yolo26_xlarge_pretrained': 'yolo26x',
+}
+
+
 def _resolve_model_path(name: str) -> str:
     """Resolve a bare model name to a full path.
 
-    If *name* already has a path separator or ends with ``.pt``, it is
-    returned as-is (lets callers pass absolute paths or Ultralytics
-    shorthand like ``yolo26n.pt`` directly).
-
-    Otherwise the name is treated as a model stem and looked up under the
-    package's ``models/`` share directory via ament_index.  Falls back to
-    ``name + '.pt'`` which Ultralytics will auto-download on first use.
+    Priority order:
+      1. Path as-is   — if *name* has a separator or .pt extension.
+      2. models/ dir  — ``<package_share>/models/<name>.pt`` via ament_index.
+      3. Alias table  — maps descriptive names like ``yolo26_nano_pretrained``
+                        to Ultralytics short stems like ``yolo26n`` so auto-
+                        download works correctly.
+      4. Bare stem    — ``name + '.pt'``; Ultralytics will try to download it.
     """
     if os.sep in name or name.endswith('.pt'):
         return name
@@ -45,7 +57,10 @@ def _resolve_model_path(name: str) -> str:
             return str(candidate)
     except Exception:
         pass
-    return f'{name}.pt'  # let Ultralytics auto-download
+    # Map descriptive name → Ultralytics short stem so auto-download works.
+    if name in _PRETRAINED_ALIASES:
+        return f'{_PRETRAINED_ALIASES[name]}.pt'
+    return f'{name}.pt'
 
 
 class YoloDetector(Detector):
