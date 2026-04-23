@@ -189,7 +189,7 @@ the axis module.
 
 ```bash
 # Terminal 1 -- manager
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim -p yaw_source:=mavlink_ahrs
+ros2 run duburi_manager start --ros-args -p mode:=sim -p yaw_source:=mavlink_ahrs
 
 # Terminal 2 -- demo mission
 ros2 run duburi_planner mission heading_lock_demo
@@ -210,18 +210,18 @@ line for every Ch4 write the lock makes (no `cmd=` because the lock
 runs in its own thread and contextvars don't cross thread boundaries):
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim -p debug:=true
+ros2 run duburi_manager start --ros-args -p mode:=sim -p debug:=true
 ```
 
 Bench test for source swap (verify BNO + Gazebo sync):
 
 ```bash
 # Run identical mission against both sources and compare drift logs.
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim -p yaw_source:=mavlink_ahrs
+ros2 run duburi_manager start --ros-args -p mode:=sim -p yaw_source:=mavlink_ahrs
 ros2 run duburi_planner mission heading_lock_demo
 
 # Reboot manager:
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim -p yaw_source:=bno085
+ros2 run duburi_manager start --ros-args -p mode:=sim -p yaw_source:=bno085
 ros2 run duburi_planner mission heading_lock_demo
 ```
 

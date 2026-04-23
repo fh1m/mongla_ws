@@ -19,13 +19,13 @@
 
 ```bash
 # Defaults (bang-bang yaw + constant thrust)
-ros2 run duburi_manager auv_manager
+ros2 run duburi_manager start
 
 # Smoother yaw only
-ros2 run duburi_manager auv_manager --ros-args -p smooth_yaw:=true
+ros2 run duburi_manager start --ros-args -p smooth_yaw:=true
 
 # Both smoothed, pool mode
-ros2 run duburi_manager auv_manager --ros-args \
+ros2 run duburi_manager start --ros-args \
     -p mode:=pool -p smooth_yaw:=true -p smooth_translate:=true
 ```
 
@@ -33,7 +33,7 @@ A YAML preset lives at
 [src/duburi_manager/config/modes.yaml](../src/duburi_manager/config/modes.yaml):
 
 ```bash
-ros2 run duburi_manager auv_manager \
+ros2 run duburi_manager start \
     --ros-args --params-file src/duburi_manager/config/modes.yaml
 ```
 
@@ -112,13 +112,13 @@ Every source: `read_yaw()` → degrees in `[0, 360)`, Earth-referenced
 
 ```bash
 # Default — ArduSub onboard AHRS
-ros2 run duburi_manager auv_manager_node
+ros2 run duburi_manager start_node
 
 # External BNO085 (auto-probes port)
-ros2 run duburi_manager auv_manager_node --ros-args -p yaw_source:=bno085
+ros2 run duburi_manager start_node --ros-args -p yaw_source:=bno085
 
 # Pin a specific port
-ros2 run duburi_manager auv_manager_node \
+ros2 run duburi_manager start_node \
     --ros-args -p yaw_source:=bno085 \
                -p bno085_port:=/dev/ttyACM0 \
                -p bno085_baud:=115200

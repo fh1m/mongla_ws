@@ -165,9 +165,9 @@ def main() -> int:
         print(f'  {failures} check(s) FAILED -- fix before running missions.')
     else:
         print('  All checks OK. Launch with:')
-        print('    ros2 run duburi_manager auv_manager   # mode=auto picks the right profile')
+        print('    ros2 run duburi_manager start         # mode=auto picks the right profile')
         print('    # then in another terminal:')
-        print('    ros2 launch duburi_vision webcam_demo.launch.py   # vision pipeline')
+        print('    ros2 launch duburi_vision cameras_.launch.py  # vision pipeline')
         print('    ros2 run duburi_planner mission move_and_see      # demo mission')
     print('=' * 72)
     return 1 if failures else 0

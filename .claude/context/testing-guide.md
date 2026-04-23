@@ -88,7 +88,7 @@ Mission smoke (planner):
 
 ## 2. Per-command bringup tests (live manager, no water)
 
-These run against a **live `auv_manager` node** -- either pointing at
+These run against a **live `duburi_manager` node** -- either pointing at
 the SITL Gazebo Pixhawk, or at a tethered real Pixhawk on the bench.
 They are how you verify a verb actually puts the right MAVLink frames
 on the wire.
@@ -98,19 +98,19 @@ on the wire.
 Sim:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim
+ros2 run duburi_manager start --ros-args -p mode:=sim
 ```
 
 Real Pixhawk over USB at /dev/ttyACM0:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=real
+ros2 run duburi_manager start --ros-args -p mode:=real
 ```
 
 With BNO085 yaw + a peek at every MAVLink frame:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args \
+ros2 run duburi_manager start --ros-args \
     -p mode:=real -p yaw_source:=bno085 -p debug:=true
 ```
 
@@ -318,7 +318,7 @@ helper on `Pixhawk` directly, exposed for payload (torpedo, grabber,
 dropper). Test it from the manager's REPL:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim &
+ros2 run duburi_manager start --ros-args -p mode:=sim &
 sleep 5
 python3 -c "
 import rclpy
@@ -348,7 +348,7 @@ flips per-command MAVLink trace tags on; default is off so production
 runs stay quiet.
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args \
+ros2 run duburi_manager start --ros-args \
     -p mode:=pool -p yaw_source:=bno085 -p debug:=true
 ```
 
@@ -420,7 +420,7 @@ manager:
 
 ```bash
 # Terminal 1
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim
+ros2 run duburi_manager start --ros-args -p mode:=sim
 
 # Terminal 2
 ros2 run duburi_planner mission --list             # list discovered missions

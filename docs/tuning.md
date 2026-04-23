@@ -61,7 +61,7 @@ Two independent flags on `auv_manager_node`:
 | `smooth_translate`  | Thrust = `gain × trapezoid_ramp(t, dur, ramp=0.4 s)` | Lurch at start or backward drift at end |
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args \
+ros2 run duburi_manager start --ros-args \
     -p smooth_yaw:=true -p smooth_translate:=true
 ```
 

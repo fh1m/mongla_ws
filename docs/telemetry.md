@@ -42,7 +42,7 @@ Fields: `armed` (bool), `mode` (string), `yaw_deg` (float), `depth_m` (float), `
 Enable with `debug:=true` at manager startup:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p debug:=true
+ros2 run duburi_manager start --ros-args -p debug:=true
 ```
 
 Every MAVLink frame the current verb emits gets tagged:

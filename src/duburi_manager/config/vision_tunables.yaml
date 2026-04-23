@@ -1,7 +1,7 @@
 # Live-tunable defaults for every vision_* command.
 #
 # Load with:
-#   ros2 run duburi_manager auv_manager --ros-args \
+#   ros2 run duburi_manager start --ros-args \
 #       --params-file src/duburi_manager/config/vision_tunables.yaml
 #
 # Or override individually at any time without restart:

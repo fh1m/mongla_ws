@@ -9,10 +9,10 @@ Public exports:
   YoloDetector              Ultralytics YOLO26 wrapper
   draw                      module of pure-function visual overlays
 
-Tracking and Kalman filtering land in v2/v3; their PLAN.md files live next
-to this module. Node entry points (`camera_node`, `detector_node`,
-`vision_node`) are package-level scripts -- import the modules to wire
-them in tests.
+Tracking (ByteTrack + Kalman smoother) ships as tracker_node.py and the
+tracking/ sub-package. Node entry points (`camera_node`, `detector_node`,
+`tracker_node`, `vision_node`) are package-level scripts -- import the
+modules to wire them in tests.
 """
 
 from .cameras.camera   import Camera, FrameMeta

@@ -29,7 +29,7 @@ that are at neutral / released so a typical line stays short:
     [MAV release_rc_override cmd=pause]     all=released
     [MAV set_target_depth cmd=set_depth]    depth=-0.40m
 
-Activate with ``ros2 run duburi_manager auv_manager --ros-args -p
+Activate with ``ros2 run duburi_manager start --ros-args -p
 debug:=true`` or set the ``debug`` ROS-param at runtime. Tests using
 FakePixhawk keep working because ``log`` defaults to None (debug
 calls no-op).

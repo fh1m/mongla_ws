@@ -1,46 +1,22 @@
-# filters/ -- v3 design notes
+# filters/ — v3 SHIPPED (folded into tracker_node)
 
-Goal: smooth bbox center per `track_id` so the visual-PID setpoint isn't
-chasing per-frame jitter. Outputs feed `duburi_planner.vision_client`.
+The per-track Kalman smoother was implemented directly inside `tracker_node.py`
+rather than as a separate `kalman_node` or `filters/` module. This reduced
+end-to-end latency by one topic hop and proved sufficient on Jetson Orin.
 
-## Module layout (when implemented)
+## What shipped
 
-```
-duburi_vision/filters/
-  __init__.py
-  smoother.py       # ABC: update(track_id, cx, cy, t) -> (cx_hat, cy_hat, vx, vy)
-  kalman.py         # 4-state CV model (filterpy or hand-rolled)
-```
+| Component | File |
+|---|---|
+| 4-state CV Kalman per track | `tracking/kalman.py` |
+| Integration into tracker pipeline | `tracker_node.py` (runs after ByteTrack update) |
 
-## State model
+## Design decisions
 
-Per-track 4-state constant-velocity Kalman:
-  x_k = [cx, cy, vx, vy]^T
-  Measurement = [cx, cy] (from tracker output)
-  Process noise: tuned per-class (a swimming person is wigglier than a torpedo target)
+- Smoothed cx/cy replace raw values in the outgoing `/tracks` topic.
+- Predicted frames (no detector measurement) use the Kalman forward-predict step
+  and are marked with `score=0.0` so callers know the box is estimated.
+- Process noise is a single tunable; per-class tuning is deferred to v4+.
 
-## ROS surface
-
-Either (a) live inside `tracker_node` (cheaper, fewer hops) or (b) be a
-separate `kalman_node.py`. Decide once we measure end-to-end latency on
-Jetson Orin. Topic:
-
-```
-out  /duburi/vision/<cam>/tracks_smooth    vision_msgs/Detection2DArray
-```
-
-with the smoothed cx/cy populated and bbox size still raw.
-
-## Bonus: lost-target prediction
-
-When the detector misses a frame, the Kalman keeps predicting forward.
-Surface that as `Detection2D.results[0].score = 0.0` so the planner can
-see "this is a predicted box, not a real measurement". After N predicted
-frames in a row (configurable), drop the track.
-
-## References to lift from
-
-- rlabbe Kalman & Bayesian Filters in Python (book)
-- https://github.com/rlabbe/filterpy
-- https://github.com/pcdangio/ros-kalman_filter
-- https://github.com/AbhinavA10/ROS2-Labs (ROS2 Kalman example)
+The `filters/` module directory is kept as an organisational placeholder.
+New filter work (e.g. depth/velocity fusion) goes here.

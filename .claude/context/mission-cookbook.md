@@ -313,6 +313,161 @@ A vision verb succeeds when `axes_in_deadband` is True for
 
 ---
 
+## 3.3  Tracking while moving — ByteTrack + Kalman
+
+### What tracking adds
+
+The bare vision pipeline (`/detections`) gives you the largest box this
+frame. Tracking (`/tracks`) gives you a **stable ID** that persists across
+frames, through brief occlusions, and across any move command you issue
+while the target is in view. The Kalman smoother inside `tracker_node`
+also removes per-frame bbox jitter so the P-loop setpoint is smoother.
+
+### Turning tracking on
+
+Two layers control whether tracking is active:
+
+**1. Launch layer — start `tracker_node`:**
+
+```bash
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+```
+
+**2. Per-goal DSL flag — route this goal through `/tracks`:**
+
+```python
+duburi.vision.lock(target='gate', axes='yaw,forward',
+                   tracking=True, ...)
+```
+
+`tracking=True` tells `auv_manager_node` to subscribe `/tracks` for this
+goal instead of `/detections`. If `tracker_node` is not running the goal
+will stall waiting for its first sample — always pair with `with_tracking:=true`.
+
+### `lock_mode` — the key parameter for tracking-while-moving
+
+`lock_mode` controls when `vision.lock` exits:
+
+| `lock_mode` | Exits when ...                                       | Use case                            |
+|-------------|------------------------------------------------------|-------------------------------------|
+| `'settle'`  | target is inside deadband for `SETTLED_TICK_BUDGET`  | Approach and stop at target         |
+| `'follow'`  | `duration` expires (never exits on deadband alone)   | Continuous tracking, orbit steps    |
+| `'pursue'`  | reserved (NYI)                                       | —                                   |
+
+**Rule of thumb:** use `settle` to *arrive*; use `follow` to *keep moving*.
+
+### Predicted frames and `on_lost`
+
+When the detector misses a frame, the Kalman filter forward-predicts the
+track position and emits a Detection with `score=0.0`. `VisionState` treats
+these as live samples — they do NOT increment the lost-tick counter. This
+means `on_lost` is only triggered when the tracker itself drops the track
+entirely (after `track_buffer` frames with no detector hit), not on single-
+frame occlusions.
+
+Implication: with `tracking=True` + `on_lost='hold'` you can drive through
+complete momentary occlusions (e.g. a fish crossing the gate) without the
+goal aborting.
+
+### Orbit pattern — canonical example
+
+The orbit is the flagship use case for `follow` mode. Each step:
+1. `yaw_left(30°)` — pivot in place; target drifts off-centre
+2. `vision.lock(..., lock_mode='follow', duration=3.0)` — re-centre and hold
+   for 3 seconds, then exit and go to the next step
+
+```python
+ORBIT_STEPS     = 12      # 12 × 30° = 360°
+ORBIT_STEP_DEG  = 30.0
+ORBIT_HOLD_S    = 3.0
+
+for step in range(ORBIT_STEPS):
+    duburi.yaw_left(ORBIT_STEP_DEG, timeout=10.0, settle=0.3)
+    # lock_mode='follow': keep tracking for the full 3 s window,
+    # never exit early just because we hit deadband.
+    duburi.vision.lock(
+        target='flare',
+        axes='yaw,forward,depth',
+        distance=0.40,
+        duration=ORBIT_HOLD_S,
+        on_lost='hold',       # survive brief occlusions
+        lock_mode='follow',
+        tracking=True,
+    )
+```
+
+The 12-step polygon is a good approximation of a circle for pre-qual.
+For a smoother arc replace the loop with `arc()` calls.
+
+### Tracking during linear moves
+
+For approach-and-follow (e.g. swimming alongside a moving object):
+
+```python
+# Move forward while re-locking every 2 s — functional tracking loop
+for _ in range(5):
+    duburi.move_forward(2.0, gain=40.0)     # open-loop
+    duburi.vision.lock(
+        target='buoy', axes='yaw',
+        duration=2.0,
+        lock_mode='follow',
+        tracking=True,
+    )
+```
+
+For pure heading-correction while driving forward, `axes='yaw'` with
+`lock_mode='follow'` and a short `duration` is enough:
+
+```python
+duburi.vision.lock(target='gate', axes='yaw',
+                   duration=20.0, lock_mode='follow', tracking=True)
+# (runs for up to 20 s, correcting yaw to stay centred on gate)
+```
+
+### Enabling tracking globally via ROS params
+
+```bash
+# From a second terminal while mission is running:
+ros2 param set /duburi_manager vision.use_tracks true   # switch to /tracks
+ros2 param set /duburi_manager vision.use_tracks false  # back to /detections
+```
+
+Or set it at node start:
+```bash
+ros2 run duburi_manager start --ros-args -p vision.use_tracks:=true
+```
+
+### Smoke-testing the tracker pipeline
+
+```bash
+# 1. Launch vision stack with tracking enabled
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+
+# 2. Topic health check
+ros2 run duburi_vision vision_check --camera laptop
+
+# 3. Confirm /tracks is publishing
+ros2 topic hz /duburi/vision/laptop/tracks
+
+# 4. Inspect a track (should have tracking_id set, score > 0 for real detections)
+ros2 topic echo /duburi/vision/laptop/tracks --once
+
+# 5. Full integration test via tracker_check CLI
+ros2 run duburi_vision tracker_check --camera laptop --class person
+```
+
+### Performance notes
+
+- `tracker_node` runs on the same Jetson Orin Nano as the detector.
+  ByteTrack state is cheap (~10 µs per update); Kalman adds ~5 µs per track.
+- At 30 fps with 5 tracked objects the combined overhead is < 1 ms, well
+  within the 33 ms frame budget.
+- `track_buffer=30` (default) means a track survives 1 s of occlusion at
+  30 fps before being dropped. Tune lower for fast-moving objects in busy
+  scenes, higher for slow targets in clean scenes.
+
+---
+
 ## 4. The math, in 30 lines
 
 ```

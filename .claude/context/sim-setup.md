@@ -124,7 +124,7 @@ cd ~/Ros_workspaces/duburi_ws
 source install/setup.bash
 
 # Run the manager node (connects to SITL on udpin:0.0.0.0:14550)
-ros2 run duburi_manager auv_manager_node --ros-args -p mode:=sim
+ros2 run duburi_manager start --ros-args -p mode:=sim
 ```
 
 > No `duburi_bringup` package exists. We don't use launch files yet — every entry point goes through `ros2 run ... --ros-args -p mode:=...`. See [`ros2-conventions.md`](./ros2-conventions.md) §10.
