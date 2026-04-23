@@ -188,11 +188,11 @@ duburi_ws/src/
     │   ├── utils/
     │   │   ├── check_pipeline.py    # `vision_check` CLI -- topic-only smoke test
     │   │   └── check_thrust.py      # `vision_thrust_check` CLI -- detection -> RC
-    │   ├── tracking/PLAN.md      # v2 -- supervision.ByteTrack
-    │   └── filters/PLAN.md       # v3 -- per-track Kalman
+    │   ├── tracking/             # ByteTrack + Kalman smoother (shipped v2/v3)
+    │   └── filters/              # placeholder for future filter modules
     ├── config/{cameras,detector}.yaml
     ├── models/README.md          # YOLO26 weights drop-in
-    └── launch/{webcam_demo,sim_demo,debug_view}.launch.py
+    └── launch/{cameras_,webcam_demo(deprecated),sim_demo}.launch.py
 ```
 
 > **Adding a new command**: add a row in `duburi_control/commands.py` and a same-named method on `Duburi`. The action server, the `duburi` CLI, and the Python `DuburiClient` all pick it up automatically — no other file needs editing.
@@ -480,7 +480,7 @@ Typical mission sequence: `MANUAL` → `arm` → first `set_depth` engages `ALT_
 cd ~/Ros_workspaces/duburi_ws
 ./build_duburi.sh
 source install/setup.bash
-ros2 run duburi_manager auv_manager_node --ros-args -p mode:=sim
+ros2 run duburi_manager start --ros-args -p mode:=sim
 ```
 
 ### Step 2: Verify connectivity

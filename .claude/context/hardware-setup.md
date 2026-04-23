@@ -125,7 +125,7 @@ cat /dev/ttyACM0 | head -20
 ### Software path
 
 ```bash
-ros2 run duburi_manager auv_manager_node --ros-args \
+ros2 run duburi_manager start --ros-args \
     -p mode:=pool \
     -p yaw_source:=bno085 \
     -p bno085_port:=/dev/ttyACM0 \
@@ -244,10 +244,10 @@ cd ~/Ros_workspaces/duburi_ws
 source install/setup.bash
 
 # Default — ArduSub AHRS as yaw source
-ros2 run duburi_manager auv_manager_node --ros-args -p mode:=pool
+ros2 run duburi_manager start --ros-args -p mode:=pool
 
 # With external BNO085 (after firmware is flashed + sensor wired)
-ros2 run duburi_manager auv_manager_node --ros-args \
+ros2 run duburi_manager start --ros-args \
     -p mode:=pool -p yaw_source:=bno085 -p bno085_port:=/dev/ttyACM0
 ```
 

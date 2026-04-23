@@ -1,43 +1,36 @@
-# tracking/ -- v2 design notes
+# tracking/ — v2 SHIPPED
 
-Goal: persist a stable `track_id` across frames so the planner can say
-"chase track 7" instead of "the largest box this frame", and so we don't
-lose lock when a fish briefly occludes the target.
+ByteTrack + per-track Kalman smoother are fully implemented and merged.
 
-## Module layout (when implemented)
+## What shipped
 
-```
-duburi_vision/tracking/
-  __init__.py
-  tracker.py        # ABC: update(detections, frame_t) -> list[Track]
-  bytetrack.py      # supervision.ByteTrack wrapper (default)
-```
+| Component | File |
+|---|---|
+| ByteTrack wrapper | `tracking/bytetrack.py` |
+| Tracker ABC | `tracking/tracker.py` |
+| Kalman smoother (per track, 4-state CV) | `tracking/kalman.py` |
+| ROS node (detections → tracks) | `tracker_node.py` (package root) |
+| Track-ID overlay | `draw.py` → `draw_track_ids()` |
+| ROS integration test | `utils/tracker_check.py` → `tracker_check` CLI |
 
-## ROS surface
-
-Add a `tracker_node.py` at the package root (NOT in `tracking/`, mirrors
-how camera/detector live at root). Topics:
+## Topic contract
 
 ```
 in   /duburi/vision/<cam>/detections    vision_msgs/Detection2DArray
-out  /duburi/vision/<cam>/tracks        vision_msgs/Detection2DArray  (with tracking_id)
-out  /duburi/vision/<cam>/image_debug   sensor_msgs/Image             (track_id labels)
+out  /duburi/vision/<cam>/tracks        vision_msgs/Detection2DArray  (tracking_id set)
 ```
 
-The tracked array reuses the `Detection2D.tracking_id` field; the visualizer
-gains a `draw_track_id` overlay so each box keeps the same color across
-frames.
+Predicted frames (occlusion-bridged) carry `score=0.0` — `VisionState` and
+`vision_state.py` check for this and do not fire `on_lost` on predicted boxes.
 
-## Failure modes to handle
+## How to enable in missions
 
-- ID swap when two objects of the same class cross paths
-- ID loss + re-acquisition (the supervision ByteTrack has `track_buffer`
-  for exactly this -- expose it as a ROS param)
-- Class drift across frames (planner asked for "person", tracker held a
-  bbox that the detector relabeled as "backpack" mid-sequence)
+```python
+# DSL — per-goal tracking:
+duburi.vision.lock(target='gate', axes='yaw,forward', tracking=True, ...)
 
-## Proven patterns to lift
+# launch — enable tracker_node:
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+```
 
-- supervision tutorial: https://supervision.roboflow.com/latest/trackers/
-- ByteTrack paper: https://arxiv.org/abs/2110.06864
-- yolo_ros (mgonzs13) for ROS integration shape
+See `.claude/context/mission-cookbook.md` §"Tracking while moving" for full examples.

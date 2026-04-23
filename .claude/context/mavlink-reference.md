@@ -268,7 +268,7 @@ the trace on (it also raises the logger level to DEBUG so the lines
 actually print):
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p debug:=true
+ros2 run duburi_manager start --ros-args -p debug:=true
 ```
 
 The banner prints `DEBUG TRACE: ON` so you can see at a glance the

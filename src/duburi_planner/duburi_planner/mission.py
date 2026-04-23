@@ -23,6 +23,7 @@ non-zero iff the mission raised, so wrappers / CI can detect a bad run.
 
 import argparse
 import sys
+import time
 
 import rclpy
 from rclpy.node import Node
@@ -30,6 +31,65 @@ from rclpy.node import Node
 from .client      import DuburiClient
 from .duburi_dsl  import DuburiMission
 from .missions    import discover
+
+
+_ABORT_BANNER = """\
+\033[1;31m
+╔══════════════════════════════════════════════════════════════╗
+║              ██  MISSION ABORT  ██                           ║
+║                                                              ║
+║   Ctrl-C received — initiating emergency surface sequence.   ║
+╚══════════════════════════════════════════════════════════════╝\033[0m"""
+
+_SURFACE_COUNTDOWN = """\
+\033[33m  ▸ Duburi will surface on positive buoyancy.\033[0m
+\033[33m  ▸ Stand clear of the pool.\033[0m
+\033[1;33m
+  Surfacing in  3 ...{r2}  2 ...{r1}  1 ...{r0}  ☑  done.
+\033[0m"""
+
+
+def _abort_sequence(duburi, log, mission_name: str) -> None:
+    """Best-effort safety stop after KeyboardInterrupt.
+
+    Each step is isolated so a rejection on stop() (likely, because the
+    manager lock is still held from the interrupted goal) does not
+    prevent attempting disarm().
+    """
+    print(_ABORT_BANNER, file=sys.stderr)
+
+    stop_ok = False
+    try:
+        duburi.stop()
+        stop_ok = True
+    except Exception:
+        pass
+
+    disarm_ok = False
+    try:
+        duburi.disarm()
+        disarm_ok = True
+    except Exception:
+        pass
+
+    stop_sym   = '\033[32m[OK]\033[0m' if stop_ok   else '\033[33m[--]\033[0m'
+    disarm_sym = '\033[32m[OK]\033[0m' if disarm_ok else '\033[33m[--]\033[0m'
+    print(
+        f'\033[90m  stop: {stop_sym}  disarm: {disarm_sym}\033[0m',
+        file=sys.stderr,
+    )
+
+    # Cosmetic countdown — actual surfacing is on positive buoyancy.
+    parts = []
+    for _ in range(3):
+        time.sleep(1.0)
+        parts.append('\033[32m✔\033[0m')
+
+    print(
+        _SURFACE_COUNTDOWN.format(r2=parts[0], r1=parts[1], r0=parts[2]),
+        file=sys.stderr,
+    )
+    log.warn(f'mission "{mission_name}" aborted by user')
 
 
 def _build_parser(known):
@@ -69,7 +129,7 @@ def main(args=None):
         missions[parsed.name](duburi, log)
         log.info(f'=== mission "{parsed.name}" -- complete OK ===')
     except KeyboardInterrupt:
-        log.warn(f'mission "{parsed.name}" interrupted by user')
+        _abort_sequence(duburi, log, parsed.name)
         exit_code = 130
     except Exception as exc:
         log.error(f'mission "{parsed.name}" FAILED: {exc}')

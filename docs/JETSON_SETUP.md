@@ -125,7 +125,7 @@ Vehicle Setup -> MAVLink Endpoints -> Add
   Port:   14550
 ```
 
-The Jetson side is zero-config: `ros2 run duburi_manager auv_manager`
+The Jetson side is zero-config: `ros2 run duburi_manager start`
 auto-detects the BlueOS endpoint via the `pool` profile (see
 `src/duburi_manager/duburi_manager/connection_config.py`).
 
@@ -135,7 +135,7 @@ Plug the Pixhawk USB into the Jetson and:
 
 ```bash
 ls -l /dev/ttyACM*      # Pixhawk usually shows as /dev/ttyACM0
-ros2 run duburi_manager auv_manager --ros-args -p mode:=pixhawk_usb
+ros2 run duburi_manager start --ros-args -p mode:=pixhawk_usb
 ```
 
 (`mode:=auto` also works -- the resolver probes both UDP and USB.)
@@ -143,7 +143,7 @@ ros2 run duburi_manager auv_manager --ros-args -p mode:=pixhawk_usb
 ### Desk SITL: Gazebo / SITL
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=sim
+ros2 run duburi_manager start --ros-args -p mode:=sim
 ```
 
 ---
@@ -175,7 +175,7 @@ All tests should pass (60 as of this writing).
 In one terminal:
 
 ```bash
-ros2 run duburi_manager auv_manager --ros-args -p mode:=auto
+ros2 run duburi_manager start --ros-args -p mode:=auto
                                     # -p debug:=true to see [MAV ...] frames
 ```
 

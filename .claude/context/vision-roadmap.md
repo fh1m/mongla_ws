@@ -16,7 +16,7 @@ the diff stays small at each step.
   crosshair, alignment readout, stale banner
 - Unit tests (factory + detector + gpu + messages) -- 26 tests, no GPU
   needed in CI
-- Launch files: `webcam_demo`, `sim_demo`, `debug_view`
+- Launch files: `cameras_` (canonical), `webcam_demo` (deprecated stub), `sim_demo`
 
 Acceptance: `ros2 launch duburi_vision webcam_demo.launch.py` opens an
 rqt window showing your webcam feed with person boxes drawn on it; the

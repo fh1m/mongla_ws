@@ -829,7 +829,7 @@ Manual probes if you want to double-check:
 ```bash
 ping -c 3 192.168.2.1             # BlueOS reachable
 ping -c 3 192.168.2.69            # Jetson reachable (from laptop on switch)
-ss -lun | grep 14550              # UDP 14550 bound & listening (after auv_manager is up)
+ss -lun | grep 14550              # UDP 14550 bound & listening (after `ros2 run duburi_manager start` is up)
 timeout 5 tcpdump -i any udp port 14550 -c 10  # see MAVLink bytes flowing (needs root)
 ```
 
