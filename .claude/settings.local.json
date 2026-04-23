@@ -21,7 +21,24 @@
       "Bash(pip install *)",
       "Bash(bash -c ' *)",
       "Bash(bash build_duburi.sh)",
-      "Bash(bash *)"
+      "Bash(bash *)",
+      "Bash(chmod 755 /home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws/install/duburi_interfaces/lib/*.so)",
+      "Bash(colcon build *)",
+      "Bash(PYTHONPATH=/home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws/install/duburi_interfaces/lib/python3.10/site-packages:/home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws/install/duburi_control/lib/python3.10/site-packages python *)",
+      "Bash(PYTHONPATH=/home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws/install/duburi_interfaces/local/lib/python3.10/dist-packages:/home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws/install/duburi_control/local/lib/python3.10/dist-packages python *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "WebSearch",
+      "WebFetch(domain:trackers.roboflow.com)",
+      "WebFetch(domain:docs.ultralytics.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:supervision.roboflow.com)",
+      "WebFetch(domain:robonation.gitbook.io)",
+      "Bash(git push *)",
+      "Bash(xargs ls *)",
+      "Bash(git -C /home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws log --oneline)",
+      "Bash(git *)"
     ]
   }
 }
