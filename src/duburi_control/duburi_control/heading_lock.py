@@ -60,6 +60,7 @@ Failure modes
   manager's atexit also calls ``pixhawk.send_neutral()``.
 """
 
+import math
 import threading
 import time
 
@@ -75,11 +76,13 @@ from .motion_rates import LOCK_STREAM_HZ as STREAM_HZ
 DRIFT_LOG_SEC  = 1.0     # how often to print the [LOCK ] heartbeat
 SOURCE_DEAD_S  = 2.0     # warn after this many seconds with no fresh sample
 
-# Proportional rate-loop tunables. Gentler than yaw_snap because
-# lock_heading is correcting small drifts, not executing 90 deg turns.
-LOCK_KP_PCT_PER_DEG = 0.6
-LOCK_PCT_MAX        = 25.0
-LOCK_DEADBAND_DEG   = 1.5
+# Rate-loop tunables. Gentle but with a minimum floor so T200s actually
+# spin when correcting small drifts (pure proportional at 2° gives ~1.2%
+# = ~5 PWM, below thruster spin-up threshold).
+LOCK_KP_PCT_PER_DEG = 1.2    # increased from 0.6 for reliable small corrections
+LOCK_SPEED_MIN_PCT  = 5.0    # floor: minimum thrust to spin T200 above deadband
+LOCK_PCT_MAX        = 22.5   # ceiling: matches yaw_snap max so corrective bursts are consistent
+LOCK_DEADBAND_DEG   = 1.0
 
 
 class HeadingLock:
@@ -162,6 +165,10 @@ class HeadingLock:
         with self._target_lock:
             return self._target_deg
 
+    @property
+    def is_suspended(self) -> bool:
+        return self._suspended.is_set()
+
     # ------------------------------------------------------------------ #
     #  Thread body                                                       #
     # ------------------------------------------------------------------ #
@@ -202,9 +209,9 @@ class HeadingLock:
                 if abs(error) <= LOCK_DEADBAND_DEG:
                     yaw_pct = 0.0
                 else:
-                    yaw_pct = max(-LOCK_PCT_MAX,
-                                  min(LOCK_PCT_MAX,
-                                      error * LOCK_KP_PCT_PER_DEG))
+                    raw = abs(error) * LOCK_KP_PCT_PER_DEG
+                    speed = max(LOCK_SPEED_MIN_PCT, min(LOCK_PCT_MAX, raw))
+                    yaw_pct = math.copysign(speed, error)
 
                 try:
                     self._pixhawk.send_rc_override(

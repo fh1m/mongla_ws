@@ -16,13 +16,13 @@
 
 duburi_detector:
   ros__parameters:
-    model_path:          yolo26_nano_pretrained
+    model_path:          gate_nano_100ep
     device:              cuda:0
     half:                false
     conf:                0.35
     iou:                 0.50
     imgsz:               640
-    classes:             person
+    classes:             gate
     publish_debug_image: true
     debug_image_hz:      5.0
     alignment_deadband:  0.05

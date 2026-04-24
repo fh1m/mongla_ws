@@ -216,16 +216,20 @@ class AUVManagerNode(Node):
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
 
-        # AHRS warmup: wait until at least one AHRS2 frame is cached so
-        # BNO calibration's reference_yaw_provider() returns a real value.
+        # Warmup: wait for both AHRS2 and a valid autopilot heartbeat.
+        # Without this, the first [STATE] line shows UNKNOWN for the mode
+        # because the autopilot heartbeat cache (_last_autopilot_hb) has
+        # not been populated yet (GCS heartbeats from BlueOS/mavproxy can
+        # arrive first and are filtered out).
         _warmup_deadline = time.monotonic() + 4.0
         while time.monotonic() < _warmup_deadline:
-            if self.pixhawk.get_attitude() is not None:
+            if (self.pixhawk.get_attitude() is not None
+                    and self.pixhawk.get_mode() != 'UNKNOWN'):
                 break
             time.sleep(0.05)
         else:
             self.get_logger().warning(
-                '[NET  ] AHRS2 not received within 4s after connection. '
+                '[NET  ] AHRS2 or autopilot heartbeat not received within 4s. '
                 'BNO085 calibration may still fail. '
                 'Check MAVLink link and ArduSub telemetry rate config.')
 
