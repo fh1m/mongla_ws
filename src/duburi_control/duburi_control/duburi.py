@@ -282,8 +282,9 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
                 f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
-            run(self.pixhawk, signed_dir, duration, int(gain), self.log,
-                self._writers(), yaw_source=self.yaw_source, settle=settle)
+            with self._suspend_heading_lock():
+                run(self.pixhawk, signed_dir, duration, int(gain), self.log,
+                    self._writers(), yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
@@ -312,8 +313,9 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
                 f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
-            run(self.pixhawk, signed_dir, duration, int(gain), self.log,
-                self._writers(), yaw_source=self.yaw_source, settle=settle)
+            with self._suspend_heading_lock():
+                run(self.pixhawk, signed_dir, duration, int(gain), self.log,
+                    self._writers(), yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
@@ -543,10 +545,11 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] {verb}  {distance_m:.2f}m  '
                 f'gain={gain:.0f}%  tol={dvl_tolerance:.3f}m  settle={settle:.1f}s')
-            drive_forward_dist(
-                self.pixhawk, signed_dir, distance_m, int(gain),
-                dvl_tolerance, self.log, self._writers(),
-                yaw_source=self.yaw_source, settle=settle)
+            with self._suspend_heading_lock():
+                drive_forward_dist(
+                    self.pixhawk, signed_dir, distance_m, int(gain),
+                    dvl_tolerance, self.log, self._writers(),
+                    yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, f'{verb}: completed',
@@ -565,10 +568,11 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] move_lateral_dist  {distance_m:.2f}m  '
                 f'gain={gain:.0f}%  tol={dvl_tolerance:.3f}m  settle={settle:.1f}s')
-            drive_lateral_dist(
-                self.pixhawk, signed_dir, distance_m, int(gain),
-                dvl_tolerance, self.log, self._writers(),
-                yaw_source=self.yaw_source, settle=settle)
+            with self._suspend_heading_lock():
+                drive_lateral_dist(
+                    self.pixhawk, signed_dir, distance_m, int(gain),
+                    dvl_tolerance, self.log, self._writers(),
+                    yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, 'move_lateral_dist: completed',
@@ -592,7 +596,8 @@ class Duburi(VisionVerbs):
         return make_writers(self.pixhawk, release_yaw=self._lock_active())
 
     def _lock_active(self):
-        return self._heading_lock is not None
+        lock = self._heading_lock
+        return lock is not None and not lock.is_suspended
 
     @contextmanager
     def _command_scope(self, verb):
@@ -642,19 +647,20 @@ class Duburi(VisionVerbs):
     def _suspend_heading_lock(self):
         """Pause the lock thread for the duration of the block.
 
-        Used by yaw_left / yaw_right / arc / pause -- commands whose
-        intent is to either change heading or release the override.
-        Re-arms `resume()` even if the body raises so a failed yaw
-        doesn't leave the lock paused forever.
+        Used by yaw_left / yaw_right / arc / pause / linear movement --
+        commands whose intent is to change heading or take sole authority
+        over all RC channels. Re-arms resume() even on exception so a
+        failed command never leaves the lock paused forever.
         """
-        active = self._heading_lock is not None
-        if active:
-            self._heading_lock.suspend()
+        lock = self._heading_lock
+        if lock is not None:
+            lock.suspend()
         try:
             yield
         finally:
-            if active and self._heading_lock is not None:
-                self._heading_lock.resume()
+            lock = self._heading_lock
+            if lock is not None and lock.is_suspended:
+                lock.resume()
 
     def _retarget_heading_lock(self, new_heading_deg):
         """Update the lock target to follow yaw_left/yaw_right/arc exit."""

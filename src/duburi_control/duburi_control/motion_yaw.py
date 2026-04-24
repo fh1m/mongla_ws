@@ -44,6 +44,7 @@ valid heading; if it stays silent longer than ``STALE_HOLD_S`` we
 park Ch4 at 1500 (safe stop) until the source recovers.
 """
 
+import math
 import time
 
 from .errors          import MovementTimeout
@@ -58,13 +59,18 @@ from .motion_easing  import smootherstep
 from .motion_rates import YAW_RATE_HZ            # noqa: F401  (re-export)
 from .motion_rates import LOG_THROTTLE_S as LOG_THROTTLE
 
-YAW_TOL_DEG   = 2.0    # heading tolerance for "locked"
+YAW_TOL_DEG   = 1.0    # heading tolerance for "locked" (matches proven 1° floor)
 YAW_LOCK_N    = 5      # consecutive frames within tol before success
 
-# ---- Rate-loop tunables (motion_vision-style proportional control) ---
-YAW_KP_PCT_PER_DEG = 1.0     # %Ch4 per degree error (90 deg -> 90%, clamped)
-YAW_PCT_MAX        = 55.0    # cap on |yaw_pct| so we never saturate the bus
-STALE_HOLD_S       = 0.5     # if yaw_source goes silent longer than this,
+# ---- Rate-loop tunables (min-speed clamped, matching sample_codebase) -------
+# T200 thrusters need ~20 PWM units (5%) above neutral to overcome static
+# friction. Pure proportional at small errors falls below this threshold and
+# the sub stops turning before reaching the target. The proven formula from
+# competition testing uses max(30, ...) in raw PWM units, which in our
+# percent_to_pwm system (±400 range) equals max(7.5%, ...).
+YAW_SPEED_MIN_PCT  = 7.5    # floor: 30 PWM / 400 range * 100
+YAW_SPEED_MAX_PCT  = 22.5   # ceiling: 90 PWM / 400 range * 100
+STALE_HOLD_S       = 0.5    # if yaw_source goes silent longer than this,
                              # park Ch4 at 1500 instead of guessing
 
 # ---- Glide-only tunables ---------------------------------------------
@@ -75,17 +81,19 @@ YAW_MIN_DUR   = 1.5    # lower bound so small turns still get a glide
 
 
 def _yaw_rate_pct(error_deg: float) -> float:
-    """Proportional yaw rate (percent of Ch4 authority) from a heading
-    error in degrees. Deadbands inside YAW_TOL_DEG so a "locked" sub
-    does not twitch on sensor noise, and clamps to +/-YAW_PCT_MAX so
-    large errors can not saturate the bus.
+    """Clamped yaw rate (percent of Ch4 authority) from a heading error.
+
+    Deadbands inside YAW_TOL_DEG so a locked sub does not twitch on
+    noise. Outside the deadband, speed is clamped to [MIN, MAX] so the
+    thrusters always spin fast enough to turn (floor) while never
+    saturating the bus (ceiling). Formula matches competition-proven
+    sample_codebase: max(30, min(90, |err|/180*200)) in raw PWM units.
     """
     if abs(error_deg) <= YAW_TOL_DEG:
         return 0.0
-    rate = error_deg * YAW_KP_PCT_PER_DEG
-    if rate >  YAW_PCT_MAX: return  YAW_PCT_MAX
-    if rate < -YAW_PCT_MAX: return -YAW_PCT_MAX
-    return rate
+    speed = max(YAW_SPEED_MIN_PCT,
+                min(YAW_SPEED_MAX_PCT, abs(error_deg) / 180.0 * 50.0))
+    return math.copysign(speed, error_deg)
 
 
 def _send_yaw_pct(pixhawk, yaw_pct: float) -> None:
