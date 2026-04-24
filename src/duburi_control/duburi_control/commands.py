@@ -115,6 +115,29 @@ COMMANDS = {
         'defaults': {},
     },
 
+    # ---- DVL ------------------------------------------------------- #
+    'dvl_connect': {
+        'help':     'Connect to the Nortek Nucleus 1000 DVL over TCP and begin '
+                    'streaming. Must be called before any move_*_dist command '
+                    'when yaw_source is dvl/nucleus_dvl.',
+        'fields':   [],
+        'defaults': {},
+    },
+
+    # ---- DVL distance-based motion --------------------------------- #
+    'move_forward_dist': {
+        'help':     'Drive forward `distance_m` metres using DVL position feedback. '
+                    'Falls back to open-loop timed drive if no DVL position available.',
+        'fields':   ['distance_m', 'gain', 'dvl_tolerance', 'settle'],
+        'defaults': {'gain': 60.0, 'dvl_tolerance': 0.1, 'settle': 0.0},
+    },
+    'move_lateral_dist': {
+        'help':     'Strafe `distance_m` metres (positive=right, negative=left) '
+                    'using DVL position feedback.',
+        'fields':   ['distance_m', 'gain', 'dvl_tolerance', 'settle'],
+        'defaults': {'gain': 36.0, 'dvl_tolerance': 0.1, 'settle': 0.0},
+    },
+
     # ---- Vision verbs --------------------------------------------- #
     # All of these read the latest detection from VisionState; preflight
     # runs once per camera the first time it's hit. Defaults are tuned

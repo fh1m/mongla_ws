@@ -86,9 +86,11 @@ from .motion_writers import make_writers
 from .motion_depth  import hold_depth
 from .motion_forward import (
     arc as motion_arc,
-    drive_forward_constant, drive_forward_eased,
+    drive_forward_constant, drive_forward_eased, drive_forward_dist,
 )
-from .motion_lateral import drive_lateral_constant, drive_lateral_eased
+from .motion_lateral import (
+    drive_lateral_constant, drive_lateral_eased, drive_lateral_dist,
+)
 from .motion_yaw    import yaw_glide, yaw_snap
 from .pixhawk       import Pixhawk
 from .tracing       import command_scope
@@ -101,7 +103,7 @@ from .tracing       import command_scope
 #
 # arm / disarm / set_mode are NOT listed here because they use the
 # tracing-only `command_scope` directly and never enter _command_scope.
-_UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading'})
+_UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect'})
 
 
 # Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
@@ -496,6 +498,81 @@ class Duburi(VisionVerbs):
             self._release_heartbeat_for_lock()
             self.pixhawk.send_neutral()
             return self._make_result(True, 'unlock_heading: released')
+
+    # ================================================================== #
+    #  DVL                                                                #
+    # ================================================================== #
+
+    def dvl_connect(self):
+        """Connect to the Nortek Nucleus 1000 DVL and begin streaming.
+
+        Calls `yaw_source.connect()` when the active source supports it
+        (i.e. NucleusDVLSource). Safe no-op if the source has no connect
+        method (e.g. mavlink_ahrs, bno085).
+
+        impl: NucleusDVLSource.connect() -> TCP 192.168.2.201:9000, auth, START.
+        """
+        with command_scope('dvl_connect'):
+            src = self.yaw_source
+            if src is not None and hasattr(src, 'connect'):
+                self.log.info('[DVL  ] dvl_connect: connecting...')
+                src.connect()  # type: ignore[union-attr]
+                self.log.info('[DVL  ] dvl_connect: connected')
+                return self._make_result(True, 'dvl_connect: streaming')
+            self.log.info('[DVL  ] dvl_connect: yaw_source has no connect() -- no-op')
+            return self._make_result(True, 'dvl_connect: no-op (source has no connect)')
+
+    # ================================================================== #
+    #  DVL distance-based motion                                          #
+    # ================================================================== #
+
+    def move_forward_dist(self, distance_m, gain=60.0, dvl_tolerance=0.1,
+                          settle=0.0):
+        """Drive forward `distance_m` metres using DVL position feedback.
+
+        impl: motion_forward.drive_forward_dist -> NucleusDVLSource position loop.
+        Falls back to open-loop timed estimate if DVL not available.
+        """
+        return self._drive_forward_dist(+1, distance_m, gain, dvl_tolerance, settle)
+
+    def _drive_forward_dist(self, signed_dir, distance_m, gain,
+                            dvl_tolerance, settle):
+        verb = 'move_forward_dist' if signed_dir > 0 else 'move_back_dist'
+        with self._command_scope(verb):
+            self._send_neutral_and_settle(axes=frozenset({'forward'}))
+            self.log.info(
+                f'[CMD  ] {verb}  {distance_m:.2f}m  '
+                f'gain={gain:.0f}%  tol={dvl_tolerance:.3f}m  settle={settle:.1f}s')
+            drive_forward_dist(
+                self.pixhawk, signed_dir, distance_m, int(gain),
+                dvl_tolerance, self.log, self._writers(),
+                yaw_source=self.yaw_source, settle=settle)
+            depth = self._current_depth()
+            return self._make_result(
+                True, f'{verb}: completed',
+                final_value=depth, error_value=0.0)
+
+    def move_lateral_dist(self, distance_m, gain=36.0, dvl_tolerance=0.1,
+                          settle=0.0):
+        """Strafe `distance_m` metres (positive=right, negative=left) using DVL.
+
+        impl: motion_lateral.drive_lateral_dist -> NucleusDVLSource position loop.
+        Falls back to open-loop timed estimate if DVL not available.
+        """
+        signed_dir = +1 if distance_m >= 0 else -1
+        with self._command_scope('move_lateral_dist'):
+            self._send_neutral_and_settle(axes=frozenset({'lateral'}))
+            self.log.info(
+                f'[CMD  ] move_lateral_dist  {distance_m:.2f}m  '
+                f'gain={gain:.0f}%  tol={dvl_tolerance:.3f}m  settle={settle:.1f}s')
+            drive_lateral_dist(
+                self.pixhawk, signed_dir, distance_m, int(gain),
+                dvl_tolerance, self.log, self._writers(),
+                yaw_source=self.yaw_source, settle=settle)
+            depth = self._current_depth()
+            return self._make_result(
+                True, 'move_lateral_dist: completed',
+                final_value=depth, error_value=0.0)
 
     # ================================================================== #
     #  Vision verbs                                                       #

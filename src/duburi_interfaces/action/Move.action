@@ -1,8 +1,9 @@
 # Goal — one field per command type, unused fields are zero/empty
 string  cmd          # arm | disarm | set_mode | stop | pause |
                      # move_forward | move_back | move_left | move_right |
+                     # move_forward_dist | move_lateral_dist |
                      # yaw_left | yaw_right | arc | set_depth |
-                     # lock_heading | unlock_heading |
+                     # lock_heading | unlock_heading | dvl_connect |
                      # vision_align_3d | vision_align_yaw | vision_align_lat |
                      # vision_align_depth | vision_hold_distance | vision_acquire
 float32 duration     # seconds  (move_*, arc, pause, vision_*)
@@ -14,6 +15,10 @@ string  target_name  # mode string  (set_mode) or
 float32 timeout      # max wait (all commands; lock_heading auto-releases)
 float32 settle       # post-command neutral-hold seconds; 0 = axis-natural settle only
 float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc` and vision_acquire('arc')
+
+# ---- DVL distance fields  (ignored by non-DVL commands) ----------
+float32 distance_m     # target distance in metres (move_*_dist)
+float32 dvl_tolerance  # stop when |error| <= this, metres (default 0.1)
 
 # ---- vision_* fields  (ignored by every non-vision command) -----------
 string  camera             # 'laptop' | 'sim_front' | 'forward' | 'downward'

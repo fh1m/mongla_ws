@@ -37,6 +37,9 @@ from .motion_writers import (
     thrust_loop, brake_kick_then_settle, final_settle, read_heading,
 )
 
+_DVL_POLL_HZ   = 20     # position polling rate for distance moves
+_DVL_TIMEOUT_K = 10.0   # generous extra timeout: metres / 0.05 + this
+
 
 # ---------------------------------------------------------------------- #
 #  Forward / back -- bang-bang                                            #
@@ -129,3 +132,64 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
     pixhawk.send_neutral()
     log.info(f'[{label:<5}] settle {settle:.1f}s + brake')
     time.sleep(max(0.6, settle))
+
+
+# ---------------------------------------------------------------------- #
+#  DVL closed-loop forward distance                                       #
+# ---------------------------------------------------------------------- #
+
+def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
+                       log, writers, yaw_source=None, settle=0.0):
+    """Drive forward (or back) a fixed distance using DVL position feedback.
+
+    Requires `yaw_source` to implement `get_position()` and
+    `reset_position()` (i.e. NucleusDVLSource). Falls back to an
+    open-loop timed estimate when DVL position is not available.
+
+    signed_dir: +1 = forward, -1 = back
+    distance_m: absolute distance in metres (always positive; direction from signed_dir)
+    gain:       thrust percentage (0-100)
+    tolerance:  stop when |error| <= tolerance metres (typical: 0.1)
+    """
+    label      = 'FWD_D' if signed_dir > 0 else 'BACK_D'
+    target_m   = abs(distance_m)
+    signed_gain = signed_dir * gain
+
+    has_dvl = (yaw_source is not None
+               and hasattr(yaw_source, 'get_position')
+               and hasattr(yaw_source, 'reset_position'))
+
+    if not has_dvl:
+        log.info(f'[{label}] no DVL position source -- open-loop fallback '
+                 f'(rough ~{target_m:.1f}m estimate)')
+        rough_s = max(1.0, target_m / 0.3)
+        drive_forward_constant(pixhawk, signed_dir, rough_s, gain, log,
+                               writers, yaw_source=yaw_source, settle=settle)
+        return
+
+    yaw_source.reset_position()
+    pwm       = Pixhawk.percent_to_pwm(signed_gain)
+    deadline  = time.monotonic() + target_m / 0.05 + _DVL_TIMEOUT_K
+    interval  = 1.0 / _DVL_POLL_HZ
+
+    log.info(f'[{label}] DVL dist {target_m:.2f}m  gain={gain:.0f}%  '
+             f'tol={tolerance:.3f}m')
+
+    while time.monotonic() < deadline:
+        x_m, _ = yaw_source.get_position()
+        error   = target_m - abs(x_m)
+
+        if abs(error) <= tolerance:
+            log.info(f'[{label}] reached  x={x_m:.3f}m  err={error:+.3f}m')
+            break
+
+        writers.forward(pwm)
+        log.info(f'[{label}] x={x_m:.3f}m  err={error:+.3f}m',
+                 throttle_duration_sec=LOG_THROTTLE)
+        time.sleep(interval)
+    else:
+        log.info(f'[{label}] timeout  target={target_m:.2f}m')
+
+    writers.neutral()
+    if settle > 0.0:
+        time.sleep(settle)
