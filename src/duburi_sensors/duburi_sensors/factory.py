@@ -40,12 +40,22 @@ def _build_bno085(*, port, baud, logger=None, pixhawk=None, calibrate=None, **_)
     )
 
 
-def _build_dvl_stub(**_):
-    """Future Nortek Nucleus1000. Currently raises NotImplementedError on
-    construction so picking it at startup fails loudly with a friendly
-    message instead of silently degrading."""
-    from .sources.dvl_stub import DVLSource
-    return DVLSource()
+def _build_nucleus_dvl(*, nucleus_dvl_host='192.168.2.201',
+                       nucleus_dvl_port=9000,
+                       nucleus_dvl_password='nortek',
+                       logger=None, **_):
+    """Nortek Nucleus 1000 DVL over TCP -- heading from AHRS + body position.
+
+    Starts DISCONNECTED. Call `duburi.dvl_connect()` (or the `dvl_connect`
+    Move.action verb) at pool-side to open TCP and begin streaming.
+    """
+    from .sources.nucleus_dvl import NucleusDVLSource
+    return NucleusDVLSource(
+        host=nucleus_dvl_host,
+        port=int(nucleus_dvl_port),
+        password=nucleus_dvl_password,
+        logger=logger,
+    )
 
 
 def _build_witmotion_stub(**_):
@@ -61,7 +71,8 @@ def _build_witmotion_stub(**_):
 BUILDERS = {
     'mavlink_ahrs': _build_mavlink_ahrs,
     'bno085':       _build_bno085,
-    'dvl':          _build_dvl_stub,
+    'dvl':          _build_nucleus_dvl,
+    'nucleus_dvl':  _build_nucleus_dvl,
     'witmotion':    _build_witmotion_stub,
 }
 

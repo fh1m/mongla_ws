@@ -5,11 +5,19 @@
 #   yaw_source: 'mavlink_ahrs'   ArduSub onboard AHRS (default, no extra hw)
 #   yaw_source: 'bno085'         External ESP32-C3 + BNO085 over USB CDC
 #                                Firmware contract: see src/duburi_sensors/README.md
+#   yaw_source: 'dvl'            Nortek Nucleus 1000 AHRS over TCP
+#               'nucleus_dvl'    (both names accepted)
+#                                Requires dvl_connect Move.action verb before use.
+#                                DVL also provides get_position() for distance commands.
 #
 # bno085_port / bno085_baud only matter when yaw_source=='bno085'.
+# nucleus_dvl_* only matter when yaw_source=='dvl' or 'nucleus_dvl'.
 
 duburi_manager:
   ros__parameters:
-    yaw_source:  mavlink_ahrs
-    bno085_port: /dev/ttyACM0
-    bno085_baud: 115200
+    yaw_source:           mavlink_ahrs
+    bno085_port:          /dev/ttyACM0
+    bno085_baud:          115200
+    nucleus_dvl_host:     '192.168.2.201'
+    nucleus_dvl_port:     9000
+    nucleus_dvl_password: 'nortek'

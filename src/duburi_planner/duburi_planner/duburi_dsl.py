@@ -258,6 +258,41 @@ class DuburiMission:
         return self._send('unlock_heading')
 
     # ================================================================== #
+    #  DVL                                                                #
+    # ================================================================== #
+
+    def dvl_connect(self):
+        """Connect Nortek Nucleus 1000 DVL over TCP. Must be called before
+        any move_*_dist command when yaw_source is 'dvl' or 'nucleus_dvl'."""
+        return self._send('dvl_connect')
+
+    def move_forward_dist(self, metres: float, *, gain: float = 60.0,
+                          tolerance: float = 0.1, settle: float = 0.0):
+        """Drive forward `metres` metres using DVL closed-loop position feedback.
+
+        Falls back to open-loop timed estimate if DVL position is unavailable.
+        Requires dvl_connect() first when yaw_source='dvl'.
+        """
+        return self._send('move_forward_dist',
+                          distance_m=float(metres),
+                          gain=gain,
+                          dvl_tolerance=tolerance,
+                          settle=settle)
+
+    def move_lateral_dist(self, metres: float, *, gain: float = 36.0,
+                          tolerance: float = 0.1, settle: float = 0.0):
+        """Strafe `metres` metres (positive=right, negative=left) using DVL.
+
+        Falls back to open-loop timed estimate if DVL position is unavailable.
+        Requires dvl_connect() first when yaw_source='dvl'.
+        """
+        return self._send('move_lateral_dist',
+                          distance_m=float(metres),
+                          gain=gain,
+                          dvl_tolerance=tolerance,
+                          settle=settle)
+
+    # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to the raw client BUT   #
     #  still get the one-line outcome log.                                #
     # ================================================================== #

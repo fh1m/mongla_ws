@@ -137,9 +137,12 @@ class AUVManagerNode(Node):
         self.declare_parameter('mav_device',       '')
         self.declare_parameter('smooth_yaw',       False)
         self.declare_parameter('smooth_translate', False)
-        self.declare_parameter('yaw_source',       'mavlink_ahrs')
-        self.declare_parameter('bno085_port',      'auto')
-        self.declare_parameter('bno085_baud',      115200)
+        self.declare_parameter('yaw_source',           'mavlink_ahrs')
+        self.declare_parameter('bno085_port',          'auto')
+        self.declare_parameter('bno085_baud',          115200)
+        self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
+        self.declare_parameter('nucleus_dvl_port',     9000)
+        self.declare_parameter('nucleus_dvl_password', 'nortek')
         # debug:=true flips per-command MAVLink trace tags on (and the
         # logger to DEBUG so they actually print). Default off so
         # production runs stay quiet. See .claude/context/mavlink-reference.md
@@ -159,9 +162,12 @@ class AUVManagerNode(Node):
         mav_device       = str(self.get_parameter('mav_device').value).strip()
         smooth_yaw       = bool(self.get_parameter('smooth_yaw').value)
         smooth_translate = bool(self.get_parameter('smooth_translate').value)
-        yaw_src_name     = str(self.get_parameter('yaw_source').value)
-        bno085_port      = str(self.get_parameter('bno085_port').value)
-        bno085_baud      = int(self.get_parameter('bno085_baud').value)
+        yaw_src_name       = str(self.get_parameter('yaw_source').value)
+        bno085_port        = str(self.get_parameter('bno085_port').value)
+        bno085_baud        = int(self.get_parameter('bno085_baud').value)
+        nucleus_dvl_host   = str(self.get_parameter('nucleus_dvl_host').value)
+        nucleus_dvl_port   = int(self.get_parameter('nucleus_dvl_port').value)
+        nucleus_dvl_passwd = str(self.get_parameter('nucleus_dvl_password').value)
         debug_enabled    = bool(self.get_parameter('debug').value)
 
         # Wire MAVLink tracing on as early as possible -- we want every
@@ -232,6 +238,9 @@ class AUVManagerNode(Node):
                 pixhawk=self.pixhawk,
                 port=bno085_port,
                 baud=bno085_baud,
+                nucleus_dvl_host=nucleus_dvl_host,
+                nucleus_dvl_port=nucleus_dvl_port,
+                nucleus_dvl_password=nucleus_dvl_passwd,
                 logger=self.get_logger(),
             )
         except Exception as exc:
@@ -248,6 +257,10 @@ class AUVManagerNode(Node):
             offset = getattr(self.yaw_source, 'offset_deg', None)
             if offset is not None:
                 yaw_src_label += f'  Earth-ref offset: {offset:+.2f} deg'
+        elif yaw_src_name in ('dvl', 'nucleus_dvl'):
+            yaw_src_label = (f'{yaw_src_label} '
+                             f'({nucleus_dvl_host}:{nucleus_dvl_port}  '
+                             f'DISCONNECTED -- call dvl_connect)')
 
         self.get_logger().info(SEPARATOR)
         self.get_logger().info(f' DUBURI AUV MANAGER  |  mode: {mode_name}')
