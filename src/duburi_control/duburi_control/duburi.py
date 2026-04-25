@@ -414,6 +414,19 @@ class Duburi(VisionVerbs):
         attitude = self.pixhawk.get_attitude()
         return attitude['yaw'] if attitude else 0.0
 
+    def current_heading(self):
+        """Return the most-recent heading reading without moving anything.
+
+        Use this in missions or from the CLI when you want to capture the
+        exact heading at execution time (not at the moment you typed the
+        command). The value lands in Move.Result.final_value.
+        """
+        with self._command_scope('current_heading'):
+            heading = self._current_heading()
+            self.log.info(f'[CMD  ] current_heading: {heading:.1f}°')
+            return self._make_result(True, f'heading={heading:.1f}°',
+                                     final_value=heading, error_value=0.0)
+
     # ================================================================== #
     #  Depth                                                              #
     # ================================================================== #
