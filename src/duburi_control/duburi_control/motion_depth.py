@@ -85,37 +85,56 @@ def prime_alt_hold(pixhawk, hold_at, neutral_writer):
 def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
     """Phase 2: stream the real target until reached or timeout.
 
-    Ramps the setpoint linearly from `start_d` to `target_m` over
-    RAMP_S (= motion_rates.DEPTH_RAMP_S) seconds before holding at
-    `target_m`. This prevents ArduSub's depth PID from receiving a
-    large step change and overshooting.
+    Ramps the setpoint from `start_d` toward `target_m` over RAMP_S
+    seconds.  Crucially, the setpoint *tracks* the sub's current depth
+    when it moves faster than the ramp — this prevents ArduSub's depth
+    PID from commanding the sub backward to catch up with a lagging
+    setpoint (the classic "goes down, bounces back up, oscillates" symptom).
+
+    Ramp phase logic:
+      - Compute the linear ramp position at elapsed time.
+      - If the sub is already past the ramp (closer to target), advance
+        the setpoint to the sub's actual depth so ArduSub never fights it.
+      - Clamp to target so we never overshoot beyond it.
+
+    After RAMP_S seconds, hold the setpoint at target_m until the
+    sub arrives within TOL_M or the timeout expires.
 
     Note: vision depth alignment bypasses this ramp by design -- it
     sends incremental nudges (≤ 0.02 m per tick at 5 Hz) which are
     gentler for small corrections. This ramp is only for large
     commanded depth changes via `set_depth`.
-
-    Returns None on success. Raises MovementTimeout otherwise -- the
-    message includes the closest depth we ever reached so the operator
-    can tell "stuck on the way" from "no telemetry at all".
     """
-    deadline    = time.time() + timeout
-    t_start     = time.time()
-    closest     = None
+    deadline   = time.time() + timeout
+    t_start    = time.time()
+    closest    = None
+    going_down = (start_d is not None) and (target_m < start_d)
 
     while time.time() < deadline:
+        # Read depth BEFORE computing the setpoint so we can track the sub.
+        attitude = pixhawk.get_attitude()
+        current  = attitude['depth'] if attitude is not None else None
+
         elapsed = time.time() - t_start
         if start_d is not None and elapsed < RAMP_S:
-            frac     = elapsed / RAMP_S
-            setpoint = start_d + (target_m - start_d) * frac
+            frac   = elapsed / RAMP_S
+            ramped = start_d + (target_m - start_d) * frac
+            if current is not None:
+                # Track sub if it's ahead of the ramp so ArduSub never
+                # reverses direction to "wait" for the lagging setpoint.
+                if going_down:
+                    setpoint = max(min(ramped, current), target_m)
+                else:
+                    setpoint = min(max(ramped, current), target_m)
+            else:
+                setpoint = ramped
         else:
             setpoint = target_m
+
         pixhawk.set_target_depth(setpoint)
 
-        attitude = pixhawk.get_attitude()
-        if attitude is not None:
-            current = attitude['depth']
-            error   = abs(target_m - current)
+        if current is not None:
+            error = abs(target_m - current)
             if closest is None or error < abs(target_m - closest):
                 closest = current
 

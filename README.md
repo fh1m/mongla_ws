@@ -710,8 +710,7 @@ duburi_ws/
     │   │       ├── nucleus_dvl.py         # Nortek Nucleus 1000 — AHRS heading + DVL bottom-track
     │   │       ├── nucleus_parser.py      # Nucleus TCP packet decoder (AHRS + bottom-track frames)
     │   │       ├── composite_bno_dvl.py   # BNO085 heading + DVL position composite (bno085_dvl)
-    │   │       ├── dvl_stub.py            # legacy placeholder (superseded by nucleus_dvl.py)
-    │   │       └── witmotion_stub.py      # placeholder for HWT905 / WT901C
+    │   │       └── witmotion_stub.py      # fail-loud placeholder for HWT905 / WT901C
     │   ├── firmware/
     │   │   └── esp32c3_bno085.md      # MCU-side wire contract + ref code
     │   └── config/sensors.yaml        # yaw_source / bno085_port / baud
