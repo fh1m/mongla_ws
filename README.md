@@ -687,11 +687,12 @@ duburi_ws/
     │       ├── tracing.py             # per-command MAVLink-trace tag (off by default; debug:=true flips on)
     │       ├── commands.py            # COMMANDS registry (single source of truth)
     │       ├── motion_easing.py       # smoothstep / smootherstep / trapezoid_ramp
-    │       ├── motion_writers.py      # shared constants + Writers (lock-aware) + thrust_loop
+    │       ├── motion_rates.py        # single source of truth for all loop rates (YAW_RATE_HZ, THRUST_HZ, DEPTH_RAMP_S …)
+    │       ├── motion_writers.py      # Writers (lock-aware Ch4 release) + thrust_loop + REVERSE_KICK_PCT
     │       ├── motion_yaw.py          # yaw_snap / yaw_glide (Ch4 rate override)
     │       ├── motion_forward.py      # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
     │       ├── motion_lateral.py      # drive_lateral_* (Ch6 RC override)
-    │       ├── motion_depth.py        # hold_depth (one-shot SET_POSITION_TARGET, then ALT_HOLD owns it)
+    │       ├── motion_depth.py        # hold_depth (ramped setpoint → SET_POSITION_TARGET, then ALT_HOLD owns it)
     │       ├── motion_vision.py       # vision_track_axes (Ch4/5/6 + depth, P-only) + vision_acquire
     │       ├── heading_lock.py        # background Ch4 yaw-rate streamer (yaw_source-driven)
     │       ├── heartbeat.py           # 5 Hz neutral RC override (FS_PILOT_INPUT guard)
@@ -703,11 +704,14 @@ duburi_ws/
     │   │   ├── factory.py             # name -> YawSource dispatch
     │   │   ├── sensors_node.py        # standalone diagnostic node
     │   │   └── sources/
-    │   │       ├── base.py            # YawSource ABC
-    │   │       ├── mavlink_ahrs.py    # ArduSub AHRS2 wrapper (default)
-    │   │       ├── bno085.py          # ESP32-C3 + BNO085 over USB CDC
-    │   │       ├── dvl_stub.py        # placeholder for Nucleus1000 yaw
-    │   │       └── witmotion_stub.py  # placeholder for HWT905 / WT901C
+    │   │       ├── base.py                # YawSource ABC
+    │   │       ├── mavlink_ahrs.py        # ArduSub AHRS2 wrapper (default)
+    │   │       ├── bno085.py              # ESP32-C3 + BNO085 over USB CDC
+    │   │       ├── nucleus_dvl.py         # Nortek Nucleus 1000 — AHRS heading + DVL bottom-track
+    │   │       ├── nucleus_parser.py      # Nucleus TCP packet decoder (AHRS + bottom-track frames)
+    │   │       ├── composite_bno_dvl.py   # BNO085 heading + DVL position composite (bno085_dvl)
+    │   │       ├── dvl_stub.py            # legacy placeholder (superseded by nucleus_dvl.py)
+    │   │       └── witmotion_stub.py      # placeholder for HWT905 / WT901C
     │   ├── firmware/
     │   │   └── esp32c3_bno085.md      # MCU-side wire contract + ref code
     │   └── config/sensors.yaml        # yaw_source / bno085_port / baud
@@ -716,18 +720,25 @@ duburi_ws/
     │   │   ├── auv_manager_node.py    # ROS2 node, ActionServer, telemetry, VisionState pool
     │   │   ├── vision_state.py        # per-camera Detection2DArray subscriber + bbox_error()
     │   │   └── connection_config.py   # PROFILES + NETWORK topology
-    │   └── config/modes.yaml          # default ros parameters
+    │   └── config/
+    │       ├── modes.yaml             # default ros parameters
+    │       └── vision_tunables.yaml   # default vision.* ROS params (live-tunable via ros2 param set)
     └── duburi_planner/
         └── duburi_planner/
             ├── client.py              # DuburiClient blocking ActionClient wrapper
             ├── cli.py                 # `duburi` command-line wrapper (auto-built from COMMANDS)
+            ├── duburi_dsl.py          # DuburiMission DSL (duburi.* + duburi.vision.*)
             ├── mission.py             # `mission` runner — dispatches into missions/<name>.run
             ├── missions/
-            │   ├── square_pattern.py  # the legacy test_runner choreography
-            │   ├── arc_demo.py        # sharp vs curved turn comparison
-            │   ├── heading_lock_demo.py
-            │   └── find_person_demo.py # full vision-driven 3D alignment demo
-            └── state_machines/        # reserved for YASMIN-based plans
+            │   ├── square_pattern.py    # open-loop square choreography
+            │   ├── arc_demo.py          # sharp vs curved turn comparison
+            │   ├── heading_lock_demo.py # lock_heading + translation demo
+            │   ├── find_person_demo.py  # full vision-driven 3D alignment demo
+            │   ├── move_and_see.py      # alternates open-loop + vision verbs
+            │   ├── pursue_demo.py       # vision_align_3d lock_mode=pursue demo
+            │   ├── gate_prequal.py      # gate pre-qualification sequence (MATE/RoboSub)
+            │   └── robosub_prequal.py   # full RoboSub pre-qualification sequence
+            └── state_machines/          # reserved for YASMIN-based plans
 ```
 
 Every new command ends up in just two places:
@@ -992,8 +1003,27 @@ All commands go through `/duburi/move` and block until done. Exit code 0 = succe
 | `vision_align_depth` | Centre target vertically | `duburi vision_align_depth --target_class person --duration 15` |
 | `vision_hold_distance` | Hold standoff distance | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55` |
 | `vision_align_3d` | Multi-axis simultaneous hold | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth` |
+| `head` | Read live heading at execution time | `duburi head` |
 
 Every flag: `ros2 run duburi_planner duburi <cmd> --help`
+
+#### `head` — execution-time heading
+
+The log shows heading continuously, but by the time you type the next command the AUV has drifted. Use `head` (or `--target head` on any numeric field) to snapshot the exact heading at the moment the command actually executes:
+
+```bash
+# Read heading
+duburi head
+# → head -> OK  final=273.400  msg="heading=273.4°"
+
+# Lock at the heading the AUV is at RIGHT NOW — not when you started typing
+duburi lock_heading --target head
+
+# Works on any float field: yaw to wherever you're currently pointing
+duburi yaw_right --target head
+```
+
+The `--target head` form sends a `head` query first, substitutes the live float, then dispatches the real command — two sequential action calls, resolved atomically from the operator's perspective.
 
 Full parameter docs, MAVLink traces, and implementation chains:
 [`.claude/context/command-reference.md`](.claude/context/command-reference.md)
@@ -1017,8 +1047,9 @@ def run(duburi, log):
 
 ```bash
 ros2 run duburi_planner mission --list
-ros2 run duburi_planner mission find_person_demo
-ros2 run duburi_planner mission pursue_demo
+ros2 run duburi_planner mission find_person_demo   # vision-driven 3D alignment
+ros2 run duburi_planner mission gate_prequal        # gate pre-qualification (MATE/RoboSub)
+ros2 run duburi_planner mission robosub_prequal     # full RoboSub pre-qual sequence
 ```
 
 Full DSL API + working principles + samples:
@@ -1075,8 +1106,9 @@ Key constants (change in source, rebuild):
 
 | What | File | Constant |
 |------|------|----------|
-| Yaw stream rate | `motion_yaw.py` | `YAW_RATE_HZ = 10.0` |
-| Thrust rate | `motion_writers.py` | `THRUST_RATE_HZ = 20.0` |
+| Yaw stream rate | `motion_rates.py` | `YAW_RATE_HZ = 10.0` |
+| Thrust loop rate | `motion_rates.py` | `THRUST_HZ = 20.0` |
+| Depth setpoint ramp | `motion_rates.py` | `DEPTH_RAMP_S = 2.5` — seconds to ramp from current to target depth (prevents overshoot) |
 | Brake strength | `motion_writers.py` | `REVERSE_KICK_PCT = 25` |
 | ArduSub depth gain | QGC → Pixhawk | `PSC_POSZ_P` (default 1.0) |
 
