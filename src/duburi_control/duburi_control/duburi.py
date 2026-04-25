@@ -282,9 +282,11 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
                 f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
-            with self._suspend_heading_lock():
-                run(self.pixhawk, signed_dir, duration, int(gain), self.log,
-                    self._writers(), yaw_source=self.yaw_source, settle=settle)
+            # Heading lock stays ACTIVE during timed forward/back moves.
+            # _writers() already releases Ch4 when lock is running so the
+            # HeadingLock thread remains the sole Ch4 author.
+            run(self.pixhawk, signed_dir, duration, int(gain), self.log,
+                self._writers(), yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
@@ -313,9 +315,10 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
                 f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
-            with self._suspend_heading_lock():
-                run(self.pixhawk, signed_dir, duration, int(gain), self.log,
-                    self._writers(), yaw_source=self.yaw_source, settle=settle)
+            # Heading lock stays ACTIVE during timed lateral moves.
+            # _writers() already releases Ch4 when lock is running.
+            run(self.pixhawk, signed_dir, duration, int(gain), self.log,
+                self._writers(), yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
