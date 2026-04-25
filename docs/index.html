@@ -1,0 +1,1757 @@
+<!DOCTYPE html><html data-src-ver="eebaf08c" lang="en"><head>
+
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mongla — AUV System Wiki</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&amp;family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#060c18;--surface:#0b1525;--card:#101e33;--border:#1a2d47;--border2:#243a57;
+  --text:#e2e8f0;--muted:#7a8fa8;--dim:#3a4f66;
+  --blue:#38bdf8;--cyan:#06e5d5;--red:#ef4444;--gold:#d4a843;--green:#34d399;--purple:#a78bfa;--orange:#fb923c;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.65;overflow-x:hidden}
+
+/* ─── NAV ─── */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;height:56px;background:rgba(6,12,24,.55);backdrop-filter:blur(28px) saturate(1.8);-webkit-backdrop-filter:blur(28px) saturate(1.8);border-bottom:1px solid rgba(56,189,248,.12);box-shadow:0 1px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);display:flex;align-items:center;padding:0 20px;gap:4px;overflow-x:auto}
+.nav-logo{height:32px;width:32px;object-fit:contain;margin-right:8px;flex-shrink:0;filter:drop-shadow(0 0 6px rgba(56,189,248,.3))}
+.nav-brand{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--cyan);letter-spacing:.12em;margin-right:16px;white-space:nowrap;text-shadow:0 0 20px rgba(56,189,248,.4)}
+nav a{font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:4px;white-space:nowrap;transition:all .18s;letter-spacing:.05em;border:1px solid transparent}
+nav a:hover{color:var(--text);background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.08)}
+nav a.act{color:var(--blue);background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.25);text-shadow:0 0 12px rgba(56,189,248,.3)}
+
+/* ─── HERO ─── */
+#hero{position:relative;min-height:100vh;display:flex;flex-direction:column;justify-content:center;overflow:hidden;padding-top:56px}
+.hero-bg{position:absolute;inset:0;background:url('assets/mongla-banner.png') 68% center/cover no-repeat;opacity:.55;filter:brightness(.65) saturate(1.3)}
+/* strong left scrim so the banner's own text is buried; AUV on right shows through */
+.hero-gradient{position:absolute;inset:0;background:
+  linear-gradient(to right, rgba(6,12,24,1) 0%, rgba(6,12,24,.97) 30%, rgba(6,12,24,.82) 52%, rgba(6,12,24,.35) 72%, rgba(6,12,24,.08) 100%),
+  linear-gradient(to bottom, rgba(6,12,24,.4) 0%, transparent 30%, transparent 70%, rgba(6,12,24,1) 100%)}
+.hero-content{position:relative;z-index:2;padding:0 48px;max-width:700px}
+.hero-tag{font-family:var(--mono);font-size:10px;color:var(--cyan);letter-spacing:.2em;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:8px}
+.hero-tag::before{content:'';display:inline-block;width:24px;height:1px;background:var(--cyan)}
+.hero-name{font-size:clamp(48px,7vw,84px);font-weight:800;letter-spacing:-.04em;line-height:1;color:var(--text);margin-bottom:4px}
+.hero-sub{font-family:var(--mono);font-size:18px;color:var(--muted);letter-spacing:.15em;margin-bottom:24px}
+.hero-sub span.r{color:var(--red)}
+.hero-desc{font-size:16px;color:var(--muted);max-width:560px;line-height:1.8;margin-bottom:36px}
+.hero-desc em{color:var(--blue);font-style:normal}
+.hero-badges{display:flex;flex-wrap:wrap;gap:8px}
+.badge{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:3px;letter-spacing:.05em}
+.badge-blue{background:rgba(56,189,248,.12);color:var(--blue);border:1px solid rgba(56,189,248,.3)}
+.badge-red{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.badge-gold{background:rgba(212,168,67,.12);color:var(--gold);border:1px solid rgba(212,168,67,.3)}
+.badge-green{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.3)}
+/* HUD decorators */
+.hud-tl,.hud-tr,.hud-bl,.hud-br{position:absolute;width:40px;height:40px;z-index:2}
+.hud-tl{top:70px;left:24px;border-top:1px solid rgba(56,189,248,.5);border-left:1px solid rgba(56,189,248,.5)}
+.hud-tr{top:70px;right:24px;border-top:1px solid rgba(56,189,248,.5);border-right:1px solid rgba(56,189,248,.5)}
+.hud-bl{bottom:80px;left:24px;border-bottom:1px solid rgba(56,189,248,.5);border-left:1px solid rgba(56,189,248,.5)}
+.hud-br{bottom:80px;right:24px;border-bottom:1px solid rgba(56,189,248,.5);border-right:1px solid rgba(56,189,248,.5)}
+.hud-coords{position:absolute;top:80px;right:60px;font-family:var(--mono);font-size:10px;color:var(--blue);opacity:.6;z-index:2;text-align:right;line-height:1.8}
+.hud-depth{position:absolute;bottom:100px;left:60px;font-family:var(--mono);font-size:10px;color:var(--gold);opacity:.6;z-index:2;line-height:1.8}
+
+/* ─── SECTIONS ─── */
+section{padding:80px 56px 64px;max-width:1360px;margin:0 auto;border-bottom:1px solid var(--border)}
+section:last-child{border-bottom:none}
+.sec-label{font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px}
+h2{font-size:32px;font-weight:700;letter-spacing:-.03em;margin-bottom:10px}
+.sec-sub{color:var(--muted);font-size:15px;max-width:720px;margin-bottom:40px;line-height:1.85}
+h3{font-size:17px;font-weight:600;margin-bottom:14px;color:var(--text)}
+
+/* ─── DIAGRAM ─── */
+.diagram{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px;overflow-x:auto;margin-bottom:24px}
+.diagram svg text{font-family:'JetBrains Mono',monospace!important}
+
+/* ─── INTERACTIVE VISION SIM ─── */
+#vsim{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;margin-bottom:24px}
+.vsim-layout{display:grid;grid-template-columns:1fr 340px;gap:28px;align-items:start}
+#vsim-canvas{border-radius:8px;border:1px solid var(--border2);display:block;background:#060c18;cursor:crosshair}
+.vsim-controls{display:flex;flex-direction:column;gap:18px}
+.vsim-row{display:flex;flex-direction:column;gap:6px}
+.vsim-row label{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+.vsim-row label span{color:var(--cyan)}
+.vsim-row input[type=range]{width:100%;appearance:none;height:4px;background:var(--border2);border-radius:2px;outline:none}
+.vsim-row input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:var(--blue);cursor:pointer;box-shadow:0 0 8px rgba(56,189,248,.6)}
+.vsim-outputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.vsim-out{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px}
+.vsim-out-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.vsim-out-val{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--cyan)}
+.vsim-out-unit{font-family:var(--mono);font-size:9px;color:var(--dim);margin-left:3px}
+.vsim-hint{font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;margin-top:8px}
+
+/* ─── SITL CARD ─── */
+.sitl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.sitl-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px}
+.sitl-card h4{font-family:var(--mono);font-size:12px;color:var(--green);margin-bottom:10px;letter-spacing:.05em}
+.sitl-card pre{font-size:11px;background:var(--bg);border-radius:6px;padding:12px;line-height:1.8;border:1px solid var(--border)}
+
+@media(max-width:900px){.vsim-layout{grid-template-columns:1fr}.sitl-grid{grid-template-columns:1fr}}
+
+/* ─── DIAGRAM ─── */
+.diagram{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:32px;overflow-x:auto;margin-bottom:20px}
+.diagram svg{display:block}
+
+/* ─── GRIDS ─── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+/* ─── CARDS ─── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px}
+.card-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px}
+.card-title{font-size:15px;font-weight:600;margin-bottom:8px}
+.card p{color:var(--muted);font-size:13px;line-height:1.7}
+
+/* ─── TABLE ─── */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)}
+.tbl td{padding:10px 14px;border-bottom:1px solid rgba(26,45,71,.6);color:var(--text)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td code,.tbl td em{font-family:var(--mono);font-size:11px;color:var(--cyan);font-style:normal}
+.tbl td.m{color:var(--muted)}
+
+/* ─── CODE / FORMULA ─── */
+code{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;color:var(--cyan)}
+pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;line-height:1.8}
+.formula{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:14px 20px;font-family:var(--mono);font-size:14px;margin:12px 0;line-height:2.2}
+
+/* ─── CALLOUT ─── */
+.callout{background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.18);border-radius:8px;padding:14px 18px;font-size:13px;color:var(--muted);line-height:1.7;margin:14px 0}
+.callout strong{color:var(--blue)}
+.callout.warn{background:rgba(251,146,60,.06);border-color:rgba(251,146,60,.18)}
+.callout.warn strong{color:var(--orange)}
+.callout.green{background:rgba(52,211,153,.06);border-color:rgba(52,211,153,.18)}
+.callout.green strong{color:var(--green)}
+
+/* ─── CITE ─── */
+.cite{font-family:var(--mono);font-size:9px;color:var(--dim);border-left:2px solid var(--dim);padding-left:8px;margin-top:8px;line-height:1.6}
+.cite a{color:var(--muted);text-decoration:none}
+.cite a:hover{color:var(--blue)}
+
+/* ─── TASK CARD ─── */
+.task-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.task-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.task-num{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--blue);opacity:.4;line-height:1}
+.task-name{font-size:15px;font-weight:600}
+.task-sub{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.task-body{padding:20px}
+.task-body p{color:var(--muted);font-size:13px;line-height:1.7}
+.task-steps{list-style:none;margin-top:12px}
+.task-steps li{font-size:12px;color:var(--muted);padding:5px 0 5px 20px;position:relative;border-bottom:1px solid rgba(26,45,71,.5)}
+.task-steps li:last-child{border-bottom:none}
+.task-steps li::before{content:attr(data-n);position:absolute;left:0;color:var(--cyan);font-family:var(--mono);font-size:10px;top:6px}
+
+/* ─── MISC ─── */
+.tag{display:inline-block;padding:2px 8px;border-radius:3px;font-family:var(--mono);font-size:9px;letter-spacing:.04em;font-weight:500}
+.t-blue{background:rgba(56,189,248,.12);color:var(--blue);border:1px solid rgba(56,189,248,.2)}
+.t-red{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.2)}
+.t-green{background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.2)}
+.t-gold{background:rgba(212,168,67,.12);color:var(--gold);border:1px solid rgba(212,168,67,.2)}
+.t-purple{background:rgba(167,139,250,.12);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+
+.section-wrap{max-width:1280px;margin:0 auto}
+</style>
+</head>
+<body data-cc-id="cc-1" style="cursor: crosshair; font-family: &quot;JetBrains Mono&quot;;">
+
+<!-- NAV -->
+<nav>
+  <img src="assets/mongla-logo-dark.png" class="nav-logo" alt="Mongla"/>
+  <span class="nav-brand">MONGLA</span>
+  <a href="#hero" class="act">Home</a>
+  <a href="#platform" class="">Platform</a>
+  <a href="#architecture" class="">Architecture</a>
+  <a href="#motion" class="">Motion</a>
+  <a href="#perception" class="">Perception</a>
+  <a href="#visioncontrol" class="">Vision→Control</a>
+  <a href="#fusion">Fusion</a>
+  <a href="#fullsystem">Full System</a>
+  <a href="#robosub">RoboSub</a>
+  <a href="#mission">Mission</a>
+  <a href="#visionsim">⚡ Simulator</a>
+  <a href="#sim">SITL</a>
+  <a href="#theory">Theory</a>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────────── -->
+<div id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-gradient"></div>
+  <div class="hud-tl"></div><div class="hud-tr"></div>
+  <div class="hud-bl"></div><div class="hud-br"></div>
+  <div class="hud-coords">22.5847° N<br>89.5485° E<br>// SUNDARBANS DELTA</div>
+  <div class="hud-depth">DEPTH<br>200M ↓<br>// TARGET</div>
+  <div class="hero-content">
+    <div class="hero-tag">AUV CONTROL STACK — duburi_ws</div>
+    <div class="hero-name">MONGLA</div>
+    <div class="hero-sub">— duburi — <span class="r">autonomous</span></div>
+    <div class="hero-desc">
+      A ROS 2 Humble control, mission, and vision stack for ArduSub vehicles.<br>
+      <em>One action surface</em>, axis-isolated control, <em>YOLO perception</em>, DVL dead-reckoning,<br>
+      and full RoboSub task autonomy — field-tested on <em>Duburi 4.2</em>.
+    </div>
+    <div class="hero-badges">
+      <span class="badge badge-blue">ROS2 Humble</span>
+      <span class="badge badge-red">ArduSub 4.x</span>
+      <span class="badge badge-gold">Pixhawk 2.4.8</span>
+      <span class="badge badge-blue">YOLO v26</span>
+      <span class="badge badge-green">Nucleus1000 DVL</span>
+      <span class="badge badge-blue">BNO085 IMU</span>
+      <span class="badge badge-red">ByteTrack</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── PLATFORM ──────────────────────────────────────────── -->
+<section id="platform">
+<div class="section-wrap">
+  <div class="sec-label">01 — The Platform</div>
+  <h2>Duburi 4.2 — hardware at a glance</h2>
+  <p class="sec-sub">Octagonal Marine 5083 aluminum hull, 8× Blue Robotics T200 thrusters in vectored_6dof configuration — same ArduSub frame as BlueROV2 Heavy.</p>
+
+  <div class="g2" style="gap:24px;align-items:start">
+    <div class="diagram" style="padding:24px">
+      <!-- Top-down AUV SVG -->
+      <svg viewBox="0 0 400 400" width="400" height="400" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+        <defs>
+          <marker id="ht" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#38bdf8"></path></marker>
+          <marker id="hr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#ef4444"></path></marker>
+          <marker id="hg" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#34d399"></path></marker>
+          <marker id="ho" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#d4a843"></path></marker>
+        </defs>
+
+        <!-- Octagonal hull -->
+        <polygon points="200,80 270,110 300,180 270,250 200,280 130,250 100,180 130,110" fill="#0b1525" stroke="#1a3d5c" stroke-width="2"></polygon>
+        <!-- Inner structure -->
+        <polygon points="200,110 250,130 270,180 250,230 200,250 150,230 130,180 150,130" fill="#101e33" stroke="#1e3a55" stroke-width="1"></polygon>
+        <!-- Center circle (gold ring like the real AUV) -->
+        <circle cx="200" cy="180" r="44" fill="none" stroke="#d4a843" stroke-width="3"></circle>
+        <circle cx="200" cy="180" r="38" fill="none" stroke="#d4a843" stroke-width="1" opacity=".4"></circle>
+        <circle cx="200" cy="180" r="8" fill="#0b1525" stroke="#38bdf8" stroke-width="1.5"></circle>
+
+        <!-- FRONT indicator -->
+        <polygon points="200,82 207,96 193,96" fill="#38bdf8" opacity=".8"></polygon>
+        <text x="200" y="76" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#38bdf8">FWD</text>
+
+        <!-- 8 Thrusters -->
+        <!-- T1 FL-fwd -->
+        <ellipse cx="138" cy="112" rx="16" ry="10" fill="#0d1a2a" stroke="#ef4444" stroke-width="1.5" transform="rotate(-45 138 112)"></ellipse>
+        <text x="115" y="96" font-family="JetBrains Mono" font-size="8" fill="#ef4444">T1</text>
+        <!-- T2 FR-fwd -->
+        <ellipse cx="262" cy="112" rx="16" ry="10" fill="#0d1a2a" stroke="#ef4444" stroke-width="1.5" transform="rotate(45 262 112)"></ellipse>
+        <text x="268" y="96" font-family="JetBrains Mono" font-size="8" fill="#ef4444">T2</text>
+        <!-- T3 RL-fwd -->
+        <ellipse cx="138" cy="248" rx="16" ry="10" fill="#0d1a2a" stroke="#ef4444" stroke-width="1.5" transform="rotate(45 138 248)"></ellipse>
+        <text x="107" y="264" font-family="JetBrains Mono" font-size="8" fill="#ef4444">T3</text>
+        <!-- T4 RR-fwd -->
+        <ellipse cx="262" cy="248" rx="16" ry="10" fill="#0d1a2a" stroke="#ef4444" stroke-width="1.5" transform="rotate(-45 262 248)"></ellipse>
+        <text x="268" y="264" font-family="JetBrains Mono" font-size="8" fill="#ef4444">T4</text>
+        <!-- T5-T8 vertical (depth) thrusters – shown as circles -->
+        <circle cx="200" cy="102" r="10" fill="#0d1a2a" stroke="#34d399" stroke-width="1.5"></circle>
+        <text x="200" y="99" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#34d399">T5</text>
+        <circle cx="200" cy="258" r="10" fill="#0d1a2a" stroke="#34d399" stroke-width="1.5"></circle>
+        <text x="200" y="255" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#34d399">T6</text>
+        <circle cx="110" cy="180" r="10" fill="#0d1a2a" stroke="#34d399" stroke-width="1.5"></circle>
+        <text x="110" y="177" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#34d399">T7</text>
+        <circle cx="290" cy="180" r="10" fill="#0d1a2a" stroke="#34d399" stroke-width="1.5"></circle>
+        <text x="290" y="177" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#34d399">T8</text>
+
+        <!-- Axis arrows -->
+        <line x1="200" y1="180" x2="200" y2="130" stroke="#38bdf8" stroke-width="2" marker-end="url(#ht)"></line>
+        <text x="210" y="144" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">Ch5 FWD</text>
+        <line x1="200" y1="180" x2="250" y2="180" stroke="#a78bfa" stroke-width="2" marker-end="url(#ht)"></line>
+        <text x="254" y="177" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">Ch6 LAT</text>
+        <!-- Yaw arc -->
+        <path d="M200,160 A20,20 0 0,1 220,180" stroke="#d4a843" fill="none" stroke-width="2" marker-end="url(#ho)"></path>
+        <text x="215" y="158" font-family="JetBrains Mono" font-size="8" fill="#d4a843">Ch4 YAW</text>
+
+        <!-- Payload labels -->
+        <text x="200" y="310" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">torpedo · grabber · dropper</text>
+        <text x="200" y="324" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#3a4f66">vectored_6dof · 8× T200</text>
+
+        <!-- Camera FOV indicator -->
+        <path d="M180,82 L140,40 M220,82 L260,40" stroke="#38bdf8" stroke-width="1" stroke-dasharray="3,3" opacity=".5"></path>
+        <text x="200" y="36" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">camera FOV</text>
+
+        <!-- Crosshairs -->
+        <line x1="10" y1="180" x2="40" y2="180" stroke="#38bdf8" stroke-width=".5" opacity=".3"></line>
+        <line x1="360" y1="180" x2="390" y2="180" stroke="#38bdf8" stroke-width=".5" opacity=".3"></line>
+        <line x1="200" y1="10" x2="200" y2="40" stroke="#38bdf8" stroke-width=".5" opacity=".3"></line>
+        <line x1="200" y1="360" x2="200" y2="390" stroke="#38bdf8" stroke-width=".5" opacity=".3"></line>
+        <text x="12" y="175" font-family="JetBrains Mono" font-size="7" fill="#38bdf8" opacity=".4">TOP VIEW</text>
+      </svg>
+    </div>
+
+    <div>
+      <table class="tbl">
+        <thead><tr><th>Component</th><th>Spec</th></tr></thead>
+        <tbody>
+          <tr><td>Hull</td><td class="m">Octagonal Marine 5083 aluminum, in-house</td></tr>
+          <tr><td>Frame</td><td><em>vectored_6dof</em> (8× T200) — same as BlueROV2 Heavy</td></tr>
+          <tr><td>Flight controller</td><td class="m">Pixhawk 2.4.8 · ArduSub 4.x · EKF3</td></tr>
+          <tr><td>Companion SBC</td><td class="m">Raspberry Pi 4B · BlueOS · MAVLink router</td></tr>
+          <tr><td>Mission SBC</td><td class="m">Nvidia Jetson Orin Nano · all ROS2 nodes</td></tr>
+          <tr><td>Depth sensor</td><td class="m">Bar30 (ArduSub AHRS2 altitude)</td></tr>
+          <tr><td>IMU</td><td><em>BNO085</em> on ESP32-C3 · USB CDC · gyro+accel</td></tr>
+          <tr><td>DVL</td><td><em>Nortek Nucleus1000</em> · 192.168.2.201 · TCP 9000</td></tr>
+          <tr><td>Cameras</td><td class="m">Blue Robotics Low-Light HD USB (fwd + down)</td></tr>
+          <tr><td>Network</td><td class="m">5-port onboard switch · FathomX PoE tether</td></tr>
+          <tr><td>Payload</td><td class="m">Slingshot torpedo · aluminum grabber · solenoid dropper</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ── ARCHITECTURE ───────────────────────────────────────── -->
+<section id="architecture">
+<div class="section-wrap">
+  <div class="sec-label">02 — Architecture</div>
+  <h2>All subsystems in one view</h2>
+  <p class="sec-sub">Five ROS2 packages, one action surface (<code>/duburi/move</code>), one MAVLink owner. Every command flows through the same registry — CLI, mission runner, and Python API alike.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1100 320" width="1100" height="320" style="max-width:100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="a1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#38bdf8" opacity=".8"></path></marker>
+        <marker id="a1g" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#34d399" opacity=".8"></path></marker>
+        <marker id="a1o" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#d4a843" opacity=".8"></path></marker>
+        <marker id="a1r" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#ef4444" opacity=".8"></path></marker>
+        <marker id="a1p" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#a78bfa" opacity=".8"></path></marker>
+      </defs>
+
+      <!-- Ground Layer -->
+      <rect x="8" y="50" width="110" height="200" rx="5" fill="#0b1525" stroke="#1a3d5c" stroke-width="1" stroke-dasharray="3,3" opacity=".7"></rect>
+      <text x="63" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8" letter-spacing="1">OPERATOR</text>
+      <rect x="18" y="62" width="90" height="28" rx="3" fill="#101e33" stroke="#1a3d5c" stroke-width="1"></rect>
+      <text x="63" y="79" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0">duburi CLI</text>
+      <rect x="18" y="100" width="90" height="28" rx="3" fill="#101e33" stroke="#1a3d5c" stroke-width="1"></rect>
+      <text x="63" y="117" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0">mission runner</text>
+      <rect x="18" y="138" width="90" height="28" rx="3" fill="#101e33" stroke="#1a3d5c" stroke-width="1"></rect>
+      <text x="63" y="155" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0">DuburiClient</text>
+      <rect x="18" y="176" width="90" height="28" rx="3" fill="#101e33" stroke="#1a3d5c" stroke-width="1"></rect>
+      <text x="63" y="193" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0">YASMIN SM</text>
+      <text x="63" y="204" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">(roadmap)</text>
+
+      <!-- Arrow to manager -->
+      <line x1="118" y1="155" x2="168" y2="155" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#a1)"></line>
+      <text x="143" y="148" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#38bdf8">/duburi/move</text>
+
+      <!-- Manager -->
+      <rect x="170" y="95" width="130" height="120" rx="5" fill="#0b1525" stroke="#38bdf8" stroke-width="1.5"></rect>
+      <text x="235" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#38bdf8" font-weight="600">duburi_manager</text>
+      <text x="235" y="130" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">ActionServer</text>
+      <text x="235" y="144" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">auv_manager_node</text>
+      <text x="235" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Duburi facade</text>
+      <text x="235" y="175" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">COMMANDS dispatch</text>
+      <text x="235" y="188" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">VisionState pool</text>
+      <text x="235" y="201" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">heading_lock owner</text>
+
+      <!-- Arrow to control -->
+      <line x1="300" y1="155" x2="350" y2="155" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#a1)"></line>
+
+      <!-- duburi_control box -->
+      <rect x="352" y="30" width="260" height="260" rx="5" fill="#080f1c" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3" opacity=".7"></rect>
+      <text x="482" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399" letter-spacing="1">duburi_control</text>
+      <rect x="362" y="40" width="240" height="30" rx="3" fill="#0d1e30" stroke="#34d399" stroke-width="1"></rect>
+      <text x="482" y="57" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#34d399">motion_yaw · yaw_snap / yaw_glide</text>
+      <rect x="362" y="78" width="240" height="30" rx="3" fill="#0d1e30" stroke="#34d399" stroke-width="1"></rect>
+      <text x="482" y="95" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#34d399">motion_forward · drive_* + arc Ch5+Ch4</text>
+      <rect x="362" y="116" width="240" height="30" rx="3" fill="#0d1e30" stroke="#34d399" stroke-width="1"></rect>
+      <text x="482" y="133" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#34d399">motion_lateral · drive_lateral_* Ch6</text>
+      <rect x="362" y="154" width="240" height="30" rx="3" fill="#0d1e30" stroke="#34d399" stroke-width="1"></rect>
+      <text x="482" y="171" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#34d399">motion_depth · hold_depth setpoint</text>
+      <rect x="362" y="192" width="240" height="30" rx="3" fill="#0d1e30" stroke="#a78bfa" stroke-width="1"></rect>
+      <text x="482" y="209" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#a78bfa">motion_vision · P-loop Ch4/5/6+depth</text>
+      <rect x="362" y="230" width="240" height="30" rx="3" fill="#0d1e30" stroke="#a78bfa" stroke-width="1.5"></rect>
+      <text x="482" y="247" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#a78bfa">heading_lock · 20 Hz Ch4 yaw-rate</text>
+      <line x1="350" y1="60" x2="362" y2="55" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <line x1="350" y1="100" x2="362" y2="95" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <line x1="350" y1="130" x2="362" y2="130" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <line x1="350" y1="160" x2="362" y2="165" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <line x1="350" y1="195" x2="362" y2="205" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
+      <line x1="350" y1="230" x2="362" y2="242" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
+
+      <!-- Pixhawk wrapper arrow -->
+      <line x1="602" y1="155" x2="648" y2="155" stroke="#d4a843" stroke-width="1.5" marker-end="url(#a1o)"></line>
+      <text x="624" y="148" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">MAVLink</text>
+
+      <!-- Hardware box -->
+      <rect x="650" y="70" width="200" height="240" rx="5" fill="#0a1420" stroke="#d4a843" stroke-width="1" stroke-dasharray="3,3" opacity=".7"></rect>
+      <text x="750" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843" letter-spacing="1">AUV HARDWARE</text>
+      <rect x="660" y="82" width="178" height="35" rx="3" fill="#101e33" stroke="#1a3d5c" stroke-width="1"></rect>
+      <text x="749" y="101" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0">Pixhawk 2.4.8 · ArduSub EKF3</text>
+      <rect x="660" y="124" width="178" height="35" rx="3" fill="#101e33" stroke="#1a3d5c" stroke-width="1"></rect>
+      <text x="749" y="143" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0">RPi · BlueOS · UDP 14550</text>
+      <rect x="660" y="166" width="178" height="35" rx="3" fill="#101e33" stroke="#ef4444" stroke-width="1"></rect>
+      <text x="749" y="185" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#ef4444">8× T200 · ESCs</text>
+      <rect x="660" y="208" width="178" height="35" rx="3" fill="#101e33" stroke="#38bdf8" stroke-width="1"></rect>
+      <text x="749" y="227" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#38bdf8">BNO085 · DVL Nucleus1000</text>
+      <rect x="660" y="250" width="178" height="35" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
+      <text x="749" y="269" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#a78bfa">Cameras · YOLO · ByteTrack</text>
+
+      <!-- duburi_vision box -->
+      <rect x="352" y="300" width="260" height="18" rx="3" fill="#0d1e30" stroke="#a78bfa" stroke-width="1"></rect>
+      <text x="482" y="313" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">duburi_vision: camera_node → detector_node → tracker_node</text>
+      <!-- vision → manager -->
+      <line x1="482" y1="300" x2="235" y2="215" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3" opacity=".7" marker-end="url(#a1p)"></line>
+      <text x="340" y="270" font-family="JetBrains Mono" font-size="7.5" fill="#a78bfa">/detections · /tracks</text>
+
+      <!-- duburi_sensors box -->
+      <rect x="170" y="280" width="130" height="32" rx="3" fill="#0d1e30" stroke="#34d399" stroke-width="1"></rect>
+      <text x="235" y="295" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">duburi_sensors</text>
+      <text x="235" y="306" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">YawSource ABC · factory</text>
+      <line x1="235" y1="280" x2="235" y2="215" stroke="#34d399" stroke-width="1" stroke-dasharray="2,3" opacity=".6" marker-end="url(#a1g)"></line>
+
+      <!-- Telemetry return -->
+      <path d="M848,285 Q900,310 900,155 Q900,20 640,155" stroke="#34d399" fill="none" stroke-width="1" stroke-dasharray="3,3" opacity=".5" marker-end="url(#a1g)"></path>
+      <text x="910" y="200" font-family="JetBrains Mono" font-size="7.5" fill="#34d399" transform="rotate(90 910 200)">telemetry</text>
+    </svg>
+  </div>
+</div>
+</section>
+
+<!-- ── MOTION CONTROL ─────────────────────────────────────── -->
+<section id="motion">
+<div class="section-wrap">
+  <div class="sec-label">03 — Motion Control</div>
+  <h2>Open-loop vs closed-loop movement</h2>
+  <p class="sec-sub">Mongla uses three control modes depending on the axis. ArduSub owns the 400 Hz inner loops; Python shapes setpoints at 5–20 Hz.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1000 280" width="1000" height="280" style="max-width:100%" xmlns="http://www.w3.org/2000/svg">
+      <!-- OPEN LOOP panel -->
+      <rect x="10" y="10" width="300" height="260" rx="6" fill="#0b1525" stroke="#d4a843" stroke-width="1.2"></rect>
+      <text x="160" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#d4a843" letter-spacing="1">OPEN LOOP — TRANSLATION</text>
+      <text x="160" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">forward · lateral · arc</text>
+      <!-- Block chain -->
+      <rect x="30" y="56" width="100" height="30" rx="3" fill="#101e33" stroke="#d4a843" stroke-width="1"></rect>
+      <text x="80" y="74" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#e2e8f0">RC override</text>
+      <line x1="130" y1="71" x2="170" y2="71" stroke="#d4a843" stroke-width="1.2" marker-end="url(#a1o)"></line>
+      <rect x="172" y="56" width="100" height="30" rx="3" fill="#101e33" stroke="#ef4444" stroke-width="1"></rect>
+      <text x="222" y="74" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">Thrusters</text>
+      <text x="80" y="105" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">Ch5 (fwd) / Ch6 (lat)</text>
+      <text x="80" y="118" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">PWM 1100–1900µs</text>
+      <text x="80" y="131" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">@ 20 Hz, timed</text>
+      <!-- Bang-bang vs trapezoid graph -->
+      <text x="160" y="155" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">thrust envelope (bang-bang vs trapezoid)</text>
+      <!-- Bang-bang -->
+      <polyline points="30,220 30,175 120,175 120,220" fill="none" stroke="#d4a843" stroke-width="1.5"></polyline>
+      <text x="75" y="232" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#d4a843">constant</text>
+      <!-- Trapezoid ramp -->
+      <polyline points="145,220 155,175 195,175 215,220" fill="none" stroke="#34d399" stroke-width="1.5"></polyline>
+      <text x="180" y="232" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#34d399">trapezoid (smooth=true)</text>
+      <line x1="30" y1="222" x2="280" y2="222" stroke="#1a3d5c" stroke-width="1"></line>
+      <text x="30" y="248" font-family="JetBrains Mono" font-size="8" fill="#3a4f66">time →</text>
+      <text x="20" y="175" font-family="JetBrains Mono" font-size="7" fill="#3a4f66" transform="rotate(-90 20 180)">thrust</text>
+
+      <!-- CLOSED LOOP panel — Yaw/Depth -->
+      <rect x="330" y="10" width="320" height="260" rx="6" fill="#0b1525" stroke="#38bdf8" stroke-width="1.2"></rect>
+      <text x="490" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#38bdf8" letter-spacing="1">CLOSED LOOP — YAW &amp; DEPTH</text>
+      <text x="490" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">ArduSub 400 Hz PIDs</text>
+      <!-- PID loop -->
+      <circle cx="370" cy="130" r="20" fill="#0d1e30" stroke="#38bdf8" stroke-width="1.5"></circle>
+      <text x="370" y="134" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#38bdf8">Σ</text>
+      <line x1="340" y1="130" x2="350" y2="130" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#a1)"></line>
+      <text x="330" y="124" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">r setpt</text>
+      <line x1="390" y1="130" x2="420" y2="130" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#a1)"></line>
+      <rect x="422" y="114" width="80" height="32" rx="3" fill="#101e33" stroke="#38bdf8" stroke-width="1"></rect>
+      <text x="462" y="132" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0">Kp·e + Ki∫e</text>
+      <line x1="502" y1="130" x2="530" y2="130" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#a1)"></line>
+      <rect x="532" y="114" width="70" height="32" rx="3" fill="#101e33" stroke="#ef4444" stroke-width="1"></rect>
+      <text x="567" y="129" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">Plant</text>
+      <text x="567" y="141" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">ESCs+water</text>
+      <circle cx="618" cy="130" r="14" fill="#0d1e30" stroke="#34d399" stroke-width="1.5"></circle>
+      <text x="618" y="134" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399">y</text>
+      <line x1="602" y1="130" x2="610" y2="130" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <!-- Feedback -->
+      <path d="M618,144 Q618,175 370,175 Q370,175 370,150" stroke="#ef4444" fill="none" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#a1r)"></path>
+      <text x="490" y="190" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#ef4444">closed-loop feedback</text>
+      <!-- Setpoint messages -->
+      <text x="490" y="215" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">SET_ATTITUDE_TARGET (yaw)</text>
+      <text x="490" y="230" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">SET_POSITION_TARGET (depth)</text>
+      <text x="490" y="248" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Python streams setpoints · ArduSub closes loop @ 400 Hz</text>
+
+      <!-- HEADING LOCK panel -->
+      <rect x="670" y="10" width="320" height="260" rx="6" fill="#0b1525" stroke="#a78bfa" stroke-width="1.2"></rect>
+      <text x="830" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#a78bfa" letter-spacing="1">HEADING LOCK — HYBRID</text>
+      <text x="830" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">Python P-loop · 20 Hz · yaw_source</text>
+      <!-- Loop diagram -->
+      <rect x="690" y="58" width="110" height="30" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
+      <text x="745" y="75" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">read yaw_source</text>
+      <line x1="800" y1="73" x2="830" y2="73" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
+      <rect x="832" y="58" width="100" height="30" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
+      <text x="882" y="72" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#e2e8f0">error = shortest</text>
+      <text x="882" y="82" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">(target−cur)</text>
+      <line x1="882" y1="88" x2="882" y2="116" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
+      <rect x="832" y="118" width="100" height="30" rx="3" fill="#101e33" stroke="#d4a843" stroke-width="1"></rect>
+      <text x="882" y="133" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843">Kp×err → Ch4</text>
+      <text x="882" y="145" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">0.6%/deg ±18%</text>
+      <line x1="832" y1="133" x2="800" y2="133" stroke="#d4a843" stroke-width="1.2" marker-end="url(#a1o)"></line>
+      <rect x="690" y="118" width="108" height="30" rx="3" fill="#101e33" stroke="#ef4444" stroke-width="1"></rect>
+      <text x="744" y="136" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">RC_OVERRIDE Ch4</text>
+      <line x1="745" y1="148" x2="745" y2="175" stroke="#ef4444" stroke-width="1.2" marker-end="url(#a1r)"></line>
+      <rect x="690" y="177" width="108" height="30" rx="3" fill="#101e33" stroke="#ef4444" stroke-width="1"></rect>
+      <text x="744" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">ArduSub yaw PID</text>
+      <!-- feedback loop back -->
+      <path d="M744,207 Q744,235 745,240 Q745,252 700,252 Q680,252 680,73 Q680,58 690,58" stroke="#34d399" fill="none" stroke-width="1" stroke-dasharray="3,3" opacity=".6" marker-end="url(#a1g)"></path>
+      <text x="682" y="160" font-family="JetBrains Mono" font-size="7" fill="#34d399" transform="rotate(-90 682 160)">yaw_source reading</text>
+    </svg>
+  </div>
+
+  <div class="g3">
+    <div class="card"><div class="card-lbl">Forward / Lateral</div><div class="card-title">Open-loop, timed</div>
+    <p>Python sends RC_CHANNELS_OVERRIDE with a thrust percentage for a set duration. With <code>smooth_translate:=true</code>, a trapezoid_ramp shapes the envelope — easing in, cruise, easing out. The ease-out IS the brake. After: 200 ms reverse kick (constant mode) + 1.2 s settle.</p></div>
+    <div class="card"><div class="card-lbl">Yaw / Depth</div><div class="card-title">Closed-loop via ArduSub</div>
+    <p>Python streams <em>setpoints</em> — <code>SET_ATTITUDE_TARGET</code> for yaw at 10–20 Hz, <code>SET_POSITION_TARGET_GLOBAL_INT</code> for depth at 5 Hz. ArduSub's 400 Hz attitude and position PIDs close the actual loops. Python never fights the firmware.</p></div>
+    <div class="card"><div class="card-lbl">Heading Lock</div><div class="card-title">Hybrid P-loop @ 20 Hz</div>
+    <p>A Python daemon thread reads <code>yaw_source</code>, computes proportional error, and streams Ch4 yaw-rate overrides at 20 Hz. Translation commands run on top — they only write Ch5/Ch6, leaving Ch4 to the lock. Source-agnostic: AHRS, BNO085, or DVL heading.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- ── PERCEPTION PIPELINE ───────────────────────────────── -->
+<section id="perception">
+<div class="section-wrap">
+  <div class="sec-label">04 — Perception</div>
+  <h2>Vision pipeline: camera → detection → tracking</h2>
+  <p class="sec-sub">YOLO v26 runs on the Jetson GPU at ~30 Hz. ByteTrack assigns stable IDs across frames. VisionState bridges detections to control commands.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1000 220" width="1000" height="220" style="max-width:100%" xmlns="http://www.w3.org/2000/svg">
+      <!-- Pipeline boxes -->
+      <rect x="10" y="50" width="110" height="120" rx="4" fill="#0b1525" stroke="#38bdf8" stroke-width="1.2"></rect>
+      <text x="65" y="74" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">camera_node</text>
+      <text x="65" y="90" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">USB capture</text>
+      <text x="65" y="104" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">1920×1080</text>
+      <text x="65" y="118" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">30 Hz</text>
+      <text x="65" y="135" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">forward +</text>
+      <text x="65" y="147" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">downward</text>
+      <!-- camera icon -->
+      <rect x="46" y="156" width="38" height="10" rx="2" fill="#101e33" stroke="#38bdf8" stroke-width="1"></rect>
+      <circle cx="65" cy="161" r="5" fill="none" stroke="#38bdf8" stroke-width="1"></circle>
+
+      <line x1="120" y1="110" x2="155" y2="110" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#a1)"></line>
+      <text x="137" y="103" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#38bdf8">/image_raw</text>
+
+      <!-- YOLO box -->
+      <rect x="157" y="40" width="160" height="140" rx="4" fill="#0b1525" stroke="#a78bfa" stroke-width="1.5"></rect>
+      <text x="237" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">detector_node</text>
+      <text x="237" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0" font-weight="500">YOLO v26</text>
+      <text x="237" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Ultralytics · Jetson GPU</text>
+      <text x="237" y="110" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">CUDA accelerated</text>
+      <!-- Bounding box icon -->
+      <rect x="195" y="120" width="84" height="44" rx="2" fill="#0d1e30" stroke="#a78bfa" stroke-width="1"></rect>
+      <rect x="213" y="128" width="48" height="28" rx="1" fill="none" stroke="#a78bfa" stroke-width="1.5"></rect>
+      <circle cx="237" cy="142" r="8" fill="rgba(167,139,250,.2)" stroke="#a78bfa" stroke-width="1"></circle>
+      <text x="237" y="174" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">class · bbox · conf</text>
+
+      <line x1="317" y1="110" x2="352" y2="110" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#a1p)"></line>
+      <text x="334" y="103" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#a78bfa">/detections</text>
+
+      <!-- ByteTrack box -->
+      <rect x="354" y="40" width="180" height="140" rx="4" fill="#0b1525" stroke="#34d399" stroke-width="1.5"></rect>
+      <text x="444" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399">tracker_node</text>
+      <text x="444" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0" font-weight="500">ByteTrack + Kalman</text>
+      <text x="444" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">supervision.ByteTrack</text>
+      <text x="444" y="108" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">PerTrackKalman smoother</text>
+      <text x="444" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">stable track IDs (occlusion bridge)</text>
+      <text x="444" y="138" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">smoothed bbox (cx,cy)</text>
+      <text x="444" y="152" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Kalman-only pred on miss</text>
+      <text x="444" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">opt-in: --tracking true</text>
+
+      <line x1="534" y1="110" x2="569" y2="110" stroke="#34d399" stroke-width="1.5" marker-end="url(#a1g)"></line>
+      <text x="551" y="103" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#34d399">/tracks</text>
+
+      <!-- VisionState box -->
+      <rect x="571" y="40" width="170" height="140" rx="4" fill="#0b1525" stroke="#d4a843" stroke-width="1.5"></rect>
+      <text x="656" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843">VisionState</text>
+      <text x="656" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0" font-weight="500">auv_manager_node</text>
+      <text x="656" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">per-camera subscriber</text>
+      <text x="656" y="108" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">bbox_error()</text>
+      <text x="656" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">cx_err = (cx−0.5)/0.5</text>
+      <text x="656" y="136" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">cy_err = (cy−0.5)/0.5</text>
+      <text x="656" y="150" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">bbox_h_frac = h/frame_h</text>
+      <text x="656" y="164" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">detection age → stale check</text>
+
+      <line x1="741" y1="110" x2="776" y2="110" stroke="#d4a843" stroke-width="1.5" marker-end="url(#a1o)"></line>
+      <text x="758" y="103" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#d4a843">errors</text>
+
+      <!-- motion_vision -->
+      <rect x="778" y="50" width="200" height="120" rx="4" fill="#0b1525" stroke="#ef4444" stroke-width="1.5"></rect>
+      <text x="878" y="70" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">motion_vision</text>
+      <text x="878" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0" font-weight="500">P-loop → RC override</text>
+      <text x="878" y="102" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">yaw_pct  = kp_yaw × cx_err</text>
+      <text x="878" y="116" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">lat_pct  = kp_lat × cx_err</text>
+      <text x="878" y="130" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">fwd_pct  = kp_fwd × dist_err</text>
+      <text x="878" y="144" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">depth_Δ = kp_dep × cy_err</text>
+      <text x="878" y="158" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">@ 20 Hz · live-tunable ROS params</text>
+
+      <!-- topic labels bottom -->
+      <text x="65" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">sensor_msgs/Image</text>
+      <text x="237" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">vision_msgs/Detection2DArray</text>
+      <text x="444" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">Detection2DArray + tracking_id</text>
+      <text x="656" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">normalised errors [−1,+1]</text>
+    </svg>
+  </div>
+
+  <div class="cite">ByteTrack: Zhang et al., "ByteTrack: Multi-Object Tracking by Associating Every Detection Box" ECCV 2022 · <a href="https://arxiv.org/abs/2110.06864">arxiv.org/abs/2110.06864</a><br>
+  YOLO: Ultralytics YOLO v26 architecture — real-time object detection · <a href="https://docs.ultralytics.com">docs.ultralytics.com</a><br>
+  Kalman Filter: R.E. Kalman, "A New Approach to Linear Filtering and Prediction Problems" ASME 1960 — used here for per-track bbox smoothing</div>
+</div>
+</section>
+
+<!-- ── VISION → CONTROL ──────────────────────────────────── -->
+<section id="visioncontrol">
+<div class="section-wrap">
+  <div class="sec-label">05 — Vision → Control</div>
+  <h2>How the AUV sees, aligns &amp; follows</h2>
+  <p class="sec-sub">Bounding box geometry drives three independent control channels simultaneously. The camera frame is a normalized coordinate system — errors feed directly into P-gains.</p>
+
+  <div class="g2" style="align-items:start;gap:24px">
+    <div>
+      <div class="diagram" style="padding:20px">
+        <!-- Camera frame diagram -->
+        <svg viewBox="0 0 400 320" width="400" height="320" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+          <!-- Camera frame -->
+          <rect x="30" y="20" width="340" height="240" rx="4" fill="#060c18" stroke="#38bdf8" stroke-width="1.5"></rect>
+          <!-- Crosshair at center -->
+          <line x1="200" y1="20" x2="200" y2="260" stroke="#38bdf8" stroke-width=".5" stroke-dasharray="4,4" opacity=".3"></line>
+          <line x1="30" y1="140" x2="370" y2="140" stroke="#38bdf8" stroke-width=".5" stroke-dasharray="4,4" opacity=".3"></line>
+          <circle cx="200" cy="140" r="4" fill="none" stroke="#38bdf8" stroke-width="1.5" opacity=".6"></circle>
+
+          <!-- Target bounding box (off-center) -->
+          <rect x="240" y="90" width="90" height="110" rx="2" fill="rgba(167,139,250,.08)" stroke="#a78bfa" stroke-width="2"></rect>
+          <!-- bbox center cross -->
+          <line x1="275" y1="90" x2="275" y2="200" stroke="#a78bfa" stroke-width=".8" stroke-dasharray="3,3" opacity=".5"></line>
+          <line x1="240" y1="145" x2="330" y2="145" stroke="#a78bfa" stroke-width=".8" stroke-dasharray="3,3" opacity=".5"></line>
+          <circle cx="285" cy="145" r="5" fill="#a78bfa"></circle>
+          <text x="285" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#a78bfa">target bbox</text>
+          <!-- Class label -->
+          <rect x="240" y="90" width="55" height="14" rx="1" fill="#a78bfa" opacity=".8"></rect>
+          <text x="268" y="101" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#060c18">gate 0.92</text>
+
+          <!-- Horizontal error arrow -->
+          <line x1="200" y1="145" x2="280" y2="145" stroke="#38bdf8" stroke-width="2" marker-end="url(#a1)"></line>
+          <text x="240" y="138" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">cx_err = +0.42</text>
+          <text x="240" y="165" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#38bdf8">→ yaw RIGHT</text>
+
+          <!-- Vertical error arrow -->
+          <line x1="155" y1="140" x2="155" y2="145" stroke="#d4a843" stroke-width="2" marker-end="url(#a1o)"></line>
+          <text x="90" y="146" font-family="JetBrains Mono" font-size="8" fill="#d4a843">cy_err = +0.03</text>
+          <text x="90" y="160" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">≈ on target</text>
+
+          <!-- bbox height fraction arrow -->
+          <line x1="340" y1="90" x2="340" y2="200" stroke="#34d399" stroke-width="2"></line>
+          <text x="345" y="148" font-family="JetBrains Mono" font-size="7.5" fill="#34d399" transform="rotate(90 345 148)">bbox_h_frac</text>
+          <text x="358" y="148" font-family="JetBrains Mono" font-size="7.5" fill="#34d399" transform="rotate(90 358 148)">0.46 (too small → approach)</text>
+
+          <!-- Frame labels -->
+          <text x="30" y="16" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">0,0</text>
+          <text x="356" y="16" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">1,0</text>
+          <text x="30" y="268" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">0,1</text>
+          <text x="356" y="268" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">1,1</text>
+          <text x="200" y="282" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">normalised image frame [0,1]</text>
+          <text x="200" y="296" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">cx=0.5 = target centred horizontally</text>
+          <text x="200" y="310" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">bbox_h_frac=target_frac = correct distance</text>
+        </svg>
+      </div>
+    </div>
+
+    <div>
+      <h3>Bounding box → thrust channels</h3>
+      <div class="formula" style="font-size:13px">
+        cx_err  = (bbox_cx − 0.5) / 0.5 <span style="color:var(--muted)">  # [−1, +1]</span><br>
+        cy_err  = (bbox_cy − 0.5) / 0.5<br>
+        dist_err = target_bbox_h_frac − bbox_h/frame_h<br><br>
+        yaw_pct  = <span style="color:var(--blue)">kp_yaw</span> × cx_err   <span style="color:var(--muted)">  # → Ch4</span><br>
+        lat_pct  = <span style="color:var(--blue)">kp_lat</span> × cx_err   <span style="color:var(--muted)">  # → Ch6 (strafe)</span><br>
+        fwd_pct  = <span style="color:var(--blue)">kp_fwd</span> × dist_err <span style="color:var(--muted)">  # → Ch5</span><br>
+        depth_Δ  = <span style="color:var(--blue)">kp_dep</span> × cy_err   <span style="color:var(--muted)">  # → depth setpoint</span>
+      </div>
+
+      <h3 style="margin-top:20px">Vision verb modes</h3>
+      <table class="tbl" style="margin-top:8px">
+        <thead><tr><th>Verb</th><th>Active axes</th><th>Settling condition</th></tr></thead>
+        <tbody>
+          <tr><td><em>vision_align_yaw</em></td><td class="m">Ch4 only</td><td class="m">|cx_err| &lt; deadband for N frames</td></tr>
+          <tr><td><em>vision_align_lat</em></td><td class="m">Ch6 only</td><td class="m">|cx_err| &lt; deadband</td></tr>
+          <tr><td><em>vision_align_depth</em></td><td class="m">depth setpoint</td><td class="m">|cy_err| &lt; deadband</td></tr>
+          <tr><td><em>vision_hold_distance</em></td><td class="m">Ch5</td><td class="m">bbox_h_frac ≈ target ± tol</td></tr>
+          <tr><td><em>vision_align_3d</em></td><td class="m">yaw+fwd+depth</td><td class="m">all axes settled simultaneously</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout" style="margin-top:16px">
+        <strong>Live tuning during a run:</strong> all vision gains are ROS params — change them without restarting:<br>
+        <code>ros2 param set /duburi_manager vision.kp_yaw 80.0</code><br>
+        <code>ros2 param set /duburi_manager vision.deadband 0.06</code>
+      </div>
+
+      <div class="callout green" style="margin-top:10px">
+        <strong>Tracking mode:</strong> With <code>--tracking true</code>, VisionState reads from <code>/tracks</code> instead of <code>/detections</code>. ByteTrack+Kalman bbox is smoother and has stable IDs — better for slow-moving targets, occlusion, and low-confidence frames. Raw detections have lower latency (no tracking buffer).
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ── SENSOR FUSION ─────────────────────────────────────── -->
+<section id="fusion">
+<div class="section-wrap">
+  <div class="sec-label">06 — Sensor Fusion</div>
+  <h2>Yaw, position &amp; state estimation</h2>
+  <p class="sec-sub">Three sensor paths, one clean interface. YawSource is an ABC — swap the backend with one ROS param. EKF3 on Pixhawk handles IMU + mag + baro fusion at 400 Hz.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1000 200" width="1000" height="200" style="max-width:100%" xmlns="http://www.w3.org/2000/svg">
+      <!-- Sensors left -->
+      <rect x="10" y="20" width="120" height="30" rx="3" fill="#101e33" stroke="#38bdf8" stroke-width="1"></rect>
+      <text x="70" y="38" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#38bdf8">Pixhawk AHRS2</text>
+      <text x="70" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">50 Hz · via MAVLink</text>
+
+      <rect x="10" y="70" width="120" height="30" rx="3" fill="#101e33" stroke="#34d399" stroke-width="1.2"></rect>
+      <text x="70" y="88" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#34d399">BNO085</text>
+      <text x="70" y="98" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">ESP32-C3 USB · no mag</text>
+
+      <rect x="10" y="120" width="120" height="30" rx="3" fill="#101e33" stroke="#d4a843" stroke-width="1.2"></rect>
+      <text x="70" y="138" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#d4a843">Nucleus1000 DVL</text>
+      <text x="70" y="148" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">TCP · AHRS + BottomTrack</text>
+
+      <rect x="10" y="162" width="120" height="30" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
+      <text x="70" y="180" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#a78bfa">Bar30 (depth)</text>
+      <text x="70" y="190" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">ArduSub AHRS2.altitude</text>
+
+      <!-- Arrows to factory -->
+      <line x1="130" y1="35" x2="195" y2="100" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#a1)"></line>
+      <line x1="130" y1="85" x2="195" y2="100" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <line x1="130" y1="135" x2="195" y2="100" stroke="#d4a843" stroke-width="1.2" marker-end="url(#a1o)"></line>
+      <line x1="130" y1="177" x2="195" y2="115" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
+
+      <!-- Factory / YawSource -->
+      <rect x="197" y="72" width="130" height="56" rx="4" fill="#0b1525" stroke="#e2e8f0" stroke-width="1.2"></rect>
+      <text x="262" y="92" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#e2e8f0">YawSource ABC</text>
+      <text x="262" y="106" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">factory.py dispatch</text>
+      <text x="262" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">yaw_source:= param</text>
+
+      <!-- Param options -->
+      <text x="215" y="142" font-family="JetBrains Mono" font-size="7.5" fill="#38bdf8">mavlink_ahrs</text>
+      <text x="215" y="154" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">bno085</text>
+      <text x="215" y="166" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">dvl / nucleus_dvl</text>
+      <text x="215" y="178" font-family="JetBrains Mono" font-size="7.5" fill="#a78bfa">bno085_dvl (pool ★)</text>
+
+      <!-- Arrow to heading lock -->
+      <line x1="327" y1="100" x2="375" y2="100" stroke="#e2e8f0" stroke-width="1.5" marker-end="url(#a1)"></line>
+
+      <!-- Heading lock -->
+      <rect x="377" y="72" width="140" height="56" rx="4" fill="#0b1525" stroke="#a78bfa" stroke-width="1.5"></rect>
+      <text x="447" y="92" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">heading_lock</text>
+      <text x="447" y="106" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">P-loop · 20 Hz</text>
+      <text x="447" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Ch4 yaw-rate override</text>
+
+      <line x1="517" y1="100" x2="555" y2="100" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#a1p)"></line>
+
+      <!-- DVL position box -->
+      <rect x="377" y="145" width="140" height="46" rx="4" fill="#0b1525" stroke="#d4a843" stroke-width="1.2"></rect>
+      <text x="447" y="163" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843">DVL position</text>
+      <text x="447" y="178" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">get_position() → (x,y) m</text>
+      <text x="447" y="188" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">reset_position() before each move</text>
+      <line x1="517" y1="168" x2="555" y2="168" stroke="#d4a843" stroke-width="1.2" marker-end="url(#a1o)"></line>
+
+      <!-- Duburi facade block -->
+      <rect x="557" y="62" width="160" height="120" rx="4" fill="#0b1525" stroke="#38bdf8" stroke-width="1.5"></rect>
+      <text x="637" y="82" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">Duburi facade</text>
+      <text x="637" y="98" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">heading → heading_lock</text>
+      <text x="637" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">position → DVL closed-loop</text>
+      <text x="637" y="126" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">depth → ArduSub ALT_HOLD</text>
+      <text x="637" y="140" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">yaw → SET_ATTITUDE_TARGET</text>
+      <text x="637" y="154" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">fwd/lat → RC_OVERRIDE</text>
+      <text x="637" y="170" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">→ Pixhawk wrapper → MAVLink</text>
+
+      <!-- Future EKF node -->
+      <rect x="748" y="72" width="140" height="56" rx="4" fill="#080c14" stroke="#3a4f66" stroke-width="1" stroke-dasharray="3,3"></rect>
+      <text x="818" y="92" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#3a4f66">robot_localization</text>
+      <text x="818" y="106" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">EKF/UKF fusion</text>
+      <text x="818" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#3a4f66">Phase 4 — roadmap</text>
+      <line x1="717" y1="100" x2="748" y2="100" stroke="#3a4f66" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#a1)"></line>
+    </svg>
+  </div>
+
+  <div class="cite">EKF3 (ArduPilot): Mahony et al., "Nonlinear Complementary Filters on the Special Orthogonal Group" IEEE Trans. Automatic Control 2008 · ArduPilot EKF3 docs: <a href="https://ardupilot.org/dev/docs/ekf3.html">ardupilot.org/dev/docs/ekf3.html</a><br>
+  Kalman Filter background: Thrun, Burgard, Fox — "Probabilistic Robotics" MIT Press 2005 · BNO085: Bosch Sensortec SH-2 reference: <a href="https://www.ceva-dsp.com/wp-content/uploads/2019/10/BNO080_085-Datasheet.pdf">ceva-dsp.com/BNO085-Datasheet</a></div>
+</div>
+</section>
+
+<!-- ── FULL SYSTEM ───────────────────────────────────────── -->
+<section id="fullsystem">
+<div class="section-wrap">
+  <div class="sec-label">07 — Full Integration</div>
+  <h2>Complete system operation</h2>
+  <p class="sec-sub">All subsystems working together: perception → state → control → actuation → sensing, in one closed loop at multiple timescales.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1000 260" width="1000" height="260" style="max-width:100%" xmlns="http://www.w3.org/2000/svg">
+      <!-- Timescale layers -->
+      <rect x="0" y="8" width="160" height="18" rx="2" fill="rgba(56,189,248,.08)" stroke="rgba(56,189,248,.2)" stroke-width="1"></rect>
+      <text x="80" y="20" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#38bdf8">VISION LAYER · 20-30 Hz</text>
+      <rect x="0" y="90" width="160" height="18" rx="2" fill="rgba(52,211,153,.08)" stroke="rgba(52,211,153,.2)" stroke-width="1"></rect>
+      <text x="80" y="102" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">CONTROL LAYER · 10-20 Hz</text>
+      <rect x="0" y="170" width="160" height="18" rx="2" fill="rgba(212,168,67,.08)" stroke="rgba(212,168,67,.2)" stroke-width="1"></rect>
+      <text x="80" y="182" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">HARDWARE LAYER · 400 Hz</text>
+
+      <!-- Vision flow -->
+      <rect x="170" y="14" width="90" height="30" rx="3" fill="#101e33" stroke="#38bdf8" stroke-width="1"></rect>
+      <text x="215" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">Camera</text>
+      <line x1="260" y1="29" x2="285" y2="29" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#a1)"></line>
+      <rect x="287" y="14" width="80" height="30" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
+      <text x="327" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">YOLO26</text>
+      <line x1="367" y1="29" x2="392" y2="29" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
+      <rect x="394" y="14" width="90" height="30" rx="3" fill="#101e33" stroke="#34d399" stroke-width="1"></rect>
+      <text x="439" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399">ByteTrack</text>
+      <line x1="484" y1="29" x2="509" y2="29" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <rect x="511" y="14" width="100" height="30" rx="3" fill="#101e33" stroke="#d4a843" stroke-width="1.5"></rect>
+      <text x="561" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843">VisionState</text>
+
+      <!-- Control flow -->
+      <rect x="170" y="96" width="110" height="30" rx="3" fill="#101e33" stroke="#34d399" stroke-width="1"></rect>
+      <text x="225" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399">Mission/CLI</text>
+      <line x1="280" y1="111" x2="305" y2="111" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <rect x="307" y="96" width="120" height="30" rx="3" fill="#101e33" stroke="#38bdf8" stroke-width="1.5"></rect>
+      <text x="367" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">auv_manager</text>
+
+      <!-- VisionState → manager -->
+      <line x1="561" y1="44" x2="561" y2="78" stroke="#d4a843" stroke-width="1.2" stroke-dasharray="2,3" marker-end="url(#a1o)"></line>
+      <line x1="561" y1="90" x2="561" y2="96" stroke="#7a8fa8" stroke-width="1" opacity=".5"></line>
+      <line x1="520" y1="96" x2="427" y2="96" stroke="#d4a843" stroke-width="1.2" marker-end="url(#a1o)"></line>
+      <text x="470" y="90" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">bbox errors</text>
+
+      <!-- Manager → motion modules -->
+      <line x1="427" y1="111" x2="450" y2="111" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#a1)"></line>
+      <rect x="452" y="96" width="120" height="30" rx="3" fill="#101e33" stroke="#34d399" stroke-width="1"></rect>
+      <text x="512" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399">motion modules</text>
+      <line x1="572" y1="111" x2="597" y2="111" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+      <rect x="599" y="96" width="100" height="30" rx="3" fill="#101e33" stroke="#d4a843" stroke-width="1"></rect>
+      <text x="649" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843">Pixhawk.py</text>
+
+      <!-- BNO085/DVL sensor path -->
+      <rect x="170" y="176" width="90" height="30" rx="3" fill="#101e33" stroke="#34d399" stroke-width="1"></rect>
+      <text x="215" y="195" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399">BNO085</text>
+      <rect x="170" y="214" width="90" height="30" rx="3" fill="#101e33" stroke="#d4a843" stroke-width="1"></rect>
+      <text x="215" y="233" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843">DVL Nucleus</text>
+
+      <!-- Pixhawk / ArduSub -->
+      <rect x="720" y="96" width="120" height="120" rx="4" fill="#0b1525" stroke="#d4a843" stroke-width="1.5"></rect>
+      <text x="780" y="116" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#d4a843">ArduSub</text>
+      <text x="780" y="130" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">EKF3 400 Hz</text>
+      <text x="780" y="144" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Att. PID</text>
+      <text x="780" y="158" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Pos. PID</text>
+      <text x="780" y="172" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Motor mixer</text>
+      <line x1="699" y1="111" x2="720" y2="130" stroke="#d4a843" stroke-width="1.5" marker-end="url(#a1o)"></line>
+
+      <!-- ESCs / Thrusters -->
+      <rect x="860" y="120" width="120" height="80" rx="4" fill="#0b1525" stroke="#ef4444" stroke-width="1.5"></rect>
+      <text x="920" y="148" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">ESCs</text>
+      <text x="920" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">PWM 1100-1900</text>
+      <text x="920" y="176" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">8× T200</text>
+      <text x="920" y="190" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#ef4444">vectored_6dof</text>
+      <line x1="840" y1="155" x2="860" y2="155" stroke="#ef4444" stroke-width="1.5" marker-end="url(#a1r)"></line>
+
+      <!-- Sensors feedback to EKF3 -->
+      <line x1="260" y1="191" x2="740" y2="175" stroke="#34d399" stroke-width="1" stroke-dasharray="2,3" opacity=".5" marker-end="url(#a1g)"></line>
+      <line x1="260" y1="229" x2="740" y2="185" stroke="#d4a843" stroke-width="1" stroke-dasharray="2,3" opacity=".5" marker-end="url(#a1g)"></line>
+      <text x="490" y="212" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8" opacity=".6">yaw feedback → heading_lock</text>
+
+      <!-- Telemetry path back to manager -->
+      <path d="M780,216 Q780,248 400,248 Q200,248 200,126" stroke="#38bdf8" fill="none" stroke-width="1" stroke-dasharray="3,3" opacity=".5" marker-end="url(#a1)"></path>
+      <text x="490" y="245" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#38bdf8" opacity=".5">AHRS2 50Hz · RC_CHANNELS 5Hz · BAT 1Hz (telemetry)</text>
+    </svg>
+  </div>
+</div>
+</section>
+
+<!-- ── ROBOSUB TASKS ─────────────────────────────────────── -->
+<section id="robosub">
+<div class="section-wrap">
+  <div class="sec-label">08 — RoboSub 2026</div>
+  <h2>Competition tasks &amp; Mongla's approach</h2>
+  <p class="sec-sub">RoboSub is an international student competition for fully autonomous underwater vehicles. Tasks test perception, navigation, manipulation, and mission management — the exact capabilities Mongla is built for.</p>
+
+  <div class="callout">
+    <strong>Competition format (RoboSub 2026):</strong> 15-minute autonomous run. No human interaction after the start signal. Points scored by completing tasks in sequence. Gate must be passed first. Source: <a href="https://robonation.gitbook.io/robosub-resources" style="color:var(--blue)">robonation.gitbook.io/robosub-resources</a>
+  </div>
+
+  <div class="g2" style="gap:16px;margin-top:24px">
+
+    <!-- Task 1: Gate -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-num">01</div>
+        <div><div class="task-name">Collecting Data — Gate</div><div class="task-sub">Pass through gate · choose side (reef shark / sawfish)</div></div>
+        <span class="tag t-green" style="margin-left:auto">MANDATORY</span>
+      </div>
+      <div class="task-body">
+        <div class="diagram" style="padding:16px;margin-bottom:12px">
+          <svg viewBox="0 0 440 140" width="440" height="140" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+            <!-- Water surface -->
+            <path d="M0,20 Q110,10 220,20 Q330,30 440,20" fill="none" stroke="#38bdf8" stroke-width="1" stroke-dasharray="4,4" opacity=".3"></path>
+            <!-- Gate structure -->
+            <rect x="160" y="20" width="8" height="100" rx="2" fill="#ef4444" stroke="#ef4444" stroke-width="1"></rect>
+            <rect x="272" y="20" width="8" height="100" rx="2" fill="#1a1a1a" stroke="#7a8fa8" stroke-width="1"></rect>
+            <rect x="160" y="20" width="120" height="8" rx="1" fill="#7a8fa8"></rect>
+            <rect x="160" y="57" width="120" height="4" rx="1" fill="#7a8fa8" opacity=".4"></rect>
+            <!-- RED side label -->
+            <text x="184" y="50" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">RED</text>
+            <text x="184" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">Reef Shark</text>
+            <!-- BLACK side label -->
+            <text x="256" y="50" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#7a8fa8">BLACK</text>
+            <text x="256" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">Sawfish</text>
+            <!-- AUV approaching -->
+            <polygon points="70,80 90,70 90,90" fill="#38bdf8" opacity=".8"></polygon>
+            <text x="40" y="78" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">Duburi</text>
+            <!-- Path arrow through gate -->
+            <line x1="90" y1="80" x2="172" y2="80" stroke="#34d399" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#a1g)"></line>
+            <!-- Path to red side -->
+            <path d="M178,80 Q190,80 190,85 L190,110" stroke="#34d399" fill="none" stroke-width="1.5" marker-end="url(#a1g)"></path>
+            <!-- past gate -->
+            <line x1="195" y1="110" x2="360" y2="110" stroke="#34d399" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#a1g)"></line>
+            <!-- Steps annotations -->
+            <text x="40" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">① depth lock</text>
+            <text x="130" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">② vision_align_yaw</text>
+            <text x="255" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">③ lateral offset</text>
+            <text x="360" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">✓ pass</text>
+          </svg>
+        </div>
+        <ul class="task-steps">
+          <li data-n="1">Submerge to gate depth (<code>set_depth -0.8</code>), engage heading lock toward gate bearing</li>
+          <li data-n="2">Drive forward, camera detects gate frame (YOLO class: gate) — <code>vision_align_yaw</code> centres it horizontally</li>
+          <li data-n="3">YOLO detects divider colour (RED=reef shark / BLACK=sawfish) — select chosen side</li>
+          <li data-n="4"><code>vision_align_lat</code> or lateral offset moves AUV to correct side of centre</li>
+          <li data-n="5"><code>move_forward</code> through gate with heading lock — DVL confirms passage distance</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Task 2: Slalom -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-num">02</div>
+        <div><div class="task-name">Navigate the Channel — Slalom</div><div class="task-sub">Weave between red/white PVC buoy pairs</div></div>
+      </div>
+      <div class="task-body">
+        <div class="diagram" style="padding:16px;margin-bottom:12px">
+          <svg viewBox="0 0 440 130" width="440" height="130" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+            <!-- Buoys -->
+            <circle cx="140" cy="65" r="10" fill="#ef4444" stroke="#ef4444" stroke-width="1.5"></circle>
+            <text x="140" y="69" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="white">R</text>
+            <circle cx="140" cy="100" r="10" fill="#e2e8f0" stroke="#7a8fa8" stroke-width="1.5"></circle>
+            <text x="140" y="104" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#0b1525">W</text>
+            <circle cx="240" cy="40" r="10" fill="#ef4444" stroke="#ef4444" stroke-width="1.5"></circle>
+            <circle cx="240" cy="90" r="10" fill="#e2e8f0" stroke="#7a8fa8" stroke-width="1.5"></circle>
+            <circle cx="340" cy="65" r="10" fill="#ef4444" stroke="#ef4444" stroke-width="1.5"></circle>
+            <circle cx="340" cy="100" r="10" fill="#e2e8f0" stroke="#7a8fa8" stroke-width="1.5"></circle>
+            <!-- Slalom path -->
+            <path d="M30,82 Q90,82 140,82 Q180,82 190,65 Q200,48 240,65 Q280,82 290,82 Q310,82 340,82" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#a1g)"></path>
+            <!-- AUV -->
+            <polygon points="22,82 36,75 36,89" fill="#38bdf8" opacity=".8"></polygon>
+            <text x="26" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">heading lock active</text>
+            <text x="170" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">lateral offset per buoy pair</text>
+            <text x="330" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">exit heading</text>
+          </svg>
+        </div>
+        <ul class="task-steps">
+          <li data-n="1">Path markers (orange 4ft × 6in) on pool floor — downward camera detects and aligns heading</li>
+          <li data-n="2">Detect red buoy (left) and white buoy (right) of each pair via forward camera</li>
+          <li data-n="3">Pass between each pair: <code>move_lateral</code> to correct offset, heading lock maintains forward direction</li>
+          <li data-n="4">DVL measures forward progress between pairs — prevents overshoot</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Task 3: Bin -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-num">03</div>
+        <div><div class="task-name">Drop a BRUVS — Bin</div><div class="task-sub">Drop markers into correct half of bin</div></div>
+      </div>
+      <div class="task-body">
+        <div class="diagram" style="padding:16px;margin-bottom:12px">
+          <svg viewBox="0 0 440 120" width="440" height="120" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+            <!-- Bin on floor -->
+            <rect x="150" y="70" width="140" height="40" rx="2" fill="#0b1525" stroke="#d4a843" stroke-width="2"></rect>
+            <line x1="220" y1="70" x2="220" y2="110" stroke="#d4a843" stroke-width="2"></line>
+            <text x="185" y="95" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#ef4444">SHARK</text>
+            <text x="255" y="95" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">SAWFISH</text>
+            <!-- AUV above -->
+            <rect x="188" y="30" width="44" height="26" rx="3" fill="#101e33" stroke="#38bdf8" stroke-width="1.5"></rect>
+            <text x="210" y="47" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#38bdf8">Duburi</text>
+            <!-- Drop arrow -->
+            <line x1="210" y1="56" x2="196" y2="70" stroke="#34d399" stroke-width="2" stroke-dasharray="3,2" marker-end="url(#a1g)"></line>
+            <circle cx="193" cy="80" r="5" fill="#ef4444" opacity=".5"></circle>
+            <!-- Steps -->
+            <text x="10" y="20" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">① downward cam detects bin</text>
+            <text x="280" y="20" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">② vision_align_3d centers over target half</text>
+            <text x="10" y="115" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">③ solenoid dropper fires</text>
+          </svg>
+        </div>
+        <ul class="task-steps">
+          <li data-n="1">Descend over bin using Bar30 depth control, downward camera detects bin and divider line</li>
+          <li data-n="2">YOLO classifies target half (based on chosen animal: reef shark side)</li>
+          <li data-n="3"><code>vision_align_3d</code> centres AUV horizontally over correct half using downward camera</li>
+          <li data-n="4">Solenoid dropper releases marker at correct depth above bin</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Task 4: Torpedo -->
+    <div class="task-card">
+      <div class="task-header">
+        <div class="task-num">04</div>
+        <div><div class="task-name">Tagging — Torpedoes</div><div class="task-sub">Fire torpedoes through target openings on board</div></div>
+      </div>
+      <div class="task-body">
+        <div class="diagram" style="padding:16px;margin-bottom:12px">
+          <svg viewBox="0 0 440 120" width="440" height="120" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+            <!-- Target board -->
+            <rect x="320" y="20" width="100" height="90" rx="2" fill="#0b1525" stroke="#d4a843" stroke-width="2"></rect>
+            <circle cx="345" cy="45" r="12" fill="none" stroke="#34d399" stroke-width="2"></circle>
+            <circle cx="395" cy="45" r="8" fill="none" stroke="#34d399" stroke-width="2"></circle>
+            <circle cx="345" cy="85" r="8" fill="none" stroke="#ef4444" stroke-width="2"></circle>
+            <circle cx="395" cy="85" r="12" fill="none" stroke="#ef4444" stroke-width="2"></circle>
+            <text x="370" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">target board</text>
+            <!-- AUV -->
+            <polygon points="50,65 72,55 72,75" fill="#38bdf8" opacity=".8"></polygon>
+            <!-- Torpedo path -->
+            <line x1="72" y1="65" x2="330" y2="46" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#a1r)"></line>
+            <text x="180" y="50" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#ef4444">torpedo 1</text>
+            <!-- Acoustic pinger -->
+            <text x="370" y="18" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">↓ pinger</text>
+            <!-- Phases -->
+            <text x="10" y="108" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">① acoustic pinger guides approach</text>
+            <text x="200" y="108" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">② vision align → fire</text>
+          </svg>
+        </div>
+        <ul class="task-steps">
+          <li data-n="1">Acoustic pinger (hydrophone) guides initial approach to torpedo board area</li>
+          <li data-n="2">Forward camera detects target board and classifies openings (YOLO classes: large/small circles)</li>
+          <li data-n="3"><code>vision_align_3d --axes yaw,depth</code> aligns torpedo tube with target opening</li>
+          <li data-n="4"><code>vision_hold_distance</code> holds correct standoff for torpedo trajectory</li>
+          <li data-n="5">Fire slingshot torpedo — repeat for second opening with repositioning</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Task 5: Octagon -->
+    <div class="task-card" style="grid-column: span 2">
+      <div class="task-header">
+        <div class="task-num">05</div>
+        <div><div class="task-name">Ocean Cleanup — Octagon</div><div class="task-sub">Surface inside octagon · face image · collect trash · place in baskets</div></div>
+        <span class="tag t-blue" style="margin-left:auto">MAX POINTS</span>
+      </div>
+      <div class="task-body">
+        <div class="g2" style="gap:16px">
+          <div class="diagram" style="padding:16px">
+            <svg viewBox="0 0 420 150" width="420" height="150" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+              <!-- Octagon -->
+              <polygon points="210,20 260,35 285,80 260,125 210,140 160,125 135,80 160,35" fill="none" stroke="#d4a843" stroke-width="2"></polygon>
+              <!-- AUV surfacing arrow -->
+              <polygon points="210,90 220,75 200,75" fill="#38bdf8" opacity=".8"></polygon>
+              <line x1="210" y1="75" x2="210" y2="50" stroke="#34d399" stroke-width="2" marker-end="url(#a1g)"></line>
+              <text x="220" y="42" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">surface</text>
+              <!-- Pinger -->
+              <text x="210" y="15" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">pinger guides</text>
+              <!-- Steps -->
+              <text x="20" y="30" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">acoustic pinger</text>
+              <text x="20" y="44" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">→ navigate to oct.</text>
+              <text x="20" y="58" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">→ surface inside</text>
+              <text x="20" y="72" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">→ face image (yaw)</text>
+              <!-- Trash + baskets -->
+              <circle cx="170" cy="100" r="6" fill="#ef4444" opacity=".6"></circle>
+              <circle cx="190" cy="110" r="6" fill="#ef4444" opacity=".6"></circle>
+              <rect x="240" y="95" width="20" height="15" rx="2" fill="#101e33" stroke="#34d399" stroke-width="1"></rect>
+              <rect x="270" y="95" width="20" height="15" rx="2" fill="#101e33" stroke="#d4a843" stroke-width="1"></rect>
+              <text x="255" y="123" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">baskets</text>
+            </svg>
+          </div>
+          <ul class="task-steps">
+            <li data-n="1">Acoustic pinger guides navigation to octagon location</li>
+            <li data-n="2">AUV surfaces inside octagon frame using depth setpoint = 0</li>
+            <li data-n="3">Forward camera detects the reference image on octagon wall; <code>vision_align_yaw</code> faces it</li>
+            <li data-n="4">Arm grabber, manoeuvre with <code>vision_align_3d</code> to collect floating trash objects</li>
+            <li data-n="5">Place collected objects into correct basket (classified by YOLO from visual markers)</li>
+            <li data-n="6">Maximum bonus points: collect multiple pieces and sort correctly</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cite" style="margin-top:16px">
+    RoboSub 2026 Task Descriptions — RoboNation Team Handbook §3.2 · <a href="https://robonation.gitbook.io/robosub-resources/section-3-autonomy-challenge/3.2-task-descriptions">robonation.gitbook.io</a><br>
+    Competition Sequence of Events — §3.4 · <a href="https://robonation.gitbook.io/robosub-resources/section-3-autonomy-challenge/3.4-competition-sequence-of-events">robonation.gitbook.io</a>
+  </div>
+</div>
+</section>
+
+<!-- ── MISSION FLOW ───────────────────────────────────────── -->
+<section id="mission">
+<div class="section-wrap">
+  <div class="sec-label">09 — Mission Execution</div>
+  <h2>Full run: from CLI to competition completion</h2>
+  <p class="sec-sub">A complete RoboSub run as a Mongla mission script. One YAML-like DSL drives all subsystems in sequence.</p>
+
+  <div class="g2" style="gap:24px;align-items:start">
+    <div>
+      <div class="diagram" style="padding:20px">
+        <svg viewBox="0 0 380 500" width="380" height="500" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+          <defs>
+            <marker id="mf" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#34d399"></path></marker>
+          </defs>
+
+          <!-- Mission flow boxes -->
+          <rect x="100" y="10" width="180" height="32" rx="4" fill="#101e33" stroke="#38bdf8" stroke-width="1.5"></rect>
+          <text x="190" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#38bdf8">ARM + bringup_check</text>
+          <line x1="190" y1="42" x2="190" y2="62" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
+
+          <rect x="100" y="64" width="180" height="32" rx="4" fill="#101e33" stroke="#a78bfa" stroke-width="1.5"></rect>
+          <text x="190" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#a78bfa">Launch vision pipeline</text>
+          <text x="190" y="91" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">cameras + YOLO + ByteTrack</text>
+          <line x1="190" y1="96" x2="190" y2="116" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
+
+          <rect x="100" y="118" width="180" height="32" rx="4" fill="#101e33" stroke="#34d399" stroke-width="1.5"></rect>
+          <text x="190" y="134" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#34d399">set_depth(-0.8)</text>
+          <text x="190" y="145" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">ArduSub ALT_HOLD engages</text>
+          <line x1="190" y1="150" x2="190" y2="170" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
+
+          <rect x="100" y="172" width="180" height="38" rx="4" fill="#101e33" stroke="#d4a843" stroke-width="1.5"></rect>
+          <text x="190" y="188" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#d4a843">lock_heading(0°)</text>
+          <text x="190" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">BNO085 yaw source</text>
+          <text x="190" y="210" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">20Hz daemon thread starts</text>
+          <line x1="190" y1="210" x2="190" y2="230" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
+
+          <!-- Gate task block -->
+          <rect x="60" y="232" width="260" height="60" rx="4" fill="#0d1e30" stroke="#ef4444" stroke-width="1.5"></rect>
+          <text x="190" y="252" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#ef4444">TASK 1: GATE</text>
+          <text x="190" y="266" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">vision_acquire → vision_align_yaw → lateral offset</text>
+          <text x="190" y="280" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">move_forward_dist(4m) → heading_lock maintained</text>
+          <line x1="190" y1="292" x2="190" y2="312" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
+
+          <rect x="60" y="314" width="260" height="44" rx="4" fill="#0d1e30" stroke="#a78bfa" stroke-width="1.5"></rect>
+          <text x="190" y="333" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#a78bfa">TASK 2: SLALOM</text>
+          <text x="190" y="347" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">path markers (downward cam) → buoy pairs (fwd cam)</text>
+          <line x1="190" y1="358" x2="190" y2="378" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
+
+          <rect x="60" y="380" width="260" height="44" rx="4" fill="#0d1e30" stroke="#d4a843" stroke-width="1.5"></rect>
+          <text x="190" y="399" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#d4a843">TASK 3–5: BIN / TORPEDO / OCTAGON</text>
+          <text x="190" y="413" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">vision_align_3d + payload actuation</text>
+          <line x1="190" y1="424" x2="190" y2="444" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
+
+          <rect x="100" y="446" width="180" height="32" rx="4" fill="#101e33" stroke="#34d399" stroke-width="1.5"></rect>
+          <text x="190" y="462" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#34d399">DISARM + unlock_heading</text>
+          <text x="190" y="474" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">mission complete</text>
+        </svg>
+      </div>
+    </div>
+
+    <div>
+      <h3>Mission DSL — actual code</h3>
+      <pre style="font-size:11px;line-height:1.9"><span style="color:#7a8fa8"># missions/robosub_prequal.py</span>
+<span style="color:#34d399">def</span> <span style="color:#e2e8f0">run</span>(duburi, log):
+    duburi.arm()
+    duburi.set_depth(<span style="color:#d4a843">-0.8</span>)
+    duburi.lock_heading(target=<span style="color:#d4a843">0</span>, timeout=<span style="color:#d4a843">180</span>)
+
+    <span style="color:#7a8fa8"># ── GATE ──────────────────────────────</span>
+    log(<span style="color:#38bdf8">"approaching gate"</span>)
+    duburi.vision.find(camera=<span style="color:#38bdf8">'laptop'</span>,
+                       target=<span style="color:#38bdf8">'gate'</span>,
+                       sweep=<span style="color:#38bdf8">'yaw_right'</span>)
+    duburi.vision.yaw(target=<span style="color:#38bdf8">'gate'</span>,
+                      duration=<span style="color:#d4a843">10</span>, camera=<span style="color:#38bdf8">'laptop'</span>)
+    duburi.move_forward_dist(distance_m=<span style="color:#d4a843">4.0</span>, gain=<span style="color:#d4a843">60</span>)
+
+    <span style="color:#7a8fa8"># ── BIN ───────────────────────────────</span>
+    log(<span style="color:#38bdf8">"finding bin"</span>)
+    duburi.set_depth(<span style="color:#d4a843">-1.5</span>)
+    duburi.vision.lock(axes=<span style="color:#38bdf8">'yaw,forward,depth'</span>,
+                       target=<span style="color:#38bdf8">'bin'</span>,
+                       camera=<span style="color:#38bdf8">'downward'</span>,
+                       duration=<span style="color:#d4a843">12</span>)
+    duburi.drop()  <span style="color:#7a8fa8"># solenoid dropper</span>
+
+    <span style="color:#7a8fa8"># ── TORPEDO ───────────────────────────</span>
+    duburi.set_depth(<span style="color:#d4a843">-0.8</span>)
+    duburi.vision.lock(axes=<span style="color:#38bdf8">'yaw,depth'</span>,
+                       target=<span style="color:#38bdf8">'torpedo_board'</span>,
+                       distance=<span style="color:#d4a843">0.4</span>, duration=<span style="color:#d4a843">15</span>)
+    duburi.fire_torpedo(<span style="color:#d4a843">1</span>)
+
+    duburi.unlock_heading()
+    duburi.disarm()</pre>
+
+      <div class="callout green" style="margin-top:16px">
+        <strong>Live-add missions:</strong> drop any <code>missions/your_name.py</code> exposing <code>def run(duburi, log)</code>, rebuild <code>duburi_planner</code>, and it appears in <code>ros2 run duburi_planner mission --list</code> instantly. No registry edit needed.
+      </div>
+
+      <h3 style="margin-top:20px">State during a vision_align_3d</h3>
+      <div class="diagram" style="padding:16px">
+        <svg viewBox="0 0 380 100" width="380" height="100" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
+          <rect x="10" y="20" width="80" height="60" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
+          <text x="50" y="42" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#a78bfa">VisionState</text>
+          <text x="50" y="56" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">cx_err=-0.3</text>
+          <text x="50" y="68" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">cy_err=+0.1</text>
+          <text x="50" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">dist_err=0.2</text>
+          <line x1="90" y1="50" x2="115" y2="50" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
+          <rect x="117" y="20" width="80" height="60" rx="3" fill="#101e33" stroke="#34d399" stroke-width="1"></rect>
+          <text x="157" y="42" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">P gains</text>
+          <text x="157" y="56" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">yaw=-15%</text>
+          <text x="157" y="68" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">dep-0.05m</text>
+          <text x="157" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">fwd=+14%</text>
+          <line x1="197" y1="50" x2="222" y2="50" stroke="#34d399" stroke-width="1.2" marker-end="url(#a1g)"></line>
+          <rect x="224" y="20" width="80" height="60" rx="3" fill="#101e33" stroke="#ef4444" stroke-width="1"></rect>
+          <text x="264" y="42" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#ef4444">RC override</text>
+          <text x="264" y="56" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">Ch4=1425</text>
+          <text x="264" y="68" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">Ch5=1570</text>
+          <text x="264" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">depth=-1.55</text>
+          <line x1="304" y1="50" x2="329" y2="50" stroke="#ef4444" stroke-width="1.2" marker-end="url(#a1r)"></line>
+          <rect x="331" y="20" width="50" height="60" rx="3" fill="#101e33" stroke="#d4a843" stroke-width="1"></rect>
+          <text x="356" y="42" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#d4a843">ArduSub</text>
+          <text x="356" y="60" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">400 Hz</text>
+          <text x="356" y="74" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7a8fa8">stabilise</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ── INTERACTIVE VISION SIM ──────────────────────────── -->
+<section id="visionsim">
+<div class="section-wrap">
+  <div class="sec-label">10 — Interactive Simulator</div>
+  <h2>Vision alignment — live control simulator</h2>
+  <p class="sec-sub">Drag the target inside the camera frame or use the sliders to see how bounding-box errors map to real RC override values. All maths match the live codebase exactly.</p>
+
+  <div id="vsim">
+    <div class="vsim-layout">
+      <div>
+        <canvas id="vsim-canvas" width="560" height="380"></canvas>
+        <div class="vsim-hint">↖ drag the target · or use the sliders on the right</div>
+      </div>
+      <div class="vsim-controls">
+        <div class="vsim-row">
+          <label>Kp yaw <span id="lbl-kpy">1.2</span></label>
+          <input type="range" id="sl-kpy" min="0.2" max="3" step="0.05" value="1.2"/>
+        </div>
+        <div class="vsim-row">
+          <label>Kp forward <span id="lbl-kpf">0.8</span></label>
+          <input type="range" id="sl-kpf" min="0.1" max="2" step="0.05" value="0.8"/>
+        </div>
+        <div class="vsim-row">
+          <label>Kp depth <span id="lbl-kpd">0.6</span></label>
+          <input type="range" id="sl-kpd" min="0.1" max="2" step="0.05" value="0.6"/>
+        </div>
+        <div class="vsim-row">
+          <label>Deadband <span id="lbl-db">0.06</span></label>
+          <input type="range" id="sl-db" min="0.01" max="0.25" step="0.01" value="0.06"/>
+        </div>
+        <div class="vsim-row">
+          <label>Target bbox size (distance) <span id="lbl-tgt">0.45</span></label>
+          <input type="range" id="sl-tgt" min="0.1" max="0.9" step="0.01" value="0.45"/>
+        </div>
+        <div class="vsim-row">
+          <label>Bbox X (horizontal) <span id="lbl-bx">0.5</span></label>
+          <input type="range" id="sl-bx" min="0.02" max="0.98" step="0.01" value="0.5"/>
+        </div>
+        <div class="vsim-row">
+          <label>Bbox Y (vertical) <span id="lbl-by">0.5</span></label>
+          <input type="range" id="sl-by" min="0.02" max="0.98" step="0.01" value="0.5"/>
+        </div>
+        <div class="vsim-row">
+          <label>Bbox height fraction <span id="lbl-bh">0.3</span></label>
+          <input type="range" id="sl-bh" min="0.05" max="0.95" step="0.01" value="0.3"/>
+        </div>
+
+        <div class="vsim-outputs">
+          <div class="vsim-out">
+            <div class="vsim-out-lbl">YAW Ch4</div>
+            <div class="vsim-out-val" id="out-yaw">0<span class="vsim-out-unit">%</span></div>
+          </div>
+          <div class="vsim-out">
+            <div class="vsim-out-lbl">FWD Ch5</div>
+            <div class="vsim-out-val" id="out-fwd">0<span class="vsim-out-unit">%</span></div>
+          </div>
+          <div class="vsim-out">
+            <div class="vsim-out-lbl">DEPTH Δ</div>
+            <div class="vsim-out-val" id="out-dep">0<span class="vsim-out-unit">m</span></div>
+          </div>
+          <div class="vsim-out">
+            <div class="vsim-out-lbl">Ch4 PWM</div>
+            <div class="vsim-out-val" id="out-pwm">1500<span class="vsim-out-unit">µs</span></div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9">
+          cx_err = (bbox_cx − 0.5) / 0.5<br/>
+          cy_err = (bbox_cy − 0.5) / 0.5<br/>
+          dist_err = target_frac − bbox_h_frac<br/>
+          yaw_pct = <span style="color:var(--blue)">Kp_yaw × cx_err</span> (clamped ±18%)<br/>
+          fwd_pct = <span style="color:var(--green)">Kp_fwd × dist_err</span><br/>
+          dep_Δ &nbsp; = <span style="color:var(--gold)">Kp_dep × cy_err × 0.1</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="g3" style="margin-top:24px">
+    <div class="card">
+      <div class="card-lbl">Vision align yaw</div>
+      <div class="card-title">Centre target horizontally</div>
+      <p>Only Ch4 driven. AUV yaws until <code>cx_err &lt; deadband</code>. Heading lock suspends during this — vision becomes the yaw authority for the duration.</p>
+    </div>
+    <div class="card">
+      <div class="card-lbl">Vision hold distance</div>
+      <div class="card-title">Stand-off via bbox height</div>
+      <p>Target <code>bbox_h_frac</code> maps to physical distance. Ch5 drives proportionally to <code>dist_err</code>. Approach if bbox too small; back off if too large.</p>
+    </div>
+    <div class="card">
+      <div class="card-lbl">Vision align 3D</div>
+      <div class="card-title">All axes simultaneously</div>
+      <p>Yaw + forward + depth errors computed every 50 ms from the same detection. Each axis has its own deadband and gain — settle condition is all three simultaneously within threshold.</p>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ── GAZEBO SITL ────────────────────────────────────────── -->
+<section id="sim">
+<div class="section-wrap">
+  <div class="sec-label">11 — Simulation</div>
+  <h2>Gazebo SITL — BlueROV2 sim target</h2>
+  <p class="sec-sub">ArduSub SITL + Gazebo Harmonic gives a faithful <code>vectored_6dof</code> 8-thruster sandbox. Mongla runs identically against sim or real hardware — only the connection profile changes.</p>
+
+  <div class="diagram" style="padding:28px 32px">
+    <svg viewBox="0 0 1000 200" width="1000" height="200" style="max-width:100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="sg" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#34d399"/></marker>
+        <marker id="sb" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#38bdf8"/></marker>
+        <marker id="so" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#d4a843"/></marker>
+      </defs>
+
+      <!-- ArduSub SITL -->
+      <rect x="10" y="50" width="160" height="100" rx="6" fill="#0b1525" stroke="#34d399" stroke-width="1.5"/>
+      <text x="90" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#34d399">ArduSub SITL</text>
+      <text x="90" y="96" text-anchor="middle" font-family="JetBrains Mono" font-size="9.5" fill="#7a8fa8">sim_vehicle.py</text>
+      <text x="90" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">-v ArduSub</text>
+      <text x="90" y="126" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">vectored_6dof</text>
+      <text x="90" y="140" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">udp:0.0.0.0:14550</text>
+
+      <!-- Gazebo -->
+      <rect x="210" y="50" width="160" height="100" rx="6" fill="#0b1525" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="290" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#a78bfa">Gazebo Harmonic</text>
+      <text x="290" y="96" text-anchor="middle" font-family="JetBrains Mono" font-size="9.5" fill="#7a8fa8">bluerov2_gz</text>
+      <text x="290" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">BlueROV2 model</text>
+      <text x="290" y="126" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">underwater world</text>
+      <text x="290" y="140" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">physics plugin</text>
+
+      <line x1="170" y1="100" x2="210" y2="100" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#sg)"/>
+      <text x="190" y="93" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#7a8fa8">JSON</text>
+
+      <!-- Manager -->
+      <rect x="410" y="50" width="170" height="100" rx="6" fill="#0b1525" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="495" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#38bdf8">auv_manager</text>
+      <text x="495" y="96" text-anchor="middle" font-family="JetBrains Mono" font-size="9.5" fill="#7a8fa8">mode:=sim</text>
+      <text x="495" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">auto-detects SITL</text>
+      <text x="495" y="126" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">all motion modules</text>
+      <text x="495" y="140" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">yaw_source:=mavlink</text>
+
+      <line x1="170" y1="110" x2="410" y2="110" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#sb)"/>
+      <text x="290" y="158" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#38bdf8">MAVLink UDP 14550</text>
+
+      <!-- duburi CLI -->
+      <rect x="620" y="50" width="160" height="100" rx="6" fill="#0b1525" stroke="#d4a843" stroke-width="1.5"/>
+      <text x="700" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#d4a843">duburi CLI</text>
+      <text x="700" y="96" text-anchor="middle" font-family="JetBrains Mono" font-size="9.5" fill="#7a8fa8">ros2 run duburi_planner</text>
+      <text x="700" y="112" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">duburi arm</text>
+      <text x="700" y="126" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">duburi set_depth -0.5</text>
+      <text x="700" y="140" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#7a8fa8">duburi move_forward</text>
+
+      <line x1="580" y1="100" x2="620" y2="100" stroke="#d4a843" stroke-width="1.5" marker-end="url(#so)"/>
+      <text x="600" y="93" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#7a8fa8">/duburi/move</text>
+
+      <!-- mode badge -->
+      <rect x="820" y="65" width="165" height="70" rx="6" fill="#0b1525" stroke="#30363d" stroke-width="1"/>
+      <text x="902" y="86" text-anchor="middle" font-family="JetBrains Mono" font-size="9.5" fill="#7a8fa8">mode:=auto probes</text>
+      <text x="902" y="101" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#34d399">UDP 14550 → pool</text>
+      <text x="902" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#38bdf8">USB CDC → desk</text>
+      <text x="902" y="129" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#a78bfa">neither → sim</text>
+    </svg>
+  </div>
+
+  <div class="sitl-grid">
+    <div class="sitl-card">
+      <h4>T1 — ArduSub SITL</h4>
+      <pre><span style="color:#34d399">sim_vehicle.py</span> \
+  -L RATBeach \
+  -v ArduSub \
+  -f vectored_6dof \
+  --model=JSON \
+  --out=udp:0.0.0.0:14550 \
+  --out=udp:127.0.0.1:14551 \
+  --console</pre>
+    </div>
+    <div class="sitl-card">
+      <h4>T2 — Gazebo world</h4>
+      <pre><span style="color:#a78bfa">gz sim</span> -v 3 -r \
+  bluerov2_underwater.world
+
+<span style="color:#7a8fa8"># GZ_SIM_RESOURCE_PATH must</span>
+<span style="color:#7a8fa8"># include bluerov2_gz/models</span>
+<span style="color:#7a8fa8"># and bluerov2_gz/worlds</span></pre>
+    </div>
+    <div class="sitl-card">
+      <h4>T3 — Manager + drive</h4>
+      <pre><span style="color:#38bdf8">ros2 run</span> duburi_manager start
+
+<span style="color:#d4a843">duburi</span> arm
+<span style="color:#d4a843">duburi</span> set_depth --target -0.5
+<span style="color:#d4a843">duburi</span> move_forward \
+  --duration 5 --gain 60
+<span style="color:#d4a843">duburi</span> disarm</pre>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:20px">
+    <strong>Sim parity:</strong> BlueROV2 Heavy in Gazebo uses the same <code>vectored_6dof</code> 8-thruster ArduSub frame as Duburi 4.2. Mass, hull shape, and payload differ — but all motion verbs, MAVLink messages, and sensor paths work identically. Develop in sim, deploy at pool without code changes.
+  </div>
+</div>
+</section>
+
+<!-- ── THEORY ────────────────────────────────────────────── -->
+<section id="theory" style="padding-bottom:100px">
+<div class="section-wrap">
+  <div class="sec-label">10 — Theory &amp; References</div>
+  <h2>Concepts &amp; citations</h2>
+  <p class="sec-sub">Mongla is built on well-established robotics, control theory, and computer vision foundations. These are the primary sources for the concepts used.</p>
+
+  <div class="g3">
+    <div class="card">
+      <span class="tag t-blue">Control Theory</span>
+      <div class="card-title" style="margin-top:8px">PID Control</div>
+      <p>Proportional-Integral-Derivative control — the foundation of depth and heading stabilisation. ArduSub implements cascaded PID (angle → rate) for attitude and altitude.</p>
+      <div class="cite" style="margin-top:10px">
+        Åström &amp; Hägglund, "PID Controllers: Theory, Design and Tuning" ISA 1995<br>
+        ArduPilot attitude control: <a href="https://ardupilot.org/dev/docs/apmcopter-adding-a-new-flight-mode.html">ardupilot.org</a><br>
+        Wikipedia: <a href="https://en.wikipedia.org/wiki/PID_controller">PID controller</a>
+      </div>
+    </div>
+    <div class="card">
+      <span class="tag t-green">State Estimation</span>
+      <div class="card-title" style="margin-top:8px">EKF3 &amp; Sensor Fusion</div>
+      <p>Extended Kalman Filter fuses IMU, magnetometer, barometer, and (optionally) DVL to produce the vehicle's pose estimate. ArduSub EKF3 runs at 400 Hz onboard Pixhawk.</p>
+      <div class="cite" style="margin-top:10px">
+        Kalman, R.E. "A New Approach to Linear Filtering" ASME 1960<br>
+        Thrun et al. "Probabilistic Robotics" MIT Press 2005<br>
+        ArduPilot EKF3: <a href="https://ardupilot.org/dev/docs/ekf3.html">ardupilot.org/dev/docs/ekf3.html</a>
+      </div>
+    </div>
+    <div class="card">
+      <span class="tag t-purple">Computer Vision</span>
+      <div class="card-title" style="margin-top:8px">YOLO Object Detection</div>
+      <p>You Only Look Once — single-pass CNN for real-time detection. YOLO v26 on Jetson GPU delivers ~30 Hz detection of gates, buoys, bins, and other RoboSub objects.</p>
+      <div class="cite" style="margin-top:10px">
+        Redmon et al., "You Only Look Once" CVPR 2016 · <a href="https://arxiv.org/abs/1506.02640">arxiv</a><br>
+        Ultralytics YOLO: <a href="https://docs.ultralytics.com">docs.ultralytics.com</a><br>
+        Wikipedia: <a href="https://en.wikipedia.org/wiki/You_only_look_once">YOLO</a>
+      </div>
+    </div>
+    <div class="card">
+      <span class="tag t-green">Object Tracking</span>
+      <div class="card-title" style="margin-top:8px">ByteTrack + Kalman</div>
+      <p>ByteTrack associates every detection (not just high-confidence ones) to tracks, bridging occlusion gaps. Per-track Kalman smooths bounding box jitter for stable vision control.</p>
+      <div class="cite" style="margin-top:10px">
+        Zhang et al., "ByteTrack" ECCV 2022 · <a href="https://arxiv.org/abs/2110.06864">arxiv</a><br>
+        Filterpy Kalman: <a href="https://filterpy.readthedocs.io">filterpy.readthedocs.io</a><br>
+        Wikipedia: <a href="https://en.wikipedia.org/wiki/Kalman_filter">Kalman filter</a>
+      </div>
+    </div>
+    <div class="card">
+      <span class="tag t-gold">Navigation</span>
+      <div class="card-title" style="margin-top:8px">DVL Dead-Reckoning</div>
+      <p>Doppler Velocity Log measures velocity relative to seabed via acoustic Doppler shift. Integrating v(t) over time gives position — enabling GPS-denied closed-loop distance moves.</p>
+      <div class="cite" style="margin-top:10px">
+        Nortek Nucleus 1000 Technical Manual · <a href="https://nortek.com">nortek.com</a><br>
+        Wikipedia: <a href="https://en.wikipedia.org/wiki/Acoustic_Doppler_current_profiler">Acoustic Doppler</a><br>
+        Dead reckoning: <a href="https://en.wikipedia.org/wiki/Dead_reckoning">en.wikipedia.org</a>
+      </div>
+    </div>
+    <div class="card">
+      <span class="tag t-blue">Middleware</span>
+      <div class="card-title" style="margin-top:8px">ROS 2 &amp; MAVLink</div>
+      <p>Robot Operating System 2 (Humble) provides pub/sub, actions, and parameters. MAVLink is a lightweight binary protocol used to command ArduSub and receive telemetry.</p>
+      <div class="cite" style="margin-top:10px">
+        ROS 2 Humble: <a href="https://docs.ros.org/en/humble">docs.ros.org/en/humble</a><br>
+        MAVLink 2.0: <a href="https://mavlink.io/en/">mavlink.io</a><br>
+        ArduSub: <a href="https://www.ardusub.com">ardusub.com</a>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- Footer -->
+<div style="background:var(--surface);border-top:1px solid var(--border);padding:32px 48px;display:flex;align-items:center;gap:24px">
+  <img src="assets/mongla-logo-dark.png" style="height:60px;opacity:.8" alt="Mongla">
+  <div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--blue);letter-spacing:.1em;margin-bottom:4px">MONGLA — duburi_ws</div>
+    <div style="font-size:12px;color:var(--muted)">AUV control stack for Duburi 4.2 · ROS2 Humble · ArduSub · YOLO v26 · Nortek Nucleus1000 DVL</div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px">EXPLORE · PERCEIVE · AUTONOMOUS</div>
+  </div>
+  <div style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);text-align:right">
+    22.5847° N, 89.5485° E<br>Sundarbans Delta, Bangladesh<br>Named for the port of Mongla
+  </div>
+</div>
+
+<script>
+// ── VISION ALIGNMENT SIMULATOR ─────────────────────────────
+(function(){
+  const canvas = document.getElementById('vsim-canvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // state
+  let bx = 0.5, by = 0.5, bh = 0.3;
+  let kpy = 1.2, kpf = 0.8, kpd = 0.6, db = 0.06, tgt = 0.45;
+  let dragging = false;
+
+  const sl = (id, cb) => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', e => { cb(parseFloat(e.target.value)); draw(); });
+  };
+  sl('sl-kpy', v => { kpy = v; document.getElementById('lbl-kpy').textContent = v.toFixed(2); });
+  sl('sl-kpf', v => { kpf = v; document.getElementById('lbl-kpf').textContent = v.toFixed(2); });
+  sl('sl-kpd', v => { kpd = v; document.getElementById('lbl-kpd').textContent = v.toFixed(2); });
+  sl('sl-db',  v => { db  = v; document.getElementById('lbl-db').textContent  = v.toFixed(2); });
+  sl('sl-tgt', v => { tgt = v; document.getElementById('lbl-tgt').textContent = v.toFixed(2); });
+  sl('sl-bx',  v => { bx  = v; document.getElementById('lbl-bx').textContent  = v.toFixed(2); document.getElementById('sl-bx').value = v; });
+  sl('sl-by',  v => { by  = v; document.getElementById('lbl-by').textContent  = v.toFixed(2); document.getElementById('sl-by').value = v; });
+  sl('sl-bh',  v => { bh  = v; document.getElementById('lbl-bh').textContent  = v.toFixed(2); document.getElementById('sl-bh').value = v; });
+
+  // drag
+  const pos = e => {
+    const r = canvas.getBoundingClientRect();
+    const cx = (e.clientX ?? e.touches[0].clientX) - r.left;
+    const cy = (e.clientY ?? e.touches[0].clientY) - r.top;
+    return [Math.max(0.05, Math.min(0.95, cx/W)), Math.max(0.05, Math.min(0.95, cy/H))];
+  };
+  canvas.addEventListener('mousedown',  e => { dragging=true; [bx,by]=pos(e); syncSliders(); draw(); });
+  canvas.addEventListener('mousemove',  e => { if(!dragging) return; [bx,by]=pos(e); syncSliders(); draw(); });
+  canvas.addEventListener('mouseup',    ()=> dragging=false);
+  canvas.addEventListener('mouseleave', ()=> dragging=false);
+  canvas.addEventListener('touchstart', e => { dragging=true; e.preventDefault(); [bx,by]=pos(e); syncSliders(); draw(); },{passive:false});
+  canvas.addEventListener('touchmove',  e => { if(!dragging) return; e.preventDefault(); [bx,by]=pos(e); syncSliders(); draw(); },{passive:false});
+  canvas.addEventListener('touchend',   ()=> dragging=false);
+
+  function syncSliders(){
+    const set = (id, v, lbl) => {
+      const el = document.getElementById(id);
+      const lb = document.getElementById(lbl);
+      if(el) el.value = v;
+      if(lb) lb.textContent = v.toFixed(2);
+    };
+    set('sl-bx','lbl-bx'); set('sl-by','lbl-by');
+    // fix: pass v correctly
+    const elx = document.getElementById('sl-bx');
+    const ely = document.getElementById('sl-by');
+    const lx  = document.getElementById('lbl-bx');
+    const ly  = document.getElementById('lbl-by');
+    if(elx){ elx.value = bx; } if(lx){ lx.textContent = bx.toFixed(2); }
+    if(ely){ ely.value = by; } if(ly){ ly.textContent = by.toFixed(2); }
+  }
+
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+  function applyDB(v, d){ return Math.abs(v) < d ? 0 : v; }
+
+  function compute(){
+    const cx_err  = (bx - 0.5) / 0.5;
+    const cy_err  = (by - 0.5) / 0.5;
+    const dist_err = tgt - bh;
+    const yaw_raw  = kpy * applyDB(cx_err,  db);
+    const fwd_raw  = kpf * applyDB(dist_err, db * 0.5);
+    const dep_raw  = kpd * applyDB(cy_err,   db);
+    const yaw_pct = clamp(yaw_raw * 18, -18, 18);
+    const fwd_pct = clamp(fwd_raw * 30, -30, 30);
+    const dep_m   = clamp(dep_raw * 0.1, -0.3, 0.3);
+    const pwm     = Math.round(1500 + yaw_pct * 5);
+    return { cx_err, cy_err, dist_err, yaw_pct, fwd_pct, dep_m, pwm };
+  }
+
+  function draw(){
+    const { cx_err, cy_err, dist_err, yaw_pct, fwd_pct, dep_m, pwm } = compute();
+
+    // background
+    ctx.fillStyle = '#060c18';
+    ctx.fillRect(0,0,W,H);
+
+    // scanlines subtle
+    for(let y=0; y<H; y+=4){
+      ctx.fillStyle = 'rgba(0,0,0,.18)';
+      ctx.fillRect(0,y,W,1);
+    }
+
+    // grid
+    ctx.strokeStyle = 'rgba(26,45,71,.7)';
+    ctx.lineWidth = 1;
+    for(let gx=0; gx<=W; gx+=W/8){ ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
+    for(let gy=0; gy<=H; gy+=H/6){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+
+    // crosshair at center
+    ctx.strokeStyle = 'rgba(56,189,248,.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(W/2,H/2,8,0,Math.PI*2);
+    ctx.strokeStyle = 'rgba(56,189,248,.5)'; ctx.stroke();
+
+    // deadband zone
+    const dbPxX = db * W/2, dbPxY = db * H/2;
+    ctx.strokeStyle = 'rgba(52,211,153,.2)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(W/2 - dbPxX, H/2 - dbPxY, dbPxX*2, dbPxY*2);
+
+    // bbox
+    const bpx = bx * W, bpy = by * H;
+    const bHpx = bh * H;
+    const bWpx = bHpx * 0.75;
+    const settled = Math.abs(cx_err) < db && Math.abs(cy_err) < db && Math.abs(dist_err) < db;
+    const boxColor = settled ? '#34d399' : '#a78bfa';
+
+    // bbox fill
+    ctx.fillStyle = `${settled ? 'rgba(52,211,153,' : 'rgba(167,139,250,'}0.08)`;
+    ctx.fillRect(bpx - bWpx/2, bpy - bHpx/2, bWpx, bHpx);
+
+    // bbox border
+    ctx.strokeStyle = boxColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bpx - bWpx/2, bpy - bHpx/2, bWpx, bHpx);
+
+    // corner brackets
+    const cs = 12;
+    ctx.lineWidth = 3;
+    [[bpx-bWpx/2, bpy-bHpx/2],[bpx+bWpx/2, bpy-bHpx/2],[bpx-bWpx/2, bpy+bHpx/2],[bpx+bWpx/2, bpy+bHpx/2]].forEach(([cx2,cy2],i)=>{
+      const sx = i%2===0?1:-1, sy = i<2?1:-1;
+      ctx.beginPath(); ctx.moveTo(cx2+sx*cs,cy2); ctx.lineTo(cx2,cy2); ctx.lineTo(cx2,cy2+sy*cs);
+      ctx.stroke();
+    });
+
+    // class label
+    const conf = (0.88 + Math.random()*0.06).toFixed(2);
+    ctx.fillStyle = boxColor;
+    ctx.fillRect(bpx - bWpx/2, bpy - bHpx/2 - 18, 88, 18);
+    ctx.fillStyle = '#060c18';
+    ctx.font = '10px JetBrains Mono';
+    ctx.fillText(`target  ${conf}`, bpx - bWpx/2 + 5, bpy - bHpx/2 - 5);
+
+    // center dot
+    ctx.beginPath(); ctx.arc(bpx, bpy, 5, 0, Math.PI*2);
+    ctx.fillStyle = boxColor; ctx.fill();
+
+    // error arrows
+    if(Math.abs(cx_err) > db){
+      ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+      drawArrow(ctx, W/2, bpy, bpx, bpy);
+      ctx.fillStyle = '#38bdf8'; ctx.font = '10px JetBrains Mono';
+      ctx.fillText(`cx_err ${cx_err > 0 ? '+' : ''}${cx_err.toFixed(2)}`, W/2+6, bpy-7);
+    }
+    if(Math.abs(cy_err) > db){
+      ctx.strokeStyle = '#d4a843'; ctx.lineWidth = 2;
+      drawArrow(ctx, bpx, H/2, bpx, bpy);
+      ctx.fillStyle = '#d4a843'; ctx.font = '10px JetBrains Mono';
+      ctx.fillText(`cy_err ${cy_err > 0 ? '+' : ''}${cy_err.toFixed(2)}`, bpx+8, H/2+15);
+    }
+
+    // distance indicator
+    const tgtPx = tgt * H;
+    ctx.strokeStyle = 'rgba(52,211,153,.4)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(W-20, H/2 - tgtPx/2); ctx.lineTo(W-20, H/2 + tgtPx/2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = dist_err > db ? '#ef4444' : (dist_err < -db ? '#34d399' : '#34d399');
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W-20, H/2 - bHpx/2); ctx.lineTo(W-20, H/2 + bHpx/2); ctx.stroke();
+    ctx.fillStyle = '#7a8fa8'; ctx.font = '9px JetBrains Mono';
+    ctx.fillText('dist', W-18, H-8);
+
+    // settled indicator
+    if(settled){
+      ctx.fillStyle = 'rgba(52,211,153,.1)';
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 14px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText('✓ SETTLED', W/2, 22);
+      ctx.textAlign = 'left';
+    }
+
+    // AUV movement indicator (bottom)
+    const aw = 120, ah = 36, ax = 16, ay = H - 52;
+    ctx.fillStyle = 'rgba(11,21,37,.85)';
+    ctx.fillRect(ax, ay, aw, ah);
+    ctx.strokeStyle = 'rgba(56,189,248,.3)'; ctx.lineWidth = 1;
+    ctx.strokeRect(ax, ay, aw, ah);
+    ctx.font = '9px JetBrains Mono';
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText(`YAW  ${yaw_pct > 0 ? '→' : yaw_pct < 0 ? '←' : '·'} ${yaw_pct.toFixed(1)}%`, ax+8, ay+14);
+    ctx.fillStyle = '#34d399';
+    ctx.fillText(`FWD  ${fwd_pct > 0 ? '↑' : fwd_pct < 0 ? '↓' : '·'} ${fwd_pct.toFixed(1)}%`, ax+8, ay+28);
+
+    // update DOM outputs
+    document.getElementById('out-yaw').innerHTML = `${yaw_pct.toFixed(1)}<span class="vsim-out-unit">%</span>`;
+    document.getElementById('out-fwd').innerHTML = `${fwd_pct.toFixed(1)}<span class="vsim-out-unit">%</span>`;
+    document.getElementById('out-dep').innerHTML = `${dep_m.toFixed(3)}<span class="vsim-out-unit">m</span>`;
+    document.getElementById('out-pwm').innerHTML = `${pwm}<span class="vsim-out-unit">µs</span>`;
+
+    // colour outputs
+    document.getElementById('out-yaw').style.color = Math.abs(yaw_pct) < 1 ? '#34d399' : '#38bdf8';
+    document.getElementById('out-fwd').style.color = Math.abs(fwd_pct) < 1 ? '#34d399' : '#d4a843';
+  }
+
+  function drawArrow(ctx, x1, y1, x2, y2){
+    const angle = Math.atan2(y2-y1, x2-x1);
+    const len = Math.hypot(x2-x1, y2-y1);
+    if(len < 4) return;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 10*Math.cos(angle-0.4), y2 - 10*Math.sin(angle-0.4));
+    ctx.lineTo(x2 - 10*Math.cos(angle+0.4), y2 - 10*Math.sin(angle+0.4));
+    ctx.closePath(); ctx.fill();
+  }
+
+  draw();
+  // pulse animation when idle
+  setInterval(draw, 200);
+})();
+
+// ── NAV ACTIVE HIGHLIGHT ───────────────────────────────────
+const secs = document.querySelectorAll('section[id], #hero');
+const links = document.querySelectorAll('nav a[href^="#"]');
+const io = new IntersectionObserver(e => e.forEach(entry => {
+  if (entry.isIntersecting) {
+    links.forEach(a => a.classList.remove('act'));
+    const l = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+    if (l) l.classList.add('act');
+  }
+}), {rootMargin:'-30% 0px -60% 0px'});
+secs.forEach(s => io.observe(s));
+</script>
+
+
+</body></html>

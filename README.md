@@ -1,13 +1,17 @@
+<p align="center">
+  <img src="docs/imgs/mongla-banner.png" alt="Mongla banner" width="100%"/>
+</p>
+
+<p align="center">
+  <img src="docs/imgs/mongla-logo-light.png" alt="Mongla logo" width="180px"/>
+</p>
+
 <h1 align="center">Mongla — <code>duburi_ws</code></h1>
 
 <p align="center">
   <em>An AUV control stack named after the port that opens onto the Sundarbans.</em><br/>
   ROS 2 Humble · ArduSub · YOLO 26 · one action surface, axis-isolated control,
   vision in the same loop.
-</p>
-
-<p align="center">
-  <img src="docs/architecture.png" alt="Mongla architecture" width="92%"/>
 </p>
 
 <p align="center">
@@ -19,6 +23,7 @@
   <img src="https://img.shields.io/badge/Pixhawk-2.4.8-black" alt="Pixhawk 2.4.8"/>
   <img src="https://img.shields.io/badge/YOLO-26-00B4D8" alt="YOLO 26"/>
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"/>
+  <a href="https://fh1m.github.io/duburi_ws/"><img src="https://img.shields.io/badge/Docs-Mongla_Wiki-0a9396" alt="Mongla Wiki"/></a>
 </p>
 
 <p align="center">
@@ -32,6 +37,7 @@
 <p align="center">
   <a href="#quickstart-smoke-tests"><strong>Quickstart</strong></a> ·
   <a href="#concepts-in-5-videos"><strong>Concept videos</strong></a> ·
+  <a href="https://fh1m.github.io/duburi_ws/"><strong>Mongla Wiki</strong></a> ·
   <a href=".claude/context/mission-cookbook.md"><strong>Mission cookbook</strong></a> ·
   <a href="#9-command-cookbook-duburi-cli"><strong>CLI cookbook</strong></a> ·
   <a href="#3-architecture"><strong>Architecture</strong></a>
@@ -40,7 +46,7 @@
 ---
 
 <p align="center">
-  <img src="docs/dataflow.png" alt="Mongla data flow" width="92%"/>
+  <img src="docs/imgs/readme_End-to-end-data-flow.png" alt="Mongla end-to-end data flow" width="92%"/>
 </p>
 
 ### One verb, end to end
@@ -273,6 +279,10 @@ Manual connect (if auto-connect failed):
 ros2 run duburi_planner duburi dvl_connect
 ```
 
+<p align="center">
+  <img src="docs/imgs/readme_dvl_graphic.png" alt="Nortek Nucleus 1000 DVL integration" width="80%"/>
+</p>
+
 Use `yaw_source:=bno085_dvl` at pool for BNO085 heading + DVL position
 (most stable combination). DVL driver: [`nucleus_dvl.py`](src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py).
 
@@ -298,6 +308,10 @@ Without `--tracking true`, vision verbs use raw `/detections` (lower
 latency, no ID stability). With `--tracking true` they use `/tracks`
 (smoothed bbox, stable ID across frames — better for slow-moving targets
 and low-confidence detections).
+
+<p align="center">
+  <img src="docs/imgs/readme-vision-pipeline.png" alt="Vision pipeline — camera → YOLO → ByteTrack → vision verb" width="90%"/>
+</p>
 
 ### 9 — Per-command MAVLink debug trace
 
@@ -501,6 +515,11 @@ Design principles we actually follow:
   (`SET_ATTITUDE_TARGET`). `arc` keeps Ch5 thrust + Ch4 yaw stick in the
   same RC packet for car-style curved trajectories. First principles:
   [`.claude/context/axis-isolation.md`](.claude/context/axis-isolation.md).
+
+<p align="center">
+  <img src="docs/imgs/readme_turn_vs_arc_stop_vs_pause.png" alt="Sharp turn vs arc, stop vs pause comparison" width="88%"/>
+</p>
+
 - **Heading-lock is yaw's depth-hold cousin.** `lock_heading` spins up a
   background Ch4-rate-override stream at 20 Hz driven by the configured
   `YawSource`; translations and `pause` run on top of it; `yaw_*` and `arc`
@@ -508,6 +527,11 @@ Design principles we actually follow:
   down. It is **source-agnostic** — the same `YawSource` that feeds the
   manager (MAVLink AHRS, BNO085, or a Gazebo mock) also feeds the lock.
   State diagram + failure modes: [`.claude/context/heading-lock.md`](.claude/context/heading-lock.md).
+
+<p align="center">
+  <img src="docs/imgs/readme_headinglock_state.png" alt="Heading lock state diagram" width="85%"/>
+</p>
+
 - **Depth is owned by ArduSub's onboard ALT_HOLD.** `set_depth` engages
   ALT_HOLD and drives `hold_depth` to the target; once reached, ArduSub's
   400 Hz onboard depth controller keeps the sub there indefinitely without
@@ -559,6 +583,10 @@ profile changes.
 | Power                  | Dual LiPo (one propulsion, one compute+sensors — isolated rails)  |
 | Payload                | Slingshot torpedo, aluminum grabber (current-sensed), solenoid dropper |
 | Network switch         | Onboard 5-port, binds all three SBCs + DVL                        |
+
+<p align="center">
+  <img src="docs/imgs/readme-auv-diagram.png" alt="Duburi 4.2 AUV diagram" width="88%"/>
+</p>
 
 Active development goals:
 1. Yaw and translation profiles smooth enough that vision-based PID can
@@ -677,6 +705,10 @@ flowchart LR
     EKF -- "telemetry" --> SP
 ```
 
+<p align="center">
+  <img src="docs/imgs/readme-control-loop.png" alt="ArduSub setpoint control loop" width="88%"/>
+</p>
+
 ### 3.3 PID without a PhD (cheat sheet)
 
 The two onboard loops above are textbook PID; our setpoint-shaping is
@@ -696,6 +728,10 @@ flowchart LR
     A -- "u" --> Plant["plant<br/>ArduSub PID + thrusters + water"]
     Plant --> Y
 ```
+
+<p align="center">
+  <img src="docs/imgs/readme-architecture.png" alt="Mongla package architecture" width="90%"/>
+</p>
 
 Key data flow:
 
@@ -853,6 +889,10 @@ sequenceDiagram
     P->>A: RC_CHANNELS_OVERRIDE (20 Hz)
     A->>E: open-loop thrust envelope
 ```
+
+<p align="center">
+  <img src="docs/imgs/readme_mavlink_message.png" alt="MAVLink message structure" width="80%"/>
+</p>
 
 ### 5.2 BlueOS endpoint configuration
 
@@ -1148,12 +1188,20 @@ Key params on `auv_manager_node`:
 
 **Yaw source selection:**
 
+<p align="center">
+  <img src="docs/imgs/readme_YawSource.png" alt="YawSource abstraction — four selectable sources" width="84%"/>
+</p>
+
 | `yaw_source` | Heading | Distance commands | Recommended for |
 |---|---|---|---|
 | `dvl` | Nucleus AHRS | DVL bottom-track | DVL as sole IMU |
 | `bno085_dvl` | BNO085 (USB) | DVL bottom-track | **Pool** — stable gyro + DVL distance |
 | `bno085` | BNO085 (USB) | open-loop fallback | Pool without DVL |
 | `mavlink_ahrs` | ArduSub AHRS | open-loop fallback | Bench / sim |
+
+<p align="center">
+  <img src="docs/imgs/readme_yaw_devitaion.png" alt="Yaw deviation over time — AHRS vs BNO085 vs DVL" width="86%"/>
+</p>
 
 > **Heading lock + DVL moves:** `lock_heading` stays ACTIVE during `move_forward_dist` / `move_lateral_dist`. The lock owns Ch4 (yaw), DVL owns Ch5/Ch6 (forward/lateral). Do not unlock before a DVL move.
 
@@ -1281,6 +1329,10 @@ Phase 4 — `duburi_vision` (**v1 + v4 done**):
   subscribes `/detections`, runs ByteTrack + 4-state CV Kalman, publishes `/tracks` with
   stable IDs + smoothed bbox. Opt-in: `cameras_.launch.py with_tracking:=true` or
   `--tracking true` per vision verb. **Done.**
+
+<p align="center">
+  <img src="docs/imgs/readme-robosub-tasks.png" alt="RoboSub competition task overview" width="88%"/>
+</p>
 
 Phase 5 (queued):
 - `robot_localization` EKF fusing DVL velocity + AHRS2 + Bar30 for full odometry.

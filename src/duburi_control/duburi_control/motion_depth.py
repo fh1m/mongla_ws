@@ -37,10 +37,11 @@ import time
 from .errors import MovementTimeout
 
 
-from .motion_rates import DEPTH_SETPOINT_HZ  as SETPOINT_HZ
-from .motion_rates import DEPTH_RAMP_S       as RAMP_S
-from .motion_rates import DEPTH_BRAKE_ZONE_M as BRAKE_ZONE_M
-from .motion_rates import LOG_THROTTLE_S     as LOG_THROTTLE
+from .motion_rates import DEPTH_SETPOINT_HZ   as SETPOINT_HZ
+from .motion_rates import DEPTH_RAMP_S        as RAMP_S
+from .motion_rates import DEPTH_BRAKE_ZONE_M  as BRAKE_ZONE_M
+from .motion_rates import DEPTH_RAMP_ADVANCE_M as RAMP_ADVANCE_M
+from .motion_rates import LOG_THROTTLE_S      as LOG_THROTTLE
 
 TOL_M         = 0.10    # exit tolerance (m). 10 cm is realistic; tighter values cause
                         # timeout when ArduSub's depth PID settles with a small residual.
@@ -76,6 +77,18 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
     after_prime = pixhawk.get_attitude()
     start_d = after_prime['depth'] if after_prime is not None else prime_d
 
+    # Advance the ramp start 0.5 m toward the target so ArduSub sees a real
+    # depth error from tick 1. Without this, the ramp starts at start_d and
+    # ArduSub's error is 0 on the first tick; the downward I-term accumulated
+    # at depth then briefly pushes the sub the wrong way before the P-term
+    # grows large enough to overcome it (visible as "goes deeper first" when
+    # commanded to a shallower depth from a deep hold).
+    if start_d is not None and abs(target_m - start_d) > RAMP_ADVANCE_M:
+        if target_m > start_d:
+            start_d = min(start_d + RAMP_ADVANCE_M, target_m)
+        else:
+            start_d = max(start_d - RAMP_ADVANCE_M, target_m)
+
     wait_for_depth(pixhawk, target_m, timeout, log, start_d=start_d)
 
 
@@ -102,6 +115,11 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
     when it moves faster than the ramp — this prevents ArduSub's depth
     PID from commanding the sub backward to catch up with a lagging
     setpoint (the classic "goes down, bounces back up, oscillates" symptom).
+
+    `start_d` is offset 0.5 m toward the target by `hold_depth` before
+    this function is called, so ArduSub sees a non-zero depth error from
+    tick 1 and its accumulated I-term cannot briefly push the sub the
+    wrong way.
 
     Ramp phase logic:
       - Compute the linear ramp position at elapsed time.
