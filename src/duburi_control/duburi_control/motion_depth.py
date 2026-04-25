@@ -42,6 +42,7 @@ from .motion_rates import LOG_THROTTLE_S as LOG_THROTTLE
 
 TOL_M         = 0.07    # exit tolerance (m). Achievable now we're not fighting ArduSub.
 PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
+RAMP_S        = 2.5     # seconds to linearly ramp setpoint from start_d to target_m
 
 
 def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
@@ -62,7 +63,7 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
     start_d  = starting['depth'] if starting is not None else target_m
 
     prime_alt_hold(pixhawk, hold_at=start_d, neutral_writer=neutral_writer)
-    wait_for_depth(pixhawk, target_m, timeout, log)
+    wait_for_depth(pixhawk, target_m, timeout, log, start_d=start_d)
 
 
 def prime_alt_hold(pixhawk, hold_at, neutral_writer):
@@ -80,18 +81,29 @@ def prime_alt_hold(pixhawk, hold_at, neutral_writer):
         time.sleep(1.0 / SETPOINT_HZ)
 
 
-def wait_for_depth(pixhawk, target_m, timeout, log):
+def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
     """Phase 2: stream the real target until reached or timeout.
+
+    Ramps the setpoint linearly from `start_d` to `target_m` over
+    RAMP_S seconds before holding at `target_m`. This prevents ArduSub's
+    depth PID from receiving a large step change and overshooting.
 
     Returns None on success. Raises MovementTimeout otherwise -- the
     message includes the closest depth we ever reached so the operator
     can tell "stuck on the way" from "no telemetry at all".
     """
     deadline    = time.time() + timeout
+    t_start     = time.time()
     closest     = None
 
     while time.time() < deadline:
-        pixhawk.set_target_depth(target_m)
+        elapsed = time.time() - t_start
+        if start_d is not None and elapsed < RAMP_S:
+            frac     = elapsed / RAMP_S
+            setpoint = start_d + (target_m - start_d) * frac
+        else:
+            setpoint = target_m
+        pixhawk.set_target_depth(setpoint)
 
         attitude = pixhawk.get_attitude()
         if attitude is not None:
@@ -102,7 +114,7 @@ def wait_for_depth(pixhawk, target_m, timeout, log):
 
             log.info(
                 f'[DEPTH] -> {target_m:+.2f}m  '
-                f'now:{current:+.2f}m  err:{error:.2f}m',
+                f'setpt:{setpoint:+.2f}m  now:{current:+.2f}m  err:{error:.2f}m',
                 throttle_duration_sec=LOG_THROTTLE)
 
             if error < TOL_M:
