@@ -38,11 +38,12 @@ from .errors import MovementTimeout
 
 
 from .motion_rates import DEPTH_SETPOINT_HZ as SETPOINT_HZ
-from .motion_rates import LOG_THROTTLE_S as LOG_THROTTLE
+from .motion_rates import DEPTH_RAMP_S      as RAMP_S
+from .motion_rates import LOG_THROTTLE_S    as LOG_THROTTLE
 
 TOL_M         = 0.07    # exit tolerance (m). Achievable now we're not fighting ArduSub.
 PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
-RAMP_S        = 2.5     # seconds to linearly ramp setpoint from start_d to target_m
+# RAMP_S is imported from motion_rates.DEPTH_RAMP_S -- tune there.
 
 
 def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
@@ -85,8 +86,14 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
     """Phase 2: stream the real target until reached or timeout.
 
     Ramps the setpoint linearly from `start_d` to `target_m` over
-    RAMP_S seconds before holding at `target_m`. This prevents ArduSub's
-    depth PID from receiving a large step change and overshooting.
+    RAMP_S (= motion_rates.DEPTH_RAMP_S) seconds before holding at
+    `target_m`. This prevents ArduSub's depth PID from receiving a
+    large step change and overshooting.
+
+    Note: vision depth alignment bypasses this ramp by design -- it
+    sends incremental nudges (≤ 0.02 m per tick at 5 Hz) which are
+    gentler for small corrections. This ramp is only for large
+    commanded depth changes via `set_depth`.
 
     Returns None on success. Raises MovementTimeout otherwise -- the
     message includes the closest depth we ever reached so the operator
