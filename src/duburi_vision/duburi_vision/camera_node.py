@@ -59,6 +59,8 @@ class CameraNode(Node):
         self.declare_parameter('fps',             30)
         self.declare_parameter('frame_id',        '')
         self.declare_parameter('publish_rate_hz', 30)
+        self.declare_parameter('path',            '')        # for source=video_file
+        self.declare_parameter('loop',            True)      # for source=video_file
 
         self._cam     = self._build_camera()
         self._info    = self._cam.info()
@@ -124,6 +126,15 @@ class CameraNode(Node):
                 expected_width=int(self.get_parameter('width').value),
                 expected_height=int(self.get_parameter('height').value),
                 expected_fps=float(self.get_parameter('fps').value),
+            )
+        elif source == 'video_file':
+            loop_val = self.get_parameter('loop').value
+            kwargs.update(
+                path=str(self.get_parameter('path').value).strip(),
+                loop=bool(loop_val) if not isinstance(loop_val, str) else loop_val.lower() != 'false',
+                width=int(self.get_parameter('width').value),
+                height=int(self.get_parameter('height').value),
+                fps=int(self.get_parameter('fps').value),
             )
 
         return make_camera(source, logger=self.get_logger(), **kwargs)

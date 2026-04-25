@@ -45,15 +45,28 @@ def _build_mavlink_stub(**_):
     return MavlinkCamera()
 
 
+def _build_video_file(*, path='', loop=True, width=0, height=0, fps=0,
+                      frame_id='video_cam', name='video', logger=None, **_):
+    if not path:
+        raise ValueError(
+            "source='video_file' requires path=<str>. "
+            "Pass video_file:=<path> in the launch file or path=<str> in Python.")
+    from .cameras.video_file import VideoFileCamera
+    return VideoFileCamera(
+        path=path, width=width, height=height, fps=fps,
+        loop=loop, frame_id=frame_id, name=name, logger=logger)
+
+
 # Stubs are wired up so users hitting `source='jetson'` get the per-stub
 # "not implemented yet" message instead of a generic "unknown source"
 # error from make_camera. Same UX as duburi_sensors.factory.
 BUILDERS = {
-    'webcam':    _build_webcam,
-    'ros_topic': _build_ros_topic,
-    'jetson':    _build_jetson_stub,
-    'blueos':    _build_blueos_stub,
-    'mavlink':   _build_mavlink_stub,
+    'webcam':      _build_webcam,
+    'ros_topic':   _build_ros_topic,
+    'video_file':  _build_video_file,
+    'jetson':      _build_jetson_stub,
+    'blueos':      _build_blueos_stub,
+    'mavlink':     _build_mavlink_stub,
 }
 
 
