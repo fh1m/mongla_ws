@@ -172,7 +172,24 @@ duburi.arc(seconds=5.0, gain=50.0, yaw_rate_pct=30.0)
 
 duburi.lock_heading(degrees=0.0, timeout=300.0)   # returns immediately
 duburi.release_heading()                          # joins the daemon
+
+# DVL closed-loop distance (heading lock stays active during these)
+duburi.dvl_connect()                              # manual connect; auto-connect is default
+duburi.move_forward_dist(meters=2.0, gain=60.0, dvl_tolerance=0.1)
+duburi.move_lateral_dist(meters=1.0, gain=36.0, dvl_tolerance=0.1)
+# Negative meters = reverse / left:
+duburi.move_forward_dist(-1.5, gain=60.0)         # 1.5 m backward
+duburi.move_lateral_dist(-0.5, gain=36.0)         # 0.5 m left
 ```
+
+**DVL distance gotchas:**
+- Heading lock is NOT suspended during `move_forward_dist` / `move_lateral_dist`.
+  The lock owns Ch4 (yaw rate) and keeps the AUV on heading while DVL owns Ch5/Ch6.
+  Call `lock_heading()` BEFORE the distance moves.
+- Falls back to open-loop time estimate (with a warning) if the yaw source has no
+  DVL component (i.e. `yaw_source=mavlink_ahrs` or `yaw_source=bno085`).
+- `dvl_connect()` is only needed if `dvl_auto_connect:=false`. The default is
+  `dvl_auto_connect:=true` (auto-connect at manager startup).
 
 ### Vision verbs (`duburi.vision.*`)
 

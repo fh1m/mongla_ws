@@ -415,7 +415,7 @@ Four packages live inside:
 | `duburi_control`    | `Pixhawk` MAVLink wrapper (opt-in `[MAV <fn> cmd=verb]` DEBUG trace via `debug:=true`) + axis-split motion controllers (`motion_forward`, `motion_lateral`, `motion_yaw`, `motion_depth`, `heading_lock`) + shared helpers (`motion_writers`, `motion_easing`) + `Heartbeat` + `VisionVerbs` mixin + the `COMMANDS` registry + `tracing` (per-command tag) |
 | `duburi_manager`    | ROS2 node, action server, telemetry logger, connection profiles                           |
 | `duburi_planner`    | `DuburiClient` Python API + `duburi` CLI + `mission` runner + `missions/*` scripts (YASMIN slot reserved under `state_machines/`) |
-| `duburi_sensors`    | `YawSource` abstraction — MAVLink AHRS default, BNO085 (ESP32-C3 USB CDC) opt-in, DVL/WitMotion stubs |
+| `duburi_sensors`    | `YawSource` abstraction — MAVLink AHRS, BNO085 (ESP32-C3 USB CDC), Nucleus1000 DVL, BNO+DVL composite (`bno085_dvl`), WitMotion stub |
 
 Design principles we actually follow:
 
@@ -501,7 +501,7 @@ profile changes.
 | Primary SBC            | Nvidia Jetson Orin Nano (all ROS2 nodes live here)                |
 | Depth sensor           | Bar30 (ArduSub AHRS2 altitude)                                    |
 | External IMU           | ESP32-C3 + BNO085 over USB CDC (gyro+accel, opt-in via param)     |
-| DVL                    | Nortek Nucleus1000 @ `192.168.2.201` (driver TODO — stub only)    |
+| DVL                    | Nortek Nucleus1000 @ `192.168.2.201` — **shipped** (TCP driver, auto-connect, distance commands) |
 | Cameras                | Blue Robotics Low-Light HD USB (forward + downward)               |
 | Tether                 | FathomX power-over-Ethernet                                       |
 | Power                  | Dual LiPo (one propulsion, one compute+sensors — isolated rails)  |
@@ -527,9 +527,9 @@ Active development goals:
 | Hull               | BlueROV2 Heavy chassis         | Octagonal Marine 5083 aluminum, in-house    |
 | Frame type         | `vectored_6dof` (8× T200)      | `vectored_6dof` (8× T200)                   |
 | Compass            | Synthetic, drift-free          | Pixhawk mag — noisy near aluminum + thrusters |
-| Heading source     | ArduSub AHRS                   | ArduSub AHRS *or* BNO085 (`yaw_source` param) |
+| Heading source     | ArduSub AHRS                   | ArduSub AHRS · BNO085 · Nucleus AHRS · BNO+DVL (`yaw_source` param) |
 | Depth sensor       | Sim plugin                     | Bar30                                       |
-| DVL                | None                           | Nortek Nucleus1000 (driver pending)         |
+| DVL                | None                           | Nortek Nucleus1000 — **shipped** (auto-connect, `move_*_dist` commands) |
 | Payload            | None                           | Torpedo, grabber, dropper                   |
 
 The full Duburi 4.2 spec block lives in
@@ -983,6 +983,9 @@ All commands go through `/duburi/move` and block until done. Exit code 0 = succe
 | `arc` | Forward + yaw simultaneously | `duburi arc --duration 4 --gain 50 --yaw_rate_pct 30` |
 | `lock_heading` | Background yaw hold (returns immediately) | `duburi lock_heading --target 0` |
 | `unlock_heading` | Stop background yaw hold | `duburi unlock_heading` |
+| `dvl_connect` | Manually connect Nucleus DVL (auto by default) | `duburi dvl_connect` |
+| `move_forward_dist` | DVL closed-loop forward N metres (heading lock stays active) | `duburi move_forward_dist --distance_m 2.0 --gain 60` |
+| `move_lateral_dist` | DVL closed-loop lateral N metres (+ = right, − = left) | `duburi move_lateral_dist --distance_m 1.0 --gain 36` |
 | `vision_acquire` | Sweep until target detected | `duburi vision_acquire --target_class person --target_name yaw_right` |
 | `vision_align_yaw` | Centre target horizontally (yaw) | `duburi vision_align_yaw --target_class person --duration 15` |
 | `vision_align_lat` | Centre target horizontally (strafe) | `duburi vision_align_lat --target_class person --duration 15` |
@@ -1030,15 +1033,28 @@ Key params on `auv_manager_node`:
 
 | Param | Default | Effect |
 |-------|---------|--------|
-| `mode` | `auto` | `auto` probes UDP 14550 + Pixhawk USB and picks `pool`/`desk`/`sim` |
+| `mode` | `pool` | `pool`/`sim`/`desk`/`auto` — `auto` probes UDP 14550 + Pixhawk USB |
 | `smooth_yaw` | `false` | `true` → smootherstep yaw setpoint sweep (reduces overshoot) |
 | `smooth_translate` | `false` | `true` → trapezoid thrust ramp (softer start/stop) |
-| `yaw_source` | `mavlink_ahrs` | `mavlink_ahrs` or `bno085` (ESP32-C3 + BNO085) |
+| `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` — see below |
+| `dvl_auto_connect` | `true` | Auto-connect Nucleus DVL at startup; no manual `dvl_connect` needed |
+| `dvl_retry_s` | `5.0` | Seconds between auto-connect retries |
 | `vision.kp_yaw` / `vision.kp_lat` | 60.0 | Centring P-gain — tune live with `ros2 param set` |
 | `vision.deadband` | 0.18 | Settle tolerance — tighten to 0.08–0.10 for pool |
 | `vision.lock_mode` | `settle` | `settle` / `follow` / `pursue` — vision loop exit behaviour |
 | `vision.depth_anchor_frac` | 0.5 | 0.2 for tall targets (person, pole) to prevent depth stall |
 | `vision.distance_metric` | `height` | `height` / `area` / `diagonal` — how target size is measured |
+
+**Yaw source selection:**
+
+| `yaw_source` | Heading | Distance commands | Recommended for |
+|---|---|---|---|
+| `dvl` | Nucleus AHRS | DVL bottom-track | DVL as sole IMU |
+| `bno085_dvl` | BNO085 (USB) | DVL bottom-track | **Pool** — stable gyro + DVL distance |
+| `bno085` | BNO085 (USB) | open-loop fallback | Pool without DVL |
+| `mavlink_ahrs` | ArduSub AHRS | open-loop fallback | Bench / sim |
+
+> **Heading lock + DVL moves:** `lock_heading` stays ACTIVE during `move_forward_dist` / `move_lateral_dist`. The lock owns Ch4 (yaw), DVL owns Ch5/Ch6 (forward/lateral). Do not unlock before a DVL move.
 
 Full param reference + yaw source + vision pipeline:
 **[docs/configuration.md](docs/configuration.md)**
@@ -1128,8 +1144,12 @@ Phase 3 — `duburi_sensors` (**done**):
 - `BNO085Source` over USB CDC + ESP32-C3 firmware contract +
   one-shot Pixhawk-mag offset calibration. **Done in software**,
   awaiting first pool run with the chip flashed.
-- `mavros` **read-only** telemetry consumer on a separate endpoint —
-  pending.
+- **Nortek Nucleus1000 DVL** — TCP driver (`nucleus_dvl.py`), packet decoder
+  (`nucleus_parser.py`), velocity integrator, auto-connect, `move_forward_dist`
+  / `move_lateral_dist` closed-loop commands. **Done — works at pool.**
+- **`CompositeBnoDvlSource` (`bno085_dvl`)** — BNO085 heading + DVL position in
+  one `yaw_source`; heading lock stable during DVL distance moves. **Done.**
+- `mavros` **read-only** telemetry consumer on a separate endpoint — pending.
 
 Phase 4 — `duburi_vision` (**v1 + v4 done**):
 - Camera factory (laptop webcam + Gazebo `ros_topic`; jetson/blueos/mavlink
@@ -1151,9 +1171,9 @@ Phase 4 — `duburi_vision` (**v1 + v4 done**):
   [filters/PLAN.md](src/duburi_vision/duburi_vision/filters/PLAN.md).
 
 Phase 5 (queued):
-- `robot_localization` EKF fusing vision + AHRS2 + Bar30.
-- Mission autonomy layer (behaviour trees or simple state machines).
-- DVL integration if hardware budget allows.
+- `robot_localization` EKF fusing DVL velocity + AHRS2 + Bar30 for full odometry.
+- Mission autonomy layer (behaviour trees or YASMIN state machines).
+- WitMotion backup IMU driver (replace `witmotion_stub.py`).
 
 Skipped intentionally for now:
 - Phase 2 `mavros` bi-directional bridge (pymavlink is already doing what

@@ -1,25 +1,25 @@
 # duburi_vision -- detector defaults
 #
-# Pick the model file (Ultralytics auto-downloads the first time it can't
-# find the path). YOLO26 ships five sizes:
-#   yolo26n.pt   ~5 MB    fastest, edge-friendly, default
-#   yolo26s.pt  ~19 MB    a notch more accurate
-#   yolo26m.pt  ~42 MB    decent accuracy on Jetson Orin
-#   yolo26l.pt  ~51 MB    desktop / training rig
-#   yolo26x.pt ~113 MB    desktop only
+# Custom gate models (src/duburi_vision/models/ -- no .yaml sidecar needed):
+#   gate_nano_100ep    ~5 MB   fastest -- class 'gate', 100 epochs (default)
+#   gate_medium_100ep ~42 MB   more accurate -- class 'gate', 100 epochs
 #
-# device:  cuda:N -> require GPU (fail-fast). cpu -> explicit CPU. auto ->
-#          GPU if present, otherwise CPU silently (use only in CI/tests).
-# half:    FP16 inference. Off by default for determinism on RTX 2060;
-#          turn on for Jetson Orin.
-# classes: CSV string. '' (empty) means "keep all coco classes".
+# Switch model at launch: ros2 launch ... model:=gate_medium_100ep
+# Or live: ros2 param set /duburi_detector model_path gate_medium_100ep
+#
+# Pretrained YOLO26 (auto-download):
+#   yolo26_nano_pretrained, yolo26_small_pretrained, etc.
+#
+# device:  cuda:N -> require GPU. cpu -> explicit CPU. auto -> GPU if present.
+# half:    FP16 inference (off by default; enable for Jetson Orin).
+# classes: CSV class names. 'gate' for gate models. '' = all classes.
 
 duburi_detector:
   ros__parameters:
     model_path:          gate_nano_100ep
     device:              cuda:0
     half:                false
-    conf:                0.35
+    conf:                0.30
     iou:                 0.50
     imgsz:               640
     classes:             gate

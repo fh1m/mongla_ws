@@ -153,17 +153,20 @@ duburi_ws/src/
 │       └── state_machines/       # reserved for YASMIN-based plans
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
-│   │   ├── factory.py            # make_yaw_source(name, **kw)
+│   │   ├── factory.py            # make_yaw_source(name, **kw) — dvl|bno085|bno085_dvl|mavlink_ahrs
 │   │   ├── sensors_node.py       # standalone diagnostic node (no thrusters)
 │   │   └── sources/
 │   │       ├── base.py               # YawSource ABC
 │   │       ├── mavlink_ahrs.py       # default — wraps Pixhawk.get_attitude
 │   │       ├── bno085.py             # USB CDC reader + one-shot calibration
-│   │       ├── dvl_stub.py           # Phase-4 placeholder
-│   │       └── witmotion_stub.py     # Phase-4 placeholder
+│   │       ├── nucleus_dvl.py        # Nortek Nucleus 1000: heading (AHRS) + position (DVL)
+│   │       ├── nucleus_parser.py     # Nucleus TCP packet decoder (bottom-track + AHRS)
+│   │       ├── composite_bno_dvl.py  # BNO085 heading + DVL position (recommended pool source)
+│   │       ├── dvl_stub.py           # legacy placeholder (superseded by nucleus_dvl.py)
+│   │       └── witmotion_stub.py     # placeholder
 │   ├── firmware/
 │   │   └── esp32c3_bno085.md     # MCU-side wire contract + reference Arduino
-│   └── config/sensors.yaml       # yaw_source / bno085_port / bno085_baud
+│   └── config/sensors.yaml       # yaw_source / bno085_port / nucleus_dvl_* / dvl_auto_connect
 └── duburi_vision/        # Camera factory + YOLO26 detector + rich on-image viz
     ├── duburi_vision/
     │   ├── factory.py            # make_camera(name, **kw)
@@ -392,14 +395,31 @@ Adapted for our context:
 
 ### ROS params on `auv_manager_node`
 
-| Param              | Type   | Default        | Notes                                                                  |
-|--------------------|--------|----------------|------------------------------------------------------------------------|
-| `mode`             | string | `sim`          | `sim`, `pool`, `laptop`, `desk` (see §3)                               |
-| `smooth_yaw`       | bool   | `false`        | `true` → `yaw_glide` (smootherstep setpoint sweep)                     |
-| `smooth_translate` | bool   | `false`        | `true` → `drive_*_eased` (trapezoid thrust, settle-only brake)         |
-| `yaw_source`       | string | `mavlink_ahrs` | `mavlink_ahrs` \| `bno085`; same source feeds yaw + heading_lock       |
-| `bno085_port`      | string | `/dev/ttyACM0` | USB CDC device path                                                    |
-| `bno085_baud`      | int    | `115200`       | BNO085 stream baud rate                                                |
+| Param                   | Type   | Default        | Notes                                                                  |
+|-------------------------|--------|----------------|------------------------------------------------------------------------|
+| `mode`                  | string | `pool`         | `pool`, `sim`, `auto`, `laptop`, `desk` (see §3)                       |
+| `smooth_yaw`            | bool   | `false`        | `true` → `yaw_glide` (smootherstep setpoint sweep)                     |
+| `smooth_translate`      | bool   | `false`        | `true` → `drive_*_eased` (trapezoid thrust, settle-only brake)         |
+| `yaw_source`            | string | `dvl`          | `dvl` \| `bno085_dvl` \| `bno085` \| `mavlink_ahrs` (see §DVL below)  |
+| `bno085_port`           | string | `/dev/ttyACM0` | USB CDC device path (bno085 sources only)                              |
+| `bno085_baud`           | int    | `115200`       | BNO085 stream baud rate                                                |
+| `nucleus_dvl_host`      | string | `192.168.2.201`| DVL TCP hostname                                                       |
+| `nucleus_dvl_port`      | int    | `9000`         | DVL TCP port                                                           |
+| `nucleus_dvl_password`  | string | `nortek`       | DVL authentication password                                            |
+| `dvl_auto_connect`      | bool   | `true`         | Auto-connect DVL at startup (background retry loop, no manual dvl_connect needed) |
+| `dvl_retry_s`           | float  | `5.0`          | Seconds between auto-connect retry attempts                            |
+
+### Yaw source selection
+
+| `yaw_source`   | Heading from | Position (DVL dist) | Recommended for          |
+|----------------|--------------|---------------------|--------------------------|
+| `mavlink_ahrs` | ArduSub AHRS | none                | bench / Gazebo sim       |
+| `bno085`       | BNO085 IMU   | none                | pool without DVL         |
+| `dvl`          | Nucleus AHRS | Nucleus DVL         | pool with DVL (heading + position in one) |
+| `bno085_dvl`   | BNO085 IMU   | Nucleus DVL         | pool when BNO heading preferred + DVL position |
+
+> DVL sources connect automatically at startup when `dvl_auto_connect:=true`. The `dvl_connect` verb still works as a manual override.
+> **Heading lock stays ACTIVE during `move_forward_dist` / `move_lateral_dist`** — the lock owns Ch4 (yaw rate) while DVL drives Ch5/Ch6. This keeps the AUV on-heading during distance moves.
 
 > Older context files reference `/duburi/arm`, `/duburi/depth_cmd`, `/duburi/attitude`, `Attitude.msg`, `RCOverride.msg`, `VehicleState.msg`. **None of these exist.** Single action + single state topic + ROS params is the entire surface.
 
@@ -503,6 +523,22 @@ ros2 run duburi_planner duburi unlock_heading
 ros2 run duburi_planner duburi disarm
 ```
 
+### Step 3b: DVL distance commands (pool only -- requires Nucleus 1000)
+
+```bash
+# DVL connects automatically if dvl_auto_connect:=true (default).
+# Manual connect if needed:
+ros2 run duburi_planner duburi dvl_connect
+
+# DVL closed-loop distance moves:
+ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 60
+ros2 run duburi_planner duburi move_lateral_dist --distance_m 1.0 --gain 40
+
+# DVL with heading lock (lock keeps heading, DVL drives distance):
+ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120 &
+ros2 run duburi_planner duburi move_forward_dist --distance_m 3.0 --gain 60
+```
+
 ### Step 4: Run a scripted mission
 
 ```bash
@@ -511,19 +547,24 @@ ros2 run duburi_planner mission square_pattern
 ros2 run duburi_planner mission arc_demo
 ros2 run duburi_planner mission heading_lock_demo
 ros2 run duburi_planner mission find_person_demo   # vision-driven 3D align demo
+ros2 run duburi_planner mission gate_prequal        # full gate pre-qualification
 ```
 
-### Step 5: Vision sanity (before pool day)
+### Step 5: Vision sanity (gate detection)
 
 ```bash
-# Terminal A: vision pipeline
-ros2 launch duburi_vision cameras_.launch.py
+# Terminal A: start control stack + gate vision
+ros2 launch duburi_manager bringup.launch.py vision:=true
 
-# Terminal B: pure topic probe (no thrust)
-ros2 run duburi_vision vision_check --camera laptop --require-class person
+# Terminal B: pure topic probe (no thrust) -- verify gate detects
+ros2 run duburi_vision vision_check --camera forward --require-class gate
 
 # Terminal C: detection -> RC echo (sub still safe-disarmed)
-ros2 run duburi_vision vision_thrust_check --camera laptop --duration 4
+ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
+
+# Gate-specific vision commands (armed, in water):
+ros2 run duburi_planner duburi vision_align_yaw --camera forward --target_class gate --duration 10
+ros2 run duburi_planner duburi vision_align_3d  --camera forward --target_class gate --axes yaw,forward --duration 15 --lock_mode settle
 ```
 
 ---

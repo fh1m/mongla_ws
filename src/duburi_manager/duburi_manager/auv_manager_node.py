@@ -143,6 +143,13 @@ class AUVManagerNode(Node):
         self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
         self.declare_parameter('nucleus_dvl_port',     9000)
         self.declare_parameter('nucleus_dvl_password', 'nortek')
+        # dvl_auto_connect: when True and a DVL-capable yaw_source is configured,
+        # the manager tries to connect the DVL in a background thread at startup
+        # (retrying every dvl_retry_s seconds). Eliminates the manual dvl_connect
+        # step for pool-day workflow. Set false if DVL is on a slow network or
+        # you want to control connect timing manually.
+        self.declare_parameter('dvl_auto_connect',  True)
+        self.declare_parameter('dvl_retry_s',       5.0)
         # debug:=true flips per-command MAVLink trace tags on (and the
         # logger to DEBUG so they actually print). Default off so
         # production runs stay quiet. See .claude/context/mavlink-reference.md
@@ -168,6 +175,8 @@ class AUVManagerNode(Node):
         nucleus_dvl_host   = str(self.get_parameter('nucleus_dvl_host').value)
         nucleus_dvl_port   = int(self.get_parameter('nucleus_dvl_port').value)
         nucleus_dvl_passwd = str(self.get_parameter('nucleus_dvl_password').value)
+        dvl_auto_connect   = bool(self.get_parameter('dvl_auto_connect').value)
+        dvl_retry_s        = float(self.get_parameter('dvl_retry_s').value)
         debug_enabled    = bool(self.get_parameter('debug').value)
 
         # Wire MAVLink tracing on as early as possible -- we want every
@@ -252,8 +261,11 @@ class AUVManagerNode(Node):
                 f'[SENS ] yaw_source={yaw_src_name!r} failed to init: {exc}')
             raise
 
+        # ---- DVL sources set (any source that has connect()) -----------
+        _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
+
         # ---- Banner ----------------------------------------------------
-        yaw_tag = 'glide' if smooth_yaw       else 'snap'
+        yaw_tag = 'glide' if smooth_yaw       else 'snap(PID)'
         tr_tag  = 'eased' if smooth_translate else 'constant'
         yaw_src_label = self.yaw_source.name
         if yaw_src_name == 'bno085':
@@ -261,10 +273,12 @@ class AUVManagerNode(Node):
             offset = getattr(self.yaw_source, 'offset_deg', None)
             if offset is not None:
                 yaw_src_label += f'  Earth-ref offset: {offset:+.2f} deg'
-        elif yaw_src_name in ('dvl', 'nucleus_dvl'):
+        elif yaw_src_name in _DVL_SOURCES:
+            connect_hint = ('auto-connecting...' if dvl_auto_connect
+                            else 'DISCONNECTED -- call dvl_connect')
             yaw_src_label = (f'{yaw_src_label} '
                              f'({nucleus_dvl_host}:{nucleus_dvl_port}  '
-                             f'DISCONNECTED -- call dvl_connect)')
+                             f'{connect_hint})')
 
         self.get_logger().info(SEPARATOR)
         self.get_logger().info(f' DUBURI AUV MANAGER  |  mode: {mode_name}')
@@ -294,6 +308,18 @@ class AUVManagerNode(Node):
                 'yaw_source:=mavlink_ahrs for desk SITL smoke tests; keep '
                 'bno085 for pool runs where the board moves with the AUV.')
         self.get_logger().info(SEPARATOR)
+
+        # ---- DVL auto-connect -----------------------------------------
+        # When dvl_auto_connect is True and the yaw_source supports
+        # connect(), start a background thread that keeps retrying until
+        # the DVL is streaming. Operators no longer need to run
+        # `duburi dvl_connect` manually at pool-day startup.
+        if dvl_auto_connect and yaw_src_name in _DVL_SOURCES:
+            self._dvl_auto_retry_s = dvl_retry_s
+            t = threading.Thread(
+                target=self._dvl_auto_connect_loop,
+                daemon=True, name='dvl_auto_connect')
+            t.start()
 
         # ---- VisionState pool (lazy per camera) -----------------------
         # The vision verbs ask for "the VisionState for camera X" and we
@@ -380,6 +406,36 @@ class AUVManagerNode(Node):
                 f'[VST  ] preflight for {camera!r} did not pass within '
                 f'10s: {exc!r}; vision verbs will fail until pipeline is up')
         return vstate
+
+    # ================================================================== #
+    #  DVL auto-connect background loop                                   #
+    # ================================================================== #
+
+    def _dvl_auto_connect_loop(self):
+        """Background thread: try to connect the DVL, retry on failure.
+
+        Runs until the DVL is connected successfully. After first
+        success, sleeps forever (daemon thread dies with the process).
+        This eliminates the manual `duburi dvl_connect` step for
+        standard pool-day workflow.
+        """
+        src = self.yaw_source
+        if src is None or not hasattr(src, 'connect'):
+            return
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                src.connect()   # type: ignore[union-attr]
+                self.get_logger().info(
+                    f'[DVL  ] auto-connect succeeded (attempt {attempt})')
+                return
+            except Exception as exc:
+                self.get_logger().warning(
+                    f'[DVL  ] auto-connect attempt {attempt} failed: {exc}  '
+                    f'-- retrying in {self._dvl_auto_retry_s:.0f}s')
+                time.sleep(self._dvl_auto_retry_s)
 
     # ================================================================== #
     #  MAVLink reader -- only place recv_match() is called                #

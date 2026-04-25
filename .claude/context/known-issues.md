@@ -106,9 +106,12 @@ Quality-of-life tier:
 - ~~**#5, #6, #7, #8, #9**~~  **DONE 2026-04**
 
 Next-up candidates not from this audit (keep here as a hand-off list):
-- **DVL** Nortek Nucleus1000 driver — replace `_build_dvl_stub`.
+- ~~**DVL** Nortek Nucleus1000 driver — replace `_build_dvl_stub`.~~  **DONE 2026-04** (`nucleus_dvl.py` ships, distance commands work at pool)
+- ~~**DVL heading lock**: heading lock was suspended during DVL moves (caused AUV to drift).~~  **FIXED 2026-04** (lock stays active, lock owns Ch4, DVL drives Ch5/Ch6)
+- ~~**Yaw P-only controller**: snapped to target with undershoots/oscillation.~~  **FIXED 2026-04** (full PID in `motion_yaw._lock_to_target`, Kp/Ki/Kd tuned)
+- ~~**DVL auto-connect**: required manual `dvl_connect` each session.~~  **FIXED 2026-04** (`dvl_auto_connect=true` background retry thread in manager)
+- ~~**BNO+DVL combo**: could not use BNO085 heading + DVL position together.~~  **FIXED 2026-04** (`CompositeBnoDvlSource`, `yaw_source=bno085_dvl`)
 - **WitMotion** binary parser if we ever want a backup IMU — replace `_build_witmotion_stub`.
-- **Vision** package (`duburi_vision`, YOLOv11 + DeepSORT) per TDR — currently absent on purpose.
 - **Mission FSM** — populate `src/duburi_planner/duburi_planner/state_machines/` with YASMIN once missions outgrow `duburi_planner/missions/*.py` linear scripts.
 
 ---
