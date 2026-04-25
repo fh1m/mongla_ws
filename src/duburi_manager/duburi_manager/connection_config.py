@@ -67,6 +67,8 @@ NETWORK = {
     'blueos_gw': '192.168.2.2',     # BlueOS gateway
     'mav_port':  14550,             # MAVLink inspector endpoint port
     'endpoint':  'inspector',       # BlueOS endpoint name (UDP Client)
+    'dvl_ip':    '192.168.2.201',   # Nortek Nucleus 1000 DVL
+    'dvl_port':  9000,              # DVL TCP control port
 }
 
 # Sentinel value for desk profile -- replaced with an actual serial path at

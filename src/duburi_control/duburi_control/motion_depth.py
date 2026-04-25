@@ -61,9 +61,19 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
         neutral_writer = pixhawk.send_neutral
 
     starting = pixhawk.get_attitude()
-    start_d  = starting['depth'] if starting is not None else target_m
+    prime_d  = starting['depth'] if starting is not None else target_m
 
-    prime_alt_hold(pixhawk, hold_at=start_d, neutral_writer=neutral_writer)
+    prime_alt_hold(pixhawk, hold_at=prime_d, neutral_writer=neutral_writer)
+
+    # Re-read depth AFTER prime so the ramp starts from the actual position.
+    # Reading before prime causes `going_down` to be wrong when the sub
+    # drifts during the 0.5 s prime phase (e.g. positively buoyant sub
+    # rising while we hold-prime a deeper depth), which makes the first
+    # ramp frame command the stale pre-prime depth and briefly drive the
+    # wrong direction before correcting.
+    after_prime = pixhawk.get_attitude()
+    start_d = after_prime['depth'] if after_prime is not None else prime_d
+
     wait_for_depth(pixhawk, target_m, timeout, log, start_d=start_d)
 
 
