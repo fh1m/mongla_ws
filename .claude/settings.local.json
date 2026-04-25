@@ -38,7 +38,8 @@
       "Bash(git push *)",
       "Bash(xargs ls *)",
       "Bash(git -C /home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws log --oneline)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(grep *)"
     ]
   }
 }

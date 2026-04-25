@@ -102,9 +102,9 @@ def _build_bno085_dvl(*, port, baud, logger=None, pixhawk=None,
     return CompositeBnoDvlSource(bno, dvl, logger=logger)
 
 
-# Registered sources. Stubs are wired up so users hitting `yaw_source='dvl'`
-# get the per-stub "not implemented yet, use mavlink_ahrs or bno085" message
-# instead of a generic "unknown yaw_source" error from make_yaw_source.
+# Registered sources. witmotion is wired up as a fail-loud stub so users
+# hitting `yaw_source='witmotion'` get a clear "not implemented" message
+# instead of a generic "unknown source" error from make_yaw_source.
 BUILDERS = {
     'mavlink_ahrs': _build_mavlink_ahrs,
     'bno085':       _build_bno085,
