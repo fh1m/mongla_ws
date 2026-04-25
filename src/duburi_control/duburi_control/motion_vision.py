@@ -412,6 +412,7 @@ def vision_acquire(*,
                    timeout: float,
                    drive_writer: Optional[Callable[[float], None]] = None,
                    stale_after: float = DEFAULT_STALE_AFTER,
+                   writers=None,
                    log) -> VisionTrackResult:
     """Block until at least one fresh detection of `target_class` arrives.
 
@@ -443,7 +444,7 @@ def vision_acquire(*,
 
             sample = vision_state.bbox_error(target_class)
             if sample is not None and sample.age_s <= stale_after:
-                pixhawk.send_neutral()
+                (writers.neutral if writers is not None else pixhawk.send_neutral)()
                 return VisionTrackResult(
                     success=True,
                     reason=(f"acquired class={target_class!r} after "
@@ -469,7 +470,7 @@ def vision_acquire(*,
             time.sleep(1.0 / LOOP_HZ)
     finally:
         try:
-            pixhawk.send_neutral()
+            (writers.neutral if writers is not None else pixhawk.send_neutral)()
         except Exception:
             pass
 
