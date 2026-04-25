@@ -13,8 +13,10 @@ The mixin only references attributes the base ``Duburi`` provides
 (``self._command_scope(verb)``, ``self.pixhawk``, ``self.log``,
 ``self._writers()``, ``self._send_neutral_and_settle()``,
 ``self._ensure_alt_hold()``, ``self._current_depth()``,
-``self._make_result()``, ``self.vision_state_provider``) -- nothing
-rclpy-aware, identical serialisation contract as the rest of the
+``self._current_heading()``, ``self._make_result()``,
+``self.vision_state_provider``, ``self._suspend_heading_lock()``,
+``self._retarget_heading_lock()``) -- nothing rclpy-aware, identical
+serialisation contract as the rest of the
 facade. Each verb passes its own name into ``_command_scope`` so the
 ``[MAV <fn> cmd=vision_align_yaw] ...`` trace tag (see ``tracing.py``)
 attributes every camera-driven MAVLink frame to its high-level verb.
@@ -29,6 +31,8 @@ The single-axis convenience verbs (``vision_align_yaw``, ``_lat``,
 ``_depth``) are just ``vision_align_3d`` with ``axes`` pinned -- one
 canonical loop, no copy-paste.
 """
+
+from contextlib import nullcontext
 
 from .motion_vision import (
     VisionGains, vision_acquire as run_vision_acquire,
@@ -214,6 +218,7 @@ class VisionVerbs:
             vstate = self._resolve_vision_state(camera)
             depth_sign = -1 if camera in ('downward',) else +1
             touches_depth = 'depth' in axes
+            touches_yaw   = 'yaw' in axes
             if touches_depth:
                 self._ensure_alt_hold(f'vision_{label}')
             self.log.info(
@@ -222,17 +227,23 @@ class VisionVerbs:
                 f'duration={duration:.1f}s  on_lost={on_lost}  '
                 f'lock={lock_mode or "settle"}  anchor={depth_anchor_frac:.2f}  '
                 f'dist_metric={distance_metric or "height"}')
-            outcome = vision_track_axes(
-                pixhawk=self.pixhawk, vision_state=vstate,
-                target_class=target_class, axes=axes,
-                duration=duration, gains=gains,
-                target_h_frac=target_h_frac,
-                deadband=deadband, stale_after=stale_after,
-                on_lost=on_lost, depth_sign=depth_sign,
-                depth_anchor_frac=depth_anchor_frac,
-                lock_mode=lock_mode, distance_metric=distance_metric,
-                log=self.log, writers=self._writers(),
-                visual_pid=visual_pid)
+            # When yaw is in axes, vision_track_axes writes Ch4 directly.
+            # Suspend HeadingLock for the duration to avoid a Ch4 race,
+            # then retarget to the new heading on exit (same as arc).
+            with self._suspend_heading_lock() if touches_yaw else nullcontext():
+                outcome = vision_track_axes(
+                    pixhawk=self.pixhawk, vision_state=vstate,
+                    target_class=target_class, axes=axes,
+                    duration=duration, gains=gains,
+                    target_h_frac=target_h_frac,
+                    deadband=deadband, stale_after=stale_after,
+                    on_lost=on_lost, depth_sign=depth_sign,
+                    depth_anchor_frac=depth_anchor_frac,
+                    lock_mode=lock_mode, distance_metric=distance_metric,
+                    log=self.log, writers=self._writers(),
+                    visual_pid=visual_pid)
+            if touches_yaw:
+                self._retarget_heading_lock(self._current_heading())
             self._send_neutral_and_settle()
             return self._make_result(
                 outcome.success,
