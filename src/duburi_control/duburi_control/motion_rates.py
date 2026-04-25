@@ -64,6 +64,18 @@ Rate sizing rationale
                           PID from receiving a step change and overshooting.
                           Tune at pool: reduce if dives feel sluggish,
                           increase if overshoot returns.
+
+``DEPTH_BRAKE_ZONE_M = 0.30``
+                          When the sub is within this distance of the
+                          target, the ramp tracking stops and the
+                          setpoint is held at target_m. ArduSub then
+                          has a real error to act on and brakes the sub
+                          into the target instead of letting it drift
+                          in under momentum. Without this, tracking
+                          zeros ArduSub's depth error during the
+                          approach so the sub arrives at full speed.
+                          Tune: increase if still overshooting; decrease
+                          (min ~0.10 m) if approach feels jerky.
 """
 
 THRUST_HZ          = 20.0   # RC override publish rate (forward, lateral, arc)
@@ -71,6 +83,7 @@ YAW_RATE_HZ        = 10.0   # Ch4 rate-override publish rate (yaw_snap / yaw_gli
 LOCK_STREAM_HZ     = 20.0   # HeadingLock background refresh rate
 DEPTH_SETPOINT_HZ  = 5.0    # set_target_depth publish rate inside motion_depth.hold_depth
 DEPTH_RAMP_S       = 2.5    # setpoint ramp duration for set_depth (seconds)
+DEPTH_BRAKE_ZONE_M = 0.30   # within this distance, stop tracking so ArduSub brakes the approach
 HEARTBEAT_HZ       = 5.0    # Heartbeat all-neutral RC override (FS_PILOT_INPUT guard)
 VISION_LOOP_HZ     = 20.0   # motion_vision tick rate
 LOG_THROTTLE_S     = 0.5    # seconds between motion-loop log heartbeats
@@ -81,6 +94,7 @@ __all__ = [
     'LOCK_STREAM_HZ',
     'DEPTH_SETPOINT_HZ',
     'DEPTH_RAMP_S',
+    'DEPTH_BRAKE_ZONE_M',
     'HEARTBEAT_HZ',
     'VISION_LOOP_HZ',
     'LOG_THROTTLE_S',

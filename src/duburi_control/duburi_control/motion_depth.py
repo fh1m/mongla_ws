@@ -37,13 +37,15 @@ import time
 from .errors import MovementTimeout
 
 
-from .motion_rates import DEPTH_SETPOINT_HZ as SETPOINT_HZ
-from .motion_rates import DEPTH_RAMP_S      as RAMP_S
-from .motion_rates import LOG_THROTTLE_S    as LOG_THROTTLE
+from .motion_rates import DEPTH_SETPOINT_HZ  as SETPOINT_HZ
+from .motion_rates import DEPTH_RAMP_S       as RAMP_S
+from .motion_rates import DEPTH_BRAKE_ZONE_M as BRAKE_ZONE_M
+from .motion_rates import LOG_THROTTLE_S     as LOG_THROTTLE
 
-TOL_M         = 0.07    # exit tolerance (m). Achievable now we're not fighting ArduSub.
+TOL_M         = 0.10    # exit tolerance (m). 10 cm is realistic; tighter values cause
+                        # timeout when ArduSub's depth PID settles with a small residual.
 PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
-# RAMP_S is imported from motion_rates.DEPTH_RAMP_S -- tune there.
+# RAMP_S and BRAKE_ZONE_M are imported from motion_rates -- tune there.
 
 
 def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
@@ -103,9 +105,13 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
 
     Ramp phase logic:
       - Compute the linear ramp position at elapsed time.
-      - If the sub is already past the ramp (closer to target), advance
-        the setpoint to the sub's actual depth so ArduSub never fights it.
-      - Clamp to target so we never overshoot beyond it.
+      - If the sub is within BRAKE_ZONE_M of the target, hold the setpoint
+        at target_m (brake zone). ArduSub now has a real depth error and
+        applies corrective thrust for a controlled arrival.
+      - Outside the brake zone: if the sub is ahead of the ramp, advance
+        the setpoint to track it so ArduSub never reverses direction to
+        chase a lagging setpoint.
+      - Clamp to target so the setpoint never overshoots it.
 
     After RAMP_S seconds, hold the setpoint at target_m until the
     sub arrives within TOL_M or the timeout expires.
@@ -130,9 +136,14 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
             frac   = elapsed / RAMP_S
             ramped = start_d + (target_m - start_d) * frac
             if current is not None:
-                # Track sub if it's ahead of the ramp so ArduSub never
-                # reverses direction to "wait" for the lagging setpoint.
-                if going_down:
+                near_target = abs(target_m - current) < BRAKE_ZONE_M
+                if near_target:
+                    # Brake zone: hold setpoint at target so ArduSub has a
+                    # real error to work against and brakes the final approach.
+                    # Without this, tracking zeros ArduSub's depth error and
+                    # the sub drifts in under momentum and overshoots.
+                    setpoint = target_m
+                elif going_down:
                     setpoint = max(min(ramped, current), target_m)
                 else:
                     setpoint = min(max(ramped, current), target_m)

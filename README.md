@@ -1178,7 +1178,9 @@ Key constants (change in source, rebuild):
 |------|------|----------|
 | Yaw stream rate | `motion_rates.py` | `YAW_RATE_HZ = 10.0` |
 | Thrust loop rate | `motion_rates.py` | `THRUST_HZ = 20.0` |
-| Depth setpoint ramp | `motion_rates.py` | `DEPTH_RAMP_S = 2.5` — seconds to ramp from current to target depth (prevents overshoot) |
+| Depth setpoint ramp | `motion_rates.py` | `DEPTH_RAMP_S = 2.5` — seconds to ramp from current to target depth |
+| Depth brake zone | `motion_rates.py` | `DEPTH_BRAKE_ZONE_M = 0.30` — within this distance, stop tracking and let ArduSub brake the approach |
+| Depth exit tolerance | `motion_depth.py` | `TOL_M = 0.10` — 10 cm; tighter values cause timeout when ArduSub's depth PID settles with a residual |
 | Brake strength | `motion_writers.py` | `REVERSE_KICK_PCT = 25` |
 | ArduSub depth gain | QGC → Pixhawk | `PSC_POSZ_P` (default 1.0) |
 
