@@ -1,21 +1,28 @@
 """bringup -- start the AUV control stack (manager + optional vision).
 
-One-command pool-day bringup:
+One-command pool-day bringup (defaults: pool mode, DVL auto-connect):
 
-    # Control only (default -- DVL yaw source, no vision):
+    # Control only (no vision):
     ros2 launch duburi_manager bringup.launch.py
 
     # With vision + gate model (forward camera):
     ros2 launch duburi_manager bringup.launch.py vision:=true
 
-    # Explicit yaw source (mavlink_ahrs for bench / sim):
-    ros2 launch duburi_manager bringup.launch.py yaw_source:=mavlink_ahrs
-
-    # Full pool day (DVL + gate vision, no rqt):
+    # Full pool day (gate vision, hide rqt):
     ros2 launch duburi_manager bringup.launch.py vision:=true rqt:=false
 
-After launch, connect the DVL:
-    ros2 run duburi_planner duburi dvl_connect
+    # Bench / sim -- no DVL, use mavlink AHRS:
+    ros2 launch duburi_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs
+
+    # BNO085 heading + DVL position (composite source):
+    ros2 launch duburi_manager bringup.launch.py yaw_source:=bno085_dvl
+
+DVL connects automatically on startup (dvl_auto_connect:=true by default).
+Manual override: ros2 run duburi_planner duburi dvl_connect
+
+Vision commands to test gate detection:
+    ros2 run duburi_planner duburi vision_align_yaw --camera forward --target_class gate --duration 10
+    ros2 run duburi_planner duburi vision_align_3d  --camera forward --target_class gate --axes yaw,forward --duration 15
 
 Run the gate mission:
     ros2 run duburi_planner mission gate_prequal
@@ -33,12 +40,14 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     args = [
-        DeclareLaunchArgument('mode',       default_value='auto',
-                              description='Connection mode: auto|sim|pool|desk|laptop'),
+        DeclareLaunchArgument('mode',       default_value='pool',
+                              description='Connection mode: pool|sim|auto|desk|laptop'),
         DeclareLaunchArgument('yaw_source', default_value='dvl',
                               description='Yaw source: dvl|mavlink_ahrs|bno085'),
-        DeclareLaunchArgument('dvl_host',   default_value='192.168.2.201'),
-        DeclareLaunchArgument('dvl_port',   default_value='9000'),
+        DeclareLaunchArgument('dvl_host',        default_value='192.168.2.201'),
+        DeclareLaunchArgument('dvl_port',        default_value='9000'),
+        DeclareLaunchArgument('dvl_auto_connect', default_value='true',
+                              description='Auto-connect DVL at startup (true|false)'),
         DeclareLaunchArgument('vision',     default_value='false',
                               description='Start camera + detector alongside manager'),
         DeclareLaunchArgument('camera',     default_value='forward',
@@ -62,6 +71,7 @@ def generate_launch_description():
             'nucleus_dvl_host':     LaunchConfiguration('dvl_host'),
             'nucleus_dvl_port':     LaunchConfiguration('dvl_port'),
             'nucleus_dvl_password': 'nortek',
+            'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
         }],
     )
 

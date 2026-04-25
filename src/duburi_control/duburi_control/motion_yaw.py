@@ -73,6 +73,18 @@ YAW_SPEED_MAX_PCT  = 22.5   # ceiling: 90 PWM / 400 range * 100
 STALE_HOLD_S       = 0.5    # if yaw_source goes silent longer than this,
                              # park Ch4 at 1500 instead of guessing
 
+# ---- PID gains for commanded yaw turns ----------------------------------------
+# Kp: scales proportionally -- 1.2 %/deg gives ~11% at 9 deg error (well above
+#     T200 dead zone) and ~22% at max range, staying below YAW_SPEED_MAX_PCT.
+# Ki: small integral to push through static friction near target (anti-windup
+#     cap at YAW_KI_MAX prevents runaway on long overshoots).
+# Kd: derivative damping -- reduces overshoot on large turns by braking as the
+#     error shrinks. Uses 1/YAW_RATE_HZ as dt, so units are %/deg/sample.
+YAW_KP            = 1.2    # proportional gain (%/deg)
+YAW_KI            = 0.03   # integral gain (%/deg·sample); 0 to disable
+YAW_KD            = 0.5    # derivative gain (%/deg change)
+YAW_KI_MAX        = 8.0    # anti-windup: clamp accumulated integral output
+
 # ---- Glide-only tunables ---------------------------------------------
 YAW_AVG_DPS   = 30.0   # average deg/s across a glided turn
 # 90 deg -> 3.0 s, 45 deg -> 1.5 s, 180 deg -> 6.0 s.
@@ -80,14 +92,45 @@ YAW_AVG_DPS   = 30.0   # average deg/s across a glided turn
 YAW_MIN_DUR   = 1.5    # lower bound so small turns still get a glide
 
 
-def _yaw_rate_pct(error_deg: float) -> float:
-    """Clamped yaw rate (percent of Ch4 authority) from a heading error.
+class _YawPID:
+    """Minimal PID state for a single yaw turn.
 
-    Deadbands inside YAW_TOL_DEG so a locked sub does not twitch on
-    noise. Outside the deadband, speed is clamped to [MIN, MAX] so the
-    thrusters always spin fast enough to turn (floor) while never
-    saturating the bus (ceiling). Formula matches competition-proven
-    sample_codebase: max(30, min(90, |err|/180*200)) in raw PWM units.
+    Call update(error_deg) each tick; returns the signed %output to
+    drive into Ch4. Integral resets automatically when error crosses zero
+    (direction reversal) to prevent windup during overshoots.
+    """
+
+    def __init__(self):
+        self._i_acc   = 0.0
+        self._last_e  = 0.0
+
+    def update(self, error_deg: float) -> float:
+        if abs(error_deg) <= YAW_TOL_DEG:
+            self._i_acc = 0.0
+            self._last_e = error_deg
+            return 0.0
+
+        # Reset integrator when error sign flips (overshoot crossed target)
+        if math.copysign(1, error_deg) != math.copysign(1, self._last_e):
+            self._i_acc = 0.0
+
+        d_term = YAW_KD * (error_deg - self._last_e)
+        self._i_acc = max(-YAW_KI_MAX, min(YAW_KI_MAX,
+                          self._i_acc + YAW_KI * error_deg))
+
+        raw = YAW_KP * error_deg + self._i_acc + d_term
+        speed = max(YAW_SPEED_MIN_PCT, min(YAW_SPEED_MAX_PCT, abs(raw)))
+
+        self._last_e = error_deg
+        return math.copysign(speed, raw)
+
+
+def _yaw_rate_pct(error_deg: float) -> float:
+    """Simple P-only clamped rate -- used by heading_lock and glide sweep phase.
+
+    Returns signed percent of Ch4 authority. Deadbands at YAW_TOL_DEG.
+    Formula matches competition-proven sample_codebase:
+    max(30, min(90, |err|/180*200)) in raw PWM, ≡ max(7.5, min(22.5, ...))%.
     """
     if abs(error_deg) <= YAW_TOL_DEG:
         return 0.0
@@ -107,22 +150,13 @@ def _send_yaw_pct(pixhawk, yaw_pct: float) -> None:
 
 
 def _lock_to_target(pixhawk, end_heading, timeout, label, log,
-                    yaw_source, current, last_good_mono):
+                    yaw_source, current, last_good_mono, pid=None):
     """Hold a heading by Ch4 rate-override until locked or timed out.
 
-    Shared termination loop for ``yaw_snap`` and the second phase of
-    ``yaw_glide``. Both algorithms produce identical success/timeout
-    semantics so the lock-frame counting, "peak error" tracking and
-    MovementTimeout message live in exactly one place.
-
-    Args:
-        current:        last good heading reading from the caller's
-                        own loop (or the start heading if the caller
-                        never read one).
-        last_good_mono: monotonic timestamp of the last fresh sample
-                        from ``yaw_source`` -- used by the stale-hold
-                        guard so the safe-stop fires at the same
-                        wall-clock budget across the two phases.
+    Uses PID control for precise, smooth settling. When `pid` is provided
+    (a _YawPID instance from the caller's snap phase), its accumulated
+    I/D state carries over so there's no discontinuity at the phase
+    boundary in yaw_glide. When None, a fresh PID is created.
 
     Returns:
         None on success (also writes a ``[YAW  ] OK`` log line).
@@ -131,9 +165,11 @@ def _lock_to_target(pixhawk, end_heading, timeout, label, log,
         MovementTimeout: when ``timeout`` seconds elapse without
                          ``YAW_LOCK_N`` consecutive in-tolerance
                          samples. Channel 4 is parked at 1500 us
-                         before the exception so the sub stops
-                         turning even though the caller is unwinding.
+                         before the exception so the sub stops turning.
     """
+    if pid is None:
+        pid = _YawPID()
+
     deadline       = time.time() + timeout
     frames_locked  = 0
     peak_error_deg = 0.0
@@ -153,7 +189,7 @@ def _lock_to_target(pixhawk, end_heading, timeout, label, log,
         error          = Pixhawk.heading_error(end_heading, current)
         peak_error_deg = max(peak_error_deg, abs(error))
 
-        yaw_pct = _yaw_rate_pct(error)
+        yaw_pct = pid.update(error)
         _send_yaw_pct(pixhawk, yaw_pct)
 
         log.info(
@@ -185,23 +221,24 @@ def _lock_to_target(pixhawk, end_heading, timeout, label, log,
 
 
 # ---------------------------------------------------------------------- #
-#  yaw_snap -- Ch4 rate loop, yaw_source drives motion AND termination   #
+#  yaw_snap -- PID rate loop, yaw_source drives motion AND termination   #
 # ---------------------------------------------------------------------- #
 def yaw_snap(pixhawk, start_heading, end_heading,
              timeout, label, log, yaw_source=None):
     turn_degrees = Pixhawk.heading_error(end_heading, start_heading)
     log.info(
         f'[CMD  ] yaw_{label.lower()}  {abs(turn_degrees):.0f} deg  '
-        f'cur={start_heading:.1f}  tgt={end_heading:.1f}  (SNAP)')
+        f'cur={start_heading:.1f}  tgt={end_heading:.1f}  (PID)')
 
     _lock_to_target(
         pixhawk, end_heading, timeout, label, log, yaw_source,
         current=start_heading,
-        last_good_mono=time.monotonic())
+        last_good_mono=time.monotonic(),
+        pid=_YawPID())
 
 
 # ---------------------------------------------------------------------- #
-#  yaw_glide -- smoothed setpoint sweep, then hand off to _lock_to_target #
+#  yaw_glide -- smoothed setpoint sweep, then PID lock                  #
 # ---------------------------------------------------------------------- #
 def yaw_glide(pixhawk, start_heading, end_heading,
               timeout, label, log, yaw_source=None):
@@ -213,7 +250,9 @@ def yaw_glide(pixhawk, start_heading, end_heading,
         f'cur={start_heading:.1f}  tgt={end_heading:.1f}  '
         f'(GLIDE {duration:.1f}s)')
 
-    # ---- Phase 1: rate-loop closes on a smootherstep-swept target ----
+    # ---- Phase 1: P rate-loop closes on a smootherstep-swept target --
+    # Phase 1 uses simple P (not PID) because the swept target is itself
+    # moving -- integral would just build up against a moving reference.
     started_at     = time.time()
     current        = start_heading
     last_good_mono = time.monotonic()
@@ -248,10 +287,10 @@ def yaw_glide(pixhawk, start_heading, end_heading,
 
         time.sleep(1.0 / YAW_RATE_HZ)
 
-    # ---- Phase 2: hand off to the shared lock loop -------------------
-    # Carry the latest reading + freshness timestamp into _lock_to_target
-    # so its STALE_HOLD watchdog stays continuous with Phase 1.
+    # ---- Phase 2: PID lock on final target ----------------------------
+    # Fresh PID so I doesn't carry over from the moving-reference phase.
     _lock_to_target(
         pixhawk, end_heading, timeout, label, log, yaw_source,
         current=current,
-        last_good_mono=last_good_mono)
+        last_good_mono=last_good_mono,
+        pid=_YawPID())

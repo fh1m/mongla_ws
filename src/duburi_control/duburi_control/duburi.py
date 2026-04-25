@@ -545,11 +545,13 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] {verb}  {distance_m:.2f}m  '
                 f'gain={gain:.0f}%  tol={dvl_tolerance:.3f}m  settle={settle:.1f}s')
-            with self._suspend_heading_lock():
-                drive_forward_dist(
-                    self.pixhawk, signed_dir, distance_m, int(gain),
-                    dvl_tolerance, self.log, self._writers(),
-                    yaw_source=self.yaw_source, settle=settle)
+            # Heading lock stays ACTIVE during DVL distance moves.
+            # The lock owns Ch4 (yaw rate); DVL drives Ch5 (forward) only.
+            # _writers() already releases Ch4 when lock is live.
+            drive_forward_dist(
+                self.pixhawk, signed_dir, distance_m, int(gain),
+                dvl_tolerance, self.log, self._writers(),
+                yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, f'{verb}: completed',
@@ -568,11 +570,11 @@ class Duburi(VisionVerbs):
             self.log.info(
                 f'[CMD  ] move_lateral_dist  {distance_m:.2f}m  '
                 f'gain={gain:.0f}%  tol={dvl_tolerance:.3f}m  settle={settle:.1f}s')
-            with self._suspend_heading_lock():
-                drive_lateral_dist(
-                    self.pixhawk, signed_dir, distance_m, int(gain),
-                    dvl_tolerance, self.log, self._writers(),
-                    yaw_source=self.yaw_source, settle=settle)
+            # Heading lock stays ACTIVE during DVL lateral moves (owns Ch4 only).
+            drive_lateral_dist(
+                self.pixhawk, signed_dir, distance_m, int(gain),
+                dvl_tolerance, self.log, self._writers(),
+                yaw_source=self.yaw_source, settle=settle)
             depth = self._current_depth()
             return self._make_result(
                 True, 'move_lateral_dist: completed',

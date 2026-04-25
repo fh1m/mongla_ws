@@ -65,6 +65,43 @@ def _build_witmotion_stub(**_):
     return WitMotionSource()
 
 
+def _build_bno085_dvl(*, port, baud, logger=None, pixhawk=None,
+                      nucleus_dvl_host='192.168.2.201',
+                      nucleus_dvl_port=9000,
+                      nucleus_dvl_password='nortek', **_):
+    """BNO085 heading + Nucleus DVL position.
+
+    Heading (for yaw turns and heading lock) comes from the BNO085 IMU.
+    Position (for DVL distance commands) comes from the Nucleus DVL.
+    DVL starts DISCONNECTED; call dvl_connect (or use dvl_auto_connect).
+    """
+    from .sources.bno085           import BNO085Source
+    from .sources.nucleus_dvl      import NucleusDVLSource
+    from .sources.composite_bno_dvl import CompositeBnoDvlSource
+
+    do_calibrate = pixhawk is not None
+
+    def _read_pixhawk_yaw():
+        if pixhawk is None:
+            return None
+        attitude = pixhawk.get_attitude()
+        return None if attitude is None else attitude['yaw']
+
+    bno = BNO085Source(
+        port=port,
+        baud=baud,
+        logger=logger,
+        reference_yaw_provider=_read_pixhawk_yaw if do_calibrate else None,
+    )
+    dvl = NucleusDVLSource(
+        host=nucleus_dvl_host,
+        port=int(nucleus_dvl_port),
+        password=nucleus_dvl_password,
+        logger=logger,
+    )
+    return CompositeBnoDvlSource(bno, dvl, logger=logger)
+
+
 # Registered sources. Stubs are wired up so users hitting `yaw_source='dvl'`
 # get the per-stub "not implemented yet, use mavlink_ahrs or bno085" message
 # instead of a generic "unknown yaw_source" error from make_yaw_source.
@@ -73,6 +110,8 @@ BUILDERS = {
     'bno085':       _build_bno085,
     'dvl':          _build_nucleus_dvl,
     'nucleus_dvl':  _build_nucleus_dvl,
+    'bno085_dvl':   _build_bno085_dvl,   # BNO heading + DVL position
+    'dvl_bno':      _build_bno085_dvl,   # alias
     'witmotion':    _build_witmotion_stub,
 }
 

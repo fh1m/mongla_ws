@@ -52,7 +52,7 @@ Each verb's `Implements` row gives the implementation breadcrumb
 
 ## Quick Reference
 
-All 29 verbs at a glance. Required fields have no default listed.
+All 33 verbs at a glance. Required fields have no default listed.
 
 | Verb | Fields (→ default) | What it does |
 |---|---|---|
@@ -66,11 +66,14 @@ All 29 verbs at a glance. Required fields have no default listed.
 | `move_left` | **duration** required, gain→80 %, settle→0 s | Open-loop lateral strafe left |
 | `move_right` | **duration** required, gain→80 %, settle→0 s | Open-loop lateral strafe right |
 | `arc` | **duration** required, gain→50 %, yaw_rate_pct→30 %, settle→0 s | Curved motion: forward + yaw |
-| `yaw_left` | **target** deg required, timeout→30 s, settle→0 s | Sharp pivot left |
-| `yaw_right` | **target** deg required, timeout→30 s, settle→0 s | Sharp pivot right |
+| `yaw_left` | **target** deg required, timeout→30 s, settle→0 s | PID pivot left |
+| `yaw_right` | **target** deg required, timeout→30 s, settle→0 s | PID pivot right |
 | `set_depth` | **target** m required, timeout→30 s, settle→0 s | Drive to absolute depth |
 | `lock_heading` | target→0.0 °, timeout→300 s | Background heading correction loop |
 | `unlock_heading` | — | Stop heading lock |
+| `dvl_connect` | — | Connect Nucleus DVL (auto-connect also available) |
+| `move_forward_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop forward (heading lock stays active) |
+| `move_lateral_dist` | **distance_m** required (±), gain→36 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop lateral (heading lock stays active) |
 | `vision_acquire` | camera→laptop, target_class→person, target_name→'', timeout→30 s, gain→25 %, yaw_rate_pct→25 %, stale_after→1.5 s, tracking→false | Sweep until target seen |
 | `vision_align_yaw` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_yaw→60, on_lost→fail, stale_after→1.5 s, lock_mode→'', tracking→false | Centre target horizontally (heading) |
 | `vision_align_lat` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_lat→60, on_lost→fail, stale_after→1.5 s, lock_mode→'', tracking→false | Centre target horizontally (strafe) |
@@ -282,7 +285,130 @@ No parameters.
 
 ---
 
-## 8. Vision verbs (closed-loop)
+## 8. DVL distance (closed-loop, Nucleus 1000)
+
+DVL verbs use position feedback from the Nortek Nucleus 1000 to stop at an exact
+distance rather than relying on open-loop timing. The DVL source must be
+connected before the first distance move; auto-connect handles this automatically
+when `dvl_auto_connect:=true` (the default).
+
+> **Heading lock interaction (IMPORTANT):** heading lock stays **active** during
+> DVL distance moves. The lock owns Ch4 (yaw rate) and keeps the AUV pointing on
+> target; the DVL verb owns Ch5/Ch6 (forward/lateral). The two channels are
+> independent so they coexist safely. Do **not** call `unlock_heading` before a
+> DVL move — the AUV will weather-cock.
+
+### `dvl_connect`
+
+Manually trigger a DVL connection attempt. Normally auto-connect handles this,
+so you only need `dvl_connect` if `dvl_auto_connect:=false` or to re-trigger
+after a cable event.
+
+No parameters.
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi dvl_connect` |
+| DSL | `duburi.dvl_connect()` |
+| Result | `success=True` if TCP handshake to 192.168.2.201:9000 completes; `success=False` with reason otherwise |
+| Auto-connect | When manager starts with `dvl_auto_connect:=true` (default), a background daemon retries every `dvl_retry_s` (5 s) until success — `dvl_connect` is not needed |
+| Banner | On manager startup: `(192.168.2.201:9000 auto-connecting...)` or `DISCONNECTED` depending on `dvl_auto_connect` setting |
+
+```bash
+# Manual connect (if dvl_auto_connect:=false)
+ros2 run duburi_planner duburi dvl_connect
+# → [DVL  ] auto-connect succeeded (attempt 1)
+```
+
+### `move_forward_dist`
+
+Drive forward (positive) or backward (negative) exactly `distance_m` metres using
+DVL bottom-track position feedback. Heading lock stays active throughout.
+
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `distance_m` | float (m) | — **required** | any non-zero float | Positive = forward; negative = backward |
+| `gain` | float (%) | `60.0` | `10.0 – 100.0` | Constant thrust percentage during move |
+| `dvl_tolerance` | float (m) | `0.1` | `0.01 – 1.0` | Stop when \|error\| ≤ this value |
+| `settle` | float (s) | `0.0` | `0.0 – 10.0` | Neutral hold after reaching target |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi move_forward_dist --distance_m 2.0 [--gain 60] [--dvl_tolerance 0.1]` |
+| DSL | `duburi.move_forward_dist(2.0, gain=60)` |
+| MAVLink | `RC_CHANNELS_OVERRIDE` Ch5 @ 20 Hz constant during move; `send_neutral()` on stop |
+| DVL feedback | `NucleusDVLSource.get_position()` → integrated (x_m, y_m); `reset_position()` called at start |
+| Fallback | If DVL source has no `get_position()` method (e.g. `yaw_source=mavlink_ahrs`), logs warning and falls back to open-loop time estimate |
+| Timeout | Generous auto-timeout: `|distance_m| / 0.05 + 10.0` seconds |
+| Result | `final_value` = current depth (m); `error_value` = 0.0 |
+| `[MAV ]` | `[MAV send_rc_override cmd=move_forward_dist] fwd=<pwm>` per tick |
+
+```bash
+# 2 m forward with DVL feedback
+ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 60
+
+# With heading lock active
+ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120 &
+ros2 run duburi_planner duburi move_forward_dist --distance_m 3.0 --gain 60
+ros2 run duburi_planner duburi unlock_heading
+
+# DSL usage in a mission
+duburi.lock_heading(target=0.0)
+duburi.move_forward_dist(3.0, gain=60)
+duburi.unlock_heading()
+```
+
+### `move_lateral_dist`
+
+Strafe left (negative) or right (positive) exactly `distance_m` metres using DVL
+lateral-velocity feedback. Heading lock stays active throughout.
+
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `distance_m` | float (m) | — **required** | any non-zero float | Positive = right; negative = left |
+| `gain` | float (%) | `36.0` | `10.0 – 100.0` | Constant thrust percentage during move |
+| `dvl_tolerance` | float (m) | `0.1` | `0.01 – 1.0` | Stop when \|error\| ≤ this value |
+| `settle` | float (s) | `0.0` | `0.0 – 10.0` | Neutral hold after reaching target |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi move_lateral_dist --distance_m 1.0 [--gain 36] [--dvl_tolerance 0.1]` |
+| DSL | `duburi.move_lateral_dist(1.0, gain=36)` |
+| MAVLink | `RC_CHANNELS_OVERRIDE` Ch6 @ 20 Hz constant during move; `send_neutral()` on stop |
+| DVL feedback | `NucleusDVLSource.get_position()` → `y_m` component; `reset_position()` called at start |
+| Fallback | Falls back to open-loop time estimate if DVL position unavailable |
+| Result | `final_value` = current depth (m); `error_value` = 0.0 |
+| `[MAV ]` | `[MAV send_rc_override cmd=move_lateral_dist] lat=<pwm>` per tick |
+
+```bash
+# 1 m right strafe
+ros2 run duburi_planner duburi move_lateral_dist --distance_m 1.0 --gain 36
+
+# Negative distance = left
+ros2 run duburi_planner duburi move_lateral_dist --distance_m -1.0 --gain 36
+```
+
+### DVL source selection
+
+| `yaw_source` | Heading from | Position from | Use when |
+|---|---|---|---|
+| `dvl` / `nucleus_dvl` | Nucleus AHRS (0xD2 packet) | Nucleus bottom-track (0xB4) | DVL is the sole IMU |
+| `bno085_dvl` / `dvl_bno` | BNO085 (USB CDC) | Nucleus bottom-track (0xB4) | Want BNO's stable gyro fusion + DVL distance |
+| `bno085` | BNO085 | — (no position) | No DVL; distance moves fall back to open-loop |
+| `mavlink_ahrs` | Pixhawk AHRS2 | — (no position) | Bench / sim; no DVL at all |
+
+`bno085_dvl` is the recommended pool configuration: BNO provides better gyro
+fusion than the Nucleus AHRS while the DVL bottom-track handles all position.
+
+> **BNO drift after DVL sessions**: if `yaw_source=bno085`, the BNO calibration
+> offset is calculated at startup using the Pixhawk AHRS heading. If the Pixhawk
+> AHRS drifts during a long DVL session, the BNO offset will be stale. Fix:
+> restart the manager when switching source, or use `yaw_source=bno085_dvl`
+> throughout (BNO stays warm, calibration never goes stale).
+
+---
+
+## 9. Vision verbs (closed-loop)
 
 Every vision verb watches the largest detection of `target_class` in
 `camera`. Defaults are the rosidl zeros so the manager's live
@@ -507,7 +633,7 @@ ey_anchor = ey + (2 × anchor − 1) × h_frac
 
 ---
 
-## 9. Tracker node (optional, off by default)
+## 10. Tracker node (optional, off by default)
 
 `tracker_node` subscribes the detector's `/detections` topic, runs **ByteTrack** (two-stage association) + a **per-track 4-state Kalman smoother** (`[cx, cy, vx, vy]`), and republishes `/tracks` — same `Detection2DArray` format but with `tracking_id` populated and bbox centers smoothed.
 
@@ -562,7 +688,7 @@ When the detector misses a frame but ByteTrack's buffer hasn't expired, `tracker
 
 ---
 
-## 10. Cross-references
+## 11. Cross-references
 
 * `COMMANDS` registry (single source of truth for fields/defaults): [`commands.py`](../../src/duburi_control/duburi_control/commands.py)
 * Python facade (open-loop verbs): [`duburi.py`](../../src/duburi_control/duburi_control/duburi.py)

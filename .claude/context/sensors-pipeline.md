@@ -163,6 +163,86 @@ or fallback logic, both forbidden by the rules above.
 
 ---
 
+## DVL extension contract
+
+Nortek Nucleus 1000 sources (and composites) extend the base `YawSource`
+contract with three extra methods. Code that needs DVL position checks for
+these via `hasattr` — the base `YawSource` does not define them.
+
+```python
+# Extension — implemented by NucleusDVLSource and CompositeBnoDvlSource
+def connect(self) -> None:
+    """Open TCP connection to Nucleus (192.168.2.201:9000).
+    Raises exception on failure. Idempotent if already connected."""
+
+def get_position(self) -> tuple[float, float]:
+    """Return integrated body-frame (x_m, y_m) since last reset_position()."""
+
+def reset_position(self) -> None:
+    """Zero the position integrator. Call before each DVL distance command."""
+```
+
+### `NucleusDVLSource` (`sources/nucleus_dvl.py`)
+
+Connects to Nucleus 1000 over TCP. Spins a background reader thread that:
+
+1. Receives AHRS packets (ID `0xD2`) → caches heading for `read_yaw()`
+2. Receives bottom-track packets (ID `0xB4`) → validates flags then integrates `(vx × dt, vy × dt)` into position
+
+Integration guard:
+```python
+if 0 < dt < 0.5:    # skip stale packet on reconnect
+    pos_x += vx * dt
+    pos_y += vy * dt
+```
+
+Validity flags checked before integration:
+```python
+pkt['beam1_fom_valid'] and pkt['beam2_fom_valid']
+    and pkt['x_velocity_valid'] and pkt['y_velocity_valid']
+```
+
+Stale handling: `read_yaw()` returns `None` if last AHRS packet is > 250 ms old
+(same 250 ms threshold as `MavlinkAhrsSource`).
+
+### `CompositeBnoDvlSource` (`sources/composite_bno_dvl.py`)
+
+Wraps one `BNO085Source` and one `NucleusDVLSource` in a single `YawSource`.
+
+| Method | Delegates to |
+|---|---|
+| `read_yaw()` | BNO085 source |
+| `is_healthy()` | BNO085 source |
+| `get_position()` | DVL source |
+| `reset_position()` | DVL source |
+| `connect()` | DVL source |
+| `dvl_is_healthy()` | DVL source (diagnostic only) |
+| `close()` | Both sources |
+
+This lets the operator choose BNO085's stable gyro fusion for heading while
+still getting DVL bottom-track for closed-loop distance commands.
+
+### Auto-connect (`auv_manager_node._dvl_auto_connect_loop`)
+
+When `dvl_auto_connect:=true` (default), the manager launches a daemon thread
+after yaw source init. The thread loops:
+
+```python
+while True:
+    try:
+        src.connect()          # TCP handshake + Nucleus startup sequence
+        return                 # exits on first success
+    except Exception as exc:
+        log.warning(f'retry in {dvl_retry_s}s: {exc}')
+        time.sleep(dvl_retry_s)
+```
+
+The thread is a `daemon=True` thread — it dies with the process even if still
+retrying. The `dvl_connect` verb (`duburi dvl_connect` CLI) always works as a
+manual override regardless of auto-connect state.
+
+---
+
 ## When to break the rules
 
 - **Add fusion** → only after `robot_localization` lands as a separate
@@ -183,5 +263,8 @@ or fallback logic, both forbidden by the rules above.
 
 - `[../../src/duburi_sensors/](../../src/duburi_sensors/)` — package source
 - `[../../src/duburi_sensors/firmware/esp32c3_bno085.md](../../src/duburi_sensors/firmware/esp32c3_bno085.md)` — BNO085 wire contract
+- `[../../src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py](../../src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py)` — Nucleus 1000 DVL driver
+- `[../../src/duburi_sensors/duburi_sensors/sources/composite_bno_dvl.py](../../src/duburi_sensors/duburi_sensors/sources/composite_bno_dvl.py)` — BNO085+DVL composite
+- `[./dvl-integration.md](./dvl-integration.md)` — DVL hardware spec, packet format, smoke tests
 - `[./yaw-stability-and-fusion.md](./yaw-stability-and-fusion.md)` — research notes on yaw drift sources
 - `[./proven-patterns.md](./proven-patterns.md)` — 2023/2025 codebase patterns we draw from

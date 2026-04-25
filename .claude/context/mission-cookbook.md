@@ -665,7 +665,104 @@ def run(duburi, log):
 
 ---
 
-## 7. Designing your own mission, step by step
+## 7. DVL distance moves
+
+DVL-based closed-loop distance commands are available when `yaw_source` has a
+DVL component (`dvl`, `nucleus_dvl`, `bno085_dvl`). Auto-connect means you
+don't need `dvl_connect` in the mission — the manager's background thread has
+already connected before any mission code runs.
+
+### 7.1  Basic DVL forward move
+
+```python
+def run(duburi, log):
+    duburi.arm()
+    duburi.set_depth(-0.8, settle=1.0)
+    # DVL closed-loop: stops exactly 2.0 m from start position
+    duburi.move_forward_dist(2.0, gain=60)
+    duburi.disarm()
+```
+
+### 7.2  Heading-stable DVL translation (recommended pattern)
+
+Lock heading BEFORE starting the DVL move. The lock owns Ch4 (yaw rate) and
+holds the AUV pointed at the target while DVL drives Ch5 (forward) or Ch6
+(lateral). Do NOT call `unlock_heading` between them.
+
+```python
+def run(duburi, log):
+    duburi.arm()
+    duburi.set_depth(-0.8, settle=1.0)
+
+    # Lock heading at 0° and keep it active throughout
+    duburi.lock_heading(target=0.0, timeout=120)
+
+    # DVL moves — heading lock stays alive, no yaw drift
+    duburi.move_forward_dist(3.0, gain=60)
+    duburi.move_lateral_dist(1.0, gain=36)      # strafe 1 m right
+    duburi.move_forward_dist(2.0, gain=60)
+
+    duburi.unlock_heading()
+    duburi.disarm()
+```
+
+### 7.3  Vision approach + DVL final run
+
+Use vision to centre on the target, then DVL for a precise close-in:
+
+```python
+def run(duburi, log):
+    duburi.target = 'gate'
+    duburi.camera = 'forward'
+    duburi.arm()
+    duburi.set_depth(-1.0)
+    duburi.lock_heading(target=0.0, timeout=120)
+
+    # Phase 1: find and centre on gate
+    duburi.vision.find(sweep='right', timeout=30.0)
+    duburi.vision.lock(axes='yaw', duration=5.0, lock_mode='settle')
+
+    # Phase 2: update heading lock to current (post-alignment) heading
+    duburi.unlock_heading()
+    duburi.lock_heading(target=0.0, timeout=120)   # target=0 = lock current
+
+    # Phase 3: drive through gate with DVL precision
+    duburi.move_forward_dist(4.0, gain=60)
+
+    duburi.unlock_heading()
+    duburi.disarm()
+```
+
+### 7.4  Composite BNO+DVL (recommended pool config)
+
+`yaw_source=bno085_dvl` uses BNO085 heading (stable gyro fusion) + DVL position.
+Configure in `config/sensors.yaml`:
+
+```yaml
+duburi_manager:
+  ros__parameters:
+    yaw_source: bno085_dvl
+```
+
+Mission code is identical — the yaw source selection is transparent to the DSL.
+
+### 7.5  DVL gotchas
+
+- `move_forward_dist` / `move_lateral_dist` call `reset_position()` internally.
+  No need to call it explicitly unless building your own control loop.
+- If `yaw_source` has no DVL component (e.g. `mavlink_ahrs` or `bno085`), both
+  commands fall back to open-loop time estimate and log a warning. They never
+  raise; the mission continues.
+- Heading lock MUST stay active during DVL moves (see §7.2). Suspending it
+  causes the AUV to weather-cock.
+- After a long DVL session, if you switch to `yaw_source=bno085` (not
+  `bno085_dvl`), restart the manager. The BNO calibration runs at startup using
+  the Pixhawk AHRS heading; if the Pixhawk AHRS drifted during the DVL session,
+  the BNO offset will be stale.
+
+---
+
+## 8. Designing your own mission, step by step
 
 1. **Pick a stable starting condition.** `arm()` then `set_depth(-0.5)`
    gives you altitude headroom and engages ALT_HOLD.
@@ -690,7 +787,7 @@ def run(duburi, log):
 
 ---
 
-## 8. Gotchas
+## 9. Gotchas
 
 - **A `vision.*` verb with `target=''`** raises — sticky context is
   required, set `duburi.target` once before the first vision verb.
@@ -709,13 +806,17 @@ def run(duburi, log):
 
 ---
 
-## 9. Cross-references
+## 10. Cross-references
 
 - Open-loop verb implementations: `src/duburi_control/duburi_control/{motion_forward,motion_lateral,motion_yaw,motion_depth,heading_lock}.py`
+- DVL distance verbs:             `src/duburi_control/duburi_control/{motion_forward,motion_lateral}.py` (`drive_*_dist`)
+- DVL sources:                    `src/duburi_sensors/duburi_sensors/sources/{nucleus_dvl,composite_bno_dvl}.py`
 - Vision loop body:               `src/duburi_control/duburi_control/motion_vision.py`
 - Vision state cache:             `src/duburi_manager/duburi_manager/vision_state.py`
 - DSL surface:                    `src/duburi_planner/duburi_planner/duburi_dsl.py`
 - ROS param defaults:             `src/duburi_manager/config/vision_tunables.yaml`
+- DVL integration reference:      `.claude/context/dvl-integration.md`
+- Sensors pipeline design:        `.claude/context/sensors-pipeline.md`
 - CLI cookbook (deck one-liners): `README.md` §9
 - Architecture (visual flow):     `.claude/context/vision-architecture.md`
 - Roadmap (what's next):          `.claude/context/vision-roadmap.md`

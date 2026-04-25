@@ -2,22 +2,28 @@
 #
 # Pick ONE source per launch. No mid-run switching, no auto-fallback.
 #
-#   yaw_source: 'mavlink_ahrs'   ArduSub onboard AHRS (default, no extra hw)
-#   yaw_source: 'bno085'         External ESP32-C3 + BNO085 over USB CDC
-#                                Firmware contract: see src/duburi_sensors/README.md
-#   yaw_source: 'dvl'            Nortek Nucleus 1000 AHRS over TCP
-#               'nucleus_dvl'    (both names accepted)
-#                                Requires dvl_connect Move.action verb before use.
-#                                DVL also provides get_position() for distance commands.
+#   yaw_source: 'mavlink_ahrs'   ArduSub onboard AHRS (bench/sim, no extra hw)
+#   yaw_source: 'bno085'         BNO085 ESP32-C3 over USB CDC (heading only)
+#   yaw_source: 'dvl'            Nucleus 1000 AHRS over TCP (heading + position)
+#               'nucleus_dvl'    (alias)
+#   yaw_source: 'bno085_dvl'     BNO085 heading + DVL position (recommended pool)
+#               'dvl_bno'        (alias)
 #
-# bno085_port / bno085_baud only matter when yaw_source=='bno085'.
-# nucleus_dvl_* only matter when yaw_source=='dvl' or 'nucleus_dvl'.
+# DVL sources (dvl / nucleus_dvl / bno085_dvl):
+#   - Connect automatically at startup when dvl_auto_connect:=true (default).
+#   - Manual: ros2 run duburi_planner duburi dvl_connect
+#   - DVL provides get_position() used by move_forward_dist / move_lateral_dist.
+#
+# bno085_port / bno085_baud only matter when yaw_source has 'bno085'.
+# nucleus_dvl_* only matter when yaw_source has 'dvl'.
 
 duburi_manager:
   ros__parameters:
-    yaw_source:           mavlink_ahrs
+    yaw_source:           dvl
     bno085_port:          /dev/ttyACM0
     bno085_baud:          115200
     nucleus_dvl_host:     '192.168.2.201'
     nucleus_dvl_port:     9000
     nucleus_dvl_password: 'nortek'
+    dvl_auto_connect:     true
+    dvl_retry_s:          5.0
