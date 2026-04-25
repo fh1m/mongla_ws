@@ -196,10 +196,12 @@ to keep you centred. Manager logs `[vision] err=±0.0XX  ch4=±YY%`.
 ### 4 — Mission runner (auto-discovered)
 
 ```bash
-ros2 run duburi_planner mission --list           # shows every missions/*.py
-ros2 run duburi_planner mission move_and_see     # short open-loop + vision demo
-ros2 run duburi_planner mission find_person_demo # full vision-driven walkthrough
-ros2 run duburi_planner mission robosub_prequal  # RoboSub pre-qualification sequence
+ros2 run duburi_planner mission --list                 # shows every missions/*.py
+ros2 run duburi_planner mission move_and_see           # short open-loop + vision demo
+ros2 run duburi_planner mission find_person_demo       # full vision-driven walkthrough
+ros2 run duburi_planner mission gate_prequal           # gate-only prequal (DVL forward)
+ros2 run duburi_planner mission gate_flare_prequal     # full autonomous gate+flare+return
+ros2 run duburi_planner mission robosub_prequal        # RoboNation prequal (strafe pass)
 ```
 
 Adding a new mission: drop `missions/<your_name>.py` exposing
@@ -207,9 +209,9 @@ Adding a new mission: drop `missions/<your_name>.py` exposing
 `--list` instantly. **No registry edit.** Full reference:
 [.claude/context/mission-cookbook.md](.claude/context/mission-cookbook.md).
 
-### 5 — Live-tune vision gains without restarting
+### 5 — Live-tune gains and switch models
 
-While a vision verb / mission is running:
+Change vision gains while a mission is running:
 
 ```bash
 ros2 param set /duburi_manager vision.kp_yaw 80.0
@@ -217,9 +219,22 @@ ros2 param set /duburi_manager vision.deadband 0.06
 ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
 ```
 
-Every subsequent vision goal picks up the new value automatically — mission
-files that omit those overrides use the live ROS-param value. Defaults live
-in [src/duburi_manager/config/vision_tunables.yaml](src/duburi_manager/config/vision_tunables.yaml).
+Switch the detector class filter without restarting the detector node:
+
+```bash
+ros2 param set /duburi_detector classes gate         # gate detection only
+ros2 param set /duburi_detector classes flare        # flare detection only
+ros2 param set /duburi_detector classes "gate,flare" # both
+```
+
+Or from inside a mission DSL:
+
+```python
+duburi.set_classes('gate')    # switch to gate phase
+duburi.set_classes('flare')   # switch to flare phase
+```
+
+Defaults live in [src/duburi_manager/config/vision_tunables.yaml](src/duburi_manager/config/vision_tunables.yaml) and [src/duburi_vision/config/detector.yaml](src/duburi_vision/config/detector.yaml).
 
 ### 6 — BNO085 yaw source (plug-and-play)
 
@@ -819,8 +834,9 @@ duburi_ws/
             │   ├── find_person_demo.py  # full vision-driven 3D alignment demo
             │   ├── move_and_see.py      # alternates open-loop + vision verbs
             │   ├── pursue_demo.py       # vision_align_3d lock_mode=pursue demo
-            │   ├── gate_prequal.py      # gate pre-qualification sequence (MATE/RoboSub)
-            │   └── robosub_prequal.py   # full RoboSub pre-qualification sequence
+            │   ├── gate_prequal.py          # gate-only prequal (DVL forward)
+            │   ├── robosub_prequal.py       # RoboNation prequal (strafe pass + flare orbit)
+            │   └── gate_flare_prequal.py    # full autonomous gate+flare+return (competition)
             └── state_machines/          # reserved for YASMIN-based plans
 ```
 
@@ -1150,12 +1166,15 @@ def run(duburi, log):
 
 - `duburi.*` — open-loop motion (arm, set_depth, move_\*, yaw_\*, arc, lock_heading, ...)
 - `duburi.vision.*` — closed-loop vision verbs (find, yaw, lateral, depth, forward, lock, follow)
+- `duburi.set_classes(csv)` — switch detector class filter live (e.g. `'gate'` → `'flare'` between phases)
+- `duburi.countdown(seconds)` — tether-removal countdown with banner before mission start
 
 ```bash
 ros2 run duburi_planner mission --list
 ros2 run duburi_planner mission find_person_demo   # vision-driven 3D alignment
-ros2 run duburi_planner mission gate_prequal        # gate pre-qualification (MATE/RoboSub)
-ros2 run duburi_planner mission robosub_prequal     # full RoboSub pre-qual sequence
+ros2 run duburi_planner mission gate_prequal            # gate-only prequal (DVL forward)
+ros2 run duburi_planner mission gate_flare_prequal      # full autonomous gate+flare+return
+ros2 run duburi_planner mission robosub_prequal         # RoboNation prequal (strafe pass)
 ```
 
 Full DSL API + working principles + samples:

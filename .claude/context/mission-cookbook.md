@@ -470,19 +470,24 @@ ros2 run duburi_vision tracker_check --camera laptop --class person
 
 ## 3.4  Model and class selection
 
-### Three-model setup (gate / flare / gate+flare)
+### Drop-and-use — no YAML required
 
-Drop weight files and YAML sidecars in `src/duburi_vision/models/`:
+Drop any `.pt` file into `src/duburi_vision/models/`. The detector reads
+class names from the model's embedded names table (`model.names`), which
+Ultralytics always populates at training time. **No sidecar YAML needed.**
 
 ```
 models/
-├── gate_v1.pt           gate_v1.yaml           # names: {0: gate}
-├── flare_v1.pt          flare_v1.yaml          # names: {0: flare}
-└── gate_flare_v1.pt     gate_flare_v1.yaml     # names: {0: gate, 1: flare}
+├── gate_nano_100ep.pt            # gate only, nano, fast
+├── gate_medium_100ep.pt          # gate only, medium accuracy
+├── gate_medium_200ep.pt          # gate only, fine-tuned 200 ep
+├── flare_medium_100ep.pt         # flare only
+└── gate_flare_medium_100ep.pt    # gate + flare combined  (prequal default)
 ```
 
-Each YAML uses Ultralytics `data.yaml` format:
+Optional YAML override (only if you need to remap class IDs):
 ```yaml
+# gate_flare_medium_100ep.yaml  -- optional; omit this and model.names is used
 names:
   0: gate
   1: flare
@@ -491,79 +496,135 @@ names:
 ### Selecting model and classes at launch
 
 ```bash
-# Gate phase
-ros2 launch duburi_vision cameras_.launch.py model:=gate_v1 classes:=gate
+# Gate-only model
+ros2 launch duburi_vision cameras_.launch.py model:=gate_medium_100ep classes:=gate
 
-# Flare phase
-ros2 launch duburi_vision cameras_.launch.py model:=flare_v1 classes:=flare
+# Flare-only model
+ros2 launch duburi_vision cameras_.launch.py model:=flare_medium_100ep classes:=flare
 
-# Combo model — gate task only
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate
+# Combined model — gate approach phase
+ros2 launch duburi_vision cameras_.launch.py \
+    model:=gate_flare_medium_100ep classes:=gate
 
-# Combo model — both classes visible
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+# Combined model — show both classes (debug)
+ros2 launch duburi_vision cameras_.launch.py \
+    model:=gate_flare_medium_100ep classes:=gate,flare
 ```
 
-### Switching class filter live (no restart needed)
+### Switching class filter live (no node restart)
 
-The model is loaded once at launch. `classes` is a post-inference filter —
-same forward pass, different box allowlist. Switch mid-pool:
+The model is loaded once at launch. `classes` is a post-inference allowlist —
+same forward pass every frame, different box list published. Change it:
 
 ```bash
+# Shell
 ros2 param set /duburi_detector classes gate
 ros2 param set /duburi_detector classes flare
 ros2 param set /duburi_detector classes "gate,flare"
+ros2 param set /duburi_detector classes ""    # publish ALL model classes
 ```
 
-### In a mission (DSL)
+```python
+# From inside a mission (takes effect next inference frame)
+duburi.set_classes('gate')
+duburi.set_classes('flare')
+duburi.set_classes('gate,flare')
+duburi.set_classes('')          # all classes
+duburi.set_classes(['gate', 'flare'])  # list form also accepted
+```
 
-Set `duburi.camera` and `duburi.target` once; they stick for all subsequent
-vision verbs. There is no API to swap the running model mid-mission — if you
-need both a gate model and a flare model in the same pool run, use the
-combined `gate_flare_v1` model and just change `duburi.target`:
+### Full gate+flare prequal mission pattern
 
 ```python
 def run(duburi, log):
-    # camera_ launch was started with: model:=gate_flare_v1 classes:=gate,flare
     duburi.camera = 'forward'
 
-    # Phase 1 — gate
-    duburi.target = 'gate'
+    # Tether removal window -- operator disconnects tether during countdown
+    duburi.countdown(10)
+
     duburi.arm()
-    duburi.set_depth(-1.0)
-    duburi.vision.find(sweep='right', timeout=20.0)
-    duburi.vision.lock(axes='yaw,forward', duration=15.0)
+    duburi.set_mode('ALT_HOLD')
+    duburi.set_depth(-1.0, settle=2.0)
+    duburi.dvl_connect()
 
-    # Phase 2 — flare (same model, different class filter in vision verb)
+    # Gate phase -- filter to gate class only
+    duburi.set_classes('gate')
+    duburi.target = 'gate'
+    duburi.vision.find(sweep='forward', timeout=45.0, gain=40.0)
+    duburi.vision.lock(axes='yaw,forward', distance=0.42,
+                       duration=20.0, on_lost='hold',
+                       distance_metric='area')
+    duburi.move_forward_dist(3.5, gain=60.0)
+
+    # Flare phase -- switch filter to flare
+    duburi.set_classes('flare')
     duburi.target = 'flare'
-    duburi.vision.find(sweep='right', timeout=20.0)
-    duburi.vision.lock(axes='yaw,depth', duration=12.0)
+    duburi.vision.find(sweep='right', timeout=40.0, gain=0.0)
+    duburi.vision.lock(axes='yaw,forward,depth', distance=0.38,
+                       duration=20.0, on_lost='hold', lock_mode='settle')
 
+    # Orbit flare 360 degrees
+    for _ in range(12):
+        duburi.yaw_left(30.0, timeout=10.0, settle=0.3)
+        duburi.vision.lock(axes='yaw,forward,depth', distance=0.38,
+                           duration=3.0, on_lost='hold', lock_mode='follow')
+
+    # Return through gate
+    duburi.yaw_right(180.0, timeout=25.0, settle=0.5)
+    duburi.set_classes('gate')
+    duburi.target = 'gate'
+    duburi.vision.find(sweep='right', timeout=30.0, gain=0.0)
+    duburi.vision.lock(axes='yaw,forward', distance=0.42,
+                       duration=20.0, on_lost='hold', distance_metric='area')
+    duburi.move_forward_dist(3.5, gain=60.0)
+
+    duburi.stop()
+    duburi.set_depth(0.0)
     duburi.disarm()
 ```
 
-No restart needed between phases. The detector keeps running; each
-`vision.*` verb passes `target_class` through to `VisionState.bbox_error`
-which already filters by class name on the fly.
+See `missions/gate_flare_prequal.py` for the production-tuned version of this.
+
+### Edge cases and robustness notes (from preview footage)
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Gate partially off-frame (one post visible) | yaw axis steers toward visible bbox center — no special code needed |
+| Gate fills 90%+ of frame (too close) | forward axis backs off until `distance` fraction is met (`distance_metric='area'`) |
+| Flare at distance (narrow, ~10% frame height) | `distance=0.38` with `height` metric still has signal; yaw locks on horizontal center |
+| Detection flicker in turbid water | `on_lost='hold'` freezes setpoints for up to `stale_after` seconds (default 1.5 s) |
+| False positives (non-target debris) | `conf=0.45` in detector.yaml already filters these; real detections are 0.90-0.97 |
+
+**`distance_metric`** guidance:
+- `'area'` (width × height) — use for gates (wide, squat objects)
+- `'height'` (default) — use for flares and vertical pipes
+
+### Tether removal countdown
+
+```python
+duburi.countdown(10)          # 10-second window, default message
+duburi.countdown(15, message='Stand clear. Starting autonomous run.')
+```
+
+Prints an ASCII box countdown to stdout. The mission continues immediately
+after. All onboard compute (Jetson, Pi, DVL, Pixhawk) is self-sufficient —
+removing the tether during this window leaves the AUV fully autonomous.
 
 ### Offline pre-pool testing with a video file
 
-Run the full vision pipeline on a recorded `.mp4` / `.avi` without a camera:
-
 ```bash
-# Play pool_run.mp4 through the gate detector
+# Run gate model on recorded pool footage
 ros2 launch duburi_vision cameras_.launch.py \
-    video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
+    video_file:=/tmp/pool_run.mp4 model:=gate_flare_medium_100ep classes:=gate
 
-# Loop OFF (stop at EOF), no rqt window, with ByteTrack
+# Loop OFF (stop at EOF), with ByteTrack
 ros2 launch duburi_vision cameras_.launch.py \
-    video_file:=/tmp/gate_run.mp4 classes:=gate loop:=false rqt:=false \
-    with_tracking:=true
+    video_file:=/tmp/gate_run.mp4 model:=gate_medium_100ep classes:=gate \
+    loop:=false with_tracking:=true
 ```
 
-The video file is treated as a camera source: `camera_node` reads frames,
-`detector_node` runs YOLO, `/duburi/vision/laptop/image_debug` shows
-annotated output. All downstream vision verbs work identically.
+All downstream nodes (`detector_node`, `tracker_node`, vision verbs)
+behave identically with `video_file` as with a live camera.
 
 ---
 

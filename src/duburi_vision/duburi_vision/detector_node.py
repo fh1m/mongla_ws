@@ -101,6 +101,10 @@ class DetectorNode(Node):
         self._device_str = str(self.get_parameter('device').value)
         self._deadband   = float(self.get_parameter('alignment_deadband').value)
 
+        # Allow live class-filter switching via `ros2 param set /duburi_detector classes <csv>`
+        # Model reload still requires a full node restart — only the allowlist is hot-swapped.
+        self.add_on_set_parameters_callback(self._on_parameter_change)
+
         self.get_logger().info(
             f"[DET  ] subscribed {ns_in!r} -> {ns_out}/detections  "
             f"({'+ image_debug' if self._publish_dbg else 'no debug image'})")
@@ -142,6 +146,20 @@ class DetectorNode(Node):
                 self._last_dbg = time.monotonic()
             except Exception as exc:
                 self.get_logger().warning(f"[DET  ] debug image encode failed: {exc!r}")
+
+    def _on_parameter_change(self, params):
+        from rcl_interfaces.msg import SetParametersResult
+        for p in params:
+            if p.name == 'classes':
+                classes_str = str(p.value).strip()
+                new_allow   = (
+                    None if not classes_str
+                    else [c.strip() for c in classes_str.split(',') if c.strip()]
+                )
+                self._det.update_allowlist(new_allow)
+                self.get_logger().info(
+                    f"[DET  ] classes updated → {new_allow or '*all*'}")
+        return SetParametersResult(successful=True)
 
     def _log_health(self):
         now = time.monotonic()

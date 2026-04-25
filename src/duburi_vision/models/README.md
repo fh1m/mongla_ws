@@ -1,20 +1,26 @@
 # duburi_vision / models
 
-Drop YOLO26 weight files here. Alongside each weight file, place a YAML
-with the same stem (`<model_name>.yaml`) to supply the class index. The
-detector logs all available classes at startup when the YAML is present.
+Drop YOLO26 weight files here. **No YAML file is required.** The detector
+reads class names directly from the model's embedded names table (trained
+with Ultralytics, so `model.names` is always populated). Class names log
+at startup regardless.
+
+Optionally place a `<stem>.yaml` sidecar to override the embedded names.
+This is only needed if the embedded table uses integer IDs you want to
+remap to human names (e.g., a COCO model retrained with different labels).
 
 ## Naming convention
 
-Use descriptive stems, not ultralytics shorthand:
+Use descriptive stems. YAML sidecar is optional (only needed to override embedded names):
 
-| Weight file                    | Index YAML                       | Notes                        |
-| ------------------------------ | -------------------------------- | ---------------------------- |
-| `yolo26_nano_pretrained.pt`    | `yolo26_nano_pretrained.yaml`    | COCO 80-class (default)      |
-| `yolo26_small_pretrained.pt`   | `yolo26_small_pretrained.yaml`   | COCO, higher accuracy        |
-| `gate_nano_100ep.pt`           | `gate_nano_100ep.yaml`           | Gate-only (single class)     |
-| `gate_medium_100ep.pt`         | `gate_medium_100ep.yaml`         | Gate-only, medium accuracy   |
-| `gate_flare_v1.pt`             | `gate_flare_v1.yaml`             | Gate + flare (two classes)   |
+| Weight file                      | Notes                                      |
+| -------------------------------- | ------------------------------------------ |
+| `gate_nano_100ep.pt`             | Gate-only, nano, 100 epochs                |
+| `gate_medium_100ep.pt`           | Gate-only, medium, 100 epochs              |
+| `gate_medium_200ep.pt`           | Gate-only, medium, 200 epochs              |
+| `flare_medium_100ep.pt`          | Flare-only, medium, 100 epochs             |
+| `gate_flare_medium_100ep.pt`     | Gate + flare combined (prequal default)    |
+| `yolo26_nano_pretrained.pt`      | COCO 80-class pretrained (auto-download)   |
 
 ## Class index YAML format
 
@@ -33,27 +39,32 @@ their internal class list without retraining.
 
 ## Selecting a model and class filter
 
-Pass just the **stem name** (no path, no `.pt`) and a `classes` CSV:
+Pass just the **stem name** (no path, no `.pt`) at launch:
 
 ```bash
-# Gate-only model, gate class
-ros2 launch duburi_vision cameras_.launch.py model:=gate_nano_100ep classes:=gate
+# Gate-only model
+ros2 launch duburi_vision cameras_.launch.py model:=gate_medium_100ep classes:=gate
 
-# Flare model (once trained)
-ros2 launch duburi_vision cameras_.launch.py model:=flare_v1 classes:=flare
+# Flare-only model
+ros2 launch duburi_vision cameras_.launch.py model:=flare_medium_100ep classes:=flare
 
-# Combined model — gate task
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate
-
-# Combined model — both classes
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+# Combined model — start with gate class, switch to flare during mission
+ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_medium_100ep classes:=gate
 ```
 
-Switch the class filter live without restarting the detector:
+Switch the class filter **live** without restarting the detector:
 
 ```bash
 ros2 param set /duburi_detector classes gate
 ros2 param set /duburi_detector classes "gate,flare"
+```
+
+Or from within a mission DSL script:
+
+```python
+duburi.set_classes('gate')       # gate approach phase
+duburi.set_classes('flare')      # flare search phase
+duburi.set_classes('')           # all classes (debug)
 ```
 
 The resolver looks up `models/<stem>.pt` in the package share directory

@@ -149,7 +149,10 @@ duburi_ws/src/
 │       │   ├── arc_demo.py
 │       │   ├── heading_lock_demo.py
 │       │   ├── find_person_demo.py    # full vision-driven 3D alignment demo
-│       │   └── move_and_see.py        # alternates open-loop + vision verbs
+│       │   ├── move_and_see.py        # alternates open-loop + vision verbs
+│       │   ├── gate_prequal.py        # gate-only prequal (DVL forward pass)
+│       │   ├── robosub_prequal.py     # RoboNation prequal (strafe gate pass + flare orbit)
+│       │   └── gate_flare_prequal.py  # full autonomous gate+flare+return (competition)
 │       └── state_machines/       # reserved for YASMIN-based plans
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
@@ -546,25 +549,35 @@ ros2 run duburi_planner mission --list
 ros2 run duburi_planner mission square_pattern
 ros2 run duburi_planner mission arc_demo
 ros2 run duburi_planner mission heading_lock_demo
-ros2 run duburi_planner mission find_person_demo   # vision-driven 3D align demo
-ros2 run duburi_planner mission gate_prequal        # full gate pre-qualification
+ros2 run duburi_planner mission find_person_demo       # vision-driven 3D align demo
+ros2 run duburi_planner mission gate_prequal           # gate-only pre-qualification
+ros2 run duburi_planner mission gate_flare_prequal     # full autonomous gate+flare+return (competition)
+ros2 run duburi_planner mission robosub_prequal        # RoboNation prequal (timed strafe pass)
 ```
 
-### Step 5: Vision sanity (gate detection)
+### Step 5: Vision sanity (gate+flare detection)
 
 ```bash
-# Terminal A: start control stack + gate vision
+# Terminal A: start control stack + combined gate+flare model
 ros2 launch duburi_manager bringup.launch.py vision:=true
+# This loads detector.yaml which defaults to gate_flare_medium_100ep, conf=0.45, classes=gate
 
-# Terminal B: pure topic probe (no thrust) -- verify gate detects
+# Terminal B: pure topic probe -- verify gate and flare detect
 ros2 run duburi_vision vision_check --camera forward --require-class gate
+ros2 run duburi_vision vision_check --camera forward --require-class flare
 
 # Terminal C: detection -> RC echo (sub still safe-disarmed)
 ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
 
-# Gate-specific vision commands (armed, in water):
+# Switch class filter live (between pool runs, no restart)
+ros2 param set /duburi_detector classes gate
+ros2 param set /duburi_detector classes flare
+ros2 param set /duburi_detector classes "gate,flare"
+
+# Gate/flare vision commands (armed, in water):
 ros2 run duburi_planner duburi vision_align_yaw --camera forward --target_class gate --duration 10
-ros2 run duburi_planner duburi vision_align_3d  --camera forward --target_class gate --axes yaw,forward --duration 15 --lock_mode settle
+ros2 run duburi_planner duburi vision_align_3d  --camera forward --target_class flare \
+    --axes yaw,forward,depth --duration 15 --lock_mode settle
 ```
 
 ---
