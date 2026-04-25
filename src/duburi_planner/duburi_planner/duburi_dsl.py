@@ -195,6 +195,18 @@ class DuburiMission:
     def stop(self):
         return self._send('stop')
 
+    def current_heading(self) -> float:
+        """Return the live heading (degrees) at the moment this call executes.
+
+        Use instead of reading the log and typing the number manually --
+        log values can be stale by the time the next command runs.
+
+            h = duburi.current_heading()
+            duburi.lock_heading(target=h)
+        """
+        result = self._send('current_heading')
+        return result.final_value if result is not None else 0.0
+
     def pause(self, seconds: float):
         return self._send('pause', duration=float(seconds))
 

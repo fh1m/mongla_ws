@@ -39,6 +39,15 @@ COMMANDS = {
         'defaults': {'timeout': 8.0},
     },
 
+    # ---- State read-outs ------------------------------------------- #
+    'current_heading': {
+        'help':     'Read and return current heading (degrees) from the active yaw source. '
+                    'Result is in final_value. Use before lock_heading to capture the '
+                    'exact heading at execution time, not at typing time.',
+        'fields':   [],
+        'defaults': {},
+    },
+
     # ---- Stop / pause ---------------------------------------------- #
     'stop': {
         'help':     'Active hold: send neutral 1500 PWM to all six channels.',
