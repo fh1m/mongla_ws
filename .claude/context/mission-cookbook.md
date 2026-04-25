@@ -468,6 +468,105 @@ ros2 run duburi_vision tracker_check --camera laptop --class person
 
 ---
 
+## 3.4  Model and class selection
+
+### Three-model setup (gate / flare / gate+flare)
+
+Drop weight files and YAML sidecars in `src/duburi_vision/models/`:
+
+```
+models/
+├── gate_v1.pt           gate_v1.yaml           # names: {0: gate}
+├── flare_v1.pt          flare_v1.yaml          # names: {0: flare}
+└── gate_flare_v1.pt     gate_flare_v1.yaml     # names: {0: gate, 1: flare}
+```
+
+Each YAML uses Ultralytics `data.yaml` format:
+```yaml
+names:
+  0: gate
+  1: flare
+```
+
+### Selecting model and classes at launch
+
+```bash
+# Gate phase
+ros2 launch duburi_vision cameras_.launch.py model:=gate_v1 classes:=gate
+
+# Flare phase
+ros2 launch duburi_vision cameras_.launch.py model:=flare_v1 classes:=flare
+
+# Combo model — gate task only
+ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate
+
+# Combo model — both classes visible
+ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+```
+
+### Switching class filter live (no restart needed)
+
+The model is loaded once at launch. `classes` is a post-inference filter —
+same forward pass, different box allowlist. Switch mid-pool:
+
+```bash
+ros2 param set /duburi_detector classes gate
+ros2 param set /duburi_detector classes flare
+ros2 param set /duburi_detector classes "gate,flare"
+```
+
+### In a mission (DSL)
+
+Set `duburi.camera` and `duburi.target` once; they stick for all subsequent
+vision verbs. There is no API to swap the running model mid-mission — if you
+need both a gate model and a flare model in the same pool run, use the
+combined `gate_flare_v1` model and just change `duburi.target`:
+
+```python
+def run(duburi, log):
+    # camera_ launch was started with: model:=gate_flare_v1 classes:=gate,flare
+    duburi.camera = 'forward'
+
+    # Phase 1 — gate
+    duburi.target = 'gate'
+    duburi.arm()
+    duburi.set_depth(-1.0)
+    duburi.vision.find(sweep='right', timeout=20.0)
+    duburi.vision.lock(axes='yaw,forward', duration=15.0)
+
+    # Phase 2 — flare (same model, different class filter in vision verb)
+    duburi.target = 'flare'
+    duburi.vision.find(sweep='right', timeout=20.0)
+    duburi.vision.lock(axes='yaw,depth', duration=12.0)
+
+    duburi.disarm()
+```
+
+No restart needed between phases. The detector keeps running; each
+`vision.*` verb passes `target_class` through to `VisionState.bbox_error`
+which already filters by class name on the fly.
+
+### Offline pre-pool testing with a video file
+
+Run the full vision pipeline on a recorded `.mp4` / `.avi` without a camera:
+
+```bash
+# Play pool_run.mp4 through the gate detector
+ros2 launch duburi_vision cameras_.launch.py \
+    video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
+
+# Loop OFF (stop at EOF), no rqt window, with ByteTrack
+ros2 launch duburi_vision cameras_.launch.py \
+    video_file:=/tmp/gate_run.mp4 classes:=gate loop:=false rqt:=false \
+    with_tracking:=true
+```
+
+The video file is treated as a camera source: `camera_node` reads frames,
+`detector_node` runs YOLO, `/duburi/vision/laptop/image_debug` shows
+annotated output. All downstream vision verbs work identically.
+
+---
+
 ## 4. The math, in 30 lines
 
 ```

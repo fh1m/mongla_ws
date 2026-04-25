@@ -6,9 +6,11 @@ the diff stays small at each step.
 
 ## v1 -- Detection (DONE)
 
-- `Camera` ABC + factory + `webcam` + `ros_topic` sources
+- `Camera` ABC + factory + `webcam` + `ros_topic` + `video_file` sources
+  - `video_file` wraps `cv2.VideoCapture(path)` for offline pre-pool testing;
+    loops at EOF by default (`loop:=false` to stop). Launch with `video_file:=<path>`.
 - Stubs for jetson / blueos / mavlink that raise `NotImplementedError`
-  with a friendly "use webcam or ros_topic" message
+  with a friendly "use webcam, ros_topic, or video_file" message
 - `YoloDetector` wrapping Ultralytics YOLO26 with class allowlist, conf/iou,
   warmup, and a fail-fast `select_device()` for GPU-first inference
 - `vision_msgs/Detection2DArray` publishing
