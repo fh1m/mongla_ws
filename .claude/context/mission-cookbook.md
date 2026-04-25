@@ -237,19 +237,67 @@ between commands, `pause` for stabilisation between mode changes.
 ### 3.2  Vision-driven motion (`duburi.vision.*`)
 
 Same axis names as the open-loop verbs above, but each one runs a
-closed P (or PI in v2) loop on the **largest detection** of
-`target` in `camera`. Sticky context comes from the parent
-`duburi`; pass `target=...` / `camera=...` to override per call.
+closed P loop on the **largest detection** of `target` in `camera`.
+Sticky context comes from the parent `duburi`; pass `target=...` /
+`camera=...` to override per call.
 
-#### Find a target
+Two equivalent APIs exist — pick whichever reads clearer. They produce
+identical wire output.
+
+#### Preferred API (boolean flags)
 
 ```python
-duburi.vision.find(target=None, sweep='right', timeout=25.0,
+# Scan until target appears
+duburi.vision.scan(target=None, sweep='right', timeout=25.0,
                    gain=25.0, yaw_rate_pct=22.0)
+
+# Single-axis shortcuts
+duburi.vision.steer  (target=None, duration=8.0)   # Ch4: steer to horizontal centre
+duburi.vision.strafe (target=None, duration=8.0)   # Ch6: slide to horizontal centre
+duburi.vision.level  (target=None, duration=8.0)   # depth setpoint to vertical centre
+duburi.vision.approach(target=None, distance=0.55, duration=12.0)  # Ch5: standoff
+
+# Multi-axis: each flag names the axis -- no CSV to get wrong
+duburi.vision.align(target=None,
+                    yaw=True, forward=False, depth=False, lat=False,
+                    distance=0.55, duration=15.0, **overrides)
+
+# Continuous follow (never exits on settle)
+duburi.vision.track (target=None, axes='yaw,forward',
+                     distance=0.55, duration=60.0, **overrides)
 ```
 
-Drives the chosen sweep and returns the moment one fresh detection
-arrives. Sweeps:
+**Typical competition patterns:**
+
+```python
+# Gate approach: steer + approach, area metric (wide rectangular target)
+duburi.vision.align(yaw=True, forward=True, distance=0.42,
+                    distance_metric='area', on_lost='hold')
+
+# Flare full lock: 3-axis settle (tall narrow pipe)
+duburi.vision.align(yaw=True, forward=True, depth=True,
+                    distance=0.38, duration=20.0,
+                    on_lost='hold', lock_mode='settle')
+
+# Flare orbit re-lock (3 s follow window after each yaw step)
+duburi.vision.align(yaw=True, forward=True, depth=True,
+                    distance=0.38, duration=3.0,
+                    on_lost='hold', lock_mode='follow')
+```
+
+#### Legacy aliases (kept forever, identical behaviour)
+
+```python
+duburi.vision.find    (...)              # → scan
+duburi.vision.yaw     (...)              # → steer
+duburi.vision.lateral (...)              # → strafe
+duburi.vision.depth   (...)              # → level
+duburi.vision.forward (...)              # → approach
+duburi.vision.lock    (axes='yaw,...')   # → align (CSV axes string form)
+duburi.vision.follow  (...)              # → track
+```
+
+#### Sweep modes for `scan` / `find`
 
 | sweep      | Drive while waiting               |
 | ---------- | --------------------------------- |
@@ -259,41 +307,16 @@ arrives. Sweeps:
 | `'arc'`    | Ch5 + Ch4 (uses both knobs)       |
 | `'still'`  | wait in place                     |
 
-#### Single-axis alignment
+#### Overrides (only when you mean to pin a value)
 
-| Verb                          | Channel  | Bbox dim it watches                    |
-| ----------------------------- | -------- | -------------------------------------- |
-| `duburi.vision.yaw(...)`      | Ch4 yaw  | horizontal centre error `ex`           |
-| `duburi.vision.lateral(...)`  | Ch6 lat  | horizontal centre error `ex`           |
-| `duburi.vision.depth(...)`    | depth SP | vertical centre error `ey`             |
-| `duburi.vision.forward(...)`  | Ch5 fwd  | bbox height fraction (distance proxy)  |
+Prefer leaving these out — the live `vision.*` ROS param applies and
+lets you tune from the deck without a rebuild:
 
-```python
-duburi.vision.yaw     (target=None, duration=8.0,  **overrides)
-duburi.vision.lateral (target=None, duration=8.0,  **overrides)
-duburi.vision.depth   (target=None, duration=8.0,  **overrides)
-duburi.vision.forward (target=None, distance=0.55, duration=12.0, **overrides)
+```bash
+ros2 param set /duburi_manager vision.kp_yaw     80.0
+ros2 param set /duburi_manager vision.deadband    0.08
+ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
 ```
-
-`distance` IS the bbox height as a fraction of image height
-(0..1). 0.30 is far, 0.70 is "right in your face". Tune this in
-the pool against your actual target size.
-
-#### Multi-axis lock
-
-```python
-duburi.vision.lock(target=None, axes='yaw,forward',
-                   distance=0.55, duration=15.0, **overrides)
-```
-
-`axes` is a CSV: any subset of `'yaw,lat,depth,forward'`. **All
-axes settle together.** The loop runs at 20 Hz, depth setpoints
-stream at 5 Hz (so ALT_HOLD doesn't fight you).
-
-#### Overrides (only when you really mean it)
-
-Every vision verb accepts these kwargs, but **prefer leaving them
-out** so the live ROS-param value applies:
 
 | Override             | Default param       | Effect                                                    |
 | -------------------- | ------------------- | --------------------------------------------------------- |
@@ -302,14 +325,15 @@ out** so the live ROS-param value applies:
 | `kp_depth`           | `vision.kp_depth`   | Metres of nudge per unit `ey` per 5 Hz tick               |
 | `kp_forward`         | `vision.kp_forward` | Ch5 percent per unit (target_h_frac − h_frac)             |
 | `deadband`           | `vision.deadband`   | Per-axis settle band; `\|err\| < deadband` counts as in  |
-| `target_bbox_h_frac` | `vision.target_bbox_h_frac` | Distance proxy used by `forward` / `lock`         |
-| `stale_after`        | `vision.stale_after`| Seconds after which a Sample is "lost"                    |
-| `on_lost`            | `vision.on_lost`    | `'fail'` (default) or `'hold'` (park, never raise)        |
+| `distance_metric`    | `vision.distance_metric` | `'height'` (poles, buoys), `'area'` (gates, wide targets), `'diagonal'` |
+| `on_lost`            | `vision.on_lost`    | `'fail'` (abort after ~0.6 s lost) or `'hold'` (freeze setpoints) |
+| `lock_mode`          | `vision.lock_mode`  | `'settle'` (exit on centred), `'follow'` (run full duration), `'pursue'` (forward-only until close) |
+| `stale_after`        | `vision.stale_after`| Seconds after which a detection is treated as lost        |
+| `tracking`           | `vision.use_tracks` | `True` = use ByteTrack IDs + Kalman-smoothed bboxes       |
 
-A vision verb succeeds when `axes_in_deadband` is True for
-`SETTLED_TICK_BUDGET` consecutive ticks (default 4 ticks @ 20 Hz =
-0.2 s). It fails on `LOST_TICK_BUDGET` consecutive lost ticks
-(default 12 ticks = 0.6 s) when `on_lost='fail'`.
+A vision verb settles when all active axes are within `deadband` for 4
+consecutive ticks (0.2 s @ 20 Hz). `on_lost='fail'` aborts after 12
+consecutive lost ticks (0.6 s).
 
 ---
 

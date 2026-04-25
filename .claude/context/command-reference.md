@@ -451,7 +451,7 @@ Scan / sweep until at least one fresh detection of `target_class` arrives.
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_acquire --target_class person [--target_name yaw_right] [--timeout 30] [--gain 25] [--tracking false]` |
-| DSL | `duburi.vision.find(target='person', sweep='right', timeout=25.0)` |
+| DSL | `duburi.vision.scan(target='gate', sweep='right', timeout=25.0)` — or legacy `vision.find(...)` |
 | Sweep modes | `''`/`still` (wait in place), `yaw_left`, `yaw_right`, `move_forward`, `arc` |
 | Result | `final_value` = time-to-acquire (s); `success=False` + timeout reason on failure |
 
@@ -482,7 +482,7 @@ Centre target horizontally via Ch4 yaw rate (P loop on `ex`).
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align_yaw --target_class person [--duration 15] [--kp_yaw 60] [--deadband 0.18] [--lock_mode settle] [--tracking false]` |
-| DSL | `duburi.vision.yaw(target='person', duration=8.0, kp_yaw=60.0)` |
+| DSL | `duburi.vision.steer(target='gate', duration=8.0)` — or legacy `vision.yaw(...)` |
 | Channel | Ch4 only |
 | Result | `final_value` = composite normalized error; `error_value` = detection age (s) |
 
@@ -499,7 +499,7 @@ Centre horizontally via Ch6 lateral strafe — doesn't change heading (P loop on
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align_lat --target_class person [--duration 15] [--kp_lat 60] [--tracking false]` |
-| DSL | `duburi.vision.lateral(target='person', duration=8.0, kp_lat=60.0)` |
+| DSL | `duburi.vision.strafe(target='gate', duration=8.0)` — or legacy `vision.lateral(...)` |
 | Channel | Ch6 only |
 
 ### `vision_align_depth`
@@ -516,7 +516,7 @@ Centre target vertically via incremental ALT_HOLD depth setpoint nudges.
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align_depth --target_class person [--duration 15] [--kp_depth 0.05] [--depth_anchor_frac 0.5] [--tracking false]` |
-| DSL | `duburi.vision.depth(target='person', duration=8.0, kp_depth=0.05, depth_anchor_frac=0.5)` |
+| DSL | `duburi.vision.level(target='flare', duration=8.0)` — or legacy `vision.depth(...)` |
 | Channel | Depth setpoint (`SET_POSITION_TARGET_GLOBAL_INT`) @ 5 Hz |
 | Math | `ey_anchor = ey + (2×anchor − 1)×h_frac` → `nudge = clamp(ey_anchor × kp_depth, ±0.02 m)` |
 | Tip | Use `depth_anchor_frac=0.2` for tall targets (person, pole) — centering on bbox top avoids depth stall |
@@ -536,12 +536,31 @@ Drive Ch5 to match target size proxy to `target_bbox_h_frac`.
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55 [--duration 20] [--kp_forward 200] [--distance_metric area] [--tracking false]` |
-| DSL | `duburi.vision.forward(target='person', distance=0.55, duration=12.0)` |
+| DSL | `duburi.vision.approach(target='gate', distance=0.42, duration=12.0)` — or legacy `vision.forward(...)` |
 | Channel | Ch5 only |
 
 ### `vision_align_3d`
 
 Hold multiple axes simultaneously. All active axes must be within `deadband` to "settle".
+
+**DSL preferred form — boolean flags (no CSV to mis-type):**
+
+```python
+# Steer + approach (classic gate setup)
+duburi.vision.align(yaw=True, forward=True, distance=0.42)
+
+# Full 3-axis flare lock
+duburi.vision.align(yaw=True, forward=True, depth=True,
+                    distance=0.38, duration=20.0,
+                    on_lost='hold', distance_metric='height')
+
+# Orbit re-lock (short follow window, no settle exit)
+duburi.vision.align(yaw=True, forward=True, depth=True,
+                    distance=0.38, duration=3.0,
+                    on_lost='hold', lock_mode='follow')
+```
+
+`duburi.vision.lock(axes='yaw,forward', ...)` is an alias that accepts the same kwargs as CSV.
 
 | Field | Type | Default | Accepted values | Notes |
 |---|---|---|---|---|
@@ -560,7 +579,7 @@ Hold multiple axes simultaneously. All active axes must be within `deadband` to 
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth --target_bbox_h_frac 0.50 [--duration 20] [--lock_mode settle] [--distance_metric area] [--tracking false]` |
-| DSL | `duburi.vision.lock(target='gate', axes='yaw,forward,depth', distance=0.50, duration=15.0)` |
+| DSL | `duburi.vision.align(yaw=True, forward=True, depth=True, distance=0.50, duration=15.0)` — or legacy `vision.lock(axes='...', ...)` |
 | Loop | Single 20 Hz tick: writes Ch4+Ch5+Ch6 in one RC packet + 5 Hz depth sub-tick |
 | Result | `final_value` = composite normalized error; `error_value` = detection age (s) |
 
@@ -690,23 +709,29 @@ When the detector misses a frame but ByteTrack's buffer hasn't expired, `tracker
 
 ## 11. Model and class selection
 
-### Three-model pattern (gate / flare / gate+flare)
+### Model selection
 
-Place `<stem>.pt` + `<stem>.yaml` in `src/duburi_vision/models/`.
-YAML format:
+Drop `<stem>.pt` in `src/duburi_vision/models/`. **No YAML required** — the detector
+reads class names from the embedded `model.names` table. Only add a `<stem>.yaml`
+if you need to remap integer IDs to human names.
 
-```yaml
-names:
-  0: gate
-  1: flare
-```
+Current model stems (pool day):
+
+| Stem | Classes | Use |
+|---|---|---|
+| `gate_flare_medium_100ep` | gate, flare | **Default** — used by `bringup.launch.py vision:=true` |
+| `gate_nano_100ep` | gate | Gate-only, faster on Jetson Orin |
+| `gate_medium_100ep` | gate | Gate-only, higher accuracy |
+| `flare_medium_100ep` | flare | Flare-only |
 
 Pass the stem at launch — no path, no `.pt` extension:
 
 ```bash
-ros2 launch duburi_vision cameras_.launch.py model:=gate_v1     classes:=gate
-ros2 launch duburi_vision cameras_.launch.py model:=flare_v1    classes:=flare
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+# Default prequal bringup (gate_flare_medium_100ep, conf=0.45, classes=gate)
+ros2 launch duburi_manager bringup.launch.py vision:=true
+
+# Explicit model override
+ros2 launch duburi_vision cameras_.launch.py model:=gate_nano_100ep classes:=gate
 ```
 
 ### Live class switching (no restart)

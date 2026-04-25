@@ -20,19 +20,35 @@ Two namespaces, one mental model:
   and drives to the target; once it returns the autopilot keeps the
   depth indefinitely without a Python streamer.
 
-  Closed-loop vision verbs mirror the SAME axis names under
-  `duburi.vision`, so it is impossible to confuse them with their
-  open-loop twin:
+  Closed-loop vision verbs sit under `duburi.vision`. Two APIs —
+  pick whichever reads clearer. They produce identical wire output.
 
-      duburi.vision.find(target)               # drive + watch until target seen
-      duburi.vision.yaw(target)                # steer left/right toward horizontal centre
-      duburi.vision.lateral(target)            # strafe left/right toward horizontal centre
-      duburi.vision.depth(target)              # nudge depth up/down toward vertical centre
-      duburi.vision.forward(target,            # approach / back off by bbox fill fraction
-                            distance=0.55)
-      duburi.vision.lock(target,               # all of the above, simultaneously
+  **Preferred API** (axis flags make intent explicit at a glance):
+
+      duburi.vision.scan(target)               # sweep until target seen (= find)
+      duburi.vision.steer(target)              # Ch4: left/right to centre horizontally (= yaw)
+      duburi.vision.strafe(target)             # Ch6: slide to centre horizontally (= lateral)
+      duburi.vision.level(target)              # depth: nudge up/down to centre vertically (= depth)
+      duburi.vision.approach(target,           # Ch5: close in / back off to distance (= forward)
+                             distance=0.55)
+      duburi.vision.align(target,              # explicit boolean flags → no CSV to type wrong
+                          yaw=True,
+                          forward=True,        # any subset of yaw/lat/depth/forward
+                          depth=True,
+                          distance=0.55)
+      duburi.vision.track(target)              # follow (lock_mode='follow') (= follow)
+
+  **Legacy aliases** (still work, never removed):
+
+      duburi.vision.find(target)     # → scan
+      duburi.vision.yaw(target)      # → steer
+      duburi.vision.lateral(target)  # → strafe
+      duburi.vision.depth(target)    # → level
+      duburi.vision.forward(target)  # → approach
+      duburi.vision.lock(target,     # → align (CSV axes string form)
                          axes='yaw,forward',
                          distance=0.55)
+      duburi.vision.follow(target)   # → track
 
 Same axis isolation contract as control: every verb owns one MAVLink
 channel; `vision.lock` owns the union of the axes listed in `axes`.
@@ -89,25 +105,32 @@ OPEN-LOOP VERBS (no sensor feedback during the move):
   stop()              Send neutral signals once (immediate hold).
 
 CLOSED-LOOP VISION VERBS (use camera feedback each step):
-  vision.find(target, sweep)
-      Rotate slowly while watching the camera. Return once the target
-      appears. Fails after timeout seconds if nothing is seen.
-  vision.yaw(target, duration)
-      Steer left/right to bring the target's horizontal centre into the
-      middle of the frame. Uses heading PID. Exits when centred or time up.
-  vision.lateral(target, duration)
-      Strafe left/right to centre the target horizontally. Uses the lateral
-      thrust channel directly (does not change heading).
-  vision.depth(target, duration)
-      Nudge depth setpoint up/down to bring the target to the vertical
-      centre of the frame. Exits when centred or time up.
-  vision.forward(target, distance, duration)
-      Approach or back off until the target's bounding box fills `distance`
-      fraction of the frame height. 0.55 = stop when bbox is 55% of frame.
-  vision.lock(target, axes, distance, duration)
-      Run multiple axes at once. All axes run in the same loop and the
-      vehicle settles when ALL are centred at the same time.
-      axes can be any combination of: 'yaw', 'lat', 'depth', 'forward'
+
+  PREFERRED NAMES -- boolean flags make each call site self-documenting:
+
+  vision.scan(target, sweep)          -- search until target seen
+  vision.steer(target, duration)      -- Ch4: steer left/right to centre horizontally
+  vision.strafe(target, duration)     -- Ch6: slide to centre without changing heading
+  vision.level(target, duration)      -- depth: nudge up/down to vertical centre
+  vision.approach(target, distance)   -- Ch5: approach/back-off to bbox fill fraction
+  vision.align(target,                -- run any subset of axes simultaneously:
+               yaw=True,              --   yaw/steer  = Ch4 horizontal centre
+               forward=True,          --   forward    = Ch5 standoff distance
+               depth=False,           --   depth      = depth nudge for vertical centre
+               lat=False,             --   lat/strafe = Ch6 horizontal (no heading change)
+               distance=0.55,         --   stop distance (bbox fill fraction, 0..1)
+               duration=15.0)
+  vision.track(target, duration)      -- follow (never exits on settle)
+
+  LEGACY ALIASES -- same underlying calls, kept for backwards compat:
+
+  vision.find(target, sweep)          -- → scan
+  vision.yaw(target, duration)        -- → steer
+  vision.lateral(target, duration)    -- → strafe
+  vision.depth(target, duration)      -- → level
+  vision.forward(target, distance)    -- → approach
+  vision.lock(target, axes='yaw,forward', distance=0.55)  -- → align (CSV form)
+  vision.follow(target, duration)     -- → track
 
 DETECTOR CONTROL (within a mission):
   duburi.set_classes('gate')          # only publish gate detections
@@ -319,6 +342,35 @@ class DuburiMission:
     # ================================================================== #
     #  Vision detector control                                            #
     # ================================================================== #
+
+    def set_model(self, stem: str, *,
+                  node: str = '/duburi_detector',
+                  wait_s: float = 0.0) -> None:
+        """Record the intended model for this mission; log it prominently.
+
+        This does NOT hot-reload the detector. Model selection takes effect
+        only when the detector_node is (re)started with `model:=<stem>`.
+        For in-mission phase switching use a combined model
+        (gate_flare_medium_100ep) and switch classes with set_classes().
+
+        Typical use: call at the top of run() so the log makes it obvious
+        which model the mission was designed for:
+
+            def run(duburi, log):
+                duburi.set_model('gate_flare_medium_100ep')
+                # If the detector is already running with the wrong model,
+                # restart it:
+                #   ros2 launch duburi_manager bringup.launch.py vision:=true \\
+                #       model:=gate_flare_medium_100ep
+                ...
+
+        wait_s : ignored (kept for future use). Document the expected model
+                 in the mission header comment for pool-day clarity.
+        """
+        self.log.info(
+            f'[DSL  ] mission expects model={stem!r}  '
+            f'(restart detector if wrong: '
+            f'ros2 launch duburi_manager bringup.launch.py vision:=true model:={stem})')
 
     def set_classes(self, classes: str | list, *,
                     node: str = '/duburi_detector') -> None:
@@ -719,3 +771,122 @@ class _VisionDSL:
             target_bbox_h_frac=float(distance),
             duration=float(duration),
             **overrides)
+
+    # ---- preferred-name API (boolean flags → explicit, no CSV typos) ----- #
+
+    def scan(self, target: str | None = None, *,
+             camera: str | None = None,
+             sweep: str = 'right',
+             timeout: float = 25.0,
+             gain: float = 25.0,
+             yaw_rate_pct: float = 22.0,
+             stale_after: float = 0.0):
+        """Sweep until the target is seen. Preferred name for find().
+
+        Identical signature and behaviour — 'scan' makes the intent
+        explicit: we're scanning the scene, not acquiring a lock.
+        """
+        return self.find(target, camera=camera, sweep=sweep,
+                         timeout=timeout, gain=gain,
+                         yaw_rate_pct=yaw_rate_pct, stale_after=stale_after)
+
+    def align(self, target: str | None = None, *,
+              camera: str | None = None,
+              yaw: bool = True,
+              lat: bool = False,
+              depth: bool = False,
+              forward: bool = False,
+              distance: float = 0.55,
+              duration: float = 15.0,
+              **overrides):
+        """Centre on target using boolean axis flags instead of a CSV string.
+
+        Preferred API for multi-axis lock — each flag is self-documenting at
+        every call site, and there is no CSV string to mis-spell or reorder.
+
+        Parameters
+        ----------
+        yaw     -- steer left/right (Ch4) to centre horizontally. Default True.
+        lat     -- slide left/right (Ch6) to centre horizontally. Default False.
+        depth   -- nudge depth setpoint to centre vertically. Default False.
+        forward -- approach/back off (Ch5) to reach `distance` fraction. Default False.
+        distance -- bbox fill fraction to stop at (0..1). Only used when forward=True.
+        duration -- seconds before the verb times out even if not settled.
+
+        All vision overrides (kp_yaw, kp_forward, deadband, on_lost, lock_mode,
+        distance_metric, tracking, etc.) are accepted as **overrides.
+
+        Examples::
+
+            # Steer + approach (classic 2-axis gate pass setup)
+            duburi.vision.align(yaw=True, forward=True, distance=0.42)
+
+            # Full 3-axis flare lock (yaw + forward + depth)
+            duburi.vision.align(yaw=True, forward=True, depth=True,
+                                distance=0.38, duration=20.0,
+                                on_lost='hold', lock_mode='settle')
+
+            # Orbit step re-lock (yaw + forward + depth, short)
+            duburi.vision.align(yaw=True, forward=True, depth=True,
+                                distance=0.38, duration=3.0,
+                                on_lost='hold', lock_mode='follow')
+
+            # Lateral-only strafe (hold heading, shift sideways)
+            duburi.vision.align(yaw=False, lat=True, distance=0.55)
+        """
+        axes_parts = [a for a, flag in
+                      [('yaw', yaw), ('forward', forward),
+                       ('lat', lat), ('depth', depth)]
+                      if flag]
+        if not axes_parts:
+            raise ValueError(
+                "vision.align: at least one axis must be True "
+                "(yaw, lat, depth, or forward)")
+        return self._send(
+            'vision_align_3d',
+            camera=self._resolved_camera(camera),
+            target_class=self._resolved_target(target),
+            axes=','.join(axes_parts),
+            target_bbox_h_frac=float(distance),
+            duration=float(duration),
+            **overrides)
+
+    def steer(self, target: str | None = None, *,
+              camera: str | None = None,
+              duration: float = 8.0,
+              **overrides):
+        """Steer left/right (Ch4) to centre target horizontally. Preferred name for yaw()."""
+        return self.yaw(target, camera=camera, duration=duration, **overrides)
+
+    def strafe(self, target: str | None = None, *,
+               camera: str | None = None,
+               duration: float = 8.0,
+               **overrides):
+        """Slide left/right (Ch6) to centre target without changing heading. Preferred name for lateral()."""
+        return self.lateral(target, camera=camera, duration=duration, **overrides)
+
+    def level(self, target: str | None = None, *,
+              camera: str | None = None,
+              duration: float = 8.0,
+              **overrides):
+        """Nudge depth to centre target vertically. Preferred name for depth()."""
+        return self.depth(target, camera=camera, duration=duration, **overrides)
+
+    def approach(self, target: str | None = None, *,
+                 camera: str | None = None,
+                 distance: float = 0.55,
+                 duration: float = 12.0,
+                 **overrides):
+        """Close in or back off to reach `distance` bbox fill fraction. Preferred name for forward()."""
+        return self.forward(target, camera=camera, distance=distance,
+                            duration=duration, **overrides)
+
+    def track(self, target: str | None = None, *,
+              camera: str | None = None,
+              axes: str = 'yaw,forward',
+              distance: float = 0.55,
+              duration: float = 60.0,
+              **overrides):
+        """Follow target continuously (lock_mode='follow'). Preferred name for follow()."""
+        return self.follow(target, camera=camera, axes=axes,
+                           distance=distance, duration=duration, **overrides)

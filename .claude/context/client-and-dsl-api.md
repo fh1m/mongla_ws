@@ -194,26 +194,66 @@ duburi.move_lateral_dist(-0.5, gain=36.0)         # 0.5 m left
 ### Vision verbs (`duburi.vision.*`)
 
 `duburi.vision` is a `_VisionDSL` sub-namespace bound to the parent
-mission's sticky `camera`/`target`. Verbs:
+mission's sticky `camera`/`target`.
+
+#### Preferred API (boolean flags — self-documenting call sites)
 
 ```python
-duburi.vision.find    (target=None, sweep='right',
+# Search until target appears
+duburi.vision.scan    (target=None, sweep='right',
                        timeout=25.0, gain=25.0,
                        yaw_rate_pct=22.0, stale_after=0.0)
 
-duburi.vision.yaw     (target=None, duration=8.0,  **overrides)
-duburi.vision.lateral (target=None, duration=8.0,  **overrides)
-duburi.vision.depth   (target=None, duration=8.0,  **overrides)
-duburi.vision.forward (target=None, distance=0.55, duration=12.0, **overrides)
+# Single-axis convenience
+duburi.vision.steer   (target=None, duration=8.0,  **overrides)  # Ch4 yaw
+duburi.vision.strafe  (target=None, duration=8.0,  **overrides)  # Ch6 lateral
+duburi.vision.level   (target=None, duration=8.0,  **overrides)  # depth nudge
+duburi.vision.approach(target=None, distance=0.55, duration=12.0, **overrides)  # Ch5 forward
 
-duburi.vision.lock    (target=None, axes='yaw,forward',
-                       distance=0.55, duration=15.0, **overrides)
+# Multi-axis: use boolean flags — no CSV to type wrong
+duburi.vision.align   (target=None,
+                       yaw=True,        # Ch4: steer to horizontal centre
+                       lat=False,       # Ch6: slide to horizontal centre
+                       depth=False,     # depth setpoint for vertical centre
+                       forward=False,   # Ch5: approach/back-off to `distance`
+                       distance=0.55,
+                       duration=15.0,
+                       **overrides)
 
-duburi.vision.follow  (target=None, axes='yaw,forward',
+# Follow (never exits on settle)
+duburi.vision.track   (target=None, axes='yaw,forward',
                        distance=0.55, duration=60.0, **overrides)
-# Convenience wrapper for lock(..., lock_mode='follow').
-# Never exits on settle — tracks the target until `duration` expires
-# or the target is lost. Use for a swimmer / diver tracking window.
+```
+
+**Typical patterns:**
+
+```python
+# Gate: steer + approach, area metric, loose deadband
+duburi.vision.align(yaw=True, forward=True, distance=0.42,
+                    distance_metric='area', on_lost='hold')
+
+# Flare: 3-axis lock, height metric, tight deadband
+duburi.vision.align(yaw=True, forward=True, depth=True,
+                    distance=0.38, duration=20.0,
+                    on_lost='hold', lock_mode='settle')
+
+# Orbit step re-lock (short follow window)
+duburi.vision.align(yaw=True, forward=True, depth=True,
+                    distance=0.38, duration=3.0,
+                    on_lost='hold', lock_mode='follow')
+```
+
+#### Legacy aliases (same wire output, never removed)
+
+```python
+duburi.vision.find    (...)   # → scan
+duburi.vision.yaw     (...)   # → steer
+duburi.vision.lateral (...)   # → strafe
+duburi.vision.depth   (...)   # → level
+duburi.vision.forward (...)   # → approach
+duburi.vision.lock    (target=None, axes='yaw,forward',
+                       distance=0.55, duration=15.0, **overrides)   # → align (CSV form)
+duburi.vision.follow  (...)   # → track
 ```
 
 `sweep` mapping (in `_FIND_SWEEP_DRIVERS`):
