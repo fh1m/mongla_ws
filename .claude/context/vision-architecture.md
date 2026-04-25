@@ -17,7 +17,8 @@ src/duburi_vision/duburi_vision/
   vision_node.py         # in-process diag (cousin of sensors_node)
   cameras/
     camera.py            # Camera ABC (the only base in the tree)
-    webcam.py            # cv2.VideoCapture wrapper
+    webcam.py            # cv2.VideoCapture wrapper (live webcam / USB cam)
+    video_file.py        # cv2.VideoCapture(path) wrapper (pre-recorded video offline testing)
     ros_topic.py         # subscribes sensor_msgs/Image (Gazebo / BlueOS)
     {jetson,blueos,mavlink}_stub.py
   detection/
@@ -120,6 +121,51 @@ Canary log line (grep for this on every machine):
 Every glyph answers a specific operator question. Every diagnostic state
 is visible in one frame — that's how we let the user paste a screenshot
 into a bug report.
+
+## Model and class selection
+
+### Model files
+
+Drop `<stem>.pt` + `<stem>.yaml` pairs into `src/duburi_vision/models/`.
+The YAML maps integer class ids to human names:
+
+```yaml
+# gate_v1.yaml
+names:
+  0: gate
+```
+
+The detector logs the full class table at startup. Pass the **stem** (no `.pt`):
+
+```bash
+ros2 launch duburi_vision cameras_.launch.py model:=gate_v1 classes:=gate
+ros2 launch duburi_vision cameras_.launch.py model:=flare_v1 classes:=flare
+ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+```
+
+### Switching class filter live
+
+The `classes` param is a post-inference allowlist — the model runs its full
+forward pass; only matching boxes are published. Change it without restarting:
+
+```bash
+ros2 param set /duburi_detector classes gate
+ros2 param set /duburi_detector classes "gate,flare"
+```
+
+### Offline testing with `video_file`
+
+Run the full pipeline on a pre-recorded `.mp4` / `.avi`:
+
+```bash
+ros2 launch duburi_vision cameras_.launch.py \
+    video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
+```
+
+`video_file` is one of the camera sources in `BUILDERS` (`factory.py`).
+When `video_file:=` is non-empty in the launch file, `camera_node`
+switches `source` to `'video_file'` automatically; `detector_node` and
+downstream vision verbs see identical topics either way.
 
 ## Adding a new camera source
 

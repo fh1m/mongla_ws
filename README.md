@@ -2,10 +2,6 @@
   <img src="docs/imgs/mongla-banner.png" alt="Mongla banner" width="100%"/>
 </p>
 
-<p align="center">
-  <img src="docs/imgs/mongla-logo-light.png" alt="Mongla logo" width="180px"/>
-</p>
-
 <h1 align="center">Mongla — <code>duburi_ws</code></h1>
 
 <p align="center">

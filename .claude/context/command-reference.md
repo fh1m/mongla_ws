@@ -688,7 +688,53 @@ When the detector misses a frame but ByteTrack's buffer hasn't expired, `tracker
 
 ---
 
-## 11. Cross-references
+## 11. Model and class selection
+
+### Three-model pattern (gate / flare / gate+flare)
+
+Place `<stem>.pt` + `<stem>.yaml` in `src/duburi_vision/models/`.
+YAML format:
+
+```yaml
+names:
+  0: gate
+  1: flare
+```
+
+Pass the stem at launch — no path, no `.pt` extension:
+
+```bash
+ros2 launch duburi_vision cameras_.launch.py model:=gate_v1     classes:=gate
+ros2 launch duburi_vision cameras_.launch.py model:=flare_v1    classes:=flare
+ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+```
+
+### Live class switching (no restart)
+
+The model is loaded once. `classes` is a post-inference filter:
+
+```bash
+ros2 param set /duburi_detector classes gate
+ros2 param set /duburi_detector classes "gate,flare"
+```
+
+### Offline testing with `video_file`
+
+```bash
+ros2 launch duburi_vision cameras_.launch.py \
+    video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
+# loop:=false to stop at EOF; rqt:=false for headless; with_tracking:=true for ByteTrack
+```
+
+`video_file` is a fully supported camera source — all downstream detection
+and vision verbs work identically.
+
+---
+
+## 12. Cross-references
+
+* Model/class selection: [`vision-architecture.md`](./vision-architecture.md#model-and-class-selection)
+* Offline video testing + three-model pattern: [`mission-cookbook.md §3.4`](./mission-cookbook.md)
 
 * `COMMANDS` registry (single source of truth for fields/defaults): [`commands.py`](../../src/duburi_control/duburi_control/commands.py)
 * Python facade (open-loop verbs): [`duburi.py`](../../src/duburi_control/duburi_control/duburi.py)
