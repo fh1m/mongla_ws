@@ -57,12 +57,20 @@ Rate sizing rationale
                           [YAW ] / [VIS ] / [DEPTH] heartbeat lines
                           dense enough to spot stalls but rare
                           enough not to drown grep.
+
+``DEPTH_RAMP_S = 2.5``   Seconds over which ``motion_depth.wait_for_depth``
+                          linearly ramps the setpoint from the current
+                          depth to the target. Prevents ArduSub's depth
+                          PID from receiving a step change and overshooting.
+                          Tune at pool: reduce if dives feel sluggish,
+                          increase if overshoot returns.
 """
 
 THRUST_HZ          = 20.0   # RC override publish rate (forward, lateral, arc)
 YAW_RATE_HZ        = 10.0   # Ch4 rate-override publish rate (yaw_snap / yaw_glide)
 LOCK_STREAM_HZ     = 20.0   # HeadingLock background refresh rate
 DEPTH_SETPOINT_HZ  = 5.0    # set_target_depth publish rate inside motion_depth.hold_depth
+DEPTH_RAMP_S       = 2.5    # setpoint ramp duration for set_depth (seconds)
 HEARTBEAT_HZ       = 5.0    # Heartbeat all-neutral RC override (FS_PILOT_INPUT guard)
 VISION_LOOP_HZ     = 20.0   # motion_vision tick rate
 LOG_THROTTLE_S     = 0.5    # seconds between motion-loop log heartbeats
@@ -72,6 +80,7 @@ __all__ = [
     'YAW_RATE_HZ',
     'LOCK_STREAM_HZ',
     'DEPTH_SETPOINT_HZ',
+    'DEPTH_RAMP_S',
     'HEARTBEAT_HZ',
     'VISION_LOOP_HZ',
     'LOG_THROTTLE_S',
