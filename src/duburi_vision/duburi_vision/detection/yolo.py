@@ -173,6 +173,25 @@ class YoloDetector(Detector):
             ))
         return out
 
+    def update_allowlist(self, class_allowlist):
+        """Hot-swap the class filter without reloading the model.
+
+        class_allowlist -- list of class name strings, or None to keep all.
+        Called by detector_node when the 'classes' ROS param changes live.
+        """
+        if class_allowlist is None:
+            self._allow_ids = None
+        else:
+            allow_lower = {str(c).strip().lower() for c in class_allowlist if c}
+            self._allow_ids = {
+                cid for cid, cname in self._names.items()
+                if str(cname).strip().lower() in allow_lower
+            }
+            if not self._allow_ids and allow_lower and self._log:
+                self._log.warning(
+                    f"[YOLO ] update_allowlist: {sorted(allow_lower)} matched 0 classes. "
+                    f"Available: {sorted(self._names.values())[:10]}")
+
     def class_names(self):
         return dict(self._names)
 

@@ -109,6 +109,17 @@ CLOSED-LOOP VISION VERBS (use camera feedback each step):
       vehicle settles when ALL are centred at the same time.
       axes can be any combination of: 'yaw', 'lat', 'depth', 'forward'
 
+DETECTOR CONTROL (within a mission):
+  duburi.set_classes('gate')          # only publish gate detections
+  duburi.set_classes('gate,flare')    # publish gate + flare detections
+  duburi.set_classes('')              # publish ALL model classes
+  # Takes effect next inference frame. Model reload requires node restart:
+  #   ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_medium_100ep
+
+TETHER REMOVAL COUNTDOWN (before mission start):
+  duburi.countdown(10)        # 10-second window to disconnect tether
+  duburi.countdown(15, message="Starting run. Stand clear.")
+
 LIVE TUNING (between runs, no rebuild needed):
   ros2 param set /duburi_manager vision.kp_yaw 80.0       # faster/slower yaw
   ros2 param set /duburi_manager vision.kp_forward 150.0  # faster/slower approach
@@ -125,6 +136,10 @@ variable in every mission is just `duburi`.
 """
 
 from __future__ import annotations
+
+import subprocess
+import sys
+import time as _time
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -300,6 +315,115 @@ class DuburiMission:
                           gain=gain,
                           dvl_tolerance=tolerance,
                           settle=settle)
+
+    # ================================================================== #
+    #  Vision detector control                                            #
+    # ================================================================== #
+
+    def set_classes(self, classes: str | list, *,
+                    node: str = '/duburi_detector') -> None:
+        """Switch the detector's class filter without restarting the node.
+
+        Changes take effect on the next inference frame (~16 ms on GPU).
+
+        Parameters
+        ----------
+        classes : str or list
+            CSV string or list of class names to keep.
+            Examples::
+                duburi.set_classes('gate')
+                duburi.set_classes('gate,flare')
+                duburi.set_classes(['gate', 'flare'])
+                duburi.set_classes('')          # keep ALL classes
+        node : str
+            ROS2 node name. Override if you renamed the detector.
+
+        Use case: gate+flare combined model — start with 'gate' to pass
+        the gate, then switch to 'flare' for the flare orbit phase.
+        """
+        if isinstance(classes, list):
+            classes_str = ','.join(str(c).strip() for c in classes)
+        else:
+            classes_str = str(classes).strip()
+        result = subprocess.run(
+            ['ros2', 'param', 'set', node, 'classes', classes_str],
+            capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            self.log.warning(
+                f"[DSL  ] set_classes failed: {result.stderr.strip()!r}")
+        else:
+            self.log.info(
+                f"[DSL  ] detector classes → {classes_str!r}")
+
+    # ================================================================== #
+    #  Mission start / countdown                                          #
+    # ================================================================== #
+
+    def countdown(self, seconds: int = 10, *,
+                  message: str = "Wire removed  --  Duburi is now autonomous. Good luck."):
+        """Print an aesthetic tether-removal countdown and return.
+
+        The operator should disconnect the tether during this window.
+        All code AFTER the countdown runs without any tether or external
+        connection -- Jetson, Pi, DVL, and Pixhawk are all on-board.
+
+        Parameters
+        ----------
+        seconds : int
+            Countdown duration. 10 s is enough for a quick disconnect.
+        message : str
+            Banner text shown at T=0.
+
+        Example::
+
+            def run(duburi, log):
+                duburi.countdown(10)   # disconnect tether now
+                duburi.arm()
+                ...
+        """
+        width = 66
+        border_h = '━' * width
+        tl, tr, bl, br = '┏', '┓', '┗', '┛'
+        vb = '┃'
+
+        def _box(lines):
+            print(f'{tl}{border_h}{tr}')
+            for line in lines:
+                pad = width - len(line)
+                lp  = pad // 2
+                rp  = pad - lp
+                print(f'{vb}{" " * lp}{line}{" " * rp}{vb}')
+            print(f'{bl}{border_h}{br}')
+
+        print()
+        _box([
+            '',
+            'TETHER REMOVAL WINDOW',
+            '',
+            'Disconnect the tether now.',
+            f'Mission starts in {seconds} seconds.',
+            '',
+        ])
+        print()
+
+        for remaining in range(seconds, 0, -1):
+            bar_total = 40
+            filled    = int(bar_total * (seconds - remaining) / seconds)
+            bar       = '█' * filled + '░' * (bar_total - filled)
+            sys.stdout.write(
+                f'\r  T-{remaining:3d}s  [{bar}]  ')
+            sys.stdout.flush()
+            _time.sleep(1)
+
+        sys.stdout.write('\r' + ' ' * 60 + '\r')
+        sys.stdout.flush()
+        print()
+        _box([
+            '',
+            message,
+            '',
+        ])
+        print()
 
     # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to the raw client BUT   #

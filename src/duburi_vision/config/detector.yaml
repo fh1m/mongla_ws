@@ -1,25 +1,32 @@
 # duburi_vision -- detector defaults
 #
-# Custom gate models (src/duburi_vision/models/ -- no .yaml sidecar needed):
-#   gate_nano_100ep    ~5 MB   fastest -- class 'gate', 100 epochs (default)
-#   gate_medium_100ep ~42 MB   more accurate -- class 'gate', 100 epochs
+# Available custom models (drop .pt in src/duburi_vision/models/ -- NO yaml needed):
+#   gate_nano_100ep         ~5 MB   gate only, fastest (Jetson Orin Nano + RTX 2060)
+#   gate_medium_100ep      ~42 MB   gate only, higher accuracy
+#   gate_medium_200ep      ~42 MB   gate only, 200-epoch fine-tune
+#   flare_medium_100ep     ~42 MB   flare only
+#   gate_flare_medium_100ep ~42 MB  gate + flare combined  <-- prequal default
 #
-# Switch model at launch: ros2 launch ... model:=gate_medium_100ep
-# Or live: ros2 param set /duburi_detector model_path gate_medium_100ep
+# Switch model at launch:  ros2 launch ... model:=gate_flare_medium_100ep
+# Switch class live:       ros2 param set /duburi_detector classes gate
+#                          ros2 param set /duburi_detector classes "gate,flare"
+#                          # or from mission DSL: duburi.set_classes('flare')
 #
 # Pretrained YOLO26 (auto-download):
 #   yolo26_nano_pretrained, yolo26_small_pretrained, etc.
 #
 # device:  cuda:N -> require GPU. cpu -> explicit CPU. auto -> GPU if present.
-# half:    FP16 inference (off by default; enable for Jetson Orin).
-# classes: CSV class names. 'gate' for gate models. '' = all classes.
+# half:    FP16 inference -- enable for Jetson Orin to save memory.
+# conf:    0.45 tuned from underwater preview footage (real gate/flare ~0.90-0.97).
+#          Lower to 0.30 only if misses occur in turbid water.
+# classes: CSV class names. Changed live with ros2 param set or duburi.set_classes().
 
 duburi_detector:
   ros__parameters:
-    model_path:          gate_nano_100ep
+    model_path:          gate_flare_medium_100ep
     device:              cuda:0
     half:                false
-    conf:                0.30
+    conf:                0.45
     iou:                 0.50
     imgsz:               640
     classes:             gate
