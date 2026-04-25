@@ -183,7 +183,8 @@ class VisionVerbs:
                 pixhawk=self.pixhawk, vision_state=vstate,
                 target_class=target_class, timeout=float(timeout),
                 drive_writer=drive_writer,
-                stale_after=float(stale_after), log=self.log)
+                stale_after=float(stale_after),
+                writers=self._writers(), log=self.log)
             self._send_neutral_and_settle()
             return self._make_result(
                 outcome.success, f'vision_acquire: {outcome.reason}',
