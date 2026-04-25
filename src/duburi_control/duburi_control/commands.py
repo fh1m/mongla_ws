@@ -40,10 +40,11 @@ COMMANDS = {
     },
 
     # ---- State read-outs ------------------------------------------- #
-    'current_heading': {
-        'help':     'Read and return current heading (degrees) from the active yaw source. '
-                    'Result is in final_value. Use before lock_heading to capture the '
-                    'exact heading at execution time, not at typing time.',
+    'head': {
+        'help':     'Read current heading (degrees) at execution time. '
+                    'Result is in final_value. Also works as a magic value in '
+                    'other CLI commands: --target head resolves to the live '
+                    'heading the moment the command runs.',
         'fields':   [],
         'defaults': {},
     },

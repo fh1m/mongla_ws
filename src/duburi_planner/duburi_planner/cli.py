@@ -49,6 +49,22 @@ def _bool_arg(value):
         f'expected bool-ish value, got {value!r}')
 
 
+_HEAD_SENTINEL = 'head'
+
+def _float_or_head(value):
+    """Accept a float OR the keyword 'head'.
+
+    'head' is resolved at send time to the live heading reading from
+    the active yaw source -- use it anywhere a float target is accepted:
+
+        duburi lock_heading --target head
+        duburi yaw_left --target head
+    """
+    if str(value).strip().lower() == _HEAD_SENTINEL:
+        return _HEAD_SENTINEL
+    return float(value)
+
+
 # Vision verbs let the manager fill defaults from `vision.*` ROS params
 # at dispatch time, so the CLI must NOT pre-fill spec defaults for these
 # commands; sending the rosidl zero is what triggers the live-param
@@ -72,7 +88,7 @@ def _build_parser():
             elif field in STRING_FIELDS:
                 arg_type = str
             else:
-                arg_type = float
+                arg_type = _float_or_head
             # For live-tuned commands, leave optional fields at None so
             # the rosidl zero reaches the manager and `vision.*` ROS
             # params apply. For everything else, prefill the spec default.
@@ -117,7 +133,12 @@ def main():
     exit_code = 0
     try:
         duburi.wait_for_connection()
-        result = duburi.send(args.cmd, **_fields_from_args(args.cmd, args))
+        fields = _fields_from_args(args.cmd, args)
+        if any(v == _HEAD_SENTINEL for v in fields.values()):
+            live = duburi.send('head').final_value
+            fields = {k: (live if v == _HEAD_SENTINEL else v)
+                      for k, v in fields.items()}
+        result = duburi.send(args.cmd, **fields)
         node.get_logger().info(
             f'{args.cmd} -> OK  '
             f'final={result.final_value:.3f}  err={result.error_value:.3f}  '
