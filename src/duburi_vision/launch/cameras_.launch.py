@@ -10,6 +10,10 @@ Usage:
     ros2 launch duburi_vision cameras_.launch.py device_param_type:=string device:=/dev/video2
     ros2 launch duburi_vision cameras_.launch.py with_tracking:=true  # enable ByteTrack + Kalman
     ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+
+    # Run on a pre-recorded video instead of a live webcam:
+    ros2 launch duburi_vision cameras_.launch.py video_file:=/path/to/pool_run.mp4
+    ros2 launch duburi_vision cameras_.launch.py video_file:=/tmp/gate.mp4 classes:=gate loop:=false
 """
 
 from launch                       import LaunchDescription
@@ -26,6 +30,10 @@ def generate_launch_description():
         DeclareLaunchArgument('width',         default_value='640'),
         DeclareLaunchArgument('height',        default_value='480'),
         DeclareLaunchArgument('fps',           default_value='30'),
+        DeclareLaunchArgument('video_file',    default_value='',
+                              description='Path to a video file; when set, overrides webcam source'),
+        DeclareLaunchArgument('loop',          default_value='true',
+                              description='Loop the video file when it reaches EOF (video_file only)'),
         DeclareLaunchArgument('model',         default_value='yolo26_nano_pretrained',
                               description='Model name (from models/) or path to .pt file'),
         DeclareLaunchArgument('cls_device',    default_value='cuda:0'),
@@ -41,16 +49,23 @@ def generate_launch_description():
                               description='tracker_node: frames to hold lost track before expiry'),
     ]
 
-    cam_name = LaunchConfiguration('camera')
+    cam_name   = LaunchConfiguration('camera')
+    video_file = LaunchConfiguration('video_file')
+
+    # source is 'video_file' when video_file arg is non-empty, else 'webcam'
+    source_expr = PythonExpression(
+        ["'video_file' if '", video_file, "' else 'webcam'"])
 
     camera_node = Node(
         package='duburi_vision', executable='camera_node', name='duburi_camera',
         output='screen',
         parameters=[{
-            'source':          'webcam',
+            'source':          source_expr,
             'name':            cam_name,
             'frame_id':        'laptop_cam',
             'device':          LaunchConfiguration('device'),
+            'path':            video_file,
+            'loop':            LaunchConfiguration('loop'),
             'width':           LaunchConfiguration('width'),
             'height':          LaunchConfiguration('height'),
             'fps':             LaunchConfiguration('fps'),
