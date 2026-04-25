@@ -122,15 +122,17 @@ the [Quickstart smoke tests](#quickstart-smoke-tests) right below.
 
 ### 0 — Bringup health check (no AUV needed)
 
-Probes USB serial ports, BlueOS UDP stream, BNO085 USB CDC, and ROS env in
-one shot. **Run this first** every session.
+Six checks in one shot: network reachability (BlueOS + Jetson IPs), MAVLink
+UDP stream, Pixhawk USB CDC, **DVL TCP** (ping 192.168.2.201 + connect port 9000),
+BNO085 USB CDC, and auto-detected mode hint. **Run this first** every session.
 
 ```bash
 ros2 run duburi_manager bringup_check
 ```
 
-Success: every line ends in `OK`. Failures print the missing piece (e.g.
-"no Pixhawk on /dev/ttyACM*", "BNO085 not detected") with the exact fix.
+Exit code 0 = nothing failed (WARNs are OK — expected in sim/desk mode).
+Each failing line prints what is missing and the exact fix. Full probe logic:
+[`src/duburi_manager/duburi_manager/bringup_check.py`](src/duburi_manager/duburi_manager/bringup_check.py)
 
 ### 1 — SIM only (Gazebo + ArduSub SITL, no real AUV)
 
@@ -249,7 +251,55 @@ Firmware + wiring contract: [src/duburi_sensors/firmware/esp32c3_bno085.md](src/
 To make the manager use BNO085 instead of ArduSub AHRS, launch with
 `-p yaw_source:=bno085` (and `-p bno085_port:=auto` is already the default).
 
-### 7 — Per-command MAVLink debug trace
+### 7 — DVL distance moves (pool only — requires Nucleus 1000)
+
+DVL auto-connects at startup (`dvl_auto_connect:=true` default). The
+manager logs `[DVL] connected` when the TCP handshake succeeds.
+
+```bash
+# Verify DVL is reachable first
+ros2 run duburi_manager bringup_check  # look for [PASS] Nucleus 1000
+
+# DVL closed-loop distance moves (heading lock stays active throughout)
+ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
+ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 60
+ros2 run duburi_planner duburi move_lateral_dist --distance_m 1.0 --gain 40
+ros2 run duburi_planner duburi unlock_heading
+```
+
+Manual connect (if auto-connect failed):
+
+```bash
+ros2 run duburi_planner duburi dvl_connect
+```
+
+Use `yaw_source:=bno085_dvl` at pool for BNO085 heading + DVL position
+(most stable combination). DVL driver: [`nucleus_dvl.py`](src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py).
+
+### 8 — Vision tracking with ByteTrack
+
+`tracker_node` subscribes `/detections`, runs ByteTrack + per-track
+Kalman smoother, and publishes `/tracks` with stable object IDs and
+smoothed bounding boxes. Opt in by launching with `with_tracking:=true`:
+
+```bash
+# T1: launch vision pipeline with tracking enabled
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+
+# T2: inspect smoothed track stream
+ros2 topic echo /duburi/vision/laptop/tracks
+
+# T3: vision verb that uses tracks instead of raw detections
+ros2 run duburi_planner duburi vision_align_yaw \
+    --camera laptop --target_class person --duration 15 --tracking true
+```
+
+Without `--tracking true`, vision verbs use raw `/detections` (lower
+latency, no ID stability). With `--tracking true` they use `/tracks`
+(smoothed bbox, stable ID across frames — better for slow-moving targets
+and low-confidence detections).
+
+### 9 — Per-command MAVLink debug trace
 
 When something misbehaves and you want to know exactly which Duburi verb
 emitted which MAVLink frame, restart the manager with `debug:=true`:
@@ -366,7 +416,7 @@ estuaries Mongla itself sits inside.
 
 ## Table of Contents
 
-- [Quickstart smoke tests](#quickstart-smoke-tests)
+- [Quickstart smoke tests](#quickstart-smoke-tests) — 0: bringup · 1: sim · 2: vision · 3: vision+control · 4: missions · 5: live-tune · 6: BNO085 · 7: DVL distance moves · 8: ByteTrack tracking · 9: MAVLink debug
 - [Concepts in 5 videos](#concepts-in-5-videos)
 
 0. [The name](#0-the-name)
@@ -449,13 +499,15 @@ Design principles we actually follow:
   zero residual velocity.
 - **Sharp vs curved turns.** `yaw_left` / `yaw_right` are sharp pivots
   (`SET_ATTITUDE_TARGET`). `arc` keeps Ch5 thrust + Ch4 yaw stick in the
-  same RC packet for car-style curved trajectories.
+  same RC packet for car-style curved trajectories. First principles:
+  [`.claude/context/axis-isolation.md`](.claude/context/axis-isolation.md).
 - **Heading-lock is yaw's depth-hold cousin.** `lock_heading` spins up a
   background Ch4-rate-override stream at 20 Hz driven by the configured
   `YawSource`; translations and `pause` run on top of it; `yaw_*` and `arc`
   suspend → execute → retarget; only `unlock_heading` (or shutdown) tears it
   down. It is **source-agnostic** — the same `YawSource` that feeds the
   manager (MAVLink AHRS, BNO085, or a Gazebo mock) also feeds the lock.
+  State diagram + failure modes: [`.claude/context/heading-lock.md`](.claude/context/heading-lock.md).
 - **Depth is owned by ArduSub's onboard ALT_HOLD.** `set_depth` engages
   ALT_HOLD and drives `hold_depth` to the target; once reached, ArduSub's
   400 Hz onboard depth controller keeps the sub there indefinitely without
@@ -974,6 +1026,19 @@ work without water.
 5. Within ~2 s you should see a `[STATE]` line. If not, the endpoint is
    misconfigured or the switch isn't bridged — see §13.
 
+6. If the Nucleus DVL is on the switch, the manager auto-connects it
+   (`dvl_auto_connect:=true` default). Watch for `[DVL] connected` in the
+   startup logs. Run bringup_check first to confirm TCP reachability.
+
+7. For the most stable pool yaw source (BNO085 heading + DVL position):
+
+   ```bash
+   ros2 run duburi_manager start --ros-args -p mode:=pool \
+       -p yaw_source:=bno085_dvl
+   ```
+
+   Sensor pipeline design: [`.claude/context/sensors-pipeline.md`](.claude/context/sensors-pipeline.md).
+
 ---
 
 ## 9. Command cookbook (`duburi` CLI)
@@ -1005,6 +1070,12 @@ All commands go through `/duburi/move` and block until done. Exit code 0 = succe
 | `head` | Read live heading at execution time | `duburi head` |
 
 Every flag: `ros2 run duburi_planner duburi <cmd> --help`
+
+> **Vision tracking flag:** all `vision_*` verbs accept `--tracking true` to
+> read from `/tracks` (ByteTrack + Kalman smoothed bbox, stable IDs) instead
+> of `/detections` (raw YOLO output). Requires the vision pipeline to be
+> launched with `with_tracking:=true`. Default is `false` (raw detections,
+> lower latency). See [quickstart §8](#8--vision-tracking-with-bytetrack).
 
 #### `head` — execution-time heading
 
@@ -1111,6 +1182,9 @@ Key constants (change in source, rebuild):
 | Brake strength | `motion_writers.py` | `REVERSE_KICK_PCT = 25` |
 | ArduSub depth gain | QGC → Pixhawk | `PSC_POSZ_P` (default 1.0) |
 
+PID theory behind the constants:
+[`.claude/context/pid-theory.md`](.claude/context/pid-theory.md)
+
 Full tuning guide: **[docs/tuning.md](docs/tuning.md)**
 
 ---
@@ -1124,6 +1198,7 @@ Full tuning guide: **[docs/tuning.md](docs/tuning.md)**
 | `[DEPTH]` | Depth tracking: target, current, error |
 | `[YAW  ]` | Yaw tracking: target, current, error |
 | `[VIS  ]` | Vision loop: bbox error, size, lock mode |
+| `[DVL  ]` | DVL connect / disconnect / position delta / timeout |
 | `[ARDUB]` | ArduSub STATUSTEXT (EKF events, pre-arm checks) |
 | `[MAV  ]` | Per-frame MAVLink trace (`debug:=true` only) |
 
@@ -1143,6 +1218,10 @@ Most common issues:
 | Yaw overshoots | `-p smooth_yaw:=true`, or lower `ATC_ANG_YAW_P` in QGC. |
 | Depth stalls on tall person | `ros2 param set /duburi_manager vision.depth_anchor_frac 0.2` |
 | `/dev/ttyACM0: Permission denied` | `sudo usermod -aG dialout "$USER"` then re-login. |
+| DVL: `[WARN] 192.168.2.201 unreachable` | DVL is off, not on the switch, or in sim mode — WARN is OK for bench/sim. |
+| DVL: `ping OK but TCP 9000 not accepting` | DVL powered but firmware not ready — wait 30 s and re-run `bringup_check`. |
+| `move_forward_dist` / `move_lateral_dist` times out | DVL not connected. Run `ros2 run duburi_planner duburi dvl_connect` or check `dvl_auto_connect` in manager logs. |
+| DVL position drifts sideways during `move_forward_dist` | Heading lock not active — always `lock_heading` before a DVL distance move. |
 
 Full issue list: **[docs/troubleshooting.md](docs/troubleshooting.md)**
 
@@ -1200,8 +1279,6 @@ Phase 4 — `duburi_vision` (**v1 + v4 done**):
   subscribes `/detections`, runs ByteTrack + 4-state CV Kalman, publishes `/tracks` with
   stable IDs + smoothed bbox. Opt-in: `cameras_.launch.py with_tracking:=true` or
   `--tracking true` per vision verb. **Done.**
-- Per-track Kalman smoothing for visual-PID setpoints -- v3, see
-  [filters/PLAN.md](src/duburi_vision/duburi_vision/filters/PLAN.md).
 
 Phase 5 (queued):
 - `robot_localization` EKF fusing DVL velocity + AHRS2 + Bar30 for full odometry.
