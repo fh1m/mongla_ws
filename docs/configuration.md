@@ -10,12 +10,17 @@
 
 | Parameter          | Type     | Default          | Values / effect |
 |--------------------|----------|------------------|-----------------|
-| `mode`             | `string` | `auto`           | `auto` (probes UDP 14550 + Pixhawk USB → picks `pool`/`desk`/`sim`), or pin one of `sim`, `pool`, `laptop`, `desk` |
+| `mode`             | `string` | `pool`           | `pool`/`sim`/`desk`/`laptop` or `auto` (probes UDP 14550 + Pixhawk USB) |
 | `smooth_yaw`       | `bool`   | `false`          | `true` → `yaw_glide` (smootherstep sweep; reduces overshoot) |
 | `smooth_translate` | `bool`   | `false`          | `true` → trapezoid thrust envelope; softer start/stop on Ch5/Ch6 |
-| `yaw_source`       | `string` | `mavlink_ahrs`   | `mavlink_ahrs` (ArduSub AHRS2) or `bno085` (ESP32-C3 + BNO085) |
+| `yaw_source`       | `string` | `dvl`            | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` — see Yaw source section |
 | `bno085_port`      | `string` | `auto`           | `auto` (probes `usb-Espressif*` → `ttyACM*`) or explicit path |
 | `bno085_baud`      | `int`    | `115200`         | BNO085 USB CDC baud rate |
+| `nucleus_dvl_host` | `string` | `192.168.2.201`  | Nucleus 1000 TCP IP |
+| `nucleus_dvl_port` | `int`    | `9000`           | Nucleus 1000 TCP port |
+| `nucleus_dvl_password` | `string` | `nortek`     | Nucleus 1000 auth password |
+| `dvl_auto_connect` | `bool`   | `true`           | Auto-connect DVL at startup; background daemon, no manual `dvl_connect` needed |
+| `dvl_retry_s`      | `float`  | `5.0`            | Seconds between DVL reconnect attempts |
 
 ```bash
 # Defaults (bang-bang yaw + constant thrust)
@@ -99,30 +104,49 @@ fallback, no mid-run switching.
         +-----------------------------------------------+
         |   make_yaw_source(name, **kw)  (factory)      |
         +-----------------------------------------------+
-          |              |              |             |
-          v              v              v             v
-   MavlinkAhrs   BNO085Source    DVLSource (stub)   WitMotion (stub)
-   (default)     (USB CDC JSON)  raises NotImpl     raises NotImpl
+          |              |              |                  |
+          v              v              v                  v
+   MavlinkAhrs   BNO085Source    NucleusDVLSource   CompositeBnoDvl
+   mavlink_ahrs  bno085          dvl/nucleus_dvl    bno085_dvl/dvl_bno
+   (bench/sim)   (USB CDC)       heading + position  BNO yaw + DVL pos
 ```
 
 Every source: `read_yaw()` → degrees in `[0, 360)`, Earth-referenced
 (magnetic north, +CW from above).
+DVL sources additionally provide `get_position()` / `reset_position()` / `connect()`.
+
+### Yaw source selection
+
+| `yaw_source` | Heading from | Distance commands | When to use |
+|---|---|---|---|
+| `mavlink_ahrs` | ArduSub AHRS2 | open-loop fallback | Bench / Gazebo sim |
+| `bno085` | BNO085 (USB CDC) | open-loop fallback | Pool without DVL |
+| `dvl` / `nucleus_dvl` | Nucleus AHRS | DVL bottom-track | DVL as sole IMU |
+| `bno085_dvl` / `dvl_bno` | BNO085 (USB CDC) | DVL bottom-track | **Recommended pool** |
+
+`bno085_dvl` is the recommended pool config: BNO085 provides stable gyro-fusion
+heading (magnetometer disabled) while DVL bottom-track handles closed-loop distance.
+Heading lock stays active during `move_forward_dist` / `move_lateral_dist` — lock
+owns Ch4 (yaw), DVL owns Ch5/Ch6.
 
 ### Switching source
 
 ```bash
-# Default — ArduSub onboard AHRS
-ros2 run duburi_manager start_node
+# Pool with DVL (recommended)
+ros2 run duburi_manager start --ros-args -p yaw_source:=bno085_dvl
 
-# External BNO085 (auto-probes port)
-ros2 run duburi_manager start_node --ros-args -p yaw_source:=bno085
+# DVL as sole IMU (heading + distance from Nucleus)
+ros2 run duburi_manager start --ros-args -p yaw_source:=dvl
 
-# Pin a specific port
-ros2 run duburi_manager start_node \
-    --ros-args -p yaw_source:=bno085 \
-               -p bno085_port:=/dev/ttyACM0 \
-               -p bno085_baud:=115200
+# BNO085 only (no DVL, distance = open-loop)
+ros2 run duburi_manager start --ros-args -p yaw_source:=bno085
+
+# Bench / sim (no extra hardware)
+ros2 run duburi_manager start --ros-args -p yaw_source:=mavlink_ahrs
 ```
+
+DVL auto-connects at startup when `dvl_auto_connect:=true` (default). To force
+manual connect: `ros2 run duburi_planner duburi dvl_connect`.
 
 If the source fails to initialise the node **fails loudly at startup** — no silent fallback.
 
@@ -195,14 +219,22 @@ and control share the same MAVLink owner and never fight for thrust.
 
 ```
 +------------------------+     +-------------------------+     +-----------------------+
-|  camera_node           | --> |  detector_node          | --> |  auv_manager_node     |
-|  Camera factory:       |     |  YoloDetector (YOLO26)  |     |  VisionState pool     |
-|  webcam / ros_topic /  |     |  + draw.render_all()    |     |  + motion_vision loop |
-|  jetson / blueos /     |     |  -> Detection2DArray    |     |  RC Ch4/5/6 + depth   |
-|  mavlink (stubs)       |     |  -> image_debug         |     +-----------------------+
-+------------------------+     +-------------------------+              ^
-                                                                        |
-                                                       /duburi/move (vision_* verbs)
+|  camera_node           | --> |  detector_node          | --> |  tracker_node (opt)   |
+|  Camera factory:       |     |  YoloDetector (YOLO26)  |     |  ByteTrack + Kalman   |
+|  webcam / ros_topic /  |     |  + draw.render_all()    |     |  -> /tracks           |
+|  jetson / blueos /     |     |  -> /detections         |     +-----------------------+
+|  mavlink (stubs)       |     |  -> image_debug         |               |
++------------------------+     +-------------------------+               |
+                                          |                              |
+                                          v (or /tracks if tracking=true)
+                                   +-----------------------+
+                                   |  auv_manager_node     |
+                                   |  VisionState pool     |
+                                   |  + motion_vision loop |
+                                   |  RC Ch4/5/6 + depth   |
+                                   +-----------------------+
+                                              ^
+                                 /duburi/move (vision_* verbs)
 ```
 
 ### Topics
@@ -211,7 +243,8 @@ and control share the same MAVLink owner and never fight for thrust.
 |-------|------|-------|
 | `/duburi/vision/<cam>/image_raw`    | `sensor_msgs/Image`            | Camera source rate |
 | `/duburi/vision/<cam>/camera_info` | `sensor_msgs/CameraInfo`       | Size only (no calibration yet) |
-| `/duburi/vision/<cam>/detections`  | `vision_msgs/Detection2DArray` | One row per detection |
+| `/duburi/vision/<cam>/detections`  | `vision_msgs/Detection2DArray` | One row per detection, no tracking IDs |
+| `/duburi/vision/<cam>/tracks`      | `vision_msgs/Detection2DArray` | ByteTrack IDs + Kalman-smoothed bbox (tracker_node only) |
 | `/duburi/vision/<cam>/image_debug` | `sensor_msgs/Image`            | Rate-limited overlay (5 Hz) |
 
 ### GPU contract
@@ -251,15 +284,57 @@ Full param docs: [`.claude/context/command-reference.md`](../../../.claude/conte
 ### Quickstart
 
 ```bash
-# Laptop webcam + YOLO26 + rqt viewer
-ros2 launch duburi_vision webcam_demo.launch.py
+# Laptop webcam + YOLO26 + rqt viewer (gate model)
+ros2 launch duburi_vision cameras_.launch.py
+
+# Switch to medium gate model
+ros2 launch duburi_vision cameras_.launch.py model:=gate_medium_100ep
 
 # Subscribe to a Gazebo image topic
 ros2 launch duburi_vision sim_demo.launch.py topic:=/your/image/topic
 
 # CPU fallback (no CUDA)
-ros2 launch duburi_vision webcam_demo.launch.py cls_device:=cpu
+ros2 launch duburi_vision cameras_.launch.py device:=cpu
+
+# With ByteTrack + Kalman tracking enabled
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
 ```
+
+> `webcam_demo.launch.py` still works but is deprecated — use `cameras_.launch.py`.
+
+### Tracker node (optional)
+
+Runs after `detector_node`, subscribes `/detections`, publishes `/tracks` with
+stable ByteTrack IDs and Kalman-smoothed bbox centres.
+
+```bash
+# Start standalone (detector must already be running)
+ros2 run duburi_vision tracker_node --ros-args -p camera:=laptop
+
+# Tell manager to use /tracks for all vision verbs
+ros2 param set /duburi_manager vision.use_tracks true
+
+# Or per-verb:
+ros2 run duburi_planner duburi vision_align_yaw --target_class gate --tracking true
+```
+
+| `tracker_node` param | Default | Notes |
+|---|---|---|
+| `camera` | `laptop` | Must match detector's camera profile |
+| `track_buffer` | `30` | Frames to keep a lost track alive (~1.5 s @ 20 Hz) |
+| `min_hits` | `3` | Confirmed frames before a new track is published |
+| `iou_threshold` | `0.3` | ByteTrack low-confidence IoU threshold |
+| `enable_kalman` | `true` | Per-track 4-state CV Kalman smoother |
+| `kalman_process_noise` | `0.1` | Q diagonal — higher = trust measurements more |
+| `kalman_measurement_noise` | `1.0` | R — higher = trust prediction more |
+| `max_predict_frames` | `5` | Kalman-only frames before track is dropped (~0.25 s) |
+
+Smoke test:
+```bash
+ros2 run duburi_vision tracker_check --camera laptop --duration 5 --require-class gate
+```
+
+All params in `src/duburi_vision/config/tracker.yaml`.
 
 ### Pipeline diagnostics
 

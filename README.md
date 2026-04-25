@@ -1165,8 +1165,10 @@ Phase 4 — `duburi_vision` (**v1 + v4 done**):
   subscriber pool with `wait_vision_state_ready` preflight. CLI utilities
   `vision_check` (topic probe) and `vision_thrust_check` (detection -> RC).
   Mission `find_person_demo` exercises the whole chain. **Done.**
-- Object tracking via `supervision.ByteTrack` -- v2, see
-  [tracking/PLAN.md](src/duburi_vision/duburi_vision/tracking/PLAN.md).
+- **v2 — ByteTrack object tracking** + **v3 — per-track Kalman smoother**: `tracker_node`
+  subscribes `/detections`, runs ByteTrack + 4-state CV Kalman, publishes `/tracks` with
+  stable IDs + smoothed bbox. Opt-in: `cameras_.launch.py with_tracking:=true` or
+  `--tracking true` per vision verb. **Done.**
 - Per-track Kalman smoothing for visual-PID setpoints -- v3, see
   [filters/PLAN.md](src/duburi_vision/duburi_vision/filters/PLAN.md).
 
