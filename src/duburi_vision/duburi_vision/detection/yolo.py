@@ -36,37 +36,87 @@ _PRETRAINED_ALIASES: dict[str, str] = {
 }
 
 
+def _find_src_models_dir() -> Optional[Path]:
+    """Locate src/duburi_vision/models/ from the installed or source path.
+
+    Uses the same /install/ split trick as missions/__init__.py so this
+    works correctly from both the installed package and a pre-build source tree.
+    """
+    this = Path(__file__).resolve()
+    path_str = str(this)
+    if '/install/' in path_str:
+        ws_root = Path(path_str.split('/install/')[0])
+        src_dir = ws_root / 'src' / 'duburi_vision' / 'models'
+        if src_dir.is_dir():
+            return src_dir
+    # Pre-build source tree: __file__ is src/duburi_vision/duburi_vision/detection/yolo.py
+    candidate = Path(__file__).parent.parent.parent / 'models'
+    if candidate.is_dir():
+        return candidate
+    return None
+
+
 def _resolve_model_path(name: str) -> str:
     """Resolve a bare model name to a full path.
 
     Priority order:
       1. Path as-is     — if *name* has a separator or .pt extension.
       2. share dir      — ``<package_share>/models/<name>.pt`` via ament_index.
-      3. Source tree    — ``<this_file>/../../models/<name>.pt`` (dev / pre-build).
+      3. Source tree    — workspace ``src/duburi_vision/models/<name>.pt``.
       4. Alias table    — maps descriptive names like ``yolo26_nano_pretrained``
                           to Ultralytics short stems like ``yolo26n`` so auto-
-                          download works correctly.
-      5. Bare stem      — ``name + '.pt'``; Ultralytics will try to download it.
+                          download works correctly (pretrained only).
+      5. Fail loudly    — raise FileNotFoundError with helpful message.
+                          Custom model names are NOT auto-downloaded; the pool
+                          has no internet and a silent download attempt would
+                          hang indefinitely.
+
+    To use an absolute path: pass ``/path/to/model.pt`` or set
+    ``model:=/abs/path.pt`` in the launch arg / models registry.
     """
     if os.sep in name or name.endswith('.pt'):
         return name
+
+    share_models_dir: Optional[str] = None
     try:
         from ament_index_python.packages import get_package_share_directory
         share = get_package_share_directory('duburi_vision')
         candidate = Path(share) / 'models' / f'{name}.pt'
+        share_models_dir = str(Path(share) / 'models')
         if candidate.exists():
             return str(candidate)
     except Exception:
         pass
-    # Source-tree fallback: works before/during colcon build.
-    # __file__ is duburi_vision/detection/yolo.py → ../../../models/
-    src_candidate = Path(__file__).parent.parent.parent / 'models' / f'{name}.pt'
-    if src_candidate.exists():
-        return str(src_candidate)
-    # Map descriptive name → Ultralytics short stem so auto-download works.
+
+    src_models = _find_src_models_dir()
+    if src_models is not None:
+        src_candidate = src_models / f'{name}.pt'
+        if src_candidate.exists():
+            return str(src_candidate)
+
+    # Map descriptive name → Ultralytics short stem for pretrained auto-download.
     if name in _PRETRAINED_ALIASES:
         return f'{_PRETRAINED_ALIASES[name]}.pt'
-    return f'{name}.pt'
+
+    # Not found locally and not a known pretrained alias.
+    # Fail loudly: never trigger a network download for custom model names.
+    searched = []
+    if share_models_dir:
+        searched.append(f'  ament share:  {share_models_dir}/{name}.pt')
+    if src_models:
+        searched.append(f'  source tree:  {src_models}/{name}.pt')
+    raise FileNotFoundError(
+        f"Model {name!r} not found locally.\n"
+        + ('\n'.join(searched) + '\n' if searched else '')
+        + f"To fix:\n"
+          f"  1. Place {name}.pt in src/duburi_vision/models/ and rebuild:\n"
+          f"       colcon build --packages-select duburi_vision\n"
+          f"  2. Use an absolute path in the launch arg:\n"
+          f"       model:=/abs/path/to/{name}.pt\n"
+          f"       models:=\"{name}=/abs/path/to/{name}.pt\"\n"
+          f"  3. For Ultralytics pretrained weights (auto-download OK):\n"
+          f"       {sorted(_PRETRAINED_ALIASES)}"
+    )
 
 
 class YoloDetector(Detector):
