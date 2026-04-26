@@ -61,8 +61,11 @@ def _resolve_model_path(name: str) -> str:
 
     Priority order:
       1. Path as-is     — if *name* has a separator or .pt extension.
-      2. share dir      — ``<package_share>/models/<name>.pt`` via ament_index.
-      3. Source tree    — workspace ``src/duburi_vision/models/<name>.pt``.
+      2. Source tree    — workspace ``src/duburi_vision/models/<name>.pt``
+                          (checked first so models work on any cloned device
+                          without needing a prior colcon build).
+      3. Share dir      — ``<package_share>/models/<name>.pt`` via ament_index
+                          (fallback for installed/container deployments).
       4. Alias table    — maps descriptive names like ``yolo26_nano_pretrained``
                           to Ultralytics short stems like ``yolo26n`` so auto-
                           download works correctly (pretrained only).
@@ -77,6 +80,12 @@ def _resolve_model_path(name: str) -> str:
     if os.sep in name or name.endswith('.pt'):
         return name
 
+    src_models = _find_src_models_dir()
+    if src_models is not None:
+        src_candidate = src_models / f'{name}.pt'
+        if src_candidate.exists():
+            return str(src_candidate)
+
     share_models_dir: Optional[str] = None
     try:
         from ament_index_python.packages import get_package_share_directory
@@ -87,12 +96,6 @@ def _resolve_model_path(name: str) -> str:
             return str(candidate)
     except Exception:
         pass
-
-    src_models = _find_src_models_dir()
-    if src_models is not None:
-        src_candidate = src_models / f'{name}.pt'
-        if src_candidate.exists():
-            return str(src_candidate)
 
     # Map descriptive name → Ultralytics short stem for pretrained auto-download.
     if name in _PRETRAINED_ALIASES:
