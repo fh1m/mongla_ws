@@ -1057,19 +1057,47 @@ work without water.
 1. Power on the AUV; confirm the switch link lights come up.
 2. On a laptop on the same switch, open `http://192.168.2.1` and confirm
    the BlueOS `inspector` endpoint matches §5.2.
-3. SSH into the Jetson:
+3. SSH into the Jetson and bring up everything in one command:
 
    ```bash
    ssh fh1m@192.168.2.69
    cd ~/Ros_workspaces/duburi_ws
    source install/setup.bash
-   ros2 run duburi_manager start --ros-args -p mode:=pool
+
+   # Control only (no vision):
+   ros2 launch duburi_manager bringup.launch.py
+
+   # Full pool day — BNO085 heading, DVL distance, gate+flare model:
+   ros2 launch duburi_manager bringup.launch.py \
+       vision:=true \
+       yaw_source:=bno085_dvl \
+       model:=gate_flare_medium_100ep \
+       classes:=gate \
+       conf:=0.45
+
+   # Headless (no rqt image viewer):
+   ros2 launch duburi_manager bringup.launch.py vision:=true rqt:=false \
+       yaw_source:=bno085_dvl model:=gate_flare_medium_100ep
    ```
+
+   **`bringup.launch.py` arguments:**
+
+   | Arg | Default | Accepted values |
+   |-----|---------|-----------------|
+   | `mode` | `pool` | `pool` · `sim` · `desk` · `laptop` · `auto` |
+   | `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` |
+   | `vision` | `false` | `true` · `false` |
+   | `camera` | `forward` | `forward` · `downward` · `laptop` |
+   | `model` | `gate_flare_medium_100ep` | `gate_flare_medium_100ep` · `gate_nano_100ep` · `gate_medium_100ep` · `flare_medium_100ep` · `yolo26_nano_pretrained` |
+   | `classes` | `gate` | CSV class names: `gate` · `flare` · `gate,flare` · (empty = all) |
+   | `conf` | `0.30` | 0.0–1.0 (use `0.45` for pool with our models) |
+   | `dvl_auto_connect` | `true` | `true` · `false` |
+   | `rqt` | `true` | `true` · `false` (disable for headless Jetson run) |
 
 4. Expected startup banner:
 
    ```
-    DUBURI AUV MANAGER  │  mode: pool
+    DUBURI AUV MANAGER  │  mode: pool  yaw: bno085_dvl
     MAVLink: sys=1 comp=0  (v2.0)
     Profiles: yaw=snap  translate=constant
     Expect BlueOS "inspector" → UDP Client 192.168.2.69:14550
@@ -1078,16 +1106,9 @@ work without water.
 5. Within ~2 s you should see a `[STATE]` line. If not, the endpoint is
    misconfigured or the switch isn't bridged — see §13.
 
-6. If the Nucleus DVL is on the switch, the manager auto-connects it
-   (`dvl_auto_connect:=true` default). Watch for `[DVL] connected` in the
-   startup logs. Run bringup_check first to confirm TCP reachability.
-
-7. For the most stable pool yaw source (BNO085 heading + DVL position):
-
-   ```bash
-   ros2 run duburi_manager start --ros-args -p mode:=pool \
-       -p yaw_source:=bno085_dvl
-   ```
+6. DVL auto-connects at startup (`dvl_auto_connect:=true` default). Watch for
+   `[DVL] connected` in the startup logs. Run bringup_check first to confirm
+   TCP reachability (`[PASS] Nucleus 1000`).
 
    Sensor pipeline design: [`.claude/context/sensors-pipeline.md`](.claude/context/sensors-pipeline.md).
 
@@ -1189,7 +1210,7 @@ Key params on `auv_manager_node`:
 
 | Param | Default | Effect |
 |-------|---------|--------|
-| `mode` | `pool` | `pool`/`sim`/`desk`/`auto` — `auto` probes UDP 14550 + Pixhawk USB |
+| `mode` | `pool` | `pool` · `sim` · `desk` · `laptop` · `auto` — `auto` probes UDP 14550 + Pixhawk USB |
 | `smooth_yaw` | `false` | `true` → smootherstep yaw setpoint sweep (reduces overshoot) |
 | `smooth_translate` | `false` | `true` → trapezoid thrust ramp (softer start/stop) |
 | `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` — see below |
