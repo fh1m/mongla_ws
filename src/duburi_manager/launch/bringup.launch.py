@@ -5,17 +5,25 @@ One-command pool-day bringup (defaults: pool mode, DVL auto-connect):
     # Control only (no vision):
     ros2 launch duburi_manager bringup.launch.py
 
-    # With vision + gate model (forward camera):
+    # With vision + gate+flare model (forward camera):
     ros2 launch duburi_manager bringup.launch.py vision:=true
 
-    # Full pool day (gate vision, hide rqt):
-    ros2 launch duburi_manager bringup.launch.py vision:=true rqt:=false
+    # Full pool day (BNO085 heading + DVL distance, gate+flare model, no rqt):
+    ros2 launch duburi_manager bringup.launch.py vision:=true \\
+        yaw_source:=bno085_dvl rqt:=false
 
     # Bench / sim -- no DVL, use mavlink AHRS:
     ros2 launch duburi_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs
 
-    # BNO085 heading + DVL position (composite source):
-    ros2 launch duburi_manager bringup.launch.py yaw_source:=bno085_dvl
+Multi-model registry (switch models mid-mission without restart):
+    ros2 launch duburi_manager bringup.launch.py vision:=true \\
+        models:="gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep" \\
+        active_model:=gate classes:=gate conf:=0.45
+
+    # In the mission DSL:
+    #   duburi.use('gate')               # phase: gate
+    #   duburi.use('flare', 'flare')     # phase: flare
+    #   duburi.use('combined', 'gate')   # phase: combined model, gate filter
 
 DVL connects automatically on startup (dvl_auto_connect:=true by default).
 Manual override: ros2 run duburi_planner duburi dvl_connect
@@ -24,8 +32,8 @@ Vision commands to test gate detection:
     ros2 run duburi_planner duburi vision_align_yaw --camera forward --target_class gate --duration 10
     ros2 run duburi_planner duburi vision_align_3d  --camera forward --target_class gate --axes yaw,forward --duration 15
 
-Run the gate mission:
-    ros2 run duburi_planner mission gate_prequal
+Run the gate+flare mission:
+    ros2 run duburi_planner mission gate_flare_prequal
 """
 
 from launch                     import LaunchDescription
@@ -53,7 +61,12 @@ def generate_launch_description():
         DeclareLaunchArgument('camera',     default_value='forward',
                               description='Camera profile name (forward|downward|laptop)'),
         DeclareLaunchArgument('model',      default_value='gate_flare_medium_100ep',
-                              description='Detector model (gate_flare_medium_100ep|gate_nano_100ep|gate_medium_100ep|flare_medium_100ep|yolo26_nano_pretrained)'),
+                              description='Single-model: gate_flare_medium_100ep|gate_nano_100ep|gate_medium_100ep|flare_medium_100ep|yolo26_nano_pretrained'),
+        DeclareLaunchArgument('models',     default_value='',
+                              description='Multi-model registry (CSV name=stem): '
+                                          '"gate=gate_nano_100ep,combined=gate_flare_medium_100ep"'),
+        DeclareLaunchArgument('active_model', default_value='',
+                              description='Registry key to start with (requires models:="..." to be set)'),
         DeclareLaunchArgument('classes',    default_value='gate',
                               description='CSV class names for detector'),
         DeclareLaunchArgument('conf',       default_value='0.30'),
@@ -82,11 +95,13 @@ def generate_launch_description():
     vision_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(vision_launch_path),
         launch_arguments={
-            'camera':  LaunchConfiguration('camera'),
-            'model':   LaunchConfiguration('model'),
-            'classes': LaunchConfiguration('classes'),
-            'conf':    LaunchConfiguration('conf'),
-            'rqt':     LaunchConfiguration('rqt'),
+            'camera':        LaunchConfiguration('camera'),
+            'model':         LaunchConfiguration('model'),
+            'models':        LaunchConfiguration('models'),
+            'active_model':  LaunchConfiguration('active_model'),
+            'classes':       LaunchConfiguration('classes'),
+            'conf':          LaunchConfiguration('conf'),
+            'rqt':           LaunchConfiguration('rqt'),
         }.items(),
         condition=IfCondition(LaunchConfiguration('vision')),
     )

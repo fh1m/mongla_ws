@@ -35,7 +35,12 @@ def generate_launch_description():
         DeclareLaunchArgument('loop',          default_value='true',
                               description='Loop the video file when it reaches EOF (video_file only)'),
         DeclareLaunchArgument('model',         default_value='yolo26_nano_pretrained',
-                              description='Model name (from models/) or path to .pt file'),
+                              description='Model name (from models/) or path to .pt file (single-model mode)'),
+        DeclareLaunchArgument('models',        default_value='',
+                              description='CSV name=stem pairs to build a named registry: '
+                                          '"gate=gate_nano_100ep,combined=gate_flare_medium_100ep"'),
+        DeclareLaunchArgument('active_model',  default_value='',
+                              description='Registry key to start with (requires models:="..." to be set)'),
         DeclareLaunchArgument('cls_device',    default_value='cuda:0'),
         DeclareLaunchArgument('classes',       default_value='person',
                               description='CSV class names or indices to detect; empty = all'),
@@ -79,6 +84,8 @@ def generate_launch_description():
         parameters=[{
             'camera':              cam_name,
             'model_path':          LaunchConfiguration('model'),
+            'models':              LaunchConfiguration('models'),
+            'active_model':        LaunchConfiguration('active_model'),
             'device':              LaunchConfiguration('cls_device'),
             'classes':             LaunchConfiguration('classes'),
             'conf':                LaunchConfiguration('conf'),
