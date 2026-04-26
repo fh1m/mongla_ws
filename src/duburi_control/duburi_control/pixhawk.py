@@ -292,6 +292,22 @@ class Pixhawk:
         self.master.mav.rc_channels_override_send(
             self.master.target_system, self.master.target_component, *values)
 
+    def send_rc_yaw_only(self, yaw: int) -> None:
+        """Override Ch4 (yaw rate) only, leaving all other channels at NO_OVERRIDE.
+
+        Used by HeadingLock so its 20 Hz Ch4 stream does NOT clobber
+        Ch5/Ch6 when a concurrent translation command (move_forward_dist,
+        move_lateral_dist, or any timed forward/lateral move) is running.
+        Writing Ch5=1500 from the heading-lock tick would interrupt the
+        DVL forward thrust every other frame -- this method avoids that
+        by touching only the one channel it owns.
+        """
+        values = [NO_OVERRIDE] * 18
+        values[CH_YAW] = int(yaw)
+        self._log_mavlink(self._summarise_rc(values))
+        self.master.mav.rc_channels_override_send(
+            self.master.target_system, self.master.target_component, *values)
+
     def send_neutral(self):
         """Active hold: send 1500 PWM to all six driving channels.
 

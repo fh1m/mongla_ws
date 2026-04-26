@@ -29,7 +29,10 @@ Each tick:
   3. Deadband inside ``LOCK_DEADBAND_DEG`` so noise does not twitch
      the sub; otherwise ``yaw_pct = error * LOCK_KP_PCT_PER_DEG``,
      clamped to ``+/-LOCK_PCT_MAX`` so we cannot saturate the bus.
-  4. ``pixhawk.send_rc_override(yaw=percent_to_pwm(yaw_pct))``.
+  4. ``pixhawk.send_rc_yaw_only(percent_to_pwm(yaw_pct))``.
+     Sets ONLY Ch4; all other channels stay at NO_OVERRIDE (65535).
+     This lets concurrent DVL forward/lateral moves run without
+     their Ch5/Ch6 thrust being overwritten every lock tick.
      ArduSub treats any Ch4 override != 1500 as a pilot yaw-rate
      command, so the Python-side yaw_source is the sole feedback
      closing the loop.
@@ -214,10 +217,13 @@ class HeadingLock:
                     yaw_pct = math.copysign(speed, error)
 
                 try:
-                    self._pixhawk.send_rc_override(
-                        yaw=Pixhawk.percent_to_pwm(yaw_pct))
+                    # send_rc_yaw_only leaves Ch5/Ch6 at NO_OVERRIDE (65535)
+                    # so concurrent DVL forward/lateral moves are not
+                    # interrupted by this tick.
+                    self._pixhawk.send_rc_yaw_only(
+                        Pixhawk.percent_to_pwm(yaw_pct))
                 except Exception as exc:
-                    self._log.warn(f'[LOCK ] send_rc_override raised: {exc}')
+                    self._log.warn(f'[LOCK ] send_rc_yaw_only raised: {exc}')
 
                 if now - last_log >= DRIFT_LOG_SEC:
                     self._log.info(
@@ -238,8 +244,8 @@ class HeadingLock:
             self._stop_event.wait(timeout=period)
 
     def _release_ch4(self) -> None:
-        """Park the yaw channel at 1500 us (zero pilot rate)."""
+        """Park the yaw channel at 1500 us (zero pilot rate), no other channels."""
         try:
-            self._pixhawk.send_rc_override(yaw=Pixhawk.percent_to_pwm(0.0))
+            self._pixhawk.send_rc_yaw_only(Pixhawk.percent_to_pwm(0.0))
         except Exception:
             pass
