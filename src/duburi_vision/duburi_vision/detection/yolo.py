@@ -40,12 +40,13 @@ def _resolve_model_path(name: str) -> str:
     """Resolve a bare model name to a full path.
 
     Priority order:
-      1. Path as-is   — if *name* has a separator or .pt extension.
-      2. models/ dir  — ``<package_share>/models/<name>.pt`` via ament_index.
-      3. Alias table  — maps descriptive names like ``yolo26_nano_pretrained``
-                        to Ultralytics short stems like ``yolo26n`` so auto-
-                        download works correctly.
-      4. Bare stem    — ``name + '.pt'``; Ultralytics will try to download it.
+      1. Path as-is     — if *name* has a separator or .pt extension.
+      2. share dir      — ``<package_share>/models/<name>.pt`` via ament_index.
+      3. Source tree    — ``<this_file>/../../models/<name>.pt`` (dev / pre-build).
+      4. Alias table    — maps descriptive names like ``yolo26_nano_pretrained``
+                          to Ultralytics short stems like ``yolo26n`` so auto-
+                          download works correctly.
+      5. Bare stem      — ``name + '.pt'``; Ultralytics will try to download it.
     """
     if os.sep in name or name.endswith('.pt'):
         return name
@@ -57,6 +58,11 @@ def _resolve_model_path(name: str) -> str:
             return str(candidate)
     except Exception:
         pass
+    # Source-tree fallback: works before/during colcon build.
+    # __file__ is duburi_vision/detection/yolo.py → ../../../models/
+    src_candidate = Path(__file__).parent.parent.parent / 'models' / f'{name}.pt'
+    if src_candidate.exists():
+        return str(src_candidate)
     # Map descriptive name → Ultralytics short stem so auto-download works.
     if name in _PRETRAINED_ALIASES:
         return f'{_PRETRAINED_ALIASES[name]}.pt'

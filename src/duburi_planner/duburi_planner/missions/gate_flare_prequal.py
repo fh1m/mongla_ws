@@ -9,13 +9,13 @@ Course layout (from 2026 briefing image):
 Sequence:
   0. Countdown (operator removes tether in this window)
   1. Arm, engage ALT_HOLD, descend to gate depth
-  2. Connect DVL
-  3. Load gate+flare combined model, start with 'gate' class filter
+  2. DVL connect (auto-connected at launch; this is a safety check)
+  3. Set class filter to 'gate'
   4. Search: drive forward slowly while watching for gate
   5. Align: centre on gate (yaw + forward distance) with on_lost='hold'
   6. Pass through gate: DVL forward 3.5 m (timed fallback)
   7. Switch class filter to 'flare'
-  8. Search: sweep right looking for flare
+  8. Search: drive forward slowly while sweeping, watching for flare
   9. Approach flare: yaw + forward + depth lock at standoff
   10. Orbit flare: 12 x 30-degree yaw steps x re-lock (360-degree polygon)
   11. Turn 180 degrees to face return heading
@@ -24,23 +24,37 @@ Sequence:
   14. Pass back through gate: DVL forward 3.5 m
   15. Surface and disarm
 
+Recommended launch (pool day with BNO085 heading + DVL distance):
+  ros2 launch duburi_manager bringup.launch.py \\
+      vision:=true \\
+      yaw_source:=bno085_dvl \\
+      model:=gate_flare_medium_100ep \\
+      classes:=gate \\
+      conf:=0.45
+
+  BNO085 provides stable magnetic heading for yaw and heading lock.
+  DVL provides measured distance for move_forward_dist / move_lateral_dist.
+  Together they are the most accurate config for this course.
+
+  Fallback without DVL (BNO heading + timed thrust only):
+    yaw_source:=bno085  -- heading lock works; pass phases use timed fallback
+
+  Sim / bench:
+    yaw_source:=mavlink_ahrs  -- ArduSub AHRS yaw, no DVL needed
+
 Bounding-box robustness notes (tuned from underwater preview footage):
   - Gate partial/off-edge: yaw axis still has center_x signal; vehicle turns
     toward visible post. Works with as little as 20% of gate in frame.
   - Gate too close (fills 90%+): forward axis backs off until GATE_STANDOFF.
     distance_metric='area' is more stable for wide objects than 'height'.
-  - Flare narrow at distance: force 'height' metric; flare is taller than wide.
+  - Flare narrow at distance: 'height' metric; flare is taller than wide.
   - High-confidence models (0.90-0.97 in murky water): conf=0.45 eliminates
     background noise without losing any real detections.
 
-Pre-flight:
-  ros2 launch duburi_manager bringup.launch.py vision:=true
-  # bringup.launch.py loads detector.yaml which now defaults to
-  # gate_flare_medium_100ep with conf=0.45 and classes=gate
-
+Pre-flight checklist:
+  ros2 launch duburi_manager bringup.launch.py vision:=true yaw_source:=bno085_dvl
   ros2 run duburi_vision vision_check --camera forward --require-class gate
   ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
-
   ros2 run duburi_planner mission gate_flare_prequal
 
 Live tuning (between runs, no rebuild):
@@ -56,8 +70,8 @@ WARNING: this mission arms the vehicle and removes the tether.
 CAMERA      = 'forward'    # forward camera profile name
 GATE_CLASS  = 'gate'
 FLARE_CLASS = 'flare'
-# Model is set at launch via detector.yaml (gate_flare_medium_100ep).
-# class filter is switched live by duburi.set_classes() during the mission.
+# Model is set at launch via bringup.launch.py model:=gate_flare_medium_100ep.
+# Class filter is switched live by duburi.set_classes() during the mission.
 
 # ── Depth -------------------------------------------------------------------
 DIVE_DEPTH_M     = -1.0    # 1 m below surface; gate sits here
@@ -84,6 +98,7 @@ GATE_PASS_GAIN    = 60.0
 GATE_PASS_T       = 5.0    # timed fallback (DVL unavailable)
 
 # ── Flare search ------------------------------------------------------------
+FLARE_SEARCH_GAIN = 30.0   # slow forward drive while scanning
 FLARE_SEARCH_YAW  = 25.0
 FLARE_SEARCH_T    = 40.0
 
@@ -104,7 +119,6 @@ ORBIT_LOCK_T      = 3.0    # re-lock duration after each step
 RETURN_SEARCH_T   = 30.0
 RETURN_PASS_M     = 3.5
 RETURN_PASS_GAIN  = 60.0
-RETURN_PASS_T     = 5.0
 
 
 def run(duburi, log):
@@ -124,23 +138,18 @@ def run(duburi, log):
     duburi.set_depth(DIVE_DEPTH_M, settle=DEPTH_SETTLE_S)
 
     # ── Phase 2: DVL connect -----------------------------------------------
-    # No-op when yaw_source is not nucleus_dvl. Aborts with a clear error
-    # if DVL TCP fails -- call dvl_connect manually before the mission if
-    # the hardware is uncertain.
+    # No-op when yaw_source is not dvl/bno085_dvl. With dvl_auto_connect:=true
+    # (default at launch), this call returns immediately -- DVL is already up.
     log('Phase 2: DVL connect')
     duburi.dvl_connect()
 
     # ── Phase 3: Class filter: gate ----------------------------------------
-    # gate_flare_medium_100ep has both classes; only publish gate detections
-    # during the gate approach phase to prevent flare false-positives.
     log('Phase 3: set class filter -> gate')
     duburi.set_classes(GATE_CLASS)
 
     # ── Phase 4: Search for gate -------------------------------------------
-    # Drive forward at GATE_SEARCH_GAIN% while watching for gate class.
-    # yaw_rate_pct=20 adds a gentle search sweep if AUV is slightly off-axis.
     log('Phase 4: searching for gate (forward sweep)')
-    duburi.vision.find(
+    duburi.vision.scan(
         target=GATE_CLASS,
         sweep='forward',
         timeout=GATE_SEARCH_T,
@@ -149,12 +158,11 @@ def run(duburi, log):
 
     # ── Phase 5: Align with gate -------------------------------------------
     # yaw + forward simultaneously. distance_metric='area' is stable for
-    # wide rectangular gates. on_lost='hold' rides out detection flickers
-    # common in turbid pool water.
+    # wide rectangular gates. on_lost='hold' rides out detection flickers.
     log('Phase 5: aligning with gate')
-    duburi.vision.lock(
+    duburi.vision.align(
         target=GATE_CLASS,
-        axes='yaw,forward',
+        yaw=True, forward=True,
         distance=GATE_STANDOFF,
         duration=GATE_ALIGN_T,
         on_lost='hold',
@@ -164,6 +172,7 @@ def run(duburi, log):
         distance_metric='area')
 
     # ── Phase 6: Pass through gate -----------------------------------------
+    # Heading lock stays active while DVL drives forward distance.
     log('Phase 6: passing through gate (DVL forward)')
     duburi.move_forward_dist(GATE_PASS_M, gain=GATE_PASS_GAIN)
 
@@ -173,22 +182,23 @@ def run(duburi, log):
     duburi.target = FLARE_CLASS
 
     # ── Phase 8: Search for flare ------------------------------------------
-    # Sweep right from the heading we came through the gate.
-    log('Phase 8: searching for flare (right sweep)')
-    duburi.vision.find(
+    # Drive forward slowly; flare is ~10 m beyond the gate. A gentle yaw
+    # sweep widens the search cone if the AUV drifted during gate pass.
+    log('Phase 8: searching for flare (forward sweep)')
+    duburi.vision.scan(
         target=FLARE_CLASS,
-        sweep='right',
+        sweep='forward',
         timeout=FLARE_SEARCH_T,
-        gain=0.0,             # stationary sweep; flare is only ~10 m away
+        gain=FLARE_SEARCH_GAIN,
         yaw_rate_pct=FLARE_SEARCH_YAW)
 
     # ── Phase 9: Approach flare --------------------------------------------
     # 3-axis lock: yaw + forward + depth. 'height' metric for the tall narrow
     # pipe. Depth axis keeps the flare vertically centred across approaches.
     log('Phase 9: approaching flare (3-axis lock)')
-    duburi.vision.lock(
+    duburi.vision.align(
         target=FLARE_CLASS,
-        axes='yaw,forward,depth',
+        yaw=True, forward=True, depth=True,
         distance=FLARE_STANDOFF,
         duration=FLARE_ALIGN_T,
         on_lost='hold',
@@ -198,7 +208,7 @@ def run(duburi, log):
 
     # ── Phase 10: Orbit flare (360-degree polygon) --------------------------
     # 12 steps x 30 degrees = 360 degrees.
-    # Each step: yaw_left 30 deg -> flare goes off-centre -> re-lock centres it.
+    # Each step: yaw_left 30 deg -> flare goes off-centre -> re-lock re-centres.
     log('Phase 10: orbiting flare (12 x 30 deg)')
     for step in range(ORBIT_STEPS):
         log(f'  orbit step {step + 1}/{ORBIT_STEPS} '
@@ -207,9 +217,9 @@ def run(duburi, log):
             ORBIT_STEP_DEG,
             timeout=ORBIT_STEP_T,
             settle=ORBIT_SETTLE_S)
-        duburi.vision.lock(
+        duburi.vision.align(
             target=FLARE_CLASS,
-            axes='yaw,forward,depth',
+            yaw=True, forward=True, depth=True,
             distance=FLARE_STANDOFF,
             duration=ORBIT_LOCK_T,
             on_lost='hold',
@@ -226,16 +236,16 @@ def run(duburi, log):
 
     # ── Phase 13: Reacquire gate on return ----------------------------------
     log('Phase 13: searching for gate (return leg, stationary sweep)')
-    duburi.vision.find(
+    duburi.vision.scan(
         target=GATE_CLASS,
         sweep='right',
         timeout=RETURN_SEARCH_T,
         gain=0.0)
 
-    log('Phase 13: aligning with gate for return pass')
-    duburi.vision.lock(
+    log('Phase 13b: aligning with gate for return pass')
+    duburi.vision.align(
         target=GATE_CLASS,
-        axes='yaw,forward',
+        yaw=True, forward=True,
         distance=GATE_STANDOFF,
         duration=GATE_ALIGN_T,
         on_lost='hold',
