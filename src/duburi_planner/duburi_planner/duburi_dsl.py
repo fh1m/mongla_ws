@@ -139,6 +139,19 @@ DETECTOR CONTROL (within a mission):
   # Takes effect next inference frame. Model reload requires node restart:
   #   ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_medium_100ep
 
+MULTI-MODEL (registry mode -- launch with models:="..." arg):
+  # Launch with a named registry:
+  #   ros2 launch duburi_manager bringup.launch.py vision:=true \\
+  #       models:="gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep" \\
+  #       active_model:=gate classes:=gate
+
+  duburi.use('gate')                  # switch to 'gate' model, keep current class filter
+  duburi.use('flare', 'flare')        # switch to 'flare' model AND set classes='flare'
+  duburi.use('combined', 'gate')      # switch to combined model, start with gate filter
+
+  # Switch class only (model unchanged):
+  duburi.set_classes('flare')
+
 TETHER REMOVAL COUNTDOWN (before mission start):
   duburi.countdown(10)        # 10-second window to disconnect tether
   duburi.countdown(15, message="Starting run. Stand clear.")
@@ -343,34 +356,81 @@ class DuburiMission:
     #  Vision detector control                                            #
     # ================================================================== #
 
-    def set_model(self, stem: str, *,
-                  node: str = '/duburi_detector',
-                  wait_s: float = 0.0) -> None:
-        """Record the intended model for this mission; log it prominently.
+    def set_model(self, name: str, *,
+                  node: str = '/duburi_detector') -> None:
+        """Switch the active detector model by registry name (hot, no restart).
 
-        This does NOT hot-reload the detector. Model selection takes effect
-        only when the detector_node is (re)started with `model:=<stem>`.
-        For in-mission phase switching use a combined model
-        (gate_flare_medium_100ep) and switch classes with set_classes().
+        Requires the detector to have been launched with a ``models`` registry
+        (e.g. ``models:="gate=gate_nano_100ep,combined=gate_flare_medium_100ep"``).
 
-        Typical use: call at the top of run() so the log makes it obvious
-        which model the mission was designed for:
+        When the detector was started in single-model mode (no ``models`` param),
+        model switching is not possible at runtime -- log a clear warning and
+        show the restart command instead.
 
-            def run(duburi, log):
-                duburi.set_model('gate_flare_medium_100ep')
-                # If the detector is already running with the wrong model,
-                # restart it:
-                #   ros2 launch duburi_manager bringup.launch.py vision:=true \\
-                #       model:=gate_flare_medium_100ep
-                ...
+        Parameters
+        ----------
+        name : str
+            Registry key (as in ``models:="<name>=<stem>,..."``) or bare
+            model stem.  Examples: ``'gate'``, ``'combined'``.
+        node : str
+            ROS2 node name of the detector (default ``/duburi_detector``).
 
-        wait_s : ignored (kept for future use). Document the expected model
-                 in the mission header comment for pool-day clarity.
+        See also: ``use(model, classes)`` for a single call that switches
+        model + class filter together.
         """
-        self.log.info(
-            f'[DSL  ] mission expects model={stem!r}  '
-            f'(restart detector if wrong: '
-            f'ros2 launch duburi_manager bringup.launch.py vision:=true model:={stem})')
+        result = subprocess.run(
+            ['ros2', 'param', 'set', node, 'active_model', name],
+            capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            if 'no registry' in stderr or 'not in registry' in stderr:
+                self.log.warning(
+                    f'[DSL  ] set_model({name!r}): {stderr}  '
+                    f'-- launch with models:="..." to enable hot switching')
+            else:
+                self.log.warning(
+                    f'[DSL  ] set_model({name!r}) failed: {stderr!r}  '
+                    f'(restart: ros2 launch duburi_manager bringup.launch.py '
+                    f'vision:=true models:="... {name}=<stem> ...")')
+        else:
+            self.log.info(f'[DSL  ] active_model → {name!r}')
+
+    def use(self, model: str, classes: str | list | None = None, *,
+            node: str = '/duburi_detector') -> None:
+        """Switch active detector model and optionally its class filter — one call.
+
+        Convenience wrapper combining ``set_model`` + ``set_classes``.
+        Requires the detector to have been launched with a ``models`` registry.
+
+        Parameters
+        ----------
+        model : str
+            Registry key (e.g. ``'gate'``, ``'combined'``).
+        classes : str | list | None
+            Class filter to apply after switching models.
+            ``None`` (default) leaves the current filter untouched.
+            ``''`` means keep all classes.
+            Examples: ``'gate'``, ``'flare'``, ``['gate', 'flare']``.
+
+        Examples::
+
+            duburi.use('gate')                # model only → keep current class filter
+            duburi.use('flare', 'flare')      # switch model and class in one call
+            duburi.use('combined', 'gate')    # combined model, start scanning for gate
+            duburi.use('combined', '')        # combined model, all classes visible
+
+        Typical mission pattern::
+
+            duburi.use('gate')                        # Phase: find + pass gate
+            duburi.vision.scan(target='gate', ...)
+            duburi.vision.align(target='gate', ...)
+            duburi.move_forward_dist(3.5)
+            duburi.use('flare', 'flare')              # Phase: find + orbit flare
+            duburi.vision.scan(target='flare', ...)
+        """
+        self.set_model(model, node=node)
+        if classes is not None:
+            self.set_classes(classes, node=node)
 
     def set_classes(self, classes: str | list, *,
                     node: str = '/duburi_detector') -> None:

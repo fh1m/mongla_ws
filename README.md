@@ -205,8 +205,10 @@ ros2 run duburi_planner mission robosub_prequal        # RoboNation prequal (str
 ```
 
 Adding a new mission: drop `missions/<your_name>.py` exposing
-`def run(duburi, log)`, rebuild `duburi_planner`, and it appears in
-`--list` instantly. **No registry edit.** Full reference:
+`def run(duburi, log)`. **No rebuild needed** — the mission runner loads
+files directly from the source tree on every invocation. Edit, save,
+re-run: changes are live immediately.
+**No registry edit.** Full reference:
 [.claude/context/mission-cookbook.md](.claude/context/mission-cookbook.md).
 
 ### 5 — Live-tune gains and switch models
@@ -227,11 +229,26 @@ ros2 param set /duburi_detector classes flare        # flare detection only
 ros2 param set /duburi_detector classes "gate,flare" # both
 ```
 
-Or from inside a mission DSL:
+**Multi-model registry** — load several named models at startup, hot-swap between them during the mission:
+
+```bash
+# Launch with a registry (all 3 models loaded at startup):
+ros2 launch duburi_manager bringup.launch.py vision:=true \
+    models:="gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep" \
+    active_model:=gate classes:=gate conf:=0.45
+
+# Switch model mid-mission (no restart, ~16 ms lag):
+ros2 param set /duburi_detector active_model flare
+ros2 param set /duburi_detector classes flare
+```
+
+From inside a mission DSL (preferred):
 
 ```python
-duburi.set_classes('gate')    # switch to gate phase
-duburi.set_classes('flare')   # switch to flare phase
+duburi.use('gate')                # switch to gate model, keep current class filter
+duburi.use('flare', 'flare')      # switch model + class in one call
+duburi.use('combined', 'gate')    # combined model, filter to gate phase
+duburi.set_classes('flare')       # class-only switch (model unchanged)
 ```
 
 Defaults live in [src/duburi_manager/config/vision_tunables.yaml](src/duburi_manager/config/vision_tunables.yaml) and [src/duburi_vision/config/detector.yaml](src/duburi_vision/config/detector.yaml).
@@ -1089,6 +1106,8 @@ work without water.
    | `vision` | `false` | `true` · `false` |
    | `camera` | `forward` | `forward` · `downward` · `laptop` |
    | `model` | `gate_flare_medium_100ep` | `gate_flare_medium_100ep` · `gate_nano_100ep` · `gate_medium_100ep` · `flare_medium_100ep` · `yolo26_nano_pretrained` |
+   | `models` | `''` | CSV `name=stem` pairs for multi-model registry: `"gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep"` |
+   | `active_model` | `''` | Registry key to start with (requires `models` to be set): `gate` · `flare` · `combined` |
    | `classes` | `gate` | CSV class names: `gate` · `flare` · `gate,flare` · (empty = all) |
    | `conf` | `0.30` | 0.0–1.0 (use `0.45` for pool with our models) |
    | `dvl_auto_connect` | `true` | `true` · `false` |
@@ -1186,8 +1205,9 @@ def run(duburi, log):
 ```
 
 - `duburi.*` — open-loop motion (arm, set_depth, move_\*, yaw_\*, arc, lock_heading, ...)
-- `duburi.vision.*` — closed-loop vision verbs (find, yaw, lateral, depth, forward, lock, follow)
-- `duburi.set_classes(csv)` — switch detector class filter live (e.g. `'gate'` → `'flare'` between phases)
+- `duburi.vision.*` — closed-loop vision verbs (scan/align/steer/strafe/level/approach/track)
+- `duburi.set_classes(csv)` — switch detector class filter live (`'gate'` → `'flare'` between phases)
+- `duburi.use(model, classes)` — switch active model + class filter in one call (requires `models:=...` at launch)
 - `duburi.countdown(seconds)` — tether-removal countdown with banner before mission start
 
 ```bash
