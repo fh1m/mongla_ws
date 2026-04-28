@@ -70,7 +70,7 @@ import time
 import serial          # pyserial
 
 
-_STALE_S = 0.25        # 12 frames @ 50 Hz; matches our 10 Hz control loop
+_STALE_S = 0.08        # 4 frames @ 50 Hz; tighter freshness to match 50 Hz heading lock
 
 # Probe order for `port='auto'`. by-id paths come first because they're
 # stable across reboots (the Espressif USB serial number stays put even

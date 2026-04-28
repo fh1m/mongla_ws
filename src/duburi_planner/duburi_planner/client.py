@@ -42,6 +42,7 @@ class DuburiClient:
     def __init__(self, node):
         self.node    = node
         self._client = ActionClient(node, Move, '/duburi/move')
+        self._active_goal_handle = None  # set during send(); cleared after
 
     # ------------------------------------------------------------------ #
     #  Connection                                                         #
@@ -92,9 +93,13 @@ class DuburiClient:
         if not goal_handle.accepted:
             raise MoveRejected(f'Goal "{cmd}" was REJECTED by action server')
 
-        result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self.node, result_future)
-        result = result_future.result().result
+        self._active_goal_handle = goal_handle
+        try:
+            result_future = goal_handle.get_result_async()
+            rclpy.spin_until_future_complete(self.node, result_future)
+            result = result_future.result().result
+        finally:
+            self._active_goal_handle = None
 
         if not result.success:
             raise MoveFailed(f'Goal "{cmd}" FAILED: {result.message}')

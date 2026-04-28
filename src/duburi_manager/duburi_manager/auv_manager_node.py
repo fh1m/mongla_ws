@@ -18,6 +18,8 @@ it must be in place BEFORE rclpy is imported.
 
 import os
 import math
+import signal
+import sys
 import threading
 import time
 
@@ -658,57 +660,69 @@ class AUVManagerNode(Node):
         self.state_publisher.publish(msg)
 
 
+_KILL_BANNER = """\033[1;31m
+╔══════════════════════════════════════════════════════════════╗
+║              ██  MONGLA EMERGENCY STOP  ██                   ║
+║                                                              ║
+║   Signal received — stopping thrusters and disarming.        ║
+╚══════════════════════════════════════════════════════════════╝\033[0m"""
+
+
+def _emergency_stop(node) -> None:
+    """Stop thrusters and disarm. Called from both Ctrl-C and SIGTERM paths."""
+    print(_KILL_BANNER, file=sys.stderr)
+
+    def _step(label: str, fn):
+        try:
+            result = fn()
+            ok_sym = '\033[32m[OK]\033[0m'
+            print(f'  {label:<22s} {ok_sym}', file=sys.stderr)
+            return result
+        except Exception as exc:
+            fail_sym = '\033[33m[--]\033[0m'
+            print(f'  {label:<22s} {fail_sym}  ({exc!r})', file=sys.stderr)
+            return None
+
+    _step('stop heading lock',  lambda: node.duburi._heading_lock.stop()
+                                        if node.duburi._heading_lock else None)
+    _step('stop heartbeat',     lambda: node.heartbeat.stop())
+    _step('send neutral RC',    lambda: node.pixhawk.send_neutral())
+
+    ok, reason = None, 'not attempted'
+    try:
+        ok, reason = node.pixhawk.disarm()
+    except Exception as exc:
+        reason = repr(exc)
+    if ok:
+        print(f'  {"disarm":<22s} \033[32m[OK]\033[0m', file=sys.stderr)
+    else:
+        print(f'  {"disarm":<22s} \033[33m[--]\033[0m  ({reason})', file=sys.stderr)
+
+    _step('close yaw source',   lambda: node.yaw_source.close())
+    for cam, vstate in list(node._vision_states.items()):
+        _step(f'close vision[{cam}]', lambda v=vstate: v.close())
+
+    print(file=sys.stderr)
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = AUVManagerNode()
     executor = MultiThreadedExecutor()
     executor.add_node(node)
+
+    # SIGTERM (kill command) triggers the same clean shutdown as Ctrl-C.
+    def _sigterm_handler(sig, frame):
+        executor.shutdown(timeout_sec=0)
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+
     try:
         executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
-        # Software kill switch: Ctrl-C → neutral all thrusters → disarm.
-        # Order matters:
-        #   1. heading-lock daemon (Ch4 rate-override) — stop so it can't
-        #      race the neutral frame we're about to send
-        #   2. heartbeat daemon (all-neutral keepalive) — stop
-        #   3. send_neutral() — one explicit all-1500 frame so the wire
-        #      ends in a known state before disarm
-        #   4. disarm() — ArduSub accepts disarm after it sees neutral RC
-        node.get_logger().warning('[KILL ] Ctrl-C received — stopping thrusters and disarming')
-        try:
-            if node.duburi._heading_lock is not None:
-                node.duburi._heading_lock.stop()
-        except Exception as exc:
-            node.get_logger().debug(
-                f'shutdown: heading_lock.stop() ignored: {exc!r}')
-        try:
-            node.heartbeat.stop()
-        except Exception as exc:
-            node.get_logger().debug(
-                f'shutdown: heartbeat.stop() ignored: {exc!r}')
-        node.pixhawk.send_neutral()
-        # Disarm — ignore if already disarmed or vehicle rejects (e.g. not armed)
-        try:
-            ok, reason = node.pixhawk.disarm()
-            if ok:
-                node.get_logger().warning('[KILL ] disarmed OK')
-            else:
-                node.get_logger().warning(f'[KILL ] disarm result: {reason} (safe to ignore if not armed)')
-        except Exception as exc:
-            node.get_logger().debug(f'shutdown: disarm ignored: {exc!r}')
-        try:
-            node.yaw_source.close()
-        except Exception as exc:
-            node.get_logger().debug(
-                f'shutdown: yaw_source.close() ignored: {exc!r}')
-        for cam, vstate in list(node._vision_states.items()):
-            try:
-                vstate.close()
-            except Exception as exc:
-                node.get_logger().debug(
-                    f'shutdown: vision_state[{cam}].close() ignored: {exc!r}')
+        _emergency_stop(node)
         node.destroy_node()
         rclpy.shutdown()
 
