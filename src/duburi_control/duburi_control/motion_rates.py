@@ -31,11 +31,12 @@ Rate sizing rationale
                           where the proportional loop still feels
                           crisp without saturating the SITL UART.
 
-``LOCK_STREAM_HZ = 20``   HeadingLock has to refresh Ch4 just as
-                          often as a translation command would
-                          otherwise overwrite it -- if the lock fell
-                          behind even one cycle the next motion
-                          command's neutral 1500 us would steal Ch4.
+``LOCK_STREAM_HZ = 50``   Matches BNO085 firmware output rate (50 Hz).
+                          Higher cadence means the heading lock samples
+                          the freshest reading every tick instead of
+                          holding a 50 ms stale value. Also keeps Ch4
+                          refresh ahead of any translation command that
+                          might otherwise overwrite it.
 
 ``DEPTH_SETPOINT_HZ = 5`` ArduSub closes the depth loop at ~400 Hz
                           internally; we only refresh the *setpoint*
@@ -80,7 +81,7 @@ Rate sizing rationale
 
 THRUST_HZ          = 20.0   # RC override publish rate (forward, lateral, arc)
 YAW_RATE_HZ        = 10.0   # Ch4 rate-override publish rate (yaw_snap / yaw_glide)
-LOCK_STREAM_HZ     = 20.0   # HeadingLock background refresh rate
+LOCK_STREAM_HZ     = 50.0   # HeadingLock background refresh rate — match BNO085 firmware output
 DEPTH_SETPOINT_HZ  = 5.0    # set_target_depth publish rate inside motion_depth.hold_depth
 DEPTH_RAMP_S          = 2.5   # setpoint ramp duration for set_depth (seconds)
 DEPTH_BRAKE_ZONE_M    = 0.30  # within this distance, stop tracking so ArduSub brakes the approach

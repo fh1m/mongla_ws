@@ -49,35 +49,34 @@ _SURFACE_COUNTDOWN = """\
 \033[0m"""
 
 
+def _try_step(label: str, fn) -> bool:
+    """Run fn(); print a colored result line. Returns True on success."""
+    try:
+        fn()
+        print(f'  {label:<24s} \033[32m[OK]\033[0m', file=sys.stderr)
+        return True
+    except Exception as exc:
+        print(f'  {label:<24s} \033[33m[--]\033[0m  ({exc!r})', file=sys.stderr)
+        return False
+
+
 def _abort_sequence(duburi, log, mission_name: str) -> None:
     """Best-effort safety stop after KeyboardInterrupt.
 
-    Each step is isolated so a rejection on stop() (likely, because the
-    manager lock is still held from the interrupted goal) does not
-    prevent attempting disarm().
+    Order: cancel in-flight goal → stop → disarm.  Each step is isolated
+    so a failure on stop() does not prevent attempting disarm().
+    The manager's own EMERGENCY STOP banner fires independently via its
+    own SIGINT handler; this banner is for the mission terminal.
     """
     print(_ABORT_BANNER, file=sys.stderr)
 
-    stop_ok = False
-    try:
-        duburi.stop()
-        stop_ok = True
-    except Exception:
-        pass
+    # Cancel any goal the action client sent and is still waiting on.
+    _try_step('cancel active goal',
+              lambda: duburi._client._active_goal_handle.cancel_goal()
+              if getattr(duburi._client, '_active_goal_handle', None) else None)
 
-    disarm_ok = False
-    try:
-        duburi.disarm()
-        disarm_ok = True
-    except Exception:
-        pass
-
-    stop_sym   = '\033[32m[OK]\033[0m' if stop_ok   else '\033[33m[--]\033[0m'
-    disarm_sym = '\033[32m[OK]\033[0m' if disarm_ok else '\033[33m[--]\033[0m'
-    print(
-        f'\033[90m  stop: {stop_sym}  disarm: {disarm_sym}\033[0m',
-        file=sys.stderr,
-    )
+    _try_step('stop thrusters', lambda: duburi.stop())
+    _try_step('disarm',         lambda: duburi.disarm())
 
     # Cosmetic countdown — actual surfacing is on positive buoyancy.
     parts = []
