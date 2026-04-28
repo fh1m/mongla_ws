@@ -46,6 +46,7 @@ os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Optional
 
 import rclpy
@@ -123,21 +124,36 @@ class DetectorNode(Node):
         if models_str:
             model_map = _parse_models_param(models_str)
             self.get_logger().info(
-                f"[DET  ] registry mode: loading {len(model_map)} model(s): "
+                f"[DET  ] registry mode: loading {len(model_map)} model(s) in parallel: "
                 f"{list(model_map)}")
-            for name, stem in model_map.items():
-                try:
-                    det = YoloDetector(
-                        model_path=stem,
-                        device=device, conf=conf, iou=iou, imgsz=imgsz,
-                        half=half, class_allowlist=allowlist,
-                        logger=self.get_logger())
-                    self._registry[name] = det
-                    self.get_logger().info(f"[DET  ] registry[{name!r}] = {stem!r}  ready")
-                except Exception as exc:
-                    self.get_logger().fatal(
-                        f"[DET  ] registry[{name!r}]: load of {stem!r} FAILED: {exc}")
-                    raise
+
+            log = self.get_logger()
+
+            def _load_one(name: str, stem: str):
+                det = YoloDetector(
+                    model_path=stem,
+                    device=device, conf=conf, iou=iou, imgsz=imgsz,
+                    half=half, class_allowlist=allowlist,
+                    logger=log)
+                return name, det
+
+            errors: list = []
+            with ThreadPoolExecutor(max_workers=len(model_map)) as pool:
+                futures = {pool.submit(_load_one, n, s): n for n, s in model_map.items()}
+                for fut in as_completed(futures):
+                    n = futures[fut]
+                    try:
+                        name_out, det = fut.result()
+                        self._registry[name_out] = det
+                        self.get_logger().info(
+                            f"[DET  ] registry[{name_out!r}] ready")
+                    except Exception as exc:
+                        self.get_logger().fatal(
+                            f"[DET  ] registry[{n!r}] FAILED: {exc}")
+                        errors.append(n)
+
+            if errors:
+                raise RuntimeError(f"Failed to load models: {errors}")
 
             if active_model and active_model in self._registry:
                 self._det: YoloDetector = self._registry[active_model]

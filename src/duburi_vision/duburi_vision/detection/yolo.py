@@ -178,7 +178,7 @@ class YoloDetector(Detector):
 
         self._ready = False
         if warmup:
-            self._do_warmup()
+            self._do_warmup(warmup_imgsz=160)
         self._ready = True
 
         if self._log:
@@ -193,8 +193,9 @@ class YoloDetector(Detector):
             return '*'
         return sorted(self._names[i] for i in self._allow_ids)
 
-    def _do_warmup(self):
-        dummy = np.zeros((self._imgsz, self._imgsz, 3), dtype=np.uint8)
+    def _do_warmup(self, warmup_imgsz: int = 160):
+        # Small dummy triggers CUDA JIT kernel compilation without a full-size forward pass.
+        dummy = np.zeros((warmup_imgsz, warmup_imgsz, 3), dtype=np.uint8)
         try:
             self._model.predict(
                 dummy, conf=self._conf, iou=self._iou, imgsz=self._imgsz,
