@@ -120,12 +120,14 @@ def main(args=None):
     log    = node.get_logger()
     client = DuburiClient(node)
     duburi = DuburiMission(client, log)
+    # Mission scripts call log('message') — wrap logger as a plain callable.
+    log_fn = lambda msg: log.info(str(msg))
 
     exit_code = 0
     try:
         client.wait_for_connection(timeout=15.0)
         log.info(f'=== mission "{parsed.name}" -- start ===')
-        missions[parsed.name](duburi, log)
+        missions[parsed.name](duburi, log_fn)
         log.info(f'=== mission "{parsed.name}" -- complete OK ===')
     except KeyboardInterrupt:
         _abort_sequence(duburi, log, parsed.name)

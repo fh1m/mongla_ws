@@ -278,21 +278,24 @@ duburi.vision.track(target=None,
 **Typical competition patterns:**
 
 ```python
+# Register models at the top of run(); access via duburi.models.alias.class_name
+duburi.models(gate='gate_flare_medium_100ep')
+
 # Gate: yaw + lateral with angle guard + committed pass-through
-duburi.vision.home(target=m.gate.gate,
+duburi.vision.home(target=duburi.models.gate.gate,
                    yaw=True, lat=True, forward=True,
                    dist=0.42, metric='area',
                    gate_guard=True, pass_at=0.38, pass_at_gain=55,
                    duration=20, on_lost='hold')
 
 # Flare: 3-axis settle (tall narrow pipe, height metric)
-duburi.vision.home(target=m.gate.flare,
+duburi.vision.home(target=duburi.models.gate.flare,
                    yaw=True, forward=True, depth=True,
                    dist=0.38, metric='height',
                    duration=20, on_lost='hold')
 
 # Flare orbit re-lock after each yaw step (3 s follow window)
-duburi.vision.track(target=m.gate.flare,
+duburi.vision.track(target=duburi.models.gate.flare,
                     yaw=True, forward=True, depth=True,
                     dist=0.38, duration=3, on_lost='hold')
 
@@ -565,12 +568,13 @@ ros2 param set /duburi_detector classes ""    # publish ALL model classes
 ```
 
 ```python
-# From inside a mission (takes effect next inference frame)
+# Manual control (only needed when NOT using duburi.models ClassRef targets):
 duburi.set_classes('gate')
 duburi.set_classes('flare')
 duburi.set_classes('gate,flare')
 duburi.set_classes('')          # all classes
 duburi.set_classes(['gate', 'flare'])  # list form also accepted
+# When using duburi.models.gate.gate as target=, set_classes is called automatically.
 ```
 
 ### Full gate+flare prequal mission pattern
@@ -578,6 +582,7 @@ duburi.set_classes(['gate', 'flare'])  # list form also accepted
 ```python
 def run(duburi, log):
     duburi.camera = 'forward'
+    duburi.models(gate='gate_flare_medium_100ep')   # register once; use anywhere
 
     # Tether removal window -- operator disconnects tether during countdown
     duburi.countdown(10)
@@ -587,35 +592,30 @@ def run(duburi, log):
     duburi.set_depth(-1.0, settle=2.0)
     duburi.dvl_connect()
 
-    m = duburi.models(gate=('gate_flare_medium_100ep', ['gate', 'flare']))
-
-    # Gate phase
-    duburi.set_classes('gate')
-    duburi.vision.find(target=m.gate.gate, move='forward', timeout=45.0, gain=40.0)
-    duburi.vision.home(target=m.gate.gate, yaw=True, forward=True,
+    # Gate phase — ClassRef auto-switches model+class in each verb call
+    duburi.vision.find(target=duburi.models.gate.gate, move='forward', timeout=45.0, gain=40.0)
+    duburi.vision.home(target=duburi.models.gate.gate, yaw=True, forward=True,
                        dist=0.42, metric='area',
                        duration=20.0, on_lost='hold')
     duburi.move_forward_dist(3.5, gain=60.0)
 
     # Flare phase
-    duburi.set_classes('flare')
-    duburi.vision.find(target=m.gate.flare, move='yaw_right', timeout=40.0, gain=0.0)
-    duburi.vision.home(target=m.gate.flare, yaw=True, forward=True, depth=True,
+    duburi.vision.find(target=duburi.models.gate.flare, move='yaw_right', timeout=40.0, gain=0.0)
+    duburi.vision.home(target=duburi.models.gate.flare, yaw=True, forward=True, depth=True,
                        dist=0.38, metric='height',
                        duration=20.0, on_lost='hold')
 
     # Orbit flare 360 degrees
     for _ in range(12):
         duburi.yaw_left(30.0, timeout=10.0, settle=0.3)
-        duburi.vision.track(target=m.gate.flare,
+        duburi.vision.track(target=duburi.models.gate.flare,
                             yaw=True, forward=True, depth=True,
                             dist=0.38, duration=3.0, on_lost='hold')
 
     # Return through gate
     duburi.yaw_right(180.0, timeout=25.0, settle=0.5)
-    duburi.set_classes('gate')
-    duburi.vision.find(target=m.gate.gate, move='yaw_right', timeout=30.0, gain=0.0)
-    duburi.vision.home(target=m.gate.gate, yaw=True, forward=True,
+    duburi.vision.find(target=duburi.models.gate.gate, move='yaw_right', timeout=30.0, gain=0.0)
+    duburi.vision.home(target=duburi.models.gate.gate, yaw=True, forward=True,
                        dist=0.42, metric='area',
                        duration=20.0, on_lost='hold')
     duburi.move_forward_dist(3.5, gain=60.0)

@@ -442,17 +442,25 @@ DSL method → action verb mapping (use DSL in missions; CLI uses action verb na
 
 Every vision verb takes `camera`, `target_class`, `deadband`, gain knobs (`kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`), and `on_lost` (`'fail'` default; `'hold'` to ride out a flicker). The closed loop runs INSIDE `auv_manager_node` (single MAVLink owner) so vision and control never fight for thrust. Detection arrives via `VisionState` (manager-side subscriber pool, lazily built per camera with a one-shot `wait_vision_state_ready` preflight).
 
-**Model context factory** — use `duburi.models()` for multi-model missions:
+**Model context** — `duburi.models` is a persistent callable registry on every `DuburiMission`:
 
 ```python
-m = duburi.models(
-    gate=('gate_flare_medium_100ep', ['gate', 'flare']),
-)
-duburi.vision.find(target=m.gate.gate, move='forward', gain=35)
-duburi.vision.home(target=m.gate.gate, yaw=True, lat=True,
+# Register once at the top of run():
+duburi.models(gate='gate_flare_medium_100ep')
+
+# Access class handles anywhere — no separate variable needed:
+duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35)
+duburi.vision.home(target=duburi.models.gate.gate, yaw=True, lat=True,
                    gate_guard=True, pass_at=0.38, pass_at_gain=55,
                    dist=0.42, metric='area', duration=20)
+duburi.vision.find(target=duburi.models.gate.flare, move='forward', gain=30)
 ```
+
+Any attribute access on a handle creates a `ClassRef` — class names are validated
+at the detector, not at registration. Optional strict validation:
+`duburi.models(gate=('stem', ['gate', 'flare']))` — access to an unlisted name
+then raises `AttributeError`. Passing a `ClassRef` as `target=` automatically
+calls `set_model()` + `set_classes()` — no manual `duburi.set_classes()` needed.
 
 `gate_guard=True` suppresses forward thrust when the gate bbox appears angled
 (`w_frac/h_frac < gate_guard_min_w_frac=0.35`). `pass_at` commits the AUV to
