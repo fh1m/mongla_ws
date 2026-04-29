@@ -551,6 +551,16 @@ class Duburi(VisionVerbs):
         """
         return self._drive_forward_dist(+1, distance_m, gain, dvl_tolerance, settle)
 
+    def move_back_dist(self, distance_m, gain=60.0, dvl_tolerance=0.1,
+                       settle=0.0):
+        """Drive backward `distance_m` metres using DVL position feedback.
+
+        Mirrors move_forward_dist with signed_dir=-1; DVL closed-loop keeps
+        the heading lock active on Ch4 while Ch5 is driven in reverse.
+        Falls back to open-loop timed estimate if DVL not available.
+        """
+        return self._drive_forward_dist(-1, distance_m, gain, dvl_tolerance, settle)
+
     def _drive_forward_dist(self, signed_dir, distance_m, gain,
                             dvl_tolerance, settle):
         verb = 'move_forward_dist' if signed_dir > 0 else 'move_back_dist'

@@ -283,6 +283,13 @@ class DuburiMission:
                           distance_m=float(metres),
                           gain=gain, dvl_tolerance=tolerance, settle=settle)
 
+    def move_back_dist(self, metres: float, *, gain: float = 60.0,
+                       tolerance: float = 0.1, settle: float = 0.0):
+        """Drive backward `metres` metres using DVL closed-loop feedback."""
+        return self._send('move_back_dist',
+                          distance_m=float(metres),
+                          gain=gain, dvl_tolerance=tolerance, settle=settle)
+
     def move_lateral_dist(self, metres: float, *, gain: float = 36.0,
                           tolerance: float = 0.1, settle: float = 0.0):
         """Strafe `metres` metres (positive=right) using DVL feedback."""
