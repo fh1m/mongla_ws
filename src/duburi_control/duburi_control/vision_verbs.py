@@ -68,13 +68,21 @@ class VisionVerbs:
                         deadband, kp_yaw, kp_lat, kp_depth, kp_forward,
                         target_bbox_h_frac, visual_pid, on_lost,
                         stale_after, depth_anchor_frac=0.0,
-                        lock_mode='', distance_metric=''):
+                        lock_mode='', distance_metric='',
+                        gate_guard=False, gate_guard_min_w_frac=0.35,
+                        pass_at=0.0, pass_at_gain=50.0):
         """Centre + maintain distance on the largest ``target_class`` bbox.
 
         ``axes`` is a CSV: any subset of ``'yaw,lat,depth,forward'``.
         This verb is the everything-on tool; the per-axis verbs below
         are pinned wrappers for missions that want to be explicit
         about intent.
+
+        gate_guard=True suppresses forward when gate appears angled (w/h aspect
+        below gate_guard_min_w_frac). Experimental — requires pool calibration.
+
+        pass_at: once size metric >= pass_at, freezes lat+depth and drives
+        straight at pass_at_gain%. Set to 0.0 to disable.
 
         impl: motion_vision.vision_track_axes -> pixhawk.send_rc_override
         (heading/lateral/forward channels) and set_target_depth when
@@ -94,7 +102,11 @@ class VisionVerbs:
             on_lost=str(on_lost), stale_after=float(stale_after),
             depth_anchor_frac=float(depth_anchor_frac),
             lock_mode=str(lock_mode),
-            distance_metric=str(distance_metric))
+            distance_metric=str(distance_metric),
+            gate_guard=bool(gate_guard),
+            gate_guard_min_w_frac=float(gate_guard_min_w_frac),
+            pass_at=float(pass_at),
+            pass_at_gain=float(pass_at_gain))
 
     def vision_align_yaw(self, camera, target_class, duration, deadband,
                          kp_yaw, on_lost, stale_after, lock_mode=''):
@@ -143,12 +155,15 @@ class VisionVerbs:
 
     def vision_hold_distance(self, camera, target_class, duration, deadband,
                              kp_forward, target_bbox_h_frac, on_lost,
-                             stale_after, lock_mode='', distance_metric=''):
+                             stale_after, lock_mode='', distance_metric='',
+                             gate_guard=False, gate_guard_min_w_frac=0.35,
+                             pass_at=0.0, pass_at_gain=50.0):
         """Approach / back off to maintain standoff distance by bbox fill fraction.
 
         lock_mode: 'settle' (exit when at distance), 'follow' (track until
         duration), 'pursue' (only approach, exit when close enough).
-        distance_metric: 'height' (default), 'area', 'diagonal'.
+        distance_metric: 'height' (default), 'area', 'width', 'diagonal'.
+        pass_at: once size >= pass_at, drive straight at pass_at_gain% (0=disabled).
         """
         gains = VisionGains(kp_forward=float(kp_forward))
         return self._run_vision_track(
@@ -160,7 +175,11 @@ class VisionVerbs:
             visual_pid=False, on_lost=str(on_lost),
             stale_after=float(stale_after),
             lock_mode=str(lock_mode),
-            distance_metric=str(distance_metric))
+            distance_metric=str(distance_metric),
+            gate_guard=bool(gate_guard),
+            gate_guard_min_w_frac=float(gate_guard_min_w_frac),
+            pass_at=float(pass_at),
+            pass_at_gain=float(pass_at_gain))
 
     def vision_acquire(self, camera, target_class, target_name, timeout,
                        gain, yaw_rate_pct, stale_after):
@@ -201,7 +220,9 @@ class VisionVerbs:
                           duration, gains, deadband, target_h_frac,
                           visual_pid, on_lost, stale_after,
                           depth_anchor_frac=0.5, lock_mode='settle',
-                          distance_metric='height'):
+                          distance_metric='height',
+                          gate_guard=False, gate_guard_min_w_frac=0.35,
+                          pass_at=0.0, pass_at_gain=50.0):
         """Common path for every vision_align_* / vision_hold_distance verb.
 
         ``verb`` is the public method name (``'vision_align_yaw'``, ...)
@@ -226,7 +247,8 @@ class VisionVerbs:
                 f'class={target_class!r}  axes={sorted(axes)}  '
                 f'duration={duration:.1f}s  on_lost={on_lost}  '
                 f'lock={lock_mode or "settle"}  anchor={depth_anchor_frac:.2f}  '
-                f'dist_metric={distance_metric or "height"}')
+                f'dist_metric={distance_metric or "height"}  '
+                f'gate_guard={gate_guard}  pass_at={pass_at:.2f}')
             # When yaw is in axes, vision_track_axes writes Ch4 directly.
             # Suspend HeadingLock for the duration to avoid a Ch4 race,
             # then retarget to the new heading on exit (same as arc).
@@ -240,6 +262,9 @@ class VisionVerbs:
                     on_lost=on_lost, depth_sign=depth_sign,
                     depth_anchor_frac=depth_anchor_frac,
                     lock_mode=lock_mode, distance_metric=distance_metric,
+                    gate_guard=gate_guard,
+                    gate_guard_min_w_frac=gate_guard_min_w_frac,
+                    pass_at=pass_at, pass_at_gain=pass_at_gain,
                     log=self.log, writers=self._writers(),
                     visual_pid=visual_pid)
             if touches_yaw:

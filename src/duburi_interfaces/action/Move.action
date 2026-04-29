@@ -38,8 +38,15 @@ float32 depth_anchor_frac  # which vertical point on the bbox to centre (0=top, 
                            # Use 0.2 for tall objects (people, poles) to avoid depth stall
 string  lock_mode          # '' or 'settle' (default) | 'follow' | 'pursue'
                            # follow = track until duration; pursue = approach until target_bbox_h_frac
-string  distance_metric    # '' or 'height' (default) | 'area' | 'diagonal'
+string  distance_metric    # '' or 'height' (default) | 'area' | 'width' | 'diagonal'
                            # area/diagonal are more robust for wide targets like gates
+                           # width = bbox width fraction (wide horizontal objects)
+bool    gate_guard         # experimental: suppress forward when gate bbox appears angled
+                           # (w_frac/h_frac below gate_guard_min_w_frac). Default false.
+float32 gate_guard_min_w_frac  # aspect ratio threshold for gate_guard; 0.0 = use default (0.35)
+float32 pass_at            # position-lock trigger: once size metric >= pass_at, freeze
+                           # lat+depth and drive straight at pass_at_gain%. 0.0 = disabled.
+float32 pass_at_gain       # forward thrust % during pass-through; 0.0 = use default (50%)
 bool    tracking           # false (default) = use /detections; true = use /tracks (requires tracker_node)
 ---
 # Result — axis-correct (set on the axis the command actually moves):

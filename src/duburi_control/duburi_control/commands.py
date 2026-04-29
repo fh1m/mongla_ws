@@ -162,13 +162,16 @@ COMMANDS = {
         'help':     'Hold target_class centred AND at target_bbox_h_frac. '
                     'Active axes via CSV axes. lock_mode: settle/follow/pursue. '
                     'depth_anchor_frac: 0=top, 0.5=centre, 1=bottom of bbox. '
-                    'distance_metric: height/area/diagonal. '
+                    'distance_metric: height/area/width/diagonal. '
+                    'gate_guard=true: suppress forward when gate appears angled. '
+                    'pass_at: freeze lat+depth, drive straight once size>=pass_at. '
                     'tracking=true: use tracker_node (stable IDs + Kalman).',
         'fields':   ['camera', 'target_class', 'axes', 'duration',
                      'deadband', 'kp_yaw', 'kp_lat', 'kp_depth', 'kp_forward',
                      'target_bbox_h_frac', 'visual_pid', 'on_lost',
                      'stale_after', 'depth_anchor_frac', 'lock_mode',
-                     'distance_metric', 'tracking'],
+                     'distance_metric', 'gate_guard', 'gate_guard_min_w_frac',
+                     'pass_at', 'pass_at_gain', 'tracking'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'axes': 'yaw,forward', 'duration': 30.0,
                      'deadband': 0.18, 'kp_yaw': 60.0, 'kp_lat': 60.0,
@@ -176,7 +179,10 @@ COMMANDS = {
                      'target_bbox_h_frac': 0.30, 'visual_pid': False,
                      'on_lost': 'fail', 'stale_after': 1.5,
                      'depth_anchor_frac': 0.0,  # 0.0 = use ROS param default (0.5)
-                     'lock_mode': '', 'distance_metric': '', 'tracking': False},
+                     'lock_mode': '', 'distance_metric': '',
+                     'gate_guard': False, 'gate_guard_min_w_frac': 0.35,
+                     'pass_at': 0.0, 'pass_at_gain': 50.0,
+                     'tracking': False},
     },
     'vision_align_yaw': {
         'help':     'Steer toward horizontal centre via heading channel. '
@@ -216,19 +222,25 @@ COMMANDS = {
     },
     'vision_hold_distance': {
         'help':     'Drive forward/back to match target_bbox_h_frac. '
-                    'distance_metric: height (default) / area / diagonal. '
+                    'distance_metric: height (default) / area / width / diagonal. '
                     'lock_mode: settle / follow / pursue (only approach). '
+                    'pass_at: freeze lat+depth, drive straight once size>=pass_at. '
                     'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_forward', 'target_bbox_h_frac', 'on_lost',
-                     'stale_after', 'lock_mode', 'distance_metric', 'tracking'],
+                     'stale_after', 'lock_mode', 'distance_metric',
+                     'gate_guard', 'gate_guard_min_w_frac',
+                     'pass_at', 'pass_at_gain', 'tracking'],
         # deadband is tighter here because bbox-height error is naturally
         # smaller than the centring errors on yaw/lat axes.
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 20.0, 'deadband': 0.05,
                      'kp_forward': 200.0, 'target_bbox_h_frac': 0.30,
                      'on_lost': 'fail', 'stale_after': 1.5,
-                     'lock_mode': '', 'distance_metric': '', 'tracking': False},
+                     'lock_mode': '', 'distance_metric': '',
+                     'gate_guard': False, 'gate_guard_min_w_frac': 0.35,
+                     'pass_at': 0.0, 'pass_at_gain': 50.0,
+                     'tracking': False},
     },
     'vision_acquire': {
         'help':     'Block (optionally driving via target_name verb) until '
@@ -250,7 +262,7 @@ STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'on_lost',
                  'lock_mode', 'distance_metric')
 
 # Field names that carry a bool. rosidl init these to False.
-BOOL_FIELDS = ('visual_pid', 'tracking')
+BOOL_FIELDS = ('visual_pid', 'tracking', 'gate_guard')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):

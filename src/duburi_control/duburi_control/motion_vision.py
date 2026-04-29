@@ -137,6 +137,10 @@ def vision_track_axes(*,
                       depth_anchor_frac: float = 0.5,
                       lock_mode: str = 'settle',
                       distance_metric: str = 'height',
+                      gate_guard: bool = False,
+                      gate_guard_min_w_frac: float = 0.35,
+                      pass_at: float = 0.0,
+                      pass_at_gain: float = 50.0,
                       log,
                       writers,
                       visual_pid: bool = False) -> VisionTrackResult:
@@ -170,13 +174,30 @@ def vision_track_axes(*,
     distance_metric
         Which part of the bounding box to use as the distance proxy for
         the 'forward' axis:
-        'height'   (default) -- bbox height fraction. Works well for tall
-                                objects. Breaks for objects wider than tall.
+        'height'   (default) -- bbox height fraction. Tall objects: buoy, pole, flare.
+        'width'              -- bbox width fraction. Wide horizontal objects: bar.
         'area'               -- geometric mean of width and height fractions
                                 (sqrt(w*h)). More robust for wide targets
                                 like gates and torpedo holes.
         'diagonal'           -- normalised bounding box diagonal. Best
                                 all-rounder for targets of unknown aspect ratio.
+    gate_guard
+        When True, suppress the forward axis whenever the gate bbox appears
+        angled (w_frac / h_frac < gate_guard_min_w_frac). The lateral and
+        yaw corrections keep running so the AUV self-corrects to a
+        perpendicular approach before resuming forward drive. Experimental.
+    gate_guard_min_w_frac
+        Aspect ratio threshold for gate_guard (default 0.35). If the gate's
+        bbox width fraction divided by its height fraction falls below this
+        value, the sub is approaching at too steep an angle.
+    pass_at
+        Position-lock trigger (default 0.0 = disabled). When the selected
+        distance metric reaches this fraction, the loop freezes lateral and
+        depth corrections and drives straight forward at pass_at_gain%.
+        Use for a committed gate pass: close alignment at range, then commit
+        once the gate fills pass_at of the frame.
+    pass_at_gain
+        Forward thrust % to use during the pass-through phase (default 50%).
     target_h_frac
         Required when 'forward' is in `axes`; ignored otherwise.
     depth_sign
@@ -208,8 +229,10 @@ def vision_track_axes(*,
         raise ValueError(f"on_lost must be 'fail' or 'hold' (got {on_lost!r})")
     if lock_mode not in ('settle', 'follow', 'pursue', ''):
         raise ValueError(f"lock_mode must be 'settle', 'follow', or 'pursue' (got {lock_mode!r})")
-    if distance_metric not in ('height', 'area', 'diagonal', ''):
-        raise ValueError(f"distance_metric must be 'height', 'area', or 'diagonal' (got {distance_metric!r})")
+    if distance_metric not in ('height', 'width', 'area', 'diagonal', ''):
+        raise ValueError(
+            f"distance_metric must be 'height', 'width', 'area', or 'diagonal' "
+            f"(got {distance_metric!r})")
 
     # Normalise empty string defaults.
     _lock_mode       = lock_mode or 'settle'
@@ -220,7 +243,8 @@ def vision_track_axes(*,
         f"[VIS  ] track class={target_class!r} axes={sorted(axes)} "
         f"deadband={deadband:.2f} target_h={target_h_frac:.2f} "
         f"anchor={depth_anchor_frac:.2f} lock={_lock_mode} dist={_distance_metric} "
-        f"stale={stale_after:.2f}s on_lost={on_lost} mode={controller_label}")
+        f"stale={stale_after:.2f}s on_lost={on_lost} mode={controller_label}"
+        f"gate_guard={gate_guard} pass_at={pass_at:.2f}")
 
     # Preflight: VisionState owns CameraInfo so a (0,0) here means we
     # never saw a single info frame. Bail loudly rather than chasing a
@@ -241,6 +265,7 @@ def vision_track_axes(*,
     last_log_time       = 0.0
     last_depth_send     = 0.0
     last_good_sample    = None
+    pass_through_active = False   # set once when pass_at triggers; never cleared
 
     # When depth axis is active, Ch3 must stay released (65535 = NO_OVERRIDE)
     # so ArduSub's ALT_HOLD depth PID has authority over the vertical thrusters.
@@ -334,7 +359,7 @@ def vision_track_axes(*,
                                          -FWD_PCT_MAX, FWD_PCT_MAX)
                 axes_in_deadband.append(abs(distance_error) <= deadband)
 
-            if 'depth' in axes:
+            if 'depth' in axes and not pass_through_active:
                 # depth_anchor_frac shifts which point on the bbox we align
                 # to the image centre. At 0.5 (default) this equals sample.ey
                 # exactly -- no change from original behaviour.
@@ -346,6 +371,35 @@ def vision_track_axes(*,
                                     -MAX_DEPTH_NUDGE, MAX_DEPTH_NUDGE) * depth_sign
                 depth_setpoint -= depth_step
                 axes_in_deadband.append(abs(ey_depth) <= deadband)
+            elif 'depth' in axes:
+                # pass_through_active: depth setpoint is frozen; still counts as "in deadband"
+                ey_depth = sample.ey + (2.0 * depth_anchor_frac - 1.0) * sample.h_frac
+                axes_in_deadband.append(abs(ey_depth) <= deadband)
+
+            # gate_guard: suppress forward if gate bbox appears angled.
+            # A gate viewed straight-on has a predictable w/h aspect ratio;
+            # when the approach angle is too steep, w_frac/h_frac drops.
+            # Suppress forward and let lat/yaw corrections realign the sub.
+            if gate_guard and 'forward' in axes and not pass_through_active:
+                aspect = sample.w_frac / max(sample.h_frac, 0.01)
+                if aspect < gate_guard_min_w_frac:
+                    forward_pct = 0.0
+
+            # pass_at: once the distance metric reaches the trigger,
+            # commit to a straight-through pass — freeze lat+depth corrections
+            # and drive forward at pass_at_gain%.
+            if pass_at > 0.0 and not pass_through_active:
+                size_for_pass = _distance_size(sample, _distance_metric)
+                if size_for_pass >= pass_at:
+                    pass_through_active = True
+                    log.info(
+                        f"[VIS  ] PASS-THROUGH: size={size_for_pass:.2f} >= "
+                        f"{pass_at:.2f} — freezing lat+depth, fwd={pass_at_gain:.0f}%")
+
+            if pass_through_active:
+                forward_pct = _clamp(pass_at_gain, 0.0, FWD_PCT_MAX)
+                lat_pct     = 0.0
+                settled_tick_streak = 0   # don't settle-exit during the pass
 
             # ONE RC packet carries Ch3 + Ch4 + Ch5 + Ch6.
             # throttle_ch is 65535 (released) when depth is active so
@@ -485,7 +539,8 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 def _distance_size(sample, metric: str) -> float:
     """Return the distance proxy for the 'forward' axis.
 
-    'height'   -- bbox height fraction (default; works for tall objects).
+    'height'   -- bbox height fraction (default; tall objects: buoy, pole, flare).
+    'width'    -- bbox width fraction (wide horizontal objects: bars, torpedo panels).
     'area'     -- geometric mean of width and height; robust for wide targets
                   (gates, torpedo holes, anything wider than it is tall).
     'diagonal' -- normalised diagonal; best all-rounder for unknown shapes.
@@ -494,6 +549,8 @@ def _distance_size(sample, metric: str) -> float:
         return (sample.h_frac * sample.w_frac) ** 0.5
     if metric == 'diagonal':
         return ((sample.h_frac ** 2 + sample.w_frac ** 2) ** 0.5) / (2 ** 0.5)
+    if metric == 'width':
+        return sample.w_frac
     return sample.h_frac  # 'height' (default)
 
 
