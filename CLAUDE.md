@@ -151,7 +151,7 @@ duburi_ws/src/
 │       │   ├── find_person_demo.py    # full vision-driven 3D alignment demo
 │       │   ├── move_and_see.py        # alternates open-loop + vision verbs
 │       │   ├── gate_prequal.py        # gate-only prequal (DVL forward pass)
-│       │   ├── robosub_prequal.py     # RoboNation prequal (strafe gate pass + flare orbit)
+│       │   ├── robosub_prequal.py     # RoboNation prequal (gate pass + flare orbit)
 │       │   └── gate_flare_prequal.py  # full autonomous gate+flare+return (competition)
 │       └── state_machines/       # reserved for YASMIN-based plans
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
@@ -206,10 +206,10 @@ duburi_ws/src/
 > **Mission DSL**: prefer
 > [`DuburiMission`](src/duburi_planner/duburi_planner/duburi_dsl.py) over
 > the raw client when authoring missions. `duburi.move_forward(...)` and
-> `duburi.vision.lock(...)` share one object with sticky `duburi.camera`
+> `duburi.vision.home(...)` share one object with sticky `duburi.camera`
 > + `duburi.target` context. Vision verbs fall back to live `vision.*`
 > ROS params when overrides are unset, so deck-side tuning works without
-> editing mission code. Full cookbook + ten samples:
+> editing mission code. Full cookbook + samples:
 > [`.claude/context/mission-cookbook.md`](.claude/context/mission-cookbook.md).
 
 > Packages **not** in this repo (despite older context files mentioning them): `duburi_bringup`, `duburi_driver`, `duburi_teleop`, `duburi_mission`. They were aspirational sketches; ignore them when you read `proven-patterns.md` etc.
@@ -428,16 +428,35 @@ Adapted for our context:
 
 ### Vision-driven verbs (`vision_*`, all on the same `/duburi/move`)
 
-| Verb                    | What it closes the loop on                                       |
-|-------------------------|------------------------------------------------------------------|
-| `vision_align_3d`       | Centre + maintain distance on largest target_class. CSV `axes` picks subset of `yaw,lat,depth,forward`. |
-| `vision_align_yaw`      | One-axis: keep target horizontally centred (Ch4 only).            |
-| `vision_align_lat`      | One-axis: keep target horizontally centred via lateral strafe (Ch6). |
-| `vision_align_depth`    | One-axis: nudge depth so target sits at vertical centre (incremental ALT_HOLD setpoint). |
-| `vision_hold_distance`  | Drive forward/back so bbox height matches `target_bbox_h_frac`.   |
-| `vision_acquire`        | Block (optionally driving via `target_name` verb) until target_class is seen. |
+DSL method → action verb mapping (use DSL in missions; CLI uses action verb names directly):
+
+| DSL method                         | Action verb            | What it closes the loop on                                       |
+|------------------------------------|------------------------|------------------------------------------------------------------|
+| `vision.home(yaw,lat,depth,forward)` | `vision_align_3d`    | Multi-axis: any subset of yaw/lat/depth/forward simultaneously.  |
+| `vision.turn()`                    | `vision_align_yaw`     | Yaw to horizontally centre target (Ch4).                         |
+| `vision.slide()`                   | `vision_align_lat`     | Slide laterally to horizontally centre target (Ch6).             |
+| `vision.hover()`                   | `vision_align_depth`   | Nudge depth setpoint to vertically centre target.                |
+| `vision.approach(dist, metric)`    | `vision_hold_distance` | Drive forward/back to standoff; metric: height/width/area/diag.  |
+| `vision.find(move=)`               | `vision_acquire`       | Block until target seen; optionally move while waiting.          |
+| `vision.track()`                   | `vision_align_3d`      | Continuous follow (lock_mode='follow'); never exits on settle.   |
 
 Every vision verb takes `camera`, `target_class`, `deadband`, gain knobs (`kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`), and `on_lost` (`'fail'` default; `'hold'` to ride out a flicker). The closed loop runs INSIDE `auv_manager_node` (single MAVLink owner) so vision and control never fight for thrust. Detection arrives via `VisionState` (manager-side subscriber pool, lazily built per camera with a one-shot `wait_vision_state_ready` preflight).
+
+**Model context factory** — use `duburi.models()` for multi-model missions:
+
+```python
+m = duburi.models(
+    gate=('gate_flare_medium_100ep', ['gate', 'flare']),
+)
+duburi.vision.find(target=m.gate.gate, move='forward', gain=35)
+duburi.vision.home(target=m.gate.gate, yaw=True, lat=True,
+                   gate_guard=True, pass_at=0.38, pass_at_gain=55,
+                   dist=0.42, metric='area', duration=20)
+```
+
+`gate_guard=True` suppresses forward thrust when the gate bbox appears angled
+(`w_frac/h_frac < gate_guard_min_w_frac=0.35`). `pass_at` commits the AUV to
+a straight drive-through once the size metric hits the threshold.
 
 Tunables (`vision.kp_yaw`, `vision.kp_lat`, `vision.kp_depth`,
 `vision.kp_forward`, `vision.deadband`, `vision.target_bbox_h_frac`,
