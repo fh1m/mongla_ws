@@ -1160,38 +1160,33 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
 
     <div>
       <h3>Mission DSL — actual code</h3>
-      <pre style="font-size:11px;line-height:1.9"><span style="color:#7a8fa8"># missions/robosub_prequal.py</span>
+      <pre style="font-size:11px;line-height:1.9"><span style="color:#7a8fa8"># missions/gate_flare_prequal.py</span>
 <span style="color:#34d399">def</span> <span style="color:#e2e8f0">run</span>(duburi, log):
+    duburi.camera = <span style="color:#38bdf8">'forward'</span>
+    duburi.models(gate=<span style="color:#38bdf8">'gate_flare_medium_100ep'</span>)
     duburi.arm()
-    duburi.set_depth(<span style="color:#d4a843">-0.8</span>)
-    duburi.lock_heading(target=<span style="color:#d4a843">0</span>, timeout=<span style="color:#d4a843">180</span>)
+    duburi.set_depth(<span style="color:#d4a843">-1.0</span>)
 
     <span style="color:#7a8fa8"># ── GATE ──────────────────────────────</span>
-    log(<span style="color:#38bdf8">"approaching gate"</span>)
-    duburi.vision.find(camera=<span style="color:#38bdf8">'laptop'</span>,
-                       target=<span style="color:#38bdf8">'gate'</span>,
-                       sweep=<span style="color:#38bdf8">'yaw_right'</span>)
-    duburi.vision.yaw(target=<span style="color:#38bdf8">'gate'</span>,
-                      duration=<span style="color:#d4a843">10</span>, camera=<span style="color:#38bdf8">'laptop'</span>)
-    duburi.move_forward_dist(distance_m=<span style="color:#d4a843">4.0</span>, gain=<span style="color:#d4a843">60</span>)
+    log(<span style="color:#38bdf8">"find + home on gate"</span>)
+    duburi.vision.find(target=duburi.models.gate.gate,
+                       move=<span style="color:#38bdf8">'forward'</span>, gain=<span style="color:#d4a843">35</span>, timeout=<span style="color:#d4a843">45</span>)
+    duburi.vision.home(target=duburi.models.gate.gate,
+                       yaw=<span style="color:#d4a843">True</span>, lat=<span style="color:#d4a843">True</span>, forward=<span style="color:#d4a843">True</span>,
+                       dist=<span style="color:#d4a843">0.42</span>, metric=<span style="color:#38bdf8">'area'</span>,
+                       gate_guard=<span style="color:#d4a843">True</span>, pass_at=<span style="color:#d4a843">0.38</span>,
+                       duration=<span style="color:#d4a843">20</span>, on_lost=<span style="color:#38bdf8">'hold'</span>)
+    duburi.move_forward_dist(distance_m=<span style="color:#d4a843">3.5</span>, gain=<span style="color:#d4a843">60</span>)
 
-    <span style="color:#7a8fa8"># ── BIN ───────────────────────────────</span>
-    log(<span style="color:#38bdf8">"finding bin"</span>)
-    duburi.set_depth(<span style="color:#d4a843">-1.5</span>)
-    duburi.vision.lock(axes=<span style="color:#38bdf8">'yaw,forward,depth'</span>,
-                       target=<span style="color:#38bdf8">'bin'</span>,
-                       camera=<span style="color:#38bdf8">'downward'</span>,
-                       duration=<span style="color:#d4a843">12</span>)
-    duburi.drop()  <span style="color:#7a8fa8"># solenoid dropper</span>
+    <span style="color:#7a8fa8"># ── FLARE ─────────────────────────────</span>
+    log(<span style="color:#38bdf8">"find + orbit flare"</span>)
+    duburi.vision.find(target=duburi.models.gate.flare,
+                       move=<span style="color:#38bdf8">'forward'</span>, gain=<span style="color:#d4a843">30</span>, timeout=<span style="color:#d4a843">40</span>)
+    duburi.vision.home(target=duburi.models.gate.flare,
+                       yaw=<span style="color:#d4a843">True</span>, forward=<span style="color:#d4a843">True</span>, depth=<span style="color:#d4a843">True</span>,
+                       dist=<span style="color:#d4a843">0.38</span>, metric=<span style="color:#38bdf8">'height'</span>,
+                       duration=<span style="color:#d4a843">20</span>, on_lost=<span style="color:#38bdf8">'hold'</span>)
 
-    <span style="color:#7a8fa8"># ── TORPEDO ───────────────────────────</span>
-    duburi.set_depth(<span style="color:#d4a843">-0.8</span>)
-    duburi.vision.lock(axes=<span style="color:#38bdf8">'yaw,depth'</span>,
-                       target=<span style="color:#38bdf8">'torpedo_board'</span>,
-                       distance=<span style="color:#d4a843">0.4</span>, duration=<span style="color:#d4a843">15</span>)
-    duburi.fire_torpedo(<span style="color:#d4a843">1</span>)
-
-    duburi.unlock_heading()
     duburi.disarm()</pre>
 
       <div class="callout green" style="margin-top:16px">
