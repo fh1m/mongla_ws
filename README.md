@@ -242,13 +242,15 @@ ros2 param set /duburi_detector active_model flare
 ros2 param set /duburi_detector classes flare
 ```
 
-From inside a mission DSL (preferred):
+From inside a mission DSL (preferred — `duburi.models` registry):
 
 ```python
-duburi.use('gate')                # switch to gate model, keep current class filter
-duburi.use('flare', 'flare')      # switch model + class in one call
-duburi.use('combined', 'gate')    # combined model, filter to gate phase
-duburi.set_classes('flare')       # class-only switch (model unchanged)
+# Register aliases once at mission start
+duburi.models(gate='gate_flare_medium_100ep')
+
+# Pass ClassRef objects to vision verbs — model+class switch is automatic
+duburi.vision.find(target=duburi.models.gate.gate,  move='forward', ...)
+duburi.vision.home(target=duburi.models.gate.flare, yaw=True, ...)
 ```
 
 Defaults live in [src/duburi_manager/config/vision_tunables.yaml](src/duburi_manager/config/vision_tunables.yaml) and [src/duburi_vision/config/detector.yaml](src/duburi_vision/config/detector.yaml).
@@ -1194,20 +1196,29 @@ Full parameter docs, MAVLink traces, and implementation chains:
 
 ```python
 def run(duburi, log):
-    duburi.target = 'person'
+    duburi.camera = 'forward'
+    duburi.models(gate='gate_flare_medium_100ep')   # register model alias
     duburi.arm()
-    duburi.set_depth(-0.5)
-    duburi.move_forward(3.0, gain=60)
-    duburi.vision.find(sweep='right')
-    duburi.vision.lock(axes='yaw,forward', distance=0.55, duration=12)
-    duburi.move_back(2.0, gain=60)
+    duburi.set_depth(-1.0)
+    duburi.move_forward(3.0, gain=40)
+
+    # find: drive forward while searching for gate
+    duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
+
+    # home: multi-axis convergence (yaw + lateral + forward + gate guard)
+    duburi.vision.home(target=duburi.models.gate.gate,
+                       yaw=True, lat=True, forward=True,
+                       dist=0.42, metric='area',
+                       gate_guard=True, pass_at=0.38,
+                       duration=20, on_lost='hold')
+    duburi.move_forward_dist(3.5, gain=60)
     duburi.disarm()
 ```
 
-- `duburi.*` — open-loop motion (arm, set_depth, move_\*, yaw_\*, arc, lock_heading, ...)
-- `duburi.vision.*` — closed-loop vision verbs (scan/align/steer/strafe/level/approach/track)
-- `duburi.set_classes(csv)` — switch detector class filter live (`'gate'` → `'flare'` between phases)
-- `duburi.use(model, classes)` — switch active model + class filter in one call (requires `models:=...` at launch)
+- `duburi.*` — open-loop motion (arm, set_depth, move_\*, yaw_\*, arc, lock_heading, dvl_connect, ...)
+- `duburi.models(alias='stem')` — register model alias; access as `duburi.models.alias.class_name`
+- `duburi.vision.find(move='forward'|'yaw_right'|'yaw_left'|'still'|'arc', ...)` — search while moving
+- `duburi.vision.turn/slide/hover/approach/home/track` — single/multi-axis vision control
 - `duburi.countdown(seconds)` — tether-removal countdown with banner before mission start
 
 ```bash
@@ -1240,7 +1251,7 @@ Key params on `auv_manager_node`:
 | `vision.deadband` | 0.18 | Settle tolerance — tighten to 0.08–0.10 for pool |
 | `vision.lock_mode` | `settle` | `settle` / `follow` / `pursue` — vision loop exit behaviour |
 | `vision.depth_anchor_frac` | 0.5 | 0.2 for tall targets (person, pole) to prevent depth stall |
-| `vision.distance_metric` | `height` | `height` / `area` / `diagonal` — how target size is measured |
+| `vision.distance_metric` | `height` | `height` / `width` / `area` / `diagonal` — how target size is measured |
 
 **Yaw source selection:**
 

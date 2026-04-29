@@ -58,7 +58,7 @@ vision verbs.
 | `duration`           | float32  | move_*, arc, pause, vision_*          |
 | `gain`               | float32  | move_*, arc, vision_acquire           |
 | `target`             | float32  | set_depth (m) / yaw_* (deg) / lock_heading (deg) |
-| `target_name`        | string   | set_mode, vision_acquire (sweep verb) |
+| `target_name`        | string   | set_mode, vision_acquire (move verb)  |
 | `timeout`            | float32  | every command; defaults vary          |
 | `settle`             | float32  | post-command neutral hold; default 0  |
 | `yaw_rate_pct`       | float32  | arc, vision_acquire('arc')            |
@@ -70,13 +70,16 @@ vision verbs.
 | `kp_lat`             | float32  | vision_align_lat / _3d                |
 | `kp_depth`           | float32  | vision_align_depth / _3d              |
 | `kp_forward`         | float32  | vision_hold_distance / _3d            |
-| `target_bbox_h_frac` | float32  | vision_hold_distance / _3d            |
+| `target_bbox_h_frac` | float32  | vision_hold_distance / _3d (standoff threshold) |
 | `visual_pid`         | bool     | vision_align_3d (placeholder for v2)  |
 | `on_lost`            | string   | vision_*  ('fail' or 'hold')          |
 | `stale_after`        | float32  | vision_*                              |
 | `depth_anchor_frac`  | float32  | vision_align_depth / vision_align_3d  |
 | `lock_mode`          | string   | vision_* ('settle' / 'follow' / 'pursue') |
 | `distance_metric`    | string   | vision_hold_distance / vision_align_3d |
+| `gate_guard`         | bool     | vision_align_3d — suppress forward when gate appears angled |
+| `pass_at`            | float32  | vision_align_3d — commit straight pass once size metric ≥ this |
+| `pass_at_gain`       | float32  | vision_align_3d — thrust % for the commit pass |
 | `tracking`           | bool     | all vision_* — `True` subscribes `/tracks` (ByteTrack IDs + Kalman-smoothed), requires tracker_node |
 
 ### `Move.Result` fields you get back
@@ -113,11 +116,18 @@ This is what every `missions/<name>.py` file actually receives:
 
 ```python
 def run(duburi, log):       # `duburi` is a DuburiMission instance
+    duburi.camera = 'forward'
+    duburi.models(gate='gate_flare_medium_100ep')
+
     duburi.arm()
-    duburi.set_depth(-0.5)
-    duburi.move_forward(3.0, gain=60)
-    duburi.vision.find(sweep='right', timeout=20)
-    duburi.vision.lock(axes='yaw,forward', distance=0.55, duration=12)
+    duburi.set_depth(-1.0)
+    duburi.move_forward(3.0, gain=40)
+
+    duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
+    duburi.vision.home(target=duburi.models.gate.gate,
+                       yaw=True, forward=True, dist=0.42, metric='area',
+                       duration=20, on_lost='hold')
+    duburi.move_forward(3.0, gain=55)
     duburi.disarm()
 ```
 
@@ -140,8 +150,38 @@ DuburiMission(client, log, *, camera='laptop', target='person')
 ```
 
 You don't usually call this -- the runner
-([`src/duburi_planner/duburi_planner/runner.py`](../../src/duburi_planner/duburi_planner/runner.py))
+([`src/duburi_planner/duburi_planner/mission.py`](../../src/duburi_planner/duburi_planner/mission.py))
 constructs it for you and hands it to your `run(duburi, log)`.
+
+### Model context registry (`duburi.models`)
+
+`duburi.models` is a `ModelRegistry` singleton always present on every `DuburiMission`.
+Call it to register named model aliases, then pass typed `ClassRef` objects to vision verbs.
+
+```python
+# Register one or more model aliases before first use
+duburi.models(gate='gate_flare_medium_100ep')
+
+# Multiple aliases in one call (all loaded at detector startup)
+duburi.models(
+    gate='gate_flare_medium_100ep',
+    slalom='slalom_combined_100ep',
+)
+
+# Access any class on a registered model
+duburi.models.gate.gate     # ClassRef → auto-switches model+class before each vision goal
+duburi.models.gate.flare    # ClassRef for flare class on the gate model
+duburi.models.slalom.slalom_red
+
+# Positional access (requires explicit class list at registration)
+duburi.models(gate=('gate_flare_medium_100ep', ['gate', 'flare']))
+duburi.models.gate[0]       # → ClassRef('gate', 'gate')
+duburi.models.gate[1]       # → ClassRef('gate', 'flare')
+```
+
+When a `ClassRef` is passed to any vision verb, `_resolve_target()` automatically
+calls `set_model(alias)` + `set_classes(class_name)` on the detector before the
+goal fires — no manual `duburi.use()` / `duburi.set_classes()` calls needed.
 
 ### Top-level verbs (`duburi.*`)
 
@@ -180,6 +220,8 @@ duburi.move_lateral_dist(meters=1.0, gain=36.0, dvl_tolerance=0.1)
 # Negative meters = reverse / left:
 duburi.move_forward_dist(-1.5, gain=60.0)         # 1.5 m backward
 duburi.move_lateral_dist(-0.5, gain=36.0)         # 0.5 m left
+
+duburi.countdown(seconds=10)                      # tether-removal countdown with banner
 ```
 
 **DVL distance gotchas:**
@@ -193,83 +235,101 @@ duburi.move_lateral_dist(-0.5, gain=36.0)         # 0.5 m left
 
 ### Vision verbs (`duburi.vision.*`)
 
-`duburi.vision` is a `_VisionDSL` sub-namespace bound to the parent
-mission's sticky `camera`/`target`.
+`duburi.vision` is a `_VisionDSL` sub-namespace. Verb names describe **what the AUV body does**
+(turn, slide, hover, approach, home) rather than the axis they operate on.
 
-#### Preferred API (boolean flags — self-documenting call sites)
+#### Preferred API
 
 ```python
-# Search until target appears
-duburi.vision.scan    (target=None, sweep='right',
-                       timeout=25.0, gain=25.0,
-                       yaw_rate_pct=22.0, stale_after=0.0)
+# Search until target appears — optionally move while looking
+duburi.vision.find(target=duburi.models.gate.gate,
+                   move='forward',      # 'still'|'forward'|'yaw_right'|'yaw_left'|'arc'
+                   gain=35.0,
+                   timeout=45.0,
+                   yaw_rate_pct=22.0,
+                   stale_after=0.0)
 
 # Single-axis convenience
-duburi.vision.steer   (target=None, duration=8.0,  **overrides)  # Ch4 yaw
-duburi.vision.strafe  (target=None, duration=8.0,  **overrides)  # Ch6 lateral
-duburi.vision.level   (target=None, duration=8.0,  **overrides)  # depth nudge
-duburi.vision.approach(target=None, distance=0.55, duration=12.0, **overrides)  # Ch5 forward
+duburi.vision.turn    (target=..., duration=6.0,  **overrides)  # Ch4: turn to centre target
+duburi.vision.slide   (target=..., duration=5.0,  **overrides)  # Ch6: slide laterally
+duburi.vision.hover   (target=..., duration=8.0,  **overrides)  # depth: rise/sink to centre
+duburi.vision.approach(target=..., dist=0.55,
+                       metric='height', duration=12.0, **overrides)  # Ch5: approach to standoff
 
-# Multi-axis: use boolean flags — no CSV to type wrong
-duburi.vision.align   (target=None,
-                       yaw=True,        # Ch4: steer to horizontal centre
-                       lat=False,       # Ch6: slide to horizontal centre
-                       depth=False,     # depth setpoint for vertical centre
-                       forward=False,   # Ch5: approach/back-off to `distance`
-                       distance=0.55,
-                       duration=15.0,
-                       **overrides)
+# Multi-axis home — boolean flags, no CSV to mis-type
+duburi.vision.home(target=...,
+                   yaw=True,            # Ch4: turn to horizontal centre
+                   lat=False,           # Ch6: slide to horizontal centre
+                   depth=False,         # depth: rise/sink to vertical centre
+                   forward=False,       # Ch5: approach/back-off to `dist`
+                   dist=0.55,           # standoff threshold (in chosen metric's units)
+                   metric='height',     # 'height'|'width'|'area'|'diagonal'
+                   gate_guard=False,    # suppress forward when gate bbox appears angled
+                   pass_at=None,        # commit straight drive-through once size ≥ this
+                   pass_at_gain=55.0,
+                   duration=15.0,
+                   on_lost='hold',
+                   lock_mode='settle',
+                   **overrides)
 
-# Follow (never exits on settle)
-duburi.vision.track   (target=None, axes='yaw,forward',
-                       distance=0.55, duration=60.0, **overrides)
+# Continuous follow (never exits on settle — duration only)
+duburi.vision.track(target=..., duration=60.0,
+                    yaw=True, forward=True, depth=True,
+                    dist=0.38, on_lost='hold', **overrides)
 ```
 
-**Typical patterns:**
+**Competition patterns:**
 
 ```python
-# Gate: steer + approach, area metric, loose deadband
-duburi.vision.align(yaw=True, forward=True, distance=0.42,
-                    distance_metric='area', on_lost='hold')
+# Gate pass (yaw + lateral + guard + commit)
+duburi.models(gate='gate_flare_medium_100ep')
+duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
+duburi.vision.turn(target=duburi.models.gate.gate, duration=6.0)
+duburi.vision.home(target=duburi.models.gate.gate,
+                   yaw=True, lat=True, forward=True,
+                   dist=0.42, metric='area',
+                   gate_guard=True, pass_at=0.38, pass_at_gain=55.0,
+                   duration=20, on_lost='hold')
+duburi.move_forward_dist(3.5, gain=60)
 
-# Flare: 3-axis lock, height metric, tight deadband
-duburi.vision.align(yaw=True, forward=True, depth=True,
-                    distance=0.38, duration=20.0,
-                    on_lost='hold', lock_mode='settle')
+# Flare 3-axis lock (height metric, settle exit)
+duburi.vision.home(target=duburi.models.gate.flare,
+                   yaw=True, forward=True, depth=True,
+                   dist=0.38, metric='height',
+                   duration=20, on_lost='hold', lock_mode='settle')
 
-# Orbit step re-lock (short follow window)
-duburi.vision.align(yaw=True, forward=True, depth=True,
-                    distance=0.38, duration=3.0,
-                    on_lost='hold', lock_mode='follow')
+# Orbit step re-track (short follow window)
+duburi.vision.track(target=duburi.models.gate.flare,
+                    yaw=True, forward=True, depth=True,
+                    dist=0.38, duration=3.0, on_lost='hold')
 ```
 
-#### Legacy aliases (same wire output, never removed)
+#### Legacy aliases (deprecated — same wire output, never removed)
 
 ```python
-duburi.vision.find    (...)   # → scan
-duburi.vision.yaw     (...)   # → steer
-duburi.vision.lateral (...)   # → strafe
-duburi.vision.depth   (...)   # → level
-duburi.vision.forward (...)   # → approach
+duburi.vision.scan    (...)   # → find   (use move= instead of sweep=)
+duburi.vision.steer   (...)   # → turn
+duburi.vision.strafe  (...)   # → slide
+duburi.vision.level   (...)   # → hover
+duburi.vision.approach(target=None, distance=0.55, ...)  # distance= still accepted
+duburi.vision.align   (...)   # → home   (use dist= instead of distance=)
 duburi.vision.lock    (target=None, axes='yaw,forward',
-                       distance=0.55, duration=15.0, **overrides)   # → align (CSV form)
+                       distance=0.55, duration=15.0, **overrides)  # → home (CSV form)
 duburi.vision.follow  (...)   # → track
 ```
 
-`sweep` mapping (in `_FIND_SWEEP_DRIVERS`):
+`move` mapping in `find()` (replaces old `sweep=` parameter):
 
-| `sweep`     | Underlying `target_name` (drive while waiting) |
-| ----------- | ---------------------------------------------- |
-| `'right'`   | `'yaw_right'`                                  |
-| `'left'`    | `'yaw_left'`                                   |
-| `'forward'` | `'move_forward'`                               |
-| `'arc'`     | `'arc'`                                        |
-| `'still'`   | `''` (no drive -- wait in place)               |
-| `'none'`    | `''`                                           |
+| `move=`       | What the AUV does while searching |
+| ------------- | --------------------------------- |
+| `'still'`     | Wait in place — just watch        |
+| `'forward'`   | Drive forward (Ch5)               |
+| `'yaw_right'` | Sweep right (Ch4)                 |
+| `'yaw_left'`  | Sweep left (Ch4)                  |
+| `'arc'`       | Forward + yaw simultaneously      |
 
 `**overrides` are any of `kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`,
-`deadband`, `target_bbox_h_frac`, `stale_after`, `on_lost`,
-`depth_anchor_frac`, `lock_mode`, `distance_metric`, `visual_pid`,
+`deadband`, `stale_after`, `on_lost`, `depth_anchor_frac`, `lock_mode`,
 **`tracking`** (bool, default `False` — set `True` to use ByteTrack stable IDs + Kalman-smoothed bbox).
 
 Only pass them when you want to *pin* a value for that one call — omit
@@ -279,8 +339,8 @@ them and the live `vision.*` ROS-param value applies.
 
 ```python
 # Option A: per-call
-duburi.vision.lock(target='gate', axes='yaw,forward',
-                   distance=0.45, duration=20.0,
+duburi.vision.home(target=duburi.models.gate.gate,
+                   yaw=True, forward=True, dist=0.45, duration=20.0,
                    tracking=True)
 
 # Option B: global ROS param (applies to all subsequent vision goals)
@@ -316,7 +376,7 @@ Every successful verb prints one line via the mission `log`:
 ```
 [OK ] move_forward 5.0 s gain=60.0  final=-0.50 m  err=0.000
 [OK ] yaw_right    90 deg            final=125.4 deg  err=-0.4
-[OK ] vision.lock  axes=yaw,forward  final=0.07       err=0.30 s
+[OK ] vision.home  yaw+forward       final=0.07       err=0.30 s
 ```
 
 Failures raise `MoveFailed` (the runner prints the traceback at the
@@ -383,7 +443,7 @@ the verbs composable.
 ## 4. Cross-references
 
 * CLI driver (the `duburi` shell command): [`cli.py`](../../src/duburi_planner/duburi_planner/cli.py)
-* Mission runner (auto-discovers `missions/*.py`): [`runner.py`](../../src/duburi_planner/duburi_planner/runner.py)
+* Mission runner (auto-discovers `missions/*.py`): [`mission.py`](../../src/duburi_planner/duburi_planner/mission.py)
 * Action server dispatch (verifies field shape, hands to `Duburi`): [`auv_manager_node.py`](../../src/duburi_manager/duburi_manager/auv_manager_node.py)
 * All verbs (CLI + Python + DSL forms in one table): [`command-reference.md`](./command-reference.md)
 * Mission cookbook (composing verbs): [`mission-cookbook.md`](./mission-cookbook.md)

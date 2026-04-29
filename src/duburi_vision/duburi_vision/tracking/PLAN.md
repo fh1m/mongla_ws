@@ -26,8 +26,9 @@ Predicted frames (occlusion-bridged) carry `score=0.0` — `VisionState` and
 ## How to enable in missions
 
 ```python
-# DSL — per-goal tracking:
-duburi.vision.lock(target='gate', axes='yaw,forward', tracking=True, ...)
+# DSL — per-goal tracking (use home() with tracking=True):
+duburi.vision.home(target=duburi.models.gate.gate, yaw=True, forward=True,
+                   dist=0.42, tracking=True, ...)
 
 # launch — enable tracker_node:
 ros2 launch duburi_vision cameras_.launch.py with_tracking:=true

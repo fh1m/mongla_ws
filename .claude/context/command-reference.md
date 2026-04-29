@@ -451,8 +451,8 @@ Scan / sweep until at least one fresh detection of `target_class` arrives.
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_acquire --target_class person [--target_name yaw_right] [--timeout 30] [--gain 25] [--tracking false]` |
-| DSL | `duburi.vision.scan(target='gate', sweep='right', timeout=25.0)` — or legacy `vision.find(...)` |
-| Sweep modes | `''`/`still` (wait in place), `yaw_left`, `yaw_right`, `move_forward`, `arc` |
+| DSL | `duburi.vision.find(target=duburi.models.gate.gate, move='yaw_right', timeout=25.0)` — legacy alias: `vision.scan(sweep='right', ...)` |
+| move= values | `'still'` (wait in place), `'yaw_left'`, `'yaw_right'`, `'forward'`, `'arc'` |
 | Result | `final_value` = time-to-acquire (s); `success=False` + timeout reason on failure |
 
 **Common fields for all vision verbs** (see full tables per verb below):
@@ -482,7 +482,7 @@ Centre target horizontally via Ch4 yaw rate (P loop on `ex`).
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align_yaw --target_class person [--duration 15] [--kp_yaw 60] [--deadband 0.18] [--lock_mode settle] [--tracking false]` |
-| DSL | `duburi.vision.steer(target='gate', duration=8.0)` — or legacy `vision.yaw(...)` |
+| DSL | `duburi.vision.turn(target=duburi.models.gate.gate, duration=8.0)` — legacy alias: `vision.steer(...)` |
 | Channel | Ch4 only |
 | Result | `final_value` = composite normalized error; `error_value` = detection age (s) |
 
@@ -499,7 +499,7 @@ Centre horizontally via Ch6 lateral strafe — doesn't change heading (P loop on
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align_lat --target_class person [--duration 15] [--kp_lat 60] [--tracking false]` |
-| DSL | `duburi.vision.strafe(target='gate', duration=8.0)` — or legacy `vision.lateral(...)` |
+| DSL | `duburi.vision.slide(target=duburi.models.gate.gate, duration=8.0)` — legacy alias: `vision.strafe(...)` |
 | Channel | Ch6 only |
 
 ### `vision_align_depth`
@@ -516,7 +516,7 @@ Centre target vertically via incremental ALT_HOLD depth setpoint nudges.
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align_depth --target_class person [--duration 15] [--kp_depth 0.05] [--depth_anchor_frac 0.5] [--tracking false]` |
-| DSL | `duburi.vision.level(target='flare', duration=8.0)` — or legacy `vision.depth(...)` |
+| DSL | `duburi.vision.hover(target=duburi.models.gate.flare, duration=8.0)` — legacy alias: `vision.level(...)` |
 | Channel | Depth setpoint (`SET_POSITION_TARGET_GLOBAL_INT`) @ 5 Hz |
 | Math | `ey_anchor = ey + (2×anchor − 1)×h_frac` → `nudge = clamp(ey_anchor × kp_depth, ±0.02 m)` |
 | Tip | Use `depth_anchor_frac=0.2` for tall targets (person, pole) — centering on bbox top avoids depth stall |
@@ -536,7 +536,7 @@ Drive Ch5 to match target size proxy to `target_bbox_h_frac`.
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55 [--duration 20] [--kp_forward 200] [--distance_metric area] [--tracking false]` |
-| DSL | `duburi.vision.approach(target='gate', distance=0.42, duration=12.0)` — or legacy `vision.forward(...)` |
+| DSL | `duburi.vision.approach(target=duburi.models.gate.gate, dist=0.42, metric='area', duration=12.0)` — legacy: `approach(distance=0.42, ...)` |
 | Channel | Ch5 only |
 
 ### `vision_align_3d`
@@ -546,21 +546,27 @@ Hold multiple axes simultaneously. All active axes must be within `deadband` to 
 **DSL preferred form — boolean flags (no CSV to mis-type):**
 
 ```python
-# Steer + approach (classic gate setup)
-duburi.vision.align(yaw=True, forward=True, distance=0.42)
+# Gate: yaw + lateral + forward + guard + commit pass
+duburi.vision.home(target=duburi.models.gate.gate,
+                   yaw=True, lat=True, forward=True,
+                   dist=0.42, metric='area',
+                   gate_guard=True, pass_at=0.38, pass_at_gain=55.0,
+                   duration=20, on_lost='hold')
 
 # Full 3-axis flare lock
-duburi.vision.align(yaw=True, forward=True, depth=True,
-                    distance=0.38, duration=20.0,
-                    on_lost='hold', distance_metric='height')
+duburi.vision.home(target=duburi.models.gate.flare,
+                   yaw=True, forward=True, depth=True,
+                   dist=0.38, metric='height',
+                   duration=20.0, on_lost='hold', lock_mode='settle')
 
-# Orbit re-lock (short follow window, no settle exit)
-duburi.vision.align(yaw=True, forward=True, depth=True,
-                    distance=0.38, duration=3.0,
-                    on_lost='hold', lock_mode='follow')
+# Orbit re-track (short follow window, no settle exit)
+duburi.vision.track(target=duburi.models.gate.flare,
+                    yaw=True, forward=True, depth=True,
+                    dist=0.38, duration=3.0,
+                    on_lost='hold')
 ```
 
-`duburi.vision.lock(axes='yaw,forward', ...)` is an alias that accepts the same kwargs as CSV.
+Legacy CSV form: `duburi.vision.lock(axes='yaw,forward', distance=0.42, ...)` — still works, `home()` preferred.
 
 | Field | Type | Default | Accepted values | Notes |
 |---|---|---|---|---|
@@ -578,8 +584,8 @@ duburi.vision.align(yaw=True, forward=True, depth=True,
 
 | Aspect | Value |
 |---|---|
-| CLI | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth --target_bbox_h_frac 0.50 [--duration 20] [--lock_mode settle] [--distance_metric area] [--tracking false]` |
-| DSL | `duburi.vision.align(yaw=True, forward=True, depth=True, distance=0.50, duration=15.0)` — or legacy `vision.lock(axes='...', ...)` |
+| CLI | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth --target_bbox_h_frac 0.50 [--duration 20] [--lock_mode settle] [--distance_metric area] [--gate_guard false] [--tracking false]` |
+| DSL | `duburi.vision.home(target=..., yaw=True, forward=True, depth=True, dist=0.50, duration=15.0)` — legacy: `vision.align(...)` / `vision.lock(axes='...', ...)` |
 | Loop | Single 20 Hz tick: writes Ch4+Ch5+Ch6 in one RC packet + 5 Hz depth sub-tick |
 | Result | `final_value` = composite normalized error; `error_value` = detection age (s) |
 
@@ -592,12 +598,14 @@ duburi.vision.align(yaw=True, forward=True, depth=True,
 | `kp_depth`           | `vision.kp_depth`            | Metres of nudge per unit `ey_anchor` per 5 Hz tick        |
 | `kp_forward`         | `vision.kp_forward`          | Ch5 percent per unit (target_h_frac - size)               |
 | `deadband`           | `vision.deadband`            | Per-axis settle band; \|err\| < deadband counts as centred |
-| `target_bbox_h_frac` | `vision.target_bbox_h_frac`  | Stop-distance threshold used by `forward` / `lock`        |
+| `target_bbox_h_frac` | `vision.target_bbox_h_frac`  | Stop-distance threshold used by `approach` / `home`; DSL: `dist=` |
+| `distance_metric`    | `vision.distance_metric`     | How size is measured: `height`\|`width`\|`area`\|`diagonal`. DSL: `metric=` |
 | `stale_after`        | `vision.stale_after`         | Seconds after which a detection is treated as lost        |
 | `on_lost`            | `vision.on_lost`             | `'fail'` (abort on lost) or `'hold'` (pause, keep waiting) |
 | `depth_anchor_frac`  | `vision.depth_anchor_frac`   | Which point on the bbox to vertically centre (0=top, 0.5=centre, 1=bottom). Use **0.2** for tall objects (person standing, pole) where centering on the bbox centre stalls the depth controller. |
 | `lock_mode`          | `vision.lock_mode`           | When to exit the loop — see Lock modes below              |
-| `distance_metric`    | `vision.distance_metric`     | How "size" is measured from the bbox — see Distance metrics below |
+| `gate_guard`         | `vision.gate_guard_min_w_frac` | `true` = suppress forward thrust when `w_frac/h_frac` drops below threshold (gate appears angled). DSL: `gate_guard=True` on `home()`. |
+| `pass_at`            | -                            | Once size metric ≥ this value, freeze lat+depth and drive straight through at `pass_at_gain%`. DSL: `pass_at=0.38, pass_at_gain=55` on `home()`. |
 | `visual_pid`         | -                            | Structural placeholder; body is P-only today. |
 | `tracking`           | `vision.use_tracks`          | `true` = subscribe `/tracks` (ByteTrack IDs + Kalman-smoothed bbox). Requires `tracker_node` running for that camera. Also settable globally: `ros2 param set /duburi_manager vision.use_tracks true`. |
 
@@ -616,7 +624,7 @@ Controls when a vision verb exits, beyond duration and target-lost:
 
 `lock_mode=''` resolves to the `vision.lock_mode` ROS-param (default `'settle'`).
 
-DSL convenience: `duburi.vision.follow(...)` is shorthand for `lock(..., lock_mode='follow')`.
+DSL convenience: `duburi.vision.track(...)` runs `home()` with `lock_mode='follow'` (never exits on settle). Legacy: `duburi.vision.follow(...)` is an alias for `track()`.
 
 ### Distance metrics (`distance_metric`)
 
@@ -624,11 +632,17 @@ How `motion_vision._distance_size(sample, metric)` measures how far away the tar
 
 | Value      | Formula                              | Best for |
 | ---------- | ------------------------------------ | -------- |
-| `height`   | `h_frac` (bbox height / image height) | Tall uniform targets — poles, buoys, vertical markers |
+| `height`   | `h_frac` (bbox height / image height) | Tall uniform targets — poles, buoys, flare, vertical markers |
+| `width`    | `w_frac` (bbox width / image width)   | Wide horizontal targets — torpedo bar, horizontal pipe |
 | `area`     | `sqrt(h_frac × w_frac)`              | Mixed-aspect targets — gates, torpedo holes, wide objects |
 | `diagonal` | `sqrt(h_frac² + w_frac²) / sqrt(2)` | Best all-rounder when target shape varies or is unknown |
 
-`distance_metric=''` resolves to the `vision.distance_metric` ROS-param (default `'height'`).
+`distance_metric=''` (or `metric=''` in DSL) resolves to the `vision.distance_metric` ROS-param (default `'height'`).
+
+`target_bbox_h_frac` retains the same name on the wire regardless of metric — it is the threshold
+value in the chosen metric's units (e.g. `target_bbox_h_frac=0.38` with `metric='height'` means
+stop when bbox height/image height = 0.38; with `metric='area'` it means stop when
+`sqrt(h×w) = 0.38`).
 
 `target_bbox_h_frac` retains the same name regardless of metric — it is the threshold value in the chosen metric's units (e.g. `target_bbox_h_frac=0.30` with `distance_metric='area'` means stop when geometric-mean size equals 0.30).
 

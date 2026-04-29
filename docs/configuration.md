@@ -73,7 +73,7 @@ Full defaults live in
 | `vision.on_lost`       | `fail`  | `fail` (abort on lost target) or `hold` (pause thrust, keep waiting). |
 | `vision.depth_anchor_frac` | 0.5 | Which vertical point on the bbox to align to the image centre. 0=top, 0.5=centre, 1=bottom. Use **0.2** for tall objects (person standing, pole) to avoid depth-controller stall. |
 | `vision.lock_mode`     | `settle` | When to exit the vision loop. `settle` (exit when centred), `follow` (track until duration), `pursue` (forward-only until target fills frame). |
-| `vision.distance_metric` | `height` | How to measure target size from bbox. `height` (h_frac), `area` (√(h×w)), `diagonal` (√(h²+w²)/√2). |
+| `vision.distance_metric` | `height` | How to measure target size from bbox. `height` (h_frac), `width` (w_frac), `area` (√(h×w)), `diagonal` (√(h²+w²)/√2). |
 | `vision.acquire_yaw_rate_pct` | 22.0 | Yaw stick percent during a `vision.find` sweep. |
 | `vision.acquire_gain`  | 25.0    | Forward thrust during a `vision.find` sweep. |
 

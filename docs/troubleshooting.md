@@ -51,7 +51,7 @@
 
 | Symptom | Fix |
 |---------|-----|
-| Vision verb times out immediately with "vision state not ready" | Vision pipeline isn't up. Start `ros2 launch duburi_vision webcam_demo.launch.py` first, then retry. |
+| Vision verb times out immediately with "vision state not ready" | Vision pipeline isn't up. Start `ros2 launch duburi_vision cameras_.launch.py` first, then retry. |
 | Depth axis stalls / barely moves when tracking a tall person | `depth_anchor_frac` is 0.5 (bbox centre). Set `ros2 param set /duburi_manager vision.depth_anchor_frac 0.2` to align near the top of the bbox instead. |
 | Target oscillates horizontally | `kp_yaw` or `kp_lat` too high. Lower to 40–50. Or increase `deadband` to 0.12. |
 | AUV overshoots distance target | `kp_forward` too high, or `deadband` too loose for the `forward` axis. Reduce `kp_forward` to 150. |

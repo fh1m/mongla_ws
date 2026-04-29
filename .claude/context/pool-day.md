@@ -288,36 +288,41 @@ ros2 bag record -a -o /tmp/pool_$(date +%Y%m%d_%H%M) &
 
 ## 7. DSL quick reference (pool-day cheat sheet)
 
-### New preferred vision names
+### Preferred vision verb names
 
 ```python
-duburi.vision.scan(target, sweep='right', timeout=25)   # search
-duburi.vision.steer(target, duration=8)                 # Ch4: yaw to centre
-duburi.vision.strafe(target, duration=8)                # Ch6: slide to centre
-duburi.vision.level(target, duration=8)                 # depth to centre
-duburi.vision.approach(target, distance=0.55, duration=12)  # Ch5: close in
+# Register model at mission start
+duburi.models(gate='gate_flare_medium_100ep')
 
-# Multi-axis (preferred — no CSV string)
-duburi.vision.align(
-    yaw=True, forward=True,          # gate: 2-axis
-    # yaw=True, forward=True, depth=True,   # flare: 3-axis
-    distance=0.42,
-    distance_metric='area',          # 'area' for gates, 'height' for flare/poles
-    on_lost='hold',
-    duration=20.0)
+duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
+duburi.vision.turn(target=duburi.models.gate.gate, duration=6)      # Ch4: yaw to centre
+duburi.vision.slide(target=duburi.models.gate.gate, duration=5)     # Ch6: slide to centre
+duburi.vision.hover(target=duburi.models.gate.flare, duration=8)    # depth to centre
+duburi.vision.approach(target=duburi.models.gate.gate, dist=0.55, metric='height', duration=12)  # Ch5: close in
 
-# Continuous track (orbit re-lock)
-duburi.vision.align(yaw=True, forward=True, depth=True,
-                    distance=0.38, duration=3.0,
-                    on_lost='hold', lock_mode='follow')
+# Multi-axis home (preferred — boolean flags, no CSV string)
+duburi.vision.home(
+    target=duburi.models.gate.gate,
+    yaw=True, lat=True, forward=True,   # gate: 3-axis + guard
+    dist=0.42, metric='area',           # 'area' for gates, 'height' for flare/poles
+    gate_guard=True, pass_at=0.38,
+    on_lost='hold', duration=20.0)
+
+# Continuous track (orbit re-lock — never exits on settle)
+duburi.vision.track(target=duburi.models.gate.flare,
+                    yaw=True, forward=True, depth=True,
+                    dist=0.38, duration=3.0, on_lost='hold')
 ```
 
 ### Class filter switching
 
+Passing a `ClassRef` (e.g. `duburi.models.gate.flare`) handles model+class switching automatically.
+Manual override if needed:
+
 ```python
-duburi.set_classes('gate')      # Phase before gate
-duburi.set_classes('flare')     # Phase after passing gate
-duburi.set_classes('')          # All classes (debug only)
+duburi.set_classes('gate')      # filter to gate class (model unchanged)
+duburi.set_classes('flare')     # filter to flare class
+duburi.set_classes('')          # all classes (debug only)
 ```
 
 ### Useful one-liners from deck
