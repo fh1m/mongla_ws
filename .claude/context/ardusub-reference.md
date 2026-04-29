@@ -248,3 +248,45 @@ SITL does simulate:
 
 This means: if our MAVLink commands work in SITL, they'll work on hardware.
 The only differences are physical tuning (PID gains may need adjustment in water).
+
+---
+
+## POSHOLD / DVL Position Hold
+
+POSHOLD (ArduSub mode 16) holds XY position using DVL velocity via EKF3 external nav.
+The Nortek BlueOS extension bridges the Nucleus 1000 to ArduSub over MAVLink automatically.
+
+### Requirements
+
+| Item | Version |
+|------|---------|
+| ArduSub | 4.5.0 recommended (4.1.2 min) |
+| BlueOS | 1.2.6+ |
+| Nortek BlueOS extension | Install via http://192.168.2.1 → Extensions |
+
+### ArduSub parameters
+
+Set these in QGC (Vehicle Setup → Parameters) or via MAVProxy:
+
+```
+EK3_SRC1_POSXY  = 3    # External Nav (DVL)
+EK3_SRC1_VELXY  = 5    # External Nav (DVL)
+VISO_TYPE       = 1    # MAVLink (VISION_POSITION_ESTIMATE)
+```
+
+Reboot ArduSub after changing these. Mode switch to POSHOLD will be rejected until
+EKF3 is healthy with the external nav source.
+
+### Usage
+
+```python
+# After arming + set_depth, hold position:
+duburi.set_mode('POSHOLD')
+
+# Return to normal depth-hold for distance moves:
+duburi.set_mode('ALT_HOLD')
+```
+
+POSHOLD rejects the mode switch if DVL is not connected. Always `dvl_connect` first.
+
+Full DVL integration guide: [dvl-reference.md](dvl-reference.md) §POSHOLD.

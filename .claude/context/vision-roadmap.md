@@ -47,6 +47,19 @@ Temporal continuity + occlusion bridging. Shipped in tracking integration commit
 Acceptance: `ros2 run duburi_vision tracker_check --camera laptop --duration 5 --require-class person`
 exits 0 with a stable track ID across ≥ 3 frames.
 
+## v2b -- Tracker backend upgrade (deferred, post-competition)
+
+The current tracker already wraps `supervision.ByteTrack` (not a custom implementation).
+Swapping to OC-SORT is a **one-line change** in `tracking/bytetrack.py`:
+
+```python
+# Replace:   self._bt = sv.ByteTrack(...)
+# With:      self._bt = sv.OCSORT(...)   # HOTA 61.9 vs 60.1 on MOT17
+```
+
+The supervision API is identical — no other code changes needed.
+Decision: keep ByteTrack until after pool day to avoid pre-competition risk.
+
 ## v3 -- Filtering (DONE, folded into tracker_node)
 
 Per-track 4-state CV Kalman smoother (`cx, cy, vx, vy`) shipped inside `tracker_node`,

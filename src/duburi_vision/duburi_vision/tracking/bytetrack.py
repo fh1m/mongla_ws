@@ -49,6 +49,7 @@ class ByteTrackWrapper(Tracker):
             ) from exc
 
         self._sv = sv
+        # To swap backend: replace sv.ByteTrack with sv.OCSORT (same API, HOTA 61.9 vs 60.1)
         self._bt = sv.ByteTrack(
             lost_track_buffer=track_buffer,
             minimum_consecutive_frames=min_hits,

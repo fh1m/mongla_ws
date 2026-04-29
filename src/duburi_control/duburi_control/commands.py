@@ -141,6 +141,12 @@ COMMANDS = {
         'fields':   ['distance_m', 'gain', 'dvl_tolerance', 'settle'],
         'defaults': {'gain': 60.0, 'dvl_tolerance': 0.1, 'settle': 0.0},
     },
+    'move_back_dist': {
+        'help':     'Drive backward `distance_m` metres using DVL position feedback. '
+                    'Falls back to open-loop timed drive if no DVL position available.',
+        'fields':   ['distance_m', 'gain', 'dvl_tolerance', 'settle'],
+        'defaults': {'gain': 60.0, 'dvl_tolerance': 0.1, 'settle': 0.0},
+    },
     'move_lateral_dist': {
         'help':     'Strafe `distance_m` metres (positive=right, negative=left) '
                     'using DVL position feedback.',

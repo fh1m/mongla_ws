@@ -499,7 +499,7 @@ Architecture detail: [`.claude/context/vision-architecture.md`](.claude/context/
 | `MANUAL`  | Raw RC override, arm/disarm                                         |
 | `STABILIZE` | Attitude-stabilized; `SET_ATTITUDE_TARGET` is interpreted as a *rate* (so we avoid it for absolute yaw) |
 | `ALT_HOLD` | The only mode we use during a mission. Depth-hold + absolute yaw setpoints both work. |
-| `POSHOLD` | Position hold (needs GPS/DVL) — not used today                      |
+| `POSHOLD` | XY position hold via DVL/EKF3. Requires Nortek BlueOS extension + ArduSub params `EK3_SRC1_POSXY=3`, `EK3_SRC1_VELXY=5`, `VISO_TYPE=1`. See [`dvl-reference.md`](.claude/context/dvl-reference.md) §POSHOLD. |
 | `GUIDED`  | Waypoint following from GCS — not used today                        |
 | `SURFACE` | Emergency surface — manual fallback only                            |
 

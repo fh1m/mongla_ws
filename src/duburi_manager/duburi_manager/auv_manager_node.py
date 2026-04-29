@@ -724,7 +724,8 @@ def main(args=None):
     finally:
         _emergency_stop(node)
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():          # Ctrl-C unwinds spin() which may already have shut down
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
