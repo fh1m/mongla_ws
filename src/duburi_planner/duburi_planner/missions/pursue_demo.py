@@ -1,83 +1,60 @@
 #!/usr/bin/env python3
-"""pursue_demo -- torpedo-style approach using lock_mode='pursue'.
+"""pursue_demo -- torpedo-style approach using home(lock_mode='pursue').
 
-Demonstrates the pursue lock mode:
-  1. Find the target.
-  2. Align yaw until centred (settle mode -- exits when done).
-  3. vision.lock with lock_mode='pursue': drive forward while keeping
-     the target centred, stop the moment the target fills 80% of
-     the frame (simulates reaching contact range / firing distance).
+Demonstrates lock_mode='pursue':
+  1. find    -- rotate right until target appears.
+  2. turn    -- centre horizontally before approaching (settle mode).
+  3. home    -- yaw + forward; lock_mode='pursue' drives forward-only until
+                the target fills APPROACH_FILL fraction of the frame.
 
-This is the core pattern for a competition torpedo task:
-  - Phase 1: centre the target horizontally (yaw).
-  - Phase 2: pursue forward until bbox fills the target fraction.
+Core pattern for a competition torpedo task:
+  Step 1: centre the target  (turn)
+  Step 2: close range and fire  (home with pursue)
 
-Safe bench/sim test sequence:
+Bench/sim test:
   ros2 run duburi_planner mission pursue_demo
-  (No pool needed -- watch the [VIS] log lines: size should grow toward 0.80.)
+  Watch [VIS] log: bbox size should grow toward 0.80.
 
-WARNING: pursues until bbox fills 80% of frame OR 20 s timeout.
+Tune: lower APPROACH_FILL (e.g. 0.55) for a safer standoff.
+      lower kp_forward for a slower approach.
+
+WARNING: pursues until bbox fills 80% OR 20 s timeout.
          On real hardware the vehicle will keep moving forward.
          Have a kill switch ready.
-
-Run: ros2 run duburi_planner mission pursue_demo
 """
 
-CAMERA           = 'laptop'
-TARGET_CLASS     = 'person'
-DIVE_DEPTH_M     = -0.5
+CAMERA       = 'laptop'
+TARGET_CLASS = 'person'
+DIVE_DEPTH_M = -0.5
 
 ACQUIRE_TIMEOUT_S = 20.0
-
-# Phase 2: approach until the target fills this fraction of the frame.
-# 0.80 = target nearly filling the frame = very close / contact range.
-# Lower this (e.g. 0.55) to stop at a comfortable standoff distance.
-APPROACH_FILL    = 0.80
-APPROACH_TIMEOUT = 20.0  # safety: abort if target not reached in 20 s
+APPROACH_FILL     = 0.80   # target fill fraction to stop at (80% = contact range)
+APPROACH_TIMEOUT  = 20.0
 
 
 def run(duburi, log):
     duburi.camera = CAMERA
     duburi.target = TARGET_CLASS
 
-    # arm + depth-hold: standard startup.
     duburi.arm()
     duburi.set_mode('ALT_HOLD')
     duburi.set_depth(DIVE_DEPTH_M, settle=1.0)
 
-    # vision.find: rotate right until the target appears in frame.
-    # Returns as soon as one detection arrives.
-    duburi.vision.find(sweep='right', timeout=ACQUIRE_TIMEOUT_S)
+    duburi.vision.find(move='yaw_right', timeout=ACQUIRE_TIMEOUT_S)
 
-    # vision.yaw: settle mode -- steer until target is horizontally centred,
-    # then return. This ensures we're aimed straight at the target before
-    # starting the approach.
-    duburi.vision.yaw(duration=8.0)
+    # Settle yaw before approaching so we're aimed straight at the target.
+    duburi.vision.turn(duration=8.0)
 
-    # vision.lock with lock_mode='pursue':
-    #   axes='yaw,forward' -- keep centred horizontally while approaching.
-    #   distance=APPROACH_FILL -- the target fill fraction to reach.
-    #   lock_mode='pursue' -- forward thrust is one-way (never backs off).
-    #                         Exits the moment the target fills APPROACH_FILL
-    #                         fraction of the frame, OR when timeout hits.
-    #   on_lost='hold' -- if detection drops briefly, hold the last thrust
-    #                     instead of aborting (useful in turbid water).
-    #
-    # Tune: lower APPROACH_FILL to stop at a safer standoff distance.
-    #       lower kp_forward to approach more slowly.
-    #       raise deadband so minor yaw wobble doesn't slow the approach.
-    duburi.vision.lock(
-        axes='yaw,forward',
-        distance=APPROACH_FILL,
+    # pursue: forward-only (never backs off). Exits when APPROACH_FILL reached.
+    # on_lost='hold' keeps the last thrust if detection drops briefly.
+    duburi.vision.home(
+        yaw=True, forward=True,
+        dist=APPROACH_FILL,
         duration=APPROACH_TIMEOUT,
         lock_mode='pursue',
-        on_lost='hold',
-    )
+        on_lost='hold')
 
-    # Back off: open-loop reverse so we don't stay at contact range.
     duburi.move_back(2.0, gain=50.0)
-
-    # Surface and shut down.
     duburi.stop()
     duburi.set_depth(0.0)
     duburi.disarm()
