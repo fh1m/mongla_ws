@@ -40,8 +40,8 @@ def run(duburi, log):
     duburi.target = 'gate'
     duburi.arm()
     duburi.set_depth(-1.0)
-    duburi.vision.find(sweep='right', timeout=20.0)
-    duburi.vision.lock(axes='yaw,forward,depth', distance=0.55, duration=15.0)
+    duburi.vision.find(move='yaw_right', timeout=20.0)
+    duburi.vision.home(yaw=True, forward=True, depth=True, dist=0.55, duration=15.0)
     duburi.set_depth(0.0)
     duburi.disarm()
 ```
@@ -72,10 +72,9 @@ def run(duburi, log):
     duburi.arm()
     duburi.set_depth(-0.5)
     duburi.move_forward(3.0, gain=60)         # open-loop -- go to area
-    duburi.vision.find()                      # search for the target
-    duburi.vision.lock(axes='yaw,forward',    # closed-loop -- land on it
-                       distance=0.55,
-                       duration=12)
+    duburi.vision.find(move='yaw_right')      # search for the target
+    duburi.vision.home(yaw=True, forward=True,# closed-loop -- land on it
+                       dist=0.55, duration=12)
     duburi.move_back(2.0, gain=60)
     duburi.disarm()
 ```
@@ -89,13 +88,13 @@ verbs and tuning.
 
 1. **One axis per command.** A `move_forward` only writes Ch5. A
    `yaw_right` only writes Ch4. Mixing axes is the controller's job
-   (`arc` for forward+yaw, `vision.lock` for any subset). This is
+   (`arc` for forward+yaw, `vision.home` for any subset). This is
    AXIS ISOLATION and it is what keeps the sub predictable.
 
 2. **Vision informs control, never fights it.** Vision verbs talk
    *to* the same control stack the open-loop verbs use. They don't
-   open a parallel channel. So `duburi.vision.yaw(...)` is exactly
-   `yaw_right` driven by a bbox-error PI loop instead of a clock.
+   open a parallel channel. So `duburi.vision.turn(...)` is exactly
+   `yaw_right` driven by a bbox-error P loop instead of a clock.
 
 3. **Sticky context.** `duburi.camera` and `duburi.target` default to
    `'laptop'` and `'person'`. Set them once at the top of the mission
@@ -236,76 +235,90 @@ between commands, `pause` for stabilisation between mode changes.
 
 ### 3.2  Vision-driven motion (`duburi.vision.*`)
 
-Same axis names as the open-loop verbs above, but each one runs a
-closed P loop on the **largest detection** of `target` in `camera`.
-Sticky context comes from the parent `duburi`; pass `target=...` /
-`camera=...` to override per call.
-
-Two equivalent APIs exist — pick whichever reads clearer. They produce
-identical wire output.
-
-#### Preferred API (boolean flags)
+Each verb describes what the AUV physically does and maps 1:1 to a
+future YASMIN state. All run a closed P loop on the **largest
+detection** of `target` in `camera`. Sticky context from the parent
+`duburi`; pass `target=` / `camera=` to override per call.
 
 ```python
-# Scan until target appears
-duburi.vision.scan(target=None, sweep='right', timeout=25.0,
-                   gain=25.0, yaw_rate_pct=22.0)
+# ── Search ──────────────────────────────────────────────────────────────── #
+duburi.vision.find(target=None,
+                   move='still',       # 'still'|'forward'|'yaw_right'|'yaw_left'|'arc'
+                   gain=25.0,          # forward thrust % (forward / arc)
+                   yaw_rate_pct=22.0,  # yaw % (yaw_right / yaw_left / arc)
+                   timeout=25.0)       # abort if not seen after this many s
 
-# Single-axis shortcuts
-duburi.vision.steer  (target=None, duration=8.0)   # Ch4: steer to horizontal centre
-duburi.vision.strafe (target=None, duration=8.0)   # Ch6: slide to horizontal centre
-duburi.vision.level  (target=None, duration=8.0)   # depth setpoint to vertical centre
-duburi.vision.approach(target=None, distance=0.55, duration=12.0)  # Ch5: standoff
+# ── Single-axis verbs ────────────────────────────────────────────────────── #
+duburi.vision.turn  (target=None, duration=8.0,  **overrides)  # Ch4: yaw to centre
+duburi.vision.slide (target=None, duration=8.0,  **overrides)  # Ch6: slide to centre
+duburi.vision.hover (target=None, duration=8.0,  **overrides)  # depth to v-centre
+duburi.vision.approach(target=None,
+                        dist=0.55,      # bbox fraction to stop at
+                        metric='height',# 'height'|'width'|'area'|'diagonal'
+                        duration=12.0,
+                        pass_at=0.0,    # commit to drive-through once size >= this
+                        pass_at_gain=50.0,
+                        **overrides)
 
-# Multi-axis: each flag names the axis -- no CSV to get wrong
-duburi.vision.align(target=None,
-                    yaw=True, forward=False, depth=False, lat=False,
-                    distance=0.55, duration=15.0, **overrides)
+# ── Multi-axis (home in on target) ──────────────────────────────────────── #
+duburi.vision.home(target=None,
+                   yaw=True, lat=False, depth=False, forward=False,
+                   dist=0.55, metric='height',
+                   gate_guard=False,            # suppress forward when gate angled
+                   gate_guard_min_w_frac=0.35,
+                   pass_at=0.0, pass_at_gain=50.0,
+                   duration=15.0, **overrides)
 
-# Continuous follow (never exits on settle)
-duburi.vision.track (target=None, axes='yaw,forward',
-                     distance=0.55, duration=60.0, **overrides)
+# ── Continuous tracking (never exits on settle) ──────────────────────────── #
+duburi.vision.track(target=None,
+                    yaw=True, forward=True, lat=False, depth=False,
+                    dist=0.55, duration=60.0, **overrides)
 ```
 
 **Typical competition patterns:**
 
 ```python
-# Gate approach: steer + approach, area metric (wide rectangular target)
-duburi.vision.align(yaw=True, forward=True, distance=0.42,
-                    distance_metric='area', on_lost='hold')
+# Gate: yaw + lateral with angle guard + committed pass-through
+duburi.vision.home(target=m.gate.gate,
+                   yaw=True, lat=True, forward=True,
+                   dist=0.42, metric='area',
+                   gate_guard=True, pass_at=0.38, pass_at_gain=55,
+                   duration=20, on_lost='hold')
 
-# Flare full lock: 3-axis settle (tall narrow pipe)
-duburi.vision.align(yaw=True, forward=True, depth=True,
-                    distance=0.38, duration=20.0,
-                    on_lost='hold', lock_mode='settle')
+# Flare: 3-axis settle (tall narrow pipe, height metric)
+duburi.vision.home(target=m.gate.flare,
+                   yaw=True, forward=True, depth=True,
+                   dist=0.38, metric='height',
+                   duration=20, on_lost='hold')
 
-# Flare orbit re-lock (3 s follow window after each yaw step)
-duburi.vision.align(yaw=True, forward=True, depth=True,
-                    distance=0.38, duration=3.0,
-                    on_lost='hold', lock_mode='follow')
+# Flare orbit re-lock after each yaw step (3 s follow window)
+duburi.vision.track(target=m.gate.flare,
+                    yaw=True, forward=True, depth=True,
+                    dist=0.38, duration=3, on_lost='hold')
+
+# Torpedo pursue: drive forward-only until target fills 80% of frame
+duburi.vision.home(yaw=True, forward=True,
+                   dist=0.80, duration=20, lock_mode='pursue')
 ```
 
-#### Legacy aliases (kept forever, identical behaviour)
+#### `move=` values for `find`
 
-```python
-duburi.vision.find    (...)              # → scan
-duburi.vision.yaw     (...)              # → steer
-duburi.vision.lateral (...)              # → strafe
-duburi.vision.depth   (...)              # → level
-duburi.vision.forward (...)              # → approach
-duburi.vision.lock    (axes='yaw,...')   # → align (CSV axes string form)
-duburi.vision.follow  (...)              # → track
-```
+| `move=`       | AUV behaviour while searching      |
+| ------------- | ---------------------------------- |
+| `'still'`     | wait in place                      |
+| `'forward'`   | drive forward at `gain`%           |
+| `'yaw_right'` | rotate right at `yaw_rate_pct`%    |
+| `'yaw_left'`  | rotate left at `yaw_rate_pct`%     |
+| `'arc'`       | forward + yaw simultaneously       |
 
-#### Sweep modes for `scan` / `find`
+#### Distance metrics for `approach` / `home`
 
-| sweep      | Drive while waiting               |
-| ---------- | --------------------------------- |
-| `'right'`  | yaw right at `yaw_rate_pct`       |
-| `'left'`   | yaw left  at `yaw_rate_pct`       |
-| `'forward'`| Ch5 forward at `gain`             |
-| `'arc'`    | Ch5 + Ch4 (uses both knobs)       |
-| `'still'`  | wait in place                     |
+| `metric=`    | Best for                                  |
+| ------------ | ----------------------------------------- |
+| `'height'`   | Tall objects: buoy, flare, pole (default) |
+| `'width'`    | Wide horizontal objects: bar, banner      |
+| `'area'`     | Square-ish or variable: gate, bin         |
+| `'diagonal'` | Best all-rounder when shape is uncertain  |
 
 #### Overrides (only when you mean to pin a value)
 
@@ -325,9 +338,13 @@ ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
 | `kp_depth`           | `vision.kp_depth`   | Metres of nudge per unit `ey` per 5 Hz tick               |
 | `kp_forward`         | `vision.kp_forward` | Ch5 percent per unit (target_h_frac − h_frac)             |
 | `deadband`           | `vision.deadband`   | Per-axis settle band; `\|err\| < deadband` counts as in  |
-| `distance_metric`    | `vision.distance_metric` | `'height'` (poles, buoys), `'area'` (gates, wide targets), `'diagonal'` |
+| `distance_metric`    | `vision.distance_metric` | `'height'` (poles, buoys), `'width'` (wide bars), `'area'` (gates), `'diagonal'` |
 | `on_lost`            | `vision.on_lost`    | `'fail'` (abort after ~0.6 s lost) or `'hold'` (freeze setpoints) |
 | `lock_mode`          | `vision.lock_mode`  | `'settle'` (exit on centred), `'follow'` (run full duration), `'pursue'` (forward-only until close) |
+| `gate_guard`         | —                   | `True` = suppress forward when gate bbox appears angled (w/h < threshold) |
+| `gate_guard_min_w_frac` | —               | Aspect ratio threshold for gate_guard (default 0.35; calibrate at pool) |
+| `pass_at`            | —                   | Commit to straight drive-through once size metric >= this value (0 = off) |
+| `pass_at_gain`       | —                   | Forward thrust % during committed pass phase (default 50%) |
 | `stale_after`        | `vision.stale_after`| Seconds after which a detection is treated as lost        |
 | `tracking`           | `vision.use_tracks` | `True` = use ByteTrack IDs + Kalman-smoothed bboxes       |
 
@@ -360,7 +377,7 @@ ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
 **2. Per-goal DSL flag — route this goal through `/tracks`:**
 
 ```python
-duburi.vision.lock(target='gate', axes='yaw,forward',
+duburi.vision.home(target='gate', yaw=True, forward=True,
                    tracking=True, ...)
 ```
 
@@ -368,17 +385,18 @@ duburi.vision.lock(target='gate', axes='yaw,forward',
 goal instead of `/detections`. If `tracker_node` is not running the goal
 will stall waiting for its first sample — always pair with `with_tracking:=true`.
 
-### `lock_mode` — the key parameter for tracking-while-moving
+### `lock_mode` — how `home` / `track` exit
 
-`lock_mode` controls when `vision.lock` exits:
+`lock_mode` controls when `vision.home` exits (pass via `**overrides`).
+`vision.track` always uses `'follow'` internally.
 
-| `lock_mode` | Exits when ...                                       | Use case                            |
-|-------------|------------------------------------------------------|-------------------------------------|
-| `'settle'`  | target is inside deadband for `SETTLED_TICK_BUDGET`  | Approach and stop at target         |
-| `'follow'`  | `duration` expires (never exits on deadband alone)   | Continuous tracking, orbit steps    |
-| `'pursue'`  | reserved (NYI)                                       | —                                   |
+| `lock_mode` | Exits when ...                                       | Use case                               |
+|-------------|------------------------------------------------------|----------------------------------------|
+| `'settle'`  | all axes inside deadband for `SETTLED_TICK_BUDGET`   | Approach and stop at standoff          |
+| `'follow'`  | `duration` expires (never exits on deadband alone)   | Continuous tracking, orbit hold steps  |
+| `'pursue'`  | forward axis reaches `dist` fraction (never backs off) | Torpedo: drive to target fill        |
 
-**Rule of thumb:** use `settle` to *arrive*; use `follow` to *keep moving*.
+**Rule of thumb:** use `settle` to *arrive*; `follow` to *keep moving*; `pursue` to *close in*.
 
 ### Predicted frames and `on_lost`
 
@@ -397,25 +415,24 @@ goal aborting.
 
 The orbit is the flagship use case for `follow` mode. Each step:
 1. `yaw_left(30°)` — pivot in place; target drifts off-centre
-2. `vision.lock(..., lock_mode='follow', duration=3.0)` — re-centre and hold
-   for 3 seconds, then exit and go to the next step
+2. `vision.track(..., duration=3.0)` — re-centre and hold for 3 seconds,
+   then exit and go to the next step
 
 ```python
-ORBIT_STEPS     = 12      # 12 × 30° = 360°
-ORBIT_STEP_DEG  = 30.0
-ORBIT_HOLD_S    = 3.0
+ORBIT_STEPS    = 12      # 12 × 30° = 360°
+ORBIT_STEP_DEG = 30.0
+ORBIT_HOLD_S   = 3.0
 
 for step in range(ORBIT_STEPS):
     duburi.yaw_left(ORBIT_STEP_DEG, timeout=10.0, settle=0.3)
-    # lock_mode='follow': keep tracking for the full 3 s window,
-    # never exit early just because we hit deadband.
-    duburi.vision.lock(
-        target='flare',
-        axes='yaw,forward,depth',
-        distance=0.40,
+    # track: keep tracking for the full 3 s window,
+    # never exit early on deadband (lock_mode='follow' internally).
+    duburi.vision.track(
+        target=m.gate.flare,
+        yaw=True, forward=True, depth=True,
+        dist=0.40,
         duration=ORBIT_HOLD_S,
         on_lost='hold',       # survive brief occlusions
-        lock_mode='follow',
         tracking=True,
     )
 ```
@@ -431,20 +448,19 @@ For approach-and-follow (e.g. swimming alongside a moving object):
 # Move forward while re-locking every 2 s — functional tracking loop
 for _ in range(5):
     duburi.move_forward(2.0, gain=40.0)     # open-loop
-    duburi.vision.lock(
-        target='buoy', axes='yaw',
+    duburi.vision.track(
+        target='buoy', yaw=True,
         duration=2.0,
-        lock_mode='follow',
         tracking=True,
     )
 ```
 
-For pure heading-correction while driving forward, `axes='yaw'` with
-`lock_mode='follow'` and a short `duration` is enough:
+For pure heading-correction while driving forward, `track(yaw=True)` with
+a short `duration` is enough:
 
 ```python
-duburi.vision.lock(target='gate', axes='yaw',
-                   duration=20.0, lock_mode='follow', tracking=True)
+duburi.vision.track(target='gate', yaw=True,
+                    duration=20.0, tracking=True)
 # (runs for up to 20 s, correcting yaw to stay centred on gate)
 ```
 
@@ -571,35 +587,37 @@ def run(duburi, log):
     duburi.set_depth(-1.0, settle=2.0)
     duburi.dvl_connect()
 
-    # Gate phase -- filter to gate class only
+    m = duburi.models(gate=('gate_flare_medium_100ep', ['gate', 'flare']))
+
+    # Gate phase
     duburi.set_classes('gate')
-    duburi.target = 'gate'
-    duburi.vision.find(sweep='forward', timeout=45.0, gain=40.0)
-    duburi.vision.lock(axes='yaw,forward', distance=0.42,
-                       duration=20.0, on_lost='hold',
-                       distance_metric='area')
+    duburi.vision.find(target=m.gate.gate, move='forward', timeout=45.0, gain=40.0)
+    duburi.vision.home(target=m.gate.gate, yaw=True, forward=True,
+                       dist=0.42, metric='area',
+                       duration=20.0, on_lost='hold')
     duburi.move_forward_dist(3.5, gain=60.0)
 
-    # Flare phase -- switch filter to flare
+    # Flare phase
     duburi.set_classes('flare')
-    duburi.target = 'flare'
-    duburi.vision.find(sweep='right', timeout=40.0, gain=0.0)
-    duburi.vision.lock(axes='yaw,forward,depth', distance=0.38,
-                       duration=20.0, on_lost='hold', lock_mode='settle')
+    duburi.vision.find(target=m.gate.flare, move='yaw_right', timeout=40.0, gain=0.0)
+    duburi.vision.home(target=m.gate.flare, yaw=True, forward=True, depth=True,
+                       dist=0.38, metric='height',
+                       duration=20.0, on_lost='hold')
 
     # Orbit flare 360 degrees
     for _ in range(12):
         duburi.yaw_left(30.0, timeout=10.0, settle=0.3)
-        duburi.vision.lock(axes='yaw,forward,depth', distance=0.38,
-                           duration=3.0, on_lost='hold', lock_mode='follow')
+        duburi.vision.track(target=m.gate.flare,
+                            yaw=True, forward=True, depth=True,
+                            dist=0.38, duration=3.0, on_lost='hold')
 
     # Return through gate
     duburi.yaw_right(180.0, timeout=25.0, settle=0.5)
     duburi.set_classes('gate')
-    duburi.target = 'gate'
-    duburi.vision.find(sweep='right', timeout=30.0, gain=0.0)
-    duburi.vision.lock(axes='yaw,forward', distance=0.42,
-                       duration=20.0, on_lost='hold', distance_metric='area')
+    duburi.vision.find(target=m.gate.gate, move='yaw_right', timeout=30.0, gain=0.0)
+    duburi.vision.home(target=m.gate.gate, yaw=True, forward=True,
+                       dist=0.42, metric='area',
+                       duration=20.0, on_lost='hold')
     duburi.move_forward_dist(3.5, gain=60.0)
 
     duburi.stop()
@@ -761,10 +779,8 @@ def run(duburi, log):
     duburi.arm()
     duburi.set_depth(-0.5)
     duburi.move_forward(3.0, gain=60)
-    duburi.vision.find(sweep='right', timeout=25.0)
-    duburi.vision.lock(axes='yaw,forward',
-                       distance=0.55,
-                       duration=12.0)
+    duburi.vision.find(move='yaw_right', timeout=25.0)
+    duburi.vision.home(yaw=True, forward=True, dist=0.55, duration=12.0)
     duburi.move_back(2.0, gain=60)
     duburi.disarm()
 ```
@@ -780,11 +796,9 @@ def run(duburi, log):
     for attempt in range(3):
         log.info(f'attempt {attempt+1}: searching')
         try:
-            duburi.vision.find(sweep='arc',  timeout=20.0)
-            duburi.vision.lock(axes='yaw,forward',
-                               distance=0.55,
-                               duration=10.0)
-            log.info('locked & held')
+            duburi.vision.find(move='arc', timeout=20.0)
+            duburi.vision.home(yaw=True, forward=True, dist=0.55, duration=10.0)
+            log.info('homed & held')
             break
         except Exception as exc:
             log.warning(f'lost target ({exc!r}) -- backing off & retrying')
@@ -794,7 +808,7 @@ def run(duburi, log):
     duburi.disarm()
 ```
 
-### 6.5  Full 3D align (yaw + lat + depth + forward at once)
+### 6.5  Full 4-axis lock (yaw + lat + depth + forward at once)
 
 ```python
 def run(duburi, log):
@@ -802,10 +816,9 @@ def run(duburi, log):
     duburi.arm()
     duburi.set_depth(-1.5)
     duburi.lock_heading()
-    duburi.vision.find(sweep='still', timeout=30.0)
-    duburi.vision.lock(axes='yaw,lat,depth,forward',
-                       distance=0.50,
-                       duration=20.0)
+    duburi.vision.find(move='still', timeout=30.0)
+    duburi.vision.home(yaw=True, lat=True, depth=True, forward=True,
+                       dist=0.50, duration=20.0)
     duburi.release_heading()
     duburi.disarm()
 ```
@@ -823,10 +836,10 @@ def run(duburi, log):
         duburi.move_forward(5.0, gain=55)
         log.info(f'leg {leg}: scan')
         try:
-            duburi.vision.find(sweep='right', timeout=8.0)
-            log.info('hit -- aligning')
-            duburi.vision.yaw(duration=6.0)
-            duburi.vision.forward(distance=0.55, duration=8.0)
+            duburi.vision.find(move='yaw_right', timeout=8.0)
+            log.info('found -- homing in')
+            duburi.vision.turn(duration=6.0)
+            duburi.vision.approach(dist=0.55, duration=8.0)
             break
         except Exception:
             log.info('no hit, continue patrol')
@@ -841,9 +854,9 @@ def run(duburi, log):
 def run(duburi, log):
     duburi.arm()
     duburi.set_depth(-0.5)
-    # An aggressive yaw-only loop with a tighter deadband than the deck default.
-    duburi.vision.yaw(duration=10.0, kp_yaw=85.0, deadband=0.06,
-                      stale_after=1.2, on_lost='hold')
+    # Aggressive yaw-only with tighter deadband than the deck default.
+    duburi.vision.turn(duration=10.0, kp_yaw=85.0, deadband=0.06,
+                       stale_after=1.2, on_lost='hold')
     duburi.disarm()
 ```
 
@@ -903,8 +916,8 @@ def run(duburi, log):
     duburi.lock_heading(target=0.0, timeout=120)
 
     # Phase 1: find and centre on gate
-    duburi.vision.find(sweep='right', timeout=30.0)
-    duburi.vision.lock(axes='yaw', duration=5.0, lock_mode='settle')
+    duburi.vision.find(move='yaw_right', timeout=30.0)
+    duburi.vision.turn(duration=5.0)
 
     # Phase 2: update heading lock to current (post-alignment) heading
     duburi.unlock_heading()
@@ -952,7 +965,7 @@ Mission code is identical — the yaw source selection is transparent to the DSL
    gives you altitude headroom and engages ALT_HOLD.
 2. **Decide what each phase isolates.** A phase that drives forward
    blindly is `move_forward`. A phase that lands on a target is
-   `vision.lock`. Don't mix them inside one verb; chain them.
+   `vision.home`. Don't mix them inside one verb; chain them.
 3. **Use `lock_heading()` whenever you do open-loop translations.** It
    keeps yaw drift bounded for free. Depth needs no equivalent --
    `set_depth(...)` already hands depth back to ArduSub's onboard
@@ -975,10 +988,10 @@ Mission code is identical — the yaw source selection is transparent to the DSL
 
 - **A `vision.*` verb with `target=''`** raises — sticky context is
   required, set `duburi.target` once before the first vision verb.
-- **`vision.depth` on a downward camera** wants `depth_sign=-1`. The
+- **`vision.hover` on a downward camera** wants `depth_sign=-1`. The
   verb infers this from the camera name (`'downward'` flips the sign);
   if you use a custom camera ID, override at the manager level.
-- **`vision.find(sweep='still')`** does not move. If your target
+- **`vision.find(move='still')`** does not move. If your target
   isn't in the camera frame at start, this returns a timeout failure
   no matter how long you wait.
 - **Open-loop seconds are NOT distances.** Currents and battery
