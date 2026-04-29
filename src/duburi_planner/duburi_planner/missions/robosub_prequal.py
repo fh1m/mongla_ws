@@ -64,10 +64,7 @@ RETURN_DRIVE_GAIN = 60.0
 
 def run(duburi, log):
     duburi.camera = CAMERA
-
-    m = duburi.models(
-        gate=('gate_flare_medium_100ep', ['gate', 'flare']),
-    )
+    duburi.models(gate='gate_flare_medium_100ep')
 
     # ── Phase 1: Startup ────────────────────────────────────────────────────
     log('Phase 1: arming and diving')
@@ -77,9 +74,8 @@ def run(duburi, log):
 
     # ── Phase 2: FindGate ───────────────────────────────────────────────────
     log('Phase 2: searching for gate (forward)')
-    duburi.set_classes('gate')
     duburi.vision.find(
-        target=m.gate.gate,
+        target=duburi.models.gate.gate,
         move='forward',
         gain=GATE_SEARCH_GAIN,
         timeout=GATE_SEARCH_T)
@@ -88,7 +84,7 @@ def run(duburi, log):
     # 'area' metric is more stable for a wide, short gate than 'height' alone.
     log('Phase 3: homing on gate (yaw + forward)')
     duburi.vision.home(
-        target=m.gate.gate,
+        target=duburi.models.gate.gate,
         yaw=True, forward=True,
         dist=GATE_STANDOFF, metric='area',
         duration=GATE_ALIGN_T,
@@ -102,9 +98,8 @@ def run(duburi, log):
 
     # ── Phase 5: FindFlare ──────────────────────────────────────────────────
     log('Phase 5: searching for flare (sweep right)')
-    duburi.set_classes('flare')
     duburi.vision.find(
-        target=m.gate.flare,
+        target=duburi.models.gate.flare,
         move='yaw_right',
         yaw_rate_pct=FLARE_SEARCH_YAW,
         gain=GATE_SEARCH_GAIN,
@@ -113,7 +108,7 @@ def run(duburi, log):
     # ── Phase 6: HomeFlare ──────────────────────────────────────────────────
     log('Phase 6: homing on flare (3-axis)')
     duburi.vision.home(
-        target=m.gate.flare,
+        target=duburi.models.gate.flare,
         yaw=True, forward=True, depth=True,
         dist=FLARE_STANDOFF, metric='height',
         duration=FLARE_ALIGN_T,
@@ -127,7 +122,7 @@ def run(duburi, log):
             f'({(step + 1) * ORBIT_STEP_DEG:.0f}° total)')
         duburi.yaw_left(ORBIT_STEP_DEG, timeout=ORBIT_STEP_T, settle=ORBIT_SETTLE_S)
         duburi.vision.track(
-            target=m.gate.flare,
+            target=duburi.models.gate.flare,
             yaw=True, forward=True, depth=True,
             dist=FLARE_STANDOFF,
             duration=ORBIT_TRACK_T,
@@ -138,9 +133,8 @@ def run(duburi, log):
     duburi.yaw_right(180.0, timeout=20.0)
 
     log('Phase 8: searching for gate (return leg)')
-    duburi.set_classes('gate')
     duburi.vision.find(
-        target=m.gate.gate,
+        target=duburi.models.gate.gate,
         move='yaw_right',
         yaw_rate_pct=20.0,
         gain=0.0,
@@ -148,7 +142,7 @@ def run(duburi, log):
 
     log('Phase 8: homing on gate for return pass')
     duburi.vision.home(
-        target=m.gate.gate,
+        target=duburi.models.gate.gate,
         yaw=True, forward=True,
         dist=GATE_STANDOFF, metric='area',
         duration=RETURN_ALIGN_T,

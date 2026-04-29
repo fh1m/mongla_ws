@@ -35,26 +35,32 @@ to one AUV physical motion and maps to one future YASMIN state:
 
 Model context (multi-model missions):
 
-    m = duburi.models(
-        gate   = ('gate_flare_medium_100ep', ['gate', 'flare']),
-        slalom = ('slalom_combined',          ['slalom_red', 'slalom_white']),
+    duburi.models(
+        gate   = 'gate_flare_medium_100ep',
+        slalom = 'slalom_combined',
     )
-    duburi.vision.find(target=m.gate.gate,  move='forward', gain=35)
-    duburi.vision.home(target=m.gate.gate,  yaw=True, lat=True)
-    duburi.vision.turn(target=m.slalom[0])  # slalom_red by index
+    duburi.vision.find(target=duburi.models.gate.gate,       move='forward', gain=35)
+    duburi.vision.home(target=duburi.models.gate.gate,       yaw=True, lat=True)
+    duburi.vision.turn(target=duburi.models.slalom.slalom_red)
+
+    # Strict class list (validates attribute access at handle time):
+    duburi.models(gate=('gate_flare_medium_100ep', ['gate', 'flare']))
+    duburi.vision.find(target=duburi.models.gate.gate)   # OK
+    # duburi.vision.find(target=duburi.models.gate.typo) # → AttributeError
 
 When a ClassRef is passed as target, the DSL automatically calls
-set_model() + set_classes() before sending the goal.
+set_model() + set_classes() before sending the goal — no explicit
+duburi.set_classes() or duburi.use() needed per verb.
 
 Canonical competition task pattern (gate pass):
 
-    m = duburi.models(gate=('gate_flare_medium_100ep', ['gate', 'flare']))
+    duburi.models(gate='gate_flare_medium_100ep')
     duburi.set_depth(-1.2)
-    duburi.vision.find(target=m.gate.gate, move='forward', gain=35, timeout=45)
-    duburi.vision.turn(target=m.gate.gate, duration=6)
-    duburi.vision.slide(target=m.gate.gate, duration=5)
-    duburi.vision.approach(target=m.gate.gate, dist=0.42, metric='area', duration=10)
-    duburi.vision.home(target=m.gate.gate, yaw=True, lat=True,
+    duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
+    duburi.vision.turn(target=duburi.models.gate.gate, duration=6)
+    duburi.vision.slide(target=duburi.models.gate.gate, duration=5)
+    duburi.vision.approach(target=duburi.models.gate.gate, dist=0.42, metric='area', duration=10)
+    duburi.vision.home(target=duburi.models.gate.gate, yaw=True, lat=True,
                        gate_guard=True, duration=8)
     duburi.move_forward(3.5, gain=55)
 
@@ -93,7 +99,7 @@ track(target, yaw=True, forward=True, lat=False, depth=False,
       dist=0.55, duration=60)
     Track continuously until duration expires (never exits on settle).
 
-Detector control:
+Detector control (manual — ClassRef targets do this automatically):
     duburi.set_classes('gate')         # only gate detections
     duburi.set_classes('gate,flare')   # gate + flare
     duburi.set_classes('')             # all classes
@@ -112,7 +118,7 @@ import subprocess
 import sys
 import time as _time
 
-from .model_context import ClassRef, ModelHandle, ModelRegistry
+from .model_context import ClassRef, ModelRegistry
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -159,6 +165,7 @@ class DuburiMission:
         self.camera = camera
         self.target = target
         self.vision = _VisionDSL(self)
+        self.models = ModelRegistry()
 
     # ================================================================== #
     #  Single send + log helper                                           #
@@ -282,50 +289,6 @@ class DuburiMission:
         return self._send('move_lateral_dist',
                           distance_m=float(metres),
                           gain=gain, dvl_tolerance=tolerance, settle=settle)
-
-    # ================================================================== #
-    #  Model context factory                                               #
-    # ================================================================== #
-
-    def models(self, **kwargs) -> ModelRegistry:
-        """Create typed model handles for vision verbs.
-
-        Each keyword argument maps an alias to a (stem, classes) tuple.
-        The returned ModelRegistry gives attribute access to ModelHandle
-        objects; class names are then attributes or indices on the handle.
-
-        Parameters
-        ----------
-        **kwargs : alias = (stem, [class, ...])
-            stem    -- detector registry key or model filename stem
-            classes -- list of YOLO class name strings for this model
-
-        Returns
-        -------
-        ModelRegistry
-            Access handles as attributes: ``m.gate``, ``m.slalom``.
-            Access classes by name: ``m.gate.gate``, ``m.gate.flare``.
-            Access classes by index: ``m.slalom[0]``, ``m.slalom[1]``.
-
-        Example::
-
-            m = duburi.models(
-                gate   = ('gate_flare_medium_100ep', ['gate', 'flare']),
-                slalom = ('slalom_combined',          ['slalom_red', 'slalom_white']),
-            )
-            duburi.vision.find(target=m.gate.gate, move='forward', gain=35)
-            duburi.vision.home(target=m.gate.flare, yaw=True, depth=True)
-            duburi.vision.turn(target=m.slalom[0])  # slalom_red
-        """
-        handles: dict[str, ModelHandle] = {}
-        for alias, spec in kwargs.items():
-            if isinstance(spec, (list, tuple)) and len(spec) == 2:
-                stem, classes = spec
-            else:
-                stem    = str(spec)
-                classes = []
-            handles[alias] = ModelHandle(alias, str(stem), list(classes))
-        return ModelRegistry(handles)
 
     # ================================================================== #
     #  Vision detector control                                             #
