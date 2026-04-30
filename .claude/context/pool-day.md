@@ -331,6 +331,9 @@ duburi.set_classes('')          # all classes (debug only)
 # Watch state live
 watch -n 0.5 "ros2 topic echo /duburi/state --once 2>/dev/null"
 
+# Live camera + detection feed (OpenCV window, no Qt/rqt needed)
+ros2 run duburi_vision vision_display --ros-args -p camera:=forward
+
 # See what detector is currently classifying
 ros2 topic echo /duburi/vision/forward/detections --once | grep class
 
@@ -339,6 +342,10 @@ ros2 run duburi_planner duburi set_depth --target -0.8
 
 # Manual heading lock
 ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
+
+# DVL distance moves (with heading lock active)
+ros2 run duburi_planner duburi move_forward_dist --distance_m 1.0 --gain 60
+ros2 run duburi_planner duburi move_back_dist    --distance_m 1.0 --gain 60
 
 # Abort / safe state
 ros2 run duburi_planner duburi stop && ros2 run duburi_planner duburi disarm
@@ -354,5 +361,5 @@ ros2 run duburi_planner duburi stop && ros2 run duburi_planner duburi disarm
 - Mission composition patterns: [`mission-cookbook.md`](./mission-cookbook.md)
 - Gate+flare mission source: [`src/duburi_planner/duburi_planner/missions/gate_flare_prequal.py`](../../src/duburi_planner/duburi_planner/missions/gate_flare_prequal.py)
 - Model README: [`src/duburi_vision/models/README.md`](../../src/duburi_vision/models/README.md)
-- DVL integration: [`dvl-integration.md`](./dvl-integration.md)
+- DVL reference (Nucleus 1000, POSHOLD, unused capabilities): [`dvl-reference.md`](./dvl-reference.md)
 - Known bugs: [`known-issues.md`](./known-issues.md)
