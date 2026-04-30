@@ -76,38 +76,98 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 
 ### ROS params on `auv_manager_node`
 
-| Param           | Type   | Default        | Notes                                                         |
-|-----------------|--------|----------------|---------------------------------------------------------------|
-| `mode`          | string | `sim`          | One of `sim`, `pool`, `laptop`, `desk` (see `connection_config.PROFILES`) |
-| `smooth_yaw`    | bool   | `false`        | `true` → `yaw_glide` (smootherstep setpoint sweep)            |
-| `smooth_translate` | bool   | `false`        | `true` → `drive_*_eased` (trapezoid thrust + settle-only brake; forward + lateral) |
-| `yaw_source`    | string | `mavlink_ahrs` | `mavlink_ahrs` \| `bno085`                                    |
-| `bno085_port`   | string | `/dev/ttyACM0` | USB CDC device path (only when `yaw_source==bno085`)          |
-| `bno085_baud`   | int    | `115200`       | BNO085 stream baud rate                                       |
+| Param                   | Type   | Default         | Notes                                                                        |
+|-------------------------|--------|-----------------|------------------------------------------------------------------------------|
+| `mode`                  | string | `pool`          | `auto`, `pool`, `sim`, `laptop`, `desk` (see `connection_config.PROFILES`)  |
+| `smooth_yaw`            | bool   | `false`         | `true` → `yaw_glide` (smootherstep setpoint sweep)                           |
+| `smooth_translate`      | bool   | `false`         | `true` → `drive_*_eased` (trapezoid thrust + settle-only brake)              |
+| `yaw_source`            | string | `dvl`           | `dvl` \| `bno085_dvl` \| `bno085` \| `mavlink_ahrs`                         |
+| `bno085_port`           | string | `/dev/ttyACM0`  | USB CDC device path (bno085 sources only)                                    |
+| `bno085_baud`           | int    | `115200`        | BNO085 stream baud rate                                                      |
+| `nucleus_dvl_host`      | string | `192.168.2.201` | DVL TCP hostname                                                             |
+| `nucleus_dvl_port`      | int    | `9000`          | DVL TCP port                                                                 |
+| `nucleus_dvl_password`  | string | `nortek`        | DVL authentication password                                                  |
+| `dvl_auto_connect`      | bool   | `true`          | Auto-connect DVL at startup (background retry loop)                          |
+| `dvl_retry_s`           | float  | `5.0`           | Seconds between auto-connect retry attempts                                  |
 
 `sensors_node` accepts a strict subset (`yaw_source`, `bno085_port`,
 `bno085_baud`, plus `calibrate` bool) for diagnostic-only use.
 
 ---
 
-## 2. Real package layout
+## 2. Complete command reference
+
+All verbs listed here are entries in `duburi_control/commands.py` and are available on the `/duburi/move` action, `duburi` CLI, and `DuburiMission` DSL.
+
+### Motion
+
+| Verb               | Key params                          | Notes                                               |
+|--------------------|-------------------------------------|-----------------------------------------------------|
+| `arm`              | `timeout`                           | Waits for ACK                                       |
+| `disarm`           | `timeout`                           | Clears RC overrides, then disarms                   |
+| `set_mode`         | `target_name` (str)                 | Mode name: `ALT_HOLD`, `POSHOLD`, `MANUAL`, …       |
+| `stop`             | —                                   | Active neutral RC (1500) for 0.6 s                  |
+| `pause`            | `duration`                          | Release all RC overrides; autopilot takes over       |
+| `head`             | —                                   | Read-only: returns current yaw in `final_value`     |
+| `move_forward`     | `duration`, `gain`, `settle`        | Ch5 forward thrust, open-loop timed                 |
+| `move_back`        | `duration`, `gain`, `settle`        | Ch5 reverse thrust, open-loop timed                 |
+| `move_left`        | `duration`, `gain`, `settle`        | Ch6 lateral left, open-loop timed                   |
+| `move_right`       | `duration`, `gain`, `settle`        | Ch6 lateral right, open-loop timed                  |
+| `arc`              | `duration`, `gain`, `yaw_rate_pct`, `settle` | Ch5 + Ch4 combined; curved trajectory        |
+| `yaw_left`         | `target` (deg), `timeout`, `settle` | Pivot left by N degrees                             |
+| `yaw_right`        | `target` (deg), `timeout`, `settle` | Pivot right by N degrees                            |
+| `set_depth`        | `target` (m neg), `timeout`, `settle` | Engage ALT_HOLD + drive to depth                  |
+| `lock_heading`     | `target` (deg), `timeout`           | 20 Hz background yaw lock; `target=0` = current     |
+| `unlock_heading`   | —                                   | Cancels the heading lock thread                     |
+
+### DVL (pool only — requires Nortek Nucleus 1000)
+
+| Verb                 | Key params                             | Notes                                          |
+|----------------------|----------------------------------------|------------------------------------------------|
+| `dvl_connect`        | —                                      | Manual TCP connect (auto if `dvl_auto_connect:=true`) |
+| `move_forward_dist`  | `distance_m`, `gain`, `dvl_tolerance`, `settle` | DVL closed-loop forward                |
+| `move_back_dist`     | `distance_m`, `gain`, `dvl_tolerance`, `settle` | DVL closed-loop reverse                |
+| `move_lateral_dist`  | `distance_m`, `gain`, `dvl_tolerance`, `settle` | DVL closed-loop lateral (+ve = right)  |
+
+Heading lock stays active during all `*_dist` moves — Ch4 holds heading while DVL drives Ch5/Ch6.
+
+### Vision (closed-loop, requires camera + detector running)
+
+| Verb                   | DSL alias               | Axes                                | Notes                                      |
+|------------------------|-------------------------|-------------------------------------|--------------------------------------------|
+| `vision_align_yaw`     | `vision.turn()`         | Ch4 yaw                             | Centres target horizontally                |
+| `vision_align_lat`     | `vision.slide()`        | Ch6 lateral                         | Centres target laterally, heading held     |
+| `vision_align_depth`   | `vision.hover()`        | depth setpoint                      | Centres target vertically                  |
+| `vision_hold_distance` | `vision.approach()`     | Ch5 forward                         | Standoff by bbox size metric               |
+| `vision_align_3d`      | `vision.home()` / `vision.track()` | any subset of yaw/lat/depth/forward | Multi-axis convergence         |
+| `vision_acquire`       | `vision.find()`         | optional move while waiting         | Blocks until target detected               |
+| `look_around`          | `vision.scan()`         | POSHOLD + incremental yaw           | Orbit-scan; exits on first detection       |
+
+All vision verbs share common fields: `camera`, `target_class`, `duration`, `timeout`,
+`kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`, `deadband`, `on_lost`, `stale_after`,
+`lock_mode`, `tracking`. Unset fields inherit the live `vision.*` ROS params on the manager.
+
+---
+
+## 3. Real package layout
 
 ```
 duburi_ws/src/
-├── duburi_interfaces/    # action defs ONLY (Move.action)
-├── duburi_control/       # MAVLink layer + per-axis movement helpers
-├── duburi_manager/       # ROS2 node + ActionServer + CLI + connection profiles
-└── duburi_sensors/       # YawSource abstraction (sensor-only, read-only)
+├── duburi_interfaces/    # ROS2 message + action defs (Move.action, DuburiState.msg)
+├── duburi_control/       # MAVLink layer + per-axis motion helpers + commands registry
+├── duburi_manager/       # ROS2 node: ActionServer, telemetry, VisionState pool
+├── duburi_sensors/       # YawSource abstraction (sensor-only, read-only)
+├── duburi_vision/        # Camera factory, YOLO detector, draw overlays, tracker
+└── duburi_planner/       # DuburiClient, DuburiMission DSL, mission scripts, CLI
 ```
 
-There are **no** `duburi_driver`, `duburi_bringup`, `duburi_teleop`,
-`duburi_mission`, or `duburi_vision` packages today. The 2023/2025
-reference codebases had several of those names; that history is
+There are **no** `duburi_driver`, `duburi_bringup`, `duburi_teleop`, or `duburi_mission`
+packages. The 2023/2025 reference codebases had several of those names; that history is
 captured in `proven-patterns.md` for pattern reference, not for layout.
 
 ---
 
-## 3. ROS2 node template
+## 4. ROS2 node template
 
 Used by `auv_manager_node` and `sensors_node`. Use this shape for any
 new node. Don't introduce launch files until we have at least three
@@ -167,7 +227,7 @@ if __name__ == '__main__':
 
 ---
 
-## 4. `package.xml` template (Python ROS2 package)
+## 5. `package.xml` template (Python ROS2 package)
 
 ```xml
 <?xml version="1.0"?>
@@ -195,7 +255,7 @@ if __name__ == '__main__':
 
 ---
 
-## 5. `setup.py` template
+## 6. `setup.py` template
 
 ```python
 import os
@@ -235,7 +295,7 @@ setup(
 
 ---
 
-## 6. Naming conventions
+## 7. Naming conventions
 
 ```
 Packages:      duburi_<name>              duburi_control, duburi_sensors
@@ -257,7 +317,7 @@ Constants:     UPPER_SNAKE                YAW_RATE_HZ, SETTLE_SEC, NETWORK
 
 ---
 
-## 7. QoS profiles
+## 8. QoS profiles
 
 We don't currently use custom QoS — defaults work for the action and
 the JSON state topic. If you add high-rate sensor topics later (e.g.
@@ -288,7 +348,7 @@ STATE_QOS = QoSProfile(
 
 ---
 
-## 8. Build commands
+## 9. Build commands
 
 ```bash
 cd ~/Ros_workspaces/duburi_ws
@@ -311,7 +371,7 @@ colcon test --packages-select duburi_manager
 
 ---
 
-## 9. Logging style
+## 10. Logging style
 
 ```python
 # Use the node logger, not print()
@@ -334,7 +394,7 @@ back the timestamp unless you're debugging a timing issue.
 
 ---
 
-## 10. What NOT to do
+## 11. What NOT to do
 
 - Don't open a second `pymavlink` connection from another node. The
   manager owns the MAVLink reader; everything else uses the `Move`
