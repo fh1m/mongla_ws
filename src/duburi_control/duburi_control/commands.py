@@ -260,6 +260,25 @@ COMMANDS = {
                      'gain': 25.0, 'yaw_rate_pct': 25.0,
                      'stale_after': 1.5, 'tracking': False},
     },
+    'look_around': {
+        'help':     'Switch to POSHOLD, hold position, and rotate incrementally '
+                    'searching for target_class. Exits immediately when target '
+                    'is detected. Makes a full orbit if duration allows. '
+                    'yaw_rate_pct = step degrees per look (positive=CW/right, '
+                    'negative=CCW/left). gain = turn speed %. '
+                    'settle = dwell seconds at each step to observe. '
+                    'target = override starting yaw (0.0 = current heading). '
+                    'Falls back to ALT_HOLD + heading lock if POSHOLD unavailable.',
+        'fields':   ['camera', 'target_class', 'duration', 'gain',
+                     'yaw_rate_pct', 'settle', 'target', 'stale_after'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'duration': 60.0,       # enough for a full 360° orbit at 20° steps
+                     'gain': 40.0,            # turn speed percent
+                     'yaw_rate_pct': 20.0,   # step degrees (positive = right orbit)
+                     'settle': 1.5,           # dwell per step to observe
+                     'target': 0.0,           # override start yaw; 0.0 = use current
+                     'stale_after': 1.0},     # detection freshness threshold
+    },
 }
 
 

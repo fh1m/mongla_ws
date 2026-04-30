@@ -5,7 +5,8 @@ string  cmd          # arm | disarm | set_mode | stop | pause |
                      # yaw_left | yaw_right | arc | set_depth |
                      # lock_heading | unlock_heading | dvl_connect |
                      # vision_align_3d | vision_align_yaw | vision_align_lat |
-                     # vision_align_depth | vision_hold_distance | vision_acquire
+                     # vision_align_depth | vision_hold_distance | vision_acquire |
+                     # look_around
 float32 duration     # seconds  (move_*, arc, pause, vision_*)
 float32 gain         # 0-100 %  (move_*, arc, vision_acquire drive level)
 float32 target       # metres   (set_depth) or

@@ -32,12 +32,14 @@ The single-axis convenience verbs (``vision_align_yaw``, ``_lat``,
 canonical loop, no copy-paste.
 """
 
+import time
 from contextlib import nullcontext
 
 from .motion_vision import (
     VisionGains, vision_acquire as run_vision_acquire,
     vision_track_axes,
 )
+from .motion_yaw import yaw_snap
 from .pixhawk import Pixhawk
 
 
@@ -213,6 +215,102 @@ class VisionVerbs:
                 outcome.success, f'vision_acquire: {outcome.reason}',
                 final_value=outcome.elapsed_s,
                 error_value=(0.0 if outcome.success else float(timeout)))
+
+    def look_around(self, camera, target_class, duration, gain,
+                    yaw_rate_pct, settle, target, stale_after):
+        """Rotate on the spot looking for target_class.
+
+        Switches to POSHOLD (position hold via DVL) then yaws in
+        incremental steps of ``yaw_rate_pct`` degrees, dwelling
+        ``settle`` seconds at each stop to observe. Exits immediately
+        when target_class is detected. Completes a full 360° orbit if
+        duration allows.
+
+        Parameters
+        ----------
+        gain         -- yaw turn speed percent (Ch4)
+        yaw_rate_pct -- step size in degrees, signed
+                        positive = clockwise (right), negative = CCW (left)
+        settle       -- dwell time at each yaw stop to observe (seconds)
+        target       -- override starting yaw in degrees (0.0 = current)
+        stale_after  -- detection freshness tolerance (seconds)
+        """
+        with self._command_scope('look_around'):
+            self._send_neutral_and_settle()
+            vstate = self._resolve_vision_state(camera)
+
+            # Try POSHOLD for true position hold. Fall back to ALT_HOLD
+            # gracefully — position may drift but the scan still works.
+            accepted, _ = self.pixhawk.set_mode('POSHOLD')
+            if not accepted:
+                self.log.warning(
+                    '[CMD  ] look_around: POSHOLD rejected — '
+                    'falling back to ALT_HOLD (position may drift)')
+                self._ensure_alt_hold('look_around')
+
+            step_deg  = float(yaw_rate_pct) or 20.0   # degrees per step
+            turn_spd  = abs(float(gain)) or 40.0
+            dwell     = max(float(settle), 0.3)
+            # Negative step_deg → left (CCW); positive → right (CW).
+            # Use the same sign for the yaw turn calls.
+            turn_deg  = abs(step_deg) * (-1 if step_deg < 0 else 1)
+
+            # Snap to starting yaw if the caller requests one.
+            start_yaw = float(target)
+            if start_yaw != 0.0:
+                yaw_snap(self.pixhawk, self._current_heading(), start_yaw,
+                         timeout=10.0, label='LOOK_INIT', log=self.log,
+                         yaw_source=self.yaw_source)
+
+            deadline  = time.monotonic() + max(float(duration), 1.0)
+            swept_deg = 0.0
+            found     = False
+
+            self.log.info(
+                f'[CMD  ] look_around camera={camera!r} class={target_class!r} '
+                f'step={step_deg:+.0f}° speed={turn_spd:.0f}% '
+                f'dwell={dwell:.1f}s budget={duration:.0f}s')
+
+            with self._suspend_heading_lock():
+                while time.monotonic() < deadline:
+                    # Observe at current yaw position.
+                    t_obs = time.monotonic()
+                    while time.monotonic() - t_obs < dwell:
+                        sample = vstate.bbox_error(target_class)
+                        if sample is not None and sample.age_s <= stale_after:
+                            found = True
+                            break
+                        time.sleep(0.05)
+
+                    if found:
+                        break
+
+                    # Exit after a full orbit even if duration remains.
+                    swept_deg += abs(turn_deg)
+                    if swept_deg >= 360.0:
+                        break
+
+                    if time.monotonic() >= deadline:
+                        break
+
+                    # Yaw one step.
+                    cur = self._current_heading()
+                    tgt = (cur + turn_deg) % 360.0
+                    yaw_snap(self.pixhawk, cur, tgt,
+                             timeout=max(dwell * 2, 6.0),
+                             label='LOOK', log=self.log,
+                             yaw_source=self.yaw_source)
+
+            self._retarget_heading_lock(self._current_heading())
+            self._send_neutral_and_settle()
+
+            reason = (f'found {target_class!r} after {swept_deg:.0f}° scan'
+                      if found else
+                      f'no {target_class!r} detected after full scan ({swept_deg:.0f}°)')
+            self.log.info(f'[CMD  ] look_around: {reason}')
+            return self._make_result(found, f'look_around: {reason}',
+                                     final_value=swept_deg,
+                                     error_value=0.0)
 
     # ---- vision helpers (private) ----------------------------------- #
 
