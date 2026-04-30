@@ -32,6 +32,42 @@ to one AUV physical motion and maps to one future YASMIN state:
                        gate_guard=True,
                        pass_at=0.35)
     duburi.vision.track(target, duration)       -- track continuously
+    duburi.vision.scan(target, step=20, dwell=1.5) -- orbit-scan for target
+
+Detection guards (non-blocking, safe in tight loops):
+
+    # Move forward until the gate is detected, then align
+    while not duburi.detected('gate'):
+        duburi.move_forward(1.0, gain=30)
+    duburi.vision.home(target='gate', yaw=True, lat=True)
+
+    # Branch on action result (.success is True on any successful verb)
+    result = duburi.vision.find(target='gate', timeout=30)
+    if result.success:
+        duburi.vision.home(target='gate', yaw=True)
+
+    # Works with ClassRef model handles (no model switching side-effect):
+    duburi.models(gate='gate_flare_medium_100ep')
+    while not duburi.detected(duburi.models.gate.gate):
+        duburi.move_forward(0.5, gain=25)
+    duburi.vision.home(target=duburi.models.gate.gate)
+
+    # Override camera or freshness window:
+    duburi.detected('flare', camera='downward', stale_after=2.0)
+
+`detected()` subscribes to `/duburi/vision/<camera>/detections` on
+first call (lazy, per-camera). It is a zero-wait cache check — every
+blocking DSL verb keeps the cache warm via ROS callbacks processed
+during the action spin.
+
+All DSL verbs return `Move.Result` with `result.success`, `result.final_value`,
+and `result.error_value`. Use `result.success` to gate state transitions:
+
+    result = duburi.vision.scan(target='flare', duration=60)
+    if result.success:
+        duburi.vision.home(target='flare', yaw=True, depth=True)
+    else:
+        duburi.move_forward(3.0)   # fallback: advance and retry
 
 Model context (multi-model missions):
 
@@ -118,6 +154,9 @@ import subprocess
 import sys
 import time as _time
 
+import rclpy
+from vision_msgs.msg import Detection2DArray
+
 from .model_context import ClassRef, ModelRegistry
 
 
@@ -166,6 +205,11 @@ class DuburiMission:
         self.target = target
         self.vision = _VisionDSL(self)
         self.models = ModelRegistry()
+        # Detection cache: camera -> (monotonic_stamp, detections_list)
+        # Populated by lazy per-camera subscriptions; refreshed automatically
+        # during every blocking send() via spin_until_future_complete.
+        self._det_cache: dict[str, tuple[float, list]] = {}
+        self._det_subs:  dict[str, object] = {}  # keeps subscriptions alive
 
     # ================================================================== #
     #  Single send + log helper                                           #
@@ -176,6 +220,64 @@ class DuburiMission:
         result = self.client.send(cmd, **fields)
         self.log.info(_format_outcome(cmd, result))
         return result
+
+    # ================================================================== #
+    #  Detection guard -- non-blocking cache check                        #
+    # ================================================================== #
+
+    def _subscribe_detections(self, camera: str) -> None:
+        topic = f'/duburi/vision/{camera}/detections'
+        sub = self.client.node.create_subscription(
+            Detection2DArray, topic,
+            lambda msg, cam=camera: self._on_detections(cam, msg), 10)
+        self._det_subs[camera] = sub
+
+    def _on_detections(self, camera: str, msg: Detection2DArray) -> None:
+        self._det_cache[camera] = (_time.monotonic(), list(msg.detections))
+
+    def detected(self, target_class, *,
+                 camera: str | None = None,
+                 stale_after: float = 1.0) -> bool:
+        """Return True if `target_class` was recently detected on `camera`.
+
+        Non-blocking: reads a local cache updated by ROS callbacks. Safe to
+        call between DSL verbs in tight loops. Lazily subscribes to the
+        `/duburi/vision/<camera>/detections` topic on first call.
+
+        Parameters
+        ----------
+        target_class : str | ClassRef
+            Class name to look for (e.g. ``'gate'``, ``duburi.models.gate.gate``).
+        camera : str | None
+            Camera to query. Defaults to ``duburi.camera``.
+        stale_after : float
+            Detections older than this many seconds are treated as absent.
+
+        Examples::
+
+            while not duburi.detected('gate'):
+                duburi.move_forward(1.0, gain=30)
+
+            if duburi.detected(duburi.models.gate.flare, stale_after=2.0):
+                duburi.vision.home(target='flare', yaw=True)
+        """
+        if isinstance(target_class, ClassRef):
+            target_class = target_class.class_name
+        cam = camera or self.camera
+        if cam not in self._det_subs:
+            self._subscribe_detections(cam)
+        # Drain any callbacks queued since the last spin (zero-wait).
+        rclpy.spin_once(self.client.node, timeout_sec=0.0)
+        entry = self._det_cache.get(cam)
+        if entry is None:
+            return False
+        stamp, detections = entry
+        if _time.monotonic() - stamp > stale_after:
+            return False
+        return any(
+            d.results and d.results[0].hypothesis.class_id == target_class
+            for d in detections
+        )
 
     # ================================================================== #
     #  Power / mode                                                        #
