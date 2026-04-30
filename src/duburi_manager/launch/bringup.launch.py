@@ -8,9 +8,9 @@ One-command pool-day bringup (defaults: pool mode, DVL auto-connect):
     # With vision + gate+flare model (forward camera):
     ros2 launch duburi_manager bringup.launch.py vision:=true
 
-    # Full pool day (BNO085 heading + DVL distance, gate+flare model, no rqt):
+    # Full pool day (BNO085 heading + DVL distance, gate+flare model, no viewer):
     ros2 launch duburi_manager bringup.launch.py vision:=true \\
-        yaw_source:=bno085_dvl rqt:=false
+        yaw_source:=bno085_dvl viewer:=false
 
     # Bench / sim -- no DVL, use mavlink AHRS:
     ros2 launch duburi_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs
@@ -70,7 +70,8 @@ def generate_launch_description():
         DeclareLaunchArgument('classes',    default_value='gate',
                               description='CSV class names for detector'),
         DeclareLaunchArgument('conf',       default_value='0.30'),
-        DeclareLaunchArgument('rqt',        default_value='true'),
+        DeclareLaunchArgument('viewer',     default_value='true',
+                              description='Open vision_display (OpenCV viewer) alongside vision pipeline'),
     ]
 
     manager_node = Node(
@@ -101,7 +102,7 @@ def generate_launch_description():
             'active_model':  LaunchConfiguration('active_model'),
             'classes':       LaunchConfiguration('classes'),
             'conf':          LaunchConfiguration('conf'),
-            'rqt':           LaunchConfiguration('rqt'),
+            'viewer':        LaunchConfiguration('viewer'),
         }.items(),
         condition=IfCondition(LaunchConfiguration('vision')),
     )

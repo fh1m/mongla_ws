@@ -1,14 +1,14 @@
-"""cameras_ -- camera + YOLO26 detector + optional tracker + debug viewer.
+"""cameras_ -- camera + YOLO26 detector + optional tracker + OpenCV viewer.
 
-The general-purpose launch file for the vision pipeline.  Detection is on
+The general-purpose launch file for the vision pipeline. Detection is on
 by default; tracking (ByteTrack + Kalman) is opt-in via with_tracking:=true.
+The viewer uses vision_display (OpenCV window) instead of rqt_image_view.
 
 Usage:
     ros2 launch duburi_vision cameras_.launch.py
     ros2 launch duburi_vision cameras_.launch.py device:=2 conf:=0.5
-    ros2 launch duburi_vision cameras_.launch.py rqt:=false           # headless
-    ros2 launch duburi_vision cameras_.launch.py device_param_type:=string device:=/dev/video2
-    ros2 launch duburi_vision cameras_.launch.py with_tracking:=true  # enable ByteTrack + Kalman
+    ros2 launch duburi_vision cameras_.launch.py viewer:=false         # headless
+    ros2 launch duburi_vision cameras_.launch.py with_tracking:=true   # enable ByteTrack + Kalman
     ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
 
     # Run on a pre-recorded video instead of a live webcam:
@@ -46,8 +46,8 @@ def generate_launch_description():
                               description='CSV class names or indices to detect; empty = all'),
         DeclareLaunchArgument('conf',          default_value='0.35'),
         DeclareLaunchArgument('iou',           default_value='0.5'),
-        DeclareLaunchArgument('rqt',           default_value='true',
-                              description='Open rqt_image_view on image_debug'),
+        DeclareLaunchArgument('viewer',        default_value='true',
+                              description='Open vision_display (OpenCV viewer) on image_debug'),
         DeclareLaunchArgument('with_tracking', default_value='false',
                               description='Start tracker_node (ByteTrack + Kalman) alongside detector'),
         DeclareLaunchArgument('track_buffer',  default_value='30',
@@ -105,12 +105,11 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('with_tracking')),
     )
 
-    image_topic = PythonExpression(["'/duburi/vision/' + '", cam_name, "' + '/image_debug'"])
     image_viewer = Node(
-        package='rqt_image_view', executable='rqt_image_view',
+        package='duburi_vision', executable='vision_display',
         name='duburi_image_view', output='screen',
-        arguments=[image_topic],
-        condition=IfCondition(LaunchConfiguration('rqt')),
+        parameters=[{'camera': cam_name}],
+        condition=IfCondition(LaunchConfiguration('viewer')),
     )
 
     return LaunchDescription(args + [camera_node, detector_node, tracker_node, image_viewer])

@@ -1,29 +1,36 @@
 #!/usr/bin/env python3
-"""vision_display -- lightweight OpenCV viewer for the perception pipeline.
+"""vision_display -- OpenCV viewer for the perception pipeline.
 
-Replaces rqt_image_view for debug sessions. Starts faster, shows a live
-HUD with depth/yaw/mode/battery from /duburi/state, and requires no Qt.
+Subscribes to image_debug and /duburi/state and shows a live window with
+a HUD overlay. No Qt or rqt required.
 
-Topics consumed
----------------
-  /duburi/vision/<cam>/image_debug   sensor_msgs/Image   annotated detector output
-  /duburi/state                      duburi_interfaces/msg/DuburiState
+With launch_pipeline:=true the node also starts camera_node and
+detector_node as child processes so the whole pipeline comes up with
+a single command:
+
+    ros2 run duburi_vision vision_display --ros-args -p launch_pipeline:=true
+
+    # Choose camera and model:
+    ros2 run duburi_vision vision_display --ros-args \\
+        -p launch_pipeline:=true -p camera:=forward \\
+        -p model:=gate_flare_medium_100ep -p classes:=gate
 
 ROS2 parameters
 ---------------
-  camera  (string, default 'forward')  camera namespace under /duburi/vision/
-  topic   (string, default '')         override full image topic (skips camera param)
+  camera          string   'forward'               camera namespace
+  topic           string   ''                      override full image topic
+  launch_pipeline bool     false                   auto-start camera_node + detector_node
+  model           string   'yolo26_nano_pretrained' model name/path (launch_pipeline only)
+  classes         string   'person'                class filter   (launch_pipeline only)
+  conf            float    0.35                    confidence     (launch_pipeline only)
 
-Usage
------
-  ros2 run duburi_vision vision_display
-  ros2 run duburi_vision vision_display --ros-args -p camera:=forward
-  ros2 run duburi_vision vision_display --ros-args -p topic:=/duburi/vision/forward/image_raw
-
-Press Q or Ctrl-C to exit.
+Press Q or Ctrl-C to exit. Child processes are terminated on exit.
 """
 
 from __future__ import annotations
+
+import subprocess
+import time
 
 import cv2
 import rclpy
@@ -34,16 +41,15 @@ from sensor_msgs.msg import Image
 
 from duburi_interfaces.msg import DuburiState
 
-# HUD layout constants
+# HUD layout
 _HUD_FONT      = cv2.FONT_HERSHEY_SIMPLEX
 _HUD_SCALE     = 0.55
 _HUD_THICKNESS = 1
-_HUD_PAD       = 8    # pixels from edge
-_HUD_LINE_H    = 22   # pixels per line
-_HUD_BG_ALPHA  = 0.45 # background rectangle opacity
+_HUD_PAD       = 8
+_HUD_LINE_H    = 22
+_HUD_BG_ALPHA  = 0.45
 
-# Log a reminder every N seconds if no frames arrive yet
-_WAIT_LOG_INTERVAL = 5.0
+_WAIT_LOG_INTERVAL = 5.0  # seconds between "still waiting" reminders
 
 
 def _draw_hud(frame, state: DuburiState) -> None:
@@ -73,32 +79,73 @@ def _draw_hud(frame, state: DuburiState) -> None:
                     _HUD_FONT, _HUD_SCALE, (220, 220, 220), _HUD_THICKNESS, cv2.LINE_AA)
 
 
+def _start_pipeline(camera: str, model: str, classes: str,
+                    conf: float) -> list[subprocess.Popen]:
+    """Spawn camera_node + detector_node as child processes.
+
+    Returns the list of Popen handles so the caller can terminate them.
+    Waits 1 s for camera_node to start before launching detector_node.
+    """
+    camera_proc = subprocess.Popen([
+        'ros2', 'run', 'duburi_vision', 'camera_node',
+        '--ros-args',
+        '-p', f'name:={camera}',
+        '-p', 'source:=webcam',
+    ])
+
+    time.sleep(1.0)  # give camera_node time to advertise its topic
+
+    detector_proc = subprocess.Popen([
+        'ros2', 'run', 'duburi_vision', 'detector_node',
+        '--ros-args',
+        '-p', f'camera:={camera}',
+        '-p', f'model_path:={model}',
+        '-p', f'classes:={classes}',
+        '-p', f'conf:={conf}',
+        '-p', 'publish_debug_image:=true',
+    ])
+
+    return [camera_proc, detector_proc]
+
+
 class VisionDisplayNode(Node):
     def __init__(self):
         super().__init__('vision_display')
 
-        self.declare_parameter('camera', 'forward')
-        self.declare_parameter('topic', '')
+        self.declare_parameter('camera',          'forward')
+        self.declare_parameter('topic',           '')
+        self.declare_parameter('launch_pipeline', False)
+        self.declare_parameter('model',           'yolo26_nano_pretrained')
+        self.declare_parameter('classes',         'person')
+        self.declare_parameter('conf',            0.35)
 
-        camera = self.get_parameter('camera').get_parameter_value().string_value
-        topic  = self.get_parameter('topic').get_parameter_value().string_value
+        camera          = self.get_parameter('camera').get_parameter_value().string_value
+        topic           = self.get_parameter('topic').get_parameter_value().string_value
+        launch_pipeline = self.get_parameter('launch_pipeline').get_parameter_value().bool_value
+        model           = self.get_parameter('model').get_parameter_value().string_value
+        classes         = self.get_parameter('classes').get_parameter_value().string_value
+        conf            = self.get_parameter('conf').get_parameter_value().double_value
+
         img_topic = topic or f'/duburi/vision/{camera}/image_debug'
 
+        self._pipeline_procs: list[subprocess.Popen] = []
+
+        if launch_pipeline:
+            self.get_logger().info(f'[DISP ] starting camera_node + detector_node for camera={camera}')
+            self._pipeline_procs = _start_pipeline(camera, model, classes, conf)
+
         self.get_logger().info(f'[DISP ] subscribing to {img_topic}')
-        self.get_logger().info('[DISP ] waiting for first frame — make sure camera_node + detector_node are running')
+        if not launch_pipeline:
+            self.get_logger().info('[DISP ] tip: add --ros-args -p launch_pipeline:=true to start the full pipeline')
 
         self._bridge = CvBridge()
         self._state: DuburiState | None = None
         self._frames_received = 0
         self._last_wait_log = self.get_clock().now()
 
-        # Best-effort QoS: a slow viewer must never stall the publisher
         qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
-
         self.create_subscription(Image, img_topic, self._on_image, qos)
         self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
-
-        # Periodic "still waiting" reminder until first frame
         self.create_timer(1.0, self._check_waiting)
 
     def _check_waiting(self) -> None:
@@ -107,7 +154,7 @@ class VisionDisplayNode(Node):
         now = self.get_clock().now()
         elapsed = (now - self._last_wait_log).nanoseconds / 1e9
         if elapsed >= _WAIT_LOG_INTERVAL:
-            self.get_logger().warn('[DISP ] no frames yet — is the camera/detector pipeline running?')
+            self.get_logger().warn('[DISP ] no frames yet — is the pipeline running? (try launch_pipeline:=true)')
             self._last_wait_log = now
 
     def _on_state(self, msg: DuburiState) -> None:
@@ -122,6 +169,11 @@ class VisionDisplayNode(Node):
         if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q')):
             raise KeyboardInterrupt
 
+    def stop_pipeline(self) -> None:
+        for proc in self._pipeline_procs:
+            proc.terminate()
+        self._pipeline_procs.clear()
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -132,6 +184,7 @@ def main(args=None):
         pass
     finally:
         cv2.destroyAllWindows()
+        node.stop_pipeline()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

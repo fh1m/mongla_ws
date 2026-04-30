@@ -113,14 +113,82 @@ the [Quickstart smoke tests](#quickstart-smoke-tests) right below.
 
 ## Quickstart smoke tests
 
-> Eight copy-paste scenarios, in the order you would actually run them.
-> Each block lists **what success looks like** and **the exact commands**.
 > All commands assume `source /opt/ros/humble/setup.bash && source install/setup.bash`.
+> Setting up a fresh Jetson / dev box? See [`docs/JETSON_SETUP.md`](docs/JETSON_SETUP.md).
 
-> **Setting up a fresh Jetson / dev box?** See
-> [`docs/JETSON_SETUP.md`](docs/JETSON_SETUP.md) for the apt + pip +
-> udev one-time install, then come back here. Python deps live in
-> [`requirements.txt`](requirements.txt) at the workspace root.
+### Subsystem commands — bring each layer up individually
+
+Use these when a bundled launch fails and you need to isolate which part broke.
+Each subsystem is independent; start from the bottom of the stack upward.
+
+```bash
+# ── 1. Flight controller (MAVLink/ArduSub) ───────────────────────────────
+ros2 run duburi_manager start                      # auto-detects pool/sim/desk
+ros2 run duburi_manager start --ros-args -p mode:=sim          # force sim
+ros2 run duburi_manager start --ros-args -p yaw_source:=bno085 # BNO heading
+# Verify: should print [STATE] armed=false depth=0.0
+ros2 topic echo /duburi/state --once
+
+# ── 2. BNO085 external IMU (optional, standalone diagnostic) ─────────────
+ros2 run duburi_sensors sensors_node --ros-args -p yaw_source:=bno085
+# With calibration:
+ros2 run duburi_sensors sensors_node --ros-args -p yaw_source:=bno085 -p calibrate:=true
+
+# ── 3. DVL — Nortek Nucleus 1000 (pool only) ─────────────────────────────
+ping 192.168.2.201                                 # reachability check first
+ros2 run duburi_manager bringup_check              # [PASS] Nucleus 1000 = ready
+ros2 run duburi_manager start --ros-args -p yaw_source:=dvl    # auto-connects
+ros2 run duburi_planner duburi dvl_connect         # manual connect if needed
+# DVL distance moves:
+ros2 run duburi_planner duburi move_forward_dist --distance_m 1.0 --gain 60
+ros2 run duburi_planner duburi move_back_dist    --distance_m 1.0 --gain 60
+ros2 run duburi_planner duburi move_lateral_dist --distance_m 0.5 --gain 40
+
+# ── 4. Camera (one node, no detector) ────────────────────────────────────
+ros2 run duburi_vision camera_node --ros-args -p name:=forward -p source:=webcam
+ros2 topic hz /duburi/vision/forward/image_raw     # verify frames ~30 Hz
+
+# ── 5. Detector (requires camera_node running) ───────────────────────────
+ros2 run duburi_vision detector_node --ros-args -p camera:=forward
+ros2 topic hz /duburi/vision/forward/detections    # verify ~15-25 Hz
+
+# ── 6. Tracker / ByteTrack (requires detector_node running) ──────────────
+ros2 run duburi_vision tracker_node --ros-args -p camera:=forward
+ros2 topic hz /duburi/vision/forward/tracks
+
+# ── 7. Vision viewer — OpenCV window (no Qt/rqt needed) ──────────────────
+# Attach to an already-running pipeline:
+ros2 run duburi_vision vision_display --ros-args -p camera:=forward
+
+# Start the full pipeline (camera + detector + viewer) in one command:
+ros2 run duburi_vision vision_display --ros-args \
+    -p launch_pipeline:=true -p camera:=forward \
+    -p model:=gate_flare_medium_100ep -p classes:=gate
+
+# ── 8. Full vision pipeline via launch (camera + detector + viewer) ───────
+ros2 launch duburi_vision cameras_.launch.py                           # webcam, viewer on
+ros2 launch duburi_vision cameras_.launch.py viewer:=false             # headless
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true       # + ByteTrack
+ros2 launch duburi_vision cameras_.launch.py camera:=forward model:=gate_flare_medium_100ep classes:=gate
+
+# Just the viewer (pipeline already running in another terminal):
+ros2 launch duburi_vision debug_view.launch.py camera:=forward
+
+# ── 9. Full AUV stack (FC + vision bundled) ───────────────────────────────
+ros2 launch duburi_manager bringup.launch.py                           # FC only
+ros2 launch duburi_manager bringup.launch.py vision:=true              # + vision + viewer
+ros2 launch duburi_manager bringup.launch.py vision:=true viewer:=false # headless
+ros2 launch duburi_manager bringup.launch.py vision:=true \
+    yaw_source:=bno085_dvl model:=gate_flare_medium_100ep classes:=gate conf:=0.45
+```
+
+**When something in the bundled launch fails:**
+1. No `/duburi/state` → FC (manager) not running or UDP 14550 unreachable
+2. No `image_raw` → camera_node failed (wrong device, permissions: `sudo usermod -aG video $USER`)
+3. No `detections` → detector_node failed (model file missing, CUDA error — check `[DET ]` logs)
+4. No vision command response → run `ros2 run duburi_vision vision_check` first
+
+---
 
 ### 0 — Bringup health check (no AUV needed)
 
@@ -1177,8 +1245,8 @@ work without water.
        classes:=gate \
        conf:=0.45
 
-   # Headless (no rqt image viewer):
-   ros2 launch duburi_manager bringup.launch.py vision:=true rqt:=false \
+   # Headless (no viewer — Jetson in pool without monitor):
+   ros2 launch duburi_manager bringup.launch.py vision:=true viewer:=false \
        yaw_source:=bno085_dvl model:=gate_flare_medium_100ep
    ```
 
@@ -1196,7 +1264,7 @@ work without water.
    | `classes` | `gate` | CSV class names: `gate` · `flare` · `gate,flare` · (empty = all) |
    | `conf` | `0.30` | 0.0–1.0 (use `0.45` for pool with our models) |
    | `dvl_auto_connect` | `true` | `true` · `false` |
-   | `rqt` | `true` | `true` · `false` (disable for headless Jetson run) |
+   | `viewer` | `true` | `true` · `false` (disable for headless Jetson run) |
 
 4. Expected startup banner:
 
