@@ -732,3 +732,50 @@ class _VisionDSL:
             lock_mode='follow',
             duration=float(duration),
             **overrides)
+
+    def scan(self, target=None, *,
+             camera=None,
+             step: float = 20.0,
+             speed: float = 40.0,
+             dwell: float = 1.5,
+             duration: float = 60.0,
+             start_yaw: float = 0.0,
+             **overrides):
+        """Rotate on the spot searching for target. Uses POSHOLD for position hold.
+
+        Takes incremental yaw steps, pausing at each position to observe.
+        Exits immediately when target is detected. Completes a full orbit
+        if duration allows without finding the target.
+
+        Parameters
+        ----------
+        step : float
+            Yaw increment in degrees per look (positive=CW/right, negative=CCW/left).
+            20.0 gives 18 stops for a full 360° orbit.
+        speed : float
+            Turn speed percent (0–100).
+        dwell : float
+            Seconds to observe at each yaw stop.
+        duration : float
+            Total time budget in seconds.
+        start_yaw : float
+            Snap to this heading before starting (0.0 = use current heading).
+
+        Example::
+
+            # Orbit right, 15° steps, stop when gate is found
+            result = duburi.vision.scan(target=m.gate.gate, step=15, duration=90)
+            if result.success:
+                duburi.vision.home(target=m.gate.gate, yaw=True, duration=10)
+        """
+        target_str = self._resolve_target(target)
+        return self._send(
+            'look_around',
+            camera=self._resolve_camera(camera),
+            target_class=target_str,
+            duration=float(duration),
+            gain=float(speed),
+            yaw_rate_pct=float(step),
+            settle=float(dwell),
+            target=float(start_yaw),
+            **overrides)
