@@ -159,16 +159,24 @@ logs converges on -0.5 m, every CLI exits 0.
 ### 2 — Vision pipeline (webcam, no AUV)
 
 ```bash
-# T1
+# T1: camera + detector
 ros2 launch duburi_vision cameras_.launch.py
-# T2 -- inspect annotated frames
-ros2 run rqt_image_view rqt_image_view /duburi/vision/laptop/image_debug
-# T3 -- inspect raw detections
+
+# T2: lightweight OpenCV viewer (replaces rqt_image_view — no Qt needed)
+ros2 run duburi_vision vision_display
+# Or a specific camera:
+ros2 run duburi_vision vision_display --ros-args -p camera:=laptop
+
+# T3: inspect raw detections
 ros2 topic echo /duburi/vision/laptop/detections
 ```
 
-Success: rqt_image_view shows your webcam with green bounding boxes around
-people. The detector logs `in_hz=~30  with_target=>0%`.
+Success: a window opens showing the webcam feed with bounding boxes and a
+depth/yaw HUD. The detector logs `in_hz=~30  with_target=>0%`.
+
+> **Note:** `vision_display` subscribes to `image_debug` — it shows "waiting for
+> first frame" until `cameras_.launch.py` is running. The HUD data comes from
+> `/duburi/state` which requires the manager to be up.
 
 ### 3 — Vision + control loop (the big one)
 
@@ -299,6 +307,7 @@ ros2 run duburi_manager bringup_check  # look for [PASS] Nucleus 1000
 # DVL closed-loop distance moves (heading lock stays active throughout)
 ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
 ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 60
+ros2 run duburi_planner duburi move_back_dist    --distance_m 2.0 --gain 60  # return
 ros2 run duburi_planner duburi move_lateral_dist --distance_m 1.0 --gain 40
 ros2 run duburi_planner duburi unlock_heading
 ```
@@ -368,6 +377,80 @@ Then `rg "cmd=lock_heading" session.log` returns every frame the verb
 produced, across every implementation file. Off by default; production
 runs stay quiet. Full format and examples in
 [.claude/context/mavlink-reference.md](.claude/context/mavlink-reference.md#per-call-audit-every-send_--set_-on-pixhawkpy).
+
+---
+
+### 10 — Individual subsystem bringup (debug each layer separately)
+
+When a bundled `bringup.launch.py` fails it's hard to tell which subsystem
+is the problem. Start each layer independently so errors are isolated:
+
+```bash
+# ── Flight controller / MAVLink layer ────────────────────────────────────
+# Start just the manager (no vision, no sensors)
+ros2 run duburi_manager start
+# Verify state is flowing
+ros2 topic echo /duburi/state --once
+# Manual arm test
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi disarm
+
+# ── BNO085 IMU (external yaw) ─────────────────────────────────────────────
+# Run the sensor node standalone — never touches thrusters
+ros2 run duburi_sensors sensors_node --ros-args -p yaw_source:=bno085
+# Calibrate if needed
+ros2 run duburi_sensors sensors_node --ros-args -p yaw_source:=bno085 -p calibrate:=true
+# Start manager with BNO085 heading
+ros2 run duburi_manager start --ros-args -p yaw_source:=bno085
+
+# ── DVL (Nortek Nucleus 1000) ─────────────────────────────────────────────
+# Check network reachability
+ping 192.168.2.201
+# Verify DVL in bringup check
+ros2 run duburi_manager bringup_check   # look for [PASS] Nucleus 1000
+# Start manager with DVL (auto-connects by default)
+ros2 run duburi_manager start --ros-args -p yaw_source:=dvl
+# Manual connect if auto-connect failed
+ros2 run duburi_planner duburi dvl_connect
+# Test DVL distance move
+ros2 run duburi_planner duburi move_forward_dist --distance_m 1.0 --gain 60
+ros2 run duburi_planner duburi move_back_dist    --distance_m 1.0 --gain 60
+
+# ── Camera node (one camera, no detector) ────────────────────────────────
+ros2 run duburi_vision camera_node --ros-args -p camera:=laptop
+# Verify frames
+ros2 topic hz /duburi/vision/laptop/image_raw
+
+# ── Detector node (YOLO inference, requires camera_node running) ─────────
+ros2 run duburi_vision detector_node --ros-args -p camera:=laptop
+# Verify detections
+ros2 topic hz /duburi/vision/laptop/detections
+ros2 topic echo /duburi/vision/laptop/detections --once
+
+# ── Tracker node (ByteTrack, requires detector_node running) ─────────────
+ros2 run duburi_vision tracker_node --ros-args -p camera:=laptop
+ros2 topic hz /duburi/vision/laptop/tracks
+
+# ── Vision viewer (requires camera_node + detector_node running) ─────────
+ros2 run duburi_vision vision_display --ros-args -p camera:=laptop
+# Or use the full pipeline health check
+ros2 run duburi_vision vision_check --camera laptop --require-class gate
+
+# ── Full vision pipeline via launch (all of the above in one) ────────────
+ros2 launch duburi_vision cameras_.launch.py                       # camera + detector
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true   # + tracker
+
+# ── Combined bringup (FC + vision, production) ───────────────────────────
+ros2 launch duburi_manager bringup.launch.py vision:=true
+```
+
+**When something fails:** start from the bottom of the chain. Check each
+`ros2 topic hz` before starting the next layer. The typical failure order is:
+1. No `/duburi/state` → manager not running or MAVLink UDP not reaching it
+2. No `image_raw` → camera_node not started or camera device missing
+3. No `detections` → detector_node failed (model file missing, CUDA error)
+4. No `tracks` → tracker_node not started
+5. Vision command times out → check `[VIS ]` logs on manager; run `vision_check` first
 
 ---
 

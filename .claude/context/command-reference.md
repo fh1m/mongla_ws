@@ -73,6 +73,7 @@ All 33 verbs at a glance. Required fields have no default listed.
 | `unlock_heading` | — | Stop heading lock |
 | `dvl_connect` | — | Connect Nucleus DVL (auto-connect also available) |
 | `move_forward_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop forward (heading lock stays active) |
+| `move_back_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop backward (same as move_forward_dist with reversed direction) |
 | `move_lateral_dist` | **distance_m** required (±), gain→36 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop lateral (heading lock stays active) |
 | `vision_acquire` | camera→laptop, target_class→person, target_name→'', timeout→30 s, gain→25 %, yaw_rate_pct→25 %, stale_after→1.5 s, tracking→false | Sweep until target seen |
 | `vision_align_yaw` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_yaw→60, on_lost→fail, stale_after→1.5 s, lock_mode→'', tracking→false | Centre target horizontally (heading) |
@@ -356,6 +357,26 @@ ros2 run duburi_planner duburi unlock_heading
 duburi.lock_heading(target=0.0)
 duburi.move_forward_dist(3.0, gain=60)
 duburi.unlock_heading()
+```
+
+### `move_back_dist`
+
+Drive backward exactly `distance_m` metres using DVL position feedback. Identical to
+`move_forward_dist` but always in reverse — no negative distance needed.
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi move_back_dist --distance_m 1.0 [--gain 60] [--dvl_tolerance 0.1]` |
+| DSL | `duburi.move_back_dist(1.0, gain=60)` |
+| Implementation | Calls `drive_forward_dist(signed_dir=-1, ...)` — same code path as move_forward_dist |
+
+```bash
+# Back off 1 m after approaching gate
+ros2 run duburi_planner duburi move_back_dist --distance_m 1.0 --gain 60
+
+# DSL — return to start after passing gate
+duburi.move_forward_dist(3.5, gain=60)   # pass gate
+duburi.move_back_dist(3.5, gain=60)      # return
 ```
 
 ### `move_lateral_dist`
