@@ -47,7 +47,7 @@ def generate_launch_description():
         DeclareLaunchArgument('conf',          default_value='0.35'),
         DeclareLaunchArgument('iou',           default_value='0.5'),
         DeclareLaunchArgument('viewer',        default_value='true',
-                              description='Open vision_display (OpenCV viewer) on image_debug'),
+                              description='Open vision_display (OpenCV viewer) on image_raw at full FPS'),
         DeclareLaunchArgument('with_tracking', default_value='false',
                               description='Start tracker_node (ByteTrack + Kalman) alongside detector'),
         DeclareLaunchArgument('track_buffer',  default_value='30',

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""vision_display -- OpenCV viewer for the perception pipeline.
+"""vision_display -- smooth OpenCV viewer for the perception pipeline.
 
-Subscribes to image_debug and /duburi/state and shows a live window with
-a HUD overlay. No Qt or rqt required.
+Subscribes to image_raw at full camera FPS and overlays the latest
+detections on every frame, so the window stays smooth (30 Hz) even
+when the detector runs at 5–10 Hz on GPU.
 
 With launch_pipeline:=true the node also starts camera_node and
 detector_node as child processes so the whole pipeline comes up with
@@ -18,7 +19,6 @@ a single command:
 ROS2 parameters
 ---------------
   camera          string   'forward'               camera namespace
-  topic           string   ''                      override full image topic
   launch_pipeline bool     false                   auto-start camera_node + detector_node
   model           string   'yolo26_nano_pretrained' model name/path (launch_pipeline only)
   classes         string   'person'                class filter   (launch_pipeline only)
@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+import threading
 
 import cv2
 import rclpy
@@ -38,8 +39,11 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
+from vision_msgs.msg import Detection2DArray
 
 from duburi_interfaces.msg import DuburiState
+from duburi_vision import draw
+from duburi_vision.detection.messages import array_to_detections
 
 # HUD layout
 _HUD_FONT      = cv2.FONT_HERSHEY_SIMPLEX
@@ -53,7 +57,7 @@ _WAIT_LOG_INTERVAL = 5.0  # seconds between "still waiting" reminders
 
 
 def _draw_hud(frame, state: DuburiState) -> None:
-    """Overlay depth / yaw / mode / battery in the top-left corner."""
+    """Overlay depth / yaw / mode / battery in the top-right corner."""
     lines = [
         f"depth : {state.depth_m:+.2f} m",
         f"yaw   : {state.yaw_deg:.1f} deg",
@@ -62,30 +66,28 @@ def _draw_hud(frame, state: DuburiState) -> None:
         f"armed : {'YES' if state.armed else 'no'}",
     ]
 
+    w = frame.shape[1]
     max_w = max(
         cv2.getTextSize(l, _HUD_FONT, _HUD_SCALE, _HUD_THICKNESS)[0][0]
         for l in lines
     )
     box_h = _HUD_LINE_H * len(lines) + _HUD_PAD
     box_w = max_w + _HUD_PAD * 2
+    x_off = w - box_w - 4
 
     overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (box_w, box_h), (20, 20, 20), -1)
+    cv2.rectangle(overlay, (x_off, 0), (w - 4, box_h), (20, 20, 20), -1)
     cv2.addWeighted(overlay, _HUD_BG_ALPHA, frame, 1 - _HUD_BG_ALPHA, 0, frame)
 
     for i, line in enumerate(lines):
         y = _HUD_PAD + (i + 1) * _HUD_LINE_H - 4
-        cv2.putText(frame, line, (_HUD_PAD, y),
+        cv2.putText(frame, line, (x_off + _HUD_PAD, y),
                     _HUD_FONT, _HUD_SCALE, (220, 220, 220), _HUD_THICKNESS, cv2.LINE_AA)
 
 
 def _start_pipeline(camera: str, model: str, classes: str,
                     conf: float) -> list[subprocess.Popen]:
-    """Spawn camera_node + detector_node as child processes.
-
-    Returns the list of Popen handles so the caller can terminate them.
-    Waits 1 s for camera_node to start before launching detector_node.
-    """
+    """Spawn camera_node + detector_node as child processes."""
     camera_proc = subprocess.Popen([
         'ros2', 'run', 'duburi_vision', 'camera_node',
         '--ros-args',
@@ -102,7 +104,7 @@ def _start_pipeline(camera: str, model: str, classes: str,
         '-p', f'model_path:={model}',
         '-p', f'classes:={classes}',
         '-p', f'conf:={conf}',
-        '-p', 'publish_debug_image:=true',
+        '-p', 'publish_debug_image:=false',  # display renders its own overlay
     ])
 
     return [camera_proc, detector_proc]
@@ -113,38 +115,49 @@ class VisionDisplayNode(Node):
         super().__init__('vision_display')
 
         self.declare_parameter('camera',          'forward')
-        self.declare_parameter('topic',           '')
         self.declare_parameter('launch_pipeline', False)
         self.declare_parameter('model',           'yolo26_nano_pretrained')
         self.declare_parameter('classes',         'person')
         self.declare_parameter('conf',            0.35)
 
         camera          = self.get_parameter('camera').get_parameter_value().string_value
-        topic           = self.get_parameter('topic').get_parameter_value().string_value
         launch_pipeline = self.get_parameter('launch_pipeline').get_parameter_value().bool_value
         model           = self.get_parameter('model').get_parameter_value().string_value
         classes         = self.get_parameter('classes').get_parameter_value().string_value
         conf            = self.get_parameter('conf').get_parameter_value().double_value
 
-        img_topic = topic or f'/duburi/vision/{camera}/image_debug'
-
+        self._camera = camera
         self._pipeline_procs: list[subprocess.Popen] = []
 
         if launch_pipeline:
             self.get_logger().info(f'[DISP ] starting camera_node + detector_node for camera={camera}')
             self._pipeline_procs = _start_pipeline(camera, model, classes, conf)
 
-        self.get_logger().info(f'[DISP ] subscribing to {img_topic}')
+        raw_topic = f'/duburi/vision/{camera}/image_raw'
+        det_topic = f'/duburi/vision/{camera}/detections'
+
+        self.get_logger().info(f'[DISP ] subscribing {raw_topic} (full-rate) + {det_topic}')
         if not launch_pipeline:
             self.get_logger().info('[DISP ] tip: add --ros-args -p launch_pipeline:=true to start the full pipeline')
 
         self._bridge = CvBridge()
         self._state: DuburiState | None = None
+        self._detections: list = []          # latest cached detections
+        self._det_lock = threading.Lock()    # guard _detections writes from det callback
         self._frames_received = 0
         self._last_wait_log = self.get_clock().now()
 
-        qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
-        self.create_subscription(Image, img_topic, self._on_image, qos)
+        # FPS tracking
+        self._fps_t0 = time.monotonic()
+        self._fps_count = 0
+        self._fps_display = 0.0
+
+        qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
+
+        # Full-rate raw frame subscription — drives the display loop
+        self.create_subscription(Image, raw_topic, self._on_image, qos_be)
+        # Detection subscription — cached and overlaid on raw frames
+        self.create_subscription(Detection2DArray, det_topic, self._on_detections, 10)
         self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
         self.create_timer(1.0, self._check_waiting)
 
@@ -160,11 +173,49 @@ class VisionDisplayNode(Node):
     def _on_state(self, msg: DuburiState) -> None:
         self._state = msg
 
+    def _on_detections(self, msg: Detection2DArray) -> None:
+        dets = array_to_detections(msg)
+        with self._det_lock:
+            self._detections = dets
+
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
-        frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+        try:
+            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as exc:
+            self.get_logger().warning(f'[DISP ] cv_bridge decode failed: {exc!r}')
+            return
+
+        # Update FPS counter
+        self._fps_count += 1
+        now = time.monotonic()
+        elapsed = now - self._fps_t0
+        if elapsed >= 1.0:
+            self._fps_display = self._fps_count / elapsed
+            self._fps_count = 0
+            self._fps_t0 = now
+
+        # Render detections overlay onto the raw frame at full camera FPS
+        with self._det_lock:
+            dets = list(self._detections)
+
+        from duburi_vision.detection.detector import largest
+        primary = largest(dets)
+        frame = draw.render_all(
+            frame, dets,
+            source=self._camera,
+            fps=self._fps_display,
+            device='',
+            healthy=True,
+            deadband=0.05,
+            primary=primary,
+        )
+
+        # AUV state HUD (top-right, doesn't overlap detection status badge)
         if self._state is not None:
             _draw_hud(frame, self._state)
+
         cv2.imshow('duburi vision', frame)
         if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q')):
             raise KeyboardInterrupt
