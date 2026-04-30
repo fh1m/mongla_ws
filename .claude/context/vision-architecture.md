@@ -227,6 +227,15 @@ verbs (`vision_align_yaw`, `vision_align_lat`, `vision_align_depth`,
 `vision_hold_distance`) are just `vision_align_3d` with `axes` pinned --
 one canonical loop, no copy-paste. `vision_acquire` is a separate
 function because its early-exit semantics differ (any detection wins).
+`look_around` (DSL: `vision.scan()`) is a motion-side search verb: it
+switches to POSHOLD, holds position, and rotates in incremental yaw
+steps — checking `VisionState` at each stop and exiting the moment the
+target class is detected. Falls back to ALT_HOLD + heading-lock if
+POSHOLD is unavailable.
+
+Current 7 vision verbs: `vision_align_3d`, `vision_align_yaw`,
+`vision_align_lat`, `vision_align_depth`, `vision_hold_distance`,
+`vision_acquire`, `look_around`.
 
 Verifying the chain before pool day:
 

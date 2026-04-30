@@ -439,6 +439,7 @@ DSL method → action verb mapping (use DSL in missions; CLI uses action verb na
 | `vision.approach(dist, metric)`    | `vision_hold_distance` | Drive forward/back to standoff; metric: height/width/area/diag.  |
 | `vision.find(move=)`               | `vision_acquire`       | Block until target seen; optionally move while waiting.          |
 | `vision.track()`                   | `vision_align_3d`      | Continuous follow (lock_mode='follow'); never exits on settle.   |
+| `vision.scan(step, dwell)`         | `look_around`          | POSHOLD + incremental yaw orbit; exits on first detection.       |
 
 Every vision verb takes `camera`, `target_class`, `deadband`, gain knobs (`kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`), and `on_lost` (`'fail'` default; `'hold'` to ride out a flicker). The closed loop runs INSIDE `auv_manager_node` (single MAVLink owner) so vision and control never fight for thrust. Detection arrives via `VisionState` (manager-side subscriber pool, lazily built per camera with a one-shot `wait_vision_state_ready` preflight).
 
@@ -466,6 +467,25 @@ calls `set_model()` + `set_classes()` — no manual `duburi.set_classes()` neede
 (`w_frac/h_frac < gate_guard_min_w_frac=0.35`). `pass_at` commits the AUV to
 a straight drive-through once the size metric hits the threshold.
 
+**Detection guard** — `duburi.detected(target_class, camera=None, stale_after=1.0) → bool`
+is a non-blocking cache check on the mission client side. It lazily subscribes to
+`/duburi/vision/<camera>/detections` and checks a timestamp-stamped cache that is
+automatically refreshed during every blocking `send()` call. Use it in loops or branches:
+
+```python
+# Move until gate seen, then align
+while not duburi.detected('gate'):
+    duburi.move_forward(1.0, gain=30)
+duburi.vision.home(target='gate', yaw=True, lat=True)
+
+# Branch on result.success (all verbs return Move.Result)
+result = duburi.vision.scan(target='gate', duration=60)
+if result.success:
+    duburi.vision.home(target='gate', yaw=True, lat=True, gate_guard=True)
+else:
+    duburi.move_forward(3.0)   # fallback: advance and retry
+```
+
 Tunables (`vision.kp_yaw`, `vision.kp_lat`, `vision.kp_depth`,
 `vision.kp_forward`, `vision.deadband`, `vision.target_bbox_h_frac`,
 `vision.stale_after`, `vision.on_lost`, `vision.acquire_*`) are
@@ -488,7 +508,7 @@ ros2 run   duburi_planner mission find_person_demo     # full vision-driven 3D m
 ros2 run   duburi_planner mission move_and_see         # alternates open-loop + vision verbs
 ```
 
-Architecture detail: [`.claude/context/vision-architecture.md`](.claude/context/vision-architecture.md). Roadmap (v1 done, v4 done; v2 tracking + v3 filtering pending): [`.claude/context/vision-roadmap.md`](.claude/context/vision-roadmap.md).
+Architecture detail: [`.claude/context/vision-architecture.md`](.claude/context/vision-architecture.md). Roadmap (v1–v4 all done: detection, tracking, filtering, vision verbs; v5 real-vehicle cameras pending): [`.claude/context/vision-roadmap.md`](.claude/context/vision-roadmap.md).
 
 ---
 
@@ -562,11 +582,23 @@ ros2 run duburi_planner duburi dvl_connect
 
 # DVL closed-loop distance moves:
 ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 60
+ros2 run duburi_planner duburi move_back_dist    --distance_m 1.0 --gain 60
 ros2 run duburi_planner duburi move_lateral_dist --distance_m 1.0 --gain 40
 
 # DVL with heading lock (lock keeps heading, DVL drives distance):
 ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120 &
 ros2 run duburi_planner duburi move_forward_dist --distance_m 3.0 --gain 60
+```
+
+### Step 3c: Orbit scan (look_around)
+
+```bash
+# Switch to POSHOLD, hold position, rotate in 20° increments, exit on detection
+ros2 run duburi_planner duburi look_around \
+    --camera forward --target_class gate \
+    --yaw_rate_pct 20 --settle 1.5 --gain 40 --duration 90
+# yaw_rate_pct = step degrees per look (positive=CW/right, negative=CCW/left)
+# settle = dwell seconds at each stop to observe
 ```
 
 ### Step 4: Run a scripted mission

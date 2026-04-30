@@ -273,6 +273,15 @@ duburi.vision.home(target=None,
 duburi.vision.track(target=None,
                     yaw=True, forward=True, lat=False, depth=False,
                     dist=0.55, duration=60.0, **overrides)
+
+# ── Orbit scan (POSHOLD + incremental yaw, exits on first detection) ─────── #
+duburi.vision.scan(target=None,
+                   step=20.0,       # degrees CW per stop (+ve=right, -ve=left)
+                   speed=40.0,      # turn speed %
+                   dwell=1.5,       # observe seconds per stop
+                   duration=60.0,   # total time budget
+                   start_yaw=0.0,   # snap to this heading first (0 = current)
+                   **overrides)
 ```
 
 **Typical competition patterns:**
@@ -869,7 +878,7 @@ DVL component (`dvl`, `nucleus_dvl`, `bno085_dvl`). Auto-connect means you
 don't need `dvl_connect` in the mission — the manager's background thread has
 already connected before any mission code runs.
 
-### 7.1  Basic DVL forward move
+### 7.1  Basic DVL forward / back move
 
 ```python
 def run(duburi, log):
@@ -877,6 +886,8 @@ def run(duburi, log):
     duburi.set_depth(-0.8, settle=1.0)
     # DVL closed-loop: stops exactly 2.0 m from start position
     duburi.move_forward_dist(2.0, gain=60)
+    # Return to start (same tolerance applies — stops when back within 0.1 m)
+    duburi.move_back_dist(2.0, gain=60)
     duburi.disarm()
 ```
 
@@ -943,7 +954,88 @@ duburi_manager:
 
 Mission code is identical — the yaw source selection is transparent to the DSL.
 
-### 7.5  DVL gotchas
+### 7.5  Orbit scan — `vision.scan()` / `look_around`
+
+`scan()` switches to POSHOLD, locks position, then pivots in incremental yaw
+steps. At each stop it watches the detection topic for `dwell` seconds.
+The moment the target class appears, it exits with `result.success=True`.
+Falls back to ALT_HOLD + heading lock if POSHOLD is unavailable.
+
+```python
+def run(duburi, log):
+    duburi.models(gate='gate_flare_medium_100ep')
+    duburi.camera = 'forward'
+    duburi.arm()
+    duburi.set_depth(-1.0, settle=1.0)
+
+    # Orbit right in 20° steps until gate is found (or 90 s budget spent)
+    result = duburi.vision.scan(
+        target=duburi.models.gate.gate,
+        step=20,       # degrees CW per stop
+        dwell=1.5,     # seconds to observe at each stop
+        speed=40,      # turn speed %
+        duration=90)
+
+    if result.success:
+        log(f'gate found after {result.final_value:.0f}° sweep — aligning')
+        duburi.vision.home(target=duburi.models.gate.gate,
+                           yaw=True, lat=True, gate_guard=True, duration=10)
+    else:
+        log('gate not found — advancing and retrying')
+        duburi.move_forward(3.0, gain=35)
+```
+
+CLI equivalent:
+```bash
+ros2 run duburi_planner duburi look_around \
+    --camera forward --target_class gate \
+    --yaw_rate_pct 20 --settle 1.5 --gain 40 --duration 90
+```
+
+### 7.6  Detection guards — `duburi.detected()`
+
+`duburi.detected(class, camera=None, stale_after=1.0)` is a **non-blocking
+cache check**. It subscribes to `/duburi/vision/<camera>/detections` on first
+call and caches the latest message. Every blocking DSL verb keeps the cache
+warm via ROS callbacks during the action spin, so the cache is always fresh
+immediately after any `move_*`, `vision.*`, or `pause` call.
+
+Use it to implement conditional branching and polling loops without blocking
+the mission on an action round-trip:
+
+```python
+def run(duburi, log):
+    duburi.models(gate='gate_flare_medium_100ep')
+    duburi.camera = 'forward'
+    duburi.arm()
+    duburi.set_depth(-1.0)
+    duburi.lock_heading(0.0, timeout=180)
+
+    # Pattern 1: Drive until gate appears
+    while not duburi.detected(duburi.models.gate.gate):
+        duburi.move_forward(1.0, gain=30)
+
+    # Pattern 2: Full gate pass only if visible
+    result = duburi.vision.home(
+        target=duburi.models.gate.gate,
+        yaw=True, lat=True, forward=True,
+        dist=0.42, metric='area',
+        gate_guard=True, pass_at=0.35, pass_at_gain=55,
+        duration=20, on_lost='hold')
+
+    if result.success:
+        duburi.move_forward(1.5, gain=55)   # blast through
+    else:
+        log('gate alignment failed — surfacing')
+
+    duburi.unlock_heading()
+    duburi.disarm()
+```
+
+`detected()` accepts a `ClassRef` directly: `duburi.detected(duburi.models.gate.gate)`.
+No model-switch side-effect — it's a pure observation query.
+
+### 7.7  DVL gotchas
 
 - `move_forward_dist` / `move_lateral_dist` call `reset_position()` internally.
   No need to call it explicitly unless building your own control loop.
