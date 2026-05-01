@@ -673,22 +673,54 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 
 ## 14. Context files (in `.claude/context/`)
 
+**API & verbs (start here):**
+
+| File                            | Contents                                                            |
+|---------------------------------|---------------------------------------------------------------------|
+| `command-reference.md`          | **Every verb** on `/duburi/move`: CLI, Python facade, DSL, MAVLink, lock modes, distance metrics |
+| `client-and-dsl-api.md`         | `DuburiClient`, `DuburiMission` DSL, `vision.*` verbs, `duburi.detected()` |
+| `mission-cookbook.md`           | Mission DSL cookbook — working principles + 10 ready-to-steal samples |
+| `testing-guide.md`              | Every test: unit, bringup, mission smoke, in-water checklist        |
+| `ros2-conventions.md`           | ROS2 coding conventions + complete 27-command reference table       |
+
+**ArduSub & MAVLink:**
+
+| File                            | Contents                                                            |
+|---------------------------------|---------------------------------------------------------------------|
+| `ardusub-canon.md`              | **First-principles** ArduSub: modes, depth cascade, yaw rate loop, failsafes |
+| `ardusub-reference.md`          | ArduSub-specific parameters, modes, quirks (quick-list)             |
+| `mavlink-reference.md`          | MAVLink catalogue + per-call audit + `[MAV <fn> cmd=verb]` DEBUG trace |
+| `heading-lock.md`               | Heading-lock state diagram, motion interaction, failure modes       |
+| `axis-isolation.md`             | First-principles theory: sharp vs curved turns, settle/pause        |
+
+**Vehicle, hardware, sim:**
+
 | File                            | Contents                                                            |
 |---------------------------------|---------------------------------------------------------------------|
 | `vehicle-spec.md`               | **Canonical** Duburi 4.2 spec + TDR-vs-implementation delta         |
-| `known-issues.md`               | Tracked code bugs from the 2026-04 audit, scoped per file           |
-| `axis-isolation.md`             | First-principles theory: sharp vs curved turns, settle/pause        |
-| `heading-lock.md`               | Heading-lock state diagram, motion interaction, failure modes       |
-| `mavlink-reference.md`          | MAVLink catalogue + per-call audit + things-we-found-wrong + community refs |
-| `mavlink-reference.md`          | MAVLink messages, type masks, enums                                 |
-| `ardusub-reference.md`          | ArduSub-specific parameters, modes, quirks                          |
-| `pid-theory.md`                 | PID design notes (LEGACY column = REFERENCE only)                   |
-| `proven-patterns.md`            | Patterns from 2023/2025 codebases — names are **historical**        |
-| `sim-setup.md`                  | Detailed simulation bring-up                                        |
-| `mission-design.md`             | YASMIN FSM patterns (target home: `duburi_planner/state_machines/`) |
 | `hardware-setup.md`             | Pool setup, BlueOS, network topology                                |
-| `ros2-conventions.md`           | ROS2 coding conventions for this project (real surface only)        |
-| `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |
+| `sim-setup.md`                  | Detailed simulation bring-up                                        |
 | `sensors-pipeline.md`           | `duburi_sensors` design rules + BNO085 calibration model            |
+| `dvl-reference.md`              | Nortek Nucleus1000 protocol, packet catalog, POSHOLD ArduSub setup  |
+| `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |
+| `pool-day.md`                   | Pool-day checklist and session workflow                             |
+| `known-issues.md`               | Tracked code bugs from the 2026-04 audit, scoped per file           |
+
+**Method & design theory:**
+
+| File                            | Contents                                                            |
+|---------------------------------|---------------------------------------------------------------------|
+| `pid-theory.md`                 | PID tuning notes — **REFERENCE**, not the live path                 |
+| `proven-patterns.md`            | Patterns from 2023/2025 codebases — names are **historical**        |
+| `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |
+| `mission-design.md`             | YASMIN FSM patterns (target home: `duburi_planner/state_machines/`) |
 | `vision-architecture.md`        | `duburi_vision` file map, topic contract, GPU contract, viz layers  |
-| `vision-roadmap.md`             | v1 (done) -> v2 tracking -> v3 filters -> v4 planner -> v5 hw cams   |
+| `vision-roadmap.md`             | v1–v4 all done (detection, tracking, Kalman, vision verbs); v5 real hw cams queued |
+
+**Archived / future work** (in `future/`):
+
+| File                            | Contents                                                            |
+|---------------------------------|---------------------------------------------------------------------|
+| `future/goals.md`               | Original TDR task checklist (archival)                              |
+| `future/future-registry-shrinkage.md` | Parked: COMMANDS registry refactor ideas                    |
+| `future/future-bno-into-ekf.md` | Parked: BNO085 velocity integration into ArduSub EKF3              |

@@ -109,9 +109,37 @@ A pool-deck workflow is three terminals + one CLI prompt. Drop these into
 </table>
 
 Exact commands for every pane live in [§5 Network setup](#5-network-setup) and
-the [Quickstart smoke tests](#quickstart-smoke-tests) right below.
+the [Quick start](#quick-start) right below.
 
-## Quickstart smoke tests
+---
+
+## Table of Contents
+
+- [Quick start](#quick-start) — 0: health check · 1: sim · 2: vision · 3: vision+control · 4: missions · 5: live-tune · 6: BNO085 · 7: DVL · 8: ByteTrack · 9: MAVLink debug · 10: per-subsystem
+- [Concepts in 5 videos](#concepts-in-5-videos)
+
+1. [What this repo is](#1-what-this-repo-is)
+2. [Hardware (Duburi 4.2)](#2-test-platform-at-a-glance)
+3. [Architecture](#3-architecture)
+4. [Code structure](#4-code-structure)
+5. [Network setup](#5-network-setup)
+6. [Prerequisites](#6-prerequisites)
+7. [Build](#7-build)
+8. [Run — three modes](#8-run--three-modes) — SIM · Desk · Pool
+9. [Command cookbook](#9-command-cookbook-duburi-cli)
+10. [Configuration](#10-configuration)
+11. [Tuning](#11-tuning)
+12. [Telemetry & logs](#12-telemetry--logs)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Development workflow](#14-development-workflow)
+15. [Roadmap](#15-roadmap)
+16. [Further reading](#16-further-reading)
+17. [Acknowledgments](#17-test-platform--acknowledgments)
+18. [License](#18-license)
+
+---
+
+## Quick start
 
 > All commands assume `source /opt/ros/humble/setup.bash && source install/setup.bash`.
 > Setting up a fresh Jetson / dev box? See [`docs/JETSON_SETUP.md`](docs/JETSON_SETUP.md).
@@ -221,7 +249,7 @@ ros2 run duburi_planner duburi move_forward --duration 3 --gain 60
 ros2 run duburi_planner duburi disarm
 ```
 
-Success: thrusters spin (open Gazebo for visuals — see §8.1), depth in T2
+Success: thrusters spin (open Gazebo for visuals — see [SIM section](#sim-docker--gazebo--ardusub-sitl)), depth in T2
 logs converges on -0.5 m, every CLI exits 0.
 
 ### 2 — Vision pipeline (webcam, no AUV)
@@ -251,7 +279,7 @@ depth/yaw HUD. The detector logs `in_hz=~30  with_target=>0%`.
 The integration test: webcam drives the simulated BlueROV2 in Gazebo.
 
 ```bash
-# T1: ArduSub SITL (see §8.1)
+# T1: ArduSub SITL (see [SIM section](#sim-docker--gazebo--ardusub-sitl))
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
     --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
 # T2: manager
@@ -590,55 +618,6 @@ especially `axis-isolation.md`, `vision-architecture.md`, and the
 
 ---
 
-## 0. The name
-
-**Mongla** (মোংলা) is Bangladesh's second seaport, opened in 1950 on the
-confluence of the Pasur and Mongla rivers in Bagerhat district. It sits a
-hundred-odd kilometres north of the Bay of Bengal, ringed on every side by
-the **Sundarbans** — the largest contiguous mangrove forest in the world,
-a UNESCO World Heritage site, and the home of the Royal Bengal tiger.
-Where Chittagong is the country's industrial gateway, Mongla is its quieter
-delta gateway: tidal channels, brown water, and ships threading the
-mangroves to reach the sea.
-
-This codebase borrows the name on purpose. The waters it imagines are
-Bengal's: muddy, current-laden, magnetically noisy, GPS-denied. The
-vehicle it drives — **Duburi** (ডুবুরি, Bengali for *diver*) — is the test
-platform; the engineering principles below are written for the kinds of
-estuaries Mongla itself sits inside.
-
----
-
-## Table of Contents
-
-- [Quickstart smoke tests](#quickstart-smoke-tests) — 0: bringup · 1: sim · 2: vision · 3: vision+control · 4: missions · 5: live-tune · 6: BNO085 · 7: DVL distance moves · 8: ByteTrack tracking · 9: MAVLink debug
-- [Concepts in 5 videos](#concepts-in-5-videos)
-
-0. [The name](#0-the-name)
-1. [What this repo is](#1-what-this-repo-is)
-2. [Test platform at a glance](#2-test-platform-at-a-glance)
-2A. [Real vehicle vs sim](#2a-real-vehicle-vs-sim)
-3. [Architecture](#3-architecture)
-4. [Code structure](#4-code-structure)
-5. [Network setup](#5-network-setup)
-6. [Prerequisites](#6-prerequisites)
-7. [Build](#7-build)
-8. [Run — three modes](#8-run--three-modes)
-9. [Command cookbook (duburi CLI)](#9-command-cookbook-duburi-cli)
-10. [Configuration guide](#10-configuration-guide)
-10A. [Yaw source — duburi_sensors](#10a-yaw-source--duburi_sensors)
-10B. [Vision — duburi_vision](#10b-vision--duburi_vision)
-11. [Tuning guide](#11-tuning-guide)
-12. [Telemetry & log cheatsheet](#12-telemetry--log-cheatsheet)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Development workflow](#14-development-workflow)
-15. [Roadmap](#15-roadmap)
-16. [Further reading](#16-further-reading)
-17. [Test platform & acknowledgments](#17-test-platform--acknowledgments)
-18. [License](#18-license)
-
----
-
 ## 1. What this repo is
 
 `duburi_ws` is a ROS2 Humble colcon workspace that exposes one clean action
@@ -779,7 +758,7 @@ Active development goals:
 
 ---
 
-## 2A. Real vehicle vs sim
+### Real vehicle vs sim
 
 > **TL;DR — BlueROV2 Heavy is the Gazebo SITL target. The real test AUV is Duburi 4.2.** Both share the `vectored_6dof` 8-thruster ArduSub frame, which is why BlueROV2 is a faithful proxy for control development. Hull shape, mass, and payload geometry differ.
 
@@ -1178,7 +1157,7 @@ is faster.
 
 ## 8. Run — three modes
 
-### 8.1 SIM (Docker + Gazebo + ArduSub SITL)
+### SIM (Docker + Gazebo + ArduSub SITL)
 
 Terminal 1 — ArduSub SITL:
 
@@ -1203,7 +1182,7 @@ ros2 run duburi_manager start --ros-args -p mode:=sim
 
 Terminal 4 — commands via CLI (see §9).
 
-### 8.2 DESK (Pixhawk via USB)
+### Desk (Pixhawk via USB)
 
 Plug the Pixhawk directly into the laptop or Jetson over USB. Grant serial
 access on first use:
@@ -1222,7 +1201,7 @@ ros2 run duburi_manager start --ros-args -p mode:=desk
 Useful for bench-testing ESC signals, calibration, and dry MAVLink plumbing
 work without water.
 
-### 8.3 POOL / HARDWARE (Jetson + BlueOS over switch)
+### Pool / Hardware (Jetson + BlueOS over switch)
 
 1. Power on the AUV; confirm the switch link lights come up.
 2. On a laptop on the same switch, open `http://192.168.2.1` and confirm
@@ -1305,8 +1284,10 @@ All commands go through `/duburi/move` and block until done. Exit code 0 = succe
 | `unlock_heading` | Stop background yaw hold | `duburi unlock_heading` |
 | `dvl_connect` | Manually connect Nucleus DVL (auto by default) | `duburi dvl_connect` |
 | `move_forward_dist` | DVL closed-loop forward N metres (heading lock stays active) | `duburi move_forward_dist --distance_m 2.0 --gain 60` |
+| `move_back_dist` | DVL closed-loop backward N metres (heading lock stays active) | `duburi move_back_dist --distance_m 2.0 --gain 60` |
 | `move_lateral_dist` | DVL closed-loop lateral N metres (+ = right, − = left) | `duburi move_lateral_dist --distance_m 1.0 --gain 36` |
 | `vision_acquire` | Sweep until target detected | `duburi vision_acquire --target_class person --target_name yaw_right` |
+| `look_around` | POSHOLD + incremental yaw orbit; exit on first detection | `duburi look_around --camera forward --target_class gate --yaw_rate_pct 20 --settle 1.5` |
 | `vision_align_yaw` | Centre target horizontally (yaw) | `duburi vision_align_yaw --target_class person --duration 15` |
 | `vision_align_lat` | Centre target horizontally (strafe) | `duburi vision_align_lat --target_class person --duration 15` |
 | `vision_align_depth` | Centre target vertically | `duburi vision_align_depth --target_class person --duration 15` |
@@ -1322,7 +1303,7 @@ Every flag: `ros2 run duburi_planner duburi <cmd> --help`
 > launched with `with_tracking:=true`. Default is `false` (raw detections,
 > lower latency). See [quickstart §8](#8--vision-tracking-with-bytetrack).
 
-#### `head` — execution-time heading
+### `head` — execution-time heading
 
 The log shows heading continuously, but by the time you type the next command the AUV has drifted. Use `head` (or `--target head` on any numeric field) to snapshot the exact heading at the moment the command actually executes:
 
@@ -1343,7 +1324,7 @@ The `--target head` form sends a `head` query first, substitutes the live float,
 Full parameter docs, MAVLink traces, and implementation chains:
 [`.claude/context/command-reference.md`](.claude/context/command-reference.md)
 
-### 9.1 Mission DSL — `duburi` + `duburi.vision`
+### Mission DSL — `duburi` + `duburi.vision`
 
 ```python
 def run(duburi, log):
@@ -1366,10 +1347,12 @@ def run(duburi, log):
     duburi.disarm()
 ```
 
-- `duburi.*` — open-loop motion (arm, set_depth, move_\*, yaw_\*, arc, lock_heading, dvl_connect, ...)
+- `duburi.*` — open-loop motion (arm, set_depth, move_\*, move_\*_dist, yaw_\*, arc, lock_heading, dvl_connect, ...)
 - `duburi.models(alias='stem')` — register model alias; access as `duburi.models.alias.class_name`
 - `duburi.vision.find(move='forward'|'yaw_right'|'yaw_left'|'still'|'arc', ...)` — search while moving
 - `duburi.vision.turn/slide/hover/approach/home/track` — single/multi-axis vision control
+- `duburi.vision.scan(step=20, dwell=1.5)` — POSHOLD orbit search; exits on first detection (falls back to ALT_HOLD + heading lock)
+- `duburi.detected(target_class, stale_after=1.0)` — non-blocking cache check; use in loops/branches (`while not duburi.detected('gate'): ...`)
 - `duburi.countdown(seconds)` — tether-removal countdown with banner before mission start
 
 ```bash
@@ -1520,28 +1503,29 @@ Phase 3 — `duburi_sensors` (**done**):
 - `YawSource` ABC, `MavlinkAhrsSource` default, factory dispatch,
   `sensors_node` diagnostic. **Done.**
 - `BNO085Source` over USB CDC + ESP32-C3 firmware contract +
-  one-shot Pixhawk-mag offset calibration. **Done in software**,
-  awaiting first pool run with the chip flashed.
+  one-shot Pixhawk-mag offset calibration. **Done.**
 - **Nortek Nucleus1000 DVL** — TCP driver (`nucleus_dvl.py`), packet decoder
   (`nucleus_parser.py`), velocity integrator, auto-connect, `move_forward_dist`
-  / `move_lateral_dist` closed-loop commands. **Done — works at pool.**
+  / `move_back_dist` / `move_lateral_dist` closed-loop commands. **Done — works at pool.**
 - **`CompositeBnoDvlSource` (`bno085_dvl`)** — BNO085 heading + DVL position in
   one `yaw_source`; heading lock stable during DVL distance moves. **Done.**
 - `mavros` **read-only** telemetry consumer on a separate endpoint — pending.
 
-Phase 4 — `duburi_vision` (**v1 + v4 done**):
+Phase 4 — `duburi_vision` (**v1–v4 done**):
 - Camera factory (laptop webcam + Gazebo `ros_topic`; jetson/blueos/mavlink
   stubs raise `NotImplementedError` with a friendly message). **Done.**
 - YOLO26 detector with GPU-first `select_device`, class allowlist, warmup,
   vision_msgs converters (publishes the human label, not numeric class id). **Done.**
 - Rich on-image visualization (boxes, labels, primary highlight, crosshair,
   alignment offset, status badge, stale banner). **Done.**
-- **v4 — vision verbs on `/duburi/move`:** six `vision_*` commands
+- **v4 — vision verbs on `/duburi/move`:** seven `vision_*` commands
   (`vision_acquire`, `vision_align_yaw`/`lat`/`depth`, `vision_hold_distance`,
-  `vision_align_3d`) running the closed loop inside `auv_manager_node` so
-  vision and control share the same MAVLink owner. `VisionState` per-camera
-  subscriber pool with `wait_vision_state_ready` preflight. CLI utilities
+  `vision_align_3d`, `look_around`) running the closed loop inside `auv_manager_node`
+  so vision and control share the same MAVLink owner. `VisionState` per-camera
+  subscriber pool with `wait_vision_state_ready` preflight. `look_around` does
+  POSHOLD + incremental yaw orbit and exits on first detection. CLI utilities
   `vision_check` (topic probe) and `vision_thrust_check` (detection -> RC).
+  Detection guard: `duburi.detected('class')` for non-blocking cache checks in missions.
   Mission `find_person_demo` exercises the whole chain. **Done.**
 - **v2 — ByteTrack object tracking** + **v3 — per-track Kalman smoother**: `tracker_node`
   subscribes `/detections`, runs ByteTrack + 4-state CV Kalman, publishes `/tracks` with
@@ -1594,6 +1578,7 @@ pillars (read these first) are bolded:
 - [hardware-setup.md](.claude/context/hardware-setup.md) — physical vehicle
 - [sim-setup.md](.claude/context/sim-setup.md) — SITL + Gazebo details
 - [sensors-pipeline.md](.claude/context/sensors-pipeline.md) — `duburi_sensors` design rules + calibration model
+- [dvl-reference.md](.claude/context/dvl-reference.md) — Nortek Nucleus1000 protocol, packet catalog, POSHOLD setup, DVL+vision roadmap
 
 **Method & known issues:**
 - [proven-patterns.md](.claude/context/proven-patterns.md) — known-good control patterns
