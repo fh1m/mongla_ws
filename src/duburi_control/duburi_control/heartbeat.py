@@ -132,5 +132,5 @@ class Heartbeat:
                 try:
                     self._pixhawk.send_neutral()
                 except Exception as exc:
-                    self._log.warn(f'[HBEAT] send_neutral raised: {exc}')
+                    self._log.error(f'[HBEAT] send_neutral raised: {exc} — MAVLink connection may be lost')
             self._stop_event.wait(timeout=self._period)

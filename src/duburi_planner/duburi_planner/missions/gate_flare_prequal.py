@@ -108,7 +108,9 @@ def run(duburi, log):
     duburi.set_mode('ALT_HOLD')
     duburi.set_depth(DIVE_DEPTH_M, settle=DEPTH_SETTLE_S)
 
-    duburi.dvl_connect()   # no-op when yaw_source is not dvl/bno085_dvl
+    dvl_result = duburi.dvl_connect()   # no-op when yaw_source is not dvl/bno085_dvl
+    if not dvl_result.success:
+        log('WARNING: DVL connect failed — distance moves will be open-loop (time-based)')
 
     # ── Phase 2: FindGate ───────────────────────────────────────────────────
     log('Phase 2: searching for gate (forward)')
@@ -213,6 +215,6 @@ def run(duburi, log):
     # ── Phase 10: Surface ────────────────────────────────────────────────────
     log('Phase 10: surfacing and disarming')
     duburi.stop()
-    duburi.set_depth(0.0, timeout=30.0)
+    duburi.set_depth(0.0, timeout=60.0)
     duburi.disarm()
     log('Mission complete.')

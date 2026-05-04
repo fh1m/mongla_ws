@@ -101,27 +101,30 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
     locked_heading = read_heading(pixhawk, yaw_source) or 0.0
     last_heading   = locked_heading
 
-    while True:
-        elapsed = time.time() - started_at
-        if elapsed >= duration:
-            break
+    try:
+        while True:
+            elapsed = time.time() - started_at
+            if elapsed >= duration:
+                break
 
-        fwd_pwm = Pixhawk.percent_to_pwm(fwd_pct)
-        yaw_pwm = Pixhawk.percent_to_pwm(yaw_pct)
-        pixhawk.send_rc_override(forward=fwd_pwm, yaw=yaw_pwm)
+            fwd_pwm = Pixhawk.percent_to_pwm(fwd_pct)
+            yaw_pwm = Pixhawk.percent_to_pwm(yaw_pct)
+            pixhawk.send_rc_override(forward=fwd_pwm, yaw=yaw_pwm)
 
-        heading = read_heading(pixhawk, yaw_source)
-        if heading is not None:
-            last_heading = heading
+            heading = read_heading(pixhawk, yaw_source)
+            if heading is not None:
+                last_heading = heading
 
-        depth = pixhawk.get_attitude()
-        depth_str = f'{depth["depth"]:+.2f}m' if depth else 'N/A'
-        log.info(
-            f'[{label:<5}] t={elapsed:.1f}s  fwd={fwd_pct:+.0f}%  '
-            f'yaw={yaw_pct:+.0f}%  hdg={last_heading:.1f}  depth={depth_str}',
-            throttle_duration_sec=LOG_THROTTLE)
+            depth = pixhawk.get_attitude()
+            depth_str = f'{depth["depth"]:+.2f}m' if depth else 'N/A'
+            log.info(
+                f'[{label:<5}] t={elapsed:.1f}s  fwd={fwd_pct:+.0f}%  '
+                f'yaw={yaw_pct:+.0f}%  hdg={last_heading:.1f}  depth={depth_str}',
+                throttle_duration_sec=LOG_THROTTLE)
 
-        time.sleep(1.0 / THRUST_RATE_HZ)
+            time.sleep(1.0 / THRUST_RATE_HZ)
+    finally:
+        pixhawk.send_neutral()
 
     swept = Pixhawk.heading_error(last_heading, locked_heading)
     log.info(

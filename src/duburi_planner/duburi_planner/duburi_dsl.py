@@ -150,6 +150,7 @@ Tunable live (between runs, no rebuild):
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import time as _time
@@ -210,6 +211,9 @@ class DuburiMission:
         # during every blocking send() via spin_until_future_complete.
         self._det_cache: dict[str, tuple[float, set[str]]] = {}
         self._det_subs:  dict[str, object] = {}  # keeps subscriptions alive
+        # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
+        self._scoreboard: list[dict] = []
+        self._mission_start: float = _time.monotonic()
 
     # ================================================================== #
     #  Single send + log helper                                           #
@@ -217,8 +221,16 @@ class DuburiMission:
 
     def _send(self, cmd: str, **fields):
         fields = {k: _to_float(v) for k, v in fields.items()}
+        t0     = _time.monotonic()
         result = self.client.send(cmd, **fields)
+        elapsed = _time.monotonic() - t0
         self.log.info(_format_outcome(cmd, result))
+        self._scoreboard.append({
+            'cmd':     cmd,
+            'success': bool(getattr(result, 'success', False)),
+            'elapsed': round(elapsed, 2),
+            'msg':     str(getattr(result, 'message', '')),
+        })
         return result
 
     # ================================================================== #
@@ -522,6 +534,70 @@ class DuburiMission:
         print()
         _box(['', message, ''])
         print()
+
+    # ================================================================== #
+    #  Mission scoreboard                                                  #
+    # ================================================================== #
+
+    def log_scoreboard(self, *, json_path: str | None = None) -> None:
+        """Print a structured per-verb mission summary and optionally write JSON.
+
+        Called automatically by `mission.py` on exit (normal or exception).
+        Can also be called manually at any point during a mission.
+
+        Parameters
+        ----------
+        json_path : str | None
+            If given, write the scoreboard JSON to this path in addition to
+            printing to stdout.  Pass ``'auto'`` to generate a timestamped
+            filename in the current directory.
+
+        Example output::
+
+            ╔══════════════════════════════════════════════════════════════════╗
+            ║  MISSION SCOREBOARD                         total: 47.3 s       ║
+            ╠══════════╦══════════╦═══════╦═══════════════════════════════════╣
+            ║  #  verb ║ success  ║  time ║  message                          ║
+            ╠══════════╬══════════╬═══════╬═══════════════════════════════════╣
+            ║  1  arm  ║    ✓     ║  2.1s ║  armed                            ║
+            ║  ...                                                             ║
+            ╚══════════════════════════════════════════════════════════════════╝
+        """
+        total_s = round(_time.monotonic() - self._mission_start, 1)
+        width   = 68
+        hb      = '═' * width
+
+        def _row(n, entry):
+            tick = '✓' if entry['success'] else '✗'
+            cmd  = entry['cmd'][:18]
+            t    = f"{entry['elapsed']:.1f}s"
+            msg  = entry['msg'][:30]
+            return f"  {n:>2d}  {cmd:<18s}  {tick}   {t:>5s}   {msg}"
+
+        print(f'\n╔{hb}╗')
+        print(f'║  MISSION SCOREBOARD{" " * (width - 20 - len(str(total_s)) - 12)}total: {total_s} s  ║')
+        print(f'╠{hb}╣')
+        print(f'║  {"#":>2s}  {"verb":<18s}  {"ok"}   {"time":>5s}   {"message":<30s}  ║')
+        print(f'╠{hb}╣')
+        for i, entry in enumerate(self._scoreboard, 1):
+            row = _row(i, entry)
+            pad = width - len(row)
+            print(f'║{row}{" " * pad}║')
+        print(f'╚{hb}╝\n')
+
+        if json_path:
+            if json_path == 'auto':
+                ts = _time.strftime('%Y%m%d_%H%M%S')
+                json_path = f'mission_scoreboard_{ts}.json'
+            payload = {
+                'total_s':    total_s,
+                'phases':     self._scoreboard,
+                'success_count': sum(1 for e in self._scoreboard if e['success']),
+                'fail_count':    sum(1 for e in self._scoreboard if not e['success']),
+            }
+            with open(json_path, 'w') as fh:
+                json.dump(payload, fh, indent=2)
+            self.log.info(f'[DSL  ] scoreboard written → {json_path}')
 
     # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to raw client           #

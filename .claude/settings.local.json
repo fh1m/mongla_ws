@@ -39,7 +39,11 @@
       "Bash(xargs ls *)",
       "Bash(git -C /home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws log --oneline)",
       "Bash(git *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(xargs -I{} git update-ref -d {} git log --oneline -5)",
+      "WebFetch(domain:discuss.bluerobotics.com)",
+      "Bash(pdftotext /home/fh1m/Envs/dockers/auv-ros2/Info_Docs/dvl_guide.pdf -)",
+      "Bash(pdftotext /home/fh1m/Envs/dockers/auv-ros2/Info_Docs/dvl_guide_2.pdf -)"
     ]
   }
 }

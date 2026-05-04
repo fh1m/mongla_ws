@@ -66,6 +66,10 @@ class NucleusDVLSource(YawSource):
         self._thread: threading.Thread | None = None
         self._running = False
 
+        # Reconnect background thread — starts on first connect(), retries on drop.
+        self._reconnect_stop   = threading.Event()
+        self._reconnect_thread: threading.Thread | None = None
+
         self._lock = threading.Lock()
 
         # AHRS heading cache
@@ -91,9 +95,12 @@ class NucleusDVLSource(YawSource):
         return (time.monotonic() - self._last_pkt_time) < _STALE
 
     def close(self) -> None:
+        self._reconnect_stop.set()
         self._running = False
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=3.0)
+        if self._reconnect_thread is not None and self._reconnect_thread.is_alive():
+            self._reconnect_thread.join(timeout=5.0)
         if self._sock is not None:
             try:
                 self._sock.close()
@@ -155,6 +162,14 @@ class NucleusDVLSource(YawSource):
         self._thread.start()
         self._log_info('[DVL  ] connected and streaming')
 
+        # Start the reconnect supervisor if not already running.
+        if self._reconnect_thread is None or not self._reconnect_thread.is_alive():
+            self._reconnect_stop.clear()
+            self._reconnect_thread = threading.Thread(
+                target=self._reconnect_loop, daemon=True,
+                name='nucleus_dvl_reconnect')
+            self._reconnect_thread.start()
+
     # ------------------------------------------------------------------
     #  Internal
     # ------------------------------------------------------------------
@@ -193,6 +208,50 @@ class NucleusDVLSource(YawSource):
         time.sleep(0.2)
         NucleusDVLSource._send(sock, 'START\r\n')
         time.sleep(0.1)
+
+    def _reconnect_loop(self) -> None:
+        """Supervisor: re-open the TCP connection after an unexpected drop.
+
+        Uses exponential back-off: 5 s → 10 s → 20 s → 40 s (cap 60 s).
+        Resets position integrator on each reconnect so distance moves start
+        from a fresh origin rather than a stale accumulated offset.
+        """
+        _BACKOFF = [5.0, 10.0, 20.0, 40.0, 60.0]
+        attempt = 0
+        while not self._reconnect_stop.is_set():
+            # Wait for the reader thread to signal it has stopped.
+            if self._thread is not None:
+                self._thread.join()
+            if self._reconnect_stop.is_set():
+                break
+            if self._running:
+                # Reader exited unexpectedly (socket error / remote close).
+                delay = _BACKOFF[min(attempt, len(_BACKOFF) - 1)]
+                self._log_info(
+                    f'[DVL  ] connection lost — reconnecting in {delay:.0f}s '
+                    f'(attempt {attempt + 1})')
+                self._reconnect_stop.wait(timeout=delay)
+                if self._reconnect_stop.is_set():
+                    break
+                try:
+                    # Reset state before reconnect so stale heading/position
+                    # from the dropped session are not used.
+                    with self._lock:
+                        self._heading = None
+                        self._pos_x   = 0.0
+                        self._pos_y   = 0.0
+                        self._last_bt_time = None
+                    self._running = False
+                    self._sock = None
+                    self.connect()
+                    attempt = 0
+                    self._log_info('[DVL  ] reconnected successfully')
+                except Exception as exc:
+                    attempt += 1
+                    self._log_info(f'[DVL  ] reconnect failed: {exc}')
+            else:
+                # Normal close() — exit supervisor.
+                break
 
     def _reader_loop(self) -> None:
         sock = self._sock

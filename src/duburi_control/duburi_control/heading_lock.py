@@ -77,7 +77,7 @@ from .pixhawk       import Pixhawk
 from .motion_rates import LOCK_STREAM_HZ as STREAM_HZ
 
 DRIFT_LOG_SEC  = 1.0     # how often to print the [LOCK ] heartbeat
-SOURCE_DEAD_S  = 2.0     # warn after this many seconds with no fresh sample
+SOURCE_DEAD_S  = 0.5     # release Ch4 after this many seconds with no fresh sample
 
 # Rate-loop tunables. Gentle but with a minimum floor so T200s actually
 # spin when correcting small drifts (pure proportional at 2° gives ~1.2%

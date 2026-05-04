@@ -170,11 +170,11 @@ def _lock_to_target(pixhawk, end_heading, timeout, label, log,
     if pid is None:
         pid = _YawPID()
 
-    deadline       = time.time() + timeout
+    deadline       = time.monotonic() + timeout
     frames_locked  = 0
     peak_error_deg = 0.0
 
-    while time.time() < deadline:
+    while time.monotonic() < deadline:
         heading = read_heading(pixhawk, yaw_source)
         now_mono = time.monotonic()
 
@@ -253,12 +253,12 @@ def yaw_glide(pixhawk, start_heading, end_heading,
     # ---- Phase 1: P rate-loop closes on a smootherstep-swept target --
     # Phase 1 uses simple P (not PID) because the swept target is itself
     # moving -- integral would just build up against a moving reference.
-    started_at     = time.time()
+    started_at     = time.monotonic()
     current        = start_heading
     last_good_mono = time.monotonic()
 
     while True:
-        elapsed = time.time() - started_at
+        elapsed = time.monotonic() - started_at
         if elapsed >= duration:
             break
 

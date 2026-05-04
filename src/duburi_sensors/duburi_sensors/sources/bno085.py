@@ -237,10 +237,18 @@ class BNO085Source:
         if reference_yaw_provider is not None:
             try:
                 self._calibrate(reference_yaw_provider, calibration_timeout_s)
+            except RuntimeError as exc:
+                # Calibration timed out (Pixhawk AHRS slow to warm, or BNO
+                # not yet streaming).  Continue in raw (boot-relative) mode
+                # rather than killing the sensors node — offset_deg stays None
+                # so callers can detect the uncalibrated state.
+                if self._log:
+                    self._log.warn(
+                        f'[SENS ] BNO085 calibration failed: {exc} '
+                        f'— running in raw (boot-relative) mode')
             except Exception:
-                # Calibration failed — release the serial port before
-                # the exception propagates, otherwise the device stays
-                # held until the GC runs the destructor.
+                # Unexpected error (serial fault, etc.) — release port and
+                # propagate so the node can restart cleanly.
                 self.close()
                 raise
 

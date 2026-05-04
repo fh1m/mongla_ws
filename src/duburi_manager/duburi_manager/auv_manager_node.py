@@ -397,9 +397,11 @@ class AUVManagerNode(Node):
             vstate = VisionState(self, camera=camera,
                                  use_tracks=use_tracks,
                                  logger=self.get_logger())
-            self._vision_states[camera] = vstate
+            # Do NOT cache until preflight passes — a cached-but-not-ready state
+            # causes vision verbs to silently chase stale/empty detections
+            # instead of raising a clear "camera not ready" failure.
 
-        # Preflight outside the lock -- it just polls VisionState's diags.
+        # Preflight outside the lock — it just polls VisionState's diags.
         try:
             wait_vision_state_ready(
                 vstate, timeout=10.0, log=self.get_logger())
@@ -407,7 +409,15 @@ class AUVManagerNode(Node):
             self.get_logger().warning(
                 f'[VST  ] preflight for {camera!r} did not pass within '
                 f'10s: {exc!r}; vision verbs will fail until pipeline is up')
-        return vstate
+            # Return the (non-ready) state anyway so the goal can fail fast
+            # with a detection error rather than blocking here indefinitely.
+            return vstate
+
+        with self._vision_lock:
+            # Check again under lock in case a concurrent goal built the same state.
+            if camera not in self._vision_states:
+                self._vision_states[camera] = vstate
+            return self._vision_states[camera]
 
     # ================================================================== #
     #  DVL auto-connect background loop                                   #
