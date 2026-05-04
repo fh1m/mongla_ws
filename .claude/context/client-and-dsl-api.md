@@ -362,6 +362,65 @@ of `/detections`. The `Sample.track_id` field is populated with the stable ByteT
 Short occlusions (up to `max_predict_frames`, default 5 frames = ~0.25 s) are bridged by
 Kalman prediction — the control loop never sees a gap.
 
+### Detection guards — `duburi.detected()`
+
+Non-blocking cache check. Subscribes to `/duburi/vision/<camera>/detections`
+on first call; refreshed automatically during every blocking verb.
+
+```python
+duburi.detected(
+    target_class,                 # str | ClassRef — e.g. 'gate', duburi.models.gate.gate
+    *,
+    camera: str | None = None,    # defaults to duburi.camera
+    stale_after: float = 1.0,     # seconds; detections older → False
+) -> bool
+```
+
+**The core paradigm (reactive missions):**
+
+```python
+# Move in short steps until gate visible, then align
+MAX_STEPS = 60
+for _ in range(MAX_STEPS):
+    if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
+        break
+    duburi.move_forward(0.5, gain=30)   # 0.5s max — avoids overshoot
+else:
+    return   # not found
+
+duburi.vision.home(target=duburi.models.gate.gate, yaw=True, lat=True, ...)
+```
+
+**Critical rules:**
+
+| Rule | Consequence if broken |
+|------|----------------------|
+| Step size ≤ 0.5 s in search loops | 2s step = 0.6m overshoot past detection point |
+| Always have `MAX_STEPS` budget | Detector offline → infinite loop |
+| Call `set_classes('gate,flare')` before orbit `detected('gate')` | `vision.home(target=flare_ref)` silently filters detector to flare; gate detection always False |
+| Set `duburi.camera` at top of `run()` | Default `'laptop'` subscribes wrong topic |
+
+**`detected()` accepts `ClassRef` without model-switching side-effects:**
+```python
+# ✓ ClassRef — extracts class_name only, does NOT call set_model/set_classes
+while not duburi.detected(duburi.models.gate.gate):
+    duburi.move_forward(0.5, gain=30)
+```
+
+**`detected()` does NOT block** beyond a 50 ms `spin_once` timeout. Every
+blocking DSL verb keeps the cache warm automatically — the cache is always
+fresh right after any `move_*`, `pause`, `vision.*`, or `yaw_*` call.
+
+**Internals:** class names are extracted to plain Python strings eagerly in
+the `_on_detections()` callback. The ROS message object is never stored —
+this is required because rclpy may reuse the underlying C++ memory across
+callbacks.
+
+Full reference: [`detected-paradigm.md`](./detected-paradigm.md) — mechanics, all rules,
+error patterns, testing procedures, canonical templates, orbit anti-patterns.
+
+---
+
 ### Escape hatch -- raw `send`
 
 ```python
