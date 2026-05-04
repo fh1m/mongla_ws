@@ -222,6 +222,11 @@ duburi.move_forward_dist(-1.5, gain=60.0)         # 1.5 m backward
 duburi.move_lateral_dist(-0.5, gain=36.0)         # 0.5 m left
 
 duburi.countdown(seconds=10)                      # tether-removal countdown with banner
+
+# Scoreboard — called automatically by mission.py; also callable mid-mission
+duburi.log_scoreboard()                           # print table to stdout
+duburi.log_scoreboard(json_path='auto')           # + write mission_scoreboard_YYYYMMDD_HHMMSS.json
+duburi.log_scoreboard(json_path='/tmp/run.json')  # + write to explicit path
 ```
 
 **DVL distance gotchas:**
