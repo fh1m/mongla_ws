@@ -205,10 +205,10 @@ class DuburiMission:
         self.target = target
         self.vision = _VisionDSL(self)
         self.models = ModelRegistry()
-        # Detection cache: camera -> (monotonic_stamp, detections_list)
+        # Detection cache: camera -> (monotonic_stamp, {class_name, ...})
         # Populated by lazy per-camera subscriptions; refreshed automatically
         # during every blocking send() via spin_until_future_complete.
-        self._det_cache: dict[str, tuple[float, list]] = {}
+        self._det_cache: dict[str, tuple[float, set[str]]] = {}
         self._det_subs:  dict[str, object] = {}  # keeps subscriptions alive
 
     # ================================================================== #
@@ -233,7 +233,19 @@ class DuburiMission:
         self._det_subs[camera] = sub
 
     def _on_detections(self, camera: str, msg: Detection2DArray) -> None:
-        self._det_cache[camera] = (_time.monotonic(), list(msg.detections))
+        # Extract class names to plain strings immediately — do not store ROS
+        # message objects because rclpy may reuse the underlying C++ memory
+        # across callbacks, which would corrupt cached data read later.
+        names: set[str] = set()
+        for d in msg.detections:
+            if not d.results:
+                continue
+            hyp = d.results[0]
+            if hasattr(hyp, 'hypothesis'):
+                names.add(str(hyp.hypothesis.class_id))
+            else:
+                names.add(str(getattr(hyp, 'id', '')))
+        self._det_cache[camera] = (_time.monotonic(), names)
 
     def detected(self, target_class, *,
                  camera: str | None = None,
@@ -266,18 +278,15 @@ class DuburiMission:
         cam = camera or self.camera
         if cam not in self._det_subs:
             self._subscribe_detections(cam)
-        # Drain any callbacks queued since the last spin (zero-wait).
-        rclpy.spin_once(self.client.node, timeout_sec=0.0)
+        # Wait briefly so the subscriber callback can fire (detector ~15-25 Hz → one frame in 40-66 ms).
+        rclpy.spin_once(self.client.node, timeout_sec=0.05)
         entry = self._det_cache.get(cam)
         if entry is None:
             return False
-        stamp, detections = entry
+        stamp, class_names = entry
         if _time.monotonic() - stamp > stale_after:
             return False
-        return any(
-            d.results and d.results[0].hypothesis.class_id == target_class
-            for d in detections
-        )
+        return target_class in class_names
 
     # ================================================================== #
     #  Power / mode                                                        #
