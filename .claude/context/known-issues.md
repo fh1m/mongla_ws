@@ -116,6 +116,57 @@ Next-up candidates not from this audit (keep here as a hand-off list):
 
 ---
 
+## 2026 Competition-Grade Audit — ALL FIXED
+
+> **Status (2026-05):** All P0 + P1 issues from the competition-prep audit are resolved.
+> Commit: `fix: competition-grade audit — P0 + P1 hardening`.
+
+### B1. Timer clock mixing — NTP-unsafe deadlines — **FIXED 2026-05**
+- **Files:** `motion_yaw.py` (`_lock_to_target`, `yaw_glide`), `motion_depth.py` (`prime_alt_hold`, `wait_for_depth`)
+- **Fix:** All `time.time()` deadlines replaced with `time.monotonic()`.
+
+### B2. RC override not neutralised on arc() exception — **FIXED 2026-05**
+- **File:** `motion_forward.py` `arc()`
+- **Fix:** Inner while loop wrapped in `try/finally: pixhawk.send_neutral()`.
+
+### B3. VisionState cached before preflight — **FIXED 2026-05**
+- **File:** `auv_manager_node.py` `_vision_state_for()`
+- **Fix:** Only insert into `_vision_states` after `wait_vision_state_ready` passes.
+
+### B4. DVL no-reconnect on TCP drop — **FIXED 2026-05**
+- **File:** `nucleus_dvl.py`
+- **Fix:** Exponential-backoff reconnect supervisor thread (5 → 10 → 20 → 40 → 60 s). Position/heading reset on reconnect. `close()` stops supervisor cleanly.
+
+### B5. DVL result unchecked in gate_flare_prequal — **FIXED 2026-05**
+- **File:** `gate_flare_prequal.py`
+- **Fix:** Check `dvl_result.success`; log WARNING before distance moves if DVL offline.
+
+### B6. BNO085 calibration timeout kills sensors node — **FIXED 2026-05**
+- **File:** `bno085.py`
+- **Fix:** Catch `RuntimeError` from `_calibrate()`; log WARN and continue in raw mode. `offset_deg` stays `None` to signal uncalibrated state.
+
+### B7. ByteTrack `_class_map` never pruned — **FIXED 2026-05**
+- **File:** `bytetrack.py`
+- **Fix:** After each `update()`, prune `_class_map` to only live + `lost_tracks` IDs.
+
+### B8. Heading lock source-death delay 2 s — **FIXED 2026-05**
+- **File:** `heading_lock.py`
+- **Fix:** `SOURCE_DEAD_S = 0.5` (was `2.0`). Max uncontrolled spin ~22° (was ~90°).
+
+### B9. Heartbeat exception at WARN — **FIXED 2026-05**
+- **File:** `heartbeat.py`
+- **Fix:** Log at `ERROR` level so MAVLink connection loss is visible.
+
+### B10. No mission scoreboard — **FIXED 2026-05**
+- **Files:** `duburi_dsl.py`, `mission.py`
+- **Fix:** `DuburiMission._scoreboard` accumulates per-verb `{cmd, success, elapsed, msg}`. `log_scoreboard(json_path='auto')` called in `mission.py` finally block.
+
+### B11. Surface timeout 30 s too short — **FIXED 2026-05**
+- **File:** `gate_flare_prequal.py`
+- **Fix:** `set_depth(0.0, timeout=60.0)`.
+
+---
+
 ## Forks we evaluated (so we don't revisit)
 
 ### `BumblebeeAS/ardupilot_fix` — STALE DUD (evaluated 2026-04)

@@ -1536,6 +1536,34 @@ Phase 4 — `duburi_vision` (**v1–v4 done**):
   <img src="docs/imgs/readme-robosub-tasks.png" alt="RoboSub competition task overview" width="88%"/>
 </p>
 
+Safety & reliability hardening (**done — 2026 competition prep**):
+- **B1 — NTP-safe motion timeouts**: `motion_yaw` + `motion_depth` deadline loops now use
+  `time.monotonic()` throughout; no longer vulnerable to NTP step-backs causing hung or
+  prematurely-exited yaw/depth moves.
+- **B2 — RC neutral on exception in `arc()`**: `motion_forward.arc()` inner loop is now
+  wrapped in `try/finally: pixhawk.send_neutral()` — thrusters stop even if telemetry
+  raises mid-motion.
+- **B3 — VisionState preflight guard**: `_vision_state_for()` only caches a `VisionState`
+  after `wait_vision_state_ready` passes, preventing silent camera-not-ready failures.
+- **B4 — DVL auto-reconnect**: `NucleusDVLSource` now spawns a supervisor thread that
+  retries on TCP drop with exponential back-off (5 → 10 → 20 → 40 → 60 s cap). A single
+  network glitch no longer kills DVL for the rest of the mission.
+- **B5 — DVL result check in `gate_flare_prequal`**: `dvl_connect()` result is validated;
+  a WARNING is printed if DVL is offline before the first distance move.
+- **B6 — BNO085 calibration fallback**: Calibration timeout now degrades to raw
+  (boot-relative) mode instead of raising `RuntimeError` and killing the sensors node.
+- **B7 — ByteTrack `_class_map` pruning**: `_class_map` is pruned after each update to
+  only live + buffered track IDs, preventing recycled IDs from inheriting stale class names.
+- **B8 — Heading lock source-death timeout**: Reduced `SOURCE_DEAD_S` from 2.0 s to 0.5 s —
+  limits uncontrolled yaw rotation on sensor death from ~90° to ~22° before Ch4 releases.
+- **B9 — Heartbeat connection-loss escalation**: `Heartbeat._run()` now logs at `ERROR`
+  (was `WARN`) on `send_neutral` failure so MAVLink outages are visible in the error stream.
+- **B10 — Mission scoreboard**: `DuburiMission` accumulates a per-verb result table
+  (`success`, `elapsed`, `message`). `log_scoreboard()` prints a formatted table and writes
+  a timestamped JSON file; the mission runner calls it automatically on every exit.
+- **B11 — Surface timeout**: `set_depth(0.0, timeout=60.0)` in `gate_flare_prequal`
+  (was 30 s) for negatively buoyant vehicle.
+
 Phase 5 (queued):
 - `robot_localization` EKF fusing DVL velocity + AHRS2 + Bar30 for full odometry.
 - Mission autonomy layer (behaviour trees or YASMIN state machines).
