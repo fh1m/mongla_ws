@@ -152,7 +152,8 @@ duburi_ws/src/
 │       │   ├── move_and_see.py        # alternates open-loop + vision verbs
 │       │   ├── gate_prequal.py        # gate-only prequal (DVL forward pass)
 │       │   ├── robosub_prequal.py     # RoboNation prequal (gate pass + flare orbit)
-│       │   └── gate_flare_prequal.py  # full autonomous gate+flare+return (competition)
+│       │   ├── gate_flare_prequal.py      # full autonomous gate+flare+return (scripted fallback)
+│       │   └── gate_flare_autonomous.py   # detected()-paradigm reactive mission (preferred)
 │       └── state_machines/       # reserved for YASMIN-based plans
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
@@ -679,6 +680,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 |---------------------------------|---------------------------------------------------------------------|
 | `command-reference.md`          | **Every verb** on `/duburi/move`: CLI, Python facade, DSL, MAVLink, lock modes, distance metrics |
 | `client-and-dsl-api.md`         | `DuburiClient`, `DuburiMission` DSL, `vision.*` verbs, `duburi.detected()` |
+| `detected-paradigm.md`          | **`duburi.detected()` deep reference** — mechanics, rules, orbit trap, errors, testing, canonical templates |
 | `mission-cookbook.md`           | Mission DSL cookbook — working principles + 10 ready-to-steal samples |
 | `testing-guide.md`              | Every test: unit, bringup, mission smoke, in-water checklist        |
 | `ros2-conventions.md`           | ROS2 coding conventions + complete 27-command reference table       |

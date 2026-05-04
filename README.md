@@ -115,7 +115,7 @@ the [Quick start](#quick-start) right below.
 
 ## Table of Contents
 
-- [Quick start](#quick-start) — 0: health check · 1: sim · 2: vision · 3: vision+control · 4: missions · 5: live-tune · 6: BNO085 · 7: DVL · 8: ByteTrack · 9: MAVLink debug · 10: per-subsystem
+- [Quick start](#quick-start) — 0: health check · 1: sim · 2: vision · 3: vision+control · 4: missions · 4b: detected() paradigm · 5: live-tune · 6: BNO085 · 7: DVL · 8: ByteTrack · 9: MAVLink debug · 10: per-subsystem
 - [Concepts in 5 videos](#concepts-in-5-videos)
 
 1. [What this repo is](#1-what-this-repo-is)
@@ -300,12 +300,13 @@ to keep you centred. Manager logs `[vision] err=±0.0XX  ch4=±YY%`.
 ### 4 — Mission runner (auto-discovered)
 
 ```bash
-ros2 run duburi_planner mission --list                 # shows every missions/*.py
-ros2 run duburi_planner mission move_and_see           # short open-loop + vision demo
-ros2 run duburi_planner mission find_person_demo       # full vision-driven walkthrough
-ros2 run duburi_planner mission gate_prequal           # gate-only prequal (DVL forward)
-ros2 run duburi_planner mission gate_flare_prequal     # full autonomous gate+flare+return
-ros2 run duburi_planner mission robosub_prequal        # RoboNation prequal (strafe pass)
+ros2 run duburi_planner mission --list                    # shows every missions/*.py
+ros2 run duburi_planner mission move_and_see              # short open-loop + vision demo
+ros2 run duburi_planner mission find_person_demo          # full vision-driven walkthrough
+ros2 run duburi_planner mission gate_prequal              # gate-only prequal (DVL forward)
+ros2 run duburi_planner mission gate_flare_prequal        # scripted gate+flare+return (safe fallback)
+ros2 run duburi_planner mission gate_flare_autonomous     # detected()-paradigm reactive mission (preferred)
+ros2 run duburi_planner mission robosub_prequal           # RoboNation prequal (strafe pass)
 ```
 
 Adding a new mission: drop `missions/<your_name>.py` exposing
@@ -314,6 +315,77 @@ files directly from the source tree on every invocation. Edit, save,
 re-run: changes are live immediately.
 **No registry edit.** Full reference:
 [.claude/context/mission-cookbook.md](.claude/context/mission-cookbook.md).
+
+### 4b — `duburi.detected()` paradigm (reactive missions)
+
+The paradigm that makes missions genuinely autonomous: the AUV executes
+open-loop maneuvers *until* a target comes into view, then hands off to
+vision-closed control. Each detection-loop IS a proto-state that maps
+directly to a future YASMIN FSM state.
+
+```python
+# Pattern: creep forward until gate visible, then align and pass
+duburi.camera = 'forward'
+duburi.models(gate='gate_flare_medium_100ep')
+duburi.arm()
+duburi.set_depth(-0.8)
+
+MAX_STEPS = 60   # safety budget
+for _ in range(MAX_STEPS):
+    if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
+        break
+    duburi.move_forward(0.5, gain=30)   # SHORT steps — 0.5s max
+else:
+    log.warn('gate not found — aborting')
+    duburi.disarm(); return
+
+duburi.vision.home(target=duburi.models.gate.gate,
+                   yaw=True, lat=True, gate_guard=True,
+                   pass_at=0.38, dist=0.40, metric='area', duration=20)
+duburi.move_forward_dist(3.0, gain=60)
+```
+
+**Four rules you must not break:**
+
+| Rule | Why |
+|------|-----|
+| Steps ≤ 0.5 s | Detection fires only after verb returns; 2s step = 0.6m overshoot |
+| Always have a `MAX_STEPS` budget | Detector offline → unbounded loop |
+| Restore class filter after flare verb | `vision.home(target=flare_ref)` sets `classes='flare'` → `detected('gate')` always False |
+| Set `duburi.camera` first | Default is `'laptop'`; subscribes wrong topic |
+
+**Orbit with gate-break — the class filter trap:**
+
+```bash
+# ✗ WRONG: vision.home above set classes='flare' → detected('gate') never True
+# ✓ FIX: restore both classes before the orbit loop
+duburi.set_classes('gate,flare')           # ← REQUIRED before orbit
+for _ in range(18):                        # 18 × 20° = 360°
+    if duburi.detected('gate', stale_after=0.3):
+        break
+    duburi.yaw_right(20); duburi.pause(1.0)
+```
+
+**Test the paradigm:**
+
+```bash
+# 1. Verify detection topic streaming
+ros2 topic hz /duburi/vision/forward/detections   # should be 15-25 Hz
+
+# 2. Confirm class names (case-sensitive)
+ros2 topic echo /duburi/vision/forward/detections --once   # look for class_id
+
+# 3. Confirm class filter
+ros2 param get /duburi_detector classes   # should be 'gate,flare' for competition
+
+# 4. Run the reference autonomous mission
+ros2 run duburi_planner mission gate_flare_autonomous
+```
+
+Full reference: [`.claude/context/detected-paradigm.md`](.claude/context/detected-paradigm.md) — rules, all error patterns, testing procedures, canonical templates.  
+Mission using this paradigm: [`missions/gate_flare_autonomous.py`](src/duburi_planner/duburi_planner/missions/gate_flare_autonomous.py).
+
+---
 
 ### 5 — Live-tune gains and switch models
 
@@ -982,10 +1054,11 @@ duburi_ws/
             │   ├── heading_lock_demo.py # lock_heading + translation demo
             │   ├── find_person_demo.py  # full vision-driven 3D alignment demo
             │   ├── move_and_see.py      # alternates open-loop + vision verbs
-            │   ├── pursue_demo.py       # vision_align_3d lock_mode=pursue demo
-            │   ├── gate_prequal.py          # gate-only prequal (DVL forward)
-            │   ├── robosub_prequal.py       # RoboNation prequal (strafe pass + flare orbit)
-            │   └── gate_flare_prequal.py    # full autonomous gate+flare+return (competition)
+            │   ├── pursue_demo.py               # vision_align_3d lock_mode=pursue demo
+            │   ├── gate_prequal.py              # gate-only prequal (DVL forward)
+            │   ├── robosub_prequal.py           # RoboNation prequal (strafe pass + flare orbit)
+            │   ├── gate_flare_prequal.py        # scripted gate+flare+return (safe pool fallback)
+            │   └── gate_flare_autonomous.py     # detected()-paradigm reactive mission (preferred)
             └── state_machines/          # reserved for YASMIN-based plans
 ```
 

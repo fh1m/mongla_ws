@@ -992,48 +992,194 @@ ros2 run duburi_planner duburi look_around \
     --yaw_rate_pct 20 --settle 1.5 --gain 40 --duration 90
 ```
 
-### 7.6  Detection guards — `duburi.detected()`
+### 7.6  Detection guards — `duburi.detected()` paradigm
 
-`duburi.detected(class, camera=None, stale_after=1.0)` is a **non-blocking
-cache check**. It subscribes to `/duburi/vision/<camera>/detections` on first
-call and caches the latest message. Every blocking DSL verb keeps the cache
-warm via ROS callbacks during the action spin, so the cache is always fresh
-immediately after any `move_*`, `vision.*`, or `pause` call.
+`duburi.detected(class, *, camera=None, stale_after=1.0) -> bool` is a
+**non-blocking, cache-backed observation query**. It reads a local Python
+dict that is refreshed automatically during every blocking DSL verb (the
+verb's `rclpy.spin_until_future_complete` call fires pending ROS callbacks,
+including the `/detections` subscription).
 
-Use it to implement conditional branching and polling loops without blocking
-the mission on an action round-trip:
+This enables a new class of mission design: **the AUV executes open-loop
+maneuvers *until* a target comes into view, then hands off to vision-closed
+control**. This is the architecture step toward YASMIN FSMs — each
+`while detected()` loop IS a proto-state.
+
+**Full deep-dive reference:** [`.claude/context/detected-paradigm.md`](./detected-paradigm.md)
+
+#### Core paradigm
 
 ```python
 def run(duburi, log):
-    duburi.models(gate='gate_flare_medium_100ep')
     duburi.camera = 'forward'
+    duburi.models(gate='gate_flare_medium_100ep')
     duburi.arm()
-    duburi.set_depth(-1.0)
+    duburi.set_depth(-0.8)
     duburi.lock_heading(0.0, timeout=180)
 
-    # Pattern 1: Drive until gate appears
-    while not duburi.detected(duburi.models.gate.gate):
-        duburi.move_forward(1.0, gain=30)
-
-    # Pattern 2: Full gate pass only if visible
-    result = duburi.vision.home(
-        target=duburi.models.gate.gate,
-        yaw=True, lat=True, forward=True,
-        dist=0.42, metric='area',
-        gate_guard=True, pass_at=0.35, pass_at_gain=55,
-        duration=20, on_lost='hold')
-
-    if result.success:
-        duburi.move_forward(1.5, gain=55)   # blast through
+    # ── Search: creep forward until gate visible ──────────────────────── #
+    MAX_STEPS = 60   # safety budget: 60 × 0.5s = 30s of search
+    for _ in range(MAX_STEPS):
+        if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
+            break
+        duburi.move_forward(0.5, gain=30)  # 0.5s steps → max 0.15m overshoot
     else:
-        log('gate alignment failed — surfacing')
+        log.warn('gate not found — aborting')
+        duburi.set_depth(0.0); duburi.disarm(); return
+
+    # ── Align and pass ────────────────────────────────────────────────── #
+    duburi.vision.home(
+        target=duburi.models.gate.gate,
+        yaw=True, lat=True,
+        gate_guard=True, pass_at=0.38, pass_at_gain=55,
+        dist=0.40, metric='area', duration=20,
+    )
+    duburi.move_forward_dist(3.0, gain=60)
+
+    # ── Search: yaw-sweep for flare ────────────────────────────────────── #
+    duburi.set_classes('gate,flare')          # must set BEFORE detecting flare
+    for _ in range(36):                       # 36 × 10° = full 360°
+        if duburi.detected('flare', stale_after=0.5):
+            break
+        duburi.yaw_right(10); duburi.pause(0.5)
+
+    if duburi.detected('flare', stale_after=0.5):
+        duburi.vision.home(
+            target=duburi.models.gate.flare,
+            yaw=True, forward=True, depth=True,
+            dist=0.38, metric='height', duration=20,
+        )
+
+        # ── Orbit flare: exit when gate re-appears ─────────────────────── #
+        # IMPORTANT: vision.home above called set_classes('flare').
+        # Restore both BEFORE the orbit loop.
+        duburi.set_classes('gate,flare')
+        for _ in range(18):                   # 18 × 20° = 360°
+            if duburi.detected('gate', stale_after=0.3):
+                break
+            duburi.yaw_right(20); duburi.pause(1.0)
+
+        if duburi.detected('gate', stale_after=0.5):
+            duburi.vision.home(target=duburi.models.gate.gate,
+                               yaw=True, lat=True, gate_guard=True, duration=15)
+            duburi.move_forward_dist(1.5, gain=60)
 
     duburi.unlock_heading()
+    duburi.set_depth(0.0)
     duburi.disarm()
 ```
 
-`detected()` accepts a `ClassRef` directly: `duburi.detected(duburi.models.gate.gate)`.
-No model-switch side-effect — it's a pure observation query.
+#### The four rules you must not break
+
+**Rule 1 — Short steps (0.5 s or less).** Detection check fires only after
+the verb returns. At `gain=30` (~0.3 m/s), a `move_forward(2.0)` step means
+~0.6 m of overshoot past the detection point. Use 0.3–0.5 s steps.
+
+**Rule 2 — Always have a safety budget.** If the detector is offline or the
+target never appears, an unbounded `while` loop runs forever. Use a `for`
+loop with `MAX_STEPS`.
+
+**Rule 3 — Class filter coupling.** Any `vision.*` verb that takes a `ClassRef`
+calls `set_classes()` automatically. After `vision.home(target=flare_ref)`, the
+detector publishes flare detections only. `detected('gate')` will always return
+`False` until you call `duburi.set_classes('gate,flare')`.
+
+**Rule 4 — Set the camera first.** `detected()` falls back to `duburi.camera`
+(default `'laptop'`). Set `duburi.camera = 'forward'` at the top of `run()`.
+
+#### What blocks vs what doesn't
+
+**Blocking (keeps cache warm via spin_until_future_complete):**
+`move_forward`, `move_back`, `move_left`, `move_right`, `yaw_left`, `yaw_right`,
+`arc`, `set_depth`, `arm`, `disarm`, `pause`, `stop`, `lock_heading`,
+`dvl_connect`, `move_forward_dist`, `move_lateral_dist`, ALL `vision.*` verbs.
+
+**Non-blocking (cache NOT updated):**
+`duburi.camera =`, `duburi.target =`, `duburi.models(...)`.
+
+`detected()` itself calls `spin_once(timeout=0.05)` internally — so even
+without a preceding blocking verb, it always fires at least one callback cycle
+before checking the cache. But use it after a blocking verb for freshest results.
+
+#### Forbidden patterns
+
+```python
+# ✗ Step too long — 0.6m overshoot at gain=30
+while not duburi.detected('gate'):
+    duburi.move_forward(2.0, gain=30)
+
+# ✗ No safety budget — runs forever if detector offline
+while not duburi.detected('gate'):
+    duburi.move_forward(0.5)
+
+# ✗ Class filter trap — vision.home set classes='flare', gate never detected
+duburi.vision.home(target=duburi.models.gate.flare, ...)
+for _ in range(18):
+    if duburi.detected('gate'):   # ALWAYS FALSE
+        break
+
+# ✗ Wrong camera — subscribes laptop/detections instead of forward/detections
+while not duburi.detected('gate'):   # duburi.camera still 'laptop'
+    ...
+```
+
+#### `detected()` + `result.success` together (full decision tree)
+
+```python
+# Try vision find; branch on whether it succeeded
+result = duburi.vision.find(target='gate', move='forward', timeout=30)
+if result.success:
+    duburi.vision.home(target='gate', yaw=True, lat=True)
+    duburi.move_forward_dist(3.0, gain=60)
+else:
+    log.warn('gate not found via vision.find — advancing blindly')
+    duburi.move_forward(4.0, gain=35)
+
+# Confirm target still visible after maneuver
+duburi.yaw_right(45)
+if duburi.detected('gate', stale_after=0.5):
+    duburi.vision.home(target='gate', yaw=True, lat=True)
+elif duburi.detected('flare', stale_after=0.5):
+    duburi.vision.home(target='flare', yaw=True, depth=True)
+else:
+    log.warn('no targets visible after yaw step')
+```
+
+#### API quick reference
+
+```python
+duburi.detected(
+    target_class,             # str | ClassRef — e.g. 'gate', duburi.models.gate.gate
+    *,
+    camera: str | None = None,      # defaults to duburi.camera
+    stale_after: float = 1.0,       # seconds; detections older than this → False
+) -> bool
+```
+
+| `stale_after` | Use case |
+|---------------|----------|
+| 0.3 | Orbit gate-break: want fresh confirmation |
+| 0.5 | Standard search loop step |
+| 1.0 | Default; fine for most uses |
+| 2.0 | Target flickers (turbid water); ride out drop-outs |
+
+#### Testing detected() live
+
+```bash
+# 1. Confirm detection topic streaming
+ros2 topic hz /duburi/vision/forward/detections   # should be 15-25 Hz
+
+# 2. Confirm class names match your code strings (case-sensitive)
+ros2 topic echo /duburi/vision/forward/detections --once   # look for class_id
+
+# 3. Confirm class filter correct
+ros2 param get /duburi_detector classes   # should be 'gate' or 'gate,flare'
+
+# 4. Test one detected() call from CLI (Python one-liner approach):
+ros2 run duburi_planner mission detected_test   # see detected-paradigm.md §8.2
+```
+
+Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-paradigm.md).
 
 ### 7.7  DVL gotchas
 
