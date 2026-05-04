@@ -100,8 +100,8 @@ def prime_alt_hold(pixhawk, hold_at, neutral_writer):
     (already at target, zero error) so its I-term can decay before we
     ask it to drive somewhere.
     """
-    deadline = time.time() + PRIME_SECONDS
-    while time.time() < deadline:
+    deadline = time.monotonic() + PRIME_SECONDS
+    while time.monotonic() < deadline:
         pixhawk.set_target_depth(hold_at)
         neutral_writer()
         time.sleep(1.0 / SETPOINT_HZ)
@@ -139,17 +139,17 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
     gentler for small corrections. This ramp is only for large
     commanded depth changes via `set_depth`.
     """
-    deadline   = time.time() + timeout
-    t_start    = time.time()
+    deadline   = time.monotonic() + timeout
+    t_start    = time.monotonic()
     closest    = None
     going_down = (start_d is not None) and (target_m < start_d)
 
-    while time.time() < deadline:
+    while time.monotonic() < deadline:
         # Read depth BEFORE computing the setpoint so we can track the sub.
         attitude = pixhawk.get_attitude()
         current  = attitude['depth'] if attitude is not None else None
 
-        elapsed = time.time() - t_start
+        elapsed = time.monotonic() - t_start
         if start_d is not None and elapsed < RAMP_S:
             frac   = elapsed / RAMP_S
             ramped = start_d + (target_m - start_d) * frac

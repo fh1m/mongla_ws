@@ -130,6 +130,18 @@ class ByteTrackWrapper(Tracker):
                 predicted=True,
             ))
 
+        # Prune _class_map entries for tracks that ByteTrack has fully expired
+        # (neither confirmed nor in lost_tracks). Without pruning, recycled track
+        # IDs inherit the old class name and targets are silently misidentified.
+        live_ids: set[int] = {td.track_id for td in results}
+        live_ids.update(
+            int(getattr(st, 'external_track_id', getattr(st, 'track_id', -1)))
+            for st in getattr(self._bt, 'lost_tracks', [])
+        )
+        stale = [k for k in self._class_map if k not in live_ids]
+        for k in stale:
+            del self._class_map[k]
+
         return results
 
     def reset(self) -> None:

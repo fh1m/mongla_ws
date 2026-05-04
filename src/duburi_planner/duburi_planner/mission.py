@@ -136,6 +136,7 @@ def main(args=None):
         log.error(f'mission "{parsed.name}" FAILED: {exc}')
         exit_code = 1
     finally:
+        duburi.log_scoreboard(json_path='auto')
         node.destroy_node()
         rclpy.shutdown()
 
