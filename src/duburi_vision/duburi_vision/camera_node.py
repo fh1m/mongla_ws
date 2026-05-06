@@ -98,6 +98,14 @@ class CameraNode(Node):
                 profile.setdefault('name', profile_name)
             else:
                 profile['name'] = str(self.get_parameter('name').value).strip()
+            # Allow explicit device override; -1 sentinel means "use profile default".
+            dev_param = self.get_parameter('device').value
+            try:
+                dev_int = int(dev_param)
+            except (TypeError, ValueError):
+                dev_int = -1
+            if dev_int >= 0:
+                profile['device'] = dev_int
             return make_camera_from_profile(
                 profile, node=self, logger=self.get_logger())
 
