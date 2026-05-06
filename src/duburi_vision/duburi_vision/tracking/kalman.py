@@ -153,7 +153,7 @@ class TrackKalmanSmoother:
         """True when the track has been predicting too long to trust."""
         flt = self._filters.get(track_id)
         if flt is None:
-            return True
+            return False
         return flt.predict_streak >= self._max_predict_frames
 
     def drop(self, track_id: int) -> None:
