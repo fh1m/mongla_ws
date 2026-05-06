@@ -159,9 +159,7 @@ class VisionDisplayNode(Node):
         det_topic = f'/duburi/vision/{camera}/detections'
 
         self.get_logger().info(f'[DISP ] subscribing {raw_topic} (full-rate) + {det_topic}')
-        if not launch_pipeline:
-            self.get_logger().info('[DISP ] tip: add --ros-args -p launch_pipeline:=true to start the full pipeline')
-
+    
         self._bridge = CvBridge()
         self._state: DuburiState | None = None
         self._detections: list = []
@@ -253,7 +251,15 @@ def main(args=None):
 
     # Spin on a background daemon thread so the main thread stays free for
     # cv2.imshow + cv2.waitKey (both require the main thread on most platforms).
-    spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
+    from rclpy.executors import ExternalShutdownException
+
+    def _spin_target(n):
+        try:
+            rclpy.spin(n)
+        except (ExternalShutdownException, Exception):
+            pass
+
+    spin_thread = threading.Thread(target=_spin_target, args=(node,), daemon=True)
     spin_thread.start()
 
     frame_budget = 1.0 / node._max_hz if node._max_hz > 0 else 0.0
