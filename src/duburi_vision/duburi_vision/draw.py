@@ -207,12 +207,13 @@ def render_all(frame_bgr: np.ndarray, detections: List[Detection], *,
                source='?', fps=0.0, device='?',
                healthy=True, show_reticle=True, show_alignment=True,
                deadband=0.05, primary: Optional[Detection] = None) -> np.ndarray:
-    """One-shot: layered overlay used by detector_node.
+    """One-shot: layered overlay used by detector_node and display_node.
 
     Layer order matters -- later layers paint on top of earlier ones:
-      1. raw frame
+      1. raw frame  (single copy made here — individual helpers NOT called
+                     so their per-call copies are avoided on the hot path)
       2. dashed reticle (operator's reference)
-      3. all detections (light boxes + labels)
+      3. all detections (supervision box+label annotators)
       4. primary target (thick box + corners)
       5. crosshair on primary
       6. offset arrow center -> primary
@@ -223,29 +224,63 @@ def render_all(frame_bgr: np.ndarray, detections: List[Detection], *,
     if frame_bgr is None:
         return None
 
-    out = frame_bgr
-    if show_reticle:
-        out = dashed_reticle(out)
+    out = frame_bgr.copy()   # single allocation for the whole pipeline
+    h, w = out.shape[:2]
 
-    out = draw_detections(out, detections)
+    if show_reticle:
+        cx, cy = w // 2, h // 2
+        _dashed_line(out, (cx, 0), (cx, h), COLOR_RETICLE, dash=8, gap=6, thickness=1)
+        _dashed_line(out, (0, cy), (w, cy), COLOR_RETICLE, dash=8, gap=6, thickness=1)
+        cv2.circle(out, (cx, cy), 4, COLOR_RETICLE, 1, cv2.LINE_AA)
+        cv2.circle(out, (cx, cy), 1, COLOR_RETICLE, -1, cv2.LINE_AA)
+
+    if detections:
+        box, lbl = _annotators()
+        sv_det = _to_sv(detections)
+        out = box.annotate(scene=out, detections=sv_det)
+        labels = [f"{d.class_name} {int(d.score * 100)}%" for d in detections]
+        out = lbl.annotate(scene=out, detections=sv_det, labels=labels)
 
     primary = primary or largest(detections)
     if primary is not None:
-        out = highlight_primary(out, primary)
-        out = crosshair(out, primary)
-        out = offset_arrow(out, primary)
+        x1, y1, x2, y2 = (int(v) for v in primary.xyxy)
+        cv2.rectangle(out, (x1, y1), (x2, y2), COLOR_PRIMARY, 3, cv2.LINE_AA)
+        _draw_corners(out, x1, y1, x2, y2, COLOR_PRIMARY, length=18, thickness=4)
+        cx_t, cy_t = int(primary.cx), int(primary.cy)
+        cv2.line(out, (cx_t - 14, cy_t), (cx_t + 14, cy_t), COLOR_PRIMARY, 2, cv2.LINE_AA)
+        cv2.line(out, (cx_t, cy_t - 14), (cx_t, cy_t + 14), COLOR_PRIMARY, 2, cv2.LINE_AA)
+        cv2.circle(out, (cx_t, cy_t), 3, COLOR_PRIMARY, -1, cv2.LINE_AA)
+        if abs(cx_t - w // 2) >= 2 or abs(cy_t - h // 2) >= 2:
+            cv2.arrowedLine(out, (w // 2, h // 2), (cx_t, cy_t),
+                            COLOR_OFFSET, 2, cv2.LINE_AA, tipLength=0.18)
 
     if show_alignment:
-        out = alignment_readout(out, primary, deadband=deadband)
+        if primary is None:
+            _panel(out, (10, h - 60), ['no target', 'err=NA'],
+                   fg=COLOR_FG, bg=(20, 20, 20), border=COLOR_ERR)
+        else:
+            ex = (primary.cx - w / 2.0) / max(w / 2.0, 1.0)
+            ey = (primary.cy - h / 2.0) / max(h / 2.0, 1.0)
+            _panel(out, (10, h - 60),
+                   [f"err_x: {ex:+.2f}    err_y: {ey:+.2f}",
+                    f"area:  {(primary.area / (w * h) * 100):5.2f}%   conf: {primary.score:.2f}"],
+                   fg=COLOR_FG, bg=(20, 20, 20),
+                   border=COLOR_OK if abs(ex) < deadband and abs(ey) < deadband else COLOR_WARN)
 
-    out = status_badge(
-        out, source=source, fps=fps, device=device,
-        n_detections=len(detections),
-        primary_class=primary.class_name if primary else None,
-        healthy=healthy)
+    badge_lines = [
+        f"src: {source}      fps: {fps:5.1f}",
+        f"dev: {device}      det: {len(detections)}",
+    ]
+    if primary is not None:
+        badge_lines.append(f"target: {primary.class_name}")
+    _panel(out, (10, 10), badge_lines,
+           fg=COLOR_FG, bg=(20, 20, 20),
+           border=COLOR_OK if healthy else COLOR_ERR)
 
     if not healthy:
-        out = stale_banner(out)
+        cv2.rectangle(out, (0, 0), (w, 28), COLOR_ERR, -1)
+        cv2.putText(out, 'STALE FRAME', (8, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
 
     return out
 

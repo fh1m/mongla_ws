@@ -8,10 +8,12 @@ when the detector runs at 5-10 Hz on GPU.
 Architecture
 ------------
   ROS spin runs on a background daemon thread; the image callback deposits
-  decoded+annotated frames into a single-slot queue (old frames are dropped
-  to keep latency near zero).  The main thread drains the queue and calls
-  cv2.imshow + cv2.waitKey -- both of which MUST run on the main thread
-  because cv2's event loop and GUI context are not thread-safe.
+  decoded raw frames into a single-slot queue (old frames are dropped to keep
+  latency near zero).  The main thread drains the queue, annotates with the
+  latest cached detections, and calls cv2.imshow + cv2.waitKey -- both of
+  which MUST run on the main thread because cv2's event loop and GUI context
+  are not thread-safe.  Annotation on the display thread (not the callback)
+  keeps the ROS executor free to service incoming messages between frames.
 
 With launch_pipeline:=true the node also starts camera_node and
 detector_node as child processes so the whole pipeline comes up with
@@ -58,6 +60,7 @@ from vision_msgs.msg import Detection2DArray
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision import draw
+from duburi_vision.detection.detector import largest
 from duburi_vision.detection.messages import array_to_detections
 
 # HUD layout
@@ -221,25 +224,6 @@ class VisionDisplayNode(Node):
             self._fps_count = 0
             self._fps_t0 = now
 
-        # Annotate here (GPU-friendly; stays off the main thread).
-        with self._det_lock:
-            dets = list(self._detections)
-
-        from duburi_vision.detection.detector import largest
-        primary = largest(dets)
-        frame = draw.render_all(
-            frame, dets,
-            source=self._camera,
-            fps=self._fps_display,
-            device='',
-            healthy=True,
-            deadband=0.05,
-            primary=primary,
-        )
-
-        if self._state is not None:
-            _draw_hud(frame, self._state)
-
         # Single-slot handoff: drop any queued frame and put the latest.
         while not self._frame_q.empty():
             try:
@@ -255,6 +239,11 @@ class VisionDisplayNode(Node):
     def stop_pipeline(self) -> None:
         for proc in self._pipeline_procs:
             proc.terminate()
+        for proc in self._pipeline_procs:
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
         self._pipeline_procs.clear()
 
 
@@ -279,6 +268,21 @@ def main(args=None):
                 if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q')):
                     break
                 continue
+
+            with node._det_lock:
+                dets = list(node._detections)
+            primary = largest(dets)
+            frame = draw.render_all(
+                frame, dets,
+                source=node._camera,
+                fps=node._fps_display,
+                device='',
+                healthy=True,
+                deadband=0.05,
+                primary=primary,
+            )
+            if node._state is not None:
+                _draw_hud(frame, node._state)
 
             t0 = time.monotonic()
             cv2.imshow(_WINDOW_NAME, frame)

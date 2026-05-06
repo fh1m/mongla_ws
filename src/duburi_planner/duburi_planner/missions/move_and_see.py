@@ -5,7 +5,7 @@
   set_depth (-0.5 m)          depth-hold engaged; autopilot owns vertical
   move_forward 3 s            open-loop scout leg
   detected() scan             yaw left in 90 deg steps until target found
-  vision.track                lateral-only tracking at TRACK_DIST frame fraction
+  vision.track                lateral-only tracking (yaw/forward disabled)
   move_back 3 s               open-loop withdraw
   set_depth 0                 surface
   disarm
@@ -26,7 +26,6 @@ DIVE_DEPTH_M        = -0.5
 
 SCOUT_GAIN          = 60.0
 WITHDRAW_GAIN       = 60.0
-TRACK_DIST          = 0.20   # target fills 20% of frame height at hold distance
 TRACK_DURATION_S    = 200.0
 
 _MAX_SEARCH_STEPS   = 20     # 20 × 90° = up to 5 full sweeps before giving up
@@ -53,11 +52,10 @@ def run(duburi, log):
         duburi.disarm()
         return
 
-    # Vision-track laterally to keep target centred at TRACK_DIST.
+    # Vision-track laterally to keep target centred (no yaw, no approach).
     duburi.vision.track(
         target=TARGET_CLASS,
         yaw=False, lat=True, forward=False,
-        dist=TRACK_DIST,
         duration=TRACK_DURATION_S,
         on_lost='hold',
     )
