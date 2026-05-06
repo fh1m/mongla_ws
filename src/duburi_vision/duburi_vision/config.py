@@ -10,14 +10,44 @@ can find it without code changes.
 
 
 CAMERA_PROFILES = {
-    # ---- Laptop dev (webcam) -------------------------------------------- #
+    # ---- Dev machine (Logitech USB RGB webcam, /dev/video4) ------------- #
+    # NOTE: /dev/video0,2 on this laptop are IR (Windows Hello) cameras.
+    # The Logitech C-series is on /dev/video4.  Switch with device:=N at launch.
     'laptop': {
+        'source':   'webcam',
+        'device':   4,
+        'width':    640,
+        'height':   480,
+        'fps':      30,
+        'frame_id': 'laptop_cam',
+    },
+    'logitech': {
+        'source':   'webcam',
+        'device':   4,
+        'width':    640,
+        'height':   480,
+        'fps':      30,
+        'frame_id': 'laptop_cam',
+    },
+
+    # ---- Vehicle: Blue Robotics Low-Light HD USB (Jetson Orin Nano) ----- #
+    # device indices assume clean Jetson USB enumeration (no IR cameras).
+    # Override at pool-day with  device:=N  if enumeration differs.
+    'forward': {
         'source':   'webcam',
         'device':   0,
         'width':    640,
         'height':   480,
         'fps':      30,
-        'frame_id': 'laptop_cam',
+        'frame_id': 'forward_cam',
+    },
+    'downward': {
+        'source':   'webcam',
+        'device':   2,
+        'width':    640,
+        'height':   480,
+        'fps':      30,
+        'frame_id': 'downward_cam',
     },
 
     # ---- Gazebo SITL: forward / down -- topics depend on the world ----- #

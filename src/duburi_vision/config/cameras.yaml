@@ -9,13 +9,41 @@
 
 duburi_vision:
   cameras:
+    # Dev machine — Logitech USB RGB webcam on /dev/video4.
+    # /dev/video0,2 are IR cameras (Windows Hello); skip those.
+    # Override at runtime:  device:=N
     laptop:
+      source:   webcam
+      device:   4
+      width:    640
+      height:   480
+      fps:      30
+      frame_id: laptop_cam
+
+    logitech:
+      source:   webcam
+      device:   4
+      width:    640
+      height:   480
+      fps:      30
+      frame_id: laptop_cam
+
+    # Vehicle — Blue Robotics Low-Light HD USB on Jetson Orin Nano.
+    forward:
       source:   webcam
       device:   0
       width:    640
       height:   480
       fps:      30
-      frame_id: laptop_cam
+      frame_id: forward_cam
+
+    downward:
+      source:   webcam
+      device:   2
+      width:    640
+      height:   480
+      fps:      30
+      frame_id: downward_cam
 
     sim_front:
       source:          ros_topic

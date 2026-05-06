@@ -147,17 +147,20 @@ class CameraNode(Node):
 
     def _capture_loop(self):
         """Daemon thread: continuously read frames and put latest into queue."""
-        while True:
-            frame, meta = self._cam.read()
-            if frame is None or not meta.fresh:
-                continue
-            # Single-slot: drop stale frame, keep only latest.
-            while not self._frame_q.empty():
-                try:
-                    self._frame_q.get_nowait()
-                except _queue.Empty:
-                    break
-            self._frame_q.put_nowait((frame, meta))
+        try:
+            while rclpy.ok():
+                frame, meta = self._cam.read()
+                if frame is None or not meta.fresh:
+                    continue
+                # Single-slot: drop stale frame, keep only latest.
+                while not self._frame_q.empty():
+                    try:
+                        self._frame_q.get_nowait()
+                    except _queue.Empty:
+                        break
+                self._frame_q.put_nowait((frame, meta))
+        except Exception:
+            pass  # camera released during shutdown
 
     def _tick(self):
         try:
