@@ -34,8 +34,10 @@ def generate_launch_description():
                               description='Path to a video file; when set, overrides webcam source'),
         DeclareLaunchArgument('loop',          default_value='true',
                               description='Loop the video file when it reaches EOF (video_file only)'),
-        DeclareLaunchArgument('model',         default_value='yolo26_nano_pretrained',
-                              description='Model name (from models/) or path to .pt file (single-model mode)'),
+        DeclareLaunchArgument('model',         default_value='yolov11n',
+                              description='Model name (from models/) or path to .pt file (single-model mode). '
+                                          'Pretrained: yolov11n (ROBOSUB tested, person class). '
+                                          'Pool: gate_flare_medium_100ep'),
         DeclareLaunchArgument('models',        default_value='',
                               description='CSV name=stem pairs to build a named registry: '
                                           '"gate=gate_nano_100ep,combined=gate_flare_medium_100ep"'),

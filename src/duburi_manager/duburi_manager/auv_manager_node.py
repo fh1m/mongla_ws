@@ -733,6 +733,12 @@ def main(args=None):
         pass
     finally:
         _emergency_stop(node)
+        # Drain executor threads before destroying the node.  Without this,
+        # a timer callback (telemetry_tick / heartbeat_tick) can fire on a
+        # background thread concurrently with node.destroy_node(), causing
+        # "publisher's context is invalid" when the logger tries to publish
+        # to /rosout after the context is torn down.
+        executor.shutdown(timeout_sec=1)
         node.destroy_node()
         if rclpy.ok():          # Ctrl-C unwinds spin() which may already have shut down
             rclpy.shutdown()

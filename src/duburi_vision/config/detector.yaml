@@ -12,8 +12,9 @@
 #                          ros2 param set /duburi_detector classes "gate,flare"
 #                          # or from mission DSL: duburi.set_classes('flare')
 #
-# Pretrained YOLO26 (auto-download):
-#   yolo26_nano_pretrained, yolo26_small_pretrained, etc.
+# Pretrained for sim / webcam / bench (COCO 80-class, auto-download):
+#   yolov11n (ROBOSUB tested ★ recommended), yolov11s, yolov11m, yolov11l, yolov11x
+#   yolo26_nano_pretrained, yolo26_small_pretrained, etc.  (previous family)
 #
 # device:  cuda:N -> require GPU. cpu -> explicit CPU. auto -> GPU if present.
 # half:    FP16 inference -- enable for Jetson Orin to save memory.

@@ -548,6 +548,15 @@ names:
 ### Selecting model and classes at launch
 
 ```bash
+# ── Sim / webcam / bench (ROBOSUB-tested pretrained ★) ──────────────────────
+# yolov11n detects COCO 80 classes — use 'person' to test move_and_see
+ros2 launch duburi_vision cameras_.launch.py model:=yolov11n classes:=person
+
+# Or single-command launch+display:
+ros2 run duburi_vision vision_display --ros-args \
+    -p launch_pipeline:=true -p model:=yolov11n -p classes:=person
+
+# ── Pool / competition custom models ─────────────────────────────────────────
 # Gate-only model
 ros2 launch duburi_vision cameras_.launch.py model:=gate_medium_100ep classes:=gate
 

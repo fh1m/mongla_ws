@@ -3,7 +3,15 @@
 
 Subscribes to image_raw at full camera FPS and overlays the latest
 detections on every frame, so the window stays smooth (30 Hz) even
-when the detector runs at 5–10 Hz on GPU.
+when the detector runs at 5-10 Hz on GPU.
+
+Architecture
+------------
+  ROS spin runs on a background daemon thread; the image callback deposits
+  decoded+annotated frames into a single-slot queue (old frames are dropped
+  to keep latency near zero).  The main thread drains the queue and calls
+  cv2.imshow + cv2.waitKey -- both of which MUST run on the main thread
+  because cv2's event loop and GUI context are not thread-safe.
 
 With launch_pipeline:=true the node also starts camera_node and
 detector_node as child processes so the whole pipeline comes up with
@@ -11,27 +19,34 @@ a single command:
 
     ros2 run duburi_vision vision_display --ros-args -p launch_pipeline:=true
 
-    # Choose camera and model:
+    # Sim / webcam test with yolov11n pretrained (person class):
+    ros2 run duburi_vision vision_display --ros-args \\
+        -p launch_pipeline:=true -p camera:=laptop \\
+        -p model:=yolov11n -p classes:=person
+
+    # Pool run with gate+flare model:
     ros2 run duburi_vision vision_display --ros-args \\
         -p launch_pipeline:=true -p camera:=forward \\
         -p model:=gate_flare_medium_100ep -p classes:=gate
 
 ROS2 parameters
 ---------------
-  camera          string   'forward'               camera namespace
-  launch_pipeline bool     false                   auto-start camera_node + detector_node
-  model           string   'yolo26_nano_pretrained' model name/path (launch_pipeline only)
-  classes         string   'person'                class filter   (launch_pipeline only)
-  conf            float    0.35                    confidence     (launch_pipeline only)
+  camera          string   'forward'    camera namespace
+  launch_pipeline bool     false        auto-start camera_node + detector_node
+  model           string   'yolov11n'   model name/path  (launch_pipeline only)
+  classes         string   'person'     class filter     (launch_pipeline only)
+  conf            float    0.35         confidence       (launch_pipeline only)
+  max_display_hz  float    30.0         display refresh cap (0 = unlimited)
 
 Press Q or Ctrl-C to exit. Child processes are terminated on exit.
 """
 
 from __future__ import annotations
 
+import queue
 import subprocess
-import time
 import threading
+import time
 
 import cv2
 import rclpy
@@ -54,6 +69,7 @@ _HUD_LINE_H    = 22
 _HUD_BG_ALPHA  = 0.45
 
 _WAIT_LOG_INTERVAL = 5.0  # seconds between "still waiting" reminders
+_WINDOW_NAME       = 'duburi vision'
 
 
 def _draw_hud(frame, state: DuburiState) -> None:
@@ -116,17 +132,20 @@ class VisionDisplayNode(Node):
 
         self.declare_parameter('camera',          'forward')
         self.declare_parameter('launch_pipeline', False)
-        self.declare_parameter('model',           'yolo26_nano_pretrained')
+        self.declare_parameter('model',           'yolov11n')
         self.declare_parameter('classes',         'person')
         self.declare_parameter('conf',            0.35)
+        self.declare_parameter('max_display_hz',  30.0)
 
         camera          = self.get_parameter('camera').get_parameter_value().string_value
         launch_pipeline = self.get_parameter('launch_pipeline').get_parameter_value().bool_value
         model           = self.get_parameter('model').get_parameter_value().string_value
         classes         = self.get_parameter('classes').get_parameter_value().string_value
         conf            = self.get_parameter('conf').get_parameter_value().double_value
+        max_hz          = self.get_parameter('max_display_hz').get_parameter_value().double_value
 
-        self._camera = camera
+        self._camera        = camera
+        self._max_hz        = max_hz
         self._pipeline_procs: list[subprocess.Popen] = []
 
         if launch_pipeline:
@@ -142,24 +161,30 @@ class VisionDisplayNode(Node):
 
         self._bridge = CvBridge()
         self._state: DuburiState | None = None
-        self._detections: list = []          # latest cached detections
-        self._det_lock = threading.Lock()    # guard _detections writes from det callback
+        self._detections: list = []
+        self._det_lock        = threading.Lock()
         self._frames_received = 0
-        self._last_wait_log = self.get_clock().now()
+        self._last_wait_log   = self.get_clock().now()
 
         # FPS tracking
-        self._fps_t0 = time.monotonic()
-        self._fps_count = 0
+        self._fps_t0      = time.monotonic()
+        self._fps_count   = 0
         self._fps_display = 0.0
+
+        # Single-slot frame queue: callback drops old frame and puts latest.
+        # Main thread drains this; cv2 calls stay off the ROS callback thread.
+        self._frame_q: queue.SimpleQueue = queue.SimpleQueue()
 
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
-        # Full-rate raw frame subscription — drives the display loop
         self.create_subscription(Image, raw_topic, self._on_image, qos_be)
-        # Detection subscription — cached and overlaid on raw frames
         self.create_subscription(Detection2DArray, det_topic, self._on_detections, 10)
         self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
         self.create_timer(1.0, self._check_waiting)
+
+    # ------------------------------------------------------------------ #
+    #  ROS callbacks (run on the background spin thread)                  #
+    # ------------------------------------------------------------------ #
 
     def _check_waiting(self) -> None:
         if self._frames_received > 0:
@@ -187,7 +212,7 @@ class VisionDisplayNode(Node):
             self.get_logger().warning(f'[DISP ] cv_bridge decode failed: {exc!r}')
             return
 
-        # Update FPS counter
+        # FPS counter (callback-side; display loop does NOT need its own)
         self._fps_count += 1
         now = time.monotonic()
         elapsed = now - self._fps_t0
@@ -196,7 +221,7 @@ class VisionDisplayNode(Node):
             self._fps_count = 0
             self._fps_t0 = now
 
-        # Render detections overlay onto the raw frame at full camera FPS
+        # Annotate here (GPU-friendly; stays off the main thread).
         with self._det_lock:
             dets = list(self._detections)
 
@@ -212,13 +237,20 @@ class VisionDisplayNode(Node):
             primary=primary,
         )
 
-        # AUV state HUD (top-right, doesn't overlap detection status badge)
         if self._state is not None:
             _draw_hud(frame, self._state)
 
-        cv2.imshow('duburi vision', frame)
-        if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q')):
-            raise KeyboardInterrupt
+        # Single-slot handoff: drop any queued frame and put the latest.
+        while not self._frame_q.empty():
+            try:
+                self._frame_q.get_nowait()
+            except queue.Empty:
+                break
+        self._frame_q.put_nowait(frame)
+
+    # ------------------------------------------------------------------ #
+    #  Teardown                                                            #
+    # ------------------------------------------------------------------ #
 
     def stop_pipeline(self) -> None:
         for proc in self._pipeline_procs:
@@ -229,8 +261,37 @@ class VisionDisplayNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = VisionDisplayNode()
+
+    # Spin on a background daemon thread so the main thread stays free for
+    # cv2.imshow + cv2.waitKey (both require the main thread on most platforms).
+    spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
+    spin_thread.start()
+
+    frame_budget = 1.0 / node._max_hz if node._max_hz > 0 else 0.0
+
     try:
-        rclpy.spin(node)
+        cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
+        while rclpy.ok():
+            try:
+                frame = node._frame_q.get(timeout=0.1)
+            except queue.Empty:
+                # No frame yet — check for Q key and loop.
+                if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q')):
+                    break
+                continue
+
+            t0 = time.monotonic()
+            cv2.imshow(_WINDOW_NAME, frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key in (ord('q'), ord('Q')):
+                break
+
+            # Rate-limit: sleep the remainder of the frame budget.
+            if frame_budget > 0:
+                elapsed = time.monotonic() - t0
+                remaining = frame_budget - elapsed
+                if remaining > 0:
+                    time.sleep(remaining)
     except KeyboardInterrupt:
         pass
     finally:
@@ -239,3 +300,4 @@ def main(args=None):
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+        spin_thread.join(timeout=2.0)

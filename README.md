@@ -254,18 +254,33 @@ logs converges on -0.5 m, every CLI exits 0.
 
 ### 2 — Vision pipeline (webcam, no AUV)
 
+**Sim / bench test with `yolov11n` pretrained (ROBOSUB tested ★):**
+
 ```bash
-# T1: camera + detector
-ros2 launch duburi_vision cameras_.launch.py
+# Single-command: camera + detector + viewer, detect person with yolov11n
+ros2 run duburi_vision vision_display --ros-args \
+    -p launch_pipeline:=true -p camera:=laptop \
+    -p model:=yolov11n -p classes:=person
+
+# Then run move_and_see mission to see the AUV respond to a person in frame:
+ros2 run duburi_planner mission move_and_see
+```
+
+**Individual nodes:**
+
+```bash
+# T1: camera + detector (yolov11n pretrained, COCO 80-class)
+ros2 launch duburi_vision cameras_.launch.py model:=yolov11n classes:=person
 
 # T2: lightweight OpenCV viewer (replaces rqt_image_view — no Qt needed)
-ros2 run duburi_vision vision_display
-# Or a specific camera:
 ros2 run duburi_vision vision_display --ros-args -p camera:=laptop
 
 # T3: inspect raw detections
 ros2 topic echo /duburi/vision/laptop/detections
 ```
+
+> **Pool day:** swap `model:=yolov11n classes:=person` for
+> `model:=gate_flare_medium_100ep classes:=gate` (or `classes:=gate,flare`).
 
 Success: a window opens showing the webcam feed with bounding boxes and a
 depth/yaw HUD. The detector logs `in_hz=~30  with_target=>0%`.
@@ -1310,7 +1325,7 @@ work without water.
    | `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` |
    | `vision` | `false` | `true` · `false` |
    | `camera` | `forward` | `forward` · `downward` · `laptop` |
-   | `model` | `gate_flare_medium_100ep` | `gate_flare_medium_100ep` · `gate_nano_100ep` · `gate_medium_100ep` · `flare_medium_100ep` · `yolo26_nano_pretrained` |
+   | `model` | `gate_flare_medium_100ep` | `gate_flare_medium_100ep` · `gate_nano_100ep` · `gate_medium_100ep` · `flare_medium_100ep` · `yolov11n` (ROBOSUB-tested pretrained, sim/bench) · `yolo26_nano_pretrained` |
    | `models` | `''` | CSV `name=stem` pairs for multi-model registry: `"gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep"` |
    | `active_model` | `''` | Registry key to start with (requires `models` to be set): `gate` · `flare` · `combined` |
    | `classes` | `gate` | CSV class names: `gate` · `flare` · `gate,flare` · (empty = all) |

@@ -576,10 +576,13 @@ sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON --out=udp:0.
 # Terminal 2: manager
 ros2 run duburi_manager start
 
-# Terminal 3: vision pipeline (uses webcam/video — points at gate prop)
+# Terminal 3a: vision — webcam / sim, detect person with yolov11n (ROBOSUB tested ★)
+ros2 launch duburi_vision cameras_.launch.py model:=yolov11n classes:=person
+
+# Terminal 3b: vision — pool/competition gate+flare model (swap in for pool day)
 ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_medium_100ep classes:=gate,flare
 
-# Terminal 4: run the autonomous mission
+# Terminal 4: run the autonomous mission (uses whatever classes the detector publishes)
 ros2 run duburi_planner mission gate_flare_autonomous
 
 # What to watch for:

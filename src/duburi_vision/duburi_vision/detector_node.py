@@ -86,7 +86,7 @@ class DetectorNode(Node):
 
         self.declare_parameter('camera',              'laptop')
         self.declare_parameter('image_topic',         '')
-        self.declare_parameter('model_path',          'yolo26n.pt')
+        self.declare_parameter('model_path',          'yolov11n')
         self.declare_parameter('models',              '')     # CSV name=stem pairs
         self.declare_parameter('active_model',        '')     # registry key to start with
         self.declare_parameter('device',              'cuda:0')

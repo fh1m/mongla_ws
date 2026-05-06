@@ -24,7 +24,7 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument('camera',  default_value='sim_front'),
         DeclareLaunchArgument('topic',   default_value='/duburi/sim/front_camera/image_raw'),
-        DeclareLaunchArgument('model',   default_value='yolo26n.pt'),
+        DeclareLaunchArgument('model',   default_value='yolov11n'),
         DeclareLaunchArgument('cls_device', default_value='cuda:0'),
         DeclareLaunchArgument('classes', default_value='person'),
         DeclareLaunchArgument('conf',    default_value='0.35'),
