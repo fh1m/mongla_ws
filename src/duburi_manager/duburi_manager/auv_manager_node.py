@@ -384,16 +384,21 @@ class AUVManagerNode(Node):
     def _vision_state_for(self, camera: str):
         """Return (and build on first call) the VisionState for `camera`.
 
+        Cached by (camera, use_tracks) so a goal with tracking=True does not
+        permanently poison the cache for subsequent goals that want tracking=False.
         Subscriptions stay alive for the rest of the process lifetime so
         repeat vision_* goals don't pay the preflight wait twice.
         """
+        use_tracks = bool(self.get_parameter('vision.use_tracks').value)
+        cache_key = (camera, use_tracks)
+
         with self._vision_lock:
-            cached = self._vision_states.get(camera)
+            cached = self._vision_states.get(cache_key)
             if cached is not None:
                 return cached
             self.get_logger().info(
-                f'[VST  ] building VisionState for camera={camera!r}')
-            use_tracks = bool(self.get_parameter('vision.use_tracks').value)
+                f'[VST  ] building VisionState for camera={camera!r} '
+                f'use_tracks={use_tracks}')
             vstate = VisionState(self, camera=camera,
                                  use_tracks=use_tracks,
                                  logger=self.get_logger())
@@ -415,9 +420,9 @@ class AUVManagerNode(Node):
 
         with self._vision_lock:
             # Check again under lock in case a concurrent goal built the same state.
-            if camera not in self._vision_states:
-                self._vision_states[camera] = vstate
-            return self._vision_states[camera]
+            if cache_key not in self._vision_states:
+                self._vision_states[cache_key] = vstate
+            return self._vision_states[cache_key]
 
     # ================================================================== #
     #  DVL auto-connect background loop                                   #
@@ -709,7 +714,7 @@ def _emergency_stop(node) -> None:
         print(f'  {"disarm":<22s} \033[33m[--]\033[0m  ({reason})', file=sys.stderr)
 
     _step('close yaw source',   lambda: node.yaw_source.close())
-    for cam, vstate in list(node._vision_states.items()):
+    for (cam, _), vstate in list(node._vision_states.items()):
         _step(f'close vision[{cam}]', lambda v=vstate: v.close())
 
     print(file=sys.stderr)

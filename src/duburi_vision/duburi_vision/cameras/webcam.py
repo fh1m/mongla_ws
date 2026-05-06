@@ -39,6 +39,9 @@ class WebcamCamera(Camera):
                 f"webcam: cv2.VideoCapture({device!r}) failed to open. "
                 f"Try a different index, check /dev/video* perms, or pass device='/dev/video0'.")
 
+        # Force MJPEG before resolution/fps — V4L2 locks format first.
+        # Without this most USB webcams deliver YUYV (~1-2 fps on USB 2.0).
+        self._cap.set(cv2.CAP_PROP_FOURCC,       cv2.VideoWriter_fourcc(*'MJPG'))
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self._cap.set(cv2.CAP_PROP_FPS,          fps)
@@ -47,11 +50,14 @@ class WebcamCamera(Camera):
         self._actual_w   = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or width)
         self._actual_h   = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or height)
         self._actual_fps = float(self._cap.get(cv2.CAP_PROP_FPS)        or fps)
+        fourcc_int = int(self._cap.get(cv2.CAP_PROP_FOURCC))
+        fourcc_str = ''.join(chr((fourcc_int >> 8 * i) & 0xFF) for i in range(4))
 
         if self._log:
             self._log.info(
                 f'[CAM  ] webcam {device!r} opened: requested {width}x{height}@{fps} '
-                f'-> got {self._actual_w}x{self._actual_h}@{self._actual_fps:.1f}')
+                f'-> got {self._actual_w}x{self._actual_h}@{self._actual_fps:.1f}  '
+                f'fourcc={fourcc_str}')
 
         self._idx          = 0
         self._last_ok      = 0.0

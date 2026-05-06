@@ -178,13 +178,13 @@ class HeadingLock:
 
     def _run(self):
         period       = 1.0 / STREAM_HZ
-        started_at   = time.time()
+        started_at   = time.monotonic()
         last_log     = 0.0
-        last_fresh   = time.time()
+        last_fresh   = time.monotonic()
         warned_dead  = False
 
         while not self._stop_event.is_set():
-            now = time.time()
+            now = time.monotonic()
 
             if now - started_at > self._timeout:
                 self._release_ch4()

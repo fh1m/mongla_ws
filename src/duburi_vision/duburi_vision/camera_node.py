@@ -27,7 +27,9 @@ ros2 run duburi_vision camera_node --ros-args \\
 import os
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
+import queue as _queue
 import sys
+import threading
 import time
 
 import rclpy
@@ -75,10 +77,14 @@ class CameraNode(Node):
         rate = float(self.get_parameter('publish_rate_hz').value)
         self.create_timer(1.0 / max(rate, 1.0), self._tick)
 
-        self._sent  = 0
+        self._sent    = 0
         self._dropped = 0
         self._last_log = time.monotonic()
         self.create_timer(2.0, self._log_health)
+
+        # Background capture thread — keeps cap.read() off the ROS executor.
+        self._frame_q: _queue.SimpleQueue = _queue.SimpleQueue()
+        threading.Thread(target=self._capture_loop, daemon=True).start()
 
         self.get_logger().info(
             f"[CAM  ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
@@ -139,10 +145,24 @@ class CameraNode(Node):
 
         return make_camera(source, logger=self.get_logger(), **kwargs)
 
+    def _capture_loop(self):
+        """Daemon thread: continuously read frames and put latest into queue."""
+        while True:
+            frame, meta = self._cam.read()
+            if frame is None or not meta.fresh:
+                continue
+            # Single-slot: drop stale frame, keep only latest.
+            while not self._frame_q.empty():
+                try:
+                    self._frame_q.get_nowait()
+                except _queue.Empty:
+                    break
+            self._frame_q.put_nowait((frame, meta))
+
     def _tick(self):
-        frame, meta = self._cam.read()
-        if frame is None or not meta.fresh:
-            self._dropped += 1
+        try:
+            frame, meta = self._frame_q.get_nowait()
+        except _queue.Empty:
             return
 
         try:

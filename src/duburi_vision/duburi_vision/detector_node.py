@@ -44,7 +44,9 @@ Multi-model launch (registry mode):
 import os
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
+import queue as _queue
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Optional
@@ -205,6 +207,11 @@ class DetectorNode(Node):
 
         self.add_on_set_parameters_callback(self._on_parameter_change)
 
+        # Inference runs on a background thread so the ROS executor stays free
+        # for param callbacks (live class/model switches) during long inferences.
+        self._infer_q: _queue.SimpleQueue = _queue.SimpleQueue()
+        threading.Thread(target=self._infer_loop, daemon=True).start()
+
         registry_info = (
             f"  registry={list(self._registry)}  active={self._active_name!r}"
             if self._registry else ''
@@ -215,44 +222,59 @@ class DetectorNode(Node):
             f"{registry_info}")
 
     def _on_image(self, msg: Image):
-        try:
-            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        except Exception as exc:
-            self.get_logger().warning(f"[DET  ] cv_bridge decode failed: {exc!r}")
-            return
-
-        t0 = time.monotonic()
-        # Read self._det once — safe atomic ref under CPython GIL.
-        det = self._det
-        try:
-            detections = det.infer(frame)
-        except Exception as exc:
-            self.get_logger().error(f"[DET  ] inference failed: {exc!r}")
-            return
-        dt = time.monotonic() - t0
-
-        self._frames        += 1
-        self._infer_total_s += dt
-        primary = largest(detections)
-        if primary is not None:
-            self._with_target += 1
-
-        det_msg = detections_to_array(detections, msg.header)
-        self._pub_det.publish(det_msg)
-
-        if self._publish_dbg and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt:
-            fps = 1.0 / dt if dt > 1e-6 else 0.0
-            overlay = draw.render_all(
-                frame, detections,
-                source=self._cam_name, fps=fps, device=self._device_str,
-                healthy=True, deadband=self._deadband, primary=primary)
+        # Single-slot: drop stale frame, enqueue latest only.
+        while not self._infer_q.empty():
             try:
-                dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
-                dbg.header = msg.header
-                self._pub_dbg.publish(dbg)
-                self._last_dbg = time.monotonic()
+                self._infer_q.get_nowait()
+            except _queue.Empty:
+                break
+        self._infer_q.put_nowait(msg)
+
+    def _infer_loop(self):
+        """Worker thread: decode + infer + publish (never touches the ROS executor)."""
+        while rclpy.ok():
+            try:
+                msg = self._infer_q.get(timeout=0.5)
+            except _queue.Empty:
+                continue
+
+            try:
+                frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             except Exception as exc:
-                self.get_logger().warning(f"[DET  ] debug image encode failed: {exc!r}")
+                self.get_logger().warning(f"[DET  ] cv_bridge decode failed: {exc!r}")
+                continue
+
+            t0 = time.monotonic()
+            det = self._det  # atomic ref read under CPython GIL
+            try:
+                detections = det.infer(frame)
+            except Exception as exc:
+                self.get_logger().error(f"[DET  ] inference failed: {exc!r}")
+                continue
+            dt = time.monotonic() - t0
+
+            self._frames        += 1
+            self._infer_total_s += dt
+            primary = largest(detections)
+            if primary is not None:
+                self._with_target += 1
+
+            det_msg = detections_to_array(detections, msg.header)
+            self._pub_det.publish(det_msg)
+
+            if self._publish_dbg and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt:
+                fps = 1.0 / dt if dt > 1e-6 else 0.0
+                overlay = draw.render_all(
+                    frame, detections,
+                    source=self._cam_name, fps=fps, device=self._device_str,
+                    healthy=True, deadband=self._deadband, primary=primary)
+                try:
+                    dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
+                    dbg.header = msg.header
+                    self._pub_dbg.publish(dbg)
+                    self._last_dbg = time.monotonic()
+                except Exception as exc:
+                    self.get_logger().warning(f"[DET  ] debug image encode failed: {exc!r}")
 
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
