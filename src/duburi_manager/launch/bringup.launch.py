@@ -61,7 +61,8 @@ def generate_launch_description():
         DeclareLaunchArgument('camera',     default_value='forward',
                               description='Camera profile name (forward|downward|laptop)'),
         DeclareLaunchArgument('model',      default_value='gate_flare_medium_100ep',
-                              description='Single-model: gate_flare_medium_100ep|gate_nano_100ep|gate_medium_100ep|flare_medium_100ep|yolo26_nano_pretrained'),
+                              description='Single-model: gate_flare_medium_100ep|gate_nano_100ep|gate_medium_100ep|flare_medium_100ep'
+                                          '|yolov11n (ROBOSUB-tested pretrained, sim/bench)|yolo26_nano_pretrained'),
         DeclareLaunchArgument('models',     default_value='',
                               description='Multi-model registry (CSV name=stem): '
                                           '"gate=gate_nano_100ep,combined=gate_flare_medium_100ep"'),

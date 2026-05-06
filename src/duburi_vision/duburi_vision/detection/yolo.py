@@ -27,7 +27,21 @@ from .class_index import load_class_index
 # Maps our descriptive model names to Ultralytics' official short stems.
 # Used only when no custom .pt exists in models/ — lets Ultralytics auto-download
 # the right pretrained weights without the caller knowing the short stem.
+#
+# ROBOSUB-TESTED pretrained for sim/bench/webcam testing (COCO 80-class, person class):
+#   yolov11n  — fastest; works on CPU and Jetson Orin Nano  ← recommended default
+#   yolov11s  — a notch more accurate
+#
+# Pool / competition custom models go in src/duburi_vision/models/ as .pt files
+# and do NOT need an alias entry.
 _PRETRAINED_ALIASES: dict[str, str] = {
+    # YOLO11 (recommended pretrained family — ROBOSUB tested)
+    'yolov11n': 'yolo11n',
+    'yolov11s': 'yolo11s',
+    'yolov11m': 'yolo11m',
+    'yolov11l': 'yolo11l',
+    'yolov11x': 'yolo11x',
+    # YOLO26 (previous pretrained family — kept for backwards compat)
     'yolo26_nano_pretrained':   'yolo26n',
     'yolo26_small_pretrained':  'yolo26s',
     'yolo26_medium_pretrained': 'yolo26m',
@@ -125,7 +139,7 @@ def _resolve_model_path(name: str) -> str:
 class YoloDetector(Detector):
     name = 'yolo'
 
-    def __init__(self, *, model_path='yolo26_nano_pretrained', device='cuda:0',
+    def __init__(self, *, model_path='yolov11n', device='cuda:0',
                  conf=0.35, iou=0.5, imgsz=640, half=False,
                  class_allowlist: Optional[Iterable[str]] = ('person',),
                  warmup=True, logger=None):

@@ -50,7 +50,7 @@ class VisionNode(Node):
         self.declare_parameter('source',              '')        # explicit override
         self.declare_parameter('topic',               '')        # for source=ros_topic
         self.declare_parameter('device',              'cuda:0')
-        self.declare_parameter('model_path',          'yolo26n.pt')
+        self.declare_parameter('model_path',          'yolov11n')
         self.declare_parameter('classes',             'person')
         self.declare_parameter('conf',                0.35)
         self.declare_parameter('iou',                 0.5)

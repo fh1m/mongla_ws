@@ -83,19 +83,38 @@ ros2 launch duburi_vision cameras_.launch.py \
 All downstream nodes (`detector_node`, `tracker_node`, vision verbs) are
 identical — `video_file` is just another camera source.
 
-## Pretrained YOLO26 sizes
+## Pretrained YOLO11 — ROBOSUB tested ★ recommended
+
+COCO 80-class pretrained. Best for sim, webcam, and bench testing.
+Use `person` class. Auto-downloads on first use.
+
+| Alias       | Ultralytics stem | Size    | Best for                        |
+| ----------- | ---------------- | ------- | ------------------------------- |
+| `yolov11n`  | `yolo11n`        | ~5 MB   | ★ Default. CPU + Jetson Orin.  |
+| `yolov11s`  | `yolo11s`        | ~19 MB  | A notch more accurate.          |
+| `yolov11m`  | `yolo11m`        | ~42 MB  | Decent on Jetson Orin Nano.     |
+| `yolov11l`  | `yolo11l`        | ~51 MB  | Desktop / training rig.         |
+| `yolov11x`  | `yolo11x`        | ~113 MB | Desktop only.                   |
+
+Quick start:
+
+```bash
+ros2 run duburi_vision vision_display --ros-args \
+    -p launch_pipeline:=true -p model:=yolov11n -p classes:=person
+ros2 run duburi_planner mission move_and_see
+```
+
+## Pretrained YOLO26 — previous family
+
+Kept for backwards compatibility.
 
 | Stem                         | Size     | Best for                             |
 | ---------------------------- | -------- | ------------------------------------ |
-| `yolo26_nano_pretrained`     | ~5 MB    | Default. Jetson Orin + RTX 2060.     |
+| `yolo26_nano_pretrained`     | ~5 MB    | Jetson Orin + RTX 2060.              |
 | `yolo26_small_pretrained`    | ~19 MB   | A notch more accurate.               |
 | `yolo26_medium_pretrained`   | ~42 MB   | Decent on Jetson Orin Nano.          |
 | `yolo26_large_pretrained`    | ~51 MB   | Desktop / training rig.              |
 | `yolo26_xlarge_pretrained`   | ~113 MB  | Desktop only.                        |
-
-References:
-- https://docs.ultralytics.com/models/yolo26
-- https://docs.ultralytics.com/guides/yolo26-training-recipe/
 
 ## Custom-trained weights
 
