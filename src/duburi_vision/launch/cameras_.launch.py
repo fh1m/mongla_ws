@@ -1,19 +1,25 @@
-"""cameras_ -- camera + YOLO26 detector + optional tracker + OpenCV viewer.
+"""cameras_ -- camera + YOLO26 detector + tracker + OpenCV viewer.
 
-The general-purpose launch file for the vision pipeline. Detection is on
-by default; tracking (ByteTrack + Kalman) is opt-in via with_tracking:=true.
-The viewer uses vision_display (OpenCV window) instead of rqt_image_view.
+Named camera profiles (config.py / cameras.yaml):
+    laptop   → Logitech USB RGB webcam, /dev/video4 (dev machine)
+    logitech → same as laptop
+    forward  → Blue Robotics fwd cam, /dev/video0  (Jetson, pool)
+    downward → Blue Robotics down cam, /dev/video2 (Jetson, pool)
 
 Usage:
-    ros2 launch duburi_vision cameras_.launch.py
-    ros2 launch duburi_vision cameras_.launch.py device:=2 conf:=0.5
-    ros2 launch duburi_vision cameras_.launch.py viewer:=false         # headless
-    ros2 launch duburi_vision cameras_.launch.py with_tracking:=true   # enable ByteTrack + Kalman
-    ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+    ros2 launch duburi_vision cameras_.launch.py                        # laptop profile
+    ros2 launch duburi_vision cameras_.launch.py camera:=forward        # vehicle fwd cam
+    ros2 launch duburi_vision cameras_.launch.py camera:=laptop device:=4  # explicit device
+    ros2 launch duburi_vision cameras_.launch.py viewer:=false          # headless
+    ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_medium_100ep classes:=gate,flare
 
     # Run on a pre-recorded video instead of a live webcam:
     ros2 launch duburi_vision cameras_.launch.py video_file:=/path/to/pool_run.mp4
     ros2 launch duburi_vision cameras_.launch.py video_file:=/tmp/gate.mp4 classes:=gate loop:=false
+
+    # Live-tune tracker without restart:
+    ros2 param set /duburi_tracker min_hits 1
+    ros2 param set /duburi_tracker track_buffer 30
 """
 
 from launch                       import LaunchDescription
@@ -54,6 +60,10 @@ def generate_launch_description():
                               description='Start tracker_node (ByteTrack + Kalman) alongside detector'),
         DeclareLaunchArgument('track_buffer',  default_value='30',
                               description='tracker_node: frames to hold lost track before expiry'),
+        DeclareLaunchArgument('min_hits',      default_value='1',
+                              description='tracker_node: consecutive detections before track is confirmed (1=instant)'),
+        DeclareLaunchArgument('max_predict',   default_value='10',
+                              description='tracker_node: Kalman frames to predict during detection gap'),
     ]
 
     cam_name   = LaunchConfiguration('camera')
@@ -102,8 +112,10 @@ def generate_launch_description():
         package='duburi_vision', executable='tracker_node', name='duburi_tracker',
         output='screen',
         parameters=[{
-            'camera':       cam_name,
-            'track_buffer': LaunchConfiguration('track_buffer'),
+            'camera':             cam_name,
+            'track_buffer':       LaunchConfiguration('track_buffer'),
+            'min_hits':           LaunchConfiguration('min_hits'),
+            'max_predict_frames': LaunchConfiguration('max_predict'),
         }],
         condition=IfCondition(LaunchConfiguration('with_tracking')),
     )
