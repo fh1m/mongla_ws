@@ -162,7 +162,7 @@ class TrackerNode(Node):
             _set_center(d2.bbox.center, td.cx, td.cy)
             d2.bbox.size_x = float(td.width)
             d2.bbox.size_y = float(td.height)
-            d2.tracking_id = str(td.track_id)
+            d2.id = str(td.track_id)
             hypo = ObjectHypothesisWithPose()
             _set_hypothesis(hypo, td.class_name, td.score)
             d2.results.append(hypo)

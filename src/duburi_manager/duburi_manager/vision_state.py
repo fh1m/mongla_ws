@@ -78,7 +78,7 @@ class VisionState:
     use_tracks : bool
         When True, subscribe to /duburi/vision/<cam>/tracks (output of
         tracker_node) instead of /detections. The topic carries the same
-        Detection2DArray type with tracking_id populated. Sample.track_id
+        Detection2DArray type with id populated. Sample.track_id
         will be set; score=0.0 frames are Kalman-predicted (no real detection).
         Default False — raw detections, no tracking overhead.
     """
@@ -285,8 +285,8 @@ def _hypothesis_matches(det: Detection2D, class_name: str) -> bool:
 
 
 def _tracking_id(det: Detection2D) -> int | None:
-    """Return integer track_id from Detection2D.tracking_id, or None."""
-    tid = getattr(det, 'tracking_id', None)
+    """Return integer track_id from Detection2D.id, or None."""
+    tid = getattr(det, 'id', None)
     if tid is None or tid == '':
         return None
     try:
