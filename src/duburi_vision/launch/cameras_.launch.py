@@ -32,7 +32,8 @@ from launch_ros.actions           import Node
 def generate_launch_description():
     args = [
         DeclareLaunchArgument('camera',        default_value='laptop'),
-        DeclareLaunchArgument('device',        default_value='0'),
+        DeclareLaunchArgument('device',        default_value='-1',
+                              description='Device index override; -1 = use profile default'),
         DeclareLaunchArgument('width',         default_value='640'),
         DeclareLaunchArgument('height',        default_value='480'),
         DeclareLaunchArgument('fps',           default_value='30'),
@@ -69,18 +70,19 @@ def generate_launch_description():
     cam_name   = LaunchConfiguration('camera')
     video_file = LaunchConfiguration('video_file')
 
-    # source is 'video_file' when video_file arg is non-empty, else 'webcam'
-    source_expr = PythonExpression(
-        ["'video_file' if '", video_file, "' else 'webcam'"])
+    # Use named profile when not playing a video file; let profile own source/device/frame_id.
+    # When video_file is set, pass source='video_file' and leave profile empty.
+    profile_expr = PythonExpression(["'", cam_name, "' if not '", video_file, "' else ''"])
+    source_expr  = PythonExpression(["'video_file' if '", video_file, "' else ''"])
 
     camera_node = Node(
         package='duburi_vision', executable='camera_node', name='duburi_camera',
         output='screen',
         parameters=[{
+            'profile':         profile_expr,
             'source':          source_expr,
             'name':            cam_name,
-            'frame_id':        'laptop_cam',
-            'device':          LaunchConfiguration('device'),
+            'device':          LaunchConfiguration('device'),   # -1 = use profile default
             'path':            video_file,
             'loop':            LaunchConfiguration('loop'),
             'width':           LaunchConfiguration('width'),

@@ -53,12 +53,12 @@ class TrackerNode(Node):
 
         self.declare_parameter('camera',                 'laptop')
         self.declare_parameter('track_buffer',           30)
-        self.declare_parameter('min_hits',               3)
+        self.declare_parameter('min_hits',               1)
         self.declare_parameter('iou_threshold',          0.3)
         self.declare_parameter('enable_kalman',          True)
         self.declare_parameter('kalman_process_noise',   0.1)
         self.declare_parameter('kalman_measurement_noise', 1.0)
-        self.declare_parameter('max_predict_frames',     5)
+        self.declare_parameter('max_predict_frames',     10)
 
         cam              = str(self.get_parameter('camera').value).strip() or 'cam'
         track_buffer     = int(self.get_parameter('track_buffer').value)
