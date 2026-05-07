@@ -2,9 +2,10 @@
 """detector_node -- subscribe to image_raw, run YOLO26, publish detections.
 
 Topics:
-  in    /duburi/vision/<cam>/image_raw     sensor_msgs/Image
-  out   /duburi/vision/<cam>/detections    vision_msgs/Detection2DArray
-  out   /duburi/vision/<cam>/image_debug   sensor_msgs/Image  (rate-limited overlay)
+  in    /duburi/vision/<cam>/image_raw       sensor_msgs/Image
+  out   /duburi/vision/<cam>/detections      vision_msgs/Detection2DArray
+  out   /duburi/vision/<cam>/image_debug     sensor_msgs/Image  (rate-limited overlay)
+  out   /duburi/vision/<cam>/classes_filter  std_msgs/String    (comma-sep active class list)
 
 Single-model launch (unchanged from v1):
 -----------------------------------------
@@ -186,9 +187,11 @@ class DetectorNode(Node):
                 raise
 
         from vision_msgs.msg import Detection2DArray
-        self._bridge   = CvBridge()
-        self._sub      = self.create_subscription(Image, ns_in, self._on_image, 5)
-        self._pub_det  = self.create_publisher(Detection2DArray, f'{ns_out}/detections',  10)
+        from std_msgs.msg import String
+        self._bridge       = CvBridge()
+        self._sub          = self.create_subscription(Image, ns_in, self._on_image, 5)
+        self._pub_det      = self.create_publisher(Detection2DArray, f'{ns_out}/detections', 10)
+        self._pub_classes  = self.create_publisher(String, f'{ns_out}/classes_filter', 10)
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)
         if self._publish_dbg:
             self._pub_dbg = self.create_publisher(Image, f'{ns_out}/image_debug', 5)
@@ -220,6 +223,17 @@ class DetectorNode(Node):
             f"[DET  ] subscribed {ns_in!r} -> {ns_out}/detections  "
             f"({'+ image_debug' if self._publish_dbg else 'no debug image'})"
             f"{registry_info}")
+
+        # Publish initial classes so display_node picks up the configured list
+        # on connect (even before any param change fires).
+        self._publish_classes(classes_param)
+
+    def _publish_classes(self, classes_str: str) -> None:
+        """Publish the current classes filter so display_node can light up active classes."""
+        from std_msgs.msg import String
+        msg = String()
+        msg.data = classes_str
+        self._pub_classes.publish(msg)
 
     def _on_image(self, msg: Image):
         # Single-slot: drop stale frame, enqueue latest only.
@@ -286,6 +300,7 @@ class DetectorNode(Node):
                     else [c.strip() for c in classes_str.split(',') if c.strip()]
                 )
                 self._det.update_allowlist(new_allow)
+                self._publish_classes(classes_str)
                 self.get_logger().info(
                     f"[DET  ] classes → {new_allow or '*all*'}")
 
