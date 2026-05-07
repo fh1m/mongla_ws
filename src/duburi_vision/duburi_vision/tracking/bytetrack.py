@@ -1,11 +1,11 @@
-"""ByteTrack wrapper using Roboflow trackers.ByteTrackTracker.
+"""ByteTrack wrapper using supervision.ByteTrack.
 
 Converts between the internal List[Detection] format and supervision's
 numpy-backed sv.Detections. Class labels are preserved per-track by
 keeping a dict[track_id -> class_name] that is updated each frame a
 real detection confirms the track.
 
-Install: pip install trackers
+Install: pip install supervision
 """
 
 from __future__ import annotations
@@ -42,19 +42,17 @@ class ByteTrackWrapper(Tracker):
                  iou_threshold: float = 0.3):
         try:
             import supervision as sv
-            from trackers import ByteTrackTracker
         except ImportError as exc:
             raise ImportError(
-                "trackers and supervision are required. "
-                "Install with: pip install trackers"
+                "supervision is required. Install with: pip install supervision"
             ) from exc
 
         self._sv = sv
-        # Swap to OCSORTTracker at pool day if tracks break during occlusion.
-        self._bt = ByteTrackTracker(
+        # To swap to OC-SORT at pool day: replace sv.ByteTrack with sv.OCSORT (same API).
+        self._bt = sv.ByteTrack(
             lost_track_buffer=track_buffer,
             minimum_consecutive_frames=min_hits,
-            minimum_iou_threshold=iou_threshold,
+            minimum_matching_threshold=iou_threshold,
         )
         self._track_buffer = track_buffer
         self._min_hits     = min_hits
@@ -77,7 +75,7 @@ class ByteTrackWrapper(Tracker):
                 class_id=class_ids,
             )
 
-        tracked = self._bt.update(sv_dets)
+        tracked = self._bt.update_with_detections(sv_dets)
 
         results: List[TrackedDetection] = []
 
