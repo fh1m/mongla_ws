@@ -252,7 +252,9 @@ duburi_ws/src/
 | `auv_manager_node` / `auv_manager` | `duburi_manager` | The single MAVLink connection, `/duburi/move` ActionServer, telemetry publisher, ROS params |
 | `sensors_node`                   | `duburi_sensors`| Standalone yaw-source diagnostic — does NOT touch thrusters or arming |
 | `camera_node`                    | `duburi_vision` | Read from one Camera (webcam / ros_topic / ...) -> `/duburi/vision/<cam>/image_raw` + `camera_info` |
-| `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO26 -> `/duburi/vision/<cam>/detections` + rate-limited `image_debug` |
+| `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO26 -> `/duburi/vision/<cam>/detections` + `image_debug` + `classes_filter` |
+| `tracker_node`                   | `duburi_vision` | ByteTrack + Kalman smoother; subscribes `detections` -> publishes `tracks` (stable IDs + smooth bboxes) |
+| `vision_display`                 | `duburi_vision` | Mission-control HUD; subscribes `image_raw` + `detections` + `tracks` + `/duburi/state` + `classes_filter`; renders instruments (depth gauge, heading tape) + active-class panel |
 | `vision_node`                    | `duburi_vision` | In-process camera+detector smoke test (cousin of `sensors_node`) |
 
 There is exactly **one** node that touches `pymavlink` in the live mission path: `auv_manager_node`. The `duburi` CLI, the `mission` runner, and any custom Python script are ROS2 ActionClients of `/duburi/move` -- all live in `duburi_planner`.

@@ -184,7 +184,7 @@ ros2 topic hz /duburi/vision/forward/detections    # verify ~15-25 Hz
 ros2 run duburi_vision tracker_node --ros-args -p camera:=forward
 ros2 topic hz /duburi/vision/forward/tracks
 
-# ── 7. Vision viewer — OpenCV window (no Qt/rqt needed) ──────────────────
+# ── 7. Vision viewer — Mission-control HUD (no Qt/rqt needed) ────────────
 # Attach to an already-running pipeline:
 ros2 run duburi_vision vision_display --ros-args -p camera:=forward
 
@@ -192,6 +192,8 @@ ros2 run duburi_vision vision_display --ros-args -p camera:=forward
 ros2 run duburi_vision vision_display --ros-args \
     -p launch_pipeline:=true -p camera:=forward \
     -p model:=gate_flare_medium_100ep -p classes:=gate
+# HUD panels: PERCEPTION / CLASSES (lights up on detection) /
+#             ALIGNMENT / STATE + DEPTH GAUGE + HEADING TAPE (when FC running)
 
 # ── 8. Full vision pipeline via launch (camera + detector + viewer) ───────
 ros2 launch duburi_vision cameras_.launch.py                           # webcam, viewer on
@@ -282,12 +284,20 @@ ros2 topic echo /duburi/vision/laptop/detections
 > **Pool day:** swap `model:=yolov11n classes:=person` for
 > `model:=gate_flare_medium_100ep classes:=gate` (or `classes:=gate,flare`).
 
-Success: a window opens showing the webcam feed with bounding boxes and a
-depth/yaw HUD. The detector logs `in_hz=~30  with_target=>0%`.
+Success: a window opens showing the webcam feed with:
+- Rounded class-colored bounding boxes + confidence bars + corner brackets
+- Track IDs once tracker_node is running (Kalman-smoothed stable positions)
+- **CLASSES panel** top-left below PERCEPTION: shows `[PERSON]`, lights up teal on detection
+- **DEPTH GAUGE** (right edge) and **HEADING TAPE** (bottom-center) appear only when
+  the FC manager is running and publishing `/duburi/state`
+- Live class switch: `ros2 param set /duburi_detector classes gate` — CLASSES panel
+  updates immediately on next detection
 
-> **Note:** `vision_display` subscribes to `image_debug` — it shows "waiting for
-> first frame" until `cameras_.launch.py` is running. The HUD data comes from
-> `/duburi/state` which requires the manager to be up.
+The detector logs `in_hz=~30  with_target=>0%`.
+
+> **Note:** `vision_display` subscribes to `image_raw` directly (not `image_debug`) for
+> full-rate smooth video, then overlays HUD on its own copy. It shows "no frames yet"
+> until `cameras_.launch.py` is running.
 
 ### 3 — Vision + control loop (the big one)
 
