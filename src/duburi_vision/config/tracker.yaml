@@ -3,12 +3,12 @@ tracker_node:
 
     # ---- ByteTrack association params --------------------------------------- #
     # Frames to hold a lost track alive before dropping it.
-    # 30 frames at 20 Hz detector = ~1.5 s of occlusion tolerance.
-    track_buffer: 30
+    # 60 frames at 20 Hz detector = ~3 s of occlusion tolerance.
+    track_buffer: 60
 
     # Consecutive detection frames before a new track is published (filters
     # one-shot false positives / background noise).
-    min_hits: 3
+    min_hits: 2
 
     # IoU threshold for the low-confidence second-pass association.
     # Lower = more aggressive re-association; higher = stricter.

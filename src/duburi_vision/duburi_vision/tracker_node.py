@@ -52,8 +52,8 @@ class TrackerNode(Node):
         super().__init__('duburi_tracker')
 
         self.declare_parameter('camera',                 'laptop')
-        self.declare_parameter('track_buffer',           30)
-        self.declare_parameter('min_hits',               1)
+        self.declare_parameter('track_buffer',           60)
+        self.declare_parameter('min_hits',               2)
         self.declare_parameter('iou_threshold',          0.3)
         self.declare_parameter('enable_kalman',          True)
         self.declare_parameter('kalman_process_noise',   0.1)
