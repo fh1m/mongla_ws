@@ -52,7 +52,7 @@ Each verb's `Implements` row gives the implementation breadcrumb
 
 ## Quick Reference
 
-All 33 verbs at a glance. Required fields have no default listed.
+All 34 verbs at a glance. Required fields have no default listed.
 
 | Verb | Fields (→ default) | What it does |
 |---|---|---|
@@ -60,6 +60,7 @@ All 33 verbs at a glance. Required fields have no default listed.
 | `disarm` | timeout→20 s | Safe shutdown |
 | `set_mode` | **target_name** required, timeout→8 s | Switch ArduSub mode |
 | `stop` | — | Neutral all channels (active hold) |
+| `surface` | — | **Safety**: ascend to 0 m. Bypasses command_active gate (works during a running mission) |
 | `pause` | duration→2 s | Release RC override |
 | `move_forward` | **duration** required, gain→80 %, settle→0 s | Open-loop forward thrust |
 | `move_back` | **duration** required, gain→80 %, settle→0 s | Open-loop reverse thrust |
@@ -82,6 +83,7 @@ All 33 verbs at a glance. Required fields have no default listed.
 | `vision_align_depth` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_depth→0.05, on_lost→fail, stale_after→1.5 s, depth_anchor_frac→0, lock_mode→'', tracking→false | Centre target vertically |
 | `vision_hold_distance` | camera→laptop, target_class→person, duration→20 s, deadband→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→1.5 s, lock_mode→'', distance_metric→'', tracking→false | Hold standoff distance |
 | `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→1.5 s, depth_anchor_frac→0, lock_mode→'', distance_metric→'', tracking→false | Multi-axis simultaneous |
+| `look_around` | camera→laptop, target_class→person, yaw_rate_pct→20, settle→1.5, gain→40, duration→90 | POSHOLD + incremental yaw orbit; exits on first detection |
 
 ---
 

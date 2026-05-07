@@ -257,6 +257,18 @@ class Duburi(VisionVerbs):
             time.sleep(settle_time)
             return self._make_result(True, 'stop: completed')
 
+    def surface(self):
+        """Emergency surface: ascend to 0 m and hold.
+
+        Sets depth setpoint to 0 m and waits up to 60 s for the AUV to
+        reach the surface.  The COMMANDS registry lists it as a safety
+        verb so goal_callback bypasses the command_active gate — it can
+        run even while another mission command is executing.
+        """
+        with self._command_scope('surface'):
+            self.log.info('[CMD  ] surface -- ascending to 0 m')
+            return self.set_depth(0.0, timeout=60.0)
+
     def pause(self, duration=2.0):
         """Release RC override for `duration` seconds.
 

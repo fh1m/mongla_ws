@@ -223,6 +223,10 @@ class AUVManagerNode(Node):
         self.prev_state      = {}
         self.last_print_time = 0.0
         self.prev_rc         = None
+        # Fast HUD cache: armed/mode/battery reused by the 20 Hz instrument tick
+        self._fast_armed  = False
+        self._fast_mode   = ''
+        self._fast_batt_v = math.nan
         self.reader_thread   = threading.Thread(
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
@@ -374,6 +378,11 @@ class AUVManagerNode(Node):
         # ---- Timers ---------------------------------------------------
         self.create_timer(0.5, self.heartbeat_tick,  callback_group=self.timer_group)
         self.create_timer(0.5, self.telemetry_tick,  callback_group=self.timer_group)
+        # Fast instrument tick: publishes heading + depth at 20 Hz so the HUD
+        # compass and depth gauge stay real-time (AHRS2 is pinned to 50 Hz).
+        # Uses a separate callback group so it can fire between telemetry ticks.
+        self.fast_group = MutuallyExclusiveCallbackGroup()
+        self.create_timer(0.05, self._fast_state_tick, callback_group=self.fast_group)
 
         # reader_thread already started above (before yaw_source init).
 
@@ -574,6 +583,26 @@ class AUVManagerNode(Node):
     def heartbeat_tick(self):
         self.pixhawk.send_heartbeat()
 
+    def _fast_state_tick(self):
+        """Publish heading + depth at 20 Hz for real-time HUD instruments.
+
+        Reads fresh attitude from the Pixhawk cache (AHRS2 pinned to 50 Hz)
+        and reuses the last-known armed/mode/battery from telemetry_tick.
+        """
+        attitude = self.pixhawk.get_attitude()
+        if attitude is None:
+            return
+        yaw_deg, _ = self._effective_yaw_deg(attitude)
+        msg = DuburiState()
+        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'duburi'
+        msg.armed           = self._fast_armed
+        msg.mode            = self._fast_mode
+        msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
+        msg.depth_m         = float(attitude['depth'])
+        msg.battery_voltage = self._fast_batt_v
+        self.state_publisher.publish(msg)
+
     def _effective_yaw_deg(self, attitude):
         """Return ``(yaw_deg, label)`` -- the SAME yaw the control loops
         close on. Prefers ``yaw_source.read_yaw()`` when fresh, falls
@@ -606,6 +635,10 @@ class AUVManagerNode(Node):
         armed    = self.pixhawk.is_armed()
 
         yaw_deg, yaw_label = self._effective_yaw_deg(attitude)
+
+        self._fast_armed  = bool(armed)
+        self._fast_mode   = mode or ''
+        self._fast_batt_v = float(battery['voltage']) if battery else math.nan
 
         self._maybe_print_state(attitude, battery, mode, armed, yaw_deg, yaw_label)
         self._maybe_print_rc(rc)

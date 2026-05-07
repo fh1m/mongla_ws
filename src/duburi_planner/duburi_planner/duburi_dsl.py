@@ -321,6 +321,10 @@ class DuburiMission:
     def stop(self):
         return self._send('stop')
 
+    def surface(self):
+        """Emergency surface: ascend to 0 m depth. Safe to call during a running mission."""
+        return self._send('surface')
+
     def head(self) -> float:
         """Return live heading (degrees) at call time.
 

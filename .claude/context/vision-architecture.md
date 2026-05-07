@@ -119,28 +119,38 @@ Canary log line (grep for this on every machine):
 
 ## Visualization layers
 
-`draw.render_all(frame, detections, *, ..., configured_classes=None, track_ids=None)` paints:
+`draw.render_all(frame, detections, *, ..., state, configured_classes, track_ids)` returns
+`np.vstack([video_section, ui_strip])` — output height = `frame_h + 150 px`.
 
- 1. raw frame
- 2. dashed center reticle
- 3. all detections — `RoundBoxAnnotator` (class colors) + `PercentageBarAnnotator`
-    (confidence bar) + `BoxCornerAnnotator` + `LabelAnnotator` (class + track ID)
- 4. primary target: `HaloAnnotator` glow + crosshair + offset arrow
- 5. PERCEPTION panel (top-left): SRC / FPS / DET / TGT / TRK
- 6. CLASSES panel (below PERCEPTION, only when `configured_classes` set):
-    configured classes dim; currently-detected ones light up teal
- 7. ALIGNMENT panel (bottom-left): STATUS / ERR_X / ERR_Y / AREA / CONF
- 8. STATE panel (top-right, only when `state` provided): DEPTH / YAW / MODE / BATT / ARMED
- 9. DEPTH GAUGE (right edge, only when `state.depth_m` is not NaN):
-    vertical 0–10 m slider with moving indicator; color: green<3m / amber<7m / red
-10. HEADING TAPE (bottom-center, only when `state.yaw_deg` is not NaN):
-    horizontal ±60° compass with cardinals and 3-digit heading readout
-11. red full-width "STALE FRAME" banner if `healthy=False`
+**Video section** — only visual overlays (no text panels, preserves operator view of the scene):
+ 1. Dashed center reticle + deadband rectangle
+ 2. Motion trails (`sv.TraceAnnotator`) — drawn before boxes so trails render behind
+ 3. All detections: `BoxAnnotator` (thin class-colored) + `BoxCornerAnnotator` (white brackets)
+    + `TriangleAnnotator` (lock indicator) + `PercentageBarAnnotator` + `LabelAnnotator`
+    (class name + optional `#track_id`)
+ 4. Primary target: thick ACCENT border + crosshair + offset arrow from frame center
+ 5. Red "STALE FRAME" banner across top if `healthy=False`
+
+**UI strip (150 px below video)** — `_render_ui_strip()` builds on a dark `C_BG` surface:
+ - Brand header: `● BRACU  DUBURI ●` centered; accent separator below
+ - Left block: `[PERCEPTION]` → `[CLASSES]` → `[ALIGNMENT]` panels (SRC/FPS/DET/TGT status)
+ - Right block (right-anchored):
+   - `[STATE]` panel: DEPTH / YAW / MODE / BATT / ARMED
+   - `[HEADING SRC]` panel: SRC label + ACTIVE/NO DATA status
+   - Compass needle (radius 20 px): direction indicator, updates at 20 Hz
+   - Depth gauge (22×72 px, 0–5 m scale): fill + indicator line, always visible with `?` when no data; updates at 20 Hz
+ - Footer: full-width heading tape (±60°, cardinal marks, 3-digit readout above center)
+
+**Real-time instruments**: `auv_manager_node` publishes `/duburi/state` at 20 Hz via
+`_fast_state_tick()` (fresh AHRS2 yaw + depth, reusing cached armed/mode/battery). The slower
+`telemetry_tick` at 2 Hz handles logging and armed/mode/battery cache updates. This keeps the
+compass needle and depth bar latency under 50 ms even though a full telemetry log line only
+prints on change.
 
 `track_ids` is a `list[int|None]` parallel to `detections`; supervision annotators use it for
-stable per-track coloring (`ColorLookup.CLASS`). `vision_display` passes Kalman-smoothed
-tracks from `/tracks` as the detection list (and their IDs as `track_ids`) for smooth bboxes,
-falling back to raw `/detections` when tracker is not running.
+stable per-track coloring. `vision_display` passes Kalman-smoothed tracks from `/tracks` as the
+detection list (and their IDs as `track_ids`) for smooth bboxes, falling back to raw
+`/detections` when tracker is not running.
 
 Every glyph answers a specific operator question. Every diagnostic state
 is visible in one frame — that's how we let the user paste a screenshot
