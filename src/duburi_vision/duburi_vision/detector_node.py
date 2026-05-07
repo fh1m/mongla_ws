@@ -277,18 +277,18 @@ class DetectorNode(Node):
             self._pub_det.publish(det_msg)
 
             if self._publish_dbg and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt:
-                fps = 1.0 / dt if dt > 1e-6 else 0.0
-                overlay = draw.render_all(
-                    frame, detections,
-                    source=self._cam_name, fps=fps, device=self._device_str,
-                    healthy=True, deadband=self._deadband, primary=primary)
                 try:
+                    fps = 1.0 / dt if dt > 1e-6 else 0.0
+                    overlay = draw.render_all(
+                        frame, detections,
+                        source=self._cam_name, fps=fps, device=self._device_str,
+                        healthy=True, deadband=self._deadband, primary=primary)
                     dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
                     dbg.header = msg.header
                     self._pub_dbg.publish(dbg)
                     self._last_dbg = time.monotonic()
                 except Exception as exc:
-                    self.get_logger().warning(f"[DET  ] debug image encode failed: {exc!r}")
+                    self.get_logger().warning(f"[DET  ] debug image failed: {exc!r}")
 
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult

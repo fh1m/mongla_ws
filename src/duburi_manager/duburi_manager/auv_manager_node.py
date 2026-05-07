@@ -473,7 +473,8 @@ class AUVManagerNode(Node):
     # ================================================================== #
 
     def goal_callback(self, goal_request):
-        if self.command_active:
+        _SAFETY = {'disarm', 'stop', 'surface'}
+        if self.command_active and goal_request.cmd not in _SAFETY:
             self.get_logger().warn(
                 f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
             return GoalResponse.REJECT

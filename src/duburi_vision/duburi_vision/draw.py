@@ -464,7 +464,8 @@ def render_all(frame_bgr: np.ndarray,
     if detections:
         sv = _get_sv()
         sv_all = _to_sv(detections, track_ids)
-        out = sv['trace'].annotate(scene=out, detections=sv_all)
+        if sv_all.tracker_id is not None:
+            out = sv['trace'].annotate(scene=out, detections=sv_all)
         out = sv['box'].annotate(scene=out, detections=sv_all)
         out = sv['corners'].annotate(scene=out, detections=sv_all)
         out = sv['triangle'].annotate(scene=out, detections=sv_all)
