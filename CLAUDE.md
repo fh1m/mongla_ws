@@ -582,6 +582,7 @@ ros2 node info /duburi_manager           # ActionServer should be listed
 ros2 run duburi_planner duburi arm
 ros2 run duburi_planner duburi set_depth --target -0.5
 ros2 run duburi_planner duburi yaw_right --target 90
+ros2 run duburi_planner duburi turn --target 90      # absolute heading, direction auto
 ros2 run duburi_planner duburi move_forward --duration 5 --gain 80
 ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
 ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120

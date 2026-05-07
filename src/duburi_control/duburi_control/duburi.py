@@ -195,6 +195,25 @@ class Duburi(VisionVerbs):
         # the pre-flight pause can be skipped when the next command uses
         # the same axes. None = no recent write / lock state changed.
         self._last_axes        = None
+        # Cooperative abort: set by request_abort(), checked every loop tick.
+        # Cleared at the START of each command scope so each command starts fresh.
+        self._abort_event      = threading.Event()
+
+    def request_abort(self):
+        """Signal all running motion loops to exit at their next tick.
+
+        Called from ``auv_manager_node.cancel_callback`` (a different thread)
+        when the operator cancels the active action goal. Each loop checks
+        ``abort_fn()`` once per tick; on True it breaks cleanly and returns,
+        which releases ``self.lock`` so queued safety commands (disarm, stop)
+        can proceed immediately.
+        """
+        self._abort_event.set()
+
+    @property
+    def _abort_fn(self):
+        """Callable returned to motion loops -- True when abort requested."""
+        return self._abort_event.is_set
 
     # ================================================================== #
     #  Arm / Disarm / Mode -- ACK-bearing, no axis movement              #
@@ -286,7 +305,8 @@ class Duburi(VisionVerbs):
             # _writers() already releases Ch4 when lock is running so the
             # HeadingLock thread remains the sole Ch4 author.
             run(self.pixhawk, signed_dir, duration, int(gain), self.log,
-                self._writers(), yaw_source=self.yaw_source, settle=settle)
+                self._writers(), yaw_source=self.yaw_source, settle=settle,
+                abort_fn=self._abort_fn)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
@@ -318,7 +338,8 @@ class Duburi(VisionVerbs):
             # Heading lock stays ACTIVE during timed lateral moves.
             # _writers() already releases Ch4 when lock is running.
             run(self.pixhawk, signed_dir, duration, int(gain), self.log,
-                self._writers(), yaw_source=self.yaw_source, settle=settle)
+                self._writers(), yaw_source=self.yaw_source, settle=settle,
+                abort_fn=self._abort_fn)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
@@ -347,7 +368,8 @@ class Duburi(VisionVerbs):
                 signed_dir = +1 if gain >= 0 else -1
                 motion_arc(self.pixhawk, signed_dir, duration, abs(int(gain)),
                            yaw_rate_pct, self.log,
-                           yaw_source=self.yaw_source, settle=settle)
+                           yaw_source=self.yaw_source, settle=settle,
+                           abort_fn=self._abort_fn)
             new_heading = self._current_heading()
             self._retarget_heading_lock(new_heading)
             return self._make_result(
@@ -366,6 +388,38 @@ class Duburi(VisionVerbs):
         """impl: motion_yaw.yaw_snap/yaw_glide -> pixhawk.send_rc_override (Ch4 rate)."""
         return self._turn(+abs(target), timeout, 'RIGHT', settle)
 
+    def turn(self, target, timeout=30.0, settle=0.0):
+        """Rotate to absolute heading `target` degrees (0-360) via shortest arc.
+
+        Direction (left/right) is determined automatically from the signed
+        heading error. Uses the same yaw_snap/yaw_glide loop as yaw_left/right.
+
+        impl: motion_yaw.yaw_snap/yaw_glide -> pixhawk.send_rc_override (Ch4 rate).
+        """
+        with self._command_scope('turn'):
+            self._send_neutral_and_settle(axes=frozenset({'yaw'}))
+            self._ensure_yaw_capable_mode()
+            target_heading = float(target) % 360.0
+            start_heading  = self._current_heading()
+            delta          = Pixhawk.heading_error(target_heading, start_heading)
+            label          = 'RIGHT' if delta >= 0 else 'LEFT'
+            run_yaw = yaw_glide if self.smooth_yaw else yaw_snap
+            self.log.info(
+                f'[CMD  ] turn -> {target_heading:.1f}°  '
+                f'from {start_heading:.1f}°  delta={delta:+.1f}°  ({label})')
+            with self._suspend_heading_lock():
+                run_yaw(self.pixhawk, start_heading, target_heading,
+                        timeout, label, self.log,
+                        yaw_source=self.yaw_source,
+                        abort_fn=self._abort_fn)
+                self._send_neutral_and_settle(settle_time=0.3 + settle)
+            final_heading = self._current_heading()
+            self._retarget_heading_lock(final_heading)
+            error = Pixhawk.heading_error(target_heading, final_heading)
+            return self._make_result(
+                True, 'turn: completed',
+                final_value=final_heading, error_value=float(error))
+
     def _turn(self, signed_degrees, timeout, label, settle):
         """Execute a yaw turn relative to the current heading."""
         verb = 'yaw_right' if signed_degrees > 0 else 'yaw_left'
@@ -378,7 +432,8 @@ class Duburi(VisionVerbs):
             with self._suspend_heading_lock():
                 run_yaw(self.pixhawk, start_heading, target_heading,
                         timeout, label, self.log,
-                        yaw_source=self.yaw_source)
+                        yaw_source=self.yaw_source,
+                        abort_fn=self._abort_fn)
                 self._send_neutral_and_settle(settle_time=0.3 + settle)
             final_heading = self._current_heading()
             self._retarget_heading_lock(final_heading)
@@ -447,7 +502,8 @@ class Duburi(VisionVerbs):
             self.log.info(f'[CMD  ] set_depth  {target:.2f}m')
             self._ensure_alt_hold('set_depth')
             hold_depth(self.pixhawk, target, timeout, self.log,
-                       neutral_writer=self._writers().neutral)
+                       neutral_writer=self._writers().neutral,
+                       abort_fn=self._abort_fn)
             self._send_neutral_and_settle(settle_time=0.3 + settle)
             depth = self._current_depth()
             return self._make_result(
@@ -575,7 +631,8 @@ class Duburi(VisionVerbs):
             drive_forward_dist(
                 self.pixhawk, signed_dir, distance_m, int(gain),
                 dvl_tolerance, self.log, self._writers(),
-                yaw_source=self.yaw_source, settle=settle)
+                yaw_source=self.yaw_source, settle=settle,
+                abort_fn=self._abort_fn)
             depth = self._current_depth()
             return self._make_result(
                 True, f'{verb}: completed',
@@ -598,7 +655,8 @@ class Duburi(VisionVerbs):
             drive_lateral_dist(
                 self.pixhawk, signed_dir, distance_m, int(gain),
                 dvl_tolerance, self.log, self._writers(),
-                yaw_source=self.yaw_source, settle=settle)
+                yaw_source=self.yaw_source, settle=settle,
+                abort_fn=self._abort_fn)
             depth = self._current_depth()
             return self._make_result(
                 True, 'move_lateral_dist: completed',
@@ -645,6 +703,7 @@ class Duburi(VisionVerbs):
         ``[MAV <fn> cmd=<verb>] ...`` line.
         """
         with self.lock, command_scope(verb):
+            self._abort_event.clear()   # each command starts with a clean abort slate
             if verb not in _UNARM_SAFE and not self.pixhawk.is_armed():
                 raise NotArmedError(
                     f'{verb}: AUV is disarmed -- call arm() first')

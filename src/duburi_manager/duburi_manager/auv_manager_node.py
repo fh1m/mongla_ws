@@ -474,16 +474,23 @@ class AUVManagerNode(Node):
 
     def goal_callback(self, goal_request):
         _SAFETY = {'disarm', 'stop', 'surface'}
-        if self.command_active and goal_request.cmd not in _SAFETY:
-            self.get_logger().warn(
-                f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
-            return GoalResponse.REJECT
+        if self.command_active:
+            if goal_request.cmd not in _SAFETY:
+                self.get_logger().warn(
+                    f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
+                return GoalResponse.REJECT
+            # Safety command accepted while busy: signal abort so the running
+            # loop exits at its next tick, releasing the lock for us.
+            self.get_logger().info(
+                f'[ACT  ] {goal_request.cmd} (safety) accepted -- signalling abort')
+            self.duburi.request_abort()
         return GoalResponse.ACCEPT
 
     def cancel_callback(self, goal_handle):
         self.get_logger().info('[ACT  ] Cancel requested -- stopping thrusters')
         self.pixhawk.send_neutral()
         self.command_active = False  # allow disarm through before execute_callback exits
+        self.duburi.request_abort()  # signal all motion loops to exit at next tick
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):

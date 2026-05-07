@@ -49,7 +49,8 @@ PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
 # RAMP_S and BRAKE_ZONE_M are imported from motion_rates -- tune there.
 
 
-def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
+def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None,
+               abort_fn=None):
     """Drive the sub to `target_m` (negative = below surface) and hold.
 
     Caller MUST already be in ALT_HOLD; this function does not switch
@@ -66,7 +67,8 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
     starting = pixhawk.get_attitude()
     prime_d  = starting['depth'] if starting is not None else target_m
 
-    prime_alt_hold(pixhawk, hold_at=prime_d, neutral_writer=neutral_writer)
+    prime_alt_hold(pixhawk, hold_at=prime_d, neutral_writer=neutral_writer,
+                   abort_fn=abort_fn)
 
     # Re-read depth AFTER prime so the ramp starts from the actual position.
     # Reading before prime causes `going_down` to be wrong when the sub
@@ -89,10 +91,11 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None):
         else:
             start_d = max(start_d - RAMP_ADVANCE_M, target_m)
 
-    wait_for_depth(pixhawk, target_m, timeout, log, start_d=start_d)
+    wait_for_depth(pixhawk, target_m, timeout, log, start_d=start_d,
+                   abort_fn=abort_fn)
 
 
-def prime_alt_hold(pixhawk, hold_at, neutral_writer):
+def prime_alt_hold(pixhawk, hold_at, neutral_writer, abort_fn=None):
     """Phase 1: drain ArduSub's stale ALT_HOLD integrator.
 
     Streams `hold_at` as the depth target with a neutral RC override
@@ -102,12 +105,15 @@ def prime_alt_hold(pixhawk, hold_at, neutral_writer):
     """
     deadline = time.monotonic() + PRIME_SECONDS
     while time.monotonic() < deadline:
+        if abort_fn and abort_fn():
+            break
         pixhawk.set_target_depth(hold_at)
         neutral_writer()
         time.sleep(1.0 / SETPOINT_HZ)
 
 
-def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
+def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None,
+                   abort_fn=None):
     """Phase 2: stream the real target until reached or timeout.
 
     Ramps the setpoint from `start_d` toward `target_m` over RAMP_S
@@ -145,6 +151,8 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None):
     going_down = (start_d is not None) and (target_m < start_d)
 
     while time.monotonic() < deadline:
+        if abort_fn and abort_fn():
+            break
         # Read depth BEFORE computing the setpoint so we can track the sub.
         attitude = pixhawk.get_attitude()
         current  = attitude['depth'] if attitude is not None else None

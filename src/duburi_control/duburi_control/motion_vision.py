@@ -143,7 +143,8 @@ def vision_track_axes(*,
                       pass_at_gain: float = 50.0,
                       log,
                       writers,
-                      visual_pid: bool = False) -> VisionTrackResult:
+                      visual_pid: bool = False,
+                      abort_fn=None) -> VisionTrackResult:
     """Run the vision-driven loop until success / lost / duration.
 
     Parameters
@@ -280,10 +281,13 @@ def vision_track_axes(*,
         while True:
             now     = time.monotonic()
             elapsed = now - started
+            if abort_fn and abort_fn():
+                return _build_bail_result("aborted", elapsed=elapsed)
             if now >= deadline:
                 # Time's up -- treat as soft success only if we'd also
                 # been continuously settled. Otherwise it's a timeout.
                 if settled_tick_streak >= SETTLED_TICK_BUDGET:
+
                     return _build_ok_result(
                         "duration elapsed while settled",
                         elapsed, last_good_sample, settled_tick_streak,
@@ -470,7 +474,8 @@ def vision_acquire(*,
                    drive_writer: Optional[Callable[[float], None]] = None,
                    stale_after: float = DEFAULT_STALE_AFTER,
                    writers=None,
-                   log) -> VisionTrackResult:
+                   log,
+                   abort_fn=None) -> VisionTrackResult:
     """Block until at least one fresh detection of `target_class` arrives.
 
     `drive_writer(elapsed_s) -> None` is OPTIONAL. When supplied it's
@@ -493,6 +498,8 @@ def vision_acquire(*,
         while True:
             now = time.monotonic()
             elapsed = now - started
+            if abort_fn and abort_fn():
+                return _build_bail_result("aborted", elapsed=elapsed)
             if now >= deadline:
                 return _build_bail_result(
                     f"target_class={target_class!r} not seen within "

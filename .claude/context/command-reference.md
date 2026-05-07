@@ -66,8 +66,9 @@ All 33 verbs at a glance. Required fields have no default listed.
 | `move_left` | **duration** required, gain→80 %, settle→0 s | Open-loop lateral strafe left |
 | `move_right` | **duration** required, gain→80 %, settle→0 s | Open-loop lateral strafe right |
 | `arc` | **duration** required, gain→50 %, yaw_rate_pct→30 %, settle→0 s | Curved motion: forward + yaw |
-| `yaw_left` | **target** deg required, timeout→30 s, settle→0 s | PID pivot left |
-| `yaw_right` | **target** deg required, timeout→30 s, settle→0 s | PID pivot right |
+| `yaw_left` | **target** deg required, timeout→30 s, settle→0 s | PID pivot left (relative, degrees) |
+| `yaw_right` | **target** deg required, timeout→30 s, settle→0 s | PID pivot right (relative, degrees) |
+| `turn` | **target** deg required, timeout→30 s, settle→0 s | Absolute heading, direction auto-selected |
 | `set_depth` | **target** m required, timeout→30 s, settle→0 s | Drive to absolute depth |
 | `lock_heading` | target→0.0 °, timeout→300 s | Background heading correction loop |
 | `unlock_heading` | — | Stop heading lock |
@@ -202,6 +203,9 @@ Currents and battery state change the metres-per-second mapping every run — us
 |---|---|---|---|
 | `yaw_left` | `duburi yaw_left --target 90 [--timeout 30]` | `duburi.yaw_left(90, timeout=30)` | `final_value` = final yaw °; `error_value` = heading error ° |
 | `yaw_right` | `duburi yaw_right --target 90 [--timeout 30]` | `duburi.yaw_right(90, timeout=30)` | same |
+| `turn` | `duburi turn --target 90 [--timeout 30]` | `duburi.turn(90, timeout=30)` | same; direction auto-selected |
+
+`yaw_left` / `yaw_right` take **relative** degrees from current heading. `turn` takes an **absolute** heading (0-360); shortest-path direction is computed automatically via `Pixhawk.heading_error`.
 
 * **Mode:** auto-engages ALT_HOLD (required for absolute yaw setpoints)
 * **Profile:** `yaw_snap` (default, bang-bang) or `yaw_glide` (`smooth_yaw:=true`, smootherstep)
