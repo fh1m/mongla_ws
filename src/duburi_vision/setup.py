@@ -15,7 +15,7 @@ setup(
         ('share/' + package_name + '/launch',  glob('launch/*.launch.py')),
         ('share/' + package_name + '/models',  glob('models/*.yaml') + glob('models/*.pt')),
     ],
-    install_requires=['setuptools', 'numpy', 'supervision', 'filterpy', 'trackers'],
+    install_requires=['setuptools', 'numpy', 'supervision', 'filterpy'],
     zip_safe=True,
     maintainer='Muhammad Fahim Faisal',
     maintainer_email='fahim.2002.faisal@gmail.com',
