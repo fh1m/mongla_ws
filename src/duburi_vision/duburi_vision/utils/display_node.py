@@ -103,6 +103,7 @@ class VisionDisplayNode(Node):
         self.declare_parameter('classes',         'person')
         self.declare_parameter('conf',            0.35)
         self.declare_parameter('max_display_hz',  30.0)
+        self.declare_parameter('yaw_source',      '')   # e.g. 'mavlink_ahrs','bno085','dvl'
 
         camera          = self.get_parameter('camera').get_parameter_value().string_value
         launch_pipeline = self.get_parameter('launch_pipeline').get_parameter_value().bool_value
@@ -113,6 +114,7 @@ class VisionDisplayNode(Node):
 
         self._camera        = camera
         self._max_hz        = max_hz
+        self._yaw_source    = self.get_parameter('yaw_source').get_parameter_value().string_value
         self._pipeline_procs: list[subprocess.Popen] = []
 
         if launch_pipeline:
@@ -182,11 +184,14 @@ class VisionDisplayNode(Node):
             self._detections = dets
 
     def _on_tracks(self, msg: Detection2DArray) -> None:
-        # Convert the full tracked detection array to smooth Detection objects
-        # (Kalman-filtered positions) and extract stable track IDs in parallel.
-        dets = array_to_detections(msg)
+        # Convert to Detection objects, keeping only confirmed tracks (score > 0).
+        # Predicted-only tracks (score=0, Kalman extrapolation when detector missed)
+        # are excluded to avoid ghost boxes trailing behind moving objects.
+        all_dets = array_to_detections(msg)
+        pairs = [(d, det) for d, det in zip(all_dets, msg.detections) if d.score > 0]
+        dets = [p[0] for p in pairs]
         ids: list[int | None] = []
-        for det in msg.detections:
+        for _, det in pairs:
             try:
                 ids.append(int(det.id))
             except (ValueError, TypeError):
@@ -298,6 +303,7 @@ def main(args=None):
                 state=node._state,
                 configured_classes=configured_classes,
                 track_ids=display_ids,
+                yaw_source=node._yaw_source,
             )
 
             t0 = time.monotonic()
