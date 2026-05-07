@@ -79,14 +79,6 @@ def _get_sv() -> dict:
                 color_lookup=sv.ColorLookup.CLASS,
                 border_radius=2,
                 smart_position=False),
-            # Corner brackets on every detection
-            'corner': sv.BoxCornerAnnotator(
-                thickness=3, corner_length=12,
-                color_lookup=sv.ColorLookup.CLASS),
-            # Glow halo — used only for the primary/locked target
-            'halo': sv.HaloAnnotator(
-                kernel_size=30, opacity=0.5,
-                color_lookup=sv.ColorLookup.CLASS),
         }
     return _SV
 
@@ -117,7 +109,6 @@ def draw_detections(frame_bgr: np.ndarray,
     out = frame_bgr.copy()
     out = sv['round_box'].annotate(scene=out, detections=sv_det)
     out = sv['pct_bar'].annotate(scene=out, detections=sv_det)
-    out = sv['corner'].annotate(scene=out, detections=sv_det)
     labels = [f'{d.class_name} {int(d.score * 100)}%' for d in detections]
     return sv['label'].annotate(scene=out, detections=sv_det, labels=labels)
 
@@ -237,7 +228,7 @@ def draw_vehicle_state(frame_bgr: np.ndarray, state) -> np.ndarray:
     bv     = float(state.battery_voltage)
     rows = [
         ('DEPTH', f'{state.depth_m:+.2f}m', C_TEXT),
-        ('YAW',   f'{state.yaw_deg:.1f}°',  C_TEXT),
+        ('YAW',   f'{state.yaw_deg:.1f}d',   C_TEXT),
         ('MODE',  state.mode or '?',         C_ACCENT if armed else C_DIM),
         ('BATT',  f'{bv:.1f}V',              _batt_color(bv)),
         ('ARMED', 'YES' if armed else 'no',  C_OK if armed else C_DIM),
@@ -329,7 +320,7 @@ def draw_heading_tape(img: np.ndarray, yaw_deg: float,
     cv2.line(img, (cx, y + 2), (cx, y + tape_h - 2), C_ACCENT, 2, cv2.LINE_AA)
 
     # Heading readout above tape center
-    hdg_label = f'{int(yaw) % 360:03d}\xb0'
+    hdg_label = f'{int(yaw) % 360:03d}d'
     (tw, _), _ = cv2.getTextSize(hdg_label, _FONT, _FS, _FT)
     cv2.putText(img, hdg_label, (cx - tw // 2, y - 3),
                 _FONT, _FS, C_ACCENT, _FT, cv2.LINE_AA)
@@ -356,6 +347,63 @@ def draw_classes_panel(img: np.ndarray,
               border=C_ACCENT if any_active else C_BORDER)
 
 
+def draw_compass_needle(img: np.ndarray, yaw_deg: float,
+                        cx: int, cy: int, radius: int = 22) -> None:
+    """Compass rose with directional needle drawn in-place.
+
+    North is fixed at the top of the circle; the needle points in the
+    direction of yaw_deg from North. Shows a '?' ring when yaw_deg is NaN.
+    Always rendered (even without telemetry) so the operator can see at
+    a glance whether heading data is present.
+    """
+    overlay = img.copy()
+    cv2.circle(overlay, (cx, cy), radius, C_BG, -1)
+    cv2.addWeighted(overlay, 0.75, img, 0.25, 0, dst=img)
+    cv2.circle(img, (cx, cy), radius, C_BORDER, 1, cv2.LINE_AA)
+
+    # Fixed N/E/S/W dots
+    for ang in (0, 90, 180, 270):
+        rad = np.radians(ang)
+        tx = cx + int((radius - 5) * np.sin(rad))
+        ty = cy - int((radius - 5) * np.cos(rad))
+        cv2.circle(img, (tx, ty), 1, C_DIM, -1)
+    cv2.putText(img, 'N', (cx - 4, cy - radius + 9),
+                _FONT, 0.25, C_DIM, 1, cv2.LINE_AA)
+
+    if np.isnan(yaw_deg):
+        cv2.putText(img, '?', (cx - 4, cy + 5), _FONT, 0.35, C_DIM, 1, cv2.LINE_AA)
+        return
+
+    needle = radius - 5
+    rad = np.radians(float(yaw_deg))
+    tip_x  = cx + int(needle         * np.sin(rad))
+    tip_y  = cy - int(needle         * np.cos(rad))
+    tail_x = cx - int((needle // 2)  * np.sin(rad))
+    tail_y = cy + int((needle // 2)  * np.cos(rad))
+    cv2.line(img, (tail_x, tail_y), (tip_x, tip_y), C_ACCENT, 2, cv2.LINE_AA)
+    cv2.circle(img, (tip_x, tip_y), 2, C_ACCENT, -1, cv2.LINE_AA)
+    cv2.circle(img, (cx, cy), 2, C_DIM, -1, cv2.LINE_AA)
+
+
+def draw_sensors_panel(img: np.ndarray, yaw_source: str,
+                       yaw_deg: float, x: int, y: int) -> None:
+    """Heading-source status panel drawn in-place.
+
+    yaw_source: 'mavlink_ahrs' | 'bno085' | 'dvl' | 'bno085_dvl' | ''
+    Status is inferred: ACTIVE when yaw_deg is a valid number, NO DATA when NaN.
+    """
+    src = (yaw_source or '?').upper()
+    if np.isnan(yaw_deg):
+        status, st_col = 'NO DATA', C_ERR
+    else:
+        status, st_col = 'ACTIVE', C_OK
+    rows = [
+        ('SRC',  src,    C_TEXT),
+        ('HDG',  status, st_col),
+    ]
+    _mc_panel(img, x, y, 'HEADING SRC', rows, border=st_col)
+
+
 def stale_banner(frame_bgr: np.ndarray, message='STALE FRAME') -> np.ndarray:
     if frame_bgr is None:
         return frame_bgr
@@ -374,7 +422,8 @@ def render_all(frame_bgr: np.ndarray,
                tracking_on=False, n_tracks=0, primary_track_id=None,
                state=None,
                configured_classes=None,
-               track_ids=None) -> np.ndarray:
+               track_ids=None,
+               yaw_source=None) -> np.ndarray:
     """Full mission-control overlay — single frame copy, all panels in one pass.
 
     Layer order (later layers paint on top):
@@ -418,7 +467,6 @@ def render_all(frame_bgr: np.ndarray,
         sv_all = _to_sv(detections, track_ids)
         out = sv['round_box'].annotate(scene=out, detections=sv_all)
         out = sv['pct_bar'].annotate(scene=out, detections=sv_all)
-        out = sv['corner'].annotate(scene=out, detections=sv_all)
         labels = []
         for i, d in enumerate(detections):
             tid = (track_ids[i] if track_ids and i < len(track_ids)
@@ -427,18 +475,16 @@ def render_all(frame_bgr: np.ndarray,
             labels.append(f'{prefix}{d.class_name} {int(d.score * 100)}%')
         out = sv['label'].annotate(scene=out, detections=sv_all, labels=labels)
 
-    # ── 3. Primary: halo glow + crosshair + offset arrow ─────────────────── #
+    # ── 3. Primary: ACCENT border + corner brackets + crosshair + arrow ─────── #
     primary = primary or largest(detections)
     if primary is not None:
-        sv = _get_sv()
-        sv_prim = _to_sv([primary])
-        out = sv['halo'].annotate(scene=out, detections=sv_prim)
-        # Crosshair
+        x1p, y1p, x2p, y2p = (int(v) for v in primary.xyxy)
+        cv2.rectangle(out, (x1p, y1p), (x2p, y2p), C_ACCENT, 2, cv2.LINE_AA)
+        _draw_corners(out, x1p, y1p, x2p, y2p, C_ACCENT, length=15, thickness=3)
         cx_t, cy_t = int(primary.cx), int(primary.cy)
         cv2.line(out, (cx_t - 14, cy_t), (cx_t + 14, cy_t), C_ACCENT, 2, cv2.LINE_AA)
         cv2.line(out, (cx_t, cy_t - 14), (cx_t, cy_t + 14), C_ACCENT, 2, cv2.LINE_AA)
         cv2.circle(out, (cx_t, cy_t), 3, C_ACCENT, -1, cv2.LINE_AA)
-        # Offset arrow from frame center → target center
         if abs(cx_t - w // 2) >= 2 or abs(cy_t - h // 2) >= 2:
             cv2.arrowedLine(out, (w // 2, h // 2), (cx_t, cy_t),
                             C_AMBER, 2, cv2.LINE_AA, tipLength=0.18)
@@ -501,7 +547,7 @@ def render_all(frame_bgr: np.ndarray,
         bv    = float(state.battery_voltage)
         st_rows = [
             ('DEPTH', f'{state.depth_m:+.2f}m',  C_TEXT),
-            ('YAW',   f'{state.yaw_deg:.1f}\xb0', C_TEXT),
+            ('YAW',   f'{state.yaw_deg:.1f}d',    C_TEXT),
             ('MODE',  state.mode or '?',           C_ACCENT if armed else C_DIM),
             ('BATT',  f'{bv:.1f}V',                _batt_color(bv)),
             ('ARMED', 'YES' if armed else 'no',    C_OK if armed else C_DIM),
@@ -513,11 +559,14 @@ def render_all(frame_bgr: np.ndarray,
         # ── 8. DEPTH GAUGE (right edge, below STATE panel) ────────────────── #
         draw_depth_gauge(out, state.depth_m, x=w - 34, y=130)
 
-        # ── 9. HEADING TAPE (bottom-center, above heading label) ─────────── #
-        tape_y = h - 56   # leaves room for the heading label drawn above the tape
-        draw_heading_tape(out, state.yaw_deg, x=(w - 260) // 2, y=tape_y)
+        # ── 9. HEADING SOURCE panel (bottom-center-right) ─────────────────── #
+        draw_sensors_panel(out, yaw_source or '', state.yaw_deg, x=(w + 60) // 2, y=h - 68)
 
-    # ── 10. Stale banner ──────────────────────────────────────────────────── #
+    # ── 10. COMPASS NEEDLE (always shown — '?' when no state/heading) ─────── #
+    _yaw = state.yaw_deg if state is not None else float('nan')
+    draw_compass_needle(out, _yaw, cx=195, cy=h - 30)
+
+    # ── 11. Stale banner ──────────────────────────────────────────────────── #
     if not healthy:
         cv2.rectangle(out, (0, 0), (w, 28), C_ERR, -1)
         cv2.putText(out, 'STALE FRAME', (8, 20),
