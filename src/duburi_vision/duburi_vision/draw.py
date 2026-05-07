@@ -65,9 +65,17 @@ def _get_sv() -> dict:
     if _SV is None:
         import supervision as sv
         _SV = {
-            # Rounded class-colored boxes for all detections
-            'round_box': sv.RoundBoxAnnotator(
-                thickness=2, roundness=0.4,
+            # Thin square class-colored outline — cleaner than rounded on a tactical HUD
+            'box': sv.BoxAnnotator(
+                thickness=1,
+                color_lookup=sv.ColorLookup.CLASS),
+            # Thick white corner brackets — strong focal markers without crowding the edges
+            'corners': sv.BoxCornerAnnotator(
+                thickness=4, corner_length=18,
+                color=sv.Color.WHITE),
+            # Triangle indicator above each box — "locked on" visual cue
+            'triangle': sv.TriangleAnnotator(
+                base=10, height=8,
                 color_lookup=sv.ColorLookup.CLASS),
             # Confidence bar (small strip above box)
             'pct_bar': sv.PercentageBarAnnotator(
@@ -107,7 +115,9 @@ def draw_detections(frame_bgr: np.ndarray,
     sv = _get_sv()
     sv_det = _to_sv(detections)
     out = frame_bgr.copy()
-    out = sv['round_box'].annotate(scene=out, detections=sv_det)
+    out = sv['box'].annotate(scene=out, detections=sv_det)
+    out = sv['corners'].annotate(scene=out, detections=sv_det)
+    out = sv['triangle'].annotate(scene=out, detections=sv_det)
     out = sv['pct_bar'].annotate(scene=out, detections=sv_det)
     labels = [f'{d.class_name} {int(d.score * 100)}%' for d in detections]
     return sv['label'].annotate(scene=out, detections=sv_det, labels=labels)
@@ -228,7 +238,7 @@ def draw_vehicle_state(frame_bgr: np.ndarray, state) -> np.ndarray:
     bv     = float(state.battery_voltage)
     rows = [
         ('DEPTH', f'{state.depth_m:+.2f}m', C_TEXT),
-        ('YAW',   f'{state.yaw_deg:.1f}d',   C_TEXT),
+        ('YAW',   f'{state.yaw_deg:.1f}',    C_TEXT),
         ('MODE',  state.mode or '?',         C_ACCENT if armed else C_DIM),
         ('BATT',  f'{bv:.1f}V',              _batt_color(bv)),
         ('ARMED', 'YES' if armed else 'no',  C_OK if armed else C_DIM),
@@ -319,11 +329,14 @@ def draw_heading_tape(img: np.ndarray, yaw_deg: float,
     # Center marker (current heading)
     cv2.line(img, (cx, y + 2), (cx, y + tape_h - 2), C_ACCENT, 2, cv2.LINE_AA)
 
-    # Heading readout above tape center
-    hdg_label = f'{int(yaw) % 360:03d}d'
-    (tw, _), _ = cv2.getTextSize(hdg_label, _FONT, _FS, _FT)
-    cv2.putText(img, hdg_label, (cx - tw // 2, y - 3),
-                _FONT, _FS, C_ACCENT, _FT, cv2.LINE_AA)
+    # Heading readout above tape center — number + degree mark circle
+    hdg_label = f'{int(yaw) % 360:03d}'
+    (tw, th), _ = cv2.getTextSize(hdg_label, _FONT, _FS, _FT)
+    lx = cx - tw // 2
+    ly = y - 3
+    cv2.putText(img, hdg_label, (lx, ly), _FONT, _FS, C_ACCENT, _FT, cv2.LINE_AA)
+    # small circle to the right of the number as degree glyph
+    cv2.circle(img, (lx + tw + 4, ly - th + 3), 2, C_ACCENT, 1, cv2.LINE_AA)
 
 
 def draw_classes_panel(img: np.ndarray,
@@ -392,7 +405,13 @@ def draw_sensors_panel(img: np.ndarray, yaw_source: str,
     yaw_source: 'mavlink_ahrs' | 'bno085' | 'dvl' | 'bno085_dvl' | ''
     Status is inferred: ACTIVE when yaw_deg is a valid number, NO DATA when NaN.
     """
-    src = (yaw_source or '?').upper()
+    _SOURCE_LABELS = {
+        'mavlink_ahrs': 'MAVLINK',
+        'bno085':       'BNO085',
+        'dvl':          'DVL',
+        'bno085_dvl':   'BNO+DVL',
+    }
+    src = _SOURCE_LABELS.get(yaw_source, yaw_source.upper() if yaw_source else '?')
     if np.isnan(yaw_deg):
         status, st_col = 'NO DATA', C_ERR
     else:
@@ -453,19 +472,34 @@ def render_all(frame_bgr: np.ndarray,
     out = frame_bgr.copy()
     h, w = out.shape[:2]
 
-    # ── 1. Reticle ────────────────────────────────────────────────────────── #
+    # ── 1. Reticle + deadband box ─────────────────────────────────────────── #
     if show_reticle:
         cx, cy = w // 2, h // 2
         _dashed_line(out, (cx, 0), (cx, h), C_RETICLE, dash=8, gap=6, thickness=1)
         _dashed_line(out, (0, cy), (w, cy), C_RETICLE, dash=8, gap=6, thickness=1)
         cv2.circle(out, (cx, cy), 4, C_RETICLE, 1, cv2.LINE_AA)
         cv2.circle(out, (cx, cy), 1, C_RETICLE, -1, cv2.LINE_AA)
+        # Deadband zone rectangle — alignment is "achieved" when target enters this box
+        db_px, db_py = int(deadband * w / 2), int(deadband * h / 2)
+        cv2.rectangle(out, (cx - db_px, cy - db_py), (cx + db_px, cy + db_py),
+                      C_RETICLE, 1, cv2.LINE_AA)
+
+    # ── 1b. "BRACU DUBURI" watermark (top-center) ─────────────────────────── #
+    brand = 'BRACU  DUBURI'
+    (bw, bh), _ = cv2.getTextSize(brand, _FONT, 0.38, 1)
+    bx = (w - bw) // 2
+    by = 18
+    cv2.putText(out, brand, (bx, by), _FONT, 0.38, C_DIM, 1, cv2.LINE_AA)
+    cv2.circle(out, (bx - 6, by - bh // 2), 2, C_ACCENT, -1, cv2.LINE_AA)
+    cv2.circle(out, (bx + bw + 6, by - bh // 2), 2, C_ACCENT, -1, cv2.LINE_AA)
 
     # ── 2. Detection boxes (rich supervision annotators) ─────────────────── #
     if detections:
         sv = _get_sv()
         sv_all = _to_sv(detections, track_ids)
-        out = sv['round_box'].annotate(scene=out, detections=sv_all)
+        out = sv['box'].annotate(scene=out, detections=sv_all)
+        out = sv['corners'].annotate(scene=out, detections=sv_all)
+        out = sv['triangle'].annotate(scene=out, detections=sv_all)
         out = sv['pct_bar'].annotate(scene=out, detections=sv_all)
         labels = []
         for i, d in enumerate(detections):
@@ -547,7 +581,7 @@ def render_all(frame_bgr: np.ndarray,
         bv    = float(state.battery_voltage)
         st_rows = [
             ('DEPTH', f'{state.depth_m:+.2f}m',  C_TEXT),
-            ('YAW',   f'{state.yaw_deg:.1f}d',    C_TEXT),
+            ('YAW',   f'{state.yaw_deg:.1f}',     C_TEXT),
             ('MODE',  state.mode or '?',           C_ACCENT if armed else C_DIM),
             ('BATT',  f'{bv:.1f}V',                _batt_color(bv)),
             ('ARMED', 'YES' if armed else 'no',    C_OK if armed else C_DIM),

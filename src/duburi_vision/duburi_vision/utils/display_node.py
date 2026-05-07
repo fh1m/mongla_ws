@@ -103,7 +103,7 @@ class VisionDisplayNode(Node):
         self.declare_parameter('classes',         'person')
         self.declare_parameter('conf',            0.35)
         self.declare_parameter('max_display_hz',  30.0)
-        self.declare_parameter('yaw_source',      '')   # e.g. 'mavlink_ahrs','bno085','dvl'
+        self.declare_parameter('yaw_source', 'mavlink_ahrs')  # override with bno085/dvl/bno085_dvl at pool
 
         camera          = self.get_parameter('camera').get_parameter_value().string_value
         launch_pipeline = self.get_parameter('launch_pipeline').get_parameter_value().bool_value
