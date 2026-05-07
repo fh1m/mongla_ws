@@ -460,6 +460,19 @@ duburi.vision.home(target=duburi.models.gate.gate, yaw=True, lat=True,
 duburi.vision.find(target=duburi.models.gate.flare, move='forward', gain=30)
 ```
 
+**Pretrained models (desk/webcam/thruster testing — no custom weights needed):**
+
+```python
+duburi.models(person='yolov11n')   # COCO 80-class, auto-downloads ~5 MB on first run
+target = duburi.models.person.person
+duburi.vision.find(target=target, move='forward', gain=30, timeout=45)
+duburi.vision.home(target=target, yaw=True, lat=True, depth=True, duration=20)
+```
+
+Pretrained aliases: `yolov11n` (5 MB, fastest), `yolov11s` (10 MB), `yolov11m` (40 MB), `yolov11l`, `yolov11x`.
+Custom model syntax is identical — only the name string changes. Full reference mission:
+`src/duburi_planner/duburi_planner/missions/find_person_demo.py`.
+
 Any attribute access on a handle creates a `ClassRef` — class names are validated
 at the detector, not at registration. Optional strict validation:
 `duburi.models(gate=('stem', ['gate', 'flare']))` — access to an unlisted name

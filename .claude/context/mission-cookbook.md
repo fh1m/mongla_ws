@@ -51,6 +51,57 @@ verbs exist** and **how to tune them**.
 
 ---
 
+## 0.5 Desk / Bench Testing with Pretrained Model (yolov11n + person)
+
+No custom weights yet? Run this on a laptop with a webcam — no pool, no vehicle
+needed (use `mode:=sim` or just call the mission runner without arming).
+
+```python
+def run(duburi, log):
+    # Auto-downloads yolov11n.pt (~5 MB, COCO 80-class) on first run.
+    duburi.models(person='yolov11n')
+    duburi.camera = 'laptop'
+
+    duburi.arm()
+    duburi.set_depth(-0.5)
+    duburi.move_forward(3.0, gain=60)
+
+    target = duburi.models.person.person   # ClassRef — sets model + class automatically
+
+    duburi.vision.find(target=target, move='forward', gain=30, timeout=45)
+    duburi.vision.home(target=target, yaw=True, lat=True, depth=True, duration=20)
+    duburi.disarm()
+```
+
+**Pretrained weight aliases** (Ultralytics COCO, auto-downloaded):
+
+| Alias      | Size  | Speed  | Notes                          |
+|------------|-------|--------|--------------------------------|
+| `yolov11n` | ~5 MB | fast   | Recommended for desk testing   |
+| `yolov11s` | ~10 MB| medium | Better accuracy, still laptop  |
+| `yolov11m` | ~40 MB| slower | Pool-quality accuracy          |
+| `yolov11l` | ~80 MB| slow   | High accuracy, needs GPU       |
+| `yolov11x` | ~150 MB| very slow | Maximum accuracy            |
+
+Custom model syntax is **identical** — only the name changes:
+
+```python
+duburi.models(gate='gate_flare_medium_100ep')    # custom weights in models/
+duburi.models(person='yolov11n')                 # COCO pretrained, auto-download
+```
+
+**Run the canonical demo mission:**
+
+```bash
+ros2 launch duburi_vision cameras_.launch.py camera:=laptop
+ros2 run duburi_planner mission find_person_demo
+```
+
+> See `src/duburi_planner/duburi_planner/missions/find_person_demo.py` for the full
+> reference mission — it exercises every `duburi.vision.*` verb in sequence.
+
+---
+
 ## 1. Mental model in 60 seconds
 
 A mission is a script. Each line is **one MAVLink command** that runs
