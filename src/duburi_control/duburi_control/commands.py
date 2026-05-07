@@ -55,6 +55,12 @@ COMMANDS = {
         'fields':   [],
         'defaults': {},
     },
+    'surface': {
+        'help':     'Emergency surface: set depth to 0 m and hold until reached. '
+                    'Bypasses command_active gate so it works during a running mission.',
+        'fields':   [],
+        'defaults': {},
+    },
     'pause': {
         'help':     'Release RC override for N seconds (autopilot takes over).',
         'fields':   ['duration'],

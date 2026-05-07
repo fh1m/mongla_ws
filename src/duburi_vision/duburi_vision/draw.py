@@ -612,22 +612,31 @@ def _render_ui_strip(w: int, frame_h: int, *,
                   border=al_border, pad=_SPAD, line_h=_SLH, fs=_SFS)
 
     # ── Right block (anchored from right edge) ─────────────────────────────── #
-    # Compact depth bar: 14px wide, 72px tall
-    _DG_W = 14
-    _DG_H = 72
-    _dg_x = w - 6 - _DG_W
-    _dg_y = py + 4
+    # Depth gauge: 22×72 px, always visible (border + ticks even with no data)
+    # Scale 0-5 m covers typical AUV operating depth; STATE panel shows exact value.
+    _DG_W  = 22
+    _DG_H  = 72
+    _MAX_D = 5.0
+    _dg_x  = w - 6 - _DG_W
+    _dg_y  = py + 4
+
+    cv2.rectangle(strip, (_dg_x, _dg_y), (_dg_x + _DG_W, _dg_y + _DG_H), C_BORDER, 1, cv2.LINE_AA)
+    cv2.putText(strip, 'D', (_dg_x + 6, _dg_y - 2), _FONT, 0.28, C_DIM, 1, cv2.LINE_AA)
+    for _m in (0, 2, 4):
+        _yt = _dg_y + int(_m / _MAX_D * _DG_H)
+        cv2.line(strip, (_dg_x, _yt), (_dg_x + 5, _yt), C_DIM, 1)
 
     if state is not None and not np.isnan(state.depth_m):
-        depth_abs = min(abs(state.depth_m), 10.0)
-        cv2.rectangle(strip, (_dg_x, _dg_y), (_dg_x + _DG_W, _dg_y + _DG_H),
-                      C_BORDER, 1, cv2.LINE_AA)
-        cv2.putText(strip, 'D', (_dg_x + 2, _dg_y - 2),
-                    _FONT, 0.26, C_DIM, 1, cv2.LINE_AA)
-        ind_y2 = _dg_y + int(depth_abs / 10.0 * _DG_H)
-        ind_y2 = max(_dg_y + 2, min(_dg_y + _DG_H - 2, ind_y2))
-        d_col = C_OK if depth_abs < 3.0 else (C_AMBER if depth_abs < 7.0 else C_ERR)
-        cv2.rectangle(strip, (_dg_x, _dg_y), (_dg_x + _DG_W, ind_y2), d_col, -1)
+        depth_abs = float(min(abs(state.depth_m), _MAX_D))
+        _ind_y    = _dg_y + int(depth_abs / _MAX_D * _DG_H)
+        _ind_y    = max(_dg_y + 1, min(_dg_y + _DG_H - 1, _ind_y))
+        d_col     = C_OK if depth_abs < 2.0 else (C_AMBER if depth_abs < 4.0 else C_ERR)
+        if depth_abs > 0.05:
+            cv2.rectangle(strip, (_dg_x + 1, _dg_y + 1), (_dg_x + _DG_W - 1, _ind_y), d_col, -1)
+        cv2.line(strip, (_dg_x, _ind_y), (_dg_x + _DG_W, _ind_y), d_col, 2, cv2.LINE_AA)
+    else:
+        cv2.putText(strip, '?', (_dg_x + 6, _dg_y + _DG_H // 2 + 4),
+                    _FONT, 0.32, C_DIM, 1, cv2.LINE_AA)
 
     # Compass needle: 40px diameter, to the left of depth bar
     _CMP_R  = 20

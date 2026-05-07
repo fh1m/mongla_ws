@@ -254,7 +254,7 @@ duburi_ws/src/
 | `camera_node`                    | `duburi_vision` | Read from one Camera (webcam / ros_topic / ...) -> `/duburi/vision/<cam>/image_raw` + `camera_info` |
 | `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO26 -> `/duburi/vision/<cam>/detections` + `image_debug` + `classes_filter` |
 | `tracker_node`                   | `duburi_vision` | ByteTrack + Kalman smoother; subscribes `detections` -> publishes `tracks` (stable IDs + smooth bboxes) |
-| `vision_display`                 | `duburi_vision` | Mission-control HUD; subscribes `image_raw` + `detections` + `tracks` + `/duburi/state` + `classes_filter`; renders instruments (depth gauge, heading tape) + active-class panel |
+| `vision_display`                 | `duburi_vision` | Mission-control HUD; subscribes `image_raw` + `detections` + `tracks` + `/duburi/state` (20 Hz) + `classes_filter`; renders video overlays + 150 px UI strip below (BRACU DUBURI header, PERCEPTION/CLASSES/ALIGNMENT/STATE panels, real-time compass needle + depth gauge, heading tape) |
 | `vision_node`                    | `duburi_vision` | In-process camera+detector smoke test (cousin of `sensors_node`) |
 
 There is exactly **one** node that touches `pymavlink` in the live mission path: `auv_manager_node`. The `duburi` CLI, the `mission` runner, and any custom Python script are ROS2 ActionClients of `/duburi/move` -- all live in `duburi_planner`.
@@ -680,11 +680,12 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 ## 13. Safety rules (non-negotiable)
 
 1. **Always have a disarm path** — Ctrl-C on the manager triggers `Duburi.stop()` + `disarm()`.
-2. **Heartbeat must keep ticking** — owned by the manager's ROS2 timer; nothing in the action callback may block long enough to break it.
-3. **Neutral on startup** — RC defaults to 1500 (not 65535) until a movement is active.
-4. **Pool test checklist** — propellers clear, tether on, topside can ping the Jetson.
-5. **Autonomous mission** — timer-delayed start (run code, wait N seconds, remove tether).
-6. **DVL offset** — `dvl_depth_match = 0.78` (calibrated value from 2025 competition; will move into `duburi_sensors` when the DVL driver lands).
+2. **Cooperative abort** — `cancel_callback` sets `command_active=False` and calls `duburi.request_abort()` which signals `_abort_event`; every motion loop checks this flag once per tick and exits early. Safety verbs (`disarm`, `stop`, `surface`) bypass the `command_active` gate and signal abort simultaneously so they always execute.
+3. **Heartbeat must keep ticking** — owned by the manager's ROS2 timer; nothing in the action callback may block long enough to break it.
+4. **Neutral on startup** — RC defaults to 1500 (not 65535) until a movement is active.
+5. **Pool test checklist** — propellers clear, tether on, topside can ping the Jetson.
+6. **Autonomous mission** — timer-delayed start (run code, wait N seconds, remove tether).
+7. **DVL offset** — `dvl_depth_match = 0.78` (calibrated value from 2025 competition; will move into `duburi_sensors` when the DVL driver lands).
 
 ---
 
