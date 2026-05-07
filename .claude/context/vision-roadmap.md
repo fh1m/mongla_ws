@@ -74,6 +74,33 @@ not a separate node (shared per-track state, avoids extra ROS hop).
 Decision: particle filters skipped — underwater single-target tracking is unimodal; the 4-state
 CV Kalman is appropriate and has near-zero overhead.
 
+## v4b -- Mission-control HUD v2 (DONE)
+
+Instruments, active-class panel, and rich bounding-box annotators for the operator display.
+
+- `draw.py` — upgraded to supervision's rich annotator suite:
+  `RoundBoxAnnotator` (class colors), `PercentageBarAnnotator` (confidence bar),
+  `BoxCornerAnnotator`, `LabelAnnotator` with track IDs, `HaloAnnotator` for primary target
+- `draw.draw_depth_gauge()` — vertical 0–10 m depth slider that tracks `DuburiState.depth_m`
+- `draw.draw_heading_tape()` — horizontal ±60° compass tape from `DuburiState.yaw_deg` with cardinals
+- `draw.draw_classes_panel()` — shows configured class list; detected classes light up teal
+- `detector_node.py` — publishes `/duburi/vision/<cam>/classes_filter` (std_msgs/String)
+  on startup and on every live `classes` param change; any source that updates the param
+  (CLI, DSL, mission) triggers a re-publish automatically
+- `display_node.py` — subscribes `classes_filter`; prefers Kalman-smoothed `/tracks`
+  detections for bbox display (stable IDs + smooth positions) over raw `/detections`;
+  passes `track_ids` to supervision annotators for consistent per-track colors
+
+Desk test:
+```bash
+ros2 run duburi_vision vision_display --ros-args \
+    -p launch_pipeline:=true -p camera:=laptop \
+    -p model:=yolov11n -p classes:=person
+# CLASSES panel shows [PERSON], lights up teal on detection
+# Depth gauge + heading tape appear when /duburi/state is publishing
+# Live class switch: ros2 param set /duburi_detector classes gate,flare
+```
+
 ## v4 -- Vision verbs in DuburiClient (DONE)
 
 Vision is a first-class verb on `/duburi/move`, not a side channel. The

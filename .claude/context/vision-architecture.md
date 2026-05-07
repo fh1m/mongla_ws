@@ -10,7 +10,10 @@ diagnostic node.
 src/duburi_vision/duburi_vision/
   factory.py             # make_camera(name, **kw) + BUILDERS dict
   config.py              # CAMERA_PROFILES dict (mirrors config/cameras.yaml)
-  draw.py                # cv2/supervision overlays + draw_track_ids()
+  draw.py                # cv2/supervision overlays — rich annotator suite + AUV instruments
+                         #   draw_depth_gauge()   vertical depth slider (DuburiState.depth_m)
+                         #   draw_heading_tape()  horizontal compass tape (DuburiState.yaw_deg)
+                         #   draw_classes_panel() configured-class list; detected classes light up
   camera_node.py         # publish image_raw + camera_info
   detector_node.py       # subscribe image_raw -> detections + image_debug
   tracker_node.py        # subscribe detections -> tracks (ByteTrack + Kalman)
@@ -50,12 +53,19 @@ no `to_ros.py`, no `nodes/` or `viz/` subfolders. Per-user request,
 ## Topic contract
 
 ```
-/duburi/vision/<cam>/image_raw      sensor_msgs/Image            (camera_node)
-/duburi/vision/<cam>/camera_info    sensor_msgs/CameraInfo       (camera_node)
-/duburi/vision/<cam>/detections     vision_msgs/Detection2DArray (detector_node)
-/duburi/vision/<cam>/tracks         vision_msgs/Detection2DArray (tracker_node, optional)
-/duburi/vision/<cam>/image_debug    sensor_msgs/Image            (detector_node, rate-limited)
+/duburi/vision/<cam>/image_raw        sensor_msgs/Image            (camera_node)
+/duburi/vision/<cam>/camera_info      sensor_msgs/CameraInfo       (camera_node)
+/duburi/vision/<cam>/detections       vision_msgs/Detection2DArray (detector_node)
+/duburi/vision/<cam>/classes_filter   std_msgs/String              (detector_node, CSV class list)
+/duburi/vision/<cam>/tracks           vision_msgs/Detection2DArray (tracker_node, optional)
+/duburi/vision/<cam>/image_debug      sensor_msgs/Image            (detector_node, rate-limited)
 ```
+
+`/classes_filter` is published once at `detector_node` startup with the initial `classes` param,
+and re-published on every live `ros2 param set /duburi_detector classes <...>` change. Any
+consumer — `vision_display`, logging nodes, future HUD overlays — can subscribe to get the
+current class filter without polling `ros2 param get`. This means class changes from CLI, DSL
+(`duburi.set_classes()`), or mission code (`duburi.models(...)`) all propagate automatically.
 
 `/tracks` uses the same message type as `/detections`. The difference:
 - `Detection2D.tracking_id` is populated with a stable ByteTrack integer ID (stringified)
@@ -74,8 +84,11 @@ Or per-goal: `duburi vision_align_yaw --tracking true` (CLI) / `duburi.vision.ya
 camera_node  →  /image_raw  →  detector_node  →  /detections  →  tracker_node  →  /tracks
                                     ↓                                                  ↓
                               /image_debug                                    VisionState (use_tracks=True)
-                                                                                        ↓
-                                                              VisionState (use_tracks=False) ←──/detections
+                             /classes_filter                                             ↓
+                                    ↓                           VisionState (use_tracks=False) ←──/detections
+                             vision_display  ←──────────────────── /tracks (smooth bboxes)
+                                 (subscribes image_raw + detections + tracks +
+                                  state + classes_filter; renders HUD overlay)
 ```
 
 `<cam>` is the camera profile name (`laptop`, `sim_front`, `sim_bottom`, ...).
@@ -106,17 +119,28 @@ Canary log line (grep for this on every machine):
 
 ## Visualization layers
 
-`draw.render_all(frame, detections, ...)` paints in this order:
+`draw.render_all(frame, detections, *, ..., configured_classes=None, track_ids=None)` paints:
 
-1. raw frame
-2. dashed center reticle
-3. all detections (light boxes + labels)
-4. primary target (thick amber box + filled corners)
-5. crosshair on primary
-6. offset arrow center -> primary
-7. alignment readout panel (bottom-left, deadband-aware border color)
-8. status badge (top-left, healthy=green / unhealthy=red border)
-9. red full-width "STALE FRAME" banner if `healthy=False`
+ 1. raw frame
+ 2. dashed center reticle
+ 3. all detections — `RoundBoxAnnotator` (class colors) + `PercentageBarAnnotator`
+    (confidence bar) + `BoxCornerAnnotator` + `LabelAnnotator` (class + track ID)
+ 4. primary target: `HaloAnnotator` glow + crosshair + offset arrow
+ 5. PERCEPTION panel (top-left): SRC / FPS / DET / TGT / TRK
+ 6. CLASSES panel (below PERCEPTION, only when `configured_classes` set):
+    configured classes dim; currently-detected ones light up teal
+ 7. ALIGNMENT panel (bottom-left): STATUS / ERR_X / ERR_Y / AREA / CONF
+ 8. STATE panel (top-right, only when `state` provided): DEPTH / YAW / MODE / BATT / ARMED
+ 9. DEPTH GAUGE (right edge, only when `state.depth_m` is not NaN):
+    vertical 0–10 m slider with moving indicator; color: green<3m / amber<7m / red
+10. HEADING TAPE (bottom-center, only when `state.yaw_deg` is not NaN):
+    horizontal ±60° compass with cardinals and 3-digit heading readout
+11. red full-width "STALE FRAME" banner if `healthy=False`
+
+`track_ids` is a `list[int|None]` parallel to `detections`; supervision annotators use it for
+stable per-track coloring (`ColorLookup.CLASS`). `vision_display` passes Kalman-smoothed
+tracks from `/tracks` as the detection list (and their IDs as `track_ids`) for smooth bboxes,
+falling back to raw `/detections` when tracker is not running.
 
 Every glyph answers a specific operator question. Every diagnostic state
 is visible in one frame — that's how we let the user paste a screenshot
