@@ -138,7 +138,8 @@ def main(args=None):
     finally:
         duburi.log_scoreboard(json_path='auto')
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
     sys.exit(exit_code)
 
