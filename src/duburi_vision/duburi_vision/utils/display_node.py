@@ -56,6 +56,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 from vision_msgs.msg import Detection2DArray
 
 from duburi_interfaces.msg import DuburiState
@@ -127,9 +128,15 @@ class VisionDisplayNode(Node):
         self._state: DuburiState | None = None
         self._detections: list = []
         self._det_lock        = threading.Lock()
-        self._n_tracks        = 0
+        # Tracked detections (Kalman-smoothed from /tracks) + parallel IDs
+        self._tracked_dets: list = []
+        self._track_ids:    list = []
+        self._n_tracks            = 0
         self._primary_track_id: int | None = None
-        self._tracks_lock     = threading.Lock()
+        self._tracks_lock         = threading.Lock()
+        # Configured classes received from detector's classes_filter topic
+        # (list reassignment is atomic under CPython — no lock needed)
+        self._configured_classes: list[str] = []
         self._frames_received = 0
         self._last_wait_log   = self.get_clock().now()
 
@@ -144,11 +151,13 @@ class VisionDisplayNode(Node):
 
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
+        cls_topic = f'/duburi/vision/{camera}/classes_filter'
         trk_topic = f'/duburi/vision/{camera}/tracks'
-        self.create_subscription(Image,            raw_topic,        self._on_image,      qos_be)
-        self.create_subscription(Detection2DArray, det_topic,        self._on_detections, 10)
-        self.create_subscription(Detection2DArray, trk_topic,        self._on_tracks,     10)
-        self.create_subscription(DuburiState,      '/duburi/state',  self._on_state,      10)
+        self.create_subscription(Image,            raw_topic,        self._on_image,         qos_be)
+        self.create_subscription(Detection2DArray, det_topic,        self._on_detections,    10)
+        self.create_subscription(Detection2DArray, trk_topic,        self._on_tracks,        10)
+        self.create_subscription(DuburiState,      '/duburi/state',  self._on_state,         10)
+        self.create_subscription(String,           cls_topic,        self._on_classes_filter, 10)
         self.create_timer(1.0, self._check_waiting)
 
     # ------------------------------------------------------------------ #
@@ -173,15 +182,23 @@ class VisionDisplayNode(Node):
             self._detections = dets
 
     def _on_tracks(self, msg: Detection2DArray) -> None:
-        ids = []
+        # Convert the full tracked detection array to smooth Detection objects
+        # (Kalman-filtered positions) and extract stable track IDs in parallel.
+        dets = array_to_detections(msg)
+        ids: list[int | None] = []
         for det in msg.detections:
             try:
                 ids.append(int(det.id))
             except (ValueError, TypeError):
-                pass
+                ids.append(None)
         with self._tracks_lock:
-            self._n_tracks = len(ids)
-            self._primary_track_id = ids[0] if ids else None
+            self._tracked_dets      = dets
+            self._track_ids         = ids
+            self._n_tracks          = len([i for i in ids if i is not None])
+            self._primary_track_id  = next((i for i in ids if i is not None), None)
+
+    def _on_classes_filter(self, msg: String) -> None:
+        self._configured_classes = [c.strip() for c in msg.data.split(',') if c.strip()]
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
@@ -257,11 +274,19 @@ def main(args=None):
             with node._det_lock:
                 dets = list(node._detections)
             with node._tracks_lock:
+                tracked_dets     = list(node._tracked_dets)
+                track_ids        = list(node._track_ids)
                 n_tracks         = node._n_tracks
                 primary_track_id = node._primary_track_id
-            primary = largest(dets)
+            configured_classes = node._configured_classes  # atomic list replace, no lock
+
+            # Prefer Kalman-smoothed tracked detections for bbox display when
+            # available; fall back to raw detections from /detections topic.
+            display_dets = tracked_dets if tracked_dets else dets
+            display_ids  = track_ids if tracked_dets else None
+            primary = largest(display_dets)
             frame = draw.render_all(
-                frame, dets,
+                frame, display_dets,
                 source=node._camera,
                 fps=node._fps_display,
                 healthy=True,
@@ -271,6 +296,8 @@ def main(args=None):
                 n_tracks=n_tracks,
                 primary_track_id=primary_track_id,
                 state=node._state,
+                configured_classes=configured_classes,
+                track_ids=display_ids,
             )
 
             t0 = time.monotonic()
