@@ -55,6 +55,7 @@ mav.parm
 mav.tlog
 mav.tlog.raw
 logs/
+mission_scoreboard_*.json
 
 # ─── ML model weights (downloaded on demand by Ultralytics) ────────────
 *.pt
