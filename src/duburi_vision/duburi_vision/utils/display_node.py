@@ -63,45 +63,8 @@ from duburi_vision import draw
 from duburi_vision.detection.detector import largest
 from duburi_vision.detection.messages import array_to_detections
 
-# HUD layout
-_HUD_FONT      = cv2.FONT_HERSHEY_SIMPLEX
-_HUD_SCALE     = 0.55
-_HUD_THICKNESS = 1
-_HUD_PAD       = 8
-_HUD_LINE_H    = 22
-_HUD_BG_ALPHA  = 0.45
-
-_WAIT_LOG_INTERVAL = 5.0  # seconds between "still waiting" reminders
-_WINDOW_NAME       = 'duburi vision'
-
-
-def _draw_hud(frame, state: DuburiState) -> None:
-    """Overlay depth / yaw / mode / battery in the top-right corner."""
-    lines = [
-        f"depth : {state.depth_m:+.2f} m",
-        f"yaw   : {state.yaw_deg:.1f} deg",
-        f"mode  : {state.mode or '?'}",
-        f"batt  : {state.battery_voltage:.1f} V",
-        f"armed : {'YES' if state.armed else 'no'}",
-    ]
-
-    w = frame.shape[1]
-    max_w = max(
-        cv2.getTextSize(l, _HUD_FONT, _HUD_SCALE, _HUD_THICKNESS)[0][0]
-        for l in lines
-    )
-    box_h = _HUD_LINE_H * len(lines) + _HUD_PAD
-    box_w = max_w + _HUD_PAD * 2
-    x_off = w - box_w - 4
-
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x_off, 0), (w - 4, box_h), (20, 20, 20), -1)
-    cv2.addWeighted(overlay, _HUD_BG_ALPHA, frame, 1 - _HUD_BG_ALPHA, 0, frame)
-
-    for i, line in enumerate(lines):
-        y = _HUD_PAD + (i + 1) * _HUD_LINE_H - 4
-        cv2.putText(frame, line, (x_off + _HUD_PAD, y),
-                    _HUD_FONT, _HUD_SCALE, (220, 220, 220), _HUD_THICKNESS, cv2.LINE_AA)
+_WAIT_LOG_INTERVAL = 5.0
+_WINDOW_NAME       = 'duburi  //  mission control'
 
 
 def _start_pipeline(camera: str, model: str, classes: str,
@@ -164,6 +127,9 @@ class VisionDisplayNode(Node):
         self._state: DuburiState | None = None
         self._detections: list = []
         self._det_lock        = threading.Lock()
+        self._n_tracks        = 0
+        self._primary_track_id: int | None = None
+        self._tracks_lock     = threading.Lock()
         self._frames_received = 0
         self._last_wait_log   = self.get_clock().now()
 
@@ -178,9 +144,11 @@ class VisionDisplayNode(Node):
 
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
-        self.create_subscription(Image, raw_topic, self._on_image, qos_be)
-        self.create_subscription(Detection2DArray, det_topic, self._on_detections, 10)
-        self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
+        trk_topic = f'/duburi/vision/{camera}/tracks'
+        self.create_subscription(Image,            raw_topic,        self._on_image,      qos_be)
+        self.create_subscription(Detection2DArray, det_topic,        self._on_detections, 10)
+        self.create_subscription(Detection2DArray, trk_topic,        self._on_tracks,     10)
+        self.create_subscription(DuburiState,      '/duburi/state',  self._on_state,      10)
         self.create_timer(1.0, self._check_waiting)
 
     # ------------------------------------------------------------------ #
@@ -203,6 +171,17 @@ class VisionDisplayNode(Node):
         dets = array_to_detections(msg)
         with self._det_lock:
             self._detections = dets
+
+    def _on_tracks(self, msg: Detection2DArray) -> None:
+        ids = []
+        for det in msg.detections:
+            try:
+                ids.append(int(det.id))
+            except (ValueError, TypeError):
+                pass
+        with self._tracks_lock:
+            self._n_tracks = len(ids)
+            self._primary_track_id = ids[0] if ids else None
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
@@ -277,18 +256,22 @@ def main(args=None):
 
             with node._det_lock:
                 dets = list(node._detections)
+            with node._tracks_lock:
+                n_tracks         = node._n_tracks
+                primary_track_id = node._primary_track_id
             primary = largest(dets)
             frame = draw.render_all(
                 frame, dets,
                 source=node._camera,
                 fps=node._fps_display,
-                device='',
                 healthy=True,
                 deadband=0.05,
                 primary=primary,
+                tracking_on=n_tracks > 0,
+                n_tracks=n_tracks,
+                primary_track_id=primary_track_id,
+                state=node._state,
             )
-            if node._state is not None:
-                _draw_hud(frame, node._state)
 
             t0 = time.monotonic()
             cv2.imshow(_WINDOW_NAME, frame)
