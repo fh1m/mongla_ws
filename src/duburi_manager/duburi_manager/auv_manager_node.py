@@ -482,6 +482,7 @@ class AUVManagerNode(Node):
     def cancel_callback(self, goal_handle):
         self.get_logger().info('[ACT  ] Cancel requested -- stopping thrusters')
         self.pixhawk.send_neutral()
+        self.command_active = False  # allow disarm through before execute_callback exits
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):
