@@ -45,7 +45,8 @@ _DVL_TIMEOUT_K = 10.0   # generous extra timeout: metres / 0.05 + this
 #  Forward / back -- bang-bang                                            #
 # ---------------------------------------------------------------------- #
 def drive_forward_constant(pixhawk, signed_dir, duration, gain, log,
-                           writers, yaw_source=None, settle=0.0):
+                           writers, yaw_source=None, settle=0.0,
+                           abort_fn=None):
     """Constant gain on Ch5, reverse-kick brake, then settle."""
     label = 'FWD' if signed_dir > 0 else 'BACK'
     axis_writer = writers.forward
@@ -53,7 +54,7 @@ def drive_forward_constant(pixhawk, signed_dir, duration, gain, log,
 
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda _t: 1.0,
-                axis_label=label, yaw_source=yaw_source)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
 
     brake_kick_then_settle(
         axis_writer, writers,
@@ -62,7 +63,8 @@ def drive_forward_constant(pixhawk, signed_dir, duration, gain, log,
 
 
 def drive_forward_eased(pixhawk, signed_dir, duration, gain, log,
-                        writers, yaw_source=None, settle=0.0):
+                        writers, yaw_source=None, settle=0.0,
+                        abort_fn=None):
     """Smootherstep envelope on Ch5, settle only (ease-out IS the brake)."""
     label = 'FWD' if signed_dir > 0 else 'BACK'
     axis_writer = writers.forward
@@ -71,7 +73,7 @@ def drive_forward_eased(pixhawk, signed_dir, duration, gain, log,
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda elapsed:
                     trapezoid_ramp(elapsed, duration, EASE_SECONDS),
-                axis_label=label, yaw_source=yaw_source)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
 
     log.info(f'[{label:<5}] settle (ease-out = brake)')
     final_settle(writers, log, extra=settle)
@@ -81,7 +83,7 @@ def drive_forward_eased(pixhawk, signed_dir, duration, gain, log,
 #  arc -- forward thrust + yaw rate in the same packet                    #
 # ---------------------------------------------------------------------- #
 def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
-        yaw_source=None, settle=0.0):
+        yaw_source=None, settle=0.0, abort_fn=None):
     """Drive Ch5 + Ch4 simultaneously for a curved car-style trajectory.
 
     `signed_dir` controls forward/back ({+1, -1}); `gain` the magnitude
@@ -105,6 +107,8 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
         while True:
             elapsed = time.time() - started_at
             if elapsed >= duration:
+                break
+            if abort_fn and abort_fn():
                 break
 
             fwd_pwm = Pixhawk.percent_to_pwm(fwd_pct)
@@ -142,7 +146,8 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
 # ---------------------------------------------------------------------- #
 
 def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
-                       log, writers, yaw_source=None, settle=0.0):
+                       log, writers, yaw_source=None, settle=0.0,
+                       abort_fn=None):
     """Drive forward (or back) a fixed distance using DVL position feedback.
 
     Requires `yaw_source` to implement `get_position()` and
@@ -167,7 +172,8 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                  f'(rough ~{target_m:.1f}m estimate)')
         rough_s = max(1.0, target_m / 0.3)
         drive_forward_constant(pixhawk, signed_dir, rough_s, gain, log,
-                               writers, yaw_source=yaw_source, settle=settle)
+                               writers, yaw_source=yaw_source, settle=settle,
+                               abort_fn=abort_fn)
         return
 
     yaw_source.reset_position()
@@ -179,6 +185,8 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
              f'tol={tolerance:.3f}m')
 
     while time.monotonic() < deadline:
+        if abort_fn and abort_fn():
+            break
         x_m, _ = yaw_source.get_position()
         error   = target_m - abs(x_m)
 

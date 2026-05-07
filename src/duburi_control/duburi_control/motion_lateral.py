@@ -30,7 +30,8 @@ _DVL_TIMEOUT_K = 10.0
 
 
 def drive_lateral_constant(pixhawk, signed_dir, duration, gain, log,
-                           writers, yaw_source=None, settle=0.0):
+                           writers, yaw_source=None, settle=0.0,
+                           abort_fn=None):
     """Constant gain on Ch6, reverse-kick brake, then settle."""
     label = 'RIGHT' if signed_dir > 0 else 'LEFT'
     axis_writer = writers.lateral
@@ -38,7 +39,7 @@ def drive_lateral_constant(pixhawk, signed_dir, duration, gain, log,
 
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda _t: 1.0,
-                axis_label=label, yaw_source=yaw_source)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
 
     brake_kick_then_settle(
         axis_writer, writers,
@@ -47,7 +48,8 @@ def drive_lateral_constant(pixhawk, signed_dir, duration, gain, log,
 
 
 def drive_lateral_eased(pixhawk, signed_dir, duration, gain, log,
-                        writers, yaw_source=None, settle=0.0):
+                        writers, yaw_source=None, settle=0.0,
+                        abort_fn=None):
     """Smootherstep envelope on Ch6, settle only (ease-out IS the brake)."""
     label = 'RIGHT' if signed_dir > 0 else 'LEFT'
     axis_writer = writers.lateral
@@ -56,7 +58,7 @@ def drive_lateral_eased(pixhawk, signed_dir, duration, gain, log,
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda elapsed:
                     trapezoid_ramp(elapsed, duration, EASE_SECONDS),
-                axis_label=label, yaw_source=yaw_source)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
 
     log.info(f'[{label:<5}] settle (ease-out = brake)')
     final_settle(writers, log, extra=settle)
@@ -67,7 +69,8 @@ def drive_lateral_eased(pixhawk, signed_dir, duration, gain, log,
 # ---------------------------------------------------------------------- #
 
 def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
-                       log, writers, yaw_source=None, settle=0.0):
+                       log, writers, yaw_source=None, settle=0.0,
+                       abort_fn=None):
     """Strafe a fixed distance using DVL position feedback.
 
     signed_dir: +1 = right, -1 = left
@@ -88,7 +91,8 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                  f'(rough ~{target_m:.1f}m estimate)')
         rough_s = max(1.0, target_m / 0.2)
         drive_lateral_constant(pixhawk, signed_dir, rough_s, gain, log,
-                               writers, yaw_source=yaw_source, settle=settle)
+                               writers, yaw_source=yaw_source, settle=settle,
+                               abort_fn=abort_fn)
         return
 
     yaw_source.reset_position()  # type: ignore[union-attr]
@@ -100,6 +104,8 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
              f'tol={tolerance:.3f}m')
 
     while time.monotonic() < deadline:
+        if abort_fn and abort_fn():
+            break
         _, y_m  = yaw_source.get_position()  # type: ignore[union-attr]
         error   = target_m - abs(y_m)
 

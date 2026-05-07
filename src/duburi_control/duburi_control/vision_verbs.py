@@ -209,7 +209,8 @@ class VisionVerbs:
                 target_class=target_class, timeout=float(timeout),
                 drive_writer=drive_writer,
                 stale_after=float(stale_after),
-                writers=self._writers(), log=self.log)
+                writers=self._writers(), log=self.log,
+                abort_fn=self._abort_fn)
             self._send_neutral_and_settle()
             return self._make_result(
                 outcome.success, f'vision_acquire: {outcome.reason}',
@@ -273,6 +274,8 @@ class VisionVerbs:
 
             with self._suspend_heading_lock():
                 while time.monotonic() < deadline:
+                    if self._abort_fn():
+                        break
                     # Observe at current yaw position.
                     t_obs = time.monotonic()
                     while time.monotonic() - t_obs < dwell:
@@ -364,7 +367,8 @@ class VisionVerbs:
                     gate_guard_min_w_frac=gate_guard_min_w_frac,
                     pass_at=pass_at, pass_at_gain=pass_at_gain,
                     log=self.log, writers=self._writers(),
-                    visual_pid=visual_pid)
+                    visual_pid=visual_pid,
+                    abort_fn=self._abort_fn)
             if touches_yaw:
                 self._retarget_heading_lock(self._current_heading())
             self._send_neutral_and_settle()

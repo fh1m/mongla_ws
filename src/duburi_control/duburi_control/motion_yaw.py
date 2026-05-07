@@ -150,7 +150,8 @@ def _send_yaw_pct(pixhawk, yaw_pct: float) -> None:
 
 
 def _lock_to_target(pixhawk, end_heading, timeout, label, log,
-                    yaw_source, current, last_good_mono, pid=None):
+                    yaw_source, current, last_good_mono, pid=None,
+                    abort_fn=None):
     """Hold a heading by Ch4 rate-override until locked or timed out.
 
     Uses PID control for precise, smooth settling. When `pid` is provided
@@ -175,6 +176,9 @@ def _lock_to_target(pixhawk, end_heading, timeout, label, log,
     peak_error_deg = 0.0
 
     while time.monotonic() < deadline:
+        if abort_fn and abort_fn():
+            _send_yaw_pct(pixhawk, 0.0)
+            return
         heading = read_heading(pixhawk, yaw_source)
         now_mono = time.monotonic()
 
@@ -224,7 +228,7 @@ def _lock_to_target(pixhawk, end_heading, timeout, label, log,
 #  yaw_snap -- PID rate loop, yaw_source drives motion AND termination   #
 # ---------------------------------------------------------------------- #
 def yaw_snap(pixhawk, start_heading, end_heading,
-             timeout, label, log, yaw_source=None):
+             timeout, label, log, yaw_source=None, abort_fn=None):
     turn_degrees = Pixhawk.heading_error(end_heading, start_heading)
     log.info(
         f'[CMD  ] yaw_{label.lower()}  {abs(turn_degrees):.0f} deg  '
@@ -234,14 +238,14 @@ def yaw_snap(pixhawk, start_heading, end_heading,
         pixhawk, end_heading, timeout, label, log, yaw_source,
         current=start_heading,
         last_good_mono=time.monotonic(),
-        pid=_YawPID())
+        pid=_YawPID(), abort_fn=abort_fn)
 
 
 # ---------------------------------------------------------------------- #
 #  yaw_glide -- smoothed setpoint sweep, then PID lock                  #
 # ---------------------------------------------------------------------- #
 def yaw_glide(pixhawk, start_heading, end_heading,
-              timeout, label, log, yaw_source=None):
+              timeout, label, log, yaw_source=None, abort_fn=None):
     turn_degrees = Pixhawk.heading_error(end_heading, start_heading)
     duration     = max(YAW_MIN_DUR, abs(turn_degrees) / YAW_AVG_DPS)
 
@@ -261,6 +265,9 @@ def yaw_glide(pixhawk, start_heading, end_heading,
         elapsed = time.monotonic() - started_at
         if elapsed >= duration:
             break
+        if abort_fn and abort_fn():
+            _send_yaw_pct(pixhawk, 0.0)
+            return
 
         fraction = elapsed / duration
         swept    = (start_heading + turn_degrees * smootherstep(fraction)) % 360
@@ -293,4 +300,4 @@ def yaw_glide(pixhawk, start_heading, end_heading,
         pixhawk, end_heading, timeout, label, log, yaw_source,
         current=current,
         last_good_mono=last_good_mono,
-        pid=_YawPID())
+        pid=_YawPID(), abort_fn=abort_fn)

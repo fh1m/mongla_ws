@@ -104,6 +104,12 @@ COMMANDS = {
         'fields':   ['target', 'timeout', 'settle'],
         'defaults': {'timeout': 30.0, 'settle': 0.0},
     },
+    'turn': {
+        'help':     'Rotate to absolute heading `target` degrees (0-360) via shortest '
+                    'arc. Direction (left/right) is chosen automatically.',
+        'fields':   ['target', 'timeout', 'settle'],
+        'defaults': {'timeout': 30.0, 'settle': 0.0},
+    },
 
     # ---- Depth ----------------------------------------------------- #
     'set_depth': {

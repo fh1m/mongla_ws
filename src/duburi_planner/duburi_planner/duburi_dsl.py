@@ -11,6 +11,7 @@ Open-loop motion verbs sit directly on `duburi`:
     duburi.move_back(seconds)
     duburi.move_left(seconds) / duburi.move_right(seconds)
     duburi.yaw_left(degrees) / duburi.yaw_right(degrees)
+    duburi.turn(heading_deg)        -- absolute heading, direction auto-selected
     duburi.arc(seconds, gain=50, yaw_rate_pct=30)
     duburi.lock_heading(degrees)  / duburi.release_heading()
     duburi.pause(seconds) / duburi.stop()
@@ -375,6 +376,23 @@ class DuburiMission:
     def yaw_right(self, degrees: float, *, timeout: float = 30.0,
                   settle: float = 0.0):
         return self._send('yaw_right',
+                          target=float(degrees),
+                          timeout=timeout, settle=settle)
+
+    def turn(self, degrees: float, *, timeout: float = 30.0,
+             settle: float = 0.0):
+        """Rotate to absolute heading `degrees` (0-360) via shortest arc.
+
+        Direction is chosen automatically — no left/right prefix needed.
+        Internally calls yaw_snap or yaw_glide depending on smooth_yaw.
+
+        Examples::
+
+            duburi.turn(90)          # face east, from any current heading
+            duburi.turn(0)           # face north (shortest path)
+            duburi.turn(270)         # face west
+        """
+        return self._send('turn',
                           target=float(degrees),
                           timeout=timeout, settle=settle)
 
