@@ -281,7 +281,7 @@ class DetectorNode(Node):
                     fps = 1.0 / dt if dt > 1e-6 else 0.0
                     overlay = draw.render_all(
                         frame, detections,
-                        source=self._cam_name, fps=fps, device=self._device_str,
+                        source=self._cam_name, fps=fps,
                         healthy=True, deadband=self._deadband, primary=primary)
                     dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
                     dbg.header = msg.header
