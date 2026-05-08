@@ -32,6 +32,9 @@ class ByteTrackWrapper(Tracker):
     iou_threshold : float
         IoU threshold for the second association pass (low-confidence
         detections). Default 0.3.
+    track_activation_threshold : float
+        Minimum detection score to immediately activate a new track.
+        Higher values suppress spurious IDs from low-confidence detections.
     """
 
     name = 'bytetrack'
@@ -39,7 +42,8 @@ class ByteTrackWrapper(Tracker):
     def __init__(self, *,
                  track_buffer: int = 30,
                  min_hits: int = 3,
-                 iou_threshold: float = 0.3):
+                 iou_threshold: float = 0.3,
+                 track_activation_threshold: float = 0.25):
         try:
             import supervision as sv
         except ImportError as exc:
@@ -53,10 +57,12 @@ class ByteTrackWrapper(Tracker):
             lost_track_buffer=track_buffer,
             minimum_consecutive_frames=min_hits,
             minimum_matching_threshold=iou_threshold,
+            track_activation_threshold=track_activation_threshold,
         )
         self._track_buffer = track_buffer
         self._min_hits     = min_hits
         self._iou_threshold = iou_threshold
+        self._track_activation_threshold = track_activation_threshold
 
         # class_name registry: track_id -> class_name from last real detection
         self._class_map: Dict[int, str] = {}

@@ -51,28 +51,33 @@ class TrackerNode(Node):
     def __init__(self):
         super().__init__('duburi_tracker')
 
-        self.declare_parameter('camera',                 'laptop')
-        self.declare_parameter('track_buffer',           60)
-        self.declare_parameter('min_hits',               1)
-        self.declare_parameter('iou_threshold',          0.2)
-        self.declare_parameter('enable_kalman',          True)
-        self.declare_parameter('kalman_process_noise',   0.1)
-        self.declare_parameter('kalman_measurement_noise', 1.0)
-        self.declare_parameter('max_predict_frames',     10)
+        self.declare_parameter('camera',                      'laptop')
+        self.declare_parameter('track_buffer',                60)
+        self.declare_parameter('min_hits',                    1)
+        self.declare_parameter('iou_threshold',               0.2)
+        self.declare_parameter('track_activation_threshold',  0.40)
+        self.declare_parameter('classes',                     '')
+        self.declare_parameter('enable_kalman',               True)
+        self.declare_parameter('kalman_process_noise',        0.1)
+        self.declare_parameter('kalman_measurement_noise',    1.0)
+        self.declare_parameter('max_predict_frames',          10)
 
         cam              = str(self.get_parameter('camera').value).strip() or 'cam'
         track_buffer     = int(self.get_parameter('track_buffer').value)
         min_hits         = int(self.get_parameter('min_hits').value)
         iou_threshold    = float(self.get_parameter('iou_threshold').value)
+        act_thresh       = float(self.get_parameter('track_activation_threshold').value)
         self._enable_kal = bool(self.get_parameter('enable_kalman').value)
         proc_noise       = float(self.get_parameter('kalman_process_noise').value)
         meas_noise       = float(self.get_parameter('kalman_measurement_noise').value)
         max_pred         = int(self.get_parameter('max_predict_frames').value)
+        self._last_classes = str(self.get_parameter('classes').value)
 
         self._tracker = ByteTrackWrapper(
             track_buffer=track_buffer,
             min_hits=min_hits,
             iou_threshold=iou_threshold,
+            track_activation_threshold=act_thresh,
         )
         self._kalman = TrackKalmanSmoother(
             process_noise=proc_noise,
@@ -100,10 +105,27 @@ class TrackerNode(Node):
         self._last_log        = time.monotonic()
         self.create_timer(2.0, self._log_health)
 
+        # Reset tracker when class filter changes (old IDs would linger otherwise)
+        self.add_on_set_parameters_callback(self._on_param_change)
+
         self.get_logger().info(
             f"[TRK  ] subscribed {ns}/detections  "
             f"track_buffer={track_buffer} min_hits={min_hits} "
+            f"act_thresh={act_thresh:.2f} "
             f"kalman={'on' if self._enable_kal else 'off'}")
+
+    def _on_param_change(self, params):
+        from rcl_interfaces.msg import SetParametersResult
+        for p in params:
+            if p.name == 'classes' and str(p.value) != self._last_classes:
+                self._last_classes = str(p.value)
+                self._tracker.reset()
+                if self._kalman is not None:
+                    self._kalman.reset()
+                self._size_ema.clear()
+                self.get_logger().info(
+                    f"[TRK  ] classes changed → reset tracker (new classes='{p.value}')")
+        return SetParametersResult(successful=True)
 
     def _on_info(self, msg: CameraInfo) -> None:
         if msg.width and msg.height:
