@@ -53,7 +53,7 @@ class CameraNode(Node):
         self.declare_parameter('source',          '')        # explicit override
         self.declare_parameter('name',            '')
         self.declare_parameter('topic',           '')        # for source=ros_topic
-        self.declare_parameter('device',          0)         # for source=webcam (int OR str path)
+        self.declare_parameter('device',          -1)        # -1 = use profile default; ≥0 overrides
         self.declare_parameter('width',           640)
         self.declare_parameter('height',          480)
         # fps / publish_rate_hz declared as int so launch ints pass through
@@ -127,6 +127,8 @@ class CameraNode(Node):
                 dev = int(dev)
             except (TypeError, ValueError):
                 pass
+            if isinstance(dev, int) and dev < 0:
+                dev = 0  # no explicit override → first available device
             kwargs.update(
                 device=dev,
                 width=int(self.get_parameter('width').value),
