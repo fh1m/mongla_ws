@@ -3,12 +3,16 @@ tracker_node:
 
     # ---- ByteTrack association params --------------------------------------- #
     # Frames to hold a lost track alive before dropping it.
-    # 60 frames at 20 Hz detector = ~3 s of occlusion tolerance.
-    track_buffer: 60
+    # 150 frames at 30 Hz = 5 s of occlusion tolerance — survives turbulence/brief occlusion.
+    track_buffer: 150
 
     # Consecutive detection frames before a new track is published.
-    # 1 = publish immediately on first detection (fastest ID assignment).
-    min_hits: 1
+    # 3 = require 3 consecutive frames before publishing (suppresses turbidity false detections).
+    min_hits: 3
+
+    # Score threshold above which a new track is immediately activated.
+    # 0.40 = higher confidence required than the default 0.25 to spawn a new ID.
+    track_activation_threshold: 0.40
 
     # IoU threshold for the low-confidence second-pass association.
     # 0.2 = more permissive re-association → fewer ID switches on partial occlusion.
