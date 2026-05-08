@@ -14,6 +14,10 @@ Widget catalogue
   heading_tape(img, x, y, w, h, yaw_deg)       horizontal compass tape
   video_progress(img, x, y, w, h, cur, total, fps, paused)  playback bar
   health_row(img, x, y, w, h, health)          pipeline OK/FAIL status
+
+All widget functions accept an optional `fs_scale` keyword argument (default 1.0)
+that multiplies every internal font size, enabling resolution-adaptive rendering.
+Pass `fs_scale = max(1.0, frame_width / 640.0)` from the strip renderer.
 """
 
 from __future__ import annotations
@@ -49,38 +53,28 @@ def needle_gauge(img: np.ndarray,
                  value: float,
                  vmin: float = -1.0, vmax: float = 1.0,
                  label: str = '',
-                 deadband: float = 0.05) -> None:
-    """Horizontal needle meter showing signed error.
-
-    Left = negative, right = positive, centre = zero.
-    Deadband zone highlighted; needle color encodes magnitude.
-    """
+                 deadband: float = 0.05,
+                 *,
+                 fs_scale: float = 1.0) -> None:
+    """Horizontal needle meter showing signed error."""
     if w < 10 or h < 4:
         return
     value = float(np.clip(value, vmin, vmax))
     span  = max(vmax - vmin, 1e-6)
 
-    # Background bar
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
 
-    # Deadband zone
     cx      = x + w // 2
     db_frac = deadband / (span / 2.0)
     db_px   = max(1, int(db_frac * w / 2))
-    cv2.rectangle(img, (cx - db_px, y + 1), (cx + db_px, y + h - 1),
-                  C_PANEL, -1)
-
-    # Centre line
+    cv2.rectangle(img, (cx - db_px, y + 1), (cx + db_px, y + h - 1), C_PANEL, -1)
     cv2.line(img, (cx, y + 1), (cx, y + h - 1), C_DIM, 1)
 
-    # Needle position
-    norm  = (value - vmin) / span           # [0, 1]
-    nx    = x + int(norm * w)
-    nx    = max(x + 2, min(x + w - 2, nx))
+    norm = (value - vmin) / span
+    nx   = max(x + 2, min(x + w - 2, x + int(norm * w)))
 
-    # Color by magnitude
-    abs_n  = abs(value) / max(abs(vmin), abs(vmax), 1e-6)
+    abs_n = abs(value) / max(abs(vmin), abs(vmax), 1e-6)
     if abs_n < deadband / (span / 2):
         color = C_OK
     elif abs_n < 0.5:
@@ -88,27 +82,20 @@ def needle_gauge(img: np.ndarray,
     else:
         color = C_ERR
 
-    # Fill from centre to needle
     if nx > cx:
         cv2.rectangle(img, (cx, y + 2), (nx, y + h - 2), color, -1)
     elif nx < cx:
         cv2.rectangle(img, (nx, y + 2), (cx, y + h - 2), color, -1)
 
-    # Needle tick (tall)
     cv2.line(img, (nx, y), (nx, y + h), C_TEXT, 2, cv2.LINE_AA)
 
-    # Label (left-aligned, 2px above bar)
+    fs = 0.30 * fs_scale
     if label:
-        fs = 0.27
-        (tw, th), _ = cv2.getTextSize(label, _FONT, fs, _FT)
         cv2.putText(img, label, (x, y - 2), _FONT, fs, C_DIM, _FT, cv2.LINE_AA)
 
-    # Value text (right-aligned, 2px above bar)
     val_str = f'{value:+.2f}'
-    fs_v    = 0.27
-    (vw, _), _ = cv2.getTextSize(val_str, _FONT, fs_v, _FT)
-    cv2.putText(img, val_str, (x + w - vw, y - 2),
-                _FONT, fs_v, color, _FT, cv2.LINE_AA)
+    (vw, _), _ = cv2.getTextSize(val_str, _FONT, fs, _FT)
+    cv2.putText(img, val_str, (x + w - vw, y - 2), _FONT, fs, color, _FT, cv2.LINE_AA)
 
 
 # ── Sparkline ────────────────────────────────────────────────────────────── #
@@ -148,11 +135,13 @@ def sparkline(img: np.ndarray,
 
 def confidence_bar(img: np.ndarray,
                    x: int, y: int, w: int, h: int,
-                   conf: float) -> None:
+                   conf: float,
+                   *,
+                   fs_scale: float = 1.0) -> None:
     """Horizontal fill bar 0-1 with colour-coded confidence level."""
     if w < 6 or h < 4:
         return
-    conf = float(np.clip(conf, 0.0, 1.0))
+    conf  = float(np.clip(conf, 0.0, 1.0))
     color = C_OK if conf > 0.70 else (C_AMBER if conf > 0.40 else C_ERR)
     fill  = int(conf * (w - 2))
 
@@ -162,7 +151,7 @@ def confidence_bar(img: np.ndarray,
         cv2.rectangle(img, (x + 1, y + 1), (x + 1 + fill, y + h - 1), color, -1)
 
     val_str = f'{int(conf * 100)}%'
-    fs = 0.26
+    fs = 0.28 * fs_scale
     (tw, _), _ = cv2.getTextSize(val_str, _FONT, fs, _FT)
     lx = x + w - tw - 2
     cv2.putText(img, val_str, (max(x + 2, lx), y + h - 2),
@@ -174,44 +163,39 @@ def confidence_bar(img: np.ndarray,
 def altimeter_depth(img: np.ndarray,
                     x: int, y: int, w: int, h: int,
                     depth_m: float,
-                    max_depth: float = 5.0) -> None:
-    """Vertical tape depth gauge — 0m at top, max_depth at bottom.
-
-    Shows: scale ticks every 0.5m, labeled every 1m, current depth indicator
-    with arrow and numeric readout. Color: cyan/green shallow, amber/red deep.
-    """
+                    max_depth: float = 5.0,
+                    *,
+                    fs_scale: float = 1.0) -> None:
+    """Vertical tape depth gauge — 0m at top, max_depth at bottom."""
     if w < 12 or h < 20:
         return
 
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
 
-    # Units header — inside the widget top edge
-    cv2.putText(img, 'D', (x + 2, y + 9), _FONT, 0.22, C_DIM, _FT, cv2.LINE_AA)
+    fs_small = 0.24 * fs_scale
+    cv2.putText(img, 'D', (x + 2, y + 10), _FONT, fs_small, C_DIM, _FT, cv2.LINE_AA)
 
-    # NaN guard
     if np.isnan(depth_m):
         cv2.putText(img, '?', (x + w // 2 - 4, y + h // 2 + 4),
-                    _FONT, 0.32, C_DIM, _FT, cv2.LINE_AA)
+                    _FONT, 0.34 * fs_scale, C_DIM, _FT, cv2.LINE_AA)
         return
 
     depth_abs = float(min(abs(depth_m), max_depth))
 
-    # Ticks and labels
     step = 0.5
     m    = 0.0
     while m <= max_depth + 0.01:
         yt       = y + int(m / max_depth * h)
         is_major = abs(round(m) - m) < 0.01
-        tick_len = 6 if is_major else 3
+        tick_len = 8 if is_major else 4
         cv2.line(img, (x, yt), (x + tick_len, yt), C_DIM, 1)
         if is_major and int(m) > 0:
             lbl = f'{int(m)}m'
-            cv2.putText(img, lbl, (x + 8, min(yt + 4, y + h - 1)),
-                        _FONT, 0.22, C_DIM, _FT, cv2.LINE_AA)
+            cv2.putText(img, lbl, (x + 10, min(yt + 4, y + h - 1)),
+                        _FONT, fs_small, C_DIM, _FT, cv2.LINE_AA)
         m += step
 
-    # Fill bar (depth column)
     fill_h = int(depth_abs / max_depth * h)
     if fill_h > 0:
         d_col = (C_OK   if depth_abs < 1.5
@@ -223,9 +207,7 @@ def altimeter_depth(img: np.ndarray,
                       (x + w - 1, y + 1 + min(fill_h, h - 2)),
                       d_col, -1)
 
-    # Current depth indicator line + label
-    ind_y = y + int(depth_abs / max_depth * h)
-    ind_y = max(y + 1, min(y + h - 1, ind_y))
+    ind_y = max(y + 1, min(y + h - 1, y + int(depth_abs / max_depth * h)))
     d_col = (C_OK   if depth_abs < 1.5
              else C_ACCENT if depth_abs < 3.0
              else C_AMBER  if depth_abs < 4.0
@@ -233,13 +215,13 @@ def altimeter_depth(img: np.ndarray,
     cv2.line(img, (x, ind_y), (x + w, ind_y), d_col, 2, cv2.LINE_AA)
 
     lbl = f'{depth_abs:.1f}m'
-    fs  = 0.28
-    (lw, lh), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
+    fs_lbl = 0.30 * fs_scale
+    (lw, _), _ = cv2.getTextSize(lbl, _FONT, fs_lbl, _FT)
     lx = x - lw - 3
     if lx < 0:
         lx = x + w + 2
     cv2.putText(img, lbl, (max(0, lx), ind_y + 4),
-                _FONT, fs, d_col, _FT, cv2.LINE_AA)
+                _FONT, fs_lbl, d_col, _FT, cv2.LINE_AA)
 
 
 # ── Battery bar ───────────────────────────────────────────────────────────── #
@@ -247,33 +229,28 @@ def altimeter_depth(img: np.ndarray,
 def battery_bar(img: np.ndarray,
                 x: int, y: int, w: int, h: int,
                 voltage: float,
-                cell_count: int = 4) -> None:
-    """Segmented battery indicator with voltage text.
-
-    Estimates percentage from 4S LiPo voltage curve:
-      full = 16.8V (4.2V/cell), empty = 14.0V (3.5V/cell).
-    """
+                cell_count: int = 4,
+                *,
+                fs_scale: float = 1.0) -> None:
+    """Segmented battery indicator with voltage text."""
     v_full  = cell_count * 4.2
     v_empty = cell_count * 3.5
     pct     = float(np.clip((voltage - v_empty) / max(v_full - v_empty, 0.1), 0.0, 1.0))
     color   = C_OK if pct > 0.60 else (C_AMBER if pct > 0.20 else C_ERR)
 
-    n_segs   = 10
-    seg_w    = (w - 2) // n_segs
-    filled   = int(pct * n_segs)
+    n_segs = 10
+    seg_w  = (w - 2) // n_segs
+    filled = int(pct * n_segs)
 
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
     for i in range(n_segs):
         sx1 = x + 1 + i * seg_w
         sx2 = sx1 + seg_w - 1
-        if i < filled:
-            cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), color, -1)
-        else:
-            cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), C_BG, -1)
+        fill_c = color if i < filled else C_BG
+        cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), fill_c, -1)
 
-    # Voltage + percentage label — inside the bar, drawn after segments so it's visible
     lbl = f'{voltage:.1f}V  {int(pct * 100)}%'
-    fs  = 0.26
+    fs  = 0.28 * fs_scale
     (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
     lx = x + (w - tw) // 2
     cv2.putText(img, lbl, (max(x + 2, lx), y + h - 2), _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
@@ -284,40 +261,39 @@ def battery_bar(img: np.ndarray,
 def mini_compass(img: np.ndarray,
                  cx: int, cy: int,
                  radius: int,
-                 heading_deg: float) -> None:
+                 heading_deg: float,
+                 *,
+                 fs_scale: float = 1.0) -> None:
     """Compass rose with needle.  N at top, tick marks every 30°."""
     overlay = img.copy()
     cv2.circle(overlay, (cx, cy), radius, C_BG, -1)
     cv2.addWeighted(overlay, 0.80, img, 0.20, 0, dst=img)
     cv2.circle(img, (cx, cy), radius, C_BORDER, 1, cv2.LINE_AA)
 
-    # Cardinal labels
+    fs_card = 0.25 * fs_scale
     for ang, lbl in ((0, 'N'), (90, 'E'), (180, 'S'), (270, 'W')):
-        rad  = np.radians(ang)
-        tx   = cx + int((radius - 5) * np.sin(rad))
-        ty   = cy - int((radius - 5) * np.cos(rad))
-        fs   = 0.22
-        (tw, th), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
+        rad = np.radians(ang)
+        tx  = cx + int((radius - 6) * np.sin(rad))
+        ty  = cy - int((radius - 6) * np.cos(rad))
+        (tw, th), _ = cv2.getTextSize(lbl, _FONT, fs_card, _FT)
         cv2.putText(img, lbl, (tx - tw // 2, ty + th // 2),
-                    _FONT, fs, C_DIM, _FT, cv2.LINE_AA)
+                    _FONT, fs_card, C_DIM, _FT, cv2.LINE_AA)
 
-    # 30° tick marks
     for deg in range(0, 360, 30):
         if deg % 90 == 0:
             continue
         rad = np.radians(deg)
         r1  = radius - 1
-        r2  = radius - 4
+        r2  = radius - 5
         cv2.line(img,
                  (cx + int(r1 * np.sin(rad)), cy - int(r1 * np.cos(rad))),
                  (cx + int(r2 * np.sin(rad)), cy - int(r2 * np.cos(rad))),
                  C_DIM, 1, cv2.LINE_AA)
 
     if np.isnan(heading_deg):
-        cv2.putText(img, '?', (cx - 4, cy + 5), _FONT, 0.32, C_DIM, _FT, cv2.LINE_AA)
+        cv2.putText(img, '?', (cx - 4, cy + 5), _FONT, 0.34 * fs_scale, C_DIM, _FT, cv2.LINE_AA)
         return
 
-    # Needle (filled wedge)
     needle = radius - 5
     rad    = np.radians(float(heading_deg))
     tip_x  = cx + int(needle * np.sin(rad))
@@ -328,12 +304,11 @@ def mini_compass(img: np.ndarray,
     cv2.circle(img, (tip_x, tip_y), 2, C_ACCENT, -1, cv2.LINE_AA)
     cv2.circle(img, (cx, cy), 2, C_DIM, -1, cv2.LINE_AA)
 
-    # Heading label below circle — reduced offset to avoid overflowing the row below
-    hdg_lbl = f'{int(heading_deg) % 360:03d}°'
-    fs = 0.26
-    (tw, _), _ = cv2.getTextSize(hdg_lbl, _FONT, fs, _FT)
-    cv2.putText(img, hdg_lbl, (cx - tw // 2, cy + radius + 7),
-                _FONT, fs, C_ACCENT, _FT, cv2.LINE_AA)
+    hdg_lbl = f'{int(heading_deg) % 360:03d}'
+    fs_hdg  = 0.28 * fs_scale
+    (tw, _), _ = cv2.getTextSize(hdg_lbl, _FONT, fs_hdg, _FT)
+    cv2.putText(img, hdg_lbl, (cx - tw // 2, cy + radius + 9),
+                _FONT, fs_hdg, C_ACCENT, _FT, cv2.LINE_AA)
 
 
 # ── Heading tape ──────────────────────────────────────────────────────────── #
@@ -341,45 +316,48 @@ def mini_compass(img: np.ndarray,
 def heading_tape(img: np.ndarray,
                  x: int, y: int, w: int, h: int,
                  yaw_deg: float,
-                 show_readout: bool = False) -> None:
+                 show_readout: bool = False,
+                 *,
+                 fs_scale: float = 1.0) -> None:
     """Horizontal compass tape showing ±60° around current heading."""
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
 
     if np.isnan(yaw_deg):
+        fs_nan = 0.32 * fs_scale
         msg = 'NO HDG'
-        (tw, _), _ = cv2.getTextSize(msg, _FONT, 0.30, _FT)
+        (tw, _), _ = cv2.getTextSize(msg, _FONT, fs_nan, _FT)
         cv2.putText(img, msg, (x + (w - tw) // 2, y + h // 2 + 5),
-                    _FONT, 0.30, C_DIM, _FT, cv2.LINE_AA)
+                    _FONT, fs_nan, C_DIM, _FT, cv2.LINE_AA)
         return
 
     yaw = float(yaw_deg) % 360.0
     cx  = x + w // 2
-    ppd = w / 120.0   # pixels per degree
+    ppd = w / 120.0
 
+    fs_lbl = 0.32 * fs_scale
     for delta in range(-65, 66, 10):
         deg_at = int(yaw + delta) % 360
         px     = cx + int(delta * ppd)
         if px < x + 2 or px > x + w - 2:
             continue
         is_label = delta % 30 == 0
-        tick_h   = 8 if is_label else 4
+        tick_h   = 9 if is_label else 4
         cv2.line(img, (px, y + h - tick_h), (px, y + h - 1), C_DIM, 1)
         if is_label:
             lbl = _cardinal(deg_at)
-            (tw, _), _ = cv2.getTextSize(lbl, _FONT, 0.30, _FT)
+            (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs_lbl, _FT)
             cv2.putText(img, lbl, (px - tw // 2, y + h - tick_h - 2),
-                        _FONT, 0.30, C_TEXT, _FT, cv2.LINE_AA)
+                        _FONT, fs_lbl, C_TEXT, _FT, cv2.LINE_AA)
 
-    # Centre heading marker
     cv2.line(img, (cx, y + 2), (cx, y + h - 2), C_ACCENT, 2, cv2.LINE_AA)
 
     if show_readout:
-        lbl = f'{int(yaw) % 360:03d}'
-        _FONT_FS = 0.40
-        (tw, th), _ = cv2.getTextSize(lbl, _FONT, _FONT_FS, _FT)
+        lbl     = f'{int(yaw) % 360:03d}'
+        fs_read = 0.42 * fs_scale
+        (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs_read, _FT)
         cv2.putText(img, lbl, (cx - tw // 2, y - 3),
-                    _FONT, _FONT_FS, C_ACCENT, _FT, cv2.LINE_AA)
+                    _FONT, fs_read, C_ACCENT, _FT, cv2.LINE_AA)
 
 
 # ── Video progress bar ────────────────────────────────────────────────────── #
@@ -388,7 +366,9 @@ def video_progress(img: np.ndarray,
                    x: int, y: int, w: int, h: int,
                    cur_frame: int, total_frames: int,
                    fps: float = 30.0,
-                   paused: bool = False) -> None:
+                   paused: bool = False,
+                   *,
+                   fs_scale: float = 1.0) -> None:
     """Playback progress bar with timestamp and pause indicator."""
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
@@ -403,31 +383,32 @@ def video_progress(img: np.ndarray,
         cv2.rectangle(img, (x + 1, y + 1), (x + 1 + fill_w, y + h - 1), bar_color, -1)
 
     def _fmt(frames: int) -> str:
-        secs  = int(frames / fps)
-        m, s  = divmod(secs, 60)
+        secs = int(frames / fps)
+        m, s = divmod(secs, 60)
         return f'{m:02d}:{s:02d}'
 
-    state  = '||' if paused else '>'
-    lbl    = f'{state} {_fmt(cur_frame)} / {_fmt(total_frames)}  {int(frac * 100)}%'
-    fs     = 0.26
+    state = '||' if paused else '>'
+    lbl   = f'{state} {_fmt(cur_frame)} / {_fmt(total_frames)}  {int(frac * 100)}%'
+    fs    = 0.28 * fs_scale
     (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
     lx = x + (w - tw) // 2
-    cv2.putText(img, lbl, (max(x + 2, lx), y + h - 2),
-                _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
+    cv2.putText(img, lbl, (max(x + 2, lx), y + h - 2), _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
 
 
 # ── Pipeline health row ───────────────────────────────────────────────────── #
 
 def health_row(img: np.ndarray,
                x: int, y: int, w: int, h: int,
-               health: Dict[str, bool]) -> None:
+               health: Dict[str, bool],
+               *,
+               fs_scale: float = 1.0) -> None:
     """One-line pipeline health strip: [OK] camera  [OK] detector  etc."""
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.line(img, (x, y), (x + w, y), C_BORDER, 1)
 
-    nodes  = [('camera', 'CAM'), ('detector', 'DET'), ('tracker', 'TRK'), ('state', 'STATE')]
-    col_w  = w // len(nodes)
-    fs     = 0.26
+    nodes = [('camera', 'CAM'), ('detector', 'DET'), ('tracker', 'TRK'), ('state', 'STATE')]
+    col_w = w // len(nodes)
+    fs    = 0.28 * fs_scale
 
     for i, (key, short) in enumerate(nodes):
         ok    = health.get(key, False)
