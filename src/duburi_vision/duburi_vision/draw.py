@@ -54,7 +54,7 @@ _FS   = 0.40   # base font scale (video-section labels)
 _FT   = 1      # font thickness (all text in this file)
 
 # ── UI strip constants ────────────────────────────────────────────────────── #
-_STRIP_H = 150   # px height of the info strip stacked below the video frame
+_STRIP_H = 170   # px height of the info strip stacked below the video frame
 _SFS     = 0.34  # strip panel font scale (smaller for horizontal density)
 _SLH     = 13    # strip panel line height (px)
 _SPAD    = 4     # strip panel inner padding (px)
@@ -303,14 +303,17 @@ def draw_heading_tape(img: np.ndarray, yaw_deg: float,
                       tape_w: int = 260, tape_h: int = 30,
                       show_readout: bool = True) -> None:
     """Horizontal compass tape drawn in-place. Shows ±60° around current heading."""
+    cv2.rectangle(img, (x, y), (x + tape_w, y + tape_h), C_BG, -1)
+    cv2.rectangle(img, (x, y), (x + tape_w, y + tape_h), C_BORDER, 1, cv2.LINE_AA)
     if np.isnan(yaw_deg):
+        msg = 'NO HDG'
+        (tw, _), _ = cv2.getTextSize(msg, _FONT, 0.30, 1)
+        cv2.putText(img, msg, (x + (tape_w - tw) // 2, y + tape_h // 2 + 5),
+                    _FONT, 0.30, C_DIM, 1, cv2.LINE_AA)
         return
     yaw = float(yaw_deg) % 360.0
     cx  = x + tape_w // 2
     pixels_per_deg = tape_w / 120.0
-
-    cv2.rectangle(img, (x, y), (x + tape_w, y + tape_h), C_BG, -1)
-    cv2.rectangle(img, (x, y), (x + tape_w, y + tape_h), C_BORDER, 1, cv2.LINE_AA)
 
     for delta in range(-65, 66, 10):
         deg_at = int(yaw + delta) % 360
@@ -478,18 +481,50 @@ def render_all(frame_bgr: np.ndarray,
             labels.append(f'{prefix}{d.class_name} {int(d.score * 100)}%')
         out = sv['label'].annotate(scene=out, detections=sv_all, labels=labels)
 
-    # ── 3. Primary target: ACCENT overlay + crosshair + offset arrow ──────── #
+    # ── 3. Primary target: accent border, full-axis hairlines, size tag, alignment bar ── #
     if primary is not None:
         x1p, y1p, x2p, y2p = (int(v) for v in primary.xyxy)
+        cx_t, cy_t = int(primary.cx), int(primary.cy)
+
+        # Accent border + corner brackets + centre dot
         cv2.rectangle(out, (x1p, y1p), (x2p, y2p), C_ACCENT, 2, cv2.LINE_AA)
         _draw_corners(out, x1p, y1p, x2p, y2p, C_ACCENT, length=15, thickness=3)
-        cx_t, cy_t = int(primary.cx), int(primary.cy)
-        cv2.line(out, (cx_t - 14, cy_t), (cx_t + 14, cy_t), C_ACCENT, 2, cv2.LINE_AA)
-        cv2.line(out, (cx_t, cy_t - 14), (cx_t, cy_t + 14), C_ACCENT, 2, cv2.LINE_AA)
         cv2.circle(out, (cx_t, cy_t), 3, C_ACCENT, -1, cv2.LINE_AA)
-        if abs(cx_t - w // 2) >= 2 or abs(cy_t - h // 2) >= 2:
-            cv2.arrowedLine(out, (w // 2, h // 2), (cx_t, cy_t),
-                            C_AMBER, 2, cv2.LINE_AA, tipLength=0.18)
+
+        # Full-axis hairlines: dashed from box edges to frame boundary.
+        # Conveys offset from frame centre more clearly than a short crosshair.
+        _dashed_line(out, (cx_t, 0),    (cx_t, y1p), C_ACCENT, dash=5, gap=5, thickness=1)
+        _dashed_line(out, (cx_t, y2p),  (cx_t, h),   C_ACCENT, dash=5, gap=5, thickness=1)
+        _dashed_line(out, (0,    cy_t), (x1p,  cy_t), C_ACCENT, dash=5, gap=5, thickness=1)
+        _dashed_line(out, (x2p,  cy_t), (w,    cy_t), C_ACCENT, dash=5, gap=5, thickness=1)
+
+        # Size + aspect-ratio tag: operator can estimate bbox framing at a glance
+        ar       = primary.width / max(primary.height, 1.0)
+        p_w_pct  = int(primary.width  / max(w, 1) * 100)
+        p_h_pct  = int(primary.height / max(h, 1) * 100)
+        size_lbl = f'W:{p_w_pct}%  H:{p_h_pct}%  ar:{ar:.2f}'
+        (slw, slh), _ = cv2.getTextSize(size_lbl, _FONT, 0.32, 1)
+        sl_x = max(x1p, 2)
+        sl_y = (y2p + slh + 4) if (y2p + slh + 8 < h) else (y1p - 4)
+        cv2.rectangle(out, (sl_x - 2, sl_y - slh - 1), (sl_x + slw + 2, sl_y + 2),
+                      C_BG, -1)
+        cv2.putText(out, size_lbl, (sl_x, sl_y), _FONT, 0.32, C_DIM, 1, cv2.LINE_AA)
+
+        # Horizontal alignment bar at frame bottom: analogue offset gauge.
+        # Dot position → how far the target is from horizontal centre.
+        _bar_y = h - 12
+        _bar_h = 7
+        ex = (primary.cx - w / 2.0) / max(w / 2.0, 1.0)
+        bar_col = C_OK if abs(ex) < deadband else C_AMBER
+        cv2.rectangle(out, (0, _bar_y), (w, _bar_y + _bar_h), C_BG, -1)
+        cv2.line(out, (w // 2, _bar_y), (w // 2, _bar_y + _bar_h), C_RETICLE, 1)
+        db_px = int(deadband * w / 2)
+        cv2.rectangle(out, (w // 2 - db_px, _bar_y),
+                      (w // 2 + db_px, _bar_y + _bar_h), C_RETICLE, 1)
+        dot_x = max(4, min(w - 4, cx_t))
+        cv2.line(out, (w // 2, _bar_y + _bar_h // 2),
+                 (dot_x, _bar_y + _bar_h // 2), bar_col, 1, cv2.LINE_AA)
+        cv2.circle(out, (dot_x, _bar_y + _bar_h // 2), 3, bar_col, -1, cv2.LINE_AA)
 
     # ── 4. Stale banner ───────────────────────────────────────────────────── #
     if not healthy:
@@ -621,10 +656,12 @@ def _render_ui_strip(w: int, frame_h: int, *,
     _dg_y  = py + 4
 
     cv2.rectangle(strip, (_dg_x, _dg_y), (_dg_x + _DG_W, _dg_y + _DG_H), C_BORDER, 1, cv2.LINE_AA)
-    cv2.putText(strip, 'D', (_dg_x + 6, _dg_y - 2), _FONT, 0.28, C_DIM, 1, cv2.LINE_AA)
-    for _m in (0, 2, 4):
+    cv2.putText(strip, 'DEP', (_dg_x + 1, _dg_y - 2), _FONT, 0.22, C_DIM, 1, cv2.LINE_AA)
+    for _m in (0, 2, 4, 5):
         _yt = _dg_y + int(_m / _MAX_D * _DG_H)
         cv2.line(strip, (_dg_x, _yt), (_dg_x + 5, _yt), C_DIM, 1)
+        cv2.putText(strip, f'{_m}m', (_dg_x + 7, min(_yt + 4, _dg_y + _DG_H - 1)),
+                    _FONT, 0.22, C_DIM, 1, cv2.LINE_AA)
 
     if state is not None and not np.isnan(state.depth_m):
         depth_abs = float(min(abs(state.depth_m), _MAX_D))
@@ -694,14 +731,15 @@ def _render_ui_strip(w: int, frame_h: int, *,
         cv2.circle(strip, (val_x_st + yw + 3, yaw_row_y - yh + 2),
                    2, C_TEXT, 1, cv2.LINE_AA)
 
-    # Separator above heading tape
-    tape_sep_y = _STRIP_H - 34
+    # Heading tape — taller tape, always renders (NO HDG when yaw is NaN)
+    _TAPE_H    = 44
+    tape_y     = _STRIP_H - 2 - _TAPE_H   # STRIP_H=170 → tape at y=124
+    tape_sep_y = tape_y - 4
+    cv2.putText(strip, 'HDG', (8, tape_sep_y - 2), _FONT, 0.24, C_DIM, 1, cv2.LINE_AA)
     cv2.line(strip, (6, tape_sep_y), (w - 6, tape_sep_y), C_BORDER, 1)
 
-    # Full-width heading tape (show_readout=False — YAW in STATE is sufficient)
-    tape_y = _STRIP_H - 32
     draw_heading_tape(strip, _yaw, x=6, y=tape_y,
-                      tape_w=w - 12, tape_h=28, show_readout=False)
+                      tape_w=w - 12, tape_h=_TAPE_H, show_readout=False)
 
     # Accent bar at the very bottom
     cv2.line(strip, (0, _STRIP_H - 1), (w - 1, _STRIP_H - 1), C_ACCENT, 1)
