@@ -645,6 +645,19 @@ def _render_ui_strip(w: int, frame_h: int, *,
 
         _mc_panel(strip, px, py, 'ALIGNMENT', al_rows,
                   border=al_border, pad=_SPAD, line_h=_SLH, fs=_SFS)
+        px += _panel_width('ALIGNMENT', al_rows, pad=_SPAD, fs=_SFS) + 6
+
+    # ── TRACKS panel (only when tracker is running) ───────────────────────── #
+    if tracking_on or n_tracks > 0:
+        trk_rows = [
+            ('TRACKS',  str(n_tracks),
+             C_ACCENT if n_tracks else C_DIM),
+            ('PRIMARY', f'#{primary_track_id}' if primary_track_id is not None else 'none',
+             C_ACCENT if primary_track_id is not None else C_DIM),
+        ]
+        _mc_panel(strip, px, py, 'TRACKS', trk_rows,
+                  border=C_ACCENT if n_tracks else C_BORDER,
+                  pad=_SPAD, line_h=_SLH, fs=_SFS)
 
     # ── Right block (anchored from right edge) ─────────────────────────────── #
     # Depth gauge: 22×72 px, always visible (border + ticks even with no data)

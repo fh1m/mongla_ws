@@ -15,16 +15,16 @@ duburi_vision:
     laptop:
       source:   webcam
       device:   4
-      width:    640
-      height:   480
+      width:    1280
+      height:   720
       fps:      30
       frame_id: laptop_cam
 
     logitech:
       source:   webcam
       device:   4
-      width:    640
-      height:   480
+      width:    1280
+      height:   720
       fps:      30
       frame_id: laptop_cam
 
