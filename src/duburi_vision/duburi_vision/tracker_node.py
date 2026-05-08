@@ -53,8 +53,8 @@ class TrackerNode(Node):
 
         self.declare_parameter('camera',                 'laptop')
         self.declare_parameter('track_buffer',           60)
-        self.declare_parameter('min_hits',               2)
-        self.declare_parameter('iou_threshold',          0.3)
+        self.declare_parameter('min_hits',               1)
+        self.declare_parameter('iou_threshold',          0.2)
         self.declare_parameter('enable_kalman',          True)
         self.declare_parameter('kalman_process_noise',   0.1)
         self.declare_parameter('kalman_measurement_noise', 1.0)
@@ -92,6 +92,7 @@ class TrackerNode(Node):
 
         self._image_size = (640, 480)
         self._info_seen  = False
+        self._size_ema: dict = {}   # track_id -> (smooth_w, smooth_h)
 
         # Diagnostics
         self._frames          = 0
@@ -143,6 +144,28 @@ class TrackerNode(Node):
                     track_id=td.track_id, predicted=td.predicted,
                 ))
             tracked = smoothed
+
+        # Size EMA pass: smooth width/height per track_id independently.
+        # Kalman only smoothed centre (cx, cy); raw ByteTrack size jitters every
+        # frame and causes visible box shaking. EMA alpha=0.7 damps jitter in
+        # ~4 frames while still following real size changes.
+        active_ids = {t.track_id for t in tracked}
+        self._size_ema = {k: v for k, v in self._size_ema.items() if k in active_ids}
+        size_smoothed = []
+        for td in tracked:
+            sw, sh = self._size_ema.get(td.track_id, (td.width, td.height))
+            sw = 0.7 * sw + 0.3 * td.width
+            sh = 0.7 * sh + 0.3 * td.height
+            self._size_ema[td.track_id] = (sw, sh)
+            half_w = sw * 0.5
+            half_h = sh * 0.5
+            size_smoothed.append(TrackedDetection(
+                class_id=td.class_id, class_name=td.class_name,
+                score=td.score,
+                xyxy=(td.cx - half_w, td.cy - half_h, td.cx + half_w, td.cy + half_h),
+                track_id=td.track_id, predicted=td.predicted,
+            ))
+        tracked = size_smoothed
 
         out = self._build_array(tracked, msg.header)
         self._pub.publish(out)

@@ -6,26 +6,26 @@ tracker_node:
     # 60 frames at 20 Hz detector = ~3 s of occlusion tolerance.
     track_buffer: 60
 
-    # Consecutive detection frames before a new track is published (filters
-    # one-shot false positives / background noise).
-    min_hits: 2
+    # Consecutive detection frames before a new track is published.
+    # 1 = publish immediately on first detection (fastest ID assignment).
+    min_hits: 1
 
     # IoU threshold for the low-confidence second-pass association.
-    # Lower = more aggressive re-association; higher = stricter.
-    iou_threshold: 0.3
+    # 0.2 = more permissive re-association → fewer ID switches on partial occlusion.
+    iou_threshold: 0.2
 
     # ---- Kalman smoother --------------------------------------------------- #
     enable_kalman: true
 
-    # Process noise Q diagonal. Lower = smoother output, more lag on fast
-    # target motion. Raise for high-speed underwater targets.
-    kalman_process_noise: 0.1
+    # Process noise Q diagonal. 0.05 = very smooth centre tracking; raise for
+    # fast-moving targets where lag becomes visible.
+    kalman_process_noise: 0.05
 
-    # Measurement noise R diagonal. Lower = tighter tracking, more jitter.
-    # Raise if the detector produces noisy bbox centres (low-light, motion blur).
-    kalman_measurement_noise: 1.0
+    # Measurement noise R diagonal. 2.0 = trust the Kalman prediction more than
+    # raw detections → suppresses per-frame centre jitter from detector noise.
+    kalman_measurement_noise: 2.0
 
     # After this many consecutive Kalman-predicted frames (no real detection),
-    # the track output is suppressed. Must be < track_buffer.
-    # At 20 Hz: 5 frames = 0.25 s of pure prediction before suppressing.
-    max_predict_frames: 5
+    # the track output is suppressed. 15 frames = 0.75 s at 20 Hz — keeps
+    # tracks alive through brief occlusion without flooding with ghost boxes.
+    max_predict_frames: 15
