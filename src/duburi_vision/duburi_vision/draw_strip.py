@@ -36,7 +36,8 @@ from .draw_widgets import (
 )
 from .detection.detector import Detection
 
-_STRIP_H = 202   # total strip height in pixels
+_STRIP_H  = 202   # total strip height in pixels
+_BASE_W   = 640   # internal raster width — strip is drawn here, then resized to frame width
 
 # Row y-positions and heights
 _R1_Y, _R1_H = 0,   22   # header
@@ -73,44 +74,60 @@ def render_ui_strip(w: int, frame_h: int, *,
                     is_paused:  bool = False,
                     video_position: Optional[tuple] = None,
                     pipeline_health: Optional[Dict[str, bool]] = None) -> np.ndarray:
-    """Build and return the _STRIP_H×w UI strip."""
+    """Build and return the _STRIP_H×w UI strip.
 
-    strip = np.full((_STRIP_H, w, 3), C_BG, dtype=np.uint8)
-    cv2.line(strip, (0, 0), (w - 1, 0), C_ACCENT, 2)   # top accent bar
+    All drawing happens on a _BASE_W-wide canvas so fonts and layout stay
+    crisp regardless of the display frame width.  The finished strip is
+    resized to `w` before returning so it composites cleanly with an
+    upscaled video frame.
+    """
+    bw = _BASE_W   # internal canvas width (640px)
+
+    strip = np.full((_STRIP_H, bw, 3), C_BG, dtype=np.uint8)
+    cv2.line(strip, (0, 0), (bw - 1, 0), C_ACCENT, 2)   # top accent bar
 
     yaw = state.yaw_deg if state is not None else float('nan')
 
+    # frame_w: actual detection-coordinate width (= `w` after upscaling in display_node)
+    # Used for ERR_X / alignment error computations so needle matches the real bbox position.
+    frame_w = w
+
     # ── Row 1: Header ──────────────────────────────────────────────────────── #
-    _draw_header_row(strip, w, fps, video_mode, is_paused)
+    _draw_header_row(strip, bw, fps, video_mode, is_paused)
 
     # ── Row 2: ERR gauges ──────────────────────────────────────────────────── #
-    _draw_err_gauges(strip, w, frame_h, primary, deadband)
+    _draw_err_gauges(strip, bw, frame_h, primary, deadband, frame_w)
 
     # ── Row 3: Panels + sparklines ─────────────────────────────────────────── #
-    _draw_panels_row(strip, w, frame_h, detections, primary, source,
+    _draw_panels_row(strip, bw, frame_h, detections, primary, source,
                      healthy, tracking_on, n_tracks, primary_track_id,
                      configured_classes, show_alignment, deadband,
-                     err_x_history or [], err_y_history or [], conf_history or [])
+                     err_x_history or [], err_y_history or [], conf_history or [],
+                     frame_w)
 
     # ── Row 4: Instruments ─────────────────────────────────────────────────── #
-    _draw_instruments_row(strip, w, yaw, yaw_source, state)
+    _draw_instruments_row(strip, bw, yaw, yaw_source, state)
 
     # ── Row 5: Heading tape ────────────────────────────────────────────────── #
-    cv2.line(strip, (4, _R5_Y - 1), (w - 4, _R5_Y - 1), C_BORDER, 1)
-    heading_tape(strip, 4, _R5_Y, w - 8, _R5_H, yaw, show_readout=False)
+    cv2.line(strip, (4, _R5_Y - 1), (bw - 4, _R5_Y - 1), C_BORDER, 1)
+    heading_tape(strip, 4, _R5_Y, bw - 8, _R5_H, yaw, show_readout=False)
 
     # ── Row 6: Health / video progress ─────────────────────────────────────── #
     if video_mode and video_position is not None:
         cur_f, tot_f = video_position
-        img_fps = (state.depth_m if False else fps) or 30.0   # use display FPS
-        video_progress(strip, 0, _R6_Y, w, _R6_H,
+        img_fps = fps or 30.0
+        video_progress(strip, 0, _R6_Y, bw, _R6_H,
                        cur_f, tot_f, img_fps, is_paused)
     else:
         health = pipeline_health or {}
-        health_row(strip, 0, _R6_Y, w, _R6_H, health)
+        health_row(strip, 0, _R6_Y, bw, _R6_H, health)
 
     # Bottom accent bar
-    cv2.line(strip, (0, _STRIP_H - 1), (w - 1, _STRIP_H - 1), C_ACCENT, 1)
+    cv2.line(strip, (0, _STRIP_H - 1), (bw - 1, _STRIP_H - 1), C_ACCENT, 1)
+
+    # Scale to display width (no-op when w == _BASE_W)
+    if w != bw:
+        strip = cv2.resize(strip, (w, _STRIP_H), interpolation=cv2.INTER_LINEAR)
 
     return strip
 
@@ -133,21 +150,28 @@ def _draw_header_row(strip: np.ndarray, w: int, fps: float,
     fps_lbl = f'{fps:.0f} Hz'
     cv2.putText(strip, fps_lbl, (6, by), _FONT, 0.30, C_DIM, _FT, cv2.LINE_AA)
 
-    # Mode badge (right side)
+    # Mode badge (right side) — ASCII only; cv2 fonts lack Unicode glyphs
     if video_mode:
-        badge      = '⏸ VIDEO SIM' if is_paused else '▶ VIDEO SIM'
-        badge_col  = C_AMBER if is_paused else C_ACCENT
+        badge     = '|| VIDEO SIM' if is_paused else '>  VIDEO SIM'
+        badge_col = C_AMBER if is_paused else C_ACCENT
     else:
-        badge      = '● LIVE'
-        badge_col  = C_OK
-    (mw, _), _ = cv2.getTextSize(badge, _FONT, 0.30, _FT)
-    cv2.putText(strip, badge, (w - mw - 6, by), _FONT, 0.30, badge_col, _FT, cv2.LINE_AA)
+        badge     = 'LIVE'
+        badge_col = C_OK
+    (mw, mh), _ = cv2.getTextSize(badge, _FONT, 0.30, _FT)
+    badge_x = w - mw - 6
+    cv2.putText(strip, badge, (badge_x, by), _FONT, 0.30, badge_col, _FT, cv2.LINE_AA)
+    # Draw a filled circle as the LIVE dot (replaces '●' glyph)
+    if not video_mode:
+        dot_cx = badge_x - 8
+        dot_cy = by - mh // 2 - 1
+        cv2.circle(strip, (dot_cx, dot_cy), 3, C_OK, -1, cv2.LINE_AA)
 
     cv2.line(strip, (4, _R2_Y - 1), (w - 4, _R2_Y - 1), C_BORDER, 1)
 
 
 def _draw_err_gauges(strip: np.ndarray, w: int, frame_h: int,
-                     primary: Optional[Detection], deadband: float) -> None:
+                     primary: Optional[Detection], deadband: float,
+                     frame_w: int = 0) -> None:
     gpad = 6
     gh   = _R2_H - 8    # gauge height
     gw   = (w - 3 * gpad) // 2
@@ -156,9 +180,10 @@ def _draw_err_gauges(strip: np.ndarray, w: int, frame_h: int,
     cv2.putText(strip, 'ERR_X', (gpad, _R2_Y + 8), _FONT, 0.26, C_DIM, _FT, cv2.LINE_AA)
     cv2.putText(strip, 'ERR_Y', (gpad + gw + gpad, _R2_Y + 8), _FONT, 0.26, C_DIM, _FT, cv2.LINE_AA)
 
+    fw = frame_w if frame_w > 0 else max(strip.shape[1], 1)
     ex = ey = 0.0
     if primary is not None:
-        ex = (primary.cx - max(strip.shape[1], 1) / 2.0) / max(strip.shape[1] / 2.0, 1.0)
+        ex = (primary.cx - fw / 2.0) / max(fw / 2.0, 1.0)
         ey = (primary.cy - max(frame_h, 1) / 2.0) / max(frame_h / 2.0, 1.0)
 
     gauge_y = _R2_Y + 10
@@ -177,7 +202,8 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                      show_alignment: bool, deadband: float,
                      err_x_hist: Sequence[float],
                      err_y_hist: Sequence[float],
-                     conf_hist:  Sequence[float]) -> None:
+                     conf_hist:  Sequence[float],
+                     frame_w: int = 0) -> None:
     py = _R3_Y + 2
     px = 6
 
@@ -215,8 +241,8 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
             al_rows   = [('STATUS', 'NO TARGET', C_ERR)]
             al_border = C_ERR
         else:
-            strip_w = strip.shape[1]
-            ex = (primary.cx - strip_w / 2.0) / max(strip_w / 2.0, 1.0)
+            fw = frame_w if frame_w > 0 else strip.shape[1]
+            ex = (primary.cx - fw / 2.0) / max(fw / 2.0, 1.0)
             ey = (primary.cy - frame_h  / 2.0) / max(frame_h  / 2.0, 1.0)
             aligned = abs(ex) < deadband and abs(ey) < deadband
             if tracking_on and n_tracks > 0:
@@ -228,7 +254,7 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                 ('STATUS', st_val,             st_col),
                 ('ERR_X',  f'{ex:+.3f}',       C_OK if abs(ex) < deadband else C_AMBER),
                 ('ERR_Y',  f'{ey:+.3f}',       C_OK if abs(ey) < deadband else C_AMBER),
-                ('AREA',   f'{(primary.area / (strip_w * frame_h) * 100):.1f}%', C_TEXT),
+                ('AREA',   f'{(primary.area / (fw * frame_h) * 100):.1f}%', C_TEXT),
                 ('CONF',   f'{primary.score:.2f}', C_TEXT),
             ]
             al_border = C_OK if aligned else C_AMBER
@@ -279,17 +305,19 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     cv2.line(strip, (4, _R4_Y), (w - 4, _R4_Y), C_BORDER, 1)
 
     # Compass + heading source label (left block)
+    # Position: r+4 from top so the heading label (cy+r+7) stays inside Row 4
     cmp_r  = 20
     cmp_cx = 26
-    cmp_cy = _R4_Y + _R4_H // 2 + 4
+    cmp_cy = _R4_Y + cmp_r + 4   # = 140; label lands at 140+20+7=167 ≤ _R5_Y=168
     mini_compass(strip, cmp_cx, cmp_cy, cmp_r, yaw)
 
-    # Heading source label
+    # Heading source label — clamped to stay within Row 4
     _SOURCE = {'mavlink_ahrs': 'MAVLINK', 'bno085': 'BNO085',
                'dvl': 'DVL', 'bno085_dvl': 'BNO+DVL'}
     src_lbl = _SOURCE.get(yaw_source, (yaw_source or '?').upper())
+    src_label_y = min(cmp_cy + cmp_r + 12, _R4_Y + _R4_H - 4)
     cv2.putText(strip, src_lbl,
-                (cmp_cx - cmp_r, cmp_cy + cmp_r + 13),
+                (cmp_cx - cmp_r, src_label_y),
                 _FONT, 0.24, C_DIM, _FT, cv2.LINE_AA)
 
     # Depth altimeter (right side)
