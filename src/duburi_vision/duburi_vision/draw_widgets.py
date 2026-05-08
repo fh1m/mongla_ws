@@ -186,8 +186,8 @@ def altimeter_depth(img: np.ndarray,
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
 
-    # Units header
-    cv2.putText(img, 'DEPTH', (x + 1, y - 2), _FONT, 0.22, C_DIM, _FT, cv2.LINE_AA)
+    # Units header — inside the widget top edge
+    cv2.putText(img, 'D', (x + 2, y + 9), _FONT, 0.22, C_DIM, _FT, cv2.LINE_AA)
 
     # NaN guard
     if np.isnan(depth_m):
@@ -271,12 +271,12 @@ def battery_bar(img: np.ndarray,
         else:
             cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), C_BG, -1)
 
-    # Voltage + percentage label
+    # Voltage + percentage label — inside the bar, drawn after segments so it's visible
     lbl = f'{voltage:.1f}V  {int(pct * 100)}%'
     fs  = 0.26
     (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
     lx = x + (w - tw) // 2
-    cv2.putText(img, lbl, (lx, y - 2), _FONT, fs, C_DIM, _FT, cv2.LINE_AA)
+    cv2.putText(img, lbl, (max(x + 2, lx), y + h - 2), _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
 
 
 # ── Mini compass ──────────────────────────────────────────────────────────── #
@@ -328,11 +328,11 @@ def mini_compass(img: np.ndarray,
     cv2.circle(img, (tip_x, tip_y), 2, C_ACCENT, -1, cv2.LINE_AA)
     cv2.circle(img, (cx, cy), 2, C_DIM, -1, cv2.LINE_AA)
 
-    # Heading label below circle
+    # Heading label below circle — reduced offset to avoid overflowing the row below
     hdg_lbl = f'{int(heading_deg) % 360:03d}°'
     fs = 0.26
     (tw, _), _ = cv2.getTextSize(hdg_lbl, _FONT, fs, _FT)
-    cv2.putText(img, hdg_lbl, (cx - tw // 2, cy + radius + 10),
+    cv2.putText(img, hdg_lbl, (cx - tw // 2, cy + radius + 7),
                 _FONT, fs, C_ACCENT, _FT, cv2.LINE_AA)
 
 
@@ -407,7 +407,7 @@ def video_progress(img: np.ndarray,
         m, s  = divmod(secs, 60)
         return f'{m:02d}:{s:02d}'
 
-    state  = '⏸' if paused else '▶'
+    state  = '||' if paused else '>'
     lbl    = f'{state} {_fmt(cur_frame)} / {_fmt(total_frames)}  {int(frac * 100)}%'
     fs     = 0.26
     (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
