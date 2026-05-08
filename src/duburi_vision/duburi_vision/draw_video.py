@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 
 from .detection.detector import Detection, largest
-from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT, C_DIM, C_BORDER
+from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR
 
 _FONT    = cv2.FONT_HERSHEY_DUPLEX
 _FT      = 1
@@ -48,12 +48,6 @@ def _get_sv() -> dict:
             'corners': sv.BoxCornerAnnotator(
                 thickness=4, corner_length=18,
                 color=sv.Color.WHITE),
-            'triangle': sv.TriangleAnnotator(
-                base=10, height=8,
-                color_lookup=sv.ColorLookup.CLASS),
-            'pct_bar': sv.PercentageBarAnnotator(
-                height=5, width=50,
-                color_lookup=sv.ColorLookup.CLASS),
             'label': sv.LabelAnnotator(
                 text_scale=0.38, text_thickness=1,
                 color_lookup=sv.ColorLookup.CLASS,
@@ -113,8 +107,6 @@ def render_video_section(frame_bgr: np.ndarray,
             out = sv['trace'].annotate(scene=out, detections=sv_all)
         out = sv['box'].annotate(scene=out, detections=sv_all)
         out = sv['corners'].annotate(scene=out, detections=sv_all)
-        out = sv['triangle'].annotate(scene=out, detections=sv_all)
-        out = sv['pct_bar'].annotate(scene=out, detections=sv_all)
         labels = []
         for i, d in enumerate(detections):
             tid    = (track_ids[i] if track_ids and i < len(track_ids)
@@ -137,18 +129,6 @@ def render_video_section(frame_bgr: np.ndarray,
         _dashed_line(out, (cx_t, y2p),   (cx_t, h),    C_ACCENT, dash=5, gap=5, thickness=1)
         _dashed_line(out, (0,    cy_t),  (x1p,  cy_t), C_ACCENT, dash=5, gap=5, thickness=1)
         _dashed_line(out, (x2p,  cy_t),  (w,    cy_t), C_ACCENT, dash=5, gap=5, thickness=1)
-
-        # Size + aspect-ratio tag
-        ar      = primary.width / max(primary.height, 1.0)
-        pw_pct  = int(primary.width  / max(w, 1) * 100)
-        ph_pct  = int(primary.height / max(h, 1) * 100)
-        lbl     = f'W:{pw_pct}%  H:{ph_pct}%  ar:{ar:.2f}'
-        (slw, slh), _ = cv2.getTextSize(lbl, _FONT, 0.32, _FT)
-        sl_x = max(x1p, 2)
-        sl_y = (y2p + slh + 4) if (y2p + slh + 8 < h) else (y1p - 4)
-        cv2.rectangle(out, (sl_x - 2, sl_y - slh - 1), (sl_x + slw + 2, sl_y + 2),
-                      C_BG, -1)
-        cv2.putText(out, lbl, (sl_x, sl_y), _FONT, 0.32, C_DIM, _FT, cv2.LINE_AA)
 
         # Horizontal alignment bar (bottom of frame)
         _bar_y = h - 12

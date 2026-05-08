@@ -336,7 +336,8 @@ def main(args=None):
     frame_budget = 1.0 / node._max_hz if node._max_hz > 0 else 0.0
 
     try:
-        cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
+        cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
+        _hud_frame_counter = 0
         while rclpy.ok():
             try:
                 frame = node._frame_q.get(timeout=0.1)
@@ -371,29 +372,6 @@ def main(args=None):
                 node._err_y_history.append(0.0)
                 node._conf_history.append(0.0)
 
-            # Upscale to at least 1280px wide so annotations are rasterized at
-            # a density that stays sharp after any further window scaling.
-            # Detection xyxy coordinates are scaled proportionally so bbox
-            # overlays and ERR gauges remain accurate at the new resolution.
-            _src_w = frame.shape[1]
-            _tgt_w = max(_src_w, 1280)
-            if _src_w < _tgt_w:
-                _sf = _tgt_w / _src_w
-                _tgt_h = int(frame.shape[0] * _sf)
-                frame = cv2.resize(frame, (_tgt_w, _tgt_h),
-                                   interpolation=cv2.INTER_LANCZOS4)
-
-                def _scale_det(d, sf=_sf):
-                    x1, y1, x2, y2 = d.xyxy
-                    return d.__class__(
-                        class_id=d.class_id, class_name=d.class_name,
-                        score=d.score,
-                        xyxy=(x1 * sf, y1 * sf, x2 * sf, y2 * sf))
-
-                display_dets = [_scale_det(d) for d in display_dets]
-                if primary is not None:
-                    primary = _scale_det(primary)
-
             frame = draw.render_all(
                 frame, display_dets,
                 source=node._camera,
@@ -415,6 +393,10 @@ def main(args=None):
                 is_paused=node._is_paused,
                 pipeline_health=_build_health(node),
             )
+
+            _hud_frame_counter += 1
+            if _hud_frame_counter % 30 == 0:
+                cv2.imwrite('/tmp/duburi-hud.png', frame)
 
             t0 = time.monotonic()
             cv2.imshow(_WINDOW_NAME, frame)
