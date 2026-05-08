@@ -206,7 +206,7 @@ class VisionDisplayNode(Node):
         self.create_timer(1.0, self._check_waiting)
 
         # Video playback control clients (only when video_file_mode=true).
-        self._pause_client: SetBool.Response | None = None
+        self._pause_client = None   # rclpy.Client[SetBool] or None
         self._seek_pub = None
         if video_file_mode:
             cam_ns = f'/duburi/vision/{camera}'
