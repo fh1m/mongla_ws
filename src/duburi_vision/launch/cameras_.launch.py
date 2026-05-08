@@ -23,8 +23,10 @@ Usage:
 """
 
 from launch                       import LaunchDescription
-from launch.actions               import DeclareLaunchArgument
+from launch.actions               import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
 from launch.conditions            import IfCondition
+from launch.event_handlers        import OnProcessExit
+from launch.events                import Shutdown
 from launch.substitutions         import LaunchConfiguration, PythonExpression
 from launch_ros.actions           import Node
 
@@ -122,11 +124,29 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('with_tracking')),
     )
 
+    # True when a video file is being played (not a live camera).
+    video_file_mode = PythonExpression(["True if '", video_file, "' else False"])
+
     image_viewer = Node(
         package='duburi_vision', executable='vision_display',
         name='duburi_image_view', output='screen',
-        parameters=[{'camera': cam_name}],
+        parameters=[{
+            'camera':          cam_name,
+            'video_file_mode': video_file_mode,
+        }],
         condition=IfCondition(LaunchConfiguration('viewer')),
     )
 
-    return LaunchDescription(args + [camera_node, detector_node, tracker_node, image_viewer])
+    # When the viewer exits (Q key), shut down the entire launch group so
+    # camera / detector / tracker nodes don't linger as orphans.
+    shutdown_on_viewer_exit = RegisterEventHandler(
+        OnProcessExit(
+            target_action=image_viewer,
+            on_exit=[EmitEvent(event=Shutdown())],
+        )
+    )
+
+    return LaunchDescription(
+        args + [camera_node, detector_node, tracker_node, image_viewer,
+                shutdown_on_viewer_exit]
+    )
