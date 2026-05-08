@@ -337,7 +337,6 @@ def main(args=None):
 
     try:
         cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
-        _hud_frame_counter = 0
         while rclpy.ok():
             try:
                 frame = node._frame_q.get(timeout=0.1)
@@ -393,10 +392,6 @@ def main(args=None):
                 is_paused=node._is_paused,
                 pipeline_health=_build_health(node),
             )
-
-            _hud_frame_counter += 1
-            if _hud_frame_counter % 30 == 0:
-                cv2.imwrite('/tmp/duburi-hud.png', frame)
 
             t0 = time.monotonic()
             cv2.imshow(_WINDOW_NAME, frame)

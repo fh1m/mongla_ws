@@ -34,7 +34,7 @@ from launch_ros.actions           import Node
 def generate_launch_description():
     args = [
         DeclareLaunchArgument('camera',        default_value='logitech'),
-        DeclareLaunchArgument('device',        default_value='-1',
+        DeclareLaunchArgument('device',        default_value='0',
                               description='Device index override; -1 = use profile default'),
         DeclareLaunchArgument('width',         default_value='640'),
         DeclareLaunchArgument('height',        default_value='480'),
