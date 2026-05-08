@@ -36,6 +36,8 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image, CameraInfo
+from std_msgs.msg     import Float32
+from std_srvs.srv     import SetBool
 from cv_bridge        import CvBridge
 
 from duburi_vision import (
@@ -85,6 +87,12 @@ class CameraNode(Node):
         # Background capture thread — keeps cap.read() off the ROS executor.
         self._frame_q: _queue.SimpleQueue = _queue.SimpleQueue()
         threading.Thread(target=self._capture_loop, daemon=True).start()
+
+        # Video file playback controls (only active when source supports pause/seek).
+        if hasattr(self._cam, 'pause'):
+            self.create_service(SetBool, f'{ns}/video_pause',    self._handle_video_pause)
+            self.create_subscription(Float32, f'{ns}/video_seek_rel', self._handle_seek, 10)
+            self.get_logger().info(f'[CAM  ] video controls: {ns}/video_pause  {ns}/video_seek_rel')
 
         self.get_logger().info(
             f"[CAM  ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
@@ -198,15 +206,35 @@ class CameraNode(Node):
         self._pub_info.publish(info)
         self._sent += 1
 
+    def _handle_video_pause(self, req: SetBool.Request,
+                             resp: SetBool.Response) -> SetBool.Response:
+        if req.data:
+            self._cam.pause()   # type: ignore[attr-defined]
+            resp.message = 'paused'
+        else:
+            self._cam.resume()  # type: ignore[attr-defined]
+            resp.message = 'resumed'
+        resp.success = True
+        return resp
+
+    def _handle_seek(self, msg: Float32) -> None:
+        self._cam.seek_rel(msg.data)  # type: ignore[attr-defined]
+
     def _log_health(self):
         now = time.monotonic()
         elapsed = max(now - self._last_log, 1e-3)
         hz = self._sent / elapsed
         healthy = self._cam.is_healthy()
         marker = 'OK ' if healthy else 'BAD'
+        extra = ''
+        if hasattr(self._cam, 'position'):
+            cur, total = self._cam.position
+            pct = 100 * cur / total if total else 0.0
+            paused = 'paused' if self._cam.is_paused else 'playing'  # type: ignore[attr-defined]
+            extra = f'  pos={cur}/{total} ({pct:.0f}%)  {paused}'
         self.get_logger().info(
             f"[CAM  ] {marker}  {self._cam_name}  pub={hz:5.1f}Hz  "
-            f"sent={self._sent}  dropped={self._dropped}")
+            f"sent={self._sent}  dropped={self._dropped}{extra}")
         self._sent = 0
         self._dropped = 0
         self._last_log = now

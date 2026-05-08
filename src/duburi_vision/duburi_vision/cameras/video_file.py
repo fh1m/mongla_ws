@@ -11,12 +11,23 @@ Behaviour
 - The frame rate defaults to the file's encoded FPS.  Override with `fps` if
   you want faster/slower playback (affects topic publish rate only — no
   interpolation is done).
-- `read()` returns `(None, meta with fresh=False)` on decode failure; the
-  camera_node handles this the same way it handles a dropped USB frame.
+- `read()` returns `(last_frame, meta with fresh=False)` when paused or on
+  decode failure; the camera_node handles the fresh=False case the same way it
+  handles a dropped USB frame.
+
+Playback controls (thread-safe)
+--------------------------------
+  cam.pause()                 → freeze playback; read() replays last good frame
+  cam.resume()                → resume playback
+  cam.toggle_pause() -> bool  → flip state; returns new is_paused value
+  cam.seek_rel(seconds)       → seek ±N seconds from current position
+  cam.position                → (current_frame, total_frames)
+  cam.is_paused               → bool
 """
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Optional, Tuple
 
@@ -51,17 +62,68 @@ class VideoFileCamera(Camera):
         self._actual_w   = int(width)  if width  else file_w
         self._actual_h   = int(height) if height else file_h
         self._actual_fps = float(fps)  if fps    else file_fps
+        self._total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
 
         if self._log:
             self._log.info(
                 f'[CAM  ] video_file {path!r} opened: '
                 f'{self._actual_w}x{self._actual_h}@{self._actual_fps:.1f} '
-                f'loop={self._loop}')
+                f'frames={self._total_frames}  loop={self._loop}')
 
         self._idx         = 0
         self._last_ok     = time.monotonic()
         self._consec_fail = 0
         self._eof         = False
+
+        # Playback control — protected by _lock so ROS service callbacks and
+        # the capture thread never race on _cap operations.
+        self._lock:       threading.Lock           = threading.Lock()
+        self._paused:     bool                     = False
+        self._last_frame: Optional[np.ndarray]     = None
+
+    # ------------------------------------------------------------------ #
+    #  Playback control API                                                #
+    # ------------------------------------------------------------------ #
+
+    def pause(self) -> None:
+        with self._lock:
+            self._paused = True
+
+    def resume(self) -> None:
+        with self._lock:
+            self._paused = False
+
+    def toggle_pause(self) -> bool:
+        with self._lock:
+            self._paused = not self._paused
+            return self._paused
+
+    def seek_rel(self, seconds: float) -> None:
+        """Seek by ±seconds from the current position. Thread-safe."""
+        with self._lock:
+            if not self._cap or not self._cap.isOpened():
+                return
+            delta  = int(seconds * self._actual_fps)
+            cur    = int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
+            hi     = max(0, self._total_frames - 1) if self._total_frames else cur + abs(delta)
+            target = max(0, min(hi, cur + delta))
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+            self._eof = False  # allow read to proceed after seek past EOF
+
+    @property
+    def position(self) -> tuple[int, int]:
+        """(current_frame, total_frames) — best-effort; not lock-protected for speed."""
+        if not self._cap:
+            return 0, self._total_frames
+        return int(self._cap.get(cv2.CAP_PROP_POS_FRAMES)), self._total_frames
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused
+
+    # ------------------------------------------------------------------ #
+    #  Camera ABC                                                          #
+    # ------------------------------------------------------------------ #
 
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         meta = FrameMeta(
@@ -70,51 +132,66 @@ class VideoFileCamera(Camera):
             height=self._actual_h,
         )
 
-        if self._eof:
-            meta.fresh = False
-            return None, meta
-
-        ok, frame = self._cap.read()
-
-        if not ok or frame is None:
-            if self._loop:
-                self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ok, frame = self._cap.read()
-            if not ok or frame is None:
-                self._eof = not self._loop
-                self._consec_fail += 1
+        with self._lock:
+            cap = self._cap
+            # When paused or closed, replay the last good frame.
+            if self._paused or cap is None:
                 meta.fresh = False
-                return None, meta
+                return self._last_frame, meta
 
-        if (self._actual_w, self._actual_h) != (
-                int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))):
+            if self._eof:
+                meta.fresh = False
+                return self._last_frame, meta
+
+            ok, frame = cap.read()
+
+            if not ok or frame is None:
+                if self._loop:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    ok, frame = cap.read()
+                if not ok or frame is None:
+                    self._eof = not self._loop
+                    self._consec_fail += 1
+                    meta.fresh = False
+                    return self._last_frame, meta
+
+            file_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            file_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        if (self._actual_w, self._actual_h) != (file_w, file_h):
             frame = cv2.resize(frame, (self._actual_w, self._actual_h))
 
         self._consec_fail = 0
         self._last_ok     = meta.stamp_monotonic
+        self._last_frame  = frame
         self._idx        += 1
         meta.fresh        = True
         return frame, meta
 
     def is_healthy(self) -> bool:
-        return (self._cap.isOpened()
+        return (self._cap is not None
+                and self._cap.isOpened()
                 and not self._eof
                 and self._consec_fail < 30)
 
     def info(self) -> dict:
+        cur, total = self.position
         return {
-            'name':        self.name,
-            'source_kind': self.source_kind,
-            'width':       self._actual_w,
-            'height':      self._actual_h,
-            'fps':         self._actual_fps,
-            'frame_id':    self._frame_id,
-            'path':        self._path,
-            'loop':        self._loop,
+            'name':         self.name,
+            'source_kind':  self.source_kind,
+            'width':        self._actual_w,
+            'height':       self._actual_h,
+            'fps':          self._actual_fps,
+            'frame_id':     self._frame_id,
+            'path':         self._path,
+            'loop':         self._loop,
+            'total_frames': total,
+            'position':     cur,
+            'paused':       self._paused,
         }
 
     def close(self) -> None:
-        if self._cap is not None:
-            self._cap.release()
-            self._cap = None
+        with self._lock:
+            if self._cap is not None:
+                self._cap.release()
+                self._cap = None

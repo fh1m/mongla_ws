@@ -31,14 +31,23 @@ a single command:
         -p launch_pipeline:=true -p camera:=forward \\
         -p model:=gate_flare_medium_100ep -p classes:=gate
 
+Video file keyboard shortcuts (active when video_file_mode:=true)
+-----------------------------------------------------------------
+  Space        → pause / resume
+  Left arrow   → seek -1 s
+  Right arrow  → seek +1 s
+  Up arrow     → seek +10 s
+  Down arrow   → seek -10 s
+
 ROS2 parameters
 ---------------
-  camera          string   'forward'    camera namespace
-  launch_pipeline bool     false        auto-start camera_node + detector_node
-  model           string   'yolov11n'   model name/path  (launch_pipeline only)
-  classes         string   'person'     class filter     (launch_pipeline only)
-  conf            float    0.35         confidence       (launch_pipeline only)
-  max_display_hz  float    30.0         display refresh cap (0 = unlimited)
+  camera           string   'forward'    camera namespace
+  video_file_mode  bool     false        enable video playback keyboard controls
+  launch_pipeline  bool     false        auto-start camera_node + detector_node
+  model            string   'yolov11n'   model name/path  (launch_pipeline only)
+  classes          string   'person'     class filter     (launch_pipeline only)
+  conf             float    0.35         confidence       (launch_pipeline only)
+  max_display_hz   float    30.0         display refresh cap (0 = unlimited)
 
 Press Q or Ctrl-C to exit. Child processes are terminated on exit.
 """
@@ -49,6 +58,7 @@ import queue
 import subprocess
 import threading
 import time
+from collections import deque
 
 import cv2
 import rclpy
@@ -56,7 +66,8 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
-from std_msgs.msg import String
+from std_msgs.msg import Float32, String
+from std_srvs.srv import SetBool
 from vision_msgs.msg import Detection2DArray
 
 from duburi_interfaces.msg import DuburiState
@@ -66,6 +77,13 @@ from duburi_vision.detection.messages import array_to_detections
 
 _WAIT_LOG_INTERVAL = 5.0
 _WINDOW_NAME       = 'duburi  //  mission control'
+
+# Arrow key codes from cv2.waitKey on Linux (after & 0xFF they become 81-84).
+# Use waitKeyEx() codes instead — waitKeyEx returns full 32-bit extended codes.
+_KEY_LEFT  = 0xFF51  # left  arrow (XK_Left)
+_KEY_RIGHT = 0xFF53  # right arrow (XK_Right)
+_KEY_UP    = 0xFF52  # up    arrow (XK_Up)
+_KEY_DOWN  = 0xFF54  # down  arrow (XK_Down)
 
 
 def _start_pipeline(camera: str, model: str, classes: str,
@@ -93,19 +111,32 @@ def _start_pipeline(camera: str, model: str, classes: str,
     return [camera_proc, detector_proc]
 
 
+def _build_health(node: 'VisionDisplayNode') -> dict[str, bool]:
+    """Build pipeline health dict from last-seen timestamps."""
+    now = time.monotonic()
+    return {
+        'camera':   (now - node._last_frame_t) < 2.0,
+        'detector': (now - node._last_det_t)   < 3.0,
+        'tracker':  (now - node._last_track_t) < 3.0,
+        'state':    (now - node._last_state_t) < 5.0,
+    }
+
+
 class VisionDisplayNode(Node):
     def __init__(self):
         super().__init__('vision_display')
 
         self.declare_parameter('camera',          'forward')
+        self.declare_parameter('video_file_mode', False)
         self.declare_parameter('launch_pipeline', False)
         self.declare_parameter('model',           'yolov11n')
         self.declare_parameter('classes',         'person')
         self.declare_parameter('conf',            0.35)
         self.declare_parameter('max_display_hz',  30.0)
-        self.declare_parameter('yaw_source', 'mavlink_ahrs')  # override with bno085/dvl/bno085_dvl at pool
+        self.declare_parameter('yaw_source', 'mavlink_ahrs')
 
         camera          = self.get_parameter('camera').get_parameter_value().string_value
+        video_file_mode = self.get_parameter('video_file_mode').get_parameter_value().bool_value
         launch_pipeline = self.get_parameter('launch_pipeline').get_parameter_value().bool_value
         model           = self.get_parameter('model').get_parameter_value().string_value
         classes         = self.get_parameter('classes').get_parameter_value().string_value
@@ -113,6 +144,7 @@ class VisionDisplayNode(Node):
         max_hz          = self.get_parameter('max_display_hz').get_parameter_value().double_value
 
         self._camera        = camera
+        self._video_mode    = video_file_mode
         self._max_hz        = max_hz
         self._yaw_source    = self.get_parameter('yaw_source').get_parameter_value().string_value
         self._pipeline_procs: list[subprocess.Popen] = []
@@ -125,19 +157,16 @@ class VisionDisplayNode(Node):
         det_topic = f'/duburi/vision/{camera}/detections'
 
         self.get_logger().info(f'[DISP ] subscribing {raw_topic} (full-rate) + {det_topic}')
-    
+
         self._bridge = CvBridge()
         self._state: DuburiState | None = None
         self._detections: list = []
         self._det_lock        = threading.Lock()
-        # Tracked detections (Kalman-smoothed from /tracks) + parallel IDs
         self._tracked_dets: list = []
         self._track_ids:    list = []
         self._n_tracks            = 0
         self._primary_track_id: int | None = None
         self._tracks_lock         = threading.Lock()
-        # Configured classes received from detector's classes_filter topic
-        # (list reassignment is atomic under CPython — no lock needed)
         self._configured_classes: list[str] = []
         self._frames_received = 0
         self._last_wait_log   = self.get_clock().now()
@@ -147,20 +176,44 @@ class VisionDisplayNode(Node):
         self._fps_count   = 0
         self._fps_display = 0.0
 
-        # Single-slot frame queue: callback drops old frame and puts latest.
-        # Main thread drains this; cv2 calls stay off the ROS callback thread.
+        # Pipeline health timestamps (monotonic; default far past so initial health=False).
+        self._last_frame_t = 0.0
+        self._last_det_t   = 0.0
+        self._last_track_t = 0.0
+        self._last_state_t = 0.0
+
+        # Rolling history for sparkline graphs (60 frames).
+        self._err_x_history: deque[float] = deque(maxlen=60)
+        self._err_y_history: deque[float] = deque(maxlen=60)
+        self._conf_history:  deque[float] = deque(maxlen=60)
+
+        # Video file state (updated by ROS service response).
+        self._is_paused:      bool            = False
+        self._video_position: tuple[int, int] = (0, 0)
+
+        # Single-slot frame queue.
         self._frame_q: queue.SimpleQueue = queue.SimpleQueue()
 
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
         cls_topic = f'/duburi/vision/{camera}/classes_filter'
         trk_topic = f'/duburi/vision/{camera}/tracks'
-        self.create_subscription(Image,            raw_topic,        self._on_image,         qos_be)
-        self.create_subscription(Detection2DArray, det_topic,        self._on_detections,    10)
-        self.create_subscription(Detection2DArray, trk_topic,        self._on_tracks,        10)
-        self.create_subscription(DuburiState,      '/duburi/state',  self._on_state,         10)
+        self.create_subscription(Image,            raw_topic,        self._on_image,          qos_be)
+        self.create_subscription(Detection2DArray, det_topic,        self._on_detections,     10)
+        self.create_subscription(Detection2DArray, trk_topic,        self._on_tracks,         10)
+        self.create_subscription(DuburiState,      '/duburi/state',  self._on_state,          10)
         self.create_subscription(String,           cls_topic,        self._on_classes_filter, 10)
         self.create_timer(1.0, self._check_waiting)
+
+        # Video playback control clients (only when video_file_mode=true).
+        self._pause_client: SetBool.Response | None = None
+        self._seek_pub = None
+        if video_file_mode:
+            cam_ns = f'/duburi/vision/{camera}'
+            self._pause_client = self.create_client(SetBool, f'{cam_ns}/video_pause')
+            self._seek_pub     = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel', 10)
+            self.get_logger().info(
+                '[DISP ] video mode: Space=pause  ←/→=±1s  ↑/↓=±10s')
 
     # ------------------------------------------------------------------ #
     #  ROS callbacks (run on the background spin thread)                  #
@@ -177,16 +230,15 @@ class VisionDisplayNode(Node):
 
     def _on_state(self, msg: DuburiState) -> None:
         self._state = msg
+        self._last_state_t = time.monotonic()
 
     def _on_detections(self, msg: Detection2DArray) -> None:
         dets = array_to_detections(msg)
         with self._det_lock:
             self._detections = dets
+        self._last_det_t = time.monotonic()
 
     def _on_tracks(self, msg: Detection2DArray) -> None:
-        # Convert to Detection objects, keeping only confirmed tracks (score > 0).
-        # Predicted-only tracks (score=0, Kalman extrapolation when detector missed)
-        # are excluded to avoid ghost boxes trailing behind moving objects.
         all_dets = array_to_detections(msg)
         pairs = [(d, det) for d, det in zip(all_dets, msg.detections) if d.score > 0]
         dets = [p[0] for p in pairs]
@@ -201,12 +253,14 @@ class VisionDisplayNode(Node):
             self._track_ids         = ids
             self._n_tracks          = len([i for i in ids if i is not None])
             self._primary_track_id  = next((i for i in ids if i is not None), None)
+        self._last_track_t = time.monotonic()
 
     def _on_classes_filter(self, msg: String) -> None:
         self._configured_classes = [c.strip() for c in msg.data.split(',') if c.strip()]
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
+        self._last_frame_t = time.monotonic()
 
         try:
             frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -214,7 +268,6 @@ class VisionDisplayNode(Node):
             self.get_logger().warning(f'[DISP ] cv_bridge decode failed: {exc!r}')
             return
 
-        # FPS counter (callback-side; display loop does NOT need its own)
         self._fps_count += 1
         now = time.monotonic()
         elapsed = now - self._fps_t0
@@ -223,7 +276,6 @@ class VisionDisplayNode(Node):
             self._fps_count = 0
             self._fps_t0 = now
 
-        # Single-slot handoff: drop any queued frame and put the latest.
         while not self._frame_q.empty():
             try:
                 self._frame_q.get_nowait()
@@ -246,12 +298,30 @@ class VisionDisplayNode(Node):
         self._pipeline_procs.clear()
 
 
+def _send_seek(node: VisionDisplayNode, seconds: float) -> None:
+    if node._seek_pub is not None:
+        node._seek_pub.publish(Float32(data=float(seconds)))
+
+
+def _send_pause(node: VisionDisplayNode, pause: bool) -> None:
+    """Fire-and-forget pause/resume request (non-blocking)."""
+    if node._pause_client is None or not node._pause_client.service_is_ready():
+        return
+    req = SetBool.Request()
+    req.data = pause
+    future = node._pause_client.call_async(req)
+
+    def _on_done(f):
+        if f.result() is not None:
+            node._is_paused = pause
+
+    future.add_done_callback(_on_done)
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = VisionDisplayNode()
 
-    # Spin on a background daemon thread so the main thread stays free for
-    # cv2.imshow + cv2.waitKey (both require the main thread on most platforms).
     from rclpy.executors import ExternalShutdownException
 
     def _spin_target(n):
@@ -271,8 +341,8 @@ def main(args=None):
             try:
                 frame = node._frame_q.get(timeout=0.1)
             except queue.Empty:
-                # No frame yet — check for Q key and loop.
-                if cv2.waitKey(1) & 0xFF in (ord('q'), ord('Q')):
+                key = cv2.waitKeyEx(1)
+                if key in (ord('q'), ord('Q')):
                     break
                 continue
 
@@ -283,13 +353,24 @@ def main(args=None):
                 track_ids        = list(node._track_ids)
                 n_tracks         = node._n_tracks
                 primary_track_id = node._primary_track_id
-            configured_classes = node._configured_classes  # atomic list replace, no lock
+            configured_classes = node._configured_classes
 
-            # Prefer Kalman-smoothed tracked detections for bbox display when
-            # available; fall back to raw detections from /detections topic.
             display_dets = tracked_dets if tracked_dets else dets
             display_ids  = track_ids if tracked_dets else None
             primary = largest(display_dets)
+
+            # Update history deques from primary detection.
+            if primary is not None:
+                h, w = frame.shape[:2]
+                cx, cy = primary.cx, primary.cy
+                node._err_x_history.append((cx / w - 0.5) * 2.0)  # [-1, 1]
+                node._err_y_history.append((cy / h - 0.5) * 2.0)
+                node._conf_history.append(primary.score)
+            else:
+                node._err_x_history.append(0.0)
+                node._err_y_history.append(0.0)
+                node._conf_history.append(0.0)
+
             frame = draw.render_all(
                 frame, display_dets,
                 source=node._camera,
@@ -304,15 +385,35 @@ def main(args=None):
                 configured_classes=configured_classes,
                 track_ids=display_ids,
                 yaw_source=node._yaw_source,
+                err_x_history=node._err_x_history,
+                err_y_history=node._err_y_history,
+                conf_history=node._conf_history,
+                video_mode=node._video_mode,
+                is_paused=node._is_paused,
+                pipeline_health=_build_health(node),
             )
 
             t0 = time.monotonic()
             cv2.imshow(_WINDOW_NAME, frame)
-            key = cv2.waitKey(1) & 0xFF
+            key = cv2.waitKeyEx(1)
+
             if key in (ord('q'), ord('Q')):
                 break
 
-            # Rate-limit: sleep the remainder of the frame budget.
+            # Video file keyboard controls.
+            if node._video_mode:
+                if key == ord(' '):
+                    new_paused = not node._is_paused
+                    _send_pause(node, new_paused)
+                elif key == _KEY_LEFT:
+                    _send_seek(node, -1.0)
+                elif key == _KEY_RIGHT:
+                    _send_seek(node, 1.0)
+                elif key == _KEY_UP:
+                    _send_seek(node, 10.0)
+                elif key == _KEY_DOWN:
+                    _send_seek(node, -10.0)
+
             if frame_budget > 0:
                 elapsed = time.monotonic() - t0
                 remaining = frame_budget - elapsed
