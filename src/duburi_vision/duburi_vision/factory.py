@@ -6,8 +6,10 @@ changes. Mirrors `duburi_sensors.factory.make_yaw_source` exactly.
 """
 
 
-def _build_webcam(*, device=0, width=640, height=480, fps=30,
+def _build_webcam(*, device=None, width=640, height=480, fps=30,
                   frame_id='laptop_cam', name='laptop', logger=None, **_):
+    if device is None:
+        device = 0
     from .cameras.webcam import WebcamCamera
     return WebcamCamera(
         device=device, width=width, height=height, fps=fps,

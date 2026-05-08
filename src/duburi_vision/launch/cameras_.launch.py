@@ -1,8 +1,8 @@
 """cameras_ -- camera + YOLO26 detector + tracker + OpenCV viewer.
 
 Named camera profiles (config.py / cameras.yaml):
-    laptop   → Logitech USB RGB webcam, /dev/video4 (dev machine)
-    logitech → same as laptop
+    logitech → Logitech USB RGB webcam, /dev/video4 (default)
+    laptop   → same as logitech
     forward  → Blue Robotics fwd cam, /dev/video0  (Jetson, pool)
     downward → Blue Robotics down cam, /dev/video2 (Jetson, pool)
 
@@ -31,7 +31,7 @@ from launch_ros.actions           import Node
 
 def generate_launch_description():
     args = [
-        DeclareLaunchArgument('camera',        default_value='laptop'),
+        DeclareLaunchArgument('camera',        default_value='logitech'),
         DeclareLaunchArgument('device',        default_value='-1',
                               description='Device index override; -1 = use profile default'),
         DeclareLaunchArgument('width',         default_value='640'),
