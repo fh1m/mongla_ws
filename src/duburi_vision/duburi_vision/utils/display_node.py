@@ -72,11 +72,16 @@ from vision_msgs.msg import Detection2DArray
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision import draw
-from duburi_vision.detection.detector import largest
+from duburi_vision.detection.detector import Detection, largest
 from duburi_vision.detection.messages import array_to_detections
 
 _WAIT_LOG_INTERVAL = 5.0
 _WINDOW_NAME       = 'duburi  //  mission control'
+
+# Render at 2× native camera resolution so sf=2 inside draw_strip → fonts/
+# widgets drawn at full pixel size → crisp on 1080p/4K monitors regardless
+# of OS window scaling.  Fixed constant avoids feedback-loop instability.
+_RENDER_SCALE = 2.0
 
 # Arrow key codes from cv2.waitKey on Linux (after & 0xFF they become 81-84).
 # Use waitKeyEx() codes instead — waitKeyEx returns full 32-bit extended codes.
@@ -109,6 +114,16 @@ def _start_pipeline(camera: str, model: str, classes: str,
     ])
 
     return [camera_proc, detector_proc]
+
+
+def _scale_dets(dets: list, scale: float) -> list:
+    """Return a new list of Detections with xyxy scaled by `scale`."""
+    return [
+        Detection(class_id=d.class_id, class_name=d.class_name, score=d.score,
+                  xyxy=(d.xyxy[0] * scale, d.xyxy[1] * scale,
+                        d.xyxy[2] * scale, d.xyxy[3] * scale))
+        for d in dets
+    ]
 
 
 def _build_health(node: 'VisionDisplayNode') -> dict[str, bool]:
@@ -337,6 +352,7 @@ def main(args=None):
 
     try:
         cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(_WINDOW_NAME, 1920, 1080)  # initial hint; user can resize freely
         while rclpy.ok():
             try:
                 frame = node._frame_q.get(timeout=0.1)
@@ -359,31 +375,43 @@ def main(args=None):
             display_ids  = track_ids if tracked_dets else None
             primary = largest(display_dets)
 
-            # Update history deques from primary detection.
+            # Compute err history from native-resolution coords (before upscaling)
+            # so the normalised values [-1, 1] are stable regardless of render scale.
             if primary is not None:
                 h, w = frame.shape[:2]
-                cx, cy = primary.cx, primary.cy
-                node._err_x_history.append((cx / w - 0.5) * 2.0)  # [-1, 1]
-                node._err_y_history.append((cy / h - 0.5) * 2.0)
+                node._err_x_history.append((primary.cx / w - 0.5) * 2.0)
+                node._err_y_history.append((primary.cy / h - 0.5) * 2.0)
                 node._conf_history.append(primary.score)
             else:
                 node._err_x_history.append(0.0)
                 node._err_y_history.append(0.0)
                 node._conf_history.append(0.0)
 
+            # Upscale frame + detection coordinates so sf = _RENDER_SCALE inside
+            # draw_strip → fonts drawn at full pixel size → crisp on 1080p displays.
+            native_h, native_w = frame.shape[:2]
+            render_w = int(native_w * _RENDER_SCALE)
+            render_h = int(native_h * _RENDER_SCALE)
+            render_frame  = cv2.resize(frame, (render_w, render_h),
+                                       interpolation=cv2.INTER_LINEAR)
+            render_dets   = _scale_dets(display_dets, _RENDER_SCALE)
+            render_primary = (_scale_dets([primary], _RENDER_SCALE)[0]
+                              if primary is not None else None)
+            render_ids    = display_ids  # track IDs are integers — no scaling needed
+
             frame = draw.render_all(
-                frame, display_dets,
+                render_frame, render_dets,
                 source=node._camera,
                 fps=node._fps_display,
                 healthy=True,
                 deadband=0.05,
-                primary=primary,
+                primary=render_primary,
                 tracking_on=n_tracks > 0,
                 n_tracks=n_tracks,
                 primary_track_id=primary_track_id,
                 state=node._state,
                 configured_classes=configured_classes,
-                track_ids=display_ids,
+                track_ids=render_ids,
                 yaw_source=node._yaw_source,
                 err_x_history=node._err_x_history,
                 err_y_history=node._err_y_history,
