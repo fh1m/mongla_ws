@@ -69,8 +69,10 @@ def render_all(frame_bgr: np.ndarray,
                ) -> np.ndarray:
     """Return np.vstack([annotated_video, ui_strip]).
 
-    Output height is frame_h + _STRIP_H (202 px).  The video section carries
-    visual overlays only; all panels and instruments live in the strip.
+    Output height is frame_h + strip_h where strip_h scales with frame_w
+    (sf = max(1.0, frame_w / 640) applied to all row heights).
+    The video section carries visual overlays only; panels and instruments
+    live in the strip.
     """
     primary = primary or largest(detections)
 

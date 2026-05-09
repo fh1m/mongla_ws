@@ -194,6 +194,10 @@ ros2 run duburi_vision vision_display --ros-args \
     -p model:=gate_flare_medium_100ep -p classes:=gate
 # HUD panels: PERCEPTION / CLASSES (lights up on detection) /
 #             ALIGNMENT / STATE + DEPTH GAUGE + HEADING TAPE (when FC running)
+#
+# Display note: renders at 2× native camera resolution (_RENDER_SCALE=2.0) so
+# all fonts and instruments are crisp on 1080p/4K monitors at any window size.
+# Initial window opens at 1920×1080; freely resizable via mouse drag.
 
 # ── 8. Full vision pipeline via launch (camera + detector + viewer) ───────
 ros2 launch duburi_vision cameras_.launch.py                           # webcam, viewer on
@@ -286,18 +290,24 @@ ros2 topic echo /duburi/vision/laptop/detections
 
 Success: a window opens showing the webcam feed with:
 - Rounded class-colored bounding boxes + confidence bars + corner brackets
-- Track IDs once tracker_node is running (Kalman-smoothed stable positions)
+- Bright cyan crosshair reticle + glow dashed offset hairlines + correction arrow
+- On-frame offset readout: `X:+0.12 Y:-0.05  87%` near each bbox
+- Track IDs once tracker_node is running (Kalman-smoothed + EMA size; stable up to 5 s occlusion)
 - **CLASSES panel** top-left below PERCEPTION: shows `[PERSON]`, lights up teal on detection
-- **DEPTH GAUGE** (right edge) and **HEADING TAPE** (bottom-center) appear only when
-  the FC manager is running and publishing `/duburi/state`
+- **ERR_X / ERR_Y needle gauges** (Row 2) + sparkline graphs + CONF bar
+- **STATE panel**: DEPTH, YAW, MODE, ARMED, BAT from `/duburi/state`
+- **Compass rose** (30 px radius) + yaw-source label
+- **Full-width altimeter** depth gauge (Zone D)
+- **HEADING TAPE** (Row 5) — active only when FC is publishing `/duburi/state`
 - Live class switch: `ros2 param set /duburi_detector classes gate` — CLASSES panel
-  updates immediately on next detection
+  updates immediately; tracker resets to avoid stale IDs
 
 The detector logs `in_hz=~30  with_target=>0%`.
 
-> **Note:** `vision_display` subscribes to `image_raw` directly (not `image_debug`) for
-> full-rate smooth video, then overlays HUD on its own copy. It shows "no frames yet"
-> until `cameras_.launch.py` is running.
+> **Note:** `vision_display` renders at 2× native resolution (`_RENDER_SCALE = 2.0`)
+> and opens a 1920×1080 window by default — all text is crisp on 1080p/4K monitors
+> regardless of OS window scaling. Subscribes to `image_raw` directly (not
+> `image_debug`) for full-rate smooth video.
 
 ### 3 — Vision + control loop (the big one)
 
@@ -521,8 +531,8 @@ Use `yaw_source:=bno085_dvl` at pool for BNO085 heading + DVL position
 ### 8 — Vision tracking with ByteTrack
 
 `tracker_node` subscribes `/detections`, runs ByteTrack + per-track
-Kalman smoother, and publishes `/tracks` with stable object IDs and
-smoothed bounding boxes. Opt in by launching with `with_tracking:=true`:
+Kalman smoother + EMA size smoothing, and publishes `/tracks` with stable
+object IDs and smoothed bounding boxes. Opt in by launching with `with_tracking:=true`:
 
 ```bash
 # T1: launch vision pipeline with tracking enabled
@@ -540,6 +550,22 @@ Without `--tracking true`, vision verbs use raw `/detections` (lower
 latency, no ID stability). With `--tracking true` they use `/tracks`
 (smoothed bbox, stable ID across frames — better for slow-moving targets
 and low-confidence detections).
+
+**Tracker parameters** (tuned for underwater robustness, `config/tracker.yaml`):
+
+| Parameter | Value | Effect |
+|-----------|-------|--------|
+| `track_buffer` | 150 | Keeps a lost track alive for 5 s at 30 fps — survives turbulence / brief occlusion without ID reassignment |
+| `min_hits` | 3 | Requires 3 consecutive frames before publishing a new track — suppresses turbidity sparkles spawning spurious IDs |
+| `track_activation_threshold` | 0.40 | Minimum detection confidence to activate a new track |
+| `iou_threshold` | 0.20 | IoU threshold for the low-confidence second association pass |
+| `enable_kalman` | true | Per-track Kalman smoother on (cx, cy); EMA alpha=0.7 also applied to bbox size |
+
+Live-tune without restart:
+```bash
+ros2 param set /duburi_tracker track_buffer 200
+ros2 param set /duburi_tracker classes gate   # flushes all stale IDs instantly
+```
 
 <p align="center">
   <img src="docs/imgs/readme-vision-pipeline.png" alt="Vision pipeline — camera → YOLO → ByteTrack → vision verb" width="90%"/>

@@ -1,24 +1,24 @@
-"""draw_strip -- mission-control UI strip (326px below the video frame).
+"""draw_strip -- mission-control UI strip below the video frame.
 
 render_ui_strip() assembles the complete strip as a new numpy array.
 Layout (top -> bottom):
 
-  Row 1  h=26   Header bar: "BRACU DUBURI"  FPS  LIVE/VIDEO badge
-  Row 2  h=40   ERR_X and ERR_Y needle gauges (full-width, each half)
-  Row 3  h=120  Three proportional columns (each w//3):
-                  Left   PERCEPTION panel + CLASSES panel stacked
-                  Middle ALIGNMENT panel (full column height)
-                  Right  ERR_X sparkline / ERR_Y sparkline / CONF bar
-  Row 4  h=88   Four proportional zones:
-                  A ~13%  compass rose + yaw-source label (radius 30px)
-                  B ~28%  STATE panel (depth, yaw, mode, armed, battery)
-                  C ~38%  ERR_X + ERR_Y sparklines side-by-side + CONF below
-                  D ~21%  full-width altimeter depth gauge
-  Row 5  h=26   Full-width heading tape
-  Row 6  h=26   Live: pipeline health row  |  Video: progress bar
+  Row 1  h=26*sf   Header bar: "BRACU DUBURI"  FPS  LIVE/VIDEO badge
+  Row 2  h=40*sf   ERR_X and ERR_Y needle gauges (full-width, each half)
+  Row 3  h=120*sf  Three proportional columns (each w//3):
+                     Left   PERCEPTION panel + CLASSES panel stacked
+                     Middle ALIGNMENT panel (full column height)
+                     Right  ERR_X sparkline / ERR_Y sparkline / CONF bar
+  Row 4  h=88*sf   Four proportional zones:
+                     A ~13%  compass rose + yaw-source label
+                     B ~28%  STATE panel (depth, yaw, mode, armed, battery)
+                     C ~38%  ERR_X + ERR_Y sparklines side-by-side + CONF below
+                     D ~21%  full-width altimeter depth gauge
+  Row 5  h=26*sf   Full-width heading tape
+  Row 6  h=26*sf   Live: pipeline health row  |  Video: progress bar
   ──────────────────────────────────────────────────────────────────────
-  Total  326px  ->  _STRIP_H = 326
-  Fonts scale with frame width: sf = max(1.0, w / 640)
+  Base  326px  at 640px native width (sf=1.0)
+  All row heights scale with sf = max(1.0, render_width / 640).
 """
 from __future__ import annotations
 
@@ -36,18 +36,20 @@ from .draw_widgets import (
 )
 from .detection.detector import Detection
 
-_STRIP_H  = 326   # 26+40+120+88+26+26
+# Base row heights at native 640px (sf=1.0).  Actual heights scale with sf.
+_R1_H = 26
+_R2_H = 40
+_R3_H = 120
+_R4_H = 88
+_R5_H = 26
+_R6_H = 26
 
-_R1_Y, _R1_H = 0,   26
-_R2_Y, _R2_H = 26,  40
-_R3_Y, _R3_H = 66,  120
-_R4_Y, _R4_H = 186, 88
-_R5_Y, _R5_H = 274, 26
-_R6_Y, _R6_H = 300, 26
+# Base strip height — used for backwards-compat export only; actual height is dynamic.
+_STRIP_H = _R1_H + _R2_H + _R3_H + _R4_H + _R5_H + _R6_H  # 326
 
-_SFS  = 0.44   # panel font scale (larger base for readability)
-_SLH  = 14     # panel line height
-_SPAD = 4      # panel inner padding
+_SFS  = 0.44   # base panel font scale (multiplied by sf at runtime)
+_SLH  = 14     # base panel line height (scaled with sf at runtime)
+_SPAD = 4      # panel inner padding (NOT scaled — prevents overflow at sf=2)
 
 
 def render_ui_strip(w: int, frame_h: int, *,
@@ -71,48 +73,63 @@ def render_ui_strip(w: int, frame_h: int, *,
                     is_paused:  bool = False,
                     video_position: Optional[tuple] = None,
                     pipeline_health: Optional[Dict[str, bool]] = None) -> np.ndarray:
-    """Build and return the _STRIP_H x w UI strip drawn at native width."""
-    strip = np.full((_STRIP_H, w, 3), C_BG, dtype=np.uint8)
+    """Build and return the UI strip.  Height scales with render width."""
+    sf = max(1.0, w / 640.0)
+
+    # Dynamic row heights and Y positions
+    r1_h = int(_R1_H * sf);  r1_y = 0
+    r2_h = int(_R2_H * sf);  r2_y = r1_y + r1_h
+    r3_h = int(_R3_H * sf);  r3_y = r2_y + r2_h
+    r4_h = int(_R4_H * sf);  r4_y = r3_y + r3_h
+    r5_h = int(_R5_H * sf);  r5_y = r4_y + r4_h
+    r6_h = int(_R6_H * sf);  r6_y = r5_y + r5_h
+    strip_h = r6_y + r6_h
+
+    slh  = max(_SLH, int(_SLH * sf))  # scale line height
+    spad = _SPAD                        # NOT scaled — prevents STATE panel overflow
+
+    yaw  = state.yaw_deg if state is not None else float('nan')
+    ex_h = list(err_x_history or [])
+    ey_h = list(err_y_history or [])
+    cf_h = list(conf_history  or [])
+
+    strip = np.full((strip_h, w, 3), C_BG, dtype=np.uint8)
     cv2.line(strip, (0, 0), (w - 1, 0), C_ACCENT, 2)
 
-    sf     = max(1.0, w / 640.0)   # font/widget scale factor — 1.0 at 640px, 2.0 at 1280px
-    yaw    = state.yaw_deg if state is not None else float('nan')
-    ex_h   = list(err_x_history or [])
-    ey_h   = list(err_y_history or [])
-    cf_h   = list(conf_history  or [])
-
-    _draw_header_row(strip, w, fps, video_mode, is_paused, sf)
-    _draw_err_gauges(strip, w, frame_h, primary, deadband, sf)
+    _draw_header_row(strip, w, fps, video_mode, is_paused, sf, r1_y, r2_y)
+    _draw_err_gauges(strip, w, frame_h, primary, deadband, sf, r2_y, r2_h, r3_y)
     _draw_panels_row(strip, w, frame_h, detections, primary, source,
                      healthy, tracking_on, n_tracks, primary_track_id,
                      configured_classes, show_alignment, deadband,
-                     ex_h, ey_h, cf_h, sf)
-    _draw_instruments_row(strip, w, yaw, yaw_source, state, ex_h, ey_h, cf_h, sf)
+                     ex_h, ey_h, cf_h, sf, r3_y, r3_h, slh, spad)
+    _draw_instruments_row(strip, w, yaw, yaw_source, state, ex_h, ey_h, cf_h,
+                          sf, r4_y, r4_h, slh, spad)
 
-    cv2.line(strip, (4, _R5_Y - 1), (w - 4, _R5_Y - 1), C_BORDER, 1)
-    heading_tape(strip, 4, _R5_Y, w - 8, _R5_H, yaw, show_readout=False, fs_scale=sf)
+    cv2.line(strip, (4, r5_y - 1), (w - 4, r5_y - 1), C_BORDER, 1)
+    heading_tape(strip, 4, r5_y, w - 8, r5_h, yaw, show_readout=False, fs_scale=sf)
 
     if video_mode and video_position is not None:
         cur_f, tot_f = video_position
-        video_progress(strip, 0, _R6_Y, w, _R6_H,
+        video_progress(strip, 0, r6_y, w, r6_h,
                        cur_f, tot_f, fps or 30.0, is_paused, fs_scale=sf)
     else:
-        health_row(strip, 0, _R6_Y, w, _R6_H, pipeline_health or {}, fs_scale=sf)
+        health_row(strip, 0, r6_y, w, r6_h, pipeline_health or {}, fs_scale=sf)
 
-    cv2.line(strip, (0, _STRIP_H - 1), (w - 1, _STRIP_H - 1), C_ACCENT, 1)
+    cv2.line(strip, (0, strip_h - 1), (w - 1, strip_h - 1), C_ACCENT, 1)
     return strip
 
 
 # ── Row 1: Header ─────────────────────────────────────────────────────────── #
 
 def _draw_header_row(strip: np.ndarray, w: int, fps: float,
-                     video_mode: bool, is_paused: bool, sf: float) -> None:
+                     video_mode: bool, is_paused: bool, sf: float,
+                     r1_y: int, r2_y: int) -> None:
     fs_brand = 0.44 * sf
     fs_side  = 0.32 * sf
     brand = 'BRACU  DUBURI'
     (bw, bh), _ = cv2.getTextSize(brand, _FONT, fs_brand, _FT)
     bx = (w - bw) // 2
-    by = _R1_Y + 17
+    by = r1_y + int(17 * sf)
     cv2.putText(strip, brand, (bx, by), _FONT, fs_brand, C_TEXT, _FT, cv2.LINE_AA)
     dot_y = by - bh // 2
     cv2.circle(strip, (bx - 10, dot_y), 3, C_ACCENT, -1, cv2.LINE_AA)
@@ -132,16 +149,16 @@ def _draw_header_row(strip: np.ndarray, w: int, fps: float,
     if not video_mode:
         cv2.circle(strip, (badge_x - 8, by - mh // 2 - 1), 3, C_OK, -1, cv2.LINE_AA)
 
-    cv2.line(strip, (4, _R2_Y - 1), (w - 4, _R2_Y - 1), C_BORDER, 1)
+    cv2.line(strip, (4, r2_y - 1), (w - 4, r2_y - 1), C_BORDER, 1)
 
 
 # ── Row 2: ERR gauges ─────────────────────────────────────────────────────── #
 
 def _draw_err_gauges(strip: np.ndarray, w: int, frame_h: int,
                      primary: Optional[Detection], deadband: float,
-                     sf: float) -> None:
+                     sf: float, r2_y: int, r2_h: int, r3_y: int) -> None:
     gpad = 8
-    gh   = _R2_H - 18
+    gh   = r2_h - int(18 * sf)
     gw   = (w - 3 * gpad) // 2
     fs_lbl = 0.32 * sf
 
@@ -151,18 +168,19 @@ def _draw_err_gauges(strip: np.ndarray, w: int, frame_h: int,
         ex = (primary.cx - fw / 2.0) / max(fw / 2.0, 1.0)
         ey = (primary.cy - max(frame_h, 1) / 2.0) / max(frame_h / 2.0, 1.0)
 
-    gauge_y = _R2_Y + 20
-    cv2.putText(strip, 'ERR_X', (gpad, _R2_Y + 13),
+    gauge_y = r2_y + int(20 * sf)
+    lbl_y   = r2_y + int(13 * sf)
+    cv2.putText(strip, 'ERR_X', (gpad, lbl_y),
                 _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
     needle_gauge(strip, gpad, gauge_y, gw, gh, ex,
                  vmin=-1.0, vmax=1.0, deadband=deadband, fs_scale=sf)
 
-    cv2.putText(strip, 'ERR_Y', (gpad * 2 + gw, _R2_Y + 13),
+    cv2.putText(strip, 'ERR_Y', (gpad * 2 + gw, lbl_y),
                 _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
     needle_gauge(strip, gpad * 2 + gw, gauge_y, gw, gh, ey,
                  vmin=-1.0, vmax=1.0, deadband=deadband, fs_scale=sf)
 
-    cv2.line(strip, (4, _R3_Y - 1), (w - 4, _R3_Y - 1), C_BORDER, 1)
+    cv2.line(strip, (4, r3_y - 1), (w - 4, r3_y - 1), C_BORDER, 1)
 
 
 # ── Row 3: Panels (3 proportional columns) ────────────────────────────────── #
@@ -177,17 +195,19 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                      err_x_hist: List[float],
                      err_y_hist: List[float],
                      conf_hist:  List[float],
-                     sf: float) -> None:
+                     sf: float,
+                     r3_y: int, r3_h: int,
+                     slh: int, spad: int) -> None:
     col_w = w // 3
     pad   = 5
-    sfs   = _SFS * sf   # scaled panel font
+    sfs   = _SFS * sf
 
-    cv2.line(strip, (col_w,     _R3_Y + 2), (col_w,     _R3_Y + _R3_H - 2), C_BORDER, 1)
-    cv2.line(strip, (col_w * 2, _R3_Y + 2), (col_w * 2, _R3_Y + _R3_H - 2), C_BORDER, 1)
+    cv2.line(strip, (col_w,     r3_y + 2), (col_w,     r3_y + r3_h - 2), C_BORDER, 1)
+    cv2.line(strip, (col_w * 2, r3_y + 2), (col_w * 2, r3_y + r3_h - 2), C_BORDER, 1)
 
     # ── Left column: PERCEPTION + CLASSES stacked ──────────────────────────── #
     lx = pad
-    ly = _R3_Y + pad
+    ly = r3_y + pad
     lw = col_w - pad * 2
 
     perc_rows: list = [
@@ -204,26 +224,26 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
     badge_border = (C_OK  if (healthy and detections)
                     else (C_ERR if not healthy else C_BORDER))
     _mc_panel(strip, lx, ly, 'PERCEPTION', perc_rows,
-              border=badge_border, pad=_SPAD, line_h=_SLH, fs=sfs, panel_w=lw)
+              border=badge_border, pad=spad, line_h=slh, fs=sfs, panel_w=lw)
 
     if configured_classes:
         cls_ly       = ly + _panel_height('PERCEPTION', perc_rows,
-                                          pad=_SPAD, line_h=_SLH) + 4
+                                          pad=spad, line_h=slh) + 4
         active_lower = {d.class_name.lower() for d in detections}
         any_active   = any(c.lower() in active_lower for c in configured_classes)
         cls_rows     = [('', c.upper(),
                          C_ACCENT if c.lower() in active_lower else C_DIM)
                         for c in configured_classes]
-        max_cls_y    = (_R3_Y + _R3_H - pad
-                        - _panel_height('CLASSES', cls_rows, pad=_SPAD, line_h=_SLH))
+        max_cls_y    = (r3_y + r3_h - pad
+                        - _panel_height('CLASSES', cls_rows, pad=spad, line_h=slh))
         if cls_ly <= max_cls_y:
             _mc_panel(strip, lx, cls_ly, 'CLASSES', cls_rows,
                       border=C_ACCENT if any_active else C_BORDER,
-                      pad=_SPAD, line_h=_SLH, fs=sfs, panel_w=lw)
+                      pad=spad, line_h=slh, fs=sfs, panel_w=lw)
 
     # ── Middle column: ALIGNMENT full-height ───────────────────────────────── #
     mx = col_w + pad
-    my = _R3_Y + pad
+    my = r3_y + pad
     mw = col_w - pad * 2
 
     if show_alignment:
@@ -241,7 +261,7 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                 st_val, st_col = f'TRK {tid_str}', C_ACCENT
             else:
                 st_val, st_col = 'DETECTED', C_TEXT
-            bbox_w = int(primary.xyxy[2] - primary.xyxy[0])
+            bbox_w    = int(primary.xyxy[2] - primary.xyxy[0])
             bbox_h_px = int(primary.xyxy[3] - primary.xyxy[1])
             al_rows = [
                 ('STATUS', st_val,                                            st_col),
@@ -253,15 +273,15 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
             ]
             al_border = C_OK if aligned else C_AMBER
         _mc_panel(strip, mx, my, 'ALIGNMENT', al_rows,
-                  border=al_border, pad=_SPAD, line_h=_SLH, fs=sfs, panel_w=mw)
+                  border=al_border, pad=spad, line_h=slh, fs=sfs, panel_w=mw)
 
     # ── Right column: sparklines using full column width ───────────────────── #
     rx   = col_w * 2 + pad
     rw   = w - col_w * 2 - pad * 2
-    cy   = _R3_Y + pad
-    lbl  = 12    # pixels for the label text line
-    rh   = _R3_H - pad * 2
-    sp_h = max(18, (rh - 3 * (lbl + 3)) // 3)   # larger sparklines (was max(10,...))
+    cy   = r3_y + pad
+    lbl  = max(12, int(12 * sf))
+    rh   = r3_h - pad * 2
+    sp_h = max(18, (rh - 3 * (lbl + 3)) // 3)
     fs_lbl = 0.30 * sf
 
     for label, values, color in (
@@ -286,8 +306,10 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
                           err_x_hist: List[float],
                           err_y_hist: List[float],
                           conf_hist:  List[float],
-                          sf: float) -> None:
-    cv2.line(strip, (4, _R4_Y), (w - 4, _R4_Y), C_BORDER, 1)
+                          sf: float,
+                          r4_y: int, r4_h: int,
+                          slh: int, spad: int) -> None:
+    cv2.line(strip, (4, r4_y), (w - 4, r4_y), C_BORDER, 1)
 
     za_w = int(w * 0.13)
     zb_w = int(w * 0.28)
@@ -299,12 +321,12 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     zd_w = w - zd_x
 
     for zx in (zb_x, zc_x, zd_x):
-        cv2.line(strip, (zx, _R4_Y + 2), (zx, _R4_Y + _R4_H - 2), C_BORDER, 1)
+        cv2.line(strip, (zx, r4_y + 2), (zx, r4_y + r4_h - 2), C_BORDER, 1)
 
     # ── Zone A: Compass ─────────────────────────────────────────────────────── #
-    cmp_r  = min(30, (_R4_H - 22) // 2)   # 30px radius at R4_H=88 (was 21px at 74)
+    cmp_r  = min(int(30 * sf), (r4_h - int(22 * sf)) // 2)
     cmp_cx = za_x + za_w // 2
-    cmp_cy = _R4_Y + cmp_r + 5
+    cmp_cy = r4_y + cmp_r + int(5 * sf)
     mini_compass(strip, cmp_cx, cmp_cy, cmp_r, yaw, fs_scale=sf)
 
     _SRC_MAP = {'mavlink_ahrs': 'MAVLNK', 'bno085': 'BNO085',
@@ -312,7 +334,7 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     src_lbl = _SRC_MAP.get(yaw_source, (yaw_source or '?').upper())
     fs_src  = 0.28 * sf
     (sw, _), _ = cv2.getTextSize(src_lbl, _FONT, fs_src, _FT)
-    src_y = min(cmp_cy + cmp_r + 12, _R4_Y + _R4_H - 3)
+    src_y = min(cmp_cy + cmp_r + int(12 * sf), r4_y + r4_h - 3)
     cv2.putText(strip, src_lbl, (cmp_cx - sw // 2, src_y),
                 _FONT, fs_src, C_DIM, _FT, cv2.LINE_AA)
 
@@ -330,15 +352,15 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
             ('ARMED', 'YES' if armed else 'no',    C_OK     if armed else C_DIM),
             ('BAT',   f'{batt_v:.1f}V',            _bat_color(batt_v)),
         ]
-        _mc_panel(strip, zb_x + 5, _R4_Y + 4, 'STATE', st_rows,
+        _mc_panel(strip, zb_x + int(5 * sf), r4_y + int(4 * sf), 'STATE', st_rows,
                   border=C_OK if armed else C_BORDER,
-                  pad=_SPAD, line_h=_SLH, fs=sfs, panel_w=zb_w - 10)
+                  pad=spad, line_h=slh, fs=sfs, panel_w=zb_w - 10)
 
     # ── Zone C: ERR history sparklines + CONF bar ────────────────────────────── #
     sp_pad   = 5
     sp_w     = (zc_w - sp_pad * 3) // 2
-    sp_h_top = (_R4_H - 34) // 2   # at R4_H=88 → 27px (was ~20px at 74)
-    sy0      = _R4_Y + 15
+    sp_h_top = (r4_h - int(34 * sf)) // 2
+    sy0      = r4_y + int(15 * sf)
     fs_sp    = 0.29 * sf
 
     cv2.putText(strip, 'ERR_X', (zc_x + sp_pad, sy0 - 3),
@@ -351,18 +373,18 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     sparkline(strip, zc_x + sp_pad * 2 + sp_w, sy0, sp_w, sp_h_top,
               err_y_hist, color=(80, 180, 240))
 
-    cy2  = sy0 + sp_h_top + 10
+    cy2  = sy0 + sp_h_top + int(10 * sf)
     cb_w = zc_w - sp_pad * 2
     cv2.putText(strip, 'CONF', (zc_x + sp_pad, cy2 - 3),
                 _FONT, fs_sp, C_DIM, _FT, cv2.LINE_AA)
     confidence_bar(strip, zc_x + sp_pad, cy2, cb_w, sp_h_top,
                    conf_hist[-1] if conf_hist else 0.0, fs_scale=sf)
 
-    # ── Zone D: Full-width altimeter (battery shown in STATE panel) ──────────── #
-    alt_w = max(28, zd_w - 6)          # fill Zone D width (was fixed 20px stub)
+    # ── Zone D: Full-width altimeter ─────────────────────────────────────────── #
+    alt_w = max(28, zd_w - 6)
     alt_x = zd_x + (zd_w - alt_w) // 2
-    alt_y = _R4_Y + 5
-    alt_h = max(8, _R4_H - 10)
+    alt_y = r4_y + int(5 * sf)
+    alt_h = max(int(8 * sf), r4_h - int(10 * sf))
     depth = (state.depth_m
              if state is not None and not np.isnan(state.depth_m)
              else float('nan'))
