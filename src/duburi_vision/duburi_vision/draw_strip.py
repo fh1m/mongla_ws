@@ -9,11 +9,10 @@ Layout (top -> bottom):
                      Left   PERCEPTION panel + CLASSES panel stacked
                      Middle ALIGNMENT panel (full column height)
                      Right  ERR_X sparkline / ERR_Y sparkline / CONF bar
-  Row 4  h=88*sf   Four proportional zones:
+  Row 4  h=88*sf   Three proportional zones:
                      A ~13%  compass rose + yaw-source label
-                     B ~28%  STATE panel (depth, yaw, mode, armed, battery)
-                     C ~38%  ERR_X + ERR_Y sparklines side-by-side + CONF below
-                     D ~21%  full-width altimeter depth gauge
+                     B ~55%  STATE panel (depth, yaw, mode, armed, battery)
+                     D ~32%  full-width altimeter depth gauge
   Row 5  h=26*sf   Full-width heading tape
   Row 6  h=26*sf   Live: pipeline health row  |  Video: progress bar
   ──────────────────────────────────────────────────────────────────────
@@ -47,8 +46,8 @@ _R6_H = 26
 # Base strip height — used for backwards-compat export only; actual height is dynamic.
 _STRIP_H = _R1_H + _R2_H + _R3_H + _R4_H + _R5_H + _R6_H  # 326
 
-_SFS  = 0.44   # base panel font scale (multiplied by sf at runtime)
-_SLH  = 14     # base panel line height (scaled with sf at runtime)
+_SFS  = 0.374  # base panel font scale (multiplied by sf at runtime) — 15% smaller than 0.44
+_SLH  = 12     # base panel line height (scaled with sf at runtime)
 _SPAD = 4      # panel inner padding (NOT scaled — prevents overflow at sf=2)
 
 
@@ -102,7 +101,7 @@ def render_ui_strip(w: int, frame_h: int, *,
                      healthy, tracking_on, n_tracks, primary_track_id,
                      configured_classes, show_alignment, deadband,
                      ex_h, ey_h, cf_h, sf, r3_y, r3_h, slh, spad)
-    _draw_instruments_row(strip, w, yaw, yaw_source, state, ex_h, ey_h, cf_h,
+    _draw_instruments_row(strip, w, yaw, yaw_source, state,
                           sf, r4_y, r4_h, slh, spad)
 
     cv2.line(strip, (4, r5_y - 1), (w - 4, r5_y - 1), C_BORDER, 1)
@@ -199,7 +198,7 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                      r3_y: int, r3_h: int,
                      slh: int, spad: int) -> None:
     col_w = w // 3
-    pad   = 5
+    pad   = 7
     sfs   = _SFS * sf
 
     cv2.line(strip, (col_w,     r3_y + 2), (col_w,     r3_y + r3_h - 2), C_BORDER, 1)
@@ -303,24 +302,19 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
 
 def _draw_instruments_row(strip: np.ndarray, w: int,
                           yaw: float, yaw_source: str, state,
-                          err_x_hist: List[float],
-                          err_y_hist: List[float],
-                          conf_hist:  List[float],
                           sf: float,
                           r4_y: int, r4_h: int,
                           slh: int, spad: int) -> None:
     cv2.line(strip, (4, r4_y), (w - 4, r4_y), C_BORDER, 1)
 
     za_w = int(w * 0.13)
-    zb_w = int(w * 0.28)
-    zc_w = int(w * 0.38)
+    zb_w = int(w * 0.55)
     za_x = 0
     zb_x = za_w
-    zc_x = za_w + zb_w
-    zd_x = za_w + zb_w + zc_w
+    zd_x = za_w + zb_w
     zd_w = w - zd_x
 
-    for zx in (zb_x, zc_x, zd_x):
+    for zx in (zb_x, zd_x):
         cv2.line(strip, (zx, r4_y + 2), (zx, r4_y + r4_h - 2), C_BORDER, 1)
 
     # ── Zone A: Compass ─────────────────────────────────────────────────────── #
@@ -355,30 +349,6 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
         _mc_panel(strip, zb_x + int(5 * sf), r4_y + int(4 * sf), 'STATE', st_rows,
                   border=C_OK if armed else C_BORDER,
                   pad=spad, line_h=slh, fs=sfs, panel_w=zb_w - 10)
-
-    # ── Zone C: ERR history sparklines + CONF bar ────────────────────────────── #
-    sp_pad   = 5
-    sp_w     = (zc_w - sp_pad * 3) // 2
-    sp_h_top = (r4_h - int(34 * sf)) // 2
-    sy0      = r4_y + int(15 * sf)
-    fs_sp    = 0.29 * sf
-
-    cv2.putText(strip, 'ERR_X', (zc_x + sp_pad, sy0 - 3),
-                _FONT, fs_sp, C_DIM, _FT, cv2.LINE_AA)
-    sparkline(strip, zc_x + sp_pad, sy0, sp_w, sp_h_top,
-              err_x_hist, color=C_AMBER)
-
-    cv2.putText(strip, 'ERR_Y', (zc_x + sp_pad * 2 + sp_w, sy0 - 3),
-                _FONT, fs_sp, C_DIM, _FT, cv2.LINE_AA)
-    sparkline(strip, zc_x + sp_pad * 2 + sp_w, sy0, sp_w, sp_h_top,
-              err_y_hist, color=(80, 180, 240))
-
-    cy2  = sy0 + sp_h_top + int(10 * sf)
-    cb_w = zc_w - sp_pad * 2
-    cv2.putText(strip, 'CONF', (zc_x + sp_pad, cy2 - 3),
-                _FONT, fs_sp, C_DIM, _FT, cv2.LINE_AA)
-    confidence_bar(strip, zc_x + sp_pad, cy2, cb_w, sp_h_top,
-                   conf_hist[-1] if conf_hist else 0.0, fs_scale=sf)
 
     # ── Zone D: Full-width altimeter ─────────────────────────────────────────── #
     alt_w = max(28, zd_w - 6)
@@ -445,21 +415,6 @@ def _mc_panel(img: np.ndarray, x: int, y: int, title: str, rows, *,
 def _panel_height(title: str, rows, pad: int = 5, line_h: int = 17) -> int:
     return line_h * (len(rows) + (1 if title else 0)) + 2 * pad
 
-
-def _panel_width(title: str, rows, pad: int = 5, fs: float | None = None) -> int:
-    fs     = fs if fs is not None else 0.40
-    key_ws = [cv2.getTextSize(r[0], _FONT, fs, _FT)[0][0]
-              for r in rows if not isinstance(r, str) and len(r) >= 2]
-    col_w  = (max(key_ws) + 8) if key_ws else 0
-    cands: list = []
-    if title:
-        cands.append(cv2.getTextSize(title, _FONT, fs, _FT)[0][0])
-    for row in rows:
-        if isinstance(row, str):
-            cands.append(cv2.getTextSize(row, _FONT, fs, _FT)[0][0])
-        elif len(row) >= 2:
-            cands.append(col_w + cv2.getTextSize(row[1], _FONT, fs, _FT)[0][0])
-    return (max(cands) if cands else 60) + 2 * pad
 
 
 def _bat_color(voltage: float) -> tuple:
