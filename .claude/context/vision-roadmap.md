@@ -74,6 +74,24 @@ not a separate node (shared per-track state, avoids extra ROS hop).
 Decision: particle filters skipped — underwater single-target tracking is unimodal; the 4-state
 CV Kalman is appropriate and has near-zero overhead.
 
+## v4c -- HUD Round 6: font scaling, tracking robustness, bbox visuals (DONE)
+
+- `draw_strip.py` — `sf = max(1.0, w / 640)` scale factor; all row heights, font sizes, and
+  widget calls multiply by `sf`; dynamic `strip_h` returned instead of constant;
+  Zone C (duplicate ERR sparklines) removed from Row 4; STATE panel expanded to 55% width;
+  font scale reduced to `_SFS=0.374`, line height `_SLH=12` for legibility
+- `draw_video.py` — bright cyan reticle `(0,200,200)`; glow hairlines (3px dim + 1px bright
+  double-pass); `arrowedLine` from target center toward frame center (green/amber);
+  on-frame `X:+0.12 Y:-0.05  87%` text below bbox; wider 12px alignment bar at `h-14`; 
+  deadband fill (15% green tint when aligned); extra `cv2.putText` track ID badge
+- `draw.py` — `_RENDER_SCALE = 2.0`: renders at 2× then downscales to output size via
+  `cv2.INTER_AREA` for crisp subpixel antialiasing on 1080p displays
+- `config/tracker.yaml` — `track_buffer: 150` (5 s occlusion buffer), `min_hits: 3`
+  (suppress turbidity spurious detections), `track_activation_threshold: 0.40`
+- `tracking/bytetrack.py` — `track_activation_threshold` param exposed; `reset()` method added
+- `tracker_node.py` — `track_activation_threshold` declared as ROS param; tracker + kalman
+  reset on `classes` param change (flushes stale gate IDs when operator switches to flare)
+
 ## v4b -- Mission-control HUD v2 (DONE)
 
 Instruments, active-class panel, and rich bounding-box annotators for the operator display.
