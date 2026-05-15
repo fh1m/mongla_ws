@@ -412,28 +412,31 @@ def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:
 # Splash screen
 # ---------------------------------------------------------------------------
 
-_C_SP_BG     = (12, 12, 12)
-_C_SP_ACCENT = (0, 210, 190)
-_C_SP_TEXT   = (200, 200, 200)
-_C_SP_DIM    = (75, 75, 75)
+# Blue theme: dark navy background, sky-blue accent (all BGR)
+_C_SP_BG     = (30, 10, 5)       # dark navy
+_C_SP_ACCENT = (255, 155, 20)    # sky blue  (R=20 G=155 B=255 in RGB)
+_C_SP_TEXT   = (230, 220, 210)   # near-white warm
+_C_SP_DIM    = (110, 80, 55)     # muted blue-grey
 
 
-def _render_splash(w: int, h: int, elapsed: float, camera: str) -> np.ndarray:
-    """Dark 'Initializing Vision System' screen shown before detector is ready."""
+def _render_splash(w: int, h: int, elapsed: float, camera: str,
+                   fade: float = 1.0) -> np.ndarray:
+    """Blue 'Initializing Vision System' splash. fade=1.0 fully opaque, 0.0 transparent."""
     img = np.full((h, w, 3), _C_SP_BG, dtype=np.uint8)
     cx, cy = w // 2, h // 2
     sf  = max(0.5, w / 1280.0)
     fnt = cv2.FONT_HERSHEY_SIMPLEX
 
-    # Brand header
-    brand = '●  BRACU  DUBURI  ●'
+    # Brand header — ASCII only (OpenCV bitmap fonts can't render Unicode)
+    brand = '---  BRACU  DUBURI  ---'
     fs_b  = 0.85 * sf
     (bw, _), _ = cv2.getTextSize(brand, fnt, fs_b, 2)
-    cv2.putText(img, brand, (cx - bw // 2, cy - 58),
+    bx = cx - bw // 2
+    cv2.putText(img, brand, (bx, cy - 58),
                 fnt, fs_b, _C_SP_ACCENT, 2, cv2.LINE_AA)
 
-    # Accent separator
-    cv2.line(img, (cx - bw // 2, cy - 34), (cx + bw // 2, cy - 34), _C_SP_ACCENT, 1)
+    # Accent separator line under brand
+    cv2.line(img, (bx, cy - 34), (bx + bw, cy - 34), _C_SP_ACCENT, 1)
 
     # Main status
     status = 'INITIALIZING VISION SYSTEM'
@@ -443,7 +446,7 @@ def _render_splash(w: int, h: int, elapsed: float, camera: str) -> np.ndarray:
                 fnt, fs_s, _C_SP_TEXT, 1, cv2.LINE_AA)
 
     # Sub-status
-    sub    = 'Loading YOLO model  —  video will play automatically when ready'
+    sub    = 'Loading model  --  video will play automatically when ready'
     fs_sub = 0.38 * sf
     (subw, _), _ = cv2.getTextSize(sub, fnt, fs_sub, 1)
     cv2.putText(img, sub, (cx - subw // 2, cy + 58),
@@ -453,13 +456,13 @@ def _render_splash(w: int, h: int, elapsed: float, camera: str) -> np.ndarray:
     bar_len = int(w * 0.48)
     bar_x0  = cx - bar_len // 2
     bar_y0  = cy + 86
-    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + bar_len, bar_y0 + 3), (35, 35, 35), -1)
+    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + bar_len, bar_y0 + 4), (50, 25, 12), -1)
     t    = (elapsed % 2.0) / 2.0
     prog = t * 2 if t < 0.5 else (1.0 - t) * 2
     fill = max(bar_len // 8, int(bar_len * prog))
-    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + fill, bar_y0 + 3), _C_SP_ACCENT, -1)
+    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + fill, bar_y0 + 4), _C_SP_ACCENT, -1)
 
-    # Footer info
+    # Footer
     fs_info = 0.33 * sf
     cv2.putText(img, f'camera: {camera}', (16, h - 20),
                 fnt, fs_info, _C_SP_DIM, 1, cv2.LINE_AA)
@@ -467,6 +470,10 @@ def _render_splash(w: int, h: int, elapsed: float, camera: str) -> np.ndarray:
     (tw, _), _ = cv2.getTextSize(ts, fnt, fs_info, 1)
     cv2.putText(img, ts, (w - tw - 16, h - 20),
                 fnt, fs_info, _C_SP_DIM, 1, cv2.LINE_AA)
+
+    # Apply fade: blend toward black at fade < 1
+    if fade < 0.999:
+        img = (img * max(0.0, fade)).astype(np.uint8)
     return img
 
 
@@ -509,24 +516,38 @@ def main(args=None):
                     break
                 time.sleep(0.05)
 
+        _splash_fade_end   = 0.0   # monotonic time when 400 ms fade-out finishes
+        _SPLASH_FADE_DUR   = 0.4
+        _prev_initializing = True
+
         while rclpy.ok():
             # ── Auto-resume when detector first becomes active ──────────────
             if node._video_mode and node._auto_paused_start and node._last_det_t > 0:
                 node._auto_paused_start = False
                 _send_pause(node, False)
 
-            _initializing = node._auto_paused_start   # splash visible while video is held
+            # Splash shows while detector has never published (all modes).
+            _initializing = node._last_det_t == 0
+
+            # Trigger fade-out on the first tick after detection fires.
+            if _prev_initializing and not _initializing:
+                _splash_fade_end = time.monotonic() + _SPLASH_FADE_DUR
+            _prev_initializing = _initializing
+
+            now = time.monotonic()
+            _fade = max(0.0, (_splash_fade_end - now) / _SPLASH_FADE_DUR) if not _initializing else 1.0
+            _show_splash = _initializing or _fade > 0.01
 
             # ── Try to get latest frame ─────────────────────────────────────
             try:
                 frame = node._frame_q.get(timeout=0.1)
             except queue.Empty:
-                # No frame — show splash while still initializing, then handle keys.
-                if _initializing:
+                # No frame — show animated splash while initializing or fading.
+                if _show_splash:
                     cv2.imshow(_WINDOW_NAME,
                                _render_splash(_SP_W, _SP_H,
-                                              time.monotonic() - splash_start,
-                                              node._camera))
+                                              now - splash_start,
+                                              node._camera, fade=_fade))
                 key = cv2.waitKeyEx(1)
                 if key in (ord('q'), ord('Q')):
                     break
@@ -589,12 +610,14 @@ def main(args=None):
                 depth_rate=node._depth_rate,
             )
 
-            # While video is held paused (detector initializing), blend splash over frame.
-            if _initializing:
+            # Blend splash over frame while initializing or fading out.
+            if _show_splash:
+                now2 = time.monotonic()
                 splash = _render_splash(out.shape[1], out.shape[0],
-                                        time.monotonic() - splash_start,
-                                        node._camera)
-                cv2.addWeighted(splash, 0.80, out, 0.20, 0, out)
+                                        now2 - splash_start,
+                                        node._camera, fade=_fade)
+                alpha = 0.80 * _fade
+                cv2.addWeighted(splash, alpha, out, 1.0 - alpha, 0, out)
 
             t0 = time.monotonic()
             cv2.imshow(_WINDOW_NAME, out)
