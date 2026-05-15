@@ -143,10 +143,15 @@ class YoloDetector(Detector):
                  conf=0.35, iou=0.5, imgsz=640, half=False,
                  class_allowlist: Optional[Iterable[str]] = ('person',),
                  warmup=True, logger=None):
+        import torch
         from ultralytics import YOLO
 
         self._log     = logger
         self._device  = select_device(device, logger=logger)
+        # Let cuDNN benchmark fastest convolution algorithm on first few forward passes.
+        # Must be set before model construction so cuDNN sees it during layer setup.
+        if self._device.startswith('cuda'):
+            torch.backends.cudnn.benchmark = True
         self._conf    = float(conf)
         self._iou     = float(iou)
         self._imgsz   = int(imgsz)
@@ -192,7 +197,7 @@ class YoloDetector(Detector):
 
         self._ready = False
         if warmup:
-            self._do_warmup(warmup_imgsz=160)
+            self._do_warmup()
         self._ready = True
 
         if self._log:
@@ -207,16 +212,20 @@ class YoloDetector(Detector):
             return '*'
         return sorted(self._names[i] for i in self._allow_ids)
 
-    def _do_warmup(self, warmup_imgsz: int = 160):
-        # Small dummy triggers CUDA JIT kernel compilation without a full-size forward pass.
-        dummy = np.zeros((warmup_imgsz, warmup_imgsz, 3), dtype=np.uint8)
-        try:
-            self._model.predict(
-                dummy, conf=self._conf, iou=self._iou, imgsz=self._imgsz,
-                device=self._device, half=self._half, verbose=False)
-        except Exception as exc:
-            if self._log:
-                self._log.warning(f"[YOLO ] warmup failed (non-fatal): {exc!r}")
+    def _do_warmup(self, warmup_passes: int = 3):
+        # Run multiple passes at full imgsz so cuDNN benchmarks and caches the
+        # optimal convolution algorithm before real inference begins.
+        dummy = np.zeros((self._imgsz, self._imgsz, 3), dtype=np.uint8)
+        for i in range(warmup_passes):
+            try:
+                self._model.predict(
+                    dummy, conf=self._conf, iou=self._iou, imgsz=self._imgsz,
+                    device=self._device, half=self._half, verbose=False)
+            except Exception as exc:
+                if self._log:
+                    self._log.warning(
+                        f"[YOLO ] warmup pass {i+1}/{warmup_passes} failed (non-fatal): {exc!r}")
+                break
 
     def infer(self, frame_bgr: np.ndarray) -> List[Detection]:
         if frame_bgr is None or frame_bgr.size == 0:
