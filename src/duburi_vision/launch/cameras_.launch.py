@@ -33,7 +33,9 @@ from launch_ros.actions           import Node
 
 def generate_launch_description():
     args = [
-        DeclareLaunchArgument('camera',        default_value='logitech'),
+        DeclareLaunchArgument('camera',        default_value='',
+                              description='Camera name/profile; defaults to "video" when video_file is set, '
+                                          '"logitech" for live webcam. Override to force a specific namespace.'),
         DeclareLaunchArgument('device',        default_value='-1',
                               description='Device index override; -1 = use profile default'),
         DeclareLaunchArgument('width',         default_value='640'),
@@ -72,10 +74,14 @@ def generate_launch_description():
     cam_name   = LaunchConfiguration('camera')
     video_file = LaunchConfiguration('video_file')
 
-    # Use named profile when not playing a video file; let profile own source/device/frame_id.
-    # When video_file is set, pass source='video_file' and leave profile empty.
-    profile_expr = PythonExpression(["'", cam_name, "' if not '", video_file, "' else ''"])
-    source_expr  = PythonExpression(["'video_file' if '", video_file, "' else ''"])
+    # effective_cam: explicit camera arg wins; otherwise 'video' when file given, 'logitech' for live.
+    # profile: use effective_cam as profile for live sources; empty (ignored) for video_file.
+    # source:  'video_file' when video_file arg set; '' lets profile/webcam defaults take over.
+    effective_cam = PythonExpression([
+        "'", cam_name, "' if '", cam_name, "' else ('video' if '", video_file, "' else 'logitech')"
+    ])
+    profile_expr  = PythonExpression(["'' if '", video_file, "' else ('", cam_name, "' or 'logitech')"])
+    source_expr   = PythonExpression(["'video_file' if '", video_file, "' else ''"])
 
     camera_node = Node(
         package='duburi_vision', executable='camera_node', name='duburi_camera',
@@ -83,7 +89,7 @@ def generate_launch_description():
         parameters=[{
             'profile':         profile_expr,
             'source':          source_expr,
-            'name':            cam_name,
+            'name':            effective_cam,
             'device':          LaunchConfiguration('device'),   # -1 = use profile default
             'path':            video_file,
             'loop':            LaunchConfiguration('loop'),
@@ -98,7 +104,7 @@ def generate_launch_description():
         package='duburi_vision', executable='detector_node', name='duburi_detector',
         output='screen',
         parameters=[{
-            'camera':              cam_name,
+            'camera':              effective_cam,
             'model_path':          LaunchConfiguration('model'),
             'models':              LaunchConfiguration('models'),
             'active_model':        LaunchConfiguration('active_model'),
@@ -116,7 +122,7 @@ def generate_launch_description():
         package='duburi_vision', executable='tracker_node', name='duburi_tracker',
         output='screen',
         parameters=[{
-            'camera':             cam_name,
+            'camera':             effective_cam,
             'track_buffer':       LaunchConfiguration('track_buffer'),
             'min_hits':           LaunchConfiguration('min_hits'),
             'max_predict_frames': LaunchConfiguration('max_predict'),
@@ -131,7 +137,7 @@ def generate_launch_description():
         package='duburi_vision', executable='vision_display',
         name='duburi_image_view', output='screen',
         parameters=[{
-            'camera':          cam_name,
+            'camera':          effective_cam,
             'video_file_mode': video_file_mode,
         }],
         condition=IfCondition(LaunchConfiguration('viewer')),

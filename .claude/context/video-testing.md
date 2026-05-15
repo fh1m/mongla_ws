@@ -60,14 +60,14 @@ The camera_node exposes these when `source=video_file`:
 
 ```bash
 # Pause / resume from CLI:
-ros2 service call /duburi/vision/logitech/video_pause std_srvs/srv/SetBool "{data: true}"
-ros2 service call /duburi/vision/logitech/video_pause std_srvs/srv/SetBool "{data: false}"
+ros2 service call /duburi/vision/video/video_pause std_srvs/srv/SetBool "{data: true}"
+ros2 service call /duburi/vision/video/video_pause std_srvs/srv/SetBool "{data: false}"
 
 # Seek forward 5 seconds:
-ros2 topic pub --once /duburi/vision/logitech/video_seek_rel std_msgs/msg/Float32 "{data: 5.0}"
+ros2 topic pub --once /duburi/vision/video/video_seek_rel std_msgs/msg/Float32 "{data: 5.0}"
 
 # Step back 1 frame (useful while paused):
-ros2 topic pub --once /duburi/vision/logitech/video_seek_frame std_msgs/msg/Int32 "{data: -1}"
+ros2 topic pub --once /duburi/vision/video/video_seek_frame std_msgs/msg/Int32 "{data: -1}"
 ```
 
 ---
@@ -169,7 +169,7 @@ ros2 launch duburi_vision cameras_.launch.py \
 
 ```bash
 ros2 run duburi_vision vision_check \
-    --camera logitech --duration 30 --require-class gate
+    --camera video --duration 30 --require-class gate
 ```
 
 **Tracker tuning on replay**
