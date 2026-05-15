@@ -61,6 +61,7 @@ import time
 from collections import deque
 
 import cv2
+import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
@@ -202,6 +203,10 @@ class VisionDisplayNode(Node):
         self._err_y_history: deque[float] = deque(maxlen=60)
         self._conf_history:  deque[float] = deque(maxlen=60)
 
+        # Depth rate estimation — short window, state-message timestamps
+        self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
+        self._depth_rate: float = 0.0
+
         # Video file state (updated by ROS service response).
         self._is_paused:      bool            = False
         self._video_position: tuple[int, int] = (0, 0)
@@ -245,7 +250,15 @@ class VisionDisplayNode(Node):
 
     def _on_state(self, msg: DuburiState) -> None:
         self._state = msg
-        self._last_state_t = time.monotonic()
+        now = time.monotonic()
+        self._last_state_t = now
+        if not np.isnan(msg.depth_m):
+            self._depth_history.append((now, float(msg.depth_m)))
+            if len(self._depth_history) >= 2:
+                t0, d0 = self._depth_history[0]
+                t1, d1 = self._depth_history[-1]
+                dt = t1 - t0
+                self._depth_rate = (d1 - d0) / dt if dt > 0.1 else 0.0
 
     def _on_detections(self, msg: Detection2DArray) -> None:
         dets = array_to_detections(msg)
@@ -419,6 +432,7 @@ def main(args=None):
                 video_mode=node._video_mode,
                 is_paused=node._is_paused,
                 pipeline_health=_build_health(node),
+                depth_rate=node._depth_rate,
             )
 
             t0 = time.monotonic()
