@@ -83,6 +83,13 @@ class VideoFileCamera(Camera):
         self._step_pending:  bool                 = False  # advance one frame while paused
         self._last_frame:    Optional[np.ndarray] = None
 
+        # Frame-rate throttle — enforced outside the lock in read().
+        # Without this, cv2.VideoCapture on a cached file decodes at ~3000 fps
+        # and burns through the video in seconds.
+        self._speed:           float = 1.0
+        self._frame_interval:  float = 1.0 / self._actual_fps
+        self._next_frame_time: float = time.monotonic()
+
     # ------------------------------------------------------------------ #
     #  Playback control API                                                #
     # ------------------------------------------------------------------ #
@@ -111,6 +118,7 @@ class VideoFileCamera(Camera):
             target = max(0, min(hi, cur + delta))
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, target)
             self._eof = False
+            self._next_frame_time = time.monotonic()  # resume without stale sleep debt
             if self._paused:
                 self._step_pending = True  # expose the seeked frame while paused
 
@@ -124,8 +132,41 @@ class VideoFileCamera(Camera):
             target = max(0, min(hi, cur + n))
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, target)
             self._eof = False
+            self._next_frame_time = time.monotonic()
             if self._paused:
                 self._step_pending = True
+
+    # Speed step ladder — same values understood by display_node keybinds.
+    _SPEED_STEPS: tuple = (0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0)
+
+    def set_speed(self, speed: float) -> float:
+        """Set playback speed multiplier (0.1–4.0). Returns clamped value."""
+        speed = max(0.05, float(speed))
+        with self._lock:
+            self._speed = speed
+        return speed
+
+    def speed_step_up(self) -> float:
+        with self._lock:
+            cur = self._speed
+            for s in self._SPEED_STEPS:
+                if s > cur + 0.01:
+                    self._speed = s
+                    return s
+            return self._speed
+
+    def speed_step_down(self) -> float:
+        with self._lock:
+            cur = self._speed
+            for s in reversed(self._SPEED_STEPS):
+                if s < cur - 0.01:
+                    self._speed = s
+                    return s
+            return self._speed
+
+    @property
+    def speed(self) -> float:
+        return self._speed
 
     @property
     def position(self) -> tuple[int, int]:
@@ -184,6 +225,15 @@ class VideoFileCamera(Camera):
         self._last_frame  = frame
         self._idx        += 1
         meta.fresh        = True
+
+        # Throttle to target fps * speed — sleep is OUTSIDE the lock so
+        # pause/seek calls are not blocked during the wait.
+        now = time.monotonic()
+        wait = self._next_frame_time - now
+        if wait > 0.001:
+            time.sleep(wait)
+        self._next_frame_time = time.monotonic() + self._frame_interval / max(0.05, self._speed)
+
         return frame, meta
 
     def is_healthy(self) -> bool:

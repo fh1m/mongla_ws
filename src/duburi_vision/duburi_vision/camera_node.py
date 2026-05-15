@@ -93,9 +93,10 @@ class CameraNode(Node):
             self.create_service(SetBool, f'{ns}/video_pause',       self._handle_video_pause)
             self.create_subscription(Float32, f'{ns}/video_seek_rel',   self._handle_seek,       10)
             self.create_subscription(Int32,   f'{ns}/video_seek_frame', self._handle_seek_frame, 10)
+            self.create_subscription(Float32, f'{ns}/video_speed',      self._handle_speed,      10)
             self.get_logger().info(
                 f'[CAM  ] video controls: {ns}/video_pause  '
-                f'{ns}/video_seek_rel  {ns}/video_seek_frame')
+                f'{ns}/video_seek_rel  {ns}/video_seek_frame  {ns}/video_speed')
 
         self.get_logger().info(
             f"[CAM  ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
@@ -232,6 +233,11 @@ class CameraNode(Node):
         if hasattr(self._cam, 'seek_frames'):
             self._cam.seek_frames(int(msg.data))  # type: ignore[attr-defined]
 
+    def _handle_speed(self, msg: Float32) -> None:
+        if hasattr(self._cam, 'set_speed'):
+            new_speed = self._cam.set_speed(float(msg.data))  # type: ignore[attr-defined]
+            self.get_logger().info(f'[CAM  ] playback speed → {new_speed:.2f}×')
+
     def _log_health(self):
         now = time.monotonic()
         elapsed = max(now - self._last_log, 1e-3)
@@ -243,7 +249,8 @@ class CameraNode(Node):
             cur, total = self._cam.position
             pct = 100 * cur / total if total else 0.0
             paused = 'paused' if self._cam.is_paused else 'playing'  # type: ignore[attr-defined]
-            extra = f'  pos={cur}/{total} ({pct:.0f}%)  {paused}'
+            spd = self._cam.speed if hasattr(self._cam, 'speed') else 1.0  # type: ignore[attr-defined]
+            extra = f'  pos={cur}/{total} ({pct:.0f}%)  {paused}  {spd:.2f}×'
         self.get_logger().info(
             f"[CAM  ] {marker}  {self._cam_name}  pub={hz:5.1f}Hz  "
             f"sent={self._sent}  dropped={self._dropped}{extra}")
