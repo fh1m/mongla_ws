@@ -30,7 +30,7 @@ import numpy as np
 # Import palette from draw.py to stay consistent.
 # These are duplicated here to avoid a circular import; draw.py re-imports
 # them from here after the split.
-_FONT = cv2.FONT_HERSHEY_DUPLEX
+_FONT = cv2.FONT_HERSHEY_SIMPLEX
 _FT   = 1
 
 # Shared palette (BGR)
@@ -274,12 +274,13 @@ def mini_compass(img: np.ndarray,
 
     fs_card = 0.25 * fs_scale
     for ang, lbl in ((0, 'N'), (90, 'E'), (180, 'S'), (270, 'W')):
-        rad = np.radians(ang)
-        tx  = cx + int((radius - 6) * np.sin(rad))
-        ty  = cy - int((radius - 6) * np.cos(rad))
+        rad   = np.radians(ang)
+        tx    = cx + int((radius - 6) * np.sin(rad))
+        ty    = cy - int((radius - 6) * np.cos(rad))
         (tw, th), _ = cv2.getTextSize(lbl, _FONT, fs_card, _FT)
+        color = C_TEXT if lbl == 'N' else C_DIM
         cv2.putText(img, lbl, (tx - tw // 2, ty + th // 2),
-                    _FONT, fs_card, C_DIM, _FT, cv2.LINE_AA)
+                    _FONT, fs_card, color, _FT, cv2.LINE_AA)
 
     for deg in range(0, 360, 30):
         if deg % 90 == 0:

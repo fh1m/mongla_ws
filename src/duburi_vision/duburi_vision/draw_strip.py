@@ -71,7 +71,8 @@ def render_ui_strip(w: int, frame_h: int, *,
                     video_mode: bool = False,
                     is_paused:  bool = False,
                     video_position: Optional[tuple] = None,
-                    pipeline_health: Optional[Dict[str, bool]] = None) -> np.ndarray:
+                    pipeline_health: Optional[Dict[str, bool]] = None,
+                    depth_rate: float = 0.0) -> np.ndarray:
     """Build and return the UI strip.  Height scales with render width."""
     sf = max(1.0, w / 640.0)
 
@@ -102,7 +103,7 @@ def render_ui_strip(w: int, frame_h: int, *,
                      configured_classes, show_alignment, deadband,
                      ex_h, ey_h, cf_h, sf, r3_y, r3_h, slh, spad)
     _draw_instruments_row(strip, w, yaw, yaw_source, state,
-                          sf, r4_y, r4_h, slh, spad)
+                          sf, r4_y, r4_h, slh, spad, depth_rate=depth_rate)
 
     cv2.line(strip, (4, r5_y - 1), (w - 4, r5_y - 1), C_BORDER, 1)
     heading_tape(strip, 4, r5_y, w - 8, r5_h, yaw, show_readout=False, fs_scale=sf)
@@ -306,7 +307,8 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
                           yaw: float, yaw_source: str, state,
                           sf: float,
                           r4_y: int, r4_h: int,
-                          slh: int, spad: int) -> None:
+                          slh: int, spad: int,
+                          depth_rate: float = 0.0) -> None:
     cv2.line(strip, (4, r4_y), (w - 4, r4_y), C_BORDER, 1)
 
     za_w = int(w * 0.13)
@@ -341,8 +343,12 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
         depth_v = state.depth_m         if not np.isnan(state.depth_m)         else 0.0
         yaw_v   = state.yaw_deg         if not np.isnan(state.yaw_deg)         else 0.0
         batt_v  = state.battery_voltage if not np.isnan(state.battery_voltage) else 0.0
+        dep_str = f'{depth_v:+.2f}m'
+        if abs(depth_rate) > 0.02:
+            arrow = '↑' if depth_rate < 0 else '↓'
+            dep_str += f' {arrow}{abs(depth_rate):.2f}'
         st_rows = [
-            ('DEPTH', f'{depth_v:+.2f}m',        C_TEXT),
+            ('DEPTH', dep_str,                     C_TEXT),
             ('YAW',   f'{yaw_v:.1f}deg',          C_TEXT),
             ('MODE',  state.mode or '?',           C_ACCENT if armed else C_DIM),
             ('ARMED', 'YES' if armed else 'no',    C_OK     if armed else C_DIM),

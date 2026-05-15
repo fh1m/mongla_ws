@@ -66,6 +66,7 @@ def render_all(frame_bgr: np.ndarray,
                is_paused: bool = False,
                video_position: Optional[tuple] = None,
                pipeline_health: Optional[Dict[str, bool]] = None,
+               depth_rate: float = 0.0,
                ) -> np.ndarray:
     """Return np.vstack([annotated_video, ui_strip]).
 
@@ -109,6 +110,7 @@ def render_all(frame_bgr: np.ndarray,
         is_paused=is_paused,
         video_position=video_position,
         pipeline_health=pipeline_health,
+        depth_rate=depth_rate,
     )
 
     return np.vstack([video_out, strip])

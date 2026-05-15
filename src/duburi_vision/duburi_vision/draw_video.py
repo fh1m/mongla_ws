@@ -22,7 +22,7 @@ import numpy as np
 from .detection.detector import Detection, largest
 from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT
 
-_FONT     = cv2.FONT_HERSHEY_DUPLEX
+_FONT     = cv2.FONT_HERSHEY_SIMPLEX
 _FT       = 1
 C_RETICLE  = (0, 200, 200)    # bright cyan reticle (was near-black 50,55,55)
 C_HAIRLINE = (0, 180, 255)    # orange-yellow target hairlines
