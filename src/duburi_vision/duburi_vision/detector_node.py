@@ -124,6 +124,8 @@ class DetectorNode(Node):
         active_model = str(self.get_parameter('active_model').value).strip()
         self._registry: Dict[str, YoloDetector] = {}
 
+        self._pending_allowlist = allowlist  # updated by param callback; used by async loader
+
         if models_str:
             model_map = _parse_models_param(models_str)
             self.get_logger().info(
@@ -174,17 +176,17 @@ class DetectorNode(Node):
                 raise RuntimeError("empty detector registry")
 
         else:
-            # Single-model mode (original behaviour)
+            # Single-model mode: load async so ROS subscriber starts immediately.
+            # Frames received before the model is ready are silently dropped.
             self._active_name = None
-            try:
-                self._det = YoloDetector(
+            self._det: Optional[YoloDetector] = None
+            threading.Thread(
+                target=self._load_single_model_async,
+                kwargs=dict(
                     model_path=str(self.get_parameter('model_path').value),
                     device=device, conf=conf, iou=iou, imgsz=imgsz,
-                    half=half, class_allowlist=allowlist,
-                    logger=self.get_logger())
-            except Exception as exc:
-                self.get_logger().fatal(f"[DET  ] YoloDetector init FAILED: {exc}")
-                raise
+                    half=half, allowlist=allowlist),
+                daemon=True).start()
 
         from vision_msgs.msg import Detection2DArray
         from std_msgs.msg import String
@@ -228,6 +230,24 @@ class DetectorNode(Node):
         # on connect (even before any param change fires).
         self._publish_classes(classes_param)
 
+    def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, allowlist):
+        """Background thread: load YoloDetector, then go live. Node subscribes before this runs."""
+        try:
+            det = YoloDetector(
+                model_path=model_path,
+                device=device, conf=conf, iou=iou, imgsz=imgsz,
+                half=half, class_allowlist=allowlist,
+                logger=self.get_logger())
+        except Exception as exc:
+            self.get_logger().fatal(f"[DET  ] YoloDetector init FAILED: {exc}")
+            return
+        # Apply any allowlist change that arrived during load via a param callback.
+        pending = self._pending_allowlist
+        if pending is not allowlist:
+            det.update_allowlist(pending)
+        self._det = det  # atomic publish under CPython GIL — _infer_loop sees it next tick
+        self.get_logger().info("[DET  ] model ready — inference active")
+
     def _publish_classes(self, classes_str: str) -> None:
         """Publish the current classes filter so display_node can light up active classes."""
         from std_msgs.msg import String
@@ -260,6 +280,8 @@ class DetectorNode(Node):
 
             t0 = time.monotonic()
             det = self._det  # atomic ref read under CPython GIL
+            if det is None:
+                continue  # model still loading — drop frame, keep queue drained
             try:
                 detections = det.infer(frame)
             except Exception as exc:
@@ -299,7 +321,9 @@ class DetectorNode(Node):
                     None if not classes_str
                     else [c.strip() for c in classes_str.split(',') if c.strip()]
                 )
-                self._det.update_allowlist(new_allow)
+                self._pending_allowlist = new_allow  # persists for async load
+                if self._det is not None:
+                    self._det.update_allowlist(new_allow)
                 self._publish_classes(classes_str)
                 self.get_logger().info(
                     f"[DET  ] classes → {new_allow or '*all*'}")

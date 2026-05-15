@@ -274,3 +274,9 @@ def _draw_corners(img, x1, y1, x2, y2, color, length=14, thickness=3):
                                (x1, y2, +1, -1), (x2, y2, -1, -1)):
         cv2.line(img, (px, py), (px + dx * length, py), color, thickness, cv2.LINE_AA)
         cv2.line(img, (px, py), (px, py + dy * length), color, thickness, cv2.LINE_AA)
+
+
+# Pre-warm supervision annotators at sf=2.0 (the display_node runtime scale).
+# Without this the first detection frame triggers annotator construction + cuDNN
+# cache miss simultaneously, causing a visible stutter.
+_get_sv(2.0)
