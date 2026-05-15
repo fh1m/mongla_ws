@@ -83,9 +83,9 @@ def needle_gauge(img: np.ndarray,
         color = C_ERR
 
     if nx > cx:
-        cv2.rectangle(img, (cx, y + 2), (nx, y + h - 2), color, -1)
+        _fill_rect(img, cx, y + 2, nx, y + h - 2, color, alpha=0.50)
     elif nx < cx:
-        cv2.rectangle(img, (nx, y + 2), (cx, y + h - 2), color, -1)
+        _fill_rect(img, nx, y + 2, cx, y + h - 2, color, alpha=0.50)
 
     cv2.line(img, (nx, y), (nx, y + h), C_TEXT, 2, cv2.LINE_AA)
 
@@ -148,7 +148,7 @@ def confidence_bar(img: np.ndarray,
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
     if fill > 0:
-        cv2.rectangle(img, (x + 1, y + 1), (x + 1 + fill, y + h - 1), color, -1)
+        _fill_rect(img, x + 1, y + 1, x + 1 + fill, y + h - 1, color, alpha=0.55)
 
     val_str = f'{int(conf * 100)}%'
     fs = 0.28 * fs_scale
@@ -163,7 +163,7 @@ def confidence_bar(img: np.ndarray,
 def altimeter_depth(img: np.ndarray,
                     x: int, y: int, w: int, h: int,
                     depth_m: float,
-                    max_depth: float = 5.0,
+                    max_depth: float = 8.0,
                     *,
                     fs_scale: float = 1.0) -> None:
     """Vertical tape depth gauge — 0m at top, max_depth at bottom."""
@@ -183,7 +183,20 @@ def altimeter_depth(img: np.ndarray,
 
     depth_abs = float(min(abs(depth_m), max_depth))
 
-    step = 0.5
+    def _depth_color(d: float) -> tuple:
+        return (C_OK    if d < 2.0
+                else C_ACCENT if d < 4.5
+                else C_AMBER  if d < 6.5
+                else C_ERR)
+
+    # 1. Transparent fill first so tick marks drawn after remain readable
+    fill_h = int(depth_abs / max_depth * h)
+    if fill_h > 0:
+        _fill_rect(img, x + 1, y + 1, x + w - 1, y + 1 + min(fill_h, h - 2),
+                   _depth_color(depth_abs), alpha=0.38)
+
+    # 2. Tick marks + labels on top of fill
+    step = 1.0 if max_depth > 6 else 0.5
     m    = 0.0
     while m <= max_depth + 0.01:
         yt       = y + int(m / max_depth * h)
@@ -196,26 +209,13 @@ def altimeter_depth(img: np.ndarray,
                         _FONT, fs_small, C_DIM, _FT, cv2.LINE_AA)
         m += step
 
-    fill_h = int(depth_abs / max_depth * h)
-    if fill_h > 0:
-        d_col = (C_OK   if depth_abs < 1.5
-                 else C_ACCENT if depth_abs < 3.0
-                 else C_AMBER  if depth_abs < 4.0
-                 else C_ERR)
-        cv2.rectangle(img,
-                      (x + 1, y + 1),
-                      (x + w - 1, y + 1 + min(fill_h, h - 2)),
-                      d_col, -1)
-
+    # 3. Bright indicator line + readout
     ind_y = max(y + 1, min(y + h - 1, y + int(depth_abs / max_depth * h)))
-    d_col = (C_OK   if depth_abs < 1.5
-             else C_ACCENT if depth_abs < 3.0
-             else C_AMBER  if depth_abs < 4.0
-             else C_ERR)
+    d_col = _depth_color(depth_abs)
     cv2.line(img, (x, ind_y), (x + w, ind_y), d_col, 2, cv2.LINE_AA)
 
     lbl = f'{depth_abs:.1f}m'
-    fs_lbl = 0.30 * fs_scale
+    fs_lbl = 0.34 * fs_scale
     (lw, _), _ = cv2.getTextSize(lbl, _FONT, fs_lbl, _FT)
     lx = x - lw - 3
     if lx < 0:
@@ -246,8 +246,10 @@ def battery_bar(img: np.ndarray,
     for i in range(n_segs):
         sx1 = x + 1 + i * seg_w
         sx2 = sx1 + seg_w - 1
-        fill_c = color if i < filled else C_BG
-        cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), fill_c, -1)
+        if i < filled:
+            _fill_rect(img, sx1, y + 1, sx2, y + h - 1, color, alpha=0.60)
+        else:
+            cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), C_BG, -1)
 
     lbl = f'{voltage:.1f}V  {int(pct * 100)}%'
     fs  = 0.28 * fs_scale
@@ -380,7 +382,7 @@ def video_progress(img: np.ndarray,
 
     bar_color = C_AMBER if paused else C_ACCENT
     if fill_w > 0:
-        cv2.rectangle(img, (x + 1, y + 1), (x + 1 + fill_w, y + h - 1), bar_color, -1)
+        _fill_rect(img, x + 1, y + 1, x + 1 + fill_w, y + h - 1, bar_color, alpha=0.55)
 
     def _fmt(frames: int) -> str:
         secs = int(frames / fps)
@@ -422,6 +424,19 @@ def health_row(img: np.ndarray,
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────── #
+
+def _fill_rect(img: np.ndarray, x1: int, y1: int, x2: int, y2: int,
+               color: tuple, alpha: float = 0.45) -> None:
+    """Semi-transparent filled rectangle — content underneath stays visible."""
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(img.shape[1], x2), min(img.shape[0], y2)
+    if x2 <= x1 or y2 <= y1:
+        return
+    roi = img[y1:y2, x1:x2]
+    overlay = roi.copy()
+    overlay[:] = color
+    cv2.addWeighted(overlay, alpha, roi, 1.0 - alpha, 0, roi)
+
 
 def _cardinal(deg: int) -> str:
     return {0: 'N', 90: 'E', 180: 'S', 270: 'W'}.get(deg % 360, f'{deg % 360:03d}')
