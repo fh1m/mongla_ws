@@ -18,20 +18,19 @@ Widget catalogue
 All widget functions accept an optional `fs_scale` keyword argument (default 1.0)
 that multiplies every internal font size, enabling resolution-adaptive rendering.
 Pass `fs_scale = max(1.0, frame_width / 640.0)` from the strip renderer.
+
+Text is rendered via Pillow (TrueType) for crisp sub-pixel output at all scales.
+Font priority: IosevkaNerdFontMono → NotoSansMono → DejaVuSansMono → PIL default.
 """
 
 from __future__ import annotations
 
+import os as _os
 from typing import Dict, Sequence
 
 import cv2
 import numpy as np
-
-# Import palette from draw.py to stay consistent.
-# These are duplicated here to avoid a circular import; draw.py re-imports
-# them from here after the split.
-_FONT = cv2.FONT_HERSHEY_SIMPLEX
-_FT   = 1
+from PIL import Image as _PILImage, ImageDraw as _PILDraw, ImageFont as _PILFont
 
 # Shared palette (BGR)
 C_BG      = (26,  26,  26)
@@ -44,6 +43,97 @@ C_DIM     = (105, 110, 110)
 C_BORDER  = ( 58,  63,  63)
 C_PANEL   = ( 38,  40,  46)
 C_HEADER  = (200, 210, 230)
+
+
+# ── TrueType text engine ──────────────────────────────────────────────────── #
+
+_PTF: dict = {}  # int → FreeTypeFont (or default ImageFont)
+_PTF_PATH: str | None = None
+
+_MONO_CANDIDATES = (
+    '/usr/local/share/fonts/TTF/IosevkaNerdFontMono-Regular.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf',
+    '/usr/local/share/fonts/noto/NotoSansMono-Regular.ttf',
+    '/usr/local/share/fonts/TTF/DejaVuSansMono.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
+)
+
+_CV2FS_TO_PX = 34  # cv2 SIMPLEX scale=1.0 → ~34px cap height
+
+
+def _pil_font(px: int) -> _PILFont.FreeTypeFont:
+    global _PTF_PATH
+    if _PTF_PATH is None:
+        for c in _MONO_CANDIDATES:
+            if _os.path.exists(c):
+                _PTF_PATH = c
+                break
+        else:
+            _PTF_PATH = ''
+    if px not in _PTF:
+        try:
+            _PTF[px] = (_PILFont.truetype(_PTF_PATH, px) if _PTF_PATH
+                        else _PILFont.load_default())
+        except Exception:
+            _PTF[px] = _PILFont.load_default()
+    return _PTF[px]
+
+
+def _blit_rgba(img: np.ndarray, surf: np.ndarray, x: int, y: int) -> None:
+    """Alpha-composite RGBA surface patch onto BGR image at (x, y) top-left."""
+    ih, iw = img.shape[:2]
+    sh, sw = surf.shape[:2]
+    sx1 = max(0, -x);   dx1 = max(0, x)
+    sy1 = max(0, -y);   dy1 = max(0, y)
+    sx2 = min(sw, iw - x);  dx2 = min(iw, x + sw)
+    sy2 = min(sh, ih - y);  dy2 = min(ih, y + sh)
+    if sx2 <= sx1 or sy2 <= sy1 or dx2 <= dx1 or dy2 <= dy1:
+        return
+    patch = surf[sy1:sy2, sx1:sx2]
+    alpha = patch[:, :, 3:4].astype(np.float32) / 255.0
+    fg    = patch[:, :, :3][:, :, ::-1].astype(np.float32)  # RGBA → BGR
+    bg    = img[dy1:dy2, dx1:dx2].astype(np.float32)
+    img[dy1:dy2, dx1:dx2] = np.clip(fg * alpha + bg * (1.0 - alpha), 0, 255).astype(np.uint8)
+
+
+def pil_text(img: np.ndarray, text: str, org: tuple,
+             cv2_fs: float, color_bgr: tuple) -> None:
+    """Render TrueType text onto BGR array.
+
+    org is (x, y_bottom) — same bottom-left baseline convention as cv2.putText.
+    """
+    if not text:
+        return
+    px   = max(8, round(cv2_fs * _CV2FS_TO_PX))
+    font = _pil_font(px)
+    r, g, b = int(color_bgr[2]), int(color_bgr[1]), int(color_bgr[0])
+    x, y_base = int(org[0]), int(org[1])
+    try:
+        bbox = font.getbbox(text)   # (left, top, right, bottom) at draw origin
+    except Exception:
+        return
+    if bbox[2] <= bbox[0]:
+        return
+    tw = int(bbox[2] - bbox[0])
+    th = int(bbox[3] - bbox[1])
+    surf = _PILImage.new('RGBA', (tw + 4, th + 4), (0, 0, 0, 0))
+    _PILDraw.Draw(surf).text((2 - bbox[0], 2 - bbox[1]),
+                              text, font=font, fill=(r, g, b, 255))
+    # y_base is bottom of text → top of surface sits at y_base - th
+    _blit_rgba(img, np.array(surf), x, int(y_base - th - 2))
+
+
+def pil_text_size(text: str, cv2_fs: float) -> tuple[int, int]:
+    """Return (width, height) of text rendered at given cv2-style scale."""
+    if not text:
+        return (0, 0)
+    px   = max(8, round(cv2_fs * _CV2FS_TO_PX))
+    font = _pil_font(px)
+    try:
+        bbox = font.getbbox(text)
+        return (max(0, int(bbox[2] - bbox[0])), max(0, int(bbox[3] - bbox[1])))
+    except Exception:
+        return (0, 0)
 
 
 # ── Needle gauge ─────────────────────────────────────────────────────────── #
@@ -91,11 +181,11 @@ def needle_gauge(img: np.ndarray,
 
     fs = 0.30 * fs_scale
     if label:
-        cv2.putText(img, label, (x, y - 2), _FONT, fs, C_DIM, _FT, cv2.LINE_AA)
+        pil_text(img, label, (x, y - 2), fs, C_DIM)
 
     val_str = f'{value:+.2f}'
-    (vw, _), _ = cv2.getTextSize(val_str, _FONT, fs, _FT)
-    cv2.putText(img, val_str, (x + w - vw, y - 2), _FONT, fs, color, _FT, cv2.LINE_AA)
+    vw, _   = pil_text_size(val_str, fs)
+    pil_text(img, val_str, (x + w - vw, y - 2), fs, color)
 
 
 # ── Sparkline ────────────────────────────────────────────────────────────── #
@@ -151,11 +241,10 @@ def confidence_bar(img: np.ndarray,
         _fill_rect(img, x + 1, y + 1, x + 1 + fill, y + h - 1, color, alpha=0.55)
 
     val_str = f'{int(conf * 100)}%'
-    fs = 0.28 * fs_scale
-    (tw, _), _ = cv2.getTextSize(val_str, _FONT, fs, _FT)
-    lx = x + w - tw - 2
-    cv2.putText(img, val_str, (max(x + 2, lx), y + h - 2),
-                _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
+    fs      = 0.28 * fs_scale
+    tw, _   = pil_text_size(val_str, fs)
+    lx      = x + w - tw - 2
+    pil_text(img, val_str, (max(x + 2, lx), y + h - 2), fs, C_TEXT)
 
 
 # ── Altimeter depth ───────────────────────────────────────────────────────── #
@@ -174,11 +263,10 @@ def altimeter_depth(img: np.ndarray,
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
 
     fs_small = 0.24 * fs_scale
-    cv2.putText(img, 'D', (x + 2, y + 10), _FONT, fs_small, C_DIM, _FT, cv2.LINE_AA)
+    pil_text(img, 'D', (x + 2, y + 10), fs_small, C_DIM)
 
     if np.isnan(depth_m):
-        cv2.putText(img, '?', (x + w // 2 - 4, y + h // 2 + 4),
-                    _FONT, 0.34 * fs_scale, C_DIM, _FT, cv2.LINE_AA)
+        pil_text(img, '?', (x + w // 2 - 4, y + h // 2 + 4), 0.34 * fs_scale, C_DIM)
         return
 
     depth_abs = float(min(abs(depth_m), max_depth))
@@ -189,13 +277,13 @@ def altimeter_depth(img: np.ndarray,
                 else C_AMBER  if d < 6.5
                 else C_ERR)
 
-    # 1. Transparent fill first so tick marks drawn after remain readable
+    # 1. Transparent fill first so tick marks remain visible
     fill_h = int(depth_abs / max_depth * h)
     if fill_h > 0:
         _fill_rect(img, x + 1, y + 1, x + w - 1, y + 1 + min(fill_h, h - 2),
                    _depth_color(depth_abs), alpha=0.38)
 
-    # 2. Tick marks + labels on top of fill
+    # 2. Tick marks + labels drawn on top of fill
     step = 1.0 if max_depth > 6 else 0.5
     m    = 0.0
     while m <= max_depth + 0.01:
@@ -204,9 +292,8 @@ def altimeter_depth(img: np.ndarray,
         tick_len = 8 if is_major else 4
         cv2.line(img, (x, yt), (x + tick_len, yt), C_DIM, 1)
         if is_major and int(m) > 0:
-            lbl = f'{int(m)}m'
-            cv2.putText(img, lbl, (x + 10, min(yt + 4, y + h - 1)),
-                        _FONT, fs_small, C_DIM, _FT, cv2.LINE_AA)
+            pil_text(img, f'{int(m)}m', (x + 10, min(yt + 4, y + h - 1)),
+                     fs_small, C_DIM)
         m += step
 
     # 3. Bright indicator line + readout
@@ -214,14 +301,13 @@ def altimeter_depth(img: np.ndarray,
     d_col = _depth_color(depth_abs)
     cv2.line(img, (x, ind_y), (x + w, ind_y), d_col, 2, cv2.LINE_AA)
 
-    lbl = f'{depth_abs:.1f}m'
+    lbl    = f'{depth_abs:.1f}m'
     fs_lbl = 0.34 * fs_scale
-    (lw, _), _ = cv2.getTextSize(lbl, _FONT, fs_lbl, _FT)
-    lx = x - lw - 3
+    lw, _  = pil_text_size(lbl, fs_lbl)
+    lx     = x - lw - 3
     if lx < 0:
         lx = x + w + 2
-    cv2.putText(img, lbl, (max(0, lx), ind_y + 4),
-                _FONT, fs_lbl, d_col, _FT, cv2.LINE_AA)
+    pil_text(img, lbl, (max(0, lx), ind_y + 4), fs_lbl, d_col)
 
 
 # ── Battery bar ───────────────────────────────────────────────────────────── #
@@ -251,11 +337,11 @@ def battery_bar(img: np.ndarray,
         else:
             cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), C_BG, -1)
 
-    lbl = f'{voltage:.1f}V  {int(pct * 100)}%'
-    fs  = 0.28 * fs_scale
-    (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
-    lx = x + (w - tw) // 2
-    cv2.putText(img, lbl, (max(x + 2, lx), y + h - 2), _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
+    lbl  = f'{voltage:.1f}V  {int(pct * 100)}%'
+    fs   = 0.28 * fs_scale
+    tw, _ = pil_text_size(lbl, fs)
+    lx   = x + (w - tw) // 2
+    pil_text(img, lbl, (max(x + 2, lx), y + h - 2), fs, C_TEXT)
 
 
 # ── Mini compass ──────────────────────────────────────────────────────────── #
@@ -277,10 +363,9 @@ def mini_compass(img: np.ndarray,
         rad   = np.radians(ang)
         tx    = cx + int((radius - 6) * np.sin(rad))
         ty    = cy - int((radius - 6) * np.cos(rad))
-        (tw, th), _ = cv2.getTextSize(lbl, _FONT, fs_card, _FT)
+        tw, th = pil_text_size(lbl, fs_card)
         color = C_TEXT if lbl == 'N' else C_DIM
-        cv2.putText(img, lbl, (tx - tw // 2, ty + th // 2),
-                    _FONT, fs_card, color, _FT, cv2.LINE_AA)
+        pil_text(img, lbl, (tx - tw // 2, ty + th // 2), fs_card, color)
 
     for deg in range(0, 360, 30):
         if deg % 90 == 0:
@@ -294,7 +379,7 @@ def mini_compass(img: np.ndarray,
                  C_DIM, 1, cv2.LINE_AA)
 
     if np.isnan(heading_deg):
-        cv2.putText(img, '?', (cx - 4, cy + 5), _FONT, 0.34 * fs_scale, C_DIM, _FT, cv2.LINE_AA)
+        pil_text(img, '?', (cx - 4, cy + 5), 0.34 * fs_scale, C_DIM)
         return
 
     needle = radius - 5
@@ -309,9 +394,8 @@ def mini_compass(img: np.ndarray,
 
     hdg_lbl = f'{int(heading_deg) % 360:03d}'
     fs_hdg  = 0.28 * fs_scale
-    (tw, _), _ = cv2.getTextSize(hdg_lbl, _FONT, fs_hdg, _FT)
-    cv2.putText(img, hdg_lbl, (cx - tw // 2, cy + radius + 9),
-                _FONT, fs_hdg, C_ACCENT, _FT, cv2.LINE_AA)
+    tw, _   = pil_text_size(hdg_lbl, fs_hdg)
+    pil_text(img, hdg_lbl, (cx - tw // 2, cy + radius + 9), fs_hdg, C_ACCENT)
 
 
 # ── Heading tape ──────────────────────────────────────────────────────────── #
@@ -328,10 +412,9 @@ def heading_tape(img: np.ndarray,
 
     if np.isnan(yaw_deg):
         fs_nan = 0.32 * fs_scale
-        msg = 'NO HDG'
-        (tw, _), _ = cv2.getTextSize(msg, _FONT, fs_nan, _FT)
-        cv2.putText(img, msg, (x + (w - tw) // 2, y + h // 2 + 5),
-                    _FONT, fs_nan, C_DIM, _FT, cv2.LINE_AA)
+        msg    = 'NO HDG'
+        tw, _  = pil_text_size(msg, fs_nan)
+        pil_text(img, msg, (x + (w - tw) // 2, y + h // 2 + 5), fs_nan, C_DIM)
         return
 
     yaw = float(yaw_deg) % 360.0
@@ -348,19 +431,17 @@ def heading_tape(img: np.ndarray,
         tick_h   = 9 if is_label else 4
         cv2.line(img, (px, y + h - tick_h), (px, y + h - 1), C_DIM, 1)
         if is_label:
-            lbl = _cardinal(deg_at)
-            (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs_lbl, _FT)
-            cv2.putText(img, lbl, (px - tw // 2, y + h - tick_h - 2),
-                        _FONT, fs_lbl, C_TEXT, _FT, cv2.LINE_AA)
+            lbl    = _cardinal(deg_at)
+            tw, _  = pil_text_size(lbl, fs_lbl)
+            pil_text(img, lbl, (px - tw // 2, y + h - tick_h - 2), fs_lbl, C_TEXT)
 
     cv2.line(img, (cx, y + 2), (cx, y + h - 2), C_ACCENT, 2, cv2.LINE_AA)
 
     if show_readout:
         lbl     = f'{int(yaw) % 360:03d}'
         fs_read = 0.42 * fs_scale
-        (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs_read, _FT)
-        cv2.putText(img, lbl, (cx - tw // 2, y - 3),
-                    _FONT, fs_read, C_ACCENT, _FT, cv2.LINE_AA)
+        tw, _   = pil_text_size(lbl, fs_read)
+        pil_text(img, lbl, (cx - tw // 2, y - 3), fs_read, C_ACCENT)
 
 
 # ── Video progress bar ────────────────────────────────────────────────────── #
@@ -393,9 +474,9 @@ def video_progress(img: np.ndarray,
     state = '||' if paused else '>'
     lbl   = f'{state} {_fmt(cur_frame)} / {_fmt(total_frames)}  {int(frac * 100)}%'
     fs    = 0.28 * fs_scale
-    (tw, _), _ = cv2.getTextSize(lbl, _FONT, fs, _FT)
-    lx = x + (w - tw) // 2
-    cv2.putText(img, lbl, (max(x + 2, lx), y + h - 2), _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
+    tw, _ = pil_text_size(lbl, fs)
+    lx    = x + (w - tw) // 2
+    pil_text(img, lbl, (max(x + 2, lx), y + h - 2), fs, C_TEXT)
 
 
 # ── Pipeline health row ───────────────────────────────────────────────────── #
@@ -419,9 +500,9 @@ def health_row(img: np.ndarray,
         color = C_OK   if ok else C_DIM
         bx    = x + i * col_w + 4
         by    = y + h - 3
-        cv2.putText(img, badge, (bx, by), _FONT, fs, color, _FT, cv2.LINE_AA)
-        (bw, _), _ = cv2.getTextSize(badge, _FONT, fs, _FT)
-        cv2.putText(img, short, (bx + bw + 3, by), _FONT, fs, C_DIM, _FT, cv2.LINE_AA)
+        pil_text(img, badge, (bx, by), fs, color)
+        bw, _ = pil_text_size(badge, fs)
+        pil_text(img, short, (bx + bw + 3, by), fs, C_DIM)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────── #
@@ -433,7 +514,7 @@ def _fill_rect(img: np.ndarray, x1: int, y1: int, x2: int, y2: int,
     x2, y2 = min(img.shape[1], x2), min(img.shape[0], y2)
     if x2 <= x1 or y2 <= y1:
         return
-    roi = img[y1:y2, x1:x2]
+    roi     = img[y1:y2, x1:x2]
     overlay = roi.copy()
     overlay[:] = color
     cv2.addWeighted(overlay, alpha, roi, 1.0 - alpha, 0, roi)

@@ -20,10 +20,8 @@ import cv2
 import numpy as np
 
 from .detection.detector import Detection, largest
-from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT
-
-_FONT     = cv2.FONT_HERSHEY_SIMPLEX
-_FT       = 1
+from .draw_widgets import (C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT,
+                           pil_text, pil_text_size)
 C_RETICLE  = (0, 200, 200)    # bright cyan reticle (was near-black 50,55,55)
 C_HAIRLINE = (0, 180, 255)    # orange-yellow target hairlines
 
@@ -175,14 +173,14 @@ def render_video_section(frame_bgr: np.ndarray,
         # On-frame offset text label below bbox — semi-transparent background for readability
         lbl = f'X:{ex:+.2f} Y:{ey:+.2f}  {int(primary.score * 100)}%'
         fs_lbl = 0.36 * sf
-        (lw, lh), _ = cv2.getTextSize(lbl, _FONT, fs_lbl, _FT)
+        lw, lh = pil_text_size(lbl, fs_lbl)
         lbl_y = min(y2p + lh + 4, h - 4)
         pad = max(2, int(3 * sf))
         bg_ov = out.copy()
         cv2.rectangle(bg_ov, (x1p - pad, lbl_y - lh - pad),
                       (x1p + lw + pad, lbl_y + pad), C_BG, -1)
         cv2.addWeighted(bg_ov, 0.70, out, 0.30, 0, out)
-        cv2.putText(out, lbl, (x1p, lbl_y), _FONT, fs_lbl, C_TEXT, _FT, cv2.LINE_AA)
+        pil_text(out, lbl, (x1p, lbl_y), fs_lbl, C_TEXT)
 
         # Horizontal alignment bar — scaled height
         _bar_h = max(8, int(12 * sf))
@@ -202,8 +200,7 @@ def render_video_section(frame_bgr: np.ndarray,
     if not healthy:
         banner_h = max(20, int(28 * sf))
         cv2.rectangle(out, (0, 0), (w, banner_h), C_ERR, -1)
-        cv2.putText(out, 'STALE FRAME', (8, int(banner_h * 0.75)),
-                    _FONT, 0.55 * sf, (255, 255, 255), _FT, cv2.LINE_AA)
+        pil_text(out, 'STALE FRAME', (8, int(banner_h * 0.75)), 0.55 * sf, (255, 255, 255))
 
     return out
 
@@ -246,8 +243,7 @@ def draw_track_ids(frame_bgr: np.ndarray, tracks) -> np.ndarray:
         else:
             cv2.rectangle(out, (x1, y1), (x2, y2), color, thick, cv2.LINE_AA)
         lbl = f"#{td.track_id} {td.class_name}" + (' (pred)' if td.predicted else '')
-        cv2.putText(out, lbl, (x1, max(y1 - 5, int(12 * sf))),
-                    _FONT, 0.36 * sf, color, _FT, cv2.LINE_AA)
+        pil_text(out, lbl, (x1, max(y1 - 5, int(12 * sf))), 0.36 * sf, color)
     return out
 
 
