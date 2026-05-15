@@ -227,7 +227,7 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
 
     if configured_classes:
         cls_ly       = ly + _panel_height('PERCEPTION', perc_rows,
-                                          pad=spad, line_h=slh) + 4
+                                          pad=spad, line_h=slh) + max(4, int(6 * sf))
         active_lower = {d.class_name.lower() for d in detections}
         any_active   = any(c.lower() in active_lower for c in configured_classes)
         cls_rows     = [('', c.upper(),
@@ -237,7 +237,7 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                         - _panel_height('CLASSES', cls_rows, pad=spad, line_h=slh))
         if cls_ly <= max_cls_y:
             _mc_panel(strip, lx, cls_ly, 'CLASSES', cls_rows,
-                      border=C_ACCENT if any_active else C_BORDER,
+                      border=C_ACCENT if any_active else C_DIM,
                       pad=spad, line_h=slh, fs=sfs, panel_w=lw)
 
     # ── Middle column: ALIGNMENT full-height ───────────────────────────────── #
@@ -275,12 +275,14 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                   border=al_border, pad=spad, line_h=slh, fs=sfs, panel_w=mw)
 
     # ── Right column: sparklines using full column width ───────────────────── #
+    r_margin = max(4, int(4 * sf))        # right margin so sparklines don't touch strip edge
     rx   = col_w * 2 + pad
-    rw   = w - col_w * 2 - pad * 2
+    rw   = w - col_w * 2 - pad * 2 - r_margin
     cy   = r3_y + pad
     lbl  = max(12, int(12 * sf))
+    gap  = max(4, int(4 * sf))             # scale-aware inter-block gap
     rh   = r3_h - pad * 2
-    sp_h = max(18, (rh - 3 * (lbl + 3)) // 3)
+    sp_h = max(18, (rh - 3 * (lbl + 1 + gap)) // 3)
     fs_lbl = 0.30 * sf
 
     for label, values, color in (
@@ -290,7 +292,7 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
         cv2.putText(strip, label, (rx, cy + lbl - 1),
                     _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
         sparkline(strip, rx, cy + lbl + 1, rw, sp_h, values, color=color)
-        cy += lbl + 1 + sp_h + 3
+        cy += lbl + 1 + sp_h + gap
 
     cv2.putText(strip, 'CONF', (rx, cy + lbl - 1),
                 _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
