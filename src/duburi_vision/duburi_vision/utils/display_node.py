@@ -412,11 +412,12 @@ def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:
 # Splash screen
 # ---------------------------------------------------------------------------
 
-# Blue theme: dark navy background, sky-blue accent (all BGR)
-_C_SP_BG     = (30, 10, 5)       # dark navy
-_C_SP_ACCENT = (255, 155, 20)    # sky blue  (R=20 G=155 B=255 in RGB)
-_C_SP_TEXT   = (230, 220, 210)   # near-white warm
-_C_SP_DIM    = (110, 80, 55)     # muted blue-grey
+# Blue theme: dark navy background, sky-blue accent (OpenCV BGR order)
+# RGB equivalents: BG=(5,15,55) navy  ACCENT=(0,160,255) sky-blue
+_C_SP_BG     = (55, 15, 5)       # dark navy  — B=55 G=15 R=5
+_C_SP_ACCENT = (255, 160, 0)     # sky blue   — B=255 G=160 R=0
+_C_SP_TEXT   = (240, 235, 220)   # bright warm white
+_C_SP_DIM    = (130, 95, 65)     # muted slate
 
 
 def _render_splash(w: int, h: int, elapsed: float, camera: str,
@@ -456,7 +457,7 @@ def _render_splash(w: int, h: int, elapsed: float, camera: str,
     bar_len = int(w * 0.48)
     bar_x0  = cx - bar_len // 2
     bar_y0  = cy + 86
-    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + bar_len, bar_y0 + 4), (50, 25, 12), -1)
+    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + bar_len, bar_y0 + 4), (90, 35, 12), -1)
     t    = (elapsed % 2.0) / 2.0
     prog = t * 2 if t < 0.5 else (1.0 - t) * 2
     fill = max(bar_len // 8, int(bar_len * prog))

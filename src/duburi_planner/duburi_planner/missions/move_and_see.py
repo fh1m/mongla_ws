@@ -20,8 +20,8 @@ Live tuning (no rebuild):
   ros2 param set /duburi_manager vision.target_bbox_h_frac 0.65
 """
 
-CAMERA              = 'laptop'
-TARGET_CLASS        = 'person'
+CAMERA              = 'video'
+TARGET_CLASS        = 'gate'
 DIVE_DEPTH_M        = -0.5
 
 SCOUT_GAIN          = 60.0
@@ -45,6 +45,8 @@ def run(duburi, log):
     for _ in range(_MAX_SEARCH_STEPS):
         if duburi.detected(TARGET_CLASS):
             break
+        duburi.move_forward(3, gain=50)
+        duburi.pause(3)
         duburi.yaw_left(90)
     else:
         log(f'target {TARGET_CLASS!r} not found after {_MAX_SEARCH_STEPS} steps — aborting')
@@ -55,7 +57,7 @@ def run(duburi, log):
     # Vision-track laterally to keep target centred (no yaw, no approach).
     duburi.vision.track(
         target=TARGET_CLASS,
-        yaw=False, lat=True, forward=False,
+        yaw=True, lat=True, forward=True,
         duration=TRACK_DURATION_S,
         on_lost='hold',
     )
