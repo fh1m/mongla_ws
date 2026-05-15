@@ -215,7 +215,7 @@ class VisionDisplayNode(Node):
         self._is_paused:        bool            = False
         self._video_position:   tuple[int, int] = (0, 0)
         self._video_speed:      float           = 1.0  # mirrors VideoFileCamera._speed
-        # True until first detection arrives — video is held paused during this window.
+        # True until first detection arrives — video stays paused (splash shown) during this window.
         self._auto_paused_start: bool           = video_file_mode
 
         # Single-slot frame queue.
@@ -498,10 +498,10 @@ def main(args=None):
         cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
         cv2.resizeWindow(_WINDOW_NAME, 1920, 1080)
 
-        # Show splash immediately, then wait for pause service + pause video.
+        # Show splash immediately; pause video until detector fires first detections.
+        cv2.imshow(_WINDOW_NAME, _render_splash(_SP_W, _SP_H, 0.0, node._camera))
+        cv2.waitKeyEx(1)
         if node._video_mode:
-            cv2.imshow(_WINDOW_NAME, _render_splash(_SP_W, _SP_H, 0.0, node._camera))
-            cv2.waitKeyEx(1)
             deadline = time.monotonic() + 5.0
             while time.monotonic() < deadline and rclpy.ok():
                 if node._pause_client and node._pause_client.service_is_ready():
@@ -515,12 +515,14 @@ def main(args=None):
                 node._auto_paused_start = False
                 _send_pause(node, False)
 
+            _initializing = node._auto_paused_start   # splash visible while video is held
+
             # ── Try to get latest frame ─────────────────────────────────────
             try:
                 frame = node._frame_q.get(timeout=0.1)
             except queue.Empty:
-                # No new frame — show splash if still initializing, then handle keys.
-                if node._video_mode and node._auto_paused_start:
+                # No frame — show splash while still initializing, then handle keys.
+                if _initializing:
                     cv2.imshow(_WINDOW_NAME,
                                _render_splash(_SP_W, _SP_H,
                                               time.monotonic() - splash_start,
@@ -528,7 +530,7 @@ def main(args=None):
                 key = cv2.waitKeyEx(1)
                 if key in (ord('q'), ord('Q')):
                     break
-                _handle_video_keys(node, key)  # ← keys work even while paused
+                _handle_video_keys(node, key)
                 continue
 
             # ── Process and render frame ────────────────────────────────────
@@ -587,8 +589,8 @@ def main(args=None):
                 depth_rate=node._depth_rate,
             )
 
-            # While still initializing, blend splash over the video frame
-            if node._video_mode and node._auto_paused_start:
+            # While video is held paused (detector initializing), blend splash over frame.
+            if _initializing:
                 splash = _render_splash(out.shape[1], out.shape[0],
                                         time.monotonic() - splash_start,
                                         node._camera)
