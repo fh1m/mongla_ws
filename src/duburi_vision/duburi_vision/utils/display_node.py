@@ -211,10 +211,12 @@ class VisionDisplayNode(Node):
         self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
         self._depth_rate: float = 0.0
 
-        # Video file state (updated by ROS service response).
-        self._is_paused:      bool            = False
-        self._video_position: tuple[int, int] = (0, 0)
-        self._video_speed:    float           = 1.0  # mirrors VideoFileCamera._speed
+        # Video file state.
+        self._is_paused:        bool            = False
+        self._video_position:   tuple[int, int] = (0, 0)
+        self._video_speed:      float           = 1.0  # mirrors VideoFileCamera._speed
+        # True until first detection arrives — video is held paused during this window.
+        self._auto_paused_start: bool           = video_file_mode
 
         # Single-slot frame queue.
         self._frame_q: queue.SimpleQueue = queue.SimpleQueue()
@@ -335,6 +337,10 @@ class VisionDisplayNode(Node):
         self._pipeline_procs.clear()
 
 
+# ---------------------------------------------------------------------------
+# Video playback helpers
+# ---------------------------------------------------------------------------
+
 def _send_seek(node: VisionDisplayNode, seconds: float) -> None:
     if node._seek_pub is not None:
         node._seek_pub.publish(Float32(data=float(seconds)))
@@ -369,19 +375,104 @@ def _send_speed(node: VisionDisplayNode, speed: float) -> None:
 
 
 def _send_pause(node: VisionDisplayNode, pause: bool) -> None:
-    """Fire-and-forget pause/resume request (non-blocking)."""
+    """Update pause state optimistically then fire service call."""
+    node._is_paused = pause          # update now — don't wait for service ACK
     if node._pause_client is None or not node._pause_client.service_is_ready():
         return
     req = SetBool.Request()
     req.data = pause
-    future = node._pause_client.call_async(req)
+    node._pause_client.call_async(req)
 
-    def _on_done(f):
-        if f.result() is not None:
-            node._is_paused = pause
 
-    future.add_done_callback(_on_done)
+def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:
+    """Process video playback keyboard shortcuts — called in BOTH empty and frame paths."""
+    if key < 0 or not node._video_mode:
+        return
+    if key == ord(' '):
+        _send_pause(node, not node._is_paused)
+    elif key == _KEY_LEFT:
+        _send_seek(node, -1.0)
+    elif key == _KEY_RIGHT:
+        _send_seek(node, 1.0)
+    elif key == _KEY_UP:
+        _send_seek(node, 10.0)
+    elif key == _KEY_DOWN:
+        _send_seek(node, -10.0)
+    elif key == ord(','):
+        _send_seek_frame(node, -1)
+    elif key == ord('.'):
+        _send_seek_frame(node, 1)
+    elif key == ord('['):
+        _send_speed(node, _speed_step_down(node._video_speed))
+    elif key == ord(']'):
+        _send_speed(node, _speed_step_up(node._video_speed))
 
+
+# ---------------------------------------------------------------------------
+# Splash screen
+# ---------------------------------------------------------------------------
+
+_C_SP_BG     = (12, 12, 12)
+_C_SP_ACCENT = (0, 210, 190)
+_C_SP_TEXT   = (200, 200, 200)
+_C_SP_DIM    = (75, 75, 75)
+
+
+def _render_splash(w: int, h: int, elapsed: float, camera: str) -> np.ndarray:
+    """Dark 'Initializing Vision System' screen shown before detector is ready."""
+    img = np.full((h, w, 3), _C_SP_BG, dtype=np.uint8)
+    cx, cy = w // 2, h // 2
+    sf  = max(0.5, w / 1280.0)
+    fnt = cv2.FONT_HERSHEY_SIMPLEX
+
+    # Brand header
+    brand = '●  BRACU  DUBURI  ●'
+    fs_b  = 0.85 * sf
+    (bw, _), _ = cv2.getTextSize(brand, fnt, fs_b, 2)
+    cv2.putText(img, brand, (cx - bw // 2, cy - 58),
+                fnt, fs_b, _C_SP_ACCENT, 2, cv2.LINE_AA)
+
+    # Accent separator
+    cv2.line(img, (cx - bw // 2, cy - 34), (cx + bw // 2, cy - 34), _C_SP_ACCENT, 1)
+
+    # Main status
+    status = 'INITIALIZING VISION SYSTEM'
+    fs_s   = 0.65 * sf
+    (sw, _), _ = cv2.getTextSize(status, fnt, fs_s, 1)
+    cv2.putText(img, status, (cx - sw // 2, cy + 22),
+                fnt, fs_s, _C_SP_TEXT, 1, cv2.LINE_AA)
+
+    # Sub-status
+    sub    = 'Loading YOLO model  —  video will play automatically when ready'
+    fs_sub = 0.38 * sf
+    (subw, _), _ = cv2.getTextSize(sub, fnt, fs_sub, 1)
+    cv2.putText(img, sub, (cx - subw // 2, cy + 58),
+                fnt, fs_sub, _C_SP_DIM, 1, cv2.LINE_AA)
+
+    # Animated ping-pong progress bar
+    bar_len = int(w * 0.48)
+    bar_x0  = cx - bar_len // 2
+    bar_y0  = cy + 86
+    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + bar_len, bar_y0 + 3), (35, 35, 35), -1)
+    t    = (elapsed % 2.0) / 2.0
+    prog = t * 2 if t < 0.5 else (1.0 - t) * 2
+    fill = max(bar_len // 8, int(bar_len * prog))
+    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + fill, bar_y0 + 3), _C_SP_ACCENT, -1)
+
+    # Footer info
+    fs_info = 0.33 * sf
+    cv2.putText(img, f'camera: {camera}', (16, h - 20),
+                fnt, fs_info, _C_SP_DIM, 1, cv2.LINE_AA)
+    ts = f'{int(elapsed)}s'
+    (tw, _), _ = cv2.getTextSize(ts, fnt, fs_info, 1)
+    cv2.putText(img, ts, (w - tw - 16, h - 20),
+                fnt, fs_info, _C_SP_DIM, 1, cv2.LINE_AA)
+    return img
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
 
 def main(args=None):
     rclpy.init(args=args)
@@ -398,20 +489,49 @@ def main(args=None):
     spin_thread = threading.Thread(target=_spin_target, args=(node,), daemon=True)
     spin_thread.start()
 
-    frame_budget = 1.0 / node._max_hz if node._max_hz > 0 else 0.0
+    frame_budget  = 1.0 / node._max_hz if node._max_hz > 0 else 0.0
+    splash_start  = time.monotonic()
+    # Splash dimensions — match expected 2× render of a 640×480 video + UI strip.
+    _SP_W, _SP_H  = 1280, 1110
 
     try:
         cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(_WINDOW_NAME, 1920, 1080)  # initial hint; user can resize freely
+        cv2.resizeWindow(_WINDOW_NAME, 1920, 1080)
+
+        # Show splash immediately, then wait for pause service + pause video.
+        if node._video_mode:
+            cv2.imshow(_WINDOW_NAME, _render_splash(_SP_W, _SP_H, 0.0, node._camera))
+            cv2.waitKeyEx(1)
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline and rclpy.ok():
+                if node._pause_client and node._pause_client.service_is_ready():
+                    _send_pause(node, True)
+                    break
+                time.sleep(0.05)
+
         while rclpy.ok():
+            # ── Auto-resume when detector first becomes active ──────────────
+            if node._video_mode and node._auto_paused_start and node._last_det_t > 0:
+                node._auto_paused_start = False
+                _send_pause(node, False)
+
+            # ── Try to get latest frame ─────────────────────────────────────
             try:
                 frame = node._frame_q.get(timeout=0.1)
             except queue.Empty:
+                # No new frame — show splash if still initializing, then handle keys.
+                if node._video_mode and node._auto_paused_start:
+                    cv2.imshow(_WINDOW_NAME,
+                               _render_splash(_SP_W, _SP_H,
+                                              time.monotonic() - splash_start,
+                                              node._camera))
                 key = cv2.waitKeyEx(1)
                 if key in (ord('q'), ord('Q')):
                     break
+                _handle_video_keys(node, key)  # ← keys work even while paused
                 continue
 
+            # ── Process and render frame ────────────────────────────────────
             with node._det_lock:
                 dets = list(node._detections)
             with node._tracks_lock:
@@ -423,33 +543,28 @@ def main(args=None):
 
             display_dets = tracked_dets if tracked_dets else dets
             display_ids  = track_ids if tracked_dets else None
-            primary = largest(display_dets)
+            primary      = largest(display_dets)
 
-            # Compute err history from native-resolution coords (before upscaling)
-            # so the normalised values [-1, 1] are stable regardless of render scale.
             if primary is not None:
-                h, w = frame.shape[:2]
-                node._err_x_history.append((primary.cx / w - 0.5) * 2.0)
-                node._err_y_history.append((primary.cy / h - 0.5) * 2.0)
+                h0, w0 = frame.shape[:2]
+                node._err_x_history.append((primary.cx / w0 - 0.5) * 2.0)
+                node._err_y_history.append((primary.cy / h0 - 0.5) * 2.0)
                 node._conf_history.append(primary.score)
             else:
                 node._err_x_history.append(0.0)
                 node._err_y_history.append(0.0)
                 node._conf_history.append(0.0)
 
-            # Upscale frame + detection coordinates so sf = _RENDER_SCALE inside
-            # draw_strip → fonts drawn at full pixel size → crisp on 1080p displays.
             native_h, native_w = frame.shape[:2]
-            render_w = int(native_w * _RENDER_SCALE)
-            render_h = int(native_h * _RENDER_SCALE)
+            render_w      = int(native_w * _RENDER_SCALE)
+            render_h      = int(native_h * _RENDER_SCALE)
             render_frame  = cv2.resize(frame, (render_w, render_h),
                                        interpolation=cv2.INTER_LINEAR)
             render_dets   = _scale_dets(display_dets, _RENDER_SCALE)
             render_primary = (_scale_dets([primary], _RENDER_SCALE)[0]
                               if primary is not None else None)
-            render_ids    = display_ids  # track IDs are integers — no scaling needed
 
-            frame = draw.render_all(
+            out = draw.render_all(
                 render_frame, render_dets,
                 source=node._camera,
                 fps=node._fps_display,
@@ -461,7 +576,7 @@ def main(args=None):
                 primary_track_id=primary_track_id,
                 state=node._state,
                 configured_classes=configured_classes,
-                track_ids=render_ids,
+                track_ids=display_ids,
                 yaw_source=node._yaw_source,
                 err_x_history=node._err_x_history,
                 err_y_history=node._err_y_history,
@@ -472,40 +587,26 @@ def main(args=None):
                 depth_rate=node._depth_rate,
             )
 
+            # While still initializing, blend splash over the video frame
+            if node._video_mode and node._auto_paused_start:
+                splash = _render_splash(out.shape[1], out.shape[0],
+                                        time.monotonic() - splash_start,
+                                        node._camera)
+                cv2.addWeighted(splash, 0.80, out, 0.20, 0, out)
+
             t0 = time.monotonic()
-            cv2.imshow(_WINDOW_NAME, frame)
+            cv2.imshow(_WINDOW_NAME, out)
             key = cv2.waitKeyEx(1)
 
             if key in (ord('q'), ord('Q')):
                 break
-
-            # Video file keyboard controls.
-            if node._video_mode:
-                if key == ord(' '):
-                    new_paused = not node._is_paused
-                    _send_pause(node, new_paused)
-                elif key == _KEY_LEFT:
-                    _send_seek(node, -1.0)
-                elif key == _KEY_RIGHT:
-                    _send_seek(node, 1.0)
-                elif key == _KEY_UP:
-                    _send_seek(node, 10.0)
-                elif key == _KEY_DOWN:
-                    _send_seek(node, -10.0)
-                elif key == ord(','):
-                    _send_seek_frame(node, -1)
-                elif key == ord('.'):
-                    _send_seek_frame(node, 1)
-                elif key == ord('['):
-                    _send_speed(node, _speed_step_down(node._video_speed))
-                elif key == ord(']'):
-                    _send_speed(node, _speed_step_up(node._video_speed))
+            _handle_video_keys(node, key)
 
             if frame_budget > 0:
-                elapsed = time.monotonic() - t0
-                remaining = frame_budget - elapsed
+                remaining = frame_budget - (time.monotonic() - t0)
                 if remaining > 0:
                     time.sleep(remaining)
+
     except KeyboardInterrupt:
         pass
     finally:
