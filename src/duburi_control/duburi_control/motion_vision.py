@@ -334,18 +334,17 @@ def vision_track_axes(*,
             axes_in_deadband = []   # one bool per active axis this tick
 
             if 'yaw' in axes:
-                # Negate: Ch4 > 1500 = turn LEFT on this vehicle (same
-                # convention as Ch6/lateral below). Target right → yaw
-                # right → Ch4 < 1500 → negative yaw_pct.
+                # Negate: Ch4 > 1500 = yaw LEFT. Target right → yaw right
+                # → need Ch4 < 1500 → negative yaw_pct.
                 yaw_pct = _clamp(-sample.ex * gains.kp_yaw,
                                  -YAW_PCT_MAX, YAW_PCT_MAX)
                 axes_in_deadband.append(abs(sample.ex) <= deadband)
 
             if 'lat' in axes:
-                # Negate: Ch6 > 1500 pushes LEFT on this AUV's thruster
-                # matrix, opposite to the image-frame sign of ex. Negate so
-                # "target right → strafe right" is the actual behaviour.
-                lat_pct = _clamp(-sample.ex * gains.kp_lat,
+                # No negation: Ch6 > 1500 = strafe RIGHT (same as open-loop
+                # move_right: signed_dir=+1 → positive pwm → Ch6 > 1500).
+                # Target right → positive ex → positive lat_pct → strafe right.
+                lat_pct = _clamp(sample.ex * gains.kp_lat,
                                  -LAT_PCT_MAX, LAT_PCT_MAX)
                 axes_in_deadband.append(abs(sample.ex) <= deadband)
 

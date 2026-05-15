@@ -57,7 +57,7 @@ def run(duburi, log):
     # Vision-track laterally to keep target centred (no yaw, no approach).
     duburi.vision.track(
         target=TARGET_CLASS,
-        yaw=True, lat=True, forward=True,
+        yaw=False, lat=True, forward=True,
         duration=TRACK_DURATION_S,
         on_lost='hold',
     )
