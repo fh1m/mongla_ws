@@ -30,29 +30,30 @@ C_HAIRLINE = (0, 180, 255)    # orange-yellow target hairlines
 
 # ── Supervision annotators (lazy-init shared with draw.py) ────────────────── #
 
-_SV: dict | None = None
+_SV: dict = {}   # keyed by rounded sf value
 
 
-def _get_sv() -> dict:
-    global _SV
-    if _SV is None:
+def _get_sv(sf: float = 1.0) -> dict:
+    key = round(sf, 2)
+    if key not in _SV:
         import supervision as sv
-        _SV = {
+        _SV[key] = {
             'trace': sv.TraceAnnotator(
                 position=sv.Position.CENTER,
                 trace_length=30,
-                thickness=2,
+                thickness=max(1, int(2 * sf)),
                 color_lookup=sv.ColorLookup.CLASS),
             'corners': sv.BoxCornerAnnotator(
-                thickness=4, corner_length=18,
+                thickness=max(2, int(4 * sf)),
+                corner_length=max(8, int(18 * sf)),
                 color=sv.Color.WHITE),
             'label': sv.LabelAnnotator(
-                text_scale=0.38, text_thickness=1,
+                text_scale=0.38 * sf, text_thickness=max(1, int(sf)),
                 color_lookup=sv.ColorLookup.CLASS,
                 border_radius=2,
                 smart_position=False),
         }
-    return _SV
+    return _SV[key]
 
 
 def _to_sv(detections: List[Detection], track_ids=None):
@@ -83,6 +84,7 @@ def render_video_section(frame_bgr: np.ndarray,
 
     out = frame_bgr.copy()
     h, w = out.shape[:2]
+    sf = max(1.0, w / 640.0)
 
     cx_frame, cy_frame = w // 2, h // 2
 
@@ -102,7 +104,7 @@ def render_video_section(frame_bgr: np.ndarray,
     # 2. Supervision annotation suite (trails behind, then boxes)
     primary = primary or largest(detections)
     if detections:
-        sv = _get_sv()
+        sv = _get_sv(sf)
         sv_all = _to_sv(detections, track_ids)
         if sv_all.tracker_id is not None:
             out = sv['trace'].annotate(scene=out, detections=sv_all)
@@ -114,6 +116,16 @@ def render_video_section(frame_bgr: np.ndarray,
             prefix = f'#{tid} ' if tid is not None else ''
             labels.append(f'{prefix}{d.class_name} {int(d.score * 100)}%')
         out = sv['label'].annotate(scene=out, detections=sv_all, labels=labels)
+
+        # Confidence pips: small colored circle at top-left of each bbox
+        pip_r = max(3, int(5 * sf))
+        for d in detections:
+            conf_col = (C_OK if d.score >= 0.75 else
+                        C_AMBER if d.score >= 0.50 else C_ERR)
+            px = int(d.xyxy[0]) + pip_r + 2
+            py = int(d.xyxy[1]) - pip_r - 2
+            if py > 0:
+                cv2.circle(out, (px, py), pip_r, conf_col, -1, cv2.LINE_AA)
 
     # 3. Primary target overlays
     if primary is not None:
@@ -150,24 +162,31 @@ def render_video_section(frame_bgr: np.ndarray,
 
         # Correction direction arrow: from target center toward frame center
         dist = float(np.hypot(cx_t - cx_frame, cy_t - cy_frame))
-        arrow_len = min(60, int(dist * 0.6))
+        arrow_len = min(int(60 * sf), int(dist * 0.6))
         if arrow_len > 10:
             dx = cx_frame - cx_t
             dy = cy_frame - cy_t
             tip = (int(cx_t + dx / max(dist, 1.0) * arrow_len),
                    int(cy_t + dy / max(dist, 1.0) * arrow_len))
             arr_col = C_OK if aligned else C_AMBER
-            cv2.arrowedLine(out, (cx_t, cy_t), tip, arr_col, 2,
-                            cv2.LINE_AA, tipLength=0.3)
+            cv2.arrowedLine(out, (cx_t, cy_t), tip, arr_col,
+                            max(1, int(2 * sf)), cv2.LINE_AA, tipLength=0.3)
 
-        # On-frame offset text label below bbox
+        # On-frame offset text label below bbox — semi-transparent background for readability
         lbl = f'X:{ex:+.2f} Y:{ey:+.2f}  {int(primary.score * 100)}%'
-        lbl_y = min(y2p + 16, h - 4)
-        cv2.putText(out, lbl, (x1p, lbl_y), _FONT, 0.36, C_TEXT, _FT, cv2.LINE_AA)
+        fs_lbl = 0.36 * sf
+        (lw, lh), _ = cv2.getTextSize(lbl, _FONT, fs_lbl, _FT)
+        lbl_y = min(y2p + lh + 4, h - 4)
+        pad = max(2, int(3 * sf))
+        bg_ov = out.copy()
+        cv2.rectangle(bg_ov, (x1p - pad, lbl_y - lh - pad),
+                      (x1p + lw + pad, lbl_y + pad), C_BG, -1)
+        cv2.addWeighted(bg_ov, 0.70, out, 0.30, 0, out)
+        cv2.putText(out, lbl, (x1p, lbl_y), _FONT, fs_lbl, C_TEXT, _FT, cv2.LINE_AA)
 
-        # Horizontal alignment bar (wider: 12px, moved to h-14)
-        _bar_y = h - 14
-        _bar_h = 12
+        # Horizontal alignment bar — scaled height
+        _bar_h = max(8, int(12 * sf))
+        _bar_y = h - _bar_h - 2
         bar_col = C_OK if abs(ex) < deadband else C_AMBER
         cv2.rectangle(out, (0, _bar_y), (w, _bar_y + _bar_h), C_BG, -1)
         cv2.line(out, (cx_frame, _bar_y), (cx_frame, _bar_y + _bar_h), C_RETICLE, 1)
@@ -181,9 +200,10 @@ def render_video_section(frame_bgr: np.ndarray,
 
     # 4. Stale banner
     if not healthy:
-        cv2.rectangle(out, (0, 0), (w, 28), C_ERR, -1)
-        cv2.putText(out, 'STALE FRAME', (8, 20),
-                    _FONT, 0.55, (255, 255, 255), _FT, cv2.LINE_AA)
+        banner_h = max(20, int(28 * sf))
+        cv2.rectangle(out, (0, 0), (w, banner_h), C_ERR, -1)
+        cv2.putText(out, 'STALE FRAME', (8, int(banner_h * 0.75)),
+                    _FONT, 0.55 * sf, (255, 255, 255), _FT, cv2.LINE_AA)
 
     return out
 
@@ -213,10 +233,12 @@ def draw_track_ids(frame_bgr: np.ndarray, tracks) -> np.ndarray:
         (255, 200,  50), (180,  50, 255), ( 50, 255, 220),
     ]
     out = frame_bgr.copy()
+    w = out.shape[1]
+    sf = max(1.0, w / 640.0)
     for td in tracks:
         color = _PALETTE[abs(int(td.track_id)) % len(_PALETTE)]
         x1, y1, x2, y2 = (int(v) for v in td.xyxy)
-        thick = 1 if td.predicted else 2
+        thick = max(1, int(sf)) if td.predicted else max(1, int(2 * sf))
         if td.predicted:
             overlay = out.copy()
             cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thick, cv2.LINE_AA)
@@ -224,7 +246,8 @@ def draw_track_ids(frame_bgr: np.ndarray, tracks) -> np.ndarray:
         else:
             cv2.rectangle(out, (x1, y1), (x2, y2), color, thick, cv2.LINE_AA)
         lbl = f"#{td.track_id} {td.class_name}" + (' (pred)' if td.predicted else '')
-        cv2.putText(out, lbl, (x1, max(y1 - 5, 12)), _FONT, 0.36, color, _FT, cv2.LINE_AA)
+        cv2.putText(out, lbl, (x1, max(y1 - 5, int(12 * sf))),
+                    _FONT, 0.36 * sf, color, _FT, cv2.LINE_AA)
     return out
 
 

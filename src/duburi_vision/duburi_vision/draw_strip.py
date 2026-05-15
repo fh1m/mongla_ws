@@ -361,7 +361,7 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
              if state is not None and not np.isnan(state.depth_m)
              else float('nan'))
     altimeter_depth(strip, alt_x, alt_y, alt_w, alt_h, depth,
-                    max_depth=5.0, fs_scale=sf)
+                    max_depth=8.0, fs_scale=sf)
 
 
 # ── Panel helpers ─────────────────────────────────────────────────────────── #
