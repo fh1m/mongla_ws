@@ -6,7 +6,7 @@
 
 <p align="center">
   <em>An AUV control stack named after the port that opens onto the Sundarbans.</em><br/>
-  ROS 2 Humble · ArduSub · YOLO 26 · one action surface, axis-isolated control,
+  ROS 2 Humble · ArduSub · YOLO11 · one action surface, axis-isolated control,
   vision in the same loop.
 </p>
 
@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/ArduSub-4.x-important" alt="ArduSub 4.x"/>
   <img src="https://img.shields.io/badge/MAVLink-2.0-purple" alt="MAVLink 2.0"/>
   <img src="https://img.shields.io/badge/Pixhawk-2.4.8-black" alt="Pixhawk 2.4.8"/>
-  <img src="https://img.shields.io/badge/YOLO-26-00B4D8" alt="YOLO 26"/>
+  <img src="https://img.shields.io/badge/YOLO-11-00B4D8" alt="YOLO 11"/>
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"/>
   <a href="https://fh1m.github.io/duburi_ws/"><img src="https://img.shields.io/badge/Docs-Mongla_Wiki-0a9396" alt="Mongla Wiki"/></a>
 </p>
@@ -99,7 +99,7 @@ A pool-deck workflow is three terminals + one CLI prompt. Drop these into
     </td>
     <td align="center" width="25%">
       <img src="https://img.shields.io/badge/T3-vision_pipeline-8957e5?style=for-the-badge" alt="T3"/>
-      <br/><sub>Camera + YOLO 26 + annotated debug stream. GPU-fast.</sub>
+      <br/><sub>Camera + YOLO11 + annotated debug stream. GPU-fast.</sub>
     </td>
     <td align="center" width="25%">
       <img src="https://img.shields.io/badge/T4-duburi_CLI-fb8500?style=for-the-badge" alt="T4"/>
@@ -695,7 +695,7 @@ ros2 launch duburi_manager bringup.launch.py vision:=true
       </a>
       <br/>
       <strong>YOLO Object Detection</strong><br/>
-      <sub>The vision pipeline runs Ultralytics YOLO 26. Helps you read <code>detector_node</code> logs.</sub>
+      <sub>The vision pipeline runs Ultralytics YOLO11 (yolo11n). Helps you read <code>detector_node</code> logs.</sub>
     </td>
     <td align="center" width="33%">
       <a href="https://www.youtube.com/watch?v=Ha66uKC-od0">
@@ -1361,7 +1361,7 @@ work without water.
    | `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` |
    | `vision` | `false` | `true` · `false` |
    | `camera` | `forward` | `forward` · `downward` · `laptop` |
-   | `model` | `gate_flare_medium_100ep` | `gate_flare_medium_100ep` · `gate_nano_100ep` · `gate_medium_100ep` · `flare_medium_100ep` · `yolov11n` (ROBOSUB-tested pretrained, sim/bench) · `yolo26_nano_pretrained` |
+   | `model` | `gate_flare_medium_100ep` | `gate_flare_medium_100ep` · `gate_nano_100ep` · `gate_medium_100ep` · `flare_medium_100ep` · `yolov11n` (ROBOSUB-tested pretrained, sim/bench) |
    | `models` | `''` | CSV `name=stem` pairs for multi-model registry: `"gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep"` |
    | `active_model` | `''` | Registry key to start with (requires `models` to be set): `gate` · `flare` · `combined` |
    | `classes` | `gate` | CSV class names: `gate` · `flare` · `gate,flare` · (empty = all) |
@@ -1638,7 +1638,7 @@ Phase 3 — `duburi_sensors` (**done**):
 Phase 4 — `duburi_vision` (**v1–v4 done**):
 - Camera factory (laptop webcam + Gazebo `ros_topic`; jetson/blueos/mavlink
   stubs raise `NotImplementedError` with a friendly message). **Done.**
-- YOLO26 detector with GPU-first `select_device`, class allowlist, warmup,
+- YOLO11 detector with GPU-first `select_device`, class allowlist, warmup,
   vision_msgs converters (publishes the human label, not numeric class id). **Done.**
 - Rich on-image visualization (boxes, labels, primary highlight, crosshair,
   alignment offset, status badge, stale banner). **Done.**
