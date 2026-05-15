@@ -1,4 +1,4 @@
-"""YoloDetector — Ultralytics YOLO26 (or any compatible model file).
+"""YoloDetector — Ultralytics YOLO11 (or any compatible model file).
 
 Robust to:
   * missing CUDA   -> select_device fails loudly with a friendly message

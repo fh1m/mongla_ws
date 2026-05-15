@@ -158,6 +158,29 @@ CLI utilities for verifying the pipeline before touching the planner:
   with `[RC   ] Yaw:NNN` lines in the manager log to confirm the chain
   closed end-to-end.
 
+## v4d -- Round 7 HUD Polish (DONE)
+
+- `draw_widgets.py` — `_fill_rect()` helper uses `cv2.addWeighted` alpha blending;
+  all widget fills (altimeter, needle gauge, confidence bar, battery, video progress)
+  now semi-transparent so scale marks remain visible through the fill
+- `draw_widgets.py` — `altimeter_depth`: 8m max scale; fill-before-ticks draw order
+  (was ticks-then-fill, which hid all scale marks); 8m color zones (green<2m,
+  accent<4.5m, amber<6.5m, red≥6.5m); tick step 1m; `fs_lbl=0.34` (larger readout)
+- `draw_widgets.py` — `_FONT = FONT_HERSHEY_SIMPLEX` throughout (was DUPLEX);
+  N cardinal highlighted with `C_TEXT` (others remain `C_DIM`)
+- `draw_video.py` — `_SV: dict = {}` keyed by `round(sf,2)`;
+  `_get_sv(sf)` creates LabelAnnotator with `text_scale=0.38*sf` (sf=2→0.76);
+  `_FONT = FONT_HERSHEY_SIMPLEX`; semi-transparent pill behind offset label text;
+  confidence pips (colored circle per bbox, green≥75%/amber≥50%/red<50%);
+  all cv2.putText font sizes, arrow thickness, and alignment bar height scale with sf
+- `draw_strip.py` — `altimeter_depth(max_depth=8.0)`;
+  `depth_rate` param wired through `render_ui_strip` → `_draw_instruments_row`;
+  STATE panel DEPTH row shows `↑`/`↓` rate when |rate|>0.02 m/s
+- `draw.py` — `render_all` signature gains `depth_rate: float = 0.0`
+- `utils/display_node.py` — `_depth_history: deque[tuple[float,float]]`; `_on_state`
+  computes `_depth_rate` from first→last history entry; passes to `render_all`
+- `README.md` + `detection/yolo.py` — YOLO 26 / YOLO26 references updated to YOLO11
+
 ## v5 -- Real-vehicle camera sources
 
 Drop in:
