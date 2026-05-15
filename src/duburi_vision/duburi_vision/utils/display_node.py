@@ -40,6 +40,8 @@ Video file keyboard shortcuts (active when video_file_mode:=true)
   Down arrow   → seek -10 s
   , (comma)    → step 1 frame back   (best used while paused)
   . (period)   → step 1 frame forward (best used while paused)
+  [ (bracket)  → slow down playback (0.1→0.25→0.5→0.75→1.0→…)
+  ] (bracket)  → speed up playback  (…→1.5→2.0→4.0)
 
 ROS2 parameters
 ---------------
@@ -212,6 +214,7 @@ class VisionDisplayNode(Node):
         # Video file state (updated by ROS service response).
         self._is_paused:      bool            = False
         self._video_position: tuple[int, int] = (0, 0)
+        self._video_speed:    float           = 1.0  # mirrors VideoFileCamera._speed
 
         # Single-slot frame queue.
         self._frame_q: queue.SimpleQueue = queue.SimpleQueue()
@@ -231,13 +234,15 @@ class VisionDisplayNode(Node):
         self._pause_client   = None   # rclpy.Client[SetBool] or None
         self._seek_pub       = None
         self._seek_frame_pub = None
+        self._speed_pub      = None
         if video_file_mode:
             cam_ns = f'/duburi/vision/{camera}'
             self._pause_client      = self.create_client(SetBool, f'{cam_ns}/video_pause')
             self._seek_pub          = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel',   10)
             self._seek_frame_pub    = self.create_publisher(Int32,   f'{cam_ns}/video_seek_frame', 10)
+            self._speed_pub         = self.create_publisher(Float32, f'{cam_ns}/video_speed',      10)
             self.get_logger().info(
-                '[DISP ] video mode: Space=pause  ←/→=±1s  ↑/↓=±10s  ,/.=frame step')
+                '[DISP ] video mode: Space=pause  ←/→=±1s  ↑/↓=±10s  ,/.=frame step  [/]=speed')
 
     # ------------------------------------------------------------------ #
     #  ROS callbacks (run on the background spin thread)                  #
@@ -338,6 +343,29 @@ def _send_seek(node: VisionDisplayNode, seconds: float) -> None:
 def _send_seek_frame(node: VisionDisplayNode, frames: int) -> None:
     if node._seek_frame_pub is not None:
         node._seek_frame_pub.publish(Int32(data=int(frames)))
+
+
+_SPEED_STEPS = (0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0)
+
+
+def _speed_step_up(cur: float) -> float:
+    for s in _SPEED_STEPS:
+        if s > cur + 0.01:
+            return s
+    return _SPEED_STEPS[-1]
+
+
+def _speed_step_down(cur: float) -> float:
+    for s in reversed(_SPEED_STEPS):
+        if s < cur - 0.01:
+            return s
+    return _SPEED_STEPS[0]
+
+
+def _send_speed(node: VisionDisplayNode, speed: float) -> None:
+    node._video_speed = speed
+    if node._speed_pub is not None:
+        node._speed_pub.publish(Float32(data=float(speed)))
 
 
 def _send_pause(node: VisionDisplayNode, pause: bool) -> None:
@@ -468,6 +496,10 @@ def main(args=None):
                     _send_seek_frame(node, -1)
                 elif key == ord('.'):
                     _send_seek_frame(node, 1)
+                elif key == ord('['):
+                    _send_speed(node, _speed_step_down(node._video_speed))
+                elif key == ord(']'):
+                    _send_speed(node, _speed_step_up(node._video_speed))
 
             if frame_budget > 0:
                 elapsed = time.monotonic() - t0

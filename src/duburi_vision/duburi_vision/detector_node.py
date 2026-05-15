@@ -296,7 +296,12 @@ class DetectorNode(Node):
                 self._with_target += 1
 
             det_msg = detections_to_array(detections, msg.header)
-            self._pub_det.publish(det_msg)
+            if not rclpy.ok():
+                return
+            try:
+                self._pub_det.publish(det_msg)
+            except Exception:
+                return  # node being destroyed; exit thread cleanly
 
             if self._publish_dbg and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt:
                 try:
@@ -310,7 +315,8 @@ class DetectorNode(Node):
                     self._pub_dbg.publish(dbg)
                     self._last_dbg = time.monotonic()
                 except Exception as exc:
-                    self.get_logger().warning(f"[DET  ] debug image failed: {exc!r}")
+                    if rclpy.ok():
+                        self.get_logger().warning(f"[DET  ] debug image failed: {exc!r}")
 
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
