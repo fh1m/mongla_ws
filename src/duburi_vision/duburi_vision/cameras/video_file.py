@@ -21,6 +21,7 @@ Playback controls (thread-safe)
   cam.resume()                → resume playback
   cam.toggle_pause() -> bool  → flip state; returns new is_paused value
   cam.seek_rel(seconds)       → seek ±N seconds from current position
+  cam.seek_frames(n)          → seek ±N frames; if paused, exposes one fresh frame
   cam.position                → (current_frame, total_frames)
   cam.is_paused               → bool
 """
@@ -77,9 +78,10 @@ class VideoFileCamera(Camera):
 
         # Playback control — protected by _lock so ROS service callbacks and
         # the capture thread never race on _cap operations.
-        self._lock:       threading.Lock           = threading.Lock()
-        self._paused:     bool                     = False
-        self._last_frame: Optional[np.ndarray]     = None
+        self._lock:          threading.Lock       = threading.Lock()
+        self._paused:        bool                 = False
+        self._step_pending:  bool                 = False  # advance one frame while paused
+        self._last_frame:    Optional[np.ndarray] = None
 
     # ------------------------------------------------------------------ #
     #  Playback control API                                                #
@@ -108,7 +110,22 @@ class VideoFileCamera(Camera):
             hi     = max(0, self._total_frames - 1) if self._total_frames else cur + abs(delta)
             target = max(0, min(hi, cur + delta))
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, target)
-            self._eof = False  # allow read to proceed after seek past EOF
+            self._eof = False
+            if self._paused:
+                self._step_pending = True  # expose the seeked frame while paused
+
+    def seek_frames(self, n: int) -> None:
+        """Seek by exactly ±N frames. While paused, exposes one fresh frame at the new position."""
+        with self._lock:
+            if not self._cap or not self._cap.isOpened():
+                return
+            cur    = int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
+            hi     = max(0, self._total_frames - 1) if self._total_frames else cur + abs(n)
+            target = max(0, min(hi, cur + n))
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+            self._eof = False
+            if self._paused:
+                self._step_pending = True
 
     @property
     def position(self) -> tuple[int, int]:
@@ -134,10 +151,11 @@ class VideoFileCamera(Camera):
 
         with self._lock:
             cap = self._cap
-            # When paused or closed, replay the last good frame.
-            if self._paused or cap is None:
+            # When paused: replay last frame, unless a step/seek was requested.
+            if self._paused and not self._step_pending or cap is None:
                 meta.fresh = False
                 return self._last_frame, meta
+            self._step_pending = False  # consume the one-shot step
 
             if self._eof:
                 meta.fresh = False

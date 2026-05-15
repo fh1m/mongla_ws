@@ -38,6 +38,8 @@ Video file keyboard shortcuts (active when video_file_mode:=true)
   Right arrow  → seek +1 s
   Up arrow     → seek +10 s
   Down arrow   → seek -10 s
+  , (comma)    → step 1 frame back   (best used while paused)
+  . (period)   → step 1 frame forward (best used while paused)
 
 ROS2 parameters
 ---------------
@@ -67,7 +69,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32, String
+from std_msgs.msg import Float32, Int32, String
 from std_srvs.srv import SetBool
 from vision_msgs.msg import Detection2DArray
 
@@ -226,14 +228,16 @@ class VisionDisplayNode(Node):
         self.create_timer(1.0, self._check_waiting)
 
         # Video playback control clients (only when video_file_mode=true).
-        self._pause_client = None   # rclpy.Client[SetBool] or None
-        self._seek_pub = None
+        self._pause_client   = None   # rclpy.Client[SetBool] or None
+        self._seek_pub       = None
+        self._seek_frame_pub = None
         if video_file_mode:
             cam_ns = f'/duburi/vision/{camera}'
-            self._pause_client = self.create_client(SetBool, f'{cam_ns}/video_pause')
-            self._seek_pub     = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel', 10)
+            self._pause_client      = self.create_client(SetBool, f'{cam_ns}/video_pause')
+            self._seek_pub          = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel',   10)
+            self._seek_frame_pub    = self.create_publisher(Int32,   f'{cam_ns}/video_seek_frame', 10)
             self.get_logger().info(
-                '[DISP ] video mode: Space=pause  ←/→=±1s  ↑/↓=±10s')
+                '[DISP ] video mode: Space=pause  ←/→=±1s  ↑/↓=±10s  ,/.=frame step')
 
     # ------------------------------------------------------------------ #
     #  ROS callbacks (run on the background spin thread)                  #
@@ -329,6 +333,11 @@ class VisionDisplayNode(Node):
 def _send_seek(node: VisionDisplayNode, seconds: float) -> None:
     if node._seek_pub is not None:
         node._seek_pub.publish(Float32(data=float(seconds)))
+
+
+def _send_seek_frame(node: VisionDisplayNode, frames: int) -> None:
+    if node._seek_frame_pub is not None:
+        node._seek_frame_pub.publish(Int32(data=int(frames)))
 
 
 def _send_pause(node: VisionDisplayNode, pause: bool) -> None:
@@ -455,6 +464,10 @@ def main(args=None):
                     _send_seek(node, 10.0)
                 elif key == _KEY_DOWN:
                     _send_seek(node, -10.0)
+                elif key == ord(','):
+                    _send_seek_frame(node, -1)
+                elif key == ord('.'):
+                    _send_seek_frame(node, 1)
 
             if frame_budget > 0:
                 elapsed = time.monotonic() - t0

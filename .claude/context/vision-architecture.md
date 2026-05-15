@@ -201,6 +201,13 @@ When `video_file:=` is non-empty in the launch file, `camera_node`
 switches `source` to `'video_file'` automatically; `detector_node` and
 downstream vision verbs see identical topics either way.
 
+**Playback controls** (HUD window, active when `video_file:=` set):
+Space=pause, →/←=±1 s, ↑/↓=±10 s, `.`/`,`=±1 frame (best while paused).
+
+**Full workflow** — recording pool runs, running mission scripts against video,
+tracker tuning, ROS2 service/topic control, sim+video setup:
+→ [`video-testing.md`](video-testing.md)
+
 ## Adding a new camera source
 
 1. Create `cameras/<name>.py` with a class that subclasses `Camera` and
