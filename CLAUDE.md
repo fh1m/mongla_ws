@@ -735,6 +735,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `mission-design.md`             | YASMIN FSM patterns (target home: `duburi_planner/state_machines/`) |
 | `vision-architecture.md`        | `duburi_vision` file map, topic contract, GPU contract, viz layers  |
 | `vision-roadmap.md`             | v1–v4 all done (detection, tracking, Kalman, vision verbs); v5 real hw cams queued |
+| `video-testing.md`              | **Full guide**: video_file source, sim+video workflow, playback controls, mission replay |
 
 **Archived / future work** (in `future/`):
 

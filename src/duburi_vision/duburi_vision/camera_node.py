@@ -36,7 +36,7 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image, CameraInfo
-from std_msgs.msg     import Float32
+from std_msgs.msg     import Float32, Int32
 from std_srvs.srv     import SetBool
 from cv_bridge        import CvBridge
 
@@ -90,9 +90,12 @@ class CameraNode(Node):
 
         # Video file playback controls (only active when source supports pause/seek).
         if hasattr(self._cam, 'pause'):
-            self.create_service(SetBool, f'{ns}/video_pause',    self._handle_video_pause)
-            self.create_subscription(Float32, f'{ns}/video_seek_rel', self._handle_seek, 10)
-            self.get_logger().info(f'[CAM  ] video controls: {ns}/video_pause  {ns}/video_seek_rel')
+            self.create_service(SetBool, f'{ns}/video_pause',       self._handle_video_pause)
+            self.create_subscription(Float32, f'{ns}/video_seek_rel',   self._handle_seek,       10)
+            self.create_subscription(Int32,   f'{ns}/video_seek_frame', self._handle_seek_frame, 10)
+            self.get_logger().info(
+                f'[CAM  ] video controls: {ns}/video_pause  '
+                f'{ns}/video_seek_rel  {ns}/video_seek_frame')
 
         self.get_logger().info(
             f"[CAM  ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
@@ -168,7 +171,12 @@ class CameraNode(Node):
         try:
             while rclpy.ok():
                 frame, meta = self._cam.read()
-                if frame is None or not meta.fresh:
+                if frame is None:
+                    time.sleep(0.02)
+                    continue
+                if not meta.fresh:
+                    # Paused / EOF — avoid tight spin; display keeps its last rendered frame.
+                    time.sleep(0.02)
                     continue
                 # Single-slot: drop stale frame, keep only latest.
                 while not self._frame_q.empty():
@@ -219,6 +227,10 @@ class CameraNode(Node):
 
     def _handle_seek(self, msg: Float32) -> None:
         self._cam.seek_rel(msg.data)  # type: ignore[attr-defined]
+
+    def _handle_seek_frame(self, msg: Int32) -> None:
+        if hasattr(self._cam, 'seek_frames'):
+            self._cam.seek_frames(int(msg.data))  # type: ignore[attr-defined]
 
     def _log_health(self):
         now = time.monotonic()
