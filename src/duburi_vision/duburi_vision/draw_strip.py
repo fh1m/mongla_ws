@@ -28,7 +28,7 @@ import numpy as np
 
 from .draw_widgets import (
     C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT, C_DIM, C_BORDER,
-    _FONT, _FT,
+    pil_text, pil_text_size,
     needle_gauge, sparkline, confidence_bar,
     altimeter_depth, mini_compass, heading_tape,
     video_progress, health_row,
@@ -127,15 +127,15 @@ def _draw_header_row(strip: np.ndarray, w: int, fps: float,
     fs_brand = 0.44 * sf
     fs_side  = 0.32 * sf
     brand = 'BRACU  DUBURI'
-    (bw, bh), _ = cv2.getTextSize(brand, _FONT, fs_brand, _FT)
+    bw, bh = pil_text_size(brand, fs_brand)
     bx = (w - bw) // 2
     by = r1_y + int(17 * sf)
-    cv2.putText(strip, brand, (bx, by), _FONT, fs_brand, C_TEXT, _FT, cv2.LINE_AA)
+    pil_text(strip, brand, (bx, by), fs_brand, C_TEXT)
     dot_y = by - bh // 2
     cv2.circle(strip, (bx - 10, dot_y), 3, C_ACCENT, -1, cv2.LINE_AA)
     cv2.circle(strip, (bx + bw + 10, dot_y), 3, C_ACCENT, -1, cv2.LINE_AA)
 
-    cv2.putText(strip, f'{fps:.0f} Hz', (8, by), _FONT, fs_side, C_DIM, _FT, cv2.LINE_AA)
+    pil_text(strip, f'{fps:.0f} Hz', (8, by), fs_side, C_DIM)
 
     if video_mode:
         badge     = '|| VIDEO SIM' if is_paused else '>  VIDEO SIM'
@@ -143,9 +143,9 @@ def _draw_header_row(strip: np.ndarray, w: int, fps: float,
     else:
         badge     = 'LIVE'
         badge_col = C_OK
-    (mw, mh), _ = cv2.getTextSize(badge, _FONT, fs_side, _FT)
+    mw, mh = pil_text_size(badge, fs_side)
     badge_x = w - mw - 8
-    cv2.putText(strip, badge, (badge_x, by), _FONT, fs_side, badge_col, _FT, cv2.LINE_AA)
+    pil_text(strip, badge, (badge_x, by), fs_side, badge_col)
     if not video_mode:
         cv2.circle(strip, (badge_x - 8, by - mh // 2 - 1), 3, C_OK, -1, cv2.LINE_AA)
 
@@ -170,13 +170,11 @@ def _draw_err_gauges(strip: np.ndarray, w: int, frame_h: int,
 
     gauge_y = r2_y + int(20 * sf)
     lbl_y   = r2_y + int(13 * sf)
-    cv2.putText(strip, 'ERR_X', (gpad, lbl_y),
-                _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
+    pil_text(strip, 'ERR_X', (gpad, lbl_y), fs_lbl, C_DIM)
     needle_gauge(strip, gpad, gauge_y, gw, gh, ex,
                  vmin=-1.0, vmax=1.0, deadband=deadband, fs_scale=sf)
 
-    cv2.putText(strip, 'ERR_Y', (gpad * 2 + gw, lbl_y),
-                _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
+    pil_text(strip, 'ERR_Y', (gpad * 2 + gw, lbl_y), fs_lbl, C_DIM)
     needle_gauge(strip, gpad * 2 + gw, gauge_y, gw, gh, ey,
                  vmin=-1.0, vmax=1.0, deadband=deadband, fs_scale=sf)
 
@@ -276,12 +274,12 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
                   border=al_border, pad=spad, line_h=slh, fs=sfs, panel_w=mw)
 
     # ── Right column: sparklines using full column width ───────────────────── #
-    r_margin = max(4, int(4 * sf))        # right margin so sparklines don't touch strip edge
+    r_margin = max(4, int(4 * sf))
     rx   = col_w * 2 + pad
     rw   = w - col_w * 2 - pad * 2 - r_margin
     cy   = r3_y + pad
     lbl  = max(12, int(12 * sf))
-    gap  = max(4, int(4 * sf))             # scale-aware inter-block gap
+    gap  = max(4, int(4 * sf))
     rh   = r3_h - pad * 2
     sp_h = max(18, (rh - 3 * (lbl + 1 + gap)) // 3)
     fs_lbl = 0.30 * sf
@@ -290,13 +288,11 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
         ('ERR_X', err_x_hist, C_AMBER),
         ('ERR_Y', err_y_hist, (80, 180, 240)),
     ):
-        cv2.putText(strip, label, (rx, cy + lbl - 1),
-                    _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
+        pil_text(strip, label, (rx, cy + lbl - 1), fs_lbl, C_DIM)
         sparkline(strip, rx, cy + lbl + 1, rw, sp_h, values, color=color)
         cy += lbl + 1 + sp_h + gap
 
-    cv2.putText(strip, 'CONF', (rx, cy + lbl - 1),
-                _FONT, fs_lbl, C_DIM, _FT, cv2.LINE_AA)
+    pil_text(strip, 'CONF', (rx, cy + lbl - 1), fs_lbl, C_DIM)
     confidence_bar(strip, rx, cy + lbl + 1, rw, sp_h,
                    conf_hist[-1] if conf_hist else 0.0, fs_scale=sf)
 
@@ -331,10 +327,9 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
                 'dvl': 'DVL', 'bno085_dvl': 'BNO+DVL'}
     src_lbl = _SRC_MAP.get(yaw_source, (yaw_source or '?').upper())
     fs_src  = 0.28 * sf
-    (sw, _), _ = cv2.getTextSize(src_lbl, _FONT, fs_src, _FT)
-    src_y = min(cmp_cy + cmp_r + int(12 * sf), r4_y + r4_h - 3)
-    cv2.putText(strip, src_lbl, (cmp_cx - sw // 2, src_y),
-                _FONT, fs_src, C_DIM, _FT, cv2.LINE_AA)
+    sw, _   = pil_text_size(src_lbl, fs_src)
+    src_y   = min(cmp_cy + cmp_r + int(12 * sf), r4_y + r4_h - 3)
+    pil_text(strip, src_lbl, (cmp_cx - sw // 2, src_y), fs_src, C_DIM)
 
     # ── Zone B: STATE panel ──────────────────────────────────────────────────── #
     sfs = _SFS * sf
@@ -378,19 +373,19 @@ def _mc_panel(img: np.ndarray, x: int, y: int, title: str, rows, *,
     fs     = fs if fs is not None else 0.40
     border = border or C_BORDER
 
-    key_ws = [cv2.getTextSize(r[0], _FONT, fs, _FT)[0][0]
+    key_ws = [pil_text_size(r[0], fs)[0]
               for r in rows if not isinstance(r, str) and len(r) >= 2]
     col_w  = (max(key_ws) + 8) if key_ws else 0
 
     if panel_w is None:
         candidates: list = []
         if title:
-            candidates.append(cv2.getTextSize(title, _FONT, fs, _FT)[0][0])
+            candidates.append(pil_text_size(title, fs)[0])
         for row in rows:
             if isinstance(row, str):
-                candidates.append(cv2.getTextSize(row, _FONT, fs, _FT)[0][0])
+                candidates.append(pil_text_size(row, fs)[0])
             elif len(row) >= 2:
-                candidates.append(col_w + cv2.getTextSize(row[1], _FONT, fs, _FT)[0][0])
+                candidates.append(col_w + pil_text_size(row[1], fs)[0])
         panel_w = (max(candidates) if candidates else 60) + 2 * pad
 
     panel_h = line_h * (len(rows) + (1 if title else 0)) + 2 * pad
@@ -403,7 +398,7 @@ def _mc_panel(img: np.ndarray, x: int, y: int, title: str, rows, *,
     row_off = 0
     if title:
         ty = y + pad + line_h - 3
-        cv2.putText(img, title, (x + pad, ty), _FONT, fs, C_ACCENT, _FT, cv2.LINE_AA)
+        pil_text(img, title, (x + pad, ty), fs, C_ACCENT)
         cv2.line(img, (x + 1, y + pad + line_h + 1),
                  (x + panel_w - 1, y + pad + line_h + 1), C_BORDER, 1)
         row_off = 1
@@ -411,18 +406,17 @@ def _mc_panel(img: np.ndarray, x: int, y: int, title: str, rows, *,
     for i, row in enumerate(rows):
         ry = y + pad + line_h * (i + row_off + 1) - 3
         if isinstance(row, str):
-            cv2.putText(img, row, (x + pad, ry), _FONT, fs, C_TEXT, _FT, cv2.LINE_AA)
+            pil_text(img, row, (x + pad, ry), fs, C_TEXT)
         else:
             label     = row[0]
             val       = row[1] if len(row) > 1 else ''
             val_color = row[2] if len(row) > 2 else C_TEXT
-            cv2.putText(img, label, (x + pad,           ry), _FONT, fs, C_DIM,     _FT, cv2.LINE_AA)
-            cv2.putText(img, val,   (x + pad + col_w,   ry), _FONT, fs, val_color, _FT, cv2.LINE_AA)
+            pil_text(img, label, (x + pad,         ry), fs, C_DIM)
+            pil_text(img, val,   (x + pad + col_w, ry), fs, val_color)
 
 
 def _panel_height(title: str, rows, pad: int = 5, line_h: int = 17) -> int:
     return line_h * (len(rows) + (1 if title else 0)) + 2 * pad
-
 
 
 def _bat_color(voltage: float) -> tuple:
