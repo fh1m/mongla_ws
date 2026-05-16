@@ -383,8 +383,8 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     cv2.rectangle(strip, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), C_BG, -1)
     if primary_vis_range > 0.01:
         fill_w   = int(bar_w * min(primary_vis_range, 1.0))
-        fill_col = (C_OK if primary_vis_range > 0.6 else
-                    C_AMBER if primary_vis_range > 0.3 else C_ERR)
+        fill_col = (C_OK if primary_vis_range > 0.65 else
+                    C_AMBER if primary_vis_range > 0.30 else C_ERR)
         cv2.rectangle(strip, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), fill_col, -1)
     cv2.rectangle(strip, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), C_BORDER, 1)
     pil_text(strip, 'PROX', (bar_x + 2, bar_y + 1), 0.22 * sf, C_DIM)

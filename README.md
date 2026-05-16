@@ -184,6 +184,16 @@ ros2 topic hz /duburi/vision/forward/detections    # verify ~15-25 Hz
 ros2 run duburi_vision tracker_node --ros-args -p camera:=forward
 ros2 topic hz /duburi/vision/forward/tracks
 
+# ── 6b. Depth estimation / vis_range (requires detector_node running) ─────
+# Bbox-area fallback (no ONNX model needed):
+ros2 run duburi_vision depth_estimation_node --ros-args -p camera:=forward
+# With Depth Anything V2-Small ONNX:
+ros2 run duburi_vision depth_estimation_node --ros-args -p camera:=forward \
+    -p model_path:=/path/to/depth_anything_v2_small.onnx
+ros2 topic echo /duburi/vision/forward/vis_range
+# Or use the launch flag (starts depth alongside tracker in one command):
+ros2 launch duburi_vision cameras_.launch.py with_tracking:=true depth:=true
+
 # ── 7. Vision viewer — Mission-control HUD (no Qt/rqt needed) ────────────
 # Attach to an already-running pipeline:
 ros2 run duburi_vision vision_display --ros-args -p camera:=forward
@@ -1655,6 +1665,13 @@ Phase 4 — `duburi_vision` (**v1–v4 done**):
   subscribes `/detections`, runs ByteTrack + 4-state CV Kalman, publishes `/tracks` with
   stable IDs + smoothed bbox. Opt-in: `cameras_.launch.py with_tracking:=true` or
   `--tracking true` per vision verb. **Done.**
+- **v4f — Monocular depth / `vis_range` pipeline**: `depth_estimation_node` publishes a
+  `Float32MultiArray` of proximity scores (0.0 = far, 1.0 = close) via
+  `/duburi/vision/<cam>/vis_range`. Uses **Depth Anything V2-Small** ONNX (364×364) with
+  EMA temporal smoothing (α=0.40); falls back to a bbox-area proxy when no model is present.
+  HUD integration: depth-coloured bbox borders (blue→green→red), `~0.72 CLOSE` label suffix,
+  **VIS_R** row in STATE panel, **PROX** fill bar in Zone D, and a TURBO-colourmap depth-map
+  inset (toggle with **D** key). Launched with `cameras_.launch.py depth:=true`. **Done — 2026-05.**
 
 <p align="center">
   <img src="docs/imgs/readme-robosub-tasks.png" alt="RoboSub competition task overview" width="88%"/>
