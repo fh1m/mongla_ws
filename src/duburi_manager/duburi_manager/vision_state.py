@@ -42,6 +42,7 @@ from typing import List, Optional
 from rclpy.node import Node
 from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
 
+from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection2D, Detection2DArray
 
@@ -66,8 +67,9 @@ class Sample:
     w_frac:   float    # bbox width  as fraction of image width  (0..1)
     age_s:    float    # how stale this detection is (monotonic seconds)
     class_id: str
-    score:    float
-    track_id: int | None = None   # stable ID when tracking; None on raw detections
+    score:     float
+    track_id:  int | None = None   # stable ID when tracking; None on raw detections
+    vis_range: float = 0.0         # monocular depth estimate from depth_estimation_node (0=far, 1=close)
 
 
 class VisionState:
@@ -96,23 +98,26 @@ class VisionState:
         self._latest_array: Optional[Detection2DArray] = None
         self._latest_stamp: float = 0.0           # monotonic seconds
         self._image_size:  tuple  = default_image_size
+        self._vis_range_vals: list = []            # parallel to _latest_array.detections
         self._info_seen:   bool   = False
         self._frames:      int    = 0             # image_raw counter (diag only)
 
         ns = f'/duburi/vision/{camera}'
         qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
         det_topic = f'{ns}/tracks' if use_tracks else f'{ns}/detections'
-        self._sub_det  = node.create_subscription(
-            Detection2DArray, det_topic,           self._on_detections, qos)
-        self._sub_info = node.create_subscription(
-            CameraInfo,       f'{ns}/camera_info', self._on_info,       qos)
-        self._sub_img  = node.create_subscription(
-            Image,            f'{ns}/image_raw',   self._on_image,      qos)
+        self._sub_det   = node.create_subscription(
+            Detection2DArray, det_topic,             self._on_detections, qos)
+        self._sub_info  = node.create_subscription(
+            CameraInfo,       f'{ns}/camera_info',   self._on_info,       qos)
+        self._sub_img   = node.create_subscription(
+            Image,            f'{ns}/image_raw',     self._on_image,      qos)
+        self._sub_vr    = node.create_subscription(
+            Float32MultiArray, f'{ns}/vis_range',    self._on_vis_range,  10)
 
         source_label = 'tracks' if use_tracks else 'detections'
         self._log.info(
             f"[VST  ] subscribed camera={camera!r} -> "
-            f"{ns}/{source_label} (+camera_info, +image_raw counter)")
+            f"{ns}/{source_label} (+camera_info, +image_raw counter, +vis_range)")
 
     # ------------------------------------------------------------------ #
     #  Subscriber callbacks                                              #
@@ -132,6 +137,10 @@ class VisionState:
         # Only used as a "is producer alive" pulse; we don't decode here.
         with self._lock:
             self._frames += 1
+
+    def _on_vis_range(self, msg: Float32MultiArray) -> None:
+        with self._lock:
+            self._vis_range_vals = list(msg.data)
 
     # ------------------------------------------------------------------ #
     #  Read API used by the control loop                                 #
@@ -177,15 +186,36 @@ class VisionState:
         Returns None when no matching detection is cached. The control
         loop treats None as "stale" and applies its `on_lost` policy.
         """
-        detection = self.largest(class_name)
-        if detection is None:
-            return None
         with self._lock:
+            detections_array     = self._latest_array
             image_width, image_height = self._image_size
-            sampled_at_monotonic      = self._latest_stamp
+            sampled_at_monotonic = self._latest_stamp
+            vis_range_vals       = self._vis_range_vals
+
+        if detections_array is None:
+            return None
         if image_width <= 0 or image_height <= 0:
             return None
 
+        # Find largest matching detection AND its index (for vis_range lookup).
+        best_detection: Optional[Detection2D] = None
+        best_area:      float = 0.0
+        best_index:     int   = 0
+        for idx, det in enumerate(detections_array.detections):
+            if class_name and not _hypothesis_matches(det, class_name):
+                continue
+            area = float(det.bbox.size_x) * float(det.bbox.size_y)
+            if area > best_area:
+                best_area      = area
+                best_detection = det
+                best_index     = idx
+        if best_detection is None:
+            return None
+
+        vis_range = (float(vis_range_vals[best_index])
+                     if best_index < len(vis_range_vals) else 0.0)
+
+        detection = best_detection
         center_x, center_y = _bbox_center(detection.bbox)
         bbox_height_frac   = float(detection.bbox.size_y) / float(image_height)
         bbox_width_frac    = float(detection.bbox.size_x) / float(image_width)
@@ -208,7 +238,8 @@ class VisionState:
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
                       age_s=time.monotonic() - sampled_at_monotonic,
-                      class_id=class_id, score=score, track_id=track_id)
+                      class_id=class_id, score=score, track_id=track_id,
+                      vis_range=vis_range)
 
     def list_classes(self) -> List[str]:
         """Sorted list of distinct class_id strings in the latest array."""
@@ -244,6 +275,7 @@ class VisionState:
             self._node.destroy_subscription(self._sub_det)
             self._node.destroy_subscription(self._sub_info)
             self._node.destroy_subscription(self._sub_img)
+            self._node.destroy_subscription(self._sub_vr)
         except Exception as exc:
             self._log.debug(f"[VST  ] close() ignored: {exc!r}")
 

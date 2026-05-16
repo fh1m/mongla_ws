@@ -183,6 +183,27 @@ class VisionVerbs:
             pass_at=float(pass_at),
             pass_at_gain=float(pass_at_gain))
 
+    def vis_approach(self, camera, target_class, duration, deadband,
+                     kp_forward, target_vis_range, on_lost,
+                     stale_after, lock_mode=''):
+        """Drive forward using monocular depth (vis_range) as the distance proxy.
+
+        target_vis_range 0..1: 0=far, 1=close. Requires depth_estimation_node
+        running on the same camera namespace.
+        distance_metric='vis_range' routes through _distance_size → sample.vis_range.
+        """
+        gains = VisionGains(kp_forward=float(kp_forward))
+        return self._run_vision_track(
+            verb='vis_approach', label='vis_approach',
+            camera=camera, target_class=target_class,
+            axes={'forward'}, duration=float(duration), gains=gains,
+            deadband=float(deadband),
+            target_h_frac=float(target_vis_range),
+            visual_pid=False, on_lost=str(on_lost),
+            stale_after=float(stale_after),
+            lock_mode=str(lock_mode),
+            distance_metric='vis_range')
+
     def vision_acquire(self, camera, target_class, target_name, timeout,
                        gain, yaw_rate_pct, stale_after):
         """Block until ``target_class`` appears.

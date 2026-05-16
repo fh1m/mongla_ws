@@ -11,7 +11,7 @@ the diff stays small at each step.
     loops at EOF by default (`loop:=false` to stop). Launch with `video_file:=<path>`.
 - Stubs for jetson / blueos / mavlink that raise `NotImplementedError`
   with a friendly "use webcam, ros_topic, or video_file" message
-- `YoloDetector` wrapping Ultralytics YOLO26 with class allowlist, conf/iou,
+- `YoloDetector` wrapping Ultralytics YOLO11 (yolov11n default) with class allowlist, conf/iou,
   warmup, and a fail-fast `select_device()` for GPU-first inference
 - `vision_msgs/Detection2DArray` publishing
 - `draw.render_all` with status badge, dashed reticle, primary highlight,
@@ -194,6 +194,35 @@ Drop in:
 No node-side changes: factory + node code stays as-is. `cameras.yaml`
 profiles for `jetson_front`, `jetson_bottom`, `blueos`, `mavlink` flip
 from "raises NotImplementedError" to "actually works".
+
+## v4d — Lateral Alignment Fix (2026-05)
+
+- **Bug fix**: `motion_vision.py` lateral control sign corrected.
+  - Was: `lat_pct = -ex * kp_lat` (wrong negation; caused divergence away from target)
+  - Now: `lat_pct = +ex * kp_lat`
+  - Root cause: comment claimed "Ch6 > 1500 pushes LEFT" — contradicted by
+    `motion_lateral.py` ground truth (Ch6 > 1500 = strafe RIGHT).
+  - Verified by IBVS interaction matrix theory: positive image error → positive
+    lateral velocity → Ch6 > 1500 (no negation needed).
+- **Yaw convention confirmed correct**: `yaw_pct = -ex * kp_yaw` stays negated
+  because Ch4 > 1500 = yaw LEFT (inverted stick convention).
+- `move_and_see.py` docstring/code sync: `yaw=False` (was `True`).
+
+## v4e — Display System Overhaul (2025–2026)
+
+- **2× render upscale**: `_RENDER_SCALE = 2.0` in `utils/display_node.py` — native 640 px
+  frame upscaled to 1280 px before draw calls; all font sizes scale with `sf = w/640`.
+- **PIL TrueType fonts**: Replaced OpenCV Hershey fonts with PIL/Pillow TrueType for
+  strip panel text. Font priority: IosevkaNerdFontMono → NotoSansMono → DejaVu.
+- **Splash screen + auto-pause**: holds video at frame 0 with branded splash until
+  first detection received; fades over 400 ms on ready.
+- **`video` namespace**: `video_file:=<path>` launch arg sets `effective_cam='video'`
+  so detection and display topics route correctly for replay debugging.
+- **Strip panel additions**: real-time compass needle, depth gauge (8 m scale), heading
+  tape, PERCEPTION/CLASSES/ALIGNMENT/STATE panels, correction arrow, sparklines.
+- **Dashboard cleanup** (v4e-cleanup): dead `draw_detections` removed from `draw_video.py`;
+  unused `battery_bar` + `C_HEADER` pruned from `draw_widgets.py`; splash font migrated
+  to PIL TrueType for visual consistency; `_start_pipeline` source param fixed.
 
 ## Always-on rules
 

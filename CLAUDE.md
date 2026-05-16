@@ -171,7 +171,7 @@ duburi_ws/src/
 │   ├── firmware/
 │   │   └── esp32c3_bno085.md     # MCU-side wire contract + reference Arduino
 │   └── config/sensors.yaml       # yaw_source / bno085_port / nucleus_dvl_* / dvl_auto_connect
-└── duburi_vision/        # Camera factory + YOLO26 detector + rich on-image viz
+└── duburi_vision/        # Camera factory + YOLO11 (yolov11n) detector + rich on-image viz
     ├── duburi_vision/
     │   ├── factory.py            # make_camera(name, **kw)
     │   ├── config.py             # CAMERA_PROFILES dict
@@ -188,7 +188,7 @@ duburi_ws/src/
     │   │   └── mavlink_stub.py       # placeholder
     │   ├── detection/
     │   │   ├── detector.py           # Detector ABC + Detection dataclass
-    │   │   ├── yolo.py               # YoloDetector (Ultralytics YOLO26)
+    │   │   ├── yolo.py               # YoloDetector (Ultralytics YOLO11, yolov11n default)
     │   │   ├── gpu.py                # select_device — fail-fast CUDA check
     │   │   └── messages.py           # Detection -> vision_msgs converters
     │   ├── preflight.py          # assert_vision_ready / wait_vision_state_ready
@@ -198,7 +198,7 @@ duburi_ws/src/
     │   ├── tracking/             # ByteTrack + Kalman smoother (shipped v2/v3)
     │   └── filters/              # placeholder for future filter modules
     ├── config/{cameras,detector}.yaml
-    ├── models/README.md          # YOLO26 weights drop-in
+    ├── models/README.md          # YOLO11 / custom weights drop-in
     └── launch/{cameras_,webcam_demo(deprecated),sim_demo}.launch.py
 ```
 
@@ -252,7 +252,7 @@ duburi_ws/src/
 | `auv_manager_node` / `auv_manager` | `duburi_manager` | The single MAVLink connection, `/duburi/move` ActionServer, telemetry publisher, ROS params |
 | `sensors_node`                   | `duburi_sensors`| Standalone yaw-source diagnostic — does NOT touch thrusters or arming |
 | `camera_node`                    | `duburi_vision` | Read from one Camera (webcam / ros_topic / ...) -> `/duburi/vision/<cam>/image_raw` + `camera_info` |
-| `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO26 -> `/duburi/vision/<cam>/detections` + `image_debug` + `classes_filter` |
+| `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO11 (yolov11n) -> `/duburi/vision/<cam>/detections` + `image_debug` + `classes_filter` |
 | `tracker_node`                   | `duburi_vision` | ByteTrack + Kalman smoother; subscribes `detections` -> publishes `tracks` (stable IDs + smooth bboxes) |
 | `vision_display`                 | `duburi_vision` | Mission-control HUD; subscribes `image_raw` + `detections` + `tracks` + `/duburi/state` (20 Hz) + `classes_filter`; renders video overlays + 150 px UI strip below (BRACU DUBURI header, PERCEPTION/CLASSES/ALIGNMENT/STATE panels, real-time compass needle + depth gauge, heading tape) |
 | `vision_node`                    | `duburi_vision` | In-process camera+detector smoke test (cousin of `sensors_node`) |
@@ -300,6 +300,7 @@ ok, reason = pixhawk.set_mode("ALT_HOLD")
 # Ch1=Pitch  Ch2=Roll  Ch3=Throttle(depth)  Ch4=Yaw
 # Ch5=Forward  Ch6=Lateral
 # PWM: 1100..1900 µs | 1500=neutral | 65535=no override
+# Direction: Ch4 > 1500 = yaw LEFT (inverted stick); Ch5 > 1500 = drive forward; Ch6 > 1500 = strafe RIGHT
 pixhawk.send_rc_override(forward=1700, lateral=1500, throttle=1500, yaw=1500)
 pixhawk.send_neutral()         # all six channels = 1500 (active hold)
 pixhawk.release_rc_override()  # all channels = 65535 (autopilot takes over)
@@ -362,6 +363,8 @@ We never close a Python control loop in the live path. ArduSub's onboard 400 Hz 
 | Lateral   | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz)| open loop (timed thrust)      | shape the thrust envelope      |
 | Arc       | `RC_CHANNELS_OVERRIDE` Ch5 + Ch4 (20 Hz, single packet) | open loop | curved car-style trajectory    |
 | Heading lock | `SET_ATTITUDE_TARGET` (20 Hz, background) | ArduSub 400 Hz attitude PID | continuous yaw hold across other commands |
+| Vision lateral | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz) | vision loop inside manager | +ex → Ch6 > 1500 → strafe RIGHT (no negation) |
+| Vision yaw     | `SET_ATTITUDE_TARGET` or Ch4 RC (20 Hz) | vision loop inside manager | −ex → Ch4 < 1500 → yaw RIGHT (Ch4 inverted, negation needed) |
 
 The two ROS params `smooth_yaw` / `smooth_translate` (both default `false`) optionally shape the *setpoint* (smootherstep / trapezoid_ramp) before it reaches the autopilot — they don't replace the autopilot's inner loop.
 

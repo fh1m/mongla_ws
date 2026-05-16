@@ -77,8 +77,10 @@ from vision_msgs.msg import Detection2DArray
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision import draw
+from duburi_vision.config import CAMERA_PROFILES
 from duburi_vision.detection.detector import Detection, largest
 from duburi_vision.detection.messages import array_to_detections
+from duburi_vision.draw_widgets import pil_text, pil_text_size
 
 _WAIT_LOG_INTERVAL = 5.0
 _WINDOW_NAME       = 'duburi  //  mission control'
@@ -99,11 +101,12 @@ _KEY_DOWN  = 0xFF54  # down  arrow (XK_Down)
 def _start_pipeline(camera: str, model: str, classes: str,
                     conf: float) -> list[subprocess.Popen]:
     """Spawn camera_node + detector_node as child processes."""
+    source = CAMERA_PROFILES.get(camera, {}).get('source', 'webcam')
     camera_proc = subprocess.Popen([
         'ros2', 'run', 'duburi_vision', 'camera_node',
         '--ros-args',
         '-p', f'name:={camera}',
-        '-p', 'source:=webcam',
+        '-p', f'source:={source}',
     ])
 
     time.sleep(1.0)  # give camera_node time to advertise its topic
@@ -426,32 +429,28 @@ def _render_splash(w: int, h: int, elapsed: float, camera: str,
     img = np.full((h, w, 3), _C_SP_BG, dtype=np.uint8)
     cx, cy = w // 2, h // 2
     sf  = max(0.5, w / 1280.0)
-    fnt = cv2.FONT_HERSHEY_SIMPLEX
 
-    # Brand header — ASCII only (OpenCV bitmap fonts can't render Unicode)
-    brand = '---  BRACU  DUBURI  ---'
+    # Brand header
+    brand = '───  BRACU  DUBURI  ───'
     fs_b  = 0.85 * sf
-    (bw, _), _ = cv2.getTextSize(brand, fnt, fs_b, 2)
+    bw, bh = pil_text_size(brand, fs_b)
     bx = cx - bw // 2
-    cv2.putText(img, brand, (bx, cy - 58),
-                fnt, fs_b, _C_SP_ACCENT, 2, cv2.LINE_AA)
+    pil_text(img, brand, (bx, cy - 58), fs_b, _C_SP_ACCENT)
 
     # Accent separator line under brand
-    cv2.line(img, (bx, cy - 34), (bx + bw, cy - 34), _C_SP_ACCENT, 1)
+    cv2.line(img, (bx, cy - 58 + bh + 6), (bx + bw, cy - 58 + bh + 6), _C_SP_ACCENT, 1)
 
     # Main status
     status = 'INITIALIZING VISION SYSTEM'
     fs_s   = 0.65 * sf
-    (sw, _), _ = cv2.getTextSize(status, fnt, fs_s, 1)
-    cv2.putText(img, status, (cx - sw // 2, cy + 22),
-                fnt, fs_s, _C_SP_TEXT, 1, cv2.LINE_AA)
+    sw, _ = pil_text_size(status, fs_s)
+    pil_text(img, status, (cx - sw // 2, cy + 22), fs_s, _C_SP_TEXT)
 
     # Sub-status
-    sub    = 'Loading model  --  video will play automatically when ready'
+    sub    = 'Loading model  ·  video will play automatically when ready'
     fs_sub = 0.38 * sf
-    (subw, _), _ = cv2.getTextSize(sub, fnt, fs_sub, 1)
-    cv2.putText(img, sub, (cx - subw // 2, cy + 58),
-                fnt, fs_sub, _C_SP_DIM, 1, cv2.LINE_AA)
+    subw, _ = pil_text_size(sub, fs_sub)
+    pil_text(img, sub, (cx - subw // 2, cy + 58), fs_sub, _C_SP_DIM)
 
     # Animated ping-pong progress bar
     bar_len = int(w * 0.48)
@@ -465,12 +464,11 @@ def _render_splash(w: int, h: int, elapsed: float, camera: str,
 
     # Footer
     fs_info = 0.33 * sf
-    cv2.putText(img, f'camera: {camera}', (16, h - 20),
-                fnt, fs_info, _C_SP_DIM, 1, cv2.LINE_AA)
+    cam_lbl = f'camera: {camera}'
+    pil_text(img, cam_lbl, (16, h - 20), fs_info, _C_SP_DIM)
     ts = f'{int(elapsed)}s'
-    (tw, _), _ = cv2.getTextSize(ts, fnt, fs_info, 1)
-    cv2.putText(img, ts, (w - tw - 16, h - 20),
-                fnt, fs_info, _C_SP_DIM, 1, cv2.LINE_AA)
+    tw, _ = pil_text_size(ts, fs_info)
+    pil_text(img, ts, (w - tw - 16, h - 20), fs_info, _C_SP_DIM)
 
     # Apply fade: blend toward black at fade < 1
     if fade < 0.999:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""detector_node -- subscribe to image_raw, run YOLO26, publish detections.
+"""detector_node -- subscribe to image_raw, run YOLO11 (yolov11n), publish detections.
 
 Topics:
   in    /duburi/vision/<cam>/image_raw       sensor_msgs/Image

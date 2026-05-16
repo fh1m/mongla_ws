@@ -26,7 +26,7 @@ src/duburi_vision/duburi_vision/
     {jetson,blueos,mavlink}_stub.py
   detection/
     detector.py          # Detector ABC + Detection dataclass
-    yolo.py              # YoloDetector (Ultralytics YOLO26)
+    yolo.py              # YoloDetector (Ultralytics YOLO11, yolov11n default)
     gpu.py               # select_device() -- fail-fast CUDA check
     messages.py          # Detection -> vision_msgs converters (+ array_to_detections)
   tracking/

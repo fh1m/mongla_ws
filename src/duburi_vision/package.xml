@@ -6,10 +6,10 @@
   <version>0.1.0</version>
   <description>
     Perception package for Duburi: a uniform Camera interface (laptop webcam,
-    Gazebo image topic, plus Jetson/BlueOS/MAVLink stubs), YOLO26 detector with
-    GPU-first inference, and rich on-image visualizations (boxes, labels,
+    Gazebo image topic, plus Jetson/BlueOS/MAVLink stubs), YOLO11 detector (yolov11n)
+    with GPU-first inference, and rich on-image visualizations (boxes, labels,
     crosshair, alignment markers, offset readout) so problems are visible in
-    one frame. Tracking and Kalman filtering land later in v2/v3.
+    one frame. ByteTrack + Kalman filtering in v2/v3.
   </description>
   <maintainer email="fahim.2002.faisal@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>
