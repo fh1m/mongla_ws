@@ -224,6 +224,46 @@ from "raises NotImplementedError" to "actually works".
   unused `battery_bar` + `C_HEADER` pruned from `draw_widgets.py`; splash font migrated
   to PIL TrueType for visual consistency; `_start_pipeline` source param fixed.
 
+## v4f — vis_range Depth Pipeline (DONE — 2026-05)
+
+End-to-end monocular proximity estimate integrated into vision stack:
+
+- **`depth/depth_estimation_node.py`** — `DepthEstimationNode`; dual mode:
+  - *fallback* (no model): bbox-area proxy `sqrt(w_frac * h_frac)` — zero-cost
+  - *ONNX*: Depth Anything V2-Small (364×364 NCHW, ImageNet-normalised, inverted+normalised)
+  - EMA temporal smoothing (alpha=0.40, reset on detection count change) for stability
+  - `use_tracks` param: subscribes `/tracks` when True (keeps parallel to tracker ordering)
+  - Throttled `[VISRNG]` log every 2 s
+  - `publish_depth_map: True` in launch → `/vis_range_map` Image topic for debug overlay
+- **`depth/models/`** — model storage folder; `.gitignore` excludes binaries; `README.md`
+  documents placement + `optimum-cli` re-export; `depth_anything_v2_small.onnx` placed here
+- **`cameras_.launch.py`** — `depth:=true` + `depth_model:=<path>` args launch the node
+- **`draw_video.py`** — vis_range overlay on bboxes:
+  - Bbox border color: blue=far → green=mid → red=close (via `_depth_color()`)
+  - Label suffix: `~0.72 CLOSE` qualitative label (via `_vr_label()`)
+  - Depth map inset top-right corner (TURBO colormap), shown only when `depth_map_bgr` passed
+- **`draw_strip.py`** — vis_range in dashboard strip:
+  - VIS_R row in STATE panel: shows `0.72 CLOSE` (green/amber/dim by threshold)
+  - PROX bar in Zone D above altimeter: proportional fill, color-coded
+  - Row heights reduced ~16% for tighter layout; font scales adjusted
+- **`utils/display_node.py`** — vis_range integration:
+  - Subscribes `/vis_range` (Float32MultiArray) + `/vis_range_map` (Image, TURBO colourised)
+  - D-key toggle: depth map inset shown only on keypress → saves frame copy + resize at 30 Hz
+  - `depth` health indicator in pipeline health row
+  - Index-safe coordinate match for `primary_vr` (handles post-scale-dets identity break)
+- **`test/test_depth_estimation.py`** — standalone 9-check test (no ROS env needed):
+  - `onnxruntime` importable, `bbox_area_fallback` correctness, ONNX session load, inference,
+    shape validation, finite values, normalised range [0, 1]
+  - Run: `python src/duburi_vision/test/test_depth_estimation.py [model_path]`
+
+Launch with depth:
+```bash
+ros2 launch duburi_vision cameras_.launch.py depth:=true \
+    depth_model:=/path/to/duburi_vision/depth/models/depth_anything_v2_small.onnx
+```
+
+Press **D** in the display window to toggle the depth map inset on/off.
+
 ## Always-on rules
 
 - One source per launch. No mid-run camera switching, no auto-fallback.

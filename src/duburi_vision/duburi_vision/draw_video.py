@@ -23,6 +23,22 @@ from .detection.detector import Detection, largest
 from .draw_widgets import (C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT,
                            pil_text, pil_text_size)
 C_RETICLE  = (0, 200, 200)    # bright cyan reticle (was near-black 50,55,55)
+
+
+def _depth_color(v: float) -> tuple:
+    """Map vis_range 0=far→blue, 0.5=mid→green, 1=close→red (BGR)."""
+    if v < 0.5:
+        t = v * 2.0
+        return (int(255 * (1.0 - t)), int(255 * t), 0)
+    else:
+        t = (v - 0.5) * 2.0
+        return (0, int(255 * (1.0 - t)), int(255 * t))
+
+
+def _vr_label(v: float) -> str:
+    if v > 0.65: return 'CLOSE'
+    if v > 0.30: return 'MED'
+    return 'FAR'
 C_HAIRLINE = (0, 180, 255)    # orange-yellow target hairlines
 
 
@@ -75,7 +91,9 @@ def render_video_section(frame_bgr: np.ndarray,
                          deadband: float = 0.05,
                          primary: Optional[Detection] = None,
                          healthy: bool = True,
-                         track_ids=None) -> np.ndarray:
+                         track_ids=None,
+                         vis_range_values: Optional[List[float]] = None,
+                         depth_map_bgr: Optional[np.ndarray] = None) -> np.ndarray:
     """Return annotated copy of frame_bgr with all video overlays applied."""
     if frame_bgr is None:
         return frame_bgr
@@ -107,12 +125,15 @@ def render_video_section(frame_bgr: np.ndarray,
         if sv_all.tracker_id is not None:
             out = sv['trace'].annotate(scene=out, detections=sv_all)
         out = sv['corners'].annotate(scene=out, detections=sv_all)
-        labels = []
+        labels  = []
+        vr_list = vis_range_values or []
         for i, d in enumerate(detections):
             tid    = (track_ids[i] if track_ids and i < len(track_ids)
                       and track_ids[i] is not None else None)
             prefix = f'#{tid} ' if tid is not None else ''
-            labels.append(f'{prefix}{d.class_name} {int(d.score * 100)}%')
+            vr_str = (f' ~{vr_list[i]:.2f} {_vr_label(vr_list[i])}'
+                      if i < len(vr_list) and vr_list[i] > 0.01 else '')
+            labels.append(f'{prefix}{d.class_name} {int(d.score * 100)}%{vr_str}')
         out = sv['label'].annotate(scene=out, detections=sv_all, labels=labels)
 
         # Confidence pips: small colored circle at top-left of each bbox
@@ -124,6 +145,16 @@ def render_video_section(frame_bgr: np.ndarray,
             py = int(d.xyxy[1]) - pip_r - 2
             if py > 0:
                 cv2.circle(out, (px, py), pip_r, conf_col, -1, cv2.LINE_AA)
+
+        # Depth-colored bbox borders (1px overlay on supervision corners)
+        if vr_list:
+            for i, d in enumerate(detections):
+                if i >= len(vr_list):
+                    break
+                vr = vr_list[i]
+                dc = _depth_color(vr)
+                x1d, y1d, x2d, y2d = (int(v) for v in d.xyxy)
+                cv2.rectangle(out, (x1d, y1d), (x2d, y2d), dc, 1, cv2.LINE_AA)
 
     # 3. Primary target overlays
     if primary is not None:
@@ -196,7 +227,25 @@ def render_video_section(frame_bgr: np.ndarray,
                  (dot_x, _bar_y + _bar_h // 2), bar_col, 1, cv2.LINE_AA)
         cv2.circle(out, (dot_x, _bar_y + _bar_h // 2), 4, bar_col, -1, cv2.LINE_AA)
 
-    # 4. Stale banner
+    # 4. Depth map inset (top-right corner)
+    if depth_map_bgr is not None:
+        inset_w  = max(96, w // 5)
+        aspect   = depth_map_bgr.shape[0] / max(depth_map_bgr.shape[1], 1)
+        inset_h  = int(inset_w * aspect)
+        inset    = cv2.resize(depth_map_bgr, (inset_w, inset_h), interpolation=cv2.INTER_AREA)
+        pad      = int(6 * sf)
+        ix       = w - inset_w - pad
+        iy       = pad
+        if iy + inset_h < h:
+            roi = out[iy:iy + inset_h, ix:ix + inset_w]
+            cv2.addWeighted(inset, 0.88, roi, 0.12, 0, roi)
+            out[iy:iy + inset_h, ix:ix + inset_w] = roi
+            cv2.rectangle(out, (ix - 1, iy - 1), (ix + inset_w, iy + inset_h),
+                          (100, 100, 100), 1, cv2.LINE_AA)
+            pil_text(out, 'DEPTH', (ix + 2, iy + 2), 0.22 * sf, (200, 200, 200))
+            pil_text(out, 'ONNX', (ix + 2, iy + inset_h - int(10 * sf)), 0.20 * sf, C_OK)
+
+    # 5. Stale banner
     if not healthy:
         banner_h = max(20, int(28 * sf))
         cv2.rectangle(out, (0, 0), (w, banner_h), C_ERR, -1)

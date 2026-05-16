@@ -40,10 +40,23 @@ src/duburi_vision/duburi_vision/
     check_thrust.py      # `vision_thrust_check` CLI -- detection -> RC echo
     check_tracker.py     # `tracker_check`       CLI -- tracking smoke test
   filters/PLAN.md        # v3 -- folded into tracker_node (Kalman in kalman.py)
+  depth/
+    __init__.py
+    depth_estimation_node.py  # DepthEstimationNode: monocular vis_range (0=far, 1=close)
+                              #   fallback: bbox-area proxy (no model needed)
+                              #   model: Depth Anything V2-Small ONNX (364×364 NCHW)
+                              #   EMA temporal smoothing (alpha=0.40) for stable estimates
+                              #   subscribes /tracks when use_tracks=True (matches tracker ordering)
+    models/
+      depth_anything_v2_small.onnx   # DA V2-Small (not tracked in git — see .gitignore)
+      README.md                      # placement, launch params, re-export instructions
+      .gitignore                     # ignores *.onnx *.pt *.bin *.pth
 config/
   cameras.yaml           # camera profiles
   detector.yaml          # model + class params
   tracker.yaml           # ByteTrack + Kalman thresholds (all as ROS params)
+test/
+  test_depth_estimation.py  # standalone 9-check test: onnxruntime, bbox fallback, ONNX inference
 ```
 
 Naming rule: every file is named after the thing inside it. No `base.py`,
@@ -58,6 +71,8 @@ no `to_ros.py`, no `nodes/` or `viz/` subfolders. Per-user request,
 /duburi/vision/<cam>/detections       vision_msgs/Detection2DArray (detector_node)
 /duburi/vision/<cam>/classes_filter   std_msgs/String              (detector_node, CSV class list)
 /duburi/vision/<cam>/tracks           vision_msgs/Detection2DArray (tracker_node, optional)
+/duburi/vision/<cam>/vis_range        std_msgs/Float32MultiArray   (depth_estimation_node, one float per detection, 0=far 1=close)
+/duburi/vision/<cam>/vis_range_map    sensor_msgs/Image            (depth_estimation_node, float32 depth map, debug only)
 /duburi/vision/<cam>/image_debug      sensor_msgs/Image            (detector_node, rate-limited)
 ```
 

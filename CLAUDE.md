@@ -196,7 +196,10 @@ duburi_ws/src/
     │   │   ├── check_pipeline.py    # `vision_check` CLI -- topic-only smoke test
     │   │   └── check_thrust.py      # `vision_thrust_check` CLI -- detection -> RC
     │   ├── tracking/             # ByteTrack + Kalman smoother (shipped v2/v3)
-    │   └── filters/              # placeholder for future filter modules
+    │   ├── filters/              # placeholder for future filter modules
+    │   └── depth/                # monocular depth estimation (vis_range)
+    │       ├── depth_estimation_node.py  # DepthEstimationNode (ONNX + bbox-area fallback)
+    │       └── models/           # model storage — depth_anything_v2_small.onnx (gitignored)
     ├── config/{cameras,detector}.yaml
     ├── models/README.md          # YOLO11 / custom weights drop-in
     └── launch/{cameras_,webcam_demo(deprecated),sim_demo}.launch.py
@@ -254,7 +257,8 @@ duburi_ws/src/
 | `camera_node`                    | `duburi_vision` | Read from one Camera (webcam / ros_topic / ...) -> `/duburi/vision/<cam>/image_raw` + `camera_info` |
 | `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO11 (yolov11n) -> `/duburi/vision/<cam>/detections` + `image_debug` + `classes_filter` |
 | `tracker_node`                   | `duburi_vision` | ByteTrack + Kalman smoother; subscribes `detections` -> publishes `tracks` (stable IDs + smooth bboxes) |
-| `vision_display`                 | `duburi_vision` | Mission-control HUD; subscribes `image_raw` + `detections` + `tracks` + `/duburi/state` (20 Hz) + `classes_filter`; renders video overlays + 150 px UI strip below (BRACU DUBURI header, PERCEPTION/CLASSES/ALIGNMENT/STATE panels, real-time compass needle + depth gauge, heading tape) |
+| `depth_estimation_node`          | `duburi_vision` | Monocular proximity estimate; subscribes `image_raw` + `detections`/`tracks` -> publishes `vis_range` (Float32MultiArray, 0=far 1=close) + optional `vis_range_map` (float32 depth map). Runs Depth Anything V2-Small ONNX or bbox-area fallback. Launched with `depth:=true`. |
+| `vision_display`                 | `duburi_vision` | Mission-control HUD; subscribes `image_raw` + `detections` + `tracks` + `/duburi/state` (20 Hz) + `classes_filter` + `vis_range` + `vis_range_map`; renders video overlays + UI strip. Press **D** to toggle depth map inset. |
 | `vision_node`                    | `duburi_vision` | In-process camera+detector smoke test (cousin of `sensors_node`) |
 
 There is exactly **one** node that touches `pymavlink` in the live mission path: `auv_manager_node`. The `duburi` CLI, the `mission` runner, and any custom Python script are ROS2 ActionClients of `/duburi/move` -- all live in `duburi_planner`.
@@ -527,7 +531,7 @@ ros2 run   duburi_planner mission find_person_demo     # full vision-driven 3D m
 ros2 run   duburi_planner mission move_and_see         # alternates open-loop + vision verbs
 ```
 
-Architecture detail: [`.claude/context/vision-architecture.md`](.claude/context/vision-architecture.md). Roadmap (v1–v4 all done: detection, tracking, filtering, vision verbs; v5 real-vehicle cameras pending): [`.claude/context/vision-roadmap.md`](.claude/context/vision-roadmap.md).
+Architecture detail: [`.claude/context/vision-architecture.md`](.claude/context/vision-architecture.md). Roadmap (v1–v4f all done: detection, tracking, Kalman, vision verbs, monocular depth / vis_range; v5 real-vehicle cameras pending): [`.claude/context/vision-roadmap.md`](.claude/context/vision-roadmap.md). Depth node reference: [`.claude/context/depth-estimation.md`](.claude/context/depth-estimation.md).
 
 ---
 
@@ -737,7 +741,8 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |
 | `mission-design.md`             | YASMIN FSM patterns (target home: `duburi_planner/state_machines/`) |
 | `vision-architecture.md`        | `duburi_vision` file map, topic contract, GPU contract, viz layers  |
-| `vision-roadmap.md`             | v1–v4 all done (detection, tracking, Kalman, vision verbs); v5 real hw cams queued |
+| `vision-roadmap.md`             | v1–v4f done (detection, tracking, Kalman, vision verbs, depth pipeline); v5 real hw cams queued |
+| `depth-estimation.md`           | Depth Anything V2-Small ONNX node: params, topics, EMA smoothing, HUD integration, test |
 | `video-testing.md`              | **Full guide**: video_file source, sim+video workflow, playback controls, mission replay |
 
 **Archived / future work** (in `future/`):

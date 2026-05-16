@@ -69,6 +69,10 @@ def generate_launch_description():
                               description='tracker_node: consecutive detections before track is confirmed (1=instant)'),
         DeclareLaunchArgument('max_predict',   default_value='10',
                               description='tracker_node: Kalman frames to predict during detection gap'),
+        DeclareLaunchArgument('depth',         default_value='false',
+                              description='Start depth_estimation_node alongside tracker (monocular vis_range)'),
+        DeclareLaunchArgument('depth_model',   default_value='',
+                              description='Path to DA V2-Small ONNX model; empty = bbox-area fallback'),
     ]
 
     cam_name   = LaunchConfiguration('camera')
@@ -130,6 +134,18 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('with_tracking')),
     )
 
+    depth_node = Node(
+        package='duburi_vision', executable='depth_estimation_node',
+        name='duburi_depth', output='screen',
+        parameters=[{
+            'camera':            effective_cam,
+            'model_path':        LaunchConfiguration('depth_model'),
+            'use_tracks':        LaunchConfiguration('with_tracking'),
+            'publish_depth_map': True,
+        }],
+        condition=IfCondition(LaunchConfiguration('depth')),
+    )
+
     # True when a video file is being played (not a live camera).
     video_file_mode = PythonExpression(["True if '", video_file, "' else False"])
 
@@ -153,6 +169,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription(
-        args + [camera_node, detector_node, tracker_node, image_viewer,
+        args + [camera_node, detector_node, tracker_node, depth_node, image_viewer,
                 shutdown_on_viewer_exit]
     )
