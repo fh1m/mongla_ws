@@ -20,8 +20,8 @@ setup(
     maintainer='Muhammad Fahim Faisal',
     maintainer_email='fahim.2002.faisal@gmail.com',
     description=(
-        'Duburi perception: Camera factory + YOLO26 detector + rich on-image '
-        'visualizations. ByteTrack + Kalman tracking in v2.'
+        'Duburi perception: Camera factory + YOLO11 detector (yolov11n) + rich on-image '
+        'visualizations. ByteTrack + Kalman tracking in v2/v3.'
     ),
     license='MIT',
     entry_points={
@@ -34,6 +34,7 @@ setup(
             'vision_thrust_check = duburi_vision.utils.check_thrust:main',
             'tracker_check       = duburi_vision.utils.check_tracker:main',
             'vision_display      = duburi_vision.utils.display_node:main',
+            'depth_estimation_node = duburi_vision.depth_estimation_node:main',
         ],
     },
 )

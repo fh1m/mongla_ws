@@ -207,21 +207,6 @@ def render_video_section(frame_bgr: np.ndarray,
 
 # ── Standalone helpers (for external callers) ─────────────────────────────── #
 
-def draw_detections(frame_bgr: np.ndarray, detections: List[Detection]) -> np.ndarray:
-    if frame_bgr is None or not detections:
-        return frame_bgr
-    sv  = _get_sv()
-    svd = _to_sv(detections)
-    out = frame_bgr.copy()
-    out = sv['trace'].annotate(scene=out, detections=svd)
-    out = sv['box'].annotate(scene=out, detections=svd)
-    out = sv['corners'].annotate(scene=out, detections=svd)
-    out = sv['triangle'].annotate(scene=out, detections=svd)
-    out = sv['pct_bar'].annotate(scene=out, detections=svd)
-    labels = [f'{d.class_name} {int(d.score * 100)}%' for d in detections]
-    return sv['label'].annotate(scene=out, detections=svd, labels=labels)
-
-
 def draw_track_ids(frame_bgr: np.ndarray, tracks) -> np.ndarray:
     if frame_bgr is None or not tracks:
         return frame_bgr

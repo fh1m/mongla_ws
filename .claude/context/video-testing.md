@@ -28,6 +28,12 @@ ros2 launch duburi_vision cameras_.launch.py \
 (camera_node → detector_node → tracker_node → vision_display) sees identical
 topics regardless of whether the source is live or recorded.
 
+> **Splash screen / auto-pause**: When `video_file:=` is set, the HUD holds the video
+> at frame 0 and displays a branded splash overlay until the detector publishes its
+> first detection (model fully loaded, first bbox seen). Once warm, the splash fades
+> over 400 ms and playback proceeds at normal speed. This prevents missed-frame false
+> readings during model warm-up.
+
 ---
 
 ## Playback controls (keyboard in the HUD window)

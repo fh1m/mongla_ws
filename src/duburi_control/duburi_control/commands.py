@@ -260,6 +260,21 @@ COMMANDS = {
                      'pass_at': 0.0, 'pass_at_gain': 50.0,
                      'tracking': False},
     },
+    'vis_approach': {
+        'help':     'Drive forward using monocular depth (vis_range) from '
+                    'depth_estimation_node. target_vis_range is 0..1 (0=far, 1=close). '
+                    'Requires depth_estimation_node running on the same camera. '
+                    'lock_mode: settle (exit at target), pursue (only approach). '
+                    'tracking=true: use tracker_node.',
+        'fields':   ['camera', 'target_class', 'duration', 'deadband',
+                     'kp_forward', 'target_vis_range', 'on_lost',
+                     'stale_after', 'lock_mode', 'tracking'],
+        'defaults': {'camera': 'laptop', 'target_class': 'person',
+                     'duration': 30.0, 'deadband': 0.05,
+                     'kp_forward': 200.0, 'target_vis_range': 0.65,
+                     'on_lost': 'fail', 'stale_after': 1.5,
+                     'lock_mode': '', 'tracking': False},
+    },
     'vision_acquire': {
         'help':     'Block (optionally driving via target_name verb) until '
                     'target_class is seen at least once. target_name in '

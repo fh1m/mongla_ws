@@ -1,4 +1,4 @@
-"""sim_demo -- subscribe to a Gazebo image topic and run YOLO26 on it.
+"""sim_demo -- subscribe to a Gazebo image topic and run YOLO11 (yolov11n) on it.
 
 Note on Gazebo: the bluerov2_gz model used today does NOT ship a camera
 plugin. Either (a) add a <sensor type="camera"/> + ros_gz image_bridge

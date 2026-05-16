@@ -162,10 +162,10 @@ def _draw_err_gauges(strip: np.ndarray, w: int, frame_h: int,
     gw   = (w - 3 * gpad) // 2
     fs_lbl = 0.32 * sf
 
-    fw = max(w, 1)
+    frame_w = max(w, 1)      # video frame width == strip render width
     ex = ey = 0.0
     if primary is not None:
-        ex = (primary.cx - fw / 2.0) / max(fw / 2.0, 1.0)
+        ex = (primary.cx - frame_w / 2.0) / max(frame_w / 2.0, 1.0)
         ey = (primary.cy - max(frame_h, 1) / 2.0) / max(frame_h / 2.0, 1.0)
 
     gauge_y = r2_y + int(20 * sf)
@@ -307,8 +307,10 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
                           depth_rate: float = 0.0) -> None:
     cv2.line(strip, (4, r4_y), (w - 4, r4_y), C_BORDER, 1)
 
-    za_w = int(w * 0.13)
-    zb_w = int(w * 0.55)
+    _ZA_FRAC = 0.13   # compass zone width fraction
+    _ZB_FRAC = 0.55   # STATE panel zone width fraction
+    za_w = int(w * _ZA_FRAC)
+    zb_w = int(w * _ZB_FRAC)
     za_x = 0
     zb_x = za_w
     zd_x = za_w + zb_w

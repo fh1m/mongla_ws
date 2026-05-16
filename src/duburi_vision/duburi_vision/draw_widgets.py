@@ -42,7 +42,6 @@ C_TEXT    = (225, 228, 228)
 C_DIM     = (105, 110, 110)
 C_BORDER  = ( 58,  63,  63)
 C_PANEL   = ( 38,  40,  46)
-C_HEADER  = (200, 210, 230)
 
 
 # ── TrueType text engine ──────────────────────────────────────────────────── #
@@ -333,40 +332,6 @@ def altimeter_depth(img: np.ndarray,
     if lx < 0:
         lx = x + w + 2
     pil_text(img, lbl, (max(0, lx), ind_y + 4), fs_lbl, d_col)
-
-
-# ── Battery bar ───────────────────────────────────────────────────────────── #
-
-def battery_bar(img: np.ndarray,
-                x: int, y: int, w: int, h: int,
-                voltage: float,
-                cell_count: int = 4,
-                *,
-                fs_scale: float = 1.0) -> None:
-    """Segmented battery indicator with voltage text."""
-    v_full  = cell_count * 4.2
-    v_empty = cell_count * 3.5
-    pct     = float(np.clip((voltage - v_empty) / max(v_full - v_empty, 0.1), 0.0, 1.0))
-    color   = C_OK if pct > 0.60 else (C_AMBER if pct > 0.20 else C_ERR)
-
-    n_segs = 10
-    seg_w  = (w - 2) // n_segs
-    filled = int(pct * n_segs)
-
-    cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
-    for i in range(n_segs):
-        sx1 = x + 1 + i * seg_w
-        sx2 = sx1 + seg_w - 1
-        if i < filled:
-            _fill_rect(img, sx1, y + 1, sx2, y + h - 1, color, alpha=0.60)
-        else:
-            cv2.rectangle(img, (sx1, y + 1), (sx2, y + h - 1), C_BG, -1)
-
-    lbl  = f'{voltage:.1f}V  {int(pct * 100)}%'
-    fs   = 0.28 * fs_scale
-    tw, _ = pil_text_size(lbl, fs)
-    lx   = x + (w - tw) // 2
-    pil_text(img, lbl, (max(x + 2, lx), y + h - 2), fs, C_TEXT)
 
 
 # ── Mini compass ──────────────────────────────────────────────────────────── #

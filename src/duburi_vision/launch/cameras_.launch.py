@@ -1,4 +1,4 @@
-"""cameras_ -- camera + YOLO26 detector + tracker + OpenCV viewer.
+"""cameras_ -- camera + YOLO11 (yolov11n) detector + tracker + OpenCV viewer.
 
 Named camera profiles (config.py / cameras.yaml):
     logitech → Logitech USB RGB webcam, /dev/video4 (default)

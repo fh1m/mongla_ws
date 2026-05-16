@@ -1,4 +1,4 @@
-"""Detection: Detector ABC + YoloDetector (Ultralytics YOLO26).
+"""Detection: Detector ABC + YoloDetector (Ultralytics YOLO11, yolov11n default).
 
 Conversion to vision_msgs lives in `messages.py` so detector code stays
 pure-Python (testable without rclpy)."""

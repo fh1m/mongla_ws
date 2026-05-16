@@ -175,13 +175,15 @@ def vision_track_axes(*,
     distance_metric
         Which part of the bounding box to use as the distance proxy for
         the 'forward' axis:
-        'height'   (default) -- bbox height fraction. Tall objects: buoy, pole, flare.
-        'width'              -- bbox width fraction. Wide horizontal objects: bar.
-        'area'               -- geometric mean of width and height fractions
-                                (sqrt(w*h)). More robust for wide targets
-                                like gates and torpedo holes.
-        'diagonal'           -- normalised bounding box diagonal. Best
-                                all-rounder for targets of unknown aspect ratio.
+        'height'    (default) -- bbox height fraction. Tall objects: buoy, pole, flare.
+        'width'               -- bbox width fraction. Wide horizontal objects: bar.
+        'area'                -- geometric mean of width and height fractions
+                                 (sqrt(w*h)). More robust for wide targets
+                                 like gates and torpedo holes.
+        'diagonal'            -- normalised bounding box diagonal. Best
+                                 all-rounder for targets of unknown aspect ratio.
+        'vis_range'           -- monocular depth estimate from depth_estimation_node
+                                 (0=far, 1=close). Requires that node running.
     gate_guard
         When True, suppress the forward axis whenever the gate bbox appears
         angled (w_frac / h_frac < gate_guard_min_w_frac). The lateral and
@@ -230,9 +232,9 @@ def vision_track_axes(*,
         raise ValueError(f"on_lost must be 'fail' or 'hold' (got {on_lost!r})")
     if lock_mode not in ('settle', 'follow', 'pursue', ''):
         raise ValueError(f"lock_mode must be 'settle', 'follow', or 'pursue' (got {lock_mode!r})")
-    if distance_metric not in ('height', 'width', 'area', 'diagonal', ''):
+    if distance_metric not in ('height', 'width', 'area', 'diagonal', 'vis_range', ''):
         raise ValueError(
-            f"distance_metric must be 'height', 'width', 'area', or 'diagonal' "
+            f"distance_metric must be 'height', 'width', 'area', 'diagonal', or 'vis_range' "
             f"(got {distance_metric!r})")
 
     # Normalise empty string defaults.
@@ -548,12 +550,16 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 def _distance_size(sample, metric: str) -> float:
     """Return the distance proxy for the 'forward' axis.
 
-    'height'   -- bbox height fraction (default; tall objects: buoy, pole, flare).
-    'width'    -- bbox width fraction (wide horizontal objects: bars, torpedo panels).
-    'area'     -- geometric mean of width and height; robust for wide targets
-                  (gates, torpedo holes, anything wider than it is tall).
-    'diagonal' -- normalised diagonal; best all-rounder for unknown shapes.
+    'height'    -- bbox height fraction (default; tall objects: buoy, pole, flare).
+    'width'     -- bbox width fraction (wide horizontal objects: bars, torpedo panels).
+    'area'      -- geometric mean of width and height; robust for wide targets
+                   (gates, torpedo holes, anything wider than it is tall).
+    'diagonal'  -- normalised diagonal; best all-rounder for unknown shapes.
+    'vis_range' -- monocular depth estimate from depth_estimation_node (0=far, 1=close).
+                   Requires depth_estimation_node running on the same camera.
     """
+    if metric == 'vis_range':
+        return sample.vis_range
     if metric == 'area':
         return (sample.h_frac * sample.w_frac) ** 0.5
     if metric == 'diagonal':

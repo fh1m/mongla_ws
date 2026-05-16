@@ -813,6 +813,81 @@ class _VisionDSL:
             duration=float(duration),
             **overrides)
 
+    def vis_approach(self, target=None, *,
+                     camera=None,
+                     threshold: float = 0.65,
+                     duration: float = 30.0,
+                     lock_mode: str = '',
+                     **overrides):
+        """Drive forward using monocular depth from depth_estimation_node.
+
+        Parameters
+        ----------
+        threshold : float
+            Target vis_range to stop at (0=far, 1=close). 0.65 ≈ gate-pass range.
+        duration : float
+            Time budget in seconds.
+
+        Requires depth_estimation_node running on the same camera.
+        Fallback: if depth_estimation_node not running, vis_range = bbox-area proxy
+        (same as approach(metric='area')) — so the verb degrades gracefully.
+
+        Example::
+
+            duburi.vision.vis_approach(target='gate', threshold=0.65, duration=20)
+        """
+        target_str = self._resolve_target(target)
+        return self._send(
+            'vis_approach',
+            camera=self._resolve_camera(camera),
+            target_class=target_str,
+            target_vis_range=float(threshold),
+            duration=float(duration),
+            lock_mode=lock_mode,
+            **overrides)
+
+    def vis_range(self, target=None, *, camera=None, stale_after: float = 1.0) -> float:
+        """Return the latest vis_range estimate for target_class (0=far, 1=close).
+
+        Non-blocking cache check — reads the most recent Float32MultiArray published
+        by depth_estimation_node. Returns 0.0 when no data is available.
+
+        Example::
+
+            r = duburi.vision.vis_range('gate')
+            if r > 0.6:
+                duburi.vision.vis_approach('gate', threshold=0.8)
+        """
+        if isinstance(target, ClassRef):
+            target = target.class_name
+        cam = self._resolve_camera(camera) or self._dsl.camera
+
+        if not hasattr(self, '_vr_subs'):
+            self._vr_subs:  dict = {}
+            self._vr_cache: dict = {}
+
+        if cam not in self._vr_subs:
+            from std_msgs.msg import Float32MultiArray as _FA
+            topic = f'/duburi/vision/{cam}/vis_range'
+            sub   = self._dsl.client.node.create_subscription(
+                _FA, topic,
+                lambda msg, c=cam: self._on_vis_range(c, msg), 10)
+            self._vr_subs[cam] = sub
+
+        rclpy.spin_once(self._dsl.client.node, timeout_sec=0.05)
+        entry = self._vr_cache.get(cam)
+        if entry is None:
+            return 0.0
+        stamp, vals = entry
+        if _time.monotonic() - stamp > stale_after:
+            return 0.0
+        return float(vals[0]) if vals else 0.0
+
+    def _on_vis_range(self, camera: str, msg) -> None:
+        if not hasattr(self, '_vr_cache'):
+            self._vr_cache: dict = {}
+        self._vr_cache[camera] = (_time.monotonic(), list(msg.data))
+
     def home(self, target=None, *,
              camera=None,
              yaw: bool = True,

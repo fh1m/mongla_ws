@@ -24,7 +24,6 @@ from .draw_widgets import (
 )
 from .draw_video import (
     render_video_section,
-    draw_detections,
     draw_track_ids,
 )
 from .draw_strip import render_ui_strip, _STRIP_H

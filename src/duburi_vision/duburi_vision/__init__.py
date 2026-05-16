@@ -6,7 +6,7 @@ Public exports:
   make_camera_from_profile  factory: CAMERA_PROFILES dict -> Camera
   CAMERA_PROFILES           named profile dict (laptop, sim_front, ...)
   Detector, Detection       detection ABC + plain dataclass result
-  YoloDetector              Ultralytics YOLO26 wrapper
+  YoloDetector              Ultralytics YOLO11 wrapper (yolov11n default)
   draw                      module of pure-function visual overlays
 
 Tracking (ByteTrack + Kalman smoother) ships as tracker_node.py and the
