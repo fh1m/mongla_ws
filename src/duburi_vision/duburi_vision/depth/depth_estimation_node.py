@@ -9,6 +9,7 @@ Topics:
 """
 
 import sys
+import time
 
 import cv2
 import numpy as np
@@ -50,6 +51,7 @@ class DepthEstimationNode(Node):
         self.declare_parameter('run_every_n_frames',  3)
         self.declare_parameter('publish_depth_map',  False)
         self.declare_parameter('invert_depth',       True)
+        self.declare_parameter('use_tracks',         False)
 
         cam        = str(self.get_parameter('camera').value or 'forward').strip()
         model_path = str(self.get_parameter('model_path').value or '').strip()
@@ -57,14 +59,16 @@ class DepthEstimationNode(Node):
         self._every_n = max(1, int(every_n) if every_n is not None else 3)
         self._pub_map = bool(self.get_parameter('publish_depth_map').value)
         self._invert  = bool(self.get_parameter('invert_depth').value)
+        use_tracks    = self.get_parameter('use_tracks').get_parameter_value().bool_value
 
         ns = f'/duburi/vision/{cam}'
 
         img_qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.BEST_EFFORT)
         self._sub_img = self.create_subscription(
             Image, f'{ns}/image_raw', self._on_image, img_qos)
+        det_topic     = f'{ns}/tracks' if use_tracks else f'{ns}/detections'
         self._sub_det = self.create_subscription(
-            Detection2DArray, f'{ns}/detections', self._on_detections, 10)
+            Detection2DArray, det_topic, self._on_detections, 10)
 
         self._pub_range = self.create_publisher(Float32MultiArray, f'{ns}/vis_range', 10)
         self._pub_depth_map = (
@@ -80,6 +84,8 @@ class DepthEstimationNode(Node):
         self._input_name  = ''
         self._output_name = ''
         self._fallback    = True
+        self._last_log: float = 0.0
+        self._smooth_ranges: list[float] = []       # EMA-smoothed vis_range per detection
 
         self._try_load_model(model_path)
 
@@ -181,8 +187,24 @@ class DepthEstimationNode(Node):
 
             ranges.append(float(np.clip(val, 0.0, 1.0)))
 
+        # Temporal EMA smoothing: alpha=0.40, reset on detection count change
+        _alpha = 0.40
+        if len(ranges) == len(self._smooth_ranges):
+            self._smooth_ranges = [
+                _alpha * r + (1.0 - _alpha) * s
+                for r, s in zip(ranges, self._smooth_ranges)
+            ]
+        else:
+            self._smooth_ranges = list(ranges)
+
         out      = Float32MultiArray()
-        out.data = ranges
+        out.data = list(self._smooth_ranges)
+        now = time.monotonic()
+        if now - self._last_log >= 2.0:
+            self._last_log = now
+            mode = 'ONNX' if not self._fallback else 'fallback'
+            vals = ', '.join(f'{r:.2f}' for r in ranges)
+            self.get_logger().info(f'[VISRNG] {mode}  {len(ranges)} dets  [{vals}]')
         self._pub_range.publish(out)
 
     def _median_depth_in_bbox(self, cx: float, cy: float, w: float, h: float) -> float:

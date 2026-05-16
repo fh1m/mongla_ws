@@ -36,19 +36,26 @@ from .draw_widgets import (
 from .detection.detector import Detection
 
 # Base row heights at native 640px (sf=1.0).  Actual heights scale with sf.
-_R1_H = 26
-_R2_H = 40
-_R3_H = 120
-_R4_H = 88
-_R5_H = 26
-_R6_H = 26
+_R1_H = 22    # Header (was 26)
+_R2_H = 32    # ERR gauges (was 40)
+_R3_H = 100   # Panels row (was 120)
+_R4_H = 76    # Instruments (was 88)
+_R5_H = 22    # Heading tape (was 26)
+_R6_H = 22    # Health / progress row (was 26)
 
 # Base strip height — used for backwards-compat export only; actual height is dynamic.
-_STRIP_H = _R1_H + _R2_H + _R3_H + _R4_H + _R5_H + _R6_H  # 326
+_STRIP_H = _R1_H + _R2_H + _R3_H + _R4_H + _R5_H + _R6_H  # 274
 
-_SFS  = 0.374  # base panel font scale (multiplied by sf at runtime) — 15% smaller than 0.44
-_SLH  = 12     # base panel line height (scaled with sf at runtime)
-_SPAD = 4      # panel inner padding (NOT scaled — prevents overflow at sf=2)
+_SFS  = 0.34   # base panel font scale (was 0.374)
+_SLH  = 11     # base panel line height (was 12)
+_SPAD = 3      # panel inner padding (was 4)
+
+
+def _vr_label(v: float) -> str:
+    """Qualitative proximity label for a vis_range value (0=far, 1=close)."""
+    if v > 0.65: return 'CLOSE'
+    if v > 0.30: return 'MED'
+    return 'FAR'
 
 
 def render_ui_strip(w: int, frame_h: int, *,
@@ -72,7 +79,8 @@ def render_ui_strip(w: int, frame_h: int, *,
                     is_paused:  bool = False,
                     video_position: Optional[tuple] = None,
                     pipeline_health: Optional[Dict[str, bool]] = None,
-                    depth_rate: float = 0.0) -> np.ndarray:
+                    depth_rate: float = 0.0,
+                    primary_vis_range: float = 0.0) -> np.ndarray:
     """Build and return the UI strip.  Height scales with render width."""
     sf = max(1.0, w / 640.0)
 
@@ -103,7 +111,9 @@ def render_ui_strip(w: int, frame_h: int, *,
                      configured_classes, show_alignment, deadband,
                      ex_h, ey_h, cf_h, sf, r3_y, r3_h, slh, spad)
     _draw_instruments_row(strip, w, yaw, yaw_source, state,
-                          sf, r4_y, r4_h, slh, spad, depth_rate=depth_rate)
+                          sf, r4_y, r4_h, slh, spad,
+                          depth_rate=depth_rate,
+                          primary_vis_range=primary_vis_range)
 
     cv2.line(strip, (4, r5_y - 1), (w - 4, r5_y - 1), C_BORDER, 1)
     heading_tape(strip, 4, r5_y, w - 8, r5_h, yaw, show_readout=False, fs_scale=sf)
@@ -304,7 +314,8 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
                           sf: float,
                           r4_y: int, r4_h: int,
                           slh: int, spad: int,
-                          depth_rate: float = 0.0) -> None:
+                          depth_rate: float = 0.0,
+                          primary_vis_range: float = 0.0) -> None:
     cv2.line(strip, (4, r4_y), (w - 4, r4_y), C_BORDER, 1)
 
     _ZA_FRAC = 0.13   # compass zone width fraction
@@ -350,6 +361,10 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
             ('MODE',  state.mode or '?',           C_ACCENT if armed else C_DIM),
             ('ARMED', 'YES' if armed else 'no',    C_OK     if armed else C_DIM),
             ('BAT',   f'{batt_v:.1f}V',            _bat_color(batt_v)),
+            ('VIS_R', (f'{primary_vis_range:.2f} {_vr_label(primary_vis_range)}'
+                       if primary_vis_range > 0.01 else '---'),
+                      C_OK if primary_vis_range > 0.65 else
+                      C_AMBER if primary_vis_range > 0.30 else C_DIM),
         ]
         _mc_panel(strip, zb_x + int(5 * sf), r4_y + int(4 * sf), 'STATE', st_rows,
                   border=C_OK if armed else C_BORDER,
@@ -358,8 +373,24 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     # ── Zone D: Full-width altimeter ─────────────────────────────────────────── #
     alt_w = max(28, zd_w - 6)
     alt_x = zd_x + (zd_w - alt_w) // 2
-    alt_y = r4_y + int(5 * sf)
-    alt_h = max(int(8 * sf), r4_h - int(10 * sf))
+
+    # Proximity bar — top 15% of Zone D height, shifts altimeter down
+    bar_pad = int(3 * sf)
+    bar_h   = max(8, int(r4_h * 0.15))
+    bar_x   = alt_x
+    bar_y   = r4_y + bar_pad
+    bar_w   = alt_w
+    cv2.rectangle(strip, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), C_BG, -1)
+    if primary_vis_range > 0.01:
+        fill_w   = int(bar_w * min(primary_vis_range, 1.0))
+        fill_col = (C_OK if primary_vis_range > 0.6 else
+                    C_AMBER if primary_vis_range > 0.3 else C_ERR)
+        cv2.rectangle(strip, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), fill_col, -1)
+    cv2.rectangle(strip, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), C_BORDER, 1)
+    pil_text(strip, 'PROX', (bar_x + 2, bar_y + 1), 0.22 * sf, C_DIM)
+
+    alt_y = bar_y + bar_h + bar_pad
+    alt_h = max(int(8 * sf), r4_y + r4_h - alt_y - bar_pad)
     depth = (state.depth_m
              if state is not None and not np.isnan(state.depth_m)
              else float('nan'))

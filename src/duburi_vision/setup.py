@@ -34,7 +34,7 @@ setup(
             'vision_thrust_check = duburi_vision.utils.check_thrust:main',
             'tracker_check       = duburi_vision.utils.check_tracker:main',
             'vision_display      = duburi_vision.utils.display_node:main',
-            'depth_estimation_node = duburi_vision.depth_estimation_node:main',
+            'depth_estimation_node = duburi_vision.depth.depth_estimation_node:main',
         ],
     },
 )

@@ -71,7 +71,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32, Int32, String
+from std_msgs.msg import Float32, Float32MultiArray, Int32, String
 from std_srvs.srv import SetBool
 from vision_msgs.msg import Detection2DArray
 
@@ -138,10 +138,11 @@ def _build_health(node: 'VisionDisplayNode') -> dict[str, bool]:
     """Build pipeline health dict from last-seen timestamps."""
     now = time.monotonic()
     return {
-        'camera':   (now - node._last_frame_t) < 2.0,
-        'detector': (now - node._last_det_t)   < 3.0,
-        'tracker':  (now - node._last_track_t) < 3.0,
-        'state':    (now - node._last_state_t) < 5.0,
+        'camera':   (now - node._last_frame_t)     < 2.0,
+        'detector': (now - node._last_det_t)        < 3.0,
+        'tracker':  (now - node._last_track_t)      < 3.0,
+        'state':    (now - node._last_state_t)      < 5.0,
+        'depth':    (now - node._last_vis_range_t)  < 3.0,
     }
 
 
@@ -214,6 +215,16 @@ class VisionDisplayNode(Node):
         self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
         self._depth_rate: float = 0.0
 
+        # vis_range (monocular proximity estimate, 0=far 1=close)
+        self._vis_range_values: list[float] = []
+        self._vis_range_lock   = threading.Lock()
+        self._last_vis_range_t = 0.0
+
+        # depth map (colorized BGR, cached from vis_range_map topic)
+        self._depth_map_bgr: np.ndarray | None = None
+        self._depth_map_lock = threading.Lock()
+        self._show_depth_map: bool = False   # toggled by 'D' keypress
+
         # Video file state.
         self._is_paused:        bool            = False
         self._video_position:   tuple[int, int] = (0, 0)
@@ -228,11 +239,15 @@ class VisionDisplayNode(Node):
 
         cls_topic = f'/duburi/vision/{camera}/classes_filter'
         trk_topic = f'/duburi/vision/{camera}/tracks'
-        self.create_subscription(Image,            raw_topic,        self._on_image,          qos_be)
-        self.create_subscription(Detection2DArray, det_topic,        self._on_detections,     10)
-        self.create_subscription(Detection2DArray, trk_topic,        self._on_tracks,         10)
-        self.create_subscription(DuburiState,      '/duburi/state',  self._on_state,          10)
-        self.create_subscription(String,           cls_topic,        self._on_classes_filter, 10)
+        vr_topic  = f'/duburi/vision/{camera}/vis_range'
+        vmap_topic = f'/duburi/vision/{camera}/vis_range_map'
+        self.create_subscription(Image,             raw_topic,    self._on_image,          qos_be)
+        self.create_subscription(Detection2DArray,  det_topic,    self._on_detections,     10)
+        self.create_subscription(Detection2DArray,  trk_topic,    self._on_tracks,         10)
+        self.create_subscription(DuburiState,       '/duburi/state', self._on_state,       10)
+        self.create_subscription(String,            cls_topic,    self._on_classes_filter, 10)
+        self.create_subscription(Float32MultiArray, vr_topic,     self._on_vis_range,      10)
+        self.create_subscription(Image,             vmap_topic,   self._on_depth_map,      2)
         self.create_timer(1.0, self._check_waiting)
 
         # Video playback control clients (only when video_file_mode=true).
@@ -299,6 +314,21 @@ class VisionDisplayNode(Node):
 
     def _on_classes_filter(self, msg: String) -> None:
         self._configured_classes = [c.strip() for c in msg.data.split(',') if c.strip()]
+
+    def _on_vis_range(self, msg: Float32MultiArray) -> None:
+        with self._vis_range_lock:
+            self._vis_range_values = list(msg.data)
+            self._last_vis_range_t = time.monotonic()
+
+    def _on_depth_map(self, msg: Image) -> None:
+        try:
+            raw  = self._bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
+            norm = np.clip(raw, 0.0, 1.0)
+            colorized = cv2.applyColorMap((norm * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
+            with self._depth_map_lock:
+                self._depth_map_bgr = colorized
+        except Exception:
+            pass
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
@@ -567,6 +597,22 @@ def main(args=None):
             display_ids  = track_ids if tracked_dets else None
             primary      = largest(display_dets)
 
+            with node._vis_range_lock:
+                vis_range_vals = list(node._vis_range_values)
+            with node._depth_map_lock:
+                depth_map_bgr = (node._depth_map_bgr.copy()
+                                 if node._show_depth_map and node._depth_map_bgr is not None
+                                 else None)
+            primary_vr = 0.0
+            if primary is not None and vis_range_vals:
+                for i, d in enumerate(display_dets):
+                    if (d.class_id == primary.class_id
+                            and abs(d.cx - primary.cx) < 1
+                            and abs(d.cy - primary.cy) < 1
+                            and i < len(vis_range_vals)):
+                        primary_vr = vis_range_vals[i]
+                        break
+
             if primary is not None:
                 h0, w0 = frame.shape[:2]
                 node._err_x_history.append((primary.cx / w0 - 0.5) * 2.0)
@@ -607,6 +653,9 @@ def main(args=None):
                 is_paused=node._is_paused,
                 pipeline_health=_build_health(node),
                 depth_rate=node._depth_rate,
+                vis_range_values=vis_range_vals,
+                primary_vis_range=primary_vr,
+                depth_map_bgr=depth_map_bgr,
             )
 
             # Blend splash over frame while initializing or fading out.
@@ -624,6 +673,8 @@ def main(args=None):
 
             if key in (ord('q'), ord('Q')):
                 break
+            if key in (ord('d'), ord('D')):
+                node._show_depth_map = not node._show_depth_map
             _handle_video_keys(node, key)
 
             if frame_budget > 0:

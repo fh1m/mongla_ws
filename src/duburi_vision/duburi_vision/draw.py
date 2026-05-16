@@ -66,6 +66,9 @@ def render_all(frame_bgr: np.ndarray,
                video_position: Optional[tuple] = None,
                pipeline_health: Optional[Dict[str, bool]] = None,
                depth_rate: float = 0.0,
+               vis_range_values: Optional[List[float]] = None,
+               primary_vis_range: float = 0.0,
+               depth_map_bgr=None,
                ) -> np.ndarray:
     """Return np.vstack([annotated_video, ui_strip]).
 
@@ -83,6 +86,8 @@ def render_all(frame_bgr: np.ndarray,
         primary=primary,
         healthy=healthy,
         track_ids=track_ids,
+        vis_range_values=vis_range_values,
+        depth_map_bgr=depth_map_bgr,
     )
 
     h, w = video_out.shape[:2]
@@ -110,6 +115,7 @@ def render_all(frame_bgr: np.ndarray,
         video_position=video_position,
         pipeline_health=pipeline_health,
         depth_rate=depth_rate,
+        primary_vis_range=primary_vis_range,
     )
 
     return np.vstack([video_out, strip])
