@@ -88,7 +88,7 @@ _WINDOW_NAME       = 'duburi  //  mission control'
 # Render at 2× native camera resolution so sf=2 inside draw_strip → fonts/
 # widgets drawn at full pixel size → crisp on 1080p/4K monitors regardless
 # of OS window scaling.  Fixed constant avoids feedback-loop instability.
-_RENDER_SCALE = 2.0
+_RENDER_SCALE = 1.5
 
 # Arrow key codes from cv2.waitKey on Linux (after & 0xFF they become 81-84).
 # Use waitKeyEx() codes instead — waitKeyEx returns full 32-bit extended codes.
@@ -527,11 +527,11 @@ def main(args=None):
 
     frame_budget  = 1.0 / node._max_hz if node._max_hz > 0 else 0.0
     splash_start  = time.monotonic()
-    # Splash dimensions — match expected 2× render of a 640×480 video + UI strip.
-    _SP_W, _SP_H  = 1280, 1110
+    # Splash at target display resolution — rendered output is always scaled to this.
+    _SP_W, _SP_H  = 1920, 1080
 
     try:
-        cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
+        cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(_WINDOW_NAME, 1920, 1080)
 
         # Show splash immediately; pause video until detector fires first detections.
@@ -668,6 +668,7 @@ def main(args=None):
                 cv2.addWeighted(splash, alpha, out, 1.0 - alpha, 0, out)
 
             t0 = time.monotonic()
+            out = cv2.resize(out, (_SP_W, _SP_H), interpolation=cv2.INTER_LINEAR)
             cv2.imshow(_WINDOW_NAME, out)
             key = cv2.waitKeyEx(1)
 
