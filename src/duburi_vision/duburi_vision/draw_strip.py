@@ -16,8 +16,8 @@ Layout (top -> bottom):
   Row 5  h=26*sf   Full-width heading tape
   Row 6  h=26*sf   Live: pipeline health row  |  Video: progress bar
   ──────────────────────────────────────────────────────────────────────
-  Base  326px  at 640px native width (sf=1.0)
-  All row heights scale with sf = max(1.0, render_width / 640).
+  Base  274px  at 1920px render width (sf=1.0)
+  All row heights scale with sf = max(0.6, render_width / 1920).
 """
 from __future__ import annotations
 
@@ -82,7 +82,9 @@ def render_ui_strip(w: int, frame_h: int, *,
                     depth_rate: float = 0.0,
                     primary_vis_range: float = 0.0) -> np.ndarray:
     """Build and return the UI strip.  Height scales with render width."""
-    sf = max(1.0, w / 640.0)
+    # Calibrated for 1920px native render (sf=1.0 at 1920). At smaller widths
+    # the floor of 0.6 keeps widgets readable without becoming microscopic.
+    sf = max(0.6, w / 1920.0)
 
     # Dynamic row heights and Y positions
     r1_h = int(_R1_H * sf);  r1_y = 0
@@ -374,9 +376,9 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     alt_w = max(28, zd_w - 6)
     alt_x = zd_x + (zd_w - alt_w) // 2
 
-    # Proximity bar — top 15% of Zone D height, shifts altimeter down
+    # Proximity bar — top 30% of Zone D height, shifts altimeter down
     bar_pad = int(3 * sf)
-    bar_h   = max(8, int(r4_h * 0.15))
+    bar_h   = max(12, int(r4_h * 0.30))
     bar_x   = alt_x
     bar_y   = r4_y + bar_pad
     bar_w   = alt_w
@@ -387,7 +389,15 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
                     C_AMBER if primary_vis_range > 0.30 else C_ERR)
         cv2.rectangle(strip, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), fill_col, -1)
     cv2.rectangle(strip, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), C_BORDER, 1)
+    # Tick marks at threshold positions (0.30=MED, 0.65=CLOSE)
+    for thresh in (0.30, 0.65):
+        tx = bar_x + int(bar_w * thresh)
+        cv2.line(strip, (tx, bar_y), (tx, bar_y + bar_h), C_BORDER, 1)
     pil_text(strip, 'PROX', (bar_x + 2, bar_y + 1), 0.22 * sf, C_DIM)
+    if primary_vis_range > 0.01:
+        num_str = f'{primary_vis_range:.2f}'
+        nw, _   = pil_text_size(num_str, 0.22 * sf)
+        pil_text(strip, num_str, (bar_x + bar_w - nw - 2, bar_y + 1), 0.22 * sf, C_DIM)
 
     alt_y = bar_y + bar_h + bar_pad
     alt_h = max(int(8 * sf), r4_y + r4_h - alt_y - bar_pad)

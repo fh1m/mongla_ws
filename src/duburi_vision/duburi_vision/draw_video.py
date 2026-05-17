@@ -39,6 +39,29 @@ def _vr_label(v: float) -> str:
     if v > 0.65: return 'CLOSE'
     if v > 0.30: return 'MED'
     return 'FAR'
+
+
+# Per-slot label hysteresis: only switch CLOSE/MED/FAR when value moves >0.05
+# from the last switch point. Prevents flickering at threshold boundaries.
+_vr_prev_labels: list[str] = []
+_vr_switch_vals: list[float] = []
+
+
+def _vr_label_hysteresis(v: float, idx: int) -> str:
+    global _vr_prev_labels, _vr_switch_vals
+    while len(_vr_prev_labels) <= idx:
+        _vr_prev_labels.append('')
+        _vr_switch_vals.append(-1.0)
+    new_raw = _vr_label(v)
+    prev = _vr_prev_labels[idx]
+    if not prev:
+        _vr_prev_labels[idx] = new_raw
+        _vr_switch_vals[idx] = v
+        return new_raw
+    if new_raw != prev and abs(v - _vr_switch_vals[idx]) > 0.05:
+        _vr_prev_labels[idx] = new_raw
+        _vr_switch_vals[idx] = v
+    return _vr_prev_labels[idx]
 C_HAIRLINE = (0, 180, 255)    # orange-yellow target hairlines
 
 
@@ -100,7 +123,7 @@ def render_video_section(frame_bgr: np.ndarray,
 
     out = frame_bgr.copy()
     h, w = out.shape[:2]
-    sf = max(1.0, w / 640.0)
+    sf = max(0.6, w / 1920.0)  # calibrated for 1920px native render
 
     cx_frame, cy_frame = w // 2, h // 2
 
@@ -131,7 +154,7 @@ def render_video_section(frame_bgr: np.ndarray,
             tid    = (track_ids[i] if track_ids and i < len(track_ids)
                       and track_ids[i] is not None else None)
             prefix = f'#{tid} ' if tid is not None else ''
-            vr_str = (f' ~{vr_list[i]:.2f} {_vr_label(vr_list[i])}'
+            vr_str = (f' ~{vr_list[i]:.2f} {_vr_label_hysteresis(vr_list[i], i)}'
                       if i < len(vr_list) and vr_list[i] > 0.01 else '')
             labels.append(f'{prefix}{d.class_name} {int(d.score * 100)}%{vr_str}')
         out = sv['label'].annotate(scene=out, detections=sv_all, labels=labels)
@@ -310,7 +333,7 @@ def _draw_corners(img, x1, y1, x2, y2, color, length=14, thickness=3):
         cv2.line(img, (px, py), (px, py + dy * length), color, thickness, cv2.LINE_AA)
 
 
-# Pre-warm supervision annotators at sf=2.0 (the display_node runtime scale).
+# Pre-warm supervision annotators at sf=1.0 (native 1920px render scale).
 # Without this the first detection frame triggers annotator construction + cuDNN
 # cache miss simultaneously, causing a visible stutter.
-_get_sv(2.0)
+_get_sv(1.0)
