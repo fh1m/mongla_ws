@@ -85,10 +85,9 @@ from duburi_vision.draw_widgets import pil_text, pil_text_size
 _WAIT_LOG_INTERVAL = 5.0
 _WINDOW_NAME       = 'duburi  //  mission control'
 
-# Render at 2× native camera resolution so sf=2 inside draw_strip → fonts/
-# widgets drawn at full pixel size → crisp on 1080p/4K monitors regardless
-# of OS window scaling.  Fixed constant avoids feedback-loop instability.
-_RENDER_SCALE = 1.5
+# Target display width. Frames are resized to this width (single step, no
+# intermediate scale) so draw_strip's sf=max(0.6, w/1920) resolves to 1.0.
+_RENDER_W = 1920
 
 # Arrow key codes from cv2.waitKey on Linux (after & 0xFF they become 81-84).
 # Use waitKeyEx() codes instead — waitKeyEx returns full 32-bit extended codes.
@@ -124,12 +123,12 @@ def _start_pipeline(camera: str, model: str, classes: str,
     return [camera_proc, detector_proc]
 
 
-def _scale_dets(dets: list, scale: float) -> list:
-    """Return a new list of Detections with xyxy scaled by `scale`."""
+def _scale_dets(dets: list, sx: float, sy: float) -> list:
+    """Return a new list of Detections with xyxy scaled by sx (x-axis) and sy (y-axis)."""
     return [
         Detection(class_id=d.class_id, class_name=d.class_name, score=d.score,
-                  xyxy=(d.xyxy[0] * scale, d.xyxy[1] * scale,
-                        d.xyxy[2] * scale, d.xyxy[3] * scale))
+                  xyxy=(d.xyxy[0] * sx, d.xyxy[1] * sy,
+                        d.xyxy[2] * sx, d.xyxy[3] * sy))
         for d in dets
     ]
 
@@ -584,6 +583,7 @@ def main(args=None):
                 continue
 
             # ── Process and render frame ────────────────────────────────────
+            t0 = time.monotonic()   # frame budget starts here, covers render + imshow
             with node._det_lock:
                 dets = list(node._detections)
             with node._tracks_lock:
@@ -624,12 +624,13 @@ def main(args=None):
                 node._conf_history.append(0.0)
 
             native_h, native_w = frame.shape[:2]
-            render_w      = int(native_w * _RENDER_SCALE)
-            render_h      = int(native_h * _RENDER_SCALE)
-            render_frame  = cv2.resize(frame, (render_w, render_h),
-                                       interpolation=cv2.INTER_LINEAR)
-            render_dets   = _scale_dets(display_dets, _RENDER_SCALE)
-            render_primary = (_scale_dets([primary], _RENDER_SCALE)[0]
+            video_h      = int(native_h * _RENDER_W / native_w)
+            render_frame = cv2.resize(frame, (_RENDER_W, video_h),
+                                      interpolation=cv2.INTER_LINEAR)
+            sx = _RENDER_W / native_w
+            sy = video_h   / native_h
+            render_dets    = _scale_dets(display_dets, sx, sy)
+            render_primary = (_scale_dets([primary], sx, sy)[0]
                               if primary is not None else None)
 
             out = draw.render_all(
@@ -667,8 +668,8 @@ def main(args=None):
                 alpha = 0.80 * _fade
                 cv2.addWeighted(splash, alpha, out, 1.0 - alpha, 0, out)
 
-            t0 = time.monotonic()
-            out = cv2.resize(out, (_SP_W, _SP_H), interpolation=cv2.INTER_LINEAR)
+            if out.shape[0] != _SP_H or out.shape[1] != _SP_W:
+                out = cv2.resize(out, (_SP_W, _SP_H), interpolation=cv2.INTER_LINEAR)
             cv2.imshow(_WINDOW_NAME, out)
             key = cv2.waitKeyEx(1)
 

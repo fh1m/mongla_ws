@@ -187,8 +187,9 @@ class DepthEstimationNode(Node):
 
             ranges.append(float(np.clip(val, 0.0, 1.0)))
 
-        # Temporal EMA smoothing: alpha=0.40, reset on detection count change
-        _alpha = 0.40
+        # Temporal EMA smoothing: alpha=0.15 gives ~0.67s settling at 10Hz — stable
+        # without being sluggish. Higher alpha (0.40) caused visible label flickering.
+        _alpha = 0.15
         if len(ranges) == len(self._smooth_ranges):
             self._smooth_ranges = [
                 _alpha * r + (1.0 - _alpha) * s
