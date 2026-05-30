@@ -38,6 +38,17 @@
 Humble control / mission / vision / simulation brain. The competition fields
 **two *bodies*** the soul runs on, coordinated for RoboSub 2026:
 
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/imgs/duburi45-render.webp" alt="Duburi 4.5 render" width="100%"/></td>
+<td width="50%" align="center"><img src="docs/imgs/dubomini-render.png" alt="Dubomini 2.0 render" width="100%"/></td>
+</tr>
+<tr>
+<td align="center"><b>Duburi 4.5</b> — primary · octagonal · sensors + Evil&nbsp;Claw / dropper / torpedo</td>
+<td align="center"><b>Dubomini 2.0</b> — agile · compact · 8× T200 · manipulator-free</td>
+</tr>
+</table>
+
 | | **Duburi 4.5** — primary | **Dubomini 2.0** — agile second body |
 |---|---|---|
 | Role | sensors + manipulation (grabber / dropper / torpedo) | fast, compact, manipulator-free tasks |
@@ -67,6 +78,29 @@ Read every capability in three states — **✅ built & tested · 🟦 committed
 - **✏️ Corrected:** detector is **YOLO11** (the TDR's YOLO26 line is corrected; YOLO11 is the committed, battle-tested family).
 
 > Decision record (P0.1, 2026-05-31): [`robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md) §6 · phase schedule: [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
+
+## In the water — RoboSub
+
+<p align="center">
+  <img src="docs/imgs/pool-dual-auvs.jpg" alt="Duburi and Dubomini running the course together" width="92%"/>
+  <br/><sub><b>Two bodies, one soul</b> — Duburi 4.5 and Dubomini 2.0 in the pool at RoboSub.</sub>
+</p>
+
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/imgs/pool-dubomini-top.jpg" alt="Dubomini holding station" width="100%"/><br/><sub>Dubomini holding station — clear-hull electronics bay.</sub></td>
+<td width="50%" align="center"><img src="docs/imgs/pool-dubomini-glide.jpg" alt="Dubomini transiting" width="100%"/><br/><sub>Compact, low-drag transit on tether.</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/imgs/robosub-deploy.jpg" alt="Deploying the AUV poolside at RoboSub" width="100%"/><br/><sub>Poolside deploy — RoboSub, California.</sub></td>
+<td align="center"><img src="docs/imgs/robosub-tent.jpg" alt="Team pit at RoboSub" width="100%"/><br/><sub>The pit — RoboNation · BlueRobotics · SpaceX lanes.</sub></td>
+</tr>
+</table>
+
+<p align="center">
+  <img src="docs/imgs/team-bd-flag.jpg" alt="BRAC University Duburi at RoboSub, Bangladesh flag" width="58%"/>
+  <br/><sub><b>BRAC University Duburi</b> — flying the flag at RoboSub. 🇧🇩 &nbsp;Final push to <b>July 11, 2026</b>.</sub>
+</p>
 
 <p align="center">
   <a href="#quickstart-smoke-tests"><strong>Quickstart</strong></a> ·

@@ -192,14 +192,15 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
     <div class="hero-sub">— duburi — <span class="r">autonomous</span></div>
     <div class="hero-desc">
       A ROS 2 Humble control, mission, and vision stack for ArduSub vehicles.<br>
-      <em>One action surface</em>, axis-isolated control, <em>YOLO perception</em>, DVL dead-reckoning,<br>
-      and full RoboSub task autonomy — field-tested on <em>Duburi 4.2</em>.
+      <em>One action surface</em>, axis-isolated control, <em>YOLO11 perception</em>, DVL dead-reckoning,<br>
+      and full RoboSub task autonomy. <strong>Mongla is the soul</strong> — it runs on two bodies,
+      <em>Duburi 4.5</em> &amp; <em>Dubomini 2.0</em> (bench-tested on the <em>Duburi 4.2</em> hull).
     </div>
     <div class="hero-badges">
       <span class="badge badge-blue">ROS2 Humble</span>
       <span class="badge badge-red">ArduSub 4.x</span>
       <span class="badge badge-gold">Pixhawk 2.4.8</span>
-      <span class="badge badge-blue">YOLO v26</span>
+      <span class="badge badge-blue">YOLO11</span>
       <span class="badge badge-green">Nucleus1000 DVL</span>
       <span class="badge badge-blue">BNO085 IMU</span>
       <span class="badge badge-red">ByteTrack</span>
@@ -210,8 +211,27 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
 <!-- ── PLATFORM ──────────────────────────────────────────── -->
 <section id="platform">
 <div class="section-wrap">
-  <div class="sec-label">01 — The Platform</div>
-  <h2>Duburi 4.2 — hardware at a glance</h2>
+  <div class="sec-label">01 — The Bodies</div>
+  <h2>One soul, two bodies</h2>
+  <p class="sec-sub">Mongla (<code>duburi_ws</code>) is the soul — it runs on two RoboSub 2026 bodies. The day-to-day dev/bench platform is the <strong>Duburi 4.2</strong> hull (the lineage the 4.5 build derives from).</p>
+
+  <div class="g2" style="gap:18px;margin:24px 0 32px">
+    <figure style="margin:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card);box-shadow:0 8px 40px rgba(0,0,0,.4)">
+      <img src="imgs/duburi45-render.webp" alt="Duburi 4.5 render" style="width:100%;display:block;background:#0b1525"/>
+      <figcaption style="padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--blue);letter-spacing:.06em">DUBURI 4.5 — primary · sensors + Evil Claw / dropper / torpedo</figcaption>
+    </figure>
+    <figure style="margin:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card);box-shadow:0 8px 40px rgba(0,0,0,.4)">
+      <img src="imgs/dubomini-render.png" alt="Dubomini 2.0 render" style="width:100%;display:block;background:#0b1525"/>
+      <figcaption style="padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--cyan);letter-spacing:.06em">DUBOMINI 2.0 — agile · 8× T200, manipulator-free</figcaption>
+    </figure>
+  </div>
+
+  <figure style="margin:0 0 30px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <img src="imgs/pool-dual-auvs.jpg" alt="Duburi and Dubomini in the pool at RoboSub" style="width:100%;display:block"/>
+    <figcaption style="padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--muted)">Both bodies in the water — RoboSub pool run.</figcaption>
+  </figure>
+
+  <h2 style="margin-top:8px">Duburi 4.2 — dev platform hardware</h2>
   <p class="sec-sub">Octagonal Marine 5083 aluminum hull, 8× Blue Robotics T200 thrusters in vectored_6dof configuration — same ArduSub frame as BlueROV2 Heavy.</p>
 
   <div class="g2" style="gap:24px;align-items:start">
@@ -521,7 +541,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
 <div class="section-wrap">
   <div class="sec-label">04 — Perception</div>
   <h2>Vision pipeline: camera → detection → tracking</h2>
-  <p class="sec-sub">YOLO v26 runs on the Jetson GPU at ~30 Hz. ByteTrack assigns stable IDs across frames. VisionState bridges detections to control commands.</p>
+  <p class="sec-sub">YOLO11 runs on the Jetson GPU at ~30 Hz. ByteTrack assigns stable IDs across frames. VisionState bridges detections to control commands.</p>
 
   <div class="diagram">
     <svg viewBox="0 0 1000 220" width="1000" height="220" style="max-width:100%" xmlns="http://www.w3.org/2000/svg">
@@ -543,7 +563,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
       <!-- YOLO box -->
       <rect x="157" y="40" width="160" height="140" rx="4" fill="#0b1525" stroke="#a78bfa" stroke-width="1.5"></rect>
       <text x="237" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">detector_node</text>
-      <text x="237" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0" font-weight="500">YOLO v26</text>
+      <text x="237" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="8.5" fill="#e2e8f0" font-weight="500">YOLO11</text>
       <text x="237" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Ultralytics · Jetson GPU</text>
       <text x="237" y="110" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">CUDA accelerated</text>
       <!-- Bounding box icon -->
@@ -602,7 +622,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
   </div>
 
   <div class="cite">ByteTrack: Zhang et al., "ByteTrack: Multi-Object Tracking by Associating Every Detection Box" ECCV 2022 · <a href="https://arxiv.org/abs/2110.06864">arxiv.org/abs/2110.06864</a><br>
-  YOLO: Ultralytics YOLO v26 architecture — real-time object detection · <a href="https://docs.ultralytics.com">docs.ultralytics.com</a><br>
+  YOLO: Ultralytics YOLO11 architecture — real-time object detection · <a href="https://docs.ultralytics.com">docs.ultralytics.com</a><br>
   Kalman Filter: R.E. Kalman, "A New Approach to Linear Filtering and Prediction Problems" ASME 1960 — used here for per-track bbox smoothing</div>
 </div>
 </section>
@@ -810,7 +830,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
       <text x="215" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#38bdf8">Camera</text>
       <line x1="260" y1="29" x2="285" y2="29" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#a1)"></line>
       <rect x="287" y="14" width="80" height="30" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
-      <text x="327" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">YOLO26</text>
+      <text x="327" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#a78bfa">YOLO11</text>
       <line x1="367" y1="29" x2="392" y2="29" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#a1p)"></line>
       <rect x="394" y="14" width="90" height="30" rx="3" fill="#101e33" stroke="#34d399" stroke-width="1"></rect>
       <text x="439" y="33" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#34d399">ByteTrack</text>
@@ -1458,7 +1478,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
     <div class="card">
       <span class="tag t-purple">Computer Vision</span>
       <div class="card-title" style="margin-top:8px">YOLO Object Detection</div>
-      <p>You Only Look Once — single-pass CNN for real-time detection. YOLO v26 on Jetson GPU delivers ~30 Hz detection of gates, buoys, bins, and other RoboSub objects.</p>
+      <p>You Only Look Once — single-pass CNN for real-time detection. YOLO11 on Jetson GPU delivers ~30 Hz detection of gates, buoys, bins, and other RoboSub objects.</p>
       <div class="cite" style="margin-top:10px">
         Redmon et al., "You Only Look Once" CVPR 2016 · <a href="https://arxiv.org/abs/1506.02640">arxiv</a><br>
         Ultralytics YOLO: <a href="https://docs.ultralytics.com">docs.ultralytics.com</a><br>
@@ -1504,7 +1524,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
   <img src="imgs/mongla-logo-dark.png" style="height:60px;opacity:.8" alt="Mongla">
   <div>
     <div style="font-family:var(--mono);font-size:11px;color:var(--blue);letter-spacing:.1em;margin-bottom:4px">MONGLA — duburi_ws</div>
-    <div style="font-size:12px;color:var(--muted)">AUV control stack for Duburi 4.2 · ROS2 Humble · ArduSub · YOLO v26 · Nortek Nucleus1000 DVL</div>
+    <div style="font-size:12px;color:var(--muted)">The soul for Duburi 4.5 + Dubomini 2.0 · ROS2 Humble · ArduSub · YOLO11 · Nortek Nucleus1000 DVL</div>
     <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px">EXPLORE · PERCEIVE · AUTONOMOUS</div>
   </div>
   <div style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);text-align:right">
