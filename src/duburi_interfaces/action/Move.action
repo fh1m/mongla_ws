@@ -5,8 +5,8 @@ string  cmd          # arm | disarm | set_mode | stop | pause |
                      # yaw_left | yaw_right | arc | set_depth |
                      # lock_heading | unlock_heading | dvl_connect |
                      # vision_align_3d | vision_align_yaw | vision_align_lat |
-                     # vision_align_depth | vision_hold_distance | vision_acquire |
-                     # look_around
+                     # vision_align_depth | vision_hold_distance | vis_approach |
+                     # vision_acquire | look_around
 float32 duration     # seconds  (move_*, arc, pause, vision_*)
 float32 gain         # 0-100 %  (move_*, arc, vision_acquire drive level)
 float32 target       # metres   (set_depth) or
@@ -50,6 +50,8 @@ float32 pass_at            # position-lock trigger: once size metric >= pass_at,
                            # lat+depth and drive straight at pass_at_gain%. 0.0 = disabled.
 float32 pass_at_gain       # forward thrust % during pass-through; 0.0 = use default (50%)
 bool    tracking           # false (default) = use /detections; true = use /tracks (requires tracker_node)
+float32 target_vis_range   # vis_approach: monocular-depth target 0..1 (0=far, 1=close)
+                           # from depth_estimation_node /vis_range. 0.0 on wire = use default (0.65)
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

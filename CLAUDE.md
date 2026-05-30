@@ -14,9 +14,30 @@
 > Some legacy `.claude/context/*.md` files (notably `proven-patterns.md`)
 > describe historical 2023/2025 codebases, not this workspace.
 
+> **RoboSub 2026 framing (TDR vs this codebase — read before trusting either).**
+> The submitted TDR (`TDR26_BRACU_Duburi.pdf`) describes the team's 2026
+> *target*: a dual-vehicle run — **Duburi 4.5** (primary; sensors +
+> grabber/dropper/torpedo) and **Dubomini 2.0** (agile, 8-thruster, no
+> DVL/manipulators) — coordinated over **IVC**, sequenced by an **FSM**,
+> perceiving with **YOLO26**. **This workspace does NOT implement that.**
+> It is the proven 4.2-derived **single-vehicle** stack (the "Duburi 4.5
+> line" of code): imperative `detected()` missions (no FSM), **YOLO11**
+> (YOLO26 is backwards-compat only), no Dubomini, no IVC, and task
+> coverage of Gate / Return / search-align (≈800 pt envelope per the
+> roadmap). The workspace name, the `/duburi/*` namespace, and "4.2" in
+> hardware tables are deliberately kept for back-compat — **do not
+> bulk-rename them.** Every TDR-vs-code delta is enumerated, severity-
+> tagged, and given an owner in
+> [`.claude/context/robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md);
+> the honest task schedule is
+> [`.claude/context/robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
+> When docs and the TDR disagree, **code is ground truth** — fix the gap
+> or soften the claim; never edit docs to assert a capability the code
+> lacks.
+
 ---
 
-## 1. Hardware Overview (test platform: Duburi 4.2)
+## 1. Hardware Overview (test platform: Duburi 4.2 hull → 4.5 build)
 
 > Full spec lives in [`.claude/context/vehicle-spec.md`](.claude/context/vehicle-spec.md). Short table here.
 
@@ -698,6 +719,14 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 
 ## 14. Context files (in `.claude/context/`)
 
+**RoboSub 2026 (read first — competition status & TDR reconciliation):**
+
+| File                            | Contents                                                            |
+|---------------------------------|---------------------------------------------------------------------|
+| `robosub-2026-audit.md`         | **Full-stack audit + TDR⇄code gap matrix + readiness verdict + P0/P1/P2 plan.** Start here for "are we on track?" |
+| `robosub-2026-roadmap.md`       | Honest task schedule + coverage table (Gate/Return/search ≈800 pt target); deliberate non-goals (FSM, Octagon, torpedo) |
+| `scouting/`                     | Competitor/reference-team scouting notes (e.g. `bumblebee-2025.md`) |
+
 **API & verbs (start here):**
 
 | File                            | Contents                                                            |
@@ -730,7 +759,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `dvl-reference.md`              | Nortek Nucleus1000 protocol, packet catalog, POSHOLD ArduSub setup  |
 | `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |
 | `pool-day.md`                   | Pool-day checklist and session workflow                             |
-| `known-issues.md`               | Tracked code bugs from the 2026-04 audit, scoped per file           |
+| `known-issues.md`               | Tracked code bugs from the 2026-04/05 audits (all FIXED). Current cross-cutting state → `robosub-2026-audit.md` |
 
 **Method & design theory:**
 
@@ -752,3 +781,48 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `future/goals.md`               | Original TDR task checklist (archival)                              |
 | `future/future-registry-shrinkage.md` | Parked: COMMANDS registry refactor ideas                    |
 | `future/future-bno-into-ekf.md` | Parked: BNO085 velocity integration into ArduSub EKF3              |
+
+---
+
+## 15. Claude automations (`.claude/agents`, `.claude/skills`, `.claude/hooks`)
+
+Project-local Claude Code automations, versioned with the repo and shared with the team.
+
+**Subagents** (`.claude/agents/*.md`) — dispatch via the Agent/Task tool:
+
+| Agent | Use after / for |
+|-------|-----------------|
+| `mavlink-reviewer`       | editing `duburi_control/` — checks mode preconditions, RC directions, rate pins, heartbeat, disarm safety |
+| `mission-reviewer`       | editing `missions/` — `detected()` guard, gate_guard, on_lost, timeout fallbacks, disarm-in-finally |
+| `doc-verifier`           | auditing external-API usage (pymavlink, ultralytics, supervision, cv2) vs current online docs |
+| `context-doc-sync`       | flagging stale claims in `.claude/context/*.md` + CLAUDE.md vs `src/` |
+| `robosub-task-architect` | designing a new RoboSub 2026 task (mission + detection + DSL verbs) |
+| `vision-model-reviewer`  | reviewing YOLO11 train/detect configs, dataset balance, thresholds |
+
+**Skills** (`.claude/skills/<name>/SKILL.md`) — invoke as `/<name>`:
+
+| Skill | Invocation | Purpose |
+|-------|-----------|---------|
+| `pool-day`     | both      | Interactive in-water preflight (bringup_check, topic rates, armed=false gate) |
+| `add-command`  | user-only | Scaffold a new `/duburi/move` verb (commands.py + Duburi method + test) |
+| `new-mission`  | user-only | Scaffold a mission from the `detected()`-paradigm template |
+| `train-model`  | both      | YOLO11 fine-tune workflow for a new detection task |
+| `verify-docs`  | user-only | Run `doc-verifier` across a package, summarize API drift |
+
+**Hooks** (`.claude/hooks/`, wired in `.claude/settings.json` via `$CLAUDE_PROJECT_DIR` so they work on any checkout):
+
+| Hook | Event | Behavior |
+|------|-------|----------|
+| `block_install.py` | PreToolUse  | Blocks edits to the colcon-generated `install/` tree (exit 2) |
+| `py_check.sh`      | PostToolUse | `py_compile` syntax check on edited `.py` (advisory) |
+| `pkg_test.sh`      | PostToolUse | Runs the matching `test_<name>.py` for an edited source file (targeted, fast, advisory) |
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

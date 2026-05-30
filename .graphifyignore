@@ -1,0 +1,11 @@
+# graphify corpus excludes (gitignore syntax).
+# Keep the knowledge graph to first-party source/docs only — drop generated
+# trees and regenerable tool artifacts so `graphify update` does not re-pollute
+# the graph with install/ duplicates or graph-of-the-graph noise.
+install/
+build/
+log/
+.understand-anything/
+graphify-out/
+.remember/
+.git/

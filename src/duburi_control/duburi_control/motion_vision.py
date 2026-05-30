@@ -39,7 +39,9 @@ Image-frame error (forward camera, BGR pixel coords; cy grows downward):
                                           target size)
 
 Per-axis output:
-  yaw_pct  = clamp(ex * Kp_yaw,   +/- YAW_PCT_MAX)             -> Ch4
+  yaw_pct  = clamp(-ex * Kp_yaw,  +/- YAW_PCT_MAX)             -> Ch4
+                                          (negated: Ch4 > 1500 = yaw LEFT,
+                                           so target-right needs Ch4 < 1500)
   lat_pct  = clamp(ex * Kp_lat,   +/- LAT_PCT_MAX)             -> Ch6
   fwd_pct  = clamp((target_h_frac - h_frac) * Kp_forward,
                    +/- FWD_PCT_MAX)                             -> Ch5
@@ -336,36 +338,28 @@ def vision_track_axes(*,
             axes_in_deadband = []   # one bool per active axis this tick
 
             if 'yaw' in axes:
-                # Negate: Ch4 > 1500 = yaw LEFT. Target right → yaw right
-                # → need Ch4 < 1500 → negative yaw_pct.
-                yaw_pct = _clamp(-sample.ex * gains.kp_yaw,
-                                 -YAW_PCT_MAX, YAW_PCT_MAX)
+                yaw_pct = _yaw_pct(sample.ex, gains.kp_yaw)
                 axes_in_deadband.append(abs(sample.ex) <= deadband)
 
             if 'lat' in axes:
-                # No negation: Ch6 > 1500 = strafe RIGHT (same as open-loop
-                # move_right: signed_dir=+1 → positive pwm → Ch6 > 1500).
-                # Target right → positive ex → positive lat_pct → strafe right.
-                lat_pct = _clamp(sample.ex * gains.kp_lat,
-                                 -LAT_PCT_MAX, LAT_PCT_MAX)
+                lat_pct = _lat_pct(sample.ex, gains.kp_lat)
                 axes_in_deadband.append(abs(sample.ex) <= deadband)
 
             if 'forward' in axes:
-                # Use the selected metric as the distance proxy.
-                # 'area' handles wide targets (gates); 'diagonal' is the
-                # best all-rounder when target shape is unknown.
-                size = _distance_size(sample, _distance_metric)
-                distance_error = target_h_frac - size
-                if _lock_mode == 'pursue':
-                    # Pursue: only allow driving forward, never backing off.
-                    # Clamp lower bound to 0 so negative error (too close)
-                    # doesn't generate reverse thrust.
-                    forward_pct = _clamp(distance_error * gains.kp_forward,
-                                         0.0, FWD_PCT_MAX)
+                # 'area' handles wide targets (gates); 'diagonal' is the best
+                # all-rounder for unknown shapes; 'vis_range' uses monocular depth.
+                forward_pct, distance_error = _forward_decision(
+                    sample, _distance_metric, target_h_frac,
+                    gains.kp_forward, _lock_mode)
+                if distance_error is None:
+                    # Suppressed: vis_range metric with no depth signal.
+                    axes_in_deadband.append(False)
+                    log.warning(
+                        '[VIS  ] vis_range=0 (depth node offline?) -- '
+                        'forward thrust suppressed',
+                        throttle_duration_sec=2.0)
                 else:
-                    forward_pct = _clamp(distance_error * gains.kp_forward,
-                                         -FWD_PCT_MAX, FWD_PCT_MAX)
-                axes_in_deadband.append(abs(distance_error) <= deadband)
+                    axes_in_deadband.append(abs(distance_error) <= deadband)
 
             if 'depth' in axes and not pass_through_active:
                 # depth_anchor_frac shifts which point on the bbox we align
@@ -545,6 +539,45 @@ def vision_acquire(*,
 # ---------------------------------------------------------------------- #
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _yaw_pct(ex: float, kp_yaw: float) -> float:
+    """Horizontal error → Ch4 yaw percent.
+
+    NEGATED: Ch4 > 1500 = yaw LEFT, so a target to the RIGHT (ex > 0) must
+    produce a NEGATIVE pct (Ch4 < 1500) to yaw right toward it. Sign errors
+    here are exactly what bite in the pool — keep this in one tested place.
+    """
+    return _clamp(-ex * kp_yaw, -YAW_PCT_MAX, YAW_PCT_MAX)
+
+
+def _lat_pct(ex: float, kp_lat: float) -> float:
+    """Horizontal error → Ch6 lateral percent.
+
+    NOT negated (opposite of _yaw_pct): Ch6 > 1500 = strafe RIGHT, so a target
+    to the RIGHT (ex > 0) needs a POSITIVE pct to strafe toward it. The
+    yaw/lateral sign asymmetry is the `1801fe2` lateral-sign bug class — keep
+    both in one tested place so the polarities can't silently drift together.
+    """
+    return _clamp(ex * kp_lat, -LAT_PCT_MAX, LAT_PCT_MAX)
+
+
+def _forward_decision(sample, metric, target_h_frac, kp_forward, lock_mode):
+    """Forward axis: returns (forward_pct, distance_error_or_None).
+
+    distance_error is None when the axis is SUPPRESSED — i.e. metric is
+    'vis_range' but there is no depth signal (`sample.vis_range <= 0.0`,
+    the default when depth_estimation_node is offline). A 0.0 vis_range is
+    "no signal", NOT "target far"; driving forward on it would thrust until
+    timeout. The caller treats a None as not-settled + warns.
+    """
+    size = _distance_size(sample, metric)
+    if metric == 'vis_range' and size <= 0.0:
+        return 0.0, None
+    distance_error = target_h_frac - size
+    # 'pursue' only drives forward (lower-clamp 0) so over-close never reverses.
+    lo = 0.0 if lock_mode == 'pursue' else -FWD_PCT_MAX
+    return _clamp(distance_error * kp_forward, lo, FWD_PCT_MAX), distance_error
 
 
 def _distance_size(sample, metric: str) -> float:

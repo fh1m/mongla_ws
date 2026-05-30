@@ -134,6 +134,11 @@ def main(args=None):
         exit_code = 130
     except Exception as exc:
         log.error(f'mission "{parsed.name}" FAILED: {exc}')
+        # A mission that raised mid-flight leaves the sub ARMED. Best-effort
+        # stop+disarm here so an unhandled exception never ends with thrusters
+        # live (the manager's emergency stop is the backstop, not the primary).
+        _try_step('stop thrusters', lambda: duburi.stop())
+        _try_step('disarm',         lambda: duburi.disarm())
         exit_code = 1
     finally:
         duburi.log_scoreboard(json_path='auto')

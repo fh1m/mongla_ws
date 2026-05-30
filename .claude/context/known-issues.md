@@ -1,5 +1,16 @@
 # Known Issues — tracked from the 2026-04 audit
 
+> **Superseded for current state (2026-05-30).** The "backlog empty / all
+> FIXED" status below is true *only for the 2026-04 and 2026-05 sprints*.
+> The post-v4f full-stack audit found a 🔴 CRITICAL that postdated this
+> file — `vis_approach` dispatched a `target_vis_range` field missing from
+> `Move.action` (AttributeError on every call); now fixed (field added,
+> interfaces rebuilt). For the **current** cross-cutting findings (TDR⇄code
+> gaps, clock residue in `thrust_loop`, stray `missions/mission.py`,
+> missions lacking disarm-in-finally, vision-control test gap), see
+> [`robosub-2026-audit.md`](./robosub-2026-audit.md). Treat *that* file as
+> the live backlog; this file is the resolved-bug history.
+
 This file lists concrete code bugs the audit found. Every entry has:
 
 - **File + line range** so the next code sprint can jump straight in.

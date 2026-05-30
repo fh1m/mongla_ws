@@ -138,7 +138,11 @@ def test_bbox_area_fallback() -> None:
 # Test 3: ONNX model loads and produces valid output
 # ---------------------------------------------------------------------------
 
-def test_onnx_model(model_path: str) -> None:
+def _check_onnx_model(model_path: str) -> None:
+    # NOTE: underscore-prefixed so pytest does NOT collect it as a test
+    # (it takes a positional arg that pytest would mistake for a fixture).
+    # Exercised via the main() CLI harness below, or pass a model path on
+    # the command line: `python test_depth_estimation.py /path/model.onnx`.
     base_name = f'ONNX model ({model_path})'
 
     # 3a: model file exists
@@ -227,7 +231,7 @@ def main() -> int:
 
     test_onnxruntime_import()
     test_bbox_area_fallback()
-    test_onnx_model(model_path)
+    _check_onnx_model(model_path)
 
     print('=' * 60)
     print(f'Results: {len(_PASSED)} passed, {len(_FAILED)} failed')
