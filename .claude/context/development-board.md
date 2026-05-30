@@ -42,7 +42,7 @@ YASMIN FSM ([`mission-design.md`](mission-design.md)) · Dubomini control path (
 | P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (payload parked pending serial contract) | audit §6, `project_payload_actuation` memory |
 | P2 | YASMIN FSM · Dubomini · IVC · remaining tasks · grabber | 🟦 committed build tickets | audit §6 P2 |
 | cont. | 800-line files (`duburi.py` 833, `auv_manager_node.py` 795) | watch | audit §3.8 |
-| cont. | manager dispatch/abort tests | 🟦 open | audit §4 |
+| P1 | manager goal-acceptance / abort gating | ✅ tested (`dispatch_policy`, 13 tests) — full `execute_callback` live-node path is integration-only, not unit | audit §4 |
 
 ---
 
@@ -62,7 +62,9 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 | 🔵 | Banner `MONGLA · DUBURI AUV MANAGER`; `motion_vision` yaw docstring. |
 | chore | Deleted stray `missions/mission.py`; `.graphifyignore`; gitignore tool artifacts. |
 
-**New test coverage:** `motion_vision` 13 · `connection_config` 16 · `nucleus_parser` 14 · `motion_writers` 4. **Suite (per-package): control+planner 83 · manager 16 · sensors 14 · vision 29.**
+| 🟠 | Manager goal-acceptance/abort gating extracted to pure `dispatch_policy.goal_acceptance` (safety-verb bypass rule) + unit-tested. |
+
+**New test coverage:** `motion_vision` 13 · `connection_config` 16 · `nucleus_parser` 14 · `motion_writers` 4 · `dispatch_policy` 13. **Suite (per-package): control+planner 83 · manager 29 · sensors 14 · vision 29 = 155.**
 
 ---
 

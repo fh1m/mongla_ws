@@ -14,6 +14,13 @@
 > Some legacy `.claude/context/*.md` files (notably `proven-patterns.md`)
 > describe historical 2023/2025 codebases, not this workspace.
 
+> **Mongla = the soul; Duburi 4.5 + Dubomini 2.0 = the bodies.** Mongla is the
+> codebase (`duburi_ws`) — one ROS 2 Humble control/mission/vision/sim brain that
+> runs on two competition bodies: **Duburi 4.5** (primary; sensors + manipulators)
+> and **Dubomini 2.0** (agile, manipulator-free). The Duburi 4.5 public spec itself
+> names the software "Mongla (duburi_ws)". `duburi_ws`, `/duburi/*`, and "4.2" are
+> kept for back-compat — **do not bulk-rename them.**
+>
 > **RoboSub 2026 framing (committed scope vs what's built — read before trusting either).**
 > Per the tech-lead reconciliation decision (2026-05-31, P0.1), the **committed
 > 2026 target** is the full TDR (`TDR26_BRACU_Duburi.pdf`): a dual-vehicle run —
