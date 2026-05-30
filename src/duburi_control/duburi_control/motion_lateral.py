@@ -44,7 +44,7 @@ def drive_lateral_constant(pixhawk, signed_dir, duration, gain, log,
     brake_kick_then_settle(
         axis_writer, writers,
         brake_pct=-signed_dir * REVERSE_KICK_PCT,
-        log=log, axis_label=label, extra_settle=settle)
+        log=log, axis_label=label, extra_settle=settle, abort_fn=abort_fn)
 
 
 def drive_lateral_eased(pixhawk, signed_dir, duration, gain, log,
@@ -61,7 +61,7 @@ def drive_lateral_eased(pixhawk, signed_dir, duration, gain, log,
                 axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
 
     log.info(f'[{label:<5}] settle (ease-out = brake)')
-    final_settle(writers, log, extra=settle)
+    final_settle(writers, log, extra=settle, abort_fn=abort_fn)
 
 
 # ---------------------------------------------------------------------- #
