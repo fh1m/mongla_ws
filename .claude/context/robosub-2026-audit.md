@@ -8,9 +8,9 @@
 
 ## 0. Readiness verdict (one line)
 
-**The control + MAVLink + perception-plumbing stack is competition-grade for a SINGLE vehicle on Gate / Return / search-and-align tasks (~800 pt envelope per the roadmap). The TDR describes a DUAL-vehicle, FSM-sequenced, IVC-coordinated, YOLO26, full-task system that the codebase does NOT implement — that delta is the headline risk, and it is a documentation/expectation gap, not a control-quality gap.**
+**Phase-1 (single-vehicle Duburi) control + MAVLink + perception-plumbing is competition-grade for Gate / Return / search-and-align (~800 pt). The committed 2026 target (per the P0.1 decision below) is the full TDR: DUAL-vehicle, YASMIN-FSM-sequenced, IVC-coordinated, YOLO11 (TDR's YOLO26 corrected), 7-task system — of which Dubomini / IVC / FSM / the extra tasks are COMMITTED phase-2 build tickets with zero-or-partial code today. The headline risk is now schedule/build-execution on phase 2, not a control-quality gap and no longer a docs-vs-intent gap (reconciled 2026-05-31).**
 
-The honest engineering plan (`robosub-2026-roadmap.md`) and the submitted TDR disagree. Reconcile them deliberately (see §6).
+P0.1 is **DECIDED** (see §6 + the Decision Record). Docs now read in three states: BUILT (phase 1) · COMMITTED-NOT-BUILT (phase 2) · CORRECTED (YOLO26→YOLO11). Central status: [`development-board.md`](development-board.md).
 
 ---
 
@@ -29,10 +29,10 @@ The TDR is the *submitted, aspirational* document. The audit's job is to surface
 
 | # | TDR claim (§) | Code reality | Severity | Disposition |
 |---|---------------|--------------|----------|-------------|
-| G1 | **Dual vehicle**: Duburi 4.5 (primary) + Dubomini 2.0 (agile, 8-thruster, no DVL, no manipulators), parallel run (§I) | Single-vehicle stack. No Dubomini config, frame, thruster map, or control path. `mode`/profiles all single-vehicle. | 🔴 | Biggest gap. Either build a Dubomini profile/param-set or scope the TDR claim to "Duburi 4.5 implemented; Dubomini in bring-up." |
-| G2 | **Finite-State Mission Planner** in ROS2, states navigation/perception/manipulation/recovery, IVC handoff as a transition (§II.C.3) | No FSM. `duburi_planner/state_machines/` is **empty** (reserved). Missions are imperative `detected()`-paradigm Python scripts. Roadmap explicitly defers YASMIN ("timed fallbacks in raw Python sufficient for 2026"). | 🟠 | Defensible engineering choice, but **directly contradicts the TDR**. Either soften TDR wording to "scripted reactive planner with state-structured phases" or stand up a thin FSM. |
-| G3 | **Inter-Vehicle Communication (IVC)** acoustic modem, release signal folded into FSM, bounded-window fallback (§I.D, §II.B.5, App D 2.4) | **Absent entirely** from the codebase — no IVC node, no transport, no release-signal transition, no fallback timer. | 🔴 (for the dual-vehicle story) | If dual-vehicle is real for 2026, IVC is a hard dependency with zero code. If not, remove IVC from the run narrative. |
-| G4 | **Ultralytics YOLO26**, NMS-free, replaces YOLOv11 (§II.C.2) | Code is **YOLO11** (`yolov11n` "ROBOSUB tested ★"). `yolo.py:44` tags YOLO26 as *"previous family — backwards compat."* Commit `efcf9de` deliberately moved docs 26→11. | 🟠 | Code stance (YOLO11 = battle-tested) is sound. TDR claim is currently **false vs code**. Decide: train/validate YOLO26 before comp, or correct the TDR to YOLO11. Do not silently edit docs to "YOLO26" to match the paper. |
+| G1 | **Dual vehicle**: Duburi 4.5 (primary) + Dubomini 2.0 (agile, 8-thruster, no DVL, no manipulators), parallel run (§I) | Single-vehicle stack. No Dubomini config, frame, thruster map, or control path. `mode`/profiles all single-vehicle. | 🔴 | **DECIDED: dual is COMMITTED (phase 2).** Dubomini profile / frame / thruster map / control path are build tickets — zero code today. Phase-1 Duburi is what runs. → `development-board.md`. |
+| G2 | **Finite-State Mission Planner** in ROS2, states navigation/perception/manipulation/recovery, IVC handoff as a transition (§II.C.3) | No FSM. `duburi_planner/state_machines/` is **empty** (reserved). Missions are imperative `detected()`-paradigm Python scripts. | 🟠 | **DECIDED: YASMIN FSM is COMMITTED (phase 2)** for robust fail-safe autonomy; build ref `mission-design.md`, home `duburi_planner/state_machines/`. `detected()` scripts are **retained** as the prototyping / unit-test / FSM-fallback layer the FSM wraps — NOT removed. |
+| G3 | **Inter-Vehicle Communication (IVC)** acoustic modem, release signal folded into FSM, bounded-window fallback (§I.D, §II.B.5, App D 2.4) | **Absent entirely** from the codebase — no IVC node, no transport, no release-signal transition, no fallback timer. | 🔴 (dual-vehicle dep) | **DECIDED: IVC is COMMITTED (phase 2)** — hard dependency of the dual-vehicle run, zero code today. Transport + FSM release-signal transition + bounded-window fallback are build tickets. |
+| G4 | **Ultralytics YOLO26**, NMS-free, replaces YOLOv11 (§II.C.2) | Code is **YOLO11** (`yolov11n` "ROBOSUB tested ★"). `yolo.py:44` tags YOLO26 as *"previous family — backwards compat."* Commit `efcf9de` deliberately moved docs 26→11. | 🟠 | **DECIDED: YOLO11 is the committed detector — TDR's YOLO26 line is CORRECTED to YOLO11** (battle-tested, 30fps verified). YOLO26 stays only as a legacy/backwards-compat reference. |
 | G5 | **Underwater CV preprocessing** (color-cast/haze correction ahead of detection) (§II.C.2, App D 3.3) | No preprocessing stage. Pipeline is camera→detector→tracker(→depth). `draw.py` is overlay-only. | 🟠 | Real perception gap for turbid pool water. Add a preprocess node/stage or scope the claim. |
 | G6 | **Vision-guided torpedo** with own ESP32-S3 + camera + 6 thrusters, terminal self-alignment, fires at 0.46 m (§II.A.3) | No torpedo terminal-guidance code in this repo (it would be torpedo-side firmware). Carrier-side: only `set_servo_pwm` exists, and no torpedo mission/verb. | 🟡 | Torpedo MCU firmware is out of this repo's scope; but the **carrier-side fire verb + board-opening detection are missing**. Confirm torpedo firmware lives elsewhere; add the carrier hooks. |
 | G7 | **Stepper grabber** (Evil Claw), step-count jaw control, scooping arc (§II.A.4) | `pixhawk.set_servo_pwm(aux, pwm)` is a **single-PWM servo** command — cannot drive a stepper (needs step/dir or a position interface). No grabber verb. | 🟠 | The TDR's 2026 grabber is not addressable by the current payload API. Need a stepper interface (likely via the Actuation Board, not Pixhawk AUX) + a `grab()` verb. |
@@ -151,7 +151,14 @@ The TDR is the *submitted, aspirational* document. The audit's job is to surface
 ## 6. Prioritized action plan (for RoboSub 2026)
 
 ### P0 — decide & de-risk (this week)
-1. **TDR reconciliation decision (team-level).** Is 2026 a dual-vehicle run (Duburi 4.5 + Dubomini 2.0 + IVC) or single-vehicle Duburi? This decision gates G1/G2/G3/G11. **Do not edit docs to claim dual-vehicle/FSM/IVC/YOLO26 until code backs them.** → owner: team lead. **STILL OPEN.**
+1. ✅ **TDR reconciliation decision (P0.1)** — **DECIDED 2026-05-31 (tech lead).** Gates G1/G2/G3/G4/G11. See the **Decision Record** below; docs now use the three-state model (built / committed-phase-2 / corrected). Central tracking → [`development-board.md`](development-board.md).
+
+   > **Decision Record — 2026-05-31 (tech lead):**
+   > 1. **Dual vehicle COMMITTED** (Duburi 4.5 + Dubomini 2.0). Phase-1 single-vehicle Duburi is what's built; Dubomini is a phase-2 build ticket. (G1)
+   > 2. **YASMIN FSM COMMITTED** (phase-2) for robust fail-safe autonomy. `detected()` scripts are **kept** as the prototyping / unit-test / FSM-fallback layer the FSM wraps. (G2)
+   > 3. **IVC COMMITTED** (phase-2) as a hard dependency of the dual-vehicle run. (G3)
+   > 4. **YOLO11 is the committed detector** — TDR's YOLO26 line **corrected** to YOLO11. (G4)
+   > 5. Doc strategy: **code-truth + committed phase-2 annex** — state what ships today; mark dual/FSM/IVC/tasks as committed-not-built; never claim them running.
 2. ✅ **Disarm-in-finally** (🟠 §3.1) — **FIXED**: done at the runner (`mission.py` `except Exception` now does best-effort `stop()`+`disarm()`). Scope: covers every **runner-launched** mission on the **abort/exception** paths (the KeyboardInterrupt path already did). NOT covered: a mission that completes normally without its own disarm, or a script run via raw `DuburiClient` outside the runner. Uses `stop()`+`disarm()` (disarm → positive-buoyancy surface), not `_surface_and_disarm` (no explicit `set_depth(0)`).
 3. ✅ **Clock-mixing residue** in `thrust_loop` (🟠 §3.2) — **FIXED**: `started_at`/`elapsed` now `time.monotonic()` (`motion_writers.py:112,115`). Also migrated the 4 pixhawk arm/disarm/mode/wait_ack deadlines to monotonic (🟡 §3.2).
 4. ✅ **Delete stray `missions/mission.py`** (🟠 §3.1) — **FIXED**: `git rm`'d (was a stale commented-out `pursue_demo` dup; live `pursue_demo.py` retained).
@@ -160,7 +167,7 @@ The TDR is the *submitted, aspirational* document. The audit's job is to surface
 5. **Underwater preprocessing stage** (🟠 G5) — color/haze correction ahead of the detector; biggest perception ROI for turbid water.
 6. **Vision-control tests** (🟠 §4) — at minimum sign/deadband unit tests for `motion_vision` error→Ch mapping; a SITL arm→dive→yaw→disarm smoke test.
 7. **Path-marker follower** + **`drop_marker` verb** (🟡 G8, G12) — roadmap already has the code; unlocks Bins.
-8. **YOLO26 decision** (🟠 G4): either train+validate a YOLO26 gate model and flip the default, or correct the TDR to YOLO11. Measure, don't assume.
+8. ✅ **YOLO26 decision** (🟠 G4) — **DECIDED: YOLO11** (committed). TDR corrected; YOLO26 legacy-only.
 9. ✅ **Battery sentinel guard** (🟡 §3.4) — **FIXED**: `get_battery` now maps `0xFFFF` mV voltage and `-1` current to `math.nan` (`pixhawk.py:463`).
 
 > **Also fixed this pass** (cheap items beyond the P0 trio):
@@ -171,11 +178,12 @@ The TDR is the *submitted, aspirational* document. The audit's job is to surface
 > **Partial close of §4 "no vision-control tests":** new `test_motion_vision.py` (9 tests) pins the yaw sign + vis_range guard via the extracted `_yaw_pct` / `_forward_decision` helpers. Full `vision_track_axes` loop + `vision_verbs` still need an integration/SITL test.
 > Tests: **75 green** (duburi_control + duburi_planner) after rebuild — run with `pytest -p no:anyio` (the `colcon test` entrypoint hits a pre-existing `anyio`/`_pytest.scope` plugin error in this env; unrelated to these changes).
 
-### P2 — TDR-claimed capability (only if dual-vehicle / full-task is committed)
-10. **Slalom** mission + pipe detection (roadmap Option A classical first).
-11. **Stepper grabber interface** (🟠 G7) — Actuation-Board path, not Pixhawk AUX; `grab()` verb. **Octagon depends on this.**
-12. **Torpedo** carrier-side fire verb + board-opening detection (G6); confirm torpedo-MCU firmware repo.
-13. **Dubomini control path** (G1) + **IVC** transport & FSM handoff (G3) — large, only if dual-vehicle is the commitment. A thin FSM (G2) would host the IVC transition.
+### P2 — Phase-2 build tickets (COMMITTED per the 2026-05-31 decision)
+10. **YASMIN FSM** in `duburi_planner/state_machines/` (G2) — wraps the `detected()`/DSL verbs as states; build ref `mission-design.md`. Hosts the IVC release-signal transition.
+11. **Dubomini control path** (G1) — profile / frame / `vectored_6dof` thruster map / param-set / mode; VN-200 sensor source.
+12. **IVC** transport + FSM handoff + bounded-window fallback (G3).
+13. **Slalom** mission + pipe detection (roadmap Option A classical first); **Bins**/**Torpedo**/**Octagon** + path-markers (G11/G12).
+14. **Payload actuation** — ESP32-serial dropper/torpedo client (`drop_marker`/`fire_torpedo`), NOT Pixhawk AUX (see `project_payload_actuation` memory); **stepper grabber** via Actuation Board, `grab()` verb (G7, Octagon dep).
 
 ### Continuous
 14. Keep `known-issues.md` honest — it currently says "backlog empty"; the `vis_approach` crash postdated it. Add a "post-v4f audit" section pointing here.
@@ -188,5 +196,5 @@ The TDR is the *submitted, aspirational* document. The audit's job is to surface
 - **Tests:** synced to current code; **95 green**; one genuine runtime bug (`vis_approach`) found and fixed.
 - **Control / MAVLink / ArduSub:** genuinely strong, competition-hardened. Minor clock + sentinel cleanups.
 - **Vision:** good plumbing; missing underwater preprocessing; YOLO11 not YOLO26; monocular depth is a bonus, not the TDR's ranging story.
-- **Planning:** excellent reactive `detected()` autonomy for Gate/Return; **not** an FSM; **does not** cover Slalom/Bin/Torpedo/Octagon; missions lack disarm-in-finally.
-- **On track for RoboSub 2026?** For the **roadmap's honest ~800-pt single-vehicle target — yes, with the P0/P1 items.** For the **TDR's dual-vehicle full-task narrative — no, not as code stands.** The gap is documentation/expectation vs implementation. Close it by choosing the 2026 commitment (P0.1) and making the unchosen document consistent.
+- **Planning:** excellent reactive `detected()` autonomy for Gate/Return (now the proto/test/fallback layer); YASMIN FSM committed for phase 2; Slalom/Bin/Torpedo/Octagon are committed-not-built; disarm-in-finally fixed.
+- **On track for RoboSub 2026?** **Phase-1 (single-vehicle Duburi, ~800 pt) — yes**, the core is competition-grade. **Full TDR (dual + FSM + IVC + 7 tasks) — committed but unbuilt**; that is now a **phase-2 build-execution** effort (P2 tickets §6), not a docs-vs-intent gap. P0.1 is reconciled (2026-05-31): docs state built vs committed-phase-2 honestly. Live status → [`development-board.md`](development-board.md).

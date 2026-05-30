@@ -177,15 +177,19 @@ inner loop.
 
 ## TDR vs implementation delta
 
+> **State key:** ✅ built · 🟦 committed phase-2 (not yet implemented) · ✏️ corrected. See audit P0.1 Decision Record (2026-05-31).
+
 | TDR section                          | TDR description                            | This codebase                                                                 |
 |--------------------------------------|--------------------------------------------|-------------------------------------------------------------------------------|
-| Appendix A — IMU                     | VectorNav VN200                            | **BNO085 + ESP32-C3** (gyro+accel, one-shot Pixhawk-mag offset)               |
-| §II.C.2 Autonomous — vision          | YOLOv11 + DeepSORT                         | Out of scope here. Will live in a separate `duburi_vision` package.           |
-| §II.C.3 Planning — FSM               | ROS2 finite state machine                  | Currently `duburi_planner/missions/*.py` + `DuburiClient`. YASMIN slot reserved at `duburi_planner/state_machines/`. |
-| §II.C.1 Control                      | ROS2 + Pixhawk + PyMavlink + EKF3 fusion   | **Implemented.** EKF3 fusion is ArduSub-side; we send setpoints over MAVLink. |
-| §II.C.1 — DVL fusion                 | Nucleus1000 → ArduSub EKF3                 | Stub only. Driver work tracked in [known-issues.md](./known-issues.md).       |
-| Appendix C — Tether                  | FathomX over Ethernet                      | Network constants in `connection_config.py`; no extra software needed.        |
-| §II.B.6 Actuation board              | MOSFET-based, AUX from Pixhawk             | `Pixhawk.set_servo_pwm(aux_n, pwm)` with internal +8 AUX offset and PWM clamping (since 2026-04). |
+| §I — Second vehicle                  | **Dubomini 2.0** (agile, 8-thruster `vectored_6dof`, no DVL/manipulators, VN-200 IMU) | 🟦 **Committed phase-2.** No Dubomini profile / frame / thruster map / control path yet — single-vehicle Duburi today. |
+| Appendix A — IMU (Duburi)            | VectorNav VN200                            | ✅ **BNO085 + ESP32-C3** (gyro+accel, one-shot Pixhawk-mag offset). Dubomini's VN-200 is phase-2. |
+| §II.C.2 Autonomous — vision          | ✏️ TDR says YOLO26; **corrected to YOLO11** | ✅ `duburi_vision`: YOLO11 (`yolov11n`) + ByteTrack/Kalman, 30fps. YOLO26 legacy-only. |
+| §II.C.3 Planning — FSM               | ROS2 finite state machine                  | 🟦 **Committed YASMIN FSM (phase-2)** at `duburi_planner/state_machines/`. ✅ Today: `detected()` missions + `DuburiClient` (the proto/test/FSM-fallback layer the FSM will wrap). |
+| §I.D / §II.B.5 — IVC                 | Acoustic inter-vehicle comms               | 🟦 **Committed phase-2** — no transport/node yet. |
+| §II.C.1 Control                      | ROS2 + Pixhawk + PyMavlink + EKF3 fusion   | ✅ **Implemented.** EKF3 fusion is ArduSub-side; we stream setpoints over MAVLink. |
+| §II.C.1 — DVL fusion                 | Nucleus1000 → ArduSub EKF3                 | Parser ✅ (`nucleus_parser`, tested); live driver/POSHOLD integration in progress. |
+| Appendix C — Tether                  | FathomX over Ethernet                      | ✅ Network constants in `connection_config.py`; no extra software needed.       |
+| §II.A — Payload actuation            | Dropper / torpedo / grabber                | 🟦 **Phase-2.** Dropper+torpedo are **ESP32-over-USB-serial** (PySerial→GPIO→relay), **NOT** Pixhawk AUX — see `project_payload_actuation` memory. Stepper grabber needs an Actuation-Board step/dir interface. No payload verbs yet. |
 
 ---
 

@@ -1,13 +1,14 @@
 # Mission Design & State Machine Architecture — Duburi AUV
 
-> **Top note:** **YASMIN FSM is the TDR target architecture.** It is **not**
-> what this repo runs today. Today's mission entry points live in
+> **Top note:** **This doc is the build reference for the COMMITTED YASMIN FSM**
+> (phase-2 per the 2026-05-31 reconciliation, audit P0.1 — see
+> [`development-board.md`](development-board.md)). The FSM is **not built yet**;
+> its home is `duburi_planner/state_machines/`. Today's mission entry points live in
 > [`src/duburi_planner/duburi_planner/missions/`](../../src/duburi_planner/duburi_planner/missions/)
-> — plain Python scripts (`square_pattern.py`, `arc_demo.py`,
-> `heading_lock_demo.py`) that use `DuburiClient` (a blocking
-> `ActionClient` wrapper from `duburi_planner`) against the
-> `/duburi/move` action. Run them via `ros2 run duburi_planner mission
-> <name>`.
+> — plain Python `detected()` scripts that use `DuburiClient` against the
+> `/duburi/move` action (run via `ros2 run duburi_planner mission <name>`). Those
+> scripts are **kept** as the prototyping / per-subsystem unit-test / **FSM-fallback**
+> layer; the FSM wraps the same DSL verbs as states (it does not replace them).
 >
 > Re-introduce YASMIN (or behavior trees, or `py_trees_ros`) when
 > missions outgrow a linear script — typically when conditional

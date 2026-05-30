@@ -1,5 +1,8 @@
 # Mongla / Duburi AUV — Development History
 
+> **Live status / open work / current bug+fix log → [`../development-board.md`](../development-board.md).**
+> This file is the append-only **history ledger** of shipped phases; the board is the dashboard.
+
 Ledger of every shipped phase from initial commit to present. Each entry:
 - **Goal**: what problem it solved
 - **Files touched**: key additions / changes

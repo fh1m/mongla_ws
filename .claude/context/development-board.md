@@ -1,0 +1,89 @@
+# Development Board — Mongla / Duburi (RoboSub 2026)
+
+> **Single source of truth for status, open work, bugs, and fixes.** Start here.
+> Detail lives in the linked docs; this board is the dashboard, not a duplicate.
+> **Last updated:** 2026-05-31 · **Competition:** July 11, 2026.
+>
+> Three-state model (used everywhere): **✅ BUILT & TESTED** · **🟦 COMMITTED (phase-2, not built)** · **✏️ CORRECTED**.
+
+---
+
+## 1. 2026 commitment (P0.1 — decided 2026-05-31, tech lead)
+
+Full TDR is the committed target. Reconciliation Decision Record: [`robosub-2026-audit.md`](robosub-2026-audit.md) §6.
+
+| # | Decision |
+|---|----------|
+| 1 | **Dual vehicle COMMITTED** — Duburi 4.5 (built, phase-1) + Dubomini 2.0 (🟦 phase-2). |
+| 2 | **YASMIN FSM COMMITTED** (🟦 phase-2). `detected()` scripts kept as proto / unit-test / FSM-fallback layer. |
+| 3 | **IVC COMMITTED** (🟦 phase-2) — dual-vehicle dependency. |
+| 4 | **YOLO11** is the detector (✏️ corrects TDR's YOLO26). |
+| 5 | Doc strategy: code-truth + committed phase-2 annex; never claim unbuilt as running. |
+
+---
+
+## 2. Phase status at a glance
+
+**✅ Phase 1 — BUILT & TESTED (single-vehicle Duburi, ~800 pt):**
+control / MAVLink / ArduSub core · `detected()` reactive missions · YOLO11 + ByteTrack/Kalman + monocular depth (30 fps) · Gate / Return / search-align · DVL packet parser.
+
+**🟦 Phase 2 — COMMITTED, NOT YET IMPLEMENTED** (tickets: [`robosub-2026-audit.md`](robosub-2026-audit.md) §6 P2 · schedule: [`robosub-2026-roadmap.md`](robosub-2026-roadmap.md) "Phase 2"):
+YASMIN FSM ([`mission-design.md`](mission-design.md)) · Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport · Slalom / Bins / Torpedo / Octagon / path-markers · ESP32-serial payload actuation (`drop_marker`/`fire_torpedo`) · stepper grabber · underwater preprocessing.
+
+---
+
+## 3. Open work (live)
+
+| Pri | Item | State | Detail |
+|-----|------|-------|--------|
+| P0 | TDR reconciliation (P0.1) | ✅ decided | audit §6 Decision Record |
+| P1 | Underwater preprocessing (G5) | 🟦 open | audit §6.5 |
+| P1 | Vision-control SITL smoke test (arm→dive→yaw→disarm) | 🟦 open | audit §6.6 / §4 |
+| P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (payload parked pending serial contract) | audit §6, `project_payload_actuation` memory |
+| P2 | YASMIN FSM · Dubomini · IVC · remaining tasks · grabber | 🟦 committed build tickets | audit §6 P2 |
+| cont. | 800-line files (`duburi.py` 833, `auv_manager_node.py` 795) | watch | audit §3.8 |
+| cont. | manager dispatch/abort tests | 🟦 open | audit §4 |
+
+---
+
+## 4. Fix log (this audit cycle, 2026-05-30 → 31)
+
+All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` (+ this docs reconcile).
+
+| Sev | Fix |
+|-----|-----|
+| 🔴 | `vis_approach` crashed every call (missing `Move.action` field `target_vis_range`) — field added, rebuilt. |
+| 🟠 | `vis_approach` drove forward forever when depth node offline — `vis_range<=0` now suppresses forward + warns (`_forward_decision`). |
+| 🟠 | Clock-mixing — `thrust_loop` + pixhawk deadlines → `time.monotonic()`. |
+| 🟠 | Disarm safety — mission runner `stop()`+`disarm()` on unhandled exception. |
+| 🟠 | Abort-interruptible settle/brake — `_interruptible_sleep`, 50 ms abort poll (safety-stop latency). |
+| 🟠 | Lateral-sign test gap (`1801fe2` class) — `_lat_pct`/`_yaw_pct` extracted + opposite-polarity test. |
+| 🟡 | Battery NaN sentinel; `vision.use_tracks` per-goal snapshot/restore. |
+| 🔵 | Banner `MONGLA · DUBURI AUV MANAGER`; `motion_vision` yaw docstring. |
+| chore | Deleted stray `missions/mission.py`; `.graphifyignore`; gitignore tool artifacts. |
+
+**New test coverage:** `motion_vision` 13 · `connection_config` 16 · `nucleus_parser` 14 · `motion_writers` 4. **Suite (per-package): control+planner 83 · manager 16 · sensors 14 · vision 29.**
+
+---
+
+## 5. Bugs / known issues
+
+- Tracked historical bugs (all FIXED): [`known-issues.md`](known-issues.md).
+- Current cross-cutting findings (severity-tagged, file:line): [`robosub-2026-audit.md`](robosub-2026-audit.md) §3.
+- No open 🔴 in phase-1 code. Phase-2 risk is build-execution, not control quality.
+
+---
+
+## 6. Doc map (where detail lives)
+
+| Doc | Purpose |
+|-----|---------|
+| **this board** | live status / open work / fixes / bugs — start here |
+| [`robosub-2026-audit.md`](robosub-2026-audit.md) | full audit, TDR⇄code gap matrix (G1–G12), Decision Record, P0/P1/P2 |
+| [`robosub-2026-roadmap.md`](robosub-2026-roadmap.md) | phase schedule + Phase-2 committed tickets |
+| [`known-issues.md`](known-issues.md) | tracked bug history |
+| [`vehicle-spec.md`](vehicle-spec.md) | hardware + TDR-vs-impl delta (Dubomini, sensors, payload) |
+| [`mission-design.md`](mission-design.md) | YASMIN FSM build reference (phase-2) |
+| `CLAUDE.md` §15 | Claude automations (agents/skills/hooks) |
+
+> **Maintenance:** when a phase-2 ticket starts, flip its row 🟦→in-progress here and in audit §6. When a bug is fixed, add a §4 row. Keep the three-state honesty — never mark unbuilt as built.
