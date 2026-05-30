@@ -171,8 +171,8 @@ class Pixhawk:
         Must be paired with `clear_ack()` before the command, otherwise
         a stale ACK from the previous command can be returned.
         """
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             ack = self.master.messages.get('COMMAND_ACK')
             if ack is not None and ack.command == command_id:
                 name = MAV_RESULT.get(ack.result, f'RESULT_{ack.result}')
@@ -202,8 +202,8 @@ class Pixhawk:
         if not accepted:
             return False, reason
 
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             if self.is_armed():
                 return True, 'ACCEPTED'
             time.sleep(0.1)
@@ -228,8 +228,8 @@ class Pixhawk:
         if not accepted:
             return False, reason
 
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             if not self.is_armed():
                 return True, 'ACCEPTED'
             time.sleep(0.1)
@@ -246,8 +246,8 @@ class Pixhawk:
         if mode_id is None:
             return False, f'UNKNOWN_MODE:{mode_name}'
         self._log_mavlink(f'{mode_name} (id={mode_id})')
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             self.master.mav.set_mode_send(
                 self.master.target_system,
                 mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
@@ -464,10 +464,12 @@ class Pixhawk:
         msg = self.master.messages.get('BATTERY_STATUS')
         if msg is None:
             return None
-        return {
-            'voltage': msg.voltages[0] / 1000.0,
-            'current': msg.current_battery / 100.0,
-        }
+        # MAVLink "unknown" sentinels: voltage cell = 0xFFFF mV, current = -1.
+        # Without this guard an unknown reading surfaces as 65.5 V / -0.01 A.
+        raw_mv = msg.voltages[0]
+        voltage = math.nan if raw_mv == 0xFFFF else raw_mv / 1000.0
+        current = math.nan if msg.current_battery == -1 else msg.current_battery / 100.0
+        return {'voltage': voltage, 'current': current}
 
     def get_rc_channels(self):
         msg = self.master.messages.get('RC_CHANNELS')

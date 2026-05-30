@@ -9,7 +9,8 @@ from duburi_vision.config import CAMERA_PROFILES, get_profile
 
 
 def test_builders_known_keys():
-    assert set(BUILDERS) == {'webcam', 'ros_topic', 'jetson', 'blueos', 'mavlink'}
+    assert set(BUILDERS) == {
+        'webcam', 'ros_topic', 'video_file', 'jetson', 'blueos', 'mavlink'}
 
 
 def test_unknown_source_raises_with_helpful_message():

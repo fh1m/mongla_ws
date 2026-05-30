@@ -287,7 +287,7 @@ class AUVManagerNode(Node):
                              f'{connect_hint})')
 
         self.get_logger().info(SEPARATOR)
-        self.get_logger().info(f' DUBURI AUV MANAGER  |  mode: {mode_name}')
+        self.get_logger().info(f' MONGLA · DUBURI AUV MANAGER  |  mode: {mode_name}')
         if debug_enabled:
             self.get_logger().info(
                 ' DEBUG TRACE: ON  -- per-command [MAV <fn> cmd=<verb>] '
@@ -528,15 +528,26 @@ class AUVManagerNode(Node):
 
                 # Per-goal tracking override: if the goal sets tracking=True,
                 # flip vision.use_tracks for this goal's VisionState build.
-                # We update the param so _vision_state_for picks it up on
-                # the next new-camera build; existing cached states are unaffected.
-                if kwargs.pop('tracking', False):
+                # _vision_state_for picks it up on the next new-camera build
+                # (cache key includes use_tracks). Snapshot + restore so the
+                # flip is per-goal and does not poison later goals' default.
+                tracking_flip   = kwargs.pop('tracking', False)
+                prev_use_tracks = None
+                if tracking_flip:
+                    prev_use_tracks = self.get_parameter('vision.use_tracks').value
                     self.set_parameters([
                         rclpy.parameter.Parameter(
                             'vision.use_tracks',
                             rclpy.Parameter.Type.BOOL, True)])
 
-                result = method(**kwargs)
+                try:
+                    result = method(**kwargs)
+                finally:
+                    if tracking_flip:
+                        self.set_parameters([
+                            rclpy.parameter.Parameter(
+                                'vision.use_tracks',
+                                rclpy.Parameter.Type.BOOL, bool(prev_use_tracks))])
 
             if result.success:
                 goal_handle.succeed()

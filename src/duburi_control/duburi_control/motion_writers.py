@@ -109,10 +109,10 @@ def thrust_loop(pixhawk, axis_writer, duration, gain, log,
     """
     locked_heading = read_heading(pixhawk, yaw_source) or 0.0
     worst_drift    = 0.0
-    started_at     = time.time()
+    started_at     = time.monotonic()
 
     while True:
-        elapsed = time.time() - started_at
+        elapsed = time.monotonic() - started_at
         if elapsed >= duration:
             break
         if abort_fn and abort_fn():

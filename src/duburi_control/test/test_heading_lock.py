@@ -1,10 +1,11 @@
 """Tests for heading_lock (background Ch4-rate heading controller).
 
 The lock runs a proportional yaw-rate loop against the configured
-YawSource and writes Ch4 via `send_rc_override`. Tests check the new
-contract: rate packets are emitted, retarget takes effect, suspend
-freezes output, and the AHRS fallback still works when yaw_source is
-None.
+YawSource and writes Ch4 via `send_rc_yaw_only` (Ch4-only override that
+leaves Ch5/Ch6 at NO_OVERRIDE so concurrent DVL translation moves are
+not interrupted). Tests check the contract: rate packets are emitted,
+retarget takes effect, suspend freezes output, and the AHRS fallback
+still works when yaw_source is None.
 """
 
 import logging
@@ -37,6 +38,11 @@ class FakePixhawk:
 
     def send_rc_override(self, **kw):
         self.rc_overrides.append(kw)
+
+    def send_rc_yaw_only(self, yaw):
+        # Mirrors Pixhawk.send_rc_yaw_only: Ch4-only override. Recorded
+        # in the same list shape (`{'yaw': pwm}`) that _yaw_packets reads.
+        self.rc_overrides.append({'yaw': int(yaw)})
 
     def get_attitude(self):
         return {'yaw': self._yaw, 'depth': -0.5,
