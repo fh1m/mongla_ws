@@ -211,7 +211,7 @@ Smoke-test: `cat /dev/ttyACM0` — if no JSON appears, ROS2 won't see it either.
 
 ## Vision pipeline — `duburi_vision`
 
-Camera factory + YOLO26 detector + six `vision_*` verbs on
+Camera factory + YOLO11 detector + six `vision_*` verbs on
 `/duburi/move`. The closed loop runs **inside the manager** — vision
 and control share the same MAVLink owner and never fight for thrust.
 
@@ -220,7 +220,7 @@ and control share the same MAVLink owner and never fight for thrust.
 ```
 +------------------------+     +-------------------------+     +-----------------------+
 |  camera_node           | --> |  detector_node          | --> |  tracker_node (opt)   |
-|  Camera factory:       |     |  YoloDetector (YOLO26)  |     |  ByteTrack + Kalman   |
+|  Camera factory:       |     |  YoloDetector (YOLO11)  |     |  ByteTrack + Kalman   |
 |  webcam / ros_topic /  |     |  + draw.render_all()    |     |  -> /tracks           |
 |  jetson / blueos /     |     |  -> /detections         |     +-----------------------+
 |  mavlink (stubs)       |     |  -> image_debug         |               |
@@ -284,7 +284,7 @@ Full param docs: [`.claude/context/command-reference.md`](../../../.claude/conte
 ### Quickstart
 
 ```bash
-# Laptop webcam + YOLO26 + rqt viewer (gate model)
+# Laptop webcam + YOLO11 + rqt viewer (gate model)
 ros2 launch duburi_vision cameras_.launch.py
 
 # Switch to medium gate model
