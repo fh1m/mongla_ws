@@ -51,6 +51,7 @@ from duburi_vision  import wait_vision_state_ready                       # noqa:
 from .connection_config import (                                             # noqa: E402
     DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
 )
+from .dispatch_policy   import goal_acceptance                           # noqa: E402
 from .vision_state     import VisionState                                # noqa: E402
 from .vision_tunables  import (                                          # noqa: E402
     declare_vision_params,
@@ -482,12 +483,13 @@ class AUVManagerNode(Node):
     # ================================================================== #
 
     def goal_callback(self, goal_request):
-        _SAFETY = {'disarm', 'stop', 'surface'}
-        if self.command_active:
-            if goal_request.cmd not in _SAFETY:
-                self.get_logger().warn(
-                    f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
-                return GoalResponse.REJECT
+        accept, signal_abort = goal_acceptance(
+            goal_request.cmd, self.command_active)
+        if not accept:
+            self.get_logger().warn(
+                f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
+            return GoalResponse.REJECT
+        if signal_abort:
             # Safety command accepted while busy: signal abort so the running
             # loop exits at its next tick, releasing the lock for us.
             self.get_logger().info(

@@ -131,7 +131,7 @@ The TDR is the *submitted, aspirational* document. The audit's job is to surface
 - 🟠 **No tests for vision control** (`motion_vision`, `vision_verbs`) — highest-risk untested code.
 - 🟠 **No integration/E2E** — no SITL smoke test that arms→dives→yaws→disarms against a fake/SITL MAVLink. `test_missions_smoke` only checks import + signature.
 - 🟡 `test_depth_estimation` is a report-style harness (no asserts on the collected tests) — weak signal.
-- 🟡 No tests for `auv_manager_node` dispatch/abort, ~~`connection_config.resolve_mode`~~, DVL parser (`nucleus_parser`). **`resolve_mode`/`resolve_profile` covered** — `src/duburi_manager/test/test_connection_config.py` (16 tests). **`nucleus_parser` covered** — `src/duburi_sensors/test/test_nucleus_parser.py` (14 tests: checksum, AHRS/bottom-track decode, rejection paths, PacketAccumulator framing). Remaining: manager dispatch/abort.
+- 🟡 No tests for `auv_manager_node` dispatch/abort, ~~`connection_config.resolve_mode`~~, DVL parser (`nucleus_parser`). **`resolve_mode`/`resolve_profile` covered** — `src/duburi_manager/test/test_connection_config.py` (16 tests). **`nucleus_parser` covered** — `src/duburi_sensors/test/test_nucleus_parser.py` (14 tests). **Manager goal-acceptance/abort gating covered** — `dispatch_policy.goal_acceptance` extracted (safety-verb bypass rule) + `test_dispatch_policy.py` (13 tests). Only the full `execute_callback` live-node path remains (integration/SITL, not a clean unit) — tracked on the board, not a unit-test gap.
 
 ---
 

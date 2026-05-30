@@ -30,6 +30,44 @@
   <strong>Duburi</strong>, a <code>vectored_6dof</code> 8-thruster AUV.
 </p>
 
+---
+
+## One soul, two bodies
+
+**Mongla is the *soul* — the codebase (`duburi_ws`).** It is the single ROS 2
+Humble control / mission / vision / simulation brain. The competition fields
+**two *bodies*** the soul runs on, coordinated for RoboSub 2026:
+
+| | **Duburi 4.5** — primary | **Dubomini 2.0** — agile second body |
+|---|---|---|
+| Role | sensors + manipulation (grabber / dropper / torpedo) | fast, compact, manipulator-free tasks |
+| Hull | Marine 5083 aluminium, octagonal · 26.2 × 21.67 × 11.8 in · 26 kg | Aluminium 5083, welded · 54.6 × 46.4 × 16.7 cm · 14.6 kg |
+| Frame | `vectored_6dof`, 8× Blue Robotics T200 | `vectored_6dof`, 8× T200 (up from 7) |
+| Flight controller | Pixhawk 2.4.8 · ArduSub 4.x | Pixhawk 2.4.8 · ArduSub |
+| Compute | NVIDIA Jetson Orin Nano | Jetson Orin Nano + ESP32 telemetry |
+| Heading / IMU | **Pixhawk on-board IMU** (ArduSub EKF) **+ BNO085 external gyro heading module** (ESP32-C3, magnetic-interference-free heading-lock) | same: **Pixhawk IMU + BNO085 external gyro heading** |
+| Localisation | Bar30 depth · **Nortek Nucleus 1000 DVL** | Bar30 depth · no DVL |
+| Cameras | 2× Blue Robotics 1080p low-light | 2× Blue Robotics 1080p low-light |
+| Power | 2× 14.8 V 5400 mAh LiPo | 2× 4S LiPo, dual-channel PDB |
+| Payload | Evil Claw stepper grabber · solenoid dropper · rubber-band/solenoid torpedo (ESP32-serial actuation) | shared dropper/torpedo interface; no manipulators |
+| Kill switch | — | contactless **encoder-based** arming (arming only — **not** a heading sensor) |
+
+> **Heading, code-truth:** Mongla's `yaw_source` reads the **BNO085** external
+> module for heading-lock on both bodies (gyro-based, immune to thruster magnetic
+> interference); the Pixhawk EKF owns attitude/depth. The 4.5 public spec lists a
+> VectorNav VN-200 — **not what the stack reads**; BNO085 is the heading source.
+> See [`vehicle-spec.md`](.claude/context/vehicle-spec.md) for the full delta.
+
+## RoboSub 2026 — status at a glance
+
+Read every capability in three states — **✅ built & tested · 🟦 committed (phase-2, not built) · ✏️ corrected.** Live tracking, open work, and the bug/fix log are centralised in the **[development board](.claude/context/development-board.md) — start there.**
+
+- **✅ Phase 1 (runs today):** single-body **Duburi** stack — `detected()` reactive missions, YOLO11 + ByteTrack/Kalman + monocular depth (30 fps), Gate / Return / search-align (~800 pt), the control / MAVLink / vision core.
+- **🟦 Phase 2 (committed, not yet built):** Dubomini 2.0 control path · inter-vehicle comms (IVC) · **YASMIN FSM** (wraps the `detected()` verbs as states) · Slalom / Bins / Torpedo / Octagon / path-markers · ESP32-serial payload actuation · stepper grabber · underwater preprocessing.
+- **✏️ Corrected:** detector is **YOLO11** (the TDR's YOLO26 line is corrected; YOLO11 is the committed, battle-tested family).
+
+> Decision record (P0.1, 2026-05-31): [`robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md) §6 · phase schedule: [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
+
 <p align="center">
   <a href="#quickstart-smoke-tests"><strong>Quickstart</strong></a> ·
   <a href="#concepts-in-5-videos"><strong>Concept videos</strong></a> ·
@@ -856,10 +894,13 @@ Design principles we actually follow:
 
 ## 2. Test platform at a glance
 
-Mongla is developed against the test AUV **Duburi 4.2**. Any other ArduSub
-`vectored_6dof` vehicle (e.g. BlueROV2 Heavy, BlueROV2 with extra
-thrusters, custom Heavy clones) is a drop-in target — only the connection
-profile changes.
+Mongla's soul runs on two competition bodies — **Duburi 4.5** and **Dubomini
+2.0** (see [One soul, two bodies](#one-soul-two-bodies)). It is *developed and
+bench-validated* against the **Duburi 4.2** hull (the lineage the 4.5 build is
+derived from — same octagonal Marine-5083 `vectored_6dof` design); the table
+below is that day-to-day dev platform. Any other ArduSub `vectored_6dof` vehicle
+(BlueROV2 Heavy, custom Heavy clones, **Dubomini 2.0**) is a drop-in target —
+only the connection profile changes.
 
 | Component              | Hardware                                                          |
 |------------------------|-------------------------------------------------------------------|
@@ -881,13 +922,12 @@ profile changes.
   <img src="docs/imgs/readme-auv-diagram.png" alt="Duburi 4.2 AUV diagram" width="88%"/>
 </p>
 
-Active development goals:
-1. Yaw and translation profiles smooth enough that vision-based PID can
-   run on top without fighting the motion envelope.
-2. Bring up the Nucleus1000 DVL driver and feed velocity into ArduSub's EKF3.
-3. Plug in vision + `robot_localization` EKF when vision hardware lands.
-4. Populate `duburi_planner/state_machines/` with YASMIN once mission
-   logic outgrows linear scripts.
+**Development is driven from one place:** the
+[**development board**](.claude/context/development-board.md) — phase status,
+open work, bug/fix log, and the committed phase-2 build tickets (YASMIN FSM,
+Dubomini control, IVC, remaining tasks, ESP32-serial payload, stepper grabber,
+underwater preprocessing). Start every session there; pick one ticket, build,
+update the board.
 
 ---
 
