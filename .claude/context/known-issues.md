@@ -8,8 +8,10 @@
 > interfaces rebuilt). For the **current** cross-cutting findings (TDR⇄code
 > gaps, clock residue in `thrust_loop`, stray `missions/mission.py`,
 > missions lacking disarm-in-finally, vision-control test gap), see
-> [`robosub-2026-audit.md`](./robosub-2026-audit.md). Treat *that* file as
-> the live backlog; this file is the resolved-bug history.
+> [`robosub-2026-audit.md`](./robosub-2026-audit.md). **Live status / open
+> work / fix log is now centralized in
+> [`development-board.md`](./development-board.md) — start there.** This file
+> is the resolved-bug history; the board is the dashboard.
 
 This file lists concrete code bugs the audit found. Every entry has:
 

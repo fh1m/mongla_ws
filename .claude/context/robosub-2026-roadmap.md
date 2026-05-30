@@ -314,16 +314,33 @@ def run(duburi, log):
 
 ---
 
+## Phase 2 — TDR full-scope build (COMMITTED, not yet implemented)
+
+> Reconciliation decision 2026-05-31 (tech lead, audit P0.1): the full TDR is the
+> committed 2026 target. The Phase-1 schedule above is what's BUILT/TESTED today
+> (single-vehicle Duburi, scripted `detected()`, YOLO11). The items below are
+> COMMITTED build tickets with zero-or-partial code — sequence after the Phase-1
+> core is pool-proven. `detected()` missions are **kept** as the prototyping /
+> per-subsystem unit-test / **FSM-fallback** layer; the FSM wraps the same DSL verbs.
+
+| Ticket | Scope | Depends on | Ref |
+|--------|-------|-----------|-----|
+| **YASMIN FSM** | states (navigation/perception/manipulation/recovery) wrapping `detected()`/DSL verbs in `duburi_planner/state_machines/`; hosts IVC release-signal transition + bounded-window fallback | Phase-1 verbs (done) | `mission-design.md` |
+| **Dubomini 2.0 control path** | profile / `vectored_6dof` frame / 8-thruster map / param-set / mode; VN-200 yaw source | — | `vehicle-spec.md` |
+| **IVC** | acoustic-modem transport node + release-signal FSM transition | YASMIN FSM, Dubomini | — |
+| **Tasks** Slalom / Bins / Torpedo / Octagon / path-markers | per-task missions + detection models | per-task hardware | this doc Phase-2 sketches |
+| **Payload actuation** | ESP32-serial dropper/torpedo client (`drop_marker`/`fire_torpedo`) — NOT Pixhawk AUX | ESP32 serial contract | `project_payload_actuation` memory |
+| **Stepper grabber** | Actuation-Board step/dir interface + `grab()` verb | grabber wiring | audit G7 |
+| **Underwater preprocessing** | colour-cast/haze correction stage ahead of the detector | — | audit G5 |
+
 ## Non-Goals (deliberate deferrals)
 
 | Item | Reason |
 |------|--------|
-| Task 5 Octagon — acoustic pinger | Hardware not confirmed on vehicle; park until hydrophone array spec locked |
 | Style maneuvers (gate Task 1 roll/pitch) | ArduSub roll/pitch in MANUAL is risky pool-side; points not worth the risk |
-| YASMIN/py_trees FSM | `state_machines/` stays reserved; timed fallbacks in raw Python are sufficient for 2026 |
 | Multi-camera display | Single `vision_display` window; no additional value for competition |
 | CompressedImage transport | Raw frames needed for detector artifact debugging |
-| Task 4 Torpedoes | Lower priority vs points — pursue only if bins is solid before Jul 3 |
+| ROS2 + Unreal Engine 5 sim (TDR §III.B) | Gazebo + ArduSub SITL is the working sim; UE5 not pursued in-repo for 2026 |
 
 ---
 

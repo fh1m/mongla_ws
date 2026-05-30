@@ -14,26 +14,38 @@
 > Some legacy `.claude/context/*.md` files (notably `proven-patterns.md`)
 > describe historical 2023/2025 codebases, not this workspace.
 
-> **RoboSub 2026 framing (TDR vs this codebase — read before trusting either).**
-> The submitted TDR (`TDR26_BRACU_Duburi.pdf`) describes the team's 2026
-> *target*: a dual-vehicle run — **Duburi 4.5** (primary; sensors +
-> grabber/dropper/torpedo) and **Dubomini 2.0** (agile, 8-thruster, no
-> DVL/manipulators) — coordinated over **IVC**, sequenced by an **FSM**,
-> perceiving with **YOLO26**. **This workspace does NOT implement that.**
-> It is the proven 4.2-derived **single-vehicle** stack (the "Duburi 4.5
-> line" of code): imperative `detected()` missions (no FSM), **YOLO11**
-> (YOLO26 is backwards-compat only), no Dubomini, no IVC, and task
-> coverage of Gate / Return / search-align (≈800 pt envelope per the
-> roadmap). The workspace name, the `/duburi/*` namespace, and "4.2" in
-> hardware tables are deliberately kept for back-compat — **do not
-> bulk-rename them.** Every TDR-vs-code delta is enumerated, severity-
-> tagged, and given an owner in
+> **RoboSub 2026 framing (committed scope vs what's built — read before trusting either).**
+> Per the tech-lead reconciliation decision (2026-05-31, P0.1), the **committed
+> 2026 target** is the full TDR (`TDR26_BRACU_Duburi.pdf`): a dual-vehicle run —
+> **Duburi 4.5** (primary; sensors + grabber/dropper/torpedo) and **Dubomini 2.0**
+> (agile, 8-thruster, no DVL/manipulators) — coordinated over **IVC**, sequenced by
+> a **YASMIN FSM**, with the full 7-task set. The detector is **YOLO11** (this
+> *corrects* the TDR's YOLO26 line — YOLO11 is the committed family; YOLO26 is
+> legacy/backwards-compat only).
+>
+> Read every doc through **three states, never blurred:**
+> - **BUILT & TESTED (phase 1, today):** the proven 4.2-derived **single-vehicle**
+>   Duburi stack — imperative `detected()` missions, YOLO11, Gate / Return /
+>   search-align (≈800 pt), the control / MAVLink / vision core. This is what runs.
+> - **COMMITTED, NOT YET IMPLEMENTED (phase 2):** Dubomini control path, **IVC**,
+>   the **YASMIN FSM**, the remaining tasks (Slalom / Bins / Torpedo / Octagon /
+>   path-markers), underwater preprocessing, and ESP32-serial payload actuation.
+>   These are committed build tickets with **zero or partial code today** — never
+>   describe them as running.
+> - **`detected()` is NOT "instead of an FSM":** it is the prototyping +
+>   per-subsystem unit-test + FSM-fallback layer. The committed YASMIN FSM (phase 2)
+>   wraps these same DSL verbs as states.
+>
+> The workspace name, the `/duburi/*` namespace, and "4.2" in hardware tables are
+> deliberately kept for back-compat — **do not bulk-rename them.**
+>
+> **Central development board (start here for status/bugs/fixes/tickets):**
+> [`.claude/context/development-board.md`](.claude/context/development-board.md).
+> Supporting detail: full audit + gap matrix
 > [`.claude/context/robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md);
-> the honest task schedule is
-> [`.claude/context/robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
-> When docs and the TDR disagree, **code is ground truth** — fix the gap
-> or soften the claim; never edit docs to assert a capability the code
-> lacks.
+> phase schedule [`.claude/context/robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
+> When docs and the TDR disagree, **code is ground truth** — fix the gap or mark the
+> claim as committed-phase-2; never edit docs to assert a capability the code lacks.
 
 ---
 
@@ -175,7 +187,7 @@ duburi_ws/src/
 │       │   ├── robosub_prequal.py     # RoboNation prequal (gate pass + flare orbit)
 │       │   ├── gate_flare_prequal.py      # full autonomous gate+flare+return (scripted fallback)
 │       │   └── gate_flare_autonomous.py   # detected()-paradigm reactive mission (preferred)
-│       └── state_machines/       # reserved for YASMIN-based plans
+│       └── state_machines/       # committed YASMIN FSM home (phase-2, not yet implemented)
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
 │   │   ├── factory.py            # make_yaw_source(name, **kw) — dvl|bno085|bno085_dvl|mavlink_ahrs
@@ -723,8 +735,9 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 
 | File                            | Contents                                                            |
 |---------------------------------|---------------------------------------------------------------------|
-| `robosub-2026-audit.md`         | **Full-stack audit + TDR⇄code gap matrix + readiness verdict + P0/P1/P2 plan.** Start here for "are we on track?" |
-| `robosub-2026-roadmap.md`       | Honest task schedule + coverage table (Gate/Return/search ≈800 pt target); deliberate non-goals (FSM, Octagon, torpedo) |
+| `development-board.md`          | **★ START HERE — central dashboard: phase status, open work, bug/fix log, phase-2 tickets, doc map.** |
+| `robosub-2026-audit.md`         | Full-stack audit + TDR⇄code gap matrix (G1–G12) + P0.1 Decision Record + P0/P1/P2 plan |
+| `robosub-2026-roadmap.md`       | Phase-1 schedule (Gate/Return/search ≈800 pt) + **Phase-2 committed build tickets** (FSM/Dubomini/IVC/tasks) |
 | `scouting/`                     | Competitor/reference-team scouting notes (e.g. `bumblebee-2025.md`) |
 
 **API & verbs (start here):**
