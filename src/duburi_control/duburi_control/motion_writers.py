@@ -141,8 +141,25 @@ def thrust_loop(pixhawk, axis_writer, duration, gain, log,
     log.info(f'[{axis_label:<5}] done  worst_drift={worst_drift:.1f}')
 
 
+def _interruptible_sleep(duration, abort_fn=None, slice_s=0.05):
+    """Sleep up to `duration`, but return early if `abort_fn()` goes True.
+
+    Polls the abort predicate every `slice_s` seconds so a settle/brake on the
+    safety-stop path cannot block abort for its full duration. Uses monotonic
+    time so an NTP step can't extend the wait.
+    """
+    deadline = time.monotonic() + duration
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            return
+        if abort_fn and abort_fn():
+            return
+        time.sleep(min(slice_s, remaining))
+
+
 def brake_kick_then_settle(axis_writer, writers, brake_pct, log, axis_label,
-                           extra_settle=0.0):
+                           extra_settle=0.0, abort_fn=None):
     """Constant-variant brake. Reverse-kick the active axis, then settle.
 
     Constant-gain commands exit at full velocity, so a short reverse
@@ -153,14 +170,18 @@ def brake_kick_then_settle(axis_writer, writers, brake_pct, log, axis_label,
         f'[{axis_label:<5}] brake -- reverse {abs(brake_pct):.0f}% '
         f'x {REVERSE_KICK_SEC:.2f}s')
     axis_writer(pwm)
-    time.sleep(REVERSE_KICK_SEC)
+    _interruptible_sleep(REVERSE_KICK_SEC, abort_fn)
 
-    final_settle(writers, log, extra=extra_settle)
+    final_settle(writers, log, extra=extra_settle, abort_fn=abort_fn)
 
 
-def final_settle(writers, log, extra=0.0):
-    """Send neutral (lock-aware) and sleep `SETTLE_SEC + extra`."""
+def final_settle(writers, log, extra=0.0, abort_fn=None):
+    """Send neutral (lock-aware) and sleep `SETTLE_SEC + extra`.
+
+    The settle wait is abort-interruptible: on the safety-stop path a long
+    settle must not swallow an abort for its whole duration.
+    """
     writers.neutral()
     duration = SETTLE_SEC + extra
     log.info(f'[CMD  ] settle {duration:.1f}s')
-    time.sleep(duration)
+    _interruptible_sleep(duration, abort_fn)
