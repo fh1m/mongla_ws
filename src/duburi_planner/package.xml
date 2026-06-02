@@ -18,6 +18,8 @@
   <depend>duburi_interfaces</depend>
   <depend>duburi_manager</depend>
   <depend>vision_msgs</depend>
+  <depend>yasmin</depend>
+  <depend>yasmin_ros</depend>
 
   <buildtool_depend>ament_python</buildtool_depend>
 

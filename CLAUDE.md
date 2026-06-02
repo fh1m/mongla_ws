@@ -193,8 +193,27 @@ duburi_ws/src/
 │       │   ├── gate_prequal.py        # gate-only prequal (DVL forward pass)
 │       │   ├── robosub_prequal.py     # RoboNation prequal (gate pass + flare orbit)
 │       │   ├── gate_flare_prequal.py      # full autonomous gate+flare+return (scripted fallback)
-│       │   └── gate_flare_autonomous.py   # detected()-paradigm reactive mission (preferred)
-│       └── state_machines/       # committed YASMIN FSM home (phase-2, not yet implemented)
+│       │   ├── gate_flare_autonomous.py   # detected()-paradigm reactive mission (preferred)
+│       │   ├── gate_flare_fsm.py          # YASMIN FSM gate+flare (dual-vehicle, auto profile)
+│       │   └── prequal_fsm.py             # YASMIN FSM prequal (dual-vehicle)
+│       └── state_machines/       # YASMIN FSM layer (BUILT — phase-2 feature complete)
+│           ├── __init__.py               # exports VehicleProfile + build_* plan builders
+│           ├── core/
+│           │   ├── outcomes.py           # SUCCEED/FAILED/TIMEOUT/ABORT
+│           │   ├── blackboard.py         # BK.* typed key constants
+│           │   ├── vehicle_profile.py    # VehicleProfile(.auto/.duburi45/.dubomini)
+│           │   └── base_state.py         # DuburiState: timeout + ABORT-on-exception wrapper
+│           ├── states/
+│           │   ├── navigation.py         # ArmState, SetDepthState, MoveForwardState (DVL/timed), SurfaceState …
+│           │   ├── vision.py             # VisionFindState, VisionHomeState, VisionScanState
+│           │   └── utility.py            # CountdownState, PauseState, LogScoreState
+│           └── plans/
+│               ├── gate_flare.py         # build_gate_flare_fsm(duburi, profile, params)
+│               └── prequal.py            # build_prequal_fsm(duburi, profile, params)
+│
+│  VehicleProfile.auto(node) probes /duburi_manager yaw_source param at runtime →
+│  sets has_dvl/has_manipulators → MoveForwardState picks DVL-dist vs timed.
+│  Same plan builder works for Duburi 4.5 AND Dubomini 2.0 with zero code changes.
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
 │   │   ├── factory.py            # make_yaw_source(name, **kw) — dvl|bno085|bno085_dvl|mavlink_ahrs
@@ -676,6 +695,9 @@ ros2 run duburi_planner mission find_person_demo       # vision-driven 3D align 
 ros2 run duburi_planner mission gate_prequal           # gate-only pre-qualification
 ros2 run duburi_planner mission gate_flare_prequal     # full autonomous gate+flare+return (competition)
 ros2 run duburi_planner mission robosub_prequal        # RoboNation prequal (timed strafe pass)
+# YASMIN FSM missions (dual-vehicle: auto-detects Duburi 4.5 vs Dubomini 2.0 from yaw_source param)
+ros2 run duburi_planner mission gate_flare_fsm         # FSM gate+flare — DVL dist OR timed, auto-selected
+ros2 run duburi_planner mission prequal_fsm            # FSM gate-only prequal
 ```
 
 ### Step 5: Vision sanity (gate+flare detection)
