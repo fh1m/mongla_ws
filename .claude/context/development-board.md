@@ -97,6 +97,7 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 | [`vehicle-spec.md`](vehicle-spec.md) | hardware + TDR-vs-impl delta (Dubomini, sensors, payload) |
 | [`mission-design.md`](mission-design.md) | YASMIN FSM design reference (now built) |
 | [`fsm-guide.md`](fsm-guide.md) | **FSM user guide** — fundamentals, VehicleProfile, state library, adding tasks, pool-day workflow |
+| [`fsm-vision-missions.md`](fsm-vision-missions.md) | **Vision-guided mission design** — detection model, 6 search patterns, DVL/timed table, pick+drop worked example, gain tuning |
 | `CLAUDE.md` §15 | Claude automations (agents/skills/hooks) |
 
 > **Maintenance:** when a phase-2 ticket starts, flip its row 🟦→in-progress here and in audit §6. When a bug is fixed, add a §4 row. Keep the three-state honesty — never mark unbuilt as built.
