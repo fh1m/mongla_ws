@@ -23,12 +23,15 @@ from .core.vehicle_profile import VehicleProfile
 from .core.base_state import DuburiState
 from .core.outcomes import SUCCEED, FAILED, TIMEOUT, ABORT
 from .core.blackboard import BK
+from .states.utility import SetDetectorState
 from .plans.gate_flare import build_gate_flare_fsm, GATE_FLARE_DEFAULTS
 from .plans.prequal import build_prequal_fsm, PREQUAL_DEFAULTS
+from .plans.gate_then_bin import build_gate_then_bin_fsm, GATE_THEN_BIN_DEFAULTS
 
 __all__ = [
-    'VehicleProfile', 'DuburiState', 'BK',
+    'VehicleProfile', 'DuburiState', 'BK', 'SetDetectorState',
     'SUCCEED', 'FAILED', 'TIMEOUT', 'ABORT',
     'build_gate_flare_fsm', 'GATE_FLARE_DEFAULTS',
     'build_prequal_fsm', 'PREQUAL_DEFAULTS',
+    'build_gate_then_bin_fsm', 'GATE_THEN_BIN_DEFAULTS',
 ]

@@ -1,8 +1,9 @@
 """Vision states — wrapping DuburiMission DSL vision verbs.
 
-Each state delegates entirely to the DSL; no direct RC/MAVLink calls here.
-The manager node owns the closed-loop vision control; these states are
-thin wrappers that turn DSL outcomes into YASMIN outcome strings.
+Each state accepts an explicit `camera` parameter (e.g. 'forward', 'downward').
+When camera=None the DSL falls back to the sticky `duburi.camera` context.
+Passing camera= explicitly makes plans self-documenting and enables camera
+switching between tasks without a separate SetDetectorState.
 """
 from __future__ import annotations
 
@@ -13,10 +14,9 @@ from ..core.outcomes import SUCCEED, FAILED, TIMEOUT
 
 
 class VisionFindState(DuburiState):
-    """Block until target class visible; optionally move while searching.
+    """Block until target visible; optionally move while searching.
 
-    Wraps duburi.vision.find(). Returns SUCCEED when target first appears;
-    TIMEOUT when the find verb's own timeout expires.
+    Wraps duburi.vision.find(). camera=None → inherits duburi.camera sticky.
     """
     TIMEOUT_S = 60.0
 
@@ -25,31 +25,32 @@ class VisionFindState(DuburiState):
         duburi,
         profile,
         target: str,
+        camera: str | None = None,
         move: str = 'forward',
         gain: int = 30,
         timeout: float = 45.0,
     ) -> None:
         super().__init__(duburi, profile, [SUCCEED])
         self._target  = target
+        self._camera  = camera
         self._move    = move
         self._gain    = gain
         self._timeout = timeout
 
     def _run(self, bb: Blackboard) -> str:
-        result = self.duburi.vision.find(
-            target=self._target,
-            move=self._move,
-            gain=self._gain,
-            timeout=self._timeout,
-        )
+        kw = dict(target=self._target, move=self._move,
+                  gain=self._gain, timeout=self._timeout)
+        if self._camera:
+            kw['camera'] = self._camera
+        result = self.duburi.vision.find(**kw)
         return SUCCEED if result.success else TIMEOUT
 
 
 class VisionHomeState(DuburiState):
     """Multi-axis vision convergence.
 
-    Wraps duburi.vision.home(). Passes all gate_guard / pass_at / dist
-    kwargs through so plan builders can tune per-task without subclassing.
+    Wraps duburi.vision.home(). camera=None → inherits duburi.camera sticky.
+    All gate_guard / pass_at / dist kwargs forwarded unchanged.
     """
     TIMEOUT_S = 30.0
 
@@ -58,6 +59,7 @@ class VisionHomeState(DuburiState):
         duburi,
         profile,
         target: str,
+        camera: str | None = None,
         yaw: bool = False,
         lat: bool = False,
         depth: bool = False,
@@ -74,30 +76,27 @@ class VisionHomeState(DuburiState):
             target=target,
             yaw=yaw, lat=lat, depth=depth, forward=forward,
             gate_guard=gate_guard,
-            pass_at=pass_at or None,      # 0.0 → None (disabled)
+            pass_at=pass_at or None,
             dist=dist or None,
             metric=metric,
             duration=duration,
             on_lost=on_lost,
         )
-        # Strip None-valued optional keys so DSL inherits param defaults
+        if camera:
+            self._kwargs['camera'] = camera
+        # Strip None-valued optional keys — DSL inherits param defaults for them
         self._kwargs = {k: v for k, v in self._kwargs.items() if v is not None}
         self.TIMEOUT_S = duration + 5.0
 
     def _run(self, bb: Blackboard) -> str:
         result = self.duburi.vision.home(**self._kwargs)
-        if result.success:
-            return SUCCEED
-        # DSL returns success=False on on_lost='fail' — signal FAILED
-        # so the plan can retry find → home rather than going to SURFACE.
-        return FAILED
+        return SUCCEED if result.success else FAILED
 
 
 class VisionScanState(DuburiState):
     """Incremental yaw orbit until target detected or budget exhausted.
 
-    Wraps duburi.vision.scan(). Returns SUCCEED on first detection;
-    TIMEOUT if full duration elapses without sighting.
+    Wraps duburi.vision.scan(). camera=None → inherits duburi.camera sticky.
     """
     TIMEOUT_S = 100.0
 
@@ -106,22 +105,23 @@ class VisionScanState(DuburiState):
         duburi,
         profile,
         target: str,
+        camera: str | None = None,
         step: float = 20.0,
         dwell: float = 1.5,
         duration: float = 90.0,
     ) -> None:
         super().__init__(duburi, profile, [SUCCEED])
         self._target   = target
+        self._camera   = camera
         self._step     = step
         self._dwell    = dwell
         self._duration = duration
         self.TIMEOUT_S = duration + 5.0
 
     def _run(self, bb: Blackboard) -> str:
-        result = self.duburi.vision.scan(
-            target=self._target,
-            step=self._step,
-            dwell=self._dwell,
-            duration=self._duration,
-        )
+        kw = dict(target=self._target, step=self._step,
+                  dwell=self._dwell, duration=self._duration)
+        if self._camera:
+            kw['camera'] = self._camera
+        result = self.duburi.vision.scan(**kw)
         return SUCCEED if result.success else TIMEOUT
