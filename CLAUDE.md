@@ -812,6 +812,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |
 | `mission-design.md`             | YASMIN FSM design reference (now built — see fsm-guide.md)          |
 | `fsm-guide.md`                  | **★ FSM user guide** — YASMIN fundamentals, VehicleProfile, state library, pool-day workflow, adding new tasks |
+| `fsm-vision-missions.md`        | **★ Vision-guided mission design** — first-principles detection model, 6 search patterns, DVL/timed table, full pick+drop worked example, gain tuning, checklist |
 | `vision-architecture.md`        | `duburi_vision` file map, topic contract, GPU contract, viz layers  |
 | `vision-roadmap.md`             | v1–v4f done (detection, tracking, Kalman, vision verbs, depth pipeline); v5 real hw cams queued |
 | `depth-estimation.md`           | Depth Anything V2-Small ONNX node: params, topics, EMA smoothing, HUD integration, test |

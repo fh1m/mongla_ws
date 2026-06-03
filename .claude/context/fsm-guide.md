@@ -6,6 +6,10 @@
 >
 > **Home:** `src/duburi_planner/duburi_planner/state_machines/`
 > **Entry missions:** `missions/gate_flare_fsm.py`, `missions/prequal_fsm.py`
+>
+> **See also:** [`fsm-vision-missions.md`](fsm-vision-missions.md) — vision as primary
+> guidance: search patterns, avoid branches, pick/drop sequences, gain tuning, DVL/timed
+> decision table, full worked example.
 
 ---
 
