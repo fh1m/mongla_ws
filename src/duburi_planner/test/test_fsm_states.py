@@ -279,6 +279,102 @@ class TestCountdownState:
         assert bb[BK.MISSION_START_T] > 0
 
 
+# ── SetDetectorState ─────────────────────────────────────────────────────────
+
+class TestSetDetectorState:
+    def test_sets_camera_on_duburi(self):
+        from duburi_planner.state_machines.states.utility import SetDetectorState
+        d = _duburi()
+        state = SetDetectorState(d, VehicleProfile.dubomini(), camera='downward')
+        state.execute(Blackboard())
+        assert d.camera == 'downward'
+
+    def test_calls_set_classes(self):
+        from duburi_planner.state_machines.states.utility import SetDetectorState
+        d = _duburi()
+        state = SetDetectorState(d, VehicleProfile.dubomini(), classes='bin_a,bin_b')
+        state.execute(Blackboard())
+        d.set_classes.assert_called_once_with('bin_a,bin_b')
+
+    def test_calls_set_model(self):
+        from duburi_planner.state_machines.states.utility import SetDetectorState
+        d = _duburi()
+        state = SetDetectorState(d, VehicleProfile.dubomini(), model='bin_medium_100ep')
+        state.execute(Blackboard())
+        d.set_model.assert_called_once_with('bin_medium_100ep')
+
+    def test_all_three_together(self):
+        from duburi_planner.state_machines.states.utility import SetDetectorState
+        d = _duburi()
+        state = SetDetectorState(d, VehicleProfile.dubomini(),
+                                  camera='downward', classes='bin_a', model='bin_v1')
+        assert state.execute(Blackboard()) == SUCCEED
+        assert d.camera == 'downward'
+        d.set_classes.assert_called_once_with('bin_a')
+        d.set_model.assert_called_once_with('bin_v1')
+
+    def test_noop_when_all_none(self):
+        from duburi_planner.state_machines.states.utility import SetDetectorState
+        d = _duburi()
+        d.camera = 'forward'
+        state = SetDetectorState(d, VehicleProfile.dubomini())
+        state.execute(Blackboard())
+        assert d.camera == 'forward'   # unchanged
+        d.set_classes.assert_not_called()
+        d.set_model.assert_not_called()
+
+
+# ── camera passthrough in vision states ──────────────────────────────────────
+
+class TestVisionStateCameraPassthrough:
+    def test_find_forwards_camera_kwarg(self):
+        d = _duburi()
+        state = VisionFindState(d, VehicleProfile.dubomini(),
+                                 target='bin_a', camera='downward',
+                                 move='still', timeout=10.0)
+        state.execute(Blackboard())
+        _, kw = d.vision.find.call_args
+        assert kw.get('camera') == 'downward'
+
+    def test_find_no_camera_no_kwarg(self):
+        d = _duburi()
+        state = VisionFindState(d, VehicleProfile.dubomini(), target='gate')
+        state.execute(Blackboard())
+        _, kw = d.vision.find.call_args
+        assert 'camera' not in kw   # DSL uses sticky duburi.camera
+
+    def test_home_forwards_camera_kwarg(self):
+        d = _duburi()
+        state = VisionHomeState(d, VehicleProfile.dubomini(),
+                                 target='bin_a', camera='downward',
+                                 yaw=True, lat=True)
+        state.execute(Blackboard())
+        _, kw = d.vision.home.call_args
+        assert kw.get('camera') == 'downward'
+
+    def test_home_no_camera_no_kwarg(self):
+        d = _duburi()
+        state = VisionHomeState(d, VehicleProfile.dubomini(), target='gate', yaw=True)
+        state.execute(Blackboard())
+        _, kw = d.vision.home.call_args
+        assert 'camera' not in kw
+
+    def test_scan_forwards_camera_kwarg(self):
+        d = _duburi()
+        state = VisionScanState(d, VehicleProfile.dubomini(),
+                                 target='bin_a', camera='downward')
+        state.execute(Blackboard())
+        _, kw = d.vision.scan.call_args
+        assert kw.get('camera') == 'downward'
+
+    def test_scan_no_camera_no_kwarg(self):
+        d = _duburi()
+        state = VisionScanState(d, VehicleProfile.dubomini(), target='gate')
+        state.execute(Blackboard())
+        _, kw = d.vision.scan.call_args
+        assert 'camera' not in kw
+
+
 # ── plan builder smoke test (no hardware) ─────────────────────────────────────
 
 class TestPlanBuilders:
@@ -301,6 +397,22 @@ class TestPlanBuilders:
         d = _duburi()
         sm = build_gate_flare_fsm(d, VehicleProfile.duburi45(),
                                    params={'gate_heading': 90.0})
-        # Just verify it builds without error; heading value goes into LockHeadingState
         from yasmin import StateMachine
         assert isinstance(sm, StateMachine)
+
+    def test_build_gate_then_bin_fsm_returns_state_machine(self):
+        from yasmin import StateMachine
+        from duburi_planner.state_machines import build_gate_then_bin_fsm
+        d = _duburi()
+        sm = build_gate_then_bin_fsm(d, VehicleProfile.dubomini())
+        assert isinstance(sm, StateMachine)
+
+    def test_gate_then_bin_has_camera_switch_state(self):
+        from duburi_planner.state_machines import build_gate_then_bin_fsm
+        d = _duburi()
+        sm = build_gate_then_bin_fsm(d, VehicleProfile.duburi45())
+        states = sm.get_states()
+        assert 'SWITCH_TO_BIN' in states
+        assert 'SCAN_BIN' in states
+        assert 'LOCK_BIN' in states
+        assert 'DROP_BIN' in states
