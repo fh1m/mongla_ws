@@ -1,24 +1,23 @@
 # Mission Design & State Machine Architecture — Duburi AUV
 
-> **Top note:** **This doc is the build reference for the COMMITTED YASMIN FSM**
-> (phase-2 per the 2026-05-31 reconciliation, audit P0.1 — see
-> [`development-board.md`](development-board.md)). The FSM is **not built yet**;
-> its home is `duburi_planner/state_machines/`. Today's mission entry points live in
-> [`src/duburi_planner/duburi_planner/missions/`](../../src/duburi_planner/duburi_planner/missions/)
-> — plain Python `detected()` scripts that use `DuburiClient` against the
-> `/duburi/move` action (run via `ros2 run duburi_planner mission <name>`). Those
-> scripts are **kept** as the prototyping / per-subsystem unit-test / **FSM-fallback**
-> layer; the FSM wraps the same DSL verbs as states (it does not replace them).
+> **Status: BUILT & TESTED** (commit 4a94231, 2026-06-02).
+> The YASMIN FSM layer is live in `duburi_planner/state_machines/`.
+> Drop-in missions: `gate_flare_fsm`, `prequal_fsm` — auto-discover via
+> `ros2 run duburi_planner mission <name>`.
 >
-> Re-introduce YASMIN (or behavior trees, or `py_trees_ros`) when
-> missions outgrow a linear script — typically when conditional
-> branches, retries, or vision-driven detours show up. The slot for that
-> code is [`src/duburi_planner/duburi_planner/state_machines/`](../../src/duburi_planner/duburi_planner/state_machines/),
-> which is intentionally empty until needed.
+> **Comprehensive guide:** [`fsm-guide.md`](fsm-guide.md) — YASMIN fundamentals,
+> VehicleProfile design, state library reference, pool-day workflow, how to add
+> new tasks.
 >
-> This file documents the *target* FSM design (good for planning) and
-> the *current* mission-script pattern (good for picking up the codebase
-> as it is today).
+> **Two layers coexist:**
+> - `missions/gate_flare_autonomous.py` etc — `detected()` scripted missions:
+>   prototyping / unit-test / FSM-fallback layer. Keep these.
+> - `missions/gate_flare_fsm.py` etc — YASMIN FSM missions: robust competition
+>   layer with explicit timeouts, retry loops, dual-vehicle auto-detection.
+>
+> The FSM wraps the same DSL verbs (`duburi.vision.home()`,
+> `duburi.move_forward_dist()`, etc.) as states. MAVLink/ArduSub control layer
+> is completely unchanged.
 
 Based on the 2025 RoboSub competition codebase (YASMIN FSM) + 2023 patterns.
 

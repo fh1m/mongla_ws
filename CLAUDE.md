@@ -810,7 +810,8 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `pid-theory.md`                 | PID tuning notes — **REFERENCE**, not the live path                 |
 | `proven-patterns.md`            | Patterns from 2023/2025 codebases — names are **historical**        |
 | `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |
-| `mission-design.md`             | YASMIN FSM patterns (target home: `duburi_planner/state_machines/`) |
+| `mission-design.md`             | YASMIN FSM design reference (now built — see fsm-guide.md)          |
+| `fsm-guide.md`                  | **★ FSM user guide** — YASMIN fundamentals, VehicleProfile, state library, pool-day workflow, adding new tasks |
 | `vision-architecture.md`        | `duburi_vision` file map, topic contract, GPU contract, viz layers  |
 | `vision-roadmap.md`             | v1–v4f done (detection, tracking, Kalman, vision verbs, depth pipeline); v5 real hw cams queued |
 | `depth-estimation.md`           | Depth Anything V2-Small ONNX node: params, topics, EMA smoothing, HUD integration, test |

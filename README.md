@@ -74,7 +74,8 @@ Humble control / mission / vision / simulation brain. The competition fields
 Read every capability in three states — **✅ built & tested · 🟦 committed (phase-2, not built) · ✏️ corrected.** Live tracking, open work, and the bug/fix log are centralised in the **[development board](.claude/context/development-board.md) — start there.**
 
 - **✅ Phase 1 (runs today):** single-body **Duburi** stack — `detected()` reactive missions, YOLO11 + ByteTrack/Kalman + monocular depth (30 fps), Gate / Return / search-align (~800 pt), the control / MAVLink / vision core.
-- **🟦 Phase 2 (committed, not yet built):** Dubomini 2.0 control path · inter-vehicle comms (IVC) · **YASMIN FSM** (wraps the `detected()` verbs as states) · Slalom / Bins / Torpedo / Octagon / path-markers · ESP32-serial payload actuation · stepper grabber · underwater preprocessing.
+- **✅ YASMIN FSM layer (built 2026-06-03):** `state_machines/` planning layer with `VehicleProfile` dual-vehicle auto-detection — same plan builder generates DVL-distance passes for Duburi 4.5 and timed passes for Dubomini 2.0. `gate_flare_fsm` + `prequal_fsm` missions live now.
+- **🟦 Phase 2 (committed, not yet built):** Dubomini 2.0 control path · inter-vehicle comms (IVC) · Slalom / Bins / Torpedo / Octagon plan builders · ESP32-serial payload actuation · stepper grabber · underwater preprocessing.
 - **✏️ Corrected:** detector is **YOLO11** (the TDR's YOLO26 line is corrected; YOLO11 is the committed, battle-tested family).
 
 > Decision record (P0.1, 2026-05-31): [`robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md) §6 · phase schedule: [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
@@ -1100,6 +1101,64 @@ flowchart LR
   <img src="docs/imgs/readme-architecture.png" alt="Mongla package architecture" width="90%"/>
 </p>
 
+### 3.4 Mission planning — two layers
+
+Mongla has two coexisting mission layers. Both use the same `run(duburi, log)` interface and are launched identically.
+
+| Layer | Files | Best for |
+|---|---|---|
+| **`detected()` scripts** | `missions/gate_flare_autonomous.py` etc | Prototyping, per-subsystem testing, scripted fallback |
+| **YASMIN FSM** | `missions/gate_flare_fsm.py`, `missions/prequal_fsm.py` | Robust competition runs — explicit timeouts, auto-retry, dual-vehicle |
+
+```
+                  ┌─────────────────────────────────────┐
+                  │  YASMIN StateMachine  sm(Blackboard) │
+                  │                                      │
+                  │  COUNTDOWN → ARM → DIVE              │
+                  │      ↓                               │
+                  │  FIND_GATE ←── (retry on FAILED) ←──┐│
+                  │      ↓ SUCCEED                       ││
+                  │  HOME_GATE ─── FAILED ───────────────┘│
+                  │      ↓ SUCCEED                        │
+                  │  PASS_GATE  ◀── DVL-dist OR timed     │
+                  │      ↓      (auto-selected by          │
+                  │  FIND_FLARE   VehicleProfile)          │
+                  │      ...                              │
+                  │  SURFACE → "succeeded"                │
+                  └────────────────┬──────────────────────┘
+                                   │ DuburiMission DSL verbs
+                         /duburi/move ActionServer
+                                   │
+                          Pixhawk / ArduSub
+```
+
+**`VehicleProfile`** is the dual-vehicle key. At mission start it probes
+`/duburi_manager`'s `yaw_source` ROS param:
+
+```
+yaw_source=dvl        → VehicleProfile.duburi45 (has_dvl=True)
+                         MoveForwardState uses move_forward_dist()  ← DVL closed-loop
+
+yaw_source=mavlink_ahrs → VehicleProfile.dubomini (has_dvl=False)
+                          MoveForwardState uses move_forward()       ← timed thrust
+```
+
+The same `build_gate_flare_fsm(duburi, profile)` call produces the right FSM for each body.
+
+**Quick run:**
+
+```bash
+# Runs on Duburi 4.5 OR Dubomini — auto-detects vehicle
+ros2 run duburi_planner mission gate_flare_fsm
+ros2 run duburi_planner mission prequal_fsm
+
+# Override pool-day params without code edits
+# → create a thin wrapper mission with a params={} dict — see fsm-guide.md §6
+```
+
+> Full guide, state library reference, how to add new tasks (Slalom, Bins …):
+> [`.claude/context/fsm-guide.md`](.claude/context/fsm-guide.md)
+
 Key data flow:
 
 1. The CLI (or `mission` runner, or any other Python client) sends a `Move`
@@ -1192,9 +1251,23 @@ duburi_ws/
             │   ├── pursue_demo.py               # vision_align_3d lock_mode=pursue demo
             │   ├── gate_prequal.py              # gate-only prequal (DVL forward)
             │   ├── robosub_prequal.py           # RoboNation prequal (strafe pass + flare orbit)
-            │   ├── gate_flare_prequal.py        # scripted gate+flare+return (safe pool fallback)
-            │   └── gate_flare_autonomous.py     # detected()-paradigm reactive mission (preferred)
-            └── state_machines/          # reserved for YASMIN-based plans
+            │   ├── gate_flare_prequal.py        # scripted gate+flare+return (scripted fallback)
+            │   ├── gate_flare_autonomous.py     # detected()-paradigm reactive mission
+            │   ├── gate_flare_fsm.py            # ★ YASMIN FSM gate+flare (dual-vehicle auto-detect)
+            │   └── prequal_fsm.py               # ★ YASMIN FSM gate-only prequal (dual-vehicle)
+            └── state_machines/          # ★ YASMIN FSM planning layer (BUILT 2026-06-03)
+                ├── core/
+                │   ├── outcomes.py              # SUCCEED/FAILED/TIMEOUT/ABORT (yasmin_ros aliases)
+                │   ├── blackboard.py            # BK.* typed key constants
+                │   ├── vehicle_profile.py       # VehicleProfile: .auto(node)/.duburi45()/.dubomini()
+                │   └── base_state.py            # DuburiState: timeout tracking + ABORT-on-exception
+                ├── states/
+                │   ├── navigation.py            # Arm/Disarm/SetDepth/LockHeading/MoveForward*/Surface
+                │   ├── vision.py                # VisionFind/Home/Scan
+                │   └── utility.py               # Countdown/Pause/LogScore
+                └── plans/
+                    ├── gate_flare.py            # build_gate_flare_fsm(duburi, profile, params)
+                    └── prequal.py               # build_prequal_fsm(duburi, profile, params)
 ```
 
 Every new command ends up in just two places:

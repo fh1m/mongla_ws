@@ -2,7 +2,7 @@
 
 > **Single source of truth for status, open work, bugs, and fixes.** Start here.
 > Detail lives in the linked docs; this board is the dashboard, not a duplicate.
-> **Last updated:** 2026-05-31 · **Competition:** July 11, 2026.
+> **Last updated:** 2026-06-03 · **Competition:** July 11, 2026.
 >
 > Three-state model (used everywhere): **✅ BUILT & TESTED** · **🟦 COMMITTED (phase-2, not built)** · **✏️ CORRECTED**.
 
@@ -15,7 +15,7 @@ Full TDR is the committed target. Reconciliation Decision Record: [`robosub-2026
 | # | Decision |
 |---|----------|
 | 1 | **Dual vehicle COMMITTED** — Duburi 4.5 (built, phase-1) + Dubomini 2.0 (🟦 phase-2). |
-| 2 | **YASMIN FSM COMMITTED** (🟦 phase-2). `detected()` scripts kept as proto / unit-test / FSM-fallback layer. |
+| 2 | **YASMIN FSM COMMITTED** ✅ **BUILT** (commit 4a94231, 2026-06-03). `detected()` scripts kept as proto / unit-test / FSM-fallback layer. |
 | 3 | **IVC COMMITTED** (🟦 phase-2) — dual-vehicle dependency. |
 | 4 | **YOLO11** is the detector (✏️ corrects TDR's YOLO26). |
 | 5 | Doc strategy: code-truth + committed phase-2 annex; never claim unbuilt as running. |
@@ -27,8 +27,13 @@ Full TDR is the committed target. Reconciliation Decision Record: [`robosub-2026
 **✅ Phase 1 — BUILT & TESTED (single-vehicle Duburi, ~800 pt):**
 control / MAVLink / ArduSub core · `detected()` reactive missions · YOLO11 + ByteTrack/Kalman + monocular depth (30 fps) · Gate / Return / search-align · DVL packet parser.
 
+**✅ YASMIN FSM layer — BUILT (2026-06-03, commit 4a94231):**
+`state_machines/` (VehicleProfile + DuburiState + state library + gate_flare + prequal plan builders).
+Drop-in missions `gate_flare_fsm` + `prequal_fsm`. 34 tests, all green.
+Full guide: [`fsm-guide.md`](fsm-guide.md). Works for both Duburi 4.5 and Dubomini 2.0 (auto-detected).
+
 **🟦 Phase 2 — COMMITTED, NOT YET IMPLEMENTED** (tickets: [`robosub-2026-audit.md`](robosub-2026-audit.md) §6 P2 · schedule: [`robosub-2026-roadmap.md`](robosub-2026-roadmap.md) "Phase 2"):
-YASMIN FSM ([`mission-design.md`](mission-design.md)) · Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport · Slalom / Bins / Torpedo / Octagon / path-markers · ESP32-serial payload actuation (`drop_marker`/`fire_torpedo`) · stepper grabber · underwater preprocessing.
+Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport · Slalom / Bins / Torpedo / Octagon plan builders · ESP32-serial payload actuation (`drop_marker`/`fire_torpedo`) · stepper grabber · underwater preprocessing.
 
 ---
 
@@ -40,7 +45,8 @@ YASMIN FSM ([`mission-design.md`](mission-design.md)) · Dubomini control path (
 | P1 | Underwater preprocessing (G5) | 🟦 open | audit §6.5 |
 | P1 | Vision-control SITL smoke test (arm→dive→yaw→disarm) | 🟦 open | audit §6.6 / §4 |
 | P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (payload parked pending serial contract) | audit §6, `project_payload_actuation` memory |
-| P2 | YASMIN FSM · Dubomini · IVC · remaining tasks · grabber | 🟦 committed build tickets | audit §6 P2 |
+| P2 | YASMIN FSM | ✅ BUILT (4a94231) — [`fsm-guide.md`](fsm-guide.md) |
+| P2 | Dubomini control path · IVC · remaining task plans · grabber | 🟦 committed build tickets | audit §6 P2 |
 | cont. | 800-line files (`duburi.py` 833, `auv_manager_node.py` 795) | watch | audit §3.8 |
 | P1 | manager goal-acceptance / abort gating | ✅ tested (`dispatch_policy`, 13 tests) — full `execute_callback` live-node path is integration-only, not unit | audit §4 |
 
@@ -64,7 +70,11 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 
 | 🟠 | Manager goal-acceptance/abort gating extracted to pure `dispatch_policy.goal_acceptance` (safety-verb bypass rule) + unit-tested. |
 
-**New test coverage:** `motion_vision` 13 · `connection_config` 16 · `nucleus_parser` 14 · `motion_writers` 4 · `dispatch_policy` 13. **Suite (per-package): control+planner 83 · manager 29 · sensors 14 · vision 29 = 155.**
+**New test coverage (audit cycle):** `motion_vision` 13 · `connection_config` 16 · `nucleus_parser` 14 · `motion_writers` 4 · `dispatch_policy` 13.
+
+**New test coverage (FSM, 2026-06-03):** `test_fsm_states` 31 (VehicleProfile · navigation · vision · utility states · plan builders).
+
+**Suite (per-package): control 80 · planner 34 · manager 29 · sensors 14 · vision 29 = 186.**
 
 ---
 
@@ -85,7 +95,8 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 | [`robosub-2026-roadmap.md`](robosub-2026-roadmap.md) | phase schedule + Phase-2 committed tickets |
 | [`known-issues.md`](known-issues.md) | tracked bug history |
 | [`vehicle-spec.md`](vehicle-spec.md) | hardware + TDR-vs-impl delta (Dubomini, sensors, payload) |
-| [`mission-design.md`](mission-design.md) | YASMIN FSM build reference (phase-2) |
+| [`mission-design.md`](mission-design.md) | YASMIN FSM design reference (now built) |
+| [`fsm-guide.md`](fsm-guide.md) | **FSM user guide** — fundamentals, VehicleProfile, state library, adding tasks, pool-day workflow |
 | `CLAUDE.md` §15 | Claude automations (agents/skills/hooks) |
 
 > **Maintenance:** when a phase-2 ticket starts, flip its row 🟦→in-progress here and in audit §6. When a bug is fixed, add a §4 row. Keep the three-state honesty — never mark unbuilt as built.
