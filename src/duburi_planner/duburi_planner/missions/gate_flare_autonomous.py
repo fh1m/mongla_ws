@@ -72,13 +72,13 @@ def run(duburi, log):
 
     dvl_result = duburi.dvl_connect()
     if not dvl_result.success:
-        log.warn('WARNING: DVL connect failed — distance moves will be open-loop (time-based)')
+        log('WARN: DVL connect failed — distance moves will be open-loop (time-based)')
 
     # Enable both classes for all detected() checks
     duburi.set_classes('gate,flare')
 
     # ── 2. FindGate — creep forward until gate visible ───────────────────── #
-    log.info('=== FindGate ===')
+    log('=== FindGate ===')
     gate_found = False
     for _ in range(_MAX_GATE_STEPS):
         if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
@@ -86,12 +86,12 @@ def run(duburi, log):
             break
         duburi.move_forward(_SEARCH_STEP_S, gain=_SEARCH_GAIN)
     if not gate_found:
-        log.warn('gate not found in search budget — aborting mission')
+        log('WARN: gate not found in search budget — aborting mission')
         _surface_and_disarm(duburi)
         return
 
     # ── 3. HomeGate — align and commit ──────────────────────────────────── #
-    log.info('=== HomeGate ===')
+    log('=== HomeGate ===')
     gate_result = duburi.vision.home(
         target=duburi.models.gate.gate,
         yaw=True, lat=True,
@@ -102,14 +102,14 @@ def run(duburi, log):
         on_lost='hold',
     )
     if not gate_result.success:
-        log.warn('gate alignment failed — attempting open-loop passage')
+        log('WARN: gate alignment failed — attempting open-loop passage')
 
     # ── 4. PassGate — DVL forward through gate ──────────────────────────── #
-    log.info('=== PassGate ===')
+    log('=== PassGate ===')
     duburi.move_forward_dist(_GATE_PASS_DIST_M, gain=60)
 
     # ── 5. FindFlare — yaw sweep until flare visible ─────────────────────── #
-    log.info('=== FindFlare ===')
+    log('=== FindFlare ===')
     # Restore both classes before sweep (vision.home above may have set classes='gate')
     duburi.set_classes('gate,flare')
     flare_found = False
@@ -121,13 +121,13 @@ def run(duburi, log):
         duburi.pause(_SWEEP_PAUSE_S)
 
     if not flare_found:
-        log.warn('flare not found in sweep — attempting return through gate directly')
+        log('WARN: flare not found in sweep — attempting return through gate directly')
         _return_through_gate(duburi, log)
         _surface_and_disarm(duburi)
         return
 
     # ── 6. HomeFlare — 3-axis lock on flare ──────────────────────────────── #
-    log.info('=== HomeFlare ===')
+    log('=== HomeFlare ===')
     duburi.vision.home(
         target=duburi.models.gate.flare,
         yaw=True, forward=True, depth=True,
@@ -137,7 +137,7 @@ def run(duburi, log):
     )
 
     # ── 7. OrbitFlare — yaw steps, break when gate re-appears ───────────── #
-    log.info('=== OrbitFlare ===')
+    log('=== OrbitFlare ===')
     # CRITICAL: vision.home above called set_classes('flare').
     # Restore both classes BEFORE the orbit loop or detected('gate') can never be True.
     duburi.set_classes('gate,flare')
@@ -150,7 +150,7 @@ def run(duburi, log):
         duburi.pause(_ORBIT_DWELL_S)
 
     if not gate_reacquired:
-        log.warn('gate not re-acquired during orbit — attempting blind return')
+        log('WARN: gate not re-acquired during orbit — attempting blind return')
 
     _return_through_gate(duburi, log)
     _surface_and_disarm(duburi)
@@ -159,7 +159,7 @@ def run(duburi, log):
 def _return_through_gate(duburi, log):
     """Phase 8+9: home on gate if visible, then DVL pass through."""
     if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
-        log.info('=== HomeReturn ===')
+        log('=== HomeReturn ===')
         duburi.vision.home(
             target=duburi.models.gate.gate,
             yaw=True, lat=True,
@@ -169,7 +169,7 @@ def _return_through_gate(duburi, log):
             on_lost='hold',
         )
 
-    log.info('=== ReturnPass ===')
+    log('=== ReturnPass ===')
     duburi.move_forward_dist(_GATE_RETURN_M, gain=60)
 
 

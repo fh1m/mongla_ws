@@ -389,6 +389,59 @@ class Duburi(VisionVerbs):
                 final_value=new_heading, error_value=0.0)
 
     # ================================================================== #
+    #  Roll style  -- 360° spin on Ch2 axis                            #
+    # ================================================================== #
+
+    def roll_rock(self, gain=60.0, timeout=15.0):
+        """Style maneuver: 360° roll spin on Ch2 (roll axis).
+
+        Sequence:
+          1. Enter STABILIZE — ArduSub doesn't fight the roll.
+          2. Read AHRS2 roll as reference (should be ~0° while stable).
+          3. Drive Ch2 at gain% continuously.
+          4. Track cumulative roll via AHRS2 get_attitude() at ~20 Hz.
+          5. Stop when ±360° accumulated (angle-confirmed, not timer-based).
+          6. Neutral Ch2, return to ALT_HOLD.
+
+        TODO: When BNO085 roll/pitch API is added to duburi_sensors, swap
+        get_attitude() for bno.read_attitude() for IMU-independent confirmation.
+
+        impl: pixhawk.send_rc_override(roll=pwm) — Ch2.
+        """
+        import time as _t
+        with self._command_scope('roll_rock'):
+            self.log.info(
+                f'[CMD  ] roll_rock  gain={gain:.0f}%  timeout={timeout:.1f}s')
+            self.pixhawk.set_mode('STABILIZE')
+            _t.sleep(0.3)   # settle before reading reference angle
+
+            last_roll = self.pixhawk.get_attitude().get('roll', 0.0)
+            accum     = 0.0
+            pwm       = Pixhawk.percent_to_pwm(gain)
+            deadline  = _t.monotonic() + timeout
+            abort     = self._abort_fn
+
+            self.pixhawk.send_rc_override(roll=pwm)
+            while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                if abort():
+                    break
+                _t.sleep(0.05)   # ~20 Hz
+                cur   = self.pixhawk.get_attitude().get('roll', last_roll)
+                delta = cur - last_roll
+                if delta >  180: delta -= 360   # ±180° wrap
+                if delta < -180: delta += 360
+                accum    += delta
+                last_roll = cur
+
+            self.pixhawk.send_rc_override(roll=1500)   # Ch2 neutral
+            self.pixhawk.send_neutral()
+            self.pixhawk.set_mode('ALT_HOLD')
+            return self._make_result(
+                True,
+                f'roll_rock: done  {accum:+.0f}° accumulated',
+                final_value=accum)
+
+    # ================================================================== #
     #  Yaw  -- sharp pivots                                              #
     # ================================================================== #
 

@@ -34,7 +34,7 @@ def run(duburi, log):
     # ------------------------------------------------------------------ #
     #  Phase A: sharp turns -- forward, pause, yaw, pause, forward        #
     # ------------------------------------------------------------------ #
-    log.info('--- Phase A: sharp turns (yaw_*, settle between)')
+    log(\1)
     for i in range(2):
         # move_forward: open-loop thrust. gain=60% for 4 seconds.
         # No vision or position feedback.
@@ -62,7 +62,7 @@ def run(duburi, log):
     # ------------------------------------------------------------------ #
     #  Phase B: curved turns -- forward + yaw in one command              #
     # ------------------------------------------------------------------ #
-    log.info('--- Phase B: curved turns (arc, no settle between)')
+    log(\1)
     for i in range(2):
         # arc: combines forward thrust (gain=50%) with a continuous yaw
         # command (yaw_rate_pct=30%) in the same command packet.
