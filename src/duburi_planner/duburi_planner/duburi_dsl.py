@@ -406,6 +406,10 @@ class DuburiMission:
                           duration=float(seconds), gain=gain,
                           yaw_rate_pct=yaw_rate_pct, settle=settle)
 
+    def roll_rock(self, *, gain: float = 60.0, timeout: float = 15.0):
+        """360° roll spin on Ch2 axis. Angle-confirmed via AHRS2, not timer."""
+        return self._send('roll_rock', gain=gain, timeout=timeout)
+
     def lock_heading(self, degrees: float = 0.0, *, timeout: float = 300.0):
         return self._send('lock_heading',
                           target=float(degrees), timeout=timeout)

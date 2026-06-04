@@ -91,6 +91,15 @@ COMMANDS = {
         'defaults': {'gain': 80.0, 'settle': 0.0},
     },
 
+    # ---- Roll style (Ch2 axis) ------------------------------------- #
+    'roll_rock': {
+        'help':     'Style roll: enter STABILIZE, spin 360° on roll axis (Ch2), '
+                    'return to ALT_HOLD. Angle-confirmed via AHRS2 — not timer. '
+                    'gain sets Ch2 PWM %, timeout caps the maneuver.',
+        'fields':   ['gain', 'timeout'],
+        'defaults': {'gain': 60.0, 'timeout': 15.0},
+    },
+
     # ---- Curved (car-style) motion --------------------------------- #
     'arc': {
         'help':     'Curved motion: forward thrust + yaw rate at the same time. '
