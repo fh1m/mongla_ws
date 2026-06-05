@@ -315,16 +315,25 @@ class BNO085Source:
             return raw                                  # raw mode (diag only)
         return (raw + self._offset_deg) % 360.0
 
-    def read_pitch(self) -> float:
-        """Current BNO085 pitch in degrees. Returns 0.0 if stale or not yet received."""
+    def read_pitch(self) -> float | None:
+        """Current BNO085 pitch in degrees, or None if stale / not yet received.
+
+        Returns None (not 0.0) so callers can distinguish "no data" from
+        "actually pitched at 0°". Style-maneuver loops skip stale ticks.
+        """
         if (time.monotonic() - self._latest_pitch_ts) > _STALE_S:
-            return 0.0
+            return None
         return self._latest_pitch
 
-    def read_roll(self) -> float:
-        """Current BNO085 roll in degrees. Returns 0.0 if stale or not yet received."""
+    def read_roll(self) -> float | None:
+        """Current BNO085 roll in degrees, or None if stale / not yet received.
+
+        Returns None (not 0.0) so callers can distinguish "no data" from
+        "actually at 0° roll". Style-maneuver loops skip stale ticks via
+        `if cur is None: continue` to avoid corrupting the accumulator.
+        """
         if (time.monotonic() - self._latest_roll_ts) > _STALE_S:
-            return 0.0
+            return None
         return self._latest_roll
 
     def send_command(self, cmd: str) -> None:

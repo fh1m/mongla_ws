@@ -430,37 +430,49 @@ class Duburi(VisionVerbs):
                 self.log.warn('[CMD  ] style_roll: PARAM_SET timeout — aborting')
                 return self._make_result(False, 'style_roll: param set failed')
 
-            with self._suspend_heading_lock():
-                try:
-                    self.pixhawk.set_mode('ACRO')
-                    _t.sleep(0.2)
-                    last_roll = _read_roll()
-                    pwm       = Pixhawk.percent_to_pwm(gain)
-                    deadline  = _t.monotonic() + timeout
-                    abort     = self._abort_fn
-                    self.pixhawk.send_rc_override(roll=pwm)
-                    while abs(accum) < 360.0 and _t.monotonic() < deadline:
-                        if abort():
-                            break
-                        _t.sleep(0.05)    # 20 Hz
-                        cur   = _read_roll()
-                        delta = cur - last_roll
-                        if delta >  180: delta -= 360
-                        if delta < -180: delta += 360
-                        accum    += delta
-                        last_roll = cur
-                    self.pixhawk.send_rc_override(roll=1500)
-                    self.pixhawk.send_neutral()
-                finally:
-                    self.pixhawk.set_param('ACRO_BAL_ROLL', orig_bal)
-                    self.pixhawk.set_param('ACRO_TRAINER',  orig_trn)
-                    self.pixhawk.set_mode('ALT_HOLD')
-            # Heading lock resumes here in ALT_HOLD.
-            new_heading = self._current_heading()
-            self._retarget_heading_lock(new_heading)
-            hold_depth(self.pixhawk, target_depth, 15.0, self.log,
-                       neutral_writer=self._writers().neutral,
-                       abort_fn=self._abort_fn)
+            # Pause heartbeat (ref-counted; safe even if lock already holds it).
+            # Without this the 5 Hz neutral writer clobbers Ch2 every 200 ms.
+            self._hold_heartbeat_for_lock()
+            try:
+                with self._suspend_heading_lock():
+                    try:
+                        self.pixhawk.set_mode('ACRO')
+                        _t.sleep(0.2)
+                        last_roll = _read_roll()
+                        if last_roll is None:
+                            last_roll = 0.0
+                        pwm      = Pixhawk.percent_to_pwm(gain)
+                        deadline = _t.monotonic() + timeout
+                        abort    = self._abort_fn
+                        while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                            if abort():
+                                break
+                            # Stream RC every tick — ACRO rate command must be
+                            # continuously refreshed; one-shot send is not reliable.
+                            self.pixhawk.send_rc_override(roll=pwm)
+                            _t.sleep(0.05)    # 20 Hz
+                            cur = _read_roll()
+                            if cur is None:
+                                continue      # stale frame — don't corrupt accum
+                            delta = cur - last_roll
+                            if delta >  180: delta -= 360
+                            if delta < -180: delta += 360
+                            accum    += delta
+                            last_roll = cur
+                        self.pixhawk.send_rc_override(roll=1500)
+                        self.pixhawk.send_neutral()
+                    finally:
+                        self.pixhawk.set_param('ACRO_BAL_ROLL', orig_bal)
+                        self.pixhawk.set_param('ACRO_TRAINER',  orig_trn)
+                        self.pixhawk.set_mode('ALT_HOLD')
+                # Heading lock resumes here in ALT_HOLD.
+                new_heading = self._current_heading()
+                self._retarget_heading_lock(new_heading)
+                hold_depth(self.pixhawk, target_depth, 15.0, self.log,
+                           neutral_writer=self._writers().neutral,
+                           abort_fn=self._abort_fn)
+            finally:
+                self._release_heartbeat_for_lock()
             return self._make_result(
                 True,
                 f'style_roll: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
@@ -498,36 +510,44 @@ class Duburi(VisionVerbs):
                 self.log.warn('[CMD  ] style_pitch: PARAM_SET timeout — aborting')
                 return self._make_result(False, 'style_pitch: param set failed')
 
-            with self._suspend_heading_lock():
-                try:
-                    self.pixhawk.set_mode('ACRO')
-                    _t.sleep(0.2)
-                    last_pitch = _read_pitch()
-                    pwm        = Pixhawk.percent_to_pwm(gain)
-                    deadline   = _t.monotonic() + timeout
-                    abort      = self._abort_fn
-                    self.pixhawk.send_rc_override(pitch=pwm)
-                    while abs(accum) < 360.0 and _t.monotonic() < deadline:
-                        if abort():
-                            break
-                        _t.sleep(0.05)
-                        cur   = _read_pitch()
-                        delta = cur - last_pitch
-                        if delta >  180: delta -= 360
-                        if delta < -180: delta += 360
-                        accum     += delta
-                        last_pitch = cur
-                    self.pixhawk.send_rc_override(pitch=1500)
-                    self.pixhawk.send_neutral()
-                finally:
-                    self.pixhawk.set_param('ACRO_BAL_PITCH', orig_bal)
-                    self.pixhawk.set_param('ACRO_TRAINER',   orig_trn)
-                    self.pixhawk.set_mode('ALT_HOLD')
-            new_heading = self._current_heading()
-            self._retarget_heading_lock(new_heading)
-            hold_depth(self.pixhawk, target_depth, 15.0, self.log,
-                       neutral_writer=self._writers().neutral,
-                       abort_fn=self._abort_fn)
+            self._hold_heartbeat_for_lock()
+            try:
+                with self._suspend_heading_lock():
+                    try:
+                        self.pixhawk.set_mode('ACRO')
+                        _t.sleep(0.2)
+                        last_pitch = _read_pitch()
+                        if last_pitch is None:
+                            last_pitch = 0.0
+                        pwm      = Pixhawk.percent_to_pwm(gain)
+                        deadline = _t.monotonic() + timeout
+                        abort    = self._abort_fn
+                        while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                            if abort():
+                                break
+                            self.pixhawk.send_rc_override(pitch=pwm)
+                            _t.sleep(0.05)
+                            cur = _read_pitch()
+                            if cur is None:
+                                continue
+                            delta = cur - last_pitch
+                            if delta >  180: delta -= 360
+                            if delta < -180: delta += 360
+                            accum     += delta
+                            last_pitch = cur
+                        self.pixhawk.send_rc_override(pitch=1500)
+                        self.pixhawk.send_neutral()
+                    finally:
+                        self.pixhawk.set_param('ACRO_BAL_PITCH', orig_bal)
+                        self.pixhawk.set_param('ACRO_TRAINER',   orig_trn)
+                        self.pixhawk.set_mode('ALT_HOLD')
+                new_heading = self._current_heading()
+                self._retarget_heading_lock(new_heading)
+                hold_depth(self.pixhawk, target_depth, 15.0, self.log,
+                           neutral_writer=self._writers().neutral,
+                           abort_fn=self._abort_fn)
+            finally:
+                self._release_heartbeat_for_lock()
             return self._make_result(
                 True,
                 f'style_pitch: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
