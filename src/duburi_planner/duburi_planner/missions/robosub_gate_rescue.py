@@ -80,10 +80,11 @@ DIVE_PASS_S        =  3.5     # forward thrust seconds while at dive depth
 DIVE_PASS_GAIN     = 50
 
 # Style maneuver
-ROLL_GAIN          = 60       # Ch2 roll thrust % for roll_rock (0-100)
-ROLL_TIMEOUT       = 15.0     # max seconds to complete 360° roll
-YAW_STYLE_DEG      = 90       # degrees per yaw style step
-YAW_STYLE_STEPS    =  4       # 4×90° = 360° yaw spin = 4 style increments
+ROLL_GAIN          = 60       # ACRO roll rate % for style_roll
+ROLL_TIMEOUT       = 20.0     # max seconds for 360° roll (ACRO, BNO-confirmed)
+YAW_STYLE_DEG      = 90.0     # degrees per yaw step
+YAW_STYLE_STEPS    =  4       # 4×90° = 360° yaw spin
+YAW_STYLE_SETTLE   =  1.0     # settle between yaw steps (seconds)
 
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -267,21 +268,19 @@ def yaw_sweep(duburi, target, max_steps) -> bool:
 
 
 def do_style(duburi, log) -> None:
-    """Style maneuver: 360° roll (angle-confirmed) + 360° yaw spin.
+    """Style maneuver: 360° roll (ACRO, BNO-confirmed) + 360° yaw spin (ALT_HOLD).
 
-    Roll: uses roll_rock verb — enters STABILIZE, drives Ch2 until ±360°
-    accumulated in AHRS2, returns to ALT_HOLD. Angle-confirmed, not timer.
-    Yaw: 4×90° yaw spin = 4 additional style increments.
+    Roll: style_roll — ACRO mode, ACRO_BAL_ROLL/TRAINER zeroed, BNO angle tracking.
+          Depth re-acquired automatically inside style_roll.
+    Yaw: style_yaw — 4×90° in ALT_HOLD, heading lock active throughout.
     """
-    log('=== Style (roll_rock + yaw circle) ===')
+    log('=== Style (style_roll + style_yaw) ===')
     duburi.release_heading()
-    duburi.roll_rock(gain=ROLL_GAIN, timeout=ROLL_TIMEOUT)
-    # Re-stabilise at mission depth after STABILIZE mode (roll may cause drift)
-    duburi.set_depth(MISSION_DEPTH, timeout=20.0, settle=1.0)
+    duburi.style_roll(gain=ROLL_GAIN, timeout=ROLL_TIMEOUT)
+    # style_roll re-acquires depth internally; lock heading at post-roll heading
     duburi.lock_heading(duburi.head(), timeout=30)
-    # Yaw circle for additional style points
-    for _ in range(YAW_STYLE_STEPS):
-        duburi.yaw_right(YAW_STYLE_DEG)
+    duburi.style_yaw(steps=YAW_STYLE_STEPS, deg_per_step=YAW_STYLE_DEG,
+                     settle=YAW_STYLE_SETTLE)
 
 
 def surface_and_disarm(duburi) -> None:

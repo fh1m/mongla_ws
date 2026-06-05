@@ -406,9 +406,19 @@ class DuburiMission:
                           duration=float(seconds), gain=gain,
                           yaw_rate_pct=yaw_rate_pct, settle=settle)
 
-    def roll_rock(self, *, gain: float = 60.0, timeout: float = 15.0):
-        """360° roll spin on Ch2 axis. Angle-confirmed via AHRS2, not timer."""
-        return self._send('roll_rock', gain=gain, timeout=timeout)
+    def style_roll(self, *, gain: float = 60.0, timeout: float = 20.0):
+        """360° roll in ACRO mode. BNO-confirmed (AHRS2 fallback). Pre/post depth hold."""
+        return self._send('style_roll', gain=gain, timeout=timeout)
+
+    def style_pitch(self, *, gain: float = 50.0, timeout: float = 20.0):
+        """360° pitch in ACRO mode. BNO-confirmed (AHRS2 fallback). Pre/post depth hold."""
+        return self._send('style_pitch', gain=gain, timeout=timeout)
+
+    def style_yaw(self, *, steps: int = 4, deg_per_step: float = 90.0,
+                  settle: float = 1.0):
+        """360° yaw spin in ALT_HOLD. N × deg_per_step steps with settle between."""
+        return self._send('style_yaw', steps=steps, deg_per_step=deg_per_step,
+                          settle=settle)
 
     def lock_heading(self, degrees: float = 0.0, *, timeout: float = 300.0):
         return self._send('lock_heading',

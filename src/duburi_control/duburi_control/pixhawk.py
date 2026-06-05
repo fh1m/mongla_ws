@@ -257,6 +257,36 @@ class Pixhawk:
                 return True, 'ACCEPTED'
         return False, 'MODE_NOT_REACHED'
 
+    def get_param(self, name: str, timeout: float = 2.0) -> float | None:
+        """Read a named ArduSub parameter. Returns None on timeout.
+
+        Sends PARAM_REQUEST_READ and waits for a matching PARAM_VALUE ACK.
+        """
+        self.master.param_fetch_one(name)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            msg = self.master.recv_match(type='PARAM_VALUE', blocking=True,
+                                         timeout=0.3)
+            if msg and msg.param_id.rstrip('\x00') == name:
+                return float(msg.param_value)
+        return None
+
+    def set_param(self, name: str, value: float, timeout: float = 3.0) -> bool:
+        """Write a named ArduSub parameter via PARAM_SET and wait for ACK.
+
+        Returns True if PARAM_VALUE ACK received within timeout.
+        Used by style verbs to temporarily zero ACRO_BAL_ROLL / ACRO_TRAINER
+        before a free-rotation maneuver and restore them after.
+        """
+        self.master.param_set_send(name, float(value))
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            msg = self.master.recv_match(type='PARAM_VALUE', blocking=True,
+                                         timeout=0.3)
+            if msg and msg.param_id.rstrip('\x00') == name:
+                return True
+        return False
+
     # ------------------------------------------------------------------ #
     #  RC Override                                                         #
     # ------------------------------------------------------------------ #

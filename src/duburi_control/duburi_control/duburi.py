@@ -389,57 +389,183 @@ class Duburi(VisionVerbs):
                 final_value=new_heading, error_value=0.0)
 
     # ================================================================== #
-    #  Roll style  -- 360° spin on Ch2 axis                            #
+    #  Style maneuvers  — 360° rotation on roll, pitch, or yaw axis    #
     # ================================================================== #
 
-    def roll_rock(self, gain=60.0, timeout=15.0):
-        """Style maneuver: 360° roll spin on Ch2 (roll axis).
+    def style_roll(self, gain=60.0, timeout=20.0):
+        """Style: 360° roll (Ch2 axis) in ACRO mode, BNO-confirmed.
 
         Sequence:
-          1. Enter STABILIZE — ArduSub doesn't fight the roll.
-          2. Read AHRS2 roll as reference (should be ~0° while stable).
-          3. Drive Ch2 at gain% continuously.
-          4. Track cumulative roll via AHRS2 get_attitude() at ~20 Hz.
-          5. Stop when ±360° accumulated (angle-confirmed, not timer-based).
-          6. Neutral Ch2, return to ALT_HOLD.
+          1. Zero ACRO_BAL_ROLL + ACRO_TRAINER so ACRO doesn't auto-level.
+          2. Enter ACRO (rate control) — Ch2 = continuous roll rate.
+          3. Suspend heading lock; drive Ch2 until BNO (or AHRS2) accumulates
+             ±360° or timeout fires.
+          4. Neutral → restore ACRO params → ALT_HOLD → re-acquire depth.
+             (No depth fight during the roll — thrusters rotate with the body;
+             re-acquire depth cleanly after the maneuver.)
 
-        TODO: When BNO085 roll/pitch API is added to duburi_sensors, swap
-        get_attitude() for bno.read_attitude() for IMU-independent confirmation.
-
-        impl: pixhawk.send_rc_override(roll=pwm) — Ch2.
+        impl: pixhawk.send_rc_override(roll=pwm) in ACRO mode — Ch2.
         """
         import time as _t
-        with self._command_scope('roll_rock'):
+        with self._command_scope('style_roll'):
+            self._ensure_yaw_capable_mode()
+            att          = self.pixhawk.get_attitude()
+            target_depth = att['depth'] if att else -0.5
+
+            bno        = self.yaw_source
+            use_bno    = bno is not None and hasattr(bno, 'read_roll')
+            _read_roll = ((lambda: bno.read_roll())  # type: ignore[union-attr]
+                          if use_bno else
+                          (lambda: (self.pixhawk.get_attitude() or {}).get('roll', 0.0)))
+            accum      = 0.0
+
             self.log.info(
-                f'[CMD  ] roll_rock  gain={gain:.0f}%  timeout={timeout:.1f}s')
-            self.pixhawk.set_mode('STABILIZE')
-            _t.sleep(0.3)   # settle before reading reference angle
+                f'[CMD  ] style_roll  gain={gain:.0f}%  timeout={timeout:.1f}s'
+                f'  depth={target_depth:.2f}m  src={"bno" if use_bno else "ahrs2"}')
 
-            last_roll = self.pixhawk.get_attitude().get('roll', 0.0)
-            accum     = 0.0
-            pwm       = Pixhawk.percent_to_pwm(gain)
-            deadline  = _t.monotonic() + timeout
-            abort     = self._abort_fn
+            orig_bal = self.pixhawk.get_param('ACRO_BAL_ROLL') or 1.0
+            orig_trn = self.pixhawk.get_param('ACRO_TRAINER')  or 2.0
+            if not (self.pixhawk.set_param('ACRO_BAL_ROLL', 0.0) and
+                    self.pixhawk.set_param('ACRO_TRAINER',  0.0)):
+                self.log.warn('[CMD  ] style_roll: PARAM_SET timeout — aborting')
+                return self._make_result(False, 'style_roll: param set failed')
 
-            self.pixhawk.send_rc_override(roll=pwm)
-            while abs(accum) < 360.0 and _t.monotonic() < deadline:
-                if abort():
-                    break
-                _t.sleep(0.05)   # ~20 Hz
-                cur   = self.pixhawk.get_attitude().get('roll', last_roll)
-                delta = cur - last_roll
-                if delta >  180: delta -= 360   # ±180° wrap
-                if delta < -180: delta += 360
-                accum    += delta
-                last_roll = cur
-
-            self.pixhawk.send_rc_override(roll=1500)   # Ch2 neutral
-            self.pixhawk.send_neutral()
-            self.pixhawk.set_mode('ALT_HOLD')
+            with self._suspend_heading_lock():
+                try:
+                    self.pixhawk.set_mode('ACRO')
+                    _t.sleep(0.2)
+                    last_roll = _read_roll()
+                    pwm       = Pixhawk.percent_to_pwm(gain)
+                    deadline  = _t.monotonic() + timeout
+                    abort     = self._abort_fn
+                    self.pixhawk.send_rc_override(roll=pwm)
+                    while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                        if abort():
+                            break
+                        _t.sleep(0.05)    # 20 Hz
+                        cur   = _read_roll()
+                        delta = cur - last_roll
+                        if delta >  180: delta -= 360
+                        if delta < -180: delta += 360
+                        accum    += delta
+                        last_roll = cur
+                    self.pixhawk.send_rc_override(roll=1500)
+                    self.pixhawk.send_neutral()
+                finally:
+                    self.pixhawk.set_param('ACRO_BAL_ROLL', orig_bal)
+                    self.pixhawk.set_param('ACRO_TRAINER',  orig_trn)
+                    self.pixhawk.set_mode('ALT_HOLD')
+            # Heading lock resumes here in ALT_HOLD.
+            new_heading = self._current_heading()
+            self._retarget_heading_lock(new_heading)
+            hold_depth(self.pixhawk, target_depth, 15.0, self.log,
+                       neutral_writer=self._writers().neutral,
+                       abort_fn=self._abort_fn)
             return self._make_result(
                 True,
-                f'roll_rock: done  {accum:+.0f}° accumulated',
+                f'style_roll: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
                 final_value=accum)
+
+    def style_pitch(self, gain=50.0, timeout=20.0):
+        """Style: 360° pitch (Ch1 axis) in ACRO mode, BNO-confirmed.
+
+        Identical strategy to style_roll but on Ch1 (pitch axis).
+        Uses BNO085 read_pitch() or AHRS2 pitch fallback for angle tracking.
+
+        impl: pixhawk.send_rc_override(pitch=pwm) in ACRO mode — Ch1.
+        """
+        import time as _t
+        with self._command_scope('style_pitch'):
+            self._ensure_yaw_capable_mode()
+            att          = self.pixhawk.get_attitude()
+            target_depth = att['depth'] if att else -0.5
+
+            bno         = self.yaw_source
+            use_bno     = bno is not None and hasattr(bno, 'read_pitch')
+            _read_pitch = ((lambda: bno.read_pitch())  # type: ignore[union-attr]
+                           if use_bno else
+                           (lambda: (self.pixhawk.get_attitude() or {}).get('pitch', 0.0)))
+            accum       = 0.0
+
+            self.log.info(
+                f'[CMD  ] style_pitch  gain={gain:.0f}%  timeout={timeout:.1f}s'
+                f'  depth={target_depth:.2f}m  src={"bno" if use_bno else "ahrs2"}')
+
+            orig_bal = self.pixhawk.get_param('ACRO_BAL_PITCH') or 1.0
+            orig_trn = self.pixhawk.get_param('ACRO_TRAINER')   or 2.0
+            if not (self.pixhawk.set_param('ACRO_BAL_PITCH', 0.0) and
+                    self.pixhawk.set_param('ACRO_TRAINER',   0.0)):
+                self.log.warn('[CMD  ] style_pitch: PARAM_SET timeout — aborting')
+                return self._make_result(False, 'style_pitch: param set failed')
+
+            with self._suspend_heading_lock():
+                try:
+                    self.pixhawk.set_mode('ACRO')
+                    _t.sleep(0.2)
+                    last_pitch = _read_pitch()
+                    pwm        = Pixhawk.percent_to_pwm(gain)
+                    deadline   = _t.monotonic() + timeout
+                    abort      = self._abort_fn
+                    self.pixhawk.send_rc_override(pitch=pwm)
+                    while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                        if abort():
+                            break
+                        _t.sleep(0.05)
+                        cur   = _read_pitch()
+                        delta = cur - last_pitch
+                        if delta >  180: delta -= 360
+                        if delta < -180: delta += 360
+                        accum     += delta
+                        last_pitch = cur
+                    self.pixhawk.send_rc_override(pitch=1500)
+                    self.pixhawk.send_neutral()
+                finally:
+                    self.pixhawk.set_param('ACRO_BAL_PITCH', orig_bal)
+                    self.pixhawk.set_param('ACRO_TRAINER',   orig_trn)
+                    self.pixhawk.set_mode('ALT_HOLD')
+            new_heading = self._current_heading()
+            self._retarget_heading_lock(new_heading)
+            hold_depth(self.pixhawk, target_depth, 15.0, self.log,
+                       neutral_writer=self._writers().neutral,
+                       abort_fn=self._abort_fn)
+            return self._make_result(
+                True,
+                f'style_pitch: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
+                final_value=accum)
+
+    def style_yaw(self, steps=4, deg_per_step=90.0, settle=1.0):
+        """Style: 360° yaw spin in ALT_HOLD (N × deg_per_step steps).
+
+        Uses ALT_HOLD — depth + roll + pitch held automatically by ArduSub.
+        BNO yaw tracking active via yaw_source. No mode change needed.
+        Calls yaw_snap/yaw_glide directly to avoid nested _command_scope.
+
+        impl: N × yaw_snap/yaw_glide inside a single _suspend_heading_lock.
+        """
+        with self._command_scope('style_yaw'):
+            self._ensure_yaw_capable_mode()
+            self.log.info(
+                f'[CMD  ] style_yaw  {steps}×{deg_per_step:.0f}°  '
+                f'settle={settle:.1f}s')
+            run_yaw = yaw_glide if self.smooth_yaw else yaw_snap
+            abort   = self._abort_fn
+            with self._suspend_heading_lock():
+                for i in range(int(steps)):
+                    if abort():
+                        break
+                    start  = self._current_heading()
+                    target = (start + abs(deg_per_step)) % 360.0
+                    run_yaw(self.pixhawk, start, target, 30.0, 'STYLE_YAW',
+                            self.log, yaw_source=self.yaw_source,
+                            abort_fn=self._abort_fn)
+                    inter_settle = settle if i < int(steps) - 1 else 0.3
+                    self._send_neutral_and_settle(settle_time=0.3 + inter_settle)
+            new_heading = self._current_heading()
+            self._retarget_heading_lock(new_heading)
+            return self._make_result(
+                True,
+                f'style_yaw: done  {steps}×{deg_per_step:.0f}°',
+                final_value=new_heading)
 
     # ================================================================== #
     #  Yaw  -- sharp pivots                                              #
@@ -615,6 +741,10 @@ class Duburi(VisionVerbs):
             )
             self._heading_lock.start()
             self._hold_heartbeat_for_lock()
+
+            # Signal BNO085 to log current heading to OLED for post-run deviation audit.
+            if self.yaw_source is not None and hasattr(self.yaw_source, 'send_command'):
+                self.yaw_source.send_command('L\n')  # type: ignore[union-attr]
 
             return self._make_result(
                 True,

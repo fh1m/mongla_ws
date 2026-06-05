@@ -31,14 +31,22 @@ Wire contract (firmware side) and convention conversion
 ------------------------------------------------------
 The MCU ships ONE JSON object per line, newline-terminated:
 
-    {"yaw": 123.45, "ts": 12345}\n
+    {"yaw": 123.45, "pitch": -5.2, "roll": 3.1, "ts": 12345}\n
 
   yaw   float   degrees in [0, 360) as emitted by the firmware's
                 ``atan2(2*(qi*qj + qk*qr), (sqi - sqj - sqk + sqr))``.
                 That is the ENU / right-handed convention: rotating the
                 board CCW (LEFT as viewed from above, looking down +Z)
                 makes the reported yaw INCREASE.
+  pitch float   degrees, body-frame pitch (nose up = positive).
+                Passed through as-is; no convention flip needed.
+  roll  float   degrees, body-frame roll (right side down = positive).
+                Passed through as-is; no convention flip needed.
   ts    int     ms since MCU boot. Optional. Diagnostic only.
+
+  pitch and roll are present in firmware ≥ 2026-06; earlier firmware
+  omits them. read_pitch() / read_roll() return 0.0 when not yet
+  received or stale.
 
 ArduSub / Pixhawk AHRS publishes in NED / compass convention, where
 rotating the vehicle CW (RIGHT) is what INCREASES yaw (N=0 E=90 S=180
@@ -217,6 +225,10 @@ class BNO085Source:
 
         self._latest_yaw: float | None = None
         self._latest_ts:  float        = 0.0
+        self._latest_pitch: float      = 0.0
+        self._latest_pitch_ts: float   = 0.0
+        self._latest_roll: float       = 0.0
+        self._latest_roll_ts: float    = 0.0
         self._frames_rx                = 0
         self._parse_errors             = 0
 
@@ -303,6 +315,31 @@ class BNO085Source:
             return raw                                  # raw mode (diag only)
         return (raw + self._offset_deg) % 360.0
 
+    def read_pitch(self) -> float:
+        """Current BNO085 pitch in degrees. Returns 0.0 if stale or not yet received."""
+        if (time.monotonic() - self._latest_pitch_ts) > _STALE_S:
+            return 0.0
+        return self._latest_pitch
+
+    def read_roll(self) -> float:
+        """Current BNO085 roll in degrees. Returns 0.0 if stale or not yet received."""
+        if (time.monotonic() - self._latest_roll_ts) > _STALE_S:
+            return 0.0
+        return self._latest_roll
+
+    def send_command(self, cmd: str) -> None:
+        """Write a command string to the BNO over serial (fire-and-forget).
+
+        Serial is full-duplex; writing from this thread while the reader
+        thread calls readline() is safe. Non-critical: exceptions are
+        swallowed so OLED logging never breaks the mission path.
+        """
+        try:
+            if self._serial and self._serial.is_open:
+                self._serial.write(cmd.encode('utf-8'))
+        except Exception:
+            pass
+
     def is_healthy(self) -> bool:
         return self.read_yaw() is not None
 
@@ -351,9 +388,16 @@ class BNO085Source:
                 # -- heading_error, motion_yaw, HeadingLock, auv_manager
                 # telemetry -- sees the same convention as Pixhawk AHRS.
                 yaw = (-float(msg['yaw'])) % 360.0
+                now = time.monotonic()
 
                 self._latest_yaw = yaw
-                self._latest_ts  = time.monotonic()
+                self._latest_ts  = now
+                if 'pitch' in msg:
+                    self._latest_pitch    = float(msg['pitch'])
+                    self._latest_pitch_ts = now
+                if 'roll' in msg:
+                    self._latest_roll     = float(msg['roll'])
+                    self._latest_roll_ts  = now
                 self._frames_rx += 1
 
             except (ValueError, KeyError, json.JSONDecodeError):
