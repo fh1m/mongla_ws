@@ -91,19 +91,38 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         self.assertAlmostEqual(src.read_pitch(), 20.0, places=1)
         self.assertAlmostEqual(src.read_roll(),  -5.0, places=1)
 
-    def test_read_pitch_returns_zero_when_stale(self):
+    def test_stale_injection_does_not_corrupt_accumulator(self):
+        """Stale BNO frame (None) must be skipped; accumulator stays monotonic."""
+        src, _ = self._make_source_with_mock_serial([])
+        src._stop.set()
+        # Simulate roll sequence mid-maneuver with a dropped frame
+        roll_seq = [0.0, 45.0, 90.0, None, 135.0, 180.0]
+        accum      = 0.0
+        last_roll  = 0.0
+        for cur in roll_seq:
+            if cur is None:
+                continue     # stale — same logic as style_roll loop
+            delta = cur - last_roll
+            if delta >  180: delta -= 360
+            if delta < -180: delta += 360
+            accum    += delta
+            last_roll = cur
+        # Should be ~180° monotonic, not jump backward on the None frame
+        self.assertAlmostEqual(accum, 180.0, places=1)
+
+    def test_read_pitch_returns_none_when_stale(self):
         src, _ = self._make_source_with_mock_serial([])
         src._stop.set()
         src._latest_pitch    = 45.0
-        src._latest_pitch_ts = 0.0   # ancient timestamp
-        self.assertEqual(src.read_pitch(), 0.0)
+        src._latest_pitch_ts = 0.0   # ancient timestamp → stale
+        self.assertIsNone(src.read_pitch())
 
-    def test_read_roll_returns_zero_when_stale(self):
+    def test_read_roll_returns_none_when_stale(self):
         src, _ = self._make_source_with_mock_serial([])
         src._stop.set()
         src._latest_roll    = 90.0
         src._latest_roll_ts = 0.0
-        self.assertEqual(src.read_roll(), 0.0)
+        self.assertIsNone(src.read_roll())
 
     def test_old_firmware_yaw_only_still_works(self):
         """Firmware without pitch/roll fields must not break the reader."""
