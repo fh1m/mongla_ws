@@ -91,13 +91,28 @@ COMMANDS = {
         'defaults': {'gain': 80.0, 'settle': 0.0},
     },
 
-    # ---- Roll style (Ch2 axis) ------------------------------------- #
-    'roll_rock': {
-        'help':     'Style roll: enter STABILIZE, spin 360° on roll axis (Ch2), '
-                    'return to ALT_HOLD. Angle-confirmed via AHRS2 — not timer. '
-                    'gain sets Ch2 PWM %, timeout caps the maneuver.',
+    # ---- Style maneuvers ------------------------------------------- #
+    'style_roll': {
+        'help':     'Style: 360° roll on Ch2 in ACRO mode. BNO085-confirmed '
+                    '(AHRS2 fallback). ACRO_BAL_ROLL + ACRO_TRAINER zeroed '
+                    'before maneuver and restored after. Depth re-acquired '
+                    'post-roll via ALT_HOLD.',
         'fields':   ['gain', 'timeout'],
-        'defaults': {'gain': 60.0, 'timeout': 15.0},
+        'defaults': {'gain': 60.0, 'timeout': 20.0},
+    },
+    'style_pitch': {
+        'help':     'Style: 360° pitch on Ch1 in ACRO mode. BNO085-confirmed '
+                    '(AHRS2 fallback). Same ACRO param + depth strategy as '
+                    'style_roll.',
+        'fields':   ['gain', 'timeout'],
+        'defaults': {'gain': 50.0, 'timeout': 20.0},
+    },
+    'style_yaw': {
+        'help':     'Style: 360° yaw spin in ALT_HOLD. N × deg_per_step steps '
+                    'with settle between. BNO heading tracking active. '
+                    'No mode change — safest style verb.',
+        'fields':   ['steps', 'deg_per_step', 'settle'],
+        'defaults': {'steps': 4, 'deg_per_step': 90.0, 'settle': 1.0},
     },
 
     # ---- Curved (car-style) motion --------------------------------- #
