@@ -418,10 +418,10 @@ class DuburiMission:
         return self._send('style_pitch', gain=gain, timeout=timeout,
                           flips=flips, headroom=headroom)
 
-    def style_yaw(self, *, steps: int = 4, deg_per_step: float = 90.0,
+    def style_yaw(self, *, flips: int = 1, deg_per_step: float = 90.0,
                   settle: float = 1.0):
-        """360° yaw spin in ALT_HOLD. N × deg_per_step steps with settle between."""
-        return self._send('style_yaw', steps=steps, deg_per_step=deg_per_step,
+        """N×360° yaw spin in ALT_HOLD. flips full rotations via deg_per_step yaw snaps."""
+        return self._send('style_yaw', flips=flips, deg_per_step=deg_per_step,
                           settle=settle)
 
     def lock_heading(self, degrees: float = 0.0, *, timeout: float = 300.0):

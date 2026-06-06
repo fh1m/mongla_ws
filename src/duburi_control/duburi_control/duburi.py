@@ -584,38 +584,43 @@ class Duburi(VisionVerbs):
                 f'  src={"bno" if use_bno else "ahrs2"}',
                 final_value=accum)
 
-    def style_yaw(self, steps=4, deg_per_step=90.0, settle=1.0):
-        """Style: 360° yaw spin in ALT_HOLD (N × deg_per_step steps).
+    def style_yaw(self, flips=1, deg_per_step=90.0, settle=1.0):
+        """Style: N×360° yaw spin in ALT_HOLD.
 
-        Uses ALT_HOLD — depth + roll + pitch held automatically by ArduSub.
-        BNO yaw tracking active via yaw_source. No mode change needed.
-        Calls yaw_snap/yaw_glide directly to avoid nested _command_scope.
+        Depth, roll, and pitch are held automatically by ArduSub (ALT_HOLD) —
+        no mode change or pre-dive required. Each flip is split into
+        (360/deg_per_step) yaw snaps with settle between.
 
-        impl: N × yaw_snap/yaw_glide inside a single _suspend_heading_lock.
+        impl: steps × yaw_snap/yaw_glide inside a single _suspend_heading_lock.
         """
+        n_flips  = max(1, int(flips))
+        step_deg = max(1.0, abs(float(deg_per_step)))
+        steps    = n_flips * max(1, int(round(360.0 / step_deg)))
         with self._command_scope('style_yaw'):
             self._ensure_yaw_capable_mode()
             self.log.info(
-                f'[CMD  ] style_yaw  {steps}×{deg_per_step:.0f}°  '
-                f'settle={settle:.1f}s')
+                f'[CMD  ] style_yaw  {n_flips} flip(s)  '
+                f'{steps}×{step_deg:.0f}°  settle={settle:.1f}s')
             run_yaw = yaw_glide if self.smooth_yaw else yaw_snap
             abort   = self._abort_fn
+            completed = 0
             with self._suspend_heading_lock():
-                for i in range(int(steps)):
+                for completed in range(1, steps + 1):
                     if abort():
+                        completed -= 1
                         break
                     start  = self._current_heading()
-                    target = (start + abs(deg_per_step)) % 360.0
+                    target = (start + step_deg) % 360.0
                     run_yaw(self.pixhawk, start, target, 30.0, 'STYLE_YAW',
                             self.log, yaw_source=self.yaw_source,
                             abort_fn=self._abort_fn)
-                    inter_settle = settle if i < int(steps) - 1 else 0.3
+                    inter_settle = settle if completed < steps else 0.3
                     self._send_neutral_and_settle(settle_time=0.3 + inter_settle)
             new_heading = self._current_heading()
             self._retarget_heading_lock(new_heading)
             return self._make_result(
                 True,
-                f'style_yaw: done  {steps}×{deg_per_step:.0f}°',
+                f'style_yaw: done  {completed}/{steps} steps  {n_flips} flip(s)',
                 final_value=new_heading)
 
     # ================================================================== #
