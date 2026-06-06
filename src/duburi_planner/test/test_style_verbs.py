@@ -332,6 +332,96 @@ class TestStyleRoll(unittest.TestCase):
         self.assertIn('ahrs2', result.message)
 
 
+class TestStyleRollMultiFlip(unittest.TestCase):
+
+    def test_two_flips_require_720_degrees(self):
+        """flips=2 → loop runs until |accum| >= 720°."""
+        duburi, px = _make_duburi_for_style()
+        # Use BNO so get_attitude is not called inside the ACRO loop.
+        # 36 steps × 20° = 720° across 40 readings (ample headroom).
+        roll_readings = [i * 20.0 for i in range(40)] + [720.0] * 30
+        bno = MagicMock()
+        bno.read_roll = MagicMock(side_effect=roll_readings)
+        bno.read_yaw  = MagicMock(return_value=0.0)
+        duburi.yaw_source = bno
+
+        with patch('duburi_control.duburi.hold_depth'):
+            result = duburi.style_roll(gain=60.0, timeout=60.0, flips=2)
+
+        self.assertTrue(result.success)
+        self.assertGreaterEqual(abs(result.final_value), 720.0 - 1.0)
+        self.assertIn('2 flip', result.message)
+
+    def test_three_flips_complete_1080_degrees(self):
+        """flips=3 → loop must accumulate 1080° before exiting."""
+        duburi, px = _make_duburi_for_style()
+        # 54 steps × 20° = 1080°. Use BNO to avoid get_attitude exhaustion.
+        roll_readings = [i * 20.0 for i in range(60)] + [1080.0] * 20
+        bno = MagicMock()
+        bno.read_roll = MagicMock(side_effect=roll_readings)
+        bno.read_yaw  = MagicMock(return_value=0.0)
+        duburi.yaw_source = bno
+
+        with patch('duburi_control.duburi.hold_depth'):
+            result = duburi.style_roll(gain=60.0, timeout=120.0, flips=3)
+
+        self.assertTrue(result.success)
+        self.assertGreaterEqual(abs(result.final_value), 1080.0 - 1.0)
+        self.assertIn('3 flip', result.message)
+
+    def test_predive_called_before_acro(self):
+        """hold_depth with dive_depth must be called before set_mode('ACRO')."""
+        duburi, px = _make_duburi_for_style()
+        duburi._abort_event.set()   # exit loop immediately
+        px.get_attitude.return_value = {'yaw': 0.0, 'roll': 0.0, 'pitch': 0.0, 'depth': -0.7}
+
+        call_order = []
+
+        def mock_hold_depth(px_arg, depth, *a, **kw):
+            call_order.append(('hold_depth', depth))
+
+        def mock_set_mode(mode, **kw):
+            call_order.append(('set_mode', mode))
+            return (True, 'ACCEPTED')
+
+        px.set_mode.side_effect = mock_set_mode
+
+        with patch('duburi_control.duburi.hold_depth', side_effect=mock_hold_depth):
+            duburi.style_roll(gain=60.0, timeout=5.0, flips=1, headroom=1.0)
+
+        # Find first hold_depth call (pre-dive) and ACRO set_mode call
+        pre_dive_idx = next((i for i, c in enumerate(call_order)
+                             if c[0] == 'hold_depth'), None)
+        acro_idx     = next((i for i, c in enumerate(call_order)
+                             if c == ('set_mode', 'ACRO')), None)
+
+        assert pre_dive_idx is not None, 'hold_depth (pre-dive) not called'
+        assert acro_idx is not None, 'set_mode(ACRO) not called'
+        self.assertLess(pre_dive_idx, acro_idx,
+                        f'pre-dive not before ACRO: {call_order}')
+        # Pre-dive depth must be target_depth - headroom = -0.7 - 1.0 = -1.7
+        self.assertAlmostEqual(call_order[pre_dive_idx][1], -1.7, places=2)
+
+    def test_headroom_zero_skips_predive(self):
+        """headroom=0 must not issue any pre-dive hold_depth call."""
+        duburi, px = _make_duburi_for_style()
+        duburi._abort_event.set()
+        px.get_attitude.return_value = {'yaw': 0.0, 'roll': 0.0, 'pitch': 0.0, 'depth': -0.7}
+
+        hold_depth_calls = []
+
+        def mock_hold_depth(px_arg, depth, *a, **kw):
+            hold_depth_calls.append(depth)
+
+        with patch('duburi_control.duburi.hold_depth', side_effect=mock_hold_depth):
+            duburi.style_roll(gain=60.0, timeout=5.0, flips=1, headroom=0.0)
+
+        # Only post-flip recovery hold_depth is allowed — no pre-dive
+        self.assertFalse(
+            any(d < -0.7 for d in hold_depth_calls),
+            f'unexpected pre-dive depth call: {hold_depth_calls}')
+
+
 class TestStylePitch(unittest.TestCase):
 
     def test_uses_pitch_channel_not_roll(self):
@@ -536,8 +626,8 @@ class TestHeartbeatReleasedBeforeCleanup(unittest.TestCase):
         # Find RESTORE set_param:ACRO_BAL_ROLL (last occurrence = restore call)
         param_idx  = max((i for i, c in enumerate(call_order)
                           if c == 'set_param:ACRO_BAL_ROLL'), default=None)
-        self.assertIsNotNone(hb_idx,    'release_hb not found after ACRO mode')
-        self.assertIsNotNone(param_idx, 'set_param:ACRO_BAL_ROLL not called')
+        assert hb_idx is not None,    'release_hb not found after ACRO mode'
+        assert param_idx is not None, 'set_param:ACRO_BAL_ROLL not called'
         self.assertLess(hb_idx, param_idx,
                         f'heartbeat released after restore set_param: {call_order}')
 

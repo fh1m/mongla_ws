@@ -93,19 +93,20 @@ COMMANDS = {
 
     # ---- Style maneuvers ------------------------------------------- #
     'style_roll': {
-        'help':     'Style: 360° roll on Ch2 in ACRO mode. BNO085-confirmed '
-                    '(AHRS2 fallback). ACRO_BAL_ROLL + ACRO_TRAINER zeroed '
-                    'before maneuver and restored after. Depth re-acquired '
-                    'post-roll via ALT_HOLD.',
-        'fields':   ['gain', 'timeout'],
-        'defaults': {'gain': 60.0, 'timeout': 20.0},
+        'help':     'Style: N×360° roll on Ch2 in ACRO mode. BNO085-confirmed '
+                    '(AHRS2 fallback). Pre-dives `headroom` m before ACRO so '
+                    'buoyant ascent during the flip does not surface the AUV. '
+                    'ACRO_BAL_ROLL + ACRO_TRAINER zeroed before and restored '
+                    'after. Original depth re-acquired via ALT_HOLD post-roll.',
+        'fields':   ['gain', 'timeout', 'flips', 'headroom'],
+        'defaults': {'gain': 60.0, 'timeout': 20.0, 'flips': 1, 'headroom': 1.0},
     },
     'style_pitch': {
-        'help':     'Style: 360° pitch on Ch1 in ACRO mode. BNO085-confirmed '
-                    '(AHRS2 fallback). Same ACRO param + depth strategy as '
+        'help':     'Style: N×360° pitch on Ch1 in ACRO mode. BNO085-confirmed '
+                    '(AHRS2 fallback). Same pre-dive + depth strategy as '
                     'style_roll.',
-        'fields':   ['gain', 'timeout'],
-        'defaults': {'gain': 50.0, 'timeout': 20.0},
+        'fields':   ['gain', 'timeout', 'flips', 'headroom'],
+        'defaults': {'gain': 50.0, 'timeout': 20.0, 'flips': 1, 'headroom': 1.0},
     },
     'style_yaw': {
         'help':     'Style: 360° yaw spin in ALT_HOLD. N × deg_per_step steps '

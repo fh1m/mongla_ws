@@ -406,13 +406,17 @@ class DuburiMission:
                           duration=float(seconds), gain=gain,
                           yaw_rate_pct=yaw_rate_pct, settle=settle)
 
-    def style_roll(self, *, gain: float = 60.0, timeout: float = 20.0):
-        """360° roll in ACRO mode. BNO-confirmed (AHRS2 fallback). Pre/post depth hold."""
-        return self._send('style_roll', gain=gain, timeout=timeout)
+    def style_roll(self, *, gain: float = 60.0, timeout: float = 20.0,
+                  flips: int = 1, headroom: float = 1.0):
+        """N×360° roll in ACRO mode. Pre-dives headroom m to avoid surfacing."""
+        return self._send('style_roll', gain=gain, timeout=timeout,
+                          flips=flips, headroom=headroom)
 
-    def style_pitch(self, *, gain: float = 50.0, timeout: float = 20.0):
-        """360° pitch in ACRO mode. BNO-confirmed (AHRS2 fallback). Pre/post depth hold."""
-        return self._send('style_pitch', gain=gain, timeout=timeout)
+    def style_pitch(self, *, gain: float = 50.0, timeout: float = 20.0,
+                   flips: int = 1, headroom: float = 1.0):
+        """N×360° pitch in ACRO mode. Pre-dives headroom m to avoid surfacing."""
+        return self._send('style_pitch', gain=gain, timeout=timeout,
+                          flips=flips, headroom=headroom)
 
     def style_yaw(self, *, steps: int = 4, deg_per_step: float = 90.0,
                   settle: float = 1.0):
