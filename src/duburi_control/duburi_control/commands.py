@@ -109,11 +109,11 @@ COMMANDS = {
         'defaults': {'gain': 50.0, 'timeout': 20.0, 'flips': 1, 'headroom': 1.0},
     },
     'style_yaw': {
-        'help':     'Style: 360° yaw spin in ALT_HOLD. N × deg_per_step steps '
-                    'with settle between. BNO heading tracking active. '
-                    'No mode change — safest style verb.',
-        'fields':   ['steps', 'deg_per_step', 'settle'],
-        'defaults': {'steps': 4, 'deg_per_step': 90.0, 'settle': 1.0},
+        'help':     'Style: N×360° yaw spin in ALT_HOLD. flips full rotations, '
+                    'each as (360/deg_per_step) steps with settle between. '
+                    'BNO heading tracking active. No mode change — safest style verb.',
+        'fields':   ['flips', 'deg_per_step', 'settle'],
+        'defaults': {'flips': 1, 'deg_per_step': 90.0, 'settle': 1.0},
     },
 
     # ---- Curved (car-style) motion --------------------------------- #

@@ -467,21 +467,30 @@ class TestStyleYaw(unittest.TestCase):
 
     def test_calls_yaw_motion_n_times(self):
         duburi, px = _make_duburi_for_style()
-        # Patch yaw_snap so it does nothing but return
+        # flips=1, deg_per_step=90 → 4 steps (1 × 360/90)
         with patch('duburi_control.duburi.yaw_snap') as mock_yaw, \
              patch('duburi_control.duburi.yaw_glide'):
             mock_yaw.return_value = None
-            duburi.style_yaw(steps=4, deg_per_step=90.0, settle=0.0)
+            duburi.style_yaw(flips=1, deg_per_step=90.0, settle=0.0)
 
         self.assertEqual(mock_yaw.call_count, 4)
+
+    def test_two_flips_calls_yaw_eight_times(self):
+        duburi, px = _make_duburi_for_style()
+        # flips=2, deg_per_step=90 → 8 steps (2 × 360/90)
+        with patch('duburi_control.duburi.yaw_snap') as mock_yaw, \
+             patch('duburi_control.duburi.yaw_glide'):
+            mock_yaw.return_value = None
+            duburi.style_yaw(flips=2, deg_per_step=90.0, settle=0.0)
+
+        self.assertEqual(mock_yaw.call_count, 8)
 
     def test_no_mode_change_stays_alt_hold(self):
         duburi, px = _make_duburi_for_style()
         with patch('duburi_control.duburi.yaw_snap'):
-            duburi.style_yaw(steps=2, deg_per_step=90.0, settle=0.0)
+            duburi.style_yaw(flips=1, deg_per_step=180.0, settle=0.0)
 
-        # set_mode should only be called for _ensure_yaw_capable_mode if needed;
-        # crucially, ACRO must NOT appear
+        # ACRO must NOT appear — style_yaw stays in ALT_HOLD (depth held automatically)
         modes = [c.args[0] for c in px.set_mode.call_args_list]
         self.assertNotIn('ACRO', modes)
         self.assertNotIn('STABILIZE', modes)
@@ -631,6 +640,40 @@ class TestHeartbeatReleasedBeforeCleanup(unittest.TestCase):
         self.assertLess(hb_idx, param_idx,
                         f'heartbeat released after restore set_param: {call_order}')
 
+
+# ===========================================================================
+# Guard: every COMMANDS field must exist on Move.Goal at the wire level.
+# Catches mismatches like the 'steps'/'flips'/'headroom' crash before pool day.
+# Skipped when duburi_interfaces is not yet installed (pre-colcon).
+# ===========================================================================
+
+import importlib.util as _iutil
+
+@unittest.skipIf(
+    _iutil.find_spec('duburi_interfaces') is None,
+    'duburi_interfaces not installed — run: colcon build --packages-select duburi_interfaces',
+)
+class TestCommandFieldsMatchMoveGoal(unittest.TestCase):
+    """Every field listed in COMMANDS must exist on Move.Goal.
+
+    If this test fails, either Move.action is missing the field (fix: add it and
+    rebuild duburi_interfaces) or commands.py lists a wrong field name (fix it).
+    """
+
+    def test_every_command_field_exists_on_move_goal(self):
+        from duburi_interfaces.action import Move        # type: ignore[import]
+        from duburi_control.commands import COMMANDS
+        goal = Move.Goal()
+        missing = []
+        for cmd, spec in COMMANDS.items():
+            for field in spec['fields']:
+                if not hasattr(goal, field):
+                    missing.append(f"'{cmd}': field '{field}'")
+        self.assertFalse(
+            missing,
+            'Fields in COMMANDS missing on Move.Goal:\n  ' + '\n  '.join(missing)
+            + '\nAdd to Move.action and rebuild duburi_interfaces.',
+        )
 
 if __name__ == '__main__':
     unittest.main()

@@ -83,7 +83,7 @@ DIVE_PASS_GAIN     = 50
 ROLL_GAIN          = 60       # ACRO roll rate % for style_roll
 ROLL_TIMEOUT       = 20.0     # max seconds for 360° roll (ACRO, BNO-confirmed)
 YAW_STYLE_DEG      = 90.0     # degrees per yaw step
-YAW_STYLE_STEPS    =  4       # 4×90° = 360° yaw spin
+YAW_STYLE_FLIPS    =  1       # number of full 360° yaw rotations
 YAW_STYLE_SETTLE   =  1.0     # settle between yaw steps (seconds)
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -279,7 +279,7 @@ def do_style(duburi, log) -> None:
     duburi.style_roll(gain=ROLL_GAIN, timeout=ROLL_TIMEOUT)
     # style_roll re-acquires depth internally; lock heading at post-roll heading
     duburi.lock_heading(duburi.head(), timeout=30)
-    duburi.style_yaw(steps=YAW_STYLE_STEPS, deg_per_step=YAW_STYLE_DEG,
+    duburi.style_yaw(flips=YAW_STYLE_FLIPS, deg_per_step=YAW_STYLE_DEG,
                      settle=YAW_STYLE_SETTLE)
 
 
