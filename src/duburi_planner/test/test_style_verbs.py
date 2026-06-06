@@ -65,6 +65,7 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         src._parse_errors = 0
         src._offset_deg   = 0.0
         src._stop = threading.Event()
+        src._serial_write_lock = threading.Lock()   # required by send_command
         src._serial = FakeSerial()
         src._thread = threading.Thread(target=src._reader_loop, daemon=True)
         src._thread.start()
@@ -394,6 +395,151 @@ class TestStyleYaw(unittest.TestCase):
         modes = [c.args[0] for c in px.set_mode.call_args_list]
         self.assertNotIn('ACRO', modes)
         self.assertNotIn('STABILIZE', modes)
+
+
+# ===========================================================================
+# Pixhawk get_param / set_param — master.messages polling (not recv_match)
+# ===========================================================================
+
+class TestPixhawkParamPolling(unittest.TestCase):
+    """Verify get_param / set_param use master.messages cache, not recv_match."""
+
+    def _make_pixhawk(self):
+        from duburi_control.pixhawk import Pixhawk
+        px = object.__new__(Pixhawk)
+        px.master = MagicMock()
+        px.master.messages = {}
+        px._log_mavlink = MagicMock()
+        return px
+
+    def test_get_param_returns_value_from_messages_cache(self):
+        px = self._make_pixhawk()
+
+        def _side_effect(name):
+            # Simulate reader thread: fill cache after param_fetch_one
+            msg = MagicMock()
+            msg.param_id = name + '\x00' * (16 - len(name))
+            msg.param_value = 1.5
+            px.master.messages['PARAM_VALUE'] = msg
+
+        px.master.param_fetch_one.side_effect = _side_effect
+        result = px.get_param('ACRO_BAL_ROLL', timeout=1.0)
+        self.assertAlmostEqual(result, 1.5, places=3)
+        # Must NOT have called recv_match
+        px.master.recv_match.assert_not_called()
+
+    def test_get_param_returns_none_on_timeout(self):
+        px = self._make_pixhawk()
+        px.master.param_fetch_one = MagicMock()  # no side effect = cache never filled
+        result = px.get_param('ACRO_BAL_ROLL', timeout=0.12)
+        self.assertIsNone(result)
+
+    def test_get_param_ignores_wrong_param_id(self):
+        px = self._make_pixhawk()
+        # Pre-fill cache with a DIFFERENT param name (stale from previous request)
+        stale = MagicMock()
+        stale.param_id = 'ACRO_TRAINER\x00\x00\x00\x00'
+        stale.param_value = 2.0
+        px.master.messages['PARAM_VALUE'] = stale
+
+        # No new message arrives — should time out, not return stale value
+        px.master.param_fetch_one = MagicMock()
+        result = px.get_param('ACRO_BAL_ROLL', timeout=0.12)
+        self.assertIsNone(result)
+
+    def test_set_param_requires_value_echo(self):
+        px = self._make_pixhawk()
+
+        def _side_effect(name, value):
+            # Echo the correct value back
+            msg = MagicMock()
+            msg.param_id = name + '\x00' * (16 - len(name))
+            msg.param_value = float(value)
+            px.master.messages['PARAM_VALUE'] = msg
+
+        px.master.param_set_send.side_effect = _side_effect
+        result = px.set_param('ACRO_BAL_ROLL', 0.0, timeout=1.0)
+        self.assertTrue(result)
+        px.master.recv_match.assert_not_called()
+
+    def test_set_param_rejects_wrong_value_echo(self):
+        px = self._make_pixhawk()
+
+        def _side_effect(name, value):
+            # Echo a DIFFERENT value (ArduSub rejected the write)
+            msg = MagicMock()
+            msg.param_id = name + '\x00' * (16 - len(name))
+            msg.param_value = 1.0   # still the old value
+            px.master.messages['PARAM_VALUE'] = msg
+
+        px.master.param_set_send.side_effect = _side_effect
+        result = px.set_param('ACRO_BAL_ROLL', 0.0, timeout=0.15)
+        # Old value echoed back — should not be accepted
+        self.assertFalse(result)
+
+    def test_set_param_clears_stale_cache_before_request(self):
+        px = self._make_pixhawk()
+        # Pre-fill cache with stale matching entry
+        stale = MagicMock()
+        stale.param_id = 'ACRO_BAL_ROLL\x00\x00\x00'
+        stale.param_value = 0.0   # matches requested value = would be false positive
+        px.master.messages['PARAM_VALUE'] = stale
+
+        px.master.param_set_send = MagicMock()  # no echo = cache should be cleared first
+        result = px.set_param('ACRO_BAL_ROLL', 0.0, timeout=0.12)
+        # Cache was cleared before request, so no stale hit
+        self.assertFalse(result)
+
+
+# ===========================================================================
+# Heartbeat ordering: released before param calls in cleanup
+# ===========================================================================
+
+class TestHeartbeatReleasedBeforeCleanup(unittest.TestCase):
+
+    def test_heartbeat_released_before_set_param_in_style_roll(self):
+        """Heartbeat must be released BEFORE set_param/set_mode in inner finally."""
+        duburi, px = _make_duburi_for_style()
+
+        call_order = []
+
+        def track_release():
+            call_order.append('release_hb')
+        def track_set_param(name, val, **kw):
+            call_order.append(f'set_param:{name}')
+            return True
+        def track_set_mode(mode, **kw):
+            call_order.append(f'set_mode:{mode}')
+            return (True, 'ACCEPTED')
+
+        duburi._release_heartbeat_for_lock = track_release
+        duburi._hold_heartbeat_for_lock    = MagicMock()
+        px.set_param.side_effect = track_set_param
+        px.set_mode.side_effect  = track_set_mode
+
+        px.get_attitude.side_effect = [
+            {'yaw': 0.0, 'roll': i * 20.0, 'pitch': 0.0, 'depth': -0.7}
+            for i in range(30)
+        ] + [{'yaw': 0.0, 'roll': 0.0, 'pitch': 0.0, 'depth': -0.7}] * 30
+
+        with patch('duburi_control.duburi.hold_depth'):
+            duburi.style_roll(gain=60.0, timeout=5.0)
+
+        # There are TWO set_param:ACRO_BAL_ROLL calls:
+        #   [0] the ZEROING call (before ACRO) — not what we're checking
+        #   [1] the RESTORE call (in finally, after loop) — must come AFTER release_hb
+        # We check: first release_hb comes before the LAST set_param:ACRO_BAL_ROLL.
+        acro_idx   = call_order.index('set_mode:ACRO')   # marks end of setup phase
+        # Find first release_hb that occurs AFTER ACRO mode was set (cleanup release)
+        hb_idx     = next((i for i, c in enumerate(call_order)
+                           if c == 'release_hb' and i > acro_idx), None)
+        # Find RESTORE set_param:ACRO_BAL_ROLL (last occurrence = restore call)
+        param_idx  = max((i for i, c in enumerate(call_order)
+                          if c == 'set_param:ACRO_BAL_ROLL'), default=None)
+        self.assertIsNotNone(hb_idx,    'release_hb not found after ACRO mode')
+        self.assertIsNotNone(param_idx, 'set_param:ACRO_BAL_ROLL not called')
+        self.assertLess(hb_idx, param_idx,
+                        f'heartbeat released after restore set_param: {call_order}')
 
 
 if __name__ == '__main__':

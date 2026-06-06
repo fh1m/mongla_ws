@@ -260,31 +260,37 @@ class Pixhawk:
     def get_param(self, name: str, timeout: float = 2.0) -> float | None:
         """Read a named ArduSub parameter. Returns None on timeout.
 
-        Sends PARAM_REQUEST_READ and waits for a matching PARAM_VALUE ACK.
+        Polls master.messages (filled by the dedicated reader thread at 200 Hz)
+        instead of calling recv_match() — which is reserved for reader_loop only.
+        Clears the PARAM_VALUE cache before the request to avoid stale hits.
         """
+        self.master.messages.pop('PARAM_VALUE', None)
         self.master.param_fetch_one(name)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            msg = self.master.recv_match(type='PARAM_VALUE', blocking=True,
-                                         timeout=0.3)
+            msg = self.master.messages.get('PARAM_VALUE')
             if msg and msg.param_id.rstrip('\x00') == name:
                 return float(msg.param_value)
+            time.sleep(0.05)   # 20 Hz poll; reader thread fills cache at 200 Hz
         return None
 
     def set_param(self, name: str, value: float, timeout: float = 3.0) -> bool:
-        """Write a named ArduSub parameter via PARAM_SET and wait for ACK.
+        """Write a named ArduSub parameter via PARAM_SET and wait for value-echo ACK.
 
-        Returns True if PARAM_VALUE ACK received within timeout.
+        Returns True when ArduSub echoes the new value back in PARAM_VALUE.
+        Polls master.messages (reader thread) — never calls recv_match() directly.
         Used by style verbs to temporarily zero ACRO_BAL_ROLL / ACRO_TRAINER
         before a free-rotation maneuver and restore them after.
         """
+        self.master.messages.pop('PARAM_VALUE', None)
         self.master.param_set_send(name, float(value))
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            msg = self.master.recv_match(type='PARAM_VALUE', blocking=True,
-                                         timeout=0.3)
-            if msg and msg.param_id.rstrip('\x00') == name:
+            msg = self.master.messages.get('PARAM_VALUE')
+            if (msg and msg.param_id.rstrip('\x00') == name
+                    and abs(msg.param_value - value) < 0.01):  # value-echo ACK
                 return True
+            time.sleep(0.05)
         return False
 
     # ------------------------------------------------------------------ #

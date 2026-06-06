@@ -462,6 +462,10 @@ class Duburi(VisionVerbs):
                         self.pixhawk.send_rc_override(roll=1500)
                         self.pixhawk.send_neutral()
                     finally:
+                        # Resume heartbeat FIRST so the 5 Hz neutral RC stream covers
+                        # the blocking param-restore and mode-change calls below.
+                        # FS_PILOT_INPUT cannot fire while heartbeat is active.
+                        self._release_heartbeat_for_lock()
                         self.pixhawk.set_param('ACRO_BAL_ROLL', orig_bal)
                         self.pixhawk.set_param('ACRO_TRAINER',  orig_trn)
                         self.pixhawk.set_mode('ALT_HOLD')
@@ -472,7 +476,7 @@ class Duburi(VisionVerbs):
                            neutral_writer=self._writers().neutral,
                            abort_fn=self._abort_fn)
             finally:
-                self._release_heartbeat_for_lock()
+                self._release_heartbeat_for_lock()  # belt-and-suspenders (ref-count clamps at 0)
             return self._make_result(
                 True,
                 f'style_roll: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
@@ -538,6 +542,7 @@ class Duburi(VisionVerbs):
                         self.pixhawk.send_rc_override(pitch=1500)
                         self.pixhawk.send_neutral()
                     finally:
+                        self._release_heartbeat_for_lock()   # resume before param calls
                         self.pixhawk.set_param('ACRO_BAL_PITCH', orig_bal)
                         self.pixhawk.set_param('ACRO_TRAINER',   orig_trn)
                         self.pixhawk.set_mode('ALT_HOLD')
@@ -547,7 +552,7 @@ class Duburi(VisionVerbs):
                            neutral_writer=self._writers().neutral,
                            abort_fn=self._abort_fn)
             finally:
-                self._release_heartbeat_for_lock()
+                self._release_heartbeat_for_lock()  # belt-and-suspenders
             return self._make_result(
                 True,
                 f'style_pitch: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
