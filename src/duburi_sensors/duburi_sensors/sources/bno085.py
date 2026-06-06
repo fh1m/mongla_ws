@@ -235,6 +235,7 @@ class BNO085Source:
         self._offset_deg: float | None = None     # set on successful calibration
 
         self._stop = threading.Event()
+        self._serial_write_lock = threading.Lock()
         self._serial = serial.Serial(port=port, baudrate=baud, timeout=0.1)
 
         self._thread = threading.Thread(
@@ -339,13 +340,15 @@ class BNO085Source:
     def send_command(self, cmd: str) -> None:
         """Write a command string to the BNO over serial (fire-and-forget).
 
-        Serial is full-duplex; writing from this thread while the reader
-        thread calls readline() is safe. Non-critical: exceptions are
-        swallowed so OLED logging never breaks the mission path.
+        Thread-safe: guarded by _serial_write_lock so concurrent callers
+        and the reader thread (readline) do not interleave writes.
+        Non-critical: exceptions swallowed so OLED logging never breaks the
+        mission path.
         """
         try:
-            if self._serial and self._serial.is_open:
-                self._serial.write(cmd.encode('utf-8'))
+            with self._serial_write_lock:
+                if self._serial and self._serial.is_open:
+                    self._serial.write(cmd.encode('utf-8'))
         except Exception:
             pass
 
