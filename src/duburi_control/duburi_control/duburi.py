@@ -392,17 +392,18 @@ class Duburi(VisionVerbs):
     #  Style maneuvers  — 360° rotation on roll, pitch, or yaw axis    #
     # ================================================================== #
 
-    def style_roll(self, gain=60.0, timeout=20.0):
-        """Style: 360° roll (Ch2 axis) in ACRO mode, BNO-confirmed.
+    def style_roll(self, gain=60.0, timeout=20.0, flips=1, headroom=1.0):
+        """Style: N × 360° roll (Ch2 axis) in ACRO mode, BNO-confirmed.
 
         Sequence:
           1. Zero ACRO_BAL_ROLL + ACRO_TRAINER so ACRO doesn't auto-level.
-          2. Enter ACRO (rate control) — Ch2 = continuous roll rate.
-          3. Suspend heading lock; drive Ch2 until BNO (or AHRS2) accumulates
-             ±360° or timeout fires.
-          4. Neutral → restore ACRO params → ALT_HOLD → re-acquire depth.
-             (No depth fight during the roll — thrusters rotate with the body;
-             re-acquire depth cleanly after the maneuver.)
+          2. Pre-dive by `headroom` metres (ALT_HOLD) so the flip has room to
+             rise without breaching surface. Thrusters rotate with the body
+             in ACRO — no depth hold is possible mid-roll; headroom compensates.
+          3. Enter ACRO (rate control) — Ch2 = continuous roll rate.
+          4. Suspend heading lock; drive Ch2 until BNO (or AHRS2) accumulates
+             ±360° × flips or timeout fires.
+          5. Neutral → restore ACRO params → ALT_HOLD → re-acquire original depth.
 
         impl: pixhawk.send_rc_override(roll=pwm) in ACRO mode — Ch2.
         """
@@ -418,9 +419,11 @@ class Duburi(VisionVerbs):
                           if use_bno else
                           (lambda: (self.pixhawk.get_attitude() or {}).get('roll', 0.0)))
             accum      = 0.0
+            target_deg = 360.0 * max(1, int(flips))
 
             self.log.info(
                 f'[CMD  ] style_roll  gain={gain:.0f}%  timeout={timeout:.1f}s'
+                f'  flips={flips}  headroom={headroom:.1f}m'
                 f'  depth={target_depth:.2f}m  src={"bno" if use_bno else "ahrs2"}')
 
             orig_bal = self.pixhawk.get_param('ACRO_BAL_ROLL') or 1.0
@@ -429,6 +432,15 @@ class Duburi(VisionVerbs):
                     self.pixhawk.set_param('ACRO_TRAINER',  0.0)):
                 self.log.warn('[CMD  ] style_roll: PARAM_SET timeout — aborting')
                 return self._make_result(False, 'style_roll: param set failed')
+
+            # Pre-dive to give the flip headroom. Done in ALT_HOLD while the
+            # heartbeat is still running. headroom=0 skips this step.
+            if headroom > 0.0:
+                dive_depth = target_depth - headroom
+                self.log.info(f'[CMD  ] style_roll: pre-diving to {dive_depth:.2f}m')
+                hold_depth(self.pixhawk, dive_depth, 15.0, self.log,
+                           neutral_writer=self._writers().neutral,
+                           abort_fn=self._abort_fn)
 
             # Pause heartbeat (ref-counted; safe even if lock already holds it).
             # Without this the 5 Hz neutral writer clobbers Ch2 every 200 ms.
@@ -442,9 +454,9 @@ class Duburi(VisionVerbs):
                         if last_roll is None:
                             last_roll = 0.0
                         pwm      = Pixhawk.percent_to_pwm(gain)
-                        deadline = _t.monotonic() + timeout
+                        deadline = _t.monotonic() + timeout * max(1, int(flips))
                         abort    = self._abort_fn
-                        while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                        while abs(accum) < target_deg and _t.monotonic() < deadline:
                             if abort():
                                 break
                             # Stream RC every tick — ACRO rate command must be
@@ -477,16 +489,19 @@ class Duburi(VisionVerbs):
                            abort_fn=self._abort_fn)
             finally:
                 self._release_heartbeat_for_lock()  # belt-and-suspenders (ref-count clamps at 0)
+            completed = int(round(abs(accum) / 360.0))
             return self._make_result(
                 True,
-                f'style_roll: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
+                f'style_roll: done  {accum:+.0f}° ({completed} flip(s))'
+                f'  src={"bno" if use_bno else "ahrs2"}',
                 final_value=accum)
 
-    def style_pitch(self, gain=50.0, timeout=20.0):
-        """Style: 360° pitch (Ch1 axis) in ACRO mode, BNO-confirmed.
+    def style_pitch(self, gain=50.0, timeout=20.0, flips=1, headroom=1.0):
+        """Style: N × 360° pitch (Ch1 axis) in ACRO mode, BNO-confirmed.
 
         Identical strategy to style_roll but on Ch1 (pitch axis).
         Uses BNO085 read_pitch() or AHRS2 pitch fallback for angle tracking.
+        Pre-dives by `headroom` metres before ACRO to avoid surfacing.
 
         impl: pixhawk.send_rc_override(pitch=pwm) in ACRO mode — Ch1.
         """
@@ -502,9 +517,11 @@ class Duburi(VisionVerbs):
                            if use_bno else
                            (lambda: (self.pixhawk.get_attitude() or {}).get('pitch', 0.0)))
             accum       = 0.0
+            target_deg  = 360.0 * max(1, int(flips))
 
             self.log.info(
                 f'[CMD  ] style_pitch  gain={gain:.0f}%  timeout={timeout:.1f}s'
+                f'  flips={flips}  headroom={headroom:.1f}m'
                 f'  depth={target_depth:.2f}m  src={"bno" if use_bno else "ahrs2"}')
 
             orig_bal = self.pixhawk.get_param('ACRO_BAL_PITCH') or 1.0
@@ -513,6 +530,13 @@ class Duburi(VisionVerbs):
                     self.pixhawk.set_param('ACRO_TRAINER',   0.0)):
                 self.log.warn('[CMD  ] style_pitch: PARAM_SET timeout — aborting')
                 return self._make_result(False, 'style_pitch: param set failed')
+
+            if headroom > 0.0:
+                dive_depth = target_depth - headroom
+                self.log.info(f'[CMD  ] style_pitch: pre-diving to {dive_depth:.2f}m')
+                hold_depth(self.pixhawk, dive_depth, 15.0, self.log,
+                           neutral_writer=self._writers().neutral,
+                           abort_fn=self._abort_fn)
 
             self._hold_heartbeat_for_lock()
             try:
@@ -524,9 +548,9 @@ class Duburi(VisionVerbs):
                         if last_pitch is None:
                             last_pitch = 0.0
                         pwm      = Pixhawk.percent_to_pwm(gain)
-                        deadline = _t.monotonic() + timeout
+                        deadline = _t.monotonic() + timeout * max(1, int(flips))
                         abort    = self._abort_fn
-                        while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                        while abs(accum) < target_deg and _t.monotonic() < deadline:
                             if abort():
                                 break
                             self.pixhawk.send_rc_override(pitch=pwm)
@@ -553,9 +577,11 @@ class Duburi(VisionVerbs):
                            abort_fn=self._abort_fn)
             finally:
                 self._release_heartbeat_for_lock()  # belt-and-suspenders
+            completed = int(round(abs(accum) / 360.0))
             return self._make_result(
                 True,
-                f'style_pitch: done  {accum:+.0f}°  src={"bno" if use_bno else "ahrs2"}',
+                f'style_pitch: done  {accum:+.0f}° ({completed} flip(s))'
+                f'  src={"bno" if use_bno else "ahrs2"}',
                 final_value=accum)
 
     def style_yaw(self, steps=4, deg_per_step=90.0, settle=1.0):
