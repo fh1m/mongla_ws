@@ -1,4 +1,4 @@
-"""Tests for style verbs (style_roll, style_pitch, style_yaw) and BNO085 enhancements.
+"""Tests for style verbs (style_roll, style_yaw) and BNO085 enhancements.
 
 All tests use mocked hardware — no MAVLink or serial required.
 """
@@ -208,7 +208,7 @@ class TestHeadingLockSendsL(unittest.TestCase):
 
 
 # ===========================================================================
-# style_roll / style_pitch
+# style_roll
 # ===========================================================================
 
 def _make_duburi_for_style():
@@ -421,42 +421,97 @@ class TestStyleRollMultiFlip(unittest.TestCase):
             any(d < -0.7 for d in hold_depth_calls),
             f'unexpected pre-dive depth call: {hold_depth_calls}')
 
-
-class TestStylePitch(unittest.TestCase):
-
-    def test_uses_pitch_channel_not_roll(self):
+    def test_per_flip_returns_to_origin_depth_not_headroom(self):
+        """flips=2, headroom=1.0 -> hold_depth sequence is [predive, recover] x2,
+        recovering to origin_depth (-0.7) each time, never to the headroom depth."""
         duburi, px = _make_duburi_for_style()
         px.get_attitude.side_effect = [
-            {'yaw': 0.0, 'roll': 0.0, 'pitch': i * 20.0, 'depth': -0.7}
-            for i in range(30)
-        ] + [{'yaw': 0.0, 'roll': 0.0, 'pitch': 0.0, 'depth': -0.7}] * 30
+            {'yaw': 0.0, 'roll': i * 20.0, 'pitch': 0.0, 'depth': -0.7}
+            for i in range(50)
+        ] + [{'yaw': 0.0, 'roll': 0.0, 'pitch': 0.0, 'depth': -0.7}] * 10
 
-        with patch('duburi_control.duburi.hold_depth'):
-            duburi.style_pitch(gain=50.0, timeout=5.0)
+        hold_depth_calls = []
 
-        # send_rc_override should have been called with pitch kwarg, not roll
-        pitch_calls = [c for c in px.send_rc_override.call_args_list
-                       if c.kwargs.get('pitch', 1500) != 1500 or
-                          (c.args and len(c.args) > 0 and c.args[0] != 1500)]
-        # At minimum, a call with pitch != 1500 must exist
-        pwm_calls = [c for c in px.send_rc_override.call_args_list
-                     if 'pitch' in c.kwargs and c.kwargs['pitch'] != 1500]
-        self.assertGreater(len(pwm_calls), 0)
+        def mock_hold_depth(px_arg, depth, *a, **kw):
+            hold_depth_calls.append(depth)
 
-    def test_restores_acro_bal_pitch_not_roll(self):
+        with patch('duburi_control.duburi.hold_depth', side_effect=mock_hold_depth):
+            result = duburi.style_roll(gain=60.0, timeout=60.0, flips=2, headroom=1.0)
+
+        self.assertTrue(result.success)
+        # origin_depth = -0.7, headroom = 1.0 -> pre-dive = -1.7, recovery = -0.7, per flip
+        self.assertEqual(hold_depth_calls, [-1.7, -0.7, -1.7, -0.7])
+
+    def test_surface_guard_aborts_flip(self):
+        """Depth shallower than STYLE_ROLL_SURFACE_GUARD_M mid-flip aborts the
+        flip (not a timeout/abort), recovers depth, and reports the trip."""
         duburi, px = _make_duburi_for_style()
-        px.get_param.return_value = 1.0
         px.get_attitude.side_effect = [
-            {'yaw': 0.0, 'roll': 0.0, 'pitch': i * 20.0, 'depth': -0.7}
-            for i in range(30)
-        ] + [{'yaw': 0.0, 'roll': 0.0, 'pitch': 0.0, 'depth': -0.7}] * 30
+            {'yaw': 0.0, 'roll': 0.0,  'pitch': 0.0, 'depth': -0.7},   # origin
+            {'yaw': 0.0, 'roll': 0.0,  'pitch': 0.0, 'depth': -0.7},   # before-loop init
+            {'yaw': 0.0, 'roll': 20.0, 'pitch': 0.0, 'depth': -0.7},   # tick 1 -- normal
+            {'yaw': 0.0, 'roll': 40.0, 'pitch': 0.0, 'depth': -0.10},  # tick 2 -- surface guard trips
+            {'yaw': 0.0, 'roll': 40.0, 'pitch': 0.0, 'depth': -0.7},   # final heading read
+        ]
+
+        hold_depth_calls = []
+
+        def mock_hold_depth(px_arg, depth, *a, **kw):
+            hold_depth_calls.append(depth)
+
+        with patch('duburi_control.duburi.hold_depth', side_effect=mock_hold_depth):
+            result = duburi.style_roll(gain=60.0, timeout=5.0, flips=1, headroom=1.0)
+
+        self.assertFalse(result.success)
+        self.assertIn('surface guard', result.message.lower())
+        # Pre-dive happened, and recovery to origin_depth still ran despite surfacing.
+        self.assertIn(-1.7, hold_depth_calls)
+        self.assertIn(-0.7, hold_depth_calls)
+
+    def test_cancel_mid_flip_disarms(self):
+        """A cancel (_abort_event set mid-flip) must restore ALT_HOLD, then
+        disarm, and the result must say so."""
+        duburi, px = _make_duburi_for_style()
+        px.get_attitude.side_effect = [
+            {'yaw': 0.0, 'roll': 0.0,  'pitch': 0.0, 'depth': -0.7},   # origin
+            {'yaw': 0.0, 'roll': 0.0,  'pitch': 0.0, 'depth': -0.7},   # before-loop init
+            {'yaw': 0.0, 'roll': 20.0, 'pitch': 0.0, 'depth': -0.7},   # tick 1
+            {'yaw': 0.0, 'roll': 20.0, 'pitch': 0.0, 'depth': -0.7},   # final heading read
+        ]
+
+        rc_call_count = {'n': 0}
+
+        def mock_send_rc(*a, **kw):
+            rc_call_count['n'] += 1
+            if rc_call_count['n'] == 1:
+                duburi._abort_event.set()
+
+        px.send_rc_override.side_effect = mock_send_rc
+
+        call_order = []
+
+        def mock_set_mode(mode, **kw):
+            call_order.append(('set_mode', mode))
+            return (True, 'ACCEPTED')
+
+        def mock_disarm(*a, **kw):
+            call_order.append(('disarm',))
+            return (True, 'ACCEPTED')
+
+        px.set_mode.side_effect = mock_set_mode
+        px.disarm.side_effect   = mock_disarm
 
         with patch('duburi_control.duburi.hold_depth'):
-            duburi.style_pitch(gain=50.0, timeout=5.0)
+            result = duburi.style_roll(gain=60.0, timeout=5.0, flips=1, headroom=1.0)
 
-        param_names = [c.args[0] for c in px.set_param.call_args_list]
-        self.assertIn('ACRO_BAL_PITCH', param_names)
-        self.assertNotIn('ACRO_BAL_ROLL', param_names)
+        self.assertFalse(result.success)
+        self.assertIn('cancelled', result.message)
+        self.assertIn('disarmed', result.message)
+        px.disarm.assert_called_once()
+        alt_hold_idx = call_order.index(('set_mode', 'ALT_HOLD'))
+        disarm_idx   = call_order.index(('disarm',))
+        self.assertLess(alt_hold_idx, disarm_idx,
+                        f'ALT_HOLD must be restored before disarm: {call_order}')
 
 
 # ===========================================================================

@@ -93,20 +93,17 @@ COMMANDS = {
 
     # ---- Style maneuvers ------------------------------------------- #
     'style_roll': {
-        'help':     'Style: N×360° roll on Ch2 in ACRO mode. BNO085-confirmed '
-                    '(AHRS2 fallback). Pre-dives `headroom` m before ACRO so '
-                    'buoyant ascent during the flip does not surface the AUV. '
+        'help':     'Style: N×360° roll on Ch2 in ACRO mode, one flip per loop '
+                    'iteration; `timeout` is per flip, not total. '
+                    'BNO085-confirmed (AHRS2 fallback) with direction-locked '
+                    'unwrap. Per flip: optional `headroom` m pre-dive, ACRO '
+                    'roll guarded by a hard surface-depth abort and '
+                    'cos(roll)-modulated Ch3 depth correction, then ALT_HOLD '
+                    'recovery to the origin depth before the next flip. '
                     'ACRO_BAL_ROLL + ACRO_TRAINER zeroed before and restored '
-                    'after. Original depth re-acquired via ALT_HOLD post-roll.',
+                    'after. Cancel mid-flip restores ALT_HOLD then disarms.',
         'fields':   ['gain', 'timeout', 'flips', 'headroom'],
         'defaults': {'gain': 60.0, 'timeout': 20.0, 'flips': 1, 'headroom': 1.0},
-    },
-    'style_pitch': {
-        'help':     'Style: N×360° pitch on Ch1 in ACRO mode. BNO085-confirmed '
-                    '(AHRS2 fallback). Same pre-dive + depth strategy as '
-                    'style_roll.',
-        'fields':   ['gain', 'timeout', 'flips', 'headroom'],
-        'defaults': {'gain': 50.0, 'timeout': 20.0, 'flips': 1, 'headroom': 1.0},
     },
     'style_yaw': {
         'help':     'Style: N×360° yaw spin in ALT_HOLD. flips full rotations, '
@@ -317,7 +314,7 @@ COMMANDS = {
                     'searching for target_class. Exits immediately when target '
                     'is detected. Makes a full orbit if duration allows. '
                     'yaw_rate_pct = step degrees per look (positive=CW/right, '
-                    'negative=CCW/left). gain = turn speed %. '
+                    'negative=CCW/left). gain = turn speed %%. '
                     'settle = dwell seconds at each step to observe. '
                     'target = override starting yaw (0.0 = current heading). '
                     'Falls back to ALT_HOLD + heading lock if POSHOLD unavailable.',
