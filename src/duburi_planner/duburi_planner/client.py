@@ -96,7 +96,19 @@ class DuburiClient:
         self._active_goal_handle = goal_handle
         try:
             result_future = goal_handle.get_result_async()
-            rclpy.spin_until_future_complete(self.node, result_future)
+            try:
+                rclpy.spin_until_future_complete(self.node, result_future)
+            except KeyboardInterrupt:
+                self.node.get_logger().warn(
+                    f'Ctrl-C — cancelling goal "{cmd}"...')
+                cancel_future = goal_handle.cancel_goal_async()
+                rclpy.spin_until_future_complete(
+                    self.node, cancel_future, timeout_sec=5.0)
+                rclpy.spin_until_future_complete(
+                    self.node, result_future, timeout_sec=15.0)
+                if not result_future.done():
+                    raise MoveFailed(
+                        f'Goal "{cmd}" did not finish cancelling in time')
             result = result_future.result().result
         finally:
             self._active_goal_handle = None

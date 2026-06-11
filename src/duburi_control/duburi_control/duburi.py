@@ -121,6 +121,24 @@ _UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect'})
 YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED')
 
 
+# style_roll tuning. RoboSub rule: surfacing during a run ends the run, so
+# depth is actively guarded during the ACRO roll phase instead of being left
+# fully open-loop.
+STYLE_ROLL_SURFACE_GUARD_M = -0.15  # AHRS2 depth (negative=below surface);
+                                     # abort the flip if shallower than this
+STYLE_ROLL_DEPTH_KP        = 150.0  # Ch3 PWM offset per metre of depth error
+STYLE_ROLL_DEPTH_CORR_MAX  = 150.0  # clamp on |Ch3 PWM offset|
+
+# |accum| (deg) before a flip's rotation direction is locked for delta-unwrap.
+# BNO085/AHRS2 report roll in -180..180; once the per-tick rotation exceeds
+# 180 deg the naive shortest-path unwrap aliases (picks the wrong delta sign),
+# under-counting accum and requiring several extra physical flips to satisfy
+# the target. Locking the rotation direction early lets each subsequent tick
+# pick the same-direction candidate (delta, delta-360, delta+360) closest to
+# zero, which resolves correctly even for >180 deg/tick steps.
+STYLE_ROLL_DIRECTION_LOCK_DEG = 10.0
+
+
 class Duburi(VisionVerbs):
     """Serialised movement facade.
 
@@ -395,36 +413,41 @@ class Duburi(VisionVerbs):
     def style_roll(self, gain=60.0, timeout=20.0, flips=1, headroom=1.0):
         """Style: N × 360° roll (Ch2 axis) in ACRO mode, BNO-confirmed.
 
-        Sequence:
+        Per-flip loop:
           1. Zero ACRO_BAL_ROLL + ACRO_TRAINER so ACRO doesn't auto-level.
-          2. Pre-dive by `headroom` metres (ALT_HOLD) so the flip has room to
-             rise without breaching surface. Thrusters rotate with the body
-             in ACRO — no depth hold is possible mid-roll; headroom compensates.
-          3. Enter ACRO (rate control) — Ch2 = continuous roll rate.
-          4. Suspend heading lock; drive Ch2 until BNO (or AHRS2) accumulates
-             ±360° × flips or timeout fires.
-          5. Neutral → restore ACRO params → ALT_HOLD → re-acquire original depth.
+          2. Capture origin depth (depth at launch) once — every flip
+             returns to this depth, not the headroom pre-dive depth.
+          3. For each flip:
+             - Optional pre-dive by `headroom` m (ALT_HOLD).
+             - Enter ACRO, drive Ch2 until BNO (or AHRS2) accumulates one
+               full 360° (direction-locked unwrap — see
+               STYLE_ROLL_DIRECTION_LOCK_DEG) or `timeout` elapses. A hard
+               surface guard aborts immediately if depth would breach
+               STYLE_ROLL_SURFACE_GUARD_M; a cos(roll)-modulated Ch3
+               correction tries to hold the origin depth throughout.
+             - Return to ALT_HOLD, recover origin depth, continue.
+          4. Restore ACRO params, resume heading lock.
 
-        impl: pixhawk.send_rc_override(roll=pwm) in ACRO mode — Ch2.
+        Ctrl-C (goal cancel) mid-flip: ALT_HOLD is restored and the AUV
+        disarms immediately — safer than leaving it armed unattended.
+
+        impl: pixhawk.send_rc_override(roll=pwm, throttle=corr) in ACRO — Ch2/Ch3.
         """
+        import math as _math
         import time as _t
         with self._command_scope('style_roll'):
             self._ensure_yaw_capable_mode()
             att          = self.pixhawk.get_attitude()
-            target_depth = att['depth'] if att else -0.5
+            origin_depth = att['depth'] if att else -0.5
 
             bno        = self.yaw_source
             use_bno    = bno is not None and hasattr(bno, 'read_roll')
-            _read_roll = ((lambda: bno.read_roll())  # type: ignore[union-attr]
-                          if use_bno else
-                          (lambda: (self.pixhawk.get_attitude() or {}).get('roll', 0.0)))
-            accum      = 0.0
-            target_deg = 360.0 * max(1, int(flips))
+            n_flips    = max(1, int(flips))
 
             self.log.info(
-                f'[CMD  ] style_roll  gain={gain:.0f}%  timeout={timeout:.1f}s'
-                f'  flips={flips}  headroom={headroom:.1f}m'
-                f'  depth={target_depth:.2f}m  src={"bno" if use_bno else "ahrs2"}')
+                f'[CMD  ] style_roll  gain={gain:.0f}%  timeout={timeout:.1f}s/flip'
+                f'  flips={n_flips}  headroom={headroom:.1f}m'
+                f'  origin_depth={origin_depth:.2f}m  src={"bno" if use_bno else "ahrs2"}')
 
             orig_bal = self.pixhawk.get_param('ACRO_BAL_ROLL') or 1.0
             orig_trn = self.pixhawk.get_param('ACRO_TRAINER')  or 2.0
@@ -433,156 +456,146 @@ class Duburi(VisionVerbs):
                 self.log.warn('[CMD  ] style_roll: PARAM_SET timeout — aborting')
                 return self._make_result(False, 'style_roll: param set failed')
 
-            # Pre-dive to give the flip headroom. Done in ALT_HOLD while the
-            # heartbeat is still running. headroom=0 skips this step.
-            if headroom > 0.0:
-                dive_depth = target_depth - headroom
-                self.log.info(f'[CMD  ] style_roll: pre-diving to {dive_depth:.2f}m')
-                hold_depth(self.pixhawk, dive_depth, 15.0, self.log,
-                           neutral_writer=self._writers().neutral,
-                           abort_fn=self._abort_fn)
+            pwm         = Pixhawk.percent_to_pwm(gain)
+            flip_accums = []
+            surfaced    = False
 
             # Pause heartbeat (ref-counted; safe even if lock already holds it).
-            # Without this the 5 Hz neutral writer clobbers Ch2 every 200 ms.
+            # Spans every flip — without this the 5 Hz neutral writer clobbers
+            # Ch2/Ch3 every 200 ms.
             self._hold_heartbeat_for_lock()
             try:
                 with self._suspend_heading_lock():
-                    try:
-                        self.pixhawk.set_mode('ACRO')
-                        _t.sleep(0.2)
-                        last_roll = _read_roll()
-                        if last_roll is None:
-                            last_roll = 0.0
-                        pwm      = Pixhawk.percent_to_pwm(gain)
-                        deadline = _t.monotonic() + timeout * max(1, int(flips))
-                        abort    = self._abort_fn
-                        while abs(accum) < target_deg and _t.monotonic() < deadline:
-                            if abort():
-                                break
-                            # Stream RC every tick — ACRO rate command must be
-                            # continuously refreshed; one-shot send is not reliable.
-                            self.pixhawk.send_rc_override(roll=pwm)
-                            _t.sleep(0.05)    # 20 Hz
-                            cur = _read_roll()
-                            if cur is None:
-                                continue      # stale frame — don't corrupt accum
-                            delta = cur - last_roll
-                            if delta >  180: delta -= 360
-                            if delta < -180: delta += 360
-                            accum    += delta
-                            last_roll = cur
-                        self.pixhawk.send_rc_override(roll=1500)
-                        self.pixhawk.send_neutral()
-                    finally:
-                        # Resume heartbeat FIRST so the 5 Hz neutral RC stream covers
-                        # the blocking param-restore and mode-change calls below.
-                        # FS_PILOT_INPUT cannot fire while heartbeat is active.
-                        self._release_heartbeat_for_lock()
-                        self.pixhawk.set_param('ACRO_BAL_ROLL', orig_bal)
-                        self.pixhawk.set_param('ACRO_TRAINER',  orig_trn)
-                        self.pixhawk.set_mode('ALT_HOLD')
+                    for flip_num in range(1, n_flips + 1):
+                        if headroom > 0.0:
+                            dive_depth = origin_depth - headroom
+                            self.log.info(
+                                f'[CMD  ] style_roll: flip {flip_num}/{n_flips}'
+                                f' pre-diving to {dive_depth:.2f}m')
+                            hold_depth(self.pixhawk, dive_depth, 15.0, self.log,
+                                       neutral_writer=self._writers().neutral,
+                                       abort_fn=self._abort_fn)
+
+                        accum     = 0.0
+                        direction = 0   # +1/-1 once |accum| >= STYLE_ROLL_DIRECTION_LOCK_DEG
+                        try:
+                            self.pixhawk.set_mode('ACRO')
+                            _t.sleep(0.2)
+
+                            att = self.pixhawk.get_attitude()
+                            if use_bno:
+                                last_roll = bno.read_roll()  # type: ignore[union-attr]
+                            else:
+                                last_roll = att.get('roll', 0.0) if att else 0.0
+                            if last_roll is None:
+                                last_roll = 0.0
+                            last_depth = att['depth'] if att else origin_depth
+
+                            deadline = _t.monotonic() + timeout
+                            tick     = 0
+                            while abs(accum) < 360.0 and _t.monotonic() < deadline:
+                                if self._abort_fn():
+                                    break
+
+                                att = self.pixhawk.get_attitude()
+                                if att:
+                                    last_depth = att['depth']
+
+                                if last_depth > STYLE_ROLL_SURFACE_GUARD_M:
+                                    self.log.warn(
+                                        f'[CMD  ] style_roll: SURFACE GUARD —'
+                                        f' flip {flip_num}/{n_flips}'
+                                        f' depth={last_depth:.2f}m — aborting')
+                                    surfaced = True
+                                    break
+
+                                depth_err = origin_depth - last_depth
+                                corr = depth_err * STYLE_ROLL_DEPTH_KP * _math.cos(_math.radians(last_roll))
+                                corr = max(-STYLE_ROLL_DEPTH_CORR_MAX,
+                                           min(STYLE_ROLL_DEPTH_CORR_MAX, corr))
+                                throttle_pwm = int(1500 + corr)
+
+                                # Stream RC every tick — ACRO rate command must be
+                                # continuously refreshed; one-shot send is not reliable.
+                                self.pixhawk.send_rc_override(roll=pwm, throttle=throttle_pwm)
+                                _t.sleep(0.05)    # 20 Hz
+
+                                if use_bno:
+                                    cur = bno.read_roll()  # type: ignore[union-attr]
+                                else:
+                                    cur = att.get('roll', 0.0) if att else None
+                                if cur is None:
+                                    tick += 1
+                                    continue      # stale frame — don't corrupt accum
+
+                                delta = cur - last_roll
+                                if delta != 0.0:
+                                    if direction == 0:
+                                        if delta >  180.0: delta -= 360.0
+                                        if delta < -180.0: delta += 360.0
+                                    else:
+                                        candidates = (delta, delta - 360.0, delta + 360.0)
+                                        same_dir = [d for d in candidates if d * direction > 0]
+                                        if same_dir:
+                                            delta = min(same_dir, key=abs)
+                                    accum += delta
+                                    if direction == 0 and abs(accum) >= STYLE_ROLL_DIRECTION_LOCK_DEG:
+                                        direction = 1 if accum > 0 else -1
+                                last_roll = cur
+
+                                tick += 1
+                                if tick % 10 == 0:
+                                    self.log.info(
+                                        f'[CMD  ] style_roll: flip={flip_num}/{n_flips}'
+                                        f' roll={cur:+.1f}° accum={accum:+.1f}°'
+                                        f' depth={last_depth:.2f}m corr={corr:+.0f}')
+
+                            self.pixhawk.send_rc_override(roll=1500, throttle=1500)
+                            self.pixhawk.send_neutral()
+                        finally:
+                            self.pixhawk.set_mode('ALT_HOLD')
+
+                        flip_accums.append(accum)
+
+                        if not self._abort_fn():
+                            hold_depth(self.pixhawk, origin_depth, 15.0, self.log,
+                                       neutral_writer=self._writers().neutral,
+                                       abort_fn=self._abort_fn)
+
+                        if surfaced or self._abort_fn():
+                            break
                 # Heading lock resumes here in ALT_HOLD.
                 new_heading = self._current_heading()
                 self._retarget_heading_lock(new_heading)
-                hold_depth(self.pixhawk, target_depth, 15.0, self.log,
-                           neutral_writer=self._writers().neutral,
-                           abort_fn=self._abort_fn)
             finally:
-                self._release_heartbeat_for_lock()  # belt-and-suspenders (ref-count clamps at 0)
-            completed = int(round(abs(accum) / 360.0))
+                # Resume heartbeat FIRST so the 5 Hz neutral RC stream covers
+                # the blocking param-restore calls below. FS_PILOT_INPUT cannot
+                # fire while heartbeat is active.
+                self._release_heartbeat_for_lock()
+                self.pixhawk.set_param('ACRO_BAL_ROLL', orig_bal)
+                self.pixhawk.set_param('ACRO_TRAINER',  orig_trn)
+
+            completed_flips = sum(1 for a in flip_accums if abs(a) >= 359.0)
+            total_accum     = sum(flip_accums)
+
+            if self._abort_fn():
+                self.pixhawk.disarm()
+                return self._make_result(
+                    False,
+                    f'style_roll: cancelled after {completed_flips}/{n_flips} flip(s)'
+                    f' — ALT_HOLD restored, disarmed',
+                    final_value=total_accum)
+            if surfaced:
+                return self._make_result(
+                    False,
+                    f'style_roll: ABORTED — surface guard tripped after'
+                    f' {completed_flips}/{n_flips} flip(s)',
+                    final_value=total_accum)
             return self._make_result(
                 True,
-                f'style_roll: done  {accum:+.0f}° ({completed} flip(s))'
-                f'  src={"bno" if use_bno else "ahrs2"}',
-                final_value=accum)
-
-    def style_pitch(self, gain=50.0, timeout=20.0, flips=1, headroom=1.0):
-        """Style: N × 360° pitch (Ch1 axis) in ACRO mode, BNO-confirmed.
-
-        Identical strategy to style_roll but on Ch1 (pitch axis).
-        Uses BNO085 read_pitch() or AHRS2 pitch fallback for angle tracking.
-        Pre-dives by `headroom` metres before ACRO to avoid surfacing.
-
-        impl: pixhawk.send_rc_override(pitch=pwm) in ACRO mode — Ch1.
-        """
-        import time as _t
-        with self._command_scope('style_pitch'):
-            self._ensure_yaw_capable_mode()
-            att          = self.pixhawk.get_attitude()
-            target_depth = att['depth'] if att else -0.5
-
-            bno         = self.yaw_source
-            use_bno     = bno is not None and hasattr(bno, 'read_pitch')
-            _read_pitch = ((lambda: bno.read_pitch())  # type: ignore[union-attr]
-                           if use_bno else
-                           (lambda: (self.pixhawk.get_attitude() or {}).get('pitch', 0.0)))
-            accum       = 0.0
-            target_deg  = 360.0 * max(1, int(flips))
-
-            self.log.info(
-                f'[CMD  ] style_pitch  gain={gain:.0f}%  timeout={timeout:.1f}s'
-                f'  flips={flips}  headroom={headroom:.1f}m'
-                f'  depth={target_depth:.2f}m  src={"bno" if use_bno else "ahrs2"}')
-
-            orig_bal = self.pixhawk.get_param('ACRO_BAL_PITCH') or 1.0
-            orig_trn = self.pixhawk.get_param('ACRO_TRAINER')   or 2.0
-            if not (self.pixhawk.set_param('ACRO_BAL_PITCH', 0.0) and
-                    self.pixhawk.set_param('ACRO_TRAINER',   0.0)):
-                self.log.warn('[CMD  ] style_pitch: PARAM_SET timeout — aborting')
-                return self._make_result(False, 'style_pitch: param set failed')
-
-            if headroom > 0.0:
-                dive_depth = target_depth - headroom
-                self.log.info(f'[CMD  ] style_pitch: pre-diving to {dive_depth:.2f}m')
-                hold_depth(self.pixhawk, dive_depth, 15.0, self.log,
-                           neutral_writer=self._writers().neutral,
-                           abort_fn=self._abort_fn)
-
-            self._hold_heartbeat_for_lock()
-            try:
-                with self._suspend_heading_lock():
-                    try:
-                        self.pixhawk.set_mode('ACRO')
-                        _t.sleep(0.2)
-                        last_pitch = _read_pitch()
-                        if last_pitch is None:
-                            last_pitch = 0.0
-                        pwm      = Pixhawk.percent_to_pwm(gain)
-                        deadline = _t.monotonic() + timeout * max(1, int(flips))
-                        abort    = self._abort_fn
-                        while abs(accum) < target_deg and _t.monotonic() < deadline:
-                            if abort():
-                                break
-                            self.pixhawk.send_rc_override(pitch=pwm)
-                            _t.sleep(0.05)
-                            cur = _read_pitch()
-                            if cur is None:
-                                continue
-                            delta = cur - last_pitch
-                            if delta >  180: delta -= 360
-                            if delta < -180: delta += 360
-                            accum     += delta
-                            last_pitch = cur
-                        self.pixhawk.send_rc_override(pitch=1500)
-                        self.pixhawk.send_neutral()
-                    finally:
-                        self._release_heartbeat_for_lock()   # resume before param calls
-                        self.pixhawk.set_param('ACRO_BAL_PITCH', orig_bal)
-                        self.pixhawk.set_param('ACRO_TRAINER',   orig_trn)
-                        self.pixhawk.set_mode('ALT_HOLD')
-                new_heading = self._current_heading()
-                self._retarget_heading_lock(new_heading)
-                hold_depth(self.pixhawk, target_depth, 15.0, self.log,
-                           neutral_writer=self._writers().neutral,
-                           abort_fn=self._abort_fn)
-            finally:
-                self._release_heartbeat_for_lock()  # belt-and-suspenders
-            completed = int(round(abs(accum) / 360.0))
-            return self._make_result(
-                True,
-                f'style_pitch: done  {accum:+.0f}° ({completed} flip(s))'
-                f'  src={"bno" if use_bno else "ahrs2"}',
-                final_value=accum)
+                f'style_roll: done {completed_flips}/{n_flips} flip(s)'
+                f' ({total_accum:+.0f}°) src={"bno" if use_bno else "ahrs2"}',
+                final_value=total_accum)
 
     def style_yaw(self, flips=1, deg_per_step=90.0, settle=1.0):
         """Style: N×360° yaw spin in ALT_HOLD.

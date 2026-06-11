@@ -408,14 +408,8 @@ class DuburiMission:
 
     def style_roll(self, *, gain: float = 60.0, timeout: float = 20.0,
                   flips: int = 1, headroom: float = 1.0):
-        """N×360° roll in ACRO mode. Pre-dives headroom m to avoid surfacing."""
+        """N×360° roll in ACRO mode (timeout is per flip). Pre-dives headroom m per flip to avoid surfacing."""
         return self._send('style_roll', gain=gain, timeout=timeout,
-                          flips=flips, headroom=headroom)
-
-    def style_pitch(self, *, gain: float = 50.0, timeout: float = 20.0,
-                   flips: int = 1, headroom: float = 1.0):
-        """N×360° pitch in ACRO mode. Pre-dives headroom m to avoid surfacing."""
-        return self._send('style_pitch', gain=gain, timeout=timeout,
                           flips=flips, headroom=headroom)
 
     def style_yaw(self, *, flips: int = 1, deg_per_step: float = 90.0,
