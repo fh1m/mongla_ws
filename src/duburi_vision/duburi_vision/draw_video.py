@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 
 from .detection.detector import Detection, largest
-from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, pil_text
+from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, pil_text, pil_text_size
 C_RETICLE  = (0, 200, 200)    # bright cyan reticle (was near-black 50,55,55)
 
 
@@ -49,16 +49,21 @@ def _get_sv(sf: float = 1.0) -> dict:
         _SV[key] = {
             'trace': sv.TraceAnnotator(
                 position=sv.Position.CENTER,
-                trace_length=30,
+                trace_length=40,
                 thickness=max(1, int(2 * sf)),
                 color_lookup=sv.ColorLookup.CLASS),
+            'box': sv.BoxAnnotator(
+                color_lookup=sv.ColorLookup.CLASS,
+                thickness=max(2, int(3 * sf))),
             'corners': sv.BoxCornerAnnotator(
-                thickness=max(2, int(4 * sf)),
-                corner_length=max(8, int(18 * sf)),
+                thickness=max(2, int(3 * sf)),
+                corner_length=max(8, int(16 * sf)),
                 color=sv.Color.WHITE),
             'dot': sv.DotAnnotator(
-                radius=max(3, int(5 * sf)),
-                color_lookup=sv.ColorLookup.CLASS),
+                radius=max(5, int(8 * sf)),
+                color_lookup=sv.ColorLookup.CLASS,
+                outline_thickness=max(1, int(2 * sf)),
+                outline_color=sv.Color.WHITE),
         }
     return _SV[key]
 
@@ -74,6 +79,41 @@ def _to_sv(detections: List[Detection], track_ids=None):
     if track_ids is not None and len(track_ids) == len(detections):
         sv_det.tracker_id = np.array(track_ids, dtype=int)
     return sv_det
+
+
+def _draw_labels(out: np.ndarray, detections: list, track_ids, sf: float) -> None:
+    """Dark semi-transparent pill label above each detection bbox.
+
+    Format: [#id] class_name  conf%
+    Placed above the top edge; falls inside top edge when no space above.
+    """
+    h_f, w_f = out.shape[:2]
+    fs = max(0.28, 0.34 * sf)
+    pad_x = max(4, int(6 * sf))
+    pad_y = max(3, int(4 * sf))
+    for i, d in enumerate(detections):
+        tid = (track_ids[i] if track_ids and i < len(track_ids)
+               and track_ids[i] is not None else None)
+        label = (f'#{tid} ' if tid is not None else '') + f'{d.class_name}  {int(d.score * 100)}%'
+        x1, y1 = int(d.xyxy[0]), int(d.xyxy[1])
+        tw, th = pil_text_size(label, fs)
+        pill_w = min(tw + pad_x * 2, w_f - x1)
+        pill_h = th + pad_y * 2
+
+        # Position: above bbox if room, else inside top edge
+        if y1 - pill_h >= 1:
+            by1, by2 = y1 - pill_h, y1
+        else:
+            by1, by2 = y1, min(y1 + pill_h, h_f - 1)
+        bx1, bx2 = x1, min(x1 + pill_w, w_f - 1)
+
+        # Semi-transparent near-black background
+        ov = out.copy()
+        cv2.rectangle(ov, (bx1, by1), (bx2, by2), (12, 12, 12), -1)
+        cv2.addWeighted(ov, 0.78, out, 0.22, 0, out)
+
+        # White text; y_bottom = by2 - pad_y
+        pil_text(out, label, (bx1 + pad_x, by2 - pad_y), fs, (235, 235, 235))
 
 
 # ── Main entry point ──────────────────────────────────────────────────────── #
@@ -110,17 +150,18 @@ def render_video_section(frame_bgr: np.ndarray,
                       (cx_frame + db_px, cy_frame + db_py),
                       C_RETICLE, 1, cv2.LINE_AA)
 
-    # 2. Supervision annotation suite (trails behind, then corners, then center dots)
+    # 2. Supervision annotation suite: trails → box → corners → dot → depth borders → labels
     primary = primary or largest(detections)
     if detections:
         sv = _get_sv(sf)
         sv_all = _to_sv(detections, track_ids)
         if sv_all.tracker_id is not None:
             out = sv['trace'].annotate(scene=out, detections=sv_all)
+        out = sv['box'].annotate(scene=out, detections=sv_all)
         out = sv['corners'].annotate(scene=out, detections=sv_all)
         out = sv['dot'].annotate(scene=out, detections=sv_all)
 
-        # Depth-colored bbox borders (1px overlay — FAR=blue, MID=green, CLOSE=red)
+        # Depth-colored 2px border overlay — FAR=blue, MID=green, CLOSE=red
         vr_list = vis_range_values or []
         if vr_list:
             for i, d in enumerate(detections):
@@ -128,7 +169,10 @@ def render_video_section(frame_bgr: np.ndarray,
                     break
                 dc = _depth_color(vr_list[i])
                 x1d, y1d, x2d, y2d = (int(v) for v in d.xyxy)
-                cv2.rectangle(out, (x1d, y1d), (x2d, y2d), dc, 1, cv2.LINE_AA)
+                cv2.rectangle(out, (x1d, y1d), (x2d, y2d), dc, 2, cv2.LINE_AA)
+
+        # Dark pill labels: class  conf%  (with track ID prefix when tracked)
+        _draw_labels(out, detections, track_ids, sf)
 
     # 3. Primary target overlays
     if primary is not None:
