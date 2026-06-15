@@ -199,16 +199,14 @@ class VisionDisplayNode(Node):
         self._fps_count   = 0
         self._fps_display = 0.0
 
+        # Terminal stats log throttle (1 Hz)
+        self._stats_log_t = 0.0
+
         # Pipeline health timestamps (monotonic; default far past so initial health=False).
         self._last_frame_t = 0.0
         self._last_det_t   = 0.0
         self._last_track_t = 0.0
         self._last_state_t = 0.0
-
-        # Rolling history for sparkline graphs (60 frames).
-        self._err_x_history: deque[float] = deque(maxlen=60)
-        self._err_y_history: deque[float] = deque(maxlen=60)
-        self._conf_history:  deque[float] = deque(maxlen=60)
 
         # Depth rate estimation — short window, state-message timestamps
         self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
@@ -587,11 +585,8 @@ def main(args=None):
             with node._det_lock:
                 dets = list(node._detections)
             with node._tracks_lock:
-                tracked_dets     = list(node._tracked_dets)
-                track_ids        = list(node._track_ids)
-                n_tracks         = node._n_tracks
-                primary_track_id = node._primary_track_id
-            configured_classes = node._configured_classes
+                tracked_dets = list(node._tracked_dets)
+                track_ids    = list(node._track_ids)
 
             display_dets = tracked_dets if tracked_dets else dets
             display_ids  = track_ids if tracked_dets else None
@@ -603,25 +598,6 @@ def main(args=None):
                 depth_map_bgr = (node._depth_map_bgr.copy()
                                  if node._show_depth_map and node._depth_map_bgr is not None
                                  else None)
-            primary_vr = 0.0
-            if primary is not None and vis_range_vals:
-                for i, d in enumerate(display_dets):
-                    if (d.class_id == primary.class_id
-                            and abs(d.cx - primary.cx) < 1
-                            and abs(d.cy - primary.cy) < 1
-                            and i < len(vis_range_vals)):
-                        primary_vr = vis_range_vals[i]
-                        break
-
-            if primary is not None:
-                h0, w0 = frame.shape[:2]
-                node._err_x_history.append((primary.cx / w0 - 0.5) * 2.0)
-                node._err_y_history.append((primary.cy / h0 - 0.5) * 2.0)
-                node._conf_history.append(primary.score)
-            else:
-                node._err_x_history.append(0.0)
-                node._err_y_history.append(0.0)
-                node._conf_history.append(0.0)
 
             native_h, native_w = frame.shape[:2]
             video_h      = int(native_h * _RENDER_W / native_w)
@@ -633,31 +609,44 @@ def main(args=None):
             render_primary = (_scale_dets([primary], sx, sy)[0]
                               if primary is not None else None)
 
+            pipeline_health = _build_health(node)
             out = draw.render_all(
                 render_frame, render_dets,
-                source=node._camera,
-                fps=node._fps_display,
-                healthy=True,
-                deadband=0.05,
                 primary=render_primary,
-                tracking_on=n_tracks > 0,
-                n_tracks=n_tracks,
-                primary_track_id=primary_track_id,
-                state=node._state,
-                configured_classes=configured_classes,
+                healthy=pipeline_health['camera'],
+                deadband=0.05,
                 track_ids=display_ids,
-                yaw_source=node._yaw_source,
-                err_x_history=node._err_x_history,
-                err_y_history=node._err_y_history,
-                conf_history=node._conf_history,
-                video_mode=node._video_mode,
-                is_paused=node._is_paused,
-                pipeline_health=_build_health(node),
-                depth_rate=node._depth_rate,
                 vis_range_values=vis_range_vals,
-                primary_vis_range=primary_vr,
                 depth_map_bgr=depth_map_bgr,
             )
+
+            # 1 Hz terminal stats (FPS, detection, vehicle state, pipeline health)
+            now_t = time.monotonic()
+            if now_t - node._stats_log_t >= 1.0:
+                node._stats_log_t = now_t
+                det_str = ''
+                if primary is not None:
+                    ex = (primary.cx / native_w - 0.5) * 2.0
+                    ey = (primary.cy / native_h - 0.5) * 2.0
+                    det_str = (f' | {primary.class_name}'
+                               f'({int(primary.score * 100)}%)'
+                               f' ex={ex:+.2f} ey={ey:+.2f}')
+                st = node._state
+                state_str = (
+                    f' depth={st.depth_m:.2f}m yaw={st.yaw_deg:.1f}°'
+                    f' mode={st.mode} armed={st.armed}'
+                    if st else ''
+                )
+                ph = pipeline_health
+                health_str = (
+                    f' cam={"OK" if ph["camera"] else "ERR"}'
+                    f' det={"OK" if ph["detector"] else "ERR"}'
+                    f' trk={"OK" if ph["tracker"] else "ERR"}'
+                )
+                node.get_logger().info(
+                    f'[VIS] fps={node._fps_display:.1f}'
+                    f' dets={len(display_dets)}{det_str}{state_str}{health_str}'
+                )
 
             # Blend splash over frame while initializing or fading out.
             if _show_splash:
