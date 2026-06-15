@@ -92,7 +92,7 @@ _AUTO_PROBE_GLOBS = (
     '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3',
 )
 
-_AUTO_PROBE_TIMEOUT_S = 1.5     # per-candidate; total budget is len(globs) * this
+_AUTO_PROBE_TIMEOUT_S = 3.5     # per-candidate; covers ESP32 boot time after DTR-reset
 
 
 def _enumerate_candidate_ports():
@@ -126,7 +126,15 @@ def _probe_port(path: str, baud: int, logger=None) -> bool:
     if at least one parseable `{"yaw":...}` JSON line arrives.
     """
     try:
-        sample = serial.Serial(port=path, baudrate=baud, timeout=0.2)
+        # Set dtr=False BEFORE open to prevent ESP32 auto-reset via DTR assertion.
+        # If DTR goes high on open, the device reboots (~2s) and the probe
+        # window expires before the first JSON line arrives.
+        sample = serial.Serial()
+        sample.port     = path
+        sample.baudrate = baud
+        sample.timeout  = 0.2
+        sample.dtr      = False
+        sample.open()
     except (serial.SerialException, OSError) as exc:
         if logger:
             logger.debug(f'[SENS ] BNO085 probe skip {path}: {exc}')
@@ -236,7 +244,14 @@ class BNO085Source:
 
         self._stop = threading.Event()
         self._serial_write_lock = threading.Lock()
-        self._serial = serial.Serial(port=port, baudrate=baud, timeout=0.1)
+        # dtr=False before open prevents ESP32 auto-reset via DTR assertion.
+        _ser = serial.Serial()
+        _ser.port     = port
+        _ser.baudrate = baud
+        _ser.timeout  = 0.1
+        _ser.dtr      = False
+        _ser.open()
+        self._serial = _ser
 
         self._thread = threading.Thread(
             target=self._reader_loop,
