@@ -20,8 +20,7 @@ import cv2
 import numpy as np
 
 from .detection.detector import Detection, largest
-from .draw_widgets import (C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT,
-                           pil_text, pil_text_size)
+from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, pil_text
 C_RETICLE  = (0, 200, 200)    # bright cyan reticle (was near-black 50,55,55)
 
 
@@ -35,33 +34,6 @@ def _depth_color(v: float) -> tuple:
         return (0, int(255 * (1.0 - t)), int(255 * t))
 
 
-def _vr_label(v: float) -> str:
-    if v > 0.65: return 'CLOSE'
-    if v > 0.30: return 'MED'
-    return 'FAR'
-
-
-# Per-slot label hysteresis: only switch CLOSE/MED/FAR when value moves >0.05
-# from the last switch point. Prevents flickering at threshold boundaries.
-_vr_prev_labels: list[str] = []
-_vr_switch_vals: list[float] = []
-
-
-def _vr_label_hysteresis(v: float, idx: int) -> str:
-    global _vr_prev_labels, _vr_switch_vals
-    while len(_vr_prev_labels) <= idx:
-        _vr_prev_labels.append('')
-        _vr_switch_vals.append(-1.0)
-    new_raw = _vr_label(v)
-    prev = _vr_prev_labels[idx]
-    if not prev:
-        _vr_prev_labels[idx] = new_raw
-        _vr_switch_vals[idx] = v
-        return new_raw
-    if new_raw != prev and abs(v - _vr_switch_vals[idx]) > 0.05:
-        _vr_prev_labels[idx] = new_raw
-        _vr_switch_vals[idx] = v
-    return _vr_prev_labels[idx]
 C_HAIRLINE = (0, 180, 255)    # orange-yellow target hairlines
 
 
@@ -84,11 +56,9 @@ def _get_sv(sf: float = 1.0) -> dict:
                 thickness=max(2, int(4 * sf)),
                 corner_length=max(8, int(18 * sf)),
                 color=sv.Color.WHITE),
-            'label': sv.LabelAnnotator(
-                text_scale=0.38 * sf, text_thickness=max(1, int(sf)),
-                color_lookup=sv.ColorLookup.CLASS,
-                border_radius=2,
-                smart_position=False),
+            'dot': sv.DotAnnotator(
+                radius=max(3, int(5 * sf)),
+                color_lookup=sv.ColorLookup.CLASS),
         }
     return _SV[key]
 
@@ -140,7 +110,7 @@ def render_video_section(frame_bgr: np.ndarray,
                       (cx_frame + db_px, cy_frame + db_py),
                       C_RETICLE, 1, cv2.LINE_AA)
 
-    # 2. Supervision annotation suite (trails behind, then boxes)
+    # 2. Supervision annotation suite (trails behind, then corners, then center dots)
     primary = primary or largest(detections)
     if detections:
         sv = _get_sv(sf)
@@ -148,34 +118,15 @@ def render_video_section(frame_bgr: np.ndarray,
         if sv_all.tracker_id is not None:
             out = sv['trace'].annotate(scene=out, detections=sv_all)
         out = sv['corners'].annotate(scene=out, detections=sv_all)
-        labels  = []
+        out = sv['dot'].annotate(scene=out, detections=sv_all)
+
+        # Depth-colored bbox borders (1px overlay — FAR=blue, MID=green, CLOSE=red)
         vr_list = vis_range_values or []
-        for i, d in enumerate(detections):
-            tid    = (track_ids[i] if track_ids and i < len(track_ids)
-                      and track_ids[i] is not None else None)
-            prefix = f'#{tid} ' if tid is not None else ''
-            vr_str = (f' ~{vr_list[i]:.2f} {_vr_label_hysteresis(vr_list[i], i)}'
-                      if i < len(vr_list) and vr_list[i] > 0.01 else '')
-            labels.append(f'{prefix}{d.class_name} {int(d.score * 100)}%{vr_str}')
-        out = sv['label'].annotate(scene=out, detections=sv_all, labels=labels)
-
-        # Confidence pips: small colored circle at top-left of each bbox
-        pip_r = max(3, int(5 * sf))
-        for d in detections:
-            conf_col = (C_OK if d.score >= 0.75 else
-                        C_AMBER if d.score >= 0.50 else C_ERR)
-            px = int(d.xyxy[0]) + pip_r + 2
-            py = int(d.xyxy[1]) - pip_r - 2
-            if py > 0:
-                cv2.circle(out, (px, py), pip_r, conf_col, -1, cv2.LINE_AA)
-
-        # Depth-colored bbox borders (1px overlay on supervision corners)
         if vr_list:
             for i, d in enumerate(detections):
                 if i >= len(vr_list):
                     break
-                vr = vr_list[i]
-                dc = _depth_color(vr)
+                dc = _depth_color(vr_list[i])
                 x1d, y1d, x2d, y2d = (int(v) for v in d.xyxy)
                 cv2.rectangle(out, (x1d, y1d), (x2d, y2d), dc, 1, cv2.LINE_AA)
 
@@ -223,18 +174,6 @@ def render_video_section(frame_bgr: np.ndarray,
             arr_col = C_OK if aligned else C_AMBER
             cv2.arrowedLine(out, (cx_t, cy_t), tip, arr_col,
                             max(1, int(2 * sf)), cv2.LINE_AA, tipLength=0.3)
-
-        # On-frame offset text label below bbox — semi-transparent background for readability
-        lbl = f'X:{ex:+.2f} Y:{ey:+.2f}  {int(primary.score * 100)}%'
-        fs_lbl = 0.36 * sf
-        lw, lh = pil_text_size(lbl, fs_lbl)
-        lbl_y = min(y2p + lh + 4, h - 4)
-        pad = max(2, int(3 * sf))
-        bg_ov = out.copy()
-        cv2.rectangle(bg_ov, (x1p - pad, lbl_y - lh - pad),
-                      (x1p + lw + pad, lbl_y + pad), C_BG, -1)
-        cv2.addWeighted(bg_ov, 0.70, out, 0.30, 0, out)
-        pil_text(out, lbl, (x1p, lbl_y), fs_lbl, C_TEXT)
 
         # Horizontal alignment bar — scaled height
         _bar_h = max(8, int(12 * sf))
