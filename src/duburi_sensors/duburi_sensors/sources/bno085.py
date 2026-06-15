@@ -124,45 +124,64 @@ def _enumerate_candidate_ports():
 def _probe_port(path: str, baud: int, logger=None) -> bool:
     """Open `path`, read for up to `_AUTO_PROBE_TIMEOUT_S`, return True
     if at least one parseable `{"yaw":...}` JSON line arrives.
+
+    Retries once if the device disconnects mid-probe (ESP32-C3 USB CDC
+    briefly re-enumerates right after a host opens the port — select()
+    reports readable but read() returns EOF, raising SerialException).
     """
-    try:
-        # Set dtr=False BEFORE open to prevent ESP32 auto-reset via DTR assertion.
-        # If DTR goes high on open, the device reboots (~2s) and the probe
-        # window expires before the first JSON line arrives.
-        sample = serial.Serial()
-        sample.port     = path
-        sample.baudrate = baud
-        sample.timeout  = 0.2
-        sample.dtr      = False
-        sample.open()
-    except (serial.SerialException, OSError) as exc:
-        if logger:
-            logger.debug(f'[SENS ] BNO085 probe skip {path}: {exc}')
-        return False
-    try:
-        deadline = time.monotonic() + _AUTO_PROBE_TIMEOUT_S
-        while time.monotonic() < deadline:
-            raw = sample.readline()
-            if not raw:
-                continue
-            try:
-                line = raw.decode('utf-8', errors='ignore').strip()
-            except Exception:
-                continue
-            if not line or line[0] != '{':
-                continue
-            try:
-                msg = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if 'yaw' in msg:
-                return True
-        return False
-    finally:
+    for attempt in range(2):
         try:
-            sample.close()
-        except Exception:
-            pass
+            # Set dtr=False BEFORE open to prevent ESP32 auto-reset via DTR.
+            s = serial.Serial()
+            s.port     = path
+            s.baudrate = baud
+            s.timeout  = 0.2
+            s.dtr      = False
+            s.open()
+        except (serial.SerialException, OSError) as exc:
+            if logger:
+                logger.debug(f'[SENS ] BNO085 probe skip {path}: {exc}')
+            return False   # can't open at all (busy / permission denied)
+
+        disconnected = False
+        try:
+            deadline = time.monotonic() + _AUTO_PROBE_TIMEOUT_S
+            while time.monotonic() < deadline:
+                try:
+                    raw = s.readline()
+                except serial.SerialException as exc:
+                    # Device briefly dropped (ESP32 USB re-enum on port open).
+                    if logger:
+                        logger.debug(
+                            f'[SENS ] BNO085 probe {path} disconnect '
+                            f'(attempt {attempt + 1}/2): {exc}')
+                    disconnected = True
+                    break
+                if not raw:
+                    continue
+                try:
+                    line = raw.decode('utf-8', errors='ignore').strip()
+                except Exception:
+                    continue
+                if not line or line[0] != '{':
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if 'yaw' in msg:
+                    return True
+        finally:
+            try:
+                s.close()
+            except Exception:
+                pass
+
+        if not disconnected or attempt > 0:
+            break   # clean timeout or second attempt exhausted
+        time.sleep(1.5)   # wait for ESP32 to re-enumerate before retry
+
+    return False
 
 
 def auto_detect_port(*, baud: int = 115200, logger=None) -> str:
@@ -196,7 +215,9 @@ def auto_detect_port(*, baud: int = 115200, logger=None) -> str:
         'Check: (1) the MCU is powered + the firmware is flashed, '
         '(2) the host user has dialout/uucp group access to /dev/tty*, '
         '(3) no other process (Arduino IDE Serial Monitor, screen, ...) '
-        'is holding the port open.')
+        'is holding the port open, '
+        '(4) pass -p bno085_port:=/dev/ttyACM0 (or whichever tty the ESP32 '
+        'enumerates as) to skip auto-detect entirely.')
 
 
 class BNO085Source:
