@@ -69,6 +69,22 @@ MAV_RESULT = {
 }
 
 
+def _euler_to_quat(roll_deg: float, pitch_deg: float, yaw_deg: float) -> list[float]:
+    """ZYX Euler (NED, degrees) → quaternion [w, x, y, z] for ATT_POS_MOCAP."""
+    r = math.radians(roll_deg) / 2
+    p = math.radians(pitch_deg) / 2
+    y = math.radians(yaw_deg) / 2
+    cr, sr = math.cos(r), math.sin(r)
+    cp, sp = math.cos(p), math.sin(p)
+    cy, sy = math.cos(y), math.sin(y)
+    return [
+        cr*cp*cy + sr*sp*sy,   # w
+        sr*cp*cy - cr*sp*sy,   # x
+        cr*sp*cy + sr*cp*sy,   # y
+        cr*cp*sy - sr*sp*cy,   # z
+    ]
+
+
 class Pixhawk:
     """Thin, well-named wrapper around `pymavlink.mavutil`."""
 
@@ -439,6 +455,24 @@ class Pixhawk:
             self.master.target_system, self.master.target_component,
             mavutil.mavlink.MAV_CMD_DO_SET_SERVO,
             0, channel, pwm, 0, 0, 0, 0, 0)
+
+    def send_att_pos_mocap(self, yaw_deg: float) -> None:
+        """Inject BNO085 yaw into ArduSub EKF3 via ATT_POS_MOCAP (MAVLink 138).
+
+        ArduSub EKF3 only consumes yaw from this message (EK3_SRC1_YAW=6).
+        Roll/pitch are zeroed — EKF3 always uses onboard IMU for those axes.
+        covariance[0]=NaN signals ArduSub to ignore the position fields.
+        Call at ~20 Hz when yaw_source is BNO-based.
+        """
+        q = _euler_to_quat(0.0, 0.0, yaw_deg)
+        nan = float('nan')
+        self.master.mav.att_pos_mocap_send(
+            time_usec=int(time.monotonic() * 1e6),
+            q=q,
+            x=0.0, y=0.0, z=0.0,
+            covariance=[nan] * 21,
+        )
+        self._log_mavlink(f'att_pos_mocap  yaw={yaw_deg:.1f}°')
 
     # ------------------------------------------------------------------ #
     #  Stream rate control (MAV_CMD_SET_MESSAGE_INTERVAL)                  #

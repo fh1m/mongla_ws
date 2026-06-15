@@ -268,6 +268,10 @@ class AUVManagerNode(Node):
                 f'[SENS ] yaw_source={yaw_src_name!r} failed to init: {exc}')
             raise
 
+        # True when yaw_source is a BNO085 variant (duck-typed — only BNO085Source
+        # has read_pitch/read_roll). Activates ATT_POS_MOCAP yaw injection.
+        self._bno_mocap_active: bool = hasattr(self.yaw_source, 'read_pitch')
+
         # ---- DVL sources set (any source that has connect()) -----------
         _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
 
@@ -384,6 +388,11 @@ class AUVManagerNode(Node):
         # Uses a separate callback group so it can fire between telemetry ticks.
         self.fast_group = MutuallyExclusiveCallbackGroup()
         self.create_timer(0.05, self._fast_state_tick, callback_group=self.fast_group)
+
+        if self._bno_mocap_active:
+            self.create_timer(0.05, self._mocap_tick, callback_group=self.timer_group)
+            self.get_logger().info('[SENS ] ATT_POS_MOCAP yaw injection active (20 Hz). '
+                                   'Requires EK3_SRC1_YAW=6 in ArduSub params.')
 
         # reader_thread already started above (before yaw_source init).
 
@@ -595,6 +604,13 @@ class AUVManagerNode(Node):
 
     def heartbeat_tick(self):
         self.pixhawk.send_heartbeat()
+
+    def _mocap_tick(self) -> None:
+        """Stream BNO085 yaw to ArduSub EKF3 at 20 Hz via ATT_POS_MOCAP."""
+        yaw = self.yaw_source.read_yaw()
+        if yaw is None:
+            return   # BNO stale — skip; EKF uses gyro integration until data resumes
+        self.pixhawk.send_att_pos_mocap(yaw)
 
     def _fast_state_tick(self):
         """Publish heading + depth at 20 Hz for real-time HUD instruments.
