@@ -92,7 +92,7 @@ _AUTO_PROBE_GLOBS = (
     '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3',
 )
 
-_AUTO_PROBE_TIMEOUT_S = 3.5     # per-candidate; covers ESP32 boot time after DTR-reset
+_AUTO_PROBE_TIMEOUT_S = 7.0     # per-candidate; covers ESP32-C3 ~2s boot + BNO init + first frame
 
 
 def _enumerate_candidate_ports():
@@ -131,12 +131,13 @@ def _probe_port(path: str, baud: int, logger=None) -> bool:
     """
     for attempt in range(2):
         try:
-            # Set dtr=False BEFORE open to prevent ESP32 auto-reset via DTR.
+            # dtr=True (default) required for ESP32-C3 built-in USB CDC (HWCDC
+            # checks DTR before sending data; dtr=False silently drops all output).
+            # Reset via USB_UART_CHIP_RESET happens regardless of DTR on C3 Mini.
             s = serial.Serial()
             s.port     = path
             s.baudrate = baud
             s.timeout  = 0.2
-            s.dtr      = False
             s.open()
         except (serial.SerialException, OSError) as exc:
             if logger:
@@ -265,12 +266,12 @@ class BNO085Source:
 
         self._stop = threading.Event()
         self._serial_write_lock = threading.Lock()
-        # dtr=False before open prevents ESP32 auto-reset via DTR assertion.
+        # dtr=True (default): required for ESP32-C3 HWCDC to send data.
+        # See _probe_port() comment. Reader thread ignores non-JSON boot lines.
         _ser = serial.Serial()
         _ser.port     = port
         _ser.baudrate = baud
         _ser.timeout  = 0.1
-        _ser.dtr      = False
         _ser.open()
         self._serial = _ser
 
