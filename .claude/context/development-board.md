@@ -44,7 +44,7 @@ Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport ·
 | P0 | TDR reconciliation (P0.1) | ✅ decided | audit §6 Decision Record |
 | P1 | Underwater preprocessing (G5) | 🟦 open | audit §6.5 |
 | P1 | Vision-control SITL smoke test (arm→dive→yaw→disarm) | 🟦 open | audit §6.6 / §4 |
-| P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (payload parked pending serial contract) | audit §6, `project_payload_actuation` memory |
+| P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (serial contract ✅ built — `PayloadDriver` + `fire` verb + `vision_lock_fire`; path-marker FSM state still needed) | audit §6, `project_payload_actuation` memory |
 | P2 | YASMIN FSM | ✅ BUILT (4a94231) — [`fsm-guide.md`](fsm-guide.md) |
 | P2 | Dubomini control path · IVC · remaining task plans · grabber | 🟦 committed build tickets | audit §6 P2 |
 | cont. | 800-line files (`duburi.py` 833, `auv_manager_node.py` 795) | watch | audit §3.8 |

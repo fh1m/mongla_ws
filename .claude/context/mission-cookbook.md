@@ -929,6 +929,206 @@ def run(duburi, log):
     duburi.disarm()
 ```
 
+### 6.8  Camera switching mid-mission (forward → downward)
+
+`duburi.camera` is a sticky string. Assign it once; all subsequent `duburi.vision.*` calls use that
+camera. The camera name must match a running `camera_node` profile — verify with
+`ros2 topic list | grep image_raw`.
+
+```python
+def run(duburi, log):
+    duburi.arm()
+    duburi.set_depth(-0.8, settle=1.0)
+
+    # Phase 1: gate approach with forward camera
+    duburi.camera = 'forward'
+    duburi.target = 'gate'
+    duburi.vision.home(yaw=True, lat=True, dist=0.6, duration=15)
+    duburi.move_forward(duration=4, gain=60)
+
+    # Phase 2: descend and switch to downward camera for bin
+    duburi.set_depth(-1.5, settle=1.5)
+    duburi.camera = 'downward'
+    duburi.target = 'bin'
+    # axes must be set explicitly — see §6.9
+    duburi.vision.home(yaw=False, lat=True, forward=True, dist=0.85, duration=20)
+    duburi.disarm()
+```
+
+### 6.9  Downward-camera alignment (bin centering)
+
+When the camera faces downward, `ex`/`ey` map to lateral/forward motion — not yaw/depth as they
+do for a forward-facing camera. **This axis remap is NOT automatic.** You must pass the correct
+boolean flags to `vision.home()` so the loop drives the right channels:
+
+```python
+duburi.camera = 'downward'
+duburi.target = 'bin'
+
+# CORRECT: lat+forward drives vehicle over the bin; depth locked; yaw skipped
+duburi.vision.home(
+    yaw=False,      # top-down view: yaw from bbox is unreliable
+    lat=True,       # ex → Ch6 lateral (left/right over bin)
+    forward=True,   # ey → Ch5 forward (fore/aft over bin)
+    depth=False,    # depth already set; don't let bbox height pull depth
+    dist=0.85,      # target bbox fill fraction (0=small/far, 1=large/close)
+    duration=20,
+)
+
+# WRONG (default home axes include yaw+depth, skip lat+forward):
+# duburi.vision.home(dist=0.85, duration=20)  # yaws and changes depth instead of centering
+```
+
+The only automatic downward adaptation is `depth_sign=-1` (negates the depth correction). Everything
+else is caller's responsibility. Phase 3 will automate the axis remap when `camera='downward'`.
+
+### 6.10  Offset alignment (merged — available on all PID verbs)
+
+`offset_x` and `offset_y` keep the target a fixed number of pixels away from frame centre.
+Positive `offset_x` = target stays to the RIGHT; positive `offset_y` = target stays BELOW.
+Normalization is done internally (`norm = offset / (image_dim * 0.5)`), clamped to ±1.5.
+
+**Slalom side-of-pipe pass** — keep the pipe 80 px right while driving forward:
+```python
+duburi.vision.turn(target='slalom_red', offset_x=80, duration=4.0)
+duburi.move_forward(duration=3.0, gain=40)
+```
+
+**Torpedo board bullseye** — aim slightly right and up from bbox centre:
+```python
+duburi.vision.home(target='torpedo_board',
+                   yaw=True, lat=True, depth=True,
+                   offset_x=60,    # aim 60 px right of board bbox centre
+                   offset_y=-40,   # aim 40 px above board bbox centre
+                   duration=15)
+```
+
+All PID verbs support `offset_x`/`offset_y`: `vision_align_yaw`, `vision_align_lat`,
+`vision_align_depth`, `vision_hold_distance`, `vis_approach`, `vision_align_3d`.
+`vision_acquire` and `look_around` have no PID loop — offsets are ignored.
+
+### 6.11  Dubomini — vision-held position (no DVL)
+
+Dubomini 2.0 has no DVL. Use `vision_align_3d` with lat+yaw+depth axes to hold station on a
+detected target. Launch with `yaw_source:=bno085` and `dvl_auto_connect:=false`.
+
+```python
+# Dubomini bringup: ros2 run duburi_manager start
+#   --ros-args -p yaw_source:=bno085 -p dvl_auto_connect:=false
+
+def run(duburi, log):
+    duburi.arm()
+    duburi.set_depth(-0.6, settle=1.0)
+    duburi.target = 'gate'
+
+    # Hold station on gate using vision (replaces POSHOLD — Dubomini has no DVL)
+    duburi.vision.home(yaw=True, lat=True, depth=True, forward=False,
+                       dist=0.5, duration=30, on_lost='hold')
+
+    # Approach: forward open-loop (no DVL dist metric available)
+    duburi.move_forward(duration=5, gain=55)
+    duburi.disarm()
+```
+
+VehicleProfile auto-selects Dubomini vs Duburi 4.5 at runtime via `VehicleProfile.auto()` —
+`has_dvl=False` disables DVL-distance verbs so any call to `move_forward_dist` will raise early
+rather than silently produce open-loop motion.
+
+### 6.12  Torpedo firing (vision_lock_fire)
+
+`vision_lock_fire` aligns on multiple axes, verifies stable hold for `stable_lock_s`, then fires
+via the ESP32 `PayloadDriver`. Retries up to `max_attempts`; fires at last pose on total failure.
+
+```python
+def run(duburi, log):
+    duburi.arm()
+    duburi.set_depth(-1.2)
+
+    # Coarse approach
+    duburi.vision.find(target='torpedo_hole', move='forward', gain=35, timeout=45)
+    duburi.vision.home(target='torpedo_hole', yaw=True, lat=True, depth=True,
+                       duration=20, on_lost='hold')
+
+    # Lock + fire
+    result = duburi.vision.vision_lock_fire(
+        target='torpedo_hole',
+        yaw=True, lat=True, depth=True,
+        stable_lock_s=4.0,       # hold in deadband 4 s before fire
+        max_attempts=3,
+        fire_channel=1,          # torpedo_1 (ESP32 serial)
+        attempt_timeout=20.0,
+        duration=60.0)
+
+    if result.success:
+        log.info('torpedo fired on stable lock')
+    else:
+        log.warning('fallback fire at last aim pose')
+
+    duburi.move_forward(duration=2, gain=40)   # clear the board
+    duburi.disarm()
+```
+
+**Key fields:**
+
+| Param | Notes |
+|---|---|
+| `fire_channel` | 1/2=torpedo, 3/4=dropper. **Preferred over `fire_aux_channel`**. |
+| `stable_lock_s` | Seconds all axes must be in deadband before fire (default 3.0 s) |
+| `max_attempts` | Retry count; fallback fires at last pose if all attempts fail |
+| `offset_x/y` | Aim offset from bbox centre (e.g. for off-centre bullseye) |
+
+---
+
+### 6.13  Bin drop (downward camera + dropper lock-fire)
+
+Axis remap: downward camera maps `ex→lat`, `ey→forward`. Pass `lat=True, forward=True, yaw=False`.
+
+```python
+def run(duburi, log):
+    duburi.arm()
+    duburi.set_depth(-1.5)
+
+    # Fly over and find the bin
+    duburi.camera = 'downward'
+    duburi.vision.find(target='fire_bin', move='still', timeout=30)
+
+    # Drop — lat+forward centering, then fire dropper when stable
+    result = duburi.vision.vision_lock_fire(
+        target='fire_bin',
+        yaw=False, lat=True, forward=True, depth=False,
+        stable_lock_s=3.0,
+        max_attempts=2,
+        fire_channel=3,          # dropper_1
+        duration=45.0)
+
+    duburi.disarm()
+```
+
+> The downward camera's `ey→forward` remap is applied automatically by `_run_vision_track`
+> when `camera='downward'` — you don't pass `forward_uses_ey=True` explicitly.
+
+---
+
+### 6.14  Hold pattern (maintain lock without exiting)
+
+`vision.hold()` runs `lock_mode='follow'` (never exits on settle). Use for timed holds,
+waiting for an external trigger, or as a positioning phase before a fire sequence.
+
+```python
+# Hold position on target for 5 s, then do something else
+duburi.vision.hold(target='gate', yaw=True, lat=True, duration=5.0)
+duburi.move_forward(duration=2.0, gain=60)
+
+# Hold while the dropper loads (timed)
+duburi.vision.hold(target='bin', yaw=False, lat=True, forward=True, duration=3.0)
+duburi.fire(fire_channel=3)   # manual fire after hold
+```
+
+**Trilogy:**
+- `vision.home()` — align, exit once settled in deadband
+- `vision.hold()` — align, keep running for `duration` (never exits on settle)
+- `vision.vision_lock_fire()` — align, maintain, fire when stable
+
 ---
 
 ## 7. DVL distance moves
@@ -1286,9 +1486,14 @@ Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-para
 
 - **A `vision.*` verb with `target=''`** raises — sticky context is
   required, set `duburi.target` once before the first vision verb.
-- **`vision.hover` on a downward camera** wants `depth_sign=-1`. The
-  verb infers this from the camera name (`'downward'` flips the sign);
-  if you use a custom camera ID, override at the manager level.
+- **Downward camera: only `depth_sign` is automatic.** When
+  `camera='downward'`, the loop flips `depth_sign=-1` so depth
+  correction stays sensible. **Full axis remapping (`ex`→lateral,
+  `ey`→forward) is NOT automatic** — you must pass `yaw=False,
+  lat=True, forward=True, depth=False` explicitly (see §6.9). Omitting
+  these flags will yaw/adjust-depth instead of centering over the bin.
+  If you use a custom camera ID other than `'downward'`, the
+  `depth_sign` flip also does not apply — override at the manager level.
 - **`vision.find(move='still')`** does not move. If your target
   isn't in the camera frame at start, this returns a timeout failure
   no matter how long you wait.

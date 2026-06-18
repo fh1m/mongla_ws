@@ -211,7 +211,8 @@ COMMANDS = {
                      'target_bbox_h_frac', 'visual_pid', 'on_lost',
                      'stale_after', 'depth_anchor_frac', 'lock_mode',
                      'distance_metric', 'gate_guard', 'gate_guard_min_w_frac',
-                     'pass_at', 'pass_at_gain', 'tracking'],
+                     'pass_at', 'pass_at_gain', 'tracking',
+                     'offset_x', 'offset_y', 'lost_patience_s'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'axes': 'yaw,forward', 'duration': 30.0,
                      'deadband': 0.18, 'kp_yaw': 60.0, 'kp_lat': 60.0,
@@ -222,55 +223,69 @@ COMMANDS = {
                      'lock_mode': '', 'distance_metric': '',
                      'gate_guard': False, 'gate_guard_min_w_frac': 0.35,
                      'pass_at': 0.0, 'pass_at_gain': 50.0,
-                     'tracking': False},
+                     'tracking': False,
+                     'offset_x': 0.0, 'offset_y': 0.0,
+                     'lost_patience_s': 0.0},
     },
     'vision_align_yaw': {
         'help':     'Steer toward horizontal centre via heading channel. '
                     'lock_mode: settle (done when centred) / follow (until duration). '
+                    'offset_x/y: keep target this many px from center (0=center). '
                     'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_yaw', 'on_lost', 'stale_after', 'lock_mode', 'tracking'],
+                     'kp_yaw', 'on_lost', 'stale_after', 'lock_mode', 'tracking',
+                     'offset_x', 'offset_y', 'lost_patience_s'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_yaw': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False},
+                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
     },
     'vision_align_lat': {
         'help':     'Strafe toward horizontal centre via lateral channel. '
-                    'lock_mode: settle / follow. tracking=true: use tracker_node.',
+                    'lock_mode: settle / follow. tracking=true: use tracker_node. '
+                    'offset_x: keep target this many px to the right of center (slalom pass). '
+                    'offset_y: keep target this many px below center.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_lat', 'on_lost', 'stale_after', 'lock_mode', 'tracking'],
+                     'kp_lat', 'on_lost', 'stale_after', 'lock_mode', 'tracking',
+                     'offset_x', 'offset_y', 'lost_patience_s'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_lat': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False},
+                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
     },
     'vision_align_depth': {
         'help':     'Nudge depth setpoint to centre target vertically. '
                     'depth_anchor_frac: which vertical point on bbox to align '
                     '(0=top, 0.5=centre, 1=bottom). Use 0.2 for tall objects. '
+                    'offset_x/y: keep target this many px from center. '
                     'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_depth', 'on_lost', 'stale_after',
-                     'depth_anchor_frac', 'lock_mode', 'tracking'],
+                     'depth_anchor_frac', 'lock_mode', 'tracking',
+                     'offset_x', 'offset_y', 'lost_patience_s'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_depth': 0.05, 'on_lost': 'fail',
                      'stale_after': 1.5,
                      'depth_anchor_frac': 0.0,  # 0.0 = use ROS param default (0.5)
-                     'lock_mode': '', 'tracking': False},
+                     'lock_mode': '', 'tracking': False,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
     },
     'vision_hold_distance': {
         'help':     'Drive forward/back to match target_bbox_h_frac. '
                     'distance_metric: height (default) / area / width / diagonal. '
                     'lock_mode: settle / follow / pursue (only approach). '
                     'pass_at: freeze lat+depth, drive straight once size>=pass_at. '
+                    'offset_x/y: keep target this many px from center. '
                     'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_forward', 'target_bbox_h_frac', 'on_lost',
                      'stale_after', 'lock_mode', 'distance_metric',
                      'gate_guard', 'gate_guard_min_w_frac',
-                     'pass_at', 'pass_at_gain', 'tracking'],
+                     'pass_at', 'pass_at_gain', 'tracking',
+                     'offset_x', 'offset_y', 'lost_patience_s'],
         # deadband is tighter here because bbox-height error is naturally
         # smaller than the centring errors on yaw/lat axes.
         'defaults': {'camera': 'laptop', 'target_class': 'person',
@@ -280,22 +295,26 @@ COMMANDS = {
                      'lock_mode': '', 'distance_metric': '',
                      'gate_guard': False, 'gate_guard_min_w_frac': 0.35,
                      'pass_at': 0.0, 'pass_at_gain': 50.0,
-                     'tracking': False},
+                     'tracking': False,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
     },
     'vis_approach': {
         'help':     'Drive forward using monocular depth (vis_range) from '
                     'depth_estimation_node. target_vis_range is 0..1 (0=far, 1=close). '
                     'Requires depth_estimation_node running on the same camera. '
                     'lock_mode: settle (exit at target), pursue (only approach). '
+                    'offset_x/y: keep target this many px from center. '
                     'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_forward', 'target_vis_range', 'on_lost',
-                     'stale_after', 'lock_mode', 'tracking'],
+                     'stale_after', 'lock_mode', 'tracking',
+                     'offset_x', 'offset_y', 'lost_patience_s'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 30.0, 'deadband': 0.05,
                      'kp_forward': 200.0, 'target_vis_range': 0.65,
                      'on_lost': 'fail', 'stale_after': 1.5,
-                     'lock_mode': '', 'tracking': False},
+                     'lock_mode': '', 'tracking': False,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
     },
     'vision_acquire': {
         'help':     'Block (optionally driving via target_name verb) until '
@@ -308,6 +327,39 @@ COMMANDS = {
                      'target_name': '', 'timeout': 30.0,
                      'gain': 25.0, 'yaw_rate_pct': 25.0,
                      'stale_after': 1.5, 'tracking': False},
+    },
+    'vision_lock_fire': {
+        'help':     'Align on target in 3D then hold stable for stable_lock_s seconds '
+                    'before firing. Retries max_attempts times; fires at last known '
+                    'pose on all-fail fallback. '
+                    'fire_channel=1/2 torpedo, 3/4 dropper (ESP32 serial). '
+                    'fire_channel=0 + fire_aux_channel=0 = log-only stub.',
+        'fields':   ['camera', 'target_class', 'axes', 'duration',
+                     'deadband', 'kp_yaw', 'kp_lat', 'kp_depth', 'kp_forward',
+                     'target_bbox_h_frac', 'on_lost', 'stale_after',
+                     'depth_anchor_frac', 'distance_metric',
+                     'stable_lock_s', 'max_attempts', 'attempt_timeout',
+                     'fire_aux_channel', 'fire_pwm',
+                     'offset_x', 'offset_y',
+                     'fire_channel', 'lost_patience_s'],
+        'defaults': {'camera': 'forward', 'target_class': 'torpedo_hole',
+                     'axes': 'yaw,lat,depth', 'duration': 60.0,
+                     'deadband': 0.10, 'kp_yaw': 60.0, 'kp_lat': 60.0,
+                     'kp_depth': 0.05, 'kp_forward': 0.0,
+                     'target_bbox_h_frac': 0.0, 'on_lost': 'hold',
+                     'stale_after': 1.5, 'depth_anchor_frac': 0.0,
+                     'distance_metric': '',
+                     'stable_lock_s': 3.0, 'max_attempts': 3.0,
+                     'attempt_timeout': 15.0,
+                     'fire_aux_channel': 0.0, 'fire_pwm': 1900.0,
+                     'offset_x': 0.0, 'offset_y': 0.0,
+                     'fire_channel': 0.0, 'lost_patience_s': 0.0},
+    },
+    'fire': {
+        'help':     'Fire ESP32 payload channel. 1/2 = torpedo, 3/4 = dropper. '
+                    'Requires payload_port to be connected (auto-detected at startup).',
+        'fields':   ['fire_channel'],
+        'defaults': {'fire_channel': 1.0},
     },
     'look_around': {
         'help':     'Switch to POSHOLD, hold position, and rotate incrementally '

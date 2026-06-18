@@ -70,11 +70,12 @@ from .pixhawk import Pixhawk
 
 # ---- Default knobs (override per-call from Duburi facade) ------------- #
 DEFAULT_DEADBAND       = 0.18      # matches vision.deadband in vision_tunables.yaml
-DEFAULT_STALE_AFTER    = 1.5       # seconds; older detection is "lost"
-# 40 ticks at LOOP_HZ=20 = 2.0 s. Webcams drop frames in bursts; we'd
-# rather ride out a 1-2 s blackout than abort a mostly-finished command.
-# Override per-call from missions if a real AUV needs stricter bounds.
-LOST_TICK_BUDGET       = 40
+DEFAULT_STALE_AFTER      = 2.5     # seconds; older detection is "lost"
+# 3.0 s patience at LOOP_HZ=20 = 60 ticks. Pool conditions routinely produce
+# 2-3 s blackouts (turbidity, occlusion, frame drop). Stale 2.5 s + patience
+# 3.0 s = ~5.5 s total gap tolerance before a mission call fails.
+# Override per-call via lost_patience_s for stricter/looser bounds.
+DEFAULT_LOST_PATIENCE_S  = 3.0
 # 2 ticks at LOOP_HZ=20 = 0.1 s. Deadband is the primary noise filter;
 # the tick budget just prevents a single on-target frame from claiming
 # success. With the widened deadband below this is still safe.
@@ -143,8 +144,14 @@ def vision_track_axes(*,
                       gate_guard_min_w_frac: float = 0.35,
                       pass_at: float = 0.0,
                       pass_at_gain: float = 50.0,
-                      log,
-                      writers,
+                      offset_x: float = 0.0,
+                      offset_y: float = 0.0,
+                      forward_uses_ey: bool = False,
+                      stable_lock_s: float = 0.0,
+                      on_stable=None,
+                      lost_patience_s: float = DEFAULT_LOST_PATIENCE_S,
+                      log=None,
+                      writers=None,
                       visual_pid: bool = False,
                       abort_fn=None) -> VisionTrackResult:
     """Run the vision-driven loop until success / lost / duration.
@@ -211,7 +218,7 @@ def vision_track_axes(*,
         camera (ey 'below' means 'in front of' the sub).
     on_lost
         'fail' -> exit with success=False once we lose the target for
-                  more than LOST_TICK_BUDGET ticks.
+                  more than lost_patience_s seconds (default 3.0 s).
         'hold' -> stay parked (neutral RC, frozen depth setpoint) until
                   duration runs out, regardless of how long we've been
                   staring at nothing.
@@ -260,6 +267,12 @@ def vision_track_axes(*,
             "camera_info not seen yet -- preflight should have caught this",
             elapsed=0.0)
 
+    # Pre-normalise pixel offsets once per call. Dividing by half-width/height
+    # converts px to the same [-1,+1] space as ex/ey. Clamped to [-1.5, 1.5]
+    # so a huge offset doesn't produce an unbounded setpoint.
+    norm_offset_x = max(-1.5, min(1.5, offset_x / (image_width  * 0.5))) if offset_x else 0.0
+    norm_offset_y = max(-1.5, min(1.5, offset_y / (image_height * 0.5))) if offset_y else 0.0
+
     # The depth setpoint is integrated incrementally so it never jumps.
     # Seed it with whatever depth ArduSub currently reports.
     current_depth  = _read_current_depth(pixhawk) or 0.0
@@ -271,6 +284,7 @@ def vision_track_axes(*,
     last_depth_send     = 0.0
     last_good_sample    = None
     pass_through_active = False   # set once when pass_at triggers; never cleared
+    _lost_budget        = max(1, int(lost_patience_s * LOOP_HZ))
 
     # When depth axis is active, Ch3 must stay released (65535 = NO_OVERRIDE)
     # so ArduSub's ALT_HOLD depth PID has authority over the vertical thrusters.
@@ -320,10 +334,11 @@ def vision_track_axes(*,
                         throttle_duration_sec=LOG_THROTTLE_S)
                     last_log_time = now
 
-                if on_lost == 'fail' and lost_tick_streak > LOST_TICK_BUDGET:
+                if on_lost == 'fail' and lost_tick_streak > _lost_budget:
                     return _build_fail_result(
                         f"target_class={target_class!r} lost "
-                        f"(stale > {stale_after:.2f}s for {lost_tick_streak} ticks)",
+                        f"(stale > {stale_after:.2f}s for {lost_tick_streak} ticks "
+                        f"/ patience {lost_patience_s:.1f}s)",
                         elapsed, last_good_sample, settled_tick_streak,
                         lost_tick_streak, axes, deadband, target_h_frac)
 
@@ -334,32 +349,44 @@ def vision_track_axes(*,
             lost_tick_streak = 0
             last_good_sample = sample
 
+            # Apply pixel offsets in the normalised error space.
+            # ex_ctrl/ey_ctrl are what the PID sees; sample.ex/ey stay for logging.
+            ex_ctrl = max(-1.5, min(1.5, sample.ex - norm_offset_x))
+            ey_ctrl = max(-1.5, min(1.5, sample.ey - norm_offset_y))
+
             yaw_pct = lat_pct = forward_pct = 0.0
             axes_in_deadband = []   # one bool per active axis this tick
 
             if 'yaw' in axes:
-                yaw_pct = _yaw_pct(sample.ex, gains.kp_yaw)
-                axes_in_deadband.append(abs(sample.ex) <= deadband)
+                yaw_pct = _yaw_pct(ex_ctrl, gains.kp_yaw)
+                axes_in_deadband.append(abs(ex_ctrl) <= deadband)
 
             if 'lat' in axes:
-                lat_pct = _lat_pct(sample.ex, gains.kp_lat)
-                axes_in_deadband.append(abs(sample.ex) <= deadband)
+                lat_pct = _lat_pct(ex_ctrl, gains.kp_lat)
+                axes_in_deadband.append(abs(ex_ctrl) <= deadband)
 
             if 'forward' in axes:
-                # 'area' handles wide targets (gates); 'diagonal' is the best
-                # all-rounder for unknown shapes; 'vis_range' uses monocular depth.
-                forward_pct, distance_error = _forward_decision(
-                    sample, _distance_metric, target_h_frac,
-                    gains.kp_forward, _lock_mode)
-                if distance_error is None:
-                    # Suppressed: vis_range metric with no depth signal.
-                    axes_in_deadband.append(False)
-                    log.warning(
-                        '[VIS  ] vis_range=0 (depth node offline?) -- '
-                        'forward thrust suppressed',
-                        throttle_duration_sec=2.0)
+                if forward_uses_ey:
+                    # Downward camera: ey drives forward/backward (not h_frac).
+                    # kp_forward sign controls direction — negate if AUV reverses.
+                    forward_pct = _clamp(ey_ctrl * gains.kp_forward,
+                                         -FWD_PCT_MAX, FWD_PCT_MAX)
+                    axes_in_deadband.append(abs(ey_ctrl) <= deadband)
                 else:
-                    axes_in_deadband.append(abs(distance_error) <= deadband)
+                    # 'area' handles wide targets (gates); 'diagonal' is the best
+                    # all-rounder for unknown shapes; 'vis_range' uses monocular depth.
+                    forward_pct, distance_error = _forward_decision(
+                        sample, _distance_metric, target_h_frac,
+                        gains.kp_forward, _lock_mode)
+                    if distance_error is None:
+                        # Suppressed: vis_range metric with no depth signal.
+                        axes_in_deadband.append(False)
+                        log.warning(
+                            '[VIS  ] vis_range=0 (depth node offline?) -- '
+                            'forward thrust suppressed',
+                            throttle_duration_sec=2.0)
+                    else:
+                        axes_in_deadband.append(abs(distance_error) <= deadband)
 
             if 'depth' in axes and not pass_through_active:
                 # depth_anchor_frac shifts which point on the bbox we align
@@ -368,14 +395,14 @@ def vision_track_axes(*,
                 # At 0.2 we align a point near the top of the box, which
                 # gives a real error signal even when the bbox centre is
                 # already at the frame centre (tall objects like people).
-                ey_depth = sample.ey + (2.0 * depth_anchor_frac - 1.0) * sample.h_frac
+                ey_depth = ey_ctrl + (2.0 * depth_anchor_frac - 1.0) * sample.h_frac
                 depth_step = _clamp(ey_depth * gains.kp_depth,
                                     -MAX_DEPTH_NUDGE, MAX_DEPTH_NUDGE) * depth_sign
                 depth_setpoint -= depth_step
                 axes_in_deadband.append(abs(ey_depth) <= deadband)
             elif 'depth' in axes:
                 # pass_through_active: depth setpoint is frozen; still counts as "in deadband"
-                ey_depth = sample.ey + (2.0 * depth_anchor_frac - 1.0) * sample.h_frac
+                ey_depth = ey_ctrl + (2.0 * depth_anchor_frac - 1.0) * sample.h_frac
                 axes_in_deadband.append(abs(ey_depth) <= deadband)
 
             # gate_guard: suppress forward if gate bbox appears angled.
@@ -422,8 +449,11 @@ def vision_track_axes(*,
 
             if (now - last_log_time) >= LOG_THROTTLE_S:
                 size_for_log = _distance_size(sample, _distance_metric) if 'forward' in axes else sample.h_frac
+                offset_tag = (f" offset=({norm_offset_x:+.2f},{norm_offset_y:+.2f})"
+                              if (norm_offset_x or norm_offset_y) else "")
                 log.info(
-                    f"[VIS  ] ex={sample.ex:+.2f} ey={sample.ey:+.2f} "
+                    f"[VIS  ] ex={sample.ex:+.2f}({ex_ctrl:+.2f}) "
+                    f"ey={sample.ey:+.2f}({ey_ctrl:+.2f}){offset_tag} "
                     f"size={size_for_log:.2f} (tgt {target_h_frac:.2f})  "
                     f"yaw={yaw_pct:+5.1f}% lat={lat_pct:+5.1f}% "
                     f"fwd={forward_pct:+5.1f}% dep={depth_setpoint:+.2f}m  "
@@ -442,7 +472,16 @@ def vision_track_axes(*,
 
             # settle / follow: exit on settle only in settle mode.
             if _lock_mode != 'follow' and _lock_mode != 'pursue':
-                if settled_tick_streak >= SETTLED_TICK_BUDGET:
+                if stable_lock_s > 0.0:
+                    stable_s = settled_tick_streak / LOOP_HZ
+                    if stable_s >= stable_lock_s:
+                        if on_stable is not None:
+                            on_stable()
+                        return _build_ok_result(
+                            f"stable lock: {stable_s:.1f}s >= {stable_lock_s:.1f}s",
+                            elapsed, last_good_sample, settled_tick_streak,
+                            lost_tick_streak, axes, deadband, target_h_frac)
+                elif settled_tick_streak >= SETTLED_TICK_BUDGET:
                     return _build_ok_result(
                         f"all axes within {deadband:.2f}",
                         elapsed, last_good_sample, settled_tick_streak,

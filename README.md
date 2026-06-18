@@ -75,7 +75,8 @@ Read every capability in three states — **✅ built & tested · 🟦 committed
 
 - **✅ Phase 1 (runs today):** single-body **Duburi** stack — `detected()` reactive missions, YOLO11 + ByteTrack/Kalman + monocular depth (30 fps), Gate / Return / search-align (~800 pt), the control / MAVLink / vision core.
 - **✅ YASMIN FSM layer (built 2026-06-03):** `state_machines/` planning layer with `VehicleProfile` dual-vehicle auto-detection — same plan builder generates DVL-distance passes for Duburi 4.5 and timed passes for Dubomini 2.0. `gate_flare_fsm` + `prequal_fsm` missions live now.
-- **🟦 Phase 2 (committed, not yet built):** Dubomini 2.0 control path · inter-vehicle comms (IVC) · Slalom / Bins / Torpedo / Octagon plan builders · ESP32-serial payload actuation · stepper grabber · underwater preprocessing.
+- **✅ ESP32-serial payload actuation (built):** `PayloadDriver` + `fire` verb + `vision_lock_fire` with `fire_channel` — torpedo/dropper actuation over USB serial. Offset alignment (`offset_x`/`offset_y`) on all PID verbs + `vision.hold()` DSL mode also added.
+- **🟦 Phase 2 (committed, not yet built):** Dubomini 2.0 control path · inter-vehicle comms (IVC) · Slalom / Bins / Torpedo / Octagon plan builders · stepper grabber · underwater preprocessing.
 - **✏️ Corrected:** detector is **YOLO11** (the TDR's YOLO26 line is corrected; YOLO11 is the committed, battle-tested family).
 
 > Decision record (P0.1, 2026-05-31): [`robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md) §6 · phase schedule: [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
@@ -960,7 +961,7 @@ only the connection profile changes.
 **Development is driven from one place:** the
 [**development board**](.claude/context/development-board.md) — phase status,
 open work, bug/fix log, and the committed phase-2 build tickets (YASMIN FSM,
-Dubomini control, IVC, remaining tasks, ESP32-serial payload, stepper grabber,
+Dubomini control, IVC, remaining tasks, stepper grabber,
 underwater preprocessing). Start every session there; pick one ticket, build,
 update the board.
 
@@ -1574,6 +1575,8 @@ All commands go through `/duburi/move` and block until done. Exit code 0 = succe
 | `vision_align_depth` | Centre target vertically | `duburi vision_align_depth --target_class person --duration 15` |
 | `vision_hold_distance` | Hold standoff distance | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55` |
 | `vision_align_3d` | Multi-axis simultaneous hold | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth` |
+| `vision_lock_fire` | Align + maintain PID lock + fire payload on stable lock | `duburi vision_lock_fire --camera forward --target_class torpedo_hole --stable_lock_s 3.0 --fire_channel 1 --max_attempts 2 --duration 30` |
+| `fire` | Fire ESP32 payload channel directly (1/2=torpedo, 3/4=dropper) | `duburi fire --fire_channel 3` |
 | `head` | Read live heading at execution time | `duburi head` |
 
 Every flag: `ros2 run duburi_planner duburi <cmd> --help`
@@ -1854,7 +1857,6 @@ Safety & reliability hardening (**done — 2026 competition prep**):
 
 Phase 5 (queued):
 - `robot_localization` EKF fusing DVL velocity + AHRS2 + Bar30 for full odometry.
-- Mission autonomy layer (behaviour trees or YASMIN state machines).
 - WitMotion backup IMU driver (replace `witmotion_stub.py`).
 
 Skipped intentionally for now:
@@ -1878,7 +1880,7 @@ pillars (read these first) are bolded:
 
 **API & verbs (start here):**
 - [**command-reference.md**](.claude/context/command-reference.md) — every verb on `/duburi/move`: CLI, Python facade, DSL, MAVLink output, lock modes, distance metrics, depth anchor
-- [**client-and-dsl-api.md**](.claude/context/client-and-dsl-api.md) — `DuburiClient`, `DuburiMission` DSL, `vision.follow()`, and `Duburi` facade
+- [**client-and-dsl-api.md**](.claude/context/client-and-dsl-api.md) — `DuburiClient`, `DuburiMission` DSL, `vision.hold()` / `vision_lock_fire()`, and `Duburi` facade
 - [**mission-cookbook.md**](.claude/context/mission-cookbook.md) — mission DSL cookbook (verbs + working principles + ten samples)
 - [**testing-guide.md**](.claude/context/testing-guide.md) — every test (unit, bringup, mission smoke, in-water checklist)
 

@@ -169,7 +169,8 @@ class Duburi(VisionVerbs):
                  yaw_source=None,
                  vision_state_provider=None,
                  heartbeat=None,
-                 quick_settle=False):
+                 quick_settle=False,
+                 payload=None):
         """vision_state_provider(camera_name) -> VisionState | None.
 
         Injected by the manager so the facade can stay rclpy-free and
@@ -208,6 +209,7 @@ class Duburi(VisionVerbs):
         self.vision_state_provider = vision_state_provider
         self._heartbeat        = heartbeat
         self.quick_settle      = bool(quick_settle)
+        self._payload          = payload
         self._heading_lock     = None      # HeadingLock thread or None
         # Tracks which channel set the last in-command write touched, so
         # the pre-flight pause can be skipped when the next command uses
@@ -255,6 +257,37 @@ class Duburi(VisionVerbs):
             accepted, reason = self.pixhawk.set_mode(target_name, timeout)
         return self._make_result(
             accepted, f'set_mode {target_name}: {reason}')
+
+    # ================================================================== #
+    #  Payload actuation                                                  #
+    # ================================================================== #
+
+    def fire(self, fire_channel: float):
+        """Fire ESP32 payload channel (1/2 = torpedo, 3/4 = dropper).
+
+        ``fire_channel`` is float from Move.Goal (0.0 = unset/stub).
+        Returns a command result so the generic COMMANDS dispatcher works.
+
+        Also callable internally as ``self._fire_payload(channel)`` for
+        vision_lock_fire's stable-lock callback (no command scope needed
+        since it runs inside an already-scoped motion verb).
+        """
+        ch = int(fire_channel)
+        with self._command_scope('fire'):
+            ok = self._fire_payload(ch)
+        return self._make_result(ok, f'fire: ch={ch} {"ok" if ok else "stub/fail"}')
+
+    def _fire_payload(self, channel: int) -> bool:
+        """Raw payload fire — no command scope. Use inside vision verbs."""
+        if self._payload is None or not self._payload.is_ready:
+            self.log.warning(f'[FIRE ] payload not ready ch={channel} -- stub only')
+            return False
+        return self._payload.fire(channel)
+
+    @property
+    def payload_ready(self) -> bool:
+        """True when the ESP32 payload board is connected and port is open."""
+        return self._payload is not None and self._payload.is_ready
 
     # ================================================================== #
     #  Stop / Pause                                                       #
