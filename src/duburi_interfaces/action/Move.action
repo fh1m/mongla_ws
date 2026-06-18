@@ -57,6 +57,20 @@ float32 pass_at_gain       # forward thrust % during pass-through; 0.0 = use def
 bool    tracking           # false (default) = use /detections; true = use /tracks (requires tracker_node)
 float32 target_vis_range   # vis_approach: monocular-depth target 0..1 (0=far, 1=close)
                            # from depth_estimation_node /vis_range. 0.0 on wire = use default (0.65)
+float32 offset_x           # lateral pixel offset: target kept this many px to the RIGHT of frame center
+                           # negative = keep target left of center. 0.0 = center (default)
+float32 offset_y           # vertical pixel offset: target kept this many px BELOW frame center
+                           # negative = keep target above center. 0.0 = center (default)
+float32 lost_patience_s    # seconds of continuous staleness before on_lost='fail' triggers
+                           # 0.0 = use engine default (3.0 s). stale_after + lost_patience_s = total gap tolerance
+
+# ---- vision_lock_fire fields  (ignored by other commands) --------------
+float32 stable_lock_s      # seconds of continuous settle required before fire (default 3.0)
+float32 max_attempts       # retry attempts for lock-fire cycle (default 3)
+float32 attempt_timeout    # per-attempt duration cap in seconds (default 15.0)
+float32 fire_aux_channel   # AUX channel 1-6 to pulse on fire; 0.0 = use fire_channel/stub
+float32 fire_pwm           # PWM value for fire pulse (default 1900)
+float32 fire_channel       # ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=log-stub
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

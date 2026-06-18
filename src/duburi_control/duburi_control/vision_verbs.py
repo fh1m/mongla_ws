@@ -72,7 +72,9 @@ class VisionVerbs:
                         stale_after, depth_anchor_frac=0.0,
                         lock_mode='', distance_metric='',
                         gate_guard=False, gate_guard_min_w_frac=0.35,
-                        pass_at=0.0, pass_at_gain=50.0):
+                        pass_at=0.0, pass_at_gain=50.0,
+                        offset_x=0.0, offset_y=0.0,
+                        lost_patience_s=0.0):
         """Centre + maintain distance on the largest ``target_class`` bbox.
 
         ``axes`` is a CSV: any subset of ``'yaw,lat,depth,forward'``.
@@ -108,10 +110,14 @@ class VisionVerbs:
             gate_guard=bool(gate_guard),
             gate_guard_min_w_frac=float(gate_guard_min_w_frac),
             pass_at=float(pass_at),
-            pass_at_gain=float(pass_at_gain))
+            pass_at_gain=float(pass_at_gain),
+            offset_x=float(offset_x),
+            offset_y=float(offset_y),
+            lost_patience_s=float(lost_patience_s))
 
     def vision_align_yaw(self, camera, target_class, duration, deadband,
-                         kp_yaw, on_lost, stale_after, lock_mode=''):
+                         kp_yaw, on_lost, stale_after, lock_mode='',
+                         offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
         """Steer toward horizontal centre via heading channel. lock_mode: 'settle'/'follow'."""
         gains = VisionGains(kp_yaw=float(kp_yaw))
         return self._run_vision_track(
@@ -121,11 +127,19 @@ class VisionVerbs:
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
             stale_after=float(stale_after),
-            lock_mode=str(lock_mode))
+            lock_mode=str(lock_mode),
+            offset_x=float(offset_x), offset_y=float(offset_y),
+            lost_patience_s=float(lost_patience_s))
 
     def vision_align_lat(self, camera, target_class, duration, deadband,
-                         kp_lat, on_lost, stale_after, lock_mode=''):
-        """Strafe toward horizontal centre via lateral channel. lock_mode: 'settle'/'follow'."""
+                         kp_lat, on_lost, stale_after, lock_mode='',
+                         offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
+        """Strafe toward horizontal centre (or offset) via lateral channel.
+
+        offset_x: keep target this many pixels to the RIGHT of frame center.
+        Negative = keep target left. Use for slalom pipe passing.
+        offset_y: keep target this many pixels BELOW frame center.
+        """
         gains = VisionGains(kp_lat=float(kp_lat))
         return self._run_vision_track(
             verb='vision_align_lat', label='align_lat',
@@ -134,15 +148,19 @@ class VisionVerbs:
             deadband=float(deadband), target_h_frac=0.0,
             visual_pid=False, on_lost=str(on_lost),
             stale_after=float(stale_after),
-            lock_mode=str(lock_mode))
+            lock_mode=str(lock_mode),
+            offset_x=float(offset_x), offset_y=float(offset_y),
+            lost_patience_s=float(lost_patience_s))
 
     def vision_align_depth(self, camera, target_class, duration, deadband,
                            kp_depth, on_lost, stale_after,
-                           depth_anchor_frac=0.0, lock_mode=''):
+                           depth_anchor_frac=0.0, lock_mode='',
+                           offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
         """Nudge depth setpoint to centre vertically.
 
         depth_anchor_frac: which vertical point on the bbox to align (0=top,
         0.5=centre, 1=bottom). 0.2 works well for tall objects like people.
+        offset_y: keep target this many pixels BELOW frame center.
         """
         gains = VisionGains(kp_depth=float(kp_depth))
         return self._run_vision_track(
@@ -153,13 +171,16 @@ class VisionVerbs:
             visual_pid=False, on_lost=str(on_lost),
             stale_after=float(stale_after),
             depth_anchor_frac=float(depth_anchor_frac),
-            lock_mode=str(lock_mode))
+            lock_mode=str(lock_mode),
+            offset_x=float(offset_x), offset_y=float(offset_y),
+            lost_patience_s=float(lost_patience_s))
 
     def vision_hold_distance(self, camera, target_class, duration, deadband,
                              kp_forward, target_bbox_h_frac, on_lost,
                              stale_after, lock_mode='', distance_metric='',
                              gate_guard=False, gate_guard_min_w_frac=0.35,
-                             pass_at=0.0, pass_at_gain=50.0):
+                             pass_at=0.0, pass_at_gain=50.0,
+                             offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
         """Approach / back off to maintain standoff distance by bbox fill fraction.
 
         lock_mode: 'settle' (exit when at distance), 'follow' (track until
@@ -181,11 +202,14 @@ class VisionVerbs:
             gate_guard=bool(gate_guard),
             gate_guard_min_w_frac=float(gate_guard_min_w_frac),
             pass_at=float(pass_at),
-            pass_at_gain=float(pass_at_gain))
+            pass_at_gain=float(pass_at_gain),
+            offset_x=float(offset_x), offset_y=float(offset_y),
+            lost_patience_s=float(lost_patience_s))
 
     def vis_approach(self, camera, target_class, duration, deadband,
                      kp_forward, target_vis_range, on_lost,
-                     stale_after, lock_mode=''):
+                     stale_after, lock_mode='',
+                     offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
         """Drive forward using monocular depth (vis_range) as the distance proxy.
 
         target_vis_range 0..1: 0=far, 1=close. Requires depth_estimation_node
@@ -202,7 +226,9 @@ class VisionVerbs:
             visual_pid=False, on_lost=str(on_lost),
             stale_after=float(stale_after),
             lock_mode=str(lock_mode),
-            distance_metric='vis_range')
+            distance_metric='vis_range',
+            offset_x=float(offset_x), offset_y=float(offset_y),
+            lost_patience_s=float(lost_patience_s))
 
     def vision_acquire(self, camera, target_class, target_name, timeout,
                        gain, yaw_rate_pct, stale_after):
@@ -344,7 +370,10 @@ class VisionVerbs:
                           depth_anchor_frac=0.5, lock_mode='settle',
                           distance_metric='height',
                           gate_guard=False, gate_guard_min_w_frac=0.35,
-                          pass_at=0.0, pass_at_gain=50.0):
+                          pass_at=0.0, pass_at_gain=50.0,
+                          offset_x=0.0, offset_y=0.0,
+                          stable_lock_s=0.0, on_stable=None,
+                          lost_patience_s=0.0):
         """Common path for every vision_align_* / vision_hold_distance verb.
 
         ``verb`` is the public method name (``'vision_align_yaw'``, ...)
@@ -359,8 +388,11 @@ class VisionVerbs:
         with self._command_scope(verb):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
-            depth_sign = -1 if camera in ('downward',) else +1
-            touches_depth = 'depth' in axes
+            is_downward     = camera in ('downward',)
+            depth_sign      = -1 if is_downward else +1
+            # Downward cam: ey (vertical in image) maps to forward/back axis.
+            forward_uses_ey = is_downward and 'forward' in axes
+            touches_depth   = 'depth' in axes
             touches_yaw   = 'yaw' in axes
             if touches_depth:
                 self._ensure_alt_hold(f'vision_{label}')
@@ -387,6 +419,11 @@ class VisionVerbs:
                     gate_guard=gate_guard,
                     gate_guard_min_w_frac=gate_guard_min_w_frac,
                     pass_at=pass_at, pass_at_gain=pass_at_gain,
+                    offset_x=offset_x, offset_y=offset_y,
+                    forward_uses_ey=forward_uses_ey,
+                    stable_lock_s=stable_lock_s, on_stable=on_stable,
+                    **({'lost_patience_s': lost_patience_s}
+                       if lost_patience_s > 0.0 else {}),
                     log=self.log, writers=self._writers(),
                     visual_pid=visual_pid,
                     abort_fn=self._abort_fn)
@@ -443,3 +480,99 @@ class VisionVerbs:
         raise ValueError(
             f"vision_acquire: unknown drive verb {drive_verb!r}; "
             f"expected one of '', 'yaw_left', 'yaw_right', 'move_forward', 'arc'")
+
+    # ------------------------------------------------------------------ #
+    #  vision_lock_fire                                                    #
+    # ------------------------------------------------------------------ #
+
+    def vision_lock_fire(self, camera, target_class, axes, duration,
+                         deadband, kp_yaw, kp_lat, kp_depth, kp_forward,
+                         target_bbox_h_frac, on_lost, stale_after,
+                         depth_anchor_frac=0.0, distance_metric='',
+                         stable_lock_s=3.0,
+                         max_attempts=3, attempt_timeout=15.0,
+                         fire_aux_channel=0, fire_pwm=1900,
+                         offset_x=0.0, offset_y=0.0,
+                         fire_channel=0, lost_patience_s=0.0):
+        """Lock 3D position on target, verify stable hold, fire.
+
+        Aligns on all requested axes; once all axes stay within deadband for
+        stable_lock_s seconds continuously the on_stable callback fires:
+          - fire_channel 1/2 = torpedo, 3/4 = dropper (ESP32 serial via payload driver)
+          - fire_aux_channel > 0 = AUX PWM fallback
+          - both 0 = log-only stub
+
+        Retries up to max_attempts. On total failure fires at last captured
+        aim-hold pose as a best-effort fallback.
+        """
+        axis_set = _parse_axes(axes)
+        gains = VisionGains(kp_yaw=float(kp_yaw), kp_lat=float(kp_lat),
+                            kp_depth=float(kp_depth),
+                            kp_forward=float(kp_forward))
+        fired = False
+        last_att = self.pixhawk.get_attitude()
+        _fire_ch  = int(fire_channel)
+        _aux_ch   = int(fire_aux_channel)
+        _aux_pwm  = int(fire_pwm)
+
+        def _on_stable():
+            nonlocal fired, last_att
+            last_att = self.pixhawk.get_attitude()
+            fired = True
+            self._do_fire(_fire_ch, _aux_ch, _aux_pwm)
+
+        for attempt in range(int(max_attempts)):
+            if self._abort_fn and self._abort_fn():
+                break
+            self.log.info(
+                f'[LOCK_FIRE] attempt {attempt + 1}/{int(max_attempts)} '
+                f'stable_lock_s={stable_lock_s:.1f}s')
+            self._run_vision_track(
+                verb='vision_lock_fire', label='lock_fire',
+                camera=camera, target_class=target_class,
+                axes=axis_set, duration=float(attempt_timeout),
+                gains=gains, deadband=float(deadband),
+                target_h_frac=float(target_bbox_h_frac),
+                visual_pid=False,
+                on_lost=str(on_lost), stale_after=float(stale_after),
+                depth_anchor_frac=float(depth_anchor_frac),
+                distance_metric=str(distance_metric),
+                stable_lock_s=float(stable_lock_s),
+                on_stable=_on_stable,
+                offset_x=float(offset_x),
+                offset_y=float(offset_y),
+                lost_patience_s=float(lost_patience_s))
+            if fired:
+                break
+
+        if not fired:
+            yaw   = last_att.get('yaw', 0.0)
+            depth = last_att.get('depth', 0.0)
+            self.log.warning(
+                f'[LOCK_FIRE] all {int(max_attempts)} attempts failed; '
+                f'fallback fire at last pose yaw={yaw:.1f} depth={depth:.2f}m')
+            self._do_fire(_fire_ch, _aux_ch, _aux_pwm)
+
+        return self._make_result(
+            success=fired,
+            message=f'vision_lock_fire: {"fired" if fired else "fallback fired"}',
+            final_value=float(fired),
+            error_value=0.0)
+
+    def _do_fire(self, fire_channel: int, aux_channel: int, pwm: int) -> None:
+        """Route fire to ESP32 payload driver, AUX PWM, or log-stub.
+
+        Called from inside a vision tracking scope -- uses _fire_payload()
+        (raw driver call) to avoid a nested command-scope deadlock.
+        """
+        if fire_channel > 0:
+            ok = self._fire_payload(fire_channel)
+            if not ok:
+                self.log.warning(
+                    f'[FIRE ] ch={fire_channel} failed (payload not ready) '
+                    f'-- falling back to stub')
+        elif aux_channel > 0:
+            self.pixhawk.set_servo_pwm(aux_channel, pwm)
+            self.log.info(f'[FIRE ] AUX ch={aux_channel} pwm={pwm}')
+        else:
+            self.log.info('[FIRE ] no channel configured -- log-only stub')

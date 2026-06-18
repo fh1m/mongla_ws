@@ -77,10 +77,18 @@ vision verbs.
 | `depth_anchor_frac`  | float32  | vision_align_depth / vision_align_3d  |
 | `lock_mode`          | string   | vision_* ('settle' / 'follow' / 'pursue') |
 | `distance_metric`    | string   | vision_hold_distance / vision_align_3d |
-| `gate_guard`         | bool     | vision_align_3d — suppress forward when gate appears angled |
-| `pass_at`            | float32  | vision_align_3d — commit straight pass once size metric ≥ this |
-| `pass_at_gain`       | float32  | vision_align_3d — thrust % for the commit pass |
-| `tracking`           | bool     | all vision_* — `True` subscribes `/tracks` (ByteTrack IDs + Kalman-smoothed), requires tracker_node |
+| `gate_guard`             | bool     | vision_align_3d — suppress forward when gate appears angled |
+| `gate_guard_min_w_frac`  | float32  | vision_align_3d — aspect ratio threshold (default 0.35, pool-calibrated); forward suppressed when `w_frac/h_frac < threshold`. Only active when `gate_guard=true`. |
+| `target_vis_range`       | float32  | vis_approach — stop when monocular depth proxy ≥ this value (0.0=farthest, 1.0=closest; default 0.65). DSL kwarg: `threshold=`. |
+| `pass_at`                | float32  | vision_align_3d — commit straight pass once size metric ≥ this |
+| `pass_at_gain`           | float32  | vision_align_3d — thrust % for the commit pass |
+| `tracking`               | bool     | all vision_* — `True` subscribes `/tracks` (ByteTrack IDs + Kalman-smoothed), requires tracker_node |
+| `offset_x`               | float32  | PID verbs only — keep target N px RIGHT of frame centre (negative=left); 0=centre |
+| `offset_y`               | float32  | PID verbs only — keep target N px BELOW frame centre (negative=above); 0=centre |
+| `lost_patience_s`        | float32  | PID verbs — extra seconds of continuous staleness before `on_lost='fail'` fires. 0.0=engine default (3.0 s). Total gap ≈ stale_after(2.5) + lost_patience_s(3.0) = 5.5 s |
+| `fire_channel`           | float32  | `vision_lock_fire` / `fire` — ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=stub |
+| `stable_lock_s`          | float32  | `vision_lock_fire` — seconds all axes must stay in deadband before firing |
+| `max_attempts`           | float32  | `vision_lock_fire` — retry count before fallback fire at last pose |
 
 ### `Move.Result` fields you get back
 
@@ -221,6 +229,10 @@ duburi.move_lateral_dist(meters=1.0, gain=36.0, dvl_tolerance=0.1)
 duburi.move_forward_dist(-1.5, gain=60.0)         # 1.5 m backward
 duburi.move_lateral_dist(-0.5, gain=36.0)         # 0.5 m left
 
+# Payload (ESP32 serial — PayloadDriver auto-detected at startup)
+duburi.fire(fire_channel=1)    # 1/2=torpedo_1/2, 3/4=dropper_1/2
+duburi.payload_ready           # bool — True if PayloadDriver connected
+
 duburi.countdown(seconds=10)                      # tether-removal countdown with banner
 
 # Scoreboard — called automatically by mission.py; also callable mid-mission
@@ -281,6 +293,41 @@ duburi.vision.home(target=...,
 duburi.vision.track(target=..., duration=60.0,
                     yaw=True, forward=True, depth=True,
                     dist=0.38, on_lost='hold', **overrides)
+
+# Maintain PID lock for duration without follow (no forward pursuit)
+# Trilogy: home()=align+exit, hold()=align+maintain, vision_lock_fire()=align+maintain+fire
+duburi.vision.hold(target=...,
+                   yaw=True, lat=True,       # default: centre + strafe
+                   depth=False, forward=False,
+                   duration=60.0,
+                   offset_x=0.0, offset_y=0.0,
+                   **overrides)
+
+# Align + stable hold + fire (torpedo/dropper)
+duburi.vision.vision_lock_fire(
+    target='torpedo_hole',
+    yaw=True, lat=True, depth=True,
+    stable_lock_s=4.0, max_attempts=3,
+    fire_channel=1,      # 1/2=torpedo, 3/4=dropper
+    duration=60.0)
+
+# Offset: keep target 80 px right of centre (slalom pass, side-of-pipe hold)
+duburi.vision.turn(target='slalom_red', offset_x=80, duration=4.0)
+
+# Orbital search — incremental yaw steps until target detected
+duburi.vision.scan(target=duburi.models.gate.gate,
+                   dwell=1.5,          # settle time after each yaw step (s)
+                   start_yaw=0.0,      # override starting yaw; 0.0 = current heading
+                   duration=60.0)      # wire field: target=float(start_yaw)
+
+# Forward approach driven by monocular depth proxy (vis_range)
+# Sends a Move action goal — blocks until threshold reached or timeout
+duburi.vision.vis_approach(target=duburi.models.gate.gate,
+                            threshold=0.65,     # stop when vis_range >= threshold (wire: target_vis_range)
+                            duration=20.0,
+                            lock_mode='',
+                            camera=None,        # falls back to duburi.camera
+                            **overrides)
 ```
 
 **Competition patterns:**
@@ -321,6 +368,33 @@ duburi.vision.align   (...)   # → home   (use dist= instead of distance=)
 duburi.vision.lock    (target=None, axes='yaw,forward',
                        distance=0.55, duration=15.0, **overrides)  # → home (CSV form)
 duburi.vision.follow  (...)   # → track
+```
+
+#### `duburi.vision.vis_range()` — non-blocking cache read (NOT a Move action)
+
+**`vis_range()` does NOT send a goal to the action server.** It is a local cache read — same pattern as `duburi.detected()`. It subscribes to `/duburi/vision/<cam>/vis_range` (`Float32MultiArray`, published by `depth_estimation_node`) and returns the latest cached value.
+
+```python
+def vis_range(self, target=None, *, camera=None, stale_after: float = 1.0) -> float:
+    ...
+```
+
+| Arg | Meaning |
+|---|---|
+| `target` | `ClassRef` or `str` — ignored for the read itself (reserved for future per-class depth) |
+| `camera` | Camera profile; defaults to `duburi.camera` |
+| `stale_after` | Max age (s) of cached reading to accept; returns `0.0` if stale or no data |
+
+Returns `float` in `[0.0, 1.0]` — `0.0` = farthest or no data; `1.0` = closest. Topic is a three-element `Float32MultiArray` `[range, confidence, age_s]`; this method extracts the range value.
+
+**Use `vis_approach()` to drive toward a threshold; use `vis_range()` to poll the current reading in a custom loop:**
+
+```python
+# Read current depth proxy (non-blocking — no action goal sent)
+current = duburi.vision.vis_range(camera='forward')
+
+# Drive until depth proxy threshold (blocking — sends vis_approach action goal)
+duburi.vision.vis_approach(target=duburi.models.gate.gate, threshold=0.65, duration=20.0)
 ```
 
 `move` mapping in `find()` (replaces old `sweep=` parameter):

@@ -763,6 +763,7 @@ def run(duburi, log):
 | Bin (from above) | downward | `area` | n/a (depth nudge) | Depth nudged until area ~0.25 |
 | Torpedo target | forward | `width` | 0.30–0.35 | Width = board face width |
 | Path marker | downward | `area` | n/a | Large flat target |
+| Approach (any) | forward | `vis_range` | 0.55–0.70 | `vis_approach` verb; monocular depth proxy; switch to bbox metric at threshold |
 
 ### 7.3 `on_lost` behaviour
 
@@ -784,7 +785,45 @@ Gains are live-tunable via `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
 
 Tune order: `kp_yaw` first (most critical), then `kp_lat`, then `kp_depth`, then `kp_forward`.
 
-### 7.5 `deadband` tuning
+### 7.5 `vis_approach` — monocular depth forward approach
+
+`vis_approach` is a distinct verb (`distance_metric='vis_range'`, `axes={'forward'}` only). It drives
+the AUV forward until the target's monocular depth proxy (`vis_range`, 0=far, 1=close) crosses a
+threshold. Use it for the coarse approach phase before switching to a bbox-geometry `vision.home`
+for fine centering.
+
+| Param | Meaning | Typical value |
+|---|---|---|
+| `threshold` | `vis_range` value to exit on (0=far, 1=close) | 0.55–0.70 |
+| `duration` | Max approach time before TIMEOUT | 20–40 s |
+| `kp_forward` | Forward thrust gain (P-only) | 30–45 |
+| `lock_mode` | `''` (settle+exit) or `'pursue'` (never stops) | `''` for approach |
+
+DSL usage:
+
+```python
+duburi.vision.vis_approach(target='gate', threshold=0.65, duration=30)
+```
+
+FSM state usage (wraps the same DSL verb as other `VisionAlignState` variants):
+
+```python
+# In a plan:
+('APPROACH_GATE', VisionApproachState(target='gate', threshold=0.65, duration=30), {
+    Outcomes.SUCCEED: 'CENTRE_GATE',
+    Outcomes.TIMEOUT: 'SURFACE',
+    Outcomes.FAILED:  'SCAN_FOR_GATE',
+})
+```
+
+`vis_approach` requires `depth_estimation_node` running and publishing `vis_range`. It degrades to
+a bbox-area proxy if the node is absent, but approach distance accuracy is reduced. Verify with:
+
+```bash
+ros2 topic echo /duburi/vision/forward/vis_range
+```
+
+### 7.6 `deadband` tuning
 
 Deadband = minimum error fraction before correction fires. Too tight = chattery, too loose = sloppy.
 
@@ -863,7 +902,91 @@ Insert between phases:
 
 ---
 
-## 11. Testing Vision-Guided FSMs Without Hardware
+## 11. Payload Fire Patterns (torpedo + dropper)
+
+### 11.1 Torpedo task — vision_lock_fire
+
+`vision_lock_fire` is the canonical verb for precise fire tasks. It aligns on requested axes,
+verifies the AUV stays in deadband for `stable_lock_s` seconds, then fires via ESP32 serial.
+Retries `max_attempts` times; fallback fires at last captured pose.
+
+**As a standalone mission call** (inside `detected()`-paradigm or FSM state body):
+
+```python
+# Coarse align first, then precision lock-fire
+duburi.vision.home(target='torpedo_hole', yaw=True, lat=True, depth=True,
+                   duration=20, on_lost='hold')
+
+result = duburi.vision.vision_lock_fire(
+    target='torpedo_hole',
+    yaw=True, lat=True, depth=True,
+    stable_lock_s=4.0,
+    max_attempts=3,
+    fire_channel=1,          # torpedo_1 (ESP32 serial)
+    attempt_timeout=20.0,
+    duration=60.0,
+    offset_x=60,             # aim at bullseye offset from board bbox
+    offset_y=-40)
+```
+
+**As an FSM state** (using `VisionHomeState` from the YASMIN library):
+
+```python
+# Plan entry using the YASMIN state library
+'TORPEDO_LOCK_FIRE': ('vision_lock_fire_state',
+    target='torpedo_hole',
+    yaw=True, lat=True, depth=True,
+    stable_lock_s=4.0, fire_channel=1,
+    duration=60.0)
+```
+
+> `fire_channel` priority: ESP32 serial (1–4) → AUX PWM (`fire_aux_channel`) → log stub.
+> Check `duburi.payload_ready` before the mission if you need a hard gate.
+
+---
+
+### 11.2 Bin drop — downward camera + dropper lock-fire
+
+Axis remap: with `camera='downward'`, `ex`→lateral, `ey`→forward. Pass `yaw=False, lat=True, forward=True`.
+
+```python
+duburi.set_depth(-1.5)
+duburi.camera = 'downward'
+
+duburi.vision.find(target='fire_bin', move='still', timeout=30)
+
+result = duburi.vision.vision_lock_fire(
+    target='fire_bin',
+    yaw=False, lat=True, forward=True, depth=False,
+    stable_lock_s=3.0,
+    max_attempts=2,
+    fire_channel=3,          # dropper_1
+    duration=45.0)
+```
+
+---
+
+### 11.3 Offset alignment (slalom / off-centre aim)
+
+All PID vision verbs accept `offset_x` (px right) and `offset_y` (px down). Useful for:
+- Slalom: keep pipe N px to one side while driving forward
+- Torpedo: aim at bullseye offset from the board's bbox centre
+
+```python
+# Slalom — keep red pipe 80 px right, then drive straight past
+duburi.vision.turn(target='slalom_red', offset_x=80, duration=4.0)
+duburi.move_forward(duration=3.0, gain=40)
+
+# Torpedo board — aim right+up offset from bbox centre
+duburi.vision.home(target='torpedo_board',
+                   yaw=True, lat=True, depth=True,
+                   offset_x=60, offset_y=-40,
+                   duration=15)
+```
+
+---
+
+## 12. Testing Vision-Guided FSMs Without Hardware
 
 ### Mock detection sequence
 

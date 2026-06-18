@@ -93,6 +93,11 @@ ros2 param set /duburi_manager vision.use_tracks true
 ```
 Or per-goal: `duburi vision_align_yaw --tracking true` (CLI) / `duburi.vision.yaw(..., tracking=True)` (DSL).
 
+The manager caches `VisionState` instances by `(camera, use_tracks)` tuple, so a `tracking=True` goal
+and a `tracking=False` goal on the same camera each get their own subscriber. The per-goal
+`tracking=True` flag temporarily flips the `vision.use_tracks` param, builds a new `VisionState`
+for that goal, then restores the param afterward. Cached states from other goals are unaffected.
+
 ## Dataflow (with tracker_node)
 
 ```
@@ -289,9 +294,76 @@ steps — checking `VisionState` at each stop and exiting the moment the
 target class is detected. Falls back to ALT_HOLD + heading-lock if
 POSHOLD is unavailable.
 
-Current 7 vision verbs: `vision_align_3d`, `vision_align_yaw`,
-`vision_align_lat`, `vision_align_depth`, `vision_hold_distance`,
-`vision_acquire`, `look_around`.
+Current 9 vision verbs + 1 payload verb:
+`vision_align_3d`, `vision_align_yaw`, `vision_align_lat`,
+`vision_align_depth`, `vision_hold_distance`, `vis_approach`,
+`vision_acquire`, `look_around`, `vision_lock_fire` (align+fire),
+and the standalone `fire` verb (no vision — direct ESP32 serial).
+
+**Offset params** (`offset_x`, `offset_y`): available on all PID verbs
+(all except `vision_acquire` / `look_around`). Keeps the target a fixed
+number of pixels from frame centre. Normalization: `norm = px / (dim * 0.5)`,
+clamped to ±1.5 before the PID subtraction `ex_ctrl = ex - norm_offset_x`.
+
+**Stale detection** (engine defaults as of 2026-06):
+- `DEFAULT_STALE_AFTER = 2.5 s` — detection older than this counts as lost
+- `DEFAULT_LOST_PATIENCE_S = 3.0 s` — continuous staleness budget before `on_lost='fail'` triggers
+- Total gap tolerance ≈ **5.5 s** (handles pool turbidity / 2-3 s occlusions)
+
+### Downward camera contract
+
+`vision_verbs.py` (`_run_vision_track`) applies **two** automatic adaptations when `camera='downward'`:
+
+```python
+is_downward     = camera in ('downward',)
+depth_sign      = -1 if is_downward else +1          # negate depth correction
+forward_uses_ey = is_downward and 'forward' in axes  # ey drives forward, not distance metric
+```
+
+1. **`depth_sign = -1`** — negates the depth correction axis so "target appears large → vehicle
+   already close → don't descend further" is handled correctly.
+2. **`forward_uses_ey = True`** (when `'forward' in axes`) — remaps `ey` (vertical bbox error) to
+   drive forward thrust via `kp_forward` instead of the normal distance metric (`area` / `diagonal` /
+   `vis_range`). This matches looking-down geometry where vertical pixel error encodes forward offset.
+
+The caller still selects WHICH axes to enable — the engine auto-adapts HOW those axes are driven
+based on camera orientation. For looking-down geometry the caller must pass the correct axis flags:
+
+```python
+# Correct downward-camera alignment (bin centering)
+duburi.vision.home(
+    camera='downward',
+    yaw=False,       # no yaw: top-down can't read heading from bbox
+    lat=True,        # ex → Ch6 lateral (auto-adapted)
+    forward=True,    # ey → Ch5 forward  (auto-adapted: ey not distance metric)
+    depth=False,     # depth already locked
+    dist=0.85,
+    duration=20,
+)
+```
+
+Omitting `yaw=False, lat=True, forward=True` will produce unexpected thruster behavior because the
+default axes (`yaw=True, lat=True`) will attempt bbox-based yaw control on a floor-facing camera.
+
+### Camera switching in a mission
+
+`duburi.camera` is a sticky string attribute on `DuburiMission`. Assign it to switch which camera
+all subsequent `duburi.vision.*` calls use:
+
+```python
+# Phase 1: gate with forward camera (default)
+duburi.camera = 'forward'
+duburi.vision.home(target='gate', yaw=True, lat=True, dist=0.6, duration=15)
+duburi.move_forward(duration=4, gain=60)
+
+# Switch to downward camera for bin task
+duburi.camera = 'downward'
+duburi.target  = 'bin'
+duburi.vision.home(yaw=False, lat=True, forward=True, dist=0.85, duration=20)
+```
+
+The camera name must match a running `camera_node` profile — verify with
+`ros2 topic list | grep image_raw`.
 
 Verifying the chain before pool day:
 
@@ -300,3 +372,32 @@ ros2 run duburi_vision vision_check                 # detector publishing?
 ros2 run duburi_vision vision_thrust_check          # detection -> RC echo?
 ros2 run duburi_planner mission find_person_demo    # full mission rehearsal
 ```
+
+### Payload actuation (PayloadDriver)
+
+`duburi_control/payload.py` — write-only ESP32-C3 USB serial driver. Fires torpedoes (ch 1/2)
+and droppers (ch 3/4) by sending ASCII digit bytes `b'1'`..`b'4'` over USB CDC.
+
+```
+DuburiMission.fire(channel)
+  v
+Duburi._fire_payload(channel)        # skips command scope (used inside vision verbs)
+  v
+PayloadDriver.fire(channel)          # serial.write(bytes([0x30 + channel]))
+  v
+ESP32-C3 GPIO → relay → actuator
+```
+
+**Auto-detect at startup**: `auv_manager_node` scans Espressif/CH340 USB-by-id globs,
+excludes the BNO085 port, and connects the first match. Startup banner:
+```
+[PAYLOAD] connected on /dev/serial/by-id/usb-Espressif_...
+[PAYLOAD] not found — fire() calls will log-stub only
+```
+
+Check: `duburi.payload_ready` → `bool`.
+
+**`vision_lock_fire`** calls `_do_fire(fire_channel, aux_channel, pwm)` internally:
+- `fire_channel > 0` → ESP32 serial (preferred)
+- `fire_aux_channel > 0` → ArduSub AUX PWM (fallback)
+- both 0 → log-only stub

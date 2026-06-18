@@ -52,7 +52,7 @@ Each verb's `Implements` row gives the implementation breadcrumb
 
 ## Quick Reference
 
-All 34 verbs at a glance. Required fields have no default listed.
+All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/commands.py`). Required fields have no default listed.
 
 | Verb | Fields (→ default) | What it does |
 |---|---|---|
@@ -77,13 +77,16 @@ All 34 verbs at a glance. Required fields have no default listed.
 | `move_forward_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop forward (heading lock stays active) |
 | `move_back_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop backward (same as move_forward_dist with reversed direction) |
 | `move_lateral_dist` | **distance_m** required (±), gain→36 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop lateral (heading lock stays active) |
-| `vision_acquire` | camera→laptop, target_class→person, target_name→'', timeout→30 s, gain→25 %, yaw_rate_pct→25 %, stale_after→1.5 s, tracking→false | Sweep until target seen |
-| `vision_align_yaw` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_yaw→60, on_lost→fail, stale_after→1.5 s, lock_mode→'', tracking→false | Centre target horizontally (heading) |
-| `vision_align_lat` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_lat→60, on_lost→fail, stale_after→1.5 s, lock_mode→'', tracking→false | Centre target horizontally (strafe) |
-| `vision_align_depth` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_depth→0.05, on_lost→fail, stale_after→1.5 s, depth_anchor_frac→0, lock_mode→'', tracking→false | Centre target vertically |
-| `vision_hold_distance` | camera→laptop, target_class→person, duration→20 s, deadband→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→1.5 s, lock_mode→'', distance_metric→'', tracking→false | Hold standoff distance |
-| `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→1.5 s, depth_anchor_frac→0, lock_mode→'', distance_metric→'', tracking→false | Multi-axis simultaneous |
-| `look_around` | camera→laptop, target_class→person, yaw_rate_pct→20, settle→1.5, gain→40, duration→90 | POSHOLD + incremental yaw orbit; exits on first detection |
+| `vision_acquire` | camera→laptop, target_class→person, target_name→'', timeout→30 s, gain→25 %, yaw_rate_pct→25 %, stale_after→2.5 s, tracking→false | Sweep until target seen |
+| `vision_align_yaw` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_yaw→60, on_lost→fail, stale_after→2.5 s, lost_patience_s→0 (engine default 3.0 s), lock_mode→'', offset_x→0, tracking→false | Centre target horizontally (heading) |
+| `vision_align_lat` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_lat→60, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', offset_x→0, offset_y→0, tracking→false | Centre target horizontally (strafe) |
+| `vision_align_depth` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_depth→0.05, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', offset_y→0, tracking→false | Centre target vertically |
+| `vision_hold_distance` | camera→laptop, target_class→person, duration→20 s, deadband→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, tracking→false | Hold standoff distance |
+| `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, tracking→false | Multi-axis simultaneous |
+| `look_around` | camera→laptop, target_class→person, yaw_rate_pct→20, settle→1.5, gain→40, duration→60, target→0.0 (override start yaw; 0.0 = current heading), stale_after→1.0 | POSHOLD + incremental yaw orbit; exits on first detection |
+| `vis_approach` | camera→laptop, target_class→person, duration→30, deadband→0.05, kp_forward→200, target_vis_range→0.65, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', offset_x→0, offset_y→0, tracking→false | Drive forward until monocular-depth proxy reaches threshold |
+| `vision_lock_fire` | camera→laptop, target_class→person, axes→yaw,lat,depth, duration→15 s per attempt, deadband→0.18, stable_lock_s→3.0 s, max_attempts→3, attempt_timeout→15 s, **fire_channel→0** (1/2=torpedo, 3/4=dropper), fire_aux_channel→0 (AUX fallback), lost_patience_s→0, offset_x→0, offset_y→0 | Align + stable hold + fire (ESP32 serial or AUX fallback) |
+| `fire` | **fire_channel** required (1–4) | Fire ESP32 payload channel directly: 1,2=torpedo, 3,4=dropper |
 
 ---
 
@@ -459,6 +462,8 @@ docstring as `impl: ...`):
 | `vision_hold_distance` | `vision_verbs._run_vision_track` -> `motion_vision.vision_track_axes(axes={'forward'})` -> `pixhawk.send_rc_override` (Ch5) |
 | `vision_align_3d`      | `vision_verbs._run_vision_track` -> `motion_vision.vision_track_axes` -> Ch4/Ch5/Ch6 + `set_target_depth`           |
 | `vision_acquire`       | `vision_verbs.vision_acquire` -> `motion_vision.vision_acquire` + `_build_acquire_drive` closure -> `pixhawk.send_rc_override` |
+| `look_around`          | `vision_verbs.look_around` -> incremental yaw steps (Ch4 RC override @ `yaw_rate_pct`) + polls `VisionState` per step |
+| `vis_approach`         | `vision_verbs.vis_approach` -> `motion_vision.vision_track_axes(axes={'forward'}, distance_metric='vis_range')` -> `pixhawk.send_rc_override` (Ch5); `vis_range` from monocular depth cache |
 
 ### `vision_acquire`
 
@@ -472,7 +477,7 @@ Scan / sweep until at least one fresh detection of `target_class` arrives.
 | `timeout` | float (s) | `30.0` | `1.0 – 300.0` | Abort if nothing seen |
 | `gain` | float (%) | `25.0` | `0.0 – 100.0` | Thrust during search maneuver |
 | `yaw_rate_pct` | float (%) | `25.0` | `-100.0 – 100.0` | Yaw rate for `arc` target_name |
-| `stale_after` | float (s) | `1.5` | `0.1 – 10.0` | Max detection age to count as "seen" |
+| `stale_after` | float (s) | `2.5` | `0.1 – 10.0` | Max detection age to count as "seen" |
 | `tracking` | bool | `false` | `true` / `false` | Subscribe `/tracks` (requires tracker_node) instead of `/detections` |
 
 | Aspect | Value |
@@ -490,8 +495,11 @@ Scan / sweep until at least one fresh detection of `target_class` arrives.
 | `target_class` | string | `person` | any detector class or `''` | `''` = largest detection regardless of class |
 | `duration` | float (s) | varies | `0.5 – 300.0` | Max seconds for the control loop |
 | `deadband` | float | `0.18` | `0.01 – 1.0` | Normalized error ≤ deadband counts as "centred" |
-| `on_lost` | string | `fail` | `fail`, `hold` | `fail` = abort after ~2 s lost; `hold` = freeze setpoints and wait |
-| `stale_after` | float (s) | `1.5` | `0.1 – 10.0` | Detection older than this is treated as lost |
+| `on_lost` | string | `fail` | `fail`, `hold` | `fail` = abort when target lost longer than `lost_patience_s`; `hold` = freeze setpoints and wait |
+| `stale_after` | float (s) | `2.5` | `0.1 – 10.0` | Detection older than this is treated as lost |
+| `lost_patience_s` | float (s) | `0.0` | `0.0 – 30.0` | Seconds of continuous staleness before `on_lost='fail'` triggers. 0.0 = engine default (3.0 s). Total gap tolerance = stale_after + lost_patience_s ≈ 5.5 s |
+| `offset_x` | float (px) | `0.0` | `-960 – 960` | Keep target this many pixels RIGHT of frame centre (negative = left). Normalized internally. No effect on `vision_acquire`/`look_around`. |
+| `offset_y` | float (px) | `0.0` | `-540 – 540` | Keep target this many pixels BELOW frame centre (negative = above). |
 | `tracking` | bool | `false` | `true`, `false` | `true` = subscribe `/tracks` (ByteTrack IDs + Kalman-smoothed); requires tracker_node running for this camera |
 
 ---
@@ -566,6 +574,55 @@ Drive Ch5 to match target size proxy to `target_bbox_h_frac`.
 | DSL | `duburi.vision.approach(target=duburi.models.gate.gate, dist=0.42, metric='area', duration=12.0)` — legacy: `approach(distance=0.42, ...)` |
 | Channel | Ch5 only |
 
+### `look_around`
+
+POSHOLD yaw orbit — incremental yaw steps at `yaw_rate_pct` per step. Exits immediately on first fresh detection of `target_class`. Used for search patterns and 360° target acquisition.
+
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `camera` | string | `laptop` | any camera profile | |
+| `target_class` | string | `person` | any detector class or `''` | `''` = accept any class |
+| `duration` | float (s) | `60.0` | `1.0 – 300.0` | Total sweep budget (enough for full 360° orbit at 20°/step) |
+| `gain` | float (%) | `40.0` | `0.0 – 100.0` | Thrust % for each yaw step |
+| `yaw_rate_pct` | float (%) | `20.0` | `1.0 – 100.0` | Degrees per yaw step (reuses `yaw_rate_pct` wire field) |
+| `settle` | float (s) | `1.5` | `0.0 – 10.0` | Dwell time after each step before polling for detection |
+| `target` | float (°) | `0.0` | any heading | Override starting yaw. **0.0 on wire = use current heading.** DSL kwarg: `start_yaw=`. |
+| `stale_after` | float (s) | `1.0` | `0.1 – 10.0` | Detection older than this is not counted as "seen" |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi look_around --camera forward --target_class gate [--duration 60] [--yaw_rate_pct 20] [--settle 1.5] [--gain 40] [--target 0.0]` |
+| DSL | `duburi.vision.scan(target=duburi.models.gate.gate, dwell=1.5, start_yaw=0.0, duration=60.0)` |
+| Mode | POSHOLD recommended (heading holds between steps); falls back to ALT_HOLD |
+| Result | `success=True` + detection info when target found; `success=False` + timeout reason if orbit completes without detection |
+
+### `vis_approach`
+
+Drive forward until the monocular depth proxy (`vis_range`) reaches a target threshold. Uses the same `vision_track_axes` pipeline as `vision_hold_distance` but with `distance_metric='vis_range'` (set internally; not a wire field).
+
+`vis_range` is published by `depth_estimation_node` on `/duburi/vision/<cam>/vis_range` (`Float32MultiArray`). When `depth_estimation_node` is absent, falls back to bbox-area proxy automatically.
+
+| Field | Type | Default | Accepted values | Notes |
+|---|---|---|---|---|
+| `camera` | string | `laptop` | any camera profile | |
+| `target_class` | string | `person` | any detector class or `''` | |
+| `duration` | float (s) | `30.0` | `0.5 – 300.0` | Max time before abort |
+| `deadband` | float | `0.05` | `0.01 – 1.0` | `\|target_vis_range − vis_range\| ≤ deadband` counts as "arrived" |
+| `kp_forward` | float | `200.0` | `10.0 – 500.0` | P gain on forward thrust |
+| `target_vis_range` | float | `0.65` | `0.05 – 0.95` | Stop when cached vis_range ≥ this value (0.0 = farthest, 1.0 = closest) |
+| `on_lost` | string | `fail` | `fail`, `hold` | `fail` = abort on lost detection |
+| `stale_after` | float (s) | `1.5` | `0.1 – 10.0` | Detection age threshold |
+| `lock_mode` | string | `''` | `''`, `settle`, `pursue` | `''` = ROS param default |
+| `tracking` | bool | `false` | `true` / `false` | Enable ByteTrack |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vis_approach --target_class gate --target_vis_range 0.65 [--duration 30] [--kp_forward 200] [--deadband 0.05]` |
+| DSL | `duburi.vision.vis_approach(target=duburi.models.gate.gate, threshold=0.65, duration=20.0)` — DSL kwarg `threshold` maps to wire field `target_vis_range` |
+| Channel | Ch5 only (`send_rc_override`) |
+| Distance | `vis_range` from `depth_estimation_node`; degrades to bbox-area when depth node absent |
+| Result | `final_value` = final vis_range reading; `success=False` + reason on timeout or lost |
+
 ### `vision_align_3d`
 
 Hold multiple axes simultaneously. All active axes must be within `deadband` to "settle".
@@ -627,11 +684,15 @@ Legacy CSV form: `duburi.vision.lock(axes='yaw,forward', distance=0.42, ...)` �
 | `deadband`           | `vision.deadband`            | Per-axis settle band; \|err\| < deadband counts as centred |
 | `target_bbox_h_frac` | `vision.target_bbox_h_frac`  | Stop-distance threshold used by `approach` / `home`; DSL: `dist=` |
 | `distance_metric`    | `vision.distance_metric`     | How size is measured: `height`\|`width`\|`area`\|`diagonal`. DSL: `metric=` |
-| `stale_after`        | `vision.stale_after`         | Seconds after which a detection is treated as lost        |
+| `stale_after`        | `vision.stale_after`         | Seconds after which a detection is treated as lost (default 2.5 s) |
+| `lost_patience_s`    | —                            | Extra seconds of continuous staleness before `fail` triggers (default 3.0 s). Total gap ≈ 5.5 s. |
 | `on_lost`            | `vision.on_lost`             | `'fail'` (abort on lost) or `'hold'` (pause, keep waiting) |
+| `offset_x`           | —                            | Keep target N px RIGHT of frame centre. Negative = left. 0 = centre. |
+| `offset_y`           | —                            | Keep target N px BELOW frame centre. Negative = above. 0 = centre. |
 | `depth_anchor_frac`  | `vision.depth_anchor_frac`   | Which point on the bbox to vertically centre (0=top, 0.5=centre, 1=bottom). Use **0.2** for tall objects (person standing, pole) where centering on the bbox centre stalls the depth controller. |
 | `lock_mode`          | `vision.lock_mode`           | When to exit the loop — see Lock modes below              |
-| `gate_guard`         | `vision.gate_guard_min_w_frac` | `true` = suppress forward thrust when `w_frac/h_frac` drops below threshold (gate appears angled). DSL: `gate_guard=True` on `home()`. |
+| `gate_guard`             | `vision.gate_guard`            | `true` = enable gate aspect-ratio guard. Suppresses forward thrust when `w_frac/h_frac < gate_guard_min_w_frac` (gate appears angled — AUV not head-on). DSL: `gate_guard=True` on `home()`. |
+| `gate_guard_min_w_frac`  | `vision.gate_guard_min_w_frac` | Aspect ratio threshold (default **0.35**, pool-calibrated). Forward thrust suppressed when `w_frac/h_frac < threshold`. Only active when `gate_guard=true`. |
 | `pass_at`            | -                            | Once size metric ≥ this value, freeze lat+depth and drive straight through at `pass_at_gain%`. DSL: `pass_at=0.38, pass_at_gain=55` on `home()`. |
 | `visual_pid`         | -                            | Structural placeholder; body is P-only today. |
 | `tracking`           | `vision.use_tracks`          | `true` = subscribe `/tracks` (ByteTrack IDs + Kalman-smoothed bbox). Requires `tracker_node` running for that camera. Also settable globally: `ros2 param set /duburi_manager vision.use_tracks true`. |
@@ -794,6 +855,81 @@ ros2 launch duburi_vision cameras_.launch.py \
 
 `video_file` is a fully supported camera source — all downstream detection
 and vision verbs work identically.
+
+---
+
+---
+
+## 11. Payload verbs
+
+### `vision_lock_fire`
+
+Align on multiple axes, verify stable hold, then fire torpedo or dropper via ESP32 serial (or AUX PWM fallback). Retries up to `max_attempts`; on total failure fires at last captured aim-hold pose.
+
+```python
+# Torpedo — forward camera, 3-axis lock, fire channel 1
+duburi.vision.vision_lock_fire(
+    target='torpedo_hole',
+    yaw=True, lat=True, depth=True,
+    stable_lock_s=4.0, max_attempts=3,
+    fire_channel=1,          # torpedo_1
+    duration=60.0)
+
+# Bin drop — downward camera, lat+forward only
+duburi.camera = 'downward'
+duburi.vision.vision_lock_fire(
+    target='fire_bin',
+    yaw=False, lat=True, forward=True, depth=False,
+    stable_lock_s=3.0, max_attempts=2,
+    fire_channel=3,          # dropper_1
+    duration=45.0)
+```
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `stable_lock_s` | float (s) | `3.0` | Seconds all axes must stay in deadband before fire |
+| `max_attempts` | float | `3.0` | Retry count before fallback fire |
+| `attempt_timeout` | float (s) | `15.0` | Per-attempt duration cap |
+| `fire_channel` | float | `0.0` | **Preferred.** 1/2=torpedo, 3/4=dropper. 0=log stub |
+| `fire_aux_channel` | float | `0.0` | AUX fallback: ArduSub AUX 1–6 PWM pulse |
+| `fire_pwm` | float | `1900.0` | PWM for AUX fallback |
+| `lost_patience_s` | float (s) | `0.0` | Engine default 3.0 s |
+| `offset_x` | float (px) | `0.0` | Target offset from frame centre (right positive) |
+| `offset_y` | float (px) | `0.0` | Target offset from frame centre (down positive) |
+
+Fire routing priority: `fire_channel > 0` → ESP32 serial (`PayloadDriver`); else `fire_aux_channel > 0` → AUX PWM; else log-only stub.
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi vision_lock_fire --target_class torpedo_hole --axes yaw,lat,depth --stable_lock_s 4 --fire_channel 1 --duration 60` |
+| DSL | `duburi.vision.vision_lock_fire(target=..., yaw=True, lat=True, depth=True, stable_lock_s=4.0, fire_channel=1)` |
+| Result | `success=True` if fired during stable lock; `success=False` if only fallback fire |
+
+---
+
+### `fire`
+
+Fire an ESP32 payload channel directly (without vision alignment). Requires `PayloadDriver` auto-detected at startup.
+
+```python
+duburi.fire(fire_channel=1.0)   # torpedo_1
+duburi.fire(fire_channel=3.0)   # dropper_1
+```
+
+| Channel | Payload |
+|---|---|
+| 1 | torpedo_1 |
+| 2 | torpedo_2 |
+| 3 | dropper_1 |
+| 4 | dropper_2 |
+
+| Aspect | Value |
+|---|---|
+| CLI | `duburi fire --fire_channel 1` |
+| DSL | `duburi.fire(fire_channel=1.0)` |
+| Check | `duburi.payload_ready` → `bool` |
+| Source | `duburi_control/payload.py` · `PayloadDriver` — auto-detects Espressif/CH340 USB-serial at startup, excludes BNO085 port |
+| Fallback | If `PayloadDriver` not connected, logs warning; returns `success=False` |
 
 ---
 

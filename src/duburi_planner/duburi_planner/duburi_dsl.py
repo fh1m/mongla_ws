@@ -912,6 +912,8 @@ class _VisionDSL:
              gate_guard_min_w_frac: float = 0.35,
              pass_at: float = 0.0,
              pass_at_gain: float = 50.0,
+             offset_x: float = 0.0,
+             offset_y: float = 0.0,
              duration: float = 15.0,
              **overrides):
         """Home in on target using selected axes simultaneously.
@@ -984,6 +986,8 @@ class _VisionDSL:
             gate_guard_min_w_frac=float(gate_guard_min_w_frac),
             pass_at=float(pass_at),
             pass_at_gain=float(pass_at_gain),
+            offset_x=float(offset_x),
+            offset_y=float(offset_y),
             duration=float(duration),
             **overrides)
 
@@ -1027,6 +1031,49 @@ class _VisionDSL:
             target_bbox_h_frac=float(dist),
             lock_mode='follow',
             duration=float(duration),
+            **overrides)
+
+    def hold(self, target=None, *,
+             camera=None,
+             yaw: bool = True,
+             lat: bool = True,
+             depth: bool = False,
+             forward: bool = False,
+             duration: float = 60.0,
+             offset_x: float = 0.0,
+             offset_y: float = 0.0,
+             **overrides):
+        """Maintain PID position-lock on target for duration without exiting on settle.
+
+        Unlike home() which exits once aligned, hold() keeps running the PID
+        loops for the full duration. Use for timed holds, waiting for external
+        triggers, or as the lock phase before a fire sequence.
+
+        Default axes (yaw + lat) maintain 2D centering — add depth=True to
+        hold a specific vertical position against the bbox, or forward=True to
+        maintain standoff distance.
+
+        The trilogy:
+          home()             — align, exit when settled
+          hold()             — align, maintain indefinitely (lock_mode='follow')
+          vision_lock_fire() — align, maintain, fire when stable
+        """
+        axes_parts = [a for a, flag in
+                      [('yaw', yaw), ('lat', lat),
+                       ('depth', depth), ('forward', forward)]
+                      if flag]
+        if not axes_parts:
+            raise ValueError("vision.hold: at least one axis must be True")
+        target_str = self._resolve_target(target)
+        return self._send(
+            'vision_align_3d',
+            camera=self._resolve_camera(camera),
+            target_class=target_str,
+            axes=','.join(axes_parts),
+            lock_mode='follow',
+            duration=float(duration),
+            offset_x=float(offset_x),
+            offset_y=float(offset_y),
             **overrides)
 
     def scan(self, target=None, *,
@@ -1074,4 +1121,63 @@ class _VisionDSL:
             yaw_rate_pct=float(step),
             settle=float(dwell),
             target=float(start_yaw),
+            **overrides)
+
+    def vision_lock_fire(self, target=None, *,
+                         camera=None,
+                         yaw: bool = True,
+                         lat: bool = True,
+                         depth: bool = True,
+                         forward: bool = False,
+                         dist: float = 0.0,
+                         metric: str = '',
+                         stable_lock_s: float = 3.0,
+                         max_attempts: int = 3,
+                         attempt_timeout: float = 15.0,
+                         fire_aux_channel: int = 0,
+                         fire_pwm: int = 1900,
+                         offset_x: float = 0.0,
+                         offset_y: float = 0.0,
+                         duration: float = 60.0,
+                         **overrides):
+        """Lock 3D on target, verify stable hold, fire torpedo (stub).
+
+        Aligns on the selected axes; once all axes stay within deadband for
+        ``stable_lock_s`` seconds the fire stub is called, then exits.
+        Retries up to ``max_attempts``; fires at last pose as fallback.
+
+        ``fire_aux_channel=0`` → log-only (no AUX output). Wire real ESP32
+        serial when the payload driver lands.
+
+        Example::
+
+            duburi.vision.vision_lock_fire(
+                target=m.torpedo.hole,
+                yaw=True, lat=True, depth=True,
+                stable_lock_s=3.0, max_attempts=2,
+                duration=60)
+        """
+        axes_parts = [a for a, flag in
+                      [('yaw', yaw), ('lat', lat),
+                       ('depth', depth), ('forward', forward)]
+                      if flag]
+        if not axes_parts:
+            raise ValueError(
+                "vision.vision_lock_fire: at least one axis must be True")
+        target_str = self._resolve_target(target)
+        return self._send(
+            'vision_lock_fire',
+            camera=self._resolve_camera(camera),
+            target_class=target_str,
+            axes=','.join(axes_parts),
+            target_bbox_h_frac=float(dist),
+            distance_metric=metric,
+            stable_lock_s=float(stable_lock_s),
+            max_attempts=float(max_attempts),
+            attempt_timeout=float(attempt_timeout),
+            fire_aux_channel=float(fire_aux_channel),
+            fire_pwm=float(fire_pwm),
+            offset_x=float(offset_x),
+            offset_y=float(offset_y),
+            duration=float(duration),
             **overrides)

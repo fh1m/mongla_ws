@@ -45,6 +45,7 @@ from duburi_interfaces.msg import DuburiState                            # noqa:
 from duburi_control import (                                            # noqa: E402
     COMMANDS, Duburi, Heartbeat, Pixhawk, fields_for, tracing,
 )
+from duburi_control.payload import PayloadDriver                         # noqa: E402
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
 
@@ -143,6 +144,7 @@ class AUVManagerNode(Node):
         self.declare_parameter('yaw_source',           'mavlink_ahrs')
         self.declare_parameter('bno085_port',          'auto')
         self.declare_parameter('bno085_baud',          115200)
+        self.declare_parameter('payload_port',         'auto')
         self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
         self.declare_parameter('nucleus_dvl_port',     9000)
         self.declare_parameter('nucleus_dvl_password', 'nortek')
@@ -175,6 +177,7 @@ class AUVManagerNode(Node):
         yaw_src_name       = str(self.get_parameter('yaw_source').value)
         bno085_port        = str(self.get_parameter('bno085_port').value)
         bno085_baud        = int(self.get_parameter('bno085_baud').value)
+        payload_port       = str(self.get_parameter('payload_port').value)
         nucleus_dvl_host   = str(self.get_parameter('nucleus_dvl_host').value)
         nucleus_dvl_port   = int(self.get_parameter('nucleus_dvl_port').value)
         nucleus_dvl_passwd = str(self.get_parameter('nucleus_dvl_password').value)
@@ -349,6 +352,19 @@ class AUVManagerNode(Node):
         self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
         self.heartbeat.start()
 
+        # ---- Payload driver (ESP32-C3 torpedo/dropper board) -----------
+        _exclude_ports: set[str] = set()
+        if bno085_port not in ('auto', ''):
+            _exclude_ports.add(bno085_port)
+        self._payload = PayloadDriver()
+        _pl_port = None if payload_port in ('auto', '') else payload_port
+        if self._payload.connect(port=_pl_port, exclude=_exclude_ports):
+            self.get_logger().info(
+                f'[PAYLOAD] connected on {self._payload.port_path}')
+        else:
+            self.get_logger().info(
+                '[PAYLOAD] not found — fire() calls will log-stub only')
+
         # ---- High-level facade ----------------------------------------
         self.duburi = Duburi(
             self.pixhawk,
@@ -358,6 +374,7 @@ class AUVManagerNode(Node):
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
             heartbeat=self.heartbeat,
+            payload=self._payload,
         )
 
         # ---- Callback groups ------------------------------------------
