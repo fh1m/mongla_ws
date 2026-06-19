@@ -76,6 +76,7 @@ Read every capability in three states — **✅ built & tested · 🟦 committed
 - **✅ Phase 1 (runs today):** single-body **Duburi** stack — `detected()` reactive missions, YOLO11 + ByteTrack/Kalman + monocular depth (30 fps), Gate / Return / search-align (~800 pt), the control / MAVLink / vision core.
 - **✅ YASMIN FSM layer (built 2026-06-03):** `state_machines/` planning layer with `VehicleProfile` dual-vehicle auto-detection — same plan builder generates DVL-distance passes for Duburi 4.5 and timed passes for Dubomini 2.0. `gate_flare_fsm` + `prequal_fsm` missions live now.
 - **✅ ESP32-serial payload actuation (built):** `PayloadDriver` + `fire` verb + `vision_lock_fire` with `fire_channel` — torpedo/dropper actuation over USB serial. Offset alignment (`offset_x`/`offset_y`) on all PID verbs + `vision.hold()` DSL mode also added.
+- **✅ Competition mission architecture (authored 2026-06-19):** 5-chunk competition run — `gate_task`, `slalom_task`, `bin_task`, `torpedo_task`, `return_task` + `full_mission_2026` combinator. Dual-camera lazy detection (`pause_detector`/`resume_detector` DSL verbs, `paused` param on `detector_node`). Gate/return chunks runnable today (`gate_rescue_repair.pt` exists); slalom/bin/torpedo blocked on model training.
 - **🟦 Phase 2 (committed, not yet built):** Dubomini 2.0 control path · inter-vehicle comms (IVC) · Slalom / Bins / Torpedo / Octagon plan builders · stepper grabber · underwater preprocessing.
 - **✏️ Corrected:** detector is **YOLO11** (the TDR's YOLO26 line is corrected; YOLO11 is the committed, battle-tested family).
 
@@ -426,6 +427,19 @@ ros2 run duburi_planner mission gate_prequal              # gate-only prequal (D
 ros2 run duburi_planner mission gate_flare_prequal        # scripted gate+flare+return (safe fallback)
 ros2 run duburi_planner mission gate_flare_autonomous     # detected()-paradigm reactive mission (preferred)
 ros2 run duburi_planner mission robosub_prequal           # RoboNation prequal (strafe pass)
+
+# YASMIN FSM missions (dual-vehicle VehicleProfile auto-detect)
+ros2 run duburi_planner mission gate_flare_fsm            # ★ gate+flare FSM
+ros2 run duburi_planner mission prequal_fsm               # ★ gate-only prequal FSM
+ros2 run duburi_planner mission gate_then_bin_fsm         # ★ gate → bin drop FSM
+
+# Competition chunks (RoboSub 2026 — run each independently for pool testing)
+ros2 run duburi_planner mission gate_task                 # ✅ gate pass (gate_rescue_repair.pt exists)
+ros2 run duburi_planner mission return_task               # ✅ return + style_roll (same model)
+ros2 run duburi_planner mission slalom_task               # ⏳ slalom logic test (model pending)
+ros2 run duburi_planner mission bin_task                  # ⏳ bin drop logic test (model pending)
+ros2 run duburi_planner mission torpedo_task              # ⏳ torpedo fire logic test (model pending)
+ros2 run duburi_planner mission full_mission_2026         # full 5-task competition combinator
 ```
 
 Adding a new mission: drop `missions/<your_name>.py` exposing
@@ -503,6 +517,56 @@ ros2 run duburi_planner mission gate_flare_autonomous
 
 Full reference: [`.claude/context/detected-paradigm.md`](.claude/context/detected-paradigm.md) — rules, all error patterns, testing procedures, canonical templates.  
 Mission using this paradigm: [`missions/gate_flare_autonomous.py`](src/duburi_planner/duburi_planner/missions/gate_flare_autonomous.py).
+
+---
+
+### 4c — Competition missions (dual-camera, 5-task chunked run)
+
+RoboSub 2026 competition uses **two cameras always streaming** with **lazy detector activation** to save GPU on the Jetson Orin Nano — inference runs only for the task that needs it.
+
+**Competition launch (both cameras + both detectors, paused at start):**
+
+```bash
+ros2 launch duburi_vision full_mission.launch.py
+```
+
+This starts: `duburi_camera_fwd` + `duburi_camera_dwn` + `duburi_detector_fwd` (paused) + `duburi_detector_dwn` (paused) + trackers + viewer.
+
+**Verify lazy detector state:**
+
+```bash
+ros2 param get /duburi_detector_fwd paused   # → True at launch
+ros2 param get /duburi_detector_dwn paused   # → True at launch
+```
+
+**DSL verbs for lazy activation:**
+
+```python
+duburi.resume_detector('forward')     # activates /duburi_detector_fwd
+duburi.pause_detector('forward')      # suspends /duburi_detector_fwd (free GPU)
+duburi.resume_detector('downward')    # activates /duburi_detector_dwn
+duburi.pause_detector('downward')     # suspends /duburi_detector_dwn
+```
+
+**Always pass `node=` when setting model/classes in dual-cam missions:**
+
+```python
+duburi.set_model('gate_rescue_repair', node='/duburi_detector_fwd')
+duburi.set_classes('gate,rescue,repair', node='/duburi_detector_fwd')
+```
+
+**Run individual chunks (independent pool testing):**
+
+```bash
+ros2 run duburi_planner mission gate_task      # ✅ gate_rescue_repair.pt — runnable today
+ros2 run duburi_planner mission return_task    # ✅ same model — runnable today
+ros2 run duburi_planner mission slalom_task    # ⏳ slalom model pending training
+ros2 run duburi_planner mission bin_task       # ⏳ bin model pending — downward cam + fire(3)
+ros2 run duburi_planner mission torpedo_task   # ⏳ torpedo model pending — vision_lock_fire(1)
+ros2 run duburi_planner mission full_mission_2026  # full 5-task competition run
+```
+
+Chunk cookbook: [`.claude/context/mission-cookbook.md §7.5`](.claude/context/mission-cookbook.md) · Model status: [`src/duburi_vision/models/README.md`](src/duburi_vision/models/README.md).
 
 ---
 
@@ -1255,7 +1319,17 @@ duburi_ws/
             │   ├── gate_flare_prequal.py        # scripted gate+flare+return (scripted fallback)
             │   ├── gate_flare_autonomous.py     # detected()-paradigm reactive mission
             │   ├── gate_flare_fsm.py            # ★ YASMIN FSM gate+flare (dual-vehicle auto-detect)
-            │   └── prequal_fsm.py               # ★ YASMIN FSM gate-only prequal (dual-vehicle)
+            │   ├── prequal_fsm.py               # ★ YASMIN FSM gate-only prequal (dual-vehicle)
+            │   ├── gate_then_bin_fsm.py         # ★ YASMIN FSM gate → bin drop
+            │   ├── competition_config.py        # pool-day constants (depths, bbox fracs, headings)
+            │   ├── full_mission_2026.py         # full 5-task competition combinator
+            │   └── chunks/                      # per-task mission chunks (run standalone for testing)
+            │       ├── __init__.py
+            │       ├── gate_task.py             # ARM→search→align rescue/repair→pass gate
+            │       ├── slalom_task.py           # find red_pipe → hold offset → slalom
+            │       ├── bin_task.py              # downward cam → align blood/fire → fire(3) dropper
+            │       ├── torpedo_task.py          # align torpedo/hole → vision_lock_fire(1)
+            │       └── return_task.py           # return gate → pass → style_roll
             └── state_machines/          # ★ YASMIN FSM planning layer (BUILT 2026-06-03)
                 ├── core/
                 │   ├── outcomes.py              # SUCCEED/FAILED/TIMEOUT/ABORT (yasmin_ros aliases)
