@@ -1457,6 +1457,154 @@ Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-para
 
 ---
 
+## 7.5  Competition mission chunks (RoboSub 2026)
+
+The full 2026 competition run is built as five standalone chunk files under
+`missions/chunks/` plus a combinator in `missions/full_mission_2026.py`.
+Each chunk can be run independently with `ros2 run duburi_planner mission <name>`.
+
+### Key patterns introduced by the competition missions
+
+#### Lazy detector activation (`pause_detector` / `resume_detector`)
+
+Both cameras are always streaming. Detectors start `paused=True` in the
+competition launch — inference only runs for the task that needs it.
+
+```python
+# resume forward detector before gate search
+duburi.resume_detector('forward')   # → ros2 param set /duburi_detector_fwd paused false
+
+# ... gate task body ...
+
+# pause again when done (frees GPU for the next chunk's detector)
+duburi.pause_detector('forward')    # → ros2 param set /duburi_detector_fwd paused true
+```
+
+#### Dual-camera node naming — always pass `node=`
+
+The competition launch creates `/duburi_detector_fwd` and `/duburi_detector_dwn`.
+The DSL defaults to `/duburi_detector` (single-camera launch). Always pass `node=`
+explicitly in dual-cam missions:
+
+```python
+duburi.set_model('gate_rescue_repair', node='/duburi_detector_fwd')
+duburi.set_classes('gate,rescue,repair', node='/duburi_detector_fwd')
+duburi.resume_detector('forward')                     # camera arg drives the node name
+```
+
+#### Bounded search — never infinite forward
+
+Every search loop has an explicit budget and a `look_around` fallback:
+
+```python
+MAX_STEPS = 20
+for _ in range(MAX_STEPS):
+    if duburi.detected('gate', stale_after=1.0):
+        break
+    duburi.move_forward(1.5, gain=40)    # 1.5 s steps — short enough to re-check
+else:
+    duburi.vision.scan(target_class='gate', duration=60)  # look_around orbit
+```
+
+#### Gate pass with bbox-fill exit (`lock_mode='pursue'`)
+
+The gate chunk exits forward drive when the gate bbox fills 80% of the frame:
+
+```python
+duburi.vision.approach(target='gate', dist=0.80,
+                       metric='height', duration=25, lock_mode='pursue')
+# exits automatically when gate fills 80% of frame height = "through"
+```
+
+#### Downward camera centering (bin task) — kp_forward MUST be negative
+
+With the downward camera, `ey > 0` means the target is *aft* of the AUV
+(below-frame = must move backward). The `kp_forward` gain must be negative:
+
+```python
+duburi.vision.home(target='fire', lat=True, forward=True, yaw=False, depth=False,
+                   downward_cam=True,
+                   kp_forward=-60.0,   # ← NEGATIVE: ey>0 = target is behind us
+                   kp_lat=60.0,
+                   deadband=0.06, duration=20)
+```
+
+#### Fire channels — always explicit
+
+`fire_channel` has a default but never rely on it. Name the channel in every call:
+
+```python
+duburi.fire(3)                        # dropper_1 — always explicit
+duburi.vision.vision_lock_fire(
+    target='hole', fire_channel=1,    # torpedo_1 — always explicit
+    ...)
+```
+
+### Pool-day constants (`competition_config.py`)
+
+All depths, headings, bbox fractions, and search budgets live in one file:
+
+```python
+from .competition_config import (
+    GATE_SEARCH_DEPTH_M,    # -0.4  — initial mission depth
+    GATE_PASS_DEPTH_M,      # -0.6  — depth for gate opening
+    GATE_PASS_BBOX_FRAC,    # 0.80  — gate height fill = "through"
+    BIN_DEPTH_M,            # -1.0  — downward cam clear of obstruction
+    TORPEDO_DEPTH_M,        # None  — fill at pool (align with hole)
+    SEARCH_MAX_STEPS,       # 20    — safety budget for all search loops
+)
+```
+
+Set `SLALOM_HEADING_DEG`, `BIN_HEADING_DEG`, `TORPEDO_HEADING_DEG`,
+`RETURN_HEADING_DEG` to `None` initially — fill them at pool from compass
+readings after navigation.
+
+### Full mission combinator
+
+```python
+# missions/full_mission_2026.py
+from .chunks import gate_task, slalom_task, bin_task, torpedo_task, return_task
+from .competition_config import GATE_SEARCH_DEPTH_M
+
+def run(duburi, log):
+    try:
+        duburi.arm()
+        duburi.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
+        duburi.lock_heading(target=0.0, timeout=600)  # BNO lock for full run
+
+        gate_task.run(duburi)
+        slalom_task.run(duburi)
+        bin_task.run(duburi)
+        torpedo_task.run(duburi)
+        return_task.run(duburi)
+
+    except Exception as e:
+        log.error(f'[MISSION] ABORT: {e}')
+    finally:
+        duburi.stop()
+        duburi.disarm()
+```
+
+### Individual chunk test commands
+
+```bash
+# ✅ runnable today (gate_rescue_repair.pt exists)
+ros2 run duburi_planner mission gate_task
+ros2 run duburi_planner mission return_task
+
+# ⏳ logic test (model missing — verify search + timeout + abort flow)
+ros2 run duburi_planner mission slalom_task
+ros2 run duburi_planner mission bin_task
+ros2 run duburi_planner mission torpedo_task
+
+# full 5-task combinator (all chunks in sequence)
+ros2 run duburi_planner mission full_mission_2026
+```
+
+See `testing-guide.md §3` for per-chunk expected outputs and `models/README.md §Competition models` for model status.
+
+---
+
 ## 8. Designing your own mission, step by step
 
 1. **Pick a stable starting condition.** `arm()` then `set_depth(-0.5)`

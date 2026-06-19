@@ -411,7 +411,130 @@ closed-loop yaw source for the rest of the pool day.
 
 ---
 
-## 3. Mission smoke + dry-run
+## 3. Competition mission unit tests (per-chunk)
+
+Each chunk under `missions/chunks/` can be run independently without the
+full 5-task sequence. Use this to validate each task before a competition
+run. Chunks that are logic-only (model not yet trained) still exercise
+the full search/align/fire flow against yolov11n — you'll get
+`detected()` misses for task-specific classes, which is the expected
+result until training lands.
+
+### 3.1 Pre-flight: lazy detector smoke test
+
+Both detectors must start `paused=True` in the competition launch:
+
+```bash
+# Terminal 1 — dual-camera launch
+ros2 launch duburi_vision full_mission.launch.py
+
+# Terminal 2 — verify paused state
+ros2 param get /duburi_detector_fwd paused    # → True
+ros2 param get /duburi_detector_dwn paused    # → True
+
+# Un-pause forward (mimics what gate_task.run() does)
+ros2 param set /duburi_detector_fwd paused false
+ros2 param get /duburi_detector_fwd paused    # → False
+ros2 topic hz /duburi/vision/forward/detections  # should be 15-25 Hz
+
+# Re-pause
+ros2 param set /duburi_detector_fwd paused true
+```
+
+### 3.2 gate_task (✅ runnable today — model exists)
+
+```bash
+# Terminal 1
+ros2 run duburi_manager start --ros-args -p mode:=sim -p yaw_source:=bno085
+ros2 launch duburi_vision full_mission.launch.py   # dual-cam, both paused
+
+# Terminal 2
+ros2 run duburi_planner mission gate_task
+```
+
+Expected flow: `resume_detector(forward)` → model switch to `gate_rescue_repair` →
+search loop (misses in sim) → `look_around` fallback → DSL exits cleanly →
+`pause_detector(forward)`.
+
+### 3.3 return_task (✅ runnable today — same model as gate)
+
+```bash
+ros2 run duburi_planner mission return_task
+```
+
+Expected: same flow as gate_task + `style_roll(flips=1)` at end.
+
+### 3.4 slalom_task (⏳ model pending — logic test only)
+
+```bash
+ros2 run duburi_planner mission slalom_task
+```
+
+Expected: `set_model('slalom')` → search loop → `detected('red_pipe')` never
+fires (model not trained) → hits `look_around` timeout → clean abort.
+Verify no crash, heading lock stays active throughout.
+
+### 3.5 bin_task (⏳ model pending — downward camera + fire logic test)
+
+```bash
+ros2 run duburi_planner mission bin_task
+```
+
+Expected: `use_camera('downward')` switch → `resume_detector(downward)` →
+search loop misses → timeout abort. Check that `use_camera('forward')` is
+called in `finally` block (should see camera switch in topic list).
+
+```bash
+ros2 topic list | grep duburi/vision    # verify both forward and downward topics active
+```
+
+### 3.6 torpedo_task (⏳ model pending — vision_lock_fire logic test)
+
+```bash
+ros2 run duburi_planner mission torpedo_task
+```
+
+Expected: search misses → `look_around` timeout abort. The `vision_lock_fire`
+call never fires because target never locks. Confirm `fire_channel=1` is
+explicit in mission code (grep check):
+
+```bash
+grep -n 'fire_channel' src/duburi_planner/duburi_planner/missions/chunks/torpedo_task.py
+# Must show: fire_channel=1  (torpedo_1, NOT default)
+```
+
+### 3.7 full_mission_2026 (dry-run combinator)
+
+```bash
+ros2 run duburi_planner mission full_mission_2026
+```
+
+Runs all 5 chunks in sequence. In sim all detector searches will timeout;
+the combinator should still exit cleanly via the `finally: stop + disarm` block.
+
+### 3.8 Syntax check (no manager needed)
+
+Before pool day, run a syntax check on all chunks:
+
+```bash
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/gate_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/slalom_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/bin_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/torpedo_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/return_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/full_mission_2026.py
+# No output = all clean
+```
+
+Also verifies all chunks import cleanly via the smoke suite:
+
+```bash
+colcon test --packages-select duburi_planner --pytest-args -q test/test_missions_smoke.py
+```
+
+---
+
+## 4. Mission smoke + dry-run
 
 Every mission file (`src/duburi_planner/duburi_planner/missions/*.py`)
 is auto-discovered by the runner and is verified to import cleanly

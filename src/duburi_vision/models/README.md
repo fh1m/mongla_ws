@@ -122,3 +122,56 @@ Once we have RoboSub-class data (gate, buoys, dropper marker, torpedo
 target, etc.), train with the YOLO26 recipe and drop the resulting
 `best.pt` here renamed to a descriptive stem. Add a matching YAML for
 the class index.
+
+## Competition models (RoboSub 2026)
+
+| Weight file                      | Camera   | Classes                | Status     | Chunk           |
+| -------------------------------- | -------- | ---------------------- | ---------- | --------------- |
+| `gate_rescue_repair.pt`          | forward  | gate, rescue, repair   | ✅ exists   | gate_task, return_task |
+| `slalom_red_pipe.pt`             | forward  | red_pipe               | ⏳ training | slalom_task     |
+| `bin_fire_blood.pt`              | downward | fire, blood            | ⏳ training | bin_task        |
+| `torpedo_blood_hole.pt`          | forward  | torpedo, blood, hole   | ⏳ training | torpedo_task    |
+
+**While `gate_rescue_repair.pt` exists, slalom/bin/torpedo models are not yet trained.**
+Use `yolov11n` as a placeholder for logic testing — see §3.4–3.6 in `testing-guide.md`.
+
+### Dual-camera usage (competition launch)
+
+The competition launch (`full_mission.launch.py`) runs two detectors:
+
+```bash
+# forward detector — node: /duburi_detector_fwd
+ros2 param set /duburi_detector_fwd active_model gate_rescue_repair
+ros2 param set /duburi_detector_fwd classes "gate,rescue,repair"
+
+# downward detector — node: /duburi_detector_dwn
+ros2 param set /duburi_detector_dwn active_model bin_fire_blood
+ros2 param set /duburi_detector_dwn classes "fire,blood"
+```
+
+**Always pass `node=` explicitly** when calling `set_model()` / `set_classes()` /
+`use()` from a dual-cam mission — the default is `/duburi_detector` which
+doesn't exist when using the competition launch:
+
+```python
+# Correct — explicit node
+duburi.set_model('gate_rescue_repair', node='/duburi_detector_fwd')
+duburi.set_classes('gate,rescue,repair', node='/duburi_detector_fwd')
+
+# Wrong — hits non-existent /duburi_detector
+duburi.set_model('gate_rescue_repair')
+```
+
+### Lazy detection (save GPU)
+
+Both detectors start `paused=True` in the competition launch. Missions
+activate inference only for the task that needs it:
+
+```python
+duburi.resume_detector('forward')   # → ros2 param set /duburi_detector_fwd paused false
+# ... task code ...
+duburi.pause_detector('forward')    # → ros2 param set /duburi_detector_fwd paused true
+```
+
+Pausing a detector drops its `_infer_loop` CPU/GPU load to ~0 while keeping
+the camera streaming and the tracker running.
