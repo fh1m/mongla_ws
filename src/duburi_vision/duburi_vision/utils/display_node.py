@@ -31,6 +31,13 @@ a single command:
         -p launch_pipeline:=true -p camera:=forward \\
         -p model:=gate_flare_medium_100ep -p classes:=gate
 
+Camera / display keyboard shortcuts (always active)
+---------------------------------------------------
+  f            → switch to forward camera
+  d            → switch to downward camera
+  D            → toggle depth map overlay
+  b            → toggle side-by-side view (both cameras with detections)
+
 Video file keyboard shortcuts (active when video_file_mode:=true)
 -----------------------------------------------------------------
   Space        → pause / resume
@@ -150,6 +157,7 @@ class VisionDisplayNode(Node):
         super().__init__('vision_display')
 
         self.declare_parameter('camera',          'forward')
+        self.declare_parameter('cameras',         'forward,downward')
         self.declare_parameter('video_file_mode', False)
         self.declare_parameter('launch_pipeline', False)
         self.declare_parameter('model',           'yolov11n')
@@ -167,10 +175,28 @@ class VisionDisplayNode(Node):
         max_hz          = self.get_parameter('max_display_hz').get_parameter_value().double_value
 
         self._camera        = camera
+        self._active_camera = camera
+        self._cameras_available = [
+            c.strip() for c in
+            self.get_parameter('cameras').get_parameter_value().string_value.split(',')
+            if c.strip()
+        ]
         self._video_mode    = video_file_mode
         self._max_hz        = max_hz
         self._yaw_source    = self.get_parameter('yaw_source').get_parameter_value().string_value
         self._pipeline_procs: list[subprocess.Popen] = []
+
+        # Runtime camera switching state
+        self._side_by_side      = False
+        self._secondary_frame: np.ndarray | None = None
+        self._secondary_lock    = threading.Lock()
+        self._secondary_dets: list = []
+        self._secondary_dets_lock = threading.Lock()
+        self._secondary_subs: list = []
+        self._cam_subs: list = []  # 6 camera-specific subs, replaced by _switch_camera
+        # Deferred subscription action (set by main thread, executed by timer in executor).
+        # Values: None | 'enable_sbs' | 'disable_sbs' | '<camera_name>'
+        self._pending_sub_action: str | None = None
 
         if launch_pipeline:
             self.get_logger().info(f'[DISP ] starting camera_node + detector_node for camera={camera}')
@@ -234,18 +260,12 @@ class VisionDisplayNode(Node):
 
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
-        cls_topic = f'/duburi/vision/{camera}/classes_filter'
-        trk_topic = f'/duburi/vision/{camera}/tracks'
-        vr_topic  = f'/duburi/vision/{camera}/vis_range'
-        vmap_topic = f'/duburi/vision/{camera}/vis_range_map'
-        self.create_subscription(Image,             raw_topic,    self._on_image,          qos_be)
-        self.create_subscription(Detection2DArray,  det_topic,    self._on_detections,     10)
-        self.create_subscription(Detection2DArray,  trk_topic,    self._on_tracks,         10)
-        self.create_subscription(DuburiState,       '/duburi/state', self._on_state,       10)
-        self.create_subscription(String,            cls_topic,    self._on_classes_filter, 10)
-        self.create_subscription(Float32MultiArray, vr_topic,     self._on_vis_range,      10)
-        self.create_subscription(Image,             vmap_topic,   self._on_depth_map,      2)
+        self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
         self.create_timer(1.0, self._check_waiting)
+        # 20 Hz timer: processes camera-switch/side-by-side requests from the display thread.
+        # create/destroy_subscription must happen inside the executor to avoid wait-set races.
+        self.create_timer(0.05, self._process_pending_sub_action)
+        self._cam_subs = self._create_cam_subs(camera, qos_be)
 
         # Video playback control clients (only when video_file_mode=true).
         self._pause_client   = None   # rclpy.Client[SetBool] or None
@@ -273,6 +293,106 @@ class VisionDisplayNode(Node):
         if elapsed >= _WAIT_LOG_INTERVAL:
             self.get_logger().warn('[DISP ] no frames yet — is the pipeline running? (try launch_pipeline:=true)')
             self._last_wait_log = now
+
+    def _process_pending_sub_action(self) -> None:
+        """Execute deferred subscription changes. Runs on the executor thread (timer cb)."""
+        action = self._pending_sub_action
+        if action is None:
+            return
+        self._pending_sub_action = None
+        if action == 'enable_sbs':
+            self._enable_side_by_side()
+        elif action == 'disable_sbs':
+            self._disable_side_by_side()
+        else:
+            self._switch_camera(action)
+
+    def _create_cam_subs(self, camera: str, qos_be) -> list:
+        raw_topic  = f'/duburi/vision/{camera}/image_raw'
+        det_topic  = f'/duburi/vision/{camera}/detections'
+        cls_topic  = f'/duburi/vision/{camera}/classes_filter'
+        trk_topic  = f'/duburi/vision/{camera}/tracks'
+        vr_topic   = f'/duburi/vision/{camera}/vis_range'
+        vmap_topic = f'/duburi/vision/{camera}/vis_range_map'
+        return [
+            self.create_subscription(Image,             raw_topic,  self._on_image,          qos_be),
+            self.create_subscription(Detection2DArray,  det_topic,  self._on_detections,     10),
+            self.create_subscription(Detection2DArray,  trk_topic,  self._on_tracks,         10),
+            self.create_subscription(String,            cls_topic,  self._on_classes_filter, 10),
+            self.create_subscription(Float32MultiArray, vr_topic,   self._on_vis_range,      10),
+            self.create_subscription(Image,             vmap_topic, self._on_depth_map,      2),
+        ]
+
+    def _switch_camera(self, name: str) -> None:
+        if name == self._active_camera:
+            return
+        self.get_logger().info(
+            f'[DISPLAY] camera switch: {self._active_camera} → {name}')
+        for sub in self._cam_subs:
+            self.destroy_subscription(sub)
+        self._cam_subs.clear()
+        with self._det_lock:
+            self._detections.clear()
+        with self._tracks_lock:
+            self._tracked_dets.clear()
+            self._track_ids.clear()
+        with self._vis_range_lock:
+            self._vis_range_values.clear()
+        # flush frame queue
+        while not self._frame_q.empty():
+            try:
+                self._frame_q.get_nowait()
+            except Exception:
+                break
+        self._active_camera = name
+        self._camera = name
+        self._last_frame_t = 0.0
+        self._last_det_t   = 0.0
+        qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
+        self._cam_subs = self._create_cam_subs(name, qos_be)
+
+    def _secondary_camera_name(self) -> str | None:
+        """Return the 'other' camera from _cameras_available, or None."""
+        others = [c for c in self._cameras_available if c != self._active_camera]
+        return others[0] if others else None
+
+    def _enable_side_by_side(self) -> None:
+        sec = self._secondary_camera_name()
+        if sec is None:
+            return
+        qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
+        self._secondary_subs = [
+            self.create_subscription(
+                Image, f'/duburi/vision/{sec}/image_raw',
+                self._on_secondary_image, qos_be),
+            self.create_subscription(
+                Detection2DArray, f'/duburi/vision/{sec}/detections',
+                self._on_secondary_detections, 10),
+        ]
+        self.get_logger().info(f'[DISPLAY] side-by-side ON  ({self._active_camera} | {sec})')
+
+    def _disable_side_by_side(self) -> None:
+        for sub in self._secondary_subs:
+            self.destroy_subscription(sub)
+        self._secondary_subs.clear()
+        with self._secondary_lock:
+            self._secondary_frame = None
+        with self._secondary_dets_lock:
+            self._secondary_dets.clear()
+        self.get_logger().info('[DISPLAY] side-by-side OFF')
+
+    def _on_secondary_image(self, msg: Image) -> None:
+        try:
+            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception:
+            return
+        with self._secondary_lock:
+            self._secondary_frame = frame
+
+    def _on_secondary_detections(self, msg: Detection2DArray) -> None:
+        dets = array_to_detections(msg)
+        with self._secondary_dets_lock:
+            self._secondary_dets = dets
 
     def _on_state(self, msg: DuburiState) -> None:
         self._state = msg
@@ -412,6 +532,25 @@ def _send_pause(node: VisionDisplayNode, pause: bool) -> None:
     req = SetBool.Request()
     req.data = pause
     node._pause_client.call_async(req)
+
+
+def _handle_camera_keys(node: VisionDisplayNode, key: int) -> None:
+    """Handle runtime camera switching keys.
+
+    Subscription create/destroy is deferred to _process_pending_sub_action (timer cb on
+    the executor thread) to avoid wait-set races with rclpy.spin on the daemon thread.
+    """
+    if key < 0:
+        return
+    if key == ord('f'):
+        node._pending_sub_action = 'forward'
+    elif key == ord('d'):
+        node._pending_sub_action = 'downward'
+    elif key == ord('D'):
+        node._show_depth_map = not node._show_depth_map
+    elif key == ord('b'):
+        node._side_by_side = not node._side_by_side
+        node._pending_sub_action = 'enable_sbs' if node._side_by_side else 'disable_sbs'
 
 
 def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:
@@ -577,6 +716,7 @@ def main(args=None):
                 key = cv2.waitKeyEx(1)
                 if key in (ord('q'), ord('Q')):
                     break
+                _handle_camera_keys(node, key)
                 _handle_video_keys(node, key)
                 continue
 
@@ -657,6 +797,35 @@ def main(args=None):
                 alpha = 0.80 * _fade
                 cv2.addWeighted(splash, alpha, out, 1.0 - alpha, 0, out)
 
+            # Side-by-side mode: hstack primary + secondary camera frames
+            if node._side_by_side:
+                with node._secondary_lock:
+                    sec_frame = (node._secondary_frame.copy()
+                                 if node._secondary_frame is not None else None)
+                with node._secondary_dets_lock:
+                    sec_dets = list(node._secondary_dets)
+                if sec_frame is not None:
+                    # Match heights then hstack
+                    h_target = out.shape[0]
+                    sec_resized = cv2.resize(
+                        sec_frame, (int(sec_frame.shape[1] * h_target / sec_frame.shape[0]), h_target),
+                        interpolation=cv2.INTER_LINEAR)
+                    # Annotate secondary with detections
+                    if sec_dets:
+                        sec_resized = draw.render_all(sec_resized, sec_dets)
+                    # Camera name labels
+                    cv2.putText(out, node._active_camera.upper(),
+                                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 160), 2, cv2.LINE_AA)
+                    sec_name = node._secondary_camera_name() or ''
+                    cv2.putText(sec_resized, sec_name.upper(),
+                                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2, cv2.LINE_AA)
+                    out = np.hstack([out, sec_resized])
+
+            # Camera name badge (single-camera mode)
+            if not node._side_by_side:
+                cv2.putText(out, node._active_camera.upper(),
+                            (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 160), 2, cv2.LINE_AA)
+
             if out.shape[0] != _SP_H or out.shape[1] != _SP_W:
                 out = cv2.resize(out, (_SP_W, _SP_H), interpolation=cv2.INTER_LINEAR)
             cv2.imshow(_WINDOW_NAME, out)
@@ -664,8 +833,7 @@ def main(args=None):
 
             if key in (ord('q'), ord('Q')):
                 break
-            if key in (ord('d'), ord('D')):
-                node._show_depth_map = not node._show_depth_map
+            _handle_camera_keys(node, key)
             _handle_video_keys(node, key)
 
             if frame_budget > 0:

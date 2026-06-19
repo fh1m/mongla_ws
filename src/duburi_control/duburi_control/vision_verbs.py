@@ -388,7 +388,7 @@ class VisionVerbs:
         with self._command_scope(verb):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
-            is_downward     = camera in ('downward',)
+            is_downward     = camera in ('downward', 'sim_bottom')
             depth_sign      = -1 if is_downward else +1
             # Downward cam: ey (vertical in image) maps to forward/back axis.
             forward_uses_ey = is_downward and 'forward' in axes

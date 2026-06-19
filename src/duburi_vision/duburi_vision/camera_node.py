@@ -45,6 +45,7 @@ from duburi_vision import (
     make_camera, make_camera_from_profile,
     get_profile,
 )
+from duburi_vision.cameras.discover import discover_cameras
 
 
 class CameraNode(Node):
@@ -65,6 +66,17 @@ class CameraNode(Node):
         self.declare_parameter('publish_rate_hz', 30)
         self.declare_parameter('path',            '')        # for source=video_file
         self.declare_parameter('loop',            True)      # for source=video_file
+        self.declare_parameter('discover_on_start', False)   # log USB camera table
+
+        if self.get_parameter('discover_on_start').get_parameter_value().bool_value:
+            cams = discover_cameras()
+            if cams:
+                self.get_logger().info('[CAM  ] USB cameras detected:')
+                for c in cams:
+                    self.get_logger().info(
+                        f"[CAM  ]   [{c['index']}] {c['path']}  ({c['name']})")
+            else:
+                self.get_logger().warn('[CAM  ] no USB cameras found via discover')
 
         self._cam     = self._build_camera()
         self._info    = self._cam.info()

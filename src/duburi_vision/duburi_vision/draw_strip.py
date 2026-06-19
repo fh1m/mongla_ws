@@ -80,7 +80,8 @@ def render_ui_strip(w: int, frame_h: int, *,
                     video_position: Optional[tuple] = None,
                     pipeline_health: Optional[Dict[str, bool]] = None,
                     depth_rate: float = 0.0,
-                    primary_vis_range: float = 0.0) -> np.ndarray:
+                    primary_vis_range: float = 0.0,
+                    ) -> np.ndarray:
     """Build and return the UI strip.  Height scales with render width."""
     # Calibrated for 1920px native render (sf=1.0 at 1920). At smaller widths
     # the floor of 0.6 keeps widgets readable without becoming microscopic.
@@ -147,7 +148,8 @@ def _draw_header_row(strip: np.ndarray, w: int, fps: float,
     cv2.circle(strip, (bx - 10, dot_y), 3, C_ACCENT, -1, cv2.LINE_AA)
     cv2.circle(strip, (bx + bw + 10, dot_y), 3, C_ACCENT, -1, cv2.LINE_AA)
 
-    pil_text(strip, f'{fps:.0f} Hz', (8, by), fs_side, C_DIM)
+    fps_label = f'{fps:.0f} Hz'
+    pil_text(strip, fps_label, (8, by), fs_side, C_DIM)
 
     if video_mode:
         badge     = '|| VIDEO SIM' if is_paused else '>  VIDEO SIM'
