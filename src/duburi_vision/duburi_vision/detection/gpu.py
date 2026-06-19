@@ -41,13 +41,24 @@ def select_device(requested: str = _DEFAULT, *, logger=None) -> str:
 
     cuda_ok = bool(torch.cuda.is_available())
 
+    def _emit(line):
+        if logger is not None and hasattr(logger, 'info'):
+            logger.info(line)
+        else:
+            print(line)
+
     if req == 'auto':
         if cuda_ok:
-            return _log_gpu(torch, _DEFAULT, logger)
-        return _log_cpu(torch, logger, note='auto: cuda unavailable')
+            idx = int(req.split(':', 1)[1]) if ':' in _DEFAULT else 0
+            _emit(f"[VIS  ] using {_DEFAULT} ({torch.cuda.get_device_name(idx)})  "
+                  f"torch={torch.__version__}  cuda={torch.version.cuda}")
+            return _DEFAULT
+        _emit(f"[VIS  ] using cpu (auto: cuda unavailable)  torch={torch.__version__}")
+        return 'cpu'
 
     if req == 'cpu':
-        return _log_cpu(torch, logger, note='requested')
+        _emit(f"[VIS  ] using cpu (requested)  torch={torch.__version__}")
+        return 'cpu'
 
     if req.startswith('cuda'):
         if not cuda_ok:
@@ -56,35 +67,15 @@ def select_device(requested: str = _DEFAULT, *, logger=None) -> str:
                 f"torch={torch.__version__} torch.cuda.is_available()=False. "
                 f"Either fix CUDA install (driver / cuda toolkit / matching torch wheel) "
                 f"or set device='cpu' in detector.yaml to run on CPU.")
-        return _log_gpu(torch, req, logger)
+        idx = 0
+        if ':' in req:
+            try:
+                idx = int(req.split(':', 1)[1])
+            except ValueError:
+                pass
+        _emit(f"[VIS  ] using {req} ({torch.cuda.get_device_name(idx)})  "
+              f"torch={torch.__version__}  cuda={torch.version.cuda}")
+        return req
 
     raise ValueError(
         f"unknown device {requested!r}. use 'cuda', 'cuda:N', 'cpu', or 'auto'.")
-
-
-def _log_gpu(torch, device, logger):
-    idx = 0
-    if ':' in device:
-        try:
-            idx = int(device.split(':', 1)[1])
-        except ValueError:
-            idx = 0
-    name = torch.cuda.get_device_name(idx)
-    line = (
-        f"[VIS  ] using {device} ({name})  torch={torch.__version__}  "
-        f"cuda={torch.version.cuda}")
-    _emit(line, logger)
-    return device
-
-
-def _log_cpu(torch, logger, *, note):
-    line = f"[VIS  ] using cpu ({note})  torch={torch.__version__}"
-    _emit(line, logger)
-    return 'cpu'
-
-
-def _emit(line, logger):
-    if logger is not None and hasattr(logger, 'info'):
-        logger.info(line)
-    else:
-        print(line)

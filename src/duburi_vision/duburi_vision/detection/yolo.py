@@ -19,9 +19,8 @@ from typing import Iterable, List, Optional
 
 import numpy as np
 
-from .detector    import Detector, Detection
-from .gpu         import select_device
-from .class_index import load_class_index
+from .detector import Detector, Detection
+from .gpu      import select_device
 
 
 # Maps our descriptive model names to Ultralytics' official short stems.
@@ -48,6 +47,20 @@ _PRETRAINED_ALIASES: dict[str, str] = {
     'yolo26_large_pretrained':  'yolo26l',
     'yolo26_xlarge_pretrained': 'yolo26x',
 }
+
+
+def _load_class_index(model_path: str) -> dict[int, str] | None:
+    """Load {id: name} from a sidecar YAML next to the model weights, or None."""
+    yaml_path = Path(model_path).with_suffix('.yaml')
+    if not yaml_path.exists():
+        return None
+    try:
+        import yaml
+        data = yaml.safe_load(yaml_path.read_text())
+        names = data.get('names', {}) if isinstance(data, dict) else {}
+        return {int(k): str(v) for k, v in names.items()}
+    except Exception:
+        return None
 
 
 def _find_src_models_dir() -> Optional[Path]:
@@ -167,7 +180,7 @@ class YoloDetector(Detector):
 
         # Prefer class names from a sidecar YAML (e.g. yolo26_nano_pretrained.yaml)
         # so custom models can override the embedded names table.
-        yaml_names = load_class_index(resolved_path)
+        yaml_names = _load_class_index(resolved_path)
         self._names = yaml_names if yaml_names else dict(getattr(self._model, 'names', {}) or {})
 
         if self._log and self._names:
