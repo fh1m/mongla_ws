@@ -350,7 +350,7 @@ COMMANDS = {
                      'stable_lock_s': 3.0, 'max_attempts': 3.0,
                      'attempt_timeout': 15.0,
                      'offset_x': 0.0, 'offset_y': 0.0,
-                     'fire_channel': 1.0, 'lost_patience_s': 0.0},
+                     'fire_channel': 0.0, 'lost_patience_s': 0.0},
     },
     'fire': {
         'help':     'Fire ESP32 payload channel. 1/2 = torpedo, 3/4 = dropper. '

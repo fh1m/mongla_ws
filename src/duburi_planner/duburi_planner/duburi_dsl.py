@@ -423,6 +423,28 @@ class DuburiMission:
     #  DVL                                                                 #
     # ================================================================== #
 
+    def use_camera(self, name: str) -> None:
+        """Switch the sticky camera for all subsequent vision verbs.
+
+        Logs the switch so pool-side operators see the transition in the
+        console. Does not affect already-running vision verbs.
+
+        Example::
+
+            duburi.use_camera('downward')
+            duburi.vision.home(
+                target='bin_marker',
+                lat=True, forward=True, depth=False, yaw=False,
+                kp_lat=60.0,
+                kp_forward=-60.0,  # negative: ey>0 = target AFT = move backward
+                offset_x=0.0, offset_y=0.0,
+                deadband=0.08,
+            )
+            duburi.use_camera('forward')
+        """
+        self.log.info(f'[MISSION] camera → {name!r}')
+        self.camera = name
+
     def dvl_connect(self):
         """Connect Nortek Nucleus 1000 DVL over TCP."""
         return self._send('dvl_connect')

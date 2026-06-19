@@ -61,6 +61,16 @@ duburi_vision:
       expected_fps:    30
       frame_id:        bottom_cam
 
+    # Auto-discover: pick first available USB device. Use discover_on_start:=true
+    # on camera_node to log which physical devices map to which indices.
+    auto:
+      source:   webcam
+      device:   0
+      width:    640
+      height:   480
+      fps:      30
+      frame_id: auto_cam
+
     jetson_front:  { source: jetson  }
     jetson_bottom: { source: jetson  }
     blueos:        { source: blueos  }
