@@ -484,25 +484,24 @@ class _VisionDSL:
                          stable_lock_s: float = 3.0,
                          max_attempts: int = 3,
                          attempt_timeout: float = 15.0,
-                         fire_aux_channel: int = 0,
-                         fire_pwm: int = 1900,
+                         fire_channel: int = 1,
                          offset_x: float = 0.0,
                          offset_y: float = 0.0,
                          duration: float = 60.0,
                          **overrides):
-        """Lock 3D on target, verify stable hold, fire torpedo (stub).
+        """Lock 3D on target, hold stable, fire via ESP32 serial.
 
         Aligns on the selected axes; once all axes stay within deadband for
-        ``stable_lock_s`` seconds the fire stub is called, then exits.
+        ``stable_lock_s`` seconds ``fire_channel`` is sent over serial.
         Retries up to ``max_attempts``; fires at last pose as fallback.
 
-        ``fire_aux_channel=0`` -> log-only (no AUX output). Wire real ESP32
-        serial when the payload driver lands.
+        ``fire_channel``: 1/2 = torpedo, 3/4 = dropper. 0 = log-only stub.
 
         Example::
 
             duburi.vision.vision_lock_fire(
                 target=m.torpedo.hole,
+                fire_channel=1,
                 yaw=True, lat=True, depth=True,
                 stable_lock_s=3.0, max_attempts=2,
                 duration=60)
@@ -525,8 +524,7 @@ class _VisionDSL:
             stable_lock_s=float(stable_lock_s),
             max_attempts=float(max_attempts),
             attempt_timeout=float(attempt_timeout),
-            fire_aux_channel=float(fire_aux_channel),
-            fire_pwm=float(fire_pwm),
+            fire_channel=float(fire_channel),
             offset_x=float(offset_x),
             offset_y=float(offset_y),
             duration=float(duration),

@@ -330,16 +330,14 @@ COMMANDS = {
     },
     'vision_lock_fire': {
         'help':     'Align on target in 3D then hold stable for stable_lock_s seconds '
-                    'before firing. Retries max_attempts times; fires at last known '
-                    'pose on all-fail fallback. '
-                    'fire_channel=1/2 torpedo, 3/4 dropper (ESP32 serial). '
-                    'fire_channel=0 + fire_aux_channel=0 = log-only stub.',
+                    'before firing via ESP32 serial. Retries max_attempts times; '
+                    'fires at last known pose on all-fail fallback. '
+                    'fire_channel=1/2=torpedo, 3/4=dropper. 0=log-only stub.',
         'fields':   ['camera', 'target_class', 'axes', 'duration',
                      'deadband', 'kp_yaw', 'kp_lat', 'kp_depth', 'kp_forward',
                      'target_bbox_h_frac', 'on_lost', 'stale_after',
                      'depth_anchor_frac', 'distance_metric',
                      'stable_lock_s', 'max_attempts', 'attempt_timeout',
-                     'fire_aux_channel', 'fire_pwm',
                      'offset_x', 'offset_y',
                      'fire_channel', 'lost_patience_s'],
         'defaults': {'camera': 'forward', 'target_class': 'torpedo_hole',
@@ -351,9 +349,8 @@ COMMANDS = {
                      'distance_metric': '',
                      'stable_lock_s': 3.0, 'max_attempts': 3.0,
                      'attempt_timeout': 15.0,
-                     'fire_aux_channel': 0.0, 'fire_pwm': 1900.0,
                      'offset_x': 0.0, 'offset_y': 0.0,
-                     'fire_channel': 0.0, 'lost_patience_s': 0.0},
+                     'fire_channel': 1.0, 'lost_patience_s': 0.0},
     },
     'fire': {
         'help':     'Fire ESP32 payload channel. 1/2 = torpedo, 3/4 = dropper. '

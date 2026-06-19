@@ -327,6 +327,10 @@ class DuburiMission:
     def pause(self, seconds: float):
         return self._send('pause', duration=float(seconds))
 
+    def fire(self, channel: int):
+        """Fire payload channel via ESP32 serial. 1/2 = torpedo, 3/4 = dropper."""
+        return self._send('fire', fire_channel=float(channel))
+
     # ================================================================== #
     #  Open-loop motion                                                    #
     # ================================================================== #

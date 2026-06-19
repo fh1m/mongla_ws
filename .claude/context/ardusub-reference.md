@@ -193,13 +193,9 @@ In ALT_HOLD, sending ch3 (throttle) = 1500 (neutral) lets ArduSub maintain depth
 Sending ch3 > 1500 ascends, < 1500 descends (relative change, not absolute depth).
 To set absolute depth: use `set_position_target_global_int_send` with depth value.
 
-### 3. Servo AUX Offset
+### 3. Servo AUX Offset (reference only — not used for payload)
 AUX outputs 1-8 on Pixhawk correspond to MAVLink servo instances 9-16.
-```python
-# AUX1 = servo instance 9
-set_servo_pwm(servo_n=1, microseconds=1500)
-# Uses MAV_CMD_DO_SET_SERVO with servo_n+8 = 9
-```
+Payload (torpedo/dropper) uses ESP32 USB serial (`duburi.fire(n)`), not Pixhawk AUX.
 
 ### 4. RC Override Timeout
 If RC_CHANNELS_OVERRIDE messages stop, ArduSub reverts to physical RC input

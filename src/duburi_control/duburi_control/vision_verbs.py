@@ -491,19 +491,17 @@ class VisionVerbs:
                          depth_anchor_frac=0.0, distance_metric='',
                          stable_lock_s=3.0,
                          max_attempts=3, attempt_timeout=15.0,
-                         fire_aux_channel=0, fire_pwm=1900,
                          offset_x=0.0, offset_y=0.0,
                          fire_channel=0, lost_patience_s=0.0):
-        """Lock 3D position on target, verify stable hold, fire.
+        """Lock 3D position on target, verify stable hold, fire via ESP32 serial.
 
         Aligns on all requested axes; once all axes stay within deadband for
-        stable_lock_s seconds continuously the on_stable callback fires:
-          - fire_channel 1/2 = torpedo, 3/4 = dropper (ESP32 serial via payload driver)
-          - fire_aux_channel > 0 = AUX PWM fallback
-          - both 0 = log-only stub
+        stable_lock_s seconds the fire callback triggers:
+          - fire_channel 1/2 = torpedo, 3/4 = dropper (ESP32 serial)
+          - fire_channel 0 = log-only stub
 
         Retries up to max_attempts. On total failure fires at last captured
-        aim-hold pose as a best-effort fallback.
+        aim-hold pose as best-effort fallback.
         """
         axis_set = _parse_axes(axes)
         gains = VisionGains(kp_yaw=float(kp_yaw), kp_lat=float(kp_lat),
@@ -511,15 +509,13 @@ class VisionVerbs:
                             kp_forward=float(kp_forward))
         fired = False
         last_att = self.pixhawk.get_attitude()
-        _fire_ch  = int(fire_channel)
-        _aux_ch   = int(fire_aux_channel)
-        _aux_pwm  = int(fire_pwm)
+        _fire_ch = int(fire_channel)
 
         def _on_stable():
             nonlocal fired, last_att
             last_att = self.pixhawk.get_attitude()
             fired = True
-            self._do_fire(_fire_ch, _aux_ch, _aux_pwm)
+            self._do_fire(_fire_ch)
 
         for attempt in range(int(max_attempts)):
             if self._abort_fn and self._abort_fn():
@@ -551,7 +547,7 @@ class VisionVerbs:
             self.log.warning(
                 f'[LOCK_FIRE] all {int(max_attempts)} attempts failed; '
                 f'fallback fire at last pose yaw={yaw:.1f} depth={depth:.2f}m')
-            self._do_fire(_fire_ch, _aux_ch, _aux_pwm)
+            self._do_fire(_fire_ch)
 
         return self._make_result(
             success=fired,
@@ -559,20 +555,16 @@ class VisionVerbs:
             final_value=float(fired),
             error_value=0.0)
 
-    def _do_fire(self, fire_channel: int, aux_channel: int, pwm: int) -> None:
-        """Route fire to ESP32 payload driver, AUX PWM, or log-stub.
+    def _do_fire(self, fire_channel: int) -> None:
+        """Fire via ESP32 serial payload driver, or log-stub if channel=0.
 
-        Called from inside a vision tracking scope -- uses _fire_payload()
-        (raw driver call) to avoid a nested command-scope deadlock.
+        Called inside a vision tracking scope — uses _fire_payload() (raw,
+        no command scope) to avoid nested command-scope deadlock.
         """
         if fire_channel > 0:
             ok = self._fire_payload(fire_channel)
             if not ok:
                 self.log.warning(
-                    f'[FIRE ] ch={fire_channel} failed (payload not ready) '
-                    f'-- falling back to stub')
-        elif aux_channel > 0:
-            self.pixhawk.set_servo_pwm(aux_channel, pwm)
-            self.log.info(f'[FIRE ] AUX ch={aux_channel} pwm={pwm}')
+                    f'[FIRE ] ch={fire_channel} failed (payload not connected) — stub')
         else:
-            self.log.info('[FIRE ] no channel configured -- log-only stub')
+            self.log.info('[FIRE ] fire_channel=0 — log-only stub (set fire_channel=1..4)')

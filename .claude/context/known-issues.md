@@ -62,11 +62,9 @@ don't bundle. Each one is ~10–40 LOC.
 - **Resolution:** Added `MavlinkAPI.get_attitude_age() -> float | None` which uses pymavlink's per-message `_timestamp` to compute seconds-since-receipt of the last `AHRS2`. `MavlinkAhrsSource.read_yaw()` and `is_healthy()` now both gate on `age <= 0.25 s`, returning `None` / `False` when stale. Matches the [`sensors-pipeline.md`](./sensors-pipeline.md) §"Stale handling" contract.
 - **Verify:** kill the SITL while the manager is running; `is_healthy()` should flip to `False` within ≈ 250 ms and yaw commands should stop locking onto the cached yaw.
 
-## 4. `set_servo_pwm` missing AUX +8 offset — **FIXED 2026-04**
+## 4. `set_servo_pwm` — **SUPERSEDED 2026-06**
 
-- **File:** `src/duburi_control/duburi_control/mavlink_api.py`
-- **Resolution:** `set_servo_pwm(aux_n, pwm)` now takes an AUX index (1..6, i.e. the AUX1..AUX6 silkscreen), validates the range with a `ValueError`, clamps `pwm` to `1100..1900`, and adds the `+8` offset internally before sending `MAV_CMD_DO_SET_SERVO`. The constants `_AUX_PWM_OFFSET=8`, `_AUX_MIN=1`, `_AUX_MAX=6` make the mapping inspectable. No callers existed yet, so this is preventative — payload code (torpedo / grabber / dropper) can land safely.
-- **Verify:** `MavlinkAPI(None).set_servo_pwm(7, 1500)` raises `ValueError: aux_n must be 1..6 ...` (confirmed in smoke test).
+- **Status:** Method deleted from `pixhawk.py`. Payload (torpedo/dropper) uses ESP32 USB serial — `duburi.fire(n)` / `PayloadDriver`. No Pixhawk AUX path exists.
 
 ## 5. `Move.action` field semantics are inconsistent — **FIXED 2026-04**
 

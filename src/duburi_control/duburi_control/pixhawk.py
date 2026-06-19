@@ -88,15 +88,6 @@ def _euler_to_quat(roll_deg: float, pitch_deg: float, yaw_deg: float) -> list[fl
 class Pixhawk:
     """Thin, well-named wrapper around `pymavlink.mavutil`."""
 
-    # ArduSub maps AUX1..AUX6 to MAV_CMD_DO_SET_SERVO channels 9..14
-    # (MAIN1..MAIN8 are 1..8; AUX = MAIN_count + n). Calling set_servo_pwm
-    # with raw 1..8 would silently drive a thruster instead of the payload
-    # servo, so the public surface here is the AUX index and we add the
-    # offset internally. See `.claude/context/ardusub-reference.md`.
-    AUX_PWM_OFFSET = 8
-    AUX_MIN, AUX_MAX = 1, 6           # Pixhawk 2.4.8 exposes 6 AUX outputs
-    PWM_MIN, PWM_MAX = 1100, 1900     # safe BlueRobotics T200 / servo range
-
     def __init__(self, master, log=None):
         self.master = master
         self._boot_time = time.time()
@@ -434,27 +425,6 @@ class Pixhawk:
             0, 0, 0,                    # vx, vy, vz   (ignored)
             0, 0, 0,                    # afx, afy, afz (ignored)
             0, 0)                       # yaw, yaw_rate (ignored)
-
-    def set_servo_pwm(self, aux_n, pwm):
-        """Drive a Pixhawk AUX servo (torpedo, grabber, dropper, ...).
-
-        `aux_n` is the AUX output number printed on the Pixhawk silkscreen
-        (AUX1..AUX6). The +8 ArduSub offset is added internally so the
-        command lands on the correct channel. `pwm` is clamped to a safe
-        BlueRobotics T200 / servo range (1100..1900 us) to prevent stall
-        current spikes.
-        """
-        if not (self.AUX_MIN <= aux_n <= self.AUX_MAX):
-            raise ValueError(
-                f'aux_n must be {self.AUX_MIN}..{self.AUX_MAX} '
-                f'(Pixhawk AUX1..AUX6), got {aux_n}')
-        pwm = max(self.PWM_MIN, min(self.PWM_MAX, int(pwm)))
-        channel = aux_n + self.AUX_PWM_OFFSET
-        self._log_mavlink(f'AUX{aux_n} (ch={channel}) pwm={pwm}')
-        self.master.mav.command_long_send(
-            self.master.target_system, self.master.target_component,
-            mavutil.mavlink.MAV_CMD_DO_SET_SERVO,
-            0, channel, pwm, 0, 0, 0, 0, 0)
 
     def send_att_pos_mocap(self, yaw_deg: float) -> None:
         """Inject BNO085 yaw into ArduSub EKF3 via ATT_POS_MOCAP (MAVLink 138).
