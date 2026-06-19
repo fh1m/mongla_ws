@@ -14,16 +14,3 @@ DEPTH_RAMP_ADVANCE_M  = 0.50  # advance the initial ramp setpoint this far in th
 HEARTBEAT_HZ       = 5.0    # Heartbeat all-neutral RC override (FS_PILOT_INPUT guard)
 VISION_LOOP_HZ     = 20.0   # motion_vision tick rate
 LOG_THROTTLE_S     = 0.5    # seconds between motion-loop log heartbeats
-
-__all__ = [
-    'THRUST_HZ',
-    'YAW_RATE_HZ',
-    'LOCK_STREAM_HZ',
-    'DEPTH_SETPOINT_HZ',
-    'DEPTH_RAMP_S',
-    'DEPTH_BRAKE_ZONE_M',
-    'DEPTH_RAMP_ADVANCE_M',
-    'HEARTBEAT_HZ',
-    'VISION_LOOP_HZ',
-    'LOG_THROTTLE_S',
-]

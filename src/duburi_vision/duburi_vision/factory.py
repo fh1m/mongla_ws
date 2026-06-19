@@ -33,18 +33,21 @@ def _build_ros_topic(*, node=None, topic=None, frame_id='ros_cam', name='ros_top
 
 
 def _build_jetson_stub(**_):
-    from .cameras.jetson_stub import JetsonCamera
-    return JetsonCamera()
+    raise NotImplementedError(
+        "jetson camera not implemented yet. "
+        "Use source='webcam' (laptop dev) or source='ros_topic' (Gazebo / BlueOS).")
 
 
 def _build_blueos_stub(**_):
-    from .cameras.blueos_stub import BlueOSCamera
-    return BlueOSCamera()
+    raise NotImplementedError(
+        "blueos camera not implemented yet. "
+        "Use source='webcam' (laptop dev) or source='ros_topic' (Gazebo / BlueOS).")
 
 
 def _build_mavlink_stub(**_):
-    from .cameras.mavlink_stub import MavlinkCamera
-    return MavlinkCamera()
+    raise NotImplementedError(
+        "mavlink camera not implemented yet. "
+        "Use source='webcam' (laptop dev) or source='ros_topic' (Gazebo / BlueOS).")
 
 
 def _build_video_file(*, path='', loop=True, width=0, height=0, fps=0,
