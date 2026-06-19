@@ -194,7 +194,7 @@ def run(duburi, log):
 ### Task 3 — Bins (6 days, Jun 24–30)
 
 4 bin symbols: FLAME, BLOOD DROPLET, COMPASS, HAMMER.  
-Dropper already wired (`pixhawk.set_servo_pwm(dropper_aux, 1900)`).
+Dropper wired via ESP32 serial (`duburi.fire(3)` or `duburi.fire(4)`).
 
 **Missing DSL verb** — add `drop_marker()` to `duburi_dsl.py`:
 ```python
@@ -235,7 +235,7 @@ def run(duburi, log):
 ### Task 4 — Torpedoes (6 days, Jul 1–7)
 
 Board openings: circular or rectangular cutouts.  
-Torpedo actuator: already in `pixhawk.set_servo_pwm(torpedo_aux, 1900)`.
+Torpedo actuator: `duburi.fire(1)` or `duburi.fire(2)` via ESP32 serial.
 
 **Detection**: similar YOLO fine-tune on board openings.  
 **DSL verb** needed: `fire_torpedo(n=1)` — same pattern as `drop_marker`.

@@ -85,7 +85,7 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, tracking→false | Multi-axis simultaneous |
 | `look_around` | camera→laptop, target_class→person, yaw_rate_pct→20, settle→1.5, gain→40, duration→60, target→0.0 (override start yaw; 0.0 = current heading), stale_after→1.0 | POSHOLD + incremental yaw orbit; exits on first detection |
 | `vis_approach` | camera→laptop, target_class→person, duration→30, deadband→0.05, kp_forward→200, target_vis_range→0.65, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', offset_x→0, offset_y→0, tracking→false | Drive forward until monocular-depth proxy reaches threshold |
-| `vision_lock_fire` | camera→laptop, target_class→person, axes→yaw,lat,depth, duration→15 s per attempt, deadband→0.18, stable_lock_s→3.0 s, max_attempts→3, attempt_timeout→15 s, **fire_channel→0** (1/2=torpedo, 3/4=dropper), fire_aux_channel→0 (AUX fallback), lost_patience_s→0, offset_x→0, offset_y→0 | Align + stable hold + fire (ESP32 serial or AUX fallback) |
+| `vision_lock_fire` | camera→laptop, target_class→person, axes→yaw,lat,depth, duration→15 s per attempt, deadband→0.18, stable_lock_s→3.0 s, max_attempts→3, attempt_timeout→15 s, **fire_channel→0** (1/2=torpedo, 3/4=dropper), lost_patience_s→0, offset_x→0, offset_y→0 | Align + stable hold + fire via ESP32 serial |
 | `fire` | **fire_channel** required (1–4) | Fire ESP32 payload channel directly: 1,2=torpedo, 3,4=dropper |
 
 ---
@@ -891,13 +891,11 @@ duburi.vision.vision_lock_fire(
 | `max_attempts` | float | `3.0` | Retry count before fallback fire |
 | `attempt_timeout` | float (s) | `15.0` | Per-attempt duration cap |
 | `fire_channel` | float | `0.0` | **Preferred.** 1/2=torpedo, 3/4=dropper. 0=log stub |
-| `fire_aux_channel` | float | `0.0` | AUX fallback: ArduSub AUX 1–6 PWM pulse |
-| `fire_pwm` | float | `1900.0` | PWM for AUX fallback |
 | `lost_patience_s` | float (s) | `0.0` | Engine default 3.0 s |
 | `offset_x` | float (px) | `0.0` | Target offset from frame centre (right positive) |
 | `offset_y` | float (px) | `0.0` | Target offset from frame centre (down positive) |
 
-Fire routing priority: `fire_channel > 0` → ESP32 serial (`PayloadDriver`); else `fire_aux_channel > 0` → AUX PWM; else log-only stub.
+Fire routing: `fire_channel > 0` → ESP32 serial (`PayloadDriver`); else log-only stub. AUX PWM path removed.
 
 | Aspect | Value |
 |---|---|

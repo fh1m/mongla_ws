@@ -277,7 +277,7 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 | `pixhawk.set_attitude_setpoint(yaw_deg)` | Requires ALT_HOLD; silently dropped in MANUAL |
 | `pixhawk.set_target_depth(-1.5)` | Negative = below surface; requires ALT_HOLD |
 | `pixhawk.get_attitude()` | `{'yaw': deg, 'depth': m, ...}` — AHRS2-backed, cached |
-| `pixhawk.set_servo_pwm(aux_n, pwm)` | AUX 1–6; adds ArduSub +8 offset internally |
+| `duburi.fire(n)` | Fire payload channel n via ESP32 serial (1/2=torpedo, 3/4=dropper); `duburi.payload_ready()` to check |
 
 **RC direction:** Ch4 > 1500 = yaw LEFT (inverted); Ch5 > 1500 = forward; Ch6 > 1500 = strafe RIGHT.
 **Heartbeat:** owned by `auv_manager_node` ROS2 timer — do not roll your own.

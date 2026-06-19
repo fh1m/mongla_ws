@@ -1,17 +1,21 @@
 """ESP32-C3 payload board driver.
 
 Fires torpedos (channels 1, 2) and droppers (channels 3, 4) by sending
-a single ASCII digit over USB serial.  Protocol is write-only -- no
-reader thread required.  Auto-detect logic mirrors bno085.py: scans
-``/dev/serial/by-id/`` globs (Espressif + CH340) and falls back to
-``/dev/ttyACM*`` / ``/dev/ttyUSB*``, excluding any ports already claimed
-by other drivers (e.g. BNO085).
+a single ASCII digit over USB serial.  Protocol is write-only.
+
+Distinguishing BNO085 vs payload ESP32
+---------------------------------------
+Both are ESP32-C3s on USB CDC.  The BNO streams JSON (``{"yaw":...}``)
+continuously; the payload board is silent unless commanded.  The manager
+node passes the actual port path held by the BNO source as ``exclude`` so
+auto-detect always picks the silent (payload) device.
 """
 
 from __future__ import annotations
 
 import glob
 import logging
+import os
 import time
 from typing import Optional
 
@@ -40,42 +44,24 @@ _PORT_GLOBS: list[str] = [
     '/dev/ttyUSB[0-3]',
 ]
 
+_CHANNEL_MAP_STR = '  ch1=torpedo_1  ch2=torpedo_2  ch3=dropper_1  ch4=dropper_2'
+
 
 class PayloadDriver:
-    """Serial interface to the ESP32-C3 payload board.
-
-    Usage::
-
-        driver = PayloadDriver()
-        if driver.connect():
-            driver.fire(1)   # fire torpedo 1
-            driver.fire(3)   # drop dropper 1
-        driver.disconnect()
-    """
+    """Serial interface to the ESP32-C3 payload board."""
 
     def __init__(self) -> None:
         self._port: Optional[object] = None  # serial.Serial when open
         self._port_path: str = ''
 
-    # ------------------------------------------------------------------ #
-    #  Public API                                                          #
-    # ------------------------------------------------------------------ #
-
     @staticmethod
     def auto_detect_port(exclude: set[str] | None = None) -> str | None:
-        """Scan known globs and return the first viable port path.
-
-        Parameters
-        ----------
-        exclude:
-            Set of port paths to skip (e.g. the BNO085 port).
-        """
+        """Return first viable port path not in ``exclude``."""
         seen: set[str] = set()
         exclude = exclude or set()
         for pattern in _PORT_GLOBS:
             for path in sorted(glob.glob(pattern)):
                 try:
-                    import os
                     real = os.path.realpath(path)
                 except Exception:
                     real = path
@@ -89,20 +75,10 @@ class PayloadDriver:
                 exclude: set[str] | None = None,
                 baud: int = 115200,
                 timeout: float = 1.0) -> bool:
-        """Open the serial port.
+        """Open the payload serial port.
 
-        Parameters
-        ----------
-        port:
-            Explicit path (e.g. ``'/dev/ttyACM1'``).  If ``None``, calls
-            :meth:`auto_detect_port`.
-        exclude:
-            Ports to skip during auto-detect (forwarded verbatim).
-        baud:
-            Baud rate (default 115200 matches ESP32 firmware).
-        timeout:
-            Write timeout in seconds.
-
+        ``port=None`` runs auto-detect; ``exclude`` is the set of ports
+        already claimed by other drivers (pass the BNO085 port path).
         Returns ``True`` on success.
         """
         if not _SERIAL_OK:
@@ -111,7 +87,7 @@ class PayloadDriver:
 
         resolved = port or self.auto_detect_port(exclude)
         if not resolved:
-            _LOG.warning('[PAYLOAD] no port found during auto-detect')
+            _LOG.warning('[PAYLOAD] no port found (auto-detect excluded: %s)', exclude)
             return False
 
         try:
@@ -120,43 +96,42 @@ class PayloadDriver:
                 baudrate=baud,
                 timeout=timeout,
                 write_timeout=timeout,
-                dsrdtr=False,
                 rtscts=False,
             )
-            # Brief settle — DTR=False prevents ESP32 reset on open
-            time.sleep(0.1)
+            # ESP32-C3 HWCDC requires DTR=True to receive serial data from host.
+            self._port.dtr = True  # type: ignore[union-attr]
+            time.sleep(0.15)       # let USB CDC settle after DTR assert
             self._port_path = resolved
-            _LOG.info(f'[PAYLOAD] connected on {resolved} @ {baud} baud')
+            _LOG.info('[PAYLOAD] torpedo+dropper board connected on %s @ %d baud%s',
+                      resolved, baud, _CHANNEL_MAP_STR)
             return True
         except Exception as exc:
-            _LOG.warning(f'[PAYLOAD] open failed {resolved}: {exc}')
+            _LOG.warning('[PAYLOAD] open failed %s: %s', resolved, exc)
             self._port = None
             return False
 
     def fire(self, channel: int) -> bool:
-        """Fire payload channel.
+        """Fire payload channel (1/2 = torpedo, 3/4 = dropper).
 
-        Parameters
-        ----------
-        channel:
-            1 = torpedo_1, 2 = torpedo_2, 3 = dropper_1, 4 = dropper_2.
-
-        Sends a single ASCII digit (b'1' .. b'4') over serial.
+        Sends a single ASCII digit over serial; ESP32 firmware pulls the
+        corresponding GPIO LOW for 500 ms to actuate the relay/solenoid.
         Returns ``True`` if the byte was written without error.
         """
         if channel not in CHANNEL_NAMES:
-            _LOG.error(f'[PAYLOAD] invalid channel {channel} (must be 1-4)')
+            _LOG.error('[PAYLOAD] invalid channel %d (must be 1-4)', channel)
             return False
         if not self.is_ready:
-            _LOG.warning(f'[PAYLOAD] fire ch={channel} ({CHANNEL_NAMES[channel]}) — port not open')
+            _LOG.warning('[PAYLOAD] fire ch=%d — port not open (payload not connected)',
+                         channel)
             return False
+        name = CHANNEL_NAMES[channel]
         try:
             self._port.write(bytes([0x30 + channel]))  # type: ignore[union-attr]
             self._port.flush()                          # type: ignore[union-attr]
-            _LOG.info(f'[PAYLOAD] fired ch={channel} ({CHANNEL_NAMES[channel]})')
+            _LOG.info("[PAYLOAD] serial '%d' sent → %s LAUNCHED", channel, name)
             return True
         except Exception as exc:
-            _LOG.error(f'[PAYLOAD] write error ch={channel}: {exc}')
+            _LOG.error('[PAYLOAD] write error ch=%d (%s): %s', channel, name, exc)
             return False
 
     def disconnect(self) -> None:
@@ -167,7 +142,7 @@ class PayloadDriver:
             except Exception:
                 pass
             self._port = None
-            _LOG.info(f'[PAYLOAD] disconnected {self._port_path}')
+            _LOG.info('[PAYLOAD] disconnected %s', self._port_path)
             self._port_path = ''
 
     @property

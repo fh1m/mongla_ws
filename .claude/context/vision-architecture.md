@@ -397,7 +397,6 @@ excludes the BNO085 port, and connects the first match. Startup banner:
 
 Check: `duburi.payload_ready` → `bool`.
 
-**`vision_lock_fire`** calls `_do_fire(fire_channel, aux_channel, pwm)` internally:
-- `fire_channel > 0` → ESP32 serial (preferred)
-- `fire_aux_channel > 0` → ArduSub AUX PWM (fallback)
-- both 0 → log-only stub
+**`vision_lock_fire`** calls `_do_fire(fire_channel)` internally:
+- `fire_channel > 0` → ESP32 serial (`PayloadDriver`)
+- `fire_channel == 0` → log-only stub

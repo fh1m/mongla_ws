@@ -429,9 +429,7 @@ This is the chronological story from "manager process starts" to
   way too rigid for our use. We do everything in `duburi_planner`.
 * **Heartbeat-as-failsafe-guard.** ArduSub treats absence-of-RC as
   an alarm; it doesn't help us *prevent* the alarm.
-* **`set_servo_pwm` payload control.** Yes, ArduSub forwards
-  `MAV_CMD_DO_SET_SERVO`, but the *what-to-actuate-when* logic
-  (drop, fire, grab) is mission-side.
+* **Payload control via ESP32, not AUX.** Torpedo/dropper are wired to a second ESP32 over USB serial (`duburi.fire(n)`). ArduSub AUX/`MAV_CMD_DO_SET_SERVO` is not used for payload.
 
 ---
 

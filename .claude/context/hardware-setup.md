@@ -22,7 +22,7 @@ companion — wiring, IPs, checklists, recovery.
 | Depth sensor      | Bar30                              | I2C → Pixhawk          | internal (read via AHRS2)     |
 | Tether            | FathomX                            | Ethernet switch        | per-port speed                |
 | Power             | Dual LiPo (propulsion + compute)   | isolated rails         | —                             |
-| Payload           | Torpedo / grabber / dropper        | Pixhawk AUX (servo)    | AUX1..AUX6 (`set_servo_pwm`)  |
+| Payload           | Torpedo / grabber / dropper        | ESP32 USB serial       | `duburi.fire(n)` — 1/2=torpedo, 3/4=dropper |
 | Kill switch       | Latex-balloon, non-magnetic        | mechanical             | —                             |
 
 ---
@@ -198,8 +198,9 @@ Driven from the Pixhawk via `MAV_CMD_DO_SET_SERVO` on AUX outputs
 Pixhawk AUX channels and the actuator hardware.
 
 ```python
-# Through Pixhawk. Internal +8 AUX offset and PWM clamping handled for you.
-pixhawk.set_servo_pwm(aux_n=1, pwm=1900)   # AUX1 = torpedo, etc.
+# Via ESP32 USB serial (PayloadDriver). Sends '1','2','3','4' over serial.
+duburi.fire(1)   # torpedo 1
+duburi.fire(3)   # dropper 1
 ```
 
 The grabber has a current sensor on the actuator line — successful
@@ -328,4 +329,4 @@ ls -l /dev/ttyACM0                 # crw-rw---- root dialout
 | Camera not found               | Device path changed                       | `ls /dev/v4l/by-id/` and update pipeline string              |
 | Node crashed                   | Missing Python dep                        | `pip install pymavlink` on Jetson; or rebuild via `./build_duburi.sh` |
 | `BNO085 calibration timed out` | Pixhawk yaw or BNO yaw stayed unavailable | Confirm both work in isolation (sensors_node first)          |
-| Payload (torpedo/grabber) silent or wrong actuator fires | Calling `set_servo_pwm` with the wrong AUX index | Use `aux_n` matching the AUX1..AUX6 silkscreen — the +8 offset is added internally by `pixhawk.py`. Range-checked since 2026-04. |
+| Payload silent or wrong actuator fires | Wrong channel number to `duburi.fire(n)` | 1=torpedo1, 2=torpedo2, 3=dropper1, 4=dropper2. Check `payload_ready()` first. |

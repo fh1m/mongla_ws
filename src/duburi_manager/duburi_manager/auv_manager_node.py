@@ -323,8 +323,14 @@ class AUVManagerNode(Node):
         self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
         self.heartbeat.start()
 
-        _exclude: set[str] = set()
-        if self._bno_port not in ('auto', ''):
+        # Exclude the actual port held by the BNO source (not the param 'auto').
+        # BNO085Source._port_name / CompositeBNO._bno._port_name holds the real path.
+        _bno_actual = (
+            getattr(self.yaw_source, '_port_name', None)
+            or getattr(getattr(self.yaw_source, '_bno', None), '_port_name', None)
+        )
+        _exclude: set[str] = {_bno_actual} if _bno_actual else set()
+        if not _bno_actual and self._bno_port not in ('auto', ''):
             _exclude.add(self._bno_port)
         self._payload = PayloadDriver()
         _pl_port = None if self._payload_port in ('auto', '') else self._payload_port
