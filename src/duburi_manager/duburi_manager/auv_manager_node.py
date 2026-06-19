@@ -131,8 +131,20 @@ class FeedbackPump:
 class AUVManagerNode(Node):
     def __init__(self):
         super().__init__('duburi_manager')
+        self._setup_parameters()
+        self._setup_mavlink()
+        self._setup_reader_and_warmup()
+        self._setup_yaw_source()
+        self._setup_vision_pool()
+        self._setup_heartbeat_and_payload()
+        self._setup_action_server()
 
-        # ---- ROS parameters --------------------------------------------
+    # ------------------------------------------------------------------ #
+    #  Init helpers (called once from __init__, in order)                 #
+    # ------------------------------------------------------------------ #
+
+    def _setup_parameters(self) -> None:
+        """Declare and read all ROS parameters; resolve mode/profile."""
         self.declare_parameter('mode',             DEFAULT_MODE)
         # Override the profile's connection string at the CLI:
         #   -p mav_device:=/dev/ttyACM0
@@ -148,50 +160,33 @@ class AUVManagerNode(Node):
         self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
         self.declare_parameter('nucleus_dvl_port',     9000)
         self.declare_parameter('nucleus_dvl_password', 'nortek')
-        # dvl_auto_connect: when True and a DVL-capable yaw_source is configured,
-        # the manager tries to connect the DVL in a background thread at startup
-        # (retrying every dvl_retry_s seconds). Eliminates the manual dvl_connect
-        # step for pool-day workflow. Set false if DVL is on a slow network or
-        # you want to control connect timing manually.
+        # dvl_auto_connect: background retry at startup; eliminates manual dvl_connect
         self.declare_parameter('dvl_auto_connect',  True)
         self.declare_parameter('dvl_retry_s',       5.0)
-        # debug:=true flips per-command MAVLink trace tags on (and the
-        # logger to DEBUG so they actually print). Default off so
-        # production runs stay quiet. See .claude/context/mavlink-reference.md
-        # "MAVLink-trace via DEBUG logs" for the on-the-wire format.
+        # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
         self.declare_parameter('debug',            False)
-        # When True, VisionState subscribes /tracks (tracker_node output)
-        # instead of /detections. Enables Kalman-smoothed, ID-stable tracking.
-        # Requires tracker_node to be running for the target camera.
-        # Toggle live: ros2 param set /duburi_manager vision.use_tracks true
+        # vision.use_tracks: subscribe /tracks instead of /detections (requires tracker_node)
         self.declare_parameter('vision.use_tracks', False)
-        # Live-tunable defaults for every vision_* command. Operators
-        # tune with `ros2 param set /duburi_manager vision.kp_yaw 80.0`
-        # and the next vision goal picks up the new value.
         declare_vision_params(self)
 
-        requested_mode   = str(self.get_parameter('mode').value)
-        mav_device       = str(self.get_parameter('mav_device').value).strip()
-        smooth_yaw       = bool(self.get_parameter('smooth_yaw').value)
-        smooth_translate = bool(self.get_parameter('smooth_translate').value)
-        yaw_src_name       = str(self.get_parameter('yaw_source').value)
-        bno085_port        = str(self.get_parameter('bno085_port').value)
-        bno085_baud        = int(self.get_parameter('bno085_baud').value)
-        payload_port       = str(self.get_parameter('payload_port').value)
-        nucleus_dvl_host   = str(self.get_parameter('nucleus_dvl_host').value)
-        nucleus_dvl_port   = int(self.get_parameter('nucleus_dvl_port').value)
-        nucleus_dvl_passwd = str(self.get_parameter('nucleus_dvl_password').value)
-        dvl_auto_connect   = bool(self.get_parameter('dvl_auto_connect').value)
-        dvl_retry_s        = float(self.get_parameter('dvl_retry_s').value)
-        debug_enabled    = bool(self.get_parameter('debug').value)
+        requested_mode      = str(self.get_parameter('mode').value)
+        mav_device          = str(self.get_parameter('mav_device').value).strip()
+        self._smooth_yaw    = bool(self.get_parameter('smooth_yaw').value)
+        self._smooth_tr     = bool(self.get_parameter('smooth_translate').value)
+        self._yaw_src_name  = str(self.get_parameter('yaw_source').value)
+        self._bno_port      = str(self.get_parameter('bno085_port').value)
+        self._bno_baud      = int(self.get_parameter('bno085_baud').value)
+        self._payload_port  = str(self.get_parameter('payload_port').value)
+        self._dvl_host      = str(self.get_parameter('nucleus_dvl_host').value)
+        self._dvl_port      = int(self.get_parameter('nucleus_dvl_port').value)
+        self._dvl_passwd    = str(self.get_parameter('nucleus_dvl_password').value)
+        self._dvl_auto      = bool(self.get_parameter('dvl_auto_connect').value)
+        self._dvl_retry_s   = float(self.get_parameter('dvl_retry_s').value)
+        self._debug         = bool(self.get_parameter('debug').value)
 
-        # Wire MAVLink tracing on as early as possible -- we want every
-        # frame from this point on to carry the cmd= tag. set_enabled
-        # mutates a contextvar in the main thread; daemons spawned after
-        # this point still see the default (False) because contextvars
-        # don't propagate across threading.Thread, but their MAVLink
-        # frames retain the <fn> caller name so they are still traceable.
-        if debug_enabled:
+        # Wire MAVLink tracing on as early as possible — mutates contextvar in
+        # main thread; daemons spawned later still see the default (False).
+        if self._debug:
             tracing.set_enabled(True)
             try:
                 import rclpy.logging
@@ -200,29 +195,29 @@ class AUVManagerNode(Node):
                 self.get_logger().warning(
                     f'debug:=true: could not raise logger level to DEBUG ({exc}); '
                     f'tag will still apply but [MAV ] lines may not print')
-        # 'auto' (the default) probes for BlueOS UDP / Pixhawk USB to
-        # pick a profile; any explicit name short-circuits the probe.
-        mode_name = resolve_mode(requested_mode, logger=self.get_logger())
-        profile   = resolve_profile(
-            mode_name, mav_device=mav_device, logger=self.get_logger())
 
-        # ---- MAVLink connection ----------------------------------------
-        self.get_logger().info(f'Connecting ({mode_name}) -> {profile["conn"]} ...')
-        baud_kw = {'baud': profile['baud']} if profile['baud'] else {}
-        self.master = mavutil.mavlink_connection(profile['conn'], **baud_kw)
+        self._mode_name = resolve_mode(requested_mode, logger=self.get_logger())
+        self._profile   = resolve_profile(
+            self._mode_name, mav_device=mav_device, logger=self.get_logger())
+
+    def _setup_mavlink(self) -> None:
+        """Open MAVLink connection, wait for heartbeat, pin telemetry rates."""
+        self.get_logger().info(
+            f'Connecting ({self._mode_name}) -> {self._profile["conn"]} ...')
+        baud_kw = {'baud': self._profile['baud']} if self._profile['baud'] else {}
+        self.master  = mavutil.mavlink_connection(self._profile['conn'], **baud_kw)
         self.master.wait_heartbeat()
         self.pixhawk = Pixhawk(self.master, log=self.get_logger())
-
-        # Pin telemetry rates so ArduSub streams what we need at the
-        # rates we need. Done here -- the reader thread starts next.
+        # Pin rates so ArduSub streams at the rates we need (default ~4 Hz).
         for msg_id, hz in MESSAGE_RATES.items():
             self.pixhawk.set_message_rate(msg_id, hz)
 
-        # ---- Reader thread (must start BEFORE yaw_source init) --------
-        # recv_match() is the only call that moves incoming MAVLink frames
-        # into master.messages. Without this running, pixhawk.get_attitude()
-        # always returns None -- which causes BNO085 calibration to time out
-        # with `pixhawk_fresh=False` even though the connection is healthy.
+    def _setup_reader_and_warmup(self) -> None:
+        """Start the MAVLink reader thread, then wait for AHRS2 + autopilot HB.
+
+        Reader must start BEFORE yaw_source init — BNO085 calibration calls
+        pixhawk.get_attitude() and returns None if the reader isn't running.
+        """
         self.last_statustext = ''
         self.prev_state      = {}
         self.last_print_time = 0.0
@@ -231,17 +226,13 @@ class AUVManagerNode(Node):
         self._fast_armed  = False
         self._fast_mode   = ''
         self._fast_batt_v = math.nan
-        self.reader_thread   = threading.Thread(
+        self.reader_thread = threading.Thread(
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
 
         # Warmup: wait for both AHRS2 and a valid autopilot heartbeat.
-        # Without this, the first [STATE] line shows UNKNOWN for the mode
-        # because the autopilot heartbeat cache (_last_autopilot_hb) has
-        # not been populated yet (GCS heartbeats from BlueOS/mavproxy can
-        # arrive first and are filtered out).
-        _warmup_deadline = time.monotonic() + 4.0
-        while time.monotonic() < _warmup_deadline:
+        _deadline = time.monotonic() + 4.0
+        while time.monotonic() < _deadline:
             if (self.pixhawk.get_attitude() is not None
                     and self.pixhawk.get_mode() != 'UNKNOWN'):
                 break
@@ -252,51 +243,47 @@ class AUVManagerNode(Node):
                 'BNO085 calibration may still fail. '
                 'Check MAVLink link and ArduSub telemetry rate config.')
 
-        # ---- Yaw source -----------------------------------------------
-        # Fail loudly if the requested source can't init -- the operator
-        # picked it, the operator gets told. No silent fallback.
+    def _setup_yaw_source(self) -> None:
+        """Instantiate yaw source, print startup banner, start DVL auto-connect."""
+        _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
         try:
             self.yaw_source = make_yaw_source(
-                yaw_src_name,
+                self._yaw_src_name,
                 pixhawk=self.pixhawk,
-                port=bno085_port,
-                baud=bno085_baud,
-                nucleus_dvl_host=nucleus_dvl_host,
-                nucleus_dvl_port=nucleus_dvl_port,
-                nucleus_dvl_password=nucleus_dvl_passwd,
+                port=self._bno_port,
+                baud=self._bno_baud,
+                nucleus_dvl_host=self._dvl_host,
+                nucleus_dvl_port=self._dvl_port,
+                nucleus_dvl_password=self._dvl_passwd,
                 logger=self.get_logger(),
             )
         except Exception as exc:
             self.get_logger().fatal(
-                f'[SENS ] yaw_source={yaw_src_name!r} failed to init: {exc}')
+                f'[SENS ] yaw_source={self._yaw_src_name!r} failed to init: {exc}')
             raise
 
-        # True when yaw_source is a BNO085 variant (duck-typed — only BNO085Source
-        # has read_pitch/read_roll). Activates ATT_POS_MOCAP yaw injection.
+        # Duck-typed: only BNO085Source has read_pitch/read_roll.
         self._bno_mocap_active: bool = hasattr(self.yaw_source, 'read_pitch')
 
-        # ---- DVL sources set (any source that has connect()) -----------
-        _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
-
-        # ---- Banner ----------------------------------------------------
-        yaw_tag = 'glide' if smooth_yaw       else 'snap(PID)'
-        tr_tag  = 'eased' if smooth_translate else 'constant'
+        # Banner
+        yaw_tag = 'glide' if self._smooth_yaw else 'snap(PID)'
+        tr_tag  = 'eased' if self._smooth_tr  else 'constant'
         yaw_src_label = self.yaw_source.name
-        if yaw_src_name == 'bno085':
-            yaw_src_label = f'{yaw_src_label} ({bno085_port} @ {bno085_baud})'
+        if self._yaw_src_name == 'bno085':
+            yaw_src_label = f'{yaw_src_label} ({self._bno_port} @ {self._bno_baud})'
             offset = getattr(self.yaw_source, 'offset_deg', None)
             if offset is not None:
                 yaw_src_label += f'  Earth-ref offset: {offset:+.2f} deg'
-        elif yaw_src_name in _DVL_SOURCES:
-            connect_hint = ('auto-connecting...' if dvl_auto_connect
+        elif self._yaw_src_name in _DVL_SOURCES:
+            connect_hint = ('auto-connecting...' if self._dvl_auto
                             else 'DISCONNECTED -- call dvl_connect')
             yaw_src_label = (f'{yaw_src_label} '
-                             f'({nucleus_dvl_host}:{nucleus_dvl_port}  '
-                             f'{connect_hint})')
+                             f'({self._dvl_host}:{self._dvl_port}  {connect_hint})')
 
         self.get_logger().info(SEPARATOR)
-        self.get_logger().info(f' MONGLA · DUBURI AUV MANAGER  |  mode: {mode_name}')
-        if debug_enabled:
+        self.get_logger().info(
+            f' MONGLA · DUBURI AUV MANAGER  |  mode: {self._mode_name}')
+        if self._debug:
             self.get_logger().info(
                 ' DEBUG TRACE: ON  -- per-command [MAV <fn> cmd=<verb>] '
                 'lines will print on every outbound MAVLink frame')
@@ -305,14 +292,11 @@ class AUVManagerNode(Node):
             f'comp={self.master.target_component}  (v2.0)')
         self.get_logger().info(f' Profiles: yaw={yaw_tag}  translate={tr_tag}')
         self.get_logger().info(f' Yaw source: {yaw_src_label}')
-        if mode_name in ('pool', 'laptop'):
+        if self._mode_name in ('pool', 'laptop'):
             self.get_logger().info(
                 f' Expect BlueOS "{NETWORK["endpoint"]}" -> UDP Client '
                 f'{NETWORK["jetson_ip"]}:{NETWORK["mav_port"]}')
-        if yaw_src_name == 'bno085' and mode_name in ('sim', 'laptop', 'desk'):
-            # Operator-visible sanity hint. In the pool the BNO is bolted
-            # inside the vehicle so it rotates with it and this note is
-            # misleading -- suppress there. See ardusub-canon.md §4A.
+        if self._yaw_src_name == 'bno085' and self._mode_name in ('sim', 'laptop', 'desk'):
             self.get_logger().info(
                 ' [HINT ] BNO is the yaw source for ALL Python loops '
                 '(yaw_*, lock_heading, translation heading-hold, [STATE], '
@@ -323,67 +307,50 @@ class AUVManagerNode(Node):
                 'bno085 for pool runs where the board moves with the AUV.')
         self.get_logger().info(SEPARATOR)
 
-        # ---- DVL auto-connect -----------------------------------------
-        # When dvl_auto_connect is True and the yaw_source supports
-        # connect(), start a background thread that keeps retrying until
-        # the DVL is streaming. Operators no longer need to run
-        # `duburi dvl_connect` manually at pool-day startup.
-        if dvl_auto_connect and yaw_src_name in _DVL_SOURCES:
-            self._dvl_auto_retry_s = dvl_retry_s
-            t = threading.Thread(
+        if self._dvl_auto and self._yaw_src_name in _DVL_SOURCES:
+            self._dvl_auto_retry_s = self._dvl_retry_s
+            threading.Thread(
                 target=self._dvl_auto_connect_loop,
-                daemon=True, name='dvl_auto_connect')
-            t.start()
+                daemon=True, name='dvl_auto_connect').start()
 
-        # ---- VisionState pool (lazy per camera) -----------------------
-        # The vision verbs ask for "the VisionState for camera X" and we
-        # build it the first time it's requested. Holding the pool here
-        # (one ROS2 node, one MAVLink owner) keeps subscriptions cheap
-        # and shared across goals.
+    def _setup_vision_pool(self) -> None:
+        """Initialise the lazy per-camera VisionState pool."""
         self._vision_states: dict = {}
-        self._vision_lock           = threading.Lock()
+        self._vision_lock         = threading.Lock()
 
-        # ---- Heartbeat (FS_PILOT_INPUT failsafe guard) ---------------
-        # Streams an all-neutral RC override at 5 Hz whenever no other
-        # writer is active so ArduSub never sees > 3 s of override
-        # silence and triggers FS_PILOT_INPUT (default action: disarm).
-        # The Duburi facade pauses/resumes it around every command and
-        # for the lifetime of an active heading-lock.
+    def _setup_heartbeat_and_payload(self) -> None:
+        """Start heartbeat, connect payload driver, build Duburi facade."""
         self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
         self.heartbeat.start()
 
-        # ---- Payload driver (ESP32-C3 torpedo/dropper board) -----------
-        _exclude_ports: set[str] = set()
-        if bno085_port not in ('auto', ''):
-            _exclude_ports.add(bno085_port)
+        _exclude: set[str] = set()
+        if self._bno_port not in ('auto', ''):
+            _exclude.add(self._bno_port)
         self._payload = PayloadDriver()
-        _pl_port = None if payload_port in ('auto', '') else payload_port
-        if self._payload.connect(port=_pl_port, exclude=_exclude_ports):
+        _pl_port = None if self._payload_port in ('auto', '') else self._payload_port
+        if self._payload.connect(port=_pl_port, exclude=_exclude):
             self.get_logger().info(
                 f'[PAYLOAD] connected on {self._payload.port_path}')
         else:
             self.get_logger().info(
                 '[PAYLOAD] not found — fire() calls will log-stub only')
 
-        # ---- High-level facade ----------------------------------------
         self.duburi = Duburi(
             self.pixhawk,
             log=self.get_logger(),
-            smooth_yaw=smooth_yaw,
-            smooth_translate=smooth_translate,
+            smooth_yaw=self._smooth_yaw,
+            smooth_translate=self._smooth_tr,
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
             heartbeat=self.heartbeat,
             payload=self._payload,
         )
 
-        # ---- Callback groups ------------------------------------------
-        # ReentrantCallbackGroup lets the action execute callback and the
-        # timers run in parallel threads under MultiThreadedExecutor.
+    def _setup_action_server(self) -> None:
+        """Create callback groups, action server, state publisher, and timers."""
         self.action_group = ReentrantCallbackGroup()
         self.timer_group  = MutuallyExclusiveCallbackGroup()
 
-        # ---- Action server --------------------------------------------
         self.command_active = False
         self.action_server  = ActionServer(
             self, Move, '/duburi/move',
@@ -393,16 +360,13 @@ class AUVManagerNode(Node):
             callback_group=self.action_group,
         )
 
-        # ---- Telemetry publisher --------------------------------------
         self.state_publisher = self.create_publisher(
             DuburiState, '/duburi/state', 10)
 
-        # ---- Timers ---------------------------------------------------
-        self.create_timer(0.5, self.heartbeat_tick,  callback_group=self.timer_group)
-        self.create_timer(0.5, self.telemetry_tick,  callback_group=self.timer_group)
-        # Fast instrument tick: publishes heading + depth at 20 Hz so the HUD
-        # compass and depth gauge stay real-time (AHRS2 is pinned to 50 Hz).
-        # Uses a separate callback group so it can fire between telemetry ticks.
+        self.create_timer(0.5,  self.heartbeat_tick,   callback_group=self.timer_group)
+        self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
+        # Fast tick: 20 Hz HUD compass + depth (AHRS2 pinned to 50 Hz).
+        # Separate callback group so it can fire between telemetry ticks.
         self.fast_group = MutuallyExclusiveCallbackGroup()
         self.create_timer(0.05, self._fast_state_tick, callback_group=self.fast_group)
 
@@ -410,8 +374,6 @@ class AUVManagerNode(Node):
             self.create_timer(0.05, self._mocap_tick, callback_group=self.timer_group)
             self.get_logger().info('[SENS ] ATT_POS_MOCAP yaw injection active (20 Hz). '
                                    'Requires EK3_SRC1_YAW=6 in ArduSub params.')
-
-        # reader_thread already started above (before yaw_source init).
 
     # ================================================================== #
     #  Vision state pool -- lazily built per camera, preflighted once     #
