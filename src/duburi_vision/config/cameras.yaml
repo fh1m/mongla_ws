@@ -29,6 +29,7 @@ duburi_vision:
       frame_id: laptop_cam
 
     # Vehicle — Blue Robotics Low-Light HD USB on Jetson Orin Nano.
+    # Bench override: -p device:=N at launch (no file edit needed).
     forward:
       source:   webcam
       device:   0
@@ -37,9 +38,11 @@ duburi_vision:
       fps:      30
       frame_id: forward_cam
 
+    # Blue Robotics Low-Light H264 USB (Bus 001 Device 010: ID 32e4:9422).
+    # Default /dev/video4 on bench; confirm with: v4l2-ctl --list-devices
     downward:
       source:   webcam
-      device:   2
+      device:   4
       width:    640
       height:   480
       fps:      30
