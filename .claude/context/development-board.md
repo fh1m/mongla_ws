@@ -32,8 +32,13 @@ control / MAVLink / ArduSub core · `detected()` reactive missions · YOLO11 + B
 Drop-in missions `gate_flare_fsm` + `prequal_fsm` + `gate_then_bin_fsm`. 34 tests, all green.
 Full guide: [`fsm-guide.md`](fsm-guide.md). Works for both Duburi 4.5 and Dubomini 2.0 (auto-detected).
 
-**✅ Competition mission architecture — AUTHORED (2026-06-19):**
-5-chunk competition run: `missions/{gate,slalom,bin,torpedo,return}_task.py` (flat layout, each standalone-runnable) + `full_mission_2026.py` combinator. `competition_config.py` for pool-day constants. Dual-camera lazy detection (`pause_detector`/`resume_detector` DSL verbs, `paused` param on `detector_node`). Gate/return chunks runnable today; slalom/bin/torpedo blocked on model training. Full launch: `full_mission.launch.py`.
+**✅ Competition mission architecture — BUILT (2026-06-19 → 2026-06-20, commit cec7f37):**
+5-chunk competition run (detected-paradigm): `missions/task_{gate,slalom,bin,torpedo,return}.py` + `task_full_2026.py` combinator.
+5 YASMIN FSM plan builders: `state_machines/plans/{slalom,bin_drop,torpedo_fire,return_gate,full_competition}.py` + launchers `missions/fsm_{slalom,bin,torpedo,return,full_2026}.py`.
+New FSM states: `TurnState`, `ApproachState`, `VisionLockFireState`, `FireState`, `StyleRollState`.
+`downward_cam=True` DSL arg on `vision.home/hold/vision_lock_fire` (auto-sets camera + kp_forward polarity).
+Demo files renamed `demo_arc/find_person/heading_lock/move_see/square/pursue.py`.
+`competition_config.py` for pool-day constants. Gate/return runnable today; slalom/bin/torpedo blocked on model training.
 
 **🟦 Phase 2 — COMMITTED, NOT YET IMPLEMENTED** (tickets: [`robosub-2026-audit.md`](robosub-2026-audit.md) §6 P2 · schedule: [`robosub-2026-roadmap.md`](robosub-2026-roadmap.md) "Phase 2"):
 Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport · Slalom / Bins / Torpedo / Octagon FSM plan builders · stepper grabber · underwater preprocessing.
@@ -53,8 +58,9 @@ Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport ·
 | P1 | `duburi_dsl.py` `pause_detector`/`resume_detector` methods | ✅ BUILT (2026-06-20) — subprocess `ros2 param set` rail, camera→node mapping fwd/dwn | plan §gap-1 |
 | P1 | `full_mission.launch.py` (competition dual-cam launch) | ✅ BUILT (2026-06-20) — both detectors `paused:=True`, gate_rescue_repair fwd model | plan §launch |
 | P2 | Model training: `slalom_red_pipe.pt`, `bin_fire_blood.pt`, `torpedo_blood_hole.pt` | 🟦 open — blocks slalom/bin/torpedo chunks from live pool testing | models/README.md §Competition |
-| P2 | YASMIN FSM | ✅ BUILT (4a94231) — [`fsm-guide.md`](fsm-guide.md) |
-| P2 | Dubomini control path · IVC · remaining task plans · grabber | 🟦 committed build tickets | audit §6 P2 |
+| P2 | YASMIN FSM (core + gate/prequal/bin plans) | ✅ BUILT (4a94231) — [`fsm-guide.md`](fsm-guide.md) |
+| P2 | YASMIN FSM (slalom/bin/torpedo/return/full_2026 plans) | ✅ BUILT (cec7f37) — `state_machines/plans/` + `missions/fsm_*.py` |
+| P2 | Dubomini control path · IVC · Octagon/path-marker plans · grabber | 🟦 committed build tickets | audit §6 P2 |
 | cont. | 800-line files (`duburi.py` 833, `auv_manager_node.py` 795) | watch | audit §3.8 |
 | P1 | manager goal-acceptance / abort gating | ✅ tested (`dispatch_policy`, 13 tests) — full `execute_callback` live-node path is integration-only, not unit | audit §4 |
 
@@ -81,6 +87,8 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 **New test coverage (audit cycle):** `motion_vision` 13 · `connection_config` 16 · `nucleus_parser` 14 · `motion_writers` 4 · `dispatch_policy` 13.
 
 **New test coverage (FSM, 2026-06-03):** `test_fsm_states` 31 (VehicleProfile · navigation · vision · utility states · plan builders).
+
+**Bug fixes (2026-06-20, commit cec7f37):** `move_forward(duration=...)` → positional (5 files); `lock_heading(target=...)` → positional (task_full_2026 + LockHeadingState); `unlock_heading()` → `release_heading()`; `time.time()` → `time.monotonic()` in arc loop.
 
 **Suite (per-package): control 80 · planner 34 · manager 29 · sensors 14 · vision 29 = 186.**
 

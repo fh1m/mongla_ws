@@ -185,13 +185,17 @@ duburi_ws/src/
 │       ├── cli.py                # argparse auto-built from COMMANDS (`duburi` entry)
 │       ├── mission.py            # `mission` runner that dispatches into missions/<name>.run
 │       ├── missions/
-│       │   ├── {square_pattern,arc_demo,heading_lock_demo,find_person_demo,move_and_see}.py
+│       │   ├── competition_config.py          # pool-day headings / depths / tuning
+│       │   ├── task_{gate,slalom,bin,torpedo,return}.py  # detected()-paradigm task chunks
+│       │   ├── task_full_2026.py              # flat combinator (chains all 5 chunks)
+│       │   ├── fsm_{slalom,bin,torpedo,return,full_2026}.py  # ★ YASMIN FSM launchers
+│       │   ├── {gate_flare_fsm,prequal_fsm,gate_then_bin_fsm}.py  # prior FSM missions (kept)
 │       │   ├── {gate_prequal,robosub_prequal,gate_flare_prequal,gate_flare_autonomous}.py
-│       │   ├── gate_flare_fsm.py / prequal_fsm.py / gate_then_bin_fsm.py  # ★ YASMIN FSM
+│       │   └── demo_{arc,find_person,heading_lock,move_see,square,pursue}.py
 │       └── state_machines/       # YASMIN FSM layer (BUILT) — see fsm-guide.md
 │           ├── core/{outcomes,blackboard,vehicle_profile,base_state}.py
-│           ├── states/{navigation,vision,utility}.py
-│           └── plans/{gate_flare,prequal,gate_then_bin}.py
+│           ├── states/{navigation,vision,utility}.py   # TurnState/ApproachState/VisionLockFireState/FireState/StyleRollState added
+│           └── plans/{gate_flare,prequal,gate_then_bin,slalom,bin_drop,torpedo_fire,return_gate,full_competition}.py
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
 │   │   ├── factory.py            # make_yaw_source(name) — dvl|bno085|bno085_dvl|mavlink_ahrs
@@ -462,9 +466,19 @@ ros2 run duburi_planner duburi look_around --camera forward --target_class gate 
 
 ```bash
 ros2 run duburi_planner mission --list
-ros2 run duburi_planner mission gate_flare_fsm    # FSM — dual-vehicle auto-detect
-ros2 run duburi_planner mission prequal_fsm       # FSM gate-only prequal
-ros2 run duburi_planner mission gate_then_bin_fsm # FSM gate → bin drop (camera switch)
+# detected()-paradigm task chunks (standalone or chained):
+ros2 run duburi_planner mission task_gate          # gate chunk
+ros2 run duburi_planner mission task_full_2026     # full 5-task detected-paradigm run
+# YASMIN FSM (per-task or full sequence):
+ros2 run duburi_planner mission fsm_slalom         # standalone slalom FSM
+ros2 run duburi_planner mission fsm_bin            # standalone bin-drop FSM
+ros2 run duburi_planner mission fsm_torpedo        # standalone torpedo FSM
+ros2 run duburi_planner mission fsm_return         # standalone return-gate FSM
+ros2 run duburi_planner mission fsm_full_2026      # full 5-task YASMIN FSM (recommended)
+# Prior FSM missions (kept for backward compat):
+ros2 run duburi_planner mission gate_flare_fsm     # FSM gate + flare
+ros2 run duburi_planner mission prequal_fsm        # FSM gate-only prequal
+ros2 run duburi_planner mission gate_then_bin_fsm  # FSM gate → bin drop
 ros2 run duburi_planner mission gate_flare_autonomous  # detected()-paradigm fallback
 ```
 
