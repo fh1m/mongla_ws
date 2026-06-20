@@ -539,6 +539,30 @@ class DuburiMission:
         else:
             self.log.info(f"[DSL  ] detector classes → {classes_str!r}")
 
+    def pause_detector(self, camera: str = 'forward') -> None:
+        """Pause inference on a detector node (frame still consumed from queue)."""
+        node = f'/duburi_detector_{"fwd" if camera == "forward" else "dwn"}'
+        result = subprocess.run(
+            ['ros2', 'param', 'set', node, 'paused', 'true'],
+            capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            self.log.warning(
+                f"[DSL  ] pause_detector({camera!r}) failed: {result.stderr.strip()!r}")
+        else:
+            self.log.info(f"[DSL  ] {node} paused")
+
+    def resume_detector(self, camera: str = 'forward') -> None:
+        """Resume inference on a detector node."""
+        node = f'/duburi_detector_{"fwd" if camera == "forward" else "dwn"}'
+        result = subprocess.run(
+            ['ros2', 'param', 'set', node, 'paused', 'false'],
+            capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            self.log.warning(
+                f"[DSL  ] resume_detector({camera!r}) failed: {result.stderr.strip()!r}")
+        else:
+            self.log.info(f"[DSL  ] {node} resumed")
+
     # ================================================================== #
     #  Mission countdown                                                   #
     # ================================================================== #

@@ -33,7 +33,7 @@ Drop-in missions `gate_flare_fsm` + `prequal_fsm` + `gate_then_bin_fsm`. 34 test
 Full guide: [`fsm-guide.md`](fsm-guide.md). Works for both Duburi 4.5 and Dubomini 2.0 (auto-detected).
 
 **✅ Competition mission architecture — AUTHORED (2026-06-19):**
-5-chunk competition run: `missions/chunks/{gate,slalom,bin,torpedo,return}_task.py` + `full_mission_2026.py` combinator. `competition_config.py` for pool-day constants. Dual-camera lazy detection (`pause_detector`/`resume_detector` DSL verbs, `paused` param on `detector_node`). Gate/return chunks runnable today; slalom/bin/torpedo blocked on model training. Full launch: `full_mission.launch.py`.
+5-chunk competition run: `missions/{gate,slalom,bin,torpedo,return}_task.py` (flat layout, each standalone-runnable) + `full_mission_2026.py` combinator. `competition_config.py` for pool-day constants. Dual-camera lazy detection (`pause_detector`/`resume_detector` DSL verbs, `paused` param on `detector_node`). Gate/return chunks runnable today; slalom/bin/torpedo blocked on model training. Full launch: `full_mission.launch.py`.
 
 **🟦 Phase 2 — COMMITTED, NOT YET IMPLEMENTED** (tickets: [`robosub-2026-audit.md`](robosub-2026-audit.md) §6 P2 · schedule: [`robosub-2026-roadmap.md`](robosub-2026-roadmap.md) "Phase 2"):
 Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport · Slalom / Bins / Torpedo / Octagon FSM plan builders · stepper grabber · underwater preprocessing.
@@ -49,9 +49,9 @@ Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport ·
 | P1 | Underwater preprocessing (G5) | 🟦 open | audit §6.5 |
 | P1 | Vision-control SITL smoke test (arm→dive→yaw→disarm) | 🟦 open | audit §6.6 / §4 |
 | P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (serial contract ✅ built — `PayloadDriver` + `fire` verb + `vision_lock_fire`; path-marker FSM state still needed) | audit §6, `project_payload_actuation` memory |
-| P1 | `detector_node.py` `paused` param implementation | 🟦 open — chunk scripts call `pause_detector()`/`resume_detector()` (DSL via subprocess); detector skip logic not yet added to `_infer_loop` | plan §gap-1 |
-| P1 | `duburi_dsl.py` `pause_detector`/`resume_detector` methods | 🟦 open — referenced by all chunk scripts, not yet added to DSL | plan §gap-1 |
-| P1 | `full_mission.launch.py` (competition dual-cam launch) | 🟦 open — referenced in docs; not yet created | plan §launch |
+| P1 | `detector_node.py` `paused` param implementation | ✅ BUILT (2026-06-20) — `declare_parameter('paused', False)`, skip in `_infer_loop` after dequeue, `_on_parameter_change` handler | plan §gap-1 |
+| P1 | `duburi_dsl.py` `pause_detector`/`resume_detector` methods | ✅ BUILT (2026-06-20) — subprocess `ros2 param set` rail, camera→node mapping fwd/dwn | plan §gap-1 |
+| P1 | `full_mission.launch.py` (competition dual-cam launch) | ✅ BUILT (2026-06-20) — both detectors `paused:=True`, gate_rescue_repair fwd model | plan §launch |
 | P2 | Model training: `slalom_red_pipe.pt`, `bin_fire_blood.pt`, `torpedo_blood_hole.pt` | 🟦 open — blocks slalom/bin/torpedo chunks from live pool testing | models/README.md §Competition |
 | P2 | YASMIN FSM | ✅ BUILT (4a94231) — [`fsm-guide.md`](fsm-guide.md) |
 | P2 | Dubomini control path · IVC · remaining task plans · grabber | 🟦 committed build tickets | audit §6 P2 |

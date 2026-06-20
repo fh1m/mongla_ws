@@ -1459,9 +1459,10 @@ Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-para
 
 ## 7.5  Competition mission chunks (RoboSub 2026)
 
-The full 2026 competition run is built as five standalone chunk files under
-`missions/chunks/` plus a combinator in `missions/full_mission_2026.py`.
+The full 2026 competition run is built as five standalone chunk files directly
+in `missions/` plus a combinator in `missions/full_mission_2026.py`.
 Each chunk can be run independently with `ros2 run duburi_planner mission <name>`.
+The flat layout is required: `discover()` only globs `missions/*.py` (non-recursive).
 
 ### Key patterns introduced by the competition missions
 
@@ -1545,7 +1546,7 @@ duburi.vision.vision_lock_fire(
 All depths, headings, bbox fractions, and search budgets live in one file:
 
 ```python
-from .competition_config import (
+from duburi_planner.missions.competition_config import (
     GATE_SEARCH_DEPTH_M,    # -0.4  — initial mission depth
     GATE_PASS_DEPTH_M,      # -0.6  — depth for gate opening
     GATE_PASS_BBOX_FRAC,    # 0.80  — gate height fill = "through"
@@ -1563,26 +1564,36 @@ readings after navigation.
 
 ```python
 # missions/full_mission_2026.py
-from .chunks import gate_task, slalom_task, bin_task, torpedo_task, return_task
-from .competition_config import GATE_SEARCH_DEPTH_M
+# Chunks are loaded via importlib for hot-reload support (same mechanism as discover()).
+# Relative imports don't work under spec_from_file_location without package context.
+import importlib.util
+from pathlib import Path
+from duburi_planner.missions.competition_config import GATE_SEARCH_DEPTH_M
 
-def run(duburi, log):
+def _chunk(name):
+    py = Path(__file__).parent / f'{name}.py'
+    spec = importlib.util.spec_from_file_location(f'duburi_planner.missions.{name}', py)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load chunk: {py}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+_gate, _slalom, _bin, _torpedo, _return = (
+    _chunk(n) for n in ('gate_task','slalom_task','bin_task','torpedo_task','return_task'))
+
+def run(duburi, log=None):
     try:
         duburi.arm()
         duburi.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
         duburi.lock_heading(target=0.0, timeout=600)  # BNO lock for full run
-
-        gate_task.run(duburi)
-        slalom_task.run(duburi)
-        bin_task.run(duburi)
-        torpedo_task.run(duburi)
-        return_task.run(duburi)
-
-    except Exception as e:
-        log.error(f'[MISSION] ABORT: {e}')
+        _gate.run(duburi); _slalom.run(duburi); _bin.run(duburi)
+        _torpedo.run(duburi); _return.run(duburi)
+    except Exception as exc:
+        if log: log(f'[MISSION] ABORT: {exc}')
+        raise
     finally:
-        duburi.stop()
-        duburi.disarm()
+        duburi.unlock_heading(); duburi.stop(); duburi.disarm()
 ```
 
 ### Individual chunk test commands

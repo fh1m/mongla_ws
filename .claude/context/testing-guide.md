@@ -413,7 +413,7 @@ closed-loop yaw source for the rest of the pool day.
 
 ## 3. Competition mission unit tests (per-chunk)
 
-Each chunk under `missions/chunks/` can be run independently without the
+Each chunk in `missions/` can be run independently without the
 full 5-task sequence. Use this to validate each task before a competition
 run. Chunks that are logic-only (model not yet trained) still exercise
 the full search/align/fire flow against yolov11n — you'll get
@@ -499,7 +499,7 @@ call never fires because target never locks. Confirm `fire_channel=1` is
 explicit in mission code (grep check):
 
 ```bash
-grep -n 'fire_channel' src/duburi_planner/duburi_planner/missions/chunks/torpedo_task.py
+grep -n 'fire_channel' src/duburi_planner/duburi_planner/missions/torpedo_task.py
 # Must show: fire_channel=1  (torpedo_1, NOT default)
 ```
 
@@ -517,11 +517,11 @@ the combinator should still exit cleanly via the `finally: stop + disarm` block.
 Before pool day, run a syntax check on all chunks:
 
 ```bash
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/gate_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/slalom_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/bin_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/torpedo_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/chunks/return_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/gate_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/slalom_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/bin_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/torpedo_task.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/return_task.py
 python3 -m py_compile src/duburi_planner/duburi_planner/missions/full_mission_2026.py
 # No output = all clean
 ```
