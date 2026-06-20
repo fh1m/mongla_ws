@@ -1323,13 +1323,11 @@ duburi_ws/
             │   ├── gate_then_bin_fsm.py         # ★ YASMIN FSM gate → bin drop
             │   ├── competition_config.py        # pool-day constants (depths, bbox fracs, headings)
             │   ├── full_mission_2026.py         # full 5-task competition combinator
-            │   └── chunks/                      # per-task mission chunks (run standalone for testing)
-            │       ├── __init__.py
-            │       ├── gate_task.py             # ARM→search→align rescue/repair→pass gate
-            │       ├── slalom_task.py           # find red_pipe → hold offset → slalom
-            │       ├── bin_task.py              # downward cam → align blood/fire → fire(3) dropper
-            │       ├── torpedo_task.py          # align torpedo/hole → vision_lock_fire(1)
-            │       └── return_task.py           # return gate → pass → style_roll
+            │   ├── gate_task.py                 # search→align rescue/repair→pass gate (standalone)
+            │   ├── slalom_task.py               # find red_pipe → hold offset → slalom (standalone)
+            │   ├── bin_task.py                  # downward cam → align blood/fire → fire(3) (standalone)
+            │   ├── torpedo_task.py              # align torpedo/hole → vision_lock_fire(1) (standalone)
+            │   └── return_task.py               # return gate → pass → style_roll (standalone)
             └── state_machines/          # ★ YASMIN FSM planning layer (BUILT 2026-06-03)
                 ├── core/
                 │   ├── outcomes.py              # SUCCEED/FAILED/TIMEOUT/ABORT (yasmin_ros aliases)

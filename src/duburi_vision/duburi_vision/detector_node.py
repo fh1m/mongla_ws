@@ -101,6 +101,7 @@ class DetectorNode(Node):
         self.declare_parameter('publish_debug_image', True)
         self.declare_parameter('debug_image_hz',      5.0)
         self.declare_parameter('alignment_deadband',  0.05)
+        self.declare_parameter('paused',              False)
 
         self._cam_name = str(self.get_parameter('camera').value).strip() or 'cam'
         ns_in  = str(self.get_parameter('image_topic').value).strip() \
@@ -272,6 +273,9 @@ class DetectorNode(Node):
             except _queue.Empty:
                 continue
 
+            if self.get_parameter('paused').value:
+                continue  # frame consumed from queue; skip decode + infer
+
             try:
                 frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             except Exception as exc:
@@ -348,6 +352,10 @@ class DetectorNode(Node):
                 self._det = self._registry[name]
                 self._active_name = name
                 self.get_logger().info(f"[DET  ] active_model → {name!r}")
+
+            elif p.name == 'paused':
+                state = 'paused' if p.value else 'resumed'
+                self.get_logger().info(f"[DET  ] {state}")
 
         return SetParametersResult(successful=True)
 
