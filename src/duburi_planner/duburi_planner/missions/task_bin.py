@@ -32,7 +32,7 @@ def run(duburi, log=None):
     for _ in range(SEARCH_MAX_STEPS):
         if duburi.detected('fire', camera='downward', stale_after=1.0):
             break
-        duburi.move_forward(duration=0.5, gain=SEARCH_FORWARD_GAIN)
+        duburi.move_forward(0.5, gain=SEARCH_FORWARD_GAIN)
     else:
         result = duburi.vision.scan(
             target='fire', camera='downward',
@@ -45,12 +45,10 @@ def run(duburi, log=None):
             return
 
     # ── Align sub directly above bin ──────────────────────────────────────────
-    # kp_forward negative: downward cam y-error polarity is inverted vs forward cam
     duburi.vision.home(
-        target='fire', camera='downward',
+        target='fire', downward_cam=True,
         lat=True, forward=True, yaw=False, depth=False,
-        kp_forward=-60.0, kp_lat=60.0,
-        deadband=0.06, on_lost='hold', duration=20)
+        kp_lat=60.0, deadband=0.06, on_lost='hold', duration=20)
 
     duburi.pause(3.0)   # 3s stability confirmation before drop
     duburi.fire(3)      # dropper_1 — channel always explicit

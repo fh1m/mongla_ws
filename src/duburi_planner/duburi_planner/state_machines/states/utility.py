@@ -49,6 +49,55 @@ class LogScoreState(DuburiState):
         return SUCCEED
 
 
+class FireState(DuburiState):
+    """Fire payload channel via ESP32 serial (duburi.fire(channel)).
+
+    channel: 1/2 = torpedo, 3/4 = dropper.
+    confirm_pause_s: dwell after firing to confirm actuation.
+    """
+    TIMEOUT_S = 8.0
+
+    def __init__(
+        self, duburi, profile, channel: int, confirm_pause_s: float = 2.0
+    ) -> None:
+        super().__init__(duburi, profile, [SUCCEED])
+        self._channel       = channel
+        self._confirm_pause = confirm_pause_s
+
+    def _run(self, bb: Blackboard) -> str:
+        self.duburi.fire(self._channel)
+        self.duburi.pause(self._confirm_pause)
+        return SUCCEED
+
+
+class StyleRollState(DuburiState):
+    """ACRO roll manoeuvre at end of run (duburi.style_roll()).
+
+    flips    : number of 360° rolls.
+    headroom : ascend this many metres before rolling (pool safety).
+    gain     : roll speed percent.
+    """
+    TIMEOUT_S = 60.0
+
+    def __init__(
+        self,
+        duburi,
+        profile,
+        flips: int = 1,
+        headroom: float = 0.4,
+        gain: int = 60,
+    ) -> None:
+        super().__init__(duburi, profile, [SUCCEED])
+        self._flips    = flips
+        self._headroom = headroom
+        self._gain     = gain
+
+    def _run(self, bb: Blackboard) -> str:
+        self.duburi.style_roll(
+            flips=self._flips, headroom=self._headroom, gain=self._gain)
+        return SUCCEED
+
+
 class SetDetectorState(DuburiState):
     """Switch camera context and/or detector class filter atomically.
 

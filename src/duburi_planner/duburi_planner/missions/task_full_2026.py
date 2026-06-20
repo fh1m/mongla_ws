@@ -1,8 +1,10 @@
 """Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll.
 
-Launch:
-    ros2 launch duburi_vision full_mission.launch.py
-    ros2 run duburi_planner mission full_mission_2026
+Detected-paradigm combinator (flat, non-FSM). For the YASMIN FSM version:
+    ros2 run duburi_planner mission fsm_full_2026
+
+Launch (detected-paradigm):
+    ros2 run duburi_planner mission task_full_2026
 
 Chunks are loaded at run() time (not module import), so pool-day edits to
 chunk files take effect without colcon build when launched from the source tree.
@@ -31,18 +33,18 @@ def _chunk(name: str):
 
 def run(duburi, log=None):
     # Load chunks here so pool-day edits take effect without colcon build.
-    gate    = _chunk('gate_task')
-    slalom  = _chunk('slalom_task')
-    _bin    = _chunk('bin_task')
-    torpedo = _chunk('torpedo_task')
-    _return = _chunk('return_task')
+    gate    = _chunk('task_gate')
+    slalom  = _chunk('task_slalom')
+    _bin    = _chunk('task_bin')
+    torpedo = _chunk('task_torpedo')
+    _return = _chunk('task_return')
 
     try:
         # 10-second window to remove tether before thrusters arm
         duburi.pause(10.0)
         duburi.arm()
         duburi.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
-        duburi.lock_heading(target=0.0, timeout=600)   # BNO085 heading lock for full run
+        duburi.lock_heading(0.0, timeout=600)   # BNO085 heading lock for full run
 
         for name, chunk in [
             ('gate',    gate),
@@ -62,6 +64,6 @@ def run(duburi, log=None):
             log(f'[MISSION] ABORT: {exc}')
         raise
     finally:
-        duburi.unlock_heading()
+        duburi.release_heading()
         duburi.stop()
         duburi.disarm()

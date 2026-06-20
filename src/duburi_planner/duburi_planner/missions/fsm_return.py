@@ -1,0 +1,33 @@
+"""Return gate task — YASMIN FSM standalone launcher.
+
+    ros2 run duburi_planner mission fsm_return
+
+Pool-day: set RETURN_HEADING_DEG in competition_config.py.
+"""
+from yasmin import Blackboard
+from yasmin_ros import set_ros_loggers
+
+from ..state_machines import build_return_gate_fsm, VehicleProfile
+from .competition_config import (
+    RETURN_HEADING_DEG, GATE_PASS_DEPTH_M, GATE_SEARCH_DEPTH_M,
+    GATE_PASS_BBOX_FRAC, STYLE_ROLL_HEADROOM_M, STYLE_ROLL_GAIN,
+)
+
+
+def run(duburi, log):
+    duburi.camera = 'forward'
+
+    profile = VehicleProfile.auto(duburi.client.node)
+    log(f'[FSM] return_gate  body={profile.name}  dvl={profile.has_dvl}')
+    set_ros_loggers()
+
+    sm = build_return_gate_fsm(duburi, profile, params={
+        'return_heading':       RETURN_HEADING_DEG,
+        'search_depth_m':       GATE_SEARCH_DEPTH_M,
+        'pass_depth_m':         GATE_PASS_DEPTH_M,
+        'pass_bbox_frac':       GATE_PASS_BBOX_FRAC,
+        'style_roll_headroom':  STYLE_ROLL_HEADROOM_M,
+        'style_roll_gain':      STYLE_ROLL_GAIN,
+    })
+    outcome = sm(Blackboard())
+    log(f'[FSM] return_gate complete: {outcome}')

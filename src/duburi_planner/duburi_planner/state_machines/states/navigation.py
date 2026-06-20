@@ -75,7 +75,7 @@ class LockHeadingState(DuburiState):
         self._heading = heading
 
     def _run(self, bb: Blackboard) -> str:
-        self.duburi.lock_heading(target=self._heading, timeout=self.TIMEOUT_S - 2)
+        self.duburi.lock_heading(self._heading, timeout=self.TIMEOUT_S - 2)
         bb[BK.START_HEADING] = self._heading
         return SUCCEED
 
@@ -156,6 +156,21 @@ class MoveLateralState(DuburiState):
         elif self._duration is not None:
             # positive distance_m = right; mirror for raw timed move
             self.duburi.move_right(self._duration, gain=self._gain)
+        return SUCCEED
+
+
+# ── TURN (absolute heading snap) ─────────────────────────────────────────────
+
+class TurnState(DuburiState):
+    """Snap to absolute compass heading via duburi.turn()."""
+    TIMEOUT_S = 30.0
+
+    def __init__(self, duburi, profile, heading_deg: float) -> None:
+        super().__init__(duburi, profile, [SUCCEED])
+        self._heading_deg = heading_deg
+
+    def _run(self, bb: Blackboard) -> str:
+        self.duburi.turn(self._heading_deg)
         return SUCCEED
 
 
