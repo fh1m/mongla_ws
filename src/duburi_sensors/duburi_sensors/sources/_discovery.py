@@ -80,11 +80,12 @@ def _probe_port(path: str, baud: int, logger=None) -> bool:
             s.port     = path
             s.baudrate = baud
             s.timeout  = 0.2
-            s.dtr      = False   # no DTR pulse on open → no reset-on-open
+            s.dtr      = False   # don't assert DTR on open (would reset ESP32-C3)
+            s.rts      = False   # don't assert RTS — RTS+DTR combo = esptool reset sequence
             s.open()
-            time.sleep(0.05)
+            time.sleep(0.1)      # let USB CDC ACM settle (kernel cdc_acm sends control msgs)
             s.reset_input_buffer()
-            s.dtr = True         # arm HWCDC stream (ESP32-C3 checks DTR before sending)
+            s.dtr = True         # arm HWCDC device→host stream
         except (serial.SerialException, OSError) as exc:
             if logger:
                 logger.debug(f'[SENS ] BNO085 probe skip {path}: {exc}')

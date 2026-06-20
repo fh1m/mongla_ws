@@ -138,11 +138,12 @@ class BNO085Source:
         _ser.port     = port
         _ser.baudrate = baud
         _ser.timeout  = 0.1
-        _ser.dtr      = False
+        _ser.dtr      = False   # don't assert DTR on open (would reset ESP32-C3)
+        _ser.rts      = False   # don't assert RTS — RTS+DTR combo = esptool reset sequence
         _ser.open()
-        time.sleep(0.05)
+        time.sleep(0.1)         # let USB CDC ACM settle (kernel cdc_acm sends control msgs)
         _ser.reset_input_buffer()
-        _ser.dtr = True          # arm HWCDC device→host stream
+        _ser.dtr = True         # arm HWCDC device→host stream
         self._serial = _ser
 
         self._thread = threading.Thread(
