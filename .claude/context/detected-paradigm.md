@@ -733,7 +733,7 @@ def run(duburi, log):
     )
     duburi.move_forward_dist(3.0, gain=60)
 
-    duburi.unlock_heading()
+    duburi.release_heading()
     duburi.set_depth(0.0)
     duburi.disarm()
 ```

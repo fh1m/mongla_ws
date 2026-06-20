@@ -140,7 +140,13 @@ state_machines/
 │   └── utility.py               ← countdown, pause, score
 └── plans/
     ├── gate_flare.py            ← build_gate_flare_fsm()
-    └── prequal.py               ← build_prequal_fsm()
+    ├── prequal.py               ← build_prequal_fsm()
+    ├── gate_then_bin.py         ← build_gate_then_bin_fsm()
+    ├── slalom.py                ← build_slalom_fsm()
+    ├── bin_drop.py              ← build_bin_drop_fsm()
+    ├── torpedo_fire.py          ← build_torpedo_fire_fsm()
+    ├── return_gate.py           ← build_return_gate_fsm()
+    └── full_competition.py      ← build_full_competition_fsm()
 ```
 
 ### VehicleProfile — the plug-and-play key
@@ -244,15 +250,28 @@ Always pass **both** `distance_m` and `duration` in plan builders so each vehicl
 | State | Constructor | Outcomes | Wraps DSL |
 |---|---|---|---|
 | `VisionFindState` | `(duburi, profile, target, move='forward', gain=30, timeout=45)` | SUCCEED, TIMEOUT, ABORT | `duburi.vision.find()` |
-| `VisionHomeState` | `(duburi, profile, target, yaw, lat, depth, forward, gate_guard, pass_at, dist, metric, duration, on_lost)` | SUCCEED, FAILED, TIMEOUT, ABORT | `duburi.vision.home()` |
+| `VisionHomeState` | `(duburi, profile, target, yaw, lat, depth, forward, gate_guard, pass_at, dist, metric, duration, on_lost, **overrides)` | SUCCEED, FAILED, TIMEOUT, ABORT | `duburi.vision.home()` |
 | `VisionScanState` | `(duburi, profile, target, step=20, dwell=1.5, duration=90)` | SUCCEED, TIMEOUT, ABORT | `duburi.vision.scan()` |
+| `ApproachState` | `(duburi, profile, target, camera=None, dist=0.55, metric='height', duration=25.0, lock_mode='pursue', on_lost='hold', **overrides)` | SUCCEED, FAILED | `duburi.vision.approach()` |
+| `VisionLockFireState` | `(duburi, profile, target, camera=None, fire_channel=1, yaw=True, lat=True, depth=True, forward=False, stable_lock_s=3.0, max_attempts=3, duration=60.0, **overrides)` | SUCCEED, FAILED | `duburi.vision.vision_lock_fire()` |
 
 **VisionHomeState outcome semantics:**
 - `SUCCEED` — multi-axis convergence achieved (or `pass_at` triggered)
 - `FAILED` — target lost mid-alignment (`on_lost='fail'`)
 - `TIMEOUT` — duration elapsed before convergence
+- `**overrides` — forwarded to `vision.home()`: use for `offset_x`, `kp_forward`, `kp_lat`, `deadband`, etc.
 
 Use `FAILED → FIND_*` in your plan to auto-retry after target loss.
+
+**VisionLockFireState outcome semantics:**
+- `SUCCEED` — stable lock achieved + fire confirmed
+- `FAILED` — `max_attempts` exhausted without stable lock, or target lost
+
+### Navigation states — additional (`states/navigation.py`)
+
+| State | Constructor | Outcomes | Notes |
+|---|---|---|---|
+| `TurnState` | `(duburi, profile, heading_deg: float)` | SUCCEED | Absolute compass heading snap via `duburi.turn()`. Use to orient toward a task zone. |
 
 ### Utility states (`states/utility.py`)
 
@@ -261,6 +280,8 @@ Use `FAILED → FIND_*` in your plan to auto-retry after target loss.
 | `CountdownState` | `(duburi, profile, seconds=10)` | SUCCEED | Tether-removal window; sets `BK.MISSION_START_T` |
 | `PauseState` | `(duburi, profile, seconds=3.0)` | SUCCEED | `duburi.pause()` dwell |
 | `LogScoreState` | `(duburi, profile)` | SUCCEED | Exports mission scoreboard JSON |
+| `FireState` | `(duburi, profile, channel: int, confirm_pause_s=2.0)` | SUCCEED | `duburi.fire(channel)` + settle pause. Channels: 1/2=torpedo, 3/4=dropper. Always explicit. |
+| `StyleRollState` | `(duburi, profile, flips=1, headroom=0.4, gain=60)` | SUCCEED | ACRO roll manoeuvre; use as final style points after Return gate pass. |
 
 ---
 
@@ -332,6 +353,33 @@ sm = build_gate_flare_fsm(duburi, profile, params={
     'pass_dist_m':  4.0,    # wider gate
 })
 ```
+
+### Competition task plan builders (RoboSub 2026)
+
+Five new builders cover the full competition run. Each is standalone-runnable or chained via `full_competition`.
+
+| Builder | Launcher mission | Key fill-at-pool params |
+|---|---|---|
+| `build_slalom_fsm` | `fsm_slalom` | `slalom_heading` (None=skip turn), `pipe_offset_px=80` |
+| `build_bin_drop_fsm` | `fsm_bin` | `bin_heading`, `bin_depth_m=-1.0`, `fire_channel=3` |
+| `build_torpedo_fire_fsm` | `fsm_torpedo` | `torpedo_heading`, **`torpedo_depth_m`** (assert != None) |
+| `build_return_gate_fsm` | `fsm_return` | `return_heading`, `pass_depth_m`, `pass_bbox_frac` |
+| `build_full_competition_fsm` | `fsm_full_2026` | all above; torpedo section skipped if `torpedo_depth_m=None` |
+
+Heading params default to `None` — when None, the turn state is omitted and the AUV proceeds straight.
+`torpedo_depth_m=None` (default) causes the torpedo task to be skipped entirely in `full_competition`.
+
+```bash
+# Standalone task FSMs:
+ros2 run duburi_planner mission fsm_slalom
+ros2 run duburi_planner mission fsm_bin
+ros2 run duburi_planner mission fsm_torpedo    # requires TORPEDO_DEPTH_M != None
+ros2 run duburi_planner mission fsm_return
+ros2 run duburi_planner mission fsm_full_2026  # ★ recommended full competition run
+```
+
+`fsm_full_2026` is a flat 5-task state machine. Each task section's failure transitions to the
+**next task's entry state** (skip pattern) rather than surfacing — the AUV completes as much as possible.
 
 ---
 

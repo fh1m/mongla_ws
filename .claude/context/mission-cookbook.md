@@ -1163,14 +1163,14 @@ def run(duburi, log):
     duburi.set_depth(-0.8, settle=1.0)
 
     # Lock heading at 0° and keep it active throughout
-    duburi.lock_heading(target=0.0, timeout=120)
+    duburi.lock_heading(0.0, timeout=120)   # ← positional arg, not target=
 
     # DVL moves — heading lock stays alive, no yaw drift
     duburi.move_forward_dist(3.0, gain=60)
     duburi.move_lateral_dist(1.0, gain=36)      # strafe 1 m right
     duburi.move_forward_dist(2.0, gain=60)
 
-    duburi.unlock_heading()
+    duburi.release_heading()   # ← release_heading(), not unlock_heading()
     duburi.disarm()
 ```
 
@@ -1184,20 +1184,20 @@ def run(duburi, log):
     duburi.camera = 'forward'
     duburi.arm()
     duburi.set_depth(-1.0)
-    duburi.lock_heading(target=0.0, timeout=120)
+    duburi.lock_heading(0.0, timeout=120)   # ← positional arg
 
     # Phase 1: find and centre on gate
     duburi.vision.find(move='yaw_right', timeout=30.0)
     duburi.vision.turn(duration=5.0)
 
     # Phase 2: update heading lock to current (post-alignment) heading
-    duburi.unlock_heading()
-    duburi.lock_heading(target=0.0, timeout=120)   # target=0 = lock current
+    duburi.release_heading()
+    duburi.lock_heading(0.0, timeout=120)   # 0 = lock current heading
 
     # Phase 3: drive through gate with DVL precision
     duburi.move_forward_dist(4.0, gain=60)
 
-    duburi.unlock_heading()
+    duburi.release_heading()
     duburi.disarm()
 ```
 
@@ -1324,7 +1324,7 @@ def run(duburi, log):
                                yaw=True, lat=True, gate_guard=True, duration=15)
             duburi.move_forward_dist(1.5, gain=60)
 
-    duburi.unlock_heading()
+    duburi.release_heading()
     duburi.set_depth(0.0)
     duburi.disarm()
 ```
@@ -1460,9 +1460,18 @@ Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-para
 ## 7.5  Competition mission chunks (RoboSub 2026)
 
 The full 2026 competition run is built as five standalone chunk files directly
-in `missions/` plus a combinator in `missions/full_mission_2026.py`.
+in `missions/` plus a combinator in `missions/task_full_2026.py`.
 Each chunk can be run independently with `ros2 run duburi_planner mission <name>`.
 The flat layout is required: `discover()` only globs `missions/*.py` (non-recursive).
+
+**Mission naming convention (commit cec7f37):**
+
+| Category | Prefix | Examples |
+|---|---|---|
+| Competition chunks (detected-paradigm) | `task_` | `task_gate`, `task_slalom`, `task_bin`, `task_torpedo`, `task_return`, `task_full_2026` |
+| Competition FSM launchers | `fsm_` | `fsm_slalom`, `fsm_bin`, `fsm_torpedo`, `fsm_return`, `fsm_full_2026` |
+| Demos / development | `demo_` | `demo_arc`, `demo_square`, `demo_heading_lock`, `demo_move_see`, `demo_pursue`, `demo_find_person` |
+| Prior FSM missions (kept) | varies | `gate_flare_fsm`, `prequal_fsm`, `gate_then_bin_fsm` |
 
 ### Key patterns introduced by the competition missions
 
@@ -1517,18 +1526,24 @@ duburi.vision.approach(target='gate', dist=0.80,
 # exits automatically when gate fills 80% of frame height = "through"
 ```
 
-#### Downward camera centering (bin task) — kp_forward MUST be negative
+#### Downward camera centering (bin task) — use `downward_cam=True`
 
 With the downward camera, `ey > 0` means the target is *aft* of the AUV
-(below-frame = must move backward). The `kp_forward` gain must be negative:
+(below-frame = must move backward). Use `downward_cam=True` — it automatically
+sets `camera='downward'` and `kp_forward=-60.0` (negative polarity for ey axis):
 
 ```python
-duburi.vision.home(target='fire', lat=True, forward=True, yaw=False, depth=False,
-                   downward_cam=True,
-                   kp_forward=-60.0,   # ← NEGATIVE: ey>0 = target is behind us
-                   kp_lat=60.0,
-                   deadband=0.06, duration=20)
+# ✅ correct — downward_cam=True auto-handles camera name + kp_forward polarity
+duburi.vision.home(target='fire', downward_cam=True,
+                   lat=True, forward=True, yaw=False, depth=False,
+                   kp_lat=60.0, deadband=0.06, duration=20)
+
+# old pattern (still works, but verbose):
+# duburi.vision.home(target='fire', camera='downward',
+#                    kp_forward=-60.0, kp_lat=60.0, ...)
 ```
+
+`downward_cam=True` is available on `vision.home()`, `vision.hold()`, and `vision.vision_lock_fire()`.
 
 #### Fire channels — always explicit
 
@@ -1560,56 +1575,62 @@ Set `SLALOM_HEADING_DEG`, `BIN_HEADING_DEG`, `TORPEDO_HEADING_DEG`,
 `RETURN_HEADING_DEG` to `None` initially — fill them at pool from compass
 readings after navigation.
 
-### Full mission combinator
+### Full mission combinator (detected-paradigm)
+
+`task_full_2026` chains all 5 chunks. Chunks are loaded via importlib for hot-reload support
+(no colcon build needed for pool-day edits):
 
 ```python
-# missions/full_mission_2026.py
-# Chunks are loaded via importlib for hot-reload support (same mechanism as discover()).
-# Relative imports don't work under spec_from_file_location without package context.
-import importlib.util
-from pathlib import Path
-from duburi_planner.missions.competition_config import GATE_SEARCH_DEPTH_M
-
-def _chunk(name):
-    py = Path(__file__).parent / f'{name}.py'
-    spec = importlib.util.spec_from_file_location(f'duburi_planner.missions.{name}', py)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load chunk: {py}")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-_gate, _slalom, _bin, _torpedo, _return = (
-    _chunk(n) for n in ('gate_task','slalom_task','bin_task','torpedo_task','return_task'))
-
+# missions/task_full_2026.py  — detected()-paradigm sequential combinator
+# Fixed API usage (post cec7f37): positional move_forward, lock_heading, release_heading
 def run(duburi, log=None):
+    gate    = _chunk('task_gate')
+    slalom  = _chunk('task_slalom')
+    _bin    = _chunk('task_bin')
+    torpedo = _chunk('task_torpedo')
+    _return = _chunk('task_return')
     try:
+        duburi.pause(10.0)
         duburi.arm()
         duburi.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
-        duburi.lock_heading(target=0.0, timeout=600)  # BNO lock for full run
-        _gate.run(duburi); _slalom.run(duburi); _bin.run(duburi)
-        _torpedo.run(duburi); _return.run(duburi)
-    except Exception as exc:
-        if log: log(f'[MISSION] ABORT: {exc}')
-        raise
+        duburi.lock_heading(0.0, timeout=600)   # ← positional, not target=
+        for name, chunk in [('gate',gate),('slalom',slalom),('bin',_bin),
+                             ('torpedo',torpedo),('return',_return)]:
+            try:
+                chunk.run(duburi)
+            except Exception as exc:
+                if log: log(f'[MISSION] {name} FAILED: {exc} — continuing')
     finally:
-        duburi.unlock_heading(); duburi.stop(); duburi.disarm()
+        duburi.release_heading()   # ← release_heading, not unlock_heading
+        duburi.stop(); duburi.disarm()
 ```
+
+### FSM alternative (recommended for competition)
+
+`fsm_full_2026` wraps the same tasks as a YASMIN state machine — structured retry,
+outcome logging, per-task skip on failure:
+
+```bash
+ros2 run duburi_planner mission fsm_full_2026
+```
+
+Fill `competition_config.py` headings before running. `torpedo_depth_m=None` → torpedo task skipped.
 
 ### Individual chunk test commands
 
 ```bash
 # ✅ runnable today (gate_rescue_repair.pt exists)
-ros2 run duburi_planner mission gate_task
-ros2 run duburi_planner mission return_task
+ros2 run duburi_planner mission task_gate
+ros2 run duburi_planner mission task_return
 
 # ⏳ logic test (model missing — verify search + timeout + abort flow)
-ros2 run duburi_planner mission slalom_task
-ros2 run duburi_planner mission bin_task
-ros2 run duburi_planner mission torpedo_task
+ros2 run duburi_planner mission task_slalom
+ros2 run duburi_planner mission task_bin
+ros2 run duburi_planner mission task_torpedo
 
-# full 5-task combinator (all chunks in sequence)
-ros2 run duburi_planner mission full_mission_2026
+# full 5-task runs
+ros2 run duburi_planner mission task_full_2026   # detected-paradigm
+ros2 run duburi_planner mission fsm_full_2026    # YASMIN FSM (recommended)
 ```
 
 See `testing-guide.md §3` for per-chunk expected outputs and `models/README.md §Competition models` for model status.

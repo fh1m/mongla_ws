@@ -432,7 +432,7 @@ ros2 launch duburi_vision full_mission.launch.py
 ros2 param get /duburi_detector_fwd paused    # → True
 ros2 param get /duburi_detector_dwn paused    # → True
 
-# Un-pause forward (mimics what gate_task.run() does)
+# Un-pause forward (mimics what task_gate.run() does)
 ros2 param set /duburi_detector_fwd paused false
 ros2 param get /duburi_detector_fwd paused    # → False
 ros2 topic hz /duburi/vision/forward/detections  # should be 15-25 Hz
@@ -441,7 +441,7 @@ ros2 topic hz /duburi/vision/forward/detections  # should be 15-25 Hz
 ros2 param set /duburi_detector_fwd paused true
 ```
 
-### 3.2 gate_task (✅ runnable today — model exists)
+### 3.2 task_gate (✅ runnable today — model exists)
 
 ```bash
 # Terminal 1
@@ -449,49 +449,54 @@ ros2 run duburi_manager start --ros-args -p mode:=sim -p yaw_source:=bno085
 ros2 launch duburi_vision full_mission.launch.py   # dual-cam, both paused
 
 # Terminal 2
-ros2 run duburi_planner mission gate_task
+ros2 run duburi_planner mission task_gate
 ```
 
 Expected flow: `resume_detector(forward)` → model switch to `gate_rescue_repair` →
 search loop (misses in sim) → `look_around` fallback → DSL exits cleanly →
 `pause_detector(forward)`.
 
-### 3.3 return_task (✅ runnable today — same model as gate)
+### 3.3 task_return (✅ runnable today — same model as gate)
 
 ```bash
-ros2 run duburi_planner mission return_task
+ros2 run duburi_planner mission task_return
 ```
 
-Expected: same flow as gate_task + `style_roll(flips=1)` at end.
+Expected: same flow as task_gate + `style_roll(flips=1)` at end.
 
-### 3.4 slalom_task (⏳ model pending — logic test only)
+### 3.4 task_slalom (⏳ model pending — logic test only)
 
 ```bash
-ros2 run duburi_planner mission slalom_task
+ros2 run duburi_planner mission task_slalom
 ```
 
 Expected: `set_model('slalom')` → search loop → `detected('red_pipe')` never
 fires (model not trained) → hits `look_around` timeout → clean abort.
 Verify no crash, heading lock stays active throughout.
 
-### 3.5 bin_task (⏳ model pending — downward camera + fire logic test)
+### 3.5 task_bin (⏳ model pending — downward camera + fire logic test)
 
 ```bash
-ros2 run duburi_planner mission bin_task
+ros2 run duburi_planner mission task_bin
 ```
 
 Expected: `use_camera('downward')` switch → `resume_detector(downward)` →
-search loop misses → timeout abort. Check that `use_camera('forward')` is
-called in `finally` block (should see camera switch in topic list).
+search loop misses → timeout abort. Verify `downward_cam=True` used (not raw `kp_forward`):
 
+```bash
+grep 'downward_cam' src/duburi_planner/duburi_planner/missions/task_bin.py
+# Must show: downward_cam=True
+```
+
+Check that `use_camera('forward')` is called in `finally` block (should see camera switch in topic list):
 ```bash
 ros2 topic list | grep duburi/vision    # verify both forward and downward topics active
 ```
 
-### 3.6 torpedo_task (⏳ model pending — vision_lock_fire logic test)
+### 3.6 task_torpedo (⏳ model pending — vision_lock_fire logic test)
 
 ```bash
-ros2 run duburi_planner mission torpedo_task
+ros2 run duburi_planner mission task_torpedo
 ```
 
 Expected: search misses → `look_around` timeout abort. The `vision_lock_fire`
@@ -499,30 +504,53 @@ call never fires because target never locks. Confirm `fire_channel=1` is
 explicit in mission code (grep check):
 
 ```bash
-grep -n 'fire_channel' src/duburi_planner/duburi_planner/missions/torpedo_task.py
+grep -n 'fire_channel' src/duburi_planner/duburi_planner/missions/task_torpedo.py
 # Must show: fire_channel=1  (torpedo_1, NOT default)
 ```
 
-### 3.7 full_mission_2026 (dry-run combinator)
+### 3.7 task_full_2026 (dry-run detected-paradigm combinator)
 
 ```bash
-ros2 run duburi_planner mission full_mission_2026
+ros2 run duburi_planner mission task_full_2026
 ```
 
 Runs all 5 chunks in sequence. In sim all detector searches will timeout;
 the combinator should still exit cleanly via the `finally: stop + disarm` block.
+
+### 3.7b fsm_full_2026 (dry-run YASMIN FSM — recommended path)
+
+```bash
+ros2 run duburi_planner mission fsm_full_2026
+```
+
+Same flow but as a flat YASMIN state machine. Task failures skip to next task entry
+(not abort). Watch `/rosout` for `[FSM]` state transition logs.
+
+Standalone FSM task tests:
+```bash
+ros2 run duburi_planner mission fsm_slalom
+ros2 run duburi_planner mission fsm_bin
+ros2 run duburi_planner mission fsm_torpedo   # needs TORPEDO_DEPTH_M != None in competition_config.py
+ros2 run duburi_planner mission fsm_return
+```
+
+FSM state unit tests (pure-Python, no hardware):
+```bash
+cd src/duburi_planner && python -m pytest test/test_fsm_states.py -v   # 31 tests
+```
 
 ### 3.8 Syntax check (no manager needed)
 
 Before pool day, run a syntax check on all chunks:
 
 ```bash
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/gate_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/slalom_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/bin_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/torpedo_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/return_task.py
-python3 -m py_compile src/duburi_planner/duburi_planner/missions/full_mission_2026.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/task_gate.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/task_slalom.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/task_bin.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/task_torpedo.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/task_return.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/task_full_2026.py
+python3 -m py_compile src/duburi_planner/duburi_planner/missions/fsm_full_2026.py
 # No output = all clean
 ```
 

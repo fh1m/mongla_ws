@@ -78,11 +78,11 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `move_back_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop backward (same as move_forward_dist with reversed direction) |
 | `move_lateral_dist` | **distance_m** required (±), gain→36 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop lateral (heading lock stays active) |
 | `vision_acquire` | camera→laptop, target_class→person, target_name→'', timeout→30 s, gain→25 %, yaw_rate_pct→25 %, stale_after→2.5 s, tracking→false | Sweep until target seen |
-| `vision_align_yaw` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_yaw→60, on_lost→fail, stale_after→2.5 s, lost_patience_s→0 (engine default 3.0 s), lock_mode→'', offset_x→0, tracking→false | Centre target horizontally (heading) |
-| `vision_align_lat` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_lat→60, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', offset_x→0, offset_y→0, tracking→false | Centre target horizontally (strafe) |
-| `vision_align_depth` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_depth→0.05, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', offset_y→0, tracking→false | Centre target vertically |
-| `vision_hold_distance` | camera→laptop, target_class→person, duration→20 s, deadband→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, tracking→false | Hold standoff distance |
-| `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, tracking→false | Multi-axis simultaneous |
+| `vision_align_yaw` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_yaw→60, on_lost→fail, stale_after→2.5 s, lost_patience_s→0 (engine default 3.0 s), lock_mode→'', offset_x→0, **downward_cam→false**, tracking→false | Centre target horizontally (heading) |
+| `vision_align_lat` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_lat→60, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', offset_x→0, offset_y→0, **downward_cam→false**, tracking→false | Centre target horizontally (strafe) |
+| `vision_align_depth` | camera→laptop, target_class→person, duration→15 s, deadband→0.18, kp_depth→0.05, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', offset_y→0, **downward_cam→false**, tracking→false | Centre target vertically |
+| `vision_hold_distance` | camera→laptop, target_class→person, duration→20 s, deadband→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, **downward_cam→false**, tracking→false | Hold standoff distance |
+| `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, **downward_cam→false**, tracking→false | Multi-axis simultaneous |
 | `look_around` | camera→laptop, target_class→person, yaw_rate_pct→20, settle→1.5, gain→40, duration→60, target→0.0 (override start yaw; 0.0 = current heading), stale_after→1.0 | POSHOLD + incremental yaw orbit; exits on first detection |
 | `vis_approach` | camera→laptop, target_class→person, duration→30, deadband→0.05, kp_forward→200, target_vis_range→0.65, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', offset_x→0, offset_y→0, tracking→false | Drive forward until monocular-depth proxy reaches threshold |
 | `vision_lock_fire` | camera→laptop, target_class→person, axes→yaw,lat,depth, duration→15 s per attempt, deadband→0.18, stable_lock_s→3.0 s, max_attempts→3, attempt_timeout→15 s, **fire_channel→0** (1/2=torpedo, 3/4=dropper), lost_patience_s→0, offset_x→0, offset_y→0 | Align + stable hold + fire via ESP32 serial |
@@ -512,6 +512,7 @@ Centre target horizontally via Ch4 yaw rate (P loop on `ex`).
 |---|---|---|---|---|
 | `kp_yaw` | float | `60.0` | `1.0 – 200.0` | P gain: `yaw_pct = clamp(ex × kp_yaw, ±35)` |
 | `lock_mode` | string | `''` | `''`, `settle`, `follow` | `''` = use ROS param default (`settle`) |
+| `downward_cam` | bool | `false` | `true` / `false` | `true` = auto-set `camera='downward'` + `kp_forward=-60.0` |
 | `tracking` | bool | `false` | `true` / `false` | Enable ByteTrack stable IDs |
 
 | Aspect | Value |
@@ -529,6 +530,7 @@ Centre horizontally via Ch6 lateral strafe — doesn't change heading (P loop on
 |---|---|---|---|---|
 | `kp_lat` | float | `60.0` | `1.0 – 200.0` | P gain: `lat_pct = clamp(−ex × kp_lat, ±35)` (negated — strafe right to move target right) |
 | `lock_mode` | string | `''` | `''`, `settle`, `follow` | |
+| `downward_cam` | bool | `false` | `true` / `false` | Auto-set `camera='downward'` + `kp_forward=-60.0` |
 | `tracking` | bool | `false` | `true` / `false` | |
 
 | Aspect | Value |
@@ -546,6 +548,7 @@ Centre target vertically via incremental ALT_HOLD depth setpoint nudges.
 | `kp_depth` | float (m/unit) | `0.05` | `0.001 – 0.5` | Small! Metres of nudge per unit `ey_anchor` per 5 Hz tick |
 | `depth_anchor_frac` | float | `0.0` | `0.0 – 1.0` | Which point on bbox to centre: 0=top, 0.5=centre, 1=bottom. **0.0 on wire = use ROS param (default 0.5)** |
 | `lock_mode` | string | `''` | `''`, `settle`, `follow` | |
+| `downward_cam` | bool | `false` | `true` / `false` | Auto-set `camera='downward'` + `kp_forward=-60.0` |
 | `tracking` | bool | `false` | `true` / `false` | |
 
 | Aspect | Value |
@@ -890,10 +893,21 @@ duburi.vision.vision_lock_fire(
 | `stable_lock_s` | float (s) | `3.0` | Seconds all axes must stay in deadband before fire |
 | `max_attempts` | float | `3.0` | Retry count before fallback fire |
 | `attempt_timeout` | float (s) | `15.0` | Per-attempt duration cap |
-| `fire_channel` | float | `0.0` | **Preferred.** 1/2=torpedo, 3/4=dropper. 0=log stub |
+| `fire_channel` | float | `0.0` | **Always specify explicitly.** 0=log stub (safe default). |
+| `downward_cam` | bool | `false` | `true` = auto-set `camera='downward'` + `kp_forward=-60.0` |
 | `lost_patience_s` | float (s) | `0.0` | Engine default 3.0 s |
 | `offset_x` | float (px) | `0.0` | Target offset from frame centre (right positive) |
 | `offset_y` | float (px) | `0.0` | Target offset from frame centre (down positive) |
+
+**Fire channel → payload mapping:**
+
+| channel | Payload | Use |
+|---|---|---|
+| `1` | torpedo port | primary torpedo shot |
+| `2` | torpedo starboard | second torpedo shot |
+| `3` | dropper 1 | bin marker drop |
+| `4` | dropper 2 | second bin marker |
+| `0` | — | log-only stub (safe during sim / test without payload) |
 
 Fire routing: `fire_channel > 0` → ESP32 serial (`PayloadDriver`); else log-only stub. AUX PWM path removed.
 

@@ -132,11 +132,11 @@ When a multi-command sequence has to keep the same heading, layer a
 `lock_heading` on top:
 
 ```python
-client.lock_heading(target=0.0, timeout=120)   # 0 = lock current
+client.lock_heading(0.0, timeout=120)          # positional degrees arg; 0 = lock current
 client.move_forward(duration=3, gain=50)       # body weather-cocks
 client.move_left(duration=3, gain=50)          #   ...lock corrects
 client.move_forward(duration=3, gain=50)       #   ...lock corrects
-client.unlock_heading()
+client.release_heading()
 ```
 
 While the lock is active, motion commands switch from

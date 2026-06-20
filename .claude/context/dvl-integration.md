@@ -84,9 +84,9 @@ which paused the lock during DVL moves and let the AUV weather-cock.
 
 DSL usage with lock:
 ```python
-duburi.lock_heading(target=0.0)     # lock heading
+duburi.lock_heading(0.0)            # lock heading (positional — DSL uses `degrees` not `target`)
 duburi.move_forward_dist(3.0)       # DVL move — lock stays active
-duburi.unlock_heading()
+duburi.release_heading()
 ```
 
 ## Position Integration
