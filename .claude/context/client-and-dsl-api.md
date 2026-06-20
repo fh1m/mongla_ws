@@ -89,6 +89,7 @@ vision verbs.
 | `fire_channel`           | float32  | `vision_lock_fire` / `fire` — ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=stub |
 | `stable_lock_s`          | float32  | `vision_lock_fire` — seconds all axes must stay in deadband before firing |
 | `max_attempts`           | float32  | `vision_lock_fire` — retry count before fallback fire at last pose |
+| `downward_cam`           | bool     | vision.home / hold / vision_lock_fire DSL shortcut: `true` → `camera='downward'` + `kp_forward=-60.0` (ey polarity fix for bin/marker tasks) |
 
 ### `Move.Result` fields you get back
 
@@ -297,6 +298,8 @@ duburi.vision.track(target=..., duration=60.0,
 # Maintain PID lock for duration without follow (no forward pursuit)
 # Trilogy: home()=align+exit, hold()=align+maintain, vision_lock_fire()=align+maintain+fire
 duburi.vision.hold(target=...,
+                   camera=None,              # or use downward_cam=True shortcut
+                   downward_cam=False,       # True = camera='downward' + kp_forward=-60.0
                    yaw=True, lat=True,       # default: centre + strafe
                    depth=False, forward=False,
                    duration=60.0,
@@ -355,6 +358,41 @@ duburi.vision.track(target=duburi.models.gate.flare,
                     yaw=True, forward=True, depth=True,
                     dist=0.38, duration=3.0, on_lost='hold')
 ```
+
+#### `downward_cam=True` shortcut
+
+Available on `vision.home()`, `vision.hold()`, `vision.vision_lock_fire()`:
+
+```python
+# Bin centering — downward_cam=True auto-sets camera='downward' + kp_forward=-60.0
+duburi.vision.home(target='fire', downward_cam=True,
+                   lat=True, forward=True, yaw=False, depth=False,
+                   kp_lat=60.0, deadband=0.06, duration=20)
+
+# Without downward_cam (old pattern — still works):
+# duburi.vision.home(target='fire', camera='downward', kp_forward=-60.0, ...)
+```
+
+The negative `kp_forward` is required because with the downward camera, `ey > 0` means the
+target is *aft* of the AUV (below center = behind) — positive thrust would drive away from it.
+
+#### FSM layer cross-reference
+
+`VisionHomeState` in `state_machines/states/vision.py` wraps `vision.home()` and accepts
+`**overrides` in its constructor — pass `offset_x`, `kp_forward`, `kp_lat`, `deadband`, etc.
+directly:
+
+```python
+VisionHomeState(duburi, profile, target='fire',
+                yaw=False, lat=True, forward=True, depth=False,
+                camera='downward', kp_forward=-60.0, kp_lat=60.0, deadband=0.06)
+# OR with shortcut (handled by VisionHomeState -> vision.home -> downward_cam logic):
+VisionHomeState(duburi, profile, target='fire',
+                yaw=False, lat=True, forward=True, depth=False,
+                downward_cam=True, kp_lat=60.0, deadband=0.06)
+```
+
+`ApproachState` and `VisionLockFireState` also accept `**overrides`.
 
 #### Legacy aliases (deprecated — same wire output, never removed)
 

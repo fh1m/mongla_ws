@@ -196,17 +196,7 @@ def run(duburi, log):
 4 bin symbols: FLAME, BLOOD DROPLET, COMPASS, HAMMER.  
 Dropper wired via ESP32 serial (`duburi.fire(3)` or `duburi.fire(4)`).
 
-**Missing DSL verb** — add `drop_marker()` to `duburi_dsl.py`:
-```python
-def drop_marker(self):
-    """Fire dropper solenoid — one shot."""
-    self.send('drop_marker')
-```
-
-And register in `commands.py`:
-```python
-'drop_marker': CommandSpec(verb='drop_marker', timeout=2.0),
-```
+**Payload verb** — `duburi.fire(3)` fires dropper_1; `duburi.fire(4)` fires dropper_2. These are already wired via ESP32 serial — no new DSL verb needed.
 
 **Detection**: small YOLO model on bin symbols.
 - Dataset: render 100 images/class from CAD + pool photos
@@ -225,8 +215,9 @@ def run(duburi, log):
 
     while not duburi.detected(TARGET_SYMBOL, camera='downward'):
         duburi.move_forward(0.5, gain=30)
-    duburi.vision.home(target=TARGET_SYMBOL, lat=True, yaw=True, duration=15)
-    duburi.drop_marker()
+    duburi.vision.home(target=TARGET_SYMBOL, downward_cam=True,
+                       lat=True, yaw=True, duration=15)
+    duburi.fire(3)   # dropper_1
 
     duburi.set_depth(0.0)
     duburi.disarm()
@@ -238,16 +229,16 @@ Board openings: circular or rectangular cutouts.
 Torpedo actuator: `duburi.fire(1)` or `duburi.fire(2)` via ESP32 serial.
 
 **Detection**: similar YOLO fine-tune on board openings.  
-**DSL verb** needed: `fire_torpedo(n=1)` — same pattern as `drop_marker`.
+**Payload verb**: `duburi.fire(1)` = torpedo port, `duburi.fire(2)` = torpedo starboard — already wired via ESP32 serial.
 
 Park until: bins model training is complete (shared GPU time), and pool test confirms torpedo actuator fires correctly.
 
 ### Full Competition FSM (4 days, Jul 8–11)
 
-Chain tasks with timed fallbacks. New file: `missions/robosub_2026_full.py`
+Chain tasks with timed fallbacks. Files: `missions/task_full_2026.py` (detected-paradigm) and `missions/fsm_full_2026.py` (YASMIN FSM — recommended).
 
 ```python
-# robosub_2026_full.py — full competition chain
+# task_full_2026.py — full competition chain (detected-paradigm)
 POOL_DEPTH_M = -0.8
 
 def run(duburi, log):
@@ -308,7 +299,7 @@ def run(duburi, log):
 | ~Jun 3  | Full gate_flare_autonomous end-to-end | Mission completes without operator intervention |
 | ~Jun 14 | Path markers + orange HSV tracker | AUV follows 2 markers in sequence |
 | ~Jun 21 | Slalom (classical HSV) | 2/3 pipes navigated correctly |
-| ~Jul 3  | Bins + drop_marker | Marker drops into correct bin |
+| ~Jul 3  | Bins + fire(3) dropper | Marker drops into correct bin |
 | ~Jul 9  | Full FSM dry run | Tasks 0, 1, 2, 6 chain — no operator assist |
 | Jul 11  | **RoboSub 2026 competition** | — |
 
@@ -329,7 +320,7 @@ def run(duburi, log):
 | **Dubomini 2.0 control path** | profile / `vectored_6dof` frame / 8-thruster map / param-set / mode; VN-200 yaw source | — | `vehicle-spec.md` |
 | **IVC** | acoustic-modem transport node + release-signal FSM transition | YASMIN FSM, Dubomini | — |
 | **Tasks** Slalom / Bins / Torpedo / Octagon / path-markers | per-task missions + detection models | per-task hardware | this doc Phase-2 sketches |
-| **Payload actuation** | ESP32-serial dropper/torpedo client (`drop_marker`/`fire_torpedo`) — NOT Pixhawk AUX | ESP32 serial contract | `project_payload_actuation` memory |
+| **Payload actuation** | ESP32-serial dropper/torpedo client (`duburi.fire(n)`: 1=torpedo port, 2=torpedo starboard, 3=dropper_1, 4=dropper_2) — NOT Pixhawk AUX | ESP32 serial contract | `project_payload_actuation` memory |
 | **Stepper grabber** | Actuation-Board step/dir interface + `grab()` verb | grabber wiring | audit G7 |
 | **Underwater preprocessing** | colour-cast/haze correction stage ahead of the detector | — | audit G5 |
 
