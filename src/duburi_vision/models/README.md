@@ -125,15 +125,15 @@ the class index.
 
 ## Competition models (RoboSub 2026)
 
-| Weight file                      | Camera   | Classes                | Status     | Chunk           |
-| -------------------------------- | -------- | ---------------------- | ---------- | --------------- |
-| `gate_rescue_repair.pt`          | forward  | gate, rescue, repair   | ✅ exists   | gate_task, return_task |
-| `slalom_red_pipe.pt`             | forward  | red_pipe               | ⏳ training | slalom_task     |
-| `bin_fire_blood.pt`              | downward | fire, blood            | ⏳ training | bin_task        |
-| `torpedo_blood_hole.pt`          | forward  | torpedo, blood, hole   | ⏳ training | torpedo_task    |
+| Weight file                      | Camera   | Classes                           | Status    | Chunk                  |
+| -------------------------------- | -------- | --------------------------------- | --------- | ---------------------- |
+| `gate_rescue_repair.pt`          | forward  | gate(0), rescue(1), repair(2)     | ✅ ready   | task_gate, task_return |
+| `slalom_red_pipe.pt`             | forward  | red_pipe(0)                       | ✅ ready   | task_slalom            |
+| `bin_fire_blood.pt`              | downward | blood(0), fire(1)                 | ✅ ready   | task_bin               |
+| `torpedo_blood_hole.pt`          | forward  | torpedo(0), blood(1), hole(2)     | ✅ ready   | task_torpedo           |
 
-**While `gate_rescue_repair.pt` exists, slalom/bin/torpedo models are not yet trained.**
-Use `yolov11n` as a placeholder for logic testing — see §3.4–3.6 in `testing-guide.md`.
+Place `.pt` files in this directory on the Jetson. YAML sidecars are already committed.
+Class index order matters — pass exactly the class name string the yaml defines.
 
 ### Dual-camera usage (competition launch)
 

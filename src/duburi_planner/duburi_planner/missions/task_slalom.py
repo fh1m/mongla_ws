@@ -1,7 +1,7 @@
 """Slalom task — weave through red pipes.
 
-Standalone test (slalom_red_pipe.pt required — logic tested with yolo11n placeholder):
-    ros2 run duburi_planner mission slalom_task
+Standalone test (slalom_red_pipe.pt — classes: red_pipe):
+    ros2 run duburi_planner mission task_slalom
 
 Called by full_mission_2026 combinator after gate_task.
 Expects heading lock active from combinator; only needs lateral + yaw corrections.
