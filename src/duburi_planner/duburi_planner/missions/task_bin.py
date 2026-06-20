@@ -1,7 +1,7 @@
 """Bin drop task — switch to downward camera, locate bin, drop marker.
 
-Standalone test (bin_fire_blood.pt required — logic tested with yolo11n placeholder):
-    ros2 run duburi_planner mission bin_task
+Standalone test (bin_fire_blood.pt — classes: blood(0) fire(1)):
+    ros2 run duburi_planner mission task_bin
 
 Called by full_mission_2026 combinator after slalom_task.
 

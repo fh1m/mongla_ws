@@ -1,7 +1,7 @@
 """Torpedo task — align to blood marker then lock and fire at hole.
 
-Standalone test (torpedo_blood_hole.pt required — logic tested with yolo11n placeholder):
-    ros2 run duburi_planner mission torpedo_task
+Standalone test (torpedo_blood_hole.pt — classes: torpedo(0) blood(1) hole(2)):
+    ros2 run duburi_planner mission task_torpedo
 
 Called by full_mission_2026 combinator after bin_task.
 fire_channel=1 → torpedo_1 (ESP32 channel 1). Always explicit.
