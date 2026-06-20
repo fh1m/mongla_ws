@@ -29,7 +29,7 @@ def run(duburi, log=None):
     for _ in range(SEARCH_MAX_STEPS):
         if duburi.detected('red_pipe', stale_after=1.0):
             break
-        duburi.move_forward(duration=0.5, gain=SEARCH_FORWARD_GAIN)
+        duburi.move_forward(0.5, gain=SEARCH_FORWARD_GAIN)
     else:
         result = duburi.vision.scan(
             target='red_pipe', camera='forward',

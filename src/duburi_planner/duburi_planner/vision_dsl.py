@@ -269,6 +269,7 @@ class _VisionDSL:
 
     def home(self, target=None, *,
              camera=None,
+             downward_cam: bool = False,
              yaw: bool = True,
              lat: bool = False,
              depth: bool = False,
@@ -316,6 +317,8 @@ class _VisionDSL:
         duration : float
             Time limit in seconds.
         """
+        if downward_cam:
+            camera = camera or 'downward'
         axes_parts = [a for a, flag in
                       [('yaw', yaw), ('forward', forward),
                        ('lat', lat), ('depth', depth)]
@@ -324,6 +327,8 @@ class _VisionDSL:
             raise ValueError(
                 "vision.home: at least one axis must be True "
                 "(yaw, lat, depth, or forward)")
+        if downward_cam and 'forward' in axes_parts and 'kp_forward' not in overrides:
+            overrides['kp_forward'] = -60.0
         target_str = self._resolve_target(target)
         return self._send(
             'vision_align_3d',
@@ -385,6 +390,7 @@ class _VisionDSL:
 
     def hold(self, target=None, *,
              camera=None,
+             downward_cam: bool = False,
              yaw: bool = True,
              lat: bool = True,
              depth: bool = False,
@@ -408,12 +414,16 @@ class _VisionDSL:
           hold()             -- align, maintain indefinitely (lock_mode='follow')
           vision_lock_fire() -- align, maintain, fire when stable
         """
+        if downward_cam:
+            camera = camera or 'downward'
         axes_parts = [a for a, flag in
                       [('yaw', yaw), ('lat', lat),
                        ('depth', depth), ('forward', forward)]
                       if flag]
         if not axes_parts:
             raise ValueError("vision.hold: at least one axis must be True")
+        if downward_cam and 'forward' in axes_parts and 'kp_forward' not in overrides:
+            overrides['kp_forward'] = -60.0
         target_str = self._resolve_target(target)
         return self._send(
             'vision_align_3d',
@@ -475,6 +485,7 @@ class _VisionDSL:
 
     def vision_lock_fire(self, target=None, *,
                          camera=None,
+                         downward_cam: bool = False,
                          yaw: bool = True,
                          lat: bool = True,
                          depth: bool = True,
@@ -506,6 +517,8 @@ class _VisionDSL:
                 stable_lock_s=3.0, max_attempts=2,
                 duration=60)
         """
+        if downward_cam:
+            camera = camera or 'downward'
         axes_parts = [a for a, flag in
                       [('yaw', yaw), ('lat', lat),
                        ('depth', depth), ('forward', forward)]

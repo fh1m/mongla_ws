@@ -99,13 +99,13 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
     fwd_pct  = signed_dir * gain
     yaw_pct  = yaw_rate_pct
 
-    started_at     = time.time()
+    started_at     = time.monotonic()
     locked_heading = read_heading(pixhawk, yaw_source) or 0.0
     last_heading   = locked_heading
 
     try:
         while True:
-            elapsed = time.time() - started_at
+            elapsed = time.monotonic() - started_at
             if elapsed >= duration:
                 break
             if abort_fn and abort_fn():

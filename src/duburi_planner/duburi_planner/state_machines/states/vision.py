@@ -70,6 +70,7 @@ class VisionHomeState(DuburiState):
         metric: str = 'area',
         duration: float = 20.0,
         on_lost: str = 'fail',
+        **overrides,
     ) -> None:
         super().__init__(duburi, profile, [SUCCEED, FAILED])
         self._kwargs = dict(
@@ -81,6 +82,7 @@ class VisionHomeState(DuburiState):
             metric=metric,
             duration=duration,
             on_lost=on_lost,
+            **overrides,
         )
         if camera:
             self._kwargs['camera'] = camera
@@ -90,6 +92,82 @@ class VisionHomeState(DuburiState):
 
     def _run(self, bb: Blackboard) -> str:
         result = self.duburi.vision.home(**self._kwargs)
+        return SUCCEED if result.success else FAILED
+
+
+class ApproachState(DuburiState):
+    """vision.approach() — drive forward/back to bbox fill fraction.
+
+    Exits when target reaches dist fraction, or duration expires.
+    Uses on_lost='hold' by default (competition-safe).
+    """
+    TIMEOUT_S = 35.0
+
+    def __init__(
+        self,
+        duburi,
+        profile,
+        target: str,
+        camera: str | None = None,
+        dist: float = 0.55,
+        metric: str = 'height',
+        duration: float = 25.0,
+        lock_mode: str = 'pursue',
+        on_lost: str = 'hold',
+        **overrides,
+    ) -> None:
+        super().__init__(duburi, profile, [SUCCEED, FAILED])
+        self._kwargs = dict(
+            target=target, dist=dist, metric=metric,
+            duration=duration, lock_mode=lock_mode, on_lost=on_lost, **overrides)
+        if camera:
+            self._kwargs['camera'] = camera
+        self.TIMEOUT_S = duration + 5.0
+
+    def _run(self, bb: Blackboard) -> str:
+        result = self.duburi.vision.approach(**self._kwargs)
+        return SUCCEED if result.success else FAILED
+
+
+class VisionLockFireState(DuburiState):
+    """vision.vision_lock_fire() — stable-lock then fire via ESP32 serial.
+
+    Aligns on target, holds stable for stable_lock_s, fires fire_channel.
+    Retries up to max_attempts; fires at last pose as fallback.
+    """
+    TIMEOUT_S = 90.0
+
+    def __init__(
+        self,
+        duburi,
+        profile,
+        target: str,
+        camera: str | None = None,
+        fire_channel: int = 1,
+        yaw: bool = True,
+        lat: bool = True,
+        depth: bool = True,
+        forward: bool = False,
+        stable_lock_s: float = 3.0,
+        max_attempts: int = 3,
+        duration: float = 60.0,
+        **overrides,
+    ) -> None:
+        super().__init__(duburi, profile, [SUCCEED, FAILED])
+        self._kwargs = dict(
+            target=target,
+            fire_channel=fire_channel,
+            yaw=yaw, lat=lat, depth=depth, forward=forward,
+            stable_lock_s=stable_lock_s,
+            max_attempts=max_attempts,
+            duration=duration,
+            **overrides)
+        if camera:
+            self._kwargs['camera'] = camera
+        self.TIMEOUT_S = duration + 5.0
+
+    def _run(self, bb: Blackboard) -> str:
+        result = self.duburi.vision.vision_lock_fire(**self._kwargs)
         return SUCCEED if result.success else FAILED
 
 
