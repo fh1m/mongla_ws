@@ -131,13 +131,18 @@ class BNO085Source:
 
         self._stop = threading.Event()
         self._serial_write_lock = threading.Lock()
-        # dtr=True (default): required for ESP32-C3 HWCDC to send data.
-        # See _probe_port() comment. Reader thread ignores non-JSON boot lines.
+        # Open with dtr=False first to avoid triggering the ESP32-C3 auto-reset
+        # circuit (dev boards wire DTR→EN via RC, causing a reset on port open).
+        # After settling, assert dtr=True so the HWCDC starts streaming.
         _ser = serial.Serial()
         _ser.port     = port
         _ser.baudrate = baud
         _ser.timeout  = 0.1
+        _ser.dtr      = False
         _ser.open()
+        time.sleep(0.05)
+        _ser.reset_input_buffer()
+        _ser.dtr = True          # arm HWCDC device→host stream
         self._serial = _ser
 
         self._thread = threading.Thread(
