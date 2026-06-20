@@ -66,16 +66,25 @@ def _probe_port(path: str, baud: int, logger=None) -> bool:
     Retries once if the device disconnects mid-probe (ESP32-C3 USB CDC
     briefly re-enumerates right after a host opens the port -- select()
     reports readable but read() returns EOF, raising SerialException).
+
+    DTR sequence: open with dtr=False (avoids triggering the ESP32-C3
+    auto-reset circuit on dev boards), then assert dtr=True so the HWCDC
+    starts streaming.  Without dtr=True the device→host path is silently
+    gated off; without the deferred assert, the DTR-on-open pulse resets
+    the board before it can stream, causing the re-enum race that makes
+    detection flaky.
     """
     for attempt in range(2):
         try:
-            # dtr=True (default) required for ESP32-C3 built-in USB CDC (HWCDC
-            # checks DTR before sending data; dtr=False silently drops all output).
             s = serial.Serial()
             s.port     = path
             s.baudrate = baud
             s.timeout  = 0.2
+            s.dtr      = False   # no DTR pulse on open → no reset-on-open
             s.open()
+            time.sleep(0.05)
+            s.reset_input_buffer()
+            s.dtr = True         # arm HWCDC stream (ESP32-C3 checks DTR before sending)
         except (serial.SerialException, OSError) as exc:
             if logger:
                 logger.debug(f'[SENS ] BNO085 probe skip {path}: {exc}')
@@ -117,7 +126,7 @@ def _probe_port(path: str, baud: int, logger=None) -> bool:
 
         if not disconnected or attempt > 0:
             break   # clean timeout or second attempt exhausted
-        time.sleep(1.5)   # wait for ESP32 to re-enumerate before retry
+        time.sleep(3.0)   # wait for ESP32 to re-enumerate before retry (3 s covers slow USB hosts)
 
     return False
 

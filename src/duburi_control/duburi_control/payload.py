@@ -91,16 +91,24 @@ class PayloadDriver:
             return False
 
         try:
-            self._port = _serial_mod.Serial(  # type: ignore[union-attr]
-                resolved,
-                baudrate=baud,
-                timeout=timeout,
-                write_timeout=timeout,
-                rtscts=False,
-            )
-            # ESP32-C3 HWCDC requires DTR=True to receive serial data from host.
-            self._port.dtr = True  # type: ignore[union-attr]
-            time.sleep(0.15)       # let USB CDC settle after DTR assert
+            # Open with dtr=False to avoid triggering the ESP32-C3 auto-reset
+            # circuit on dev boards (DTR-on-open pulses EN via the RC cap →
+            # board resets → GPIO glitch → relay/solenoid fires before firmware
+            # initialises the pin HIGH).
+            # DTR is NOT asserted at all: HWCDC's DTR gate only applies to the
+            # device→host direction.  The host→device path (our fire byte) works
+            # regardless of DTR state, so we never need dtr=True here.
+            _p = _serial_mod.Serial()  # type: ignore[union-attr]
+            _p.port         = resolved
+            _p.baudrate     = baud
+            _p.timeout      = timeout
+            _p.write_timeout = timeout
+            _p.rtscts       = False
+            _p.dtr          = False    # ← safe: no reset, no GPIO glitch
+            _p.open()
+            time.sleep(0.5)            # USB CDC settle (no reset to wait for)
+            _p.reset_input_buffer()    # discard any spurious boot noise
+            self._port = _p
             self._port_path = resolved
             _LOG.info('[PAYLOAD] torpedo+dropper board connected on %s @ %d baud%s',
                       resolved, baud, _CHANNEL_MAP_STR)
