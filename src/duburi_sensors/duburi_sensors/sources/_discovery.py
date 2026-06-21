@@ -17,16 +17,15 @@ import time
 
 import serial  # pyserial
 
-# Probe order for `port='auto'`. by-id paths come first because they're
-# stable across reboots (the Espressif USB serial number stays put even
-# if the kernel renumbers ttyACM*).
+# Probe order for `port='auto'`. BNO085 runs on ESP32-C3 HWCDC (303a:1001)
+# which enumerates as ttyACM*; by-id paths are stable across reboots.
+# CH340-based DevKit V1 (1a86:7523) is the payload board — deliberately
+# excluded here so BNO discovery never touches it (avoids 7s probe timeout).
 _AUTO_PROBE_GLOBS = (
     '/dev/serial/by-id/usb-Espressif*',
     '/dev/serial/by-id/usb-Adafruit*',
     '/dev/serial/by-id/usb-Seeed*',
-    '/dev/serial/by-id/usb-1a86*',          # CH340/CH9102 USB-serial
     '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3',
-    '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3',
 )
 
 # per-candidate probe window; covers ESP32-C3 ~2s boot + BNO init + first frame
