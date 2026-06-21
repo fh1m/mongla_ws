@@ -134,18 +134,39 @@ class PayloadDriver:
             self._port = None
             return False
 
+    def _close_dead(self) -> None:
+        """Close a stale port and clear state so the next fire() triggers VID/PID re-scan."""
+        dead_path = self._port_path
+        try:
+            self._port.close()  # type: ignore[union-attr]
+        except Exception:
+            pass
+        self._port = None
+        self._port_path = ''
+        _LOG.warning('[PAYLOAD] port %s closed after I/O error — will auto-reconnect on next fire',
+                     dead_path)
+
     def fire(self, channel: int) -> bool:
         """Fire payload channel (1/2 = torpedo, 3/4 = dropper).
 
         Sends a single ASCII digit over serial; ESP32 firmware pulls the
         corresponding GPIO LOW for 500 ms to actuate the relay/solenoid.
         Returns ``True`` if the byte was written without error.
+
+        If the port went dead (USB re-enumeration / brownout), auto-reconnects
+        via VID/PID re-scan before writing.  No same-call retry on write
+        failure — the caller decides whether to re-issue (to avoid double-fire
+        if the byte reached the relay before the USB drop).
         """
         if channel not in CHANNEL_NAMES:
             _LOG.error('[PAYLOAD] invalid channel %d (must be 1-4)', channel)
             return False
         if not self.is_ready:
-            _LOG.warning('[PAYLOAD] fire ch=%d — port not open (payload not connected)',
+            # Port never connected or died — attempt transparent recovery.
+            _LOG.info('[PAYLOAD] fire ch=%d — port not ready, attempting auto-reconnect...', channel)
+            self.connect()
+        if not self.is_ready:
+            _LOG.warning('[PAYLOAD] fire ch=%d — not connected (board absent or still re-enumerating)',
                          channel)
             return False
         name = CHANNEL_NAMES[channel]
@@ -156,6 +177,8 @@ class PayloadDriver:
             return True
         except Exception as exc:
             _LOG.error('[PAYLOAD] write error ch=%d (%s): %s', channel, name, exc)
+            # ponytail: no same-call retry — double-fire risk if byte reached relay before USB drop
+            self._close_dead()
             return False
 
     def disconnect(self) -> None:
