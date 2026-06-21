@@ -22,8 +22,9 @@ from serial.tools import list_ports
 _BNO_VID_PID: tuple[int, int] = (0x303a, 0x1001)  # Espressif USB JTAG/serial (HWCDC)
 
 # per-candidate probe window; covers ESP32-C3 cold-boot + BNO init + first JSON frame.
-# When device is already powered, first frame arrives in <100ms; 3s covers cold boot.
-_AUTO_PROBE_TIMEOUT_S = 3.0
+# ESP32-C3 HWCDC needs ~2s after DTR assert before BNO085 first frame on cold start.
+# 5.0s covers that with margin; warm device gets first frame in <100ms.
+_AUTO_PROBE_TIMEOUT_S = 5.0
 
 
 def _enumerate_candidate_ports() -> list[str]:
