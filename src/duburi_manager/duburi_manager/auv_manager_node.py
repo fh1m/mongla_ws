@@ -134,7 +134,8 @@ class AUVManagerNode(Node):
         self._setup_parameters()
         self._setup_mavlink()
         self._setup_reader_and_warmup()
-        self._setup_yaw_source()
+        self._preflight_payload()       # start payload connect in background (parallel to BNO)
+        self._setup_yaw_source()        # BNO probe blocks here (≤3s with warm device)
         self._setup_vision_pool()
         self._setup_heartbeat_and_payload()
         self._setup_action_server()
@@ -313,30 +314,36 @@ class AUVManagerNode(Node):
                 target=self._dvl_auto_connect_loop,
                 daemon=True, name='dvl_auto_connect').start()
 
+    def _preflight_payload(self) -> None:
+        """Start payload board connect in a background thread.
+
+        Runs concurrently with the BNO085 probe in _setup_yaw_source().
+        VID/PID discovery (1a86:7523) means no port overlap is possible
+        with the BNO (303a:1001), so exclusion is not needed.
+        Join happens at the top of _setup_heartbeat_and_payload().
+        """
+        self._payload = PayloadDriver()
+        _pl_port = None if self._payload_port in ('auto', '') else self._payload_port
+        self._payload_thread = threading.Thread(
+            target=lambda: self._payload.connect(port=_pl_port, exclude=set()),
+            daemon=True, name='payload-connect')
+        self._payload_thread.start()
+
     def _setup_vision_pool(self) -> None:
         """Initialise the lazy per-camera VisionState pool."""
         self._vision_states: dict = {}
         self._vision_lock         = threading.Lock()
 
     def _setup_heartbeat_and_payload(self) -> None:
-        """Start heartbeat, connect payload driver, build Duburi facade."""
+        """Start heartbeat, join payload connect thread, build Duburi facade."""
         self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
         self.heartbeat.start()
 
-        # Exclude the actual port held by the BNO source (not the param 'auto').
-        # BNO085Source._port_name / CompositeBNO._bno._port_name holds the real path.
-        _bno_actual = (
-            getattr(self.yaw_source, '_port_name', None)
-            or getattr(getattr(self.yaw_source, '_bno', None), '_port_name', None)
-        )
-        _exclude: set[str] = {_bno_actual} if _bno_actual else set()
-        if not _bno_actual and self._bno_port not in ('auto', ''):
-            _exclude.add(self._bno_port)
-        self._payload = PayloadDriver()
-        _pl_port = None if self._payload_port in ('auto', '') else self._payload_port
-        if self._payload.connect(port=_pl_port, exclude=_exclude):
+        # Payload connect ran in parallel with BNO probe — join now.
+        self._payload_thread.join(timeout=5.0)
+        if self._payload.is_ready:
             self.get_logger().info(
-                f'[PAYLOAD] connected on {self._payload.port_path}')
+                f'[PAYLOAD] verified + connected on {self._payload.port_path}')
         else:
             self.get_logger().info(
                 '[PAYLOAD] not found — fire() calls will log-stub only')

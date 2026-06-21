@@ -275,7 +275,8 @@ class Duburi(VisionVerbs):
         ch = int(fire_channel)
         with self._command_scope('fire'):
             ok = self._fire_payload(ch)
-        return self._make_result(ok, f'fire: ch={ch} {"ok" if ok else "stub/fail"}')
+        _name = {1: 'torpedo_1', 2: 'torpedo_2', 3: 'dropper_1', 4: 'dropper_2'}.get(ch, '?')
+        return self._make_result(ok, f'fire: ch={ch} ({_name}) {"FIRED" if ok else "stub/fail"}')
 
     def _fire_payload(self, channel: int) -> bool:
         """Raw payload fire — no command scope. Use inside vision verbs."""
