@@ -57,14 +57,21 @@ class PayloadDriver:
     def auto_detect_port(exclude: set[str] | None = None) -> str | None:
         """Return first viable port path not in ``exclude``."""
         seen: set[str] = set()
-        exclude = exclude or set()
+        # Normalize exclude to real device paths so by-id symlinks match raw
+        # ttyUSB/ttyACM paths and vice versa.
+        exclude_real: set[str] = set()
+        for e in (exclude or set()):
+            try:
+                exclude_real.add(os.path.realpath(e))
+            except Exception:
+                exclude_real.add(e)
         for pattern in _PORT_GLOBS:
             for path in sorted(glob.glob(pattern)):
                 try:
                     real = os.path.realpath(path)
                 except Exception:
                     real = path
-                if real in seen or real in exclude or path in exclude:
+                if real in seen or real in exclude_real:
                     continue
                 seen.add(real)
                 return real
