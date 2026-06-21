@@ -300,13 +300,18 @@ export ROS_LOCALHOST_ONLY=0
 sudo usermod -aG dialout "$USER"   # log out / back in
 ls -l /dev/ttyACM0                 # crw-rw---- root dialout
 
-# CH340 (payload DevKit V1, 1a86:7523) needs a udev rule in distrobox —
-# the host may assign it to an unmapped group (0660 but group unknown in container).
-# ttyACM* devices get 777 by default; ttyUSB* may not. Fix on HOST:
-echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666"' \
-  | sudo tee /etc/udev/rules.d/99-ch340.rules
+# ttyUSB* (CH340) gets crw-rw---- (0660, group dialout) by default.
+# Inside distrobox the host dialout group is unmapped → Permission denied after re-enum.
+# Fix: udev rule on HOST sets MODE=0666 for all CH340 variants + BNO085.
+# Run on HOST (outside distrobox), covers initial plug AND re-enumeration after ESP32 crash:
+sudo tee /etc/udev/rules.d/99-duburi-serial.rules <<'EOF'
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7522", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="0666"
+EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
-# Temporary fix (survives until replug): sudo chmod a+rw /dev/ttyUSB0
+# Verify: ls -la /dev/ttyUSB* /dev/ttyACM*  →  should show crw-rw-rw- (0666)
 ```
 
 ---
