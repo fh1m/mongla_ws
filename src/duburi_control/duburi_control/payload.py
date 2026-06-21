@@ -49,9 +49,15 @@ _CHANNEL_MAP_STR = '  ch1=torpedo_1  ch2=torpedo_2  ch3=dropper_1  ch4=dropper_2
 class PayloadDriver:
     """Serial interface to the ESP32-C3 payload board."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        wired_channels: set[int] | None = None,
+        reconnect_settle_s: float = 2.0,
+    ) -> None:
         self._port: Optional[object] = None  # serial.Serial when open
         self._port_path: str = ''
+        self._wired = wired_channels          # None = accept all 4
+        self._reconnect_settle_s = reconnect_settle_s  # ESP32 boot wait after re-enum
 
     @staticmethod
     def auto_detect_port(exclude: set[str] | None = None) -> str | None:
@@ -135,7 +141,7 @@ class PayloadDriver:
             return False
 
     def _close_dead(self) -> None:
-        """Close a stale port and clear state so the next fire() triggers VID/PID re-scan."""
+        """Close stale port; caller drives reconnect."""
         dead_path = self._port_path
         try:
             self._port.close()  # type: ignore[union-attr]
@@ -143,8 +149,19 @@ class PayloadDriver:
             pass
         self._port = None
         self._port_path = ''
-        _LOG.warning('[PAYLOAD] port %s closed after I/O error — will auto-reconnect on next fire',
-                     dead_path)
+        _LOG.warning('[PAYLOAD] port %s closed after I/O error', dead_path)
+
+    def _wait_and_reconnect(self, timeout: float = 3.0) -> bool:
+        """Poll VID/PID until CH340 re-enumerates then connect. Returns True on success."""
+        _LOG.info('[PAYLOAD] waiting for CH340 re-enumeration (timeout=%.1fs)...', timeout)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            port = self.auto_detect_port()
+            if port:
+                return self.connect(port=port)
+            time.sleep(0.1)
+        _LOG.error('[PAYLOAD] re-enumeration timed out after %.1fs', timeout)
+        return False
 
     def fire(self, channel: int) -> bool:
         """Fire payload channel (1/2 = torpedo, 3/4 = dropper).
@@ -153,17 +170,19 @@ class PayloadDriver:
         corresponding GPIO LOW for 500 ms to actuate the relay/solenoid.
         Returns ``True`` if the byte was written without error.
 
-        If the port went dead (ESP32 firmware crash on an unwired channel causes
-        CH340 to re-enumerate as a new ttyUSB node), auto-reconnects via
-        VID/PID re-scan before writing.  No same-call retry on write failure —
-        caller decides whether to re-issue (double-fire risk if byte reached
-        relay before USB drop).
+        On write failure (EIO from CH340 re-enumeration after ESP32 crash):
+        closes the dead port, polls VID/PID until CH340 re-appears (≤3s),
+        waits ``reconnect_settle_s`` for ESP32 to finish booting, then retries
+        the write once.  Accept the double-fire risk on wired channels — a missed
+        fire is worse than a duplicate in competition.
         """
         if channel not in CHANNEL_NAMES:
             _LOG.error('[PAYLOAD] invalid channel %d (must be 1-4)', channel)
             return False
+        if self._wired is not None and channel not in self._wired:
+            _LOG.error('[PAYLOAD] ch=%d not in wired set %s — blocked', channel, self._wired)
+            return False
         if not self.is_ready:
-            # Port never connected or died — attempt transparent recovery.
             _LOG.info('[PAYLOAD] fire ch=%d — port not ready, attempting auto-reconnect...', channel)
             self.connect()
         if not self.is_ready:
@@ -177,9 +196,20 @@ class PayloadDriver:
             _LOG.info("[PAYLOAD] serial '%d' sent → %s LAUNCHED", channel, name)
             return True
         except Exception as exc:
-            _LOG.error('[PAYLOAD] write error ch=%d (%s): %s', channel, name, exc)
-            # ponytail: no same-call retry — double-fire risk if byte reached relay before USB drop
+            _LOG.error('[PAYLOAD] write error ch=%d (%s): %s — reconnecting + retry', channel, name, exc)
             self._close_dead()
+            if self._wait_and_reconnect():
+                # ponytail: settle for ESP32 boot before retry; CH340 enumerates ~1s before ESP32 ready
+                time.sleep(self._reconnect_settle_s)
+                try:
+                    self._port.write(bytes([0x30 + channel]))  # type: ignore[union-attr]
+                    self._port.flush()                          # type: ignore[union-attr]
+                    _LOG.warning('[PAYLOAD] ch=%d retry fired after reconnect (%.1fs settle)',
+                                 channel, self._reconnect_settle_s)
+                    return True
+                except Exception as exc2:
+                    _LOG.error('[PAYLOAD] ch=%d retry failed: %s', channel, exc2)
+                    self._close_dead()
             return False
 
     def disconnect(self) -> None:
