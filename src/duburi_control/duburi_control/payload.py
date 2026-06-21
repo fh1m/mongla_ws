@@ -1,14 +1,15 @@
-"""ESP32-C3 payload board driver.
+"""Payload board driver (ESP32 / CH340 DevKit V1 or similar).
 
 Fires torpedos (channels 1, 2) and droppers (channels 3, 4) by sending
 a single ASCII digit over USB serial.  Protocol is write-only.
 
-Distinguishing BNO085 vs payload ESP32
+Distinguishing BNO085 vs payload board
 ---------------------------------------
-Both are ESP32-C3s on USB CDC.  The BNO streams JSON (``{"yaw":...}``)
-continuously; the payload board is silent unless commanded.  The manager
-node passes the actual port path held by the BNO source as ``exclude`` so
-auto-detect always picks the silent (payload) device.
+BNO085 streams JSON (``{"yaw":...}``) continuously on an ESP32-C3 JTAG
+device (303a:1001).  The payload board (now a CH340-based DevKit V1,
+1a86:7523) is silent unless commanded.  The manager node passes the actual
+port path held by the BNO source as ``exclude`` so auto-detect always picks
+the silent (payload) device.
 """
 
 from __future__ import annotations
@@ -36,12 +37,10 @@ CHANNEL_NAMES: dict[int, str] = {
 }
 
 _PORT_GLOBS: list[str] = [
-    '/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit*',
-    '/dev/serial/by-id/usb-Espressif_*',
-    '/dev/serial/by-id/usb-1a86_USB_Single_Serial*',  # CH340
-    '/dev/serial/by-id/usb-1a86_*',
-    '/dev/ttyACM[0-3]',
-    '/dev/ttyUSB[0-3]',
+    '/dev/serial/by-id/usb-1a86_USB_Serial*',         # classic CH340 (1a86:7523)
+    '/dev/serial/by-id/usb-1a86_USB_Single_Serial*',  # CH9102 variant
+    '/dev/serial/by-id/usb-1a86_*',                   # any other 1a86
+    '/dev/ttyUSB[0-3]',                               # CH340 fallback (no by-id)
 ]
 
 _CHANNEL_MAP_STR = '  ch1=torpedo_1  ch2=torpedo_2  ch3=dropper_1  ch4=dropper_2'
@@ -104,7 +103,8 @@ class PayloadDriver:
             _p.timeout      = timeout
             _p.write_timeout = timeout
             _p.rtscts       = False
-            _p.dtr          = False    # ← safe: no reset, no GPIO glitch
+            _p.dtr          = False    # prevent DTR→EN reset pulse (CH340 DevKit V1)
+            _p.rts          = False    # prevent RTS toggle (esptool reset sequence)
             _p.open()
             time.sleep(0.5)            # USB CDC settle (no reset to wait for)
             _p.reset_input_buffer()    # discard any spurious boot noise
