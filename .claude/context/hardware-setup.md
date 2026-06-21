@@ -296,9 +296,17 @@ python3 -c "import torch; print(torch.cuda.is_available())"
 export ROS_DOMAIN_ID=42
 export ROS_LOCALHOST_ONLY=0
 
-# Serial port permissions for BNO085
+# Serial port permissions for BNO085 + payload CH340
 sudo usermod -aG dialout "$USER"   # log out / back in
 ls -l /dev/ttyACM0                 # crw-rw---- root dialout
+
+# CH340 (payload DevKit V1, 1a86:7523) needs a udev rule in distrobox —
+# the host may assign it to an unmapped group (0660 but group unknown in container).
+# ttyACM* devices get 777 by default; ttyUSB* may not. Fix on HOST:
+echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/99-ch340.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+# Temporary fix (survives until replug): sudo chmod a+rw /dev/ttyUSB0
 ```
 
 ---
