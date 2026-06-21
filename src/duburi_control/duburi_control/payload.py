@@ -3,18 +3,15 @@
 Fires torpedos (channels 1, 2) and droppers (channels 3, 4) by sending
 a single ASCII digit over USB serial.  Protocol is write-only.
 
-Distinguishing BNO085 vs payload board
----------------------------------------
-BNO085 streams JSON (``{"yaw":...}``) continuously on an ESP32-C3 JTAG
-device (303a:1001).  The payload board (now a CH340-based DevKit V1,
-1a86:7523) is silent unless commanded.  The manager node passes the actual
-port path held by the BNO source as ``exclude`` so auto-detect always picks
-the silent (payload) device.
+Port discovery uses USB VID/PID via serial.tools.list_ports so the correct
+board is always found regardless of which ttyACM*/ttyUSB* node the OS assigns.
+
+  BNO085 (ESP32-C3 HWCDC): VID=0x303a  PID=0x1001  → handled by duburi_sensors
+  Payload (CH340 DevKit V1): VID=0x1a86 PID=0x7523  → handled here
 """
 
 from __future__ import annotations
 
-import glob
 import logging
 import os
 import time
@@ -36,12 +33,15 @@ CHANNEL_NAMES: dict[int, str] = {
     4: 'dropper_2',
 }
 
-_PORT_GLOBS: list[str] = [
-    '/dev/serial/by-id/usb-1a86_USB_Serial*',         # classic CH340 (1a86:7523)
-    '/dev/serial/by-id/usb-1a86_USB_Single_Serial*',  # CH9102 variant
-    '/dev/serial/by-id/usb-1a86_*',                   # any other 1a86
-    '/dev/ttyUSB[0-3]',                               # CH340 fallback (no by-id)
+# USB VID/PID for supported payload boards (checked in priority order)
+_PAYLOAD_VID_PID: list[tuple[int, int]] = [
+    (0x1a86, 0x7523),  # QinHeng CH340 DevKit V1 (primary)
+    (0x1a86, 0x7522),  # CH340K variant
+    (0x1a86, 0x55d4),  # CH9102 variant
 ]
+
+# Safe probe byte — firmware only acts on ASCII '1'–'4'; '0' is ignored
+VERIFY_BYTE = b'0'
 
 _CHANNEL_MAP_STR = '  ch1=torpedo_1  ch2=torpedo_2  ch3=dropper_1  ch4=dropper_2'
 
@@ -55,26 +55,31 @@ class PayloadDriver:
 
     @staticmethod
     def auto_detect_port(exclude: set[str] | None = None) -> str | None:
-        """Return first viable port path not in ``exclude``."""
-        seen: set[str] = set()
-        # Normalize exclude to real device paths so by-id symlinks match raw
-        # ttyUSB/ttyACM paths and vice versa.
+        """Return first payload board port identified by USB VID/PID.
+
+        Uses ``serial.tools.list_ports`` so the correct device is found
+        regardless of which ttyACM*/ttyUSB* number the OS assigns.
+        """
+        try:
+            from serial.tools import list_ports
+        except ImportError:
+            _LOG.error('[PAYLOAD] pyserial not installed — cannot auto-detect port')
+            return None
         exclude_real: set[str] = set()
         for e in (exclude or set()):
             try:
                 exclude_real.add(os.path.realpath(e))
             except Exception:
                 exclude_real.add(e)
-        for pattern in _PORT_GLOBS:
-            for path in sorted(glob.glob(pattern)):
-                try:
-                    real = os.path.realpath(path)
-                except Exception:
-                    real = path
-                if real in seen or real in exclude_real:
-                    continue
-                seen.add(real)
-                return real
+        for vid, pid in _PAYLOAD_VID_PID:
+            for info in list_ports.comports():
+                if info.vid == vid and info.pid == pid:
+                    try:
+                        real = os.path.realpath(info.device)
+                    except Exception:
+                        real = info.device
+                    if real not in exclude_real:
+                        return info.device
         return None
 
     def connect(self, port: str | None = None,
@@ -113,15 +118,19 @@ class PayloadDriver:
             _p.dtr          = False    # prevent DTR→EN reset pulse (CH340 DevKit V1)
             _p.rts          = False    # prevent RTS toggle (esptool reset sequence)
             _p.open()
-            time.sleep(0.5)            # USB CDC settle (no reset to wait for)
+            time.sleep(0.2)            # CH340 settle (no reset circuit; 0.5s was conservative)
             _p.reset_input_buffer()    # discard any spurious boot noise
+            # Verify the serial link is alive before declaring connected.
+            # VERIFY_BYTE ('0') is outside the fire command set ('1'–'4') so no relay fires.
+            _p.write(VERIFY_BYTE)
+            _p.flush()
             self._port = _p
             self._port_path = resolved
-            _LOG.info('[PAYLOAD] torpedo+dropper board connected on %s @ %d baud%s',
+            _LOG.info('[PAYLOAD] verified + connected on %s @ %d baud%s',
                       resolved, baud, _CHANNEL_MAP_STR)
             return True
         except Exception as exc:
-            _LOG.warning('[PAYLOAD] open failed %s: %s', resolved, exc)
+            _LOG.warning('[PAYLOAD] open/verify failed %s: %s', resolved, exc)
             self._port = None
             return False
 

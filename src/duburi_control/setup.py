@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'pymavlink'],
+    install_requires=['setuptools', 'pymavlink', 'pyserial'],
     zip_safe=True,
     maintainer='Mongla project',
     description='Mongla control stack: Pixhawk MAVLink wrapper and Duburi command facade',

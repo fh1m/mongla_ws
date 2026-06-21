@@ -79,7 +79,7 @@ from ._discovery import (   # noqa: F401 -- re-exported for external callers
     auto_detect_port,
     _enumerate_candidate_ports,
     _probe_port,
-    _AUTO_PROBE_GLOBS,
+    _BNO_VID_PID,
     _AUTO_PROBE_TIMEOUT_S,
 )
 

@@ -10,51 +10,39 @@ auto_detect_port(*, baud, logger) -> str
     Raises RuntimeError with a friendly checklist if nothing answers.
 """
 
-import glob
 import json
 import os
 import time
 
 import serial  # pyserial
+from serial.tools import list_ports
 
-# Probe order for `port='auto'`. BNO085 runs on ESP32-C3 HWCDC (303a:1001)
-# which enumerates as ttyACM*; by-id paths are stable across reboots.
-# CH340-based DevKit V1 (1a86:7523) is the payload board — deliberately
-# excluded here so BNO discovery never touches it (avoids 7s probe timeout).
-_AUTO_PROBE_GLOBS = (
-    '/dev/serial/by-id/usb-Espressif*',
-    '/dev/serial/by-id/usb-Adafruit*',
-    '/dev/serial/by-id/usb-Seeed*',
-    '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3',
-)
+# BNO085 runs on ESP32-C3 HWCDC — USB VID/PID is stable regardless of /dev node.
+# This replaces glob patterns so discovery works even if the port number reassigns.
+_BNO_VID_PID: tuple[int, int] = (0x303a, 0x1001)  # Espressif USB JTAG/serial (HWCDC)
 
-# per-candidate probe window; covers ESP32-C3 ~2s boot + BNO init + first frame
-_AUTO_PROBE_TIMEOUT_S = 7.0
+# per-candidate probe window; covers ESP32-C3 cold-boot + BNO init + first JSON frame.
+# When device is already powered, first frame arrives in <100ms; 3s covers cold boot.
+_AUTO_PROBE_TIMEOUT_S = 3.0
 
 
-def _enumerate_candidate_ports():
-    """Return a de-duplicated, real-path list of ports worth probing.
+def _enumerate_candidate_ports() -> list[str]:
+    """Return de-duplicated ports matching the ESP32-C3 HWCDC VID/PID.
 
-    Globs expand to whatever is actually plugged in; literal paths only
-    survive if the device node exists. The result preserves the
-    declaration order in `_AUTO_PROBE_GLOBS`.
+    Uses serial.tools.list_ports so discovery works regardless of which
+    ttyACM*/ttyUSB* number the OS assigns to the device.
     """
-    seen = set()
-    candidates = []
-    for pattern in _AUTO_PROBE_GLOBS:
-        if any(ch in pattern for ch in '*?['):
-            matches = sorted(glob.glob(pattern))
-        else:
-            matches = [pattern] if os.path.exists(pattern) else []
-        for path in matches:
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for info in list_ports.comports():
+        if info.vid == _BNO_VID_PID[0] and info.pid == _BNO_VID_PID[1]:
             try:
-                real = os.path.realpath(path)
+                real = os.path.realpath(info.device)
             except OSError:
-                real = path
-            if real in seen:
-                continue
-            seen.add(real)
-            candidates.append(path)        # keep the human-friendly name
+                real = info.device
+            if real not in seen:
+                seen.add(real)
+                candidates.append(info.device)
     return candidates
 
 
@@ -139,9 +127,9 @@ def auto_detect_port(*, baud: int = 115200, logger=None) -> str:
     candidates = _enumerate_candidate_ports()
     if not candidates:
         raise RuntimeError(
-            'BNO085 auto-detect: no candidate serial devices present. '
-            'Plug the ESP32-C3 in (USB CDC), then retry. Looked for: '
-            f'{list(_AUTO_PROBE_GLOBS)}')
+            f'BNO085 auto-detect: no device found with VID=0x{_BNO_VID_PID[0]:04x} '
+            f'PID=0x{_BNO_VID_PID[1]:04x} (ESP32-C3 HWCDC). '
+            'Plug the ESP32-C3 in, then retry.')
 
     if logger:
         logger.info(
@@ -156,12 +144,11 @@ def auto_detect_port(*, baud: int = 115200, logger=None) -> str:
             return path
 
     raise RuntimeError(
-        f'BNO085 auto-detect: probed {len(candidates)} device(s), none streamed '
-        f'a parseable {{"yaw":...}} JSON line at {baud} baud within '
-        f'{_AUTO_PROBE_TIMEOUT_S:.1f}s each. '
-        'Check: (1) the MCU is powered + the firmware is flashed, '
-        '(2) the host user has dialout/uucp group access to /dev/tty*, '
-        '(3) no other process (Arduino IDE Serial Monitor, screen, ...) '
-        'is holding the port open, '
-        '(4) pass -p bno085_port:=/dev/ttyACM0 (or whichever tty the ESP32 '
-        'enumerates as) to skip auto-detect entirely.')
+        f'BNO085 auto-detect: probed {len(candidates)} device(s) '
+        f'(VID=0x{_BNO_VID_PID[0]:04x} PID=0x{_BNO_VID_PID[1]:04x}), '
+        f'none streamed a parseable {{"yaw":...}} JSON line at {baud} baud '
+        f'within {_AUTO_PROBE_TIMEOUT_S:.1f}s each. '
+        'Check: (1) MCU is powered + firmware flashed, '
+        '(2) user has dialout/uucp group access to /dev/tty*, '
+        '(3) no other process (Arduino IDE, screen) holds the port open, '
+        '(4) pass -p bno085_port:=<path> to skip auto-detect entirely.')

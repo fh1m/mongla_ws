@@ -348,7 +348,8 @@ Adapted for our context:
 | `yaw_source` | `dvl` | `dvl`\|`bno085_dvl`\|`bno085`\|`mavlink_ahrs` — also drives VehicleProfile.auto() |
 | `dvl_auto_connect` | `true` | Background retry loop; `dvl_connect` verb for manual override |
 | `nucleus_dvl_host` | `192.168.2.201` | DVL TCP host; port `9000`, password `nortek` |
-| `bno085_port` | `/dev/ttyACM0` | USB CDC device (bno085 sources) |
+| `bno085_port` | `auto` | ESP32-C3 HWCDC port; `auto` = VID/PID scan (303a:1001); explicit path skips scan |
+| `payload_port` | `auto` | CH340 payload board; `auto` = VID/PID scan (1a86:7523); explicit path skips scan |
 | `smooth_yaw` / `smooth_translate` | `false` | Enable smootherstep/trapezoid shaping |
 
 ### Yaw source selection
