@@ -153,10 +153,11 @@ class PayloadDriver:
         corresponding GPIO LOW for 500 ms to actuate the relay/solenoid.
         Returns ``True`` if the byte was written without error.
 
-        If the port went dead (USB re-enumeration / brownout), auto-reconnects
-        via VID/PID re-scan before writing.  No same-call retry on write
-        failure — the caller decides whether to re-issue (to avoid double-fire
-        if the byte reached the relay before the USB drop).
+        If the port went dead (ESP32 firmware crash on an unwired channel causes
+        CH340 to re-enumerate as a new ttyUSB node), auto-reconnects via
+        VID/PID re-scan before writing.  No same-call retry on write failure —
+        caller decides whether to re-issue (double-fire risk if byte reached
+        relay before USB drop).
         """
         if channel not in CHANNEL_NAMES:
             _LOG.error('[PAYLOAD] invalid channel %d (must be 1-4)', channel)
