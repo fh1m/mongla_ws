@@ -341,7 +341,11 @@ class AUVManagerNode(Node):
 
         # Payload connect ran in parallel with BNO probe — join now.
         self._payload_thread.join(timeout=5.0)
-        if self._payload.is_ready:
+        if self._payload_thread.is_alive():
+            # Thread still running after timeout — treat as not connected.
+            self.get_logger().warning(
+                '[PAYLOAD] connect timed out — fire() calls will log-stub only')
+        elif self._payload.is_ready:
             self.get_logger().info(
                 f'[PAYLOAD] verified + connected on {self._payload.port_path}')
         else:
