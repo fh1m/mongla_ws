@@ -40,6 +40,11 @@ _PAYLOAD_VID_PID: list[tuple[int, int]] = [
     (0x1a86, 0x55d4),  # CH9102 variant
 ]
 
+# WCH out-of-tree ch341 V1.9 driver creates ttyCH341USB* instead of ttyUSB*.
+# These nodes bypass the standard USB-serial sysfs path so list_ports never
+# enumerates them — fall back to a glob scan after VID/PID fails.
+_PAYLOAD_GLOB_FALLBACKS: list[str] = ['/dev/ttyCH341USB*']
+
 # Safe probe byte — firmware only acts on ASCII '1'–'4'; '0' is ignored
 VERIFY_BYTE = b'0'
 
@@ -86,6 +91,18 @@ class PayloadDriver:
                         real = info.device
                     if real not in exclude_real:
                         return info.device
+
+        # Fallback: WCH custom driver — list_ports doesn't enumerate these
+        import glob
+        for pattern in _PAYLOAD_GLOB_FALLBACKS:
+            for dev in sorted(glob.glob(pattern)):
+                try:
+                    real = os.path.realpath(dev)
+                except Exception:
+                    real = dev
+                if real not in exclude_real:
+                    _LOG.debug('[PAYLOAD] VID/PID scan missed %s — found via glob fallback', dev)
+                    return dev
         return None
 
     def connect(self, port: str | None = None,
