@@ -59,6 +59,7 @@ _MAX_ORBIT_STEPS  = 18     # orbit budget (18 × 20° = full 360°)
 
 
 def run(duburi, log):
+    duburi.mission_reset()   # clear heading lock + abort from any previous run
     duburi.camera = 'forward'
     duburi.models(gate='gate_flare_medium_100ep')
 

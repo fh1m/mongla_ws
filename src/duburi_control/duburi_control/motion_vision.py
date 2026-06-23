@@ -86,6 +86,11 @@ KP_LAT_DEFAULT         = 60.0;   LAT_PCT_MAX     = 35.0
 KP_FORWARD_DEFAULT     = 200.0;  FWD_PCT_MAX     = 50.0
 KP_DEPTH_DEFAULT       = 0.05;   MAX_DEPTH_NUDGE = 0.02   # m / 5 Hz tick
 
+# Depth is negative-down: -1.5 = 1.5m deep.  Floor at -0.2m so vision
+# depth alignment can NEVER command shallower than 0.2m — surfacing under
+# a boat hull is a hull/prop strike risk.  Hardcoded, not a ROS param.
+_MIN_DEPTH_M = -0.2
+
 from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
 from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
 from .motion_rates import LOG_THROTTLE_S
@@ -453,6 +458,7 @@ def vision_track_axes(*,
                 depth_step = _clamp(ey_depth * gains.kp_depth,
                                     -MAX_DEPTH_NUDGE, MAX_DEPTH_NUDGE) * depth_sign
                 depth_setpoint -= depth_step
+                depth_setpoint = min(depth_setpoint, _MIN_DEPTH_M)  # surfacing safety floor
                 axes_in_deadband.append(abs(ey_depth) <= deadband)
             elif 'depth' in axes:
                 # pass_through_active: depth setpoint is frozen; still counts as "in deadband"
@@ -498,6 +504,19 @@ def vision_track_axes(*,
                     yaw_pct     = _clamp(yaw_pct,     -YAW_PCT_MAX * effective_scale, YAW_PCT_MAX * effective_scale)
                     lat_pct     = _clamp(lat_pct,     -LAT_PCT_MAX * effective_scale, LAT_PCT_MAX * effective_scale)
                     forward_pct = _clamp(forward_pct, -FWD_PCT_MAX * effective_scale, FWD_PCT_MAX * effective_scale)
+
+            # Lat-priority axis gating: when lat+forward both active and lateral
+            # error is large, suppress forward proportionally so the AUV corrects
+            # sideways first before approaching.  Prevents diagonal movement when
+            # aligning with slalom pipes.  No new param — threshold derived from
+            # the current lat_max cap.
+            if 'lat' in axes and 'forward' in axes and lat_pct != 0.0:
+                lat_dominance = min(abs(lat_pct) / max(LAT_PCT_MAX * speed * 0.5, 1.0), 1.0)
+                if lat_dominance > 0.5:
+                    log.debug(
+                        f"[VIS  ] LAT-PRIORITY fwd suppressed {lat_dominance:.0%}"
+                        f" (lat={lat_pct:+.1f}%)")
+                forward_pct *= (1.0 - lat_dominance)
 
             # Slew limiter: cap per-tick RC delta to damp oscillation.
             if slew_limit_pct > 0.0:

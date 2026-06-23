@@ -55,6 +55,13 @@ COMMANDS = {
         'fields':   [],
         'defaults': {},
     },
+    'mission_reset': {
+        'help':     'Stop heading lock, clear abort event, send RC neutral. '
+                    'Call at start of every mission run() to clear state '
+                    'carried forward from any previous mission.',
+        'fields':   [],
+        'defaults': {},
+    },
     'surface': {
         'help':     'Emergency surface: set depth to 0 m and hold until reached. '
                     'Bypasses command_active gate so it works during a running mission.',
@@ -351,7 +358,8 @@ COMMANDS = {
                      'depth_anchor_frac', 'distance_metric',
                      'stable_lock_s', 'max_attempts', 'attempt_timeout',
                      'offset_x', 'offset_y',
-                     'fire_channel', 'lost_patience_s'],
+                     'fire_channel', 'lost_patience_s',
+                     'speed', 'h_frac_close'],
         'defaults': {'camera': 'forward', 'target_class': 'torpedo_hole',
                      'axes': 'yaw,lat,depth', 'duration': 60.0,
                      'deadband': 0.10, 'kp_yaw': 60.0, 'kp_lat': 60.0,
@@ -362,7 +370,8 @@ COMMANDS = {
                      'stable_lock_s': 3.0, 'max_attempts': 3.0,
                      'attempt_timeout': 15.0,
                      'offset_x': 0.0, 'offset_y': 0.0,
-                     'fire_channel': 0.0, 'lost_patience_s': 0.0},
+                     'fire_channel': 0.0, 'lost_patience_s': 0.0,
+                     'speed': 0.0, 'h_frac_close': 0.0},
     },
     'fire': {
         'help':     'Fire ESP32 payload channel. 1/2 = torpedo, 3/4 = dropper. '

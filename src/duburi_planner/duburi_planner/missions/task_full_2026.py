@@ -32,6 +32,7 @@ def _chunk(name: str):
 
 
 def run(duburi, log=None):
+    duburi.mission_reset()   # clear heading lock + abort from any previous run
     # Load chunks here so pool-day edits take effect without colcon build.
     gate    = _chunk('task_gate')
     slalom  = _chunk('task_slalom')

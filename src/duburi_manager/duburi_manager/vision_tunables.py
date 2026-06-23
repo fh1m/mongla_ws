@@ -79,6 +79,9 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     'vision.search_lat_pct':       0.0,
     'vision.search_timeout_s':    20.0,
     'vision.search_dwell_s':       1.5,
+    # stable_lock_s: seconds all axes must stay in deadband before vision_lock_fire
+    # triggers the fire callback.  Higher = more stable shot, longer wait.
+    'vision.stable_lock_s':        3.0,
 }
 
 
@@ -155,6 +158,21 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'gain':         'vision.acquire_gain',
         'yaw_rate_pct': 'vision.acquire_yaw_rate_pct',
         'stale_after':  'vision.stale_after',
+    },
+    'vision_lock_fire': {
+        'kp_yaw':             'vision.kp_yaw',
+        'kp_lat':             'vision.kp_lat',
+        'kp_depth':           'vision.kp_depth',
+        'kp_forward':         'vision.kp_forward',
+        'deadband':           'vision.deadband',
+        'target_bbox_h_frac': 'vision.target_bbox_h_frac',
+        'stale_after':        'vision.stale_after',
+        'on_lost':            'vision.on_lost',
+        'depth_anchor_frac':  'vision.depth_anchor_frac',
+        'distance_metric':    'vision.distance_metric',
+        'stable_lock_s':      'vision.stable_lock_s',
+        'speed':              'vision.speed',
+        'h_frac_close':       'vision.h_frac_close',
     },
 }
 

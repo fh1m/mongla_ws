@@ -18,6 +18,7 @@ from duburi_planner.missions.competition_config import (
 
 
 def run(duburi, log=None):
+    duburi.mission_reset()   # clear heading lock + abort from any previous run
     if SLALOM_HEADING_DEG is not None:
         duburi.turn(SLALOM_HEADING_DEG)
 

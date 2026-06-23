@@ -103,7 +103,7 @@ from .tracing       import command_scope
 #
 # arm / disarm / set_mode are NOT listed here because they use the
 # tracing-only `command_scope` directly and never enter _command_scope.
-_UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect'})
+_UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect', 'mission_reset'})
 
 
 # Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
@@ -854,6 +854,27 @@ class Duburi(VisionVerbs):
                 f'lock_heading: locked at {actual_target:.1f} deg '
                 f'(timeout {timeout:.0f}s)',
                 final_value=actual_target, error_value=0.0)
+
+    def mission_reset(self):
+        """Clear all cross-goal state before a new mission starts.
+
+        Stops heading lock, clears a stale abort event, and sends RC
+        neutral.  Call this as the FIRST line of every mission run() so
+        state from a previous run (headed to wrong heading, lingering
+        abort flag) does not carry forward.
+
+        impl: unlock_heading (direct, not via _command_scope) + abort clear
+              + neutral RC.
+        """
+        with self._command_scope('mission_reset'):
+            if self._heading_lock is not None:
+                self._heading_lock.stop()
+                self._heading_lock = None
+                self._release_heartbeat_for_lock()
+            self._abort_event.clear()
+            self._writers().neutral()
+            self.log.info('[CMD  ] mission_reset — heading lock stopped, abort cleared, RC neutral')
+            return self._make_result(True, 'mission_reset: completed')
 
     def unlock_heading(self):
         """Stop the heading-lock streamer and send neutral.
