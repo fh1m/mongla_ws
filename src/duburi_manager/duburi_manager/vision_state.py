@@ -70,6 +70,7 @@ class Sample:
     score:     float
     track_id:  int | None = None   # stable ID when tracking; None on raw detections
     vis_range: float = 0.0         # monocular depth estimate from depth_estimation_node (0=far, 1=close)
+    predicted: bool  = False       # True when ByteTrack Kalman-predicting (no fresh measurement)
 
 
 class VisionState:
@@ -232,14 +233,15 @@ class VisionState:
         horizontal_error = max(-1.5, min(1.5, horizontal_error))
         vertical_error   = max(-1.5, min(1.5, vertical_error))
 
-        class_id = _hypothesis_class_id(detection)
-        score    = _hypothesis_score(detection)
-        track_id = _tracking_id(detection) if self._use_tracks else None
+        class_id  = _hypothesis_class_id(detection)
+        score     = _hypothesis_score(detection)
+        track_id  = _tracking_id(detection) if self._use_tracks else None
+        predicted = self._use_tracks and track_id is not None and score == 0.0
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
                       age_s=time.monotonic() - sampled_at_monotonic,
                       class_id=class_id, score=score, track_id=track_id,
-                      vis_range=vis_range)
+                      vis_range=vis_range, predicted=predicted)
 
     def list_classes(self) -> List[str]:
         """Sorted list of distinct class_id strings in the latest array."""

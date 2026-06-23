@@ -196,8 +196,8 @@ COMMANDS = {
     #
     # tracking=True: subscribe to /tracks (tracker_node must be running)
     # instead of /detections. Enables ByteTrack ID stability + Kalman
-    # smoothing. Off by default -- requires tracker_node for that camera.
-    # Can also be set persistently: ros2 param set /duburi_manager vision.use_tracks true
+    # smoothing. On by default -- vision.use_tracks ROS param governs global default.
+    # Per-goal override: pass tracking=False to use raw /detections for that goal.
     'vision_align_3d': {
         'help':     'Hold target_class centred AND at target_bbox_h_frac. '
                     'Active axes via CSV axes. lock_mode: settle/follow/pursue. '
@@ -212,7 +212,8 @@ COMMANDS = {
                      'stale_after', 'depth_anchor_frac', 'lock_mode',
                      'distance_metric', 'gate_guard', 'gate_guard_min_w_frac',
                      'pass_at', 'pass_at_gain', 'tracking',
-                     'offset_x', 'offset_y', 'lost_patience_s'],
+                     'offset_x', 'offset_y', 'lost_patience_s',
+                     'speed', 'h_frac_close'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'axes': 'yaw,forward', 'duration': 30.0,
                      'deadband': 0.18, 'kp_yaw': 60.0, 'kp_lat': 60.0,
@@ -223,9 +224,10 @@ COMMANDS = {
                      'lock_mode': '', 'distance_metric': '',
                      'gate_guard': False, 'gate_guard_min_w_frac': 0.35,
                      'pass_at': 0.0, 'pass_at_gain': 50.0,
-                     'tracking': False,
+                     'tracking': True,
                      'offset_x': 0.0, 'offset_y': 0.0,
-                     'lost_patience_s': 0.0},
+                     'lost_patience_s': 0.0,
+                     'speed': 0.0, 'h_frac_close': 0.0},
     },
     'vision_align_yaw': {
         'help':     'Steer toward horizontal centre via heading channel. '
@@ -234,12 +236,14 @@ COMMANDS = {
                     'tracking=true: use tracker_node.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_yaw', 'on_lost', 'stale_after', 'lock_mode', 'tracking',
-                     'offset_x', 'offset_y', 'lost_patience_s'],
+                     'offset_x', 'offset_y', 'lost_patience_s',
+                     'speed', 'h_frac_close'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_yaw': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False,
-                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
+                     'stale_after': 1.5, 'lock_mode': '', 'tracking': True,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0,
+                     'speed': 0.0, 'h_frac_close': 0.0},
     },
     'vision_align_lat': {
         'help':     'Strafe toward horizontal centre via lateral channel. '
@@ -248,12 +252,14 @@ COMMANDS = {
                     'offset_y: keep target this many px below center.',
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_lat', 'on_lost', 'stale_after', 'lock_mode', 'tracking',
-                     'offset_x', 'offset_y', 'lost_patience_s'],
+                     'offset_x', 'offset_y', 'lost_patience_s',
+                     'speed', 'h_frac_close'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_lat': 60.0, 'on_lost': 'fail',
-                     'stale_after': 1.5, 'lock_mode': '', 'tracking': False,
-                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
+                     'stale_after': 1.5, 'lock_mode': '', 'tracking': True,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0,
+                     'speed': 0.0, 'h_frac_close': 0.0},
     },
     'vision_align_depth': {
         'help':     'Nudge depth setpoint to centre target vertically. '
@@ -264,14 +270,16 @@ COMMANDS = {
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_depth', 'on_lost', 'stale_after',
                      'depth_anchor_frac', 'lock_mode', 'tracking',
-                     'offset_x', 'offset_y', 'lost_patience_s'],
+                     'offset_x', 'offset_y', 'lost_patience_s',
+                     'speed', 'h_frac_close'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 15.0, 'deadband': 0.18,
                      'kp_depth': 0.05, 'on_lost': 'fail',
                      'stale_after': 1.5,
                      'depth_anchor_frac': 0.0,  # 0.0 = use ROS param default (0.5)
-                     'lock_mode': '', 'tracking': False,
-                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
+                     'lock_mode': '', 'tracking': True,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0,
+                     'speed': 0.0, 'h_frac_close': 0.0},
     },
     'vision_hold_distance': {
         'help':     'Drive forward/back to match target_bbox_h_frac. '
@@ -285,7 +293,8 @@ COMMANDS = {
                      'stale_after', 'lock_mode', 'distance_metric',
                      'gate_guard', 'gate_guard_min_w_frac',
                      'pass_at', 'pass_at_gain', 'tracking',
-                     'offset_x', 'offset_y', 'lost_patience_s'],
+                     'offset_x', 'offset_y', 'lost_patience_s',
+                     'speed', 'h_frac_close'],
         # deadband is tighter here because bbox-height error is naturally
         # smaller than the centring errors on yaw/lat axes.
         'defaults': {'camera': 'laptop', 'target_class': 'person',
@@ -295,8 +304,9 @@ COMMANDS = {
                      'lock_mode': '', 'distance_metric': '',
                      'gate_guard': False, 'gate_guard_min_w_frac': 0.35,
                      'pass_at': 0.0, 'pass_at_gain': 50.0,
-                     'tracking': False,
-                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
+                     'tracking': True,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0,
+                     'speed': 0.0, 'h_frac_close': 0.0},
     },
     'vis_approach': {
         'help':     'Drive forward using monocular depth (vis_range) from '
@@ -308,13 +318,15 @@ COMMANDS = {
         'fields':   ['camera', 'target_class', 'duration', 'deadband',
                      'kp_forward', 'target_vis_range', 'on_lost',
                      'stale_after', 'lock_mode', 'tracking',
-                     'offset_x', 'offset_y', 'lost_patience_s'],
+                     'offset_x', 'offset_y', 'lost_patience_s',
+                     'speed', 'h_frac_close'],
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'duration': 30.0, 'deadband': 0.05,
                      'kp_forward': 200.0, 'target_vis_range': 0.65,
                      'on_lost': 'fail', 'stale_after': 1.5,
-                     'lock_mode': '', 'tracking': False,
-                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0},
+                     'lock_mode': '', 'tracking': True,
+                     'offset_x': 0.0, 'offset_y': 0.0, 'lost_patience_s': 0.0,
+                     'speed': 0.0, 'h_frac_close': 0.0},
     },
     'vision_acquire': {
         'help':     'Block (optionally driving via target_name verb) until '
@@ -326,7 +338,7 @@ COMMANDS = {
         'defaults': {'camera': 'laptop', 'target_class': 'person',
                      'target_name': '', 'timeout': 30.0,
                      'gain': 25.0, 'yaw_rate_pct': 25.0,
-                     'stale_after': 1.5, 'tracking': False},
+                     'stale_after': 1.5, 'tracking': True},
     },
     'vision_lock_fire': {
         'help':     'Align on target in 3D then hold stable for stable_lock_s seconds '

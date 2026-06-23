@@ -229,7 +229,13 @@ class DuburiMission:
     # ================================================================== #
 
     def _subscribe_detections(self, camera: str) -> None:
-        topic = f'/duburi/vision/{camera}/detections'
+        # Subscribe to /tracks when tracker is running (default); fall back to /detections.
+        try:
+            use_tracks = self.client.node.get_parameter('vision.use_tracks').value
+        except Exception:
+            use_tracks = True
+        suffix = 'tracks' if use_tracks else 'detections'
+        topic = f'/duburi/vision/{camera}/{suffix}'
         sub = self.client.node.create_subscription(
             Detection2DArray, topic,
             lambda msg, cam=camera: self._on_detections(cam, msg), 10)
@@ -538,6 +544,17 @@ class DuburiMission:
                 f"[DSL  ] set_classes failed: {result.stderr.strip()!r}")
         else:
             self.log.info(f"[DSL  ] detector classes → {classes_str!r}")
+
+    def set_conf(self, conf: float, *, camera: str = 'forward') -> None:
+        """Set YOLO confidence threshold live. Takes effect on next inference tick."""
+        node = f'/duburi_detector_{"fwd" if camera == "forward" else "dwn"}'
+        result = subprocess.run(
+            ['ros2', 'param', 'set', node, 'conf', str(float(conf))],
+            capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            self.log.warning(f"[DSL  ] set_conf({conf}) failed: {result.stderr.strip()!r}")
+        else:
+            self.log.info(f"[DSL  ] {node} conf → {conf:.3f}")
 
     def pause_detector(self, camera: str = 'forward') -> None:
         """Pause inference on a detector node (frame still consumed from queue)."""

@@ -60,6 +60,25 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # distance_metric: how to measure target distance from its bounding box.
     # 'height' (default), 'area' (better for wide targets), 'diagonal'.
     'vision.distance_metric':     'height',
+    # speed: master scalar 0.0-1.0. 1.0 = full gain caps, 0.5 = half.
+    # Set lower at pool for safety; per-goal override available in Move.action.
+    'vision.speed':               1.0,
+    # h_frac_close: bbox height fraction at which proximity scaling is fully applied.
+    # 0.0 disables proximity scaling (raw speed only). Per-task override recommended.
+    'vision.h_frac_close':        0.0,
+    # proximity_min_scale: gain floor fraction when target fills frame at h_frac_close.
+    'vision.proximity_min_scale': 0.2,
+    # slew_limit_pct: max RC channel change per 20Hz tick. Kills oscillation.
+    # At 8%/tick = 160%/s max slew — fast enough to correct, smooth enough not to lose.
+    'vision.slew_limit_pct':      8.0,
+    # coast_ticks: 20Hz ticks to coast on last bbox before going neutral on lost target.
+    # 10 ticks = 0.5s — matches ByteTrack Kalman prediction window.
+    'vision.coast_ticks':         10,
+    # search_* params for on_lost='search' sweep behaviour.
+    'vision.search_yaw_rate_pct': 20.0,
+    'vision.search_lat_pct':       0.0,
+    'vision.search_timeout_s':    20.0,
+    'vision.search_dwell_s':       1.5,
 }
 
 
@@ -82,20 +101,26 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'depth_anchor_frac':   'vision.depth_anchor_frac',
         'lock_mode':           'vision.lock_mode',
         'distance_metric':     'vision.distance_metric',
+        'speed':               'vision.speed',
+        'h_frac_close':        'vision.h_frac_close',
     },
     'vision_align_yaw': {
-        'kp_yaw':      'vision.kp_yaw',
-        'deadband':    'vision.deadband',
-        'stale_after': 'vision.stale_after',
-        'on_lost':     'vision.on_lost',
-        'lock_mode':   'vision.lock_mode',
+        'kp_yaw':       'vision.kp_yaw',
+        'deadband':     'vision.deadband',
+        'stale_after':  'vision.stale_after',
+        'on_lost':      'vision.on_lost',
+        'lock_mode':    'vision.lock_mode',
+        'speed':        'vision.speed',
+        'h_frac_close': 'vision.h_frac_close',
     },
     'vision_align_lat': {
-        'kp_lat':      'vision.kp_lat',
-        'deadband':    'vision.deadband',
-        'stale_after': 'vision.stale_after',
-        'on_lost':     'vision.on_lost',
-        'lock_mode':   'vision.lock_mode',
+        'kp_lat':       'vision.kp_lat',
+        'deadband':     'vision.deadband',
+        'stale_after':  'vision.stale_after',
+        'on_lost':      'vision.on_lost',
+        'lock_mode':    'vision.lock_mode',
+        'speed':        'vision.speed',
+        'h_frac_close': 'vision.h_frac_close',
     },
     'vision_align_depth': {
         'kp_depth':           'vision.kp_depth',
@@ -104,6 +129,8 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'on_lost':            'vision.on_lost',
         'depth_anchor_frac':  'vision.depth_anchor_frac',
         'lock_mode':          'vision.lock_mode',
+        'speed':              'vision.speed',
+        'h_frac_close':       'vision.h_frac_close',
     },
     'vision_hold_distance': {
         'kp_forward':         'vision.kp_forward',
@@ -113,6 +140,16 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'on_lost':            'vision.on_lost',
         'lock_mode':          'vision.lock_mode',
         'distance_metric':    'vision.distance_metric',
+        'speed':              'vision.speed',
+        'h_frac_close':       'vision.h_frac_close',
+    },
+    'vis_approach': {
+        'kp_forward':   'vision.kp_forward',
+        'stale_after':  'vision.stale_after',
+        'on_lost':      'vision.on_lost',
+        'lock_mode':    'vision.lock_mode',
+        'speed':        'vision.speed',
+        'h_frac_close': 'vision.h_frac_close',
     },
     'vision_acquire': {
         'gain':         'vision.acquire_gain',

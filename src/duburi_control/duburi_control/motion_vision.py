@@ -153,7 +153,17 @@ def vision_track_axes(*,
                       log=None,
                       writers=None,
                       visual_pid: bool = False,
-                      abort_fn=None) -> VisionTrackResult:
+                      abort_fn=None,
+                      speed: float = 1.0,
+                      h_frac_close: float = 0.0,
+                      proximity_min_scale: float = 0.2,
+                      slew_limit_pct: float = 8.0,
+                      coast_ticks: int = 10,
+                      search_yaw_rate_pct: float = 20.0,
+                      search_lat_pct: float = 0.0,
+                      search_speed: float = 0.3,
+                      search_timeout_s: float = 20.0,
+                      search_dwell_s: float = 1.5) -> VisionTrackResult:
     """Run the vision-driven loop until success / lost / duration.
 
     Parameters
@@ -237,8 +247,8 @@ def vision_track_axes(*,
         raise ValueError(
             "vision_track_axes: target_h_frac>0 required when 'forward' in axes "
             f"(got {target_h_frac})")
-    if on_lost not in ('fail', 'hold'):
-        raise ValueError(f"on_lost must be 'fail' or 'hold' (got {on_lost!r})")
+    if on_lost not in ('fail', 'hold', 'search'):
+        raise ValueError(f"on_lost must be 'fail', 'hold', or 'search' (got {on_lost!r})")
     if lock_mode not in ('settle', 'follow', 'pursue', ''):
         raise ValueError(f"lock_mode must be 'settle', 'follow', or 'pursue' (got {lock_mode!r})")
     if distance_metric not in ('height', 'width', 'area', 'diagonal', 'vis_range', ''):
@@ -285,6 +295,7 @@ def vision_track_axes(*,
     last_good_sample    = None
     pass_through_active = False   # set once when pass_at triggers; never cleared
     _lost_budget        = max(1, int(lost_patience_s * LOOP_HZ))
+    prev_yaw = prev_lat = prev_fwd = 0.0  # slew limiter state
 
     # When depth axis is active, Ch3 must stay released (65535 = NO_OVERRIDE)
     # so ArduSub's ALT_HOLD depth PID has authority over the vertical thrusters.
@@ -321,18 +332,38 @@ def vision_track_axes(*,
             if sample_is_stale:
                 lost_tick_streak    += 1
                 settled_tick_streak  = 0
-                writers.neutral()
+
+                # Coast: for the first coast_ticks after detection loss, output
+                # decaying control toward neutral instead of snapping immediately.
+                # This avoids sharp RC transitions that can worsen the loss.
+                if last_good_sample is not None and 0 < lost_tick_streak <= coast_ticks:
+                    decay = (1.0 - lost_tick_streak / coast_ticks) * 0.4
+                    coast_yaw = _clamp(-last_good_sample.ex * gains.kp_yaw * decay,
+                                       -YAW_PCT_MAX * decay, YAW_PCT_MAX * decay) if 'yaw' in axes else 0.0
+                    coast_lat = _clamp(last_good_sample.ex * gains.kp_lat * decay,
+                                       -LAT_PCT_MAX * decay, LAT_PCT_MAX * decay) if 'lat' in axes else 0.0
+                    pixhawk.send_rc_override(
+                        forward=Pixhawk.percent_to_pwm(0.0),
+                        lateral=Pixhawk.percent_to_pwm(coast_lat),
+                        yaw=Pixhawk.percent_to_pwm(coast_yaw),
+                        throttle=throttle_ch,
+                    )
+                    if (now - last_log_time) >= LOG_THROTTLE_S:
+                        log.info(f"[VIS  ] COAST  decay={decay:.2f}  tick={lost_tick_streak}/{coast_ticks}")
+                        last_log_time = now
+                else:
+                    writers.neutral()
+                    if (now - last_log_time) >= LOG_THROTTLE_S:
+                        age = sample.age_s if sample is not None else float('inf')
+                        log.info(
+                            f"[VIS  ] LOST  age={age:5.2f}s  lost_ticks={lost_tick_streak}",
+                            throttle_duration_sec=LOG_THROTTLE_S)
+                        last_log_time = now
+
                 # Keep depth setpoint frozen so ALT_HOLD doesn't drift.
                 if 'depth' in axes:
                     pixhawk.set_target_depth(depth_setpoint)
                     last_depth_send = now
-
-                if (now - last_log_time) >= LOG_THROTTLE_S:
-                    age = sample.age_s if sample is not None else float('inf')
-                    log.info(
-                        f"[VIS  ] LOST  age={age:5.2f}s  lost_ticks={lost_tick_streak}",
-                        throttle_duration_sec=LOG_THROTTLE_S)
-                    last_log_time = now
 
                 if on_lost == 'fail' and lost_tick_streak > _lost_budget:
                     return _build_fail_result(
@@ -342,10 +373,33 @@ def vision_track_axes(*,
                         elapsed, last_good_sample, settled_tick_streak,
                         lost_tick_streak, axes, deadband, target_h_frac)
 
+                if on_lost == 'search' and lost_tick_streak > _lost_budget:
+                    log.info(f"[VIS  ] SEARCH  target_class={target_class!r} lost — sweeping")
+                    found = _do_search_sweep(
+                        pixhawk=pixhawk, writers=writers,
+                        vision_state=vision_state, target_class=target_class,
+                        yaw_rate_pct=search_yaw_rate_pct,
+                        lat_pct=search_lat_pct,
+                        timeout_s=search_timeout_s,
+                        dwell_s=search_dwell_s,
+                        stale_after=stale_after,
+                        throttle_ch=throttle_ch,
+                        abort_fn=abort_fn, log=log)
+                    if found:
+                        lost_tick_streak = 0
+                        prev_yaw = prev_lat = prev_fwd = 0.0
+                    else:
+                        return _build_fail_result(
+                            f"target_class={target_class!r} not found after search sweep",
+                            elapsed, last_good_sample, settled_tick_streak,
+                            lost_tick_streak, axes, deadband, target_h_frac)
+
                 time.sleep(1.0 / LOOP_HZ)
                 continue
 
             # Fresh sample -- reset lost streak, run the controller.
+            if lost_tick_streak > 0:
+                prev_yaw = prev_lat = prev_fwd = 0.0  # clear coast residual on re-acquire
             lost_tick_streak = 0
             last_good_sample = sample
 
@@ -429,6 +483,28 @@ def vision_track_axes(*,
                 forward_pct = _clamp(pass_at_gain, 0.0, FWD_PCT_MAX)
                 lat_pct     = 0.0
                 settled_tick_streak = 0   # don't settle-exit during the pass
+
+            # Proximity-aware gain scaling: shrink output cap as bbox grows.
+            # h_frac_close=0 disables; speed=1.0 is identity.
+            if not pass_through_active:
+                if h_frac_close > 0.0:
+                    prox_scale = max(proximity_min_scale,
+                                     1.0 - (sample.h_frac / h_frac_close)
+                                     * (1.0 - proximity_min_scale))
+                    effective_scale = speed * prox_scale
+                else:
+                    effective_scale = speed
+                if effective_scale < 1.0:
+                    yaw_pct     = _clamp(yaw_pct,     -YAW_PCT_MAX * effective_scale, YAW_PCT_MAX * effective_scale)
+                    lat_pct     = _clamp(lat_pct,     -LAT_PCT_MAX * effective_scale, LAT_PCT_MAX * effective_scale)
+                    forward_pct = _clamp(forward_pct, -FWD_PCT_MAX * effective_scale, FWD_PCT_MAX * effective_scale)
+
+            # Slew limiter: cap per-tick RC delta to damp oscillation.
+            if slew_limit_pct > 0.0:
+                yaw_pct     = prev_yaw + _clamp(yaw_pct - prev_yaw,     -slew_limit_pct, slew_limit_pct)
+                lat_pct     = prev_lat + _clamp(lat_pct - prev_lat,     -slew_limit_pct, slew_limit_pct)
+                forward_pct = prev_fwd + _clamp(forward_pct - prev_fwd, -slew_limit_pct, slew_limit_pct)
+            prev_yaw, prev_lat, prev_fwd = yaw_pct, lat_pct, forward_pct
 
             # ONE RC packet carries Ch3 + Ch4 + Ch5 + Ch6.
             # throttle_ch is 65535 (released) when depth is active so
@@ -571,6 +647,50 @@ def vision_acquire(*,
             (writers.neutral if writers is not None else pixhawk.send_neutral)()
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------- #
+#  Search sweep (on_lost='search')                                        #
+# ---------------------------------------------------------------------- #
+def _do_search_sweep(*,
+                     pixhawk, writers, vision_state, target_class: str,
+                     yaw_rate_pct: float, lat_pct: float,
+                     timeout_s: float, dwell_s: float,
+                     stale_after: float, throttle_ch: int,
+                     abort_fn, log) -> bool:
+    """Yaw-sweep while checking for detection. Returns True if found."""
+    started = time.monotonic()
+    deadline = started + timeout_s
+    tick_s = 1.0 / LOOP_HZ
+    dwell_ticks = max(1, int(dwell_s * LOOP_HZ))
+
+    while time.monotonic() < deadline:
+        if abort_fn and abort_fn():
+            return False
+
+        # Drive yaw (and optional lat) for dwell_ticks, checking each tick.
+        for _ in range(dwell_ticks):
+            if abort_fn and abort_fn():
+                return False
+            if time.monotonic() >= deadline:
+                break
+            pixhawk.send_rc_override(
+                forward=Pixhawk.percent_to_pwm(0.0),
+                lateral=Pixhawk.percent_to_pwm(lat_pct),
+                yaw=Pixhawk.percent_to_pwm(yaw_rate_pct),
+                throttle=throttle_ch,
+            )
+            sample = vision_state.bbox_error(target_class)
+            if sample is not None and sample.age_s <= stale_after:
+                writers.neutral()
+                log.info(f"[VIS  ] SEARCH  found {target_class!r} after "
+                         f"{time.monotonic() - started:.1f}s")
+                return True
+            time.sleep(tick_s)
+
+    writers.neutral()
+    log.info(f"[VIS  ] SEARCH  {target_class!r} not found within {timeout_s:.1f}s")
+    return False
 
 
 # ---------------------------------------------------------------------- #
