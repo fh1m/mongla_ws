@@ -507,6 +507,7 @@ class AUVManagerNode(Node):
         self.pixhawk.send_neutral()
         self.command_active = False  # allow disarm through before execute_callback exits
         self.duburi.request_abort()  # signal all motion loops to exit at next tick
+        self.duburi.unlock_heading()  # heading lock must not outlive a cancelled goal
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):

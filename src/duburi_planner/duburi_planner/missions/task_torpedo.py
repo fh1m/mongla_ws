@@ -18,6 +18,7 @@ _FWD = '/duburi_detector_fwd'
 
 
 def run(duburi, log=None):
+    duburi.mission_reset()   # clear heading lock + abort from any previous run
     assert TORPEDO_DEPTH_M is not None, (
         'TORPEDO_DEPTH_M not set — edit competition_config.py before pool day')
 

@@ -88,6 +88,7 @@ def _find(duburi, target, camera='forward', scan_speed=40, scan_duration=60):
 
 
 def run(duburi, log=None):
+    duburi.mission_reset()   # clear heading lock + abort from any previous run
 
     def info(msg):
         if log:

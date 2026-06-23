@@ -13,6 +13,7 @@ from .competition_config import TORPEDO_HEADING_DEG, TORPEDO_DEPTH_M
 
 
 def run(duburi, log):
+    duburi.mission_reset()   # clear heading lock + abort from any previous run
     duburi.camera = 'forward'
 
     profile = VehicleProfile.auto(duburi.client.node)

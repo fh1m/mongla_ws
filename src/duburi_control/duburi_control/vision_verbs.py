@@ -506,7 +506,8 @@ class VisionVerbs:
                          stable_lock_s=3.0,
                          max_attempts=3, attempt_timeout=15.0,
                          offset_x=0.0, offset_y=0.0,
-                         fire_channel=0, lost_patience_s=0.0):
+                         fire_channel=0, lost_patience_s=0.0,
+                         speed=0.0, h_frac_close=0.0):
         """Lock 3D position on target, verify stable hold, fire via ESP32 serial.
 
         Aligns on all requested axes; once all axes stay within deadband for
@@ -551,7 +552,9 @@ class VisionVerbs:
                 on_stable=_on_stable,
                 offset_x=float(offset_x),
                 offset_y=float(offset_y),
-                lost_patience_s=float(lost_patience_s))
+                lost_patience_s=float(lost_patience_s),
+                speed=float(speed),
+                h_frac_close=float(h_frac_close))
             if fired:
                 break
 

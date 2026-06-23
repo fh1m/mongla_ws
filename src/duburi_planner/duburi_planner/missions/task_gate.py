@@ -17,6 +17,7 @@ _FWD = '/duburi_detector_fwd'
 
 
 def run(duburi, log=None):
+    duburi.mission_reset()   # clear heading lock + abort from any previous run
     duburi.resume_detector('forward')
     duburi.set_model('gate_rescue_repair', node=_FWD)
     duburi.set_classes('gate,rescue,repair', node=_FWD)
