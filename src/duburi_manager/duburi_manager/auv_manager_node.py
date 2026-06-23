@@ -167,7 +167,7 @@ class AUVManagerNode(Node):
         # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
         self.declare_parameter('debug',            False)
         # vision.use_tracks: subscribe /tracks instead of /detections (requires tracker_node)
-        self.declare_parameter('vision.use_tracks', False)
+        self.declare_parameter('vision.use_tracks', True)
         declare_vision_params(self)
 
         requested_mode      = str(self.get_parameter('mode').value)

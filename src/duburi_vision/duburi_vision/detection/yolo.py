@@ -288,6 +288,9 @@ class YoloDetector(Detector):
                     f"[YOLO ] update_allowlist: {sorted(allow_lower)} matched 0 classes. "
                     f"Available: {sorted(self._names.values())[:10]}")
 
+    def update_conf(self, conf: float) -> None:
+        self._conf = float(conf)
+
     def class_names(self):
         return dict(self._names)
 

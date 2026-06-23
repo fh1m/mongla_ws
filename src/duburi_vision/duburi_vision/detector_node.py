@@ -357,6 +357,12 @@ class DetectorNode(Node):
                 state = 'paused' if p.value else 'resumed'
                 self.get_logger().info(f"[DET  ] {state}")
 
+            elif p.name == 'conf':
+                new_conf = float(p.value)
+                if self._det is not None:
+                    self._det.update_conf(new_conf)
+                self.get_logger().info(f"[DET  ] conf → {new_conf:.3f}")
+
         return SetParametersResult(successful=True)
 
     def _log_health(self):

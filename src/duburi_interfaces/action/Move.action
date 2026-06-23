@@ -63,6 +63,9 @@ float32 offset_y           # vertical pixel offset: target kept this many px BEL
                            # negative = keep target above center. 0.0 = center (default)
 float32 lost_patience_s    # seconds of continuous staleness before on_lost='fail' triggers
                            # 0.0 = use engine default (3.0 s). stale_after + lost_patience_s = total gap tolerance
+float32 speed              # master speed scalar 0.0-1.0 (0.0 = use vision.speed ROS param)
+float32 h_frac_close       # bbox-height fraction at which proximity scaling kicks in fully
+                           # (0.0 = use vision.h_frac_close ROS param; e.g. 0.5 for gate)
 
 # ---- vision_lock_fire fields  (ignored by other commands) --------------
 float32 stable_lock_s      # seconds of continuous settle required before fire (default 3.0)

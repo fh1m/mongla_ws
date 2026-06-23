@@ -74,7 +74,8 @@ class VisionVerbs:
                         gate_guard=False, gate_guard_min_w_frac=0.35,
                         pass_at=0.0, pass_at_gain=50.0,
                         offset_x=0.0, offset_y=0.0,
-                        lost_patience_s=0.0):
+                        lost_patience_s=0.0,
+                        speed=0.0, h_frac_close=0.0):
         """Centre + maintain distance on the largest ``target_class`` bbox.
 
         ``axes`` is a CSV: any subset of ``'yaw,lat,depth,forward'``.
@@ -113,11 +114,13 @@ class VisionVerbs:
             pass_at_gain=float(pass_at_gain),
             offset_x=float(offset_x),
             offset_y=float(offset_y),
-            lost_patience_s=float(lost_patience_s))
+            lost_patience_s=float(lost_patience_s),
+            speed=float(speed), h_frac_close=float(h_frac_close))
 
     def vision_align_yaw(self, camera, target_class, duration, deadband,
                          kp_yaw, on_lost, stale_after, lock_mode='',
-                         offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
+                         offset_x=0.0, offset_y=0.0, lost_patience_s=0.0,
+                         speed=0.0, h_frac_close=0.0):
         """Steer toward horizontal centre via heading channel. lock_mode: 'settle'/'follow'."""
         gains = VisionGains(kp_yaw=float(kp_yaw))
         return self._run_vision_track(
@@ -129,11 +132,13 @@ class VisionVerbs:
             stale_after=float(stale_after),
             lock_mode=str(lock_mode),
             offset_x=float(offset_x), offset_y=float(offset_y),
-            lost_patience_s=float(lost_patience_s))
+            lost_patience_s=float(lost_patience_s),
+            speed=float(speed), h_frac_close=float(h_frac_close))
 
     def vision_align_lat(self, camera, target_class, duration, deadband,
                          kp_lat, on_lost, stale_after, lock_mode='',
-                         offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
+                         offset_x=0.0, offset_y=0.0, lost_patience_s=0.0,
+                         speed=0.0, h_frac_close=0.0):
         """Strafe toward horizontal centre (or offset) via lateral channel.
 
         offset_x: keep target this many pixels to the RIGHT of frame center.
@@ -150,12 +155,14 @@ class VisionVerbs:
             stale_after=float(stale_after),
             lock_mode=str(lock_mode),
             offset_x=float(offset_x), offset_y=float(offset_y),
-            lost_patience_s=float(lost_patience_s))
+            lost_patience_s=float(lost_patience_s),
+            speed=float(speed), h_frac_close=float(h_frac_close))
 
     def vision_align_depth(self, camera, target_class, duration, deadband,
                            kp_depth, on_lost, stale_after,
                            depth_anchor_frac=0.0, lock_mode='',
-                           offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
+                           offset_x=0.0, offset_y=0.0, lost_patience_s=0.0,
+                           speed=0.0, h_frac_close=0.0):
         """Nudge depth setpoint to centre vertically.
 
         depth_anchor_frac: which vertical point on the bbox to align (0=top,
@@ -173,14 +180,16 @@ class VisionVerbs:
             depth_anchor_frac=float(depth_anchor_frac),
             lock_mode=str(lock_mode),
             offset_x=float(offset_x), offset_y=float(offset_y),
-            lost_patience_s=float(lost_patience_s))
+            lost_patience_s=float(lost_patience_s),
+            speed=float(speed), h_frac_close=float(h_frac_close))
 
     def vision_hold_distance(self, camera, target_class, duration, deadband,
                              kp_forward, target_bbox_h_frac, on_lost,
                              stale_after, lock_mode='', distance_metric='',
                              gate_guard=False, gate_guard_min_w_frac=0.35,
                              pass_at=0.0, pass_at_gain=50.0,
-                             offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
+                             offset_x=0.0, offset_y=0.0, lost_patience_s=0.0,
+                             speed=0.0, h_frac_close=0.0):
         """Approach / back off to maintain standoff distance by bbox fill fraction.
 
         lock_mode: 'settle' (exit when at distance), 'follow' (track until
@@ -204,12 +213,14 @@ class VisionVerbs:
             pass_at=float(pass_at),
             pass_at_gain=float(pass_at_gain),
             offset_x=float(offset_x), offset_y=float(offset_y),
-            lost_patience_s=float(lost_patience_s))
+            lost_patience_s=float(lost_patience_s),
+            speed=float(speed), h_frac_close=float(h_frac_close))
 
     def vis_approach(self, camera, target_class, duration, deadband,
                      kp_forward, target_vis_range, on_lost,
                      stale_after, lock_mode='',
-                     offset_x=0.0, offset_y=0.0, lost_patience_s=0.0):
+                     offset_x=0.0, offset_y=0.0, lost_patience_s=0.0,
+                     speed=0.0, h_frac_close=0.0):
         """Drive forward using monocular depth (vis_range) as the distance proxy.
 
         target_vis_range 0..1: 0=far, 1=close. Requires depth_estimation_node
@@ -228,7 +239,8 @@ class VisionVerbs:
             lock_mode=str(lock_mode),
             distance_metric='vis_range',
             offset_x=float(offset_x), offset_y=float(offset_y),
-            lost_patience_s=float(lost_patience_s))
+            lost_patience_s=float(lost_patience_s),
+            speed=float(speed), h_frac_close=float(h_frac_close))
 
     def vision_acquire(self, camera, target_class, target_name, timeout,
                        gain, yaw_rate_pct, stale_after):
@@ -373,7 +385,8 @@ class VisionVerbs:
                           pass_at=0.0, pass_at_gain=50.0,
                           offset_x=0.0, offset_y=0.0,
                           stable_lock_s=0.0, on_stable=None,
-                          lost_patience_s=0.0):
+                          lost_patience_s=0.0,
+                          speed=0.0, h_frac_close=0.0):
         """Common path for every vision_align_* / vision_hold_distance verb.
 
         ``verb`` is the public method name (``'vision_align_yaw'``, ...)
@@ -424,6 +437,7 @@ class VisionVerbs:
                     stable_lock_s=stable_lock_s, on_stable=on_stable,
                     **({'lost_patience_s': lost_patience_s}
                        if lost_patience_s > 0.0 else {}),
+                    speed=float(speed), h_frac_close=float(h_frac_close),
                     log=self.log, writers=self._writers(),
                     visual_pid=visual_pid,
                     abort_fn=self._abort_fn)
