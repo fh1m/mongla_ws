@@ -73,6 +73,7 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `set_depth` | **target** m required, timeout→30 s, settle→0 s | Drive to absolute depth |
 | `lock_heading` | target→0.0 °, timeout→300 s | Background heading correction loop |
 | `unlock_heading` | — | Stop heading lock |
+| `mission_reset` | — | Stop heading lock + clear abort event + RC neutral. **Call at start of every `run()`.** Safe before arm (`_UNARM_SAFE`). |
 | `dvl_connect` | — | Connect Nucleus DVL (auto-connect also available) |
 | `move_forward_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop forward (heading lock stays active) |
 | `move_back_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop backward (same as move_forward_dist with reversed direction) |
@@ -85,7 +86,7 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `vision_align_3d` | camera→laptop, target_class→person, axes→yaw,forward, duration→30 s, deadband→0.18, kp_yaw→60, kp_lat→60, kp_depth→0.05, kp_forward→200, target_bbox_h_frac→0.30, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, depth_anchor_frac→0, lock_mode→'', distance_metric→'', offset_x→0, offset_y→0, **downward_cam→false**, tracking→false | Multi-axis simultaneous |
 | `look_around` | camera→laptop, target_class→person, yaw_rate_pct→20, settle→1.5, gain→40, duration→60, target→0.0 (override start yaw; 0.0 = current heading), stale_after→1.0 | POSHOLD + incremental yaw orbit; exits on first detection |
 | `vis_approach` | camera→laptop, target_class→person, duration→30, deadband→0.05, kp_forward→200, target_vis_range→0.65, on_lost→fail, stale_after→2.5 s, lost_patience_s→0, lock_mode→'', offset_x→0, offset_y→0, tracking→false | Drive forward until monocular-depth proxy reaches threshold |
-| `vision_lock_fire` | camera→laptop, target_class→person, axes→yaw,lat,depth, duration→15 s per attempt, deadband→0.18, stable_lock_s→3.0 s, max_attempts→3, attempt_timeout→15 s, **fire_channel→0** (1/2=torpedo, 3/4=dropper), lost_patience_s→0, offset_x→0, offset_y→0 | Align + stable hold + fire via ESP32 serial |
+| `vision_lock_fire` | camera→laptop, target_class→person, axes→yaw,lat,depth, duration→15 s per attempt, deadband→0.18, stable_lock_s→3.0 s, max_attempts→3, attempt_timeout→15 s, **fire_channel→0** (1/2=torpedo, 3/4=dropper), lost_patience_s→0, offset_x→0, offset_y→0, **speed→0.0** (0–1 gain scalar), **h_frac_close→0.0** (bbox fraction at which proximity scaling kicks in) | Align + stable hold + fire via ESP32 serial |
 | `fire` | **fire_channel** required (1–4) | Fire ESP32 payload channel directly: 1,2=torpedo, 3,4=dropper |
 
 ---
@@ -894,10 +895,14 @@ duburi.vision.vision_lock_fire(
 | `max_attempts` | float | `3.0` | Retry count before fallback fire |
 | `attempt_timeout` | float (s) | `15.0` | Per-attempt duration cap |
 | `fire_channel` | float | `0.0` | **Always specify explicitly.** 0=log stub (safe default). |
+| `speed` | float | `0.0` | Gain scalar (0–1). `0.0` = full gains. Set e.g. `0.15` to slow when near hole. |
+| `h_frac_close` | float | `0.0` | Bbox height fraction at which proximity scaling starts. `0.0` = no scaling. |
 | `downward_cam` | bool | `false` | `true` = auto-set `camera='downward'` + `kp_forward=-60.0` |
 | `lost_patience_s` | float (s) | `0.0` | Engine default 3.0 s |
 | `offset_x` | float (px) | `0.0` | Target offset from frame centre (right positive) |
 | `offset_y` | float (px) | `0.0` | Target offset from frame centre (down positive) |
+
+**Proximity scaling** (`speed` + `h_frac_close`): when bbox grows past `h_frac_close`, gains scale down toward `proximity_min_scale` (ROS param `vision.proximity_min_scale`, default 0.2). AUV moves barely at all when close to hole — essential for stable torpedo lock. Example: `speed=0.15, h_frac_close=0.25` means at full close (bbox = 25% frame height), effective gain = `0.15 * 0.2 = 3%` of max.
 
 **Fire channel → payload mapping:**
 

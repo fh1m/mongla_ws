@@ -178,6 +178,25 @@ Next-up candidates not from this audit (keep here as a hand-off list):
 
 ---
 
+## 2026-06 Pool-Test Fixes — ALL FIXED (commit 0a3d8e1)
+
+### C1. Vision depth alignment can command surfacing — **FIXED 2026-06-23**
+- **File:** `motion_vision.py`
+- **Symptom:** `vision_track_axes` depth nudges had no floor; repeated "move up" corrections could command depth → 0m → boat hull collision.
+- **Fix:** `_MIN_DEPTH_M = -0.2` constant; `depth_setpoint = min(depth_setpoint, _MIN_DEPTH_M)` after every nudge. Uses `min()` because depth is negative-down.
+
+### C2. Mission state carry-over across runs — **FIXED 2026-06-23**
+- **Files:** `commands.py`, `duburi.py`, `auv_manager_node.py`, all `run()` mission files
+- **Symptom:** Heading lock and `_abort_event` persisted after a mission. Second mission armed into previous heading; abort state could prevent motion.
+- **Fix:** New `mission_reset` verb (in `_UNARM_SAFE`): stops heading lock thread, clears `_abort_event`, sends RC neutral. All `run()` functions call `duburi.mission_reset()` as first line. `cancel_callback` now also calls `unlock_heading()`.
+
+### C3. Slalom diagonal movement — **FIXED 2026-06-23**
+- **File:** `motion_vision.py` (`vision_track_axes`)
+- **Symptom:** When both `lat` and `forward` in axes, both channels sent simultaneously → AUV moved diagonally → risk of hitting slalom pipes.
+- **Fix:** Lat-priority smooth gating: `fwd_pct *= (1 - lat_dominance)` where `lat_dominance = min(abs(lat_pct) / max(LAT_PCT_MAX * speed * 0.5, 1.0), 1.0)`. Forward fully suppressed when lateral error large; smoothly restored when centred.
+
+---
+
 ## Forks we evaluated (so we don't revisit)
 
 ### `BumblebeeAS/ardupilot_fix` — STALE DUD (evaluated 2026-04)

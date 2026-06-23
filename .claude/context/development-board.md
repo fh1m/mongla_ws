@@ -90,6 +90,16 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 
 **Bug fixes (2026-06-20, commit cec7f37):** `move_forward(duration=...)` → positional (5 files); `lock_heading(target=...)` → positional (task_full_2026 + LockHeadingState); `unlock_heading()` → `release_heading()`; `time.time()` → `time.monotonic()` in arc loop.
 
+**Vision stability Phase 2 (2026-06-23, commit 0a3d8e1):**
+| Fix | What changed |
+|-----|-------------|
+| 🔴 Depth surfacing clamp | `motion_vision._MIN_DEPTH_M = -0.2` — vision depth loop can never command shallower than 0.2m; uses `min()` (negative-down). Hardware safety constant, not a ROS param. |
+| 🟠 Mission state carry-over | New `mission_reset` verb: stops heading lock, clears abort event, RC neutral. Added to `_UNARM_SAFE`. All `run()` functions call it first. `cancel_callback` now also calls `unlock_heading()`. |
+| 🟠 Slalom diagonal movement | Lat-priority gating in `vision_track_axes`: when lat+forward both active, `fwd_pct *= (1 - lat_dominance)`. Smooth scaling — no stutter. Prevents diagonal approach to slalom pipes. |
+| 🟡 `vision_lock_fire` speed params | `speed` + `h_frac_close` added to COMMANDS fields, `vision_lock_fire` signature, and `_FIELDS_PER_COMMAND`. Torpedo fire now honors proximity scaling. |
+| 🟡 `stable_lock_s` ROS param | `vision.stable_lock_s = 3.0` added to `VISION_PARAM_DEFAULTS`; `vision_lock_fire` entry added to `_FIELDS_PER_COMMAND`. |
+| 🟢 pool_day_torpedo.py | New practice mission: board detect → coarse align → fine hole lock → `vision_lock_fire`. |
+
 **Suite (per-package): control 80 · planner 34 · manager 29 · sensors 14 · vision 29 = 186.**
 
 ---

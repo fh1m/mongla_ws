@@ -282,6 +282,7 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 | `pixhawk.set_target_depth(-1.5)` | Negative = below surface; requires ALT_HOLD |
 | `pixhawk.get_attitude()` | `{'yaw': deg, 'depth': m, ...}` — AHRS2-backed, cached |
 | `duburi.fire(n)` | Fire payload channel n via ESP32 serial (1/2=torpedo, 3/4=dropper); `duburi.payload_ready()` to check |
+| `duburi.mission_reset()` | **Call at start of every `run()`.** Stops heading lock, clears `_abort_event`, sends RC neutral. Safe before arm (`_UNARM_SAFE`). Prevents state carry-over across back-to-back pool runs. |
 
 **RC direction:** Ch4 > 1500 = yaw LEFT (inverted); Ch5 > 1500 = forward; Ch6 > 1500 = strafe RIGHT.
 **Heartbeat:** owned by `auv_manager_node` ROS2 timer — do not roll your own.
@@ -379,8 +380,9 @@ Adapted for our context:
 | `vision.scan(step, dwell)` | `look_around` | POSHOLD yaw orbit |
 | `vision.turn/slide/hover/approach/track` | `vision_align_*` | single-axis variants |
 
-Every verb accepts `camera=`, `target_class=`, `on_lost=`, and `kp_*` gain knobs.
+Every verb accepts `camera=`, `target_class=`, `on_lost=`, `kp_*` gain knobs, `speed` (0–1 gain scalar), and `h_frac_close` (proximity scaling threshold).
 Gains are live-tunable: `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
+Key vision ROS params (all on `/duburi_manager`): `vision.speed` (default 0.0), `vision.h_frac_close` (default 0.0), `vision.stable_lock_s` (default 3.0), `vision.proximity_min_scale` (default 0.2).
 `duburi.detected('gate', stale_after=1.0)` — non-blocking cache poll (use in search loops).
 `duburi.models(gate='gate_flare_medium_100ep')` — model registry; `duburi.models.gate.gate` returns `ClassRef`.
 
