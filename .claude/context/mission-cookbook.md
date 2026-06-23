@@ -1039,21 +1039,34 @@ rather than silently produce open-loop motion.
 `vision_lock_fire` aligns on multiple axes, verifies stable hold for `stable_lock_s`, then fires
 via the ESP32 `PayloadDriver`. Retries up to `max_attempts`; fires at last pose on total failure.
 
+**Pattern: always call `mission_reset()` first.** This stops any leftover heading lock and clears
+the abort event from the previous run — critical for back-to-back pool runs.
+
 ```python
 def run(duburi, log):
+    duburi.mission_reset()   # ★ ALWAYS first — clears heading lock + abort from previous run
+
     duburi.arm()
     duburi.set_depth(-1.2)
 
-    # Coarse approach
-    duburi.vision.find(target='torpedo_hole', move='forward', gain=35, timeout=45)
-    duburi.vision.home(target='torpedo_hole', yaw=True, lat=True, depth=True,
+    # Coarse board align — faster speed, big deadband (board is large)
+    duburi.vision.find(target='torpedo', move='forward', gain=35, timeout=45)
+    duburi.vision.home(target='torpedo', yaw=True, lat=True, depth=False,
+                       speed=0.55, h_frac_close=0.40, deadband=0.12,
                        duration=20, on_lost='hold')
 
-    # Lock + fire
+    # Fine hole lock — slow speed + proximity scaling (AUV barely moves when close)
+    duburi.vision.home(target='hole', yaw=True, lat=True, depth=True,
+                       speed=0.25, h_frac_close=0.30, deadband=0.05,
+                       duration=30, on_lost='hold')
+
+    # Lock + fire: proximity scaling keeps AUV nearly still at close range
     result = duburi.vision.vision_lock_fire(
-        target='torpedo_hole',
+        target='hole',
         yaw=True, lat=True, depth=True,
-        stable_lock_s=4.0,       # hold in deadband 4 s before fire
+        stable_lock_s=2.5,       # hold in deadband 2.5 s before fire
+        speed=0.15,              # very slow near hole
+        h_frac_close=0.25,       # scale down when bbox > 25% frame height
         max_attempts=3,
         fire_channel=1,          # torpedo_1 (ESP32 serial)
         attempt_timeout=20.0,
@@ -1072,10 +1085,15 @@ def run(duburi, log):
 
 | Param | Notes |
 |---|---|
-| `fire_channel` | 1/2=torpedo, 3/4=dropper. **Preferred over `fire_aux_channel`**. |
+| `fire_channel` | 1/2=torpedo, 3/4=dropper. **Always specify explicitly** (default 0 = log stub). |
 | `stable_lock_s` | Seconds all axes must be in deadband before fire (default 3.0 s) |
+| `speed` | Gain scalar 0–1. Use `0.15` near hole — barely correcting when locked close. |
+| `h_frac_close` | Bbox fraction at which proximity scaling activates. `0.25` = 25% frame height. |
 | `max_attempts` | Retry count; fallback fires at last pose if all attempts fail |
 | `offset_x/y` | Aim offset from bbox centre (e.g. for off-centre bullseye) |
+
+> **Full practice mission** with all tunables inline: `pool_day_torpedo.py` — run with
+> `ros2 run duburi_planner mission pool_day_torpedo`.
 
 ---
 
