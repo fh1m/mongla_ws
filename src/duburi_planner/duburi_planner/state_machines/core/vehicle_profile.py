@@ -93,7 +93,9 @@ class VehicleProfile:
             profile = cls(
                 name='duburi45' if has_dvl else 'dubomini',
                 has_dvl=has_dvl,
-                has_manipulators=False,  # extend when ESP32 serial contract lands
+                has_manipulators=False,  # auto() can't probe manipulators from ROS params;
+                                         # payload fire works via PayloadDriver regardless.
+                                         # Use VehicleProfile.duburi45() to enable manipulator states.
                 mission_depth_m=-0.8 if has_dvl else -0.6,
             )
             node.get_logger().info(

@@ -20,7 +20,7 @@ ultralytics here:
 
 Failure mode is loud and friendly: `VisionNotReadyError` carries a
 human-readable reason that tells the operator EXACTLY which stage was
-silent so they can `ros2 launch duburi_vision webcam_demo.launch.py` or
+silent so they can `ros2 launch duburi_vision vision.launch.py camera:=<cam>` or
 debug a missing ros_topic source without reading the manager log.
 """
 
@@ -203,7 +203,7 @@ def wait_vision_state_ready(vision_state, *,
             raise VisionNotReadyError(
                 f"vision state preflight failed: missing {', '.join(missing)} "
                 f"after {timeout:.1f}s -- start the vision pipeline "
-                f"(e.g. `ros2 launch duburi_vision webcam_demo.launch.py`)")
+                f"(e.g. `ros2 launch duburi_vision vision.launch.py camera:=forward`)")
 
         time.sleep(0.05)
 
@@ -265,6 +265,6 @@ def _build_failure_reason(camera, counters, require_image_hz, require_detections
         bits.append(f"detections silent on /duburi/vision/{camera}/detections")
     hint = (
         " -- start the vision pipeline first, e.g. "
-        "`ros2 launch duburi_vision webcam_demo.launch.py camera:="
+        "`ros2 launch duburi_vision vision.launch.py camera:="
         f"{camera}`")
     return "vision preflight failed: " + " ; ".join(bits) + hint
