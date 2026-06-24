@@ -167,10 +167,10 @@ duburi_ws/src/
 │       ├── motion_forward.py     # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
 │       ├── motion_lateral.py     # drive_lateral_* (Ch6 RC override)
 │       ├── motion_depth.py       # hold_depth + prime_alt_hold (one-shot SET_POSITION_TARGET, then ALT_HOLD)
-│       ├── motion_vision.py      # vision_track_axes (Ch4/5/6 + depth, P-only) + vision_acquire
+│       ├── motion_vision.py      # align_loop + move_loop (P-on-pixel, gain=speed cap, Outcome codes)
 │       ├── heading_lock.py       # background Ch4 yaw-rate streamer (yaw_source-driven)
 │       ├── heartbeat.py          # 5 Hz neutral RC override -- prevents FS_PILOT_INPUT disarm
-│       ├── vision_verbs.py       # VisionVerbs mixin -- vision_align_* / vision_acquire on Duburi
+│       ├── vision_verbs.py       # VisionVerbs mixin -- vision_align / vision_move on Duburi (release_yaw aware)
 │       ├── duburi.py             # Duburi facade: lock + dispatch + heading_lock + heartbeat owner
 │       └── errors.py             # MovementError / MovementTimeout / ModeChangeError
 ├── duburi_manager/       # ROS2 node, action server, telemetry
@@ -181,7 +181,9 @@ duburi_ws/src/
 ├── duburi_planner/       # mission planner: Python client + CLI + mission scripts
 │   └── duburi_planner/
 │       ├── client.py             # blocking ActionClient wrapper (DuburiClient)
-│       ├── duburi_dsl.py         # DuburiMission DSL (duburi.* + duburi.vision.*)
+│       ├── duburi_dsl.py         # DuburiMission DSL (duburi.* open-loop verbs + .vision facade)
+│       ├── vision_dsl.py         # duburi.vision.align + duburi.vision.move (+ fallback orchestration)
+│       ├── model_context.py      # duburi.models registry + ClassRef (auto model+class switch)
 │       ├── cli.py                # argparse auto-built from COMMANDS (`duburi` entry)
 │       ├── mission.py            # `mission` runner that dispatches into missions/<name>.run
 │       ├── missions/
@@ -194,7 +196,7 @@ duburi_ws/src/
 │       │   └── demo_{arc,find_person,heading_lock,move_see,square,pursue}.py
 │       └── state_machines/       # YASMIN FSM layer (BUILT) — see fsm-guide.md
 │           ├── core/{outcomes,blackboard,vehicle_profile,base_state}.py
-│           ├── states/{navigation,vision,utility}.py   # TurnState/ApproachState/VisionLockFireState/FireState/StyleRollState added
+│           ├── states/{navigation,vision,utility}.py   # nav: Turn/Approach/Fire/StyleRoll; vision: VisionSearch/VisionAlign/VisionMove
 │           └── plans/{gate_flare,prequal,gate_then_bin,slalom,bin_drop,torpedo_fire,return_gate,full_competition}.py
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
@@ -212,7 +214,8 @@ duburi_ws/src/
     │   ├── depth/depth_estimation_node.py   # ONNX Depth Anything V2-Small + bbox fallback
     │   └── utils/{check_pipeline,check_thrust}.py
     ├── config/{cameras,detector}.yaml
-    └── launch/{cameras_,sim_demo}.launch.py
+    ├── models/                   # *.pt weights (gitignored) + committed class-index YAMLs
+    └── launch/{cameras_,dual_cameras,full_mission,sim_demo,debug_view}.launch.py
 ```
 
 > **Adding a new command**: add a row in `duburi_control/commands.py` and a same-named method on `Duburi`. The action server, the `duburi` CLI, and the Python `DuburiClient` all pick it up automatically — no other file needs editing.
@@ -220,10 +223,10 @@ duburi_ws/src/
 > **Mission DSL**: prefer
 > [`DuburiMission`](src/duburi_planner/duburi_planner/duburi_dsl.py) over
 > the raw client when authoring missions. `duburi.move_forward(...)` and
-> `duburi.vision.home(...)` share one object with sticky `duburi.camera`
-> + `duburi.target` context. Vision verbs fall back to live `vision.*`
-> ROS params when overrides are unset, so deck-side tuning works without
-> editing mission code. Full cookbook + samples:
+> `duburi.vision.align(...)` / `duburi.vision.move(...)` share one object with
+> sticky `duburi.camera` + `duburi.target` context. Vision verbs fall back to
+> live `vision.*` ROS params when overrides are unset, so deck-side tuning works
+> without editing mission code. Full cookbook + samples:
 > [`.claude/context/mission-cookbook.md`](.claude/context/mission-cookbook.md).
 
 > Packages **not** in this repo (despite older context files mentioning them): `duburi_bringup`, `duburi_driver`, `duburi_teleop`, `duburi_mission`. They were aspirational sketches; ignore them when you read `proven-patterns.md` etc.
@@ -367,24 +370,30 @@ Adapted for our context:
 
 > Older context files reference `/duburi/arm`, `/duburi/depth_cmd`, `/duburi/attitude`, `Attitude.msg`, `RCOverride.msg`, `VehicleState.msg`. **None of these exist.** Single action + single state topic + ROS params is the entire surface.
 
-### Vision-driven verbs (`vision_*`, all on the same `/duburi/move`)
+### Vision-driven verbs — TWO verbs (`vision_align` + `vision_move` on `/duburi/move`)
 
 > Full DSL + verb reference: [`command-reference.md`](.claude/context/command-reference.md) · [`client-and-dsl-api.md`](.claude/context/client-and-dsl-api.md).
 > Vision architecture: [`vision-architecture.md`](.claude/context/vision-architecture.md).
 > FSM state wrappers: [`fsm-guide.md`](.claude/context/fsm-guide.md) §4.
 
-| DSL method | Action verb | Axes |
-|---|---|---|
-| `vision.home(yaw,lat,depth,forward)` | `vision_align_3d` | any subset simultaneously |
-| `vision.find(move=)` | `vision_acquire` | block until target detected |
-| `vision.scan(step, dwell)` | `look_around` | POSHOLD yaw orbit |
-| `vision.turn/slide/hover/approach/track` | `vision_align_*` | single-axis variants |
+The 2026-06 rewrite replaced the 9-verb API with **exactly two** pixel-native verbs.
+Engine: `motion_vision.align_loop` / `move_loop`. Source of truth for signatures:
+[`vision_dsl.py`](src/duburi_planner/duburi_planner/vision_dsl.py).
 
-Every verb accepts `camera=`, `target_class=`, `on_lost=`, `kp_*` gain knobs, `speed` (0–1 gain scalar), and `h_frac_close` (proximity scaling threshold).
-Gains are live-tunable: `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
-Key vision ROS params (all on `/duburi_manager`): `vision.speed` (default 0.0), `vision.h_frac_close` (default 0.0), `vision.stable_lock_s` (default 3.0), `vision.proximity_min_scale` (default 0.2).
-`duburi.detected('gate', stale_after=1.0)` — non-blocking cache poll (use in search loops).
-`duburi.models(gate='gate_flare_medium_100ep')` — model registry; `duburi.models.gate.gate` returns `ClassRef`.
+| DSL method | Action verb | What it does |
+|---|---|---|
+| `vision.align(target, lat=, yaw=, depth=, err=, duration=, gain=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one axis. |
+| `vision.move(target, fwd=, mode=, maintain=, hold=, err=, duration=, gain=, fallback=)` | `vision_move` | Drive forward until bbox fills `fwd`% (`mode`=area/width/height). `maintain`=±px lateral offset; never re-centres yaw/depth. |
+
+- **`gain` is a hard max-speed cap** (% thrust), not a target speed — the AUV never exceeds it.
+- **Never-fail contract:** neither verb raises; the server always returns `success=True` with an outcome code in `Move.Result.final_value` (`ALIGNED`=0, `LOST`=1, `TIMEOUT`=2, `NO_CAMERA`=3, `ABORTED`=4). The DSL returns a `VisionResult` (truthy only on `ALIGNED`); a server/setup error surfaces as non-fatal `FAILED`.
+- **`fallback`** = mission-authored search `fn(duburi)` / `fn(duburi, should_stop)`; runs on target loss, then the verb re-enters — all inside `duration`.
+- Control path always reads `/detections` (tracker `/tracks` feeds the HUD only; no `--tracking` flag).
+
+Gains are live-tunable (apply on the NEXT goal): `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
+Key vision ROS params (all on `/duburi_manager`): `vision.kp_lat`/`kp_yaw` (60.0), `vision.kp_depth` (0.05), `vision.kp_forward` (200.0), `vision.lost_grace_s` (1.0), `vision.frame_fill_default` (95.0), `vision.align_stable_frames` (3.0). Defaults live in [`vision_tunables.py`](src/duburi_manager/duburi_manager/vision_tunables.py).
+`duburi.detected('gate', stale_after=1.0)` — non-blocking, **case-insensitive** cache poll (use in search loops).
+`duburi.models(gate='gate_flare_medium_100ep')` — model registry; `duburi.models.gate.gate` returns `ClassRef` (auto-switches model+class when passed as `target`).
 
 ```bash
 ros2 run duburi_manager bringup_check          # network + serial preflight
@@ -456,13 +465,16 @@ ros2 run duburi_planner duburi unlock_heading
 ros2 run duburi_planner duburi disarm
 ```
 
-### Step 3b: DVL + orbit scan (pool only)
+### Step 3b: DVL + vision verbs (pool only)
 
 ```bash
 # DVL auto-connects (dvl_auto_connect:=true). Manual: duburi dvl_connect
 ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 60
-ros2 run duburi_planner duburi look_around --camera forward --target_class gate \
-    --yaw_rate_pct 20 --settle 1.5 --gain 40 --duration 90
+# Centre the gate (yaw + lateral), then drive forward until it fills 80% of frame:
+ros2 run duburi_planner duburi vision_align --camera forward --target_class gate \
+    --axes yaw,lat --err_px 40 --gain 30 --duration 20
+ros2 run duburi_planner duburi vision_move --camera forward --target_class gate \
+    --fwd_fill 80 --mode area --gain 35 --duration 20
 ```
 
 ### Step 4: Run a mission
@@ -606,7 +618,7 @@ Project-local Claude Code automations, versioned with the repo and shared with t
 | Agent | Use after / for |
 |-------|-----------------|
 | `mavlink-reviewer`       | editing `duburi_control/` — checks mode preconditions, RC directions, rate pins, heartbeat, disarm safety |
-| `mission-reviewer`       | editing `missions/` — `detected()` guard, gate_guard, on_lost, timeout fallbacks, disarm-in-finally |
+| `mission-reviewer`       | editing `missions/` — `detected()` guard, two-verb vision (`align`/`move`) fallbacks, duration budgets, disarm-in-finally |
 | `doc-verifier`           | auditing external-API usage (pymavlink, ultralytics, supervision, cv2) vs current online docs |
 | `context-doc-sync`       | flagging stale claims in `.claude/context/*.md` + CLAUDE.md vs `src/` |
 | `robosub-task-architect` | designing a new RoboSub 2026 task (mission + detection + DSL verbs) |

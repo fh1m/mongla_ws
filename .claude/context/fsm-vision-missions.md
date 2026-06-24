@@ -16,7 +16,7 @@ Every vision interaction fits one of two modes. Confusing them is the #1 design 
 | Mode | What it does | Mongla primitive | Blocks? |
 |---|---|---|---|
 | **Vision-as-trigger** | Detects that an object IS present; changes state | `duburi.detected('gate')` | No — cache poll |
-| **Vision-as-control** | Continuously centres the AUV on a target via closed-loop | `duburi.vision.home(...)` | Yes — runs until settle/timeout |
+| **Vision-as-control** | Continuously centres / approaches a target via closed-loop | `duburi.vision.align(...)` / `duburi.vision.move(...)` | Yes — runs until reached/timeout |
 
 ```
 Vision-as-TRIGGER (inside a state's _run loop):
@@ -28,12 +28,16 @@ Vision-as-TRIGGER (inside a state's _run loop):
 
 Vision-as-CONTROL (hand off to DSL):
 
-  result = duburi.vision.home(target='gate', yaw=True, lat=True)
-  return SUCCEED if result.success else FAILED
-  ← DSL runs a 20 Hz P-loop until error < deadband × N frames
+  result = duburi.vision.align('gate', yaw=0, lat=0)
+  return SUCCEED if result.ok else FAILED
+  ← DSL runs a 20 Hz P-loop until every active axis is within
+    err px for vision.align_stable_frames ticks
 ```
 
-**Rule:** use `detected()` to decide *when* to change state; use `vision.home/find/scan` to do the actual alignment work inside a dedicated state.
+**Rule:** use `detected()` to decide *when* to change state; use
+`vision.align` (centre) and `vision.move` (approach) to do the actual
+alignment work inside a dedicated state — `VisionAlignState` /
+`VisionMoveState` wrap them, `VisionSearchState` wraps the search.
 
 ---
 
@@ -106,19 +110,19 @@ Every movement in a mission falls into one of these categories. Choose before co
 | Movement type | Duburi 4.5 (`has_dvl=True`) | Dubomini 2.0 (`has_dvl=False`) | Notes |
 |---|---|---|---|
 | **Pass through gate** | `move_forward_dist(3.5m, gain=80)` | `move_forward(5.0s, gain=80)` | `MoveForwardState` handles automatically |
-| **Approach to standoff** | `vision.approach(dist=0.4, metric='area')` | same | Vision-measured — DVL irrelevant |
+| **Approach to standoff** | `vision.move(fwd=40, mode='area')` | same | Vision-measured (bbox fill) — DVL irrelevant |
 | **Lateral clear of obstacle** | `move_lateral_dist(0.8m, gain=50)` | `move_right(1.5s, gain=50)` | Lateral precision matters less |
 | **Return through gate** | `move_forward_dist(1.5m, gain=80)` | `move_forward(3.0s, gain=80)` | |
 | **Depth change** | `set_depth(-5.0m)` | same | ArduSub ALT_HOLD always; DVL irrelevant |
 | **Yaw search sweep** | `yaw_right(20°)` × N | same | Heading-based; DVL irrelevant |
 | **Hold position** | DVL auto-helps via EKF | POSHOLD not available | Duburi can hold; Dubomini drifts |
 | **Forward search steps** | `move_forward(0.5s, gain=30)` | same | Short steps — precision irrelevant |
-| **Orbit around target** | `vision.scan(step=20, dwell=1.5)` | same | Vision-guided; DVL irrelevant |
-| **Pick approach** | `vision.approach(dist=X, metric='height')` | same | Vision-measured |
+| **Orbit around target** | `VisionSearchState(pattern='yaw')` / `yaw_right(20°)` + `detected()` | same | Vision-guided; DVL irrelevant |
+| **Pick approach** | `vision.move(fwd=X, mode='height')` | same | Vision-measured (bbox fill) |
 | **Drop manoeuvre** | `move_lateral_dist` or stay in place | timed lateral | DVL for precision |
 
 **Core rule: any open-loop distance move should use DVL when available.
-Vision-closed-loop moves (home, approach, scan) are DVL-agnostic.**
+Vision-closed-loop moves (`align`, `move`) are DVL-agnostic.**
 
 ---
 
@@ -153,7 +157,7 @@ class MarchSearchState(DuburiState):
         return TIMEOUT
 ```
 
-### 4.2 Yaw sweep with trigger (look_around)
+### 4.2 Yaw sweep with trigger
 
 ```
 AUV rotates in place (POSHOLD), stops every N° to observe.
@@ -165,7 +169,7 @@ Exits on first detection.
 Best for: post-pass searching for next task object, orbit around marker.
 ```
 
-Use `VisionScanState(duburi, profile, target='flare', step=20, dwell=1.5, duration=90)`.
+Use `VisionSearchState(duburi, profile, target='flare', pattern='yaw', yaw_step=20, timeout=90)`.
 
 ### 4.3 Yaw sweep + forward march (helix)
 
@@ -203,19 +207,20 @@ Used when target is at a known depth (bin, path marker).
     dive(-5m) → stabilise → [scan pattern] → DETECTED
 ```
 
-Two states: `SetDepthState(-5.0)` → `VisionScanState` or `MarchSearchState`.
+Two states: `SetDepthState(-5.0)` → `VisionSearchState(pattern='yaw')` or `MarchSearchState`.
 
 ### 4.5 Standoff approach (vision-measured distance)
 
 ```
-Home on target until within threshold. DVL-agnostic.
+Drive forward until bbox fills the frame. DVL-agnostic.
 
-    ────────────────────────▶ [bbox grows] ──▶ SUCCEED when area ≥ threshold
-    vision.home(forward=True, dist=0.4, metric='area')
+    ────────────────────────▶ [bbox grows] ──▶ SUCCEED when fill ≥ fwd%
+    vision.move(fwd=40, mode='area')
 ```
 
-Use `VisionHomeState(forward=True, dist=0.4, metric='area')`.
-For bins seen from above: `metric='area'`, `depth=True` (nudge depth down).
+Use `VisionMoveState(target='gate', fwd=40, mode='area')`.
+For bins seen from above, centre first with
+`VisionAlignState(target='bin', lat=True, depth=True)`, then approach.
 
 ### 4.6 Multi-priority search (search A while watching for B)
 
@@ -238,18 +243,20 @@ Implemented with custom outcomes + FSM loop-back transition (see §5 full exampl
 The fundamental gate-passing pattern:
 
 ```
-FIND (march forward)
+SEARCH (march forward)                VisionSearchState
   │ SUCCEED
-HOME (yaw + lat, gate_guard, pass_at=0.38)
-  │ SUCCEED (pass_at triggered)
-PASS (DVL 3.5m or timed 5s)
+ALIGN (yaw + lat, centre on 0,0)      VisionAlignState
+  │ SUCCEED
+MOVE (drive to fwd=80, mode='height') VisionMoveState
+  │ SUCCEED (fill reached)
+PASS (DVL 3.5m or timed 5s)           MoveForwardState
 ```
 
 State graph:
 ```
-FIND_GATE ──SUCCEED──▶ HOME_GATE ──SUCCEED──▶ PASS_GATE
-    ▲                      │FAILED
-    └──────────────────────┘ (lost target → re-find)
+SEARCH_GATE ──SUCCEED──▶ ALIGN_GATE ──SUCCEED──▶ MOVE_GATE ──SUCCEED──▶ PASS_GATE
+    ▲                        │FAILED               │FAILED
+    └────────────────────────┴──────────────────────┘ (lost target → re-search)
 ```
 
 ### 5.2 Orbit + Confirm
@@ -257,10 +264,11 @@ FIND_GATE ──SUCCEED──▶ HOME_GATE ──SUCCEED──▶ PASS_GATE
 Fly around a marker to confirm its nature or score points:
 
 ```
-FIND → HOME (yaw + lat) → SCAN (orbit 360°) → SCORE
+SEARCH → ALIGN (yaw + lat) → ORBIT (yaw sweep 360°) → SCORE
 ```
 
-Each step in `VisionScanState` pauses `dwell` seconds to re-detect.
+The orbit is a `VisionSearchState(pattern='yaw')` (or an open-loop
+`yaw_right` + `detected()` loop) that stops every `yaw_step`° to re-detect.
 
 ### 5.3 Depth Dive → Search Below
 
@@ -269,17 +277,21 @@ Target is at known depth (bin, path marker):
 ```
 SET_DEPTH(-5.0m)
   │ SUCCEED
-SCAN_AT_DEPTH (VisionScanState)
+SCAN_AT_DEPTH (VisionSearchState, pattern='yaw')
   │ SUCCEED
-HOME_ON_TARGET (yaw + lat + forward from above)
+ALIGN_ON_TARGET (VisionAlignState, yaw + lat)
+  │ SUCCEED
+MOVE_ON_TARGET (VisionMoveState, fwd fill)
 ```
 
 ### 5.4 Pick Sequence
 
 ```
-APPROACH (vision.home, dist=0.15m from camera)
+ALIGN (VisionAlignState, yaw + lat + depth, centre on object)
   │ SUCCEED
-ACTUATE_GRAB (set_servo or ESP32 grab cmd)
+APPROACH (VisionMoveState, fwd=high %, mode='height')
+  │ SUCCEED
+ACTUATE_GRAB (ESP32 grab cmd)
   │
 CONFIRM_PICK (poll current or bbox disappear)
   │ SUCCEED | TIMEOUT (assume picked)
@@ -291,7 +303,7 @@ ASCEND (set_depth to drop depth)
 ```
 SEARCH_BIN (yaw sweep looking down-camera)
   │ SUCCEED
-LOCK_BIN (vision.home yaw+lat, depth=True nudge down)
+LOCK_BIN (VisionAlignState lat + depth, centre over bin in down-cam)
   │ SUCCEED
 ACTUATE_DROP (dropper command)
   │
@@ -327,7 +339,11 @@ SEARCH_A ◀──────────────────────�
     │            AVOID_B ─────────────────────────────────┘
     │            (lateral clear + pause)
     │
-HOME_A (vision.home yaw+lat+forward, dist=0.3, metric='height')
+ALIGN_A (VisionAlignState yaw+lat, centre object_a)
+    │ SUCCEED
+    │ FAILED → SEARCH_A (lost object_a → re-search)
+    │
+MOVE_A (VisionMoveState fwd=high %, mode='height')
     │ SUCCEED
     │ FAILED → SEARCH_A (lost object_a → re-search)
     │
@@ -335,11 +351,15 @@ DEEP_DIVE (-5.0m)
     │ SUCCEED
     │ TIMEOUT → SURFACE
     │
-SCAN_C (yaw sweep, down-cam or forward-cam)
+SCAN_C (VisionSearchState pattern='yaw', down-cam or forward-cam)
     │ SUCCEED
     │ TIMEOUT → SURFACE
     │
-HOME_C (vision.home yaw+lat, approach to 0.2m)
+ALIGN_C (VisionAlignState yaw+lat+depth, centre object_c)
+    │ SUCCEED
+    │ FAILED → SCAN_C
+    │
+MOVE_C (VisionMoveState fwd=high %, mode='height')
     │ SUCCEED
     │ FAILED → SCAN_C
     │
@@ -351,11 +371,11 @@ CONFIRM_PICK (poll for grasp signal; timeout = assume picked)
 ASCEND_DROP (-1.0m drop depth)
     │ SUCCEED
     │
-SEARCH_BIN (VisionScanState, down-camera, target='bin_a')
+SEARCH_BIN (VisionSearchState pattern='yaw', down-camera, target='bin_a')
     │ SUCCEED
     │ TIMEOUT → SURFACE_WITH_OBJ (ascend and keep object)
     │
-LOCK_BIN (vision.home yaw+lat+depth from above, metric='area')
+LOCK_BIN (VisionAlignState lat+depth from above, centre over bin)
     │ SUCCEED
     │ FAILED → SEARCH_BIN
     │
@@ -504,8 +524,8 @@ class ConfirmPickState(DuburiState):
 
 ```python
 class LockBinState(DuburiState):
-    """Align above bin using downward camera.
-    yaw + lat centre; depth nudge to get target area fraction.
+    """Centre above bin using the downward camera.
+    lat + depth centre the bin (down-cam: ex→lateral, ey→depth nudge).
     """
     TIMEOUT_S = 30.0
 
@@ -517,19 +537,18 @@ class LockBinState(DuburiState):
         self._duration = duration
 
     def _run(self, bb):
-        # Home: yaw+lat to centre bin in down-cam, depth nudge to get area ~0.25
-        result = self.duburi.vision.home(
-            target=self._target,
+        # align: lat + depth to centre the bin in the down-cam (0 = centre).
+        # A miss returns a non-ALIGNED VisionResult; never raises.
+        result = self.duburi.vision.align(
+            self._target,
             camera=self._camera,
-            yaw=True,
-            lat=True,
-            depth=True,            # nudge depth down to enlarge bbox
-            target_bbox_h_frac=0.5,# target: bin fills ~50% of frame height
-            metric='area',
+            lat=0,                 # centre laterally
+            depth=0,               # centre fore/aft (down-cam ey → depth nudge)
+            err=30,
+            gain=30,
             duration=self._duration,
-            on_lost='fail',
         )
-        return SUCCEED if result.success else FAILED
+        return SUCCEED if result.ok else FAILED
 ```
 
 #### ConfirmDropState
@@ -572,7 +591,7 @@ from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState,
     MoveForwardState, SurfaceState,
 )
-from ..states.vision import VisionHomeState, VisionScanState
+from ..states.vision import VisionSearchState, VisionAlignState, VisionMoveState
 from ..states.utility import CountdownState, LogScoreState
 
 # Import custom states defined above (same file or imported)
@@ -584,8 +603,8 @@ PICK_DROP_DEFAULTS = {
     'search_depth_m': -1.2,    # depth while searching for object_a
     'deep_depth_m':   -5.0,    # depth for object_c scan
     'drop_depth_m':   -1.0,    # depth for bin approach
-    'approach_dist':   0.3,    # vision.home standoff to object_a
-    'pick_dist':       0.15,   # vision.home standoff for grabber
+    'approach_fill':   40,     # vision.move fwd fill % for object_a standoff
+    'pick_fill':       70,     # vision.move fwd fill % for grabber approach
     'gate_heading':    0.0,
 }
 
@@ -613,7 +632,7 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
     # ── search with avoid ─────────────────────────────────────────────
     sm.add_state('SEARCH_A',
                  SearchAWhileAvoidingState(duburi, profile),
-                 transitions={SUCCEED: 'HOME_A',
+                 transitions={SUCCEED: 'ALIGN_A',
                                'avoid': 'AVOID_B',
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
@@ -622,12 +641,19 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
                  transitions={SUCCEED: 'SEARCH_A',   # ← loops back!
                                ABORT: 'SURFACE'})
 
-    # ── approach object_a ─────────────────────────────────────────────
-    sm.add_state('HOME_A',
-                 VisionHomeState(duburi, profile, target='object_a',
-                                 yaw=True, lat=True, forward=True,
-                                 dist=p['approach_dist'], metric='height',
-                                 duration=20.0, on_lost='fail'),
+    # ── approach object_a: centre (align) then drive in (move) ────────
+    sm.add_state('ALIGN_A',
+                 VisionAlignState(duburi, profile, target='object_a',
+                                  yaw=True, lat=True,
+                                  err=40, gain=30, duration=20.0),
+                 transitions={SUCCEED: 'MOVE_A',
+                               FAILED: 'SEARCH_A',    # lost → re-find
+                               TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
+
+    sm.add_state('MOVE_A',
+                 VisionMoveState(duburi, profile, target='object_a',
+                                 fwd=p['approach_fill'], mode='height',
+                                 gain=35, duration=20.0),
                  transitions={SUCCEED: 'DEEP_DIVE',
                                FAILED: 'SEARCH_A',    # lost → re-find
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
@@ -638,16 +664,23 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
                  transitions={SUCCEED: 'SCAN_C', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('SCAN_C',
-                 VisionScanState(duburi, profile, target='object_c',
-                                 step=20.0, dwell=2.0, duration=120.0),
-                 transitions={SUCCEED: 'HOME_C', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
+                 VisionSearchState(duburi, profile, target='object_c',
+                                   pattern='yaw', yaw_step=20.0, timeout=120.0),
+                 transitions={SUCCEED: 'ALIGN_C', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
-    # ── lock on object_c for pick ─────────────────────────────────────
-    sm.add_state('HOME_C',
-                 VisionHomeState(duburi, profile, target='object_c',
-                                 yaw=True, lat=True, forward=True, depth=True,
-                                 dist=p['pick_dist'], metric='height',
-                                 duration=20.0, on_lost='fail'),
+    # ── lock on object_c for pick: align (3-axis) then move in ────────
+    sm.add_state('ALIGN_C',
+                 VisionAlignState(duburi, profile, target='object_c',
+                                  yaw=True, lat=True, depth=True,
+                                  err=30, gain=30, duration=20.0),
+                 transitions={SUCCEED: 'MOVE_C',
+                               FAILED: 'SCAN_C',
+                               TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
+
+    sm.add_state('MOVE_C',
+                 VisionMoveState(duburi, profile, target='object_c',
+                                 fwd=p['pick_fill'], mode='height',
+                                 gain=25, duration=20.0),
                  transitions={SUCCEED: 'PICK',
                                FAILED: 'SCAN_C',
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
@@ -666,8 +699,9 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
                  transitions={SUCCEED: 'SEARCH_BIN', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('SEARCH_BIN',
-                 VisionScanState(duburi, profile, target='bin_a',
-                                 step=20.0, dwell=1.5, duration=90.0),
+                 VisionSearchState(duburi, profile, target='bin_a',
+                                   camera='downward', pattern='yaw',
+                                   yaw_step=20.0, timeout=90.0),
                  transitions={SUCCEED: 'LOCK_BIN',
                                TIMEOUT: 'SURFACE_WITH_OBJ',   # no bin found: give up
                                ABORT: 'SURFACE'})
@@ -729,7 +763,7 @@ def run(duburi, log):
         'search_depth_m': -0.9,
         'deep_depth_m':  -4.5,
         'drop_depth_m':  -1.0,
-        'approach_dist':  0.35,
+        'approach_fill':  40,    # vision.move fwd fill % for object_a
     }
 
     set_ros_loggers()
@@ -742,97 +776,111 @@ def run(duburi, log):
 
 ## 7. Vision Parameter Tuning Reference
 
-### 7.1 `vision.home` axis selection
+### 7.1 `vision.align` axis selection
 
-| Situation | `yaw` | `lat` | `depth` | `forward` | Notes |
+`align` takes `lat` / `yaw` / `depth`: each is `None` (axis off) or a signed
+**pixel offset** from centre (`0` = centre, `+` = right/below, `-` =
+left/above). At least one axis. (FSM `VisionAlignState` also accepts `True`
+= centre/offset 0 and `False`/`None` = off.) `vision.move` owns the forward
+axis separately.
+
+| Situation | `yaw` | `lat` | `depth` | Forward (separate `vision.move`) | Notes |
 |---|---|---|---|---|---|
-| Centre gate in frame | ✓ | ✓ | — | — | Depth hold by ArduSub; no vertical correction |
-| Gate pass (committed) | ✓ | ✓ | — | ✓ | `gate_guard=True`, `pass_at=0.38` |
-| Flare approach | ✓ | ✓ | ✓ | ✓ | Full 4-axis; `metric='height'` |
-| Object approach for pick | ✓ | ✓ | ✓ | ✓ | `metric='height'`, tight `dist` |
-| Lock above bin | ✓ | ✓ | ✓ | — | Down-cam; `metric='area'`, nudge depth |
-| Track moving target | ✓ | ✓ | — | — | `lock_mode='follow'`; never exits on settle |
+| Centre gate in frame | ✓ | ✓ | — | — | Depth held by ArduSub; no vertical correction |
+| Gate pass | ✓ | ✓ | — | `move(fwd=80, mode='height')` | align first, then move through |
+| Flare approach | ✓ | — | ✓ | `move(fwd=38, mode='height')` | yaw + depth centre, then close in |
+| Object approach for pick | ✓ | ✓ | ✓ | `move(fwd=70, mode='height')` | 3-axis centre, then drive in |
+| Lock above bin | — | ✓ | ✓ | — | Down-cam; lat + depth centre |
+| Slalom pipe (offset) | ✓ | `±80` | — | `move(fwd=60, mode='height', maintain=±80)` | hold pipe off-centre while passing |
 
-### 7.2 `dist` and `metric` per object
+### 7.2 `vision.move` `fwd` fill + `mode` per object
 
-| Object | Camera | `metric` | `dist` | Rationale |
+`move` drives forward until the bbox fills `fwd` % of the frame, measured by
+`mode` (`area` / `width` / `height`). No more `dist` / `metric` knobs.
+
+| Object | Camera | `mode` | `fwd` % | Rationale |
 |---|---|---|---|---|
-| Gate | forward | `area` | 0.38 | Pass when fills 38% frame area |
-| Flare / buoy | forward | `height` | 0.38–0.42 | Height more stable for tall targets |
-| Pick object | forward | `height` | 0.15–0.20 | Close approach; height = real size proxy |
-| Bin (from above) | downward | `area` | n/a (depth nudge) | Depth nudged until area ~0.25 |
-| Torpedo target | forward | `width` | 0.30–0.35 | Width = board face width |
-| Path marker | downward | `area` | n/a | Large flat target |
-| Approach (any) | forward | `vis_range` | 0.55–0.70 | `vis_approach` verb; monocular depth proxy; switch to bbox metric at threshold |
+| Gate | forward | `height` | 80 | Pass when the bar fills 80% of frame height |
+| Flare / buoy | forward | `height` | 38–42 | Height more stable for tall targets |
+| Pick object | forward | `height` | 60–75 | Close approach; height = real size proxy |
+| Slalom pipe | forward | `height` | 55–65 | Tall thin target; pair with `maintain=±px` |
+| Torpedo board | forward | `width` | 30–35 | Width = board face width |
+| Path marker | downward | `area` | n/a | Centre with `align`; `move` rarely needed |
 
-### 7.3 `on_lost` behaviour
+### 7.3 Target loss — the `fallback` search function
 
-| `on_lost` | State outcome | Use for |
+There is no `on_lost` knob. By default a verb coasts for
+`vision.lost_grace_s` and then returns a non-`ALIGNED` `VisionResult` (the
+state maps it to `FAILED`, so the plan routes back to a search state). Pass a
+mission-authored `fallback=fn(duburi)` / `fn(duburi, should_stop)` to recover
+*inside* the same state — the verb runs the search once, then re-enters, all
+within `duration`:
+
+| Recovery | How | Use for |
 |---|---|---|
-| `'fail'` (default) | `FAILED` immediately | Production missions — force re-search on loss |
-| `'hold'` | Holds last setpoint; waits for reappearance | Debugging, slow-moving targets |
+| Re-search at plan level | no `fallback`; route `FAILED` → search state | Production missions — explicit re-search on loss |
+| Recover in-state | pass `fallback=creep_forward` (or a yaw sweep) | Brief dropouts; keep the same state active |
 
 ### 7.4 `kp_*` gain tuning guide
 
-Gains are live-tunable via `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
+Gains are live-tunable via `ros2 param set /duburi_manager vision.kp_yaw 80.0`
+(applied on the NEXT goal). Defaults live in `vision_tunables.py`.
 
-| Gain | Too low symptom | Too high symptom | Starting point |
+| Gain | Too low symptom | Too high symptom | Default |
 |---|---|---|---|
-| `kp_yaw` | Slow, drifts off-axis during forward motion | Oscillates yaw, never settles | 60–70 |
-| `kp_lat` | Misses lateral centre; passes offset | Jerky strafe, oscillates | 55–65 |
-| `kp_depth` | Misses vertical centre | AUV bobs up/down | 40–50 |
-| `kp_forward` | Stays far; doesn't approach | Overshoots, crashes | 30–45 |
+| `kp_yaw` | Slow, drifts off-axis during forward motion | Oscillates yaw, never settles | 60 |
+| `kp_lat` | Misses lateral centre; passes offset | Jerky strafe, oscillates | 60 |
+| `kp_depth` (m/tick) | Misses vertical centre | AUV bobs up/down | 0.05 |
+| `kp_forward` | Stays far; doesn't approach | Overshoots, crashes | 200 |
 
 Tune order: `kp_yaw` first (most critical), then `kp_lat`, then `kp_depth`, then `kp_forward`.
 
-### 7.5 `vis_approach` — monocular depth forward approach
+Other live `vision.*` params: `vision.lost_grace_s` (1.0 s coast before
+LOST), `vision.frame_fill_default` (95 %, the `move` fill used when a mission
+leaves `fwd` at 0), `vision.align_stable_frames` (3 ticks every active axis
+must stay within `err` px before `align` reports `ALIGNED`).
 
-`vis_approach` is a distinct verb (`distance_metric='vis_range'`, `axes={'forward'}` only). It drives
-the AUV forward until the target's monocular depth proxy (`vis_range`, 0=far, 1=close) crosses a
-threshold. Use it for the coarse approach phase before switching to a bbox-geometry `vision.home`
-for fine centering.
+### 7.5 Forward approach = `vision.move` (replaces the old `vis_approach`)
 
-| Param | Meaning | Typical value |
-|---|---|---|
-| `threshold` | `vis_range` value to exit on (0=far, 1=close) | 0.55–0.70 |
-| `duration` | Max approach time before TIMEOUT | 20–40 s |
-| `kp_forward` | Forward thrust gain (P-only) | 30–45 |
-| `lock_mode` | `''` (settle+exit) or `'pursue'` (never stops) | `''` for approach |
+> **Removed:** the monocular-depth `vis_approach` verb (and its `vis_range`
+> threshold / `lock_mode`) no longer exist. Forward approach is now a pure
+> bbox-fill `vision.move`.
 
-DSL usage:
+Drive forward until the target fills the frame, then hand off to `vision.align`
+for fine centring if needed:
 
 ```python
-duburi.vision.vis_approach(target='gate', threshold=0.65, duration=30)
+# Coarse approach, then fine centre
+duburi.vision.move('gate', fwd=70, mode='height', gain=35, duration=30)
+duburi.vision.align('gate', yaw=0, lat=0, err=20, gain=20, duration=15)
 ```
 
-FSM state usage (wraps the same DSL verb as other `VisionAlignState` variants):
+FSM state usage wraps the same DSL verb:
 
 ```python
 # In a plan:
-('APPROACH_GATE', VisionApproachState(target='gate', threshold=0.65, duration=30), {
-    Outcomes.SUCCEED: 'CENTRE_GATE',
-    Outcomes.TIMEOUT: 'SURFACE',
-    Outcomes.FAILED:  'SCAN_FOR_GATE',
-})
+sm.add_state('APPROACH_GATE',
+             VisionMoveState(duburi, profile, target='gate',
+                             fwd=70, mode='height', duration=30),
+             transitions={SUCCEED: 'CENTRE_GATE',
+                           FAILED:  'SCAN_FOR_GATE',
+                           TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 ```
 
-`vis_approach` requires `depth_estimation_node` running and publishing `vis_range`. It degrades to
-a bbox-area proxy if the node is absent, but approach distance accuracy is reduced. Verify with:
+### 7.6 `err` (pixel tolerance) tuning
 
-```bash
-ros2 topic echo /duburi/vision/forward/vis_range
-```
+`err` is the per-axis pixel tolerance: `align` counts an axis "centred" only
+once `|error| ≤ err` px, and reports `ALIGNED` after every active axis holds
+that band for `vision.align_stable_frames` ticks. Too tight = chattery / slow
+to settle, too loose = sloppy centre. (This replaces the old `deadband`
+fraction.)
 
-### 7.6 `deadband` tuning
-
-Deadband = minimum error fraction before correction fires. Too tight = chattery, too loose = sloppy.
-
-| Object | `deadband` | Why |
+| Object | `err` (px) | Why |
 |---|---|---|
-| Gate | 0.05 | Large target; coarse centering fine |
-| Buoy / flare | 0.04 | Medium target |
-| Pick object | 0.02 | Tight precision required for grabber |
-| Bin (from above) | 0.04 | Precision needed but not extreme |
+| Gate | 40 | Large target; coarse centering fine |
+| Buoy / flare | 30 | Medium target |
+| Pick object | 14–20 | Tight precision required for grabber |
+| Bin (from above) | 30 | Precision needed but not extreme |
 
 ---
 
@@ -841,7 +889,7 @@ Deadband = minimum error fraction before correction fires. Too tight = chattery,
 | Outcome | When returned | Typical plan transition |
 |---|---|---|
 | `SUCCEED` | Task completed successfully | Next task state |
-| `FAILED` | Target lost during vision-control (`on_lost='fail'`) | Re-search state (avoid surfacing for recoverable error) |
+| `FAILED` | Vision verb returned non-`ALIGNED` (target lost / not reached) | Re-search state (avoid surfacing for recoverable error) |
 | `TIMEOUT` | `TIMEOUT_S` elapsed | Safety surface OR re-search if budget allows |
 | `ABORT` | Unhandled exception; base class caught it; `stop()` called | Always → SURFACE |
 | Custom (e.g. `'avoid'`) | Specific condition detected mid-state | Side-branch state, then loop back |
@@ -864,7 +912,7 @@ Before writing a new plan:
 - [ ] Every state has a `TIMEOUT` path to `SURFACE` (no infinite loops)
 - [ ] Every state has `ABORT → SURFACE` (exceptions always surface)
 - [ ] `detected()` priority order: safety checks first, mission target second
-- [ ] `vision.home` uses `on_lost='fail'` → plan routes `FAILED` to re-search
+- [ ] `VisionAlignState` / `VisionMoveState` route `FAILED` to a re-search state (or pass `fallback=` for in-state recovery)
 - [ ] Both `distance_m` AND `duration` passed to `MoveForwardState` (DVL/timed)
 - [ ] Detector loaded + classes filtered before first vision state
 - [ ] `VehicleProfile.auto()` called before SM construction (or hardcoded for test)
@@ -904,84 +952,87 @@ Insert between phases:
 
 ## 11. Payload Fire Patterns (torpedo + dropper)
 
-### 11.1 Torpedo task — vision_lock_fire
+### 11.1 Torpedo task — align then fire
 
-`vision_lock_fire` is the canonical verb for precise fire tasks. It aligns on requested axes,
-verifies the AUV stays in deadband for `stable_lock_s` seconds, then fires via ESP32 serial.
-Retries `max_attempts` times; fallback fires at last captured pose.
+There is no lock-fire verb. Centre the target with `vision.align` (tight `err`,
+slow `gain`); when it returns `ALIGNED`, call `duburi.fire(channel)`
+(1/2 = torpedo, 3/4 = dropper). `VisionResult` is truthy only on a real lock,
+so `if align(...).ok:` gates the shot.
 
 **As a standalone mission call** (inside `detected()`-paradigm or FSM state body):
 
 ```python
-# Coarse align first, then precision lock-fire
-duburi.vision.home(target='torpedo_hole', yaw=True, lat=True, depth=True,
-                   duration=20, on_lost='hold')
+duburi.models(torpedo='torpedo_blood_hole')   # classes: torpedo, blood, hole
 
-result = duburi.vision.vision_lock_fire(
-    target='torpedo_hole',
-    yaw=True, lat=True, depth=True,
-    stable_lock_s=4.0,
-    max_attempts=3,
-    fire_channel=1,          # torpedo_1 (ESP32 serial)
-    attempt_timeout=20.0,
-    duration=60.0,
-    offset_x=60,             # aim at bullseye offset from board bbox
-    offset_y=-40)
+# Coarse board align, then a precise hole lock before firing
+duburi.vision.align('torpedo', yaw=0, lat=0, depth=0,
+                    err=40, gain=30, duration=20, fallback=creep_forward)
+
+duburi.set_classes('hole')
+if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
+                       err=14, gain=12, duration=25, fallback=creep_forward).ok:
+    duburi.fire(1)           # torpedo_1 (ESP32 serial 1/2)
 ```
 
-**As an FSM state** (using `VisionHomeState` from the YASMIN library):
+**As an FSM state** (`VisionAlignState` for the lock, a small fire state for the shot):
 
 ```python
-# Plan entry using the YASMIN state library
-'TORPEDO_LOCK_FIRE': ('vision_lock_fire_state',
-    target='torpedo_hole',
-    yaw=True, lat=True, depth=True,
-    stable_lock_s=4.0, fire_channel=1,
-    duration=60.0)
+sm.add_state('LOCK_HOLE',
+             VisionAlignState(duburi, profile, target='hole',
+                              yaw=True, lat=True, depth=True,
+                              err=14, gain=12, duration=25),
+             transitions={SUCCEED: 'FIRE_TORPEDO',
+                           FAILED:  'SCAN_BOARD',
+                           TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
+# FireState._run() calls duburi.fire(1) and returns SUCCEED.
 ```
 
-> `fire_channel` priority: ESP32 serial (1–4) → AUX PWM (`fire_aux_channel`) → log stub.
-> Check `duburi.payload_ready` before the mission if you need a hard gate.
+> `duburi.fire(ch)`: 1/2 = torpedo, 3/4 = dropper (ESP32 serial).
+> Call `duburi.payload_ready()` before the mission if you need a hard gate.
 
 ---
 
-### 11.2 Bin drop — downward camera + dropper lock-fire
+### 11.2 Bin drop — downward camera + align then drop
 
-Axis remap: with `camera='downward'`, `ex`→lateral, `ey`→forward. Pass `yaw=False, lat=True, forward=True`.
+Axis remap: with `camera='downward'`, `ex`→lateral and `ey`→the depth nudge.
+Centre with `lat` + `depth`, then drop.
 
 ```python
 duburi.set_depth(-1.5)
-duburi.camera = 'downward'
+duburi.use_camera('downward')
+duburi.models(bin='bin_fire_blood')          # classes: blood, fire
+duburi.set_classes('fire,blood')
 
-duburi.vision.find(target='fire_bin', move='still', timeout=30)
+# Search the down-cam for the bin marker, then centre and drop
+for _ in range(30):
+    if duburi.detected('fire', camera='downward', stale_after=0.5):
+        break
+    duburi.move_forward(0.5, gain=30)
 
-result = duburi.vision.vision_lock_fire(
-    target='fire_bin',
-    yaw=False, lat=True, forward=True, depth=False,
-    stable_lock_s=3.0,
-    max_attempts=2,
-    fire_channel=3,          # dropper_1
-    duration=45.0)
+if duburi.vision.align('fire', camera='downward', lat=0, depth=0,
+                       err=30, gain=30, duration=25, fallback=creep_forward).ok:
+    duburi.fire(3)           # dropper_1 (ESP32 serial 3/4)
 ```
 
 ---
 
 ### 11.3 Offset alignment (slalom / off-centre aim)
 
-All PID vision verbs accept `offset_x` (px right) and `offset_y` (px down). Useful for:
-- Slalom: keep pipe N px to one side while driving forward
-- Torpedo: aim at bullseye offset from the board's bbox centre
+`align` takes the offset directly: a signed pixel value on `lat` / `yaw` /
+`depth` holds the target that many px off centre (no separate `offset_x/y`).
+`vision.move` holds a lateral offset while driving with `maintain=±px`.
 
 ```python
-# Slalom — keep red pipe 80 px right, then drive straight past
-duburi.vision.turn(target='slalom_red', offset_x=80, duration=4.0)
-duburi.move_forward(duration=3.0, gain=40)
+# Slalom — keep the red pipe 80 px to the right, then drive past it
+duburi.models(slalom='slalom_red_pipe')      # class: red_pipe
+duburi.vision.align('red_pipe', yaw=0, lat=80, err=40, gain=30, duration=20)
+duburi.vision.move('red_pipe', fwd=60, mode='height', maintain=80,
+                   gain=35, duration=15)
 
-# Torpedo board — aim right+up offset from bbox centre
-duburi.vision.home(target='torpedo_board',
-                   yaw=True, lat=True, depth=True,
-                   offset_x=60, offset_y=-40,
-                   duration=15)
+# Torpedo board — aim right + above the bbox centre
+# (+lat/+yaw = right, -depth = above centre)
+duburi.vision.align('torpedo', yaw=60, lat=0, depth=-40,
+                    err=20, gain=20, duration=15)
 ```
 
 ---
@@ -1006,7 +1057,9 @@ def mock_detected(target, camera=None, stale_after=1.0):
 
 duburi = MagicMock()
 duburi.detected.side_effect = mock_detected
-duburi.vision.home.return_value = MagicMock(success=True)
+# Vision verbs return a VisionResult; .ok is the truthy success flag.
+duburi.vision.align.return_value = MagicMock(ok=True)
+duburi.vision.move.return_value = MagicMock(ok=True)
 ```
 
 ### Test avoid branch fires
@@ -1022,16 +1075,25 @@ def test_avoid_branch_taken_when_object_b_detected():
     assert outcome == 'avoid'
 ```
 
-### Test DVL vs timed in pick approach
+### Test the move verb gets the right fill target
 
 ```python
-def test_approach_uses_dvl_on_duburi45():
+def test_move_passes_fill_to_vision():
     duburi = MagicMock()
-    duburi.vision.home.return_value = MagicMock(success=True)
-    state = VisionHomeState(duburi, VehicleProfile.duburi45(), target='object_c',
-                             yaw=True, lat=True, forward=True, dist=0.15)
-    state.execute(Blackboard())
-    # VisionHomeState delegates entirely to vision.home — dist passed correctly
-    _, kw = duburi.vision.home.call_args
-    assert kw['dist'] == pytest.approx(0.15)
+    duburi.vision.move.return_value = MagicMock(ok=True)
+    state = VisionMoveState(duburi, VehicleProfile.duburi45(), target='object_c',
+                            fwd=70, mode='height')
+    outcome = state.execute(Blackboard())
+    # VisionMoveState delegates entirely to vision.move — fwd/mode passed through
+    _, kw = duburi.vision.move.call_args
+    assert kw['fwd'] == 70
+    assert kw['mode'] == 'height'
+    assert outcome == SUCCEED
+
+def test_align_succeeds_on_ok_result():
+    duburi = MagicMock()
+    duburi.vision.align.return_value = MagicMock(ok=True)
+    state = VisionAlignState(duburi, VehicleProfile.duburi45(), target='object_c',
+                             yaw=True, lat=True, depth=True)
+    assert state.execute(Blackboard()) == SUCCEED
 ```

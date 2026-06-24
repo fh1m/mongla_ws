@@ -47,35 +47,36 @@ ros2 run duburi_manager start \
 ## Vision parameters (`vision.*`)
 
 All resolved at goal-dispatch time in this priority order:
-1. Value the goal supplied (per-call kwarg wins)
+1. Value the goal supplied (per-call `err`/`duration`/`gain` wins)
 2. Live `ros2 param set /duburi_manager vision.X Y` value
 3. Hardcoded default in `COMMANDS` registry
 
 ```bash
 # Tune live between goals (no restart)
 ros2 param set /duburi_manager vision.kp_yaw 80.0
-ros2 param set /duburi_manager vision.deadband 0.08
-ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
+ros2 param set /duburi_manager vision.kp_forward 180.0
+ros2 param set /duburi_manager vision.lost_grace_s 1.5
 ```
 
 Full defaults live in
-[src/duburi_manager/config/vision_tunables.yaml](../src/duburi_manager/config/vision_tunables.yaml).
+[src/duburi_manager/duburi_manager/vision_tunables.py](../src/duburi_manager/duburi_manager/vision_tunables.py)
+(`VISION_PARAM_DEFAULTS`).
 
 | Param                  | Default | Effect |
 |------------------------|---------|--------|
-| `vision.kp_yaw`        | 60.0    | Yaw P-gain (Ch4 percent per unit horizontal error). Raise if slow, lower if oscillating. |
-| `vision.kp_lat`        | 60.0    | Lateral P-gain (Ch6). Same tuning guidance. |
-| `vision.kp_depth`      | 0.05    | Depth nudge per unit vertical error per tick. Small — depth setpoints accumulate. |
-| `vision.kp_forward`    | 200.0   | Forward P-gain (Ch5). Large because the distance error is itself small (< 0.1). |
-| `vision.deadband`      | 0.18    | Settle tolerance (0..1). 0.18 is loose (webcam). Tighten to 0.08–0.10 for pool. |
-| `vision.target_bbox_h_frac` | 0.30 | Stop-distance threshold. 0.30 = target fills ~30% of frame height. Raise to 0.5–0.6 for getting closer. |
-| `vision.stale_after`   | 1.5     | Seconds before a detection is treated as lost. Drop to 0.6–0.8 for clean pool cameras. |
-| `vision.on_lost`       | `fail`  | `fail` (abort on lost target) or `hold` (pause thrust, keep waiting). |
-| `vision.depth_anchor_frac` | 0.5 | Which vertical point on the bbox to align to the image centre. 0=top, 0.5=centre, 1=bottom. Use **0.2** for tall objects (person standing, pole) to avoid depth-controller stall. |
-| `vision.lock_mode`     | `settle` | When to exit the vision loop. `settle` (exit when centred), `follow` (track until duration), `pursue` (forward-only until target fills frame). |
-| `vision.distance_metric` | `height` | How to measure target size from bbox. `height` (h_frac), `width` (w_frac), `area` (√(h×w)), `diagonal` (√(h²+w²)/√2). |
-| `vision.acquire_yaw_rate_pct` | 22.0 | Yaw stick percent during a `vision.find` sweep. |
-| `vision.acquire_gain`  | 25.0    | Forward thrust during a `vision.find` sweep. |
+| `vision.kp_yaw`        | 60.0    | Yaw P-gain (Ch4 percent per unit normalized horizontal error). Raise if centring is slow, lower if oscillating. |
+| `vision.kp_lat`        | 60.0    | Lateral P-gain (Ch6 strafe). Same tuning guidance. |
+| `vision.kp_depth`      | 0.05    | Depth setpoint nudge per unit vertical error per tick. Small — nudges accumulate. |
+| `vision.kp_forward`    | 200.0   | Forward P-gain for `vision_move` (Ch5). Large because the fill error is itself small (0..1). |
+| `vision.lost_grace_s`  | 1.0     | Seconds the loop coasts on target loss before reporting `LOST` (so the DSL can run its `fallback`). 1.0 s rides typical pool turbidity blackouts. |
+| `vision.frame_fill_default` | 95.0 | Default bbox fill % for `vision_move` when the mission leaves `fwd`/`fwd_fill` at 0. |
+| `vision.align_stable_frames` | 3.0 | Ticks (at 20 Hz) every active axis must stay within `err_px` before `vision_align` reports `ALIGNED`. 3 ticks ≈ 0.15 s. |
+
+> **`gain` and `err` are per-call, not ROS params.** `gain` is a hard
+> max-speed cap (% thrust) the P-controller output is clamped to;
+> `err` (`err_px`) is the pixel tolerance for "centred"/"reached". Pass
+> them on each `vision.align(...)` / `vision.move(...)` call. The `vision.*`
+> params above only fill the gains/grace the DSL leaves unset.
 
 > **Yaw-mode note:** ArduSub honours `SET_ATTITUDE_TARGET` only in
 > `ALT_HOLD` / `POSHOLD` / `GUIDED`. The node auto-engages `ALT_HOLD`
@@ -211,9 +212,10 @@ Smoke-test: `cat /dev/ttyACM0` — if no JSON appears, ROS2 won't see it either.
 
 ## Vision pipeline — `duburi_vision`
 
-Camera factory + YOLO11 detector + six `vision_*` verbs on
-`/duburi/move`. The closed loop runs **inside the manager** — vision
-and control share the same MAVLink owner and never fight for thrust.
+Camera factory + YOLO11 detector + two `vision_*` verbs
+(`vision_align`, `vision_move`) on `/duburi/move`. The closed loop runs
+**inside the manager** — vision and control share the same MAVLink owner
+and never fight for thrust.
 
 ### Architecture
 
@@ -225,8 +227,9 @@ and control share the same MAVLink owner and never fight for thrust.
 |  jetson / blueos /     |     |  -> /detections         |     +-----------------------+
 |  mavlink (stubs)       |     |  -> image_debug         |               |
 +------------------------+     +-------------------------+               |
-                                          |                              |
-                                          v (or /tracks if tracking=true)
+                                          |                              v
+                                          |                     (HUD overlay only)
+                                          v  /detections
                                    +-----------------------+
                                    |  auv_manager_node     |
                                    |  VisionState pool     |
@@ -234,8 +237,11 @@ and control share the same MAVLink owner and never fight for thrust.
                                    |  RC Ch4/5/6 + depth   |
                                    +-----------------------+
                                               ^
-                                 /duburi/move (vision_* verbs)
+                                 /duburi/move (vision_align / vision_move)
 ```
+
+> The control loop **always reads `/detections`**. `tracker_node` /
+> `/tracks` feed the HUD only — there is no `--tracking` flag.
 
 ### Topics
 
@@ -268,16 +274,28 @@ and control share the same MAVLink owner and never fight for thrust.
 | Bottom-left alignment readout (err_x, err_y) | How well aligned is the AUV (-1..+1) |
 | Red full-width "STALE FRAME" banner | Source unhealthy |
 
-### Vision verbs
+### Vision verbs — two pixel-native verbs
 
-| Verb | Axes | Use case |
-|------|------|---------|
-| `vision_align_yaw`     | Ch4 only         | Centre horizontally (yaw) |
-| `vision_align_lat`     | Ch6 only         | Centre horizontally (strafe) |
-| `vision_align_depth`   | Depth setpoint   | Centre vertically |
-| `vision_hold_distance` | Ch5 only         | Maintain standoff distance |
-| `vision_align_3d`      | Any subset of Ch4/Ch5/Ch6 + depth | Multi-axis simultaneous hold |
-| `vision_acquire`       | Sweep verb       | Rotate/move until target detected |
+| Verb | DSL | What it does |
+|------|-----|--------------|
+| `vision_align` | `duburi.vision.align(target, *, lat=, yaw=, depth=, err=, duration=, gain=, fallback=)` | Centre `target` on the named axes; each value is a **signed pixel offset** from centre (`0` = centre). At least one of `lat`/`yaw`/`depth`. |
+| `vision_move` | `duburi.vision.move(target, *, fwd=, mode=, maintain=, hold=, err=, duration=, gain=, fallback=)` | Drive forward until the bbox fills `fwd`% (`mode` = `area`/`width`/`height`). `maintain` = ±px lateral offset while driving; never re-centres yaw/depth. |
+
+- **Never-fail contract:** neither verb raises. The server always returns
+  `success=True` with an outcome code in `Move.Result.final_value`
+  (`ALIGNED`=0, `LOST`=1, `TIMEOUT`=2, `NO_CAMERA`=3, `ABORTED`=4). The DSL
+  returns a `VisionResult` (truthy only on `ALIGNED`).
+- **`fallback`** = a mission-authored search `fn(duburi)` /
+  `fn(duburi, should_stop)`; it runs on target loss, then the verb
+  re-enters — all inside the original `duration` budget.
+
+```bash
+# Centre the gate (yaw + lateral), then drive forward until it fills 80%:
+ros2 run duburi_planner duburi vision_align --camera forward \
+    --target_class gate --axes yaw,lat --duration 20 --gain 30
+ros2 run duburi_planner duburi vision_move --camera forward \
+    --target_class gate --fwd_fill 80 --mode area --duration 20 --gain 35
+```
 
 Full param docs: [`.claude/context/command-reference.md`](../../../.claude/context/command-reference.md).
 
@@ -302,20 +320,16 @@ ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
 
 > `webcam_demo.launch.py` still works but is deprecated — use `cameras_.launch.py`.
 
-### Tracker node (optional)
+### Tracker node (optional — HUD only)
 
 Runs after `detector_node`, subscribes `/detections`, publishes `/tracks` with
-stable ByteTrack IDs and Kalman-smoothed bbox centres.
+stable ByteTrack IDs and Kalman-smoothed bbox centres. `/tracks` feeds the
+**vision HUD only** — the `vision_align` / `vision_move` control loops always
+read `/detections`, so there is no manager param or `--tracking` flag to wire.
 
 ```bash
 # Start standalone (detector must already be running)
 ros2 run duburi_vision tracker_node --ros-args -p camera:=laptop
-
-# Tell manager to use /tracks for all vision verbs
-ros2 param set /duburi_manager vision.use_tracks true
-
-# Or per-verb:
-ros2 run duburi_planner duburi vision_align_yaw --target_class gate --tracking true
 ```
 
 | `tracker_node` param | Default | Notes |

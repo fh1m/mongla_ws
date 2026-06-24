@@ -182,18 +182,70 @@ Next-up candidates not from this audit (keep here as a hand-off list):
 
 ### C1. Vision depth alignment can command surfacing — **FIXED 2026-06-23**
 - **File:** `motion_vision.py`
-- **Symptom:** `vision_track_axes` depth nudges had no floor; repeated "move up" corrections could command depth → 0m → boat hull collision.
-- **Fix:** `_MIN_DEPTH_M = -0.2` constant; `depth_setpoint = min(depth_setpoint, _MIN_DEPTH_M)` after every nudge. Uses `min()` because depth is negative-down.
+- **Symptom:** the vision depth-axis nudges had no floor; repeated "move up" corrections could command depth → 0m → boat hull collision.
+- **Fix:** `_MIN_DEPTH_M = -0.2` constant; the `align_loop` depth axis clamps `depth_setpoint = min(depth_setpoint, _MIN_DEPTH_M)` after every nudge. Uses `min()` because depth is negative-down. (Still in force after the 2026-06-24 two-verb rewrite.)
 
 ### C2. Mission state carry-over across runs — **FIXED 2026-06-23**
 - **Files:** `commands.py`, `duburi.py`, `auv_manager_node.py`, all `run()` mission files
 - **Symptom:** Heading lock and `_abort_event` persisted after a mission. Second mission armed into previous heading; abort state could prevent motion.
 - **Fix:** New `mission_reset` verb (in `_UNARM_SAFE`): stops heading lock thread, clears `_abort_event`, sends RC neutral. All `run()` functions call `duburi.mission_reset()` as first line. `cancel_callback` now also calls `unlock_heading()`.
 
-### C3. Slalom diagonal movement — **FIXED 2026-06-23**
-- **File:** `motion_vision.py` (`vision_track_axes`)
-- **Symptom:** When both `lat` and `forward` in axes, both channels sent simultaneously → AUV moved diagonally → risk of hitting slalom pipes.
-- **Fix:** Lat-priority smooth gating: `fwd_pct *= (1 - lat_dominance)` where `lat_dominance = min(abs(lat_pct) / max(LAT_PCT_MAX * speed * 0.5, 1.0), 1.0)`. Forward fully suppressed when lateral error large; smoothly restored when centred.
+### C3. Slalom diagonal movement — **FIXED 2026-06-23, SUPERSEDED 2026-06-24**
+- **File:** `motion_vision.py`
+- **Symptom:** the old combined-axis tracker drove `lat` and `forward` at once → AUV moved diagonally → risk of hitting slalom pipes.
+- **Fix (original):** lat-priority smooth gating inside the old combined tracker (`fwd_pct` scaled down by a `speed`-based lateral-dominance term).
+- **Superseded:** the two-verb rewrite split tracking into `vision_align` (centre only, never drives forward) and `vision_move` (drives forward; optional `maintain=±px` lateral hold). The diagonal case can no longer arise, so the removed `speed`-scaled dominance gate is no longer needed.
+
+---
+
+## 2026-06 Vision Two-Verb Rewrite + Harmony Fixes — ALL FIXED (2026-06-24)
+
+> The 9-verb vision API (`vision_align_yaw/lat/depth`, `vision_align_3d`,
+> `vision_hold_distance`, `vision_lock_fire`, `vision_acquire`, `look_around`;
+> DSL `vision.find/home/turn/slide/hover/approach/track/scan/hold`) was
+> replaced by **two** pixel-native verbs — `vision_align` (centre on
+> lat/yaw/depth at signed pixel offsets) and `vision_move` (drive forward to a
+> bbox fill ratio). Neither raises on a miss: the server returns
+> `success=True` with an outcome code in `Move.Result.final_value`
+> (`ALIGNED`=0 / `LOST`=1 / `TIMEOUT`=2 / `NO_CAMERA`=3 / `ABORTED`=4). `gain`
+> is a hard max-speed cap; search is a mission-authored `fallback`. Removed
+> params: `vision.deadband`, `lock_mode`, `depth_anchor_frac`,
+> `distance_metric`, `target_bbox_h_frac`, `stable_lock_s`, `h_frac_close`,
+> `proximity_min_scale`, `speed`, `use_tracks` (and the `--tracking` flag).
+> New `/duburi_manager` params: `vision.kp_lat`=60, `vision.kp_yaw`=60,
+> `vision.kp_depth`=0.05, `vision.kp_forward`=200, `vision.lost_grace_s`=1.0,
+> `vision.frame_fill_default`=95, `vision.align_stable_frames`=3. Control loops
+> read `/detections` only; `detected()` is case-insensitive.
+
+### D1. `surface()` re-entrant deadlock — **FIXED 2026-06-24**
+- **File:** `duburi.py`
+- **Symptom:** `surface()` runs in `_command_scope('surface')` and then calls `set_depth()` (its own scope). With a plain `threading.Lock` the second acquire on the same thread blocked forever — the one safety verb most likely to be needed could hang.
+- **Fix:** `Duburi.lock` is now a `threading.RLock`. Commands stay serialized one-at-a-time across threads (an `RLock` only re-admits the thread that already holds it).
+
+### D2. Heading-lock lifecycle leaks (timeout zombie + disarm) — **FIXED 2026-06-24**
+- **Files:** `heading_lock.py`, `duburi.py`, `state_machines/states/navigation.py`
+- **Symptom:** a lock that hit its own `timeout` released Ch4 but left `Duburi._heading_lock` set and the heartbeat paused — a "zombie" lock that still looked active (so translation verbs released Ch4 to a dead thread). `disarm()` did not stop an active lock, so its Ch4 yaw-rate stream kept firing after the drop to MANUAL.
+- **Fix:** `HeadingLock` gained an `on_exit` callback; on timeout it fires `Duburi._on_lock_timeout`, which clears the handle and releases the heartbeat (identity-guarded so a freshly engaged lock isn't clobbered). `disarm()` now stops/joins an active lock and releases the heartbeat before disarming. FSM `LockHeadingState` passes a long `lock_timeout` (task/hold duration, not the FSM state timeout) so the lock isn't killed mid-task; FSM `DisarmState` calls `release_heading()` before `disarm()`.
+
+### D3. `vision_align` fought an active heading lock — **FIXED 2026-06-24**
+- **Files:** `vision_verbs.py`, `motion_vision.py`
+- **Symptom:** a lat/depth-only `vision_align` wrote `yaw=1500` every tick, racing the background heading lock's 20 Hz Ch4 stream.
+- **Fix:** when a lock is live and `yaw` is *not* an align axis, `vision_align` runs the loop with `release_yaw=True` — lateral goes via `send_rc_translation` and Ch4 is left entirely to the lock (the same path `vision_move` uses). When `yaw` *is* an axis the lock is suspended and the loop drives Ch4 itself, retargeting the lock to the achieved heading on exit.
+
+### D4. `vision_move` depth + post-failure cleanup — **FIXED 2026-06-24**
+- **Files:** `vision_verbs.py`, `auv_manager_node.py`
+- **Symptom:** a mission jumping straight to `vision_move` from MANUAL had its depth setpoint silently dropped; and the manager's post-exception cleanup used raw `send_neutral()` which clobbered an active lock's Ch4 for a tick.
+- **Fix:** `vision_move` calls `_ensure_alt_hold('vision_move')` at entry. The manager exception path now neutralises via the lock-aware `duburi._writers().neutral()`.
+
+### D5. A bad vision verb could abort a whole mission — **FIXED 2026-06-24**
+- **File:** `vision_dsl.py`
+- **Symptom:** a setup error (bad camera name, ALT_HOLD rejected, disarmed) raised `MoveFailed`/`MoveRejected` out of the DSL and unwound the mission.
+- **Fix:** `_orchestrate` catches `MoveFailed`/`MoveRejected`/`Exception` and returns a non-fatal `VisionResult(False, 'FAILED', …)`; the mission logs it and continues to the next step.
+
+### D6. Silent "sees but doesn't move" on a mis-scaled stream — **FIXED 2026-06-24**
+- **Files:** `motion_vision.py`, `vision_state.py`
+- **Symptom:** pixel math ran before `camera_info` arrived (image size still `(0,0)`), mis-scaling the error; and a class-name mismatch produced no diagnostic.
+- **Fix:** the verbs return `NO_CAMERA` until `vision_state.info_seen()` is true, so the controller never steers on an unscaled pixel error. A throttled "`<class>` not among live detections […]" warning fires when boxes are present but none match the requested class. Class matching is case-insensitive.
 
 ---
 

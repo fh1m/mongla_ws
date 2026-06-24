@@ -15,9 +15,9 @@
 > - `missions/gate_flare_fsm.py` etc — YASMIN FSM missions: robust competition
 >   layer with explicit timeouts, retry loops, dual-vehicle auto-detection.
 >
-> The FSM wraps the same DSL verbs (`duburi.vision.home()`,
-> `duburi.move_forward_dist()`, etc.) as states. MAVLink/ArduSub control layer
-> is completely unchanged.
+> The FSM wraps the same DSL verbs (`duburi.vision.align()`,
+> `duburi.vision.move()`, `duburi.move_forward_dist()`, etc.) as states.
+> MAVLink/ArduSub control layer is completely unchanged.
 
 Based on the 2025 RoboSub competition codebase (YASMIN FSM) + 2023 patterns.
 

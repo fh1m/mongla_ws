@@ -152,8 +152,8 @@ ros2 launch duburi_vision cameras_.launch.py \
 ros2 run duburi_planner mission gate_flare_prequal
 ```
 
-The mission calls `duburi.vision.find(target='gate', ...)` and
-`duburi.vision.home(...)` — these close the visual loop against the recorded
+The mission calls `duburi.vision.align(target='gate', ...)` and
+`duburi.vision.move(...)` — these close the visual loop against the recorded
 video frames just as they would in the pool. Thrust commands go to SITL (or
 are silently dropped if the AUV isn't armed), so the control logic is fully
 exercised without water.

@@ -75,8 +75,9 @@ Read every capability in three states — **✅ built & tested · 🟦 committed
 
 - **✅ Phase 1 (runs today):** single-body **Duburi** stack — `detected()` reactive missions, YOLO11 + ByteTrack/Kalman + monocular depth (30 fps), Gate / Return / search-align (~800 pt), the control / MAVLink / vision core.
 - **✅ YASMIN FSM layer (built 2026-06-03):** `state_machines/` planning layer with `VehicleProfile` dual-vehicle auto-detection — same plan builder generates DVL-distance passes for Duburi 4.5 and timed passes for Dubomini 2.0. `gate_flare_fsm` + `prequal_fsm` missions live now.
-- **✅ ESP32-serial payload actuation (built):** `PayloadDriver` + `fire` verb + `vision_lock_fire` with `fire_channel` — torpedo/dropper actuation over USB serial. Offset alignment (`offset_x`/`offset_y`) on all PID verbs + `vision.hold()` DSL mode also added.
-- **✅ Competition mission architecture (authored 2026-06-19):** 5-chunk competition run — `gate_task`, `slalom_task`, `bin_task`, `torpedo_task`, `return_task` + `full_mission_2026` combinator. Dual-camera lazy detection (`pause_detector`/`resume_detector` DSL verbs, `paused` param on `detector_node`). Gate/return chunks runnable today (`gate_rescue_repair.pt` exists); slalom/bin/torpedo blocked on model training.
+- **✅ Two-verb vision (rewritten 2026-06):** the whole vision surface is `vision_align` + `vision_move` — pixel-native, `gain` = max-speed cap, misses are non-fatal, search/recovery is a mission-authored `fallback`. Replaced the prior 9-verb API.
+- **✅ ESP32-serial payload actuation (built):** `PayloadDriver` + `fire` verb (`fire_channel` 1/2=torpedo, 3/4=dropper) — torpedo/dropper actuation over USB serial.
+- **✅ Competition mission architecture (authored 2026-06):** 5-chunk competition run — `task_gate`, `task_slalom`, `task_bin`, `task_torpedo`, `task_return` + `task_full_2026` combinator (plus the `fsm_*` YASMIN launchers and `pool_day_practice`). Dual-camera lazy detection (`pause_detector`/`resume_detector` DSL verbs, `paused` param on `detector_node`). Runnable once each task's `.pt` is on the Jetson (`gate_rescue_repair`, `slalom_red_pipe`, `bin_fire_blood`, `torpedo_blood_hole`).
 - **🟦 Phase 2 (committed, not yet built):** Dubomini 2.0 control path · inter-vehicle comms (IVC) · Slalom / Bins / Torpedo / Octagon plan builders · stepper grabber · underwater preprocessing.
 - **✏️ Corrected:** detector is **YOLO11** (the TDR's YOLO26 line is corrected; YOLO11 is the committed, battle-tested family).
 
@@ -122,7 +123,7 @@ Read every capability in three states — **✅ built & tested · 🟦 committed
 
 ### One verb, end to end
 
-What actually happens when you type `ros2 run duburi_planner duburi vision_align_yaw --camera laptop --target_class person --duration 8`:
+What actually happens when you type `ros2 run duburi_planner duburi vision_align --camera forward --target_class gate --axes yaw,lat --duration 8`:
 
 ```mermaid
 sequenceDiagram
@@ -130,7 +131,7 @@ sequenceDiagram
     participant CLI as duburi CLI
     participant AC as Action client
     participant MGR as auv_manager_node
-    participant MV as motion_vision
+    participant MV as motion_vision.align_loop
     participant DUB as Duburi facade
     participant PIX as Pixhawk (MAVLink)
     participant VEH as ArduSub / vehicle
@@ -138,24 +139,27 @@ sequenceDiagram
     participant DET as detector_node
 
     CAM->>DET: sensor_msgs/Image @ 30 Hz
-    DET-->>MGR: vision_msgs/Detection2DArray
-    CLI->>AC: build Move goal (vision_align_yaw, ...)
+    DET-->>MGR: vision_msgs/Detection2DArray (cached in VisionState)
+    CLI->>AC: build Move goal (vision_align, axes=yaw,lat)
     AC->>MGR: /duburi/move goal
-    MGR->>MV: vision_track_axes(axes={yaw}, ...)
+    MGR->>MV: align_loop(axes={yaw,lat}, gain=speed-cap)
     loop closed loop @ 20 Hz
-        MV->>MGR: query VisionState (last detection)
-        MV->>DUB: yaw_pct = kp * horizontal_error
-        DUB->>PIX: MANUAL_CONTROL (r = yaw_pct)
+        MV->>MGR: read VisionState.bbox_error() → ex,ey (pixels)
+        MV->>DUB: P·error, clamped to gain — yaw + lateral
+        DUB->>PIX: SET_ATTITUDE_TARGET (yaw) + Ch6 RC override (lat)
         PIX->>VEH: MAVLink frame
-        VEH-->>PIX: HEARTBEAT / ATTITUDE
-        MV-->>AC: feedback (err, age, settled)
+        VEH-->>PIX: AHRS2 / HEARTBEAT
+        MV-->>AC: feedback (worst per-axis err_px)
     end
-    MV-->>MGR: VisionTrackResult(success, reason)
-    MGR-->>AC: action result
-    AC-->>CLI: exit 0 / non-zero
+    MV-->>MGR: Outcome(code) → Move.Result.final_value
+    MGR-->>AC: result (success always True; code = ALIGNED/LOST/TIMEOUT)
+    AC-->>CLI: VisionResult — truthy only on ALIGNED
 ```
 
-Same flow runs for every verb in §9 — only the motion module and the axes change. That single contract is why missions stay readable.
+The whole vision surface is just **two** verbs — `vision_align` (centre on lat/yaw/depth)
+and `vision_move` (drive forward to a bbox fill ratio). `gain` is a hard max-speed cap, errors
+are raw pixels, and a miss is **non-fatal**: the server reports an outcome code and the mission
+keeps going. See [§9 Vision: two verbs](#vision-two-verbs-align--move) for the full contract.
 
 ### What a session actually looks like
 
@@ -353,8 +357,8 @@ ros2 run duburi_vision vision_display --ros-args \
     -p launch_pipeline:=true -p camera:=laptop \
     -p model:=yolov11n -p classes:=person
 
-# Then run move_and_see mission to see the AUV respond to a person in frame:
-ros2 run duburi_planner mission move_and_see
+# Then run demo_move_see mission to see the AUV respond to a person in frame:
+ros2 run duburi_planner mission demo_move_see
 ```
 
 **Individual nodes:**
@@ -409,37 +413,39 @@ ros2 launch duburi_vision cameras_.launch.py
 # T4: drive
 ros2 run duburi_planner duburi arm
 ros2 run duburi_planner duburi set_depth --target -0.5
-ros2 run duburi_planner duburi vision_align_yaw \
-    --camera laptop --target_class person --duration 8
+ros2 run duburi_planner duburi vision_align \
+    --camera forward --target_class person --axes yaw --duration 8
 ros2 run duburi_planner duburi disarm
 ```
 
 Success: when you move sideways in front of the webcam, the BlueROV2 yaws
-to keep you centred. Manager logs `[vision] err=±0.0XX  ch4=±YY%`.
+to keep you centred. Manager logs `[VIS  ] align 'person': ex=±NNpx → ch4=±YY%`.
 
 ### 4 — Mission runner (auto-discovered)
 
 ```bash
 ros2 run duburi_planner mission --list                    # shows every missions/*.py
-ros2 run duburi_planner mission move_and_see              # short open-loop + vision demo
-ros2 run duburi_planner mission find_person_demo          # full vision-driven walkthrough
+ros2 run duburi_planner mission demo_move_see             # short open-loop + vision demo
+ros2 run duburi_planner mission demo_find_person          # full vision-driven walkthrough
 ros2 run duburi_planner mission gate_prequal              # gate-only prequal (DVL forward)
 ros2 run duburi_planner mission gate_flare_prequal        # scripted gate+flare+return (safe fallback)
-ros2 run duburi_planner mission gate_flare_autonomous     # detected()-paradigm reactive mission (preferred)
+ros2 run duburi_planner mission gate_flare_autonomous     # detected()-paradigm reactive mission
 ros2 run duburi_planner mission robosub_prequal           # RoboNation prequal (strafe pass)
+ros2 run duburi_planner mission pool_day_practice         # ★ Gate→Slalom→Torpedo→Bin (two-verb, dual-cam)
 
 # YASMIN FSM missions (dual-vehicle VehicleProfile auto-detect)
 ros2 run duburi_planner mission gate_flare_fsm            # ★ gate+flare FSM
 ros2 run duburi_planner mission prequal_fsm               # ★ gate-only prequal FSM
 ros2 run duburi_planner mission gate_then_bin_fsm         # ★ gate → bin drop FSM
+ros2 run duburi_planner mission fsm_full_2026             # ★ full 5-task YASMIN FSM (recommended)
 
-# Competition chunks (RoboSub 2026 — run each independently for pool testing)
-ros2 run duburi_planner mission gate_task                 # ✅ gate pass (gate_rescue_repair.pt exists)
-ros2 run duburi_planner mission return_task               # ✅ return + style_roll (same model)
-ros2 run duburi_planner mission slalom_task               # ⏳ slalom logic test (model pending)
-ros2 run duburi_planner mission bin_task                  # ⏳ bin drop logic test (model pending)
-ros2 run duburi_planner mission torpedo_task              # ⏳ torpedo fire logic test (model pending)
-ros2 run duburi_planner mission full_mission_2026         # full 5-task competition combinator
+# Competition chunks (RoboSub 2026 — detected()-paradigm, run each independently)
+ros2 run duburi_planner mission task_gate                 # gate pass (gate_rescue_repair model)
+ros2 run duburi_planner mission task_return               # return + style_roll (same model)
+ros2 run duburi_planner mission task_slalom               # slalom weave (slalom_red_pipe model)
+ros2 run duburi_planner mission task_bin                  # bin drop (bin_fire_blood, downward cam)
+ros2 run duburi_planner mission task_torpedo              # torpedo fire (torpedo_blood_hole model)
+ros2 run duburi_planner mission task_full_2026            # full 5-task detected()-paradigm combinator
 ```
 
 Adding a new mission: drop `missions/<your_name>.py` exposing
@@ -472,9 +478,8 @@ else:
     log.warn('gate not found — aborting')
     duburi.disarm(); return
 
-duburi.vision.home(target=duburi.models.gate.gate,
-                   yaw=True, lat=True, gate_guard=True,
-                   pass_at=0.38, dist=0.40, metric='area', duration=20)
+duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0, duration=20)
+duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area', duration=20)
 duburi.move_forward_dist(3.0, gain=60)
 ```
 
@@ -484,13 +489,13 @@ duburi.move_forward_dist(3.0, gain=60)
 |------|-----|
 | Steps ≤ 0.5 s | Detection fires only after verb returns; 2s step = 0.6m overshoot |
 | Always have a `MAX_STEPS` budget | Detector offline → unbounded loop |
-| Restore class filter after flare verb | `vision.home(target=flare_ref)` sets `classes='flare'` → `detected('gate')` always False |
-| Set `duburi.camera` first | Default is `'laptop'`; subscribes wrong topic |
+| Restore class filter after a class switch | A verb on a `flare` `ClassRef` sets `classes='flare'` → `detected('gate')` always False |
+| Set `duburi.camera` first | Default is `'forward'`; set `'downward'`/`'laptop'` to subscribe the right topic |
 
 **Orbit with gate-break — the class filter trap:**
 
 ```bash
-# ✗ WRONG: vision.home above set classes='flare' → detected('gate') never True
+# ✗ WRONG: a prior verb set classes='flare' → detected('gate') never True
 # ✓ FIX: restore both classes before the orbit loop
 duburi.set_classes('gate,flare')           # ← REQUIRED before orbit
 for _ in range(18):                        # 18 × 20° = 360°
@@ -558,26 +563,30 @@ duburi.set_classes('gate,rescue,repair', node='/duburi_detector_fwd')
 **Run individual chunks (independent pool testing):**
 
 ```bash
-ros2 run duburi_planner mission gate_task      # ✅ gate_rescue_repair.pt — runnable today
-ros2 run duburi_planner mission return_task    # ✅ same model — runnable today
-ros2 run duburi_planner mission slalom_task    # ⏳ slalom model pending training
-ros2 run duburi_planner mission bin_task       # ⏳ bin model pending — downward cam + fire(3)
-ros2 run duburi_planner mission torpedo_task   # ⏳ torpedo model pending — vision_lock_fire(1)
-ros2 run duburi_planner mission full_mission_2026  # full 5-task competition run
+ros2 run duburi_planner mission task_gate      # gate pass — gate_rescue_repair (fwd cam)
+ros2 run duburi_planner mission task_return    # return + style_roll — same model
+ros2 run duburi_planner mission task_slalom    # slalom weave — slalom_red_pipe (fwd cam)
+ros2 run duburi_planner mission task_bin       # bin drop — bin_fire_blood (downward cam) + fire(3)
+ros2 run duburi_planner mission task_torpedo   # torpedo fire — torpedo_blood_hole + fire(1)
+ros2 run duburi_planner mission task_full_2026 # full 5-task detected()-paradigm run
 ```
 
-Chunk cookbook: [`.claude/context/mission-cookbook.md §7.5`](.claude/context/mission-cookbook.md) · Model status: [`src/duburi_vision/models/README.md`](src/duburi_vision/models/README.md).
+Each task drops to a pure-control mission-authored `fallback` search when the
+target is lost, and `fire`s payload channels directly (no dedicated fire verb).
+Chunk cookbook: [`.claude/context/mission-cookbook.md`](.claude/context/mission-cookbook.md) · Model status: [`src/duburi_vision/models/README.md`](src/duburi_vision/models/README.md).
 
 ---
 
 ### 5 — Live-tune gains and switch models
 
-Change vision gains while a mission is running:
+Change vision gains live — they apply on the **next** vision goal (never mid-loop):
 
 ```bash
-ros2 param set /duburi_manager vision.kp_yaw 80.0
-ros2 param set /duburi_manager vision.deadband 0.06
-ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
+ros2 param set /duburi_manager vision.kp_yaw 80.0          # yaw centring P-gain
+ros2 param set /duburi_manager vision.kp_lat 80.0          # lateral centring P-gain
+ros2 param set /duburi_manager vision.kp_forward 220.0     # forward approach P-gain
+ros2 param set /duburi_manager vision.lost_grace_s 1.5     # coast time before LOST → fallback
+ros2 param set /duburi_manager vision.frame_fill_default 90.0   # default fwd= for vision_move
 ```
 
 Switch the detector class filter without restarting the detector node:
@@ -608,11 +617,11 @@ From inside a mission DSL (preferred — `duburi.models` registry):
 duburi.models(gate='gate_flare_medium_100ep')
 
 # Pass ClassRef objects to vision verbs — model+class switch is automatic
-duburi.vision.find(target=duburi.models.gate.gate,  move='forward', ...)
-duburi.vision.home(target=duburi.models.gate.flare, yaw=True, ...)
+duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0)   # switches to gate model+class
+duburi.vision.move(duburi.models.gate.flare, fwd=80)         # switches to flare class
 ```
 
-Defaults live in [src/duburi_manager/config/vision_tunables.yaml](src/duburi_manager/config/vision_tunables.yaml) and [src/duburi_vision/config/detector.yaml](src/duburi_vision/config/detector.yaml).
+Defaults live in [src/duburi_manager/duburi_manager/vision_tunables.py](src/duburi_manager/duburi_manager/vision_tunables.py) (`vision.*` ROS params) and [src/duburi_vision/config/detector.yaml](src/duburi_vision/config/detector.yaml).
 
 ### 6 — BNO085 yaw source (plug-and-play)
 
@@ -687,17 +696,17 @@ object IDs and smoothed bounding boxes. Opt in by launching with `with_tracking:
 ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
 
 # T2: inspect smoothed track stream
-ros2 topic echo /duburi/vision/laptop/tracks
+ros2 topic echo /duburi/vision/forward/tracks
 
-# T3: vision verb that uses tracks instead of raw detections
-ros2 run duburi_planner duburi vision_align_yaw \
-    --camera laptop --target_class person --duration 15 --tracking true
+# T3: a vision verb (always reads /detections; tracker feeds the HUD + analysis)
+ros2 run duburi_planner duburi vision_align \
+    --camera forward --target_class person --axes yaw,lat --duration 15
 ```
 
-Without `--tracking true`, vision verbs use raw `/detections` (lower
-latency, no ID stability). With `--tracking true` they use `/tracks`
-(smoothed bbox, stable ID across frames — better for slow-moving targets
-and low-confidence detections).
+The two control verbs (`vision_align` / `vision_move`) always read raw
+`/detections` for lowest latency. The `tracker_node` (`/tracks`, ByteTrack +
+Kalman, stable IDs, smoothed bbox) runs alongside for the mission-control HUD
+and offline analysis — there is no per-verb `--tracking` flag.
 
 **Tracker parameters** (tuned for underwater robustness, `config/tracker.yaml`):
 
@@ -1272,10 +1281,10 @@ duburi_ws/
     │       ├── motion_forward.py      # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
     │       ├── motion_lateral.py      # drive_lateral_* (Ch6 RC override)
     │       ├── motion_depth.py        # hold_depth (ramped setpoint → SET_POSITION_TARGET, then ALT_HOLD owns it)
-    │       ├── motion_vision.py       # vision_track_axes (Ch4/5/6 + depth, P-only) + vision_acquire
-    │       ├── heading_lock.py        # background Ch4 yaw-rate streamer (yaw_source-driven)
+    │       ├── motion_vision.py       # align_loop + move_loop (P-on-pixel, gain=speed-cap, Outcome codes)
+    │       ├── heading_lock.py        # background Ch4 yaw-rate streamer (yaw_source-driven, on_exit cb)
     │       ├── heartbeat.py           # 5 Hz neutral RC override (FS_PILOT_INPUT guard)
-    │       ├── vision_verbs.py        # VisionVerbs mixin -- vision_align_* / vision_acquire
+    │       ├── vision_verbs.py        # VisionVerbs mixin -- vision_align / vision_move (release_yaw aware)
     │       ├── duburi.py              # Duburi facade (lock + dispatch + heading_lock + heartbeat owner)
     │       └── errors.py              # MovementError / Timeout / ModeChangeError
     ├── duburi_sensors/
@@ -1298,22 +1307,25 @@ duburi_ws/
     │   │   ├── auv_manager_node.py    # ROS2 node, ActionServer, telemetry, VisionState pool
     │   │   ├── vision_state.py        # per-camera Detection2DArray subscriber + bbox_error()
     │   │   └── connection_config.py   # PROFILES + NETWORK topology
+    │   ├── duburi_manager/
+    │   │   └── vision_tunables.py     # default vision.* ROS params (live-tunable via ros2 param set)
     │   └── config/
-    │       ├── modes.yaml             # default ros parameters
-    │       └── vision_tunables.yaml   # default vision.* ROS params (live-tunable via ros2 param set)
+    │       └── modes.yaml             # default ros parameters
     └── duburi_planner/
         └── duburi_planner/
             ├── client.py              # DuburiClient blocking ActionClient wrapper
             ├── cli.py                 # `duburi` command-line wrapper (auto-built from COMMANDS)
-            ├── duburi_dsl.py          # DuburiMission DSL (duburi.* + duburi.vision.*)
+            ├── duburi_dsl.py          # DuburiMission DSL (duburi.*)
+            ├── vision_dsl.py          # duburi.vision.align + duburi.vision.move (+ fallback orchestration)
+            ├── model_context.py       # duburi.models registry + ClassRef (model+class auto-switch)
             ├── mission.py             # `mission` runner — dispatches into missions/<name>.run
             ├── missions/
-            │   ├── square_pattern.py    # open-loop square choreography
-            │   ├── arc_demo.py          # sharp vs curved turn comparison
-            │   ├── heading_lock_demo.py # lock_heading + translation demo
-            │   ├── find_person_demo.py  # full vision-driven 3D alignment demo
-            │   ├── move_and_see.py      # alternates open-loop + vision verbs
-            │   ├── pursue_demo.py               # vision_align_3d lock_mode=pursue demo
+            │   ├── demo_square.py       # open-loop square choreography
+            │   ├── demo_arc.py          # sharp vs curved turn comparison
+            │   ├── demo_heading_lock.py # lock_heading + translation demo
+            │   ├── demo_find_person.py  # vision align + move demo
+            │   ├── demo_move_see.py     # alternates open-loop + vision verbs
+            │   ├── demo_pursue.py               # vision_move follow demo
             │   ├── gate_prequal.py              # gate-only prequal (DVL forward)
             │   ├── robosub_prequal.py           # RoboNation prequal (strafe pass + flare orbit)
             │   ├── gate_flare_prequal.py        # scripted gate+flare+return (scripted fallback)
@@ -1321,13 +1333,15 @@ duburi_ws/
             │   ├── gate_flare_fsm.py            # ★ YASMIN FSM gate+flare (dual-vehicle auto-detect)
             │   ├── prequal_fsm.py               # ★ YASMIN FSM gate-only prequal (dual-vehicle)
             │   ├── gate_then_bin_fsm.py         # ★ YASMIN FSM gate → bin drop
-            │   ├── competition_config.py        # pool-day constants (depths, bbox fracs, headings)
-            │   ├── full_mission_2026.py         # full 5-task competition combinator
-            │   ├── gate_task.py                 # search→align rescue/repair→pass gate (standalone)
-            │   ├── slalom_task.py               # find red_pipe → hold offset → slalom (standalone)
-            │   ├── bin_task.py                  # downward cam → align blood/fire → fire(3) (standalone)
-            │   ├── torpedo_task.py              # align torpedo/hole → vision_lock_fire(1) (standalone)
-            │   └── return_task.py               # return gate → pass → style_roll (standalone)
+            │   ├── fsm_{slalom,bin,torpedo,return,full_2026}.py  # ★ per-task + full YASMIN FSM launchers
+            │   ├── competition_config.py        # pool-day constants (depths, fill %, headings)
+            │   ├── pool_day_practice.py         # ★ Gate→Slalom→Torpedo→Bin (two-verb, dual-cam)
+            │   ├── task_full_2026.py            # full 5-task detected()-paradigm combinator
+            │   ├── task_gate.py                 # search→align rescue/repair→pass gate (standalone)
+            │   ├── task_slalom.py               # find red_pipe → hold offset → slalom (standalone)
+            │   ├── task_bin.py                  # downward cam → align blood/fire → fire(3) (standalone)
+            │   ├── task_torpedo.py              # align torpedo/hole → fire(1) (standalone)
+            │   └── task_return.py               # return gate → pass → style_roll (standalone)
             └── state_machines/          # ★ YASMIN FSM planning layer (BUILT 2026-06-03)
                 ├── core/
                 │   ├── outcomes.py              # SUCCEED/FAILED/TIMEOUT/ABORT (yasmin_ros aliases)
@@ -1335,12 +1349,13 @@ duburi_ws/
                 │   ├── vehicle_profile.py       # VehicleProfile: .auto(node)/.duburi45()/.dubomini()
                 │   └── base_state.py            # DuburiState: timeout tracking + ABORT-on-exception
                 ├── states/
-                │   ├── navigation.py            # Arm/Disarm/SetDepth/LockHeading/MoveForward*/Surface
-                │   ├── vision.py                # VisionFind/Home/Scan
-                │   └── utility.py               # Countdown/Pause/LogScore
-                └── plans/
-                    ├── gate_flare.py            # build_gate_flare_fsm(duburi, profile, params)
-                    └── prequal.py               # build_prequal_fsm(duburi, profile, params)
+                │   ├── navigation.py            # Arm/Disarm/SetDepth/LockHeading/MoveForward*/Turn/Approach/Fire/StyleRoll/Surface
+                │   ├── vision.py                # VisionSearchState / VisionAlignState / VisionMoveState (two-verb wrappers)
+                │   └── utility.py               # Countdown/Pause/SwitchModel/LogScore
+                └── plans/                       # build_*_fsm(duburi, profile, params)
+                    ├── gate_flare.py · prequal.py · gate_then_bin.py
+                    ├── slalom.py · bin_drop.py · torpedo_fire.py · return_gate.py
+                    └── full_competition.py      # full 5-task YASMIN FSM
 ```
 
 Every new command ends up in just two places:
@@ -1555,67 +1570,114 @@ ros2 run duburi_manager start --ros-args -p mode:=desk
 Useful for bench-testing ESC signals, calibration, and dry MAVLink plumbing
 work without water.
 
-### Pool / Hardware (Jetson + BlueOS over switch)
+### Pool / Hardware — full pool-day startup sequence
 
-1. Power on the AUV; confirm the switch link lights come up.
-2. On a laptop on the same switch, open `http://192.168.2.1` and confirm
-   the BlueOS `inspector` endpoint matches §5.2.
-3. SSH into the Jetson and bring up everything in one command:
+This is the end-to-end sequence for an in-water session: **Raspberry Pi /
+Pixhawk + BNO payload → Jetson cameras → vision nodes (gate + bin) → missions.**
+Everything below runs on the Jetson unless noted.
 
-   ```bash
-   ssh fh1m@192.168.2.69
-   cd ~/Ros_workspaces/duburi_ws
-   source install/setup.bash
+```mermaid
+flowchart LR
+  PIX[Pixhawk + ArduSub] -->|USB| RPI[Raspberry Pi · BlueOS · 192.168.2.1]
+  RPI -->|MAVLink UDP 14550| JET[Jetson Orin · 192.168.2.69]
+  BNO[ESP32-C3 + BNO085] -->|USB CDC| JET
+  PAY[ESP32 payload · CH340] -->|USB serial| JET
+  FCAM[Forward cam] -->|USB| JET
+  DCAM[Downward cam] -->|USB| JET
+  DVL[Nucleus DVL · .201] -->|TCP 9000| JET
+  JET -->|auv_manager + vision + mission| PIX
+```
 
-   # Control only (no vision):
-   ros2 launch duburi_manager bringup.launch.py
+**Step 1 — Power & network (RPi + Pixhawk).** Power on the AUV; confirm the
+switch link lights. The **Pixhawk** is plugged into the **Raspberry Pi** over
+USB; BlueOS routes its MAVLink to the Jetson as a UDP client to
+`192.168.2.69:14550`. From a laptop on the switch, open `http://192.168.2.1`
+and confirm the BlueOS `inspector` endpoint matches [§5.2](#52-blueos-endpoint-configuration).
 
-   # Full pool day — BNO085 heading, DVL distance, gate+flare model:
-   ros2 launch duburi_manager bringup.launch.py \
-       vision:=true \
-       yaw_source:=bno085_dvl \
-       model:=gate_flare_medium_100ep \
-       classes:=gate \
-       conf:=0.45
+**Step 2 — Plug payload sensors into the Jetson.** The **BNO085** (ESP32-C3,
+USB CDC, VID/PID `303a:1001`) and the **ESP32 payload board** (CH340,
+`1a86:7523`) both connect to Jetson USB. Both auto-detect by VID/PID — no port
+config needed. The forward + downward **cameras** are USB on the Jetson too.
 
-   # Headless (no viewer — Jetson in pool without monitor):
-   ros2 launch duburi_manager bringup.launch.py vision:=true viewer:=false \
-       yaw_source:=bno085_dvl model:=gate_flare_medium_100ep
-   ```
+**Step 3 — Preflight (one command, ~3 s).**
 
-   **`bringup.launch.py` arguments:**
+```bash
+ssh fh1m@192.168.2.69
+cd ~/Ros_workspaces/duburi_ws
+source /opt/ros/humble/setup.bash && source install/setup.bash
+ros2 run duburi_manager bringup_check      # pings RPi/Jetson, sniffs UDP 14550, BNO085, DVL
+ls /dev/video*                             # confirm camera device indices
+```
 
-   | Arg | Default | Accepted values |
-   |-----|---------|-----------------|
-   | `mode` | `pool` | `pool` · `sim` · `desk` · `laptop` · `auto` |
-   | `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` |
-   | `vision` | `false` | `true` · `false` |
-   | `camera` | `forward` | `forward` · `downward` · `laptop` |
-   | `model` | `gate_flare_medium_100ep` | `gate_flare_medium_100ep` · `gate_nano_100ep` · `gate_medium_100ep` · `flare_medium_100ep` · `yolov11n` (ROBOSUB-tested pretrained, sim/bench) |
-   | `models` | `''` | CSV `name=stem` pairs for multi-model registry: `"gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep"` |
-   | `active_model` | `''` | Registry key to start with (requires `models` to be set): `gate` · `flare` · `combined` |
-   | `classes` | `gate` | CSV class names: `gate` · `flare` · `gate,flare` · (empty = all) |
-   | `conf` | `0.30` | 0.0–1.0 (use `0.45` for pool with our models) |
-   | `dvl_auto_connect` | `true` | `true` · `false` |
-   | `viewer` | `true` | `true` · `false` (disable for headless Jetson run) |
+**Step 4 — Manager + sensors (control layer).** DVL + BNO085 heading is the
+most stable pool combination:
 
-4. Expected startup banner:
+```bash
+ros2 launch duburi_manager bringup.launch.py mode:=pool yaw_source:=bno085_dvl
+# Expect banner "DUBURI AUV MANAGER │ mode: pool  yaw: bno085_dvl" then a [STATE] line
+# within ~2 s, plus [DVL] connected (dvl_auto_connect:=true). If no [STATE], see §13.
+```
 
-   ```
-    DUBURI AUV MANAGER  │  mode: pool  yaw: bno085_dvl
-    MAVLink: sys=1 comp=0  (v2.0)
-    Profiles: yaw=snap  translate=constant
-    Expect BlueOS "inspector" → UDP Client 192.168.2.69:14550
-   ```
+**Step 5 — Vision nodes (gate + bin, both cameras).** Pick one:
 
-5. Within ~2 s you should see a `[STATE]` line. If not, the endpoint is
-   misconfigured or the switch isn't bridged — see §13.
+```bash
+# ── Both cameras, competition launch (detectors start PAUSED; missions resume per task)
+#    forward = gate_rescue_repair (gate,rescue,repair) · downward = bin_fire_blood (fire,blood)
+ros2 launch duburi_vision full_mission.launch.py \
+    dwn_model:=bin_fire_blood conf:=0.45            # fwd defaults to gate_rescue_repair
+ros2 launch duburi_vision full_mission.launch.py viewer:=false   # headless Jetson
 
-6. DVL auto-connects at startup (`dvl_auto_connect:=true` default). Watch for
-   `[DVL] connected` in the startup logs. Run bringup_check first to confirm
-   TCP reachability (`[PASS] Nucleus 1000`).
+# ── Both cameras, always-on detectors (best for free command/subsystem testing)
+ros2 launch duburi_vision dual_cameras.launch.py \
+    fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \
+    dwn_model:=bin_fire_blood    dwn_classes:=fire,blood \
+    fwd_device:=0 dwn_device:=4 conf:=0.45
 
-   Sensor pipeline design: [`.claude/context/sensors-pipeline.md`](.claude/context/sensors-pipeline.md).
+# ── Single camera only (forward gate, or downward bin)
+ros2 launch duburi_vision cameras_.launch.py camera:=forward  model:=gate_rescue_repair classes:=gate,rescue,repair conf:=0.45
+ros2 launch duburi_vision cameras_.launch.py camera:=downward model:=bin_fire_blood    classes:=fire,blood        conf:=0.45
+```
+
+> **Models live on the Jetson.** Drop the trained `.pt` weights in
+> `src/duburi_vision/models/` (gitignored; YAML class sidecars are committed).
+> Competition stems: `gate_rescue_repair` (gate/rescue/repair), `slalom_red_pipe`,
+> `bin_fire_blood` (blood/fire), `torpedo_blood_hole`. Until `bin_fire_blood.pt`
+> is present, `full_mission.launch.py` falls back to the `yolo11n` placeholder on
+> the downward camera. Full table: [`src/duburi_vision/models/README.md`](src/duburi_vision/models/README.md).
+
+**`bringup.launch.py` arguments** (manager + optional single-camera vision):
+
+| Arg | Default | Accepted values |
+|-----|---------|-----------------|
+| `mode` | `pool` | `pool` · `sim` · `desk` · `laptop` · `auto` |
+| `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` |
+| `vision` | `false` | `true` adds one camera+detector+viewer (for dual-cam use the `duburi_vision` launches above) |
+| `camera` | `forward` | `forward` · `downward` · `laptop` |
+| `model` | `gate_flare_medium_100ep` | any stem in `models/` · `yolov11n` (sim/bench) |
+| `classes` | `gate` | CSV class names · (empty = all) |
+| `conf` | `0.30` | 0.0–1.0 (use `0.45` for pool with our models) |
+| `dvl_auto_connect` | `true` | `true` · `false` |
+| `viewer` | `true` | `false` for headless Jetson |
+
+**Step 6 — Verify the pipeline before arming.**
+
+```bash
+ros2 run duburi_vision vision_check --camera forward --require-class gate    # topic health
+ros2 topic echo /duburi/state --once                                         # armed=false, mode, yaw, depth
+ros2 run duburi_vision vision_thrust_check --camera forward --duration 4     # detection → RC echo (disarmed-safe)
+```
+
+**Step 7 — Launch missions / drive.** With control + vision up, run any
+mission or single verb (tether-removal countdown handled by the mission):
+
+```bash
+ros2 run duburi_planner mission pool_day_practice     # ★ Gate→Slalom→Torpedo→Bin (two-verb)
+ros2 run duburi_planner mission task_gate             # single competition chunk
+ros2 run duburi_planner duburi vision_align --camera forward --target_class gate --axes yaw,lat --duration 15
+```
+
+Sensor pipeline design: [`.claude/context/sensors-pipeline.md`](.claude/context/sensors-pipeline.md) ·
+pool-day checklist: [`.claude/context/pool-day.md`](.claude/context/pool-day.md).
 
 ---
 
@@ -1640,24 +1702,20 @@ All commands go through `/duburi/move` and block until done. Exit code 0 = succe
 | `move_forward_dist` | DVL closed-loop forward N metres (heading lock stays active) | `duburi move_forward_dist --distance_m 2.0 --gain 60` |
 | `move_back_dist` | DVL closed-loop backward N metres (heading lock stays active) | `duburi move_back_dist --distance_m 2.0 --gain 60` |
 | `move_lateral_dist` | DVL closed-loop lateral N metres (+ = right, − = left) | `duburi move_lateral_dist --distance_m 1.0 --gain 36` |
-| `vision_acquire` | Sweep until target detected | `duburi vision_acquire --target_class person --target_name yaw_right` |
-| `look_around` | POSHOLD + incremental yaw orbit; exit on first detection | `duburi look_around --camera forward --target_class gate --yaw_rate_pct 20 --settle 1.5` |
-| `vision_align_yaw` | Centre target horizontally (yaw) | `duburi vision_align_yaw --target_class person --duration 15` |
-| `vision_align_lat` | Centre target horizontally (strafe) | `duburi vision_align_lat --target_class person --duration 15` |
-| `vision_align_depth` | Centre target vertically | `duburi vision_align_depth --target_class person --duration 15` |
-| `vision_hold_distance` | Hold standoff distance | `duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55` |
-| `vision_align_3d` | Multi-axis simultaneous hold | `duburi vision_align_3d --target_class gate --axes yaw,forward,depth` |
-| `vision_lock_fire` | Align + maintain PID lock + fire payload on stable lock | `duburi vision_lock_fire --camera forward --target_class torpedo_hole --stable_lock_s 3.0 --fire_channel 1 --max_attempts 2 --duration 30` |
+| `vision_align` | Centre target on lat/yaw/depth at signed px offsets (gain = speed cap) | `duburi vision_align --target_class gate --axes yaw,lat --duration 15` |
+| `vision_move` | Drive forward until bbox fills `fwd_fill`% (mode area/width/height) | `duburi vision_move --target_class gate --fwd_fill 80 --mode area --duration 20` |
 | `fire` | Fire ESP32 payload channel directly (1/2=torpedo, 3/4=dropper) | `duburi fire --fire_channel 3` |
 | `head` | Read live heading at execution time | `duburi head` |
 
 Every flag: `ros2 run duburi_planner duburi <cmd> --help`
 
-> **Vision tracking flag:** all `vision_*` verbs accept `--tracking true` to
-> read from `/tracks` (ByteTrack + Kalman smoothed bbox, stable IDs) instead
-> of `/detections` (raw YOLO output). Requires the vision pipeline to be
-> launched with `with_tracking:=true`. Default is `false` (raw detections,
-> lower latency). See [quickstart §8](#8--vision-tracking-with-bytetrack).
+> **Vision is just two verbs.** `vision_align` centres the target on any subset
+> of `lat,yaw,depth` (each at a signed pixel offset, `0` = centre); `vision_move`
+> drives forward until the bbox fills the frame. `gain` is a hard **max-speed cap**,
+> `err_px` is the pixel tolerance, and both verbs **never fail a mission** — on a
+> miss they log the outcome and return so the next step runs. The control loops read
+> raw `/detections` (the tracker feeds only the HUD). Full contract:
+> [Vision: two verbs](#vision-two-verbs-align--move) below.
 
 ### `head` — execution-time heading
 
@@ -1680,7 +1738,50 @@ The `--target head` form sends a `head` query first, substitutes the live float,
 Full parameter docs, MAVLink traces, and implementation chains:
 [`.claude/context/command-reference.md`](.claude/context/command-reference.md)
 
-### Mission DSL — `duburi` + `duburi.vision`
+### Vision: two verbs (align + move)
+
+The entire vision surface is **two** mission-facing verbs. Both are pixel-native,
+both treat `gain` as a hard **max-speed cap**, and **neither ever fails a mission** —
+on a miss they log the outcome and return so the next step runs.
+
+```python
+duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
+                    err=40, duration=20, gain=30, fallback=None, camera=None)
+
+duburi.vision.move(target, *, fwd=95, mode='area', maintain=None, hold=None,
+                   err=40, duration=20, gain=30, fallback=None, camera=None)
+```
+
+**`align`** centres `target` on the axes you name. Each of `lat` / `yaw` / `depth`
+is `None` = axis OFF, or a **number = axis ON**, where the number is the signed
+pixel offset from centre (`0` = centre, `+` = right/below, `-` = left/above).
+`lat`+`yaw` are horizontal (strafe / rotate); `depth` is vertical. At least one
+axis is required. Aligned when every active axis stays within `err` px.
+
+**`move`** drives forward until `target`'s bbox fills `fwd`% of the frame
+(`mode` = `area` default · `width` · `height` for tall slalom pipes). It never
+re-centres — `maintain=±px` holds a lateral offset while driving, `hold=s`
+station-keeps once reached. Depth/yaw are left to ArduSub + the heading lock.
+
+| Arg | Meaning |
+|-----|---------|
+| `target` | class string or `duburi.models.<alias>.<class>` (auto-switches model+class) |
+| `err` | pixel tolerance for "aligned" (default 40) |
+| `duration` | total time budget (s); on expiry the verb logs a miss and returns |
+| `gain` | **max-speed cap** (% thrust) — the AUV never exceeds this, even if the P-term is larger |
+| `fallback` | mission-authored search `fn(duburi)` (or `fn(duburi, should_stop)`) run on target loss, then the verb re-enters — all inside `duration` |
+| `camera` | `'forward'` (default) · `'downward'` · `'laptop'` |
+
+**Outcome** — both return a `VisionResult` (truthy only on success):
+
+| Code | `reason` | Meaning |
+|------|----------|---------|
+| 0 | `ALIGNED` | centred (align) / reached fill (move) |
+| 1 | `LOST` | target gone past `lost_grace_s` (with a `fallback`, the verb searches and retries) |
+| 2 | `TIMEOUT` | `duration` elapsed without success |
+| 3 | `NO_CAMERA` | pipeline not up (no `camera_info` ever seen) |
+| 4 | `ABORTED` | goal cancelled |
+| — | `FAILED` | server/setup error (bad camera, ALT_HOLD reject) — surfaced non-fatally |
 
 ```python
 def run(duburi, log):
@@ -1688,35 +1789,42 @@ def run(duburi, log):
     duburi.models(gate='gate_flare_medium_100ep')   # register model alias
     duburi.arm()
     duburi.set_depth(-1.0)
-    duburi.move_forward(3.0, gain=40)
 
-    # find: drive forward while searching for gate
-    duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
+    # Centre the gate on yaw + lateral (heading lock keeps the rest steady)
+    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+                        err=40, duration=20, gain=30, fallback=sweep_for_gate)
 
-    # home: multi-axis convergence (yaw + lateral + forward + gate guard)
-    duburi.vision.home(target=duburi.models.gate.gate,
-                       yaw=True, lat=True, forward=True,
-                       dist=0.42, metric='area',
-                       gate_guard=True, pass_at=0.38,
-                       duration=20, on_lost='hold')
+    # Drive forward until the gate fills 80% of the frame, then commit through
+    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area',
+                       duration=20, gain=35)
     duburi.move_forward_dist(3.5, gain=60)
     duburi.disarm()
+
+# Mission-authored fallback: pure control, runs on target loss, bails on reacquire
+def sweep_for_gate(duburi, should_stop):
+    for _ in range(6):
+        if should_stop():            # target reappeared → resume the vision verb
+            return
+        duburi.yaw_right(15); duburi.pause(0.4)
 ```
+
+### Mission DSL — `duburi` + `duburi.vision`
 
 - `duburi.*` — open-loop motion (arm, set_depth, move_\*, move_\*_dist, yaw_\*, arc, lock_heading, dvl_connect, ...)
 - `duburi.models(alias='stem')` — register model alias; access as `duburi.models.alias.class_name`
-- `duburi.vision.find(move='forward'|'yaw_right'|'yaw_left'|'still'|'arc', ...)` — search while moving
-- `duburi.vision.turn/slide/hover/approach/home/track` — single/multi-axis vision control
-- `duburi.vision.scan(step=20, dwell=1.5)` — POSHOLD orbit search; exits on first detection (falls back to ALT_HOLD + heading lock)
-- `duburi.detected(target_class, stale_after=1.0)` — non-blocking cache check; use in loops/branches (`while not duburi.detected('gate'): ...`)
+- `duburi.vision.align(target, lat=/yaw=/depth=, ...)` — centre on the named axes (signed px offsets)
+- `duburi.vision.move(target, fwd=, mode=, maintain=, hold=, ...)` — drive forward to a bbox fill ratio
+- `duburi.detected(target_class, stale_after=1.0)` — non-blocking cache check (case-insensitive); use in loops/branches (`while not duburi.detected('gate'): ...`)
+- `duburi.fire(channel)` — fire ESP32 payload (1/2=torpedo, 3/4=dropper)
 - `duburi.countdown(seconds)` — tether-removal countdown with banner before mission start
 
 ```bash
 ros2 run duburi_planner mission --list
-ros2 run duburi_planner mission find_person_demo   # vision-driven 3D alignment
-ros2 run duburi_planner mission gate_prequal            # gate-only prequal (DVL forward)
-ros2 run duburi_planner mission gate_flare_prequal      # full autonomous gate+flare+return
-ros2 run duburi_planner mission robosub_prequal         # RoboNation prequal (strafe pass)
+ros2 run duburi_planner mission demo_find_person       # vision-driven align + move demo
+ros2 run duburi_planner mission gate_prequal           # gate-only prequal (DVL forward)
+ros2 run duburi_planner mission gate_flare_prequal     # full autonomous gate+flare+return
+ros2 run duburi_planner mission robosub_prequal        # RoboNation prequal (strafe pass)
+ros2 run duburi_planner mission pool_day_practice      # ★ Gate→Slalom→Torpedo→Bin (two-verb, dual-cam)
 ```
 
 Full DSL API + working principles + samples:
@@ -1737,11 +1845,12 @@ Key params on `auv_manager_node`:
 | `yaw_source` | `dvl` | `dvl` · `bno085_dvl` · `bno085` · `mavlink_ahrs` — see below |
 | `dvl_auto_connect` | `true` | Auto-connect Nucleus DVL at startup; no manual `dvl_connect` needed |
 | `dvl_retry_s` | `5.0` | Seconds between auto-connect retries |
-| `vision.kp_yaw` / `vision.kp_lat` | 60.0 | Centring P-gain — tune live with `ros2 param set` |
-| `vision.deadband` | 0.18 | Settle tolerance — tighten to 0.08–0.10 for pool |
-| `vision.lock_mode` | `settle` | `settle` / `follow` / `pursue` — vision loop exit behaviour |
-| `vision.depth_anchor_frac` | 0.5 | 0.2 for tall targets (person, pole) to prevent depth stall |
-| `vision.distance_metric` | `height` | `height` / `width` / `area` / `diagonal` — how target size is measured |
+| `vision.kp_yaw` / `vision.kp_lat` | `60.0` | Centring P-gain (% thrust per normalized px error) — tune live |
+| `vision.kp_depth` | `0.05` | Depth-axis P-gain (metres of setpoint nudge per tick) |
+| `vision.kp_forward` | `200.0` | Forward-approach P-gain for `vision_move` |
+| `vision.lost_grace_s` | `1.0` | Seconds the loop coasts on target loss before reporting `LOST` (→ fallback) |
+| `vision.frame_fill_default` | `95.0` | `fwd` % a bbox must fill for `vision_move` when the mission leaves `fwd` unset |
+| `vision.align_stable_frames` | `3.0` | Ticks (@20 Hz) every axis must hold within `err_px` before `ALIGNED` |
 
 **Yaw source selection:**
 
@@ -1773,9 +1882,12 @@ Quick reference — tune vision gains live between goals:
 
 ```bash
 ros2 param set /duburi_manager vision.kp_yaw 80.0
-ros2 param set /duburi_manager vision.deadband 0.08
-ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
+ros2 param set /duburi_manager vision.kp_lat 80.0
+ros2 param set /duburi_manager vision.lost_grace_s 1.5
 ```
+
+> Vision params apply on the **next** vision goal, never mid-loop, so a moving
+> control loop is never handed a discontinuous gain.
 
 Key constants (change in source, rebuild):
 
@@ -1804,7 +1916,7 @@ Full tuning guide: **[docs/tuning.md](docs/tuning.md)**
 | `[RC   ]` | Active PWM values on Thr/Yaw/Fwd/Lat channels |
 | `[DEPTH]` | Depth tracking: target, current, error |
 | `[YAW  ]` | Yaw tracking: target, current, error |
-| `[VIS  ]` | Vision loop: bbox error, size, lock mode |
+| `[VIS  ]` | Vision loop: per-axis pixel error, bbox fill %, outcome (ALIGNED/LOST/TIMEOUT) |
 | `[DVL  ]` | DVL connect / disconnect / position delta / timeout |
 | `[ARDUB]` | ArduSub STATUSTEXT (EKF events, pre-arm checks) |
 | `[MAV  ]` | Per-frame MAVLink trace (`debug:=true` only) |
@@ -1823,7 +1935,8 @@ Most common issues:
 | `arm -> FAIL: DENIED` | Pre-arm check failed — read `[ARDUB]` lines for reason. |
 | Depth times out at ~-0.5 m | ArduSub not in ALT_HOLD or Bar30 unhealthy. Check `[STATE]` mode. |
 | Yaw overshoots | `-p smooth_yaw:=true`, or lower `ATC_ANG_YAW_P` in QGC. |
-| Depth stalls on tall person | `ros2 param set /duburi_manager vision.depth_anchor_frac 0.2` |
+| **Camera sees the target but the AUV doesn't move** | The detector is publishing boxes but none match `target_class`. Watch for the `[VIS  ] detector publishing N boxes, none match 'X'` warning — fix the class filter (`ros2 param get /duburi_detector classes`) or model. Confirm `vision_align` reports a code other than `NO_CAMERA`. |
+| `vision_*` returns `NO_CAMERA` immediately | `camera_node` isn't publishing `camera_info` for that camera — check the camera is up and `--camera` matches the running namespace. |
 | `/dev/ttyACM0: Permission denied` | `sudo usermod -aG dialout "$USER"` then re-login. |
 | DVL: `[WARN] 192.168.2.201 unreachable` | DVL is off, not on the switch, or in sim mode — WARN is OK for bench/sim. |
 | DVL: `ping OK but TCP 9000 not accepting` | DVL powered but firmware not ready — wait 30 s and re-run `bringup_check`. |
@@ -1874,19 +1987,24 @@ Phase 4 — `duburi_vision` (**v1–v4 done**):
   vision_msgs converters (publishes the human label, not numeric class id). **Done.**
 - Rich on-image visualization (boxes, labels, primary highlight, crosshair,
   alignment offset, status badge, stale banner). **Done.**
-- **v4 — vision verbs on `/duburi/move`:** seven `vision_*` commands
-  (`vision_acquire`, `vision_align_yaw`/`lat`/`depth`, `vision_hold_distance`,
-  `vision_align_3d`, `look_around`) running the closed loop inside `auv_manager_node`
-  so vision and control share the same MAVLink owner. `VisionState` per-camera
-  subscriber pool with `wait_vision_state_ready` preflight. `look_around` does
-  POSHOLD + incremental yaw orbit and exits on first detection. CLI utilities
-  `vision_check` (topic probe) and `vision_thrust_check` (detection -> RC).
-  Detection guard: `duburi.detected('class')` for non-blocking cache checks in missions.
-  Mission `find_person_demo` exercises the whole chain. **Done.**
+- **v4 — vision verbs on `/duburi/move`:** the closed loop runs inside
+  `auv_manager_node` so vision and control share the same MAVLink owner.
+  `VisionState` per-camera subscriber pool (reads `/detections`, gated on
+  `info_seen()`). CLI utilities `vision_check` (topic probe) and
+  `vision_thrust_check` (detection -> RC). Detection guard:
+  `duburi.detected('class')` (case-insensitive) for non-blocking cache checks.
+  Mission `demo_find_person` exercises the whole chain. **Done.**
+- **v5 — two-verb rewrite (`vision_align` + `vision_move`):** replaced the
+  9-verb API with two pixel-native verbs — `gain` is a max-speed cap, errors are
+  raw pixels, misses are non-fatal (outcome code in `Move.Result.final_value`),
+  and search/recovery is a mission-authored Python `fallback`. Harmony fixes
+  shipped alongside: `align` releases Ch4 to an active heading lock, `surface()`
+  uses an `RLock` (no deadlock), heading-lock timeout clears cleanly, and the DSL
+  never lets a vision error abort a mission. **Done — 2026-06.**
 - **v2 — ByteTrack object tracking** + **v3 — per-track Kalman smoother**: `tracker_node`
   subscribes `/detections`, runs ByteTrack + 4-state CV Kalman, publishes `/tracks` with
-  stable IDs + smoothed bbox. Opt-in: `cameras_.launch.py with_tracking:=true` or
-  `--tracking true` per vision verb. **Done.**
+  stable IDs + smoothed bbox. Feeds the mission-control HUD + offline analysis
+  (`cameras_.launch.py with_tracking:=true`). **Done.**
 - **v4f — Monocular depth / `vis_range` pipeline**: `depth_estimation_node` publishes a
   `Float32MultiArray` of proximity scores (0.0 = far, 1.0 = close) via
   `/duburi/vision/<cam>/vis_range`. Uses **Depth Anything V2-Small** ONNX (364×364) with
@@ -1952,7 +2070,7 @@ pillars (read these first) are bolded:
 
 **API & verbs (start here):**
 - [**command-reference.md**](.claude/context/command-reference.md) — every verb on `/duburi/move`: CLI, Python facade, DSL, MAVLink output, lock modes, distance metrics, depth anchor
-- [**client-and-dsl-api.md**](.claude/context/client-and-dsl-api.md) — `DuburiClient`, `DuburiMission` DSL, `vision.hold()` / `vision_lock_fire()`, and `Duburi` facade
+- [**client-and-dsl-api.md**](.claude/context/client-and-dsl-api.md) — `DuburiClient`, `DuburiMission` DSL, `duburi.vision.align()` / `duburi.vision.move()`, and `Duburi` facade
 - [**mission-cookbook.md**](.claude/context/mission-cookbook.md) — mission DSL cookbook (verbs + working principles + ten samples)
 - [**testing-guide.md**](.claude/context/testing-guide.md) — every test (unit, bringup, mission smoke, in-water checklist)
 

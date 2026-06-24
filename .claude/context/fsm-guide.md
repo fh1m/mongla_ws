@@ -228,9 +228,9 @@ Always use `BK.*` constants, never raw strings — grep-able and typo-safe.
 | State | Constructor | Outcomes | Notes |
 |---|---|---|---|
 | `ArmState` | `(duburi, profile)` | SUCCEED, ABORT | Arms + DVL connect if `has_dvl`; sets `BK.DVL_CONNECTED` |
-| `DisarmState` | `(duburi, profile)` | SUCCEED | |
+| `DisarmState` | `(duburi, profile)` | SUCCEED | Calls `release_heading()` before `disarm()` (mirrors `SurfaceState`) |
 | `SetDepthState` | `(duburi, profile, depth_m, timeout_s=45)` | SUCCEED, TIMEOUT, ABORT | Calls `duburi.set_depth()` |
-| `LockHeadingState` | `(duburi, profile, heading=0.0)` | SUCCEED, TIMEOUT, ABORT | Calls `duburi.lock_heading()`; stores `BK.START_HEADING` |
+| `LockHeadingState` | `(duburi, profile, heading=0.0, lock_timeout=600.0)` | SUCCEED, TIMEOUT, ABORT | Calls `duburi.lock_heading(heading, timeout=lock_timeout)`; stores `BK.START_HEADING`. `lock_timeout` is how long the lock HOLDS heading across later states (mission/hold duration), **not** this state's `TIMEOUT_S` |
 | `MoveForwardState` | `(duburi, profile, distance_m=None, duration=None, gain=60)` | SUCCEED, ABORT | **DVL/timed auto-select** |
 | `MoveBackState` | same | SUCCEED, ABORT | **DVL/timed auto-select** |
 | `MoveLateralState` | same | SUCCEED, ABORT | **DVL/timed auto-select** |
@@ -247,25 +247,39 @@ Always pass **both** `distance_m` and `duration` in plan builders so each vehicl
 
 ### Vision states (`states/vision.py`)
 
+Three states map 1:1 onto the two-verb vision API plus an open-loop search.
+(Every state also inherits `TIMEOUT` + `ABORT` from `DuburiState`; ABORT fires
+on an unexpected exception.)
+
 | State | Constructor | Outcomes | Wraps DSL |
 |---|---|---|---|
-| `VisionFindState` | `(duburi, profile, target, move='forward', gain=30, timeout=45)` | SUCCEED, TIMEOUT, ABORT | `duburi.vision.find()` |
-| `VisionHomeState` | `(duburi, profile, target, yaw, lat, depth, forward, gate_guard, pass_at, dist, metric, duration, on_lost, **overrides)` | SUCCEED, FAILED, TIMEOUT, ABORT | `duburi.vision.home()` |
-| `VisionScanState` | `(duburi, profile, target, step=20, dwell=1.5, duration=90)` | SUCCEED, TIMEOUT, ABORT | `duburi.vision.scan()` |
-| `ApproachState` | `(duburi, profile, target, camera=None, dist=0.55, metric='height', duration=25.0, lock_mode='pursue', on_lost='hold', **overrides)` | SUCCEED, FAILED | `duburi.vision.approach()` |
-| `VisionLockFireState` | `(duburi, profile, target, camera=None, fire_channel=1, yaw=True, lat=True, depth=True, forward=False, stable_lock_s=3.0, max_attempts=3, duration=60.0, **overrides)` | SUCCEED, FAILED | `duburi.vision.vision_lock_fire()` |
+| `VisionSearchState` | `(duburi, profile, target, camera=None, pattern='forward', gain=35, step_s=0.6, yaw_step=20.0, timeout=45.0)` | SUCCEED, TIMEOUT, ABORT | open-loop creep / yaw-sweep; polls `duburi.detected()` (replaces find/scan) |
+| `VisionAlignState` | `(duburi, profile, target, camera=None, yaw=None, lat=None, depth=None, err=40, gain=30, duration=20, fallback=None)` | SUCCEED, FAILED, ABORT | `duburi.vision.align()` |
+| `VisionMoveState` | `(duburi, profile, target, camera=None, fwd=95, mode='area', maintain=None, hold=None, gain=30, duration=20, fallback=None)` | SUCCEED, FAILED, ABORT | `duburi.vision.move()` |
 
-**VisionHomeState outcome semantics:**
-- `SUCCEED` — multi-axis convergence achieved (or `pass_at` triggered)
-- `FAILED` — target lost mid-alignment (`on_lost='fail'`)
-- `TIMEOUT` — duration elapsed before convergence
-- `**overrides` — forwarded to `vision.home()`: use for `offset_x`, `kp_forward`, `kp_lat`, `deadband`, etc.
+**Axis flags on `VisionAlignState`** (`yaw` / `lat` / `depth`): `True` = centre
+(offset 0), a number = signed **pixel offset** from centre, `None`/`False` =
+axis off. At least one axis must be on.
+
+**VisionSearchState outcome semantics:**
+- `SUCCEED` — target detected within the search window
+- `TIMEOUT` — search window elapsed without a detection (`pattern='forward'`
+  creeps ahead; `pattern='yaw'` sweeps in `yaw_step` increments)
+
+**VisionAlignState outcome semantics:**
+- `SUCCEED` — every active axis held within `err` px for `align_stable_frames`
+  ticks (`VisionResult.ok`)
+- `FAILED` — any miss (LOST / TIMEOUT / NO_CAMERA); the verb never raises
+- `fallback` — mission-authored `fn(duburi[, should_stop])` search run on
+  target loss; the verb re-enters within the same `duration`
 
 Use `FAILED → FIND_*` in your plan to auto-retry after target loss.
 
-**VisionLockFireState outcome semantics:**
-- `SUCCEED` — stable lock achieved + fire confirmed
-- `FAILED` — `max_attempts` exhausted without stable lock, or target lost
+**VisionMoveState outcome semantics:**
+- `SUCCEED` — bbox reached `fwd`% fill (`mode` = area/width/height; `maintain`
+  holds a lateral px offset while driving; `hold` station-keeps once reached)
+- `FAILED` — fill not reached before `duration` elapsed, or target lost.
+  Never re-centres yaw/depth (ArduSub holds depth; heading lock holds yaw)
 
 ### Navigation states — additional (`states/navigation.py`)
 
@@ -294,23 +308,31 @@ Plan builders are functions that return a `StateMachine`. They take:
 
 ### `build_gate_flare_fsm` — state graph
 
+Vision is the two-verb API: **search** (open-loop) → **align** (centre) →
+**move** (drive in). Each align/move SUCCEEDs only on a real outcome; a miss
+routes back to search.
+
 ```
 COUNTDOWN → ARM → DIVE → LOCK_HEADING
                               │
-                         FIND_GATE ←─────────────────────────────────┐
-                              │ SUCCEED                               │
-                         HOME_GATE ─── TIMEOUT → SURFACE             │
-                              │ SUCCEED          FAILED ──────────────┘
-                         PASS_GATE ─── ABORT → SURFACE
+                         FIND_GATE  (VisionSearchState) ←────────────┐
+                              │ SUCCEED        TIMEOUT → SURFACE      │
+                         HOME_GATE  (VisionAlignState yaw+lat)        │
+                              │ SUCCEED        FAILED ────────────────┘
+                         MOVE_GATE  (VisionMoveState area)
+                              │ SUCCEED / FAILED (commit pass)
+                         PASS_GATE  (MoveForwardState DVL/timed) ── ABORT → SURFACE
                               │ SUCCEED
-                         FIND_FLARE ── TIMEOUT → SURFACE
+                         FIND_FLARE (VisionSearchState) ── TIMEOUT → SURFACE
                               │ SUCCEED
-                         HOME_FLARE ── TIMEOUT → SURFACE
-                              │ SUCCEED    FAILED → FIND_FLARE (retry)
-                         SCAN_GATE ─── TIMEOUT → SURFACE
+                         HOME_FLARE (VisionAlignState yaw+depth)
+                              │ SUCCEED        FAILED → FIND_FLARE (retry)
+                         MOVE_FLARE (VisionMoveState height)
+                              │ SUCCEED / FAILED
+                         SCAN_GATE  (VisionSearchState yaw) ── TIMEOUT → SURFACE
                               │ SUCCEED
-                        RETURN_HOME ── TIMEOUT → SURFACE
-                              │ SUCCEED    FAILED → SCAN_GATE (re-scan)
+                        RETURN_HOME (VisionAlignState yaw+lat)
+                              │ SUCCEED        FAILED → SCAN_GATE (re-scan)
                         RETURN_PASS → LOG_SCORE → SURFACE → succeeded
 ```
 
@@ -338,10 +360,13 @@ GATE_FLARE_DEFAULTS = {
     'return_dist_m':  1.5,
     'return_duration': 3.0,
     'find_timeout':   45.0,
-    'home_duration':  20.0,
-    'scan_step':      20.0,
-    'scan_dwell':     1.5,
-    'scan_duration':  90.0,
+    'align_duration': 20.0,   # vision.align budget (HOME_* states)
+    'move_duration':  20.0,   # vision.move budget (MOVE_* states)
+    'align_err_px':   40,     # px tolerance for "aligned"
+    'align_gain':     30,     # max-speed cap while centring
+    'approach_gain':  45,     # max-speed cap while driving in
+    'gate_fwd_fill':  42,     # gate area % of frame at standoff
+    'flare_fwd_fill': 38,     # flare height % of frame at standoff
 }
 ```
 
@@ -428,7 +453,7 @@ def run(duburi, log):
         'gate_heading': 63.0,   # today's pool compass heading
         'depth_m':     -0.9,    # competition pool depth
         'pass_dist_m':  3.5,
-        'home_duration': 15.0,  # faster convergence once tuned
+        'align_duration': 15.0, # faster vision.align convergence once tuned
     }
 
     set_ros_loggers()
@@ -465,13 +490,13 @@ ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
 
 ## 7. Vision-DVL Smooth Autonomous Missions — Design Pattern
 
-The FSM shines when combining closed-loop vision + DVL distance:
+The FSM shines when combining closed-loop vision + DVL distance. The vision
+half is the two-verb search → align → move chain:
 
 ```
-FIND_GATE (vision.find)  → detects gate
-HOME_GATE (vision.home, gate_guard=True, pass_at=0.38)
-  → yaw + lateral centre, suppress forward until gate is straight-on
-  → SUCCEED when pass_at area threshold reached
+FIND_GATE (VisionSearchState, pattern='forward')   → detects gate
+HOME_GATE (VisionAlignState, yaw=True, lat=True)    → centre yaw + lateral on the gate
+MOVE_GATE (VisionMoveState, fwd=42, mode='area')    → drive in until gate fills 42% of frame
 PASS_GATE (MoveForwardState, distance_m=3.5, duration=5.0)
   → Duburi 4.5: DVL-measured 3.5m forward pass (precise, heading-locked)
   → Dubomini: 5.0s timed thrust at gain=80
@@ -481,11 +506,17 @@ Key settings for smooth vision+DVL:
 
 | Param | Purpose | Tune toward |
 |---|---|---|
-| `home_duration` | Max seconds to converge | 15-25s after first pool test |
-| `pass_at` | Gate area fraction to commit pass | 0.35-0.42 (closer = more risk of clipping) |
-| `gate_guard=True` | Suppress forward if gate looks angled | Always True for gate |
-| `on_lost='fail'` | Trigger FAILED → re-find if target lost | Keep 'fail'; use 'hold' for debugging |
-| `kp_yaw / kp_lat` | Vision loop gains | Tune via `ros2 param set /duburi_manager vision.kp_yaw 80` |
+| `align_duration` | Max seconds `vision.align` may converge | 15-25s after first pool test |
+| `gate_fwd_fill` | Gate bbox % of frame that commits the pass | 38-45 (higher = closer = more risk of clipping) |
+| `approach_gain` | Max-speed cap while `vision.move` drives in | 35-50 |
+| `align_gain` | Max-speed cap while `vision.align` centres | 25-35 |
+| `kp_yaw / kp_lat` | Vision loop P-gains | Tune via `ros2 param set /duburi_manager vision.kp_yaw 80` |
+| `fallback=` | Mission search fn run on target loss; the verb re-enters within `duration` | Pass a creep/sweep fn; omit to coast through brief losses |
+
+A real miss (LOST / TIMEOUT) routes the align/move state to `FAILED`, so wire
+`FAILED → FIND_*` in the plan to auto-re-search. There is no `gate_guard`,
+`pass_at`, or `on_lost` knob any more — the verbs are pixel-native and the
+plan owns recovery.
 
 ### Heading lock + DVL forward = smooth straight pass
 
@@ -520,7 +551,7 @@ Create `plans/slalom.py`:
 from yasmin import StateMachine
 from ..core.outcomes import SUCCEED, FAILED, TIMEOUT, ABORT
 from ..states.navigation import ArmState, SetDepthState, LockHeadingState, MoveForwardState, SurfaceState
-from ..states.vision import VisionFindState, VisionHomeState
+from ..states.vision import VisionSearchState, VisionAlignState, VisionMoveState
 
 SLALOM_DEFAULTS = {
     'depth_m': -0.8,
@@ -548,14 +579,18 @@ from ..state_machines.plans.slalom import build_slalom_fsm
 from ..state_machines import VehicleProfile
 
 def run(duburi, log):
-    duburi.models(slalom='slalom_combined_100ep')
+    duburi.set_model('slalom_red_pipe')
     duburi.camera = 'forward'
-    duburi.set_classes('slalom_red,slalom_white')
+    duburi.set_classes('red_pipe')
     profile = VehicleProfile.auto(duburi.client.node)
     set_ros_loggers()
     outcome = build_slalom_fsm(duburi, profile)(Blackboard())
     log(f'[FSM] {outcome}')
 ```
+
+> The slalom task already ships as `plans/slalom.py` + `missions/fsm_slalom.py`
+> (it switches model/classes inside a `SetDetectorState`). The skeleton above is
+> the generic pattern for adding *any* new task.
 
 ### Step 4 — export
 
@@ -675,7 +710,8 @@ ros2 param set /duburi_manager vision.kp_lat 65.0
                                  │
               ┌──────────────────▼──────────────────┐
               │  DuburiState.execute()               │
-              │  calls: duburi.vision.home(...)      │
+              │  calls: duburi.vision.align(...)     │
+              │         duburi.vision.move(...)       │
               │         duburi.move_forward_dist(...) │
               │         duburi.set_depth(...)         │
               └──────────────────┬──────────────────┘

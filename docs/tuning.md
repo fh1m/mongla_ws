@@ -29,23 +29,27 @@ PID theory: [`.claude/context/pid-theory.md`](../../.claude/context/pid-theory.m
 
 ## Vision gains
 
-All tunable live between goals — no restart needed:
+P-gains and grace tune live between goals — no restart needed (they apply
+on the **next** vision goal):
 
 ```bash
 ros2 param set /duburi_manager vision.kp_yaw 80.0
-ros2 param set /duburi_manager vision.deadband 0.08
-ros2 param set /duburi_manager vision.target_bbox_h_frac 0.55
+ros2 param set /duburi_manager vision.kp_forward 180.0
+ros2 param set /duburi_manager vision.lost_grace_s 1.5
 ```
 
 | Param | Sim default | Pool recommendation | Effect |
 |-------|-------------|---------------------|--------|
 | `vision.kp_yaw` / `vision.kp_lat` | 60.0 | 60–80 | Raise if centring is sluggish; lower if oscillating |
 | `vision.kp_depth` | 0.05 | 0.05–0.10 | Small — depth nudges accumulate |
-| `vision.kp_forward` | 200.0 | 150–250 | Large OK because distance error is small |
-| `vision.deadband` | 0.18 | 0.08–0.10 | Tighten for pool; 0.18 tolerates webcam noise |
-| `vision.target_bbox_h_frac` | 0.30 | 0.45–0.60 | Raise to get closer to target |
-| `vision.stale_after` | 1.5 s | 0.6–0.8 s | Drop for clean pool cameras |
-| `vision.depth_anchor_frac` | 0.5 | 0.2 for tall targets | 0.2 = align near top of bbox; prevents depth stall on tall objects |
+| `vision.kp_forward` | 200.0 | 150–250 | `vision_move` forward gain; large OK because fill error is small |
+| `vision.lost_grace_s` | 1.0 s | 1.0–1.5 s | Coast on target loss before reporting `LOST` (then the DSL `fallback` runs). Raise for turbid pools |
+| `vision.frame_fill_default` | 95.0 | per-task | `vision_move` fill target when the mission leaves `fwd` at 0 |
+| `vision.align_stable_frames` | 3.0 | 3–5 | Ticks each axis must hold within `err_px` before `vision_align` reports `ALIGNED` |
+
+`err` (pixel tolerance) and `gain` (hard max-speed cap, % thrust) are
+**per-call** on `vision.align(...)` / `vision.move(...)`, not ROS params —
+tighten `err` and lower `gain` for a slow, precise final lock.
 
 Full param descriptions: [`configuration.md`](configuration.md#vision-parameters-vision).
 

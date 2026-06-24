@@ -110,15 +110,20 @@ alignment (P-loop on bbox centre + height). Sim demo + webcam demo launches.
 - `duburi_vision/camera_node.py`, `detector_node.py`, `vision_node.py`
 - `duburi_control/motion_vision.py`, `vision_verbs.py`
 - `duburi_manager/vision_state.py`
-- `duburi_planner/missions/find_person_demo.py`
+- `duburi_planner/missions/demo_find_person.py` (originally `find_person_demo.py`)
 
 **Acceptance test:** `ros2 launch duburi_vision cameras_.launch.py` streams annotated video. `vision_thrust_check` confirms Ch4 nudges in the right direction when person is off-centre.
 
-**Moved to next:** Depth anchor, `lock_mode`, `distance_metric` vision params.
+**Moved to next:** extra vision params — `depth_anchor_frac` / `lock_mode` / `distance_metric` (all **removed** in the 2026-06-24 two-verb rewrite; see the Phase 6 banner).
 
 ---
 
 ## Phase 6 — Vision param extensions: depth_anchor, lock_mode, distance_metric (commit `3b2325e`)
+
+> **⚠️ Superseded 2026-06-24:** every param and verb introduced in this phase —
+> `depth_anchor_frac`, `lock_mode`, `distance_metric`, the `vision_track_axes`
+> loop, and the DSL `vision.lock` — was **removed** by the two-verb rewrite
+> (`vision.align` + `vision.move`). The entry below is preserved as history.
 
 **Goal:** Three new vision verb fields:
 - `depth_anchor_frac`: hold the target at a configurable vertical position in frame
@@ -134,29 +139,35 @@ alignment (P-loop on bbox centre + height). Sim demo + webcam demo launches.
 
 **Acceptance test:** `vision.lock(..., lock_mode='follow', duration=5.0)` runs for the full 5 s without exiting early when the target is centred.
 
-**Moved to next:** Full doc restructure + `pursue_demo` mission.
+**Moved to next:** Full doc restructure + `demo_pursue` mission.
 
 ---
 
-## Phase 7 — Doc restructure + pursue_demo mission (commits `4468bd4`–`fc8f1bb`)
+## Phase 7 — Doc restructure + demo_pursue mission (commits `4468bd4`–`fc8f1bb`)
 
-**Goal:** Move architecture/config docs to `docs/` sub-pages. Add `pursue_demo`
+**Goal:** Move architecture/config docs to `docs/` sub-pages. Add `demo_pursue`
 mission (torpedo-style constant-approach pattern). Full command-reference
 parameter tables for all vision fields.
 
 **Files touched:**
 - `docs/` — `architecture.md`, `configuration.md`, `sensor-fusion.md`, `hardware.md`
-- `duburi_planner/missions/pursue_demo.py`
+- `duburi_planner/missions/demo_pursue.py` (originally `pursue_demo.py`)
 - `.claude/context/command-reference.md` — full param tables
 - `.claude/context/client-and-dsl-api.md` — DSL vision API docs
 
-**Acceptance test:** `ros2 run duburi_planner mission pursue_demo` drives the AUV toward a detected person at constant fractional speed without overshooting.
+**Acceptance test:** `ros2 run duburi_planner mission demo_pursue` drives the AUV toward a detected person at constant fractional speed without overshooting.
 
 **Moved to next:** ByteTrack tracking integration (v2) + Kalman smoother (v3).
 
 ---
 
 ## Phase 8 — Tracking integration: ByteTrack + Kalman v2/v3 (commit `6204b5c`)
+
+> **⚠️ 2026-06-24 update:** ByteTrack + Kalman still run for the HUD, but the
+> **control path no longer consumes tracks** — the `tracking` Move.action field,
+> the DSL `tracking=True` kwarg, the `vision.use_tracks` param, and the
+> `--tracking` flag were all **removed**; the vision loops read `/detections`
+> only.
 
 **Goal:** Add stable track IDs that survive occlusion. Per-track 4-state CV
 Kalman smoother to remove bbox jitter. `with_tracking:=true` opt-in.
@@ -238,4 +249,4 @@ Add §3.3 tracking-while-moving to `mission-cookbook.md`.
 | MED | YASMIN FSM: convert prequal from linear script to state machine for re-entry safety |
 | MED | `arc()` orbit alternative: replace 12-step polygon orbit with smooth `arc()` calls |
 | LOW | Per-class Kalman noise tuning: `gate` vs `flare` vs `buoy` have different velocity profiles |
-| LOW | `vision.follow()` DSL shorthand: wrapper for `lock(lock_mode='follow', duration=∞)` |
+| LOW | ~~`vision.follow()` DSL shorthand~~ — **obsolete** after the two-verb rewrite: station-keeping is now `vision.move(..., hold=<s>)` and a long-`duration` `vision.align`. |

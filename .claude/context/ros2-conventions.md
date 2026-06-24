@@ -133,19 +133,25 @@ Heading lock stays active during all `*_dist` moves — Ch4 holds heading while 
 
 ### Vision (closed-loop, requires camera + detector running)
 
-| Verb                   | DSL alias               | Axes                                | Notes                                      |
-|------------------------|-------------------------|-------------------------------------|--------------------------------------------|
-| `vision_align_yaw`     | `vision.turn()`         | Ch4 yaw                             | Centres target horizontally                |
-| `vision_align_lat`     | `vision.slide()`        | Ch6 lateral                         | Centres target laterally, heading held     |
-| `vision_align_depth`   | `vision.hover()`        | depth setpoint                      | Centres target vertically                  |
-| `vision_hold_distance` | `vision.approach()`     | Ch5 forward                         | Standoff by bbox size metric               |
-| `vision_align_3d`      | `vision.home()` / `vision.track()` | any subset of yaw/lat/depth/forward | Multi-axis convergence         |
-| `vision_acquire`       | `vision.find()`         | optional move while waiting         | Blocks until target detected               |
-| `look_around`          | `vision.scan()`         | POSHOLD + incremental yaw           | Orbit-scan; exits on first detection       |
+Exactly **two** pixel-native verbs (the 2026-06 rewrite replaced the old
+9-verb axis API). Both ALWAYS return `success=True`; the align/move outcome
+rides in `final_value` as an integer code (`0`=ALIGNED, `1`=LOST,
+`2`=TIMEOUT, `3`=NO_CAMERA, `4`=ABORTED). `gain` is a hard max-speed cap.
 
-All vision verbs share common fields: `camera`, `target_class`, `duration`, `timeout`,
-`kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`, `deadband`, `on_lost`, `stale_after`,
-`lock_mode`, `tracking`. Unset fields inherit the live `vision.*` ROS params on the manager.
+| Verb           | DSL              | Key params                                                                                     | Notes                                                                                                              |
+|----------------|------------------|-----------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| `vision_align` | `vision.align()` | `camera`, `target_class`, `axes` (CSV of `lat,yaw,depth`), `offset_lat/yaw/depth`, `err_px`, `duration`, `gain` | Centre target on each active axis at its signed pixel offset (`0`=centre). Aligned when every axis is within `err_px` for `align_stable_frames` ticks. |
+| `vision_move`  | `vision.move()`  | `camera`, `target_class`, `fwd_fill`, `mode` (`area`/`width`/`height`), `maintain_px`, `maintain_on`, `hold_s`, `err_px`, `duration`, `gain` | Drive forward until the bbox fills `fwd_fill`% of the frame. `maintain_px` holds a lateral offset; never re-centres yaw/depth. |
+
+Per-goal tuning fields (normally left unset so the live `vision.*` ROS
+params on the manager apply): `vision_align` also takes `kp_lat`, `kp_yaw`,
+`kp_depth`, `lost_grace_s`, `align_stable_frames`, `hold_through_loss`;
+`vision_move` also takes `kp_forward`, `kp_lat`, `lost_grace_s`,
+`hold_through_loss`. The control loop reads
+`/duburi/vision/<cam>/detections` directly; the tracker's `/tracks` feeds
+the HUD only (no `--tracking` flag). The standalone `fire` verb
+(`fire_channel`: 1/2=torpedo, 3/4=dropper) actuates payloads — there is no
+vision-fire verb.
 
 ---
 

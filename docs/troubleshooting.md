@@ -51,12 +51,12 @@
 
 | Symptom | Fix |
 |---------|-----|
-| Vision verb times out immediately with "vision state not ready" | Vision pipeline isn't up. Start `ros2 launch duburi_vision cameras_.launch.py` first, then retry. |
-| Depth axis stalls / barely moves when tracking a tall person | `depth_anchor_frac` is 0.5 (bbox centre). Set `ros2 param set /duburi_manager vision.depth_anchor_frac 0.2` to align near the top of the bbox instead. |
-| Target oscillates horizontally | `kp_yaw` or `kp_lat` too high. Lower to 40–50. Or increase `deadband` to 0.12. |
-| AUV overshoots distance target | `kp_forward` too high, or `deadband` too loose for the `forward` axis. Reduce `kp_forward` to 150. |
-| Detection drops frequently ("stale" in logs) | Lighting or model confidence. Lower `vision.stale_after` only after fixing the root cause. Use `on_lost='hold'` to ride out transient drops. |
-| Wrong object being chased | Model detecting background noise. Narrow YOLO class allowlist in `config/detector.yaml` or use a more specific `target_class`. |
+| `vision_align` / `vision_move` returns `NO_CAMERA` (code 3) | Camera pipeline isn't up — `camera_info` was never seen, so there's no trustworthy pixel scale. Start `ros2 launch duburi_vision cameras_.launch.py`, confirm the `--camera`/`camera=` name matches a running detector, then retry. |
+| Camera clearly sees the target but the AUV doesn't move | The detector is publishing boxes, but **none match `target_class`**. Watch for `[VIS  ] align: 'gate' not among live detections [...] -- check classes filter / model`. Fix the class allowlist (`ros2 param set /duburi_detector classes "gate,flare"`) or switch to the model that actually has that class. Class matching is case-insensitive. |
+| Target oscillates horizontally | `vision.kp_yaw` or `vision.kp_lat` too high. Lower to 40–50, or loosen the per-call `err` (e.g. `err=60`). |
+| AUV overshoots / never settles the forward approach | `vision.kp_forward` too high, or the per-call `gain` cap too high for a clean stop. Reduce `vision.kp_forward` to 150 and/or lower `gain`. |
+| Verb reports `LOST` and gives up immediately | No `fallback` was supplied, so the loop only coasts `vision.lost_grace_s` then returns `LOST`. Pass a mission-authored `fallback=` search (the verb re-enters after it) or raise `vision.lost_grace_s` to ride out transient drops. |
+| Wrong object being chased | Model detecting background noise. Narrow the YOLO class allowlist in `config/detector.yaml` (or the `classes` param) or use a more specific `target_class`. |
 
 ---
 

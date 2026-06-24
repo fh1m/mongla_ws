@@ -4,6 +4,14 @@
 > The current `COMMANDS = { ... }` dict is verbose but human-traceable;
 > any compaction needs to keep `rg "'cmd_name'" src/` working as the
 > primary debugging entry point.
+>
+> **2026-06-24 note:** the vision **9→2-verb rewrite** already deleted most of
+> the per-vision-verb boilerplate this doc targeted — only `vision_align` +
+> `vision_move` remain, and the old `on_lost` / `stale_after` / `deadband` /
+> `lock_mode` / `distance_metric` fields are gone. The verb counts and line
+> tallies below are **pre-rewrite**; the remaining win is the `move_*` /
+> `yaw_*` families. The Option A/B examples have been refreshed to the two
+> current verbs.
 
 ---
 
@@ -13,8 +21,8 @@ Look at `src/duburi_control/duburi_control/commands.py` today:
 
 * 24 verbs, ~190 lines.
 * Every vision verb repeats `'camera': 'laptop', 'target_class':
-  'person', 'on_lost': 'fail', 'stale_after': 1.5` -- 6 verbs * 4
-  fields = 24 lines of identical default boilerplate.
+  'person', 'duration': 20.0, 'gain': 30.0` -- 6 verbs * 4
+  fields = 24 lines of identical default boilerplate (pre-rewrite).
 * All 4 `move_*` verbs have IDENTICAL `fields` and `defaults`.
 * All 2 `yaw_*` verbs have IDENTICAL `fields` and `defaults`.
 
@@ -58,8 +66,8 @@ Pull repeated default sets into named constants at the top of
 _VISION_BASE = {
     'camera': 'laptop',
     'target_class': 'person',
-    'on_lost': 'fail',
-    'stale_after': 1.5,
+    'err_px': 40.0,
+    'lost_grace_s': 1.0,
 }
 _TRANSLATE_BASE = {
     'gain': 80.0,
@@ -77,12 +85,12 @@ COMMANDS = {
         'defaults': {**_TRANSLATE_BASE},
     },
     ...
-    'vision_align_yaw': {
+    'vision_align': {
         'help':     '...',
-        'fields':   ['camera', 'target_class', 'duration', 'deadband',
-                     'kp_yaw', 'on_lost', 'stale_after'],
-        'defaults': {**_VISION_BASE, 'duration': 15.0,
-                     'deadband': 0.18, 'kp_yaw': 60.0},
+        'fields':   ['camera', 'target_class', 'axes', 'err_px',
+                     'duration', 'gain', 'kp_yaw', 'lost_grace_s'],
+        'defaults': {**_VISION_BASE, 'duration': 20.0,
+                     'gain': 30.0, 'kp_yaw': 60.0},
     },
     ...
 }
@@ -108,8 +116,8 @@ Group fields by family at the top:
 ```python
 _TRANSLATE_FIELDS = ['duration', 'gain', 'settle']
 _YAW_FIELDS       = ['target', 'timeout', 'settle']
-_VISION_AXIS_FIELDS = ['camera', 'target_class', 'duration', 'deadband',
-                       'on_lost', 'stale_after']
+_VISION_FIELDS    = ['camera', 'target_class', 'axes', 'err_px',
+                     'duration', 'gain', 'lost_grace_s']
 
 COMMANDS = {
     'move_forward':  {'help': 'Drive forward...',
