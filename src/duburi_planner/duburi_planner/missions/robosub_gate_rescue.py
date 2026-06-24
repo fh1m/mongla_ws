@@ -90,6 +90,7 @@ YAW_STYLE_SETTLE   =  1.0     # settle between yaw steps (seconds)
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     # Register model — strict: wrong class name raises AttributeError
     duburi.models(robosub=('gate_rescue_repair', ['gate', 'rescue', 'repair']))
     duburi.camera = 'forward'

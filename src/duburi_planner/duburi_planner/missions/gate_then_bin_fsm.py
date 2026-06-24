@@ -20,6 +20,7 @@ from ..state_machines import build_gate_then_bin_fsm, VehicleProfile, GATE_THEN_
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     # ── detector setup (task 1 — gate) ──────────────────────────────
     # SetDetectorState will switch to bin model mid-mission automatically.
     duburi.models(gate='gate_flare_medium_100ep')

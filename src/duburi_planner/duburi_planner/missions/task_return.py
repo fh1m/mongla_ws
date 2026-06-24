@@ -21,6 +21,7 @@ _FWD = '/duburi_detector_fwd'
 
 
 def run(duburi, log=None):
+    duburi.mission_reset()
     if RETURN_HEADING_DEG is not None:
         duburi.turn(RETURN_HEADING_DEG)
 

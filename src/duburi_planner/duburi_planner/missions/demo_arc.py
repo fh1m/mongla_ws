@@ -26,6 +26,7 @@ ARC_YAW_RATE   = 30.0   # 30% yaw stick during the arc (positive = right turn)
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     # arm + depth: standard startup sequence.
     duburi.arm()
     duburi.set_mode('ALT_HOLD')

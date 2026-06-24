@@ -33,6 +33,7 @@ APPROACH_TIMEOUT  = 20.0
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     duburi.camera = CAMERA
     duburi.target = TARGET_CLASS
 
