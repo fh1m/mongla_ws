@@ -92,7 +92,7 @@ def generate_launch_description():
 
     vision_launch_path = os.path.join(
         get_package_share_directory('duburi_vision'),
-        'launch', 'cameras_.launch.py')
+        'launch', 'vision.launch.py')
 
     vision_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(vision_launch_path),
