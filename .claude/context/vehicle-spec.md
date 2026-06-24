@@ -33,12 +33,17 @@ file mirrors only the parts that affect the software stack.
 | Grabber  | Aluminum, in-house machined                | **Current sensor** detects successful grasp + safety trip.      |
 | Dropper  | Solenoid-based                             | Plastic-coated aluminum marker, deviation-free descent.         |
 
-Actuator wiring goes through the **MOSFET-based actuation board**
-(replaced relays for faster switching + signal isolation). Driven from
-the autopilot via `MAV_CMD_DO_SET_SERVO` on AUX outputs. The Python
-surface is `Pixhawk.set_servo_pwm(aux_n, pwm)` — `aux_n` is the
-silkscreen index (1..6, AUX1..AUX6); the ArduSub `+8` offset and PWM
-clamping are handled internally.
+Torpedo and dropper are actuated **NOT** through the Pixhawk — there is no
+`MAV_CMD_DO_SET_SERVO` / AUX path and no `Pixhawk.set_servo_pwm` method.
+They are driven from an **ESP32-C3 over USB serial** (separate from the
+BNO085 board): the Python surface is `duburi.fire(n)` →
+`duburi_control/payload.py` `PayloadDriver`, which writes a single ASCII
+digit (`b'1'`..`b'4'`) over USB CDC; the ESP32 firmware pulls the matching
+GPIO to fire the relay/solenoid. Channels: 1/2 = torpedo, 3/4 = dropper.
+The board is auto-detected at manager startup by USB VID/PID (CH340), and
+`duburi.payload_ready` reports connection state. See `known-issues.md` #4
+and the `project_payload_actuation` memory. (Stepper grabber needs an
+Actuation-Board step/dir interface — phase-2, not yet wired.)
 
 ## Electronics & power
 
@@ -60,7 +65,7 @@ clamping are handled internally.
 | Depth (Bar30)      | Stock ArduSub Bar30                            | Read via `AHRS2.altitude` through `Pixhawk`            |
 | Compass / mag      | Pixhawk internal magnetometer                  | Used **once at boot** for BNO085 Earth-reference       |
 | External heading   | **ESP32-C3 + BNO085**, USB CDC (gyro+accel)    | `BNO085Source` in `duburi_sensors`, opt-in via param   |
-| DVL                | **Nortek Nucleus1000** at `192.168.2.201`      | **Stub only** (`dvl_stub.py`) — driver is a TODO       |
+| DVL                | **Nortek Nucleus1000** at `192.168.2.201`      | **Working driver** — `NucleusDVLSource` (`nucleus_dvl.py` + `nucleus_parser.py`): TCP auth, AHRS heading, bottom-track position integration, backoff reconnect. Lazy-connect via `dvl_connect` / auto-connect. POSHOLD/EKF3 fusion still TODO. |
 | Hydrophones        | None                                           | Out of scope                                           |
 
 ### Why BNO085 instead of the TDR's VectorNav VN200
@@ -133,7 +138,10 @@ src/
         ├── base.py                 # YawSource ABC
         ├── mavlink_ahrs.py         # default — wraps Pixhawk.get_attitude
         ├── bno085.py               # USB CDC reader + one-shot calibration
-        ├── dvl_stub.py             # Phase-4 placeholder
+        ├── _discovery.py           # BNO085 USB VID/PID auto-detect probe
+        ├── nucleus_dvl.py          # Nortek Nucleus1000 TCP driver (heading + position)
+        ├── nucleus_parser.py       # Nucleus binary packet decoder (bottom-track + AHRS)
+        ├── composite_bno_dvl.py    # BNO085 heading + DVL position (yaw_source=bno085_dvl)
         └── witmotion_stub.py       # Phase-4 placeholder
 ```
 
@@ -141,8 +149,8 @@ src/
 
 ```
         ┌─────────────────┐    ┌────────────────────┐
-yaw  →  │ SET_ATTITUDE_   │    │                    │
-        │ TARGET (10 Hz)  │    │                    │
+yaw  →  │ RC_OVERRIDE Ch4 │    │                    │
+        │ yaw rate (10Hz) │    │                    │
         └─────────────────┘    │                    │
                                │                    │
         ┌─────────────────┐    │ ArduSub            │
@@ -187,7 +195,7 @@ inner loop.
 | §II.C.3 Planning — FSM               | ROS2 finite state machine                  | 🟦 **Committed YASMIN FSM (phase-2)** at `duburi_planner/state_machines/`. ✅ Today: `detected()` missions + `DuburiClient` (the proto/test/FSM-fallback layer the FSM will wrap). |
 | §I.D / §II.B.5 — IVC                 | Acoustic inter-vehicle comms               | 🟦 **Committed phase-2** — no transport/node yet. |
 | §II.C.1 Control                      | ROS2 + Pixhawk + PyMavlink + EKF3 fusion   | ✅ **Implemented.** EKF3 fusion is ArduSub-side; we stream setpoints over MAVLink. |
-| §II.C.1 — DVL fusion                 | Nucleus1000 → ArduSub EKF3                 | Parser ✅ (`nucleus_parser`, tested); live driver/POSHOLD integration in progress. |
+| §II.C.1 — DVL fusion                 | Nucleus1000 → ArduSub EKF3                 | Parser + driver ✅ (`nucleus_parser` + `nucleus_dvl`, used by `move_*_dist` closed-loop); POSHOLD/EKF3 fusion still TODO. |
 | Appendix C — Tether                  | FathomX over Ethernet                      | ✅ Network constants in `connection_config.py`; no extra software needed.       |
 | §II.A — Payload actuation            | Dropper / torpedo / grabber                | 🟦 **Phase-2.** Dropper+torpedo are **ESP32-over-USB-serial** (PySerial→GPIO→relay), **NOT** Pixhawk AUX — see `project_payload_actuation` memory. Stepper grabber needs an Actuation-Board step/dir interface. No payload verbs yet. |
 

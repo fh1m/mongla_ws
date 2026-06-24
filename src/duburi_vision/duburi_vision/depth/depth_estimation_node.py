@@ -21,6 +21,8 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Float32MultiArray
 from vision_msgs.msg import Detection2DArray
 
+from duburi_vision.detection.messages import _msg_bbox_center
+
 _DA2_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _DA2_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 _DA2_SIZE = 364
@@ -175,7 +177,7 @@ class DepthEstimationNode(Node):
         ranges = []
         for det in msg.detections:
             bbox   = det.bbox
-            cx, cy = float(bbox.center.position.x), float(bbox.center.position.y)
+            cx, cy = _msg_bbox_center(bbox)   # Humble/Iron Pose2D compat
             w,  h  = float(bbox.size_x), float(bbox.size_y)
 
             if self._fallback or self._depth_map is None:

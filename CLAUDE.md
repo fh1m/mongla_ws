@@ -239,11 +239,11 @@ duburi_ws/src/
 [Python client]──┼──/duburi/move (action goal)──→ [auv_manager_node]
                                                       │
                                                       ├──→ Duburi facade (lock + dispatch via COMMANDS)
-                                                      │       ├── motion_yaw     (SET_ATTITUDE_TARGET ×10 Hz)
+                                                      │       ├── motion_yaw     (Ch4 RC rate override ×10 Hz)
                                                       │       ├── motion_forward (Ch5 RC override; arc = Ch5+Ch4 ×20 Hz)
                                                       │       ├── motion_lateral (Ch6 RC override ×20 Hz)
                                                       │       ├── motion_depth   (SET_POSITION_TARGET_GLOBAL_INT ×5 Hz)
-                                                      │       └── heading_lock   (SET_ATTITUDE_TARGET ×20 Hz, background)
+                                                      │       └── heading_lock   (Ch4 RC rate override ×50 Hz, background)
                                                       │
                                                       ├──→ Pixhawk ──UDP 14550──→ [BlueOS] ──USB──→ [Pixhawk / ArduSub]
                                                       │                                         telemetry: AHRS2 50Hz, RC 5Hz, BAT 1Hz
@@ -281,7 +281,7 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 | `pixhawk.arm()` / `pixhawk.disarm()` | Returns `(ok, reason)`; reason is MAV_RESULT name or NO_ACK |
 | `pixhawk.set_mode("ALT_HOLD")` | Polls heartbeat for ACK (SET_MODE gives no direct ACK) |
 | `pixhawk.send_rc_override(forward, lateral, throttle, yaw)` | PWM 1100–1900; 1500=neutral; 65535=release |
-| `pixhawk.set_attitude_setpoint(yaw_deg)` | Requires ALT_HOLD; silently dropped in MANUAL |
+| `pixhawk.send_rc_override(yaw=pwm)` | Ch4 yaw-rate; ArduSub treats Ch4≠1500 as a pilot yaw-rate command (bypasses its compass-driven heading hold). `send_rc_yaw_only(pwm)` writes only Ch4 (heading-lock path). |
 | `pixhawk.set_target_depth(-1.5)` | Negative = below surface; requires ALT_HOLD |
 | `pixhawk.get_attitude()` | `{'yaw': deg, 'depth': m, ...}` — AHRS2-backed, cached |
 | `duburi.fire(n)` | Fire payload channel n via ESP32 serial (1/2=torpedo, 3/4=dropper); `duburi.payload_ready()` to check |
@@ -295,18 +295,23 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 
 ## 6. Control philosophy — ArduSub does the inner loop
 
-We never close a Python control loop in the live path. ArduSub's onboard 400 Hz stabilizer + EKF3 owns yaw and depth; we only stream setpoints.
+ArduSub's onboard 400 Hz stabilizer + EKF3 owns the **inner** loop. **Depth** is
+owned entirely by ArduSub (we stream a setpoint). **Yaw is split:** ArduSub's rate
+loop closes the *yaw rate* from our Ch4 stick, but the *absolute heading* loop is
+closed in Python against `yaw_source` (BNO085/AHRS) — ArduSub's compass is untrusted
+inside the aluminum hull, so we drive Ch4 as a rate command and never hand ArduSub
+an absolute-attitude setpoint. (There is no `SET_ATTITUDE_TARGET` anywhere in the code.)
 
 | Axis      | Setpoint message                  | Loop that closes it           | Our role                       |
 |-----------|-----------------------------------|-------------------------------|--------------------------------|
-| Yaw       | `SET_ATTITUDE_TARGET` (10 Hz)     | ArduSub 400 Hz attitude PID   | stream + watch yaw_source      |
+| Yaw       | `RC_CHANNELS_OVERRIDE` Ch4 rate (10 Hz) | ArduSub rate loop + Python heading PID | close heading on yaw_source |
 | Depth     | `SET_POSITION_TARGET_GLOBAL_INT` (5 Hz) | ArduSub ALT_HOLD position PID | stream + watch AHRS depth      |
 | Forward   | `RC_CHANNELS_OVERRIDE` Ch5 (20 Hz)| open loop (timed thrust)      | shape the thrust envelope      |
 | Lateral   | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz)| open loop (timed thrust)      | shape the thrust envelope      |
 | Arc       | `RC_CHANNELS_OVERRIDE` Ch5 + Ch4 (20 Hz, single packet) | open loop | curved car-style trajectory    |
-| Heading lock | `SET_ATTITUDE_TARGET` (20 Hz, background) | ArduSub 400 Hz attitude PID | continuous yaw hold across other commands |
+| Heading lock | `RC_CHANNELS_OVERRIDE` Ch4 rate (50 Hz, background) | ArduSub rate loop + Python P-loop | continuous yaw hold across other commands |
 | Vision lateral | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz) | vision loop inside manager | +ex → Ch6 > 1500 → strafe RIGHT (no negation) |
-| Vision yaw     | `SET_ATTITUDE_TARGET` or Ch4 RC (20 Hz) | vision loop inside manager | −ex → Ch4 < 1500 → yaw RIGHT (Ch4 inverted, negation needed) |
+| Vision yaw     | `RC_CHANNELS_OVERRIDE` Ch4 rate (20 Hz) | vision loop inside manager | −ex → Ch4 < 1500 → yaw RIGHT (Ch4 inverted, negation needed) |
 
 The two ROS params `smooth_yaw` / `smooth_translate` (both default `false`) optionally shape the *setpoint* (smootherstep / trapezoid_ramp) before it reaches the autopilot — they don't replace the autopilot's inner loop.
 

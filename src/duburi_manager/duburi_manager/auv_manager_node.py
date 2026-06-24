@@ -764,7 +764,7 @@ def _emergency_stop(node) -> None:
         print(f'  {"disarm":<22s} \033[33m[--]\033[0m  ({reason})', file=sys.stderr)
 
     _step('close yaw source',   lambda: node.yaw_source.close())
-    for (cam, _), vstate in list(node._vision_states.items()):
+    for cam, vstate in list(node._vision_states.items()):
         _step(f'close vision[{cam}]', lambda v=vstate: v.close())
 
     print(file=sys.stderr)

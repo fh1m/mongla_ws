@@ -71,8 +71,8 @@ from .motion_writers import read_heading
 from .pixhawk       import Pixhawk
 
 
-# 20 Hz matches the motion-loop rate so logs interleave cleanly and the
-# rate command is refreshed comfortably inside ArduSub's RC timeout.
+# 50 Hz (LOCK_STREAM_HZ) matches the BNO085 firmware output so the rate
+# command is refreshed comfortably inside ArduSub's RC timeout.
 # Sourced from motion_rates so a single edit retunes every loop.
 from .motion_rates import LOCK_STREAM_HZ as STREAM_HZ
 
