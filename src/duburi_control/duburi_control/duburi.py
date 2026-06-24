@@ -202,7 +202,13 @@ class Duburi(VisionVerbs):
         """
         self.pixhawk           = pixhawk
         self.log               = log
-        self.lock              = threading.Lock()
+        # Reentrant so a safety verb can call another scoped verb without
+        # self-deadlocking: surface() runs inside _command_scope('surface')
+        # and then calls set_depth() (its own _command_scope). A plain Lock
+        # would block the second acquire on the same thread forever. Commands
+        # are still serialized one-at-a-time across threads (RLock only
+        # re-admits the thread that already holds it).
+        self.lock              = threading.RLock()
         self.smooth_yaw        = smooth_yaw
         self.smooth_translate  = smooth_translate
         self.yaw_source        = yaw_source
@@ -246,8 +252,18 @@ class Duburi(VisionVerbs):
         return self._make_result(accepted, f'arm: {reason}')
 
     def disarm(self, timeout=20.0):
-        """impl: pixhawk.py:disarm (set_mode MANUAL -> send_neutral -> COMMAND_LONG p1=0)."""
+        """impl: pixhawk.py:disarm (set_mode MANUAL -> send_neutral -> COMMAND_LONG p1=0).
+
+        Stops any active heading lock first: its daemon streams Ch4 yaw-rate
+        overrides, which must not keep firing after the vehicle drops to
+        MANUAL (and leaving the lock handle set would keep the heartbeat
+        paused). Mirrors the cleanup in unlock_heading / mission_reset.
+        """
         with command_scope('disarm'):
+            if self._heading_lock is not None:
+                self._heading_lock.stop()
+                self._heading_lock = None
+                self._release_heartbeat_for_lock()
             accepted, reason = self.pixhawk.disarm(timeout)
         return self._make_result(accepted, f'disarm: {reason}')
 
@@ -268,9 +284,9 @@ class Duburi(VisionVerbs):
         ``fire_channel`` is float from Move.Goal (0.0 = unset/stub).
         Returns a command result so the generic COMMANDS dispatcher works.
 
-        Also callable internally as ``self._fire_payload(channel)`` for
-        vision_lock_fire's stable-lock callback (no command scope needed
-        since it runs inside an already-scoped motion verb).
+        Also callable internally as ``self._fire_payload(channel)`` for a
+        mission's "align then fire" pattern (no command scope needed since
+        it runs inside an already-scoped motion verb).
         """
         ch = int(fire_channel)
         with self._command_scope('fire'):
@@ -841,6 +857,7 @@ class Duburi(VisionVerbs):
                 yaw_source=self.yaw_source,
                 log=self.log,
                 timeout=timeout,
+                on_exit=self._on_lock_timeout,
             )
             self._heading_lock.start()
             self._hold_heartbeat_for_lock()
@@ -872,6 +889,9 @@ class Duburi(VisionVerbs):
                 self._heading_lock = None
                 self._release_heartbeat_for_lock()
             self._abort_event.clear()
+            # Forget the previous run's axis history so the first command's
+            # pre-flight settle pause is never skipped on stale state.
+            self._last_axes = None
             self._writers().neutral()
             self.log.info('[CMD  ] mission_reset — heading lock stopped, abort cleared, RC neutral')
             return self._make_result(True, 'mission_reset: completed')
@@ -1018,7 +1038,7 @@ class Duburi(VisionVerbs):
             returns every frame the verb produced.
 
         ``verb`` is the public method name (``'yaw_right'``,
-        ``'vision_align_yaw'``, ...) and shows up verbatim in the
+        ``'vision_align'``, ...) and shows up verbatim in the
         ``[MAV <fn> cmd=<verb>] ...`` line.
         """
         with self.lock, command_scope(verb):
@@ -1046,6 +1066,19 @@ class Duburi(VisionVerbs):
     def _release_heartbeat_for_lock(self):
         if self._heartbeat is not None:
             self._heartbeat.resume()
+
+    def _on_lock_timeout(self, lock):
+        """Heading lock auto-released on its own timeout (runs in the lock thread).
+
+        Clear our handle and resume the heartbeat so a timed-out lock isn't
+        left looking "active" (which would keep the heartbeat paused and make
+        translation verbs release Ch4 to a thread that no longer exists). The
+        identity guard means a stale callback can't clobber a freshly engaged
+        lock that already replaced the timed-out one.
+        """
+        if self._heading_lock is lock:
+            self._heading_lock = None
+            self._release_heartbeat_for_lock()
 
     @contextmanager
     def _suspend_heading_lock(self):

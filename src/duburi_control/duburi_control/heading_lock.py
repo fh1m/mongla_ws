@@ -106,11 +106,16 @@ class HeadingLock:
     """
 
     def __init__(self, pixhawk, target_deg, yaw_source, log,
-                 timeout=300.0):
+                 timeout=300.0, on_exit=None):
         self._pixhawk     = pixhawk
         self._yaw_source  = yaw_source
         self._log         = log
         self._timeout     = float(timeout)
+        # Called with (self) when the loop auto-releases on timeout (NOT on
+        # an explicit stop(), which the caller already cleans up after). Lets
+        # the owner clear its handle and resume the heartbeat so a timed-out
+        # lock doesn't leave a zombie that still looks "active".
+        self._on_exit     = on_exit
 
         self._target_lock = threading.Lock()
         self._target_deg  = float(target_deg) % 360.0
@@ -191,6 +196,7 @@ class HeadingLock:
                 self._log.warn(
                     f'[LOCK ] timeout {self._timeout:.0f}s reached -- '
                     f'auto-releasing')
+                self._fire_on_exit()
                 break
 
             if self._suspended.is_set():
@@ -249,3 +255,13 @@ class HeadingLock:
             self._pixhawk.send_rc_yaw_only(Pixhawk.percent_to_pwm(0.0))
         except Exception:
             pass
+
+    def _fire_on_exit(self) -> None:
+        """Notify the owner that the lock auto-released (timeout). Never raises."""
+        cb = self._on_exit
+        if cb is None:
+            return
+        try:
+            cb(self)
+        except Exception as exc:   # noqa: BLE001 -- cleanup must never crash the thread
+            self._log.warn(f'[LOCK ] on_exit callback raised: {exc}')

@@ -166,8 +166,6 @@ class AUVManagerNode(Node):
         self.declare_parameter('dvl_retry_s',       5.0)
         # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
         self.declare_parameter('debug',            False)
-        # vision.use_tracks: subscribe /tracks instead of /detections (requires tracker_node)
-        self.declare_parameter('vision.use_tracks', True)
         declare_vision_params(self)
 
         requested_mode      = str(self.get_parameter('mode').value)
@@ -399,39 +397,39 @@ class AUVManagerNode(Node):
     def _vision_state_for(self, camera: str):
         """Return (and build on first call) the VisionState for `camera`.
 
-        Cached by (camera, use_tracks) so a goal with tracking=True does not
-        permanently poison the cache for subsequent goals that want tracking=False.
-        Subscriptions stay alive for the rest of the process lifetime so
-        repeat vision_* goals don't pay the preflight wait twice.
+        The control loop reads ``/detections`` directly (the topic the HUD
+        shows); the tracker keeps running for display only. Subscriptions
+        stay alive for the rest of the process lifetime so repeat vision_*
+        goals don't pay the preflight wait twice. The FIRST build for a
+        camera requires a live detection (``require_detection``) so a goal
+        fails fast with a clear "no boxes" rather than silently chasing an
+        empty cache.
         """
-        use_tracks = bool(self.get_parameter('vision.use_tracks').value)
-        cache_key = (camera, use_tracks)
+        cache_key = camera
 
         with self._vision_lock:
             cached = self._vision_states.get(cache_key)
             if cached is not None:
                 return cached
             self.get_logger().info(
-                f'[VST  ] building VisionState for camera={camera!r} '
-                f'use_tracks={use_tracks}')
+                f'[VST  ] building VisionState for camera={camera!r}')
             vstate = VisionState(self, camera=camera,
-                                 use_tracks=use_tracks,
                                  logger=self.get_logger())
-            # Do NOT cache until preflight passes — a cached-but-not-ready state
-            # causes vision verbs to silently chase stale/empty detections
-            # instead of raising a clear "camera not ready" failure.
 
         # Preflight outside the lock — it just polls VisionState's diags.
+        # The FIRST build waits (up to 10 s) for a live detection so the
+        # pipeline has time to warm up before the loop starts. The loop
+        # itself tolerates no-detection (grace -> LOST -> DSL fallback), so
+        # we cache the state either way and never pay this wait twice.
         try:
             wait_vision_state_ready(
-                vstate, timeout=10.0, log=self.get_logger())
+                vstate, timeout=10.0, require_detection=True,
+                log=self.get_logger())
         except Exception as exc:
             self.get_logger().warning(
                 f'[VST  ] preflight for {camera!r} did not pass within '
-                f'10s: {exc!r}; vision verbs will fail until pipeline is up')
-            # Return the (non-ready) state anyway so the goal can fail fast
-            # with a detection error rather than blocking here indefinitely.
-            return vstate
+                f'10s: {exc!r}; first goal starts cold (loop will search '
+                f'via its fallback)')
 
         with self._vision_lock:
             # Check again under lock in case a concurrent goal built the same state.
@@ -504,10 +502,14 @@ class AUVManagerNode(Node):
 
     def cancel_callback(self, goal_handle):
         self.get_logger().info('[ACT  ] Cancel requested -- stopping thrusters')
+        # Signal abort FIRST so the running loop exits at its next tick (its
+        # own finally neutralises lock-aware), and free the active gate so a
+        # queued safety verb (disarm) gets through. Then stop the heading lock
+        # (it must not outlive a cancelled goal) and send a backstop neutral.
+        self.duburi.request_abort()
+        self.command_active = False
+        self.duburi.unlock_heading()
         self.pixhawk.send_neutral()
-        self.command_active = False  # allow disarm through before execute_callback exits
-        self.duburi.request_abort()  # signal all motion loops to exit at next tick
-        self.duburi.unlock_heading()  # heading lock must not outlive a cancelled goal
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):
@@ -533,29 +535,7 @@ class AUVManagerNode(Node):
                 runtime = runtime_defaults_for_command(
                     cmd, snapshot_from_node(self))
                 kwargs = fields_for(cmd, request, runtime_defaults=runtime)
-
-                # Per-goal tracking override: if the goal sets tracking=True,
-                # flip vision.use_tracks for this goal's VisionState build.
-                # _vision_state_for picks it up on the next new-camera build
-                # (cache key includes use_tracks). Snapshot + restore so the
-                # flip is per-goal and does not poison later goals' default.
-                tracking_flip   = kwargs.pop('tracking', False)
-                prev_use_tracks = None
-                if tracking_flip:
-                    prev_use_tracks = self.get_parameter('vision.use_tracks').value
-                    self.set_parameters([
-                        rclpy.parameter.Parameter(
-                            'vision.use_tracks',
-                            rclpy.Parameter.Type.BOOL, True)])
-
-                try:
-                    result = method(**kwargs)
-                finally:
-                    if tracking_flip:
-                        self.set_parameters([
-                            rclpy.parameter.Parameter(
-                                'vision.use_tracks',
-                                rclpy.Parameter.Type.BOOL, bool(prev_use_tracks))])
+                result = method(**kwargs)
 
             if result.success:
                 goal_handle.succeed()
@@ -584,9 +564,11 @@ class AUVManagerNode(Node):
             # `stop()` is skipped, which can leave a stale Ch4 RC
             # override or SET_POSITION_TARGET setpoint active.
             # Neutralise explicitly so the next command starts from a
-            # known state.
+            # known state. Use the lock-aware writer so a still-active
+            # heading lock keeps Ch4 (a raw send_neutral would clobber it
+            # for one tick and the lock would just re-assert anyway).
             try:
-                self.pixhawk.send_neutral()
+                self.duburi._writers().neutral()
             except Exception as cleanup_exc:
                 self.get_logger().warn(
                     f'[ACT  ] post-failure neutralise raised: {cleanup_exc}')
