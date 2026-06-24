@@ -446,12 +446,28 @@ class DuburiMission:
     #  Vision detector control                                             #
     # ================================================================== #
 
+    def _detector_node(self, camera: str | None = None,
+                       node: str | None = None) -> str:
+        """Resolve the detector node name for a camera.
+
+        Single naming rule for the whole stack: ``/duburi_detector_<camera>``
+        (e.g. ``/duburi_detector_forward``, ``/duburi_detector_downward``),
+        matching the names the vision launch files give the detector nodes.
+        ``camera`` defaults to the mission's sticky camera. An explicit
+        ``node`` always wins (escape hatch for non-standard setups).
+        """
+        if node:
+            return node
+        return f'/duburi_detector_{camera or self.camera}'
+
     def set_model(self, name: str, *,
-                  node: str = '/duburi_detector') -> None:
+                  camera: str | None = None, node: str | None = None) -> None:
         """Switch active detector model by registry name (hot, no restart).
 
         Requires the detector to have been launched with a ``models`` registry.
+        Targets ``/duburi_detector_<camera>`` (camera defaults to the mission's).
         """
+        node = self._detector_node(camera, node)
         result = subprocess.run(
             ['ros2', 'param', 'set', node, 'active_model', name],
             capture_output=True, text=True, timeout=5)
@@ -463,12 +479,12 @@ class DuburiMission:
                     f'-- launch with models:="..." to enable hot switching')
             else:
                 self.log.warning(
-                    f'[DSL  ] set_model({name!r}) failed: {stderr!r}')
+                    f'[DSL  ] set_model({name!r}) on {node} failed: {stderr!r}')
         else:
-            self.log.info(f'[DSL  ] active_model → {name!r}')
+            self.log.info(f'[DSL  ] {node} active_model → {name!r}')
 
     def use(self, model: str, classes: str | list | None = None, *,
-            node: str = '/duburi_detector') -> None:
+            camera: str | None = None, node: str | None = None) -> None:
         """Switch active detector model and optionally its class filter.
 
         Parameters
@@ -484,12 +500,12 @@ class DuburiMission:
             duburi.use('gate', 'gate')    # switch model and filter together
             duburi.use('combined', '')    # combined model, all classes visible
         """
-        self.set_model(model, node=node)
+        self.set_model(model, camera=camera, node=node)
         if classes is not None:
-            self.set_classes(classes, node=node)
+            self.set_classes(classes, camera=camera, node=node)
 
     def set_classes(self, classes: str | list, *,
-                    node: str = '/duburi_detector') -> None:
+                    camera: str | None = None, node: str | None = None) -> None:
         """Switch the detector's class filter without restarting the node.
 
         Example::
@@ -498,6 +514,7 @@ class DuburiMission:
             duburi.set_classes(['gate', 'flare'])
             duburi.set_classes('')   # all classes
         """
+        node = self._detector_node(camera, node)
         if isinstance(classes, list):
             classes_str = ','.join(str(c).strip() for c in classes)
         else:
@@ -507,42 +524,45 @@ class DuburiMission:
             capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
             self.log.warning(
-                f"[DSL  ] set_classes failed: {result.stderr.strip()!r}")
+                f"[DSL  ] set_classes on {node} failed: {result.stderr.strip()!r}")
         else:
-            self.log.info(f"[DSL  ] detector classes → {classes_str!r}")
+            self.log.info(f"[DSL  ] {node} classes → {classes_str!r}")
 
-    def set_conf(self, conf: float, *, camera: str = 'forward') -> None:
+    def set_conf(self, conf: float, *,
+                 camera: str | None = None, node: str | None = None) -> None:
         """Set YOLO confidence threshold live. Takes effect on next inference tick."""
-        node = f'/duburi_detector_{"fwd" if camera == "forward" else "dwn"}'
+        node = self._detector_node(camera, node)
         result = subprocess.run(
             ['ros2', 'param', 'set', node, 'conf', str(float(conf))],
             capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
-            self.log.warning(f"[DSL  ] set_conf({conf}) failed: {result.stderr.strip()!r}")
+            self.log.warning(f"[DSL  ] set_conf({conf}) on {node} failed: {result.stderr.strip()!r}")
         else:
             self.log.info(f"[DSL  ] {node} conf → {conf:.3f}")
 
-    def pause_detector(self, camera: str = 'forward') -> None:
+    def pause_detector(self, camera: str | None = None, *,
+                       node: str | None = None) -> None:
         """Pause inference on a detector node (frame still consumed from queue)."""
-        node = f'/duburi_detector_{"fwd" if camera == "forward" else "dwn"}'
+        node = self._detector_node(camera, node)
         result = subprocess.run(
             ['ros2', 'param', 'set', node, 'paused', 'true'],
             capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
             self.log.warning(
-                f"[DSL  ] pause_detector({camera!r}) failed: {result.stderr.strip()!r}")
+                f"[DSL  ] pause_detector on {node} failed: {result.stderr.strip()!r}")
         else:
             self.log.info(f"[DSL  ] {node} paused")
 
-    def resume_detector(self, camera: str = 'forward') -> None:
+    def resume_detector(self, camera: str | None = None, *,
+                        node: str | None = None) -> None:
         """Resume inference on a detector node."""
-        node = f'/duburi_detector_{"fwd" if camera == "forward" else "dwn"}'
+        node = self._detector_node(camera, node)
         result = subprocess.run(
             ['ros2', 'param', 'set', node, 'paused', 'false'],
             capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
             self.log.warning(
-                f"[DSL  ] resume_detector({camera!r}) failed: {result.stderr.strip()!r}")
+                f"[DSL  ] resume_detector on {node} failed: {result.stderr.strip()!r}")
         else:
             self.log.info(f"[DSL  ] {node} resumed")
 

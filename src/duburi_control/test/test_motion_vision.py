@@ -296,3 +296,38 @@ def test_move_hold_through_loss_never_reports_lost():
     out, _, _ = _move(_FakeVision(None), hold_through_loss=True,
                       lost_grace_s=0.1, duration=0.3)
     assert out.code == TIMEOUT
+
+
+# --------------------------------------------------------------------------- #
+#  move_loop -- pass-through (fwd=None / fwd_fill<=0)                          #
+# --------------------------------------------------------------------------- #
+def test_move_passthrough_seen_then_lost_reaches():
+    # Gate is seen for a couple of ticks, then leaves the frame -> after the
+    # commit window the verb reports ALIGNED ("passed through").
+    seen = _sample(w_frac=0.5, h_frac=0.5)
+    vis = _FakeVision([seen, seen, None])   # present, present, then gone
+    out, _, writers = _move(vis, passthrough=True, hold_s=0.1,
+                            lost_grace_s=5.0, duration=1.0)
+    assert out.code == ALIGNED
+    assert writers.neutralised >= 1
+
+
+def test_move_passthrough_never_seen_reports_lost():
+    # Never detected -> must NOT blind-drive; falls through to LOST so a
+    # mission fallback search can run.
+    out, _, _ = _move(_FakeVision(None), passthrough=True,
+                      lost_grace_s=0.1, duration=2.0)
+    assert out.code == LOST
+
+
+def test_move_passthrough_ignores_fill_stop():
+    # A frame-filling bbox would normally trip the fill-stop; in pass-through
+    # the AUV keeps driving forward at gain until the target leaves the frame.
+    big = _sample(w_frac=1.0, h_frac=1.0)
+    out, pix, _ = _move(_FakeVision(big), passthrough=True, fwd_fill=0.8,
+                        gain=30.0, duration=0.25)
+    assert out.code == TIMEOUT          # target never leaves -> drives the whole budget
+    cap = _FakePixhawk.percent_to_pwm(30.0)
+    fwd = [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+    assert fwd, 'pass-through must keep commanding forward thrust'
+    assert max(fwd) <= cap

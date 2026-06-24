@@ -20,7 +20,7 @@ from duburi_planner.missions.competition_config import (
     SEARCH_CREEP_S,
 )
 
-_FWD = '/duburi_detector_fwd'
+_FWD = '/duburi_detector_forward'
 
 
 def run(duburi, log=None):

@@ -27,8 +27,8 @@ def run(duburi, log=None):
 
     duburi.use_camera('downward')
     duburi.resume_detector('downward')
-    duburi.set_model('bin_fire_blood', node='/duburi_detector_dwn')
-    duburi.set_classes('fire,blood', node='/duburi_detector_dwn')
+    duburi.set_model('bin_fire_blood', node='/duburi_detector_downward')
+    duburi.set_classes('fire,blood', node='/duburi_detector_downward')
 
     # ── Centre the AUV over the bin (lat + fore/aft via the depth axis) ───────
     # Downward cam: ey>0 = target aft, so the depth axis nudge drives the AUV

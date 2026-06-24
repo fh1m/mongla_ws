@@ -178,6 +178,16 @@ def test_detected_is_case_insensitive(monkeypatch):
     assert m.detected('flare') is False
 
 
+def test_detector_node_derivation():
+    # Single naming rule: /duburi_detector_<camera>, camera defaults to the
+    # mission's sticky camera; explicit node always wins.
+    import duburi_planner.duburi_dsl as dd
+    m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
+    assert m._detector_node() == '/duburi_detector_forward'
+    assert m._detector_node('downward') == '/duburi_detector_downward'
+    assert m._detector_node(node='/duburi_detector_custom') == '/duburi_detector_custom'
+
+
 def test_move_passes_fill_and_mode_to_server():
     send = MagicMock(return_value=_result(ALIGNED, 0.9))
     dsl = _dsl(send)
@@ -185,3 +195,56 @@ def test_move_passes_fill_and_mode_to_server():
     _, kwargs = send.call_args
     assert kwargs['fwd_fill'] == pytest.approx(60.0)
     assert kwargs['mode'] == 'height'
+
+
+def test_move_passthrough_sends_negative_sentinel():
+    # move('gate') with no fwd = pass-through. The DSL must wire fwd_fill=-1
+    # (a value that survives the manager's 0.0==unset rule) so the control
+    # loop selects pass-through instead of the 95% spec default.
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.move('gate')
+    _, kwargs = send.call_args
+    assert kwargs['fwd_fill'] < 0.0
+
+
+def test_move_explicit_fill_is_not_sentinel():
+    send = MagicMock(return_value=_result(ALIGNED, 0.8))
+    dsl = _dsl(send)
+    dsl.move('gate', fwd=80)
+    _, kwargs = send.call_args
+    assert kwargs['fwd_fill'] == pytest.approx(80.0)
+
+
+# --------------------------------------------------------------------------- #
+#  align -- 0-offset centring (the pool-day "yaw=0, lat=0" case)              #
+# --------------------------------------------------------------------------- #
+def test_align_zero_offsets_build_axes_and_center():
+    # align('gate', yaw=0, lat=0) must activate both axes (0 = centre) and
+    # send offset_*=0.0 -- never silently drop a zero-valued axis.
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    res = dsl.align('gate', yaw=0, lat=0)
+    assert res.ok is True
+    _, kwargs = send.call_args
+    assert set(kwargs['axes'].split(',')) == {'lat', 'yaw'}
+    assert kwargs['offset_lat'] == pytest.approx(0.0)
+    assert kwargs['offset_yaw'] == pytest.approx(0.0)
+
+
+def test_align_single_zero_axis_only_that_axis():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.align('gate', yaw=0)
+    _, kwargs = send.call_args
+    assert kwargs['axes'] == 'yaw'
+    assert kwargs['offset_yaw'] == pytest.approx(0.0)
+
+
+def test_align_nonzero_offset_passed_through():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.align('gate', lat=64, yaw=0)
+    _, kwargs = send.call_args
+    assert kwargs['offset_lat'] == pytest.approx(64.0)
+    assert kwargs['offset_yaw'] == pytest.approx(0.0)

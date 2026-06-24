@@ -228,11 +228,14 @@ COMMANDS = {
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0},
     },
     'vision_move': {
-        'help':     'Drive forward toward target_class until its bbox fills fwd_fill%% '
-                    'of the frame (mode = area/width/height; height for tall slalom). '
-                    'maintain_on holds a maintain_px lateral offset while moving; depth '
-                    'and yaw are left to ArduSub / heading lock. hold_s station-keeps at '
-                    'the fill target. gain caps speed. Does NOT re-centre.',
+        'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '
+                    'fills that %% of the frame (mode = area/width/height; height for tall '
+                    'slalom). fwd_fill <= 0 (e.g. --fwd_fill -1, or DSL move(fwd=None)) is '
+                    'PASS-THROUGH: drive until the target is seen and then leaves the frame, '
+                    'plus a commit overshoot (hold_s, else ~2s) to carry the hull through a '
+                    'gate. maintain_on holds a maintain_px lateral offset while moving; depth '
+                    'and yaw are left to ArduSub / heading lock. gain caps speed. Does NOT '
+                    're-centre.',
         'fields':   ['camera', 'target_class', 'fwd_fill', 'mode',
                      'maintain_px', 'maintain_on', 'hold_s',
                      'err_px', 'duration', 'gain', 'hold_through_loss',
