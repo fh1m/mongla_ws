@@ -32,6 +32,7 @@ _MAX_SEARCH_STEPS   = 20     # 20 × 90° = up to 5 full sweeps before giving up
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     duburi.camera = CAMERA
     duburi.target = TARGET_CLASS
 

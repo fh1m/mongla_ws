@@ -11,6 +11,7 @@ from ..state_machines import build_prequal_fsm, VehicleProfile
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     duburi.models(gate='gate_flare_medium_100ep')
     duburi.camera = 'forward'
     duburi.set_classes('gate')

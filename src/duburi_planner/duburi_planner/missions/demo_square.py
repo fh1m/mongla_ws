@@ -21,6 +21,7 @@ PAUSE_S        = 1.0    # coast-down time between turns
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     # arm: power the thrusters, wait for ArduSub to confirm.
     duburi.arm()
 

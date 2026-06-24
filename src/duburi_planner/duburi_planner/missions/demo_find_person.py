@@ -56,6 +56,7 @@ LOCK_DURATION_S   = 15.0
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     # Pretrained COCO weights — auto-downloads yolov11n.pt (~5 MB) on first run.
     # Access class handles via duburi.models.person.person (ClassRef).
     duburi.models(person='yolov11n')

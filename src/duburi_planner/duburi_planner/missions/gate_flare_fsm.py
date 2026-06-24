@@ -21,6 +21,7 @@ from ..state_machines import build_gate_flare_fsm, VehicleProfile
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     # ── detector setup ────────────────────────────────────────────────
     duburi.models(gate='gate_flare_medium_100ep')
     duburi.camera = 'forward'

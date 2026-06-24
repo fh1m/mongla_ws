@@ -19,6 +19,7 @@ from duburi_planner.missions.competition_config import (
 
 
 def run(duburi, log=None):
+    duburi.mission_reset()
     if BIN_HEADING_DEG is not None:
         duburi.turn(BIN_HEADING_DEG)
     duburi.set_depth(BIN_DEPTH_M, timeout=30)

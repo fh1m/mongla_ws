@@ -27,6 +27,7 @@ PIVOT_DEG      = 45.0    # mid-mission yaw to prove lock retargeting
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     # arm + depth-hold: standard startup.
     duburi.arm()
     duburi.set_mode('ALT_HOLD')

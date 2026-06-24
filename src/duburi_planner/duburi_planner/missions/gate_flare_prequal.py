@@ -93,6 +93,7 @@ RETURN_PASS_GAIN = 60.0
 
 
 def run(duburi, log):
+    duburi.mission_reset()
     duburi.camera = CAMERA
     duburi.models(gate='gate_flare_medium_100ep')
 
