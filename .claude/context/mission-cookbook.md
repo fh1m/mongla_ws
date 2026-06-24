@@ -1542,24 +1542,27 @@ competition launch — inference only runs for the task that needs it.
 
 ```python
 # resume forward detector before gate search
-duburi.resume_detector('forward')   # → ros2 param set /duburi_detector_fwd paused false
+duburi.resume_detector('forward')   # → ros2 param set /duburi_detector_forward paused false
 
 # ... gate task body ...
 
 # pause again when done (frees GPU for the next chunk's detector)
-duburi.pause_detector('forward')    # → ros2 param set /duburi_detector_fwd paused true
+duburi.pause_detector('forward')    # → ros2 param set /duburi_detector_forward paused true
 ```
 
-#### Dual-camera node naming — always pass `node=`
+#### Dual-camera node naming — pass `camera=`
 
-The competition launch creates `/duburi_detector_fwd` and `/duburi_detector_dwn`.
-The DSL defaults to `/duburi_detector` (single-camera launch). Always pass `node=`
-explicitly in dual-cam missions:
+There is one naming rule for the whole stack: the detector node is
+`/duburi_detector_<camera>`, so `vision_dual.launch.py` creates
+`/duburi_detector_forward` and `/duburi_detector_downward`. Every DSL helper
+derives the node from its `camera` argument (default = the mission's sticky
+camera), so just pass `camera=`:
 
 ```python
-duburi.set_model('gate_rescue_repair', node='/duburi_detector_fwd')
-duburi.set_classes('gate,rescue,repair', node='/duburi_detector_fwd')
-duburi.resume_detector('forward')                     # camera arg drives the node name
+duburi.set_model('gate_rescue_repair', camera='forward')   # → /duburi_detector_forward
+duburi.set_classes('gate,rescue,repair', camera='forward')
+duburi.resume_detector('forward')                          # camera arg drives the node name
+duburi.set_model('bin_fire_blood', camera='downward')      # → /duburi_detector_downward
 ```
 
 #### Bounded search — never infinite forward

@@ -271,7 +271,7 @@ ros2 run duburi_vision depth_estimation_node --ros-args -p camera:=forward \
     -p model_path:=/path/to/depth_anything_v2_small.onnx
 ros2 topic echo /duburi/vision/forward/vis_range
 # Or use the launch flag (starts depth alongside tracker in one command):
-ros2 launch duburi_vision cameras_.launch.py with_tracking:=true depth:=true
+ros2 launch duburi_vision vision.launch.py camera:=forward depth:=true
 
 # ── 7. Vision viewer — Mission-control HUD (no Qt/rqt needed) ────────────
 # Attach to an already-running pipeline:
@@ -288,14 +288,14 @@ ros2 run duburi_vision vision_display --ros-args \
 # all fonts and instruments are crisp on 1080p/4K monitors at any window size.
 # Initial window opens at 1920×1080; freely resizable via mouse drag.
 
-# ── 8. Full vision pipeline via launch (camera + detector + viewer) ───────
-ros2 launch duburi_vision cameras_.launch.py                           # webcam, viewer on
-ros2 launch duburi_vision cameras_.launch.py viewer:=false             # headless
-ros2 launch duburi_vision cameras_.launch.py with_tracking:=true       # + ByteTrack
-ros2 launch duburi_vision cameras_.launch.py camera:=forward model:=gate_flare_medium_100ep classes:=gate
+# ── 8. Full vision pipeline via launch (camera + detector + tracker + viewer) ──
+ros2 launch duburi_vision vision.launch.py camera:=forward                # webcam, viewer on
+ros2 launch duburi_vision vision.launch.py camera:=forward viewer:=false  # headless (mission mode)
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_flare_medium_100ep classes:=gate
+ros2 launch duburi_vision vision_dual.launch.py                           # both cameras (competition)
 
 # Just the viewer (pipeline already running in another terminal):
-ros2 launch duburi_vision debug_view.launch.py camera:=forward
+ros2 run duburi_vision vision_display --ros-args -p camera:=forward
 
 # ── 9. Full AUV stack (FC + vision bundled) ───────────────────────────────
 ros2 launch duburi_manager bringup.launch.py                           # FC only
@@ -365,7 +365,7 @@ ros2 run duburi_planner mission demo_move_see
 
 ```bash
 # T1: camera + detector (yolov11n pretrained, COCO 80-class)
-ros2 launch duburi_vision cameras_.launch.py model:=yolov11n classes:=person
+ros2 launch duburi_vision vision.launch.py camera:=laptop model:=yolov11n classes:=person
 
 # T2: lightweight OpenCV viewer (replaces rqt_image_view — no Qt needed)
 ros2 run duburi_vision vision_display --ros-args -p camera:=laptop
@@ -388,7 +388,7 @@ Success: a window opens showing the webcam feed with:
 - **Compass rose** (30 px radius) + yaw-source label
 - **Full-width altimeter** depth gauge (Zone D)
 - **HEADING TAPE** (Row 5) — active only when FC is publishing `/duburi/state`
-- Live class switch: `ros2 param set /duburi_detector classes gate` — CLASSES panel
+- Live class switch: `ros2 param set /duburi_detector_laptop classes gate` — CLASSES panel
   updates immediately; tracker resets to avoid stale IDs
 
 The detector logs `in_hz=~30  with_target=>0%`.
@@ -409,7 +409,7 @@ sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
 # T2: manager
 ros2 run duburi_manager start
 # T3: vision
-ros2 launch duburi_vision cameras_.launch.py
+ros2 launch duburi_vision vision.launch.py camera:=laptop
 # T4: drive
 ros2 run duburi_planner duburi arm
 ros2 run duburi_planner duburi set_depth --target -0.5
@@ -514,7 +514,7 @@ ros2 topic hz /duburi/vision/forward/detections   # should be 15-25 Hz
 ros2 topic echo /duburi/vision/forward/detections --once   # look for class_id
 
 # 3. Confirm class filter
-ros2 param get /duburi_detector classes   # should be 'gate,flare' for competition
+ros2 param get /duburi_detector_forward classes   # should be 'gate,flare' for competition
 
 # 4. Run the reference autonomous mission
 ros2 run duburi_planner mission gate_flare_autonomous
@@ -532,32 +532,33 @@ RoboSub 2026 competition uses **two cameras always streaming** with **lazy detec
 **Competition launch (both cameras + both detectors, paused at start):**
 
 ```bash
-ros2 launch duburi_vision full_mission.launch.py
+ros2 launch duburi_vision vision_dual.launch.py
 ```
 
-This starts: `duburi_camera_fwd` + `duburi_camera_dwn` + `duburi_detector_fwd` (paused) + `duburi_detector_dwn` (paused) + trackers + viewer.
+This starts: `duburi_camera_forward` + `duburi_camera_downward` + `duburi_detector_forward` (paused) + `duburi_detector_downward` (paused) + trackers + viewer.
 
 **Verify lazy detector state:**
 
 ```bash
-ros2 param get /duburi_detector_fwd paused   # → True at launch
-ros2 param get /duburi_detector_dwn paused   # → True at launch
+ros2 param get /duburi_detector_forward paused    # → True at launch
+ros2 param get /duburi_detector_downward paused   # → True at launch
 ```
 
-**DSL verbs for lazy activation:**
+**DSL verbs for lazy activation** (the detector node is derived from the camera, so just pass the camera name):
 
 ```python
-duburi.resume_detector('forward')     # activates /duburi_detector_fwd
-duburi.pause_detector('forward')      # suspends /duburi_detector_fwd (free GPU)
-duburi.resume_detector('downward')    # activates /duburi_detector_dwn
-duburi.pause_detector('downward')     # suspends /duburi_detector_dwn
+duburi.resume_detector('forward')     # activates /duburi_detector_forward
+duburi.pause_detector('forward')      # suspends /duburi_detector_forward (free GPU)
+duburi.resume_detector('downward')    # activates /duburi_detector_downward
+duburi.pause_detector('downward')     # suspends /duburi_detector_downward
 ```
 
-**Always pass `node=` when setting model/classes in dual-cam missions:**
+**Set model/classes per camera** — pass `camera=` (the node name is derived as `/duburi_detector_<camera>`):
 
 ```python
-duburi.set_model('gate_rescue_repair', node='/duburi_detector_fwd')
-duburi.set_classes('gate,rescue,repair', node='/duburi_detector_fwd')
+duburi.set_model('gate_rescue_repair', camera='forward')
+duburi.set_classes('gate,rescue,repair', camera='forward')
+duburi.set_model('bin_fire_blood', camera='downward')
 ```
 
 **Run individual chunks (independent pool testing):**
@@ -592,9 +593,10 @@ ros2 param set /duburi_manager vision.frame_fill_default 90.0   # default fwd= f
 Switch the detector class filter without restarting the detector node:
 
 ```bash
-ros2 param set /duburi_detector classes gate         # gate detection only
-ros2 param set /duburi_detector classes flare        # flare detection only
-ros2 param set /duburi_detector classes "gate,flare" # both
+# Detector node is /duburi_detector_<camera> (e.g. _forward, _downward):
+ros2 param set /duburi_detector_forward classes gate         # gate detection only
+ros2 param set /duburi_detector_forward classes flare        # flare detection only
+ros2 param set /duburi_detector_forward classes "gate,flare" # both
 ```
 
 **Multi-model registry** — load several named models at startup, hot-swap between them during the mission:
@@ -606,8 +608,8 @@ ros2 launch duburi_manager bringup.launch.py vision:=true \
     active_model:=gate classes:=gate conf:=0.45
 
 # Switch model mid-mission (no restart, ~16 ms lag):
-ros2 param set /duburi_detector active_model flare
-ros2 param set /duburi_detector classes flare
+ros2 param set /duburi_detector_forward active_model flare
+ros2 param set /duburi_detector_forward classes flare
 ```
 
 From inside a mission DSL (preferred — `duburi.models` registry):
@@ -689,11 +691,11 @@ Use `yaw_source:=bno085_dvl` at pool for BNO085 heading + DVL position
 
 `tracker_node` subscribes `/detections`, runs ByteTrack + per-track
 Kalman smoother + EMA size smoothing, and publishes `/tracks` with stable
-object IDs and smoothed bounding boxes. Opt in by launching with `with_tracking:=true`:
+object IDs and smoothed bounding boxes. Tracking is on by default (`tracking:=false` to disable):
 
 ```bash
-# T1: launch vision pipeline with tracking enabled
-ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+# T1: launch vision pipeline with tracking enabled (default)
+ros2 launch duburi_vision vision.launch.py camera:=forward tracking:=true
 
 # T2: inspect smoothed track stream
 ros2 topic echo /duburi/vision/forward/tracks
@@ -813,8 +815,8 @@ ros2 run duburi_vision vision_display --ros-args -p camera:=laptop
 ros2 run duburi_vision vision_check --camera laptop --require-class gate
 
 # ── Full vision pipeline via launch (all of the above in one) ────────────
-ros2 launch duburi_vision cameras_.launch.py                       # camera + detector
-ros2 launch duburi_vision cameras_.launch.py with_tracking:=true   # + tracker
+ros2 launch duburi_vision vision.launch.py camera:=forward                  # camera + detector + tracker
+ros2 launch duburi_vision vision.launch.py camera:=forward tracking:=false  # without tracker
 
 # ── Combined bringup (FC + vision, production) ───────────────────────────
 ros2 launch duburi_manager bringup.launch.py vision:=true
@@ -1623,27 +1625,27 @@ ros2 launch duburi_manager bringup.launch.py mode:=pool yaw_source:=bno085_dvl
 ```bash
 # ── Both cameras, competition launch (detectors start PAUSED; missions resume per task)
 #    forward = gate_rescue_repair (gate,rescue,repair) · downward = bin_fire_blood (fire,blood)
-ros2 launch duburi_vision full_mission.launch.py \
-    dwn_model:=bin_fire_blood conf:=0.45            # fwd defaults to gate_rescue_repair
-ros2 launch duburi_vision full_mission.launch.py viewer:=false   # headless Jetson
+ros2 launch duburi_vision vision_dual.launch.py \
+    dwn_model:=bin_fire_blood dwn_conf:=0.45         # fwd defaults to gate_rescue_repair
+ros2 launch duburi_vision vision_dual.launch.py viewer:=false   # headless Jetson
 
 # ── Both cameras, always-on detectors (best for free command/subsystem testing)
-ros2 launch duburi_vision dual_cameras.launch.py \
+ros2 launch duburi_vision vision_dual.launch.py paused:=false \
     fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \
     dwn_model:=bin_fire_blood    dwn_classes:=fire,blood \
-    fwd_device:=0 dwn_device:=4 conf:=0.45
+    fwd_device:=0 dwn_device:=4 fwd_conf:=0.45 dwn_conf:=0.45
 
 # ── Single camera only (forward gate, or downward bin)
-ros2 launch duburi_vision cameras_.launch.py camera:=forward  model:=gate_rescue_repair classes:=gate,rescue,repair conf:=0.45
-ros2 launch duburi_vision cameras_.launch.py camera:=downward model:=bin_fire_blood    classes:=fire,blood        conf:=0.45
+ros2 launch duburi_vision vision.launch.py camera:=forward  model:=gate_rescue_repair classes:=gate,rescue,repair conf:=0.45
+ros2 launch duburi_vision vision.launch.py camera:=downward model:=bin_fire_blood    classes:=fire,blood        conf:=0.45
 ```
 
 > **Models live on the Jetson.** Drop the trained `.pt` weights in
 > `src/duburi_vision/models/` (gitignored; YAML class sidecars are committed).
 > Competition stems: `gate_rescue_repair` (gate/rescue/repair), `slalom_red_pipe`,
-> `bin_fire_blood` (blood/fire), `torpedo_blood_hole`. Until `bin_fire_blood.pt`
-> is present, `full_mission.launch.py` falls back to the `yolo11n` placeholder on
-> the downward camera. Full table: [`src/duburi_vision/models/README.md`](src/duburi_vision/models/README.md).
+> `bin_fire_blood` (blood/fire), `torpedo_blood_hole`. If a stem's `.pt` is
+> missing the detector falls back to the `yolo11n` placeholder for that camera.
+> Full table: [`src/duburi_vision/models/README.md`](src/duburi_vision/models/README.md).
 
 **`bringup.launch.py` arguments** (manager + optional single-camera vision):
 
@@ -1935,7 +1937,7 @@ Most common issues:
 | `arm -> FAIL: DENIED` | Pre-arm check failed — read `[ARDUB]` lines for reason. |
 | Depth times out at ~-0.5 m | ArduSub not in ALT_HOLD or Bar30 unhealthy. Check `[STATE]` mode. |
 | Yaw overshoots | `-p smooth_yaw:=true`, or lower `ATC_ANG_YAW_P` in QGC. |
-| **Camera sees the target but the AUV doesn't move** | The detector is publishing boxes but none match `target_class`. Watch for the `[VIS  ] detector publishing N boxes, none match 'X'` warning — fix the class filter (`ros2 param get /duburi_detector classes`) or model. Confirm `vision_align` reports a code other than `NO_CAMERA`. |
+| **Camera sees the target but the AUV doesn't move** | The detector is publishing boxes but none match `target_class`. Watch for the `[VIS  ] detector publishing N boxes, none match 'X'` warning — fix the class filter (`ros2 param get /duburi_detector_forward classes`) or model. Confirm `vision_align` reports a code other than `NO_CAMERA`. |
 | `vision_*` returns `NO_CAMERA` immediately | `camera_node` isn't publishing `camera_info` for that camera — check the camera is up and `--camera` matches the running namespace. |
 | `/dev/ttyACM0: Permission denied` | `sudo usermod -aG dialout "$USER"` then re-login. |
 | DVL: `[WARN] 192.168.2.201 unreachable` | DVL is off, not on the switch, or in sim mode — WARN is OK for bench/sim. |

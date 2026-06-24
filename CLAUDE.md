@@ -215,7 +215,7 @@ duburi_ws/src/
     │   └── utils/{check_pipeline,check_thrust}.py
     ├── config/{cameras,detector}.yaml
     ├── models/                   # *.pt weights (gitignored) + committed class-index YAMLs
-    └── launch/{cameras_,dual_cameras,full_mission,sim_demo,debug_view}.launch.py
+    └── launch/{vision,vision_dual}.launch.py   # 1-cam + 2-cam; detector node = duburi_detector_<camera>
 ```
 
 > **Adding a new command**: add a row in `duburi_control/commands.py` and a same-named method on `Duburi`. The action server, the `duburi` CLI, and the Python `DuburiClient` all pick it up automatically — no other file needs editing.
@@ -503,7 +503,7 @@ ros2 run duburi_planner mission gate_flare_autonomous  # detected()-paradigm fal
 ros2 launch duburi_manager bringup.launch.py vision:=true
 ros2 run duburi_vision vision_check --camera forward --require-class gate
 ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
-ros2 param set /duburi_detector classes "gate,flare"   # live class switch
+ros2 param set /duburi_detector_forward classes "gate,flare"   # live class switch
 ```
 
 ---

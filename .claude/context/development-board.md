@@ -55,8 +55,9 @@ Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport ·
 | P1 | Vision-control SITL smoke test (arm→dive→yaw→disarm) | 🟦 open | audit §6.6 / §4 |
 | P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (serial contract ✅ built — `PayloadDriver` + `fire` verb; path-marker FSM state still needed) | audit §6, `project_payload_actuation` memory |
 | P1 | `detector_node.py` `paused` param implementation | ✅ BUILT (2026-06-20) — `declare_parameter('paused', False)`, skip in `_infer_loop` after dequeue, `_on_parameter_change` handler | plan §gap-1 |
-| P1 | `duburi_dsl.py` `pause_detector`/`resume_detector` methods | ✅ BUILT (2026-06-20) — subprocess `ros2 param set` rail, camera→node mapping fwd/dwn | plan §gap-1 |
-| P1 | `full_mission.launch.py` (competition dual-cam launch) | ✅ BUILT (2026-06-20) — both detectors `paused:=True`, gate_rescue_repair fwd model | plan §launch |
+| P1 | `duburi_dsl.py` `pause_detector`/`resume_detector` methods | ✅ BUILT (2026-06-20) — subprocess `ros2 param set` rail; all 6 detector helpers now derive node uniformly as `/duburi_detector_<camera>` via `_detector_node()` (2026-06-24) | plan §gap-1 |
+| P1 | Vision launch consolidation → `vision.launch.py` (1-cam) + `vision_dual.launch.py` (2-cam) | ✅ BUILT (2026-06-24) — replaced 5 scattered launches; detector node = `duburi_detector_<camera>`, quiet (`--log-level warn`), detectors `paused:=true` by default in dual | plan §launch |
+| P1 | `vision.move('gate')` pass-through (`fwd=None`) | ✅ BUILT (2026-06-24) — `fwd_fill<=0` sentinel → `move_loop` drives until target seen-then-leaves-frame + commit overshoot; never-seen → LOST | this plan |
 | P2 | Model training: `slalom_red_pipe.pt`, `bin_fire_blood.pt`, `torpedo_blood_hole.pt` | 🟦 open — blocks slalom/bin/torpedo chunks from live pool testing | models/README.md §Competition |
 | P2 | YASMIN FSM (core + gate/prequal/bin plans) | ✅ BUILT (4a94231) — [`fsm-guide.md`](fsm-guide.md) |
 | P2 | YASMIN FSM (slalom/bin/torpedo/return/full_2026 plans) | ✅ BUILT (cec7f37) — `state_machines/plans/` + `missions/fsm_*.py` |

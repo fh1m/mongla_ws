@@ -43,20 +43,21 @@ Pass just the **stem name** (no path, no `.pt`) at launch:
 
 ```bash
 # Gate-only model
-ros2 launch duburi_vision cameras_.launch.py model:=gate_medium_100ep classes:=gate
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_medium_100ep classes:=gate
 
 # Flare-only model
-ros2 launch duburi_vision cameras_.launch.py model:=flare_medium_100ep classes:=flare
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=flare_medium_100ep classes:=flare
 
 # Combined model — start with gate class, switch to flare during mission
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_medium_100ep classes:=gate
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_flare_medium_100ep classes:=gate
 ```
 
-Switch the class filter **live** without restarting the detector:
+Switch the class filter **live** without restarting the detector (node =
+`/duburi_detector_<camera>`):
 
 ```bash
-ros2 param set /duburi_detector classes gate
-ros2 param set /duburi_detector classes "gate,flare"
+ros2 param set /duburi_detector_forward classes gate
+ros2 param set /duburi_detector_forward classes "gate,flare"
 ```
 
 Or from within a mission DSL script:
@@ -76,7 +77,7 @@ The resolver looks up `models/<stem>.pt` in the package share directory
 Run the pipeline on a `.mp4` / `.avi` before pool day:
 
 ```bash
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py camera:=forward \
     video_file:=/tmp/pool_run.mp4 model:=gate_nano_100ep classes:=gate
 ```
 
@@ -137,29 +138,26 @@ Class index order matters — pass exactly the class name string the yaml define
 
 ### Dual-camera usage (competition launch)
 
-The competition launch (`full_mission.launch.py`) runs two detectors:
+The competition launch (`vision_dual.launch.py`) runs two detectors, named
+`/duburi_detector_<camera>`:
 
 ```bash
-# forward detector — node: /duburi_detector_fwd
-ros2 param set /duburi_detector_fwd active_model gate_rescue_repair
-ros2 param set /duburi_detector_fwd classes "gate,rescue,repair"
+# forward detector — node: /duburi_detector_forward
+ros2 param set /duburi_detector_forward active_model gate_rescue_repair
+ros2 param set /duburi_detector_forward classes "gate,rescue,repair"
 
-# downward detector — node: /duburi_detector_dwn
-ros2 param set /duburi_detector_dwn active_model bin_fire_blood
-ros2 param set /duburi_detector_dwn classes "fire,blood"
+# downward detector — node: /duburi_detector_downward
+ros2 param set /duburi_detector_downward active_model bin_fire_blood
+ros2 param set /duburi_detector_downward classes "fire,blood"
 ```
 
-**Always pass `node=` explicitly** when calling `set_model()` / `set_classes()` /
-`use()` from a dual-cam mission — the default is `/duburi_detector` which
-doesn't exist when using the competition launch:
+**Pass `camera=`** when calling `set_model()` / `set_classes()` / `use()` from a
+dual-cam mission — the helper derives the node as `/duburi_detector_<camera>`:
 
 ```python
-# Correct — explicit node
-duburi.set_model('gate_rescue_repair', node='/duburi_detector_fwd')
-duburi.set_classes('gate,rescue,repair', node='/duburi_detector_fwd')
-
-# Wrong — hits non-existent /duburi_detector
-duburi.set_model('gate_rescue_repair')
+duburi.set_model('gate_rescue_repair', camera='forward')   # → /duburi_detector_forward
+duburi.set_classes('gate,rescue,repair', camera='forward')
+duburi.set_model('bin_fire_blood', camera='downward')      # → /duburi_detector_downward
 ```
 
 ### Lazy detection (save GPU)
@@ -168,9 +166,9 @@ Both detectors start `paused=True` in the competition launch. Missions
 activate inference only for the task that needs it:
 
 ```python
-duburi.resume_detector('forward')   # → ros2 param set /duburi_detector_fwd paused false
+duburi.resume_detector('forward')   # → ros2 param set /duburi_detector_forward paused false
 # ... task code ...
-duburi.pause_detector('forward')    # → ros2 param set /duburi_detector_fwd paused true
+duburi.pause_detector('forward')    # → ros2 param set /duburi_detector_forward paused true
 ```
 
 Pausing a detector drops its `_infer_loop` CPU/GPU load to ~0 while keeping

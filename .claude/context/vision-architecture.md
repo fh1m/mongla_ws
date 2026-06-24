@@ -77,7 +77,7 @@ no `to_ros.py`, no `nodes/` or `viz/` subfolders. Per-user request,
 ```
 
 `/classes_filter` is published once at `detector_node` startup with the initial `classes` param,
-and re-published on every live `ros2 param set /duburi_detector classes <...>` change. Any
+and re-published on every live `ros2 param set /duburi_detector_<camera> classes <...>` change. Any
 consumer — `vision_display`, logging nodes, future HUD overlays — can subscribe to get the
 current class filter without polling `ros2 param get`. This means class changes from CLI, DSL
 (`duburi.set_classes()`), or mission code (`duburi.models(...)`) all propagate automatically.
@@ -194,19 +194,20 @@ names:
 The detector logs the full class table at startup. Pass the **stem** (no `.pt`):
 
 ```bash
-ros2 launch duburi_vision cameras_.launch.py model:=gate_v1 classes:=gate
-ros2 launch duburi_vision cameras_.launch.py model:=flare_v1 classes:=flare
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_v1 classes:=gate,flare
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_v1 classes:=gate
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=flare_v1 classes:=flare
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_flare_v1 classes:=gate,flare
 ```
 
 ### Switching class filter live
 
 The `classes` param is a post-inference allowlist — the model runs its full
-forward pass; only matching boxes are published. Change it without restarting:
+forward pass; only matching boxes are published. Change it without restarting
+(node = `/duburi_detector_<camera>`):
 
 ```bash
-ros2 param set /duburi_detector classes gate
-ros2 param set /duburi_detector classes "gate,flare"
+ros2 param set /duburi_detector_forward classes gate
+ros2 param set /duburi_detector_forward classes "gate,flare"
 ```
 
 ### Offline testing with `video_file`
@@ -214,7 +215,7 @@ ros2 param set /duburi_detector classes "gate,flare"
 Run the full pipeline on a pre-recorded `.mp4` / `.avi`:
 
 ```bash
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py camera:=forward \
     video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
 ```
 
