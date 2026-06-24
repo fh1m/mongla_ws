@@ -122,6 +122,14 @@ ros2 launch duburi_vision vision.launch.py camera:=laptop model:=yolov11n classe
 # competition dual-camera: ros2 launch duburi_vision vision_dual.launch.py
 ```
 
+**Any model · any classes · any number of cameras.** `model:=<stem>` picks any weights in
+`models/` (or a `yolov11n`/`yolo26n` pretrained alias); `classes:=a,b,c` (empty = all) is a
+live post-inference filter; `conf:=` sets the threshold. For N cameras, launch one
+`vision.launch.py camera:=<name>` per camera (or a per-node `camera_node`+`detector_node`
+pair) — each gets its own `/duburi/vision/<name>/*` topics and a `/duburi_detector_<name>`
+node you can retarget live (`ros2 param set /duburi_detector_<name> classes …` /
+`active_model …`). Load several models at once with `models:="gate=gate_nano_100ep,combined=gate_flare_medium_100ep" active_model:=gate` and hot-swap mid-mission.
+
 ### Run a mission
 
 ```bash
@@ -232,6 +240,29 @@ Full flags: `ros2 run duburi_planner duburi <cmd> --help`.
 `--target head` (or any numeric field) snapshots the live heading at dispatch:
 `duburi lock_heading --target head`. Full parameter / MAVLink reference:
 [`command-reference.md`](.claude/context/command-reference.md).
+
+### Stopping, aborting & emergency kill
+
+`stop`, `disarm`, and `surface` are **safety verbs** — they bypass the "one command at a
+time" gate, so they execute *even while another command is mid-run* and signal it to abort
+at its next tick.
+
+```bash
+ros2 run duburi_planner duburi stop        # active hold — RC neutral on every channel
+ros2 run duburi_planner duburi surface     # ascend to 0 m and hold (works during a mission)
+ros2 run duburi_planner duburi disarm      # cut thrusters (MANUAL → neutral → disarm)
+```
+
+**Ctrl-C is the kill switch.** Hitting Ctrl-C (or sending `SIGTERM`) to:
+- **the manager** → automatic emergency stop: heading-lock + heartbeat stopped, RC neutral,
+  **disarm**, sensor/camera handles closed (the red `MONGLA EMERGENCY STOP` banner prints).
+- **a running mission** (`mission` runner) → cancels the in-flight goal, then `stop` + `disarm`.
+- **a blocking `duburi <cmd>`** → cancels that goal and waits for it to unwind.
+
+Every mission calls `duburi.mission_reset()` first (stops a stale heading lock, clears any
+abort flag, RC neutral) so a fresh run never inherits the previous run's state. In a custom
+mission, wrap motion in `try/finally: duburi.disarm()` so an exception still disarms — the
+runner also does this as a backstop.
 
 ### Vision: two verbs
 
