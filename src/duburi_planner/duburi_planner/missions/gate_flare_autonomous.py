@@ -112,7 +112,8 @@ def run(duburi, log):
 
     # ── 5. FindFlare — yaw sweep until flare visible ─────────────────────── #
     log('=== FindFlare ===')
-    # Restore both classes before sweep (vision.home above may have set classes='gate')
+    # Restore both classes before sweep (the gate align/move above set classes='gate'
+    # via its ClassRef target)
     duburi.set_classes('gate,flare')
     flare_found = False
     for _ in range(_MAX_SWEEP_STEPS):
@@ -140,7 +141,7 @@ def run(duburi, log):
 
     # ── 7. OrbitFlare — yaw steps, break when gate re-appears ───────────── #
     log('=== OrbitFlare ===')
-    # CRITICAL: vision.home above called set_classes('flare').
+    # CRITICAL: the flare align/move above set classes='flare' via its ClassRef.
     # Restore both classes BEFORE the orbit loop or detected('gate') can never be True.
     duburi.set_classes('gate,flare')
     gate_reacquired = False

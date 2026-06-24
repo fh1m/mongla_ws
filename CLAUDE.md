@@ -196,7 +196,7 @@ duburi_ws/src/
 │       │   └── demo_{arc,find_person,heading_lock,move_see,square,pursue}.py
 │       └── state_machines/       # YASMIN FSM layer (BUILT) — see fsm-guide.md
 │           ├── core/{outcomes,blackboard,vehicle_profile,base_state}.py
-│           ├── states/{navigation,vision,utility}.py   # nav: Turn/Approach/Fire/StyleRoll; vision: VisionSearch/VisionAlign/VisionMove
+│           ├── states/{navigation,vision,utility}.py   # nav: Arm/Disarm/SetDepth/LockHeading/Move*/Turn/Surface; vision: VisionSearch/VisionAlign/VisionMove; utility: Countdown/Pause/LogScore/SetDetector/Fire/StyleRoll
 │           └── plans/{gate_flare,prequal,gate_then_bin,slalom,bin_drop,torpedo_fire,return_gate,full_competition}.py
 ├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
 │   ├── duburi_sensors/
