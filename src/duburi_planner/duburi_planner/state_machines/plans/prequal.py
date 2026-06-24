@@ -14,7 +14,7 @@ from ..core.vehicle_profile import VehicleProfile
 from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState, MoveForwardState, SurfaceState,
 )
-from ..states.vision import VisionFindState, VisionHomeState
+from ..states.vision import VisionSearchState, VisionAlignState
 from ..states.utility import CountdownState, LogScoreState
 
 PREQUAL_DEFAULTS: dict = {
@@ -25,7 +25,9 @@ PREQUAL_DEFAULTS: dict = {
     'pass_duration': 5.0,
     'pass_gain':     80,
     'find_timeout':  45.0,
-    'home_duration': 20.0,
+    'align_duration': 20.0,
+    'align_err_px':  40,
+    'align_gain':    30,
 }
 
 
@@ -54,21 +56,20 @@ def build_prequal_fsm(
                  transitions={SUCCEED: 'FIND_GATE', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_GATE',
-                 VisionFindState(duburi, profile, target='gate',
-                                 move='forward', gain=30,
-                                 timeout=p['find_timeout']),
+                 VisionSearchState(duburi, profile, target='gate',
+                                   pattern='forward', gain=30,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'HOME_GATE', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('HOME_GATE',
-                 VisionHomeState(duburi, profile, target='gate',
-                                 yaw=True, lat=True,
-                                 gate_guard=True, pass_at=0.38,
-                                 metric='area',
-                                 duration=p['home_duration']),
+                 VisionAlignState(duburi, profile, target='gate',
+                                  yaw=True, lat=True,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
                  transitions={SUCCEED: 'PASS_GATE',
-                               FAILED: 'FIND_GATE',
-                               TIMEOUT: 'SURFACE',
-                               ABORT: 'SURFACE'})
+                              FAILED: 'FIND_GATE',
+                              TIMEOUT: 'SURFACE',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('PASS_GATE',
                  MoveForwardState(duburi, profile,

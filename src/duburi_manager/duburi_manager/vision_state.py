@@ -52,14 +52,9 @@ class Sample:
     """One snapshot of where the largest target sits in the frame.
 
     All values are normalized to [-1, +1] for ex/ey, [0, 1] for h_frac,
-    so the controller math is camera-resolution-agnostic.
-
-    When tracking is enabled (VisionState.use_tracks=True), track_id is
-    the ByteTrack-assigned stable integer ID. score=0.0 + track_id set
-    means a Kalman-predicted frame (real detection absent but track alive).
-    The control loop uses age_s for stale-gate logic — predicted frames
-    inherit the age of the last real measurement, so short occlusions ride
-    through stale_after naturally.
+    so the controller math is camera-resolution-agnostic. The control
+    loop reads /detections directly (the same topic the HUD shows), so a
+    box visible on screen is a box the controller acts on.
     """
     ex:       float    # horizontal error: -1=left edge, 0=centre, +1=right edge
     ey:       float    # vertical error:   -1=top  edge, 0=centre, +1=bottom edge
@@ -68,32 +63,24 @@ class Sample:
     age_s:    float    # how stale this detection is (monotonic seconds)
     class_id: str
     score:     float
-    track_id:  int | None = None   # stable ID when tracking; None on raw detections
     vis_range: float = 0.0         # monocular depth estimate from depth_estimation_node (0=far, 1=close)
-    predicted: bool  = False       # True when ByteTrack Kalman-predicting (no fresh measurement)
 
 
 class VisionState:
     """One camera's worth of subscribed-and-cached vision state.
 
-    Parameters
-    ----------
-    use_tracks : bool
-        When True, subscribe to /duburi/vision/<cam>/tracks (output of
-        tracker_node) instead of /detections. The topic carries the same
-        Detection2DArray type with id populated. Sample.track_id
-        will be set; score=0.0 frames are Kalman-predicted (no real detection).
-        Default False — raw detections, no tracking overhead.
+    The control loop always reads ``/duburi/vision/<cam>/detections`` --
+    the raw detector output, the exact topic the operator HUD overlays.
+    The tracker node still runs for the display but is no longer in the
+    control path, so a detection on screen is one the controller sees.
     """
 
     def __init__(self, node: Node, *, camera: str = 'laptop',
-                 default_image_size: tuple = (640, 480),
-                 use_tracks: bool = False,
+                 default_image_size: tuple = (0, 0),
                  logger=None):
         self._node    = node
         self._camera  = camera
         self._log     = logger or node.get_logger()
-        self._use_tracks = use_tracks
 
         self._lock          = threading.Lock()
         self._latest_array: Optional[Detection2DArray] = None
@@ -105,9 +92,8 @@ class VisionState:
 
         ns = f'/duburi/vision/{camera}'
         qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
-        det_topic = f'{ns}/tracks' if use_tracks else f'{ns}/detections'
         self._sub_det   = node.create_subscription(
-            Detection2DArray, det_topic,             self._on_detections, qos)
+            Detection2DArray, f'{ns}/detections',   self._on_detections, qos)
         self._sub_info  = node.create_subscription(
             CameraInfo,       f'{ns}/camera_info',   self._on_info,       qos)
         self._sub_img   = node.create_subscription(
@@ -115,10 +101,9 @@ class VisionState:
         self._sub_vr    = node.create_subscription(
             Float32MultiArray, f'{ns}/vis_range',    self._on_vis_range,  10)
 
-        source_label = 'tracks' if use_tracks else 'detections'
         self._log.info(
             f"[VST  ] subscribed camera={camera!r} -> "
-            f"{ns}/{source_label} (+camera_info, +image_raw counter, +vis_range)")
+            f"{ns}/detections (+camera_info, +image_raw counter, +vis_range)")
 
     # ------------------------------------------------------------------ #
     #  Subscriber callbacks                                              #
@@ -184,8 +169,9 @@ class VisionState:
     def bbox_error(self, class_name: str = '') -> Optional[Sample]:
         """Pick the largest matching detection and return a normalized Sample.
 
-        Returns None when no matching detection is cached. The control
-        loop treats None as "stale" and applies its `on_lost` policy.
+        Returns None when no matching detection is cached, or before the
+        first CameraInfo arrives (image size still (0,0)) so the control
+        loop never steers on a mis-scaled pixel error.
         """
         with self._lock:
             detections_array     = self._latest_array
@@ -235,13 +221,10 @@ class VisionState:
 
         class_id  = _hypothesis_class_id(detection)
         score     = _hypothesis_score(detection)
-        track_id  = _tracking_id(detection) if self._use_tracks else None
-        predicted = self._use_tracks and track_id is not None and score == 0.0
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
                       age_s=time.monotonic() - sampled_at_monotonic,
-                      class_id=class_id, score=score, track_id=track_id,
-                      vis_range=vis_range, predicted=predicted)
+                      class_id=class_id, score=score, vis_range=vis_range)
 
     def list_classes(self) -> List[str]:
         """Sorted list of distinct class_id strings in the latest array."""
@@ -316,14 +299,3 @@ def _hypothesis_score(det: Detection2D) -> float:
 
 def _hypothesis_matches(det: Detection2D, class_name: str) -> bool:
     return _hypothesis_class_id(det).strip().lower() == class_name.strip().lower()
-
-
-def _tracking_id(det: Detection2D) -> int | None:
-    """Return integer track_id from Detection2D.id, or None."""
-    tid = getattr(det, 'id', None)
-    if tid is None or tid == '':
-        return None
-    try:
-        return int(tid)
-    except (ValueError, TypeError):
-        return None

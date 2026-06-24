@@ -70,8 +70,7 @@ def _float_or_head(value):
 # commands; sending the rosidl zero is what triggers the live-param
 # substitution inside `commands.fields_for`.
 _LIVE_TUNED_COMMANDS = {
-    'vision_align_3d', 'vision_align_yaw', 'vision_align_lat',
-    'vision_align_depth', 'vision_hold_distance', 'vision_acquire',
+    'vision_align', 'vision_move',
 }
 
 

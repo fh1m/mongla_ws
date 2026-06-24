@@ -15,7 +15,7 @@ from ..state_machines import build_full_competition_fsm, VehicleProfile
 from .competition_config import (
     GATE_SEARCH_DEPTH_M,
     GATE_PASS_DEPTH_M,
-    GATE_PASS_BBOX_FRAC,
+    GATE_PASS_FWD_FILL,
     BIN_DEPTH_M,
     TORPEDO_DEPTH_M,
     SLALOM_HEADING_DEG,
@@ -40,7 +40,7 @@ def run(duburi, log):
     sm = build_full_competition_fsm(duburi, profile, params={
         'search_depth_m':       GATE_SEARCH_DEPTH_M,
         'gate_pass_depth_m':    GATE_PASS_DEPTH_M,
-        'gate_pass_bbox':       GATE_PASS_BBOX_FRAC,
+        'gate_pass_fill':       GATE_PASS_FWD_FILL,
         'bin_depth_m':          BIN_DEPTH_M,
         'torpedo_depth_m':      TORPEDO_DEPTH_M,   # None = skip torpedo task
         'slalom_heading':       SLALOM_HEADING_DEG,

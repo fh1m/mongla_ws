@@ -20,18 +20,23 @@ in   /duburi/vision/<cam>/detections    vision_msgs/Detection2DArray
 out  /duburi/vision/<cam>/tracks        vision_msgs/Detection2DArray  (tracking_id set)
 ```
 
-Predicted frames (occlusion-bridged) carry `score=0.0` — `VisionState` and
-`vision_state.py` check for this and do not fire `on_lost` on predicted boxes.
+Predicted frames (occlusion-bridged) carry `score=0.0`.
 
-## How to enable in missions
+## Where tracks are consumed
 
-```python
-# DSL — per-goal tracking (use home() with tracking=True):
-duburi.vision.home(target=duburi.models.gate.gate, yaw=True, forward=True,
-                   dist=0.42, tracking=True, ...)
+The mission **control path always reads `/detections`** — the two vision
+verbs (`vision_align` / `vision_move`) run their pixel-error P-loops on raw
+detector boxes, so there is no per-goal tracking flag anymore. `/tracks`
+(stable IDs + Kalman-smoothed bboxes) feeds the **mission-control HUD and
+offline analysis** instead.
 
-# launch — enable tracker_node:
+```bash
+# Start tracker_node alongside the detector (default true):
 ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+
+# depth_estimation_node can optionally read /tracks instead of /detections:
+ros2 launch duburi_vision cameras_.launch.py depth:=true   # use_tracks=with_tracking
 ```
 
-See `.claude/context/mission-cookbook.md` §"Tracking while moving" for full examples.
+See `.claude/context/vision-architecture.md` (topic contract) for the full
+detector → tracker → HUD data flow.

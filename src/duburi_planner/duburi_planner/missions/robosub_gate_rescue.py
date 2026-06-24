@@ -11,20 +11,15 @@ Mission phases:
   0. Countdown      tether-removal window (COUNTDOWN_S)
   1. Startup        arm → dive → BNO085 heading lock
   2. FindGate       forward march → lateral wiggle → yaw sweep (both dirs)
-  3. AlignGate      vision.home(gate, yaw+gate_guard) — heading correction
-  4. SlideRescue    vision.home(rescue, lat only)     — slide to rescue side
-  5. CommitPass     vision.home(gate, yaw+fwd+gate_guard+pass_at)
+  3. AlignGate      vision.align(gate, yaw+lat) — heading correction
+  4. SlideRescue    vision.align(rescue, lat only) — slide to rescue side
+  5. CommitPass     vision.move(gate, fwd fill)
   6. ClearGate      timed burst to ensure full clearance
   7. FindRescue     forward march → lateral wiggle → yaw sweep (both dirs)
-  8. ApproachRescue vision.home(rescue, yaw+lat+fwd) to bbox threshold
+  8. ApproachRescue vision.move(rescue, fwd fill) to bbox threshold
   9. DiveUnder      deeper depth → forward → return to mission depth
   10. Style         roll_rock (360° angle-confirmed) + yaw circle
   11. Surface       release heading → stop → surface → disarm
-
-Gate angle guard:
-  gate_guard=True suppresses forward when gate bbox w/h < GATE_GUARD_FRAC
-  — prevents bar collision on angled approach.
-  Phase 3 corrects heading first so Phase 5 rarely needs gate_guard.
 
 Launch (BNO085, no DVL):
   ros2 launch duburi_manager bringup.launch.py \\
@@ -56,22 +51,23 @@ MAX_LATERAL_WIGGLES= 3        # left/right wiggles per search (3 = ±3 half-widt
 SWEEP_DEG          = 20       # yaw step size in degrees
 MAX_SWEEP_STEPS    = 18       # 18×20° = full 360° sweep
 
+# Vision alignment (pixel-native, two-verb API)
+ALIGN_ERR_PX       = 40       # "centred" pixel tolerance for vision.align
+ALIGN_GAIN         = 30       # max speed while centring
+APPROACH_GAIN      = 45       # max speed while driving forward
+
 # Gate alignment & pass
 GATE_ALIGN_DUR     = 12.0     # max seconds for yaw-only gate alignment
-GATE_ALIGN_SETTLE  = 0.3      # settle after alignment before slide
 RESCUE_SLIDE_DUR   =  8.0     # max seconds sliding laterally to rescue side
-RESCUE_SLIDE_SETTLE=  0.3     # settle after slide
 GATE_PASS_DUR      = 20.0     # max seconds for committed gate pass
-GATE_PASS_AT       =  0.40    # commit forward when gate area ≥ 40% of frame
-GATE_PASS_GAIN     = 65       # forward % after pass_at triggers
-GATE_GUARD_FRAC    =  0.30    # suppress forward if gate bbox w/h < 0.30
+GATE_PASS_FILL     = 50       # drive through until gate area fills 50% of frame
 GATE_CLEAR_S       =  3.0     # timed burst after pass to clear gate bars
 GATE_CLEAR_GAIN    = 65
 
 # Rescue approach
+RESCUE_ALIGN_DUR   = 12.0     # max seconds centring on rescue sign
 RESCUE_HOME_DUR    = 25.0     # max seconds approaching rescue sign
-RESCUE_HOME_DIST   =  0.45    # stop when rescue fills 45% of frame height
-RESCUE_HOME_SETTLE =  0.5     # settle after approach
+RESCUE_FWD_FILL    = 45       # stop when rescue fills 45% of frame height
 
 # Dive under rescue sign
 DIVE_EXTRA         = -0.35    # extra depth below MISSION_DEPTH (more negative)
@@ -133,44 +129,34 @@ def run(duburi, log):
 
     # ── 3. AlignGate — yaw only, no forward yet ───────────────────────── #
     # Correct heading to face gate straight-on before lateral offset.
-    # gate_guard prevents forward if gate still appears narrow (angled approach).
+    # yaw=0 only touches Ch4 (the heading lock owns it via release_yaw);
+    # there is no forward motion in this phase.
     log('=== AlignGate ===')
     duburi.set_classes('gate')
-    duburi.vision.home(
-        target=gate,
-        yaw=True, lat=False, forward=False,
-        gate_guard=True, gate_guard_min_w_frac=GATE_GUARD_FRAC,
-        duration=GATE_ALIGN_DUR, settle=GATE_ALIGN_SETTLE,
-        on_lost='hold',
-    )
+    duburi.vision.align(
+        gate, yaw=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=GATE_ALIGN_DUR,
+        fallback=creep_search)
 
     # ── 4. SlideRescue — lateral only, heading stays locked ───────────── #
     # yaw=False: don't undo the heading correction from phase 3.
     # Slides until rescue sign is centred in frame (rescue side of gate).
     log('=== SlideToRescue ===')
     duburi.set_classes('gate,rescue')
-    duburi.vision.home(
-        target=rescue,
-        yaw=False, lat=True, forward=False,
-        duration=RESCUE_SLIDE_DUR, settle=RESCUE_SLIDE_SETTLE,
-        on_lost='hold',
-    )
+    duburi.vision.align(
+        rescue, lat=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=RESCUE_SLIDE_DUR)
 
     # ── 5. CommitPass — advance through gate on rescue side ───────────── #
-    # lat=False: hold rescue-side position (don't drift back to gate centre).
-    # pass_at: commits full-speed forward once gate fills GATE_PASS_AT of frame.
+    # move() drives pure forward (no re-centre) until the gate fills
+    # GATE_PASS_FILL of the frame; gain caps the approach speed.
     log('=== CommitPass ===')
     duburi.set_classes('gate')
-    gate_result = duburi.vision.home(
-        target=gate,
-        yaw=True, lat=False, forward=True,
-        gate_guard=True, gate_guard_min_w_frac=GATE_GUARD_FRAC,
-        pass_at=GATE_PASS_AT, pass_at_gain=GATE_PASS_GAIN,
-        dist=0.45, metric='area',
-        duration=GATE_PASS_DUR, settle=0.0,
-        on_lost='hold',
-    )
-    if not gate_result.success:
+    gate_result = duburi.vision.move(
+        gate, fwd=GATE_PASS_FILL, mode='area',
+        gain=APPROACH_GAIN, duration=GATE_PASS_DUR,
+        fallback=creep_search)
+    if not gate_result.ok:
         log('WARN: gate pass incomplete — continuing with timed clear')
 
     # ── 6. ClearGate — ensure full clearance past bars ────────────────── #
@@ -199,13 +185,14 @@ def run(duburi, log):
     # Forward until rescue sign height fills RESCUE_HOME_DIST of frame.
     log('=== ApproachRescue ===')
     duburi.set_classes('rescue')
-    duburi.vision.home(
-        target=rescue,
-        yaw=True, lat=True, forward=True,
-        dist=RESCUE_HOME_DIST, metric='height',
-        duration=RESCUE_HOME_DUR, settle=RESCUE_HOME_SETTLE,
-        on_lost='hold',
-    )
+    duburi.vision.align(
+        rescue, yaw=0, lat=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=RESCUE_ALIGN_DUR,
+        fallback=creep_search)
+    duburi.vision.move(
+        rescue, fwd=RESCUE_FWD_FILL, mode='height',
+        gain=APPROACH_GAIN, duration=RESCUE_HOME_DUR,
+        fallback=creep_search)
 
     # ── 9. DiveUnder — descend, pass under sign, re-ascend ────────────── #
     log('=== DiveUnder ===')
@@ -222,6 +209,11 @@ def run(duburi, log):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def creep_search(duburi):
+    """Fallback for vision.align/move: one short forward creep, then return."""
+    duburi.move_forward(STEP_S, gain=SEARCH_GAIN)
+
 
 def creep_forward(duburi, target, max_steps) -> bool:
     """March forward in STEP_S bursts until target detected. Returns True on find."""

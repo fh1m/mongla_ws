@@ -3,7 +3,7 @@
 
 Uses the pretrained yolov11n model (COCO 80-class, auto-downloads ~5 MB on first
 run) to detect 'person'. No custom weights needed -- ideal for desk testing before
-pool day. Also exercises every duburi.vision.* verb in sequence.
+pool day. Exercises both vision verbs (align + move) and the fallback search.
 
 To run:
     ros2 launch duburi_vision cameras_.launch.py camera:=laptop
@@ -13,52 +13,39 @@ Swap model:
     duburi.models(person='yolov11s')   # ~10 MB, more accurate
     duburi.models(person='yolov11m')   # ~40 MB, highest accuracy
 
-Custom weights use identical syntax:
-    duburi.models(gate='gate_flare_medium_100ep')
-    duburi.vision.find(target=duburi.models.gate.gate, move='forward')
+The two verbs
+-------------
+duburi.vision.align(target, *, lat=, yaw=, depth=, err=, duration=, gain=, fallback=)
+    Hold the target at a signed pixel offset on each active axis (a number
+    activates the axis; 0 = centre). Returns a truthy VisionResult when
+    centred; never raises on a miss.
 
-Verb quick-reference
---------------------
-duburi.vision.find(move, timeout)
-    Watch until target appears. move='still'/'forward'/'yaw_right'/'yaw_left'/'arc'.
-    Exits on first detection. Aborts mission after timeout seconds.
-
-duburi.vision.turn(duration)
-    Yaw left/right to bring target's horizontal centre to frame centre (Ch4).
-    Exits when centred within deadband, or duration expires.
-
-duburi.vision.approach(dist, metric, duration)
-    Drive forward/back so target fills dist fraction of frame.
-    metric: 'height'/'width'/'area'/'diagonal'. Exits when at standoff, or timeout.
-
-duburi.vision.home(yaw, lat, depth, forward, dist, metric, duration)
-    Multi-axis lock. All active axes run in one 20 Hz loop.
-    Exits when all axes settle within deadband, or duration expires.
-
-duburi.vision.track(yaw, forward, depth, lat, dist, duration)
-    Continuous tracking (never exits on settle). Good for moving targets.
+duburi.vision.move(target, *, fwd=, mode=, maintain=, hold=, ..., fallback=)
+    Drive forward until the bbox fills `fwd` % of the frame (mode =
+    area/width/height). `maintain` holds a lateral pixel offset while
+    driving. Never re-centres.
 
 Live tuning (no rebuild):
   ros2 param set /duburi_manager vision.kp_yaw 80.0
-  ros2 param set /duburi_manager vision.deadband 0.06
+  ros2 param set /duburi_manager vision.lost_grace_s 1.5
 
 WARNING: this mission arms the vehicle.
 """
 
-CAMERA        = 'laptop'
-DIVE_DEPTH_M  = -0.5
-HOLD_DISTANCE = 0.55   # stop when bbox fills 55% of frame height
+CAMERA       = 'laptop'
+DIVE_DEPTH_M = -0.5
 
-ACQUIRE_TIMEOUT_S = 25.0
-ALIGN_DURATION_S  = 8.0
-HOLD_DURATION_S   = 12.0
-LOCK_DURATION_S   = 15.0
+ALIGN_ERR_PX     = 50     # webcam is noisy — a loose tolerance settles reliably
+ALIGN_GAIN       = 30
+APPROACH_GAIN    = 35
+PERSON_FWD_FILL  = 55     # drive in until the person fills 55% of frame height
+ALIGN_DURATION_S = 12.0
+MOVE_DURATION_S  = 15.0
 
 
 def run(duburi, log):
     duburi.mission_reset()
     # Pretrained COCO weights — auto-downloads yolov11n.pt (~5 MB) on first run.
-    # Access class handles via duburi.models.person.person (ClassRef).
     duburi.models(person='yolov11n')
     duburi.camera = CAMERA
 
@@ -68,40 +55,37 @@ def run(duburi, log):
 
     target = duburi.models.person.person   # ClassRef — sets model + class automatically
 
-    # find: rotate right until target appears. Aborts after 25 s.
-    duburi.vision.find(target=target, move='yaw_right', timeout=ACQUIRE_TIMEOUT_S)
+    # align: yaw-centre the person; sweep to find them if not in frame.
+    duburi.vision.align(
+        target, camera=CAMERA, yaw=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=ALIGN_DURATION_S,
+        fallback=sweep_yaw)
 
-    # turn: yaw only — centre target horizontally before approaching.
-    duburi.vision.turn(target=target, duration=ALIGN_DURATION_S)
+    # move: drive in to standoff distance by bbox height fill.
+    duburi.vision.move(
+        target, camera=CAMERA, fwd=PERSON_FWD_FILL, mode='height',
+        gain=APPROACH_GAIN, duration=MOVE_DURATION_S, fallback=creep_forward)
 
-    # approach: drive to standoff distance by bbox height fraction.
-    # on_lost='hold' rides out brief detection gaps (turbid water).
-    duburi.vision.approach(
-        target=target,
-        dist=HOLD_DISTANCE,
-        duration=HOLD_DURATION_S,
-        on_lost='hold')
-
-    # home: yaw + forward simultaneously in one control loop.
-    duburi.vision.home(
-        target=target,
-        yaw=True, forward=True,
-        dist=HOLD_DISTANCE,
-        duration=LOCK_DURATION_S)
-
-    # Deliberate de-target then re-acquire: tests full search → lock cycle.
+    # Deliberate de-target then re-acquire: tests the full search → lock cycle.
     duburi.yaw_left(90.0)
-    duburi.vision.find(target=target, move='yaw_right', timeout=ACQUIRE_TIMEOUT_S)
-
-    # home: 3-axis lock. Depth axis nudges the ALT_HOLD setpoint to keep
-    # the target vertically centred. All three axes run in the same loop.
-    duburi.vision.home(
-        target=target,
-        yaw=True, forward=True, depth=True,
-        dist=HOLD_DISTANCE,
-        duration=LOCK_DURATION_S,
-        on_lost='hold')
+    duburi.vision.align(
+        target, camera=CAMERA, yaw=0, depth=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=ALIGN_DURATION_S,
+        fallback=sweep_yaw)
 
     duburi.stop()
     duburi.set_depth(0.0)
     duburi.disarm()
+
+
+# ── Mission-authored fallback search patterns (pure control) ────────────────────
+def creep_forward(duburi):
+    duburi.move_forward(0.6, gain=30)
+
+
+def sweep_yaw(duburi, should_stop):
+    """Rotate right in steps looking for the target; bail when it reappears."""
+    for _ in range(6):
+        duburi.yaw_right(30.0)
+        if should_stop():
+            return

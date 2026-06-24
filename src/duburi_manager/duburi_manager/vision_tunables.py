@@ -33,146 +33,45 @@ from typing import Any, Dict
 # Mirrors the spec defaults in duburi_control/commands.py exactly so
 # nothing changes if the operator never sets a param.
 VISION_PARAM_DEFAULTS: Dict[str, Any] = {
-    'vision.kp_yaw':              60.0,
+    # P-gains: pct thrust per unit normalized pixel error (kp_depth is m/tick).
+    # Mirror the engine defaults in duburi_control/motion_vision.py.
     'vision.kp_lat':              60.0,
+    'vision.kp_yaw':              60.0,
     'vision.kp_depth':             0.05,
     'vision.kp_forward':         200.0,
-    # Loose defaults tuned for sim + webcam smoke tests: a seated person
-    # inside a reasonable "centred" zone satisfies `deadband`, fills
-    # ~30% of frame height from a normal chair distance, and webcam
-    # detection stutters up to 1.5 s without tripping the lost-target
-    # budget. Pool missions override per-call via the CLI / mission DSL
-    # or by editing vision_tunables.yaml for the run.
-    'vision.deadband':             0.18,
-    'vision.target_bbox_h_frac':   0.30,
-    'vision.stale_after':          1.5,
-    'vision.on_lost':             'fail',
-    'vision.acquire_yaw_rate_pct': 22.0,
-    'vision.acquire_gain':         25.0,
-    # depth_anchor_frac: which vertical point on the bbox to align to centre.
-    # 0.5 = centre (default, same as before). 0.2 = near-top (use for tall
-    # objects like standing people -- prevents the controller stalling when
-    # the bbox centre is already at the frame centre).
-    'vision.depth_anchor_frac':    0.5,
-    # lock_mode: 'settle' (exit when centred), 'follow' (track until duration),
-    # 'pursue' (approach-only, exit when target fills target_bbox_h_frac).
-    'vision.lock_mode':           'settle',
-    # distance_metric: how to measure target distance from its bounding box.
-    # 'height' (default), 'area' (better for wide targets), 'diagonal'.
-    'vision.distance_metric':     'height',
-    # speed: master scalar 0.0-1.0. 1.0 = full gain caps, 0.5 = half.
-    # Set lower at pool for safety; per-goal override available in Move.action.
-    'vision.speed':               1.0,
-    # h_frac_close: bbox height fraction at which proximity scaling is fully applied.
-    # 0.0 disables proximity scaling (raw speed only). Per-task override recommended.
-    'vision.h_frac_close':        0.0,
-    # proximity_min_scale: gain floor fraction when target fills frame at h_frac_close.
-    'vision.proximity_min_scale': 0.2,
-    # slew_limit_pct: max RC channel change per 20Hz tick. Kills oscillation.
-    # At 8%/tick = 160%/s max slew — fast enough to correct, smooth enough not to lose.
-    'vision.slew_limit_pct':      8.0,
-    # coast_ticks: 20Hz ticks to coast on last bbox before going neutral on lost target.
-    # 10 ticks = 0.5s — matches ByteTrack Kalman prediction window.
-    'vision.coast_ticks':         10,
-    # search_* params for on_lost='search' sweep behaviour.
-    'vision.search_yaw_rate_pct': 20.0,
-    'vision.search_lat_pct':       0.0,
-    'vision.search_timeout_s':    20.0,
-    'vision.search_dwell_s':       1.5,
-    # stable_lock_s: seconds all axes must stay in deadband before vision_lock_fire
-    # triggers the fire callback.  Higher = more stable shot, longer wait.
-    'vision.stable_lock_s':        3.0,
+    # lost_grace_s: seconds the server coasts on target loss before reporting
+    # LOST (so the DSL can run a fallback search). 1.0 s rides typical pool
+    # turbidity blackouts without false-triggering.
+    'vision.lost_grace_s':         1.0,
+    # frame_fill_default: % of frame the bbox must fill for vision_move to count
+    # as "reached" when the mission leaves fwd_fill at 0.
+    'vision.frame_fill_default':  95.0,
+    # align_stable_frames: ticks (at 20 Hz) every active axis must stay within
+    # err_px before vision_align reports ALIGNED. 3 ticks = 0.15 s.
+    'vision.align_stable_frames':  3.0,
 }
 
 
 # Per-command map: COMMANDS-field name -> ROS-param name.
 #
-# Some commands reuse the same conceptual gain (e.g. vision_acquire's
-# `gain` is the search-thrust percent, sourced from
-# `vision.acquire_gain`; vision_align_yaw's `kp_yaw` is sourced from
-# `vision.kp_yaw`). Keep this table explicit -- never guess.
+# These let a deck operator tune gains / grace live with `ros2 param set
+# /duburi_manager vision.kp_yaw 80.0` and have the NEXT vision goal pick
+# up the value -- without editing mission code. The fields here are NOT
+# mission-facing (the DSL leaves them at the rosidl zero), so the
+# substitution in `commands.fields_for` is what fills them.
 _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
-    'vision_align_3d': {
-        'kp_yaw':              'vision.kp_yaw',
+    'vision_align': {
         'kp_lat':              'vision.kp_lat',
+        'kp_yaw':              'vision.kp_yaw',
         'kp_depth':            'vision.kp_depth',
-        'kp_forward':          'vision.kp_forward',
-        'deadband':            'vision.deadband',
-        'target_bbox_h_frac':  'vision.target_bbox_h_frac',
-        'stale_after':         'vision.stale_after',
-        'on_lost':             'vision.on_lost',
-        'depth_anchor_frac':   'vision.depth_anchor_frac',
-        'lock_mode':           'vision.lock_mode',
-        'distance_metric':     'vision.distance_metric',
-        'speed':               'vision.speed',
-        'h_frac_close':        'vision.h_frac_close',
+        'lost_grace_s':        'vision.lost_grace_s',
+        'align_stable_frames': 'vision.align_stable_frames',
     },
-    'vision_align_yaw': {
-        'kp_yaw':       'vision.kp_yaw',
-        'deadband':     'vision.deadband',
-        'stale_after':  'vision.stale_after',
-        'on_lost':      'vision.on_lost',
-        'lock_mode':    'vision.lock_mode',
-        'speed':        'vision.speed',
-        'h_frac_close': 'vision.h_frac_close',
-    },
-    'vision_align_lat': {
-        'kp_lat':       'vision.kp_lat',
-        'deadband':     'vision.deadband',
-        'stale_after':  'vision.stale_after',
-        'on_lost':      'vision.on_lost',
-        'lock_mode':    'vision.lock_mode',
-        'speed':        'vision.speed',
-        'h_frac_close': 'vision.h_frac_close',
-    },
-    'vision_align_depth': {
-        'kp_depth':           'vision.kp_depth',
-        'deadband':           'vision.deadband',
-        'stale_after':        'vision.stale_after',
-        'on_lost':            'vision.on_lost',
-        'depth_anchor_frac':  'vision.depth_anchor_frac',
-        'lock_mode':          'vision.lock_mode',
-        'speed':              'vision.speed',
-        'h_frac_close':       'vision.h_frac_close',
-    },
-    'vision_hold_distance': {
-        'kp_forward':         'vision.kp_forward',
-        'target_bbox_h_frac': 'vision.target_bbox_h_frac',
-        'deadband':           'vision.deadband',
-        'stale_after':        'vision.stale_after',
-        'on_lost':            'vision.on_lost',
-        'lock_mode':          'vision.lock_mode',
-        'distance_metric':    'vision.distance_metric',
-        'speed':              'vision.speed',
-        'h_frac_close':       'vision.h_frac_close',
-    },
-    'vis_approach': {
+    'vision_move': {
         'kp_forward':   'vision.kp_forward',
-        'stale_after':  'vision.stale_after',
-        'on_lost':      'vision.on_lost',
-        'lock_mode':    'vision.lock_mode',
-        'speed':        'vision.speed',
-        'h_frac_close': 'vision.h_frac_close',
-    },
-    'vision_acquire': {
-        'gain':         'vision.acquire_gain',
-        'yaw_rate_pct': 'vision.acquire_yaw_rate_pct',
-        'stale_after':  'vision.stale_after',
-    },
-    'vision_lock_fire': {
-        'kp_yaw':             'vision.kp_yaw',
-        'kp_lat':             'vision.kp_lat',
-        'kp_depth':           'vision.kp_depth',
-        'kp_forward':         'vision.kp_forward',
-        'deadband':           'vision.deadband',
-        'target_bbox_h_frac': 'vision.target_bbox_h_frac',
-        'stale_after':        'vision.stale_after',
-        'on_lost':            'vision.on_lost',
-        'depth_anchor_frac':  'vision.depth_anchor_frac',
-        'distance_metric':    'vision.distance_metric',
-        'stable_lock_s':      'vision.stable_lock_s',
-        'speed':              'vision.speed',
-        'h_frac_close':       'vision.h_frac_close',
+        'kp_lat':       'vision.kp_lat',
+        'lost_grace_s': 'vision.lost_grace_s',
+        'fwd_fill':     'vision.frame_fill_default',
     },
 }
 

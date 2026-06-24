@@ -19,39 +19,57 @@ Open-loop motion verbs sit directly on `duburi`:
 Depth is held automatically by ArduSub's onboard ALT_HOLD. `set_depth`
 engages the mode and drives to the target; the autopilot holds it afterwards.
 
-Closed-loop vision verbs sit under `duburi.vision`. Each verb corresponds
-to one AUV physical motion and maps to one future YASMIN state:
+Closed-loop vision lives under `duburi.vision` as exactly two verbs:
 
-    duburi.vision.find(target, move='still')   -- watch until target seen
-    duburi.vision.turn(target, duration)        -- yaw to centre horizontally
-    duburi.vision.slide(target, duration)       -- slide laterally to centre
-    duburi.vision.hover(target, duration)       -- rise/sink to centre vertically
-    duburi.vision.approach(target, dist, metric)-- approach to standoff distance
-    duburi.vision.home(target,                  -- multi-axis convergence
-                       yaw=True, lat=True,
-                       dist=0.42, metric='area',
-                       gate_guard=True,
-                       pass_at=0.35)
-    duburi.vision.track(target, duration)       -- track continuously
-    duburi.vision.scan(target, step=20, dwell=1.5) -- orbit-scan for target
+    duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
+                        err=40, duration=20, gain=30, fallback=None, camera=None)
+        Centre the target on the selected axes. Each of lat/yaw/depth is
+        None (axis off) or a signed pixel offset from centre (0 = centre,
+        +=right/below, -=left/above). lat+yaw are horizontal (Ch6 strafe /
+        Ch4 rotate); depth is vertical. At least one axis is required.
+
+    duburi.vision.move(target, *, fwd=95, mode='area', maintain=None,
+                       hold=None, err=40, duration=20, gain=30,
+                       fallback=None, camera=None)
+        Drive forward until the bbox fills `fwd` % of the frame. mode is
+        'area' | 'width' | 'height' (slalom uses 'height'). `maintain` holds
+        a px lateral offset while driving; `hold` station-keeps after reach.
+        Never re-centres; depth is left to ArduSub's depth-hold.
+
+Both return a `VisionResult(ok, reason, code, last_err_px, fill)` and
+NEVER raise on a miss — on timeout/loss they log "not aligned/reached"
+and the mission continues. `gain` is a hard max-speed cap (% thrust).
+
+`fallback` is a mission-authored search function called on target loss:
+
+    def creep_forward(duburi):          # one short maneuver, then return
+        duburi.move_forward(0.6, gain=35)
+
+    def sweep_yaw(duburi, should_stop):  # longer self-polling sweep
+        for ang in (15, -30, 30):
+            duburi.turn(duburi.head() + ang)
+            if should_stop():
+                return
+
+    duburi.vision.align('gate', yaw=0, lat=0, fallback=creep_forward)
+
+Firing replaces the old lock-fire verb with align + the `fire` control verb:
+
+    if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12).ok:
+        duburi.fire(1)
 
 Detection guards (non-blocking, safe in tight loops):
 
     # Move forward until the gate is detected, then align
     while not duburi.detected('gate'):
         duburi.move_forward(1.0, gain=30)
-    duburi.vision.home(target='gate', yaw=True, lat=True)
-
-    # Branch on action result (.success is True on any successful verb)
-    result = duburi.vision.find(target='gate', timeout=30)
-    if result.success:
-        duburi.vision.home(target='gate', yaw=True)
+    duburi.vision.align('gate', yaw=0, lat=0)
 
     # Works with ClassRef model handles (no model switching side-effect):
     duburi.models(gate='gate_flare_medium_100ep')
     while not duburi.detected(duburi.models.gate.gate):
         duburi.move_forward(0.5, gain=25)
-    duburi.vision.home(target=duburi.models.gate.gate)
+    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0)
 
     # Override camera or freshness window:
     duburi.detected('flare', camera='downward', stale_after=2.0)
@@ -61,29 +79,19 @@ first call (lazy, per-camera). It is a zero-wait cache check — every
 blocking DSL verb keeps the cache warm via ROS callbacks processed
 during the action spin.
 
-All DSL verbs return `Move.Result` with `result.success`, `result.final_value`,
-and `result.error_value`. Use `result.success` to gate state transitions:
-
-    result = duburi.vision.scan(target='flare', duration=60)
-    if result.success:
-        duburi.vision.home(target='flare', yaw=True, depth=True)
-    else:
-        duburi.move_forward(3.0)   # fallback: advance and retry
-
 Model context (multi-model missions):
 
     duburi.models(
         gate   = 'gate_flare_medium_100ep',
         slalom = 'slalom_combined',
     )
-    duburi.vision.find(target=duburi.models.gate.gate,       move='forward', gain=35)
-    duburi.vision.home(target=duburi.models.gate.gate,       yaw=True, lat=True)
-    duburi.vision.turn(target=duburi.models.slalom.slalom_red)
+    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0)
+    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='height')
 
     # Strict class list (validates attribute access at handle time):
     duburi.models(gate=('gate_flare_medium_100ep', ['gate', 'flare']))
-    duburi.vision.find(target=duburi.models.gate.gate)   # OK
-    # duburi.vision.find(target=duburi.models.gate.typo) # → AttributeError
+    duburi.vision.align(duburi.models.gate.gate, yaw=0)   # OK
+    # duburi.vision.align(duburi.models.gate.typo, yaw=0)  # → AttributeError
 
 When a ClassRef is passed as target, the DSL automatically calls
 set_model() + set_classes() before sending the goal — no explicit
@@ -93,48 +101,12 @@ Canonical competition task pattern (gate pass):
 
     duburi.models(gate='gate_flare_medium_100ep')
     duburi.set_depth(-1.2)
-    duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
-    duburi.vision.turn(target=duburi.models.gate.gate, duration=6)
-    duburi.vision.slide(target=duburi.models.gate.gate, duration=5)
-    duburi.vision.approach(target=duburi.models.gate.gate, dist=0.42, metric='area', duration=10)
-    duburi.vision.home(target=duburi.models.gate.gate, yaw=True, lat=True,
-                       gate_guard=True, duration=8)
-    duburi.move_forward(3.5, gain=55)
-
-Each DSL line becomes one YASMIN state when the state machine layer is added.
-
-Vision verb quick reference
----------------------------
-find(target, move='still', gain=25, yaw_rate_pct=22, timeout=25)
-    move: 'still' | 'forward' | 'yaw_right' | 'yaw_left' | 'arc'
-    Blocks until target is detected. Optionally moves while searching.
-
-turn(target, duration=8)
-    Yaw (Ch4) left/right to horizontally centre target in frame.
-
-slide(target, duration=8)
-    Slide (Ch6) laterally to horizontally centre target without changing heading.
-
-hover(target, duration=8)
-    Nudge depth setpoint up/down to vertically centre target in frame.
-
-approach(target, dist=0.55, metric='height', duration=12, pass_at=0.0, pass_at_gain=50)
-    Drive forward/back to reach standoff distance.
-    metric: 'height' (tall objects) | 'width' (wide objects) |
-            'area' (gates) | 'diagonal' (all-rounder)
-    pass_at: once size >= pass_at, freeze lat+depth and drive straight.
-
-home(target, yaw=True, lat=False, depth=False, forward=False,
-     dist=0.55, metric='height',
-     gate_guard=False, gate_guard_min_w_frac=0.35,
-     pass_at=0.0, pass_at_gain=50, duration=15)
-    Multi-axis convergence. Boolean flags select which axes run simultaneously.
-    gate_guard: suppress forward when gate appears angled (experimental).
-    pass_at: commit to straight-through pass at threshold (experimental).
-
-track(target, yaw=True, forward=True, lat=False, depth=False,
-      dist=0.55, duration=60)
-    Track continuously until duration expires (never exits on settle).
+    while not duburi.detected(duburi.models.gate.gate):
+        duburi.move_forward(0.6, gain=35)
+    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+                        fallback=creep_forward)
+    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area',
+                       fallback=creep_forward)
 
 Detector control (manual — ClassRef targets do this automatically):
     duburi.set_classes('gate')         # only gate detections
@@ -145,8 +117,8 @@ Detector control (manual — ClassRef targets do this automatically):
 
 Tunable live (between runs, no rebuild):
     ros2 param set /duburi_manager vision.kp_yaw 80.0
-    ros2 param set /duburi_manager vision.kp_forward 150.0
-    ros2 param set /duburi_manager vision.deadband 0.10
+    ros2 param set /duburi_manager vision.kp_lat 60.0
+    ros2 param set /duburi_manager vision.lost_grace_s 1.0
 """
 
 from __future__ import annotations
@@ -189,7 +161,7 @@ class DuburiMission:
         Sticky defaults. Override per call with `camera=` / `target=`.
     """
 
-    def __init__(self, client, log, *, camera: str = 'laptop',
+    def __init__(self, client, log, *, camera: str = 'forward',
                  target: str = 'person'):
         self.client = client
         self.log    = log
@@ -229,13 +201,10 @@ class DuburiMission:
     # ================================================================== #
 
     def _subscribe_detections(self, camera: str) -> None:
-        # Subscribe to /tracks when tracker is running (default); fall back to /detections.
-        try:
-            use_tracks = self.client.node.get_parameter('vision.use_tracks').value
-        except Exception:
-            use_tracks = True
-        suffix = 'tracks' if use_tracks else 'detections'
-        topic = f'/duburi/vision/{camera}/{suffix}'
+        # Always read /detections -- the same raw detector topic the control
+        # loop (VisionState) and the HUD use, so detected() agrees with what
+        # the AUV actually acts on. The tracker stays display-only.
+        topic = f'/duburi/vision/{camera}/detections'
         sub = self.client.node.create_subscription(
             Detection2DArray, topic,
             lambda msg, cam=camera: self._on_detections(cam, msg), 10)
@@ -280,7 +249,7 @@ class DuburiMission:
                 duburi.move_forward(1.0, gain=30)
 
             if duburi.detected(duburi.models.gate.flare, stale_after=2.0):
-                duburi.vision.home(target='flare', yaw=True)
+                duburi.vision.align('flare', yaw=0)
         """
         if isinstance(target_class, ClassRef):
             target_class = target_class.class_name
@@ -295,7 +264,11 @@ class DuburiMission:
         stamp, class_names = entry
         if _time.monotonic() - stamp > stale_after:
             return False
-        return target_class in class_names
+        # Case-insensitive match, consistent with the control path
+        # (VisionState._hypothesis_matches lowercases both sides) so a
+        # fallback's should_stop() fires the moment the target reappears.
+        needle = str(target_class).strip().lower()
+        return any(needle == name.strip().lower() for name in class_names)
 
     # ================================================================== #
     #  Power / mode                                                        #
@@ -438,14 +411,7 @@ class DuburiMission:
         Example::
 
             duburi.use_camera('downward')
-            duburi.vision.home(
-                target='bin_marker',
-                lat=True, forward=True, depth=False, yaw=False,
-                kp_lat=60.0,
-                kp_forward=-60.0,  # negative: ey>0 = target AFT = move backward
-                offset_x=0.0, offset_y=0.0,
-                deadband=0.08,
-            )
+            duburi.vision.align('bin_marker', lat=0, depth=0, err=30)
             duburi.use_camera('forward')
         """
         self.log.info(f'[MISSION] camera → {name!r}')

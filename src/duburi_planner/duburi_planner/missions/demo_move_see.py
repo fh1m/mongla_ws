@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""move_and_see -- minimal open-loop + vision-tracking demo.
+"""move_and_see -- minimal open-loop + vision demo (two-verb).
 
   arm
   set_depth (-0.5 m)          depth-hold engaged; autopilot owns vertical
   move_forward 3 s            open-loop scout leg
-  detected() scan             yaw left in 90 deg steps until target found
-  vision.track                lateral-only tracking (yaw/forward disabled)
+  vision.align (lat)          slide to keep target centred (creep fallback)
+  vision.move                 drive in until target fills the frame
   move_back 3 s               open-loop withdraw
   set_depth 0                 surface
   disarm
@@ -17,18 +17,21 @@ Sim / webcam testing (yolov11n pretrained):
 
 Live tuning (no rebuild):
   ros2 param set /duburi_manager vision.kp_lat 80.0
-  ros2 param set /duburi_manager vision.target_bbox_h_frac 0.65
 """
 
-CAMERA              = 'video'
-TARGET_CLASS        = 'gate'
-DIVE_DEPTH_M        = -0.5
+CAMERA       = 'video'
+TARGET_CLASS = 'gate'
+DIVE_DEPTH_M = -0.5
 
-SCOUT_GAIN          = 60.0
-WITHDRAW_GAIN       = 60.0
-TRACK_DURATION_S    = 200.0
+SCOUT_GAIN    = 60.0
+WITHDRAW_GAIN = 60.0
 
-_MAX_SEARCH_STEPS   = 20     # 20 × 90° = up to 5 full sweeps before giving up
+ALIGN_ERR_PX  = 40
+ALIGN_GAIN    = 30
+APPROACH_GAIN = 35
+FWD_FILL      = 70
+ALIGN_S       = 20.0
+MOVE_S        = 30.0
 
 
 def run(duburi, log):
@@ -39,31 +42,30 @@ def run(duburi, log):
     duburi.arm()
     duburi.set_depth(DIVE_DEPTH_M, settle=1.0)
 
-    # Open-loop scout: close distance before scanning.
+    # Open-loop scout: close distance before aligning.
     duburi.move_forward(3.0, gain=SCOUT_GAIN)
 
-    # Bounded scan: yaw left in 90° steps until target appears.
-    for _ in range(_MAX_SEARCH_STEPS):
-        if duburi.detected(TARGET_CLASS):
-            break
-        duburi.move_forward(3, gain=50)
-        duburi.pause(3)
-        duburi.yaw_left(90)
-    else:
-        log(f'target {TARGET_CLASS!r} not found after {_MAX_SEARCH_STEPS} steps — aborting')
-        duburi.set_depth(0.0)
-        duburi.disarm()
-        return
+    # Slide to centre the target (creep+sweep fallback finds it if lost).
+    duburi.vision.align(
+        TARGET_CLASS, camera=CAMERA, lat=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=ALIGN_S,
+        fallback=scout)
 
-    # Vision-track laterally to keep target centred (no yaw, no approach).
-    duburi.vision.track(
-        target=TARGET_CLASS,
-        yaw=False, lat=True, forward=True,
-        duration=TRACK_DURATION_S,
-        on_lost='hold',
-    )
+    # Drive in until the target fills the frame.
+    duburi.vision.move(
+        TARGET_CLASS, camera=CAMERA, fwd=FWD_FILL, mode='area',
+        gain=APPROACH_GAIN, duration=MOVE_S, fallback=scout)
 
     # Withdraw and surface.
     duburi.move_back(3.0, gain=WITHDRAW_GAIN)
     duburi.set_depth(0.0)
     duburi.disarm()
+
+
+# ── Mission-authored fallback search pattern (pure control) ─────────────────────
+def scout(duburi, should_stop):
+    """Creep forward then yaw-step, looking for the target."""
+    duburi.move_forward(3.0, gain=50)
+    if should_stop():
+        return
+    duburi.yaw_left(90.0)

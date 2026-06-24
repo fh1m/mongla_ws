@@ -28,11 +28,19 @@ def test_discover_finds_missions():
         assert callable(fn), f'mission {name!r} is not callable'
 
 
-def test_every_mission_has_two_arg_signature():
-    """The runner calls `fn(duburi, log)`. Reject any other signature."""
+def test_every_mission_accepts_runner_call():
+    """The runner calls `fn(duburi, log)`. `log` may be optional
+    (`run(duburi, log=None)`), but the two-positional call must bind and
+    `duburi` must be required."""
     for name, fn in discover().items():
         sig = inspect.signature(fn)
-        positionals = [
+        try:
+            sig.bind(object(), object())
+        except TypeError as exc:
+            raise AssertionError(
+                f'mission {name!r} cannot be called as fn(duburi, log): '
+                f'{sig} ({exc})')
+        required = [
             p for p in sig.parameters.values()
             if p.kind in (
                 inspect.Parameter.POSITIONAL_ONLY,
@@ -40,13 +48,13 @@ def test_every_mission_has_two_arg_signature():
             )
             and p.default is inspect.Parameter.empty
         ]
-        assert len(positionals) == 2, (
-            f'mission {name!r} signature must be `(duburi, log)`, '
+        assert 1 <= len(required) <= 2, (
+            f'mission {name!r} signature must be `(duburi, log[=None])`, '
             f'got {sig}')
 
 
 def test_known_missions_are_present():
     """Hard-code the missions we ship today so a deletion is loud."""
     reg = discover()
-    for name in ('square_pattern', 'arc_demo', 'heading_lock_demo'):
+    for name in ('demo_square', 'demo_arc', 'demo_heading_lock'):
         assert name in reg, f'expected mission {name!r} to be registered'

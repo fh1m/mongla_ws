@@ -1,11 +1,22 @@
-"""Vision states — wrapping DuburiMission DSL vision verbs.
+"""Vision states — wrapping the two DuburiMission vision verbs.
 
-Each state accepts an explicit `camera` parameter (e.g. 'forward', 'downward').
-When camera=None the DSL falls back to the sticky `duburi.camera` context.
-Passing camera= explicitly makes plans self-documenting and enables camera
-switching between tasks without a separate SetDetectorState.
+Three states map 1:1 onto the two-verb vision API plus an open-loop
+search:
+
+  VisionSearchState -- open-loop creep / yaw-sweep until the target is
+                       detected (replaces the old find/scan verbs).
+  VisionAlignState  -- duburi.vision.align(): centre on lat/yaw/depth at
+                       signed pixel offsets. SUCCEED only when aligned.
+  VisionMoveState   -- duburi.vision.move(): drive forward to a bbox fill
+                       ratio. SUCCEED only when the fill target is reached.
+
+``camera=None`` falls back to the sticky ``duburi.camera`` context.
+Axis flags on VisionAlignState accept ``True`` (centre, offset 0), a
+number (signed pixel offset), or ``None``/``False`` (axis off).
 """
 from __future__ import annotations
+
+import time
 
 from yasmin import Blackboard
 
@@ -13,193 +24,132 @@ from ..core.base_state import DuburiState
 from ..core.outcomes import SUCCEED, FAILED, TIMEOUT
 
 
-class VisionFindState(DuburiState):
-    """Block until target visible; optionally move while searching.
+def _axis(value):
+    """Normalise an axis flag to align()'s None=off / number=offset form."""
+    if value is None or value is False:
+        return None
+    if value is True:
+        return 0.0
+    return float(value)
 
-    Wraps duburi.vision.find(). camera=None → inherits duburi.camera sticky.
+
+class VisionSearchState(DuburiState):
+    """Open-loop search until target detected (replaces find/scan).
+
+    ``pattern='forward'`` creeps ahead in short bursts; ``pattern='yaw'``
+    sweeps in yaw steps. Polls ``duburi.detected()`` each step.
     """
-    TIMEOUT_S = 60.0
-
     def __init__(
         self,
         duburi,
         profile,
         target: str,
         camera: str | None = None,
-        move: str = 'forward',
-        gain: int = 30,
+        pattern: str = 'forward',
+        gain: float = 35.0,
+        step_s: float = 0.6,
+        yaw_step: float = 20.0,
         timeout: float = 45.0,
     ) -> None:
         super().__init__(duburi, profile, [SUCCEED])
         self._target  = target
         self._camera  = camera
-        self._move    = move
+        self._pattern = pattern
         self._gain    = gain
+        self._step_s  = step_s
+        self._yaw     = yaw_step
         self._timeout = timeout
+        self.TIMEOUT_S = timeout + 10.0
 
     def _run(self, bb: Blackboard) -> str:
-        kw = dict(target=self._target, move=self._move,
-                  gain=self._gain, timeout=self._timeout)
-        if self._camera:
-            kw['camera'] = self._camera
-        result = self.duburi.vision.find(**kw)
-        return SUCCEED if result.success else TIMEOUT
+        deadline = time.monotonic() + self._timeout
+        while time.monotonic() < deadline:
+            if self.duburi.detected(self._target, camera=self._camera,
+                                    stale_after=1.0):
+                return SUCCEED
+            if self._pattern == 'yaw':
+                self.duburi.yaw_right(self._yaw)
+            else:
+                self.duburi.move_forward(self._step_s, gain=self._gain)
+        return TIMEOUT
 
 
-class VisionHomeState(DuburiState):
-    """Multi-axis vision convergence.
+class VisionAlignState(DuburiState):
+    """duburi.vision.align() — centre on the selected axes at pixel offsets.
 
-    Wraps duburi.vision.home(). camera=None → inherits duburi.camera sticky.
-    All gate_guard / pass_at / dist kwargs forwarded unchanged.
+    SUCCEED when aligned, FAILED on any miss (LOST / TIMEOUT / NO_CAMERA).
     """
-    TIMEOUT_S = 30.0
-
     def __init__(
         self,
         duburi,
         profile,
         target: str,
         camera: str | None = None,
-        yaw: bool = False,
-        lat: bool = False,
-        depth: bool = False,
-        forward: bool = False,
-        gate_guard: bool = False,
-        pass_at: float = 0.0,
-        dist: float = 0.0,
-        metric: str = 'area',
+        yaw=None,
+        lat=None,
+        depth=None,
+        err: float = 40.0,
+        gain: float = 30.0,
         duration: float = 20.0,
-        on_lost: str = 'fail',
-        **overrides,
+        fallback=None,
     ) -> None:
         super().__init__(duburi, profile, [SUCCEED, FAILED])
-        self._kwargs = dict(
-            target=target,
-            yaw=yaw, lat=lat, depth=depth, forward=forward,
-            gate_guard=gate_guard,
-            pass_at=pass_at or None,
-            dist=dist or None,
-            metric=metric,
-            duration=duration,
-            on_lost=on_lost,
-            **overrides,
-        )
-        if camera:
-            self._kwargs['camera'] = camera
-        # Strip None-valued optional keys — DSL inherits param defaults for them
-        self._kwargs = {k: v for k, v in self._kwargs.items() if v is not None}
-        self.TIMEOUT_S = duration + 5.0
-
-    def _run(self, bb: Blackboard) -> str:
-        result = self.duburi.vision.home(**self._kwargs)
-        return SUCCEED if result.success else FAILED
-
-
-class ApproachState(DuburiState):
-    """vision.approach() — drive forward/back to bbox fill fraction.
-
-    Exits when target reaches dist fraction, or duration expires.
-    Uses on_lost='hold' by default (competition-safe).
-    """
-    TIMEOUT_S = 35.0
-
-    def __init__(
-        self,
-        duburi,
-        profile,
-        target: str,
-        camera: str | None = None,
-        dist: float = 0.55,
-        metric: str = 'height',
-        duration: float = 25.0,
-        lock_mode: str = 'pursue',
-        on_lost: str = 'hold',
-        **overrides,
-    ) -> None:
-        super().__init__(duburi, profile, [SUCCEED, FAILED])
-        self._kwargs = dict(
-            target=target, dist=dist, metric=metric,
-            duration=duration, lock_mode=lock_mode, on_lost=on_lost, **overrides)
-        if camera:
-            self._kwargs['camera'] = camera
-        self.TIMEOUT_S = duration + 5.0
-
-    def _run(self, bb: Blackboard) -> str:
-        result = self.duburi.vision.approach(**self._kwargs)
-        return SUCCEED if result.success else FAILED
-
-
-class VisionLockFireState(DuburiState):
-    """vision.vision_lock_fire() — stable-lock then fire via ESP32 serial.
-
-    Aligns on target, holds stable for stable_lock_s, fires fire_channel.
-    Retries up to max_attempts; fires at last pose as fallback.
-    """
-    TIMEOUT_S = 90.0
-
-    def __init__(
-        self,
-        duburi,
-        profile,
-        target: str,
-        camera: str | None = None,
-        fire_channel: int = 1,
-        yaw: bool = True,
-        lat: bool = True,
-        depth: bool = True,
-        forward: bool = False,
-        stable_lock_s: float = 3.0,
-        max_attempts: int = 3,
-        duration: float = 60.0,
-        **overrides,
-    ) -> None:
-        super().__init__(duburi, profile, [SUCCEED, FAILED])
-        self._kwargs = dict(
-            target=target,
-            fire_channel=fire_channel,
-            yaw=yaw, lat=lat, depth=depth, forward=forward,
-            stable_lock_s=stable_lock_s,
-            max_attempts=max_attempts,
-            duration=duration,
-            **overrides)
-        if camera:
-            self._kwargs['camera'] = camera
-        self.TIMEOUT_S = duration + 5.0
-
-    def _run(self, bb: Blackboard) -> str:
-        result = self.duburi.vision.vision_lock_fire(**self._kwargs)
-        return SUCCEED if result.success else FAILED
-
-
-class VisionScanState(DuburiState):
-    """Incremental yaw orbit until target detected or budget exhausted.
-
-    Wraps duburi.vision.scan(). camera=None → inherits duburi.camera sticky.
-    """
-    TIMEOUT_S = 100.0
-
-    def __init__(
-        self,
-        duburi,
-        profile,
-        target: str,
-        camera: str | None = None,
-        step: float = 20.0,
-        dwell: float = 1.5,
-        duration: float = 90.0,
-    ) -> None:
-        super().__init__(duburi, profile, [SUCCEED])
         self._target   = target
         self._camera   = camera
-        self._step     = step
-        self._dwell    = dwell
+        self._yaw      = _axis(yaw)
+        self._lat      = _axis(lat)
+        self._depth    = _axis(depth)
+        self._err      = err
+        self._gain     = gain
         self._duration = duration
-        self.TIMEOUT_S = duration + 5.0
+        self._fallback = fallback
+        self.TIMEOUT_S = duration + 10.0
 
     def _run(self, bb: Blackboard) -> str:
-        kw = dict(target=self._target, step=self._step,
-                  dwell=self._dwell, duration=self._duration)
-        if self._camera:
-            kw['camera'] = self._camera
-        result = self.duburi.vision.scan(**kw)
-        return SUCCEED if result.success else TIMEOUT
+        result = self.duburi.vision.align(
+            self._target, camera=self._camera,
+            lat=self._lat, yaw=self._yaw, depth=self._depth,
+            err=self._err, gain=self._gain, duration=self._duration,
+            fallback=self._fallback)
+        return SUCCEED if result.ok else FAILED
+
+
+class VisionMoveState(DuburiState):
+    """duburi.vision.move() — drive forward to a bbox fill ratio.
+
+    SUCCEED when the fill target is reached, FAILED otherwise.
+    """
+    def __init__(
+        self,
+        duburi,
+        profile,
+        target: str,
+        camera: str | None = None,
+        fwd: float = 95.0,
+        mode: str = 'area',
+        maintain=None,
+        hold=None,
+        gain: float = 30.0,
+        duration: float = 20.0,
+        fallback=None,
+    ) -> None:
+        super().__init__(duburi, profile, [SUCCEED, FAILED])
+        self._target   = target
+        self._camera   = camera
+        self._fwd      = fwd
+        self._mode     = mode
+        self._maintain = maintain
+        self._hold     = hold
+        self._gain     = gain
+        self._duration = duration
+        self._fallback = fallback
+        self.TIMEOUT_S = duration + 10.0
+
+    def _run(self, bb: Blackboard) -> str:
+        result = self.duburi.vision.move(
+            self._target, camera=self._camera,
+            fwd=self._fwd, mode=self._mode,
+            maintain=self._maintain, hold=self._hold,
+            gain=self._gain, duration=self._duration,
+            fallback=self._fallback)
+        return SUCCEED if result.ok else FAILED

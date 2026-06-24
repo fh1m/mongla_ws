@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""robosub_prequal -- RoboNation pre-qualification sequence.
+"""robosub_prequal -- RoboNation pre-qualification sequence (two-verb vision).
 
 Course layout:
   Start → [3 m] → Gate (2 m wide, 1 m tall, ~1 m below surface)
@@ -7,19 +7,17 @@ Course layout:
 
 Mission phases (each = one future YASMIN state):
   1.  Startup     -- arm, ALT_HOLD, descend
-  2.  FindGate    -- drive forward while watching for 'gate'
-  3.  HomeGate    -- yaw + forward; 'area' metric; approach to standoff
-  4.  PassGate    -- strafe left + drive forward through gate
-  5.  FindFlare   -- sweep right while watching for 'flare'
-  6.  HomeFlare   -- 3-axis: yaw + forward + depth; 'height' metric
-  7.  OrbitFlare  -- 12 × (yaw_left 30° + re-track) ≈ 360° polygon
-  8.  Return      -- yaw 180°, find gate, home, pass through
-  9.  Surface     -- stop, surface, disarm
+  2.  HomeGate    -- align (yaw) then move forward through gate ('area' fill)
+  3.  PassGate    -- strafe left + drive forward through gate
+  4.  HomeFlare   -- align (yaw+depth) then move in ('height' fill)
+  5.  OrbitFlare  -- 12 × (yaw_left 30° + re-align)
+  6.  Return      -- yaw 180°, re-align gate, pass through
+  7.  Surface     -- stop, surface, disarm
 
 Tune live (between runs, no rebuild):
   ros2 param set /duburi_manager vision.kp_yaw      60.0
   ros2 param set /duburi_manager vision.kp_forward  200.0
-  ros2 param set /duburi_manager vision.deadband     0.12
+  ros2 param set /duburi_manager vision.lost_grace_s 1.5
 
 WARNING: this mission arms the vehicle.
 """
@@ -30,35 +28,37 @@ CAMERA = 'forward'
 DIVE_DEPTH_M   = -1.0
 DEPTH_SETTLE_S = 2.0
 
-# ── Gate approach ────────────────────────────────────────────────────────────
-GATE_SEARCH_GAIN    = 40.0
-GATE_SEARCH_T       = 45.0
-GATE_STANDOFF       = 0.45   # 45% area at standoff
-GATE_ALIGN_T        = 20.0
+# ── Vision (pixel-native) ─────────────────────────────────────────────────────
+ALIGN_ERR_PX   = 40
+ALIGN_GAIN     = 30
+APPROACH_GAIN  = 45
+SEARCH_GAIN    = 40
+SEARCH_CREEP_S = 0.6
 
-# ── Gate pass (strafe + drive) ───────────────────────────────────────────────
+# ── Gate ───────────────────────────────────────────────────────────────────────
+GATE_FWD_FILL  = 45     # gate area % at standoff
+GATE_ALIGN_T   = 20.0
+GATE_MOVE_T    = 20.0
 GATE_STRAFE_T    = 4.0
 GATE_STRAFE_GAIN = 55.0
 GATE_DRIVE_T     = 3.0
 GATE_DRIVE_GAIN  = 60.0
 
-# ── Flare approach ───────────────────────────────────────────────────────────
-FLARE_SEARCH_T       = 35.0
-FLARE_SEARCH_YAW     = 25.0
-FLARE_STANDOFF       = 0.40
-FLARE_ALIGN_T        = 20.0
+# ── Flare ──────────────────────────────────────────────────────────────────────
+FLARE_FWD_FILL = 40
+FLARE_ALIGN_T  = 20.0
+FLARE_MOVE_T   = 20.0
 
-# ── Flare orbit ──────────────────────────────────────────────────────────────
+# ── Orbit ────────────────────────────────────────────────────────────────────
 ORBIT_STEP_DEG = 30.0
 ORBIT_STEPS    = 12
 ORBIT_STEP_T   = 10.0
 ORBIT_SETTLE_S = 0.3
-ORBIT_TRACK_T  = 3.0
+ORBIT_TRACK_T  = 4.0
 
 # ── Return ───────────────────────────────────────────────────────────────────
-RETURN_SEARCH_T  = 30.0
-RETURN_ALIGN_T   = 20.0
-RETURN_DRIVE_T   = 5.0
+RETURN_ALIGN_T    = 20.0
+RETURN_DRIVE_T    = 5.0
 RETURN_DRIVE_GAIN = 60.0
 
 
@@ -66,6 +66,8 @@ def run(duburi, log):
     duburi.mission_reset()
     duburi.camera = CAMERA
     duburi.models(gate='gate_flare_medium_100ep')
+    gate  = duburi.models.gate.gate
+    flare = duburi.models.gate.flare
 
     # ── Phase 1: Startup ────────────────────────────────────────────────────
     log('Phase 1: arming and diving')
@@ -73,89 +75,58 @@ def run(duburi, log):
     duburi.set_mode('ALT_HOLD')
     duburi.set_depth(DIVE_DEPTH_M, settle=DEPTH_SETTLE_S)
 
-    # ── Phase 2: FindGate ───────────────────────────────────────────────────
-    log('Phase 2: searching for gate (forward)')
-    duburi.vision.find(
-        target=duburi.models.gate.gate,
-        move='forward',
-        gain=GATE_SEARCH_GAIN,
-        timeout=GATE_SEARCH_T)
+    # ── Phase 2: HomeGate (align yaw, then drive in on area fill) ───────────
+    log('Phase 2: homing on gate')
+    duburi.vision.align(gate, yaw=0, err=ALIGN_ERR_PX, gain=ALIGN_GAIN,
+                        duration=GATE_ALIGN_T, fallback=creep_forward)
+    duburi.vision.move(gate, fwd=GATE_FWD_FILL, mode='area',
+                      gain=APPROACH_GAIN, duration=GATE_MOVE_T,
+                      fallback=creep_forward)
 
-    # ── Phase 3: HomeGate ───────────────────────────────────────────────────
-    # 'area' metric is more stable for a wide, short gate than 'height' alone.
-    log('Phase 3: homing on gate (yaw + forward)')
-    duburi.vision.home(
-        target=duburi.models.gate.gate,
-        yaw=True, forward=True,
-        dist=GATE_STANDOFF, metric='area',
-        duration=GATE_ALIGN_T,
-        on_lost='hold',
-        lock_mode='settle')
-
-    # ── Phase 4: PassGate ───────────────────────────────────────────────────
-    log('Phase 4: passing through gate (left side)')
+    # ── Phase 3: PassGate ───────────────────────────────────────────────────
+    log('Phase 3: passing through gate (left side)')
     duburi.move_left(GATE_STRAFE_T, gain=GATE_STRAFE_GAIN)
     duburi.move_forward(GATE_DRIVE_T, gain=GATE_DRIVE_GAIN)
 
-    # ── Phase 5: FindFlare ──────────────────────────────────────────────────
-    log('Phase 5: searching for flare (sweep right)')
-    duburi.vision.find(
-        target=duburi.models.gate.flare,
-        move='yaw_right',
-        yaw_rate_pct=FLARE_SEARCH_YAW,
-        gain=GATE_SEARCH_GAIN,
-        timeout=FLARE_SEARCH_T)
+    # ── Phase 4: HomeFlare (align yaw+depth, then drive in on height fill) ──
+    log('Phase 4: homing on flare')
+    duburi.vision.align(flare, yaw=0, depth=0, err=ALIGN_ERR_PX,
+                        gain=ALIGN_GAIN, duration=FLARE_ALIGN_T,
+                        fallback=sweep_right)
+    duburi.vision.move(flare, fwd=FLARE_FWD_FILL, mode='height',
+                      gain=APPROACH_GAIN, duration=FLARE_MOVE_T,
+                      fallback=creep_forward)
 
-    # ── Phase 6: HomeFlare ──────────────────────────────────────────────────
-    log('Phase 6: homing on flare (3-axis)')
-    duburi.vision.home(
-        target=duburi.models.gate.flare,
-        yaw=True, forward=True, depth=True,
-        dist=FLARE_STANDOFF, metric='height',
-        duration=FLARE_ALIGN_T,
-        on_lost='hold',
-        lock_mode='settle')
-
-    # ── Phase 7: OrbitFlare ─────────────────────────────────────────────────
-    log('Phase 7: orbiting flare (12 × 30°)')
+    # ── Phase 5: OrbitFlare ─────────────────────────────────────────────────
+    log('Phase 5: orbiting flare (12 × 30°)')
     for step in range(ORBIT_STEPS):
-        log(f'  orbit step {step + 1}/{ORBIT_STEPS} '
-            f'({(step + 1) * ORBIT_STEP_DEG:.0f}° total)')
+        log(f'  orbit step {step + 1}/{ORBIT_STEPS}')
         duburi.yaw_left(ORBIT_STEP_DEG, timeout=ORBIT_STEP_T, settle=ORBIT_SETTLE_S)
-        duburi.vision.track(
-            target=duburi.models.gate.flare,
-            yaw=True, forward=True, depth=True,
-            dist=FLARE_STANDOFF,
-            duration=ORBIT_TRACK_T,
-            on_lost='hold')
+        duburi.vision.align(flare, yaw=0, err=ALIGN_ERR_PX, gain=ALIGN_GAIN,
+                            duration=ORBIT_TRACK_T)
 
-    # ── Phase 8: Return ──────────────────────────────────────────────────────
-    log('Phase 8: yaw 180° to return heading')
+    # ── Phase 6: Return ──────────────────────────────────────────────────────
+    log('Phase 6: yaw 180° and return through gate')
     duburi.yaw_right(180.0, timeout=20.0)
-
-    log('Phase 8: searching for gate (return leg)')
-    duburi.vision.find(
-        target=duburi.models.gate.gate,
-        move='yaw_right',
-        yaw_rate_pct=20.0,
-        gain=0.0,
-        timeout=RETURN_SEARCH_T)
-
-    log('Phase 8: homing on gate for return pass')
-    duburi.vision.home(
-        target=duburi.models.gate.gate,
-        yaw=True, forward=True,
-        dist=GATE_STANDOFF, metric='area',
-        duration=RETURN_ALIGN_T,
-        on_lost='hold',
-        lock_mode='settle')
-
-    log('Phase 8: passing through gate (return leg)')
+    duburi.vision.align(gate, yaw=0, err=ALIGN_ERR_PX, gain=ALIGN_GAIN,
+                        duration=RETURN_ALIGN_T, fallback=sweep_right)
     duburi.move_left(GATE_STRAFE_T, gain=GATE_STRAFE_GAIN)
     duburi.move_forward(RETURN_DRIVE_T, gain=RETURN_DRIVE_GAIN)
 
-    # ── Phase 9: Surface ────────────────────────────────────────────────────
-    log('Phase 9: surfacing and disarming')
+    # ── Phase 7: Surface ────────────────────────────────────────────────────
+    log('Phase 7: surfacing and disarming')
     duburi.stop()
     duburi.set_depth(0.0)
     duburi.disarm()
+
+
+# ── Mission-authored fallback search patterns (pure control) ────────────────────
+def creep_forward(duburi):
+    duburi.move_forward(SEARCH_CREEP_S, gain=SEARCH_GAIN)
+
+
+def sweep_right(duburi, should_stop):
+    for _ in range(8):
+        duburi.yaw_right(25.0)
+        if should_stop():
+            return

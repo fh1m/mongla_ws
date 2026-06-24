@@ -1,22 +1,21 @@
-# Goal — one field per command type, unused fields are zero/empty
-string  cmd          # arm | disarm | set_mode | stop | pause |
+# Goal — one field per command type, unused fields are zero/empty.
+# `cmd` is any verb in the COMMANDS registry (duburi_control/commands.py is
+# the single source of truth; this list is illustrative, not exhaustive):
+string  cmd          # arm | disarm | set_mode | stop | pause | surface |
                      # move_forward | move_back | move_left | move_right |
                      # move_forward_dist | move_lateral_dist |
-                     # yaw_left | yaw_right | arc | set_depth |
-                     # lock_heading | unlock_heading | dvl_connect |
-                     # vision_align_3d | vision_align_yaw | vision_align_lat |
-                     # vision_align_depth | vision_hold_distance | vis_approach |
-                     # vision_acquire | look_around
+                     # yaw_left | yaw_right | turn | arc | set_depth |
+                     # lock_heading | unlock_heading | look_around |
+                     # style_yaw | style_roll | style_pitch | dvl_connect |
+                     # vision_align | vision_move | fire | mission_reset
 float32 duration     # seconds  (move_*, arc, pause, vision_*)
-float32 gain         # 0-100 %  (move_*, arc, vision_acquire drive level)
+float32 gain         # 0-100 %  (move_*, arc; vision_*: hard max-speed cap)
 float32 target       # metres   (set_depth) or
                      # degrees  (yaw_*, lock_heading: 0=current heading)
-string  target_name  # mode string  (set_mode) or
-                     # drive verb   (vision_acquire: 'yaw_left'|'yaw_right'|'move_forward'|'arc')
+string  target_name  # mode string  (set_mode)
 float32 timeout      # max wait (all commands; lock_heading auto-releases)
 float32 settle       # post-command neutral-hold seconds; 0 = axis-natural settle only
-float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc` and vision_acquire('arc')
-                     # DUAL USE in `look_around`: degrees per step (+= CW, -= CCW)
+float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc`
 
 # ---- style_* fields  (ignored by every non-style command) ----------
 float32 flips        # style_*: number of complete 360° rotations (default 1)
@@ -27,53 +26,32 @@ float32 deg_per_step # style_yaw: yaw step size degrees (default 90.0)
 float32 distance_m     # target distance in metres (move_*_dist)
 float32 dvl_tolerance  # stop when |error| <= this, metres (default 0.1)
 
-# ---- vision_* fields  (ignored by every non-vision command) -----------
-string  camera             # 'laptop' | 'sim_front' | 'forward' | 'downward'
-string  target_class       # 'person' | 'gate' | ... ('' = first available)
-string  axes               # CSV: any of 'yaw,lat,depth,forward'  (vision_align_3d)
-float32 deadband           # |error| considered centered (normalized 0..1)
-float32 kp_yaw             # gain on yaw axis        (pct per unit ex)
-float32 kp_lat             # gain on lateral axis    (pct per unit ex)
-float32 kp_depth           # gain on depth axis      (m per unit ey per tick)
-float32 kp_forward         # gain on forward axis    (pct per unit h_frac error)
-float32 target_bbox_h_frac # bbox height target as fraction of image height
-bool    visual_pid         # false=P only; true=PI (anti-windup, v2 hook)
-string  on_lost            # 'fail' (default) | 'hold'
-float32 stale_after        # seconds; older detection considered lost
-float32 depth_anchor_frac  # which vertical point on the bbox to centre (0=top, 0.5=centre, 1=bottom)
-                           # 0.0 on wire = use ROS param (vision.depth_anchor_frac, default 0.5)
-                           # Use 0.2 for tall objects (people, poles) to avoid depth stall
-string  lock_mode          # '' or 'settle' (default) | 'follow' | 'pursue'
-                           # follow = track until duration; pursue = approach until target_bbox_h_frac
-string  distance_metric    # '' or 'height' (default) | 'area' | 'width' | 'diagonal'
-                           # area/diagonal are more robust for wide targets like gates
-                           # width = bbox width fraction (wide horizontal objects)
-bool    gate_guard         # experimental: suppress forward when gate bbox appears angled
-                           # (w_frac/h_frac below gate_guard_min_w_frac). Default false.
-float32 gate_guard_min_w_frac  # aspect ratio threshold for gate_guard; 0.0 = use default (0.35)
-float32 pass_at            # position-lock trigger: once size metric >= pass_at, freeze
-                           # lat+depth and drive straight at pass_at_gain%. 0.0 = disabled.
-float32 pass_at_gain       # forward thrust % during pass-through; 0.0 = use default (50%)
-bool    tracking           # false (default) = use /detections; true = use /tracks (requires tracker_node)
-float32 target_vis_range   # vis_approach: monocular-depth target 0..1 (0=far, 1=close)
-                           # from depth_estimation_node /vis_range. 0.0 on wire = use default (0.65)
-float32 offset_x           # lateral pixel offset: target kept this many px to the RIGHT of frame center
-                           # negative = keep target left of center. 0.0 = center (default)
-float32 offset_y           # vertical pixel offset: target kept this many px BELOW frame center
-                           # negative = keep target above center. 0.0 = center (default)
-float32 lost_patience_s    # seconds of continuous staleness before on_lost='fail' triggers
-                           # 0.0 = use engine default (3.0 s). stale_after + lost_patience_s = total gap tolerance
-float32 speed              # master speed scalar 0.0-1.0 (0.0 = use vision.speed ROS param)
-float32 h_frac_close       # bbox-height fraction at which proximity scaling kicks in fully
-                           # (0.0 = use vision.h_frac_close ROS param; e.g. 0.5 for gate)
-
-# ---- vision_lock_fire fields  (ignored by other commands) --------------
-float32 stable_lock_s      # seconds of continuous settle required before fire (default 3.0)
-float32 max_attempts       # retry attempts for lock-fire cycle (default 3)
-float32 attempt_timeout    # per-attempt duration cap in seconds (default 15.0)
-float32 fire_aux_channel   # AUX channel 1-6 to pulse on fire; 0.0 = use fire_channel/stub
-float32 fire_pwm           # PWM value for fire pulse (default 1900)
+# ---- vision_align / vision_move fields  (ignored by non-vision cmds) ---
+string  camera             # 'forward' | 'downward' | 'laptop' | 'sim_front'
+string  target_class       # class from the loaded model ('' = first available)
+# vision_align: which axes are active + their signed pixel offset from centre.
+string  axes               # CSV subset of 'lat,yaw,depth' (the active axes)
+float32 offset_lat         # px offset on lateral axis (+ = keep target right of centre)
+float32 offset_yaw         # px offset on yaw axis     (+ = keep target right of centre)
+float32 offset_depth       # px offset on depth axis   (+ = keep target below centre)
+# vision_move: how far to drive in.
+float32 fwd_fill           # % of frame the bbox must fill to count as reached (0 = default 95)
+string  mode               # fill metric: 'area' (default) | 'width' | 'height'
+float32 maintain_px        # lateral px offset to hold while driving (needs maintain_on)
+bool    maintain_on        # true = hold lateral offset while moving; false = pure forward
+float32 hold_s             # seconds to station-keep after reaching fwd_fill (0 = exit on reach)
+# shared.
+float32 err_px             # pixel tolerance: aligned when |err| <= this (0 = default 40)
+bool    hold_through_loss  # true = coast/hold on target loss until duration (no fallback)
 float32 fire_channel       # ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=log-stub
+# vision tuning -- NOT mission-facing; the manager fills these from vision.* ROS
+# params at dispatch (rosidl-zero triggers substitution). Mission DSL leaves them 0.
+float32 kp_lat             # P gain on lateral/yaw pixel error  (0 = use vision.kp_lat)
+float32 kp_yaw             # P gain on yaw pixel error          (0 = use vision.kp_yaw)
+float32 kp_depth           # P gain on depth pixel error        (0 = use vision.kp_depth)
+float32 kp_forward         # P gain on fill error (vision_move) (0 = use vision.kp_forward)
+float32 lost_grace_s       # seconds to coast on target loss before reporting LOST (0 = 1.0)
+float32 align_stable_frames# ticks within err_px before ALIGNED (0 = use vision.align_stable_frames)
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]
@@ -90,12 +68,13 @@ float32 fire_channel       # ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=
 #                           error_value = 0.0
 #   arm / disarm / stop  :  final_value = current depth [m]
 #                           error_value = 0.0
-#   vision_align_*       :  final_value = composite normalized error [0..1+]
-#                           error_value = age of last detection [s] at exit
-#   vision_hold_distance :  final_value = |target_bbox_h_frac - last h_frac|
-#                           error_value = age of last detection [s]
-#   vision_acquire       :  final_value = time-to-acquire [s] on success
-#                           error_value = 0.0 on success, timeout on failure
+#   vision_align         :  success     = True (the verb ran; never fails the mission)
+#                           final_value = outcome code (0=ALIGNED,1=LOST,2=TIMEOUT,
+#                                         3=NO_CAMERA,4=ABORTED)
+#                           error_value = worst per-axis pixel error at exit
+#   vision_move          :  success     = True (the verb ran)
+#                           final_value = outcome code (0=REACHED, see above)
+#                           error_value = bbox fill fraction at exit [0..1]
 bool    success
 string  message
 float32 final_value

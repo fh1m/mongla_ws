@@ -10,20 +10,20 @@ Mission phases:
   0. Countdown    -- operator removes tether
   1. Startup      -- arm, depth, DVL connect (warn if offline)
   2. FindGate     -- while not detected('gate'): move_forward(0.5s steps)
-  3. HomeGate     -- vision.home(yaw+lat+gate_guard+pass_at)
-  4. PassGate     -- DVL move_forward_dist(GATE_PASS_DIST_M)
+  3. HomeGate     -- vision.align(gate, yaw+lat)
+  4. PassGate     -- vision.move(gate, fwd fill)
   5. FindFlare    -- sweep: yaw + detected('flare') at each stop
-  6. HomeFlare    -- vision.home(yaw+forward+depth, height metric)
+  6. HomeFlare    -- vision.align(flare, yaw) + vision.move(flare)
   7. OrbitFlare   -- yaw_right(20°) × 18, break when detected('gate')
-  8. HomeReturn   -- vision.home on gate (if re-found)
-  9. ReturnPass   -- DVL move_forward_dist(GATE_RETURN_M)
+  8. HomeReturn   -- vision.align on gate (if re-found)
+  9. ReturnPass   -- vision.move(gate) / DVL move_forward_dist(GATE_RETURN_M)
   10. Surface     -- set_depth(0), disarm
 
 Key design properties:
   • Short open-loop steps (0.5s) keep overshoot below ~0.15m at gain=30.
   • Safety budgets (MAX_*) prevent infinite loops if detector goes offline.
   • Class filter is restored with set_classes('gate,flare') before every
-    orbit loop — prevents the "orbit trap" where vision.home(flare) silently
+    orbit loop — prevents the "orbit trap" where vision.align(flare) silently
     filters the detector so detected('gate') can never return True.
   • All distance moves use DVL closed-loop (falls back to open-loop if DVL
     is offline, with a WARNING logged).
@@ -56,6 +56,12 @@ _DEPTH_TIMEOUT_S  = 30.0
 _MAX_GATE_STEPS   = 60     # safety budget for gate search (60 × 0.5s = 30s)
 _MAX_SWEEP_STEPS  = 36     # flare sweep budget (36 × 10° = full 360°)
 _MAX_ORBIT_STEPS  = 18     # orbit budget (18 × 20° = full 360°)
+
+# Vision (two-verb, pixel-native)
+_ALIGN_ERR_PX     = 40     # "centred" pixel tolerance
+_ALIGN_GAIN       = 30     # max speed while centring
+_APPROACH_GAIN    = 45     # max speed while driving forward
+_FLARE_FWD_FILL   = 38     # flare height % of frame at end of approach
 
 
 def run(duburi, log):
@@ -93,16 +99,11 @@ def run(duburi, log):
 
     # ── 3. HomeGate — align and commit ──────────────────────────────────── #
     log('=== HomeGate ===')
-    gate_result = duburi.vision.home(
-        target=duburi.models.gate.gate,
-        yaw=True, lat=True,
-        gate_guard=True, gate_guard_min_w_frac=0.35,
-        pass_at=0.38, pass_at_gain=55,
-        dist=0.40, metric='area',
-        duration=20,
-        on_lost='hold',
-    )
-    if not gate_result.success:
+    gate_result = duburi.vision.align(
+        duburi.models.gate.gate, yaw=0, lat=0,
+        err=_ALIGN_ERR_PX, gain=_ALIGN_GAIN, duration=20,
+        fallback=_creep)
+    if not gate_result.ok:
         log('WARN: gate alignment failed — attempting open-loop passage')
 
     # ── 4. PassGate — DVL forward through gate ──────────────────────────── #
@@ -129,13 +130,13 @@ def run(duburi, log):
 
     # ── 6. HomeFlare — 3-axis lock on flare ──────────────────────────────── #
     log('=== HomeFlare ===')
-    duburi.vision.home(
-        target=duburi.models.gate.flare,
-        yaw=True, forward=True, depth=True,
-        dist=0.38, metric='height',
-        duration=20,
-        on_lost='hold',
-    )
+    duburi.vision.align(
+        duburi.models.gate.flare, yaw=0, depth=0,
+        err=_ALIGN_ERR_PX, gain=_ALIGN_GAIN, duration=15,
+        fallback=_creep)
+    duburi.vision.move(
+        duburi.models.gate.flare, fwd=_FLARE_FWD_FILL, mode='height',
+        gain=_APPROACH_GAIN, duration=20, fallback=_creep)
 
     # ── 7. OrbitFlare — yaw steps, break when gate re-appears ───────────── #
     log('=== OrbitFlare ===')
@@ -161,17 +162,18 @@ def _return_through_gate(duburi, log):
     """Phase 8+9: home on gate if visible, then DVL pass through."""
     if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
         log('=== HomeReturn ===')
-        duburi.vision.home(
-            target=duburi.models.gate.gate,
-            yaw=True, lat=True,
-            gate_guard=True,
-            dist=0.40, metric='area',
-            duration=15,
-            on_lost='hold',
-        )
+        duburi.vision.align(
+            duburi.models.gate.gate, yaw=0, lat=0,
+            err=_ALIGN_ERR_PX, gain=_ALIGN_GAIN, duration=15,
+            fallback=_creep)
 
     log('=== ReturnPass ===')
     duburi.move_forward_dist(_GATE_RETURN_M, gain=60)
+
+
+def _creep(duburi):
+    """Fallback for vision.align/move: one short forward creep, then return."""
+    duburi.move_forward(_SEARCH_STEP_S, gain=_SEARCH_GAIN)
 
 
 def _surface_and_disarm(duburi):

@@ -21,7 +21,7 @@ from ..core.vehicle_profile import VehicleProfile
 from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState, TurnState, SurfaceState,
 )
-from ..states.vision import VisionFindState, VisionHomeState, VisionScanState
+from ..states.vision import VisionSearchState, VisionAlignState
 from ..states.utility import (
     CountdownState, PauseState, LogScoreState, SetDetectorState, FireState,
 )
@@ -35,7 +35,9 @@ BIN_DROP_DEFAULTS: dict = {
     'fire_channel':      3,         # dropper_1
     'confirm_pause_s':   3.0,       # stability window before drop
     'find_timeout':      90.0,
-    'home_duration':     20.0,
+    'align_duration':    20.0,
+    'align_err_px':      30,        # tight centring over the bin
+    'align_gain':        30,
     'model':            'bin_fire_blood',
     'classes':          'fire,blood',
     'camera_downward':  'downward',
@@ -87,25 +89,25 @@ def build_bin_drop_fsm(
                  transitions={SUCCEED: 'FIND_BIN', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_BIN',
-                 VisionFindState(duburi, profile,
-                                 target='fire',
-                                 camera=p['camera_downward'],
-                                 move='forward', gain=30,
-                                 timeout=p['find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='fire',
+                                   camera=p['camera_downward'],
+                                   pattern='forward', gain=30,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'HOME_BIN', TIMEOUT: 'SWITCH_FORWARD', ABORT: 'SURFACE'})
 
-    # downward_cam=True: auto-sets kp_forward=-60 (ey polarity inversion)
+    # Downward camera: lat (Ch6) handles left/right, depth axis handles
+    # fore/aft (image-Y maps to fore/aft below the AUV).
     sm.add_state('HOME_BIN',
-                 VisionHomeState(duburi, profile,
-                                 target='fire',
-                                 camera=p['camera_downward'],
-                                 lat=True, forward=True, yaw=False, depth=False,
-                                 duration=p['home_duration'],
-                                 on_lost='hold',
-                                 kp_forward=-60.0, kp_lat=60.0, deadband=0.06),
+                 VisionAlignState(duburi, profile,
+                                  target='fire',
+                                  camera=p['camera_downward'],
+                                  lat=0, depth=0,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
                  transitions={SUCCEED: 'CONFIRM_PAUSE',
-                               FAILED: 'SWITCH_FORWARD',
-                               TIMEOUT: 'SWITCH_FORWARD', ABORT: 'SURFACE'})
+                              FAILED: 'SWITCH_FORWARD',
+                              TIMEOUT: 'SWITCH_FORWARD', ABORT: 'SURFACE'})
 
     sm.add_state('CONFIRM_PAUSE',
                  PauseState(duburi, profile, seconds=p['confirm_pause_s']),

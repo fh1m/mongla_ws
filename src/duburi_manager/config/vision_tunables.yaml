@@ -1,4 +1,4 @@
-# Live-tunable defaults for every vision_* command.
+# Live-tunable defaults for the two vision verbs (vision_align / vision_move).
 #
 # Load with:
 #   ros2 run duburi_manager start --ros-args \
@@ -6,92 +6,41 @@
 #
 # Or override individually at any time without restart:
 #   ros2 param set /duburi_manager vision.kp_yaw 80.0
-#   ros2 param set /duburi_manager vision.deadband 0.06
-#   ros2 param set /duburi_manager vision.target_bbox_h_frac 0.65
+#   ros2 param set /duburi_manager vision.lost_grace_s 1.5
 #
 # Resolution order at goal-dispatch time (in commands.fields_for):
 #   1. value the goal supplied (mission/cli kwarg)         -- per-call wins
 #   2. live ROS-param value (this file at startup)         -- pool tuning
 #   3. hardcoded spec default (duburi_control/commands.py) -- last resort
 #
-# Live mid-loop tuning is OUT of v1: param changes take effect on the
-# NEXT vision goal; in-flight goals keep their snapshotted values to the
-# end so we never confuse a moving sub by yanking a gain mid-tick.
+# Param changes take effect on the NEXT vision goal; in-flight goals keep
+# their snapshotted values to the end so we never confuse a moving sub by
+# yanking a gain mid-tick.
 
 duburi_manager:
   ros__parameters:
     vision:
-      # ---- Centring gains ---------------------------------------------
-      # Raise if centring is sluggish; lower if the sub oscillates.
-      kp_yaw:      60.0   # Ch4 percent per unit normalized horizontal error
-      kp_lat:      60.0   # Ch6 percent per unit normalized horizontal error
-
-      # ---- Vertical / depth axis --------------------------------------
-      # Metres of incremental depth setpoint per unit normalized vertical
-      # error per tick. Stays small so ALT_HOLD never sees a step jump.
-      kp_depth:    0.05
-
-      # ---- Distance-keep gain (vision_hold_distance / vision_align_3d)
-      # Ch5 percent per unit bbox-height-fraction error. Big number is
-      # OK because the error itself is small (typically <= 0.1).
-      kp_forward: 200.0
-
-      # ---- Settling deadband ------------------------------------------
-      # |error| below which an axis is considered "centred" for the
-      # SETTLED_TICK_BUDGET counter. Match to your camera noise floor.
-      # Default 0.18 is loose: easy for a seated person on a webcam to
-      # satisfy. Tighten to 0.08-0.10 for pool runs.
-      deadband:    0.18
-
-      # ---- Distance proxy ---------------------------------------------
-      # Bbox height as a fraction of image height that means "stop here".
-      # Tune to match your target's real size and the sub's safe approach
-      # distance (bigger number = closer). Default 0.30 is the distance
-      # at which a seated upper body fills ~a third of a laptop webcam
-      # frame. Raise to 0.5-0.6 for pool targets you want to get close to.
-      target_bbox_h_frac: 0.30
+      # ---- P-gains (percent thrust per unit normalized pixel error) ----
+      # Raise if centring is sluggish; lower if the sub oscillates. The
+      # P-controller output is then clamped to the per-call `gain` cap, so
+      # these set responsiveness while `gain` sets the speed ceiling.
+      kp_lat:      60.0   # Ch6 strafe percent  (vision_align lat, vision_move maintain)
+      kp_yaw:      60.0   # Ch4 yaw percent     (vision_align yaw)
+      kp_depth:    0.05   # metres of depth setpoint nudge per tick (vision_align depth)
+      kp_forward: 200.0   # Ch5 forward percent per unit fill error (vision_move)
 
       # ---- Loss handling ----------------------------------------------
-      # Seconds; older detection treated as lost. Default 1.5 tolerates
-      # webcam YOLO's bursty drops; drop to 0.6-0.8 for clean pool cameras.
-      stale_after: 1.5
+      # Seconds the server coasts (neutral RC) on target loss before
+      # reporting LOST so the mission DSL can run its fallback search.
+      # Raise for turbid pool water with bursty detector drops.
+      lost_grace_s: 1.0
 
-      # 'fail' -- abort on lost target (LOST_TICK_BUDGET ticks).
-      # 'hold' -- ride out flickers, just stop driving until the target
-      #           comes back. Good for vision_hold_distance.
-      on_lost: "fail"
+      # ---- vision_move default fill -----------------------------------
+      # % of frame the bbox must fill to count as "reached" when a mission
+      # leaves fwd_fill unset (0). 95 = drive until the box fills the view.
+      frame_fill_default: 95.0
 
-      # ---- vision_acquire (search) ------------------------------------
-      # Yaw stick percent and forward-thrust percent used during sweep.
-      # The acquire verb only uses the one matching its drive verb.
-      acquire_yaw_rate_pct: 22.0
-      acquire_gain:         25.0
-
-      # ---- Depth anchor -----------------------------------------------
-      # Which vertical point on the bounding box to align to the image
-      # centre.  0.0 = top edge,  0.5 = centre (default),  1.0 = bottom.
-      # Use 0.2 for tall objects (standing people, poles) -- their bbox
-      # centre is already near the frame centre, which would make the
-      # depth correction look like zero (controller stalls). Aligning near
-      # the top gives a real error signal and lets the AUV find the right
-      # depth relative to the object.
-      depth_anchor_frac: 0.5
-
-      # ---- Continuous lock mode ---------------------------------------
-      # Controls when a vision lock exits (beyond duration / target lost):
-      #   settle  (default) -- exit as soon as all axes are centred.
-      #   follow            -- never exit on settle; track until duration.
-      #                        Good for following a moving target.
-      #   pursue            -- keep driving forward (no backing off) until
-      #                        the target fills target_bbox_h_frac of the
-      #                        frame. Good for torpedo approach / ramming.
-      lock_mode: "settle"
-
-      # ---- Distance proxy metric for forward axis --------------------
-      # How to measure "how far away" the target is from the bounding box:
-      #   height   (default) -- bbox height fraction. Good for tall targets.
-      #   area               -- geometric mean of width and height fractions.
-      #                         Better for wide targets (gates, torpedo holes).
-      #   diagonal           -- normalised diagonal. Best all-rounder when
-      #                         target shape is unknown.
-      distance_metric: "height"
+      # ---- vision_align settle ----------------------------------------
+      # Consecutive 20 Hz ticks every active axis must stay within err_px
+      # before vision_align reports ALIGNED. 3 ticks = 0.15 s.
+      align_stable_frames: 3.0
