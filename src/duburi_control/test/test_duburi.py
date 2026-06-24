@@ -165,6 +165,34 @@ def test_lock_heading_target_zero_locks_current_heading(duburi, monkeypatch):
     duburi.unlock_heading()
 
 
+def test_surface_does_not_deadlock(duburi, monkeypatch):
+    """surface() runs inside its own command scope and then calls set_depth()
+    (another scope) on the SAME thread. self.lock must be reentrant (RLock)
+    or this self-deadlocks forever -- the original P0 bug."""
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    done = threading.Event()
+
+    def _run():
+        duburi.surface()
+        done.set()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    assert done.wait(timeout=5.0), (
+        'surface() deadlocked -- self.lock must be reentrant (RLock)')
+
+
+def test_disarm_stops_active_heading_lock(duburi, monkeypatch):
+    """disarm() must stop a running heading lock (its background Ch4 stream
+    must not outlive MANUAL) and clear the handle so no zombie lingers."""
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    duburi.lock_heading(target=0.0, timeout=10.0)
+    assert duburi._heading_lock is not None
+    duburi.disarm()
+    assert duburi._heading_lock is None
+    assert duburi.pixhawk.is_armed() is False
+
+
 def test_set_depth_engages_alt_hold(duburi, monkeypatch):
     """set_depth must guarantee ALT_HOLD is engaged before driving."""
     monkeypatch.setattr(time, 'sleep', lambda *_: None)

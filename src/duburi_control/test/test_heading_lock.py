@@ -155,6 +155,41 @@ def test_heading_lock_suspend_pauses_streaming():
     assert final_count > post_count
 
 
+def test_heading_lock_timeout_fires_on_exit_callback():
+    """On its own timeout the lock must notify the owner via on_exit so a
+    timed-out lock gets cleared instead of lingering as a zombie that still
+    looks 'active' (keeping the heartbeat paused)."""
+    pixhawk = FakePixhawk()
+    log     = ThrottleLogger()
+    src     = FakeYawSource()
+    fired = []
+
+    lock = HeadingLock(pixhawk, target_deg=0.0, yaw_source=src, log=log,
+                       timeout=0.1, on_exit=lambda lk: fired.append(lk))
+    lock.start()
+    time.sleep(0.4)            # well past the 0.1 s auto-release
+    assert fired == [lock], (
+        'on_exit must fire exactly once with the lock instance on timeout')
+    lock.stop()               # idempotent; thread already exited
+
+
+def test_heading_lock_explicit_stop_does_not_fire_on_exit():
+    """on_exit is only the self-timeout escape hatch; an explicit stop()
+    (the caller already cleans up) must NOT invoke it."""
+    pixhawk = FakePixhawk()
+    log     = ThrottleLogger()
+    src     = FakeYawSource()
+    fired = []
+
+    lock = HeadingLock(pixhawk, target_deg=0.0, yaw_source=src, log=log,
+                       timeout=5.0, on_exit=lambda lk: fired.append(lk))
+    lock.start()
+    time.sleep(0.15)
+    lock.stop()
+    time.sleep(0.1)
+    assert fired == [], 'explicit stop() must not fire on_exit'
+
+
 def test_heading_lock_works_with_no_yaw_source():
     """yaw_source=None -> falls back to AHRS via pixhawk.get_attitude.
 

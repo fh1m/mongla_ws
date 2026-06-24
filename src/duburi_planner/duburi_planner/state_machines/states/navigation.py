@@ -44,6 +44,13 @@ class DisarmState(DuburiState):
         super().__init__(duburi, profile, [SUCCEED])
 
     def _run(self, bb: Blackboard) -> str:
+        # Release the heading lock before disarming (mirrors SurfaceState).
+        # disarm() also stops the lock at the facade level; doing it here too
+        # keeps the FSM path explicit and self-documenting.
+        try:
+            self.duburi.release_heading()
+        except Exception:
+            pass
         self.duburi.disarm()
         return SUCCEED
 
@@ -67,15 +74,24 @@ class SetDepthState(DuburiState):
 # ── LOCK HEADING ─────────────────────────────────────────────────────────────
 
 class LockHeadingState(DuburiState):
-    """Engage heading lock. Stores initial heading in BK.START_HEADING."""
+    """Engage heading lock. Stores initial heading in BK.START_HEADING.
+
+    ``lock_timeout`` is the lock's background auto-release timer (how long
+    it should HOLD heading across subsequent states), NOT this state's
+    execution timeout. ``lock_heading()`` returns immediately, so binding
+    the hold to ``TIMEOUT_S`` would kill the lock mid-task; use a duration
+    that comfortably covers the whole task instead.
+    """
     TIMEOUT_S = 30.0
 
-    def __init__(self, duburi, profile, heading: float = 0.0) -> None:
+    def __init__(self, duburi, profile, heading: float = 0.0,
+                 lock_timeout: float = 600.0) -> None:
         super().__init__(duburi, profile, [SUCCEED])
         self._heading = heading
+        self._lock_timeout = lock_timeout
 
     def _run(self, bb: Blackboard) -> str:
-        self.duburi.lock_heading(self._heading, timeout=self.TIMEOUT_S - 2)
+        self.duburi.lock_heading(self._heading, timeout=self._lock_timeout)
         bb[BK.START_HEADING] = self._heading
         return SUCCEED
 

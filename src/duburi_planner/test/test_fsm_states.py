@@ -23,7 +23,7 @@ from duburi_planner.state_machines.states.navigation import (
     MoveForwardState, MoveBackState, MoveLateralState, SurfaceState,
 )
 from duburi_planner.state_machines.states.vision import (
-    VisionFindState, VisionHomeState, VisionScanState,
+    VisionSearchState, VisionAlignState, VisionMoveState,
 )
 from duburi_planner.state_machines.states.utility import (
     CountdownState, PauseState, LogScoreState,
@@ -38,13 +38,20 @@ def _mock_result(success: bool = True) -> MagicMock:
     return r
 
 
+def _vis_result(ok: bool = True) -> MagicMock:
+    """Stand-in for vision_dsl.VisionResult (truthy on .ok)."""
+    r = MagicMock()
+    r.ok = ok
+    return r
+
+
 def _duburi() -> MagicMock:
     """Minimal DuburiMission mock with all DSL verbs stubbed."""
     d = MagicMock()
     d.vision = MagicMock()
-    d.vision.find.return_value  = _mock_result(True)
-    d.vision.home.return_value  = _mock_result(True)
-    d.vision.scan.return_value  = _mock_result(True)
+    d.vision.align.return_value = _vis_result(True)
+    d.vision.move.return_value  = _vis_result(True)
+    d.detected.return_value = True
     return d
 
 
@@ -182,72 +189,126 @@ class TestSetDepthState:
         assert args[0] == -0.8
 
 
-# ── VisionFindState ───────────────────────────────────────────────────────────
+# ── VisionSearchState ─────────────────────────────────────────────────────────
 
-class TestVisionFindState:
+class TestVisionSearchState:
     def test_returns_succeed_on_detection(self):
         d = _duburi()
-        d.vision.find.return_value = _mock_result(True)
-        state = VisionFindState(d, VehicleProfile.dubomini(), target='gate')
+        d.detected.return_value = True
+        state = VisionSearchState(d, VehicleProfile.dubomini(), target='gate',
+                                  timeout=5.0)
         assert state.execute(Blackboard()) == SUCCEED
 
     def test_returns_timeout_when_not_found(self):
         d = _duburi()
-        d.vision.find.return_value = _mock_result(False)
-        state = VisionFindState(d, VehicleProfile.dubomini(), target='gate')
+        d.detected.return_value = False
+        state = VisionSearchState(d, VehicleProfile.dubomini(), target='gate',
+                                  timeout=0.2)
         assert state.execute(Blackboard()) == TIMEOUT
 
-    def test_passes_target_and_move_to_dsl(self):
+    def test_forward_pattern_creeps(self):
         d = _duburi()
-        state = VisionFindState(d, VehicleProfile.dubomini(),
-                                 target='flare', move='yaw_right', gain=40, timeout=30.0)
+        d.detected.return_value = False
+        state = VisionSearchState(d, VehicleProfile.dubomini(), target='gate',
+                                  pattern='forward', timeout=0.2, gain=35)
         state.execute(Blackboard())
-        d.vision.find.assert_called_once_with(
-            target='flare', move='yaw_right', gain=40, timeout=30.0)
+        assert d.move_forward.called
 
-
-# ── VisionHomeState ───────────────────────────────────────────────────────────
-
-class TestVisionHomeState:
-    def test_returns_succeed_on_converge(self):
+    def test_yaw_pattern_sweeps(self):
         d = _duburi()
-        d.vision.home.return_value = _mock_result(True)
-        state = VisionHomeState(d, VehicleProfile.dubomini(), target='gate',
-                                 yaw=True, lat=True, duration=10.0)
+        d.detected.return_value = False
+        state = VisionSearchState(d, VehicleProfile.dubomini(), target='gate',
+                                  pattern='yaw', timeout=0.2, yaw_step=20.0)
+        state.execute(Blackboard())
+        assert d.yaw_right.called
+
+
+# ── VisionAlignState ──────────────────────────────────────────────────────────
+
+class TestVisionAlignState:
+    def test_returns_succeed_on_align(self):
+        d = _duburi()
+        d.vision.align.return_value = _vis_result(True)
+        state = VisionAlignState(d, VehicleProfile.dubomini(), target='gate',
+                                 yaw=0, lat=0, duration=10.0)
         assert state.execute(Blackboard()) == SUCCEED
 
-    def test_returns_failed_on_lost(self):
+    def test_returns_failed_on_miss(self):
         d = _duburi()
-        d.vision.home.return_value = _mock_result(False)
-        state = VisionHomeState(d, VehicleProfile.dubomini(), target='gate',
-                                 yaw=True, lat=True, duration=10.0)
+        d.vision.align.return_value = _vis_result(False)
+        state = VisionAlignState(d, VehicleProfile.dubomini(), target='gate',
+                                 yaw=0, lat=0, duration=10.0)
         assert state.execute(Blackboard()) == FAILED
 
-    def test_gate_guard_forwarded_to_dsl(self):
+    def test_axis_flags_passed_to_dsl(self):
         d = _duburi()
-        state = VisionHomeState(d, VehicleProfile.dubomini(), target='gate',
-                                 yaw=True, lat=True, gate_guard=True,
-                                 pass_at=0.38, duration=15.0)
+        # True -> centre (0.0); number -> signed offset; None/False -> off.
+        state = VisionAlignState(d, VehicleProfile.dubomini(), target='red_pipe',
+                                 yaw=True, lat=80, depth=None,
+                                 err=30, gain=25, duration=15.0)
         state.execute(Blackboard())
-        _, kwargs = d.vision.home.call_args
-        assert kwargs.get('gate_guard') is True
-        assert kwargs.get('pass_at') == pytest.approx(0.38)
+        _, kwargs = d.vision.align.call_args
+        assert kwargs.get('yaw') == pytest.approx(0.0)
+        assert kwargs.get('lat') == pytest.approx(80.0)
+        assert kwargs.get('depth') is None
+        assert kwargs.get('err') == 30
+        assert kwargs.get('gain') == 25
 
 
-# ── VisionScanState ───────────────────────────────────────────────────────────
+# ── VisionMoveState ───────────────────────────────────────────────────────────
 
-class TestVisionScanState:
-    def test_returns_succeed_on_detection(self):
+class TestVisionMoveState:
+    def test_returns_succeed_on_reach(self):
         d = _duburi()
-        d.vision.scan.return_value = _mock_result(True)
-        state = VisionScanState(d, VehicleProfile.dubomini(), target='gate')
+        d.vision.move.return_value = _vis_result(True)
+        state = VisionMoveState(d, VehicleProfile.dubomini(), target='gate',
+                                fwd=80, mode='area')
         assert state.execute(Blackboard()) == SUCCEED
 
-    def test_returns_timeout_when_no_detection(self):
+    def test_returns_failed_on_miss(self):
         d = _duburi()
-        d.vision.scan.return_value = _mock_result(False)
-        state = VisionScanState(d, VehicleProfile.dubomini(), target='gate')
-        assert state.execute(Blackboard()) == TIMEOUT
+        d.vision.move.return_value = _vis_result(False)
+        state = VisionMoveState(d, VehicleProfile.dubomini(), target='gate')
+        assert state.execute(Blackboard()) == FAILED
+
+    def test_move_args_passed_to_dsl(self):
+        d = _duburi()
+        state = VisionMoveState(d, VehicleProfile.dubomini(), target='red_pipe',
+                                fwd=60, mode='height', gain=40, duration=18.0)
+        state.execute(Blackboard())
+        _, kwargs = d.vision.move.call_args
+        assert kwargs.get('fwd') == 60
+        assert kwargs.get('mode') == 'height'
+        assert kwargs.get('gain') == 40
+
+
+# ── LockHeadingState / DisarmState ─────────────────────────────────────────────
+
+class TestLockHeadingState:
+    def test_lock_timeout_is_hold_duration_not_state_timeout(self):
+        d = _duburi()
+        state = LockHeadingState(d, VehicleProfile.dubomini(), heading=90.0)
+        assert state.execute(Blackboard()) == SUCCEED
+        # The lock's auto-release must be the long hold duration, NOT the
+        # state's execution TIMEOUT_S (which would kill the lock mid-task).
+        _, kwargs = d.lock_heading.call_args
+        assert kwargs['timeout'] > state.TIMEOUT_S
+
+
+class TestDisarmState:
+    def test_releases_heading_before_disarm(self):
+        d = _duburi()
+        state = DisarmState(d, VehicleProfile.dubomini())
+        assert state.execute(Blackboard()) == SUCCEED
+        d.release_heading.assert_called_once()
+        d.disarm.assert_called_once()
+
+    def test_release_heading_failure_does_not_block_disarm(self):
+        d = _duburi()
+        d.release_heading.side_effect = RuntimeError('lock not active')
+        state = DisarmState(d, VehicleProfile.dubomini())
+        assert state.execute(Blackboard()) == SUCCEED
+        d.disarm.assert_called_once()
 
 
 # ── SurfaceState ──────────────────────────────────────────────────────────────
@@ -327,52 +388,38 @@ class TestSetDetectorState:
 # ── camera passthrough in vision states ──────────────────────────────────────
 
 class TestVisionStateCameraPassthrough:
-    def test_find_forwards_camera_kwarg(self):
+    def test_align_forwards_camera_kwarg(self):
         d = _duburi()
-        state = VisionFindState(d, VehicleProfile.dubomini(),
+        state = VisionAlignState(d, VehicleProfile.dubomini(),
                                  target='bin_a', camera='downward',
-                                 move='still', timeout=10.0)
+                                 lat=0, depth=0)
         state.execute(Blackboard())
-        _, kw = d.vision.find.call_args
+        _, kw = d.vision.align.call_args
         assert kw.get('camera') == 'downward'
 
-    def test_find_no_camera_no_kwarg(self):
+    def test_align_default_camera_is_none(self):
         d = _duburi()
-        state = VisionFindState(d, VehicleProfile.dubomini(), target='gate')
+        state = VisionAlignState(d, VehicleProfile.dubomini(), target='gate', yaw=0)
         state.execute(Blackboard())
-        _, kw = d.vision.find.call_args
-        assert 'camera' not in kw   # DSL uses sticky duburi.camera
+        _, kw = d.vision.align.call_args
+        assert kw.get('camera') is None   # DSL falls back to sticky duburi.camera
 
-    def test_home_forwards_camera_kwarg(self):
+    def test_move_forwards_camera_kwarg(self):
         d = _duburi()
-        state = VisionHomeState(d, VehicleProfile.dubomini(),
-                                 target='bin_a', camera='downward',
-                                 yaw=True, lat=True)
+        state = VisionMoveState(d, VehicleProfile.dubomini(),
+                                target='bin_a', camera='downward')
         state.execute(Blackboard())
-        _, kw = d.vision.home.call_args
+        _, kw = d.vision.move.call_args
         assert kw.get('camera') == 'downward'
 
-    def test_home_no_camera_no_kwarg(self):
+    def test_search_forwards_camera_kwarg(self):
         d = _duburi()
-        state = VisionHomeState(d, VehicleProfile.dubomini(), target='gate', yaw=True)
+        d.detected.return_value = True
+        state = VisionSearchState(d, VehicleProfile.dubomini(),
+                                  target='bin_a', camera='downward', timeout=5.0)
         state.execute(Blackboard())
-        _, kw = d.vision.home.call_args
-        assert 'camera' not in kw
-
-    def test_scan_forwards_camera_kwarg(self):
-        d = _duburi()
-        state = VisionScanState(d, VehicleProfile.dubomini(),
-                                 target='bin_a', camera='downward')
-        state.execute(Blackboard())
-        _, kw = d.vision.scan.call_args
+        _, kw = d.detected.call_args
         assert kw.get('camera') == 'downward'
-
-    def test_scan_no_camera_no_kwarg(self):
-        d = _duburi()
-        state = VisionScanState(d, VehicleProfile.dubomini(), target='gate')
-        state.execute(Blackboard())
-        _, kw = d.vision.scan.call_args
-        assert 'camera' not in kw
 
 
 # ── plan builder smoke test (no hardware) ─────────────────────────────────────
