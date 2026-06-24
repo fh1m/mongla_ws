@@ -688,8 +688,8 @@ param.
 ### Start the tracker (HUD overlay)
 
 ```bash
-# With cameras_.launch.py
-ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+# With vision.launch.py (tracking on by default)
+ros2 launch duburi_vision vision.launch.py camera:=forward tracking:=true
 
 # Or start tracker_node standalone (detector must already be running)
 ros2 run duburi_vision tracker_node --ros-args -p camera:=laptop
@@ -755,24 +755,25 @@ Pass the stem at launch — no path, no `.pt` extension:
 ros2 launch duburi_manager bringup.launch.py vision:=true
 
 # Explicit model override
-ros2 launch duburi_vision cameras_.launch.py model:=gate_nano_100ep classes:=gate
+ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_nano_100ep classes:=gate
 ```
 
 ### Live class switching (no restart)
 
-The model is loaded once. `classes` is a post-inference filter:
+The model is loaded once. `classes` is a post-inference filter (node =
+`/duburi_detector_<camera>`):
 
 ```bash
-ros2 param set /duburi_detector classes gate
-ros2 param set /duburi_detector classes "gate,flare"
+ros2 param set /duburi_detector_forward classes gate
+ros2 param set /duburi_detector_forward classes "gate,flare"
 ```
 
 ### Offline testing with `video_file`
 
 ```bash
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py camera:=forward \
     video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
-# loop:=false to stop at EOF; rqt:=false for headless; with_tracking:=true for ByteTrack
+# loop:=false to stop at EOF; viewer:=false for headless; tracking:=false to skip ByteTrack
 ```
 
 `video_file` is a fully supported camera source — all downstream detection
