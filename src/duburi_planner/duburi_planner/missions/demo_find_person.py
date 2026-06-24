@@ -6,7 +6,7 @@ run) to detect 'person'. No custom weights needed -- ideal for desk testing befo
 pool day. Exercises both vision verbs (align + move) and the fallback search.
 
 To run:
-    ros2 launch duburi_vision cameras_.launch.py camera:=laptop
+    ros2 launch duburi_vision vision.launch.py camera:=laptop model:=yolov11n classes:=person
     ros2 run duburi_planner mission find_person_demo
 
 Swap model:

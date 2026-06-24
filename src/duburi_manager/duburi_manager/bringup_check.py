@@ -213,7 +213,7 @@ def main() -> int:
 def _print_launch_hint() -> None:
     print('    ros2 run duburi_manager start              '
           '# mode=auto picks the right profile')
-    print('    ros2 launch duburi_vision cameras_.launch.py  '
+    print('    ros2 launch duburi_vision vision.launch.py camera:=forward  '
           '# vision pipeline (optional)')
     print('    ros2 run duburi_planner mission move_and_see   '
           '# demo mission')
