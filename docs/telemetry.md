@@ -12,7 +12,7 @@ Every log line starts with a bracketed tag. Grep for a tag to isolate a specific
 | `[YAW  ]` | Yaw tracking: target, current, error |
 | `[FOR  ]` | Forward translation progress |
 | `[BAC  ]` | Backward translation progress |
-| `[VIS  ]` | Vision loop: target class, bbox error, size proxy, lock mode |
+| `[VIS  ]` | Vision loop: per-axis pixel error (align) / bbox fill % (move) + outcome (`ALIGNED`/`LOST`/`TIMEOUT`) |
 | `[ARDUB]` | Relayed `STATUSTEXT` from ArduSub (EKF switches, arming checks, ...) |
 | `[INIT ]` | One-shot init notes (startup banner, message-rate pins) |
 | `[MAV  ]` | Per-frame MAVLink trace (`debug:=true` only — off by default) |
@@ -58,8 +58,8 @@ Format: `[MAV <pixhawk_method> cmd=<verb>] <non-neutral channels only>`
 Grep for a single verb's frames:
 
 ```bash
-# All RC frames from the last vision_align_yaw call
-grep "cmd=vision_align_yaw" session.log
+# All RC frames from the last vision_align call
+grep "cmd=vision_align" session.log
 ```
 
 Full MAVLink message catalogue: [`.claude/context/mavlink-reference.md`](../../.claude/context/mavlink-reference.md).

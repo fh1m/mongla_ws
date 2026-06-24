@@ -53,7 +53,7 @@ Reference: https://robonation.gitbook.io/robosub-resources/section-3-autonomy-ch
 | B3 Tracking default | `cameras_.launch.py` | `with_tracking` default → `true` |
 | B2 Async inference | `detector_node.py` | `_infer_loop` worker thread |
 | C1 monotonic | `heading_lock.py` | `time.time()` → `time.monotonic()` |
-| C2 tracking cache | `auv_manager_node.py` | VisionState cache by `(camera, use_tracks)` |
+| C2 tracking cache | `auv_manager_node.py` | VisionState cached per `camera` (control reads `/detections`; tracker feeds the HUD only) |
 | C3 ExternalShutdown | `display_node.py` | Catch `ExternalShutdownException` in spin thread |
 | C4 tip log | `display_node.py` | Remove misleading `launch_pipeline` hint |
 
@@ -95,7 +95,7 @@ import random
 GATE_SIDE = random.choice(['left', 'right'])   # or read from a config file set pre-run
 ```
 
-Then lateral offset the gate approach accordingly (small Ch6 bias during `vision.home`).
+Then lateral offset the gate approach accordingly (pass a small `lat=` pixel offset to `vision.align`).
 
 No new file needed — 5-line addition to existing mission.
 
@@ -146,7 +146,7 @@ def follow_orange_marker(duburi, max_steps=20, camera='downward'):
 ```
 
 **When downward camera is wired** (Jetson + Blue Robotics low-light USB): replace
-open-loop with `duburi.vision.slide()` on the HSV-derived centroid published
+open-loop with `duburi.vision.align(lat=0)` on the HSV-derived centroid published
 as a synthetic `Detection2DArray`.
 
 ### Task 2 — Slalom (8 days, Jun 15–23)
@@ -179,7 +179,7 @@ def run(duburi, log):
         # Find pipe — yaw-scan then lateral align
         while not duburi.detected('pipe'):
             duburi.move_forward(0.5, gain=30)
-        duburi.vision.home(target='pipe', yaw=True, lat=True, duration=10)
+        duburi.vision.align(target='pipe', yaw=0, lat=0, duration=10)
         # Pass on correct side
         if side == 'right':
             duburi.move_right(1.5, gain=40)
@@ -215,8 +215,8 @@ def run(duburi, log):
 
     while not duburi.detected(TARGET_SYMBOL, camera='downward'):
         duburi.move_forward(0.5, gain=30)
-    duburi.vision.home(target=TARGET_SYMBOL, downward_cam=True,
-                       lat=True, yaw=True, duration=15)
+    duburi.vision.align(target=TARGET_SYMBOL, camera='downward',
+                        lat=0, yaw=0, duration=15)
     duburi.fire(3)   # dropper_1
 
     duburi.set_depth(0.0)
@@ -248,9 +248,8 @@ def run(duburi, log):
     # Task 1: Gate
     while not duburi.detected('gate'):
         duburi.move_forward(0.5, gain=30)
-    duburi.vision.home(target='gate', yaw=True, lat=True,
-                       gate_guard=True, pass_at=0.38, pass_at_gain=55,
-                       dist=0.40, metric='area', duration=20)
+    duburi.vision.align(target='gate', yaw=0, lat=0, duration=20)
+    duburi.vision.move(target='gate', fwd=40, mode='area', duration=20)
     duburi.move_forward_dist(distance_m=3.0, gain=60)
     log('GATE PASS DONE')
 
@@ -270,7 +269,7 @@ def run(duburi, log):
             duburi.move_forward(2.0, gain=50)
             continue
         side = 'right' if i % 2 == 0 else 'left'
-        duburi.vision.home(target='pipe', yaw=True, lat=True, duration=10)
+        duburi.vision.align(target='pipe', yaw=0, lat=0, duration=10)
         (duburi.move_right if side == 'right' else duburi.move_left)(1.5, gain=40)
         duburi.move_forward(1.0, gain=50)
     log('SLALOM DONE')
@@ -278,9 +277,8 @@ def run(duburi, log):
     # Task 6: Return gate
     while not duburi.detected('gate'):
         duburi.move_forward(0.5, gain=30)
-    duburi.vision.home(target='gate', yaw=True, lat=True,
-                       gate_guard=True, pass_at=0.38, pass_at_gain=55,
-                       dist=0.40, metric='area', duration=20)
+    duburi.vision.align(target='gate', yaw=0, lat=0, duration=20)
+    duburi.vision.move(target='gate', fwd=40, mode='area', duration=20)
     duburi.move_forward_dist(distance_m=3.0, gain=60)
     log('RETURN GATE DONE')
 

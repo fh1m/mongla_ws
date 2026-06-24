@@ -124,12 +124,22 @@ agree to within the BNO085 - AHRS calibration offset.
 
 * **suspend / resume** is internal -- `Duburi._suspend_heading_lock()`
   is a context manager that wraps any verb that intentionally
-  changes heading (`yaw_left`, `yaw_right`, `arc`) or releases the
-  override (`pause`). The lock thread stays alive, just stops
-  streaming.
-* **retarget** is called automatically after a yaw / arc exits, so
-  the lock follows the most recently commanded heading without the
-  operator having to call `unlock` + `lock_heading(new_target)`.
+  changes heading (`yaw_left`, `yaw_right`, `arc`, and `vision_align`
+  when `yaw` is an align axis) or releases the override (`pause`).
+  The lock thread stays alive, just stops streaming.
+* **retarget** is called automatically after a yaw / arc / yaw-axis
+  `vision_align` exits, so the lock follows the most recently commanded
+  heading without the operator having to call `unlock` +
+  `lock_heading(new_target)`.
+* **timeout / disarm exit** -- the lock can also end *without*
+  `unlock_heading`. On `timeout` the lock thread fires an `on_exit`
+  callback (`Duburi._on_lock_timeout`) that releases Ch4, clears
+  `Duburi._heading_lock`, and releases the heartbeat hold, so a
+  timed-out lock can never linger as an "active" zombie that still
+  pauses the heartbeat and makes translation verbs release Ch4 to a
+  dead thread. `disarm()` stops and joins an active lock (and releases
+  the heartbeat) before dropping to MANUAL. Both paths land in
+  `NO LOCK` exactly like `unlock_heading`.
 
 ## 6. Cooperation with `Heartbeat`
 
@@ -144,7 +154,10 @@ them stepping on each other:
   writer on Ch4, AND it writes a full RC packet every 50 ms, which
   inherently keeps `FS_PILOT_INPUT` from triggering.
 * `unlock_heading` resumes the Heartbeat so the wire stays warm
-  during whatever runs next.
+  during whatever runs next. The same heartbeat hold is released on
+  the two other lock-exit paths — a `timeout` (via the `on_exit`
+  callback) and `disarm()` — so the Heartbeat is never left paused
+  after a lock ends.
 
 This is why the lock uses `send_rc_override` (full 6-channel write)
 rather than `send_rc_translation` -- it owns the whole pilot input
@@ -162,7 +175,10 @@ slot, including the neutral throttle/forward/lateral fields.
 | `arc`              | Suspend lock, run arc, retarget lock, resume.                   |
 | `pause`            | Suspend lock for the duration, resume.                           |
 | `stop`             | Suspends lock briefly via `_command_scope`, send_neutral, resume. |
+| `vision_align`     | If `yaw` IS an align axis: suspend lock, loop drives Ch4, retarget lock on exit. If `yaw` is NOT an axis but a lock is live: `release_yaw` — loop writes lateral via `send_rc_translation`, Ch4 left entirely to the lock (never writes `yaw=1500` to fight it). |
+| `vision_move`      | Never commands yaw; with a lock active it drives forward/lateral via `send_rc_translation` (`release_yaw`), so the lock keeps Ch4. |
 | `unlock_heading`   | Stop the thread, send_neutral, resume Heartbeat.                |
+| `disarm`           | Stops/joins the lock + releases the Heartbeat hold, *then* disarms — the lock's Ch4 yaw-rate stream must not outlive the drop to MANUAL. |
 
 The motion modules don't know about lock state -- they receive a
 `Writers` from `motion_writers.make_writers(..., release_yaw=...)`
@@ -179,10 +195,11 @@ the axis module.
 | ------------------------------------ | ----------------------------------------------------------------- |
 | Source returns `None` for a tick     | Last valid heading held; loop never blocks.                       |
 | Source dead > `SOURCE_DEAD_S` (2 s)  | `[LOCK ] WARN yaw source silent` log every 2 s; loop releases Ch4 (1500) so the sub does not yaw on stale data; recovers automatically when samples resume. |
-| Operator forgets `unlock_heading`    | `timeout` (default 300 s) auto-stops the thread.                 |
+| Operator forgets `unlock_heading`    | `timeout` (default 300 s) fires the `on_exit` callback: Ch4 released, `Duburi._heading_lock` cleared, Heartbeat hold released — so a timed-out lock can't linger as an "active" zombie. |
+| `disarm()` while a lock is active    | `disarm()` stops/joins the lock and releases the Heartbeat hold before dropping to MANUAL, so the Ch4 yaw-rate stream stops cleanly. FSM `DisarmState` also calls `release_heading()` first. |
 | Manager process exits                | `daemon=True` kills the thread; manager's `finally` calls `pixhawk.send_neutral()` and stops the lock first. |
 | User Ctrl+Cs the manager             | Same as above.                                                    |
-| Two `lock_heading` calls in a row    | First lock is `stop()`'d, then a new one starts.                  |
+| Two `lock_heading` calls in a row    | First lock is `stop()`'d (Heartbeat hold released), then a new one starts. |
 | `lock_heading` called from non-yaw mode | `_ensure_yaw_capable_mode` engages ALT_HOLD first (or raises `ModeChangeError` if the mode change is rejected). |
 
 ## 9. Verification recipe

@@ -32,7 +32,8 @@ while not duburi.detected('gate')|  read cache → False (gate not visible yet)
     duburi.move_forward(0.5)     |  blocking action round-trip → cache updated
                                  |  spin_until_future_complete fires callbacks
 # → loop exits when gate visible |  next detected() call → True
-duburi.vision.home(target='gate')|  vision P-loop closes in on gate bbox
+duburi.vision.align('gate',      |  vision P-loop centres on gate bbox
+                    yaw=0, lat=0) |  (signed pixel offsets; 0 = centre)
 ```
 
 ---
@@ -129,6 +130,11 @@ duburi.detected(
 that frame arrived within `stale_after` seconds. `False` otherwise (no
 subscription yet, cache empty, class absent, or frame too old).
 
+Matching is **case-insensitive** — `detected('gate')`, `detected('Gate')`,
+and `detected('GATE')` are equivalent, consistent with the control path
+(`VisionState._hypothesis_matches` lowercases both sides). You still have to
+use the right class *name*; only the case is forgiven.
+
 ### Using ClassRef
 
 ```python
@@ -196,9 +202,9 @@ specified class appears in the detection topic** — `detected()` for any other
 class will always return `False`.
 
 ```python
-# ✗ BUG: vision.home with flare ClassRef sets classes='flare'
+# ✗ BUG: vision.align with flare ClassRef sets classes='flare'
 #         Then detected('gate') can never be True — detector only publishes flare
-duburi.vision.home(target=duburi.models.gate.flare, yaw=True, ...)  # ← sets classes='flare'
+duburi.vision.align(duburi.models.gate.flare, yaw=0)  # ← sets classes='flare'
 for _ in range(18):
     if duburi.detected('gate'):   # ← ALWAYS FALSE — detector filtered to flare only
         break
@@ -207,7 +213,7 @@ for _ in range(18):
 
 ```python
 # ✓ CORRECT: restore both classes before the loop
-duburi.vision.home(target=duburi.models.gate.flare, yaw=True, ...)  # sets classes='flare'
+duburi.vision.align(duburi.models.gate.flare, yaw=0)  # sets classes='flare'
 duburi.set_classes('gate,flare')   # ← restore detection of both
 for _ in range(18):
     if duburi.detected('gate', stale_after=0.3):   # ← NOW works
@@ -247,20 +253,26 @@ while not duburi.detected('gate'):
     duburi.move_forward(0.5, gain=30)
 ```
 
-### Rule 6 — Camera must be set before first use
+### Rule 6 — Camera defaults to `'forward'`; switch it for the downward cam
+
+`duburi.camera` now defaults to `'forward'` (the `DuburiMission` constructor
+default), which matches the forward detector topic. Forward-camera missions
+work without setting anything. For a downward-camera task you must switch
+first, or `detected()` subscribes the wrong topic.
 
 ```python
-# ✗ detected() falls back to duburi.camera='laptop' (the constructor default)
-#    if you forgot to set it. This subscribes the wrong topic.
-while not duburi.detected('gate'):   # subscribes /duburi/vision/laptop/detections
-    ...
+# ✓ forward cam — default is already 'forward'
+while not duburi.detected('gate'):       # /duburi/vision/forward/detections
+    duburi.move_forward(0.5, gain=30)
 
-# ✓ Set camera context at the top of run()
-def run(duburi, log):
-    duburi.camera = 'forward'
-    ...
-    while not duburi.detected('gate'):   # subscribes /duburi/vision/forward/detections
-        ...
+# ✓ downward cam — switch before the loop (use_camera logs the change)
+duburi.use_camera('downward')
+while not duburi.detected('bin'):         # /duburi/vision/downward/detections
+    duburi.move_forward(0.5, gain=30)
+
+# ✓ or override per call without changing the sticky context
+while not duburi.detected('bin', camera='downward'):
+    duburi.move_forward(0.5, gain=30)
 ```
 
 ---
@@ -290,14 +302,8 @@ duburi.lock_heading(deg)
 duburi.dvl_connect()
 duburi.move_forward_dist(m)
 duburi.move_lateral_dist(m)
-duburi.vision.find(...)
-duburi.vision.home(...)
-duburi.vision.turn(...)
-duburi.vision.slide(...)
-duburi.vision.hover(...)
-duburi.vision.approach(...)
-duburi.vision.track(...)
-duburi.vision.scan(...)
+duburi.vision.align(...)   # centre on lat/yaw/depth (signed px offsets)
+duburi.vision.move(...)    # drive forward to a bbox fill ratio
 ```
 
 ### Non-blocking (return almost immediately, do NOT update cache meaningfully)
@@ -343,14 +349,14 @@ for _ in range(36):   # 36 × 10° = full 360°
 **Conditional branch:**
 ```python
 if duburi.detected('flare', stale_after=0.5):
-    duburi.vision.home(target='flare', yaw=True, depth=True)
+    duburi.vision.align('flare', yaw=0, depth=0)
 else:
     duburi.move_forward(2.0, gain=35)
 ```
 
 **While gate visible — crude approach:**
 ```python
-# Move toward gate as long as it's in view (crude, use vision.home for precision)
+# Move toward gate as long as it's in view (crude, use vision.move for precision)
 while duburi.detected('gate', stale_after=0.5):
     duburi.move_forward(0.3, gain=25)
 ```
@@ -366,7 +372,7 @@ while not duburi.detected('gate'):
 duburi.yaw_right(45)
 # Confirm gate is now visible before committing to alignment
 if duburi.detected('gate', stale_after=0.5):
-    duburi.vision.home(target='gate', yaw=True, lat=True)
+    duburi.vision.align('gate', yaw=0, lat=0)
 ```
 
 **Orbit with gate-break (correct class filter):**
@@ -398,9 +404,9 @@ while not duburi.detected('gate'):
 
 **Missing class filter restore:**
 ```python
-# ✗ vision.home(target=flare_ref) calls set_classes('flare')
+# ✗ vision.align(flare_ref) calls set_classes('flare')
 #    The loop below can never see gate
-duburi.vision.home(target=duburi.models.gate.flare, yaw=True, ...)
+duburi.vision.align(duburi.models.gate.flare, yaw=0)
 for _ in range(18):
     if duburi.detected('gate'):    # never True
         break
@@ -409,8 +415,8 @@ for _ in range(18):
 
 **Querying wrong camera:**
 ```python
-# ✗ duburi.camera still 'laptop' but detector is on 'forward'
-while not duburi.detected('gate'):    # subscribes laptop/detections (nothing there)
+# ✗ camera left at 'forward' but the bin detector publishes on 'downward'
+while not duburi.detected('bin'):     # subscribes forward/detections (nothing there)
     duburi.move_forward(0.5)          # runs until budget exhausted
 ```
 
@@ -451,7 +457,7 @@ detected('gate') → False             /duburi/vision/.../detections ← (detect
 move_forward(0.5) ──────────────────→  executes motion command (Ch5 RC)
   spin_until_future_complete         /duburi/vision/.../detections ← updated during spin
 detected('gate') → True             (no action sent yet)
-vision.home(...) ───────────────────→  executes vision P-loop
+vision.align(...) ──────────────────→  executes vision P-loop
 ```
 
 Key property: **at any given instant, at most one action goal is in flight**.
@@ -587,7 +593,8 @@ ros2 run duburi_planner mission gate_flare_autonomous
 
 # What to watch for:
 # - AUV creeps forward in short steps until 'gate' appears in detections
-# - Once gate detected, vision.home() takes over (smooth P-loop alignment)
+# - Once gate detected, vision.align() takes over (smooth P-loop centring)
+# - After align, vision.move() drives forward to the gate fill ratio
 # - After gate pass, search loop for flare (yaw sweep + detected('flare'))
 # - After flare lock: orbit with detected('gate') break in each step
 # - Scoreboard JSON written on exit
@@ -598,7 +605,7 @@ ros2 run duburi_planner mission gate_flare_autonomous
 | What | How to check | Tuning lever |
 |------|-------------|--------------|
 | Detection topic flowing | `ros2 topic hz /duburi/vision/<cam>/detections` | Camera/detector pipeline must be up |
-| Class names match code | `ros2 topic echo ... --once` and grep for `class_id` | Must match your `detected('string')` exactly — case-sensitive |
+| Class names match code | `ros2 topic echo ... --once` and grep for `class_id` | Name must match your `detected('string')`; matching is case-insensitive (`'Gate'` == `'gate'`) |
 | Cache freshness | `detected('gate', stale_after=0.1)` → should return True when gate visible | Tune `stale_after` for your use case |
 | Correct camera | `ros2 topic echo /duburi/vision/<cam>/detections` exists | Set `duburi.camera = 'forward'` before first loop |
 | Class filter not broken | `ros2 param get /duburi_detector classes` | Call `set_classes('gate,flare')` before orbit loop |
@@ -613,13 +620,14 @@ ros2 run duburi_planner mission gate_flare_autonomous
 
 **Likely causes (check in order):**
 
-1. **Wrong camera** — `duburi.camera` defaults to `'laptop'`. If your detector
-   is on `'forward'`, the subscription is on the wrong topic.
+1. **Wrong camera** — `duburi.camera` defaults to `'forward'`. If your target
+   is on the downward detector (bin / path marker), the subscription is on the
+   wrong topic.
    ```python
-   duburi.camera = 'forward'   # fix: set at top of run()
+   duburi.use_camera('downward')   # fix: switch before downward-cam loops
    ```
 
-2. **Class filter set to wrong class** — a previous `vision.home(target=flare_ref)`
+2. **Class filter set to wrong class** — a previous `vision.align(flare_ref)`
    set `classes='flare'`. The detector no longer publishes gate detections.
    ```python
    duburi.set_classes('gate,flare')   # fix: restore both classes
@@ -630,8 +638,10 @@ ros2 run duburi_planner mission gate_flare_autonomous
    ros2 topic list | grep detections   # should show your camera
    ```
 
-4. **Class name mismatch** — the model uses `'Gate'` (capitalised) but your
-   code checks `'gate'`. class_id is case-sensitive.
+4. **Class name mismatch** — matching is case-insensitive (`'Gate'` resolves
+   to `'gate'`), so capitalisation is never the problem; a genuinely
+   different name (e.g. `'gate_left'` vs `'gate'`) still misses. Confirm the
+   published class_id:
    ```bash
    ros2 topic echo /duburi/vision/forward/detections --once | grep class_id
    ```
@@ -676,7 +686,7 @@ set `classes='flare'`.
 
 **Fix:** restore the filter before the orbit:
 ```python
-duburi.vision.home(target=duburi.models.gate.flare, ...)   # ← sets classes='flare'
+duburi.vision.align(duburi.models.gate.flare, yaw=0, depth=0)   # ← sets classes='flare'
 duburi.set_classes('gate,flare')   # ← REQUIRED before orbit
 for _ in range(18):
     if duburi.detected('gate', stale_after=0.3):
@@ -694,8 +704,11 @@ at the edge of the frame or partially occluded.
 1. Increase `stale_after`: `detected('gate', stale_after=1.5)` — sustains
    True through detection dropouts.
 2. Lower detector confidence: `ros2 launch ... conf:=0.35`.
-3. Use `vision.find()` instead of `detected()` for more robust target
-   acquisition with built-in lost-track recovery.
+3. Hand off to a vision verb with a `fallback` search instead of relying on
+   raw `detected()`. `duburi.vision.align('gate', yaw=0, lat=0,
+   fallback=creep_forward)` rides brief dropouts (it coasts for
+   `vision.lost_grace_s` before running the fallback) and re-acquires
+   automatically.
 
 ---
 
@@ -704,12 +717,16 @@ at the edge of the frame or partially occluded.
 ### Pattern A: Search-then-align (the core paradigm)
 
 ```python
+def creep_forward(duburi):
+    """Fallback for vision.align/move: one short forward creep, then return."""
+    duburi.move_forward(0.5, gain=30)
+
 def run(duburi, log):
     duburi.camera = 'forward'
     duburi.models(gate='gate_flare_medium_100ep')
     duburi.arm()
     duburi.set_depth(-0.8)
-    duburi.lock_heading(target=0.0, timeout=180)
+    duburi.lock_heading(0.0, timeout=180)
 
     # Search for gate — creep forward until visible
     MAX_SEARCH_STEPS = 60
@@ -723,15 +740,12 @@ def run(duburi, log):
         duburi.disarm()
         return
 
-    # Gate visible — align and pass
-    duburi.vision.home(
-        target=duburi.models.gate.gate,
-        yaw=True, lat=True,
-        gate_guard=True, pass_at=0.38, pass_at_gain=55,
-        dist=0.40, metric='area',
-        duration=20,
-    )
-    duburi.move_forward_dist(3.0, gain=60)
+    # Gate visible — centre it (yaw + lat), then drive through to the fill ratio
+    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+                        err=40, gain=30, duration=20, fallback=creep_forward)
+    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='height',
+                       gain=45, duration=20, fallback=creep_forward)
+    duburi.move_forward_dist(3.0, gain=60)   # DVL commit through the gate
 
     duburi.release_heading()
     duburi.set_depth(0.0)
@@ -755,8 +769,9 @@ else:
 ### Pattern C: Orbit with detection exit
 
 ```python
-# After aligning to flare:
-duburi.vision.home(target=duburi.models.gate.flare, yaw=True, forward=True, depth=True, ...)
+# After aligning to flare (centre yaw + depth, then close in):
+duburi.vision.align(duburi.models.gate.flare, yaw=0, depth=0, fallback=creep_forward)
+duburi.vision.move(duburi.models.gate.flare, fwd=38, mode='height', fallback=creep_forward)
 
 # Restore both classes before orbit
 duburi.set_classes('gate,flare')
@@ -770,7 +785,7 @@ for _ in range(18):                        # 18 × 20° = 360°
 
 # Re-align on gate if found
 if duburi.detected('gate', stale_after=0.5):
-    duburi.vision.home(target=duburi.models.gate.gate, yaw=True, lat=True, ...)
+    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0, fallback=creep_forward)
     duburi.move_forward_dist(1.5, gain=60)
 ```
 
@@ -782,10 +797,11 @@ duburi.pause(1.0)   # warm the cache
 
 if duburi.detected('gate', stale_after=0.5):
     log('gate visible — aligning')
-    duburi.vision.home(target='gate', yaw=True, lat=True, gate_guard=True)
+    duburi.vision.align('gate', yaw=0, lat=0)
 elif duburi.detected('flare', stale_after=0.5):
-    log('flare visible but no gate — orbit first')
-    duburi.vision.home(target='flare', yaw=True, forward=True, depth=True)
+    log('flare visible but no gate — centre then approach')
+    duburi.vision.align('flare', yaw=0, depth=0)
+    duburi.vision.move('flare', fwd=38, mode='height')
 else:
     log('nothing visible — advancing')
     duburi.move_forward(2.0, gain=35)
@@ -794,57 +810,66 @@ else:
 ### Pattern E: Conditional DVL pass
 
 ```python
-result = duburi.vision.home(
-    target=duburi.models.gate.gate,
-    yaw=True, lat=True,
-    gate_guard=True, pass_at=0.38,
-    duration=20,
+result = duburi.vision.align(
+    duburi.models.gate.gate,
+    yaw=0, lat=0,
+    err=40, gain=30, duration=20,
 )
 
-if result.success:
+if result.ok:
     # Vision aligned — use DVL for precise gate passage
     duburi.move_forward_dist(3.0, gain=60)
 else:
-    # Vision failed (gate moved or lost) — open-loop fallback
+    # Vision did not centre (gate moved or lost) — open-loop fallback
     log.warn('gate alignment failed — open-loop passage attempt')
     duburi.move_forward(4.0, gain=40)   # conservative open-loop
 ```
+
+> `VisionResult` is truthy only on `ALIGNED`, so `if result.ok:` and
+> `if result:` are equivalent. A miss never raises — the verb logs "not
+> aligned" and the mission keeps going.
 
 ---
 
 ## 11. The paradigm in context of the mission architecture
 
 ```
-YASMIN FSM (future)            What we have now
+YASMIN FSM (built)             What the imperative paradigm does
 ─────────────────────          ─────────────────────────────────────────
-State: SEARCH_GATE         →   while not duburi.detected('gate'):
-  SEARCH_GATE → FOUND              duburi.move_forward(0.5, gain=30)
-                           
-State: ALIGN_GATE          →   duburi.vision.home(target='gate', yaw=True, lat=True, ...)
-  ALIGN_GATE → PASS        
-                           
-State: PASS_GATE           →   duburi.move_forward_dist(3.0, gain=60)
+VisionSearchState          →   while not duburi.detected('gate'):
+  SEARCH_GATE → ALIGN_GATE          duburi.move_forward(0.5, gain=30)
+
+VisionAlignState           →   duburi.vision.align('gate', yaw=0, lat=0, ...)
+  ALIGN_GATE → MOVE_GATE
+
+VisionMoveState            →   duburi.vision.move('gate', fwd=80, mode='height')
+  MOVE_GATE → PASS_GATE
+
+MoveForwardState           →   duburi.move_forward_dist(3.0, gain=60)
   PASS_GATE → SEARCH_FLARE
 ```
 
-Each `detected()`-based loop IS a proto-state. When YASMIN replaces linear
-scripts, each loop becomes an explicit state node with named transitions. The
-detected paradigm is the design that makes that refactor clean: every logical
+Each `detected()`-based loop IS a proto-state. The YASMIN FSM layer
+(`duburi_planner/state_machines/`) wraps the *same* DSL verbs as explicit
+state nodes: `VisionSearchState` (search-until-detected), `VisionAlignState`
+(wraps `vision.align`), and `VisionMoveState` (wraps `vision.move`). The
+detected paradigm is the design that makes that mapping clean — every logical
 state is already isolated in the mission script.
 
-The detected paradigm is specifically documented as the design step toward
-YASMIN FSM in `duburi_planner/state_machines/` (currently empty). When
-missions outgrow linear scripts (more than ~3 tasks with retry logic), YASMIN
-is the right next step — and each `while detected()` loop maps 1:1 to a state.
+When missions outgrow linear scripts (more than ~3 tasks with retry logic),
+the YASMIN FSM is the right structure — and each `while detected()` loop maps
+1:1 to a `VisionSearchState`, each `vision.align`/`vision.move` to a
+`VisionAlignState`/`VisionMoveState`.
 
 ---
 
 ## 12. Cross-references
 
 - Implementation: `src/duburi_planner/duburi_planner/duburi_dsl.py` (`detected()` method, `_on_detections()` callback)
+- Two-verb vision DSL: `src/duburi_planner/duburi_planner/vision_dsl.py` (`vision.align` / `vision.move`)
 - Detection topic source: `src/duburi_vision/duburi_vision/detector_node.py` (publishes `Detection2DArray`)
 - Vision state (manager side): `src/duburi_manager/duburi_manager/vision_state.py` (`bbox_error()`, used by vision verbs, NOT by `detected()`)
-- Mission samples: `src/duburi_planner/duburi_planner/missions/gate_flare_autonomous.py` (canonical use)
+- Mission samples: `src/duburi_planner/duburi_planner/missions/gate_flare_autonomous.py` (canonical use), `pool_day_practice.py` (full two-verb run + fallbacks)
 - Mission cookbook: `.claude/context/mission-cookbook.md` §7.6
 - Client/DSL API: `.claude/context/client-and-dsl-api.md` §2.5
-- YASMIN FSM target: `src/duburi_planner/duburi_planner/state_machines/` (currently empty)
+- YASMIN FSM states: `src/duburi_planner/duburi_planner/state_machines/states/vision.py` (`VisionSearchState` / `VisionAlignState` / `VisionMoveState`)

@@ -45,6 +45,21 @@ opencv-python>=4.8
 # pip doesn't replace them with the CPU-only PyPI wheels.
 ultralytics>=8.1.0
 
+# ---- Vision: tracking (ByteTrack + Kalman) ----------------------------
+# supervision provides the ByteTrack implementation used by
+# `duburi_vision.tracking.bytetrack` (+ `draw_video`); filterpy provides
+# the Kalman filter used by `duburi_vision.tracking.kalman` to smooth
+# track bboxes. Both are declared in duburi_vision/setup.py install_requires.
+supervision>=0.18.0
+filterpy>=1.4.5
+
+# ---- Vision: monocular depth (OPTIONAL) -------------------------------
+# `duburi_vision.depth.depth_estimation_node` runs Depth Anything V2-Small
+# as an ONNX graph via onnxruntime. It is imported lazily: if absent, the
+# node logs a warning and falls back to bbox-area proximity, so this line
+# is optional. On Jetson prefer `onnxruntime-gpu` from NVIDIA's index.
+onnxruntime>=1.16; platform_machine == "x86_64"
+
 # ---- Test runner (CI + colcon test) ----------------------------------
 # Required for the duburi_control unit tests; colcon also calls into
 # pytest under the hood for `colcon test`.

@@ -584,7 +584,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
       <text x="444" y="122" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">stable track IDs (occlusion bridge)</text>
       <text x="444" y="138" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">smoothed bbox (cx,cy)</text>
       <text x="444" y="152" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">Kalman-only pred on miss</text>
-      <text x="444" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">opt-in: --tracking true</text>
+      <text x="444" y="168" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#3a4f66">HUD overlay only</text>
 
       <line x1="534" y1="110" x2="569" y2="110" stroke="#34d399" stroke-width="1.5" marker-end="url(#a1g)"></line>
       <text x="551" y="103" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#34d399">/tracks</text>
@@ -689,33 +689,31 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
       <div class="formula" style="font-size:13px">
         cx_err  = (bbox_cx − 0.5) / 0.5 <span style="color:var(--muted)">  # [−1, +1]</span><br>
         cy_err  = (bbox_cy − 0.5) / 0.5<br>
-        dist_err = target_bbox_h_frac − bbox_h/frame_h<br><br>
-        yaw_pct  = <span style="color:var(--blue)">kp_yaw</span> × cx_err   <span style="color:var(--muted)">  # → Ch4</span><br>
-        lat_pct  = <span style="color:var(--blue)">kp_lat</span> × cx_err   <span style="color:var(--muted)">  # → Ch6 (strafe)</span><br>
-        fwd_pct  = <span style="color:var(--blue)">kp_fwd</span> × dist_err <span style="color:var(--muted)">  # → Ch5</span><br>
+        fill_err = fwd_fill − bbox_fill <span style="color:var(--muted)">  # vision_move</span><br><br>
+        yaw_pct  = <span style="color:var(--blue)">kp_yaw</span> × cx_err   <span style="color:var(--muted)">  # → Ch4 (align)</span><br>
+        lat_pct  = <span style="color:var(--blue)">kp_lat</span> × cx_err   <span style="color:var(--muted)">  # → Ch6 strafe</span><br>
+        fwd_pct  = <span style="color:var(--blue)">kp_fwd</span> × fill_err <span style="color:var(--muted)">  # → Ch5 (move)</span><br>
         depth_Δ  = <span style="color:var(--blue)">kp_dep</span> × cy_err   <span style="color:var(--muted)">  # → depth setpoint</span>
       </div>
 
-      <h3 style="margin-top:20px">Vision verb modes</h3>
+      <h3 style="margin-top:20px">Two pixel-native verbs</h3>
       <table class="tbl" style="margin-top:8px">
-        <thead><tr><th>Verb</th><th>Active axes</th><th>Settling condition</th></tr></thead>
+        <thead><tr><th>Verb</th><th>Active axes</th><th>Reached when</th></tr></thead>
         <tbody>
-          <tr><td><em>vision_align_yaw</em></td><td class="m">Ch4 only</td><td class="m">|cx_err| &lt; deadband for N frames</td></tr>
-          <tr><td><em>vision_align_lat</em></td><td class="m">Ch6 only</td><td class="m">|cx_err| &lt; deadband</td></tr>
-          <tr><td><em>vision_align_depth</em></td><td class="m">depth setpoint</td><td class="m">|cy_err| &lt; deadband</td></tr>
-          <tr><td><em>vision_hold_distance</em></td><td class="m">Ch5</td><td class="m">bbox_h_frac ≈ target ± tol</td></tr>
-          <tr><td><em>vision_align_3d</em></td><td class="m">yaw+fwd+depth</td><td class="m">all axes settled simultaneously</td></tr>
+          <tr><td><em>vision_align</em></td><td class="m">any of lat (Ch6) · yaw (Ch4) · depth</td><td class="m">every active axis within err_px for align_stable_frames</td></tr>
+          <tr><td><em>vision_move</em></td><td class="m">Ch5 fwd (+ optional Ch6 maintain)</td><td class="m">bbox fill ≥ fwd_fill% (mode area/width/height)</td></tr>
         </tbody>
       </table>
+      <p class="sec-sub" style="margin-top:8px">Each <em>vision_align</em> axis takes a signed pixel offset (0 = centre). <em>vision_move</em> never re-centres yaw/depth. <code>gain</code> is a hard max-speed cap (% thrust).</p>
 
       <div class="callout" style="margin-top:16px">
-        <strong>Live tuning during a run:</strong> all vision gains are ROS params — change them without restarting:<br>
+        <strong>Live tuning during a run:</strong> the vision P-gains are ROS params — change them without restarting (they apply on the next goal):<br>
         <code>ros2 param set /duburi_manager vision.kp_yaw 80.0</code><br>
-        <code>ros2 param set /duburi_manager vision.deadband 0.06</code>
+        <code>ros2 param set /duburi_manager vision.kp_forward 180.0</code>
       </div>
 
       <div class="callout green" style="margin-top:10px">
-        <strong>Tracking mode:</strong> With <code>--tracking true</code>, VisionState reads from <code>/tracks</code> instead of <code>/detections</code>. ByteTrack+Kalman bbox is smoother and has stable IDs — better for slow-moving targets, occlusion, and low-confidence frames. Raw detections have lower latency (no tracking buffer).
+        <strong>Recover, don't fail:</strong> neither verb ever aborts the mission — on a miss it returns an outcome code (<code>ALIGNED</code>/<code>LOST</code>/<code>TIMEOUT</code>/<code>NO_CAMERA</code>). Pass a mission-authored <code>fallback</code> search fn; it runs on target loss, then the verb re-enters within the same <code>duration</code> budget. The control loop always reads <code>/detections</code> (the tracker's <code>/tracks</code> feed the HUD only).
       </div>
     </div>
   </div>
@@ -942,16 +940,16 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
             <line x1="195" y1="110" x2="360" y2="110" stroke="#34d399" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#a1g)"></line>
             <!-- Steps annotations -->
             <text x="40" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">① depth lock</text>
-            <text x="130" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">② vision_align_yaw</text>
+            <text x="130" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">② vision_align (yaw)</text>
             <text x="255" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">③ lateral offset</text>
             <text x="360" y="120" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">✓ pass</text>
           </svg>
         </div>
         <ul class="task-steps">
           <li data-n="1">Submerge to gate depth (<code>set_depth -0.8</code>), engage heading lock toward gate bearing</li>
-          <li data-n="2">Drive forward, camera detects gate frame (YOLO class: gate) — <code>vision_align_yaw</code> centres it horizontally</li>
+          <li data-n="2">Drive forward, camera detects gate frame (YOLO class: gate) — <code>vision_align</code> (yaw axis) centres it horizontally</li>
           <li data-n="3">YOLO detects divider colour (RED=reef shark / BLACK=sawfish) — select chosen side</li>
-          <li data-n="4"><code>vision_align_lat</code> or lateral offset moves AUV to correct side of centre</li>
+          <li data-n="4"><code>vision_align</code> with a signed lateral pixel offset moves the AUV to the correct side of centre</li>
           <li data-n="5"><code>move_forward</code> through gate with heading lock — DVL confirms passage distance</li>
         </ul>
       </div>
@@ -1015,14 +1013,14 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
             <circle cx="193" cy="80" r="5" fill="#ef4444" opacity=".5"></circle>
             <!-- Steps -->
             <text x="10" y="20" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">① downward cam detects bin</text>
-            <text x="280" y="20" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">② vision_align_3d centers over target half</text>
+            <text x="280" y="20" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">② vision_align centers over target half</text>
             <text x="10" y="115" font-family="JetBrains Mono" font-size="7.5" fill="#34d399">③ solenoid dropper fires</text>
           </svg>
         </div>
         <ul class="task-steps">
           <li data-n="1">Descend over bin using Bar30 depth control, downward camera detects bin and divider line</li>
           <li data-n="2">YOLO classifies target half (based on chosen animal: reef shark side)</li>
-          <li data-n="3"><code>vision_align_3d</code> centres AUV horizontally over correct half using downward camera</li>
+          <li data-n="3"><code>vision_align</code> (lat + depth) centres the AUV over the correct half using the downward camera</li>
           <li data-n="4">Solenoid dropper releases marker at correct depth above bin</li>
         </ul>
       </div>
@@ -1059,8 +1057,8 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
         <ul class="task-steps">
           <li data-n="1">Acoustic pinger (hydrophone) guides initial approach to torpedo board area</li>
           <li data-n="2">Forward camera detects target board and classifies openings (YOLO classes: large/small circles)</li>
-          <li data-n="3"><code>vision_align_3d --axes yaw,depth</code> aligns torpedo tube with target opening</li>
-          <li data-n="4"><code>vision_hold_distance</code> holds correct standoff for torpedo trajectory</li>
+          <li data-n="3"><code>vision_align --axes yaw,depth</code> aligns torpedo tube with target opening</li>
+          <li data-n="4"><code>vision_move --mode height</code> drives to the correct standoff (bbox fills to <code>fwd_fill</code>) for the torpedo trajectory</li>
           <li data-n="5">Fire slingshot torpedo — repeat for second opening with repositioning</li>
         </ul>
       </div>
@@ -1101,8 +1099,8 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
           <ul class="task-steps">
             <li data-n="1">Acoustic pinger guides navigation to octagon location</li>
             <li data-n="2">AUV surfaces inside octagon frame using depth setpoint = 0</li>
-            <li data-n="3">Forward camera detects the reference image on octagon wall; <code>vision_align_yaw</code> faces it</li>
-            <li data-n="4">Arm grabber, manoeuvre with <code>vision_align_3d</code> to collect floating trash objects</li>
+            <li data-n="3">Forward camera detects the reference image on octagon wall; <code>vision_align</code> (yaw axis) faces it</li>
+            <li data-n="4">Arm grabber, manoeuvre with <code>vision_align</code> (lat + depth) to collect floating trash objects</li>
             <li data-n="5">Place collected objects into correct basket (classified by YOLO from visual markers)</li>
             <li data-n="6">Maximum bonus points: collect multiple pieces and sort correctly</li>
           </ul>
@@ -1157,7 +1155,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
           <!-- Gate task block -->
           <rect x="60" y="232" width="260" height="60" rx="4" fill="#0d1e30" stroke="#ef4444" stroke-width="1.5"></rect>
           <text x="190" y="252" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#ef4444">TASK 1: GATE</text>
-          <text x="190" y="266" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">vision_acquire → vision_align_yaw → lateral offset</text>
+          <text x="190" y="266" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">vision_align (fallback search on loss) → vision_move</text>
           <text x="190" y="280" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">move_forward_dist(4m) → heading_lock maintained</text>
           <line x1="190" y1="292" x2="190" y2="312" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
 
@@ -1168,7 +1166,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
 
           <rect x="60" y="380" width="260" height="44" rx="4" fill="#0d1e30" stroke="#d4a843" stroke-width="1.5"></rect>
           <text x="190" y="399" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#d4a843">TASK 3–5: BIN / TORPEDO / OCTAGON</text>
-          <text x="190" y="413" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">vision_align_3d + payload actuation</text>
+          <text x="190" y="413" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5" fill="#7a8fa8">vision_align / vision_move + payload actuation</text>
           <line x1="190" y1="424" x2="190" y2="444" stroke="#34d399" stroke-width="1.5" marker-end="url(#mf)"></line>
 
           <rect x="100" y="446" width="180" height="32" rx="4" fill="#101e33" stroke="#34d399" stroke-width="1.5"></rect>
@@ -1187,33 +1185,43 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
     duburi.arm()
     duburi.set_depth(<span style="color:#d4a843">-1.0</span>)
 
-    <span style="color:#7a8fa8"># ── GATE ──────────────────────────────</span>
-    log(<span style="color:#38bdf8">"find + home on gate"</span>)
-    duburi.vision.find(target=duburi.models.gate.gate,
-                       move=<span style="color:#38bdf8">'forward'</span>, gain=<span style="color:#d4a843">35</span>, timeout=<span style="color:#d4a843">45</span>)
-    duburi.vision.home(target=duburi.models.gate.gate,
-                       yaw=<span style="color:#d4a843">True</span>, lat=<span style="color:#d4a843">True</span>, forward=<span style="color:#d4a843">True</span>,
-                       dist=<span style="color:#d4a843">0.42</span>, metric=<span style="color:#38bdf8">'area'</span>,
-                       gate_guard=<span style="color:#d4a843">True</span>, pass_at=<span style="color:#d4a843">0.38</span>,
-                       duration=<span style="color:#d4a843">20</span>, on_lost=<span style="color:#38bdf8">'hold'</span>)
-    duburi.move_forward_dist(distance_m=<span style="color:#d4a843">3.5</span>, gain=<span style="color:#d4a843">60</span>)
+    <span style="color:#7a8fa8"># ── GATE: centre, then drive through ───</span>
+    log(<span style="color:#38bdf8">"align + move on gate"</span>)
+    duburi.vision.align(duburi.models.gate.gate,
+                        yaw=<span style="color:#d4a843">0</span>, lat=<span style="color:#d4a843">0</span>,        <span style="color:#7a8fa8"># signed px offsets (0 = centre)</span>
+                        err=<span style="color:#d4a843">40</span>, gain=<span style="color:#d4a843">30</span>, duration=<span style="color:#d4a843">20</span>,
+                        fallback=creep_forward)
+    duburi.vision.move(duburi.models.gate.gate,
+                       fwd=<span style="color:#d4a843">80</span>, mode=<span style="color:#38bdf8">'height'</span>,   <span style="color:#7a8fa8"># forward until bbox fills 80%</span>
+                       gain=<span style="color:#d4a843">35</span>, duration=<span style="color:#d4a843">20</span>,
+                       fallback=creep_forward)
 
-    <span style="color:#7a8fa8"># ── FLARE ─────────────────────────────</span>
-    log(<span style="color:#38bdf8">"find + orbit flare"</span>)
-    duburi.vision.find(target=duburi.models.gate.flare,
-                       move=<span style="color:#38bdf8">'forward'</span>, gain=<span style="color:#d4a843">30</span>, timeout=<span style="color:#d4a843">40</span>)
-    duburi.vision.home(target=duburi.models.gate.flare,
-                       yaw=<span style="color:#d4a843">True</span>, forward=<span style="color:#d4a843">True</span>, depth=<span style="color:#d4a843">True</span>,
-                       dist=<span style="color:#d4a843">0.38</span>, metric=<span style="color:#38bdf8">'height'</span>,
-                       duration=<span style="color:#d4a843">20</span>, on_lost=<span style="color:#38bdf8">'hold'</span>)
+    <span style="color:#7a8fa8"># ── FLARE: centre, then approach ───────</span>
+    log(<span style="color:#38bdf8">"align + move on flare"</span>)
+    duburi.vision.align(duburi.models.gate.flare,
+                        yaw=<span style="color:#d4a843">0</span>, depth=<span style="color:#d4a843">0</span>,
+                        err=<span style="color:#d4a843">40</span>, gain=<span style="color:#d4a843">30</span>, duration=<span style="color:#d4a843">20</span>,
+                        fallback=sweep)
+    duburi.vision.move(duburi.models.gate.flare,
+                       fwd=<span style="color:#d4a843">38</span>, mode=<span style="color:#38bdf8">'height'</span>,
+                       gain=<span style="color:#d4a843">30</span>, duration=<span style="color:#d4a843">20</span>, fallback=sweep)
 
-    duburi.disarm()</pre>
+    duburi.disarm()
+
+<span style="color:#7a8fa8"># mission-authored fallbacks (pure control, run on target loss)</span>
+<span style="color:#34d399">def</span> <span style="color:#e2e8f0">creep_forward</span>(duburi):
+    duburi.move_forward(<span style="color:#d4a843">0.5</span>, gain=<span style="color:#d4a843">40</span>)
+
+<span style="color:#34d399">def</span> <span style="color:#e2e8f0">sweep</span>(duburi, should_stop):
+    <span style="color:#34d399">for</span> _ <span style="color:#34d399">in</span> range(<span style="color:#d4a843">6</span>):
+        <span style="color:#34d399">if</span> should_stop(): <span style="color:#34d399">return</span>
+        duburi.yaw_right(<span style="color:#d4a843">15</span>); duburi.pause(<span style="color:#d4a843">0.4</span>)</pre>
 
       <div class="callout green" style="margin-top:16px">
         <strong>Live-add missions:</strong> drop any <code>missions/your_name.py</code> exposing <code>def run(duburi, log)</code>, rebuild <code>duburi_planner</code>, and it appears in <code>ros2 run duburi_planner mission --list</code> instantly. No registry edit needed.
       </div>
 
-      <h3 style="margin-top:20px">State during a vision_align_3d</h3>
+      <h3 style="margin-top:20px">State during a vision_align</h3>
       <div class="diagram" style="padding:16px">
         <svg viewBox="0 0 380 100" width="380" height="100" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">
           <rect x="10" y="20" width="80" height="60" rx="3" fill="#101e33" stroke="#a78bfa" stroke-width="1"></rect>
@@ -1272,7 +1280,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
           <input type="range" id="sl-kpd" min="0.1" max="2" step="0.05" value="0.6"/>
         </div>
         <div class="vsim-row">
-          <label>Deadband <span id="lbl-db">0.06</span></label>
+          <label>Settle band (err) <span id="lbl-db">0.06</span></label>
           <input type="range" id="sl-db" min="0.01" max="0.25" step="0.01" value="0.06"/>
         </div>
         <div class="vsim-row">
@@ -1325,19 +1333,19 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
 
   <div class="g3" style="margin-top:24px">
     <div class="card">
-      <div class="card-lbl">Vision align yaw</div>
-      <div class="card-title">Centre target horizontally</div>
-      <p>Only Ch4 driven. AUV yaws until <code>cx_err &lt; deadband</code>. Heading lock suspends during this — vision becomes the yaw authority for the duration.</p>
+      <div class="card-lbl">vision_align</div>
+      <div class="card-title">Centre on lat · yaw · depth</div>
+      <p>Each axis takes a signed pixel offset (<code>0</code> = centre). The loop holds until every active axis stays within <code>err_px</code> for <code>align_stable_frames</code> ticks. <code>gain</code> caps the per-axis speed.</p>
     </div>
     <div class="card">
-      <div class="card-lbl">Vision hold distance</div>
-      <div class="card-title">Stand-off via bbox height</div>
-      <p>Target <code>bbox_h_frac</code> maps to physical distance. Ch5 drives proportionally to <code>dist_err</code>. Approach if bbox too small; back off if too large.</p>
+      <div class="card-lbl">vision_move</div>
+      <div class="card-title">Drive forward to a bbox fill</div>
+      <p>Ch5 drives proportionally to <code>fwd_fill − bbox_fill</code> (mode <code>area</code>/<code>width</code>/<code>height</code>). Optional <code>maintain</code> holds a lateral pixel offset; it never re-centres yaw/depth.</p>
     </div>
     <div class="card">
-      <div class="card-lbl">Vision align 3D</div>
-      <div class="card-title">All axes simultaneously</div>
-      <p>Yaw + forward + depth errors computed every 50 ms from the same detection. Each axis has its own deadband and gain — settle condition is all three simultaneously within threshold.</p>
+      <div class="card-lbl">Recover, don't fail</div>
+      <div class="card-title">Mission-authored fallback</div>
+      <p>Neither verb aborts the mission — on a miss it returns an outcome code (<code>ALIGNED</code>/<code>LOST</code>/<code>TIMEOUT</code>/<code>NO_CAMERA</code>). A <code>fallback</code> search fn runs on target loss, then the verb re-enters within the same <code>duration</code>.</p>
     </div>
   </div>
 </div>
@@ -1636,7 +1644,7 @@ pre{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px 
     ctx.beginPath(); ctx.arc(W/2,H/2,8,0,Math.PI*2);
     ctx.strokeStyle = 'rgba(56,189,248,.5)'; ctx.stroke();
 
-    // deadband zone
+    // settle band zone
     const dbPxX = db * W/2, dbPxY = db * H/2;
     ctx.strokeStyle = 'rgba(52,211,153,.2)';
     ctx.lineWidth = 1;

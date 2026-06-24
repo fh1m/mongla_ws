@@ -73,7 +73,7 @@ Vision unit tests:
 
 | Suite                                        | What it tests                                                                            |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| [`test_detector.py`](../../src/duburi_vision/test/test_detector.py)   | YOLOv8 wrapper round-trips synthetic images.                                            |
+| [`test_detector.py`](../../src/duburi_vision/test/test_detector.py)   | YOLO11 wrapper round-trips synthetic images.                                            |
 | [`test_factory.py`](../../src/duburi_vision/test/test_factory.py)     | Backend factory picks the right detector class for a given config.                       |
 | [`test_messages.py`](../../src/duburi_vision/test/test_messages.py)   | `Detection2DArray` round-trips through `VisionState`.                                    |
 | [`test_gpu.py`](../../src/duburi_vision/test/test_gpu.py)             | CUDA path -- skipped on CPU-only hosts via `pytest.importorskip('torch.cuda')`.         |
@@ -281,26 +281,31 @@ goes silent during the lock and resumes after `unlock_heading`.
 
 #### Vision
 
+Two verbs. `vision_align` centres the target on the CSV `axes` (subset of
+`lat,yaw,depth`), each held at its signed pixel offset (`offset_lat/yaw/depth`,
+0=centre); `vision_move` drives forward until the bbox fills `fwd_fill`% of the
+frame (`mode` = area/width/height). `gain` is a hard max-speed cap.
+
 ```bash
-duburi vision_acquire     --target_class person --target_name yaw_right --timeout 20
-duburi vision_align_yaw   --target_class person --duration 8
-duburi vision_align_lat   --target_class person --duration 8
-duburi vision_align_depth --target_class person --duration 8
-duburi vision_hold_distance --target_class person --target_bbox_h_frac 0.55 --duration 12
-duburi vision_align_3d    --target_class person --axes yaw,forward --duration 12
+duburi vision_align --target_class person --axes yaw,lat   --duration 8
+duburi vision_align --target_class person --axes yaw,depth --duration 8
+duburi vision_align --target_class person --axes lat --offset_lat 80 --duration 8
+duburi vision_move  --target_class person --fwd_fill 60 --mode height --duration 12
 ```
 
 What to look at:
 
-* INFO log line per loop tick from the manager: `[VIS  ]
-  ex=+0.05 ey=-0.02 h=0.31 axes_in=YF settle=2/4 lost=0/12`.
+* INFO log line per loop tick from the manager:
+  `[VIS  ] align err=  22px (tgt 40) yaw= -3.1% lat= +1.2% ... stable=2/3`
+  (align) or `[VIS  ] move fill= 41.0% (tgt 60%) lat= +0.0%` (move).
 * DEBUG `[MAV ]` shows the corresponding RC writes (one per tick at
   20 Hz).
-* `final_value` in the response is the composite normalised error
-  (lower = better-aligned); `error_value` is the age in seconds of
-  the last detection at exit.
-* If the camera frame is empty, expect `MoveFailed: ... lost ...`
-  unless you set `--on_lost hold`.
+* The verb ALWAYS returns `success=True`; the outcome is an integer in
+  `final_value` (`0`=ALIGNED/reached, `1`=LOST, `2`=TIMEOUT, `3`=NO_CAMERA,
+  `4`=ABORTED). `error_value` carries the exit pixel error (align) or fill
+  fraction (move).
+* If `camera_info` has never arrived, expect `final_value=3` (NO_CAMERA) — the
+  loop refuses to steer on an un-scaled frame rather than raising.
 
 The full vision pipeline can be sanity-checked end-to-end with
 `duburi_vision/utils/check_pipeline.py` (synthesises a fake
@@ -452,9 +457,10 @@ ros2 launch duburi_vision full_mission.launch.py   # dual-cam, both paused
 ros2 run duburi_planner mission task_gate
 ```
 
-Expected flow: `resume_detector(forward)` → model switch to `gate_rescue_repair` →
-search loop (misses in sim) → `look_around` fallback → DSL exits cleanly →
-`pause_detector(forward)`.
+Expected flow: `resume_detector('forward')` → `set_model('gate_rescue_repair')` →
+`vision.align('gate', yaw,lat)` creeps forward via its `fallback` (misses in sim)
+→ `vision.align('rescue', lat)` → `vision.move('gate', height)` → DSL exits
+cleanly → `pause_detector('forward')`.
 
 ### 3.3 task_return (✅ runnable today — same model as gate)
 
@@ -470,42 +476,50 @@ Expected: same flow as task_gate + `style_roll(flips=1)` at end.
 ros2 run duburi_planner mission task_slalom
 ```
 
-Expected: `set_model('slalom')` → search loop → `detected('red_pipe')` never
-fires (model not trained) → hits `look_around` timeout → clean abort.
-Verify no crash, heading lock stays active throughout.
+Expected: `set_model('slalom_red_pipe')` → `vision.align('red_pipe', ...)` whose
+`fallback` creeps forward while `detected('red_pipe')` never fires (model not
+trained) → align reports TIMEOUT → DSL exits cleanly. Verify no crash, heading
+lock stays active throughout.
 
-### 3.5 task_bin (⏳ model pending — downward camera + fire logic test)
+### 3.5 task_bin (⏳ model pending — downward camera + drop logic test)
 
 ```bash
 ros2 run duburi_planner mission task_bin
 ```
 
-Expected: `use_camera('downward')` switch → `resume_detector(downward)` →
-search loop misses → timeout abort. Verify `downward_cam=True` used (not raw `kp_forward`):
+Expected: `use_camera('downward')` → `resume_detector('downward')` →
+`set_model('bin_fire_blood')` → `vision.align('fire', lat, depth)` whose
+`fallback` creeps while the bin is never detected → align TIMEOUT → `fire(3)`
+(dropper_1) → `pause_detector('downward')` → `use_camera('forward')`.
 
+Verify the align runs on the downward camera and the drop channel is explicit:
 ```bash
-grep 'downward_cam' src/duburi_planner/duburi_planner/missions/task_bin.py
-# Must show: downward_cam=True
+grep -n "camera='downward'" src/duburi_planner/duburi_planner/missions/task_bin.py
+grep -n 'duburi.fire(3)'    src/duburi_planner/duburi_planner/missions/task_bin.py
 ```
 
-Check that `use_camera('forward')` is called in `finally` block (should see camera switch in topic list):
+Confirm the camera is returned to forward at the end (topic list shows both):
 ```bash
 ros2 topic list | grep duburi/vision    # verify both forward and downward topics active
 ```
 
-### 3.6 task_torpedo (⏳ model pending — vision_lock_fire logic test)
+### 3.6 task_torpedo (⏳ model pending — align-then-fire logic test)
 
 ```bash
 ros2 run duburi_planner mission task_torpedo
 ```
 
-Expected: search misses → `look_around` timeout abort. The `vision_lock_fire`
-call never fires because target never locks. Confirm `fire_channel=1` is
-explicit in mission code (grep check):
+Expected: `vision.align('torpedo', yaw,lat,depth)` → `vision.move('blood', height)`
+→ tight `vision.align('hole', err=FINE_ERR_PX)`; all miss in sim, so the final
+`if locked:` stays False and the torpedo never fires. Firing is just
+`if duburi.vision.align('hole', ...): duburi.fire(1)` — the VisionResult is truthy
+only on a centred lock, so no dedicated lock-and-fire verb exists.
+
+Confirm the fire channel is explicit (torpedo_1):
 
 ```bash
-grep -n 'fire_channel' src/duburi_planner/duburi_planner/missions/task_torpedo.py
-# Must show: fire_channel=1  (torpedo_1, NOT default)
+grep -n 'duburi.fire(1)' src/duburi_planner/duburi_planner/missions/task_torpedo.py
+# Must show: duburi.fire(1)   (torpedo_1, NOT a default)
 ```
 
 ### 3.7 task_full_2026 (dry-run detected-paradigm combinator)

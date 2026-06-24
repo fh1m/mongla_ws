@@ -110,14 +110,15 @@ ros2 param get /duburi_detector classes              # should print 'gate' at st
 ros2 run duburi_planner mission gate_flare_prequal
 ```
 
-**Phase summary:**
-- T−10 s: countdown (disconnect tether in this window)
-- Phase 1: arm → ALT_HOLD → dive to −1.0 m
-- Phase 2: DVL connect
-- Phase 3−6: find gate → align (yaw+forward, area) → DVL forward 3.5 m
-- Phase 7−10: switch to flare → find flare → 3-axis align → orbit (12×30°)
-- Phase 11−14: yaw 180° → reacquire gate → DVL forward 3.5 m
-- Phase 15: surface → disarm
+**Phase summary** (`gate_flare_prequal`):
+- Phase 0: countdown (disconnect tether in this window)
+- Phase 1: arm → ALT_HOLD → dive to −1.0 m → DVL connect
+- Phase 2: home gate — `vision.align(yaw, lat)` then `vision.move(area)` to standoff
+- Phase 3: pass gate — DVL forward 3.5 m
+- Phase 4: home flare — `vision.align(yaw, depth)` then `vision.move(height)`
+- Phase 5: orbit flare — 12 × (yaw_left 30° + re-align)
+- Phase 6: return — yaw 180° → re-align gate → DVL forward 3.5 m
+- Phase 7: surface → disarm
 
 **Normal output to watch:**
 
@@ -130,9 +131,10 @@ Phase 1: arm + ALT_HOLD + descend
   set_mode               final=-0.00 err=0.00   (ALT_HOLD)
   set_depth              final=-1.02 err=0.02   (converged)
 ...
-Phase 5: aligning with gate
-  vision_align_3d        final=0.04  err=0.11   (settled yaw+forward)
-Phase 6: passing through gate (DVL forward)
+Phase 2: homing on gate
+  vision_align           final=0     err=22     (ALIGNED, yaw+lat within 22px)
+  vision_move            final=0     err=42     (ALIGNED, gate fills 42% of frame)
+Phase 3: passing through gate (DVL forward)
   move_forward_dist      final=-1.01 err=0.00   (3.5 m)
 ...
 Mission complete.
@@ -147,18 +149,24 @@ All of these take effect on the NEXT vision command. No node restart.
 ### Vision gains
 
 ```bash
-ros2 param set /duburi_manager vision.kp_yaw      70.0   # default 60; raise if slow steering
-ros2 param set /duburi_manager vision.kp_forward  180.0  # default 200; lower if oscillating distance
-ros2 param set /duburi_manager vision.deadband      0.08  # default 0.18; lower for tighter lock
-ros2 param set /duburi_manager vision.stale_after   2.0   # default 1.5; raise in murky water
+ros2 param set /duburi_manager vision.kp_yaw       70.0  # default 60; raise if slow steering
+ros2 param set /duburi_manager vision.kp_lat       65.0  # default 60; lateral centring gain
+ros2 param set /duburi_manager vision.kp_forward   180.0 # default 200; lower if distance oscillates
+ros2 param set /duburi_manager vision.lost_grace_s 1.5   # default 1.0; raise in murky water
 ```
+
+> Lock tightness is the **per-goal** `err_px` (default 40 px), not a manager
+> param — pass `--err_px` on a CLI goal or set `err=` in the mission. The
+> ticks-within-band before ALIGNED is `vision.align_stable_frames` (default 3).
 
 ### Gate standoff distance
 
 ```bash
-# In gate_flare_prequal: GATE_STANDOFF constant controls it per-call
-# For live single-call testing:
-ros2 param set /duburi_manager vision.target_bbox_h_frac 0.45
+# In gate_flare_prequal: GATE_FWD_FILL constant controls it — the % of frame the
+# gate bbox must fill before vision.move stops (closer = higher fill).
+# For live single-call testing, pass --fwd_fill on the goal, or change the
+# default fill the manager uses when a goal leaves fwd_fill unset:
+ros2 param set /duburi_manager vision.frame_fill_default 45.0
 ```
 
 ### Class filter (without restarting detector)
@@ -205,9 +213,10 @@ ros2 run duburi_planner duburi arm
 
 If still failing, check the BlueOS pre-arm page at http://192.168.2.1.
 
-### Gate not found (timeout in Phase 4)
+### Gate not found (search / align times out)
 
-**Symptom:** `vision_acquire: timeout after 45.0 s`
+**Symptom:** `[VIS  ] align 'gate': NOT reached (TIMEOUT) -- mission continues`
+(or `... (LOST)` if the `fallback` search never reacquired the target)
 
 **Checks:**
 1. Is the class filter set to 'gate'? → `ros2 param get /duburi_detector classes`
@@ -246,15 +255,17 @@ ros2 launch duburi_manager bringup.launch.py vision:=true yaw_source:=bno085
 ### Vision lock oscillating / not settling
 
 ```bash
-# Raise deadband (accept rougher centering)
-ros2 param set /duburi_manager vision.deadband 0.15
+# Accept rougher centring: widen the per-goal err_px (default 40 px).
+ros2 run duburi_planner duburi vision_align --camera forward --target_class gate \
+    --axes yaw,lat --err_px 60 --gain 25 --duration 20
 
-# Lower gains
+# Lower the loop gains (gentler corrections):
 ros2 param set /duburi_manager vision.kp_yaw 40.0
+ros2 param set /duburi_manager vision.kp_lat 40.0
 ros2 param set /duburi_manager vision.kp_forward 120.0
 
-# Switch on_lost to hold (less sensitive to flickers)
-ros2 param set /duburi_manager vision.on_lost hold
+# Ride brief detector flickers without re-searching: raise lost_grace_s.
+ros2 param set /duburi_manager vision.lost_grace_s 1.5
 ```
 
 ### Emergency disarm
@@ -288,30 +299,34 @@ ros2 bag record -a -o /tmp/pool_$(date +%Y%m%d_%H%M) &
 
 ## 7. DSL quick reference (pool-day cheat sheet)
 
-### Preferred vision verb names
+### The two vision verbs
 
 ```python
 # Register model at mission start
 duburi.models(gate='gate_flare_medium_100ep')
+gate, flare = duburi.models.gate.gate, duburi.models.gate.flare
 
-duburi.vision.find(target=duburi.models.gate.gate, move='forward', gain=35, timeout=45)
-duburi.vision.turn(target=duburi.models.gate.gate, duration=6)      # Ch4: yaw to centre
-duburi.vision.slide(target=duburi.models.gate.gate, duration=5)     # Ch6: slide to centre
-duburi.vision.hover(target=duburi.models.gate.flare, duration=8)    # depth to centre
-duburi.vision.approach(target=duburi.models.gate.gate, dist=0.55, metric='height', duration=12)  # Ch5: close in
+# align: centre the target on the chosen axes. Each of lat / yaw / depth is a
+# SIGNED PIXEL OFFSET from centre (0 = centre); omit / None = axis off.
+duburi.vision.align(gate,  yaw=0, lat=0,   err=40, gain=30, duration=20)  # gate: yaw+lat
+duburi.vision.align(flare, yaw=0, depth=0, err=40, gain=30, duration=20)  # flare: yaw+depth
+duburi.vision.align(gate,  lat=80,         err=40, gain=30, duration=20)  # hold 80px right of centre
 
-# Multi-axis home (preferred — boolean flags, no CSV string)
-duburi.vision.home(
-    target=duburi.models.gate.gate,
-    yaw=True, lat=True, forward=True,   # gate: 3-axis + guard
-    dist=0.42, metric='area',           # 'area' for gates, 'height' for flare/poles
-    gate_guard=True, pass_at=0.38,
-    on_lost='hold', duration=20.0)
+# move: drive forward until the bbox fills fwd% of the frame
+# (mode = area | width | height). gain is a HARD max-speed cap, not a target.
+duburi.vision.move(gate,  fwd=42, mode='area',   gain=45, duration=20)    # gate: area metric
+duburi.vision.move(flare, fwd=38, mode='height', gain=45, duration=20)    # tall pipe: height
+duburi.vision.move(gate,  fwd=80, mode='area', maintain=0, hold=2, gain=45)  # keep centred + hold 2s
 
-# Continuous track (orbit re-lock — never exits on settle)
-duburi.vision.track(target=duburi.models.gate.flare,
-                    yaw=True, forward=True, depth=True,
-                    dist=0.38, duration=3.0, on_lost='hold')
+# Recover-don't-fail: pass a mission search fn as fallback; on target loss the
+# verb runs it once and re-enters, all inside `duration`.
+def creep(duburi):
+    duburi.move_forward(0.6, gain=40)
+duburi.vision.align(gate, yaw=0, lat=0, duration=20, fallback=creep)
+
+# Both return a VisionResult — truthy ONLY when ALIGNED / fill reached:
+if not duburi.vision.align(gate, yaw=0, lat=0):
+    log('gate not centred -- mission continues anyway')
 ```
 
 ### Class filter switching
@@ -346,6 +361,12 @@ ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
 # DVL distance moves (with heading lock active)
 ros2 run duburi_planner duburi move_forward_dist --distance_m 1.0 --gain 60
 ros2 run duburi_planner duburi move_back_dist    --distance_m 1.0 --gain 60
+
+# Vision: centre the gate (yaw+lat), then drive in until it fills 80% (area)
+ros2 run duburi_planner duburi vision_align --camera forward --target_class gate \
+    --axes yaw,lat --err_px 40 --gain 30 --duration 20
+ros2 run duburi_planner duburi vision_move  --camera forward --target_class gate \
+    --fwd_fill 80 --mode area --gain 35 --duration 20
 
 # Abort / safe state
 ros2 run duburi_planner duburi stop && ros2 run duburi_planner duburi disarm

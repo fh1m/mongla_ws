@@ -1,8 +1,9 @@
 # Vision Roadmap
 
-Phased plan for `duburi_vision` and its planner integration. Phases v1
-and v4 are shipped; v2/v3/v5 land in already-named placeholder files so
-the diff stays small at each step.
+Phased plan for `duburi_vision` and its planner integration. Phases v1–v4f
+and the **v5 two-verb vision rewrite** are shipped; v6 (real-vehicle camera
+sources) lands in already-named placeholder files so the diff stays small at
+each step.
 
 ## v1 -- Detection (DONE)
 
@@ -39,10 +40,11 @@ Temporal continuity + occlusion bridging. Shipped in tracking integration commit
 - `draw.py` — `draw_track_ids()` with 12-color stable palette (track_id % 12)
 - `utils/check_tracker.py` — `tracker_check` CLI smoke test
 - `config/tracker.yaml` — all 8 tracker params; all declared as ROS params for live tuning
-- `Move.action` + `commands.py` — `tracking` bool field on all 6 vision verbs
-- `vision_state.py` — `use_tracks=True` subscribes `/tracks`; `track_id` field on `Sample`
-- `auv_manager_node.py` — `vision.use_tracks` ROS param; per-goal `tracking=True` sets it
-- Launch files (`cameras_.launch.py`, `sim_demo`) — `with_tracking:=false` opt-in arg
+- Launch graph — `tracker_node` runs behind `with_tracking:=true` (default on) in
+  `cameras_.launch.py` / `sim_demo`; it consumes `/detections` and republishes `/tracks`
+- `/tracks` feeds the **HUD / depth overlay only**. The vision control loop reads
+  `/detections` directly, so there is **no** per-goal `tracking` field and **no**
+  `vision.use_tracks` manager param (both removed in the v5 two-verb rewrite)
 
 Acceptance: `ros2 run duburi_vision tracker_check --camera laptop --duration 5 --require-class person`
 exits 0 with a stable track ID across ≥ 3 frames.
@@ -83,7 +85,7 @@ CV Kalman is appropriate and has near-zero overhead.
 - `draw_video.py` — bright cyan reticle `(0,200,200)`; glow hairlines (3px dim + 1px bright
   double-pass); `arrowedLine` from target center toward frame center (green/amber);
   on-frame `X:+0.12 Y:-0.05  87%` text below bbox; wider 12px alignment bar at `h-14`; 
-  deadband fill (15% green tint when aligned); extra `cv2.putText` track ID badge
+  in-band fill (15% green tint when aligned); extra `cv2.putText` track ID badge
 - `draw.py` — `_RENDER_SCALE = 2.0`: renders at 2× then downscales to output size via
   `cv2.INTER_AREA` for crisp subpixel antialiasing on 1080p displays
 - `config/tracker.yaml` — `track_buffer: 150` (5 s occlusion buffer), `min_hits: 3`
@@ -126,37 +128,30 @@ closed loop runs INSIDE `auv_manager_node` (the single MAVLink owner)
 so the latency stays bounded and there's no risk of two processes
 fighting for thrust.
 
-Pieces:
+> **Superseded by the v5 two-verb rewrite (below).** v4 originally shipped a
+> multi-verb pixel API (`vision_align_yaw/lat/depth`, `vision_align_3d`,
+> `vision_hold_distance`, `vision_acquire`, ...) plus the `Move.action` knobs
+> `deadband` / `target_bbox_h_frac` / `visual_pid` / `on_lost`. Those verbs and
+> knobs were removed in 2026-06. The surviving infrastructure (which the two
+> verbs reuse) is listed here.
 
-- `Move.action` carries 12 new fields (`camera`, `target_class`, `axes`,
-  `deadband`, `kp_yaw`, `kp_lat`, `kp_depth`, `kp_forward`,
-  `target_bbox_h_frac`, `visual_pid`, `on_lost`, `stale_after`) and the
-  `cmd` enum is extended.
-- `duburi_control/commands.py` adds 6 verbs:
-  - `vision_align_3d`        -- pick axes via CSV `axes`
-  - `vision_align_yaw`       -- one-axis convenience wrapper
-  - `vision_align_lat`       -- one-axis convenience wrapper
-  - `vision_align_depth`     -- one-axis convenience wrapper (incremental)
-  - `vision_hold_distance`   -- forward thrust from bbox height
-  - `vision_acquire`         -- wait (optionally driving) until target seen
-- `duburi_control/motion_vision.py` owns `vision_track_axes` (multi-axis
-  P loop @ 20 Hz RC + 5 Hz depth) and `vision_acquire`.
-- `duburi_manager/vision_state.py` holds the per-camera subscriber pool
-  and exposes `largest()`, `bbox_error()`, `is_fresh()`.
-- `duburi_vision/preflight.py` provides `assert_vision_ready` (CLI-side)
-  and `wait_vision_state_ready` (manager-side, polling-only -- safe to
-  call from inside an action callback).
-- Mission: `duburi_planner/missions/find_person_demo.py` walks every
-  verb in turn (acquire -> yaw -> hold -> 3D -> lose+reacquire -> 3D+depth).
+Pieces that remain (re-pointed at the two verbs):
+
+- `duburi_control/motion_vision.py` owns the closed-loop engine — now the two
+  loops `align_loop` (multi-axis P @ 20 Hz RC + 5 Hz depth) and `move_loop`
+  (drive-forward-to-fill).
+- `duburi_manager/vision_state.py` holds the per-camera subscriber pool and
+  exposes `bbox_error()`, `image_size()`, `info_seen()`.
+- The closed loop still runs INSIDE `auv_manager_node` (the single MAVLink
+  owner) so latency stays bounded and no second process fights for thrust.
 
 CLI utilities for verifying the pipeline before touching the planner:
 
 - `ros2 run duburi_vision vision_check` -- pure topic probe; reports
   image_raw rate, camera_info presence, detections rate, classes seen.
-- `ros2 run duburi_vision vision_thrust_check` -- sends one
-  `vision_align_yaw` goal to `/duburi/move` and reports the result; pair
-  with `[RC   ] Yaw:NNN` lines in the manager log to confirm the chain
-  closed end-to-end.
+- `ros2 run duburi_vision vision_thrust_check` -- sends one `vision_align`
+  goal to `/duburi/move` and reports the result; pair with `[RC   ] Yaw:NNN`
+  lines in the manager log to confirm the chain closed end-to-end.
 
 ## v4d -- Round 7 HUD Polish (DONE)
 
@@ -181,7 +176,7 @@ CLI utilities for verifying the pipeline before touching the planner:
   computes `_depth_rate` from first→last history entry; passes to `render_all`
 - `README.md` + `detection/yolo.py` — YOLO 26 / YOLO26 references updated to YOLO11
 
-## v5 -- Real-vehicle camera sources
+## v6 -- Real-vehicle camera sources
 
 Drop in:
 - `cameras/jetson.py` -- replaces the stub. V4L2 + MJPG + locked exposure
@@ -206,7 +201,7 @@ from "raises NotImplementedError" to "actually works".
     lateral velocity → Ch6 > 1500 (no negation needed).
 - **Yaw convention confirmed correct**: `yaw_pct = -ex * kp_yaw` stays negated
   because Ch4 > 1500 = yaw LEFT (inverted stick convention).
-- `move_and_see.py` docstring/code sync: `yaw=False` (was `True`).
+- `demo_move_see.py` (formerly `move_and_see.py`) docstring/code sync: `yaw=False` (was `True`).
 
 ## v4e — Display System Overhaul (2025–2026)
 
@@ -263,6 +258,61 @@ ros2 launch duburi_vision cameras_.launch.py depth:=true \
 ```
 
 Press **D** in the display window to toggle the depth map inset on/off.
+
+## v5 -- Two-verb vision rewrite (vision_align + vision_move) (DONE — 2026-06)
+
+The v4 multi-verb pixel API collapsed into **exactly two** mission verbs, both
+pixel-native and recover-don't-fail. Engine: `motion_vision.align_loop` /
+`move_loop`; DSL: `vision_dsl.py`; FSM wrappers: `states/vision.py`.
+
+- **`vision_align`** — `duburi.vision.align(target, *, lat=None, yaw=None,
+  depth=None, err=40, duration=20, gain=30, fallback=None, camera=None)`.
+  Centre the target on the named axes; each of `lat`/`yaw`/`depth` is `None`
+  (axis off) or a **signed pixel offset** from centre (`0` = centre). At least
+  one axis required.
+- **`vision_move`** — `duburi.vision.move(target, *, fwd=95, mode='area',
+  maintain=None, hold=None, err=40, duration=20, gain=30, fallback=None,
+  camera=None)`. Drive forward until the bbox fills `fwd`% of the frame
+  (`mode` = area/width/height). `maintain` holds a ±px lateral offset; `hold`
+  station-keeps once reached. Never re-centres yaw/depth.
+- `gain` is a **hard max-speed cap** (% thrust), not a target speed — the
+  P-controller output is clamped to it.
+- **Never-fail contract:** the server always returns `success=True`; the outcome
+  rides in `Move.Result.final_value` (`ALIGNED`=0, `LOST`=1, `TIMEOUT`=2,
+  `NO_CAMERA`=3, `ABORTED`=4). The DSL returns a `VisionResult` (truthy only on
+  `ALIGNED`; a server/setup error surfaces as non-fatal `FAILED`) and never
+  aborts a mission.
+- **`fallback`** = mission-authored `fn(duburi[, should_stop])` search run on a
+  real target loss; the verb re-enters within the same `duration` budget.
+- FSM states: `VisionSearchState` (open-loop search) / `VisionAlignState` /
+  `VisionMoveState`.
+
+Removed in this pass: verbs `vision_align_yaw/lat/depth`, `vision_align_3d`,
+`vision_hold_distance`, `vision_lock_fire`, `vision_acquire`, `look_around`; DSL
+`find/home/turn/slide/hover/approach/track/scan/hold`; `Move.action` knobs
+`deadband`, `lock_mode`, `distance_metric`, `target_bbox_h_frac`, `visual_pid`,
+`on_lost` (and `stale_after`, kept only on `detected()`); plus the `--tracking`
+flag (control reads `/detections`; `/tracks` is HUD-only).
+
+New `/duburi_manager` ROS params (`vision_tunables.py`): `vision.kp_lat=60`,
+`vision.kp_yaw=60`, `vision.kp_depth=0.05`, `vision.kp_forward=200`,
+`vision.lost_grace_s=1.0`, `vision.frame_fill_default=95`,
+`vision.align_stable_frames=3`.
+
+**Harmony fixes shipped with the rewrite:**
+
+- **Heading-lock release** — `align_loop` / `move_loop` honour `release_yaw`:
+  when the background heading lock owns Ch4, the verbs leave yaw released
+  (`send_rc_translation`) instead of racing the lock's 20 Hz Ch4 stream.
+- **Surface RLock** — `Duburi.lock` is a reentrant `threading.RLock`, so
+  `surface()` (which nests `set_depth()` in a second command scope on the same
+  thread) no longer self-deadlocks (the original P0 bug).
+- **NO_CAMERA gating** — both loops return `NO_CAMERA` until `info_seen()` is
+  true, so the controller never steers on a mis-scaled pixel error before
+  `camera_info` is published.
+- **DSL never-die** — every server/setup exception is caught in
+  `_orchestrate` and turned into a non-fatal `FAILED`; even a raising
+  `fallback` can't kill the mission.
 
 ## Always-on rules
 

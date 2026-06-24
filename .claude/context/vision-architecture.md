@@ -87,29 +87,31 @@ current class filter without polling `ros2 param get`. This means class changes 
 - Bbox center (`cx`, `cy`) is Kalman-smoothed; jitter from YOLO NMS is filtered out
 - Entries with `score=0.0` are Kalman-only predictions (detector missed that frame)
 
-`VisionState(use_tracks=True)` subscribes `/tracks` instead of `/detections`. Enable globally:
-```bash
-ros2 param set /duburi_manager vision.use_tracks true
-```
-Or per-goal: `duburi vision_align_yaw --tracking true` (CLI) / `duburi.vision.yaw(..., tracking=True)` (DSL).
-
-The manager caches `VisionState` instances by `(camera, use_tracks)` tuple, so a `tracking=True` goal
-and a `tracking=False` goal on the same camera each get their own subscriber. The per-goal
-`tracking=True` flag temporarily flips the `vision.use_tracks` param, builds a new `VisionState`
-for that goal, then restores the param afterward. Cached states from other goals are unaffected.
+**The vision control loop reads `/detections` only.** `VisionState` (in
+`duburi_manager`) subscribes `/duburi/vision/<cam>/detections` and
+`camera_info`, caches the latest array, and computes `bbox_error()` in
+normalized pixels via `info_seen()`-gated scaling — so a box visible on the
+operator HUD is a box the controller acts on. There is **no** `--tracking`
+flag and **no** `vision.use_tracks` param on the manager: the tracker's
+`/tracks` (ByteTrack IDs + Kalman smoothing) is consumed by
+`vision_display` and analysis tooling for the HUD only, never by the
+control path. (`depth_estimation_node` has its own independent `use_tracks`
+param that merely selects which topic *it* reads for detection ordering.)
 
 ## Dataflow (with tracker_node)
 
 ```
-camera_node  →  /image_raw  →  detector_node  →  /detections  →  tracker_node  →  /tracks
-                                    ↓                                                  ↓
-                              /image_debug                                    VisionState (use_tracks=True)
-                             /classes_filter                                             ↓
-                                    ↓                           VisionState (use_tracks=False) ←──/detections
-                             vision_display  ←──────────────────── /tracks (smooth bboxes)
-                                 (subscribes image_raw + detections + tracks +
-                                  state + classes_filter; renders HUD overlay)
+camera_node ──/image_raw──▶ detector_node ──/detections──┬──▶ tracker_node ──/tracks──▶ vision_display (HUD)
+                                  │                       │
+                            /image_debug                  └──▶ VisionState (duburi_manager) ──▶ motion_vision
+                           /classes_filter                     (control loop — reads /detections only)
+                                  │
+                                  └──▶ vision_display (subscribes image_raw + detections + tracks +
+                                       state + classes_filter; renders HUD overlay)
 ```
+
+The control loop (`VisionState` → `motion_vision`) reads `/detections`
+only; `/tracks` is a display / analysis convenience, never a control input.
 
 `<cam>` is the camera profile name (`laptop`, `sim_front`, `sim_bottom`, ...).
 `vision_msgs/Detection2D.results[0].hypothesis.class_id` is a **string**
@@ -251,27 +253,36 @@ through the factory.
 The pipeline downstream of `Detector` doesn't care which model is in the
 box.
 
-## Vision verbs (v4) -- where the closed loop lives
+## Vision verbs -- where the closed loop lives
 
 The control loop owns thrust; the planner asks for an outcome. Vision
-verbs are the bridge.
+verbs are the bridge. The 2026-06 rewrite replaced the old 9-verb axis API
+with **exactly two** pixel-native verbs, `vision_align` and `vision_move`,
+backed by two loops in `duburi_control/motion_vision.py`:
+
+| Loop (`motion_vision.py`) | Action verb | Facade (`vision_verbs.py`) | DSL (`vision_dsl.py`) |
+|---------------------------|-------------|----------------------------|-----------------------|
+| `align_loop` | `vision_align` | `VisionVerbs.vision_align` | `duburi.vision.align` |
+| `move_loop`  | `vision_move`  | `VisionVerbs.vision_move`  | `duburi.vision.move`  |
 
 ```
 mission script
   v
-DuburiClient.send('vision_align_3d', ...)
+duburi.vision.align(target, yaw=0, lat=0)      # vision_dsl._VisionDSL
   v
-/duburi/move action  (Move.Goal carries 12 vision fields)
+/duburi/move action  (Move.Goal carries the vision_align / vision_move fields)
   v
 auv_manager_node
   +-- _vision_state_for(camera)        -- lazy VisionState per camera
   +-- wait_vision_state_ready(...)     -- one-time preflight, polling-only
-  +-- duburi.vision_align_3d(...)
+  +-- duburi.vision_align(...)         -- VisionVerbs mixin
         v
-duburi_control.motion_vision.vision_track_axes
-  +-- 20 Hz  send_rc_override(forward, lateral, yaw)        -- one packet
-  +-- 5  Hz  set_target_depth(depth_setpoint += clamp(ey * Kp_depth))
-  +-- on stale > stale_after  -> neutral + (fail | hold)
+duburi_control.motion_vision.align_loop   (move_loop for vision_move)
+  +-- reads VisionState.bbox_error(target)            -- normalized pixel error
+  +-- 20 Hz  send_rc_override / send_rc_translation (lateral / yaw / forward)
+  +-- 5  Hz  set_target_depth(setpoint += clamp(ey * kp_depth))  -- align depth axis
+  +-- gain clamps every axis (hard max-speed cap)
+  +-- returns Outcome code: ALIGNED / LOST / TIMEOUT / NO_CAMERA / ABORTED
 ```
 
 Why the loop is in the manager, not the client:
@@ -283,67 +294,52 @@ Why the loop is in the manager, not the client:
 - Preflight is a polling check on an existing `VisionState`. No
   `spin_once` from inside an action callback, no second subscription set.
 
-Axis composition is by CSV: `axes='yaw,forward,depth'`. The convenience
-verbs (`vision_align_yaw`, `vision_align_lat`, `vision_align_depth`,
-`vision_hold_distance`) are just `vision_align_3d` with `axes` pinned --
-one canonical loop, no copy-paste. `vision_acquire` is a separate
-function because its early-exit semantics differ (any detection wins).
-`look_around` (DSL: `vision.scan()`) is a motion-side search verb: it
-switches to POSHOLD, holds position, and rotates in incremental yaw
-steps — checking `VisionState` at each stop and exiting the moment the
-target class is detected. Falls back to ALT_HOLD + heading-lock if
-POSHOLD is unavailable.
+**`align_loop`** centres the target on any subset of `{lat, yaw, depth}`,
+each axis carrying a signed pixel offset (`0` = centre). It exits ALIGNED
+when every active axis stays within `err_px` for `align_stable_frames`
+consecutive ticks. **`move_loop`** drives forward until the bbox fills
+`fwd_fill` of the frame (metric `mode` = `area` / `width` / `height`),
+optionally holding a lateral pixel offset (`maintain`); it never re-centres
+yaw/depth (ArduSub holds depth, the heading lock holds yaw).
 
-Current 9 vision verbs + 1 payload verb:
-`vision_align_3d`, `vision_align_yaw`, `vision_align_lat`,
-`vision_align_depth`, `vision_hold_distance`, `vis_approach`,
-`vision_acquire`, `look_around`, `vision_lock_fire` (align+fire),
-and the standalone `fire` verb (no vision — direct ESP32 serial).
+Search and recovery are **not** verbs: the mission DSL owns them via
+`duburi.detected()` poll loops and the `fallback=` search function passed
+to either verb (see [`client-and-dsl-api.md`](client-and-dsl-api.md)).
+Model + class switching lives in `duburi_planner/model_context.py`
+(`ClassRef` → `set_model` + `set_classes`) and runs before each goal.
 
-**Offset params** (`offset_x`, `offset_y`): available on all PID verbs
-(all except `vision_acquire` / `look_around`). Keeps the target a fixed
-number of pixels from frame centre. Normalization: `norm = px / (dim * 0.5)`,
-clamped to ±1.5 before the PID subtraction `ex_ctrl = ex - norm_offset_x`.
+These two verbs plus the standalone `fire` verb (no vision — direct ESP32
+serial; `fire_channel` 1/2=torpedo, 3/4=dropper) are the entire vision
+surface. `target_class` matching is case-insensitive.
 
-**Stale detection** (engine defaults as of 2026-06):
-- `DEFAULT_STALE_AFTER = 2.5 s` — detection older than this counts as lost
-- `DEFAULT_LOST_PATIENCE_S = 3.0 s` — continuous staleness budget before `on_lost='fail'` triggers
-- Total gap tolerance ≈ **5.5 s** (handles pool turbidity / 2-3 s occlusions)
+**Loss handling:** a detection older than `_STALE_LIMIT_S` (1.0 s) counts
+as "no target this tick". The loop coasts (neutral RC) until `lost_grace_s`
+(default 1.0 s) elapses, then returns `LOST` so the DSL can run its
+`fallback`; with `hold_through_loss=True` (set by the DSL when no fallback
+is supplied) it instead coasts through the loss until `duration` expires.
 
 ### Downward camera contract
 
-`vision_verbs.py` (`_run_vision_track`) applies **two** automatic adaptations when `camera='downward'`:
+`vision_verbs.vision_align` applies one automatic adaptation for a
+floor-facing camera:
 
 ```python
-is_downward     = camera in ('downward',)
-depth_sign      = -1 if is_downward else +1          # negate depth correction
-forward_uses_ey = is_downward and 'forward' in axes  # ey drives forward, not distance metric
+is_downward = camera in ('downward', 'sim_bottom')
+depth_sign  = -1 if is_downward else +1     # negate the depth-axis correction
 ```
 
-1. **`depth_sign = -1`** — negates the depth correction axis so "target appears large → vehicle
-   already close → don't descend further" is handled correctly.
-2. **`forward_uses_ey = True`** (when `'forward' in axes`) — remaps `ey` (vertical bbox error) to
-   drive forward thrust via `kp_forward` instead of the normal distance metric (`area` / `diagonal` /
-   `vis_range`). This matches looking-down geometry where vertical pixel error encodes forward offset.
-
-The caller still selects WHICH axes to enable — the engine auto-adapts HOW those axes are driven
-based on camera orientation. For looking-down geometry the caller must pass the correct axis flags:
+`depth_sign = -1` flips the depth-axis nudge so a target that grows in the
+downward view (vehicle already close) does not command a further descent.
+That is the engine's only orientation special-case — `vision_move` has
+none. On a floor-facing camera, drive lateral centring off the `lat` axis
+(`ex` → Ch6 strafe); yaw cannot be inferred from a bbox looking straight
+down, so leave it off:
 
 ```python
-# Correct downward-camera alignment (bin centering)
-duburi.vision.home(
-    camera='downward',
-    yaw=False,       # no yaw: top-down can't read heading from bbox
-    lat=True,        # ex → Ch6 lateral (auto-adapted)
-    forward=True,    # ey → Ch5 forward  (auto-adapted: ey not distance metric)
-    depth=False,     # depth already locked
-    dist=0.85,
-    duration=20,
-)
+# Strafe-centre a bin under the AUV on the downward camera
+duburi.camera = 'downward'
+duburi.vision.align('bin', lat=0, err=30, duration=20)
 ```
-
-Omitting `yaw=False, lat=True, forward=True` will produce unexpected thruster behavior because the
-default axes (`yaw=True, lat=True`) will attempt bbox-based yaw control on a floor-facing camera.
 
 ### Camera switching in a mission
 
@@ -353,13 +349,13 @@ all subsequent `duburi.vision.*` calls use:
 ```python
 # Phase 1: gate with forward camera (default)
 duburi.camera = 'forward'
-duburi.vision.home(target='gate', yaw=True, lat=True, dist=0.6, duration=15)
-duburi.move_forward(duration=4, gain=60)
+duburi.vision.align('gate', yaw=0, lat=0, duration=15)
+duburi.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
 
 # Switch to downward camera for bin task
 duburi.camera = 'downward'
 duburi.target  = 'bin'
-duburi.vision.home(yaw=False, lat=True, forward=True, dist=0.85, duration=20)
+duburi.vision.align(lat=0, err=30, duration=20)   # target falls back to duburi.target='bin'
 ```
 
 The camera name must match a running `camera_node` profile — verify with
@@ -370,7 +366,7 @@ Verifying the chain before pool day:
 ```
 ros2 run duburi_vision vision_check                 # detector publishing?
 ros2 run duburi_vision vision_thrust_check          # detection -> RC echo?
-ros2 run duburi_planner mission find_person_demo    # full mission rehearsal
+ros2 run duburi_planner mission demo_find_person    # full mission rehearsal
 ```
 
 ### Payload actuation (PayloadDriver)
@@ -381,7 +377,9 @@ and droppers (ch 3/4) by sending ASCII digit bytes `b'1'`..`b'4'` over USB CDC.
 ```
 DuburiMission.fire(channel)
   v
-Duburi._fire_payload(channel)        # skips command scope (used inside vision verbs)
+Duburi.fire(fire_channel)            # 'fire' COMMANDS verb (command-scoped)
+  v
+Duburi._fire_payload(channel)        # raw helper; also for mission "align then fire"
   v
 PayloadDriver.fire(channel)          # serial.write(bytes([0x30 + channel]))
   v
@@ -397,6 +395,9 @@ excludes the BNO085 port, and connects the first match. Startup banner:
 
 Check: `duburi.payload_ready` → `bool`.
 
-**`vision_lock_fire`** calls `_do_fire(fire_channel)` internally:
+The `fire` verb (and the raw `_fire_payload` helper) decides:
 - `fire_channel > 0` → ESP32 serial (`PayloadDriver`)
 - `fire_channel == 0` → log-only stub
+
+There is **no** vision-fire verb. Missions compose vision with a fire call,
+e.g. `if duburi.vision.align('torpedo_hole', yaw=0, lat=0, depth=0).ok: duburi.fire(1)`.

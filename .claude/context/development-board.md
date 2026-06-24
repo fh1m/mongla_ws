@@ -2,7 +2,7 @@
 
 > **Single source of truth for status, open work, bugs, and fixes.** Start here.
 > Detail lives in the linked docs; this board is the dashboard, not a duplicate.
-> **Last updated:** 2026-06-19 · **Competition:** July 11, 2026.
+> **Last updated:** 2026-06-24 · **Competition:** July 11, 2026.
 >
 > Three-state model (used everywhere): **✅ BUILT & TESTED** · **🟦 COMMITTED (phase-2, not built)** · **✏️ CORRECTED**.
 
@@ -35,8 +35,8 @@ Full guide: [`fsm-guide.md`](fsm-guide.md). Works for both Duburi 4.5 and Dubomi
 **✅ Competition mission architecture — BUILT (2026-06-19 → 2026-06-20, commit cec7f37):**
 5-chunk competition run (detected-paradigm): `missions/task_{gate,slalom,bin,torpedo,return}.py` + `task_full_2026.py` combinator.
 5 YASMIN FSM plan builders: `state_machines/plans/{slalom,bin_drop,torpedo_fire,return_gate,full_competition}.py` + launchers `missions/fsm_{slalom,bin,torpedo,return,full_2026}.py`.
-New FSM states: `TurnState`, `ApproachState`, `VisionLockFireState`, `FireState`, `StyleRollState`.
-`downward_cam=True` DSL arg on `vision.home/hold/vision_lock_fire` (auto-sets camera + kp_forward polarity).
+New FSM states: `TurnState` (nav) + `VisionSearchState` / `VisionAlignState` / `VisionMoveState` (vision).
+Vision verbs select the camera via `camera=` (or sticky `duburi.camera`); a downward camera auto-flips the `vision_align` depth-axis polarity.
 Demo files renamed `demo_arc/find_person/heading_lock/move_see/square/pursue.py`.
 `competition_config.py` for pool-day constants. Gate/return runnable today; slalom/bin/torpedo blocked on model training.
 
@@ -53,7 +53,7 @@ Dubomini control path ([`vehicle-spec.md`](vehicle-spec.md)) · IVC transport ·
 | P0 | TDR reconciliation (P0.1) | ✅ decided | audit §6 Decision Record |
 | P1 | Underwater preprocessing (G5) | 🟦 open | audit §6.5 |
 | P1 | Vision-control SITL smoke test (arm→dive→yaw→disarm) | 🟦 open | audit §6.6 / §4 |
-| P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (serial contract ✅ built — `PayloadDriver` + `fire` verb + `vision_lock_fire`; path-marker FSM state still needed) | audit §6, `project_payload_actuation` memory |
+| P1 | Path-marker follower + `drop_marker` (ESP32-serial) | 🟦 open (serial contract ✅ built — `PayloadDriver` + `fire` verb; path-marker FSM state still needed) | audit §6, `project_payload_actuation` memory |
 | P1 | `detector_node.py` `paused` param implementation | ✅ BUILT (2026-06-20) — `declare_parameter('paused', False)`, skip in `_infer_loop` after dequeue, `_on_parameter_change` handler | plan §gap-1 |
 | P1 | `duburi_dsl.py` `pause_detector`/`resume_detector` methods | ✅ BUILT (2026-06-20) — subprocess `ros2 param set` rail, camera→node mapping fwd/dwn | plan §gap-1 |
 | P1 | `full_mission.launch.py` (competition dual-cam launch) | ✅ BUILT (2026-06-20) — both detectors `paused:=True`, gate_rescue_repair fwd model | plan §launch |
@@ -78,7 +78,7 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 | 🟠 | Disarm safety — mission runner `stop()`+`disarm()` on unhandled exception. |
 | 🟠 | Abort-interruptible settle/brake — `_interruptible_sleep`, 50 ms abort poll (safety-stop latency). |
 | 🟠 | Lateral-sign test gap (`1801fe2` class) — `_lat_pct`/`_yaw_pct` extracted + opposite-polarity test. |
-| 🟡 | Battery NaN sentinel; `vision.use_tracks` per-goal snapshot/restore. |
+| 🟡 | Battery NaN sentinel; per-goal vision-param snapshot/restore. |
 | 🔵 | Banner `MONGLA · DUBURI AUV MANAGER`; `motion_vision` yaw docstring. |
 | chore | Deleted stray `missions/mission.py`; `.graphifyignore`; gitignore tool artifacts. |
 
@@ -95,10 +95,22 @@ All landed on `main`, tests green. Commits: `9276aae` · `c508579` · `7838286` 
 |-----|-------------|
 | 🔴 Depth surfacing clamp | `motion_vision._MIN_DEPTH_M = -0.2` — vision depth loop can never command shallower than 0.2m; uses `min()` (negative-down). Hardware safety constant, not a ROS param. |
 | 🟠 Mission state carry-over | New `mission_reset` verb: stops heading lock, clears abort event, RC neutral. Added to `_UNARM_SAFE`. All `run()` functions call it first. `cancel_callback` now also calls `unlock_heading()`. |
-| 🟠 Slalom diagonal movement | Lat-priority gating in `vision_track_axes`: when lat+forward both active, `fwd_pct *= (1 - lat_dominance)`. Smooth scaling — no stutter. Prevents diagonal approach to slalom pipes. |
-| 🟡 `vision_lock_fire` speed params | `speed` + `h_frac_close` added to COMMANDS fields, `vision_lock_fire` signature, and `_FIELDS_PER_COMMAND`. Torpedo fire now honors proximity scaling. |
-| 🟡 `stable_lock_s` ROS param | `vision.stable_lock_s = 3.0` added to `VISION_PARAM_DEFAULTS`; `vision_lock_fire` entry added to `_FIELDS_PER_COMMAND`. |
-| 🟢 pool_day_torpedo.py | New practice mission: board detect → coarse align → fine hole lock → `vision_lock_fire`. |
+| 🟢 pool_day_torpedo.py | Practice mission: board detect → coarse align → fine hole lock → `fire`. |
+
+> ⚠️ **Superseded by the 2026-06-24 two-verb rewrite (below):** the per-verb tuning this cycle added to the old 9-verb API — slalom lat-priority in the old `vision_track_axes`, the old `vision_lock_fire` `speed`/`h_frac_close` fields, and the removed `vision.stable_lock_s` param — was **removed** when vision collapsed to `vision_align` + `vision_move`. The depth clamp and `mission_reset` fixes above still stand; `pool_day_torpedo.py` now drives the board with `vision.align`/`vision.move` + `fire`.
+
+**Vision two-verb rewrite + cross-subsystem harmony (2026-06-24):**
+The 9-verb vision API (`vision_align_yaw/lat/depth`, `vision_align_3d`, `vision_hold_distance`, `vision_lock_fire`, `vision_acquire`, `look_around`; DSL `vision.find/home/turn/slide/hover/approach/track/scan/hold`) collapses to **two pixel-native verbs**: `duburi.vision.align(target, *, lat/yaw/depth=signed-px, err=40, duration=20, gain=30, fallback)` + `duburi.vision.move(target, *, fwd=95% fill, mode=area/width/height, maintain, hold, …)`.
+| Sev | Fix |
+|-----|-----|
+| ✅ rewrite | Two verbs only. `gain` is a hard **max-speed cap** (% thrust), not a target speed. Misses are **non-fatal** — the server always returns `success=True` with an outcome code in `Move.Result.final_value` (`ALIGNED`=0 / `LOST`=1 / `TIMEOUT`=2 / `NO_CAMERA`=3 / `ABORTED`=4); search is a mission-authored `fallback(duburi[, should_stop])`. Control loops read `/detections` only (no `--tracking`). `detected()` is now case-insensitive. |
+| ✅ params | Removed `vision.deadband`/`lock_mode`/`depth_anchor_frac`/`distance_metric`/`target_bbox_h_frac`/`stable_lock_s`/`h_frac_close`/`proximity_min_scale`/`speed`/`use_tracks`. New `/duburi_manager` params: `vision.kp_lat`=60, `vision.kp_yaw`=60, `vision.kp_depth`=0.05, `vision.kp_forward`=200, `vision.lost_grace_s`=1.0, `vision.frame_fill_default`=95, `vision.align_stable_frames`=3. |
+| 🔴 surface() deadlock | `Duburi.lock` `threading.Lock`→`RLock` so the safety verb `surface()`→`set_depth()` re-entry can't hang (commands stay serialized; RLock only re-admits the same thread). |
+| 🟠 heading-lock lifecycle | `HeadingLock` gained an `on_exit` callback: on timeout/auto-release it clears `Duburi._heading_lock` and releases the heartbeat hold. `disarm()` now stops/joins an active lock + releases the heartbeat before disarming. FSM `LockHeadingState` passes a long `lock_timeout` (task/hold duration, not the FSM state timeout); FSM `DisarmState` calls `release_heading()` first. |
+| 🟠 vision/lock harmony | When a heading lock owns Ch4 and `yaw` is **not** an align axis, `vision_align` uses a `release_yaw` path (lateral via `send_rc_translation`, Ch4 left to the lock) instead of writing `yaw=1500` and fighting the lock. |
+| 🟠 ALT_HOLD + cleanup | `vision_move` calls `_ensure_alt_hold('vision_move')` at entry. Manager exception cleanup uses lock-aware `duburi._writers().neutral()` (not raw `send_neutral()`). |
+| 🟠 DSL never-die | `vision_dsl._orchestrate` catches `MoveFailed`/`MoveRejected`/`Exception` and returns a non-fatal `VisionResult(False,'FAILED',…)` so a bad camera / ALT_HOLD reject / disarmed never aborts a mission. |
+| 🟡 NO_CAMERA gating | Vision verbs return `NO_CAMERA` until `vision_state.info_seen()` (camera_info seen) so pixel math is never mis-scaled on a non-640×480 stream. New throttled "boxes present but none match class" warning kills silent "sees but doesn't move". |
 
 **Suite (per-package): control 80 · planner 34 · manager 29 · sensors 14 · vision 29 = 186.**
 
