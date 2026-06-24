@@ -1,16 +1,23 @@
 """Gate task — find gate, align to rescue/repair marker, pass through.
 
+Two-verb vision: align() centres (creeping forward via its fallback until
+the gate appears), then move() drives through on bbox-height fill. No
+command aborts the mission — a miss just logs and the run continues.
+
 Standalone test (gate_rescue_repair.pt present):
-    ros2 run duburi_planner mission gate_task
+    ros2 run duburi_planner mission task_gate
 
 Called by full_mission_2026 combinator after arm + depth set.
 """
 
 from duburi_planner.missions.competition_config import (
     GATE_PASS_DEPTH_M,
-    GATE_PASS_BBOX_FRAC,
+    GATE_PASS_FWD_FILL,
+    ALIGN_ERR_PX,
+    ALIGN_GAIN,
+    APPROACH_GAIN,
     SEARCH_FORWARD_GAIN,
-    SEARCH_MAX_STEPS,
+    SEARCH_CREEP_S,
 )
 
 _FWD = '/duburi_detector_fwd'
@@ -22,41 +29,32 @@ def run(duburi, log=None):
     duburi.set_model('gate_rescue_repair', node=_FWD)
     duburi.set_classes('gate,rescue,repair', node=_FWD)
 
-    # ── Search for gate ────────────────────────────────────────────────────────
-    for _ in range(SEARCH_MAX_STEPS):
-        if duburi.detected('gate', stale_after=1.0):
-            break
-        duburi.move_forward(0.5, gain=SEARCH_FORWARD_GAIN)
-    else:
-        result = duburi.vision.scan(
-            target='gate', camera='forward',
-            step=20, dwell=1.5, speed=40, duration=60)
-        if not result.success:
-            if log:
-                log('[gate_task] gate not found in scan — skipping task')
-            duburi.pause_detector('forward')
-            return
+    # ── Centre on gate (yaw+lat); creep forward to find it if not yet seen ────
+    duburi.vision.align(
+        'gate', camera='forward', yaw=0, lat=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=30,
+        fallback=creep_forward)
 
-    # ── Coarse align: centre on gate ──────────────────────────────────────────
-    duburi.vision.home(
-        target='gate', camera='forward',
-        yaw=True, lat=True, on_lost='hold', duration=15)
-
-    # ── Lateral slide: align sub with rescue/repair marker ────────────────────
+    # ── Slide onto the rescue/repair marker (heading fixed) ───────────────────
     duburi.set_classes('rescue,repair', node=_FWD)
-    duburi.vision.home(
-        target='rescue', camera='forward',
-        yaw=False, lat=True, on_lost='hold', duration=10)
+    duburi.vision.align(
+        'rescue', camera='forward', lat=0,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=10)
 
-    # ── Descend to pass depth, then re-filter for gate outline ────────────────
+    # ── Descend to pass depth, re-filter for the gate outline, drive through ──
     duburi.set_depth(GATE_PASS_DEPTH_M, timeout=20)
     duburi.set_classes('gate', node=_FWD)
-
-    # ── Drive through — exits when gate fills GATE_PASS_BBOX_FRAC of frame ────
-    duburi.vision.approach(
-        target='gate', camera='forward',
-        dist=GATE_PASS_BBOX_FRAC, metric='height',
-        on_lost='hold', duration=25, lock_mode='pursue')
+    duburi.vision.move(
+        'gate', camera='forward',
+        fwd=GATE_PASS_FWD_FILL, mode='height',
+        gain=APPROACH_GAIN, duration=25,
+        fallback=creep_forward)
 
     duburi.pause(2.0)
     duburi.pause_detector('forward')
+
+
+# ── Mission-authored fallback search patterns (pure control) ────────────────────
+def creep_forward(duburi):
+    """One short forward creep, then return so the vision loop retries."""
+    duburi.move_forward(SEARCH_CREEP_S, gain=SEARCH_FORWARD_GAIN)

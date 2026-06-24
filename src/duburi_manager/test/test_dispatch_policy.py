@@ -13,7 +13,7 @@ from duburi_manager.dispatch_policy import goal_acceptance, SAFETY_VERBS
 
 # --- idle: accept anything, never abort --------------------------------------
 
-@pytest.mark.parametrize('cmd', ['move_forward', 'yaw_left', 'disarm', 'vision_align_3d'])
+@pytest.mark.parametrize('cmd', ['move_forward', 'yaw_left', 'disarm', 'vision_align'])
 def test_idle_accepts_any_verb_without_abort(cmd):
     accept, signal_abort = goal_acceptance(cmd, command_active=False)
     assert accept is True
@@ -22,7 +22,7 @@ def test_idle_accepts_any_verb_without_abort(cmd):
 
 # --- busy: one command at a time, except safety verbs ------------------------
 
-@pytest.mark.parametrize('cmd', ['move_forward', 'yaw_left', 'set_depth', 'vision_align_3d'])
+@pytest.mark.parametrize('cmd', ['move_forward', 'yaw_left', 'set_depth', 'vision_move'])
 def test_busy_rejects_non_safety(cmd):
     accept, signal_abort = goal_acceptance(cmd, command_active=True)
     assert accept is False

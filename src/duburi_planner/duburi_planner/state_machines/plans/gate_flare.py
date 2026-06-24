@@ -4,6 +4,10 @@ build_gate_flare_fsm() produces a StateMachine that works for both bodies:
   - Duburi 4.5  (has_dvl=True)  → passage moves use DVL distance
   - Dubomini 2.0 (has_dvl=False) → passage moves use timed thrust
 
+Vision is the two-verb API: search (open-loop) → align (centre) →
+move (drive in). Each align/move SUCCEED only on a real outcome; a miss
+routes back to search.
+
 Override any GATE_FLARE_DEFAULTS key via the params dict argument.
 """
 from __future__ import annotations
@@ -16,7 +20,7 @@ from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState,
     MoveForwardState, SurfaceState,
 )
-from ..states.vision import VisionFindState, VisionHomeState, VisionScanState
+from ..states.vision import VisionSearchState, VisionAlignState, VisionMoveState
 from ..states.utility import CountdownState, LogScoreState
 
 GATE_FLARE_DEFAULTS: dict = {
@@ -29,10 +33,13 @@ GATE_FLARE_DEFAULTS: dict = {
     'return_dist_m':  1.5,
     'return_duration': 3.0,
     'find_timeout':   45.0,
-    'home_duration':  20.0,
-    'scan_step':      20.0,
-    'scan_dwell':     1.5,
-    'scan_duration':  90.0,
+    'align_duration': 20.0,
+    'move_duration':  20.0,
+    'align_err_px':   40,
+    'align_gain':     30,
+    'approach_gain':  45,
+    'gate_fwd_fill':  42,     # gate area % at standoff
+    'flare_fwd_fill': 38,     # flare height % at standoff
 }
 
 
@@ -65,21 +72,30 @@ def build_gate_flare_fsm(
                  transitions={SUCCEED: 'FIND_GATE', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_GATE',
-                 VisionFindState(duburi, profile, target='gate',
-                                 move='forward', gain=30,
-                                 timeout=p['find_timeout']),
+                 VisionSearchState(duburi, profile, target='gate',
+                                   pattern='forward', gain=30,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'HOME_GATE', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('HOME_GATE',
-                 VisionHomeState(duburi, profile, target='gate',
-                                 yaw=True, lat=True,
-                                 gate_guard=True, pass_at=0.38,
-                                 metric='area',
-                                 duration=p['home_duration']),
+                 VisionAlignState(duburi, profile, target='gate',
+                                  yaw=True, lat=True,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
+                 transitions={SUCCEED: 'MOVE_GATE',
+                              FAILED: 'FIND_GATE',
+                              TIMEOUT: 'SURFACE',
+                              ABORT: 'SURFACE'})
+
+    sm.add_state('MOVE_GATE',
+                 VisionMoveState(duburi, profile, target='gate',
+                                 fwd=p['gate_fwd_fill'], mode='area',
+                                 gain=p['approach_gain'],
+                                 duration=p['move_duration']),
                  transitions={SUCCEED: 'PASS_GATE',
-                               FAILED: 'FIND_GATE',   # lost target → re-find
-                               TIMEOUT: 'SURFACE',
-                               ABORT: 'SURFACE'})
+                              FAILED: 'PASS_GATE',   # close enough — commit pass
+                              TIMEOUT: 'SURFACE',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('PASS_GATE',
                  MoveForwardState(duburi, profile,
@@ -89,38 +105,46 @@ def build_gate_flare_fsm(
                  transitions={SUCCEED: 'FIND_FLARE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_FLARE',
-                 VisionFindState(duburi, profile, target='flare',
-                                 move='forward', gain=30,
-                                 timeout=p['find_timeout']),
+                 VisionSearchState(duburi, profile, target='flare',
+                                   pattern='forward', gain=30,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'HOME_FLARE', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('HOME_FLARE',
-                 VisionHomeState(duburi, profile, target='flare',
-                                 yaw=True, lat=True, depth=True, forward=True,
-                                 dist=0.38, metric='height',
-                                 duration=p['home_duration']),
+                 VisionAlignState(duburi, profile, target='flare',
+                                  yaw=True, depth=True,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
+                 transitions={SUCCEED: 'MOVE_FLARE',
+                              FAILED: 'FIND_FLARE',
+                              TIMEOUT: 'SURFACE',
+                              ABORT: 'SURFACE'})
+
+    sm.add_state('MOVE_FLARE',
+                 VisionMoveState(duburi, profile, target='flare',
+                                 fwd=p['flare_fwd_fill'], mode='height',
+                                 gain=p['approach_gain'],
+                                 duration=p['move_duration']),
                  transitions={SUCCEED: 'SCAN_GATE',
-                               FAILED: 'FIND_FLARE',
-                               TIMEOUT: 'SURFACE',
-                               ABORT: 'SURFACE'})
+                              FAILED: 'SCAN_GATE',
+                              TIMEOUT: 'SURFACE',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('SCAN_GATE',
-                 VisionScanState(duburi, profile, target='gate',
-                                 step=p['scan_step'],
-                                 dwell=p['scan_dwell'],
-                                 duration=p['scan_duration']),
+                 VisionSearchState(duburi, profile, target='gate',
+                                   pattern='yaw', yaw_step=20.0,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'RETURN_HOME', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('RETURN_HOME',
-                 VisionHomeState(duburi, profile, target='gate',
-                                 yaw=True, lat=True,
-                                 gate_guard=True, pass_at=0.38,
-                                 metric='area',
-                                 duration=p['home_duration']),
+                 VisionAlignState(duburi, profile, target='gate',
+                                  yaw=True, lat=True,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
                  transitions={SUCCEED: 'RETURN_PASS',
-                               FAILED: 'SCAN_GATE',
-                               TIMEOUT: 'SURFACE',
-                               ABORT: 'SURFACE'})
+                              FAILED: 'SCAN_GATE',
+                              TIMEOUT: 'SURFACE',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('RETURN_PASS',
                  MoveForwardState(duburi, profile,

@@ -21,7 +21,7 @@ from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState, TurnState, SurfaceState,
 )
 from ..states.vision import (
-    VisionFindState, VisionHomeState, ApproachState, VisionLockFireState,
+    VisionSearchState, VisionAlignState, VisionMoveState,
 )
 from ..states.utility import (
     CountdownState, PauseState, LogScoreState,
@@ -44,8 +44,13 @@ FULL_COMP_DEFAULTS: dict = {
     'bin_depth_m':         -1.0,
     'torpedo_depth_m':      None,   # MUST fill at pool
 
+    # ── align/approach tuning (shared) ─────────────────────────────────────────
+    'align_err_px':         40,
+    'align_gain':           30,
+    'approach_gain':        45,
+
     # ── gate task ─────────────────────────────────────────────────────────────
-    'gate_pass_bbox':       0.80,
+    'gate_pass_fill':       80,     # % frame the gate fills when passing
     'gate_find_timeout':    60.0,
     'gate_home_dur':        15.0,
     'gate_approach_dur':    25.0,
@@ -60,17 +65,19 @@ FULL_COMP_DEFAULTS: dict = {
     # ── bin task ──────────────────────────────────────────────────────────────
     'bin_find_timeout':     90.0,
     'bin_home_dur':         20.0,
+    'bin_err_px':           30,
     'bin_fire_channel':     3,      # dropper_1
     'bin_model':           'bin_fire_blood',
 
     # ── torpedo task ──────────────────────────────────────────────────────────
     'torpedo_find_timeout': 90.0,
-    'torpedo_home_coarse':  15.0,
-    'torpedo_home_fine':    12.0,
+    'torpedo_coarse_dur':   15.0,
+    'torpedo_coarse_err':   50,
+    'torpedo_fine_dur':     12.0,
     'torpedo_lock_dur':     60.0,
+    'torpedo_fine_err':     14,
+    'torpedo_fine_gain':    25,
     'torpedo_fire_channel': 1,      # torpedo_1 — always explicit
-    'torpedo_stable_lock':  3.0,
-    'torpedo_max_attempts': 3,
     'torpedo_model':       'torpedo_blood_hole',
 
     # ── return task ───────────────────────────────────────────────────────────
@@ -130,31 +137,33 @@ def build_full_competition_fsm(
                  transitions={SUCCEED: 'FIND_GATE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_GATE',
-                 VisionFindState(duburi, profile,
-                                 target='gate', camera='forward',
-                                 move='forward', gain=30,
-                                 timeout=p['gate_find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='gate', camera='forward',
+                                   pattern='forward', gain=30,
+                                   timeout=p['gate_find_timeout']),
                  transitions={SUCCEED: 'HOME_GATE',
-                               TIMEOUT: _slalom_entry(p),
-                               ABORT: 'SURFACE'})
+                              TIMEOUT: _slalom_entry(p),
+                              ABORT: 'SURFACE'})
 
     sm.add_state('HOME_GATE',
-                 VisionHomeState(duburi, profile,
-                                 target='gate', camera='forward',
-                                 yaw=True, lat=True,
-                                 duration=p['gate_home_dur'], on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='gate', camera='forward',
+                                  yaw=0, lat=0,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['gate_home_dur']),
                  transitions={SUCCEED: 'HOME_MARKER',
-                               FAILED: _slalom_entry(p),
-                               TIMEOUT: _slalom_entry(p), ABORT: 'SURFACE'})
+                              FAILED: _slalom_entry(p),
+                              TIMEOUT: _slalom_entry(p), ABORT: 'SURFACE'})
 
     sm.add_state('HOME_MARKER',
-                 VisionHomeState(duburi, profile,
-                                 target='rescue', camera='forward',
-                                 yaw=False, lat=True,
-                                 duration=10.0, on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='rescue', camera='forward',
+                                  lat=0,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=10.0),
                  transitions={SUCCEED: 'SET_PASS_DEPTH',
-                               FAILED: 'SET_PASS_DEPTH',
-                               TIMEOUT: 'SET_PASS_DEPTH', ABORT: 'SURFACE'})
+                              FAILED: 'SET_PASS_DEPTH',
+                              TIMEOUT: 'SET_PASS_DEPTH', ABORT: 'SURFACE'})
 
     sm.add_state('SET_PASS_DEPTH',
                  SetDepthState(duburi, profile, depth_m=p['gate_pass_depth_m']),
@@ -166,14 +175,14 @@ def build_full_competition_fsm(
                  transitions={SUCCEED: 'APPROACH_GATE', ABORT: 'SURFACE'})
 
     sm.add_state('APPROACH_GATE',
-                 ApproachState(duburi, profile,
-                               target='gate', camera='forward',
-                               dist=p['gate_pass_bbox'], metric='height',
-                               duration=p['gate_approach_dur'],
-                               lock_mode='pursue', on_lost='hold'),
+                 VisionMoveState(duburi, profile,
+                                 target='gate', camera='forward',
+                                 fwd=p['gate_pass_fill'], mode='height',
+                                 gain=p['approach_gain'],
+                                 duration=p['gate_approach_dur']),
                  transitions={SUCCEED: 'RESTORE_DEPTH',
-                               FAILED: _slalom_entry(p),
-                               TIMEOUT: _slalom_entry(p), ABORT: 'SURFACE'})
+                              FAILED: _slalom_entry(p),
+                              TIMEOUT: _slalom_entry(p), ABORT: 'SURFACE'})
 
     sm.add_state('RESTORE_DEPTH',
                  SetDepthState(duburi, profile, depth_m=p['search_depth_m']),
@@ -197,37 +206,37 @@ def build_full_competition_fsm(
                  transitions={SUCCEED: 'FIND_PIPE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_PIPE',
-                 VisionFindState(duburi, profile,
-                                 target='red_pipe', camera='forward',
-                                 move='forward', gain=30,
-                                 timeout=p['slalom_find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='red_pipe', camera='forward',
+                                   pattern='forward', gain=30,
+                                   timeout=p['slalom_find_timeout']),
                  transitions={SUCCEED: 'SLALOM_L',
-                               TIMEOUT: _bin_entry(p),
-                               ABORT: 'SURFACE'})
+                              TIMEOUT: _bin_entry(p),
+                              ABORT: 'SURFACE'})
 
     sm.add_state('SLALOM_L',
-                 VisionHomeState(duburi, profile,
-                                 target='red_pipe', camera='forward',
-                                 yaw=True, lat=True,
-                                 offset_x=+p['slalom_pipe_offset'],
-                                 duration=p['slalom_home_dur'], on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='red_pipe', camera='forward',
+                                  yaw=0, lat=+p['slalom_pipe_offset'],
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['slalom_home_dur']),
                  transitions={SUCCEED: 'PAUSE_SL',
-                               FAILED: _bin_entry(p),
-                               TIMEOUT: _bin_entry(p), ABORT: 'SURFACE'})
+                              FAILED: _bin_entry(p),
+                              TIMEOUT: _bin_entry(p), ABORT: 'SURFACE'})
 
     sm.add_state('PAUSE_SL',
                  PauseState(duburi, profile, seconds=0.5),
                  transitions={SUCCEED: 'SLALOM_R', ABORT: 'SURFACE'})
 
     sm.add_state('SLALOM_R',
-                 VisionHomeState(duburi, profile,
-                                 target='red_pipe', camera='forward',
-                                 yaw=True, lat=True,
-                                 offset_x=-p['slalom_pipe_offset'],
-                                 duration=p['slalom_home_dur'], on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='red_pipe', camera='forward',
+                                  yaw=0, lat=-p['slalom_pipe_offset'],
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['slalom_home_dur']),
                  transitions={SUCCEED: 'PAUSE_SR',
-                               FAILED: _bin_entry(p),
-                               TIMEOUT: _bin_entry(p), ABORT: 'SURFACE'})
+                              FAILED: _bin_entry(p),
+                              TIMEOUT: _bin_entry(p), ABORT: 'SURFACE'})
 
     sm.add_state('PAUSE_SR',
                  PauseState(duburi, profile, seconds=0.5),
@@ -256,23 +265,23 @@ def build_full_competition_fsm(
                  transitions={SUCCEED: 'FIND_BIN', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_BIN',
-                 VisionFindState(duburi, profile,
-                                 target='fire', camera='downward',
-                                 move='forward', gain=30,
-                                 timeout=p['bin_find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='fire', camera='downward',
+                                   pattern='forward', gain=30,
+                                   timeout=p['bin_find_timeout']),
                  transitions={SUCCEED: 'HOME_BIN',
-                               TIMEOUT: 'SWITCH_FWD_B',
-                               ABORT: 'SURFACE'})
+                              TIMEOUT: 'SWITCH_FWD_B',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('HOME_BIN',
-                 VisionHomeState(duburi, profile,
-                                 target='fire', camera='downward',
-                                 lat=True, forward=True, yaw=False, depth=False,
-                                 duration=p['bin_home_dur'], on_lost='hold',
-                                 kp_forward=-60.0, kp_lat=60.0, deadband=0.06),
+                 VisionAlignState(duburi, profile,
+                                  target='fire', camera='downward',
+                                  lat=0, depth=0,
+                                  err=p['bin_err_px'], gain=p['align_gain'],
+                                  duration=p['bin_home_dur']),
                  transitions={SUCCEED: 'CONFIRM_BIN',
-                               FAILED: 'SWITCH_FWD_B',
-                               TIMEOUT: 'SWITCH_FWD_B', ABORT: 'SURFACE'})
+                              FAILED: 'SWITCH_FWD_B',
+                              TIMEOUT: 'SWITCH_FWD_B', ABORT: 'SURFACE'})
 
     sm.add_state('CONFIRM_BIN',
                  PauseState(duburi, profile, seconds=3.0),
@@ -310,48 +319,51 @@ def build_full_competition_fsm(
                      transitions={SUCCEED: 'FIND_BOARD', ABORT: 'SURFACE'})
 
         sm.add_state('FIND_BOARD',
-                     VisionFindState(duburi, profile,
-                                     target='torpedo', camera='forward',
-                                     move='forward', gain=30,
-                                     timeout=p['torpedo_find_timeout']),
+                     VisionSearchState(duburi, profile,
+                                       target='torpedo', camera='forward',
+                                       pattern='forward', gain=30,
+                                       timeout=p['torpedo_find_timeout']),
                      transitions={SUCCEED: 'HOME_BOARD',
-                                   TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
+                                  TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
 
         sm.add_state('HOME_BOARD',
-                     VisionHomeState(duburi, profile,
-                                     target='torpedo', camera='forward',
-                                     yaw=True, lat=True, depth=True,
-                                     duration=p['torpedo_home_coarse'], on_lost='hold'),
+                     VisionAlignState(duburi, profile,
+                                      target='torpedo', camera='forward',
+                                      yaw=0, lat=0, depth=0,
+                                      err=p['torpedo_coarse_err'], gain=p['align_gain'],
+                                      duration=p['torpedo_coarse_dur']),
                      transitions={SUCCEED: 'SWITCH_FINE_T',
-                                   FAILED: 'SWITCH_FINE_T',
-                                   TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
+                                  FAILED: 'SWITCH_FINE_T',
+                                  TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
 
         sm.add_state('SWITCH_FINE_T',
                      SetDetectorState(duburi, profile, classes='blood,hole'),
                      transitions={SUCCEED: 'HOME_BLOOD', ABORT: 'SURFACE'})
 
         sm.add_state('HOME_BLOOD',
-                     VisionHomeState(duburi, profile,
-                                     target='blood', camera='forward',
-                                     yaw=True, lat=True, depth=True,
-                                     duration=p['torpedo_home_fine'], on_lost='hold'),
-                     transitions={SUCCEED: 'LOCK_FIRE_T',
-                                   FAILED: 'LOCK_FIRE_T',
-                                   TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
+                     VisionAlignState(duburi, profile,
+                                      target='blood', camera='forward',
+                                      yaw=0, lat=0, depth=0,
+                                      err=p['torpedo_fine_err'], gain=p['torpedo_fine_gain'],
+                                      duration=p['torpedo_fine_dur']),
+                     transitions={SUCCEED: 'LOCK_HOLE_T',
+                                  FAILED: 'LOCK_HOLE_T',
+                                  TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
 
-        sm.add_state('LOCK_FIRE_T',
-                     VisionLockFireState(duburi, profile,
-                                         target='hole', camera='forward',
-                                         fire_channel=p['torpedo_fire_channel'],
-                                         yaw=True, lat=True, depth=True, forward=False,
-                                         stable_lock_s=p['torpedo_stable_lock'],
-                                         max_attempts=p['torpedo_max_attempts'],
-                                         duration=p['torpedo_lock_dur'],
-                                         kp_yaw=80.0, kp_lat=80.0, kp_depth=0.08,
-                                         deadband=0.04),
-                     transitions={SUCCEED: 'PAUSE_T',
-                                   FAILED: _return_entry(p),
-                                   TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
+        sm.add_state('LOCK_HOLE_T',
+                     VisionAlignState(duburi, profile,
+                                      target='hole', camera='forward',
+                                      yaw=0, lat=0, depth=0,
+                                      err=p['torpedo_fine_err'], gain=p['torpedo_fine_gain'],
+                                      duration=p['torpedo_lock_dur']),
+                     transitions={SUCCEED: 'FIRE_T',
+                                  FAILED: _return_entry(p),
+                                  TIMEOUT: _return_entry(p), ABORT: 'SURFACE'})
+
+        sm.add_state('FIRE_T',
+                     FireState(duburi, profile,
+                               channel=p['torpedo_fire_channel'], confirm_pause_s=2.0),
+                     transitions={SUCCEED: 'PAUSE_T', ABORT: 'SURFACE'})
 
         sm.add_state('PAUSE_T',
                      PauseState(duburi, profile, seconds=2.0),
@@ -374,35 +386,36 @@ def build_full_competition_fsm(
                  transitions={SUCCEED: 'FIND_RETURN_GATE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_RETURN_GATE',
-                 VisionFindState(duburi, profile,
-                                 target='gate', camera='forward',
-                                 move='forward', gain=30,
-                                 timeout=p['return_find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='gate', camera='forward',
+                                   pattern='forward', gain=30,
+                                   timeout=p['return_find_timeout']),
                  transitions={SUCCEED: 'HOME_RETURN_GATE',
-                               TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
+                              TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('HOME_RETURN_GATE',
-                 VisionHomeState(duburi, profile,
-                                 target='gate', camera='forward',
-                                 yaw=True, lat=True,
-                                 duration=p['return_home_dur'], on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='gate', camera='forward',
+                                  yaw=0, lat=0,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['return_home_dur']),
                  transitions={SUCCEED: 'SET_PASS_DEPTH_R',
-                               FAILED: 'LOG_SCORE',
-                               TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
+                              FAILED: 'LOG_SCORE',
+                              TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('SET_PASS_DEPTH_R',
                  SetDepthState(duburi, profile, depth_m=p['gate_pass_depth_m']),
                  transitions={SUCCEED: 'APPROACH_RETURN', TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('APPROACH_RETURN',
-                 ApproachState(duburi, profile,
-                               target='gate', camera='forward',
-                               dist=p['gate_pass_bbox'], metric='height',
-                               duration=p['return_approach_dur'],
-                               lock_mode='pursue', on_lost='hold'),
+                 VisionMoveState(duburi, profile,
+                                 target='gate', camera='forward',
+                                 fwd=p['gate_pass_fill'], mode='height',
+                                 gain=p['approach_gain'],
+                                 duration=p['return_approach_dur']),
                  transitions={SUCCEED: 'SURFACE_LEVEL',
-                               FAILED: 'LOG_SCORE',
-                               TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
+                              FAILED: 'LOG_SCORE',
+                              TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('SURFACE_LEVEL',
                  SetDepthState(duburi, profile, depth_m=p['search_depth_m']),

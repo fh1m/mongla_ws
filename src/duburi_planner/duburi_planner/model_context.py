@@ -9,14 +9,13 @@ Usage in a mission::
         )
 
         # Access classes by name — any name is valid (validated at detector):
-        duburi.vision.find(target=duburi.models.gate.gate,  move='forward', gain=35)
-        duburi.vision.home(target=duburi.models.gate.flare, yaw=True, depth=True)
-        duburi.vision.turn(target=duburi.models.slalom.slalom_red)
+        duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0)
+        duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area')
 
         # Explicit class list validates at handle creation (optional):
         duburi.models(strict=('slalom_combined', ['slalom_red', 'slalom_white']))
-        duburi.vision.turn(target=duburi.models.strict.slalom_red)   # validated
-        # duburi.vision.turn(target=duburi.models.strict.typo)        # → AttributeError
+        duburi.vision.align(duburi.models.strict.slalom_red, yaw=0)   # validated
+        # duburi.vision.align(duburi.models.strict.typo, yaw=0)        # → AttributeError
 
 When a `ClassRef` is passed to any vision verb, the DSL automatically calls
 `set_model(model_name)` and `set_classes(class_name)` before sending the

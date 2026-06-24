@@ -20,7 +20,7 @@ from ..core.vehicle_profile import VehicleProfile
 from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState, TurnState, SurfaceState,
 )
-from ..states.vision import VisionFindState, VisionHomeState, VisionScanState
+from ..states.vision import VisionSearchState, VisionAlignState
 from ..states.utility import CountdownState, PauseState, LogScoreState, SetDetectorState
 
 SLALOM_DEFAULTS: dict = {
@@ -30,7 +30,9 @@ SLALOM_DEFAULTS: dict = {
     'slalom_heading':   None,       # compass bearing to slalom; fill at pool
     'pipe_offset_px':   80,         # lateral pixel offset; positive = right
     'find_timeout':     60.0,
-    'home_duration':    20.0,
+    'align_duration':   20.0,
+    'align_err_px':     40,
+    'align_gain':       30,
     'model':           'slalom_red_pipe',
     'classes':         'red_pipe',
 }
@@ -79,36 +81,34 @@ def build_slalom_fsm(
                  transitions={SUCCEED: 'FIND_PIPE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_PIPE',
-                 VisionFindState(duburi, profile,
-                                 target='red_pipe',
-                                 camera='forward',
-                                 move='forward', gain=30,
-                                 timeout=p['find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='red_pipe',
+                                   camera='forward',
+                                   pattern='forward', gain=30,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'SLALOM_L', TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('SLALOM_L',
-                 VisionHomeState(duburi, profile,
-                                 target='red_pipe', camera='forward',
-                                 yaw=True, lat=True,
-                                 offset_x=+p['pipe_offset_px'],
-                                 duration=p['home_duration'],
-                                 on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='red_pipe', camera='forward',
+                                  yaw=0, lat=+p['pipe_offset_px'],
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
                  transitions={SUCCEED: 'PAUSE_L', FAILED: 'LOG_SCORE',
-                               TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
+                              TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('PAUSE_L',
                  PauseState(duburi, profile, seconds=0.5),
                  transitions={SUCCEED: 'SLALOM_R', ABORT: 'SURFACE'})
 
     sm.add_state('SLALOM_R',
-                 VisionHomeState(duburi, profile,
-                                 target='red_pipe', camera='forward',
-                                 yaw=True, lat=True,
-                                 offset_x=-p['pipe_offset_px'],
-                                 duration=p['home_duration'],
-                                 on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='red_pipe', camera='forward',
+                                  yaw=0, lat=-p['pipe_offset_px'],
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
                  transitions={SUCCEED: 'PAUSE_R', FAILED: 'LOG_SCORE',
-                               TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
+                              TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('PAUSE_R',
                  PauseState(duburi, profile, seconds=0.5),

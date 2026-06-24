@@ -29,8 +29,8 @@ DVL connects automatically on startup (dvl_auto_connect:=true by default).
 Manual override: ros2 run duburi_planner duburi dvl_connect
 
 Vision commands to test gate detection:
-    ros2 run duburi_planner duburi vision_align_yaw --camera forward --target_class gate --duration 10
-    ros2 run duburi_planner duburi vision_align_3d  --camera forward --target_class gate --axes yaw,forward --duration 15
+    ros2 run duburi_planner duburi vision_align --camera forward --target_class gate --axes yaw,lat --duration 10
+    ros2 run duburi_planner duburi vision_move  --camera forward --target_class gate --fwd_fill 80 --mode area --duration 15
 
 Run the gate+flare mission:
     ros2 run duburi_planner mission gate_flare_prequal

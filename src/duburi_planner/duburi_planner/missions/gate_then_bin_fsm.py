@@ -1,7 +1,7 @@
 """Gate pass → bin drop — 2-task FSM with camera switching.
 
 Task 1: forward camera, gate+flare model
-  arm → dive → find gate → home gate (yaw+lat, gate_guard) → pass gate
+  arm → dive → find gate → home gate (align yaw+lat) → pass gate
 
 Camera switch: SetDetectorState flips to downward cam + bin model atomically.
 

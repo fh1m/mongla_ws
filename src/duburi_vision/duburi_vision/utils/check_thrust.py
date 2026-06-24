@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """vision_thrust_check -- end-to-end smoke test: detection -> RC channel.
 
-Sends a short `vision_align_yaw` goal via /duburi/move and reports what
-came back. Use BEFORE pool tests so a wiring mistake doesn't waste pool
-time.
+Sends a short `vision_align` (yaw axis) goal via /duburi/move and reports
+what came back. Use BEFORE pool tests so a wiring mistake doesn't waste
+pool time.
 
 Watch the manager log for `[VIS  ]` lines (loop is running) and
 `[RC   ] Yaw:NNN` lines (thrust has actually moved). If both appear
@@ -38,17 +38,17 @@ from duburi_interfaces.action import Move
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description='Vision -> thrust smoke test (sends one vision_align_yaw goal).')
+        description='Vision -> thrust smoke test (sends one vision_align yaw goal).')
     parser.add_argument('--camera',          default='laptop')
     parser.add_argument('--target-class',    default='person')
     parser.add_argument('--duration',        type=float, default=5.0,
-                        help='vision_align_yaw duration seconds (default: 5)')
-    parser.add_argument('--deadband',        type=float, default=0.10)
-    parser.add_argument('--kp-yaw',          type=float, default=60.0)
-    parser.add_argument('--on-lost',         choices=('fail', 'hold'),
-                        default='hold',
-                        help="hold by default so a brief mis-detect doesn't abort")
-    parser.add_argument('--stale-after',     type=float, default=0.8)
+                        help='vision_align duration seconds (default: 5)')
+    parser.add_argument('--err-px',          type=float, default=40.0,
+                        help='pixel tolerance for "aligned" (default: 40)')
+    parser.add_argument('--gain',            type=float, default=30.0,
+                        help='hard max-speed cap %% (default: 30)')
+    parser.add_argument('--kp-yaw',          type=float, default=0.0,
+                        help='override yaw P gain (0 = use vision.kp_yaw param)')
     parser.add_argument('--connect-timeout', type=float, default=15.0)
     args = parser.parse_args(argv)
 
@@ -62,18 +62,21 @@ def main(argv=None):
         node.destroy_node(); rclpy.shutdown(); sys.exit(1)
 
     goal = Move.Goal()
-    goal.cmd          = 'vision_align_yaw'
+    goal.cmd          = 'vision_align'
     goal.camera       = args.camera
     goal.target_class = args.target_class
+    goal.axes         = 'yaw'
+    goal.offset_yaw   = 0.0
+    goal.err_px       = float(args.err_px)
     goal.duration     = float(args.duration)
-    goal.deadband     = float(args.deadband)
+    goal.gain         = float(args.gain)
     goal.kp_yaw       = float(args.kp_yaw)
-    goal.on_lost      = args.on_lost
-    goal.stale_after  = float(args.stale_after)
+    # No fallback from a raw goal -> hold through brief losses for the run.
+    goal.hold_through_loss = True
 
-    print(f'[VTHR ] sending vision_align_yaw  camera={args.camera}  '
+    print(f'[VTHR ] sending vision_align (yaw)  camera={args.camera}  '
           f'class={args.target_class}  duration={args.duration:.1f}s  '
-          f'on_lost={args.on_lost}')
+          f'err={args.err_px:.0f}px gain={args.gain:.0f}%')
     print('[VTHR ] watch the manager log for [VIS  ] lines and [RC   ] Yaw:NNN')
 
     send_future = client.send_goal_async(goal)
@@ -88,11 +91,14 @@ def main(argv=None):
     rclpy.spin_until_future_complete(node, result_future)
     result = result_future.result().result
 
+    _OUTCOME = {0: 'ALIGNED', 1: 'LOST', 2: 'TIMEOUT', 3: 'NO_CAMERA', 4: 'ABORTED'}
+    code = int(round(result.final_value))
+    aligned = code == 0
     print()
-    print(f'[VTHR ] {"PASS" if result.success else "FAIL"}')
+    print(f'[VTHR ] {"PASS (aligned)" if aligned else "ran (not aligned)"}')
     print(f'  message            : {result.message}')
-    print(f'  composite_error    : {result.final_value:.3f}')
-    print(f'  last detection age : {result.error_value:.2f}s')
+    print(f'  outcome            : {_OUTCOME.get(code, code)}')
+    print(f'  last pixel error   : {result.error_value:.1f}px')
     print()
     print('[VTHR ] If you saw [RC   ] Yaw:... in the manager log, the loop '
           'is closed end-to-end. If not, run `vision_check` first to confirm '
@@ -100,7 +106,7 @@ def main(argv=None):
 
     node.destroy_node()
     rclpy.shutdown()
-    sys.exit(0 if result.success else 1)
+    sys.exit(0 if aligned else 1)
 
 
 if __name__ == '__main__':

@@ -50,7 +50,7 @@ def command_scope(verb: str):
     """Open a `cmd=<verb>` tag scope for the duration of one Duburi call.
 
     Use exactly once per public verb body (`Duburi.yaw_right`,
-    `Duburi.vision_align_yaw`, ...). Nested scopes are allowed -- the
+    `Duburi.vision_align`, ...). Nested scopes are allowed -- the
     inner one wins for the duration it is active and the outer scope
     is restored on exit. When tracing is disabled this is a no-op
     yield, so the cost in production is one branch.

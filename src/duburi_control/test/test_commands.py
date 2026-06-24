@@ -78,3 +78,28 @@ def test_string_fields_constant_matches_actual_string_typed_fields():
     new string field is added to Move.Goal, it must be added here too,
     or numeric defaulting will misfire on it."""
     assert 'target_name' in STRING_FIELDS
+
+
+def test_only_two_vision_verbs_registered():
+    """The vision subsystem is exactly vision_align + vision_move now;
+    every legacy verb must be gone (no aliases, no back-compat)."""
+    assert 'vision_align' in COMMANDS
+    assert 'vision_move' in COMMANDS
+    for legacy in ('vision_align_3d', 'vision_acquire', 'look_around',
+                   'vision_track_axes', 'vision_lock_fire', 'vision_align_yaw'):
+        assert legacy not in COMMANDS, f'legacy vision verb {legacy!r} still registered'
+
+
+def test_vision_align_fields():
+    spec = COMMANDS['vision_align']
+    for f in ('camera', 'target_class', 'axes',
+              'offset_lat', 'offset_yaw', 'offset_depth',
+              'err_px', 'duration', 'gain'):
+        assert f in spec['fields'], f'vision_align missing field {f!r}'
+
+
+def test_vision_move_fields():
+    spec = COMMANDS['vision_move']
+    for f in ('camera', 'target_class', 'fwd_fill', 'mode',
+              'maintain_px', 'hold_s', 'err_px', 'duration', 'gain'):
+        assert f in spec['fields'], f'vision_move missing field {f!r}'

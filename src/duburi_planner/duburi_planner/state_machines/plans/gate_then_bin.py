@@ -19,7 +19,7 @@ from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState,
     MoveForwardState, SurfaceState,
 )
-from ..states.vision import VisionFindState, VisionHomeState, VisionScanState
+from ..states.vision import VisionSearchState, VisionAlignState
 from ..states.utility import CountdownState, LogScoreState, SetDetectorState
 
 GATE_THEN_BIN_DEFAULTS: dict = {
@@ -32,7 +32,9 @@ GATE_THEN_BIN_DEFAULTS: dict = {
     'pass_duration':    5.0,
     'pass_gain':        80,
     'find_timeout':     45.0,
-    'home_duration':    20.0,
+    'align_duration':   20.0,
+    'align_err_px':     40,
+    'align_gain':       30,
     # detector models
     'gate_model':      'gate_flare_medium_100ep',
     'bin_model':       'bin_medium_100ep',
@@ -40,9 +42,9 @@ GATE_THEN_BIN_DEFAULTS: dict = {
     'bin_classes':     'bin_a,bin_b',
     # bin task
     'bin_scan_step':    20.0,
-    'bin_scan_dwell':   1.5,
     'bin_scan_duration': 90.0,
-    'bin_home_duration': 20.0,
+    'bin_align_duration': 20.0,
+    'bin_err_px':       30,
 }
 
 
@@ -82,24 +84,23 @@ def build_gate_then_bin_fsm(
 
     # ── task 1: gate (forward camera) ────────────────────────────────────
     sm.add_state('FIND_GATE',
-                 VisionFindState(duburi, profile,
-                                 target='gate',
-                                 camera='forward',       # explicit
-                                 move='forward', gain=30,
-                                 timeout=p['find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='gate',
+                                   camera='forward',       # explicit
+                                   pattern='forward', gain=30,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'HOME_GATE', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('HOME_GATE',
-                 VisionHomeState(duburi, profile,
-                                 target='gate',
-                                 camera='forward',       # explicit
-                                 yaw=True, lat=True,
-                                 gate_guard=True, pass_at=0.38,
-                                 metric='area',
-                                 duration=p['home_duration']),
+                 VisionAlignState(duburi, profile,
+                                  target='gate',
+                                  camera='forward',       # explicit
+                                  yaw=0, lat=0,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
                  transitions={SUCCEED: 'PASS_GATE',
-                               FAILED: 'FIND_GATE',
-                               TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
+                              FAILED: 'FIND_GATE',
+                              TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('PASS_GATE',
                  MoveForwardState(duburi, profile,
@@ -124,26 +125,24 @@ def build_gate_then_bin_fsm(
                  transitions={SUCCEED: 'SCAN_BIN', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('SCAN_BIN',
-                 VisionScanState(duburi, profile,
-                                 target='bin_a',
-                                 camera='downward',      # explicit
-                                 step=p['bin_scan_step'],
-                                 dwell=p['bin_scan_dwell'],
-                                 duration=p['bin_scan_duration']),
+                 VisionSearchState(duburi, profile,
+                                   target='bin_a',
+                                   camera='downward',      # explicit
+                                   pattern='yaw',
+                                   yaw_step=p['bin_scan_step'],
+                                   timeout=p['bin_scan_duration']),
                  transitions={SUCCEED: 'LOCK_BIN', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('LOCK_BIN',
-                 VisionHomeState(duburi, profile,
-                                 target='bin_a',
-                                 camera='downward',      # explicit
-                                 yaw=True, lat=True,
-                                 depth=True,             # nudge depth: enlarge bbox
-                                 metric='area',
-                                 duration=p['bin_home_duration'],
-                                 on_lost='fail'),
+                 VisionAlignState(duburi, profile,
+                                  target='bin_a',
+                                  camera='downward',      # explicit
+                                  lat=0, depth=0,         # downward cam: lat + fore/aft
+                                  err=p['bin_err_px'],
+                                  duration=p['bin_align_duration']),
                  transitions={SUCCEED: 'DROP_BIN',
-                               FAILED: 'SCAN_BIN',
-                               TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
+                              FAILED: 'SCAN_BIN',
+                              TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     # DROP_BIN and CONFIRM_DROP are stubs here — wire to your ESP32 actuator
     # state when the payload serial contract is finalised (see project_payload_actuation).

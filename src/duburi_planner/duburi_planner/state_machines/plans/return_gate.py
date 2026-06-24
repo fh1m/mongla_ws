@@ -21,7 +21,7 @@ from ..core.vehicle_profile import VehicleProfile
 from ..states.navigation import (
     ArmState, SetDepthState, LockHeadingState, TurnState, SurfaceState,
 )
-from ..states.vision import VisionFindState, VisionHomeState, ApproachState
+from ..states.vision import VisionSearchState, VisionAlignState, VisionMoveState
 from ..states.utility import (
     CountdownState, PauseState, LogScoreState, SetDetectorState, StyleRollState,
 )
@@ -32,10 +32,13 @@ RETURN_GATE_DEFAULTS: dict = {
     'gate_heading':      0.0,
     'return_heading':    None,          # compass bearing back to gate; fill at pool
     'pass_depth_m':     -0.6,
-    'pass_bbox_frac':    0.80,
+    'pass_fwd_fill':     80,            # % frame the gate fills when passing
     'find_timeout':      60.0,
-    'home_duration':     15.0,
+    'align_duration':    15.0,
+    'align_err_px':      40,
+    'align_gain':        30,
     'approach_duration': 25.0,
+    'approach_gain':     45,
     'style_roll_flips':  1,
     'style_roll_headroom': 0.4,
     'style_roll_gain':   60,
@@ -83,35 +86,35 @@ def build_return_gate_fsm(
                  transitions={SUCCEED: 'FIND_GATE', ABORT: 'SURFACE'})
 
     sm.add_state('FIND_GATE',
-                 VisionFindState(duburi, profile,
-                                 target='gate', camera='forward',
-                                 move='forward', gain=30,
-                                 timeout=p['find_timeout']),
+                 VisionSearchState(duburi, profile,
+                                   target='gate', camera='forward',
+                                   pattern='forward', gain=30,
+                                   timeout=p['find_timeout']),
                  transitions={SUCCEED: 'HOME_GATE', TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('HOME_GATE',
-                 VisionHomeState(duburi, profile,
-                                 target='gate', camera='forward',
-                                 yaw=True, lat=True,
-                                 duration=p['home_duration'],
-                                 on_lost='hold'),
+                 VisionAlignState(duburi, profile,
+                                  target='gate', camera='forward',
+                                  yaw=0, lat=0,
+                                  err=p['align_err_px'], gain=p['align_gain'],
+                                  duration=p['align_duration']),
                  transitions={SUCCEED: 'SET_PASS_DEPTH',
-                               FAILED: 'LOG_SCORE',
-                               TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
+                              FAILED: 'LOG_SCORE',
+                              TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('SET_PASS_DEPTH',
                  SetDepthState(duburi, profile, depth_m=p['pass_depth_m']),
                  transitions={SUCCEED: 'APPROACH_GATE', TIMEOUT: 'APPROACH_GATE', ABORT: 'SURFACE'})
 
     sm.add_state('APPROACH_GATE',
-                 ApproachState(duburi, profile,
-                               target='gate', camera='forward',
-                               dist=p['pass_bbox_frac'], metric='height',
-                               duration=p['approach_duration'],
-                               lock_mode='pursue', on_lost='hold'),
+                 VisionMoveState(duburi, profile,
+                                 target='gate', camera='forward',
+                                 fwd=p['pass_fwd_fill'], mode='height',
+                                 gain=p['approach_gain'],
+                                 duration=p['approach_duration']),
                  transitions={SUCCEED: 'PAUSE',
-                               FAILED: 'LOG_SCORE',
-                               TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
+                              FAILED: 'LOG_SCORE',
+                              TIMEOUT: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('PAUSE',
                  PauseState(duburi, profile, seconds=1.0),
