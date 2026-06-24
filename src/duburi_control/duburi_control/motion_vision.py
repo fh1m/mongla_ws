@@ -72,6 +72,11 @@ _STALE_LIMIT_S = 1.0
 # Depth setpoint nudge ceiling per tick at gain=100 (scaled by gain/100).
 _MAX_DEPTH_NUDGE = 0.02   # metres / tick
 
+# Pass-through commit: how long to keep driving forward AFTER the target
+# leaves the frame, so the hull fully clears the gate. Overridable per
+# call via move(..., hold=<s>).
+_PASSTHROUGH_COMMIT_S = 2.0
+
 # Surfacing safety floor: never command shallower than 0.2 m.
 _MIN_DEPTH_M = -0.2
 
@@ -324,6 +329,7 @@ def move_loop(*,
               target_class: str,
               fwd_fill: float,
               mode: str = 'area',
+              passthrough: bool = False,
               maintain_px: float = 0.0,
               maintain_on: bool = False,
               hold_s: float = 0.0,
@@ -338,13 +344,25 @@ def move_loop(*,
               writers=None,
               log=None,
               abort_fn=None) -> Outcome:
-    """Drive forward until ``target_class`` fills ``fwd_fill`` of the frame.
+    """Drive forward toward ``target_class`` -- stop at a fill ratio or pass through.
 
-    ``mode`` picks the fill metric (area/width/height). ``maintain_on``
-    holds a lateral pixel offset (``maintain_px``) while driving; depth
-    and yaw are never commanded (ArduSub holds depth; heading lock or the
-    autopilot holds yaw). ``hold_s`` station-keeps at the fill target
-    before exiting. Returns an Outcome -- never raises on a miss.
+    Two modes:
+
+    * **fill-stop** (default): drive forward, slowing as the bbox fills,
+      until it reaches ``fwd_fill`` (measured by ``mode``); ``hold_s``
+      station-keeps there before exiting.
+    * **pass-through** (``passthrough=True``, selected by the DSL when
+      ``move(fwd=None)``): drive forward at ``gain`` while the target is
+      visible; once the target has been seen and then leaves the frame,
+      keep driving for a commit window (``hold_s`` if given, else
+      ``_PASSTHROUGH_COMMIT_S``) and report ALIGNED -- this carries the
+      hull *through* the gate. If the target is never seen, falls back to
+      the normal loss path (LOST -> mission fallback search).
+
+    ``maintain_on`` holds a lateral pixel offset (``maintain_px``) while
+    driving; depth and yaw are never commanded (ArduSub holds depth;
+    heading lock or the autopilot holds yaw). Returns an Outcome -- never
+    raises on a miss.
     """
     if mode not in VALID_MODES:
         raise ValueError(f"move_loop: mode must be one of {sorted(VALID_MODES)}")
@@ -366,16 +384,22 @@ def move_loop(*,
                 lateral=Pixhawk.percent_to_pwm(lat_pct),
                 yaw=1500, throttle=1500)
 
-    lost_since: Optional[float] = None
-    reached_at: Optional[float] = None
-    last_log   = 0.0
-    last_fill  = 0.0
+    seen_once    = False
+    lost_since:   Optional[float] = None
+    reached_at:   Optional[float] = None
+    commit_until: Optional[float] = None
+    last_log     = 0.0
+    last_fill    = 0.0
     last_lat_err = 0.0
 
+    # Pass-through commit window: hold_s overrides the module default.
+    commit_s = hold_s if hold_s > 0.0 else _PASSTHROUGH_COMMIT_S
+
     log.info(
-        f"[VIS  ] move class={target_class!r} fwd_fill={fwd_fill * 100:.0f}% "
+        f"[VIS  ] move class={target_class!r} "
+        f"{'PASS-THROUGH commit=%.1fs' % commit_s if passthrough else 'fwd_fill=%.0f%%' % (fwd_fill * 100)} "
         f"mode={mode} maintain={'%+.0fpx' % maintain_px if maintain_on else 'off'} "
-        f"hold={hold_s:.0f}s gain={gain:.0f}% dur={duration:.0f}s")
+        f"gain={gain:.0f}% dur={duration:.0f}s")
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
@@ -386,11 +410,31 @@ def move_loop(*,
             if abort_fn and abort_fn():
                 return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed)
             if now >= deadline:
-                return Outcome(TIMEOUT, "fill not reached (duration elapsed)",
-                               last_lat_err, last_fill, elapsed)
+                reason = ("passed-through window not closed (duration elapsed)"
+                          if passthrough else "fill not reached (duration elapsed)")
+                return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed)
 
-            sample = vision_state.bbox_error(target_class)
-            if not _present(sample):
+            sample  = vision_state.bbox_error(target_class)
+            present = _present(sample)
+
+            # Pass-through trigger: the target was seen and has now left the
+            # frame -- keep driving straight for the commit window so the hull
+            # clears the gate, then report success.
+            if passthrough and seen_once and not present:
+                reached_at = None
+                if commit_until is None:
+                    commit_until = now + commit_s
+                    log.info(f"[VIS  ] move: {target_class!r} cleared frame -- "
+                             f"committing {commit_s:.1f}s to pass through")
+                if now >= commit_until:
+                    writers.neutral()
+                    return Outcome(ALIGNED, "passed through", last_lat_err,
+                                   last_fill, elapsed)
+                _drive(gain, 0.0)   # no detection -> no lateral, just drive on
+                time.sleep(1.0 / LOOP_HZ)
+                continue
+
+            if not present:
                 reached_at = None
                 _drive(0.0, 0.0)
                 if lost_since is None:
@@ -411,7 +455,9 @@ def move_loop(*,
                 time.sleep(1.0 / LOOP_HZ)
                 continue
 
-            lost_since = None
+            seen_once    = True
+            lost_since   = None
+            commit_until = None
             fill = _fill(sample, mode)
             last_fill = fill
 
@@ -420,6 +466,16 @@ def move_loop(*,
                 ctrl = sample.ex - maintain_px / half_w
                 last_lat_err = abs(ctrl) * half_w
                 lat_pct = _clamp(ctrl * kp_lat, -gain, gain)
+
+            if passthrough:
+                # Drive forward at the speed cap until the target leaves frame.
+                _drive(gain, lat_pct)
+                if (now - last_log) >= LOG_THROTTLE_S:
+                    log.info(f"[VIS  ] move PASS-THROUGH fill={fill * 100:5.1f}% "
+                             f"fwd={gain:.0f}% lat={lat_pct:+5.1f}%")
+                    last_log = now
+                time.sleep(1.0 / LOOP_HZ)
+                continue
 
             if fill >= fwd_fill:
                 if reached_at is None:

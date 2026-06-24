@@ -125,9 +125,15 @@ class VisionVerbs:
 
         ``mode`` is the fill metric (area/width/height). ``maintain_on``
         holds a lateral pixel offset (``maintain_px``) while driving;
-        depth/yaw are never commanded. Returns a Move.Result with
-        ``success=True`` and the outcome code in ``final_value``.
+        depth/yaw are never commanded. A ``fwd_fill`` <= 0 selects
+        PASS-THROUGH: drive forward until the target is seen and then
+        leaves the frame, plus a commit overshoot (used to go *through* a
+        gate). Returns a Move.Result with ``success=True`` and the
+        outcome code in ``final_value``.
         """
+        # fwd_fill <= 0 is the pass-through sentinel (DSL move(fwd=None) /
+        # CLI --fwd_fill -1). Anything > 0 is a real fill-% stop target.
+        passthrough = float(fwd_fill) <= 0.0
         with self._command_scope('vision_move'):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
@@ -138,7 +144,8 @@ class VisionVerbs:
             self._ensure_alt_hold('vision_move')
             self.log.info(
                 f'[CMD  ] vision_move camera={camera!r} class={target_class!r} '
-                f'fwd_fill={float(fwd_fill):.0f}% mode={mode} '
+                f'{"PASS-THROUGH" if passthrough else "fwd_fill=%.0f%%" % float(fwd_fill)} '
+                f'mode={mode} '
                 f'maintain={"%+.0fpx" % maintain_px if maintain_on else "off"} '
                 f'hold={float(hold_s):.0f}s gain={float(gain):.0f}%')
             outcome = move_loop(
@@ -146,6 +153,7 @@ class VisionVerbs:
                 target_class=target_class,
                 fwd_fill=float(fwd_fill) / 100.0,
                 mode=str(mode) or 'area',
+                passthrough=passthrough,
                 maintain_px=float(maintain_px),
                 maintain_on=bool(maintain_on),
                 hold_s=float(hold_s),

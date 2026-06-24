@@ -57,7 +57,7 @@ FIRE_CHANNEL           = 1      # 1=torpedo_1  2=torpedo_2  (always explicit)
 SEARCH_FORWARD_GAIN    = 40     # % thrust per creep
 SEARCH_CREEP_S         = 0.8    # seconds of forward creep per fallback cycle
 
-_FWD = '/duburi_detector_fwd'
+_FWD = '/duburi_detector_forward'
 
 
 def run(duburi, log=None):

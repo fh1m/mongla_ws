@@ -30,8 +30,8 @@ def run(duburi, log=None):
         duburi.turn(SLALOM_HEADING_DEG)
 
     duburi.resume_detector('forward')
-    duburi.set_model('slalom_red_pipe', node='/duburi_detector_fwd')
-    duburi.set_classes('red_pipe', node='/duburi_detector_fwd')
+    duburi.set_model('slalom_red_pipe', node='/duburi_detector_forward')
+    duburi.set_classes('red_pipe', node='/duburi_detector_forward')
 
     # ── Weave: sit beside each pipe (signed lateral offset), then close in ────
     # ponytail: simple two-pass (right of pipe, then left). Add passes if needed.

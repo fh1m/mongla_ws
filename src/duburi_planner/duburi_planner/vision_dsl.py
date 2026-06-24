@@ -92,11 +92,15 @@ class _VisionDSL:
     def _resolve_camera(self, camera) -> str:
         return camera if camera else self._dsl.camera
 
-    def _resolve_target(self, target) -> str:
-        """string -> use as-is; ClassRef -> switch detector model/class first."""
+    def _resolve_target(self, target, camera: Optional[str] = None) -> str:
+        """string -> use as-is; ClassRef -> switch detector model/class first.
+
+        ``camera`` selects which detector node gets reprogrammed so the
+        model/class switch lands on the same node the verb will read from.
+        """
         if isinstance(target, ClassRef):
-            self._dsl.set_model(target.model_name)
-            self._dsl.set_classes(target.class_name)
+            self._dsl.set_model(target.model_name, camera=camera)
+            self._dsl.set_classes(target.class_name, camera=camera)
             return target.class_name
         return target if target else self._dsl.target
 
@@ -127,13 +131,16 @@ class _VisionDSL:
                   if val is not None]
         if not active:
             raise ValueError(
-                "vision.align: at least one axis required -- pass a number "
-                "to lat=, yaw=, or depth= (0 = centre).")
+                "vision.align needs at least one axis as a KEYWORD with a "
+                "number: align('gate', yaw=0, lat=0) centres on yaw+lat "
+                "(0 = centre, a number = signed px offset). Bare names like "
+                "align('gate', yaw, lat) do not work -- the axes are "
+                "keyword-only.")
 
         axes_csv = ','.join(name for name, _ in active)
         offsets = {name: float(val) for name, val in active}
         cam     = self._resolve_camera(camera)
-        tgt     = self._resolve_target(target)
+        tgt     = self._resolve_target(target, cam)
 
         def _one_shot(remaining: float):
             return self._send(
@@ -152,7 +159,7 @@ class _VisionDSL:
     #  move -- drive forward to a bbox fill ratio                         #
     # ================================================================== #
     def move(self, target=None, *,
-             fwd: float = 95.0,
+             fwd: Optional[float] = None,
              mode: str = 'area',
              maintain: Optional[float] = None,
              hold: Optional[float] = None,
@@ -161,24 +168,38 @@ class _VisionDSL:
              gain: float = 30.0,
              fallback: Optional[Callable] = None,
              camera: Optional[str] = None) -> VisionResult:
-        """Drive forward until ``target`` fills ``fwd`` % of the frame.
+        """Drive forward toward ``target``; stop at a fill ratio or pass through.
+
+        ``fwd`` is the bbox fill % at which to stop. **Leave it unset
+        (``fwd=None``, the default) to PASS THROUGH**: the AUV drives
+        forward until the target is seen and then leaves the frame
+        (passed / lost), plus a short commit overshoot to fully clear it
+        -- this is what gets the vehicle *through* a gate. A number (e.g.
+        ``fwd=80``) instead stops once the bbox fills that % (use it to
+        stand off in front of a target).
 
         ``mode`` is the fill metric (``area`` default, ``width``,
         ``height`` for slalom). ``maintain`` (px) holds a lateral offset
         while driving (``None`` = pure forward, never touches lat/yaw/
-        depth). ``hold`` (s) station-keeps once reached (``None`` = exit
-        on reach). Never re-centres yaw/depth. Returns a
-        :class:`VisionResult`; never raises on a miss.
+        depth). ``hold`` (s) station-keeps once a fill target is reached
+        (ignored in pass-through, where it sets the commit overshoot).
+        Never re-centres yaw/depth. Returns a :class:`VisionResult`;
+        never raises on a miss.
         """
         cam = self._resolve_camera(camera)
-        tgt = self._resolve_target(target)
+        tgt = self._resolve_target(target, cam)
         maintain_on = maintain is not None
+        # fwd=None -> pass-through: wire a negative sentinel so it survives
+        # the manager's `0.0 == unset` rule (which would otherwise restore
+        # the 95% spec default). The control loop treats fwd_fill <= 0 as
+        # "drive through until the target leaves the frame".
+        fwd_fill = -1.0 if fwd is None else float(fwd)
 
         def _one_shot(remaining: float):
             return self._send(
                 'vision_move',
                 camera=cam, target_class=tgt,
-                fwd_fill=float(fwd), mode=str(mode),
+                fwd_fill=fwd_fill, mode=str(mode),
                 maintain_px=float(maintain) if maintain_on else 0.0,
                 maintain_on=maintain_on,
                 hold_s=float(hold) if hold is not None else 0.0,

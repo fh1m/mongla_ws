@@ -70,8 +70,8 @@ SEARCH_YAW_STEP_DEG      = 15    # degrees per sweep look
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-_FWD = '/duburi_detector_fwd'
-_DWN = '/duburi_detector_dwn'
+_FWD = '/duburi_detector_forward'
+_DWN = '/duburi_detector_downward'
 
 
 def run(duburi, log=None):
