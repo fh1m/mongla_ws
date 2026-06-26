@@ -244,6 +244,63 @@ def test_align_yaw_polarity_mirrors_for_negative_ex():
     assert max(yaw) < 1500, 'ex<0 must give Ch4<1500 (mirrors lateral polarity)'
 
 
+def test_align_yaw_neutral_when_in_band():
+    # No shot-jitter: when the target is inside err_px the yaw channel must
+    # command exactly 1500 (still) so the mission can fire on a steady hull.
+    pix = _FakePixhawk()
+    # ex=0.05 on a 640px frame -> epx = 0.05*320 = 16px, inside err_px=40.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.05)), pix=pix,
+                       axes={'yaw'}, kp_yaw=60.0, gain=30.0, err_px=40.0)
+    assert out.code == ALIGNED                 # in-band -> stable -> aligned
+    yaws = [c.get('yaw', 1500) for c in pix.rc]
+    assert yaws, 'expected yaw RC frames'
+    assert all(y == 1500 for y in yaws), (
+        'in-band yaw must be neutral 1500 (no thrust when aligned)')
+
+
+def test_align_yaw_min_floor_spins_thruster_on_small_error():
+    # The hole-lock fix: a small OUT-of-band yaw error whose pure-proportional
+    # output is below the T200 spin-up floor must be bumped UP to the floor so
+    # the thruster actually turns -- otherwise micro-corrections die in the
+    # dead-zone and the lock stalls just outside err_px.
+    from duburi_control.motion_vision import VISION_YAW_MIN_PCT
+    pix = _FakePixhawk()
+    # err_px=10, ex=0.06 -> epx=19.2px (out of band). Proportional would be
+    # 0.06*60 = 3.6% (pwm 1514) -- below the 5% floor; must floor to 5% (1520).
+    _align(_FakeVision(_sample(ex=0.06)), pix=pix,
+           axes={'yaw'}, kp_yaw=60.0, gain=30.0, err_px=10.0, duration=0.25)
+    floor_pwm = _FakePixhawk.percent_to_pwm(VISION_YAW_MIN_PCT)   # 1520
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert yaw, 'expected yaw thrust on a small out-of-band error'
+    assert min(yaw) >= floor_pwm, (
+        'small out-of-band yaw must be floored to the spin-up minimum, '
+        'not a sub-threshold dribble')
+
+
+def test_align_yaw_floor_never_exceeds_gain_cap():
+    # If the operator picks a gain below the floor (very slow fine-lock), the
+    # gain cap must still win -- the floor must never push thrust above gain.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0)), pix=pix,
+           axes={'yaw'}, kp_yaw=60.0, gain=3.0, err_px=10.0, duration=0.25)
+    cap = _FakePixhawk.percent_to_pwm(3.0)     # gain=3% -> 1512
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert yaw, 'expected yaw thrust commands'
+    assert max(yaw) == cap, 'gain cap must bound the floor (floor <= gain)'
+
+
+def test_align_yaw_and_lat_share_one_override_packet():
+    # "Wired" when multiple axes are active: yaw + lat must land in the SAME
+    # send_rc_override frame (not split / not clobbering each other).
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0)), pix=pix,
+           axes={'yaw', 'lat'}, kp_yaw=60.0, kp_lat=60.0, gain=30.0,
+           err_px=10.0, duration=0.25)
+    both = [c for c in pix.rc
+            if c.get('lateral', 1500) != 1500 and c.get('yaw', 1500) != 1500]
+    assert both, 'yaw+lat align must emit Ch6 and Ch4 in the same RC packet'
+
+
 def test_align_lost_after_grace():
     out, _, _ = _align(_FakeVision(None), lost_grace_s=0.1, duration=2.0)
     assert out.code == LOST
