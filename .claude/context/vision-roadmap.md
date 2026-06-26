@@ -199,8 +199,13 @@ from "raises NotImplementedError" to "actually works".
     `motion_lateral.py` ground truth (Ch6 > 1500 = strafe RIGHT).
   - Verified by IBVS interaction matrix theory: positive image error → positive
     lateral velocity → Ch6 > 1500 (no negation needed).
-- **Yaw convention confirmed correct**: `yaw_pct = -ex * kp_yaw` stays negated
-  because Ch4 > 1500 = yaw LEFT (inverted stick convention).
+- **Yaw convention corrected (2026-06, pool-verified)**: `yaw_pct = +ex * kp_yaw`
+  (NO negation -- same polarity as the lateral axis above). The earlier
+  "confirmed correct, stays negated" claim was a reasoning-confirmation derived
+  from the "Ch4 > 1500 = yaw LEFT" label, not an empirical toward-target test;
+  in the water the `-ex` negation drove the AUV *away* from the target. The
+  working lateral axis and `heading_lock` (which derives Ch4 sign from heading
+  math) both confirm the un-negated sign.
 - `demo_move_see.py` (formerly `move_and_see.py`) docstring/code sync: `yaw=False` (was `True`).
 
 ## v4e — Display System Overhaul (2025–2026)

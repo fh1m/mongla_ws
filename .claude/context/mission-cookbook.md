@@ -757,7 +757,7 @@ else:
     half_w, half_h = W/2, H/2
     # per ACTIVE axis: signed pixel control error (offset shifts the aim point)
     'yaw':   ctrl = sample.ex - off_yaw/half_w;  epx = |ctrl|*half_w
-             yaw_pct = clamp(-ctrl * kp_yaw, -gain, +gain)      -> Ch4 (negated)
+             yaw_pct = clamp( ctrl * kp_yaw, -gain, +gain)      -> Ch4 (no negate)
     'lat':   ctrl = sample.ex - off_lat/half_w;  epx = |ctrl|*half_w
              lat_pct = clamp( ctrl * kp_lat, -gain, +gain)      -> Ch6
     'depth': ctrl = sample.ey - off_dep/half_h;  epx = |ctrl|*half_h
@@ -781,7 +781,8 @@ if maintain_on:                     # optional lateral hold while driving
 - Depth integrates **incrementally** so ALT_HOLD never sees a step jump
   (`nudge = 0.02 m × gain/100` per tick).
 - Sign rules (forward cam): `ex>0` = target right, `ey>0` = target below.
-  Ch4>1500 = yaw LEFT, so yaw is negated; Ch6>1500 = strafe RIGHT, no negate.
+  Ch4>1500 = yaw RIGHT and Ch6>1500 = strafe RIGHT (current hull), so neither
+  yaw nor lat is negated — both share `ex` polarity (pool-verified 2026-06).
 - `gain` is a hard clamp on every output — the AUV never exceeds it.
 
 Reference implementation:
