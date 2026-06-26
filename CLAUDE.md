@@ -287,7 +287,7 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 | `duburi.fire(n)` | Fire payload channel n via ESP32 serial (1/2=torpedo, 3/4=dropper); `duburi.payload_ready()` to check |
 | `duburi.mission_reset()` | **Call at start of every `run()`.** Stops heading lock, clears `_abort_event`, sends RC neutral. Safe before arm (`_UNARM_SAFE`). Prevents state carry-over across back-to-back pool runs. |
 
-**RC direction:** Ch4 > 1500 = yaw LEFT (inverted); Ch5 > 1500 = forward; Ch6 > 1500 = strafe RIGHT.
+**RC direction (current Duburi hull, pool-verified 2026-06):** Ch4 > 1500 = yaw RIGHT; Ch5 > 1500 = forward; Ch6 > 1500 = strafe RIGHT. (The 2023 reference hull was RC4-reversed — Ch4 > 1500 = LEFT there; polarity is an `RC4_REVERSED`/frame-config property, so re-confirm per hull with a bare `Ch4=1600` check. `heading_lock`/`motion_yaw` are polarity-correct regardless — they derive Ch4 sign from `heading_error` math, never from this label.)
 **Heartbeat:** owned by `auv_manager_node` ROS2 timer — do not roll your own.
 **Stream rates:** pinned at startup via `MAV_CMD_SET_MESSAGE_INTERVAL` (AHRS2=50 Hz, RC=5 Hz, BAT=1 Hz).
 
@@ -320,7 +320,7 @@ an absolute-attitude setpoint. (There is no `SET_ATTITUDE_TARGET` anywhere in th
 | Arc       | `RC_CHANNELS_OVERRIDE` Ch5 + Ch4 (20 Hz, single packet) | open loop | curved car-style trajectory    |
 | Heading lock | `RC_CHANNELS_OVERRIDE` Ch4 rate (50 Hz, background) | ArduSub rate loop + Python P-loop | continuous yaw hold across other commands |
 | Vision lateral | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz) | vision loop inside manager | +ex → Ch6 > 1500 → strafe RIGHT (no negation) |
-| Vision yaw     | `RC_CHANNELS_OVERRIDE` Ch4 rate (20 Hz) | vision loop inside manager | −ex → Ch4 < 1500 → yaw RIGHT (Ch4 inverted, negation needed) |
+| Vision yaw     | `RC_CHANNELS_OVERRIDE` Ch4 rate (20 Hz) | vision loop inside manager | +ex → yaw toward target (no negation; same polarity as vision lateral — pool-verified 2026-06) |
 
 The two ROS params `smooth_yaw` / `smooth_translate` (both default `false`) optionally shape the *setpoint* (smootherstep / trapezoid_ramp) before it reaches the autopilot — they don't replace the autopilot's inner loop.
 

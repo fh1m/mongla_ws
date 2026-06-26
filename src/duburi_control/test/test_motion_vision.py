@@ -217,6 +217,33 @@ def test_align_gain_caps_speed():
     assert max(lateral) == cap          # full error saturates exactly at gain
 
 
+def test_align_yaw_same_polarity_as_lateral():
+    # Sign regression pin: yaw must use the SAME polarity as the working lateral
+    # axis on the same `ex` (no negation). ex>0 -> Ch4>1500, matching lateral's
+    # ex>0 -> Ch6>1500. This guards against re-introducing the old `-ctrl`
+    # negation. (Physical yaw DIRECTION is pool-verified, not asserted here --
+    # this test only pins the numeric polarity / lateral-parity.)
+    pix = _FakePixhawk()
+    out, _, _ = _align(_FakeVision(_sample(ex=1.0)), pix=pix,
+                       axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.25)
+    assert out.code == TIMEOUT          # full-right never centres -> times out
+    cap = _FakePixhawk.percent_to_pwm(30.0)   # 1620
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert yaw, 'expected yaw thrust commands on Ch4'
+    assert min(yaw) > 1500, 'ex>0 must give Ch4>1500 (same polarity as lateral)'
+    assert max(yaw) == cap, 'full error saturates exactly at gain'
+
+
+def test_align_yaw_polarity_mirrors_for_negative_ex():
+    # Mirror pin: ex<0 -> Ch4<1500 (same sign relationship as lateral).
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=-1.0)), pix=pix,
+           axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.25)
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert yaw, 'expected yaw thrust commands on Ch4'
+    assert max(yaw) < 1500, 'ex<0 must give Ch4<1500 (mirrors lateral polarity)'
+
+
 def test_align_lost_after_grace():
     out, _, _ = _align(_FakeVision(None), lost_grace_s=0.1, duration=2.0)
     assert out.code == LOST

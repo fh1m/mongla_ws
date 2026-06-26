@@ -26,7 +26,9 @@ Sign rules (forward camera, image y grows downward)
 ---------------------------------------------------
   ex > 0  -> target RIGHT of centre
   ey > 0  -> target BELOW centre
-  yaw : Ch4 > 1500 = yaw LEFT, so target-right needs Ch4 < 1500 -> NEGATE
+  yaw : target-right -> yaw RIGHT toward it -> NO negate (same polarity as
+        lateral; pool-verified -- the old `-ex` negation drove away from the
+        target)
   lat : Ch6 > 1500 = strafe RIGHT, so target-right needs Ch6 > 1500 -> NO negate
   depth: target below -> descend -> depth setpoint more negative
 
@@ -283,7 +285,12 @@ def align_loop(*,
                 ctrl = sample.ex - offsets.get('yaw', 0.0) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
-                yaw_pct = _clamp(-ctrl * kp_yaw, -gain, gain)
+                # Same polarity as the lateral axis above (no negation): a
+                # target to the RIGHT (ex > 0) yaws RIGHT toward it. The old
+                # `-ctrl` negation drove the AUV away from the target -- pool-
+                # verified inversion; the working lateral + heading_lock paths
+                # both confirm this sign.
+                yaw_pct = _clamp(ctrl * kp_yaw, -gain, gain)
                 in_band.append(epx <= err_px)
 
             if use_depth:

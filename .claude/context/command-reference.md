@@ -500,7 +500,7 @@ From [`motion_vision.py`](../../src/duburi_control/duburi_control/motion_vision.
 |---|---|
 | `ex > 0` | target is RIGHT of centre |
 | `ey > 0` | target is BELOW centre |
-| yaw | Ch4 `> 1500` = yaw LEFT, so target-right needs Ch4 `< 1500` → **negate** |
+| yaw | Ch4 `> 1500` = yaw RIGHT (current hull), so target-right needs Ch4 `> 1500` → **no negate** (same polarity as lat; pool-verified 2026-06) |
 | lat | Ch6 `> 1500` = strafe RIGHT, so target-right needs Ch6 `> 1500` → **no negate** |
 | depth | target below → descend → depth setpoint more negative |
 
