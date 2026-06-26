@@ -60,6 +60,7 @@ Their fields below; everything else is the open-loop motion surface.
 | -------------------- | -------- | ------------------------------------- |
 | `duration`           | float32  | move_*, arc, pause, vision_align, vision_move |
 | `gain`               | float32  | move_*, arc, vision_align, vision_move — for vision it is a **hard max-speed cap** (% thrust) |
+| `gain_lat`/`gain_yaw`/`gain_depth` | float32 | vision_align per-axis speed cap (vision_move uses `gain_lat` for the maintain strafe); **0 = inherit `gain`, not disable** |
 | `target`             | float32  | set_depth (m) / yaw_* (deg) / lock_heading (deg) |
 | `target_name`        | string   | set_mode                              |
 | `timeout`            | float32  | every command; defaults vary          |

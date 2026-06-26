@@ -397,7 +397,8 @@ Both verbs return `VisionResult(ok, reason, code, last_err_px, fill)`,
 **truthy only when the goal was achieved**, so you branch on it directly:
 
 ```python
-if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12):
+# yaw_gain low -> slow, stable yaw so the 20 kg hull holds the hole steady to fire.
+if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12, gain=25, yaw_gain=10):
     duburi.fire(1)                       # fire only on a confirmed lock
 else:
     log.info('hole never locked — holding fire')

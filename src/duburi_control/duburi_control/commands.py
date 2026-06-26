@@ -210,19 +210,23 @@ COMMANDS = {
     'vision_align': {
         'help':     'Centre target_class on the active axes (CSV of lat,yaw,depth) '
                     'each at its signed pixel offset (offset_lat/yaw/depth; 0=centre). '
-                    'Aligned when every active axis is within err_px. gain caps speed. '
+                    'Aligned when every active axis is within err_px. gain caps speed; '
+                    'gain_lat/gain_yaw/gain_depth override the cap per axis (0 = inherit '
+                    'gain) so e.g. yaw can micro-align slowly while lateral stays brisk. '
                     'On duration expiry it logs NOT-aligned and the mission continues. '
                     'hold_through_loss=true coasts on target loss (set by the DSL when '
                     'no fallback search is supplied).',
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
-                     'err_px', 'duration', 'gain', 'hold_through_loss',
+                     'err_px', 'duration', 'gain',
+                     'gain_lat', 'gain_yaw', 'gain_depth', 'hold_through_loss',
                      'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
                      'duration': 20.0, 'gain': 30.0,
+                     'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
                      'hold_through_loss': False,
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0},
@@ -234,17 +238,18 @@ COMMANDS = {
                     'PASS-THROUGH: drive until the target is seen and then leaves the frame, '
                     'plus a commit overshoot (hold_s, else ~2s) to carry the hull through a '
                     'gate. maintain_on holds a maintain_px lateral offset while moving; depth '
-                    'and yaw are left to ArduSub / heading lock. gain caps speed. Does NOT '
-                    're-centre.',
+                    'and yaw are left to ArduSub / heading lock. gain caps forward speed; '
+                    'gain_lat overrides the cap on the maintain strafe (0 = inherit gain). '
+                    'Does NOT re-centre.',
         'fields':   ['camera', 'target_class', 'fwd_fill', 'mode',
                      'maintain_px', 'maintain_on', 'hold_s',
-                     'err_px', 'duration', 'gain', 'hold_through_loss',
+                     'err_px', 'duration', 'gain', 'gain_lat', 'hold_through_loss',
                      'kp_forward', 'kp_lat', 'lost_grace_s'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'fwd_fill': 95.0, 'mode': 'area',
                      'maintain_px': 0.0, 'maintain_on': False,
                      'hold_s': 0.0, 'err_px': 40.0,
-                     'duration': 20.0, 'gain': 30.0,
+                     'duration': 20.0, 'gain': 30.0, 'gain_lat': 0.0,
                      'hold_through_loss': False,
                      'kp_forward': 200.0, 'kp_lat': 60.0, 'lost_grace_s': 1.0},
     },

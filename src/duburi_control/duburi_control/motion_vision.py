@@ -78,6 +78,15 @@ KP_FORWARD_DEFAULT = 200.0
 # with the bare Ch4 check (does the floor visibly spin the yaw thrusters?).
 VISION_YAW_MIN_PCT = 5.0
 
+# The yaw floor above is a hard minimum command outside the deadband. On Ch4
+# (a yaw RATE) that is a relay feeding an integrator -- a limit-cycle oscillator
+# that wobbles the hull left/right when aligning a small, distant target. Gate
+# it on bbox fill so it only engages CLOSE (large bbox), where it does its real
+# job: break T200 stiction for the tight hole-lock. Far away (small bbox) yaw is
+# left pure-proportional and decays cleanly into the deadband with no relay.
+# Pool-tunable: confirm the re-engage distance on pool day.
+VISION_YAW_FLOOR_FILL = 0.25
+
 # A detection older than this (seconds) counts as "no target this tick".
 # bbox_error() returns None when the class is absent; this only catches a
 # detector that has died while the last box is still cached.
@@ -179,6 +188,9 @@ def align_loop(*,
                err_px: float,
                duration: float,
                gain: float,
+               gain_lat: Optional[float] = None,
+               gain_yaw: Optional[float] = None,
+               gain_depth: Optional[float] = None,
                kp_lat: float = KP_LAT_DEFAULT,
                kp_yaw: float = KP_YAW_DEFAULT,
                kp_depth: float = KP_DEPTH_DEFAULT,
@@ -208,9 +220,16 @@ def align_loop(*,
     width, height = vision_state.image_size()
     half_w, half_h = width * 0.5, height * 0.5
 
+    # Per-axis speed caps: each falls back to the global `gain` when unset, so
+    # `align(gain=30)` caps every axis at 30% while `align(gain=40, yaw_gain=15)`
+    # slows only yaw. (Mirrors the kp_* `or DEFAULT` idiom at the call site.)
+    g_lat   = gain if gain_lat   is None else gain_lat
+    g_yaw   = gain if gain_yaw   is None else gain_yaw
+    g_depth = gain if gain_depth is None else gain_depth
+
     use_depth   = 'depth' in axes
     throttle_ch = 65535 if use_depth else 1500   # release Ch3 for ALT_HOLD depth PID
-    max_nudge   = _MAX_DEPTH_NUDGE * max(gain, 0.0) / 100.0
+    max_nudge   = _MAX_DEPTH_NUDGE * max(g_depth, 0.0) / 100.0
 
     depth_setpoint = _read_depth(pixhawk)
 
@@ -290,7 +309,7 @@ def align_loop(*,
                 ctrl = sample.ex - offsets.get('lat', 0.0) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
-                lat_pct = _clamp(ctrl * kp_lat, -gain, gain)
+                lat_pct = _clamp(ctrl * kp_lat, -g_lat, g_lat)
                 in_band.append(epx <= err_px)
 
             if 'yaw' in axes:
@@ -300,15 +319,19 @@ def align_loop(*,
                 # Polarity: un-negated, same as the lateral axis (ex > 0 ->
                 # target RIGHT -> yaw RIGHT). Inside the err_px deadband we
                 # command 0 (let the hull settle, no shot-jitter when the
-                # mission fires in-band); outside it we floor the magnitude to
-                # VISION_YAW_MIN_PCT (never above the `gain` cap) so even a few
-                # residual pixels still spin the yaw thrusters and the tight
-                # hole-lock can actually reach centre.
+                # mission fires in-band). Outside it, pure proportional capped
+                # by g_yaw -- and ONLY when the bbox is large (target close) do
+                # we floor the magnitude to VISION_YAW_MIN_PCT to break T200
+                # stiction for the tight hole-lock. Far away (small bbox) the
+                # floor is suppressed: a hard minimum on a rate channel is a
+                # relay that limit-cycles the hull, which is the far-field
+                # wobble. See VISION_YAW_FLOOR_FILL.
                 if epx <= err_px:
                     yaw_pct = 0.0
                 else:
-                    mag = min(abs(ctrl * kp_yaw), gain)
-                    mag = max(mag, min(VISION_YAW_MIN_PCT, gain))
+                    mag = min(abs(ctrl * kp_yaw), g_yaw)
+                    if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
+                        mag = max(mag, min(VISION_YAW_MIN_PCT, g_yaw))
                     yaw_pct = math.copysign(mag, ctrl)
                 in_band.append(epx <= err_px)
 
@@ -362,6 +385,7 @@ def move_loop(*,
               err_px: float = 40.0,
               duration: float = 20.0,
               gain: float = 30.0,
+              gain_lat: Optional[float] = None,
               kp_forward: float = KP_FORWARD_DEFAULT,
               kp_lat: float = KP_LAT_DEFAULT,
               lost_grace_s: float = 1.0,
@@ -398,6 +422,9 @@ def move_loop(*,
                        elapsed_s=0.0)
     width, height = vision_state.image_size()
     half_w = width * 0.5
+
+    # Lateral 'maintain' strafe gets its own cap; forward stays capped by `gain`.
+    g_lat = gain if gain_lat is None else gain_lat
 
     def _drive(fwd_pct: float, lat_pct: float) -> None:
         if release_yaw:
@@ -491,7 +518,7 @@ def move_loop(*,
             if maintain_on:
                 ctrl = sample.ex - maintain_px / half_w
                 last_lat_err = abs(ctrl) * half_w
-                lat_pct = _clamp(ctrl * kp_lat, -gain, gain)
+                lat_pct = _clamp(ctrl * kp_lat, -g_lat, g_lat)
 
             if passthrough:
                 # Drive forward at the speed cap until the target leaves frame.

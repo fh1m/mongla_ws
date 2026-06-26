@@ -258,35 +258,101 @@ def test_align_yaw_neutral_when_in_band():
         'in-band yaw must be neutral 1500 (no thrust when aligned)')
 
 
-def test_align_yaw_min_floor_spins_thruster_on_small_error():
-    # The hole-lock fix: a small OUT-of-band yaw error whose pure-proportional
-    # output is below the T200 spin-up floor must be bumped UP to the floor so
-    # the thruster actually turns -- otherwise micro-corrections die in the
-    # dead-zone and the lock stalls just outside err_px.
+def test_align_yaw_min_floor_spins_thruster_when_close():
+    # The hole-lock fix, CLOSE regime: a large bbox (fill >= VISION_YAW_FLOOR_FILL)
+    # means the target is near, so a small OUT-of-band yaw error whose
+    # pure-proportional output is below the T200 spin-up floor must be bumped UP
+    # to the floor -- otherwise micro-corrections die in the dead-zone and the
+    # tight lock stalls just outside err_px.
     from duburi_control.motion_vision import VISION_YAW_MIN_PCT
     pix = _FakePixhawk()
-    # err_px=10, ex=0.06 -> epx=19.2px (out of band). Proportional would be
-    # 0.06*60 = 3.6% (pwm 1514) -- below the 5% floor; must floor to 5% (1520).
-    _align(_FakeVision(_sample(ex=0.06)), pix=pix,
+    # Big bbox -> close. err_px=10, ex=0.06 -> epx=19.2px (out of band).
+    # Proportional 0.06*60 = 3.6% (pwm 1514) -- below the 5% floor; close so the
+    # floor engages -> must floor to 5% (1520).
+    _align(_FakeVision(_sample(ex=0.06, w_frac=0.6, h_frac=0.6)), pix=pix,
            axes={'yaw'}, kp_yaw=60.0, gain=30.0, err_px=10.0, duration=0.25)
     floor_pwm = _FakePixhawk.percent_to_pwm(VISION_YAW_MIN_PCT)   # 1520
     yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
     assert yaw, 'expected yaw thrust on a small out-of-band error'
     assert min(yaw) >= floor_pwm, (
-        'small out-of-band yaw must be floored to the spin-up minimum, '
-        'not a sub-threshold dribble')
+        'close-up small out-of-band yaw must be floored to the spin-up minimum')
+
+
+def test_align_yaw_no_floor_when_far_pure_proportional():
+    # The wobble fix, FAR regime: a small bbox (fill < VISION_YAW_FLOOR_FILL) means
+    # the target is distant. The floor MUST be suppressed so yaw stays pure
+    # proportional and decays into the deadband -- a hard minimum on a rate channel
+    # is a relay that limit-cycles (the left/right far-field wobble).
+    from duburi_control.motion_vision import VISION_YAW_MIN_PCT
+    pix = _FakePixhawk()
+    # Small bbox -> far. Same small error as the close test, but proportional
+    # 3.6% (pwm 1514) must be left as-is, BELOW the 5% floor pwm (1520).
+    _align(_FakeVision(_sample(ex=0.06, w_frac=0.05, h_frac=0.05)), pix=pix,
+           axes={'yaw'}, kp_yaw=60.0, gain=30.0, err_px=10.0, duration=0.25)
+    floor_pwm = _FakePixhawk.percent_to_pwm(VISION_YAW_MIN_PCT)   # 1520
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert yaw, 'expected proportional yaw thrust on a small far-field error'
+    assert max(yaw) < floor_pwm, (
+        'far-field yaw must stay pure-proportional below the floor (no relay)')
 
 
 def test_align_yaw_floor_never_exceeds_gain_cap():
     # If the operator picks a gain below the floor (very slow fine-lock), the
     # gain cap must still win -- the floor must never push thrust above gain.
+    # Close bbox so the floor path actually runs.
     pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ex=1.0)), pix=pix,
+    _align(_FakeVision(_sample(ex=1.0, w_frac=0.6, h_frac=0.6)), pix=pix,
            axes={'yaw'}, kp_yaw=60.0, gain=3.0, err_px=10.0, duration=0.25)
     cap = _FakePixhawk.percent_to_pwm(3.0)     # gain=3% -> 1512
     yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
     assert yaw, 'expected yaw thrust commands'
     assert max(yaw) == cap, 'gain cap must bound the floor (floor <= gain)'
+
+
+# --------------------------------------------------------------------------- #
+#  align_loop -- per-axis gain caps                                            #
+# --------------------------------------------------------------------------- #
+def test_align_per_axis_gain_caps_yaw_independently_of_lat():
+    # gain=40 globally, yaw_gain=10 just for yaw: full-right target saturates
+    # both axes, so yaw clamps at 10% (slow micro-align) while lateral still
+    # drives at the global 40% cap.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0)), pix=pix,
+           axes={'yaw', 'lat'}, kp_yaw=60.0, kp_lat=60.0,
+           gain=40.0, gain_yaw=10.0, err_px=10.0, duration=0.25)
+    yaw_cap = _FakePixhawk.percent_to_pwm(10.0)   # 1540
+    lat_cap = _FakePixhawk.percent_to_pwm(40.0)   # 1660
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    assert yaw and lat
+    assert max(yaw) == yaw_cap, 'yaw must clamp at its own per-axis cap (10%)'
+    assert max(lat) == lat_cap, 'lateral must still use the global gain (40%)'
+
+
+def test_align_per_axis_gain_unset_inherits_global():
+    # yaw_gain left None -> inherits gain=20; full-right saturates at 20%.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0)), pix=pix,
+           axes={'yaw'}, kp_yaw=60.0, gain=20.0, err_px=10.0, duration=0.25)
+    cap = _FakePixhawk.percent_to_pwm(20.0)   # 1580
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert yaw and max(yaw) == cap, 'unset per-axis gain must inherit the global cap'
+
+
+def test_align_per_axis_gain_depth_scales_nudge():
+    # depth setpoint excursion must scale with gain_depth (it drives max_nudge),
+    # independently of the global gain. Larger gain_depth -> larger depth move
+    # over the same run. (Cadence-independent: compares total excursion.)
+    def _depth_excursion(g_depth):
+        pix = _FakePixhawk()
+        _align(_FakeVision(_sample(ey=1.0, w_frac=0.3, h_frac=0.3)), pix=pix,
+               axes={'depth'}, kp_depth=0.05, gain=40.0, gain_depth=g_depth,
+               err_px=10.0, duration=0.4)
+        return abs(pix.depths[-1] - (-0.5)) if pix.depths else 0.0
+    small = _depth_excursion(10.0)
+    large = _depth_excursion(50.0)
+    assert large > small > 0.0, (
+        'gain_depth must scale the depth nudge (50 deepens more than 10)')
 
 
 def test_align_yaw_and_lat_share_one_override_packet():
@@ -369,6 +435,21 @@ def test_move_maintain_lateral_clamped():
     lateral = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
     assert lateral
     assert max(lateral) <= cap
+
+
+def test_move_per_axis_gain_lat_caps_strafe_not_forward():
+    # gain=50 forward, gain_lat=10 for the maintain strafe: a far, off-centre
+    # target drives forward at the 50% cap while the lateral correction is held
+    # to its own slow 10% cap.
+    out, pix, _ = _move(_FakeVision(_sample(ex=1.0, w_frac=0.1, h_frac=0.1)),
+                        fwd_fill=0.8, maintain_on=True, maintain_px=0.0,
+                        kp_lat=60.0, gain=50.0, gain_lat=10.0, duration=0.25)
+    assert out.code == TIMEOUT
+    fwd = [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    assert fwd and lat
+    assert max(fwd) <= _FakePixhawk.percent_to_pwm(50.0), 'forward keeps the global cap'
+    assert max(lat) == _FakePixhawk.percent_to_pwm(10.0), 'strafe uses its own cap'
 
 
 def test_move_lost_after_grace():

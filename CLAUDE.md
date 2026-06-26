@@ -396,10 +396,11 @@ Engine: `motion_vision.align_loop` / `move_loop`. Source of truth for signatures
 
 | DSL method | Action verb | What it does |
 |---|---|---|
-| `vision.align(target, lat=, yaw=, depth=, err=, duration=, gain=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one axis. |
-| `vision.move(target, fwd=, mode=, maintain=, hold=, err=, duration=, gain=, fallback=)` | `vision_move` | Drive forward until bbox fills `fwd`% (`mode`=area/width/height). `maintain`=±px lateral offset; never re-centres yaw/depth. |
+| `vision.align(target, lat=, yaw=, depth=, err=, duration=, gain=, lat_gain=, yaw_gain=, depth_gain=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one axis. |
+| `vision.move(target, fwd=, mode=, maintain=, hold=, err=, duration=, gain=, lat_gain=, fallback=)` | `vision_move` | Drive forward until bbox fills `fwd`% (`mode`=area/width/height). `maintain`=±px lateral offset; never re-centres yaw/depth. |
 
 - **`gain` is a hard max-speed cap** (% thrust), not a target speed — the AUV never exceeds it.
+- **Per-axis caps** `lat_gain`/`yaw_gain`/`depth_gain` (align) and `lat_gain` (move's `maintain` strafe) override `gain` on one axis; **unset = inherit `gain`, NOT disable** (to drop an axis, omit `lat`/`yaw`/`depth`). Use a low `yaw_gain` for slow, stable micro-alignment of a 20 kg hull against a small/distant target (e.g. `align('hole', yaw=0, lat=0, gain=25, yaw_gain=10)`). The yaw spin-up floor (`VISION_YAW_MIN_PCT`) only engages when the bbox is large (close: `VISION_YAW_FLOOR_FILL`) — far-field yaw stays pure-proportional so it can't limit-cycle/wobble.
 - **Never-fail contract:** neither verb raises; the server always returns `success=True` with an outcome code in `Move.Result.final_value` (`ALIGNED`=0, `LOST`=1, `TIMEOUT`=2, `NO_CAMERA`=3, `ABORTED`=4). The DSL returns a `VisionResult` (truthy only on `ALIGNED`); a server/setup error surfaces as non-fatal `FAILED`.
 - **`fallback`** = mission-authored search `fn(duburi)` / `fn(duburi, should_stop)`; runs on target loss, then the verb re-enters — all inside `duration`.
 - Control path always reads `/detections` (tracker `/tracks` feeds the HUD only; no `--tracking` flag).
