@@ -302,6 +302,15 @@ closed in Python against `yaw_source` (BNO085/AHRS) — ArduSub's compass is unt
 inside the aluminum hull, so we drive Ch4 as a rate command and never hand ArduSub
 an absolute-attitude setpoint. (There is no `SET_ATTITUDE_TARGET` anywhere in the code.)
 
+> **Parallel BNO→EKF3 feed (live).** Independently of the Ch4 heading loop, when
+> `yaw_source` is BNO-based the manager's `_mocap_tick` streams BNO yaw into ArduSub's
+> EKF3 at 20 Hz via `ATT_POS_MOCAP` (quaternion built with `math.radians()` —
+> unitless on the wire, so no radians caveat). It only takes effect with FC params
+> `VISO_TYPE=1` + `EK3_SRC1_YAW=6` on a 2 MB fmuv3 build; the manager verifies these
+> at startup and WARNs on mismatch. This is an *EKF correction*, not the heading
+> authority — `HeadingLock` (Python Ch4) is still primary. See
+> [`future/future-bno-into-ekf.md`](.claude/context/future/future-bno-into-ekf.md).
+
 | Axis      | Setpoint message                  | Loop that closes it           | Our role                       |
 |-----------|-----------------------------------|-------------------------------|--------------------------------|
 | Yaw       | `RC_CHANNELS_OVERRIDE` Ch4 rate (10 Hz) | ArduSub rate loop + Python heading PID | close heading on yaw_source |

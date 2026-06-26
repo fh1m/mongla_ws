@@ -187,6 +187,12 @@ def main() -> int:
     bno_status, bno_detail = _check_bno085_auto()
     if bno_status == PASS:
         ok('BNO085 auto-detect', bno_detail)
+        # BNO yaw is injected into EKF3 via ATT_POS_MOCAP, but ArduSub only
+        # fuses it with these FC params set. The manager verifies them live at
+        # startup (loud WARN on mismatch); flagged here so the deck operator
+        # can set them first.
+        _line('NOTE', 'EKF ext-nav yaw needs', 'VISO_TYPE=1, EK3_SRC1_YAW=6 '
+              '(2 MB fmuv3 build); manager re-checks at startup')
     else:
         warn('BNO085 auto-detect', bno_detail)
 

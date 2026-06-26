@@ -103,7 +103,18 @@ from .tracing       import command_scope
 #
 # arm / disarm / set_mode are NOT listed here because they use the
 # tracing-only `command_scope` directly and never enter _command_scope.
-_UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect', 'mission_reset'})
+_UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect',
+                         'mission_reset', 'lock_heading'})
+
+# Verbs that do NOT engage a deferred heading lock. lock_heading called while
+# disarmed captures the heading but holds correction suspended until the first
+# *actuating* (control/vision) command runs while armed. Everything not listed
+# here (set_depth, move_*, yaw_*, turn, arc, style_*, vision_align/move)
+# activates the correction. set_depth is intentionally an activator: the depth
+# descent is the operator's first commanded motion.
+_LOCK_PASSIVE_VERBS = frozenset({'lock_heading', 'unlock_heading', 'stop',
+                                 'pause', 'surface', 'head', 'mission_reset',
+                                 'dvl_connect', 'fire'})
 
 
 # Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
@@ -217,6 +228,13 @@ class Duburi(VisionVerbs):
         self.quick_settle      = bool(quick_settle)
         self._payload          = payload
         self._heading_lock     = None      # HeadingLock thread or None
+        # Deferred-activation state: lock_heading called while disarmed
+        # captures the heading immediately but suspends the thread (no Ch4
+        # correction) until the first armed actuating command resumes it.
+        self._lock_deferred    = False
+        # Idempotent guard so the lock's heartbeat hold/release can't
+        # underflow the ref-count on the deferred path (held only once).
+        self._lock_holds_heartbeat = False
         # Tracks which channel set the last in-command write touched, so
         # the pre-flight pause can be skipped when the next command uses
         # the same axes. None = no recent write / lock state changed.
@@ -263,6 +281,7 @@ class Duburi(VisionVerbs):
             if self._heading_lock is not None:
                 self._heading_lock.stop()
                 self._heading_lock = None
+                self._lock_deferred = False
                 self._release_heartbeat_for_lock()
             accepted, reason = self.pixhawk.disarm(timeout)
         return self._make_result(accepted, f'disarm: {reason}')
@@ -839,16 +858,26 @@ class Duburi(VisionVerbs):
         Source-agnostic: works with `mavlink_ahrs` (Gazebo / bench),
         `bno085` (real sub), or any future YawSource. Uniform plug.
 
-        impl: heading_lock.HeadingLock daemon -> pixhawk.send_rc_override (Ch4 rate, 20 Hz).
+        Heading lock NEVER changes flight mode: the Ch4 rate-override is
+        honoured in whatever mode the operator has selected, and depth hold
+        is the operator's responsibility (``set_depth`` engages ALT_HOLD).
+
+        Deferred activation: when called while DISARMED the heading is
+        captured now but correction is held suspended (no Ch4, no thruster
+        kick) until the first armed actuating command resumes it -- so
+        surface holders aren't fought during arm + descent. Called while
+        ARMED it activates immediately (legacy in-mission behaviour).
+
+        impl: heading_lock.HeadingLock daemon -> pixhawk.send_rc_override (Ch4 rate, 50 Hz LOCK_STREAM_HZ).
         """
         with self._command_scope('lock_heading'):
-            self._ensure_yaw_capable_mode()
             current = self._current_heading()
             actual_target = current if abs(target) < 1e-3 else float(target) % 360.0
 
             if self._heading_lock is not None:
                 self._heading_lock.stop()
                 self._heading_lock = None
+                self._lock_deferred = False
                 self._release_heartbeat_for_lock()
 
             self._heading_lock = HeadingLock(
@@ -859,8 +888,31 @@ class Duburi(VisionVerbs):
                 timeout=timeout,
                 on_exit=self._on_lock_timeout,
             )
+
+            armed = self.pixhawk.is_armed()
+            if not armed:
+                # Suspend BEFORE start so the daemon never emits a single Ch4
+                # write before the first armed command -- no thruster kick
+                # while surface holders steady the hull.
+                self._heading_lock.suspend()
             self._heading_lock.start()
-            self._hold_heartbeat_for_lock()
+
+            if armed:
+                # Active immediately: the lock authors Ch4, so hold the
+                # neutral heartbeat for its lifetime.
+                self._hold_heartbeat_for_lock()
+                self._lock_deferred = False
+                lock_msg = f'lock_heading: locked at {actual_target:.1f} deg'
+            else:
+                # Capture now, correct later. Keep the neutral heartbeat
+                # streaming (1500) so once armed there's no FS_PILOT_INPUT
+                # failsafe; do NOT hold it for the (suspended) lock yet.
+                self._lock_deferred = True
+                self.log.info(
+                    f'[LOCK ] captured {actual_target:.1f} deg -- correction '
+                    f'deferred until armed + first command')
+                lock_msg = (f'lock_heading: captured {actual_target:.1f} deg '
+                            f'(deferred until armed + first command)')
 
             # Signal BNO085 to log current heading to OLED for post-run deviation audit.
             if self.yaw_source is not None and hasattr(self.yaw_source, 'send_command'):
@@ -868,8 +920,7 @@ class Duburi(VisionVerbs):
 
             return self._make_result(
                 True,
-                f'lock_heading: locked at {actual_target:.1f} deg '
-                f'(timeout {timeout:.0f}s)',
+                f'{lock_msg} (timeout {timeout:.0f}s)',
                 final_value=actual_target, error_value=0.0)
 
     def mission_reset(self):
@@ -887,6 +938,7 @@ class Duburi(VisionVerbs):
             if self._heading_lock is not None:
                 self._heading_lock.stop()
                 self._heading_lock = None
+                self._lock_deferred = False
                 self._release_heartbeat_for_lock()
             self._abort_event.clear()
             # Forget the previous run's axis history so the first command's
@@ -906,6 +958,7 @@ class Duburi(VisionVerbs):
                 return self._make_result(True, 'unlock_heading: no-op')
             self._heading_lock.stop()
             self._heading_lock = None
+            self._lock_deferred = False
             self._release_heartbeat_for_lock()
             self.pixhawk.send_neutral()
             return self._make_result(True, 'unlock_heading: released')
@@ -1046,6 +1099,25 @@ class Duburi(VisionVerbs):
             if verb not in _UNARM_SAFE and not self.pixhawk.is_armed():
                 raise NotArmedError(
                     f'{verb}: AUV is disarmed -- call arm() first')
+            # Engage a deferred heading lock on the first armed actuating
+            # command. Runs before the body builds its (now lock-aware)
+            # writers, so Ch4 is released to the lock for this command too.
+            # Capture the handle in a local: disarm()/_on_lock_timeout() can
+            # null _heading_lock from another thread (they bypass self.lock),
+            # so guard on the local and undo our heartbeat hold if the lock
+            # vanished mid-activation -- never strand a hold on a dead lock.
+            lock = self._heading_lock
+            if (self._lock_deferred and lock is not None
+                    and verb not in _LOCK_PASSIVE_VERBS
+                    and self.pixhawk.is_armed()):
+                self._lock_deferred = False
+                lock.resume()
+                self._hold_heartbeat_for_lock()
+                if self._heading_lock is None:
+                    self._release_heartbeat_for_lock()   # disarm raced us
+                else:
+                    self.log.info(
+                        '[LOCK ] heading correction engaged (first armed command)')
             if self._heartbeat is not None:
                 self._heartbeat.pause()
             try:
@@ -1057,15 +1129,25 @@ class Duburi(VisionVerbs):
     def _hold_heartbeat_for_lock(self):
         """Mark the heartbeat held for the entire heading-lock lifetime.
 
-        Released by ``_release_heartbeat_for_lock`` from
-        ``unlock_heading`` (or when ``lock_heading`` swaps locks).
+        Idempotent: a deferred lock holds the heartbeat only when it
+        activates, never at capture, so this must not double-pause. The
+        ``_lock_holds_heartbeat`` guard keeps the ref-count balanced with
+        ``_release_heartbeat_for_lock``.
         """
-        if self._heartbeat is not None:
+        if self._heartbeat is not None and not self._lock_holds_heartbeat:
             self._heartbeat.pause()
+            self._lock_holds_heartbeat = True
 
     def _release_heartbeat_for_lock(self):
-        if self._heartbeat is not None:
+        """Release a heartbeat hold taken for the lock -- only if one is held.
+
+        Safe to call on the deferred path (lock captured but never activated,
+        so the heartbeat was never held): it becomes a no-op instead of
+        underflowing the ref-count.
+        """
+        if self._heartbeat is not None and self._lock_holds_heartbeat:
             self._heartbeat.resume()
+            self._lock_holds_heartbeat = False
 
     def _on_lock_timeout(self, lock):
         """Heading lock auto-released on its own timeout (runs in the lock thread).
@@ -1078,6 +1160,7 @@ class Duburi(VisionVerbs):
         """
         if self._heading_lock is lock:
             self._heading_lock = None
+            self._lock_deferred = False
             self._release_heartbeat_for_lock()
 
     @contextmanager

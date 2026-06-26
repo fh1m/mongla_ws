@@ -387,8 +387,8 @@ class AUVManagerNode(Node):
 
         if self._bno_mocap_active:
             self.create_timer(0.05, self._mocap_tick, callback_group=self.timer_group)
-            self.get_logger().info('[SENS ] ATT_POS_MOCAP yaw injection active (20 Hz). '
-                                   'Requires EK3_SRC1_YAW=6 in ArduSub params.')
+            self.get_logger().info('[SENS ] ATT_POS_MOCAP yaw injection active (20 Hz).')
+            self._verify_extnav_params()
 
     # ================================================================== #
     #  Vision state pool -- lazily built per camera, preflighted once     #
@@ -583,6 +583,42 @@ class AUVManagerNode(Node):
 
     def heartbeat_tick(self):
         self.pixhawk.send_heartbeat()
+
+    def _verify_extnav_params(self) -> None:
+        """Confirm ArduSub will actually fuse the ATT_POS_MOCAP yaw we stream.
+
+        The feed is inert unless VISO_TYPE=1 (instantiates the MAVLink
+        visual-odom backend; without it the message is dropped before the
+        EKF) AND EK3_SRC1_YAW=6 (ExternalNav yaw source). Both live on the
+        flight controller, not in this repo, so we read them back and WARN
+        loudly on mismatch rather than silently streaming into a void. A
+        None read means the param is absent -- on a Pixhawk 2.4.8 that's the
+        1 MB (fmuv2) build, which strips visual-odom entirely.
+        """
+        log  = self.get_logger()
+        # Short per-param timeout: bounds startup delay to ~2 s even when the
+        # params are absent (e.g. a 1 MB build that lacks VISO_TYPE).
+        viso = self.pixhawk.get_param('VISO_TYPE', timeout=1.0)
+        yaw  = self.pixhawk.get_param('EK3_SRC1_YAW', timeout=1.0)
+
+        if viso is None:
+            log.warn('[SENS ] VISO_TYPE not readable -- BNO yaw will NOT be '
+                     'fused. Likely a 1 MB (fmuv2) build with no visual-odom; '
+                     'flash the 2 MB (fmuv3) ArduSub build.')
+            return
+        ok = True
+        if int(round(viso)) != 1:
+            ok = False
+            log.warn(f'[SENS ] VISO_TYPE={viso:.0f} (need 1) -- ATT_POS_MOCAP '
+                     'dropped before the EKF. Set VISO_TYPE=1.')
+        if yaw is None or int(round(yaw)) != 6:
+            ok = False
+            shown = 'unreadable' if yaw is None else f'{yaw:.0f}'
+            log.warn(f'[SENS ] EK3_SRC1_YAW={shown} (need 6=ExternalNav) -- '
+                     'BNO yaw not fused. Set EK3_SRC1_YAW=6.')
+        if ok:
+            log.info('[SENS ] EKF external-nav yaw confirmed '
+                     '(VISO_TYPE=1, EK3_SRC1_YAW=6).')
 
     def _mocap_tick(self) -> None:
         """Stream BNO085 yaw to ArduSub EKF3 at 20 Hz via ATT_POS_MOCAP."""
