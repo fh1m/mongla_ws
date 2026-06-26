@@ -969,10 +969,21 @@ duburi.vision.align('torpedo', yaw=0, lat=0, depth=0,
                     err=40, gain=30, duration=20, fallback=creep_forward)
 
 duburi.set_classes('hole')
+# yaw_gain low: a 20 kg hull needs the yaw inertia fought gently to hold a tight
+# hole-lock steady enough to fire through (lat/depth stay at the global gain).
 if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
-                       err=14, gain=12, duration=25, fallback=creep_forward).ok:
+                       err=14, gain=12, yaw_gain=8,
+                       duration=25, fallback=creep_forward).ok:
     duburi.fire(1)           # torpedo_1 (ESP32 serial 1/2)
 ```
+
+> **Per-axis gain for stable holds.** `lat_gain`/`yaw_gain`/`depth_gain` cap one
+> axis independently of the global `gain` (unset = inherit it). Yaw is the axis to
+> slow down for a torpedo hole-lock: far from the target a brisk yaw overshoots and
+> wobbles, so dial `yaw_gain` low (≈8–12) for a slow, settle-able correction while
+> `lat`/`depth` stay responsive. The yaw spin-up floor only engages once the bbox is
+> large (close), so a low `yaw_gain` far out stays pure-proportional and won't
+> limit-cycle.
 
 **As an FSM state** (`VisionAlignState` for the lock, a small fire state for the shot):
 

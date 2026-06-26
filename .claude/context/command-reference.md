@@ -78,7 +78,7 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `move_forward_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop forward (heading lock stays active) |
 | `move_back_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop backward (same as move_forward_dist with reversed direction) |
 | `move_lateral_dist` | **distance_m** required (±), gain→36 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop lateral (heading lock stays active) |
-| `vision_align` | camera→forward, target_class→'', axes→'' (≥1 of lat,yaw,depth), offset_lat/yaw/depth→0 px, err_px→40, duration→20 s, gain→30 %, hold_through_loss→false, kp_lat→60, kp_yaw→60, kp_depth→0.05, lost_grace_s→1.0, align_stable_frames→3 | Centre target on lat/yaw/depth at signed pixel offsets |
+| `vision_align` | camera→forward, target_class→'', axes→'' (≥1 of lat,yaw,depth), offset_lat/yaw/depth→0 px, err_px→40, duration→20 s, gain→30 %, gain_lat/yaw/depth→0 (inherit gain), hold_through_loss→false, kp_lat→60, kp_yaw→60, kp_depth→0.05, lost_grace_s→1.0, align_stable_frames→3 | Centre target on lat/yaw/depth at signed pixel offsets; per-axis gain caps |
 | `vision_move` | camera→forward, target_class→'', fwd_fill→95 %, mode→area, maintain_px→0/maintain_on→false, hold_s→0 s, err_px→40, duration→20 s, gain→30 %, hold_through_loss→false, kp_forward→200, kp_lat→60, lost_grace_s→1.0 | Drive forward until target's bbox fills fwd_fill% of frame |
 | `fire` | fire_channel→1.0 (1/2=torpedo, 3/4=dropper) | Fire ESP32 payload channel directly |
 
@@ -552,9 +552,10 @@ required. Aligned when **every** active axis stays within `err_px` for
 
 | Aspect | Value |
 |---|---|
-| CLI | `duburi vision_align --camera forward --target_class gate --axes yaw,lat [--offset_yaw 0] [--offset_lat 0] [--err_px 40] [--duration 20] [--gain 30]` |
-| DSL | `duburi.vision.align('gate', yaw=0, lat=0, err=40, duration=20, gain=30, fallback=None, camera=None)` |
-| Facade | `Duburi.vision_align(camera, target_class, axes, offset_lat=, offset_yaw=, offset_depth=, err_px=, duration=, gain=, hold_through_loss=, kp_lat=, kp_yaw=, kp_depth=, lost_grace_s=, align_stable_frames=)` |
+| CLI | `duburi vision_align --camera forward --target_class gate --axes yaw,lat [--offset_yaw 0] [--offset_lat 0] [--err_px 40] [--duration 20] [--gain 30] [--gain_yaw 10] [--gain_lat 0] [--gain_depth 0]` |
+| DSL | `duburi.vision.align('gate', yaw=0, lat=0, err=40, duration=20, gain=30, lat_gain=None, yaw_gain=None, depth_gain=None, fallback=None, camera=None)` |
+| Facade | `Duburi.vision_align(camera, target_class, axes, offset_lat=, offset_yaw=, offset_depth=, err_px=, duration=, gain=, gain_lat=, gain_yaw=, gain_depth=, hold_through_loss=, kp_lat=, kp_yaw=, kp_depth=, lost_grace_s=, align_stable_frames=)` |
+| Per-axis gain | `lat_gain`/`yaw_gain`/`depth_gain` cap one axis; **unset/0 = inherit `gain`, NOT disable** (omit `lat`/`yaw`/`depth` to drop an axis). The yaw spin-up floor only engages close-up (large bbox ≥ `VISION_YAW_FLOOR_FILL`); far-field yaw is pure-proportional so it cannot limit-cycle/wobble. |
 | MAVLink | `RC_CHANNELS_OVERRIDE` Ch6 (lat) + Ch4 (yaw) @ 20 Hz; `SET_POSITION_TARGET_GLOBAL_INT` (alt) @ 5 Hz when `depth` is active |
 | Mode | auto-engages `ALT_HOLD` when `depth` is an axis; a downward camera (`downward`/`sim_bottom`) inverts the depth sign automatically |
 | Heading lock | when `yaw` is an axis the loop owns Ch4 (lock suspended, retargeted on exit); when `yaw` is NOT an axis and a lock is live, the lock keeps Ch4 and the loop writes lateral only (no fight) |
@@ -594,9 +595,10 @@ to ArduSub's ALT_HOLD, yaw to the heading lock or the autopilot.
 
 | Aspect | Value |
 |---|---|
-| CLI | `duburi vision_move --camera forward --target_class gate --fwd_fill 80 --mode area [--duration 20] [--gain 30]` |
-| DSL | `duburi.vision.move('gate', fwd=80, mode='area', maintain=None, hold=None, err=40, duration=20, gain=30, fallback=None, camera=None)` |
-| Facade | `Duburi.vision_move(camera, target_class, fwd_fill=, mode=, maintain_px=, maintain_on=, hold_s=, err_px=, duration=, gain=, hold_through_loss=, kp_forward=, kp_lat=, lost_grace_s=)` |
+| CLI | `duburi vision_move --camera forward --target_class gate --fwd_fill 80 --mode area [--duration 20] [--gain 30] [--gain_lat 0]` |
+| DSL | `duburi.vision.move('gate', fwd=80, mode='area', maintain=None, hold=None, err=40, duration=20, gain=30, lat_gain=None, fallback=None, camera=None)` |
+| Facade | `Duburi.vision_move(camera, target_class, fwd_fill=, mode=, maintain_px=, maintain_on=, hold_s=, err_px=, duration=, gain=, gain_lat=, hold_through_loss=, kp_forward=, kp_lat=, lost_grace_s=)` |
+| Per-axis gain | `gain` caps forward speed; `lat_gain` caps the `maintain` strafe (unset/0 = inherit `gain`). |
 | MAVLink | `RC_CHANNELS_OVERRIDE` Ch5 forward @ 20 Hz (+ Ch6 when `maintain` set); yaw + depth never commanded |
 | Mode | auto-engages `ALT_HOLD` so depth holds during the approach even if the mission jumps straight to `vision_move` |
 | Result | `final_value` = outcome code (0–4); `error_value` = bbox fill fraction at exit |

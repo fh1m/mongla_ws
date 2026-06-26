@@ -40,6 +40,10 @@ string  mode               # fill metric: 'area' (default) | 'width' | 'height'
 float32 maintain_px        # lateral px offset to hold while driving (needs maintain_on)
 bool    maintain_on        # true = hold lateral offset while moving; false = pure forward
 float32 hold_s             # seconds to station-keep after reaching fwd_fill (0 = exit on reach)
+# per-axis speed caps -- each overrides `gain` on one axis (0 = inherit gain).
+float32 gain_lat           # lateral speed cap   (vision_align lat; vision_move maintain)
+float32 gain_yaw           # yaw speed cap       (vision_align yaw)
+float32 gain_depth         # depth speed cap     (vision_align depth)
 # shared.
 float32 err_px             # pixel tolerance: aligned when |err| <= this (0 = default 40)
 bool    hold_through_loss  # true = coast/hold on target loss until duration (no fallback)

@@ -43,6 +43,7 @@ class VisionVerbs:
     def vision_align(self, camera, target_class, axes,
                      offset_lat=0.0, offset_yaw=0.0, offset_depth=0.0,
                      err_px=40.0, duration=20.0, gain=30.0,
+                     gain_lat=0.0, gain_yaw=0.0, gain_depth=0.0,
                      hold_through_loss=False,
                      kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
                      lost_grace_s=0.0, align_stable_frames=0.0):
@@ -95,6 +96,9 @@ class VisionVerbs:
                     target_class=target_class, axes=axis_set, offsets=offsets,
                     err_px=float(err_px), duration=float(duration),
                     gain=float(gain),
+                    gain_lat=float(gain_lat) or float(gain),
+                    gain_yaw=float(gain_yaw) or float(gain),
+                    gain_depth=float(gain_depth) or float(gain),
                     kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
                     kp_yaw=float(kp_yaw) or KP_YAW_DEFAULT,
                     kp_depth=float(kp_depth) or KP_DEPTH_DEFAULT,
@@ -118,7 +122,7 @@ class VisionVerbs:
     # ================================================================== #
     def vision_move(self, camera, target_class, fwd_fill=95.0, mode='area',
                     maintain_px=0.0, maintain_on=False, hold_s=0.0,
-                    err_px=40.0, duration=20.0, gain=30.0,
+                    err_px=40.0, duration=20.0, gain=30.0, gain_lat=0.0,
                     hold_through_loss=False,
                     kp_forward=0.0, kp_lat=0.0, lost_grace_s=0.0):
         """Drive forward until ``target_class`` fills ``fwd_fill`` % of the frame.
@@ -159,6 +163,7 @@ class VisionVerbs:
                 hold_s=float(hold_s),
                 err_px=float(err_px), duration=float(duration),
                 gain=float(gain),
+                gain_lat=float(gain_lat) or float(gain),
                 kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
                 kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
                 lost_grace_s=float(lost_grace_s) or 1.0,

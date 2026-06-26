@@ -3,11 +3,13 @@
 Exactly two mission-facing verbs, both pixel-native and recover-don't-fail:
 
     duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
-                        err=40, duration=20, gain=30, fallback=None, camera=None)
+                        err=40, duration=20, gain=30,
+                        lat_gain=None, yaw_gain=None, depth_gain=None,
+                        fallback=None, camera=None)
 
     duburi.vision.move(target, *, fwd=95, mode='area', maintain=None,
                        hold=None, err=40, duration=20, gain=30,
-                       fallback=None, camera=None)
+                       lat_gain=None, fallback=None, camera=None)
 
 Axis rule (align): each of ``lat`` / ``yaw`` / ``depth`` is ``None`` =
 axis OFF; a number = axis ON, where the number is the **signed pixel
@@ -117,6 +119,9 @@ class _VisionDSL:
               err: float = 40.0,
               duration: float = 20.0,
               gain: float = 30.0,
+              lat_gain: Optional[float] = None,
+              yaw_gain: Optional[float] = None,
+              depth_gain: Optional[float] = None,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -125,6 +130,16 @@ class _VisionDSL:
         axis (the number is the signed px offset from centre; ``0`` =
         centre). At least one axis is required. Returns a
         :class:`VisionResult`; never raises on a miss.
+
+        ``gain`` is the global max-speed cap (% thrust). ``lat_gain`` /
+        ``yaw_gain`` / ``depth_gain`` override that cap on one axis;
+        leave them unset to inherit ``gain``. This is for slow, stable
+        per-axis micro-alignment -- e.g. ``align('hole', yaw=0, lat=0,
+        gain=25, yaw_gain=10)`` creeps yaw in while lateral stays brisk
+        (a 20 kg hull needs the yaw inertia fought gently to hold a tight
+        torpedo-hole lock). Note ``*_gain=0`` / unset means *inherit*, NOT
+        *disable* -- to drop an axis, omit it (``lat`` / ``yaw`` /
+        ``depth`` = None).
         """
         active = [(name, val) for name, val in
                   (('lat', lat), ('yaw', yaw), ('depth', depth))
@@ -150,6 +165,9 @@ class _VisionDSL:
                 offset_yaw=offsets.get('yaw', 0.0),
                 offset_depth=offsets.get('depth', 0.0),
                 err_px=float(err), duration=remaining, gain=float(gain),
+                gain_lat=float(lat_gain) if lat_gain is not None else 0.0,
+                gain_yaw=float(yaw_gain) if yaw_gain is not None else 0.0,
+                gain_depth=float(depth_gain) if depth_gain is not None else 0.0,
                 hold_through_loss=(fallback is None))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
@@ -166,6 +184,7 @@ class _VisionDSL:
              err: float = 40.0,
              duration: float = 20.0,
              gain: float = 30.0,
+             lat_gain: Optional[float] = None,
              fallback: Optional[Callable] = None,
              camera: Optional[str] = None) -> VisionResult:
         """Drive forward toward ``target``; stop at a fill ratio or pass through.
@@ -183,8 +202,10 @@ class _VisionDSL:
         while driving (``None`` = pure forward, never touches lat/yaw/
         depth). ``hold`` (s) station-keeps once a fill target is reached
         (ignored in pass-through, where it sets the commit overshoot).
-        Never re-centres yaw/depth. Returns a :class:`VisionResult`;
-        never raises on a miss.
+        Never re-centres yaw/depth. ``gain`` caps forward speed;
+        ``lat_gain`` overrides the cap on the ``maintain`` strafe (unset
+        = inherit ``gain``). Returns a :class:`VisionResult`; never raises
+        on a miss.
         """
         cam = self._resolve_camera(camera)
         tgt = self._resolve_target(target, cam)
@@ -204,6 +225,7 @@ class _VisionDSL:
                 maintain_on=maintain_on,
                 hold_s=float(hold) if hold is not None else 0.0,
                 err_px=float(err), duration=remaining, gain=float(gain),
+                gain_lat=float(lat_gain) if lat_gain is not None else 0.0,
                 hold_through_loss=(fallback is None))
 
         return self._orchestrate('move', tgt, cam, duration, fallback,
