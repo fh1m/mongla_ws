@@ -483,10 +483,13 @@ have no direct replacement — the two verbs cover their roles with
 `lat/yaw/depth` offsets, `fwd/mode`, `fallback`, ROS-param gains, and
 `camera=`.
 
-### Detection guards — `duburi.detected()`
+### Vision queries — `detected()` / `wait_for()` / `where()`
 
-Non-blocking cache check. Subscribes to `/duburi/vision/<camera>/detections`
-on first call; refreshed automatically during every blocking verb.
+Client-side reads of the `/duburi/vision/<camera>/detections` stream the
+control loop acts on. Each **pumps the node** so the answer reflects the
+current frame; the default camera is subscribed eagerly (and `use_camera`
+subscribes a new one) so the first call never false-negates on DDS discovery.
+They run between goals only — safe in search loops and vision `fallback`s.
 
 ```python
 duburi.detected(
@@ -494,8 +497,21 @@ duburi.detected(
     *,
     camera: str | None = None,    # defaults to duburi.camera
     stale_after: float = 1.0,     # seconds; detections older → False
-) -> bool
+) -> bool                          # visible RIGHT NOW?
+
+duburi.wait_for(
+    target_class, *, timeout=10.0, camera=None, stale_after=1.0,
+) -> bool                          # block until seen / timeout (loop-free acquire)
+
+duburi.where(
+    target_class, *, camera=None, stale_after=1.0, band=0.15,
+) -> str                           # 'left' | 'center' | 'right' | 'unknown'
+duburi.where_offset(target_class, ...) -> float | None   # signed [-1,+1]
 ```
+
+> **`if` runs once — a moving search needs a `while`.** `if detected(): a else: b`
+> executes one branch and falls through; it is **not** a loop. To search while
+> moving, `while not detected(): <small move>`. To wait in place, use `wait_for`.
 
 **The core paradigm (reactive missions):**
 
@@ -528,14 +544,22 @@ while not duburi.detected(duburi.models.gate.gate):
     duburi.move_forward(0.5, gain=30)
 ```
 
-**`detected()` does NOT block** beyond a 50 ms `spin_once` timeout. Every
-blocking DSL verb keeps the cache warm automatically — the cache is always
-fresh right after any `move_*`, `pause`, `vision.*`, or `yaw_*` call.
+**`detected()`/`where()` block only for their bounded pump** (≤0.25 s warm,
+≤0.60 s cold-on-first-frame); `wait_for` blocks up to its `timeout`. None
+depend on a recent verb to be fresh — the pump reads the current frame.
 
-**Internals:** class names are extracted to plain Python strings eagerly in
-the `_on_detections()` callback. The ROS message object is never stored —
-this is required because rclpy may reuse the underlying C++ memory across
-callbacks.
+**`where()` bearing steer:**
+```python
+{'left':  lambda: duburi.yaw_left(20),
+ 'right': lambda: duburi.yaw_right(20),
+}.get(duburi.where('gate'), lambda: duburi.move_forward(1))()
+```
+
+**Internals:** each frame is parsed to plain-Python `DetRecord` tuples
+(`class, cx, cy, w, h, conf`) eagerly in `_on_detections()`. The ROS message
+is never stored — rclpy reuses the underlying C++ memory across callbacks.
+`count()`/`visible()`/`proximity()` are easy future additions on this cache
+(not built yet).
 
 Full reference: [`detected-paradigm.md`](./detected-paradigm.md) — mechanics, all rules,
 error patterns, testing procedures, canonical templates, orbit anti-patterns.

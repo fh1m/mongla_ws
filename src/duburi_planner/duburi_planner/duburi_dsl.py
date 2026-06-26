@@ -58,26 +58,37 @@ Firing replaces the old lock-fire verb with align + the `fire` control verb:
     if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12).ok:
         duburi.fire(1)
 
-Detection guards (non-blocking, safe in tight loops):
+Vision queries -- detected() / wait_for() / where():
 
-    # Move forward until the gate is detected, then align
-    while not duburi.detected('gate'):
-        duburi.move_forward(1.0, gain=30)
-    duburi.vision.align('gate', yaw=0, lat=0)
+    # branch ONCE on what's visible now (an `if` runs once -- it does NOT loop)
+    if duburi.detected('gate'):
+        duburi.vision.align('gate', yaw=0, lat=0)
 
-    # Works with ClassRef model handles (no model switching side-effect):
-    duburi.models(gate='gate_flare_medium_100ep')
-    while not duburi.detected(duburi.models.gate.gate):
-        duburi.move_forward(0.5, gain=25)
-    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0)
+    # search WHILE MOVING -- this needs a `while`, not an `if`
+    while not duburi.detected('red_pipe'):
+        duburi.move_left(2)
+    duburi.move_forward(3)
 
-    # Override camera or freshness window:
+    # acquire while stationary, no busy-loop: wait_for blocks until seen/timeout
+    if duburi.wait_for('gate', timeout=8):
+        duburi.vision.align('gate', yaw=0, lat=0)
+    else:
+        duburi.recover()
+
+    # steer by bearing: 'left' | 'center' | 'right' | 'unknown'
+    {'left':  lambda: duburi.yaw_left(20),
+     'right': lambda: duburi.yaw_right(20),
+    }.get(duburi.where('gate'), lambda: duburi.move_forward(1))()
+
+    # ClassRef handles + camera / freshness overrides work everywhere:
+    duburi.detected(duburi.models.gate.gate)
     duburi.detected('flare', camera='downward', stale_after=2.0)
 
-`detected()` subscribes to `/duburi/vision/<camera>/detections` on
-first call (lazy, per-camera). It is a zero-wait cache check — every
-blocking DSL verb keeps the cache warm via ROS callbacks processed
-during the action spin.
+These are client-side reads of the same `/detections` stream the control
+loop acts on. Each pumps the node so the answer reflects the CURRENT frame
+(not a stale cache); the default camera is subscribed eagerly so the first
+query never false-negates on DDS discovery. They run between goals (safe in
+search loops and inside a vision `fallback`), never during one.
 
 Model context (multi-model missions):
 
@@ -129,6 +140,8 @@ import sys
 import time as _time
 
 import rclpy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from sensor_msgs.msg import CameraInfo
 from vision_msgs.msg import Detection2DArray
 
 from .model_context import ClassRef, ModelRegistry
@@ -138,6 +151,106 @@ from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by DuburiM
 def _format_outcome(cmd: str, result) -> str:
     return (f'  {cmd:<22s} final={result.final_value:+.3f} '
             f'err={result.error_value:+.3f}  ({result.message})')
+
+
+# --------------------------------------------------------------------------- #
+#  Detection-stream parsing helpers (defensive vs ROS distro field layout)    #
+# --------------------------------------------------------------------------- #
+# A parsed detection record: lowercased class + bbox geometry in pixels + conf.
+# Tuple, not a class, so it copies trivially off the (reused) ROS message.
+#   (class_lower, cx_px, cy_px, w_px, h_px, conf)
+
+def _det_class_id(det) -> str:
+    """Class id of a Detection2D's top hypothesis -- handles both layouts.
+
+    Iron+ nests the label under ``results[0].hypothesis.class_id``; Humble's
+    older message has a flat ``results[0].id``. Mirrors VisionState's
+    ``_hypothesis_class_id`` so detected()/where() agree with the control path.
+    """
+    if not det.results:
+        return ''
+    hyp = det.results[0]
+    if hasattr(hyp, 'hypothesis') and hasattr(hyp.hypothesis, 'class_id'):
+        return str(hyp.hypothesis.class_id)
+    if hasattr(hyp, 'id'):
+        return str(hyp.id)
+    return ''
+
+
+def _det_score(det) -> float:
+    """Confidence of a Detection2D's top hypothesis (both layouts)."""
+    if not det.results:
+        return 0.0
+    hyp = det.results[0]
+    if hasattr(hyp, 'hypothesis') and hasattr(hyp.hypothesis, 'score'):
+        return float(hyp.hypothesis.score)
+    if hasattr(hyp, 'score'):
+        return float(hyp.score)
+    return 0.0
+
+
+def _det_center(bbox):
+    """(cx, cy) of a BoundingBox2D -- Iron+ Pose2D w/ Point2D, or Humble flat."""
+    centre = bbox.center
+    if hasattr(centre, 'position'):       # Iron+: Pose2D with Point2D position
+        return float(centre.position.x), float(centre.position.y)
+    return float(centre.x), float(centre.y)   # Humble: flat Pose2D
+
+
+def _parse_detections(msg) -> list:
+    """Detection2DArray -> [DetRecord, ...], copied to plain Python.
+
+    Copy eagerly: rclpy may reuse the underlying C++ buffer across callbacks,
+    so holding the message objects past the callback would corrupt the cache.
+    """
+    out = []
+    for det in msg.detections:
+        cls = _det_class_id(det).strip().lower()
+        if not cls:
+            continue
+        cx, cy = _det_center(det.bbox)
+        out.append((cls, cx, cy,
+                    float(det.bbox.size_x), float(det.bbox.size_y),
+                    _det_score(det)))
+    return out
+
+
+def _eval_detected(records: list, needle: str) -> bool:
+    """True iff any record matches ``needle`` (case-insensitive)."""
+    n = str(needle).strip().lower()
+    return any(rec[0] == n for rec in records)
+
+
+def _eval_where(records: list, needle: str, width: float,
+                band: float) -> tuple:
+    """Bearing of the largest matching detection.
+
+    Returns ``(label, offset)`` where ``label`` is 'left' | 'center' |
+    'right' | 'unknown' and ``offset`` is the signed normalized horizontal
+    offset in [-1, +1] (negative = left of centre, positive = right), or
+    ``None`` when unknown. 'unknown' = class absent or image width not yet
+    known. ``band`` is the centre dead-zone half-width (normalized).
+    """
+    n = str(needle).strip().lower()
+    if not width or width <= 0.0:
+        return ('unknown', None)
+    best = None
+    best_area = 0.0
+    for rec in records:
+        if rec[0] != n:
+            continue
+        area = rec[3] * rec[4]
+        if area > best_area:
+            best_area = area
+            best = rec
+    if best is None:
+        return ('unknown', None)
+    offset = (best[1] - width * 0.5) / (width * 0.5)   # [-1, +1]
+    if offset < -band:
+        return ('left', offset)
+    if offset > band:
+        return ('right', offset)
+    return ('center', offset)
 
 
 def _to_float(value):
@@ -169,14 +282,21 @@ class DuburiMission:
         self.target = target
         self.vision = _VisionDSL(self)
         self.models = ModelRegistry()
-        # Detection cache: camera -> (monotonic_stamp, {class_name, ...})
-        # Populated by lazy per-camera subscriptions; refreshed automatically
-        # during every blocking send() via spin_until_future_complete.
-        self._det_cache: dict[str, tuple[float, set[str]]] = {}
-        self._det_subs:  dict[str, object] = {}  # keeps subscriptions alive
+        # Detection cache: camera -> (monotonic_stamp, [DetRecord, ...]).
+        # Refreshed by ROS callbacks; detected()/where() actively pump the node
+        # so the cache is fresh at the call instant (not just during a send()).
+        self._det_cache: dict[str, tuple[float, list]] = {}
+        self._det_subs:  dict[str, object] = {}   # detection subs (kept alive)
+        self._info_subs: dict[str, object] = {}   # camera_info subs (kept alive)
+        self._img_size:  dict[str, tuple] = {}    # camera -> (width, height)
+        self._det_warm:  set[str] = set()         # cameras that have produced a frame
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
         self._mission_start: float = _time.monotonic()
+        # Eager-subscribe the default camera so DDS discovery completes before
+        # the first detected()/where() -- otherwise the first poll false-negates
+        # (discovery takes 50-500 ms) and a `while not detected()` loop hangs.
+        self._subscribe_detections(self.camera)
 
     # ================================================================== #
     #  Single send + log helper                                           #
@@ -197,78 +317,190 @@ class DuburiMission:
         return result
 
     # ================================================================== #
-    #  Detection guard -- non-blocking cache check                        #
+    #  Vision queries -- detected() / wait_for() / where()                #
     # ================================================================== #
+    #
+    # These read the raw /detections stream the control loop and HUD act on,
+    # so a query agrees with what the AUV is steering toward. They are
+    # client-side cache checks (NOT action goals), and each actively pumps the
+    # node so the cache is fresh at the call instant. Safe ONLY between goals
+    # (the mission is single-threaded; a query never runs during a send()).
+    #
+    # First-frame discovery: the default camera is subscribed eagerly in
+    # __init__; other cameras subscribe on first query and use a longer pump
+    # window until they have produced a frame (see _pump_detections).
+
+    # Timeouts (seconds) for the per-call pump. _PUMP_WARM_S must be >= ~2 real
+    # frame-periods or the pump returns having seen no frame newer than `start`,
+    # and the query falls back to the last cached frame (still correct, but up to
+    # `stale_after` old -- weakening the "current frame" guarantee). The detector
+    # can run slow (medium model on the Orin Nano, sometimes <10 Hz -> >0.1 s/frame),
+    # so 0.25 s covers ~2 frames down to ~8 Hz. Raise it if your real FPS is lower.
+    _PUMP_WARM_S = 0.25   # >= ~2 frame-periods at >=8 Hz
+    _PUMP_COLD_S = 0.60   # first frame after subscribe: covers DDS discovery
+    _PUMP_SLICE_S = 0.02  # spin_once granularity inside the pump
 
     def _subscribe_detections(self, camera: str) -> None:
-        # Always read /detections -- the same raw detector topic the control
-        # loop (VisionState) and the HUD use, so detected() agrees with what
-        # the AUV actually acts on. The tracker stays display-only.
-        topic = f'/duburi/vision/{camera}/detections'
-        sub = self.client.node.create_subscription(
-            Detection2DArray, topic,
-            lambda msg, cam=camera: self._on_detections(cam, msg), 10)
-        self._det_subs[camera] = sub
+        """Subscribe a camera's /detections + /camera_info (idempotent)."""
+        if camera in self._det_subs:
+            return
+        node = self.client.node
+        # Match VisionState's QoS so we connect to the same publishers.
+        qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
+        ns = f'/duburi/vision/{camera}'
+        self._det_subs[camera] = node.create_subscription(
+            Detection2DArray, f'{ns}/detections',
+            lambda msg, cam=camera: self._on_detections(cam, msg), qos)
+        self._info_subs[camera] = node.create_subscription(
+            CameraInfo, f'{ns}/camera_info',
+            lambda msg, cam=camera: self._on_info(cam, msg), qos)
 
-    def _on_detections(self, camera: str, msg: Detection2DArray) -> None:
-        # Extract class names to plain strings immediately — do not store ROS
-        # message objects because rclpy may reuse the underlying C++ memory
-        # across callbacks, which would corrupt cached data read later.
-        names: set[str] = set()
-        for d in msg.detections:
-            if not d.results:
-                continue
-            hyp = d.results[0]
-            if hasattr(hyp, 'hypothesis'):
-                names.add(str(hyp.hypothesis.class_id))
-            else:
-                names.add(str(getattr(hyp, 'id', '')))
-        self._det_cache[camera] = (_time.monotonic(), names)
+    def _on_detections(self, camera: str, msg) -> None:
+        # Copy to plain Python immediately (rclpy reuses the C++ buffer across
+        # callbacks; holding the message would corrupt the cache).
+        self._det_cache[camera] = (_time.monotonic(), _parse_detections(msg))
+        self._det_warm.add(camera)
+
+    def _on_info(self, camera: str, msg) -> None:
+        if msg.width and msg.height:
+            self._img_size[camera] = (float(msg.width), float(msg.height))
+
+    def _pump_detections(self, camera: str) -> None:
+        """Spin the node until a /detections frame newer than now arrives.
+
+        The detector publishes every frame, so a live pipeline lands a fresh
+        frame within one frame period; a stalled or just-subscribed pipeline
+        times out and the caller reads no (or stale) data -> correctly absent.
+        """
+        node = self.client.node
+        start = _time.monotonic()
+        budget = self._PUMP_WARM_S if camera in self._det_warm else self._PUMP_COLD_S
+        deadline = start + budget
+        while _time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=self._PUMP_SLICE_S)
+            entry = self._det_cache.get(camera)
+            if entry is not None and entry[0] >= start:
+                return   # a frame stamped after we started -> cache is current
+
+    def _records(self, camera: str, stale_after: float) -> list:
+        """Fresh detection records for `camera`, or [] when stale/absent."""
+        entry = self._det_cache.get(camera)
+        if entry is None:
+            return []
+        stamp, records = entry
+        if _time.monotonic() - stamp > stale_after:
+            return []
+        return records
 
     def detected(self, target_class, *,
                  camera: str | None = None,
                  stale_after: float = 1.0) -> bool:
-        """Return True if `target_class` was recently detected on `camera`.
+        """Is `target_class` visible RIGHT NOW on `camera`? (True/False).
 
-        Non-blocking: reads a local cache updated by ROS callbacks. Safe to
-        call between DSL verbs in tight loops. Lazily subscribes to the
-        `/duburi/vision/<camera>/detections` topic on first call.
+        A point-in-time check: it pumps the detection stream so the answer
+        reflects the current frame, then returns True iff the class is present
+        and fresh. Use it to branch (``if``) or to drive a moving search
+        (``while``):
+
+            # branch once on what is currently visible
+            if duburi.detected('gate'):
+                duburi.vision.align('gate', yaw=0, lat=0)
+
+            # search WHILE MOVING -- needs a loop (an `if` runs once!)
+            while not duburi.detected('red_pipe'):
+                duburi.move_left(2)
+            duburi.move_forward(3)
+
+        To wait for a target while holding station, prefer ``wait_for`` (one
+        call, no busy-loop). Works inside a vision ``fallback`` too -- the
+        search re-enters the verb the moment the target reappears.
 
         Parameters
         ----------
         target_class : str | ClassRef
-            Class name to look for (e.g. ``'gate'``, ``duburi.models.gate.gate``).
+            Class name (``'gate'``) or a ``duburi.models.<m>.<c>`` handle.
         camera : str | None
             Camera to query. Defaults to ``duburi.camera``.
         stale_after : float
-            Detections older than this many seconds are treated as absent.
-
-        Examples::
-
-            while not duburi.detected('gate'):
-                duburi.move_forward(1.0, gain=30)
-
-            if duburi.detected(duburi.models.gate.flare, stale_after=2.0):
-                duburi.vision.align('flare', yaw=0)
+            Detections older than this many seconds count as absent.
         """
         if isinstance(target_class, ClassRef):
             target_class = target_class.class_name
         cam = camera or self.camera
-        if cam not in self._det_subs:
-            self._subscribe_detections(cam)
-        # Wait briefly so the subscriber callback can fire (detector ~15-25 Hz → one frame in 40-66 ms).
-        rclpy.spin_once(self.client.node, timeout_sec=0.05)
-        entry = self._det_cache.get(cam)
-        if entry is None:
-            return False
-        stamp, class_names = entry
-        if _time.monotonic() - stamp > stale_after:
-            return False
-        # Case-insensitive match, consistent with the control path
-        # (VisionState._hypothesis_matches lowercases both sides) so a
-        # fallback's should_stop() fires the moment the target reappears.
-        needle = str(target_class).strip().lower()
-        return any(needle == name.strip().lower() for name in class_names)
+        self._subscribe_detections(cam)
+        self._pump_detections(cam)
+        return _eval_detected(self._records(cam, stale_after), target_class)
+
+    def wait_for(self, target_class, *,
+                 timeout: float = 10.0,
+                 camera: str | None = None,
+                 stale_after: float = 1.0) -> bool:
+        """Block until `target_class` is seen on `camera`, or `timeout` elapses.
+
+        The loop-free way to (re)acquire a target while stationary -- returns
+        True the moment it appears, False if `timeout` passes first. Each poll
+        pumps the stream, so this keeps the cache fresh without a busy-loop::
+
+            if duburi.wait_for('gate', timeout=8):
+                duburi.vision.align('gate', yaw=0, lat=0)
+            else:
+                duburi.recover()           # never showed up
+
+        For a search that should KEEP MOVING while looking, use a
+        ``while not duburi.detected(...): <small move>`` loop instead.
+        """
+        if isinstance(target_class, ClassRef):
+            target_class = target_class.class_name
+        cam = camera or self.camera
+        self._subscribe_detections(cam)
+        deadline = _time.monotonic() + max(float(timeout), 0.0)
+        while _time.monotonic() < deadline:
+            self._pump_detections(cam)
+            if _eval_detected(self._records(cam, stale_after), target_class):
+                return True
+        return False
+
+    def where(self, target_class, *,
+              camera: str | None = None,
+              stale_after: float = 1.0,
+              band: float = 0.15) -> str:
+        """Bearing of `target_class`: 'left' | 'center' | 'right' | 'unknown'.
+
+        Picks the largest matching detection and reports which side of frame
+        centre it sits on (``band`` = centre dead-zone half-width, normalized).
+        ``'unknown'`` = not visible (or camera_info not seen yet). Image-frame
+        semantics: ``'left'`` means the target is on the left, so yaw left to
+        face it (same polarity as the vision-yaw axis)::
+
+            {'left': lambda: duburi.yaw_left(20),
+             'right': lambda: duburi.yaw_right(20),
+            }.get(duburi.where('gate'), lambda: duburi.move_forward(1))()
+
+        Use ``where_offset`` for the raw signed offset (fine steering).
+        """
+        label, _ = self._where_eval(target_class, camera, stale_after, band)
+        return label
+
+    def where_offset(self, target_class, *,
+                     camera: str | None = None,
+                     stale_after: float = 1.0):
+        """Signed normalized horizontal offset [-1,+1] of `target_class`.
+
+        Negative = left of centre, positive = right; ``None`` when not visible
+        or image width unknown. The continuous companion to ``where``.
+        """
+        _, offset = self._where_eval(target_class, camera, stale_after, 0.0)
+        return offset
+
+    def _where_eval(self, target_class, camera, stale_after, band) -> tuple:
+        if isinstance(target_class, ClassRef):
+            target_class = target_class.class_name
+        cam = camera or self.camera
+        self._subscribe_detections(cam)
+        self._pump_detections(cam)
+        width = self._img_size.get(cam, (0.0, 0.0))[0]
+        return _eval_where(self._records(cam, stale_after),
+                           target_class, width, band)
 
     # ================================================================== #
     #  Power / mode                                                        #
@@ -416,6 +648,9 @@ class DuburiMission:
         """
         self.log.info(f'[MISSION] camera → {name!r}')
         self.camera = name
+        # Eager-subscribe so discovery warms before the first detected()/where()
+        # on the new camera (otherwise that first query false-negates).
+        self._subscribe_detections(name)
 
     def dvl_connect(self):
         """Connect Nortek Nucleus 1000 DVL over TCP."""

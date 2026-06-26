@@ -408,7 +408,7 @@ Engine: `motion_vision.align_loop` / `move_loop`. Source of truth for signatures
 
 Gains are live-tunable (apply on the NEXT goal): `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
 Key vision ROS params (all on `/duburi_manager`): `vision.kp_lat`/`kp_yaw` (60.0), `vision.kp_depth` (0.05), `vision.kp_forward` (200.0), `vision.lost_grace_s` (1.0), `vision.frame_fill_default` (95.0), `vision.align_stable_frames` (3.0). Defaults live in [`vision_tunables.py`](src/duburi_manager/duburi_manager/vision_tunables.py).
-`duburi.detected('gate', stale_after=1.0)` — non-blocking, **case-insensitive** cache poll (use in search loops).
+**Vision queries** (client-side cache reads, distinct from the two action verbs; each pumps the node so the answer is the current frame — the default camera is subscribed eagerly so the first call never false-negates): `duburi.detected('gate', stale_after=1.0)` — point-in-time "visible now?" (True/False, **case-insensitive**); `duburi.wait_for('gate', timeout=8)` — block until seen/timeout (loop-free acquire); `duburi.where('gate')` → `'left'`|`'center'`|`'right'`|`'unknown'` (+ `where_offset` for signed `[-1,+1]`). An `if detected()` runs once — a moving search needs a `while`. All three work inside a vision `fallback`.
 `duburi.models(gate='gate_flare_medium_100ep')` — model registry; `duburi.models.gate.gate` returns `ClassRef` (auto-switches model+class when passed as `target`).
 
 ```bash
