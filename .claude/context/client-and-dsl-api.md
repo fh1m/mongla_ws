@@ -61,6 +61,7 @@ Their fields below; everything else is the open-loop motion surface.
 | `duration`           | float32  | move_*, arc, pause, vision_align, vision_move |
 | `gain`               | float32  | move_*, arc, vision_align, vision_move — for vision it is a **hard max-speed cap** (% thrust) |
 | `gain_lat`/`gain_yaw`/`gain_depth` | float32 | vision_align per-axis speed cap (vision_move uses `gain_lat` for the maintain strafe); **0 = inherit `gain`, not disable** |
+| `brake_off` / `brake_gain` | bool / float32 | vision arrival brake (on by default). `brake_off=true` coasts; `brake_gain` scales the reverse kick (0 = default). DSL exposes `brake=True`; sends `brake_off = not brake`. Brakes lateral (align) + forward-on-fill-stop (move); never yaw/depth/pass-through |
 | `target`             | float32  | set_depth (m) / yaw_* (deg) / lock_heading (deg) |
 | `target_name`        | string   | set_mode                              |
 | `timeout`            | float32  | every command; defaults vary          |

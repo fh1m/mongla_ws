@@ -352,6 +352,16 @@ count against it). `camera` defaults to `duburi.camera` (`'forward'`).
 `target` is a class string (`'gate'`) or a `duburi.models.<alias>.<class>`
 ClassRef (which auto-switches model + class filter first).
 
+> **Inertial brake (`brake=True`, on by default).** Like the control verbs,
+> the vision verbs reverse-kick on arrival to bleed water inertia so the hull
+> stops where you planned and the next step starts from the right place —
+> `align` brakes lateral, `move` brakes forward (+`maintain`) on a fill-stop.
+> It is self-gating on the exit-velocity EMA, so a gently-converged lock that
+> ramps down usually isn't kicked — but a fast snap-in can still cross the gate,
+> so on the **torpedo fire path pass `brake=False`** (no benefit when firing).
+> Pass-through (`move(fwd=None)`) and abort/loss never brake. `brake=False`
+> coasts any step.
+
 #### `align` — centre the target on selected axes
 
 Each of `lat` / `yaw` / `depth` is **`None` = axis OFF**, or a **number =
@@ -398,7 +408,11 @@ Both verbs return `VisionResult(ok, reason, code, last_err_px, fill)`,
 
 ```python
 # yaw_gain low -> slow, stable yaw so the 20 kg hull holds the hole steady to fire.
-if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12, gain=25, yaw_gain=10):
+# brake=False on the fire path: the arrival brake can emit a 0.2s kick on a fast
+# snap-in, nudging the hull off-aim between lock-confirm and fire(). No benefit
+# when firing from a lock (you are not moving away), so disable it.
+if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12, gain=25, yaw_gain=10,
+                       brake=False):
     duburi.fire(1)                       # fire only on a confirmed lock
 else:
     log.info('hole never locked — holding fire')

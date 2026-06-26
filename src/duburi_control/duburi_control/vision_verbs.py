@@ -21,6 +21,7 @@ from contextlib import nullcontext
 from .motion_vision import (
     align_loop, move_loop,
     KP_LAT_DEFAULT, KP_YAW_DEFAULT, KP_DEPTH_DEFAULT, KP_FORWARD_DEFAULT,
+    VISION_BRAKE_GAIN,
 )
 
 
@@ -44,6 +45,7 @@ class VisionVerbs:
                      offset_lat=0.0, offset_yaw=0.0, offset_depth=0.0,
                      err_px=40.0, duration=20.0, gain=30.0,
                      gain_lat=0.0, gain_yaw=0.0, gain_depth=0.0,
+                     brake_off=False, brake_gain=0.0,
                      hold_through_loss=False,
                      kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
                      lost_grace_s=0.0, align_stable_frames=0.0):
@@ -99,6 +101,8 @@ class VisionVerbs:
                     gain_lat=float(gain_lat) or float(gain),
                     gain_yaw=float(gain_yaw) or float(gain),
                     gain_depth=float(gain_depth) or float(gain),
+                    brake=not bool(brake_off),
+                    brake_gain=float(brake_gain) or VISION_BRAKE_GAIN,
                     kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
                     kp_yaw=float(kp_yaw) or KP_YAW_DEFAULT,
                     kp_depth=float(kp_depth) or KP_DEPTH_DEFAULT,
@@ -123,6 +127,7 @@ class VisionVerbs:
     def vision_move(self, camera, target_class, fwd_fill=95.0, mode='area',
                     maintain_px=0.0, maintain_on=False, hold_s=0.0,
                     err_px=40.0, duration=20.0, gain=30.0, gain_lat=0.0,
+                    brake_off=False, brake_gain=0.0,
                     hold_through_loss=False,
                     kp_forward=0.0, kp_lat=0.0, lost_grace_s=0.0):
         """Drive forward until ``target_class`` fills ``fwd_fill`` % of the frame.
@@ -164,6 +169,8 @@ class VisionVerbs:
                 err_px=float(err_px), duration=float(duration),
                 gain=float(gain),
                 gain_lat=float(gain_lat) or float(gain),
+                brake=not bool(brake_off),
+                brake_gain=float(brake_gain) or VISION_BRAKE_GAIN,
                 kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
                 kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
                 lost_grace_s=float(lost_grace_s) or 1.0,

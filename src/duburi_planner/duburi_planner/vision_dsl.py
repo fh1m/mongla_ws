@@ -5,11 +5,12 @@ Exactly two mission-facing verbs, both pixel-native and recover-don't-fail:
     duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
                         err=40, duration=20, gain=30,
                         lat_gain=None, yaw_gain=None, depth_gain=None,
-                        fallback=None, camera=None)
+                        brake=True, brake_gain=None, fallback=None, camera=None)
 
     duburi.vision.move(target, *, fwd=95, mode='area', maintain=None,
                        hold=None, err=40, duration=20, gain=30,
-                       lat_gain=None, fallback=None, camera=None)
+                       lat_gain=None, brake=True, brake_gain=None,
+                       fallback=None, camera=None)
 
 Axis rule (align): each of ``lat`` / ``yaw`` / ``depth`` is ``None`` =
 axis OFF; a number = axis ON, where the number is the **signed pixel
@@ -122,6 +123,8 @@ class _VisionDSL:
               lat_gain: Optional[float] = None,
               yaw_gain: Optional[float] = None,
               depth_gain: Optional[float] = None,
+              brake: bool = True,
+              brake_gain: Optional[float] = None,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -140,6 +143,14 @@ class _VisionDSL:
         torpedo-hole lock). Note ``*_gain=0`` / unset means *inherit*, NOT
         *disable* -- to drop an axis, omit it (``lat`` / ``yaw`` /
         ``depth`` = None).
+
+        ``brake`` (on by default) reverse-kicks the lateral axis on arrival
+        to bleed water inertia, so the hull stops square and the next
+        mission step starts from the planned position. It is self-gating: a
+        gently-converged lock (the hole-lock) exits with ~0 momentum and is
+        NOT kicked, so a fire-on-align shot is never disturbed. Pass
+        ``brake=False`` to coast; ``brake_gain`` scales the kick. Yaw/depth
+        never brake.
         """
         active = [(name, val) for name, val in
                   (('lat', lat), ('yaw', yaw), ('depth', depth))
@@ -168,6 +179,8 @@ class _VisionDSL:
                 gain_lat=float(lat_gain) if lat_gain is not None else 0.0,
                 gain_yaw=float(yaw_gain) if yaw_gain is not None else 0.0,
                 gain_depth=float(depth_gain) if depth_gain is not None else 0.0,
+                brake_off=(not brake),
+                brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
                 hold_through_loss=(fallback is None))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
@@ -185,6 +198,8 @@ class _VisionDSL:
              duration: float = 20.0,
              gain: float = 30.0,
              lat_gain: Optional[float] = None,
+             brake: bool = True,
+             brake_gain: Optional[float] = None,
              fallback: Optional[Callable] = None,
              camera: Optional[str] = None) -> VisionResult:
         """Drive forward toward ``target``; stop at a fill ratio or pass through.
@@ -204,8 +219,12 @@ class _VisionDSL:
         (ignored in pass-through, where it sets the commit overshoot).
         Never re-centres yaw/depth. ``gain`` caps forward speed;
         ``lat_gain`` overrides the cap on the ``maintain`` strafe (unset
-        = inherit ``gain``). Returns a :class:`VisionResult`; never raises
-        on a miss.
+        = inherit ``gain``). ``brake`` (on by default) reverse-kicks the
+        forward (and maintain) axis on a **fill-stop** arrival so the hull
+        halts in front of the target instead of creeping in; PASS-THROUGH
+        (``fwd=None``) never brakes -- it must coast through the gate. Pass
+        ``brake=False`` to coast; ``brake_gain`` scales the kick. Returns a
+        :class:`VisionResult`; never raises on a miss.
         """
         cam = self._resolve_camera(camera)
         tgt = self._resolve_target(target, cam)
@@ -226,6 +245,8 @@ class _VisionDSL:
                 hold_s=float(hold) if hold is not None else 0.0,
                 err_px=float(err), duration=remaining, gain=float(gain),
                 gain_lat=float(lat_gain) if lat_gain is not None else 0.0,
+                brake_off=(not brake),
+                brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
                 hold_through_loss=(fallback is None))
 
         return self._orchestrate('move', tgt, cam, duration, fallback,

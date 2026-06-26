@@ -213,13 +213,17 @@ COMMANDS = {
                     'Aligned when every active axis is within err_px. gain caps speed; '
                     'gain_lat/gain_yaw/gain_depth override the cap per axis (0 = inherit '
                     'gain) so e.g. yaw can micro-align slowly while lateral stays brisk. '
+                    'On arrival the lateral inertia is braked (reverse-kick) so the hull '
+                    'stops square; brake_off=true coasts, brake_gain scales the kick. A '
+                    'gently-converged lock exits with ~0 momentum and is not kicked. '
                     'On duration expiry it logs NOT-aligned and the mission continues. '
                     'hold_through_loss=true coasts on target loss (set by the DSL when '
                     'no fallback search is supplied).',
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
-                     'gain_lat', 'gain_yaw', 'gain_depth', 'hold_through_loss',
+                     'gain_lat', 'gain_yaw', 'gain_depth',
+                     'brake_off', 'brake_gain', 'hold_through_loss',
                      'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames'],
         'defaults': {'camera': 'forward', 'target_class': '',
@@ -227,6 +231,7 @@ COMMANDS = {
                      'offset_depth': 0.0, 'err_px': 40.0,
                      'duration': 20.0, 'gain': 30.0,
                      'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
+                     'brake_off': False, 'brake_gain': 0.0,
                      'hold_through_loss': False,
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0},
@@ -240,16 +245,21 @@ COMMANDS = {
                     'gate. maintain_on holds a maintain_px lateral offset while moving; depth '
                     'and yaw are left to ArduSub / heading lock. gain caps forward speed; '
                     'gain_lat overrides the cap on the maintain strafe (0 = inherit gain). '
-                    'Does NOT re-centre.',
+                    'On a fill-stop arrival the forward (and maintain) inertia is braked so '
+                    'the hull halts in front of the target instead of creeping in; '
+                    'PASS-THROUGH never brakes (it must coast through the gate). '
+                    'brake_off=true coasts, brake_gain scales the kick. Does NOT re-centre.',
         'fields':   ['camera', 'target_class', 'fwd_fill', 'mode',
                      'maintain_px', 'maintain_on', 'hold_s',
-                     'err_px', 'duration', 'gain', 'gain_lat', 'hold_through_loss',
+                     'err_px', 'duration', 'gain', 'gain_lat',
+                     'brake_off', 'brake_gain', 'hold_through_loss',
                      'kp_forward', 'kp_lat', 'lost_grace_s'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'fwd_fill': 95.0, 'mode': 'area',
                      'maintain_px': 0.0, 'maintain_on': False,
                      'hold_s': 0.0, 'err_px': 40.0,
                      'duration': 20.0, 'gain': 30.0, 'gain_lat': 0.0,
+                     'brake_off': False, 'brake_gain': 0.0,
                      'hold_through_loss': False,
                      'kp_forward': 200.0, 'kp_lat': 60.0, 'lost_grace_s': 1.0},
     },
@@ -266,7 +276,7 @@ COMMANDS = {
 STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode')
 
 # Field names that carry a bool. rosidl init these to False.
-BOOL_FIELDS = ('maintain_on', 'hold_through_loss')
+BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):

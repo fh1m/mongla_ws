@@ -48,6 +48,7 @@ from .pixhawk import Pixhawk
 from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
 from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
 from .motion_rates import LOG_THROTTLE_S
+from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep
 
 
 # ---- Outcome codes (copied to Move.Result.final_value) --------------- #
@@ -86,6 +87,20 @@ VISION_YAW_MIN_PCT = 5.0
 # left pure-proportional and decays cleanly into the deadband with no relay.
 # Pool-tunable: confirm the re-engage distance on pool day.
 VISION_YAW_FLOOR_FILL = 0.25
+
+# Inertial arrival brake (lateral + forward-on-fill-stop). The vision loops drive
+# open-loop translation (Ch5/Ch6); on arrival the hull coasts on water inertia in
+# its last travel direction, drifting off the planned position so the next mission
+# step starts wrong. Mirror the control verbs' reverse-kick brake, but scale it to
+# how hard the loop was actually translating just before exit -- a trailing EMA of
+# the signed thrust command. brake = reverse kick opposite the EMA, magnitude
+# VISION_BRAKE_GAIN * |EMA|, capped. A near-zero gate (VISION_BRAKE_MIN_PCT) skips
+# the kick when the loop had already tapered into the deadband (gentle convergence,
+# e.g. the torpedo hole-lock) so the shot is never disturbed. All pool-tunable.
+VISION_BRAKE_GAIN    = 0.6    # reverse-kick % = this * |EMA command %|
+VISION_BRAKE_MIN_PCT = 6.0    # gate: skip the kick below this |EMA| (deadband exit)
+VISION_BRAKE_CAP_PCT = 30.0   # never reverse-kick harder than this
+_BRAKE_EMA_ALPHA     = 0.3    # per-tick EMA weight (~0.4 s memory at LOOP_HZ)
 
 # A detection older than this (seconds) counts as "no target this tick".
 # bbox_error() returns None when the class is absent; this only catches a
@@ -129,6 +144,36 @@ class Outcome:
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _brake_axis(axis_writer, ema_pct: float, brake_gain: float,
+                *, abort_fn=None, log=None, label: str = 'VIS') -> None:
+    """Reverse-kick one translation axis to bleed exit momentum.
+
+    ``ema_pct`` is the trailing EMA of the signed thrust the loop was
+    commanding on this axis (% thrust, +/-). The kick is OPPOSITE that
+    sign, magnitude ``brake_gain * |ema_pct|`` capped at
+    ``VISION_BRAKE_CAP_PCT``, held for ``REVERSE_KICK_SEC``. A near-zero
+    EMA (loop already tapered into the deadband -- gentle convergence /
+    hole-lock) is gated out so the kick never disturbs a steady hull.
+
+    Leaves the axis at the kick PWM; the caller goes neutral next (its
+    normal exit path), so a separate settle is not needed here.
+    """
+    if abs(ema_pct) < VISION_BRAKE_MIN_PCT:
+        return   # deadband exit -- no momentum worth braking
+    mag = min(brake_gain * abs(ema_pct), VISION_BRAKE_CAP_PCT)
+    kick = -math.copysign(mag, ema_pct)
+    if log is not None:
+        log.info(f'[{label:<5}] brake -- reverse {mag:.0f}% '
+                 f'x {REVERSE_KICK_SEC:.2f}s (ema={ema_pct:+.0f}%)')
+    # NOTE: on a lat+depth align, writers.lateral routes through
+    # send_rc_override(lateral=) which drops Ch3 throttle from the 65535
+    # ALT_HOLD release to 1500 for this REVERSE_KICK_SEC. That is intentional and
+    # benign -- 1500 = "hold depth" in ALT_HOLD and matches the send_neutral the
+    # caller issues immediately after; do NOT "fix" it back to a release.
+    axis_writer(Pixhawk.percent_to_pwm(kick))
+    _interruptible_sleep(REVERSE_KICK_SEC, abort_fn)
 
 
 def _fill(sample, mode: str) -> float:
@@ -191,6 +236,8 @@ def align_loop(*,
                gain_lat: Optional[float] = None,
                gain_yaw: Optional[float] = None,
                gain_depth: Optional[float] = None,
+               brake: bool = True,
+               brake_gain: float = VISION_BRAKE_GAIN,
                kp_lat: float = KP_LAT_DEFAULT,
                kp_yaw: float = KP_YAW_DEFAULT,
                kp_depth: float = KP_DEPTH_DEFAULT,
@@ -257,6 +304,7 @@ def align_loop(*,
     last_log    = 0.0
     last_depth  = 0.0
     last_err_px = float('inf')
+    lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
 
     log.info(
         f"[VIS  ] align class={target_class!r} axes={sorted(axes)} "
@@ -345,12 +393,20 @@ def align_loop(*,
 
             last_err_px = worst
             _drive(lat_pct, yaw_pct)
+            lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
             if use_depth and (now - last_depth) >= 1.0 / DEPTH_HZ:
                 pixhawk.set_target_depth(depth_setpoint)
                 last_depth = now
 
             stable = stable + 1 if all(in_band) else 0
             if stable >= align_stable_frames:
+                # Arrival: bleed lateral inertia so the hull stops square and the
+                # next mission step starts from the planned position. Gated on the
+                # EMA, so a gently-converged lock (hole-lock) exits with ~0 EMA and
+                # is NOT kicked. Yaw/depth never brake.
+                if brake and 'lat' in axes:
+                    _brake_axis(writers.lateral, lat_ema, brake_gain,
+                                abort_fn=abort_fn, log=log, label='VBRK')
                 writers.neutral()
                 return Outcome(ALIGNED, f"aligned ({worst:.0f}px)",
                                worst, 0.0, elapsed)
@@ -386,6 +442,8 @@ def move_loop(*,
               duration: float = 20.0,
               gain: float = 30.0,
               gain_lat: Optional[float] = None,
+              brake: bool = True,
+              brake_gain: float = VISION_BRAKE_GAIN,
               kp_forward: float = KP_FORWARD_DEFAULT,
               kp_lat: float = KP_LAT_DEFAULT,
               lost_grace_s: float = 1.0,
@@ -444,6 +502,8 @@ def move_loop(*,
     last_log     = 0.0
     last_fill    = 0.0
     last_lat_err = 0.0
+    fwd_ema      = 0.0   # trailing EMA of forward command -> brake proxy (fill-stop)
+    lat_ema      = 0.0   # trailing EMA of the maintain strafe command -> brake proxy
 
     # Pass-through commit window: hold_s overrides the module default.
     commit_s = hold_s if hold_s > 0.0 else _PASSTHROUGH_COMMIT_S
@@ -519,9 +579,11 @@ def move_loop(*,
                 ctrl = sample.ex - maintain_px / half_w
                 last_lat_err = abs(ctrl) * half_w
                 lat_pct = _clamp(ctrl * kp_lat, -g_lat, g_lat)
+            lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
 
             if passthrough:
                 # Drive forward at the speed cap until the target leaves frame.
+                # Pass-through is defined to COAST through the gate -- never braked.
                 _drive(gain, lat_pct)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     log.info(f"[VIS  ] move PASS-THROUGH fill={fill * 100:5.1f}% "
@@ -535,7 +597,16 @@ def move_loop(*,
                     reached_at = now
                 # Station-keep: zero forward, keep correcting lateral if asked.
                 _drive(0.0, lat_pct)
+                fwd_ema += _BRAKE_EMA_ALPHA * (0.0 - fwd_ema)   # forward decays while holding
                 if hold_s <= 0.0 or (now - reached_at) >= hold_s:
+                    # Arrival: bleed the forward (and maintain-strafe) inertia so the
+                    # hull halts in front of the target instead of creeping into it.
+                    if brake:
+                        _brake_axis(writers.forward, fwd_ema, brake_gain,
+                                    abort_fn=abort_fn, log=log, label='VBRK')
+                        if maintain_on:
+                            _brake_axis(writers.lateral, lat_ema, brake_gain,
+                                        abort_fn=abort_fn, log=log, label='VBRK')
                     writers.neutral()
                     return Outcome(ALIGNED,
                                    f"reached fill={fill * 100:.0f}%",
@@ -544,6 +615,7 @@ def move_loop(*,
                 reached_at = None
                 fwd_pct = _clamp((fwd_fill - fill) * kp_forward, 0.0, gain)
                 _drive(fwd_pct, lat_pct)
+                fwd_ema += _BRAKE_EMA_ALPHA * (fwd_pct - fwd_ema)
 
             if (now - last_log) >= LOG_THROTTLE_S:
                 hold_tag = ("" if reached_at is None

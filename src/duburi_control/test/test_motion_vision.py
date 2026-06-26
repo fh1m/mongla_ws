@@ -84,8 +84,23 @@ class _FakePixhawk:
 
 
 class _FakeWriters:
+    """Stand-in for the Writers bundle.
+
+    The loops drive translation via `pixhawk` directly; only the arrival
+    brake (`_brake_axis`) writes through `writers.forward`/`.lateral`, so
+    these lists capture exactly the brake kicks (empty when braking is
+    gated out / disabled).
+    """
     def __init__(self):
         self.neutralised = 0
+        self.forwards = []     # brake-kick PWMs on the forward axis
+        self.laterals = []     # brake-kick PWMs on the lateral axis
+
+    def forward(self, pwm):
+        self.forwards.append(pwm)
+
+    def lateral(self, pwm):
+        self.laterals.append(pwm)
 
     def neutral(self):
         self.neutralised += 1
@@ -367,6 +382,78 @@ def test_align_yaw_and_lat_share_one_override_packet():
     assert both, 'yaw+lat align must emit Ch6 and Ch4 in the same RC packet'
 
 
+# --------------------------------------------------------------------------- #
+#  align_loop -- inertial arrival brake                                        #
+# --------------------------------------------------------------------------- #
+def test_align_brake_fires_after_sustained_strafe():
+    # A lat align that drives hard one way and then reaches the band must emit a
+    # REVERSE-sign lateral brake kick (opposite the drive) before going neutral,
+    # so the hull stops square instead of coasting sideways.
+    from duburi_control.motion_vision import VISION_BRAKE_MIN_PCT
+    # Off-centre for a while (drives +lat), then snaps into band -> ALIGNED.
+    drift = [_sample(ex=0.6)] * 4 + [_sample(ex=0.0)] * 4
+    pix = _FakePixhawk()
+    out, _, writers = _align(_FakeVision(drift), pix=pix,
+                             axes={'lat'}, kp_lat=60.0, gain=30.0,
+                             err_px=40.0, duration=2.0)
+    assert out.code == ALIGNED
+    assert writers.laterals, 'expected a lateral brake kick on arrival'
+    # EMA of +lat drive -> reverse kick is BELOW neutral (Ch6 < 1500).
+    assert min(writers.laterals) < 1500, 'brake must reverse the drive direction'
+
+
+def test_align_brake_gated_on_gentle_convergence():
+    # THE fire-on-align safety pin: a target already in-band (EMA ~ 0, e.g. the
+    # gently-converged hole-lock) must NOT be kicked -- a brake here would shove
+    # the hull off the lock right before the mission fires.
+    pix = _FakePixhawk()
+    out, _, writers = _align(_FakeVision(_sample(ex=0.0)), pix=pix,
+                             axes={'lat'}, kp_lat=60.0, gain=30.0, err_px=40.0)
+    assert out.code == ALIGNED
+    assert not writers.laterals, (
+        'gentle convergence (EMA~0) must NOT brake -- the hole-lock shot '
+        'must not be disturbed')
+
+
+def test_align_brake_gated_on_realistic_rampdown_lock():
+    # A realistic hole-lock ramps DOWN from off-centre into a tight err band -- the
+    # P-output tapers, so the EMA decays below the gate and the lock is NOT kicked.
+    # This is the real fire-on-align case (the ex=0-from-tick-1 test is degenerate).
+    ramp = [_sample(ex=0.5), _sample(ex=0.4), _sample(ex=0.3), _sample(ex=0.2),
+            _sample(ex=0.12), _sample(ex=0.06)] + [_sample(ex=0.03)] * 4
+    out, _, writers = _align(_FakeVision(ramp),
+                             axes={'lat'}, kp_lat=60.0, gain=12.0,
+                             err_px=14.0, duration=5.0)
+    assert out.code == ALIGNED
+    assert not writers.laterals, (
+        'a gently-ramped lock must stay below the brake gate (no pre-fire kick)')
+
+
+def test_align_brake_fires_on_fast_snap_in():
+    # The boundary case the docs warn about: sustained hard lateral drive then an
+    # ABRUPT centre keeps the EMA above the gate, so a kick DOES fire on arrival.
+    # This is exactly why the torpedo fire path passes brake=False -- pinned so the
+    # doc claim stays honest if the gate / EMA constants are ever retuned.
+    snap = [_sample(ex=1.0)] * 8 + [_sample(ex=0.03)] * 4
+    out, _, writers = _align(_FakeVision(snap),
+                             axes={'lat'}, kp_lat=60.0, gain=25.0,
+                             err_px=14.0, duration=5.0)
+    assert out.code == ALIGNED
+    assert writers.laterals and min(writers.laterals) < 1500, (
+        'a fast snap-in keeps EMA above the gate -> a reverse kick fires '
+        '(documents why fire-from-lock uses brake=False)')
+
+
+def test_align_brake_off_suppresses_kick():
+    # brake=False must coast even after a hard strafe.
+    drift = [_sample(ex=0.6)] * 4 + [_sample(ex=0.0)] * 4
+    out, _, writers = _align(_FakeVision(drift),
+                             axes={'lat'}, kp_lat=60.0, gain=30.0,
+                             err_px=40.0, duration=2.0, brake=False)
+    assert out.code == ALIGNED
+    assert not writers.laterals, 'brake=False must emit no brake kick'
+
+
 def test_align_lost_after_grace():
     out, _, _ = _align(_FakeVision(None), lost_grace_s=0.1, duration=2.0)
     assert out.code == LOST
@@ -450,6 +537,47 @@ def test_move_per_axis_gain_lat_caps_strafe_not_forward():
     assert fwd and lat
     assert max(fwd) <= _FakePixhawk.percent_to_pwm(50.0), 'forward keeps the global cap'
     assert max(lat) == _FakePixhawk.percent_to_pwm(10.0), 'strafe uses its own cap'
+
+
+def test_move_brake_fires_forward_on_fill_stop():
+    # Drive forward toward a target that fills the frame -> on the fill-stop
+    # arrival the forward inertia is braked (reverse kick BELOW neutral) so the
+    # hull halts in front instead of creeping in.
+    far_then_big = [_sample(w_frac=0.2, h_frac=0.2)] * 3 + \
+                   [_sample(w_frac=1.0, h_frac=1.0)] * 3
+    out, _, writers = _move(_FakeVision(far_then_big), fwd_fill=0.8, mode='area',
+                            gain=40.0, hold_s=0.0, duration=2.0)
+    assert out.code == ALIGNED
+    assert writers.forwards, 'expected a forward brake kick on fill-stop arrival'
+    assert min(writers.forwards) < 1500, 'forward brake must reverse the drive'
+
+
+def test_move_passthrough_never_brakes():
+    # Pass-through is defined to COAST through the gate: seen then gone -> ALIGNED
+    # with NO brake kick (a brake would defeat carrying the hull through).
+    seen = _sample(w_frac=0.5, h_frac=0.5)
+    vis = _FakeVision([seen, seen, None])
+    out, _, writers = _move(vis, passthrough=True, hold_s=0.1,
+                            lost_grace_s=5.0, duration=1.0)
+    assert out.code == ALIGNED
+    assert not writers.forwards, 'pass-through must never brake -- it must coast'
+
+
+def test_move_timeout_does_not_brake():
+    # A far target that never reaches fill -> TIMEOUT, no arrival, no brake.
+    out, _, writers = _move(_FakeVision(_sample(w_frac=0.1, h_frac=0.1)),
+                            fwd_fill=0.8, gain=30.0, duration=0.25)
+    assert out.code == TIMEOUT
+    assert not writers.forwards, 'a non-arrival (timeout) exit must not brake'
+
+
+def test_move_brake_off_suppresses_forward_kick():
+    far_then_big = [_sample(w_frac=0.2, h_frac=0.2)] * 3 + \
+                   [_sample(w_frac=1.0, h_frac=1.0)] * 3
+    out, _, writers = _move(_FakeVision(far_then_big), fwd_fill=0.8,
+                            gain=40.0, hold_s=0.0, duration=2.0, brake=False)
+    assert out.code == ALIGNED
+    assert not writers.forwards, 'brake=False must emit no forward brake kick'
 
 
 def test_move_lost_after_grace():
