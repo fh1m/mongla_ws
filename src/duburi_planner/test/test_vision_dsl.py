@@ -162,20 +162,98 @@ def test_move_never_dies_on_server_failure():
 # --------------------------------------------------------------------------- #
 #  detected() case-insensitive (control path lowercases both sides)           #
 # --------------------------------------------------------------------------- #
+def _rec(cls, cx=320.0, cy=240.0, w=40.0, h=40.0, conf=0.9):
+    """Build a DetRecord tuple: (class_lower, cx, cy, w, h, conf)."""
+    return (cls, cx, cy, w, h, conf)
+
+
 def test_detected_is_case_insensitive(monkeypatch):
     import time as _t
     import duburi_planner.duburi_dsl as dd
 
-    # detected() spins the node once; stub it out (no ROS in unit tests).
-    monkeypatch.setattr(dd.rclpy, 'spin_once', lambda *a, **k: None)
+    # detected() pumps the node; stub the pump out (no ROS in unit tests).
     m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
-    # Pretend we're subscribed and the detector just published 'Gate'.
+    monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
+    # Pretend we're subscribed and the detector just published 'gate'.
     m._det_subs['forward'] = object()
-    m._det_cache['forward'] = (_t.monotonic(), {'Gate'})
+    m._det_cache['forward'] = (_t.monotonic(), [_rec('gate')])
 
     assert m.detected('gate') is True      # case-insensitive match
     assert m.detected('GATE') is True
     assert m.detected('flare') is False
+
+
+# --------------------------------------------------------------------------- #
+#  Pure cores: _eval_detected / _eval_where (no ROS)                          #
+# --------------------------------------------------------------------------- #
+def test_eval_detected_present_absent_caseinsensitive():
+    import duburi_planner.duburi_dsl as dd
+    recs = [_rec('gate'), _rec('flare')]
+    assert dd._eval_detected(recs, 'gate') is True
+    assert dd._eval_detected(recs, 'GATE') is True       # case-insensitive
+    assert dd._eval_detected(recs, ' Flare ') is True    # trimmed
+    assert dd._eval_detected(recs, 'hole') is False
+    assert dd._eval_detected([], 'gate') is False
+
+
+def test_eval_where_left_center_right():
+    import duburi_planner.duburi_dsl as dd
+    W = 640.0
+    # cx=64 -> offset -0.8 -> left; cx=320 -> 0 -> center; cx=576 -> +0.8 -> right
+    assert dd._eval_where([_rec('gate', cx=64.0)],  'gate', W, 0.15)[0] == 'left'
+    assert dd._eval_where([_rec('gate', cx=320.0)], 'gate', W, 0.15)[0] == 'center'
+    assert dd._eval_where([_rec('gate', cx=576.0)], 'gate', W, 0.15)[0] == 'right'
+
+
+def test_eval_where_largest_area_wins():
+    import duburi_planner.duburi_dsl as dd
+    # Two gates: a tiny one on the left, a big one on the right -> right wins.
+    recs = [_rec('gate', cx=50.0,  w=10.0, h=10.0),
+            _rec('gate', cx=600.0, w=200.0, h=200.0)]
+    label, offset = dd._eval_where(recs, 'gate', 640.0, 0.15)
+    assert label == 'right'
+    assert offset > 0.0
+
+
+def test_eval_where_unknown_when_no_width_or_absent():
+    import duburi_planner.duburi_dsl as dd
+    assert dd._eval_where([_rec('gate')], 'gate', 0.0, 0.15) == ('unknown', None)
+    assert dd._eval_where([], 'gate', 640.0, 0.15) == ('unknown', None)
+    assert dd._eval_where([_rec('flare')], 'gate', 640.0, 0.15) == ('unknown', None)
+
+
+def test_wait_for_returns_true_when_target_appears(monkeypatch):
+    import time as _t
+    import duburi_planner.duburi_dsl as dd
+    m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
+    monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
+    # Target absent for the first 2 polls, then appears.
+    state = {'n': 0}
+    def fake_records(cam, stale):
+        state['n'] += 1
+        return [_rec('gate')] if state['n'] >= 3 else []
+    monkeypatch.setattr(m, '_records', fake_records)
+    assert m.wait_for('gate', timeout=5.0) is True
+
+
+def test_wait_for_returns_false_on_timeout(monkeypatch):
+    import duburi_planner.duburi_dsl as dd
+    m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
+    monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
+    monkeypatch.setattr(m, '_records', lambda *a, **k: [])  # never appears
+    assert m.wait_for('gate', timeout=0.2) is False
+
+
+def test_where_returns_label_from_cache(monkeypatch):
+    import time as _t
+    import duburi_planner.duburi_dsl as dd
+    m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
+    monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
+    m._img_size['forward'] = (640.0, 480.0)
+    m._det_cache['forward'] = (_t.monotonic(), [_rec('gate', cx=64.0)])
+    assert m.where('gate') == 'left'
+    assert m.where_offset('gate') < 0.0
+    assert m.where('hole') == 'unknown'
 
 
 def test_detector_node_derivation():

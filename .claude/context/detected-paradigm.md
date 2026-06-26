@@ -14,94 +14,115 @@
 
 `duburi.detected(class, *, camera=None, stale_after=1.0) -> bool`
 
-A **non-blocking, cache-backed observation query**. It does not send a
-MAVLink command. It does not block waiting for an action to complete. It
-simply asks: "is `class` currently visible on `camera`?"
+A **point-in-time observation query**: "is `class` visible RIGHT NOW on
+`camera`?" It does not send a MAVLink command. It reads the same
+`/duburi/vision/<cam>/detections` stream the control loop acts on, and
+**actively pumps the ROS node** before answering so the result reflects the
+current frame — not a cache left over from the last move.
 
-The answer is drawn from a per-camera timestamp-stamped cache that is
-refreshed automatically during every blocking DSL verb (because each verb
-calls `rclpy.spin_until_future_complete`, which processes all pending ROS
-callbacks including the subscription on `/duburi/vision/<cam>/detections`).
+Two companions share the same machinery (added 2026-06):
 
-### The three-line mental model
+- `duburi.wait_for(class, *, timeout=10.0, camera=None, stale_after=1.0) -> bool`
+  — block until the class appears or `timeout` elapses. The loop-free way to
+  acquire a target while stationary.
+- `duburi.where(class, *, camera=None, stale_after=1.0, band=0.15) -> str`
+  — bearing of the largest matching detection: `'left'` | `'center'` |
+  `'right'` | `'unknown'`. `where_offset(...)` returns the raw signed
+  normalized offset `[-1,+1]` for fine steering.
+
+### `if` runs ONCE — a moving search needs a `while`
+
+The single most common mistake (and the original "2nd command never runs"
+bug report) is treating an `if` as a loop:
+
+```python
+# ✗ WRONG — an if executes once; this is NOT a circle search
+if duburi.detected('gate'):
+    duburi.move_forward(2)
+else:
+    duburi.yaw_left(90)        # runs at most once, then the script falls through
+
+# ✓ CORRECT — a moving search loops until seen
+while not duburi.detected('gate'):
+    duburi.yaw_left(30)        # keep turning until the gate comes into frame
+duburi.move_forward(2)         # runs once the loop exits
+```
+
+### The mental model
 
 ```
 mission code                     |  what's happening
 ---------------------------------|-------------------------------------------
-while not duburi.detected('gate')|  read cache → False (gate not visible yet)
-    duburi.move_forward(0.5)     |  blocking action round-trip → cache updated
-                                 |  spin_until_future_complete fires callbacks
-# → loop exits when gate visible |  next detected() call → True
+while not duburi.detected('gate')|  pump node → read current frame → False
+    duburi.yaw_left(30)          |  blocking action round-trip (hull turns)
+# → loop exits when gate visible |  next detected() pumps → sees gate → True
 duburi.vision.align('gate',      |  vision P-loop centres on gate bbox
                     yaw=0, lat=0) |  (signed pixel offsets; 0 = centre)
 ```
 
 ---
 
-## 2. Internal mechanics (why it is safe)
+## 2. Internal mechanics (why it is reliable)
 
-### 2.1 Subscription lifecycle
+> **History:** before 2026-06, `detected()` lazily subscribed on first call
+> and did a single `spin_once(0.05)`. With no background executor, the first
+> poll raced DDS discovery (50–500 ms) and a lone poll serviced one callback —
+> so a `while not detected()` loop would spin forever even with the target in
+> frame. The fix below (eager subscribe + active pump) removes both failure
+> modes.
 
-On the **first call** for a given camera, `_subscribe_detections(cam)` is
-called once. It creates a `Detection2DArray` subscriber on
-`/duburi/vision/<cam>/detections` with depth 10 (RELIABLE QoS default). The
-`sub` object is stored in `self._det_subs[cam]` to keep it alive for the
-process lifetime.
+### 2.1 Subscription lifecycle — eager, not lazy
 
-Subsequent calls for the same camera skip this — no repeated allocation.
+The **default camera is subscribed in `__init__`**, and `use_camera(name)`
+subscribes the new camera immediately. So DDS discovery completes long before
+the first `detected()`/`where()`, and the first poll cannot false-negate.
+`_subscribe_detections(cam)` is idempotent and creates two subs per camera:
+`/duburi/vision/<cam>/detections` (RELIABLE depth-10, matching `VisionState`)
+and `/duburi/vision/<cam>/camera_info` (for the image width `where()` needs).
 
-### 2.2 Callback: eager class extraction
+### 2.2 Callback: eager record extraction
 
-```python
-def _on_detections(self, camera: str, msg: Detection2DArray) -> None:
-    names: set[str] = set()
-    for d in msg.detections:
-        if not d.results:
-            continue
-        hyp = d.results[0]
-        if hasattr(hyp, 'hypothesis'):
-            names.add(str(hyp.hypothesis.class_id))
-        else:
-            names.add(str(getattr(hyp, 'id', '')))
-    self._det_cache[camera] = (time.monotonic(), names)
-```
-
-Class names are extracted to plain Python strings **immediately** in the
-callback. The ROS message object is never stored in the cache. This is
-critical: rclpy may reuse the underlying C++ `Detection2DArray` memory
-across successive callbacks. Storing the message and reading it later would
-read garbage or the next frame's data.
+`_on_detections` parses each frame into plain-Python `DetRecord` tuples
+**immediately** — `(class_lower, cx_px, cy_px, w_px, h_px, conf)` — via
+`_parse_detections`. The ROS message is never stored: rclpy reuses the C++
+buffer across callbacks, so holding it would read the next frame's data. The
+class/bbox/score fields are read through `_det_class_id` / `_det_center` /
+`_det_score`, which handle both the Humble-flat and Iron+ nested message
+layouts (mirrors `VisionState`'s helpers so queries agree with the control
+path). The callback also marks the camera "warm".
 
 ### 2.3 Cache entry format
 
 ```python
-self._det_cache[camera]  # dict[str, tuple[float, set[str]]]
-                         #   key:   camera name
-                         #   value: (monotonic_stamp, {class_name, ...})
+self._det_cache[camera]  # dict[str, tuple[float, list[DetRecord]]]
+                         #   value: (monotonic_stamp, [(cls, cx, cy, w, h, conf), ...])
+self._img_size[camera]   # (width, height) from camera_info (for where())
 ```
 
-### 2.4 The `spin_once` call inside `detected()`
+### 2.4 The active pump inside every query
 
 ```python
-rclpy.spin_once(self.client.node, timeout_sec=0.05)
+def _pump_detections(self, camera):
+    start = monotonic()
+    budget = WARM(0.25s) if camera warm else COLD(0.60s)   # cold covers discovery
+    while monotonic() < start + budget:
+        rclpy.spin_once(node, 0.02)
+        if cache[camera] stamped >= start:   # a frame newer than this call
+            return
 ```
 
-Every `detected()` call spins the ROS event loop for up to 50 ms. This
-guarantees:
-- At least one callback cycle fires so brand-new detections reach the cache.
-- The call is bounded and never hangs — `timeout_sec=0.05` is the ceiling.
+The detector publishes a `Detection2DArray` **every frame** (even when
+empty), so a live pipeline lands a fresh frame within ~1 frame period and the
+pump returns early. A stalled or just-subscribed pipeline burns the budget and
+the query reads no fresh data → correctly returns absent. The result is a
+true point-in-time answer, independent of whether a verb ran recently.
 
-50 ms is sufficient because the detector runs at 15–25 Hz (frame interval
-40–66 ms). One `spin_once(0.05)` is enough to catch the most recent frame.
+### 2.5 Why this is safe (no executor race)
 
-### 2.5 How blocking verbs keep the cache warm
-
-Every blocking verb calls `self.client.send(cmd, **fields)` internally.
-`send()` uses `rclpy.spin_until_future_complete(node, goal_handle_future, ...)`.
-This spin processes ALL pending callbacks on the node's executor — including
-the `/detections` subscription. So immediately after `move_forward(0.5)`
-returns, `_det_cache[camera]` contains the detection state as of the last
-frame received during the move. The cache is never stale right after a verb.
+Queries run **between** goals only — the mission is single-threaded, so a
+query never executes while `client.send()` is spinning on an action future.
+The pump therefore never races the action client; it owns the node for its
+bounded window and returns.
 
 ---
 
@@ -152,6 +173,65 @@ while not duburi.detected('gate'):
 A `ClassRef` in `detected()` is **read-only** — it extracts `.class_name`
 and does not call `set_model()` or `set_classes()`. That's intentional.
 `detected()` is an observation query, not a detector control operation.
+The same holds for `wait_for()` and `where()`.
+
+### 3.1 `wait_for` — block until seen (loop-free acquire)
+
+```python
+duburi.wait_for(target_class, *, timeout=10.0,
+                camera=None, stale_after=1.0) -> bool
+```
+
+Polls (and pumps) until `target_class` appears, returning `True` the moment
+it does, or `False` if `timeout` elapses first. Use it to acquire/re-acquire
+a target while holding station — no busy-loop, no `move` between polls:
+
+```python
+if duburi.wait_for('gate', timeout=8):
+    duburi.vision.align('gate', yaw=0, lat=0)
+else:
+    duburi.recover()                 # never appeared in 8 s
+```
+
+`wait_for` is for waiting **in place**; to search while *moving*, use a
+`while not detected(): <small move>` loop (§4 Rule 1).
+
+### 3.2 `where` — bearing of the target
+
+```python
+duburi.where(target_class, *, camera=None,
+             stale_after=1.0, band=0.15) -> str       # 'left'|'center'|'right'|'unknown'
+duburi.where_offset(target_class, ...) -> float|None  # signed [-1,+1], None if unknown
+```
+
+Picks the **largest-area** matching detection and reports which side of frame
+centre it sits on (`band` = centre dead-zone half-width, normalized).
+`'unknown'` = not visible, or `camera_info` not seen yet. Image-frame
+semantics: `'left'` = target on the left → yaw left to face it (same polarity
+as the vision-yaw axis). Coarse steering:
+
+```python
+{'left':  lambda: duburi.yaw_left(20),
+ 'right': lambda: duburi.yaw_right(20),
+}.get(duburi.where('gate'), lambda: duburi.move_forward(1))()
+```
+
+`where_offset` gives the continuous offset for proportional steering.
+
+### 3.3 Use inside a vision `fallback`
+
+These queries run between goals, which is exactly the context a vision
+`fallback` search executes in. So a fallback can use them freely — the search
+re-enters the verb the moment `detected()`/`wait_for()` sees the target:
+
+```python
+def sweep(duburi, should_stop):       # should_stop() is duburi.detected(target)
+    for ang in (20, -40, 40):
+        duburi.turn(duburi.head() + ang)
+        if should_stop():
+            return
+duburi.vision.align('gate', yaw=0, lat=0, fallback=sweep)
+```
 
 ---
 
@@ -236,21 +316,25 @@ to restore the filter before the loop.
 | Confirm target is still there after maneuver | 0.5 s | Verify fresh frame, not stale cache |
 | Search loop with 1 s pause steps | 1.0 s | Steps update cache every 1 s |
 
-### Rule 5 — Never put detected() in a bare while True without any blocking call
+### Rule 5 — A poll-loop now works, but do something useful in it
+
+Since `detected()` pumps the node itself, a bare `while not detected(): pass`
+will **exit correctly** when the target appears (the old lazy version could
+hang). But it busy-spins the CPU doing nothing. Prefer `wait_for` (to wait in
+place) or a small move (to search):
 
 ```python
-# ✗ WRONG — detected() calls spin_once(0.05) each iteration, so this
-#            burns ~50ms per loop and hogs the node thread
-while not duburi.detected('gate'):
-    pass   # no blocking verb
+# ✓ BEST for waiting in place — one call, no busy-loop
+if duburi.wait_for('gate', timeout=10):
+    ...
 
-# ✓ CORRECT — pause provides a real sleep + callback cycle
-while not duburi.detected('gate'):
-    duburi.pause(0.5)   # 0.5s sleep, cache updated
-
-# ✓ CORRECT — move provides the blocking action cycle
+# ✓ search WHILE moving — the loop both polls and makes progress
 while not duburi.detected('gate'):
     duburi.move_forward(0.5, gain=30)
+
+# ⚠ works but wasteful — busy-polls (~8 Hz) doing nothing; use wait_for instead
+while not duburi.detected('gate'):
+    pass
 ```
 
 ### Rule 6 — Camera defaults to `'forward'`; switch it for the downward cam
@@ -283,7 +367,9 @@ Understanding this is essential for designing detected()-paradigm missions.
 
 ### Blocking (each line waits for action server round-trip)
 
-Every one of these keeps the detection cache warm during execution:
+These run the action round-trip (and incidentally service callbacks).
+`detected()` no longer depends on that — it pumps the node itself — but these
+are still where the *time* in a mission is spent:
 
 ```python
 duburi.move_forward(s)      # Ch5 RC override for s seconds
@@ -388,9 +474,10 @@ for _ in range(18):
 
 ### 6.2 Forbidden / will silently fail
 
-**Loop without motion verb:**
+**Busy poll-loop (works, but wasteful — use `wait_for`):**
 ```python
-# ✗ detected() calls spin_once(0.05) — so this runs ~20x/s with no sleep
+# ⚠ detected() pumps, so this DOES exit when the gate appears, but it
+#   busy-spins (~8 Hz) doing nothing. Prefer wait_for('gate', timeout=...).
 while not duburi.detected('gate'):
     pass
 ```
@@ -453,29 +540,33 @@ There is no parallel thread contention because:
 ```
 mission script (planner process)     manager process (control process)
 ─────────────────────────────────    ──────────────────────────────────
-detected('gate') → False             /duburi/vision/.../detections ← (detections topic)
+detected('gate') → pump → False      /duburi/vision/.../detections ← (detections topic)
 move_forward(0.5) ──────────────────→  executes motion command (Ch5 RC)
-  spin_until_future_complete         /duburi/vision/.../detections ← updated during spin
-detected('gate') → True             (no action sent yet)
+detected('gate') → pump → True       reads the current frame itself
 vision.align(...) ──────────────────→  executes vision P-loop
 ```
 
 Key property: **at any given instant, at most one action goal is in flight**.
 The manager serialises commands with a `threading.Lock`. The planner sends one
-goal, blocks, gets the result, then sends the next. There is never a race
-between detected() and a motion command.
+goal, blocks, gets the result, then sends the next. A query runs only between
+goals, so its pump never races an in-flight action future.
 
-### What detected() does NOT do
+### What a query (detected/wait_for/where) does NOT do
 
 - Does NOT send any MAVLink messages.
 - Does NOT send any ROS2 action goals.
-- Does NOT change the detector's class filter.
+- Does NOT change the detector's class filter (ClassRef is read-only here).
 - Does NOT change any motion state.
-- Does NOT block (beyond the 50ms spin_once timeout).
+- Does NOT block beyond its bounded pump window (`detected`/`where`: one
+  pump, ≤0.25 s warm / ≤0.60 s cold; `wait_for`: until seen or its `timeout`).
+  The warm budget (`_PUMP_WARM_S`) must be ≥ ~2 real frame-periods; if the
+  detector runs slower than ~8 Hz, raise it (or the query falls back to the
+  last cached frame, up to `stale_after` old).
 - Does NOT interact with the heading lock or heartbeat.
 
-It is a pure read of a local in-memory dict. The only side effect is
-subscribing to a topic on first call (once per camera per process lifetime).
+It is a bounded pump + read of a local in-memory cache. The only persistent
+side effect is subscribing to a camera's topics on first use (idempotent;
+the default camera is subscribed eagerly at construction).
 
 ---
 
@@ -514,16 +605,19 @@ import time
 def run(duburi, log):
     duburi.camera = 'forward'
 
-    # 1. Cold-cache check (no blocking verb yet)
-    log.info('=== Test 1: cold cache (expect False) ===')
+    # 1. First check — eager subscribe + pump means this is already reliable
+    #    (True if the gate is in view right now, no warm-up move needed).
+    log.info('=== Test 1: first detected() (pumps the current frame) ===')
     result = duburi.detected('gate')
-    log.info(f'detected("gate") = {result}')   # may be False (cache cold)
+    log.info(f'detected("gate") = {result}')   # True iff gate visible now
 
-    # 2. After a pause, cache should be warm
-    duburi.pause(1.0)
-    log.info('=== Test 2: after pause (cache updated during spin) ===')
-    result = duburi.detected('gate')
-    log.info(f'detected("gate") = {result}')   # True if gate in view, False if not
+    # 2. wait_for — block (in place) until the gate appears or timeout
+    log.info('=== Test 2: wait_for (loop-free acquire) ===')
+    seen = duburi.wait_for('gate', timeout=3.0)
+    log.info(f'wait_for("gate", 3s) = {seen}')
+
+    # 2b. where — bearing of the gate ('left'|'center'|'right'|'unknown')
+    log.info(f'where("gate") = {duburi.where("gate")}')
 
     # 3. stale_after test
     log.info('=== Test 3: stale_after=0.01 (almost always False) ===')

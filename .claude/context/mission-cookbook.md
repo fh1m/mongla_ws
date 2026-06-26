@@ -1326,20 +1326,45 @@ def run(duburi, log):
 > Prefer to fold the search into the verb itself: pass the loop as a `fallback`
 > and `align` will run it on target loss, then re-enter — all inside `duration`.
 
-### 7.6  Detection guards — `duburi.detected()` paradigm
+### 7.6  Vision queries — `detected()` / `wait_for()` / `where()`
 
-`duburi.detected(class, *, camera=None, stale_after=1.0) -> bool` is a
-**non-blocking, cache-backed observation query**. It reads a local Python
-dict that is refreshed automatically during every blocking DSL verb (the
-verb's `rclpy.spin_until_future_complete` call fires pending ROS callbacks,
-including the `/detections` subscription).
+Three client-side reads of the `/detections` stream let open-loop motion react
+to what the camera sees, then hand off to vision-closed control. Each **pumps
+the node** so the answer is the current frame (the default camera is subscribed
+eagerly, so the first call never false-negates):
 
-This enables a new class of mission design: **the AUV executes open-loop
-maneuvers *until* a target comes into view, then hands off to vision-closed
-control**. This is the architecture step toward YASMIN FSMs — each
-`while detected()` loop IS a proto-state.
+- `duburi.detected(class, *, camera=None, stale_after=1.0) -> bool` — visible
+  right now? (point-in-time, case-insensitive)
+- `duburi.wait_for(class, *, timeout=10.0, ...) -> bool` — block until seen or
+  timeout (loop-free acquire while stationary)
+- `duburi.where(class, *, band=0.15, ...) -> 'left'|'center'|'right'|'unknown'`
+  — bearing of the largest match (`where_offset` → signed `[-1,+1]`)
+
+This is the architecture step toward YASMIN FSMs — each `while detected()` loop
+IS a proto-state.
 
 **Full deep-dive reference:** [`.claude/context/detected-paradigm.md`](./detected-paradigm.md)
+
+#### The three canonical patterns
+
+```python
+# 1. CIRCLE SEARCH — keep turning until seen (a moving search NEEDS a while;
+#    an `if` runs once and falls through, it is not a loop)
+while not duburi.detected('red_pipe'):
+    duburi.yaw_left(30)
+duburi.move_forward(3)            # runs once the pipe is in frame
+
+# 2. ACQUIRE-THEN-ACT — wait in place, no busy-loop, with a give-up branch
+if duburi.wait_for('gate', timeout=8):
+    duburi.vision.align('gate', yaw=0, lat=0)
+else:
+    duburi.move_forward(1)        # never showed — recover
+
+# 3. BEARING STEER — turn toward whichever side the target is on
+{'left':  lambda: duburi.yaw_left(20),
+ 'right': lambda: duburi.yaw_right(20),
+}.get(duburi.where('gate'), lambda: duburi.move_forward(1))()
+```
 
 #### Core paradigm
 
@@ -1421,17 +1446,18 @@ detector publishes flare detections only. `detected('gate')` will always return
 
 #### What blocks vs what doesn't
 
-**Blocking (keeps cache warm via spin_until_future_complete):**
+**Blocking (action round-trip — where mission time is spent):**
 `move_forward`, `move_back`, `move_left`, `move_right`, `yaw_left`, `yaw_right`,
 `arc`, `set_depth`, `arm`, `disarm`, `pause`, `stop`, `lock_heading`,
 `dvl_connect`, `move_forward_dist`, `move_lateral_dist`, ALL `vision.*` verbs.
 
-**Non-blocking (cache NOT updated):**
+**Instant (no action goal):**
 `duburi.camera =`, `duburi.target =`, `duburi.models(...)`.
 
-`detected()` itself calls `spin_once(timeout=0.05)` internally — so even
-without a preceding blocking verb, it always fires at least one callback cycle
-before checking the cache. But use it after a blocking verb for freshest results.
+`detected()`/`where()` **pump the node themselves** (bounded: ≤0.25 s warm,
+≤0.60 s cold-on-first-frame), so they read the current frame regardless of
+whether a verb ran just before — no warm-up move needed. `wait_for` pumps until
+seen or its `timeout`.
 
 #### Forbidden patterns
 
