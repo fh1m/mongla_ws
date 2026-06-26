@@ -971,8 +971,13 @@ duburi.vision.align('torpedo', yaw=0, lat=0, depth=0,
 duburi.set_classes('hole')
 # yaw_gain low: a 20 kg hull needs the yaw inertia fought gently to hold a tight
 # hole-lock steady enough to fire through (lat/depth stay at the global gain).
+# brake=False on the FIRE path: the arrival brake is self-gating and usually
+# skips a gently-converged lock, but a fast snap-in can still emit a 0.2 s kick
+# right before align() returns -- which would nudge the hull off-aim between
+# lock-confirm and fire(). On a fire-from-lock the lateral brake buys nothing
+# (you are not moving away), so disable it to keep the shot dead still.
 if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
-                       err=14, gain=12, yaw_gain=8,
+                       err=14, gain=12, yaw_gain=8, brake=False,
                        duration=25, fallback=creep_forward).ok:
     duburi.fire(1)           # torpedo_1 (ESP32 serial 1/2)
 ```
@@ -984,6 +989,18 @@ if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
 > `lat`/`depth` stay responsive. The yaw spin-up floor only engages once the bbox is
 > large (close), so a low `yaw_gain` far out stays pure-proportional and won't
 > limit-cycle.
+
+> **Inertial arrival brake (`brake=True`, default).** Vision verbs reverse-kick on
+> arrival to bleed water inertia so a step ends at a predictable, drift-free
+> position — `align` brakes lateral, `move` brakes forward (+`maintain`) on a
+> fill-stop. It is self-gating on the exit-velocity EMA: a gently-converged lock
+> that ramps down into the band usually exits with ~0 momentum and is **not**
+> kicked. But a *fast snap-in* (sustained high lateral drive then an abrupt
+> centre, more likely at higher `gain`) can still cross the gate and emit a 0.2 s
+> kick — which on the torpedo path lands between lock-confirm and `fire()`. So on
+> a **fire-from-lock pass `brake=False`** (above): you are not moving away, so the
+> lateral brake buys nothing and only risks the shot. Pass-through
+> (`move(fwd=None)`) and abort/loss never brake. Yaw/depth never brake.
 
 **As an FSM state** (`VisionAlignState` for the lock, a small fire state for the shot):
 
