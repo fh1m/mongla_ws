@@ -46,9 +46,11 @@ discussion. Don't relax them without a new conversation.
 |                                               | format. Nothing in our control loop needs roll /   |
 |                                               | pitch from the external chip — ArduSub gives us    |
 |                                               | those just fine.                                   |
-| **Read-only — no actuation, no MAVLink writes** | Sensor source must NEVER send to the autopilot.  |
-|                                               | If something armed via this path, it'd be          |
-|                                               | catastrophic on the desk.                          |
+| **Read-only — no actuation, no MAVLink writes** | The *sensor source* must NEVER send to the       |
+|                                               | autopilot. If something armed via this path, it'd  |
+|                                               | be catastrophic on the desk. (The **manager**'s    |
+|                                               | `_mocap_tick` *reads* the source and does the       |
+|                                               | `ATT_POS_MOCAP` yaw write — the source stays pure.) |
 | **No vision in this package**                 | Vision is large enough to deserve its own package  |
 |                                               | (`duburi_vision`). Don't pollute the sensor-only   |
 |                                               | scope.                                             |

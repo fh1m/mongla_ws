@@ -1,20 +1,60 @@
-# Future TODO -- feed BNO085 yaw into ArduSub's EKF
+# BNO085 yaw into ArduSub's EKF -- basic feed LIVE, full design remaining
 
-> **Status:** parked. Do NOT implement before the next pool test.
-> Reasoning, design sketch, and abort-criteria are below so future work
-> can resume without re-deriving the trade-offs.
+> **Status (2026-06-26):** the **basic feed is IMPLEMENTED** -- option (1)
+> below (`ATT_POS_MOCAP` yaw-only quaternion). What remains parked is the
+> *fuller* design: dedicated feeder module, pre-arm grace stream, a runtime
+> `ekf_yaw_off` abort verb, and deleting `HeadingLock`. The safety caveats
+> and verification checklist below are still the gate before relying on it
+> in a mission.
+
+## What's LIVE today
+
+When `yaw_source` is BNO-based, the manager streams BNO yaw into ArduSub
+EKF3 at 20 Hz:
+
+* `auv_manager_node._mocap_tick` (registered only when the source has
+  `read_pitch`, i.e. `BNO085Source`) reads `yaw_source.read_yaw()` (NED
+  degrees) and calls `pixhawk.send_att_pos_mocap(yaw)`.
+* `pixhawk.send_att_pos_mocap` builds a pure-yaw quaternion via
+  `_euler_to_quat(0,0,yaw_deg)` (uses `math.radians()`), sends
+  `ATT_POS_MOCAP` (#138) with `x=y=z=0` and `covariance[0]=NaN` so ArduSub
+  ignores the position fields and fuses **yaw only**.
+* `auv_manager_node._verify_extnav_params` reads `VISO_TYPE` /
+  `EK3_SRC1_YAW` at startup and logs a loud WARN if the FC won't fuse the
+  feed; `bringup_check` prints the same requirement at preflight.
+
+**Units note:** `ATT_POS_MOCAP` carries a *unitless quaternion*, not Euler
+fields, so there is no degrees-vs-radians concern on the wire (the
+"radians" requirement applies to `VISION_POSITION_ESTIMATE`, which we do
+not use). The internal `math.radians()` conversion is correct.
+
+**Required FC params (set ONCE via QGC/mavproxy, NOT in our code):**
+`VISO_TYPE=1` (instantiates the MAVLink visual-odom backend; without it the
+message is dropped before the EKF), `EK3_SRC1_YAW=6` (ExternalNav),
+`AHRS_EKF_TYPE=3` (default). Leave `EK3_SRC1_POSXY`/`VELXY` at defaults
+(yaw-only, no external position). **Board must run the 2 MB fmuv3 ArduSub
+build** -- the 1 MB fmuv2 build strips visual-odom and `VISO_TYPE` won't
+exist (confirm the param is present).
+
+**Verification (expectation-setting):** rotating *only the BNO* while the
+hull is still feeds an external-yaw step with no matching gyro rotation;
+EKF3 innovation-gates it or pulls in slowly, so the sub likely won't react
+crisply -- a false negative. Better checks: (a) rotate the *whole vehicle*
+and confirm the heading estimate tracks BNO not the internal compass;
+(b) watch the EKF yaw estimate directly (`EKF_STATUS_REPORT` / `XKF*`
+logs); (c) a yaw that *diverges* instead of holding = quaternion sign
+inverted (see "Sign-error magnification" below).
+
+`HeadingLock` is **still the primary heading authority** (Python Ch4 rate
+loop); the EKF feed runs in parallel and is not yet trusted enough to
+delete it.
 
 ---
 
-## What this would actually mean
+## What the FULL design would still add
 
-Today, `yaw_source:=bno085` only changes which sensor our **Python**
-loops read. ArduSub's onboard 400 Hz attitude controller (the one
-that runs in STABILIZE / ALT_HOLD-stick-release / yaw-hold-sub-loop)
-still uses its compass-fed EKF and has no idea the BNO exists. See
-[`ardusub-canon.md`](./ardusub-canon.md) §4A for the full table.
-
-This future work would push BNO yaw into the EKF so that:
+The remaining (parked) work would push the feed far enough to retire
+`HeadingLock`:
 
 1. The yaw-hold sub-loop in ALT_HOLD/STABILIZE corrects to BNO,
    not to compass.
