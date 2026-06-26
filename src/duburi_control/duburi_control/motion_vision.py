@@ -39,6 +39,7 @@ keeps it that many px BELOW centre. ``0`` = dead centre.
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Set
@@ -65,6 +66,17 @@ KP_LAT_DEFAULT     = 60.0
 KP_YAW_DEFAULT     = 60.0
 KP_DEPTH_DEFAULT   = 0.05
 KP_FORWARD_DEFAULT = 200.0
+
+# Yaw is THE essential axis for micro-aligning + holding against a small
+# target (the torpedo 'hole'). Pure-proportional yaw falls below the T200
+# spin-up threshold near centre, so a small residual error commands only a
+# few PWM and the thruster never turns -- the hull drifts off and the tight
+# hole-lock stalls just outside err_px. Mirror heading_lock: zero inside the
+# err_px deadband, else floor the magnitude so corrections actually move the
+# hull. Starting value copied from heading_lock.LOCK_SPEED_MIN_PCT; it is a
+# hardware spin-up assumption, NOT a measured value -- confirm on pool day
+# with the bare Ch4 check (does the floor visibly spin the yaw thrusters?).
+VISION_YAW_MIN_PCT = 5.0
 
 # A detection older than this (seconds) counts as "no target this tick".
 # bbox_error() returns None when the class is absent; this only catches a
@@ -285,12 +297,19 @@ def align_loop(*,
                 ctrl = sample.ex - offsets.get('yaw', 0.0) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
-                # Same polarity as the lateral axis above (no negation): a
-                # target to the RIGHT (ex > 0) yaws RIGHT toward it. The old
-                # `-ctrl` negation drove the AUV away from the target -- pool-
-                # verified inversion; the working lateral + heading_lock paths
-                # both confirm this sign.
-                yaw_pct = _clamp(ctrl * kp_yaw, -gain, gain)
+                # Polarity: un-negated, same as the lateral axis (ex > 0 ->
+                # target RIGHT -> yaw RIGHT). Inside the err_px deadband we
+                # command 0 (let the hull settle, no shot-jitter when the
+                # mission fires in-band); outside it we floor the magnitude to
+                # VISION_YAW_MIN_PCT (never above the `gain` cap) so even a few
+                # residual pixels still spin the yaw thrusters and the tight
+                # hole-lock can actually reach centre.
+                if epx <= err_px:
+                    yaw_pct = 0.0
+                else:
+                    mag = min(abs(ctrl * kp_yaw), gain)
+                    mag = max(mag, min(VISION_YAW_MIN_PCT, gain))
+                    yaw_pct = math.copysign(mag, ctrl)
                 in_band.append(epx <= err_px)
 
             if use_depth:
