@@ -14,11 +14,27 @@
 
 `duburi.detected(class, *, camera=None, stale_after=1.0) -> bool`
 
-A **point-in-time observation query**: "is `class` visible RIGHT NOW on
-`camera`?" It does not send a MAVLink command. It reads the same
-`/duburi/vision/<cam>/detections` stream the control loop acts on, and
-**actively pumps the ROS node** before answering so the result reflects the
-current frame — not a cache left over from the last move.
+A **recency observation query**: "was `class` seen within the last
+`stale_after` s on `camera`?" It does not send a MAVLink command. It reads the
+same `/duburi/vision/<cam>/detections` stream the control loop acts on, and
+**actively pumps the ROS node** before answering so the cache is current — not
+one left over from the last move.
+
+**Per-class last-seen window (not the single latest frame).** `detected()` and
+`wait_for()` track the last-seen monotonic stamp *per class* and return True
+while `now - last_seen <= stale_after` (default 1.0 s). This is **flicker-
+tolerant**: at low/uneven detection FPS (3-4 Hz on the Orin Nano, worse under
+motion blur) a class routinely drops out of *individual* raw `/detections`
+frames; keying off only the latest frame made `detected()` false-negate on
+those gaps and a `while not detected(): <search>` loop could never break even
+with the target plainly on the HUD. The window is the reacquire-side analogue
+of the control loop's `lost_grace_s`. (The HUD looks continuous because it
+overlays Kalman-smoothed `/tracks`, which predict through dropouts; these
+queries read raw `/detections`, so "on screen" ≠ "in the latest raw frame" —
+the window reconciles them.) `where()`/`where_offset()` deliberately stay on
+the **current frame** (bearing must be the live position, never a remembered
+spot), so `where()` can return `'unknown'` while `detected()` is still True
+inside the window.
 
 Two companions share the same machinery (added 2026-06):
 
@@ -96,6 +112,9 @@ path). The callback also marks the camera "warm".
 ```python
 self._det_cache[camera]  # dict[str, tuple[float, list[DetRecord]]]
                          #   value: (monotonic_stamp, [(cls, cx, cy, w, h, conf), ...])
+                         #   the LATEST frame -- where()/where_offset() read this
+self._det_seen[camera]   # dict[str, float]: class -> last-seen monotonic stamp
+                         #   detected()/wait_for() read this (recency window)
 self._img_size[camera]   # (width, height) from camera_info (for where())
 ```
 
@@ -104,7 +123,7 @@ self._img_size[camera]   # (width, height) from camera_info (for where())
 ```python
 def _pump_detections(self, camera):
     start = monotonic()
-    budget = WARM(0.25s) if camera warm else COLD(0.60s)   # cold covers discovery
+    budget = WARM(0.40s) if camera warm else COLD(0.60s)   # cold covers discovery
     while monotonic() < start + budget:
         rclpy.spin_once(node, 0.02)
         if cache[camera] stamped >= start:   # a frame newer than this call
@@ -114,8 +133,10 @@ def _pump_detections(self, camera):
 The detector publishes a `Detection2DArray` **every frame** (even when
 empty), so a live pipeline lands a fresh frame within ~1 frame period and the
 pump returns early. A stalled or just-subscribed pipeline burns the budget and
-the query reads no fresh data → correctly returns absent. The result is a
-true point-in-time answer, independent of whether a verb ran recently.
+the query then leans on the per-class recency window (§1) rather than the
+single latest frame. WARM is 0.40 s (~1.5 frames at 3-4 Hz); raise it if real
+FPS is lower. The pump keeps the cache current; the window absorbs per-frame
+flicker so a reacquire search breaks the instant the target is back.
 
 ### 2.5 Why this is safe (no executor race)
 

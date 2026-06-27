@@ -286,6 +286,13 @@ class DuburiMission:
         # Refreshed by ROS callbacks; detected()/where() actively pump the node
         # so the cache is fresh at the call instant (not just during a send()).
         self._det_cache: dict[str, tuple[float, list]] = {}
+        # Per-class last-seen monotonic stamp, per camera: {cam: {class: stamp}}.
+        # detected()/wait_for() read this (NOT the latest frame) so a class that
+        # flickers out of individual raw frames at low FPS still counts as present
+        # within a recency window -- the reacquire-side analogue of the control
+        # loop's lost_grace_s. where()/where_offset() deliberately stay on the
+        # latest frame (bearing must be current, never a stale remembered spot).
+        self._det_seen:  dict[str, dict[str, float]] = {}
         self._det_subs:  dict[str, object] = {}   # detection subs (kept alive)
         self._info_subs: dict[str, object] = {}   # camera_info subs (kept alive)
         self._img_size:  dict[str, tuple] = {}    # camera -> (width, height)
@@ -332,11 +339,12 @@ class DuburiMission:
 
     # Timeouts (seconds) for the per-call pump. _PUMP_WARM_S must be >= ~2 real
     # frame-periods or the pump returns having seen no frame newer than `start`,
-    # and the query falls back to the last cached frame (still correct, but up to
-    # `stale_after` old -- weakening the "current frame" guarantee). The detector
-    # can run slow (medium model on the Orin Nano, sometimes <10 Hz -> >0.1 s/frame),
-    # so 0.25 s covers ~2 frames down to ~8 Hz. Raise it if your real FPS is lower.
-    _PUMP_WARM_S = 0.25   # >= ~2 frame-periods at >=8 Hz
+    # and the query falls back to the per-class last-seen window (see _present).
+    # The detector can run slow (medium model on the Orin Nano, sometimes 3-4 Hz
+    # -> ~0.25-0.33 s/frame), so 0.40 s covers ~1.5 frames at 3-4 Hz. The pump
+    # early-returns the instant a fresh frame lands, so this only costs latency
+    # on a miss. Raise it if your real FPS is lower.
+    _PUMP_WARM_S = 0.40   # ~1.5 frame-periods at 3-4 Hz; early-returns when fresh
     _PUMP_COLD_S = 0.60   # first frame after subscribe: covers DDS discovery
     _PUMP_SLICE_S = 0.02  # spin_once granularity inside the pump
 
@@ -358,7 +366,12 @@ class DuburiMission:
     def _on_detections(self, camera: str, msg) -> None:
         # Copy to plain Python immediately (rclpy reuses the C++ buffer across
         # callbacks; holding the message would corrupt the cache).
-        self._det_cache[camera] = (_time.monotonic(), _parse_detections(msg))
+        now     = _time.monotonic()
+        records = _parse_detections(msg)
+        self._det_cache[camera] = (now, records)        # latest frame: where() reads this
+        seen = self._det_seen.setdefault(camera, {})    # per-class last-seen: detected() reads this
+        for rec in records:
+            seen[rec[0]] = now                          # rec[0] = lowercased class
         self._det_warm.add(camera)
 
     def _on_info(self, camera: str, msg) -> None:
@@ -383,7 +396,11 @@ class DuburiMission:
                 return   # a frame stamped after we started -> cache is current
 
     def _records(self, camera: str, stale_after: float) -> list:
-        """Fresh detection records for `camera`, or [] when stale/absent."""
+        """Latest-frame detection records for `camera`, or [] when stale/absent.
+
+        Used by where()/where_offset() -- bearing must reflect the CURRENT frame.
+        detected()/wait_for() use _present() instead (per-class recency window).
+        """
         entry = self._det_cache.get(camera)
         if entry is None:
             return []
@@ -392,15 +409,28 @@ class DuburiMission:
             return []
         return records
 
+    def _present(self, camera: str, needle: str, within: float) -> bool:
+        """True iff `needle` was seen on `camera` within the last `within` s.
+
+        Flicker-tolerant: a class that drops from individual raw frames (low
+        FPS, motion blur) still counts as present until `within` elapses since
+        its last sighting -- so a `while not detected()` search reacquires the
+        instant the target reappears instead of chasing per-frame dropouts.
+        """
+        n    = str(needle).strip().lower()
+        last = self._det_seen.get(camera, {}).get(n)
+        return last is not None and (_time.monotonic() - last) <= within
+
     def detected(self, target_class, *,
                  camera: str | None = None,
                  stale_after: float = 1.0) -> bool:
-        """Is `target_class` visible RIGHT NOW on `camera`? (True/False).
+        """Was `target_class` seen within the last `stale_after` s on `camera`?
 
-        A point-in-time check: it pumps the detection stream so the answer
-        reflects the current frame, then returns True iff the class is present
-        and fresh. Use it to branch (``if``) or to drive a moving search
-        (``while``):
+        A recency check: it pumps the detection stream so the cache is current,
+        then returns True iff the class was seen within the `stale_after` window
+        (per-class last-seen, NOT just the single latest frame -- so it tolerates
+        the per-frame flicker raw `/detections` shows at low FPS). Use it to
+        branch (``if``) or to drive a moving search (``while``):
 
             # branch once on what is currently visible
             if duburi.detected('gate'):
@@ -422,14 +452,17 @@ class DuburiMission:
         camera : str | None
             Camera to query. Defaults to ``duburi.camera``.
         stale_after : float
-            Detections older than this many seconds count as absent.
+            Recency window: the class counts as present until this many seconds
+            after its last sighting (bridges per-frame flicker). A class not seen
+            for longer than this counts as absent. Lower it where you need the
+            False edge to be prompt (e.g. gating an irreversible fire/drop).
         """
         if isinstance(target_class, ClassRef):
             target_class = target_class.class_name
         cam = camera or self.camera
         self._subscribe_detections(cam)
         self._pump_detections(cam)
-        return _eval_detected(self._records(cam, stale_after), target_class)
+        return self._present(cam, target_class, stale_after)
 
     def wait_for(self, target_class, *,
                  timeout: float = 10.0,
@@ -456,7 +489,7 @@ class DuburiMission:
         deadline = _time.monotonic() + max(float(timeout), 0.0)
         while _time.monotonic() < deadline:
             self._pump_detections(cam)
-            if _eval_detected(self._records(cam, stale_after), target_class):
+            if self._present(cam, target_class, stale_after):
                 return True
         return False
 

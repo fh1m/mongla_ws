@@ -167,20 +167,85 @@ def _rec(cls, cx=320.0, cy=240.0, w=40.0, h=40.0, conf=0.9):
     return (cls, cx, cy, w, h, conf)
 
 
-def test_detected_is_case_insensitive(monkeypatch):
-    import time as _t
-    import duburi_planner.duburi_dsl as dd
+def _fake_msg(*classes, cx=320.0, cy=240.0, w=40.0, h=40.0, conf=0.9):
+    """Minimal Detection2DArray duck-type for driving _on_detections (no ROS).
 
-    # detected() pumps the node; stub the pump out (no ROS in unit tests).
-    m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
+    Humble-flat Pose2D (center has .x/.y, no .position) so _det_center takes the
+    flat branch; one ObjectHypothesisWithPose per class with .hypothesis.class_id.
+    """
+    dets = []
+    for c in classes:
+        hyp    = SimpleNamespace(hypothesis=SimpleNamespace(class_id=c, score=conf))
+        center = SimpleNamespace(x=cx, y=cy)
+        bbox   = SimpleNamespace(center=center, size_x=w, size_y=h)
+        dets.append(SimpleNamespace(results=[hyp], bbox=bbox))
+    return SimpleNamespace(detections=dets)
+
+
+def _ready_mission(monkeypatch, dd, camera='forward'):
+    """A DuburiMission with the pump stubbed + subscription faked (no ROS)."""
+    m = dd.DuburiMission(MagicMock(), MagicMock(), camera=camera)
     monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
-    # Pretend we're subscribed and the detector just published 'gate'.
-    m._det_subs['forward'] = object()
-    m._det_cache['forward'] = (_t.monotonic(), [_rec('gate')])
+    m._det_subs[camera] = object()   # _subscribe_detections() early-returns
+    return m
+
+
+def test_detected_is_case_insensitive(monkeypatch):
+    import duburi_planner.duburi_dsl as dd
+    m = _ready_mission(monkeypatch, dd)
+    # Drive the real callback so _det_seen is populated the way ROS would.
+    m._on_detections('forward', _fake_msg('gate'))
 
     assert m.detected('gate') is True      # case-insensitive match
     assert m.detected('GATE') is True
     assert m.detected('flare') is False
+
+
+def test_detected_survives_single_frame_flicker(monkeypatch):
+    # THE core reacquire fix: a class that drops from one raw frame still counts
+    # as present within the recency window, so `while not detected()` reacquires
+    # the instant it reappears instead of chasing per-frame dropouts.
+    import duburi_planner.duburi_dsl as dd
+    clock = {'t': 100.0}
+    monkeypatch.setattr(dd._time, 'monotonic', lambda: clock['t'])
+    m = _ready_mission(monkeypatch, dd)
+
+    m._on_detections('forward', _fake_msg('red_pipe'))   # seen at t=100.0
+    assert m.detected('red_pipe') is True
+
+    clock['t'] = 100.3                                    # 0.3 s later: flicker
+    m._on_detections('forward', _fake_msg('flare'))      # red_pipe missing this frame
+    # Latest frame lacks red_pipe, but it was seen 0.3 s ago < 1.0 s window:
+    assert m.detected('red_pipe', stale_after=1.0) is True
+
+
+def test_detected_false_after_window_expires(monkeypatch):
+    import duburi_planner.duburi_dsl as dd
+    clock = {'t': 50.0}
+    monkeypatch.setattr(dd._time, 'monotonic', lambda: clock['t'])
+    m = _ready_mission(monkeypatch, dd)
+
+    m._on_detections('forward', _fake_msg('red_pipe'))   # seen at t=50.0
+    clock['t'] = 51.5                                     # 1.5 s later, no new sighting
+    assert m.detected('red_pipe', stale_after=1.0) is False
+
+
+def test_where_reflects_latest_frame_not_seen_window(monkeypatch):
+    # where()/where_offset() must read the LATEST frame, never the last-seen
+    # memory -- bearing has to be the target's current position, not a stale one.
+    import duburi_planner.duburi_dsl as dd
+    clock = {'t': 0.0}
+    monkeypatch.setattr(dd._time, 'monotonic', lambda: clock['t'])
+    m = _ready_mission(monkeypatch, dd)
+    m._img_size['forward'] = (640.0, 480.0)
+
+    m._on_detections('forward', _fake_msg('red_pipe', cx=64.0))  # left, t=0
+    assert m.where('red_pipe') == 'left'
+
+    clock['t'] = 0.3
+    m._on_detections('forward', _fake_msg('flare'))     # latest frame: no red_pipe
+    assert m.detected('red_pipe') is True               # still within window
+    assert m.where('red_pipe') == 'unknown'             # but bearing is from latest frame
 
 
 # --------------------------------------------------------------------------- #
@@ -223,24 +288,21 @@ def test_eval_where_unknown_when_no_width_or_absent():
 
 
 def test_wait_for_returns_true_when_target_appears(monkeypatch):
-    import time as _t
     import duburi_planner.duburi_dsl as dd
-    m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
-    monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
-    # Target absent for the first 2 polls, then appears.
+    m = _ready_mission(monkeypatch, dd)
+    # Target absent for the first 2 polls; on the 3rd the pump lands a frame.
     state = {'n': 0}
-    def fake_records(cam, stale):
+    def fake_pump(cam):
         state['n'] += 1
-        return [_rec('gate')] if state['n'] >= 3 else []
-    monkeypatch.setattr(m, '_records', fake_records)
+        if state['n'] >= 3:
+            m._on_detections(cam, _fake_msg('gate'))
+    monkeypatch.setattr(m, '_pump_detections', fake_pump)
     assert m.wait_for('gate', timeout=5.0) is True
 
 
 def test_wait_for_returns_false_on_timeout(monkeypatch):
     import duburi_planner.duburi_dsl as dd
-    m = dd.DuburiMission(MagicMock(), MagicMock(), camera='forward')
-    monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
-    monkeypatch.setattr(m, '_records', lambda *a, **k: [])  # never appears
+    m = _ready_mission(monkeypatch, dd)   # pump stubbed; no frame ever lands
     assert m.wait_for('gate', timeout=0.2) is False
 
 
