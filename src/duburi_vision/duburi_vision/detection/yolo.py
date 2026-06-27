@@ -159,7 +159,7 @@ class YoloDetector(Detector):
     name = 'yolo'
 
     def __init__(self, *, model_path='yolov11n', device='cuda:0',
-                 conf=0.35, iou=0.5, imgsz=640, half=False,
+                 conf=0.35, iou=0.5, imgsz=640, half=False, max_det=100,
                  class_allowlist: Optional[Iterable[str]] = ('person',),
                  warmup=True, logger=None):
         import torch
@@ -175,6 +175,11 @@ class YoloDetector(Detector):
         self._iou     = float(iou)
         self._imgsz   = int(imgsz)
         self._half    = bool(half) and self._device.startswith('cuda')
+        # Cap on post-NMS detections per frame. Bounds the NMS topk + the Python
+        # per-box loop so a textured target spraying many candidates can't tank a
+        # frame. ponytail: 100 is generous headroom over any real RoboSub frame;
+        # drop it (live param) toward ~10 if bench shows NMS is the FPS culprit.
+        self._max_det = int(max_det)
 
         resolved_path = _resolve_model_path(model_path)
         self._is_engine = str(resolved_path).endswith('.engine')
@@ -246,7 +251,8 @@ class YoloDetector(Detector):
             try:
                 self._model.predict(
                     dummy, conf=self._conf, iou=self._iou, imgsz=self._imgsz,
-                    device=self._device, half=self._half, verbose=False)
+                    device=self._device, half=self._half, max_det=self._max_det,
+                    verbose=False)
             except Exception as exc:
                 if self._log:
                     self._log.warning(
@@ -259,7 +265,8 @@ class YoloDetector(Detector):
         results = self._model.predict(
             frame_bgr,
             conf=self._conf, iou=self._iou, imgsz=self._imgsz,
-            device=self._device, half=self._half, verbose=False)
+            device=self._device, half=self._half, max_det=self._max_det,
+            verbose=False)
         if not results:
             return []
         boxes = results[0].boxes
@@ -303,6 +310,9 @@ class YoloDetector(Detector):
 
     def update_conf(self, conf: float) -> None:
         self._conf = float(conf)
+
+    def update_max_det(self, max_det: int) -> None:
+        self._max_det = max(int(max_det), 1)
 
     def class_names(self):
         return dict(self._names)

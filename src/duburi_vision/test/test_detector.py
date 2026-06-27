@@ -30,8 +30,9 @@ class _FakeResult:
 
 class _FakeYOLO:
     """Stand-in for ultralytics.YOLO. Returns a fixed set of boxes."""
-    NEXT_BOXES = None      # set by tests before instantiation
-    NAMES      = {0: 'person', 1: 'cat', 2: 'dog', 3: 'backpack'}
+    NEXT_BOXES  = None      # set by tests before instantiation
+    LAST_KWARGS = None      # records the kwargs of the most recent predict() call
+    NAMES       = {0: 'person', 1: 'cat', 2: 'dog', 3: 'backpack'}
 
     def __init__(self, *_, **__):
         self.names = dict(self.NAMES)
@@ -39,7 +40,8 @@ class _FakeYOLO:
     def to(self, _device):
         return self
 
-    def predict(self, _frame, **_kwargs):
+    def predict(self, _frame, **kwargs):
+        type(self).LAST_KWARGS = kwargs
         return [_FakeResult(self.NEXT_BOXES)]
 
 
@@ -121,3 +123,24 @@ def test_infer_handles_none_frame(patched, monkeypatch):
     det = _make(monkeypatch)
     assert det.infer(None) == []
     assert det.infer(np.zeros((0, 0, 3), dtype=np.uint8)) == []
+
+
+def test_max_det_passed_to_predict(patched, monkeypatch):
+    """The post-NMS cap reaches ultralytics predict() so NMS/loop stays bounded."""
+    _FakeYOLO.NEXT_BOXES = _FakeBoxes(
+        xyxy=[[0, 0, 10, 10]], conf=[0.9], cls=[0])
+    det = _make(monkeypatch, max_det=7)
+    det.infer(np.zeros((100, 100, 3), dtype=np.uint8))
+    assert _FakeYOLO.LAST_KWARGS['max_det'] == 7
+
+
+def test_update_max_det_takes_effect_and_clamps(patched, monkeypatch):
+    _FakeYOLO.NEXT_BOXES = _FakeBoxes(
+        xyxy=[[0, 0, 10, 10]], conf=[0.9], cls=[0])
+    det = _make(monkeypatch, max_det=50)
+    det.update_max_det(12)
+    det.infer(np.zeros((100, 100, 3), dtype=np.uint8))
+    assert _FakeYOLO.LAST_KWARGS['max_det'] == 12
+    det.update_max_det(0)          # invalid → clamped to ≥1, never 0
+    det.infer(np.zeros((100, 100, 3), dtype=np.uint8))
+    assert _FakeYOLO.LAST_KWARGS['max_det'] == 1

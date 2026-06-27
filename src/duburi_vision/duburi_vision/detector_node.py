@@ -102,6 +102,7 @@ class DetectorNode(Node):
         self.declare_parameter('conf',                0.35)
         self.declare_parameter('iou',                 0.5)
         self.declare_parameter('imgsz',               640)
+        self.declare_parameter('max_det',             100)   # post-NMS cap (live-tunable)
         self.declare_parameter('classes',             'person')
         self.declare_parameter('publish_debug_image', True)
         self.declare_parameter('debug_image_hz',      5.0)
@@ -123,6 +124,7 @@ class DetectorNode(Node):
         conf     = float(self.get_parameter('conf').value)
         iou      = float(self.get_parameter('iou').value)
         imgsz    = int(self.get_parameter('imgsz').value)
+        max_det  = int(self.get_parameter('max_det').value)
         half     = bool(self.get_parameter('half').value)
 
         # ── Registry (multi-model) ─────────────────────────────────────
@@ -144,7 +146,7 @@ class DetectorNode(Node):
                 det = YoloDetector(
                     model_path=stem,
                     device=device, conf=conf, iou=iou, imgsz=imgsz,
-                    half=half, class_allowlist=allowlist,
+                    half=half, max_det=max_det, class_allowlist=allowlist,
                     logger=log)
                 return name, det
 
@@ -191,7 +193,7 @@ class DetectorNode(Node):
                 kwargs=dict(
                     model_path=str(self.get_parameter('model_path').value),
                     device=device, conf=conf, iou=iou, imgsz=imgsz,
-                    half=half, allowlist=allowlist),
+                    half=half, max_det=max_det, allowlist=allowlist),
                 daemon=True).start()
 
         from vision_msgs.msg import Detection2DArray
@@ -237,13 +239,13 @@ class DetectorNode(Node):
         # on connect (even before any param change fires).
         self._publish_classes(classes_param)
 
-    def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, allowlist):
+    def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, max_det, allowlist):
         """Background thread: load YoloDetector, then go live. Node subscribes before this runs."""
         try:
             det = YoloDetector(
                 model_path=model_path,
                 device=device, conf=conf, iou=iou, imgsz=imgsz,
-                half=half, class_allowlist=allowlist,
+                half=half, max_det=max_det, class_allowlist=allowlist,
                 logger=self.get_logger())
         except Exception as exc:
             self.get_logger().fatal(f"[DET  ] YoloDetector init FAILED: {exc}")
@@ -375,6 +377,14 @@ class DetectorNode(Node):
                 if self._det is not None:
                     self._det.update_conf(new_conf)
                 self.get_logger().info(f"[DET  ] conf → {new_conf:.3f}")
+
+            elif p.name == 'max_det':
+                new_max = int(p.value)
+                # Apply across the whole registry so a model switch keeps the cap.
+                for det in (self._registry.values() if self._registry
+                            else ([self._det] if self._det is not None else [])):
+                    det.update_max_det(new_max)
+                self.get_logger().info(f"[DET  ] max_det → {new_max}")
 
         return SetParametersResult(successful=True)
 
