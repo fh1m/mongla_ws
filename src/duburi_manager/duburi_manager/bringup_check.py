@@ -120,6 +120,26 @@ def _check_bno085_auto() -> tuple[str, str]:
     return PASS, f'streaming on {path}'
 
 
+def _check_jetson_power() -> tuple[str, str]:
+    """Read the Jetson power mode; WARN unless MAXN. Skips on non-Jetson.
+
+    A power-capped Orin Nano roughly halves inference; `nvpmodel -m 0` (MAXN) +
+    `jetson_clocks` is the single biggest free FPS win. Read-only -- we can't
+    sudo from here, so we only nudge the operator.
+    """
+    try:
+        out = subprocess.run(['nvpmodel', '-q'], capture_output=True, text=True,
+                             timeout=3).stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return PASS, 'not a Jetson (nvpmodel absent) -- skipped'
+    text = out.replace('\n', ' ').strip()
+    low = text.lower()
+    if 'maxn' in low or 'nv power mode: 0' in low or ': 0' in low:
+        return PASS, f'MAXN ({text[:48]})'
+    return WARN, (f'NOT MaxN ({text[:48]}) -- run: '
+                  'sudo nvpmodel -m 0 && sudo jetson_clocks')
+
+
 def main() -> int:
     failures = 0
     warnings = 0
@@ -196,7 +216,15 @@ def main() -> int:
     else:
         warn('BNO085 auto-detect', bno_detail)
 
-    # ---- 6. resolved mode + launch hint ----------------------------- #
+    # ---- 6. Jetson GPU power mode (vision FPS) ----------------------- #
+    print(' Jetson power mode (vision FPS)')
+    pwr_status, pwr_detail = _check_jetson_power()
+    if pwr_status == PASS:
+        ok('GPU power mode', pwr_detail)
+    else:
+        warn('GPU power mode', pwr_detail)
+
+    # ---- 7. resolved mode + launch hint ----------------------------- #
     print(' Manager startup hint')
     chosen = resolve_mode('auto', logger=None)
     ok(f'auto-detected mode={chosen!r}',

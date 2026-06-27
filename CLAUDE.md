@@ -411,10 +411,15 @@ Key vision ROS params (all on `/duburi_manager`): `vision.kp_lat`/`kp_yaw` (60.0
 **Vision queries** (client-side cache reads, distinct from the two action verbs; each pumps the node so the answer is the current frame — the default camera is subscribed eagerly so the first call never false-negates): `duburi.detected('gate', stale_after=1.0)` — point-in-time "visible now?" (True/False, **case-insensitive**); `duburi.wait_for('gate', timeout=8)` — block until seen/timeout (loop-free acquire); `duburi.where('gate')` → `'left'`|`'center'`|`'right'`|`'unknown'` (+ `where_offset` for signed `[-1,+1]`). An `if detected()` runs once — a moving search needs a `while`. All three work inside a vision `fallback`.
 `duburi.models(gate='gate_flare_medium_100ep')` — model registry; `duburi.models.gate.gate` returns `ClassRef` (auto-switches model+class when passed as `target`).
 
+**Detection FPS (Jetson Orin Nano):** the detector prefers a TensorRT `<stem>.engine` over the `<stem>.pt` automatically (`yolo._resolve_model_path`); raw PyTorch @640 is ~3-4 Hz (inference-bound), TensorRT FP16 is ~20-30 Hz (nano/small) / ~10-15 Hz (medium). Build engines **on the Jetson** (device + JetPack-version locked): `ros2 run duburi_vision export_engine --all` — confirm the `[YOLO ] backend=TensorRT engine` log. Also run `sudo nvpmodel -m 0 && sudo jetson_clocks` (MAXN; ~2× alone — `bringup_check` warns if not set). On a dev box without an engine it falls back to `.pt` transparently. The debug overlay is skipped when no viewer is subscribed (`viewer:=false`). **Control/FPS coupling:** the 20 Hz vision loop **freshness-decays** the translational command (lat/fwd, not yaw/depth) by `sample.age_s` — full authority on a fresh frame, decaying to neutral when blind — so low/variable FPS can't make it blind-drive on a stale bbox. Raising FPS (TensorRT) is the primary fix; this is the per-frame guard.
+
+**Mission-quiet logging:** vision verbs emit one throttled operator line — `[ align lat=<px> depth=<px>px ] (cx,cy) align ['class'] center -> (0,0)` (and a `[ move fill=…% lat=…px ]` line) — the live pixel values for tuning standoff/err. The manager demotes periodic telemetry (`[STATE]`/`[ARDUB]`/`[RC ]`) to debug under `mission_quiet` (default true); `bringup.launch.py quiet:=false` (or `--log-level debug`) restores full telemetry.
+
 ```bash
-ros2 run duburi_manager bringup_check          # network + serial preflight
+ros2 run duburi_manager bringup_check          # network + serial + Jetson power preflight
 ros2 run duburi_vision vision_check            # topic-only health probe
 ros2 run duburi_vision vision_thrust_check     # detection → RC echo (disarmed safe)
+ros2 run duburi_vision export_engine --all     # build TensorRT engines (ON THE JETSON)
 ```
 
 ---

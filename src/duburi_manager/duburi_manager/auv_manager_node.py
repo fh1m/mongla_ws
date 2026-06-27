@@ -166,7 +166,14 @@ class AUVManagerNode(Node):
         self.declare_parameter('dvl_retry_s',       5.0)
         # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
         self.declare_parameter('debug',            False)
+        # mission_quiet: demote periodic non-mission telemetry ([STATE]/[ARDUB]/[RC ])
+        # to debug so a combined launch terminal shows essentially only mission
+        # progress + the vision operator line. Set false (or --log-level debug) for
+        # full telemetry while debugging.
+        self.declare_parameter('mission_quiet',    True)
         declare_vision_params(self)
+
+        self._mission_quiet = bool(self.get_parameter('mission_quiet').value)
 
         requested_mode      = str(self.get_parameter('mode').value)
         mav_device          = str(self.get_parameter('mav_device').value).strip()
@@ -478,7 +485,7 @@ class AUVManagerNode(Node):
             text = self.pixhawk.get_statustext()
             if text and text != self.last_statustext:
                 self.last_statustext = text
-                self.get_logger().info(f'[ARDUB] {text}')
+                self._chatter(f'[ARDUB] {text}')
             time.sleep(0.005)   # 200 Hz drain
 
     # ================================================================== #
@@ -714,7 +721,7 @@ class AUVManagerNode(Node):
             yaw_str = '   N/A'
         depth_str = f'{attitude["depth"]:+6.2f}m' if attitude else '   N/A'
         bat_str   = f'{battery["voltage"]:5.1f}V'  if battery else '  N/A'
-        self.get_logger().info(
+        self._chatter(
             f'[STATE] {arm_str} | {mode:<10} | '
             f'YAW:{yaw_str} | DEPTH:{depth_str} | BAT:{bat_str}')
         self.prev_state = {
@@ -724,6 +731,17 @@ class AUVManagerNode(Node):
             'bat':   battery['voltage'] if battery else 0,
         }
         self.last_print_time = now
+
+    def _chatter(self, msg: str) -> None:
+        """Periodic non-mission telemetry: info normally, debug when mission_quiet.
+
+        Keeps a combined launch terminal to mission progress + the vision operator
+        line; full telemetry returns with mission_quiet:=false or --log-level debug.
+        """
+        if self._mission_quiet:
+            self.get_logger().debug(msg)
+        else:
+            self.get_logger().info(msg)
 
     def _maybe_print_rc(self, rc):
         """Print the RC line only when an active channel actually
@@ -738,10 +756,10 @@ class AUVManagerNode(Node):
             for label, value in zip(('Thr', 'Yaw', 'Fwd', 'Lat'), drive):
                 if abs(value - 1500) > 50:
                     parts.append(f'{label}:{value}')
-            self.get_logger().info('[RC   ] ' + '  '.join(parts))
+            self._chatter('[RC   ] ' + '  '.join(parts))
             self.prev_rc = drive
         elif not active and self.prev_rc is not None:
-            self.get_logger().info('[RC   ] all neutral')
+            self._chatter('[RC   ] all neutral')
             self.prev_rc = None
 
     def _publish_state(self, attitude, battery, mode, armed, yaw_deg):

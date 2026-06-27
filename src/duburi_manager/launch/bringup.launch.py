@@ -73,6 +73,10 @@ def generate_launch_description():
         DeclareLaunchArgument('conf',       default_value='0.30'),
         DeclareLaunchArgument('viewer',     default_value='true',
                               description='Open vision_display (OpenCV viewer) alongside vision pipeline'),
+        DeclareLaunchArgument('quiet',      default_value='true',
+                              description='Mission-quiet logging: show only mission progress + the '
+                                          'vision operator line (demote [STATE]/[ARDUB]/[RC ] telemetry '
+                                          'to debug). Set false for full telemetry.'),
     ]
 
     manager_node = Node(
@@ -87,6 +91,7 @@ def generate_launch_description():
             'nucleus_dvl_port':     LaunchConfiguration('dvl_port'),
             'nucleus_dvl_password': 'nortek',
             'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
+            'mission_quiet':        LaunchConfiguration('quiet'),
         }],
     )
 

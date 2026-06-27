@@ -22,6 +22,12 @@ ls ~/Ros_workspaces/duburi_ws/src/duburi_vision/models/
 # Build is clean
 cd ~/Ros_workspaces/duburi_ws
 ./build_duburi.sh && source install/setup.bash
+
+# Jetson FPS prep (ON THE JETSON — raw PyTorch is ~3-4 Hz, TensorRT ~10-30 Hz):
+sudo nvpmodel -m 0 && sudo jetson_clocks          # MAXN power (~2× alone)
+ros2 run duburi_vision export_engine --all        # build <stem>.engine beside each .pt
+# Engines are device + JetPack-version locked: build on the Jetson, rebuild after
+# a JetPack/TRT upgrade. Confirm at launch: [YOLO ] backend=TensorRT engine.
 ```
 
 ---

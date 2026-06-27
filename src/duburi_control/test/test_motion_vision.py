@@ -12,7 +12,8 @@ from types import SimpleNamespace
 import pytest
 
 from duburi_control.motion_vision import (
-    align_loop, move_loop, _fill, _clamp, _present,
+    align_loop, move_loop, _fill, _clamp, _present, _freshness,
+    VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA,
 )
 
@@ -110,6 +111,7 @@ class _Log:
     def info(self, *_a, **_k): pass
     def warning(self, *_a, **_k): pass
     def error(self, *_a, **_k): pass
+    def debug(self, *_a, **_k): pass
 
 
 class _CapLog:
@@ -117,10 +119,12 @@ class _CapLog:
     def __init__(self):
         self.warnings = []
         self.infos = []
+        self.debugs = []
 
     def info(self, msg, *_a, **_k): self.infos.append(str(msg))
     def warning(self, msg, *_a, **_k): self.warnings.append(str(msg))
     def error(self, *_a, **_k): pass
+    def debug(self, msg, *_a, **_k): self.debugs.append(str(msg))
 
 
 def _align(vision, pix=None, **kw):
@@ -207,7 +211,9 @@ def test_align_warns_when_boxes_present_but_none_match():
     align_loop(pixhawk=_FakePixhawk(), vision_state=vis, target_class='gate',
                axes={'lat'}, offsets={}, err_px=40.0, duration=0.3, gain=30.0,
                lost_grace_s=2.0, writers=_FakeWriters(), log=log, abort_fn=None)
-    assert any('not among live detections' in w for w in log.warnings)
+    # Demoted to debug (mission-quiet) so it no longer pollutes the operator view,
+    # but the "why isn't it moving" hint still fires at --log-level debug.
+    assert any('not among live detections' in d for d in log.debugs)
 
 
 def test_align_converges_when_centered():
@@ -380,6 +386,104 @@ def test_align_yaw_and_lat_share_one_override_packet():
     both = [c for c in pix.rc
             if c.get('lateral', 1500) != 1500 and c.get('yaw', 1500) != 1500]
     assert both, 'yaw+lat align must emit Ch6 and Ch4 in the same RC packet'
+
+
+# --------------------------------------------------------------------------- #
+#  Freshness-decay -- pace translational authority to detection FPS            #
+# --------------------------------------------------------------------------- #
+def test_freshness_pure_function():
+    assert _freshness(0.0) == 1.0
+    assert _freshness(VISION_FRESH_FULL_S) == 1.0          # boundary: still full
+    assert _freshness(VISION_FRESH_ZERO_S) == 0.0          # boundary: zero
+    assert _freshness(VISION_FRESH_ZERO_S + 1.0) == 0.0    # beyond: clamped
+    mid = (VISION_FRESH_FULL_S + VISION_FRESH_ZERO_S) / 2  # halfway -> 0.5
+    assert _freshness(mid) == pytest.approx(0.5, abs=1e-6)
+
+
+def test_align_lateral_decays_when_sample_stale():
+    # A STALE-but-present sample (age in the decay band) must command LESS lateral
+    # than the identical FRESH sample -- the loop stops blind-driving on old data.
+    fresh_pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0, age_s=0.0)), pix=fresh_pix,
+           axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.2)
+    stale_pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0, age_s=0.30)), pix=stale_pix,
+           axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.2)
+    fresh_lat = max(abs(c['lateral'] - 1500) for c in fresh_pix.rc
+                    if c.get('lateral', 1500) != 1500)
+    stale_lat = max(abs(c['lateral'] - 1500) for c in stale_pix.rc
+                    if c.get('lateral', 1500) != 1500)
+    assert stale_lat < fresh_lat, 'a stale frame must decay the lateral command'
+
+
+def test_align_lateral_zero_when_blind():
+    # Sample older than the zero threshold (but < _STALE_LIMIT_S so still "present")
+    # -> lateral authority is fully decayed: never blind-drive on a dead frame.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0, age_s=VISION_FRESH_ZERO_S + 0.05)), pix=pix,
+           axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.2)
+    laterals = [c.get('lateral', 1500) for c in pix.rc]
+    assert laterals and all(l == 1500 for l in laterals), (
+        'a frame past the freshness-zero age must command neutral lateral (no blind drive)')
+
+
+def test_align_yaw_not_decayed_by_freshness():
+    # Yaw is excluded from freshness-decay (Ch4 is a rate ArduSub bleeds). Even a
+    # stale frame still drives full yaw -- so yaw authority is unchanged by age.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=1.0, age_s=0.30)), pix=pix,
+           axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.2)
+    cap = _FakePixhawk.percent_to_pwm(30.0)
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert yaw and max(yaw) == cap, 'yaw must NOT be freshness-decayed (full authority)'
+
+
+def test_move_forward_decays_when_sample_stale():
+    far_fresh = _FakePixhawk()
+    _move(_FakeVision(_sample(w_frac=0.1, h_frac=0.1, age_s=0.0)), pix=far_fresh,
+          fwd_fill=0.8, gain=30.0, duration=0.2)
+    far_stale = _FakePixhawk()
+    _move(_FakeVision(_sample(w_frac=0.1, h_frac=0.1, age_s=0.30)), pix=far_stale,
+          fwd_fill=0.8, gain=30.0, duration=0.2)
+    fresh_fwd = max(abs(c['forward'] - 1500) for c in far_fresh.rc
+                    if c.get('forward', 1500) != 1500)
+    stale_fwd = max(abs(c['forward'] - 1500) for c in far_stale.rc
+                    if c.get('forward', 1500) != 1500)
+    assert stale_fwd < fresh_fwd, 'a stale frame must decay the forward approach command'
+
+
+def test_brake_reads_post_decay_command():
+    # The brake EMA must see the POST-decay lateral command, so the two stacked
+    # mechanisms don't double-count. A sustained strafe that arrives on STALE
+    # frames (decayed) must brake LESS than the identical strafe on FRESH frames.
+    drift_fresh = [_sample(ex=0.6, age_s=0.0)] * 4 + [_sample(ex=0.0, age_s=0.0)] * 4
+    _, _, fresh_w = _align(_FakeVision(drift_fresh), axes={'lat'}, kp_lat=60.0,
+                           gain=30.0, err_px=40.0, duration=2.0)
+    drift_stale = [_sample(ex=0.6, age_s=0.30)] * 4 + [_sample(ex=0.0, age_s=0.30)] * 4
+    _, _, stale_w = _align(_FakeVision(drift_stale), axes={'lat'}, kp_lat=60.0,
+                           gain=30.0, err_px=40.0, duration=2.0)
+    fresh_kick = max((1500 - p) for p in fresh_w.laterals) if fresh_w.laterals else 0
+    stale_kick = max((1500 - p) for p in stale_w.laterals) if stale_w.laterals else 0
+    assert fresh_kick > 0, 'fresh sustained strafe should brake'
+    assert stale_kick < fresh_kick, (
+        'brake must read the post-decay command -- a decayed approach brakes less')
+
+
+def test_align_operator_line_format():
+    # Output-level pin on the swimmer-facing line: the throttled operator log
+    # must carry the requested shape -- signed lat px, the class, and the
+    # "center -> (0,0)" target -- so deck tuning reads the live pixel values.
+    log = _CapLog()
+    # ex=0.5 on a 640px frame -> +160px to the right of centre; never reaches
+    # the err band, so the loop logs the operator line and times out.
+    align_loop(pixhawk=_FakePixhawk(), vision_state=_FakeVision(_sample(ex=0.5)),
+               target_class='gate', axes={'lat'}, offsets={}, err_px=10.0,
+               duration=0.3, gain=30.0, kp_lat=60.0,
+               writers=_FakeWriters(), log=log, abort_fn=None)
+    line = next((m for m in log.infos if m.startswith('[ align')), None)
+    assert line is not None, f'expected an operator align line, got {log.infos}'
+    assert 'lat=+160' in line, f'expected signed lat px in {line!r}'
+    assert "['gate']" in line and 'center -> (0,0)' in line, f'bad format: {line!r}'
 
 
 # --------------------------------------------------------------------------- #
