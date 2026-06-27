@@ -63,6 +63,11 @@ from duburi_vision.detection.detector  import largest
 from duburi_vision.detection.yolo      import YoloDetector
 from duburi_vision.detection.messages  import detections_to_array
 
+# Throttle for the always-on operator alignment line (seconds). Matches the
+# control-side vision throttle so the rate feels consistent between the detector
+# status line and the manager's mission logs.
+ALIGN_LOG_THROTTLE_S = 0.5
+
 
 def _parse_models_param(s: str) -> Dict[str, str]:
     """Parse 'gate=gate_nano_100ep,flare=flare_medium_100ep' → {name: stem}.
@@ -206,6 +211,7 @@ class DetectorNode(Node):
         self._with_target   = 0
         self._infer_total_s = 0.0
         self._last_log      = time.monotonic()
+        self._last_align_log = 0.0
         self.create_timer(2.0, self._log_health)
 
         self._device_str = device
@@ -298,6 +304,7 @@ class DetectorNode(Node):
             primary = largest(detections)
             if primary is not None:
                 self._with_target += 1
+                self._log_alignment(primary, frame)
 
             det_msg = detections_to_array(detections, msg.header)
             if not rclpy.ok():
@@ -371,6 +378,28 @@ class DetectorNode(Node):
 
         return SetParametersResult(successful=True)
 
+    def _log_alignment(self, primary, frame) -> None:
+        """Always-on operator alignment line for the currently-loaded class.
+
+        Fires whenever the detector sees its loaded class (``detections`` are
+        already class-filtered, so ``primary`` is that class) -- independent of
+        whether a vision verb is running. Reports the bbox-centre pixel offset
+        from frame centre on lateral (x) and depth (y), matching the format the
+        vision verbs emit so the operator reads one consistent line. Throttled
+        so it doesn't flood at detection rate.
+        """
+        now = time.monotonic()
+        if (now - self._last_align_log) < ALIGN_LOG_THROTTLE_S:
+            return
+        self._last_align_log = now
+        h, w   = frame.shape[:2]
+        cx, cy = primary.cx, primary.cy
+        x_off  = cx - w * 0.5    # +right of centre
+        y_off  = cy - h * 0.5    # +below centre (drives depth)
+        self.get_logger().info(
+            f"[ align lat={x_off:+.0f} depth={y_off:+.0f}px ] "
+            f"({cx:.0f},{cy:.0f}) align ['{primary.class_name}'] center -> (0,0)")
+
     def _log_health(self):
         now = time.monotonic()
         elapsed = max(now - self._last_log, 1e-3)
@@ -378,7 +407,7 @@ class DetectorNode(Node):
         avg_ms  = (self._infer_total_s / max(self._frames, 1)) * 1000.0
         target_pct = 100.0 * self._with_target / max(self._frames, 1)
         model_tag = f'  model={self._active_name!r}' if self._active_name else ''
-        self.get_logger().info(
+        self.get_logger().debug(
             f"[DET  ] in_hz={in_hz:5.1f}  avg_infer={avg_ms:5.1f}ms  "
             f"with_target={target_pct:4.0f}%  total={self._frames}{model_tag}")
         self._frames = 0
