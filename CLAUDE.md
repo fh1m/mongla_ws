@@ -215,7 +215,7 @@ duburi_ws/src/
     │   └── utils/{check_pipeline,check_thrust}.py
     ├── config/{cameras,detector}.yaml
     ├── models/                   # *.pt weights (gitignored) + committed class-index YAMLs
-    └── launch/{vision,vision_dual}.launch.py   # 1-cam + 2-cam; detector node = duburi_detector_<camera>
+    └── launch/{vision,vision_dual,video}.launch.py  # 1-cam + 2-cam live + 2-cam dataset-video preset; detector node = duburi_detector_<camera>
 ```
 
 > **Adding a new command**: add a row in `duburi_control/commands.py` and a same-named method on `Duburi`. The action server, the `duburi` CLI, and the Python `DuburiClient` all pick it up automatically — no other file needs editing.

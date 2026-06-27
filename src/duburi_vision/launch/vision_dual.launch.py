@@ -28,6 +28,11 @@ Usage:
     # Detectors live from the start (no per-task resume):
     ros2 launch duburi_vision vision_dual.launch.py paused:=false
 
+    # Dataset VIDEO sources instead of live cameras (gate clip fwd, bin clip dwn).
+    # For a video-tuned preset (detectors live, splash, loop) use video.launch.py:
+    ros2 launch duburi_vision vision_dual.launch.py \\
+        fwd_video:=/path/gate.mp4 dwn_video:=/path/bin.mp4 paused:=false
+
 Viewer keys: f=forward  d=downward  b=side-by-side  D=depth-map
 Camera/detector/tracker log at WARN; the viewer logs at INFO.
 """
@@ -37,7 +42,7 @@ from launch.actions          import DeclareLaunchArgument, EmitEvent, RegisterEv
 from launch.conditions       import IfCondition
 from launch.event_handlers   import OnProcessExit
 from launch.events           import Shutdown
-from launch.substitutions    import LaunchConfiguration
+from launch.substitutions    import LaunchConfiguration, PythonExpression
 from launch_ros.actions      import Node
 
 _QUIET = ['--log-level', 'warn']
@@ -75,16 +80,42 @@ def generate_launch_description():
                               description='Start both detectors paused (resume_detector per task)'),
         DeclareLaunchArgument('viewer',       default_value='true'),
         DeclareLaunchArgument('tracking',     default_value='true'),
+        # Per-camera video sources. A non-empty path runs that camera off a
+        # dataset clip instead of the live webcam (forward = gate clip, downward
+        # = bin clip) -- lets a full dual-camera mission be exercised against real
+        # detections with no hardware. Empty = live webcam (back-compat default).
+        DeclareLaunchArgument('fwd_video',    default_value='',
+                              description='Video file for the FORWARD camera (e.g. a gate clip). '
+                                          'Set => forward runs off the file; empty => live webcam.'),
+        DeclareLaunchArgument('dwn_video',    default_value='',
+                              description='Video file for the DOWNWARD camera (e.g. a bin clip). '
+                                          'Set => downward runs off the file; empty => live webcam.'),
+        DeclareLaunchArgument('fwd_loop',     default_value='true',
+                              description='Loop the forward video at EOF (video source only).'),
+        DeclareLaunchArgument('dwn_loop',     default_value='true',
+                              description='Loop the downward video at EOF (video source only).'),
     ]
 
-    def camera(profile: str, device_arg: str) -> Node:
+    def camera(profile: str, device_arg: str, video_arg: str, loop_arg: str) -> Node:
+        # Source-aware: a non-empty video path runs this camera off a file
+        # (source=video_file, profile cleared so camera_node takes the path);
+        # empty falls back to the live webcam profile. The node NAME stays the
+        # profile ('forward'/'downward') either way, so the detector namespace
+        # /duburi/vision/<name>/* and the manager's _vision_state_for(<name>)
+        # resolve identically to live -- vision verbs need no change.
+        video = LaunchConfiguration(video_arg)
+        src   = PythonExpression(["'video_file' if '", video, "' else ''"])
+        prof  = PythonExpression(["'' if '", video, "' else '", profile, "'"])
         return Node(
             package='duburi_vision', executable='camera_node',
             name=f'duburi_camera_{profile}', output='screen', ros_arguments=_QUIET,
             parameters=[{
-                'profile': profile,
+                'profile': prof,
+                'source':  src,
                 'name':    profile,
                 'device':  LaunchConfiguration(device_arg),
+                'path':    video,
+                'loop':    LaunchConfiguration(loop_arg),
             }],
         )
 
@@ -115,10 +146,15 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('tracking')),
         )
 
+    # Enable the HUD's video playback controls + warm-up splash whenever either
+    # camera is a file source (Space=pause, ,/.=frame-step, arrows=seek).
+    any_video = PythonExpression([
+        "True if ('", LaunchConfiguration('fwd_video'), "' or '",
+        LaunchConfiguration('dwn_video'), "') else False"])
     viewer = Node(
         package='duburi_vision', executable='vision_display',
         name='duburi_display', output='screen',
-        parameters=[{'camera': 'forward'}],
+        parameters=[{'camera': 'forward', 'video_file_mode': any_video}],
         condition=IfCondition(LaunchConfiguration('viewer')),
     )
 
@@ -127,8 +163,8 @@ def generate_launch_description():
     )
 
     return LaunchDescription(args + [
-        camera('forward',  'fwd_device'),
-        camera('downward', 'dwn_device'),
+        camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop'),
+        camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop'),
         detector('forward',  'fwd_model', 'fwd_classes', 'fwd_conf'),
         detector('downward', 'dwn_model', 'dwn_classes', 'dwn_conf'),
         tracker('forward'),

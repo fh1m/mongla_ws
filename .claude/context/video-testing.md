@@ -10,23 +10,66 @@ tracker tuning, and mission logic without pool time.
 
 ```bash
 # Full pipeline (camera + detector + tracker + HUD viewer) on a recording:
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py \
     video_file:=/path/to/pool_run.mp4 \
     classes:=gate \
     model:=gate_flare_medium_100ep
 
 # Loop disabled — stop at end of file:
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py \
     video_file:=/tmp/gate_run.mp4 classes:=gate loop:=false
 
 # Use pretrained YOLO11 (person class) for desk testing without custom weights:
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py \
     video_file:=/tmp/test.mp4 model:=yolov11n classes:=person
 ```
 
 `video_file:=<path>` overrides the `camera:=` profile — the entire pipeline
 (camera_node → detector_node → tracker_node → vision_display) sees identical
 topics regardless of whether the source is live or recorded.
+
+---
+
+## Dual-camera video (`video.launch.py`) — gate clip + bin clip at once
+
+`vision.launch.py` drives **one** camera. To rehearse a full mission that uses
+**both** cameras — gate/slalom/torpedo on the forward camera, bin/drop on the
+downward camera — use `video.launch.py`, a video-tuned preset over
+`vision_dual.launch.py`:
+
+```bash
+# Forward = gate clip, downward = bin clip; both detectors LIVE, both loop:
+ros2 launch duburi_vision video.launch.py \
+    fwd_video:=/path/to/gate.mp4 \
+    dwn_video:=/path/to/bin.mp4
+
+# One camera only (forward), custom model/classes to match the clip:
+ros2 launch duburi_vision video.launch.py \
+    fwd_video:=/path/to/gate.mp4 \
+    fwd_model:=gate_flare_medium_100ep fwd_classes:=gate,flare
+
+# Single pass (no loop) for a clean one-shot mission-sequence run:
+ros2 launch duburi_vision video.launch.py fwd_video:=/path/gate.mp4 loop:=false
+```
+
+The clips publish under `/duburi/vision/forward/*` and
+`/duburi/vision/downward/*` exactly like live cameras, so `vision.align` /
+`vision.move` and `duburi.detected('...', camera='downward')` work unchanged —
+the manager resolves each camera's `VisionState` by name. Defaults vs
+`vision_dual`: detectors start **live** (`paused:=false`) so verbs see
+detections immediately, the HUD enables video playback controls + warm-up
+splash, and both videos loop. `video.launch.py` requires at least one of
+`fwd_video` / `dwn_video` (it errors clearly otherwise).
+
+> `vision_dual.launch.py` itself also accepts `fwd_video:=` / `dwn_video:=`
+> (plus `fwd_loop` / `dwn_loop`); `video.launch.py` is just the convenience
+> preset with video-first defaults. Either runs a camera off a file while the
+> other stays a live webcam — pass only the side you have a clip for.
+
+> **Loop ↔ `detected()` interaction.** With `loop:=true`, a looping clip
+> re-shows the target at EOF, which can re-trigger `detected()` acquisition
+> mid-test (great for iterating verbs/gains, confusing for one-shot sequencing).
+> Use `loop:=false` for a clean single-pass mission run.
 
 > **Splash screen / auto-pause**: When `video_file:=` is set, the HUD holds the video
 > at frame 0 and displays a branded splash overlay until the detector publishes its
@@ -102,7 +145,7 @@ also supported, see below):
 
 ```bash
 # Option A: mp4 via video_file source (simplest, full pipeline runs normally)
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py \
     video_file:=/home/fh1m/bags/pool_run.mp4 \
     model:=gate_flare_medium_100ep \
     classes:=gate,flare \
@@ -144,7 +187,7 @@ sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
 ros2 run duburi_manager start --ros-args -p mode:=sim
 
 # Terminal 3: video pipeline (replays pool run)
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py \
     video_file:=/home/fh1m/bags/pool_run.mp4 \
     camera:=forward model:=gate_flare_medium_100ep classes:=gate
 
@@ -153,10 +196,21 @@ ros2 run duburi_planner mission gate_flare_prequal
 ```
 
 The mission calls `duburi.vision.align(target='gate', ...)` and
-`duburi.vision.move(...)` — these close the visual loop against the recorded
-video frames just as they would in the pool. Thrust commands go to SITL (or
-are silently dropped if the AUV isn't armed), so the control logic is fully
-exercised without water.
+`duburi.vision.move(...)` against the recorded frames. Thrust commands go to
+SITL (or are silently dropped if the AUV isn't armed), so the mission *logic*
+is exercised without water.
+
+> **⚠️ Video testing is OPEN-LOOP on vision — know what it does and does NOT
+> validate.** The clip plays on its own timeline and does **not** react to
+> commanded thrust. So it validates: detections firing on real imagery
+> (model / conf / class tuning); mission **logic** — `detected()` transitions,
+> verb dispatch, fallback search, model/class switching, the downward-camera
+> handoff; and thrust **direction/sign** for a given bbox position. It does
+> **NOT** validate closed-loop dynamics — convergence, overshoot, the
+> `align(hold=)` station-keep, or arrival braking — because the scene won't move
+> when the AUV does. `align`/`move` will chase a bbox that moves on the file's
+> schedule and never truly converge unless the clip happens to show a centred
+> target. For dynamics use Gazebo/SITL; for detection + sequencing use video.
 
 ---
 
@@ -166,7 +220,7 @@ exercised without water.
 
 ```bash
 # Launch at ¼ FPS for frame-by-frame inspection:
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch duburi_vision vision.launch.py \
     video_file:=/tmp/run.mp4 fps:=4 classes:=gate
 # Then use Space + ,/. to step through detections one frame at a time.
 ```
@@ -189,8 +243,9 @@ ros2 param set /duburi_tracker min_hits 2
 **video_file with the manager's launch file**
 
 The `bringup.launch.py` in `duburi_manager` does not directly support
-`video_file:=`; use `cameras_.launch.py` from `duburi_vision` instead for
-video-based testing, then start the manager separately.
+`video_file:=` (it is the control+vision path); use `vision.launch.py` (one
+camera) or `video.launch.py` (forward+downward clips) from `duburi_vision`
+instead for video-based testing, then start the manager separately.
 
 ---
 
