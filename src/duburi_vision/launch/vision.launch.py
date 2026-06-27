@@ -41,8 +41,11 @@ from launch.events                import Shutdown
 from launch.substitutions         import LaunchConfiguration, PythonExpression
 from launch_ros.actions           import Node
 
-# Quiet by default: camera/detector/tracker emit only warnings+ so the
-# console isn't flooded during a mission (YOLO itself is already verbose=False).
+# Quiet by default: camera/tracker/depth emit only warnings+ so the console
+# isn't flooded during a mission (YOLO itself is already verbose=False). The
+# bare 'warn' is the process default -- it silences rcl/rmw framework chatter
+# too. The detector is the exception: it owns the always-on operator alignment
+# line, so its own logger is pinned back to info (see _DET_QUIET below).
 _QUIET = ['--log-level', 'warn']
 
 
@@ -111,6 +114,10 @@ def generate_launch_description():
     det_node = ['duburi_detector_', cam]
     trk_node = ['duburi_tracker_',  cam]
 
+    # Detector: process default warn (kills framework gibberish) but pin THIS
+    # node's own logger to info so its always-on operator alignment line shows.
+    _DET_QUIET = ['--log-level', 'warn', '--log-level', det_node + [':=info']]
+
     camera_node = Node(
         package='duburi_vision', executable='camera_node', name=cam_node,
         output='screen', ros_arguments=_QUIET,
@@ -131,7 +138,7 @@ def generate_launch_description():
 
     detector_node = Node(
         package='duburi_vision', executable='detector_node', name=det_node,
-        output='screen', ros_arguments=_QUIET,
+        output='screen', ros_arguments=_DET_QUIET,
         parameters=[{
             'camera':              cam,
             'model_path':          LaunchConfiguration('model'),

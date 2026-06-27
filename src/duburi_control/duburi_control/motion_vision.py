@@ -447,14 +447,15 @@ def align_loop(*,
                                worst, 0.0, elapsed)
 
             if (now - last_log) >= LOG_THROTTLE_S:
-                # Operator line: the signed pixel offset of the target from frame
-                # centre (what the swimmer reads to tune err / standoff) and where
-                # it currently sits. Active axes drive it toward centre (0,0).
+                # The detector node owns the always-on operator alignment line
+                # (same format, against the loaded class, regardless of verb), so
+                # this per-verb copy is demoted to debug to avoid a duplicate
+                # line in the mission terminal.
                 x_off = sample.ex * half_w
                 y_off = sample.ey * half_h
                 cx    = half_w + x_off
                 cy    = half_h + y_off
-                log.info(
+                log.debug(
                     f"[ align lat={x_off:+.0f} depth={y_off:+.0f}px ] "
                     f"({cx:.0f},{cy:.0f}) align ['{target_class}'] center -> (0,0)")
                 last_log = now

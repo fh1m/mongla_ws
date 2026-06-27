@@ -73,10 +73,6 @@ def generate_launch_description():
         DeclareLaunchArgument('conf',       default_value='0.30'),
         DeclareLaunchArgument('viewer',     default_value='true',
                               description='Open vision_display (OpenCV viewer) alongside vision pipeline'),
-        DeclareLaunchArgument('quiet',      default_value='true',
-                              description='Mission-quiet logging: show only mission progress + the '
-                                          'vision operator line (demote [STATE]/[ARDUB]/[RC ] telemetry '
-                                          'to debug). Set false for full telemetry.'),
     ]
 
     manager_node = Node(
@@ -84,6 +80,10 @@ def generate_launch_description():
         executable='start',
         name='duburi_manager',
         output='screen',
+        # Process default warn silences rcl/rmw framework gibberish; the manager's
+        # own logger is pinned to info so all Mongla telemetry ([STATE]/[ARDUB]/
+        # [RC ]/[ACT]) and the mission progress lines always show.
+        ros_arguments=['--log-level', 'warn', '--log-level', 'duburi_manager:=info'],
         parameters=[{
             'mode':                 LaunchConfiguration('mode'),
             'yaw_source':           LaunchConfiguration('yaw_source'),
@@ -91,7 +91,6 @@ def generate_launch_description():
             'nucleus_dvl_port':     LaunchConfiguration('dvl_port'),
             'nucleus_dvl_password': 'nortek',
             'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
-            'mission_quiet':        LaunchConfiguration('quiet'),
         }],
     )
 

@@ -211,8 +211,8 @@ def test_align_warns_when_boxes_present_but_none_match():
     align_loop(pixhawk=_FakePixhawk(), vision_state=vis, target_class='gate',
                axes={'lat'}, offsets={}, err_px=40.0, duration=0.3, gain=30.0,
                lost_grace_s=2.0, writers=_FakeWriters(), log=log, abort_fn=None)
-    # Demoted to debug (mission-quiet) so it no longer pollutes the operator view,
-    # but the "why isn't it moving" hint still fires at --log-level debug.
+    # Emitted at debug so it doesn't pollute the operator view, but the
+    # "why isn't it moving" hint still fires at --log-level debug.
     assert any('not among live detections' in d for d in log.debugs)
 
 
@@ -470,9 +470,11 @@ def test_brake_reads_post_decay_command():
 
 
 def test_align_operator_line_format():
-    # Output-level pin on the swimmer-facing line: the throttled operator log
-    # must carry the requested shape -- signed lat px, the class, and the
-    # "center -> (0,0)" target -- so deck tuning reads the live pixel values.
+    # Output-level pin on the shared align-line shape -- signed lat px, the
+    # class, and the "center -> (0,0)" target. The detector node owns the
+    # always-on operator copy; this per-verb copy is emitted at debug (so it
+    # doesn't duplicate the detector line in the mission terminal), but the
+    # format string is shared, so this remains the regression pin for its shape.
     log = _CapLog()
     # ex=0.5 on a 640px frame -> +160px to the right of centre; never reaches
     # the err band, so the loop logs the operator line and times out.
@@ -480,8 +482,8 @@ def test_align_operator_line_format():
                target_class='gate', axes={'lat'}, offsets={}, err_px=10.0,
                duration=0.3, gain=30.0, kp_lat=60.0,
                writers=_FakeWriters(), log=log, abort_fn=None)
-    line = next((m for m in log.infos if m.startswith('[ align')), None)
-    assert line is not None, f'expected an operator align line, got {log.infos}'
+    line = next((m for m in log.debugs if m.startswith('[ align')), None)
+    assert line is not None, f'expected an operator align line, got {log.debugs}'
     assert 'lat=+160' in line, f'expected signed lat px in {line!r}'
     assert "['gate']" in line and 'center -> (0,0)' in line, f'bad format: {line!r}'
 
