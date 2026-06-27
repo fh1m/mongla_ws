@@ -388,3 +388,21 @@ def test_align_nonzero_offset_passed_through():
     _, kwargs = send.call_args
     assert kwargs['offset_lat'] == pytest.approx(64.0)
     assert kwargs['offset_yaw'] == pytest.approx(0.0)
+
+
+def test_align_hold_sent_when_given():
+    # align(hold=2.5) must wire hold_s=2.5 so the server station-keeps.
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.align('hole', yaw=0, lat=0, hold=2.5)
+    _, kwargs = send.call_args
+    assert kwargs['hold_s'] == pytest.approx(2.5)
+
+
+def test_align_hold_defaults_to_zero():
+    # No hold -> hold_s=0.0 (exit-on-stable, unchanged behaviour).
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.align('gate', yaw=0, lat=0)
+    _, kwargs = send.call_args
+    assert kwargs['hold_s'] == pytest.approx(0.0)

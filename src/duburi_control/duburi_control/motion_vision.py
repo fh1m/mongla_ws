@@ -268,6 +268,7 @@ def align_loop(*,
                gain_depth: Optional[float] = None,
                brake: bool = True,
                brake_gain: float = VISION_BRAKE_GAIN,
+               hold_s: float = 0.0,
                kp_lat: float = KP_LAT_DEFAULT,
                kp_yaw: float = KP_YAW_DEFAULT,
                kp_depth: float = KP_DEPTH_DEFAULT,
@@ -284,6 +285,12 @@ def align_loop(*,
     ``axes`` is a subset of {'lat','yaw','depth'}; ``offsets`` carries the
     signed pixel offset for each active axis (0 = centre). Returns an
     Outcome -- never raises on a miss.
+
+    ``hold_s`` > 0 turns the verb into an ACTIVE station-keep: once centred,
+    the loop keeps running its lat/yaw/depth corrections for hold_s seconds
+    (fighting water inertia) before exiting ALIGNED, instead of exiting on the
+    first stable tick. hold_s counts against ``duration`` -- budget
+    duration >= approach + hold_s or the verb TIMEOUTs mid-hold.
     """
     bad = axes - VALID_AXES
     if bad:
@@ -331,6 +338,7 @@ def align_loop(*,
 
     stable      = 0
     lost_since: Optional[float] = None
+    aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
     last_log    = 0.0
     last_depth  = 0.0
     last_err_px = float('inf')
@@ -340,7 +348,7 @@ def align_loop(*,
         f"[VIS  ] align class={target_class!r} axes={sorted(axes)} "
         f"offsets={ {k: round(v) for k, v in offsets.items()} } "
         f"err={err_px:.0f}px gain={gain:.0f}% dur={duration:.0f}s "
-        f"hold_thru_loss={hold_through_loss}")
+        f"hold={hold_s:.0f}s hold_thru_loss={hold_through_loss}")
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
@@ -435,16 +443,38 @@ def align_loop(*,
 
             stable = stable + 1 if all(in_band) else 0
             if stable >= align_stable_frames:
-                # Arrival: bleed lateral inertia so the hull stops square and the
-                # next mission step starts from the planned position. Gated on the
-                # EMA, so a gently-converged lock (hole-lock) exits with ~0 EMA and
-                # is NOT kicked. Yaw/depth never brake.
-                if brake and 'lat' in axes:
-                    _brake_axis(writers.lateral, lat_ema, brake_gain,
-                                abort_fn=abort_fn, log=log, label='VBRK')
-                writers.neutral()
-                return Outcome(ALIGNED, f"aligned ({worst:.0f}px)",
-                               worst, 0.0, elapsed)
+                # First confirmed-centred tick opens the hold window. With
+                # hold_s>0 we keep the loop ALIVE and correcting for hold_s --
+                # the ACTIVE station-keep the operator needs to hold steady
+                # against water inertia while a payload fires (passive neutral
+                # would just drift). hold_s<=0 keeps the original exit-on-stable
+                # behaviour bit-for-bit.
+                if aligned_at is None:
+                    aligned_at = now
+                    if hold_s > 0.0:
+                        log.info(f"[VIS  ] align HELD -- station-keeping "
+                                 f"{hold_s:.1f}s ({worst:.0f}px)")
+                if hold_s <= 0.0 or (now - aligned_at) >= hold_s:
+                    # Arrival / hold complete: bleed lateral inertia so the hull
+                    # stops square and the next mission step starts from the
+                    # planned position. Gated on the EMA, so a gently-converged
+                    # lock (hole-lock) exits with ~0 EMA and is NOT kicked.
+                    # Yaw/depth never brake.
+                    if brake and 'lat' in axes:
+                        _brake_axis(writers.lateral, lat_ema, brake_gain,
+                                    abort_fn=abort_fn, log=log, label='VBRK')
+                    writers.neutral()
+                    reason = (f"held {hold_s:.1f}s ({worst:.0f}px)" if hold_s > 0.0
+                              else f"aligned ({worst:.0f}px)")
+                    return Outcome(ALIGNED, reason, worst, 0.0, elapsed)
+                # else: inside the hold window -- fall through to the loop tail
+                # and keep correcting (the per-tick _drive above already ran).
+                # ponytail: aligned_at is set ONCE and never reset (unlike
+                # move_loop's reached_at ~L660). Align drift is transient jitter
+                # the loop corrects; resetting on a drift-out tick would risk
+                # never completing the hold under a steady current. The in-band
+                # gate on this block still guarantees we exit centred. Do NOT
+                # "fix" this to match move.
 
             if (now - last_log) >= LOG_THROTTLE_S:
                 # The detector node owns the always-on operator alignment line

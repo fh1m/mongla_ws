@@ -45,7 +45,7 @@ class VisionVerbs:
                      offset_lat=0.0, offset_yaw=0.0, offset_depth=0.0,
                      err_px=40.0, duration=20.0, gain=30.0,
                      gain_lat=0.0, gain_yaw=0.0, gain_depth=0.0,
-                     brake_off=False, brake_gain=0.0,
+                     brake_off=False, brake_gain=0.0, hold_s=0.0,
                      hold_through_loss=False,
                      kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
                      lost_grace_s=0.0, align_stable_frames=0.0):
@@ -84,7 +84,8 @@ class VisionVerbs:
             self.log.info(
                 f'[CMD  ] vision_align camera={camera!r} class={target_class!r} '
                 f'axes={sorted(axis_set)} err={float(err_px):.0f}px '
-                f'gain={float(gain):.0f}% dur={float(duration):.0f}s')
+                f'gain={float(gain):.0f}% dur={float(duration):.0f}s '
+                f'hold={float(hold_s):.0f}s')
 
             # Ch4 arbitration: when yaw IS an align axis we suspend the lock
             # and the loop drives Ch4 itself. When yaw is NOT an axis but a
@@ -103,6 +104,7 @@ class VisionVerbs:
                     gain_depth=float(gain_depth) or float(gain),
                     brake=not bool(brake_off),
                     brake_gain=float(brake_gain) or VISION_BRAKE_GAIN,
+                    hold_s=float(hold_s),
                     kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
                     kp_yaw=float(kp_yaw) or KP_YAW_DEFAULT,
                     kp_depth=float(kp_depth) or KP_DEPTH_DEFAULT,

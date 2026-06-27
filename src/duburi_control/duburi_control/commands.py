@@ -216,6 +216,10 @@ COMMANDS = {
                     'On arrival the lateral inertia is braked (reverse-kick) so the hull '
                     'stops square; brake_off=true coasts, brake_gain scales the kick. A '
                     'gently-converged lock exits with ~0 momentum and is not kicked. '
+                    'hold_s>0 turns it into an ACTIVE station-keep: once centred it keeps '
+                    'correcting for hold_s seconds (fighting water inertia, e.g. to hold a '
+                    'torpedo-hole lock steady for the shot) before exiting -- budget '
+                    'duration >= approach + hold_s. '
                     'On duration expiry it logs NOT-aligned and the mission continues. '
                     'hold_through_loss=true coasts on target loss (set by the DSL when '
                     'no fallback search is supplied).',
@@ -223,7 +227,7 @@ COMMANDS = {
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
                      'gain_lat', 'gain_yaw', 'gain_depth',
-                     'brake_off', 'brake_gain', 'hold_through_loss',
+                     'brake_off', 'brake_gain', 'hold_s', 'hold_through_loss',
                      'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames'],
         'defaults': {'camera': 'forward', 'target_class': '',
@@ -231,7 +235,7 @@ COMMANDS = {
                      'offset_depth': 0.0, 'err_px': 40.0,
                      'duration': 20.0, 'gain': 30.0,
                      'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
-                     'brake_off': False, 'brake_gain': 0.0,
+                     'brake_off': False, 'brake_gain': 0.0, 'hold_s': 0.0,
                      'hold_through_loss': False,
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0},

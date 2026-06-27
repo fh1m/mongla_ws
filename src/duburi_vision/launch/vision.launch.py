@@ -80,6 +80,14 @@ def generate_launch_description():
         DeclareLaunchArgument('iou',           default_value='0.5'),
         DeclareLaunchArgument('device_cls',    default_value='cuda:0',
                               description='Inference device for YOLO (cuda:0 | cpu)'),
+        DeclareLaunchArgument('imgsz',         default_value='640',
+                              description='Inference square size. NOTE: a TensorRT .engine bakes '
+                                          'imgsz at export -- this arg only re-scales the .pt '
+                                          'fallback. To bench a size on TRT, re-export to match: '
+                                          'export_engine --all --imgsz <N>, then imgsz:=<N> here.'),
+        DeclareLaunchArgument('max_det',       default_value='100',
+                              description='Post-NMS detection cap (runtime; lower toward ~10 if '
+                                          'NMS is the FPS bottleneck on busy frames).'),
         DeclareLaunchArgument('paused',        default_value='false',
                               description='Start the detector paused (resume_detector(camera) per task)'),
         DeclareLaunchArgument('viewer',        default_value='true',
@@ -148,6 +156,8 @@ def generate_launch_description():
             'classes':             LaunchConfiguration('classes'),
             'conf':                LaunchConfiguration('conf'),
             'iou':                 LaunchConfiguration('iou'),
+            'imgsz':               LaunchConfiguration('imgsz'),
+            'max_det':             LaunchConfiguration('max_det'),
             'half':                True,
             'paused':              LaunchConfiguration('paused'),
             'publish_debug_image': True,

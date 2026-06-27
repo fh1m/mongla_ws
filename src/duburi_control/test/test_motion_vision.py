@@ -225,6 +225,33 @@ def test_align_converges_when_centered():
     assert writers.neutralised >= 1
 
 
+def test_align_hold_zero_exits_on_first_stable():
+    # hold_s=0 (default) keeps the original behaviour: exit the instant
+    # alignment is confirmed (align_stable_frames ticks), well inside budget.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.0, duration=2.0)
+    assert out.code == ALIGNED
+    assert 'aligned' in out.reason
+    assert out.elapsed_s < 0.5          # ~3 ticks @20Hz, nowhere near 2s
+
+
+def test_align_hold_keeps_correcting_then_exits_aligned():
+    # hold_s>0 is an ACTIVE station-keep: once centred it KEEPS issuing
+    # corrections across the hold window (never goes neutral -- the whole
+    # point), then exits ALIGNED in-band. ex=0.1 is inside err (32px<=40)
+    # so it counts as stable, yet lat has no deadband so it still commands a
+    # non-zero lateral correction every tick -> proof the loop stays active.
+    hold_s = 0.3
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=hold_s, duration=2.0)
+    assert out.code == ALIGNED
+    assert 'held' in out.reason
+    assert out.elapsed_s >= hold_s      # held the window, not exit-on-stable
+    lat_cmds = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    assert lat_cmds, 'expected active lateral corrections DURING the hold'
+    # Materially longer than the hold_s=0 exit-on-stable path on the same target.
+    base, _, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.0, duration=2.0)
+    assert out.elapsed_s > base.elapsed_s + hold_s * 0.5
+
+
 def test_align_gain_caps_speed():
     # Full-right target (ex=1.0) with kp=60 would command 60% but gain=30
     # must clamp it. Lateral PWM never exceeds percent_to_pwm(gain).

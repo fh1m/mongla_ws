@@ -71,6 +71,14 @@ def generate_launch_description():
         DeclareLaunchArgument('classes',    default_value='gate',
                               description='CSV class names for detector'),
         DeclareLaunchArgument('conf',       default_value='0.30'),
+        DeclareLaunchArgument('imgsz',      default_value='640',
+                              description='Inference square size. NOTE: a TensorRT .engine bakes '
+                                          'imgsz at export -- this only re-scales the .pt fallback. '
+                                          'For TRT, re-export to match (export_engine --all '
+                                          '--imgsz <N>), then imgsz:=<N>.'),
+        DeclareLaunchArgument('max_det',    default_value='100',
+                              description='Post-NMS detection cap (runtime; lower toward ~10 if NMS '
+                                          'is the FPS bottleneck on busy frames).'),
         DeclareLaunchArgument('viewer',     default_value='true',
                               description='Open vision_display (OpenCV viewer) alongside vision pipeline'),
     ]
@@ -107,6 +115,8 @@ def generate_launch_description():
             'active_model':  LaunchConfiguration('active_model'),
             'classes':       LaunchConfiguration('classes'),
             'conf':          LaunchConfiguration('conf'),
+            'imgsz':         LaunchConfiguration('imgsz'),
+            'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
         }.items(),
         condition=IfCondition(LaunchConfiguration('vision')),

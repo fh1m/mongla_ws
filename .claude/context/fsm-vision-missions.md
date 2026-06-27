@@ -971,13 +971,17 @@ duburi.vision.align('torpedo', yaw=0, lat=0, depth=0,
 duburi.set_classes('hole')
 # yaw_gain low: a 20 kg hull needs the yaw inertia fought gently to hold a tight
 # hole-lock steady enough to fire through (lat/depth stay at the global gain).
-# brake=False on the FIRE path: the arrival brake is self-gating and usually
+# hold=2.0: ACTIVE station-keep -- once centred, keep correcting on the hole for
+# 2 s so the hull is held dead-still against water inertia BEFORE the shot
+# (exiting the instant it's centred leaves nothing fighting drift -> the hull
+# walks off-aim). hold counts against duration, so budget duration >= approach +
+# hold. brake=False on the FIRE path: the arrival brake is self-gating and usually
 # skips a gently-converged lock, but a fast snap-in can still emit a 0.2 s kick
 # right before align() returns -- which would nudge the hull off-aim between
 # lock-confirm and fire(). On a fire-from-lock the lateral brake buys nothing
 # (you are not moving away), so disable it to keep the shot dead still.
 if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
-                       err=14, gain=12, yaw_gain=8, brake=False,
+                       err=14, gain=12, yaw_gain=8, brake=False, hold=2.0,
                        duration=25, fallback=creep_forward).ok:
     duburi.fire(1)           # torpedo_1 (ESP32 serial 1/2)
 ```
@@ -1001,6 +1005,18 @@ if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
 > a **fire-from-lock pass `brake=False`** (above): you are not moving away, so the
 > lateral brake buys nothing and only risks the shot. Pass-through
 > (`move(fwd=None)`) and abort/loss never brake. Yaw/depth never brake.
+
+> **Active station-keep (`hold=`s).** Without `hold`, `align` exits the instant it's
+> centred and goes neutral — so on a payload step the hull immediately drifts off-aim
+> on water inertia (it has "nothing to stay stable against"). `hold=N` keeps the
+> alignment loop *alive and correcting* (lat/yaw/depth) for N seconds after first
+> centring, fighting drift, then exits `ALIGNED` while in-band — the corrections are
+> the stability. Use it to hold steady through a torpedo/dropper shot
+> (`align('hole', …, hold=2.0, brake=False)` then `fire()`). It counts against
+> `duration` (budget `duration ≥ approach + hold`, else it `TIMEOUT`s mid-hold and a
+> `if align(hold=…): fire()` skips the shot). It holds **lat/yaw/depth only** — not
+> forward range (the prior `move` set the standoff). This is the *active* cousin of
+> the passive `settle` neutral-hold; `settle` is exactly what fails here.
 
 **As an FSM state** (`VisionAlignState` for the lock, a small fire state for the shot):
 
