@@ -307,7 +307,13 @@ class DetectorNode(Node):
             except Exception:
                 return  # node being destroyed; exit thread cleanly
 
-            if self._publish_dbg and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt:
+            # Skip the overlay render + encode + publish entirely when no one is
+            # subscribed to image_debug (autonomous runs with viewer:=false). This
+            # is pure overhead on the inference thread otherwise -- a free win that
+            # grows once TensorRT speeds inference up.
+            if (self._publish_dbg
+                    and self._pub_dbg.get_subscription_count() > 0
+                    and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt):
                 try:
                     fps = 1.0 / dt if dt > 1e-6 else 0.0
                     overlay = draw.render_all(

@@ -102,6 +102,20 @@ VISION_BRAKE_MIN_PCT = 6.0    # gate: skip the kick below this |EMA| (deadband e
 VISION_BRAKE_CAP_PCT = 30.0   # never reverse-kick harder than this
 _BRAKE_EMA_ALPHA     = 0.3    # per-tick EMA weight (~0.4 s memory at LOOP_HZ)
 
+# Freshness-decay of the translational command. The loop runs at VISION_LOOP_HZ
+# (20 Hz) but the detector may publish far slower (3-4 Hz when inference-bound),
+# so the same bbox error is re-used for several ticks. Re-commanding the same P
+# output while the hull drives blind for a whole frame period over-drives by
+# ~Kp*e*T_frame -- the low-FPS twitchiness. Fix: full command authority the
+# instant a frame lands, then decay the LATERAL/FORWARD command toward neutral as
+# the sample ages, hard-zero once we are driving blind. Yaw/depth are NOT decayed
+# (Ch4 is a rate ArduSub bleeds; depth is ArduSub's hold). At healthy FPS frames
+# refresh before VISION_FRESH_FULL_S so the factor stays 1.0 -- zero behaviour
+# change; the decay only engages when detections are slow or drop out. ZERO_S is
+# below _STALE_LIMIT_S so the command zeroes BEFORE "target lost" declares.
+VISION_FRESH_FULL_S = 0.10   # full authority while the sample is this fresh (~1 frame)
+VISION_FRESH_ZERO_S = 0.40   # linearly decayed to zero by this age (driving blind)
+
 # A detection older than this (seconds) counts as "no target this tick".
 # bbox_error() returns None when the class is absent; this only catches a
 # detector that has died while the last box is still cached.
@@ -144,6 +158,22 @@ class Outcome:
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
+
+
+def _freshness(age_s: float) -> float:
+    """Translational-command authority [0,1] as a function of sample age.
+
+    1.0 while the sample is fresher than VISION_FRESH_FULL_S, then linearly to
+    0.0 by VISION_FRESH_ZERO_S (driving blind -> stop). Pure + side-effect-free
+    so it unit-tests without ROS. Caps per-frame over-drive at low FPS while
+    leaving healthy FPS untouched (frames refresh before decay engages).
+    """
+    if age_s <= VISION_FRESH_FULL_S:
+        return 1.0
+    if age_s >= VISION_FRESH_ZERO_S:
+        return 0.0
+    span = VISION_FRESH_ZERO_S - VISION_FRESH_FULL_S
+    return (VISION_FRESH_ZERO_S - age_s) / span
 
 
 def _brake_axis(axis_writer, ema_pct: float, brake_gain: float,
@@ -306,7 +336,7 @@ def align_loop(*,
     last_err_px = float('inf')
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
 
-    log.info(
+    log.debug(
         f"[VIS  ] align class={target_class!r} axes={sorted(axes)} "
         f"offsets={ {k: round(v) for k, v in offsets.items()} } "
         f"err={err_px:.0f}px gain={gain:.0f}% dur={duration:.0f}s "
@@ -338,12 +368,12 @@ def align_loop(*,
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
-                        log.warning(
+                        log.debug(
                             f"[VIS  ] align: {target_class!r} not among live "
                             f"detections {live} -- check classes filter / model")
                     else:
-                        log.info(f"[VIS  ] align LOST {now - lost_since:.1f}s "
-                                 f"(grace {lost_grace_s:.1f}s)")
+                        log.debug(f"[VIS  ] align LOST {now - lost_since:.1f}s "
+                                  f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
                 time.sleep(1.0 / LOOP_HZ)
                 continue
@@ -392,6 +422,11 @@ def align_loop(*,
                 in_band.append(epx <= err_px)
 
             last_err_px = worst
+            # Freshness-decay: pace LATERAL authority to measurement freshness so
+            # the loop doesn't blind-drive on a stale bbox between slow frames
+            # (yaw/depth excluded -- ArduSub bleeds Ch4, holds depth). At healthy
+            # FPS fresh==1.0 so this is a no-op.
+            lat_pct *= _freshness(sample.age_s)
             _drive(lat_pct, yaw_pct)
             lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
             if use_depth and (now - last_depth) >= 1.0 / DEPTH_HZ:
@@ -412,10 +447,16 @@ def align_loop(*,
                                worst, 0.0, elapsed)
 
             if (now - last_log) >= LOG_THROTTLE_S:
+                # Operator line: the signed pixel offset of the target from frame
+                # centre (what the swimmer reads to tune err / standoff) and where
+                # it currently sits. Active axes drive it toward centre (0,0).
+                x_off = sample.ex * half_w
+                y_off = sample.ey * half_h
+                cx    = half_w + x_off
+                cy    = half_h + y_off
                 log.info(
-                    f"[VIS  ] align err={worst:5.0f}px (tgt {err_px:.0f}) "
-                    f"yaw={yaw_pct:+5.1f}% lat={lat_pct:+5.1f}% "
-                    f"dep={depth_setpoint:+.2f}m stable={stable}/{align_stable_frames}")
+                    f"[ align lat={x_off:+.0f} depth={y_off:+.0f}px ] "
+                    f"({cx:.0f},{cy:.0f}) align ['{target_class}'] center -> (0,0)")
                 last_log = now
             time.sleep(1.0 / LOOP_HZ)
     finally:
@@ -508,7 +549,7 @@ def move_loop(*,
     # Pass-through commit window: hold_s overrides the module default.
     commit_s = hold_s if hold_s > 0.0 else _PASSTHROUGH_COMMIT_S
 
-    log.info(
+    log.debug(
         f"[VIS  ] move class={target_class!r} "
         f"{'PASS-THROUGH commit=%.1fs' % commit_s if passthrough else 'fwd_fill=%.0f%%' % (fwd_fill * 100)} "
         f"mode={mode} maintain={'%+.0fpx' % maintain_px if maintain_on else 'off'} "
@@ -537,8 +578,8 @@ def move_loop(*,
                 reached_at = None
                 if commit_until is None:
                     commit_until = now + commit_s
-                    log.info(f"[VIS  ] move: {target_class!r} cleared frame -- "
-                             f"committing {commit_s:.1f}s to pass through")
+                    log.debug(f"[VIS  ] move: {target_class!r} cleared frame -- "
+                              f"committing {commit_s:.1f}s to pass through")
                 if now >= commit_until:
                     writers.neutral()
                     return Outcome(ALIGNED, "passed through", last_lat_err,
@@ -558,12 +599,12 @@ def move_loop(*,
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
-                        log.warning(
+                        log.debug(
                             f"[VIS  ] move: {target_class!r} not among live "
                             f"detections {live} -- check classes filter / model")
                     else:
-                        log.info(f"[VIS  ] move LOST {now - lost_since:.1f}s "
-                                 f"(grace {lost_grace_s:.1f}s)")
+                        log.debug(f"[VIS  ] move LOST {now - lost_since:.1f}s "
+                                  f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
                 time.sleep(1.0 / LOOP_HZ)
                 continue
@@ -573,21 +614,24 @@ def move_loop(*,
             commit_until = None
             fill = _fill(sample, mode)
             last_fill = fill
+            fresh = _freshness(sample.age_s)   # pace translational authority to FPS
 
+            x_off = sample.ex * half_w         # signed horizontal offset (operator px)
             lat_pct = 0.0
             if maintain_on:
                 ctrl = sample.ex - maintain_px / half_w
                 last_lat_err = abs(ctrl) * half_w
-                lat_pct = _clamp(ctrl * kp_lat, -g_lat, g_lat)
+                lat_pct = _clamp(ctrl * kp_lat, -g_lat, g_lat) * fresh
             lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
 
             if passthrough:
                 # Drive forward at the speed cap until the target leaves frame.
-                # Pass-through is defined to COAST through the gate -- never braked.
+                # Pass-through is defined to COAST through the gate -- never braked,
+                # and forward is NOT freshness-decayed (it must clear the gate).
                 _drive(gain, lat_pct)
                 if (now - last_log) >= LOG_THROTTLE_S:
-                    log.info(f"[VIS  ] move PASS-THROUGH fill={fill * 100:5.1f}% "
-                             f"fwd={gain:.0f}% lat={lat_pct:+5.1f}%")
+                    log.info(f"[ move PASS-THROUGH fill={fill * 100:.0f}% "
+                             f"lat={x_off:+.0f}px ] ['{target_class}'] -> clear gate")
                     last_log = now
                 time.sleep(1.0 / LOOP_HZ)
                 continue
@@ -613,7 +657,9 @@ def move_loop(*,
                                    last_lat_err, fill, elapsed)
             else:
                 reached_at = None
-                fwd_pct = _clamp((fwd_fill - fill) * kp_forward, 0.0, gain)
+                # Freshness-decay forward so a stale frame doesn't blind-drive the
+                # approach past the fill target (yaw/depth untouched).
+                fwd_pct = _clamp((fwd_fill - fill) * kp_forward, 0.0, gain) * fresh
                 _drive(fwd_pct, lat_pct)
                 fwd_ema += _BRAKE_EMA_ALPHA * (fwd_pct - fwd_ema)
 
@@ -621,8 +667,8 @@ def move_loop(*,
                 hold_tag = ("" if reached_at is None
                             else f" hold={now - reached_at:.1f}/{hold_s:.0f}s")
                 log.info(
-                    f"[VIS  ] move fill={fill * 100:5.1f}% (tgt {fwd_fill * 100:.0f}%) "
-                    f"lat={lat_pct:+5.1f}%{hold_tag}")
+                    f"[ move fill={fill * 100:.0f}% -> {fwd_fill * 100:.0f}% "
+                    f"lat={x_off:+.0f}px ] ['{target_class}']{hold_tag}")
                 last_log = now
             time.sleep(1.0 / LOOP_HZ)
     finally:

@@ -139,6 +139,38 @@ Canary log line (grep for this on every machine):
 [VIS ] using cuda:0 (NVIDIA GeForce RTX 2060)  torch=2.11.0+cu128  cuda=12.8
 ```
 
+### TensorRT engine (Jetson FPS)
+
+`_resolve_model_path` **prefers `<stem>.engine` over `<stem>.pt`** when both
+sit in `models/`. On the Jetson Orin Nano raw PyTorch @640 is ~3-4 Hz
+(inference-bound); a TensorRT FP16 engine is ~20-30 Hz (nano/small) / ~10-15 Hz
+(medium). Confirm the fast path via the backend canary:
+
+```
+[YOLO ] backend=TensorRT engine  (gate_flare_medium_100ep.engine)
+[YOLO ] backend=PyTorch .pt       (gate_flare_medium_100ep.pt)     ← fallback
+```
+
+Engines are **device + TRT/JetPack-version locked** — build them ON the Jetson
+(`ros2 run duburi_vision export_engine --all`, FP16, imgsz must match the
+detector's `imgsz`), rebuild after a JetPack/TRT upgrade, and never commit them
+(`*.engine` gitignored). A dev box without an engine falls back to `.pt`
+transparently. Also set MAXN: `sudo nvpmodel -m 0 && sudo jetson_clocks`
+(~2× alone; `bringup_check` warns if not set). The debug overlay is skipped
+when no one subscribes to `image_debug` (`viewer:=false`).
+
+### FPS ↔ control coupling
+
+The vision loop runs at `VISION_LOOP_HZ` (20 Hz) but the detector may publish
+far slower, so the same bbox is re-used for several ticks. `align_loop`/
+`move_loop` **freshness-decay** the translational command (`_freshness(age_s)`:
+full authority while fresh, linearly to zero by `VISION_FRESH_ZERO_S`, hard-zero
+when blind) on **lat/fwd only** — yaw is a rate ArduSub bleeds, depth is its
+hold. At healthy FPS the factor is 1.0 (no behaviour change); at low/variable
+FPS it caps the per-frame over-drive (`Kp·e·T_frame`) that otherwise makes the
+hull twitch on stale data. Raising FPS (TensorRT) is the primary fix; this is
+the per-frame safety guard, complementary to the arrival brake (end-of-command).
+
 ## Visualization layers
 
 `draw.render_all(frame, detections, *, ..., state, configured_classes, track_ids)` returns

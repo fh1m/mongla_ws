@@ -104,23 +104,29 @@ def _resolve_model_path(name: str) -> str:
     To use an absolute path: pass ``/path/to/model.pt`` or set
     ``model:=/abs/path.pt`` in the launch arg / models registry.
     """
-    if os.sep in name or name.endswith('.pt'):
+    if os.sep in name or name.endswith('.pt') or name.endswith('.engine'):
         return name
 
+    # Prefer a TensorRT .engine over the .pt when one sits beside it: on the
+    # Jetson the engine is 3-6x faster. Engines are device + TRT-version locked
+    # (built on the Jetson via `ros2 run duburi_vision export_engine`), so on a
+    # dev box without one we transparently fall back to the .pt.
     src_models = _find_src_models_dir()
     if src_models is not None:
-        src_candidate = src_models / f'{name}.pt'
-        if src_candidate.exists():
-            return str(src_candidate)
+        for ext in ('.engine', '.pt'):
+            cand = src_models / f'{name}{ext}'
+            if cand.exists():
+                return str(cand)
 
     share_models_dir: Optional[str] = None
     try:
         from ament_index_python.packages import get_package_share_directory
         share = get_package_share_directory('duburi_vision')
-        candidate = Path(share) / 'models' / f'{name}.pt'
         share_models_dir = str(Path(share) / 'models')
-        if candidate.exists():
-            return str(candidate)
+        for ext in ('.engine', '.pt'):
+            cand = Path(share) / 'models' / f'{name}{ext}'
+            if cand.exists():
+                return str(cand)
     except Exception:
         pass
 
@@ -171,12 +177,19 @@ class YoloDetector(Detector):
         self._half    = bool(half) and self._device.startswith('cuda')
 
         resolved_path = _resolve_model_path(model_path)
+        self._is_engine = str(resolved_path).endswith('.engine')
         self._model = YOLO(resolved_path)
-        try:
-            self._model.to(self._device)
-        except Exception as exc:
-            raise RuntimeError(
-                f"failed to move {resolved_path!r} to {self._device}: {exc!r}") from exc
+        # A TensorRT engine is already bound to the device it was built on;
+        # YOLO.to() can raise for engines, so only move .pt models.
+        if not self._is_engine:
+            try:
+                self._model.to(self._device)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"failed to move {resolved_path!r} to {self._device}: {exc!r}") from exc
+        if self._log:
+            backend = 'TensorRT engine' if self._is_engine else 'PyTorch .pt'
+            self._log.info(f"[YOLO ] backend={backend}  ({Path(resolved_path).name})")
 
         # Prefer class names from a sidecar YAML (e.g. yolo26_nano_pretrained.yaml)
         # so custom models can override the embedded names table.
