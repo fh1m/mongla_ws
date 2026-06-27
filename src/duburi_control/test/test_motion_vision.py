@@ -489,6 +489,31 @@ def test_align_operator_line_format():
 
 
 # --------------------------------------------------------------------------- #
+#  align_loop -- yaw floor is gated on the yaw axis being requested            #
+# --------------------------------------------------------------------------- #
+def test_yaw_never_driven_when_yaw_axis_absent():
+    # Regression pin: omitting yaw= from align() must mean ZERO yaw command --
+    # the VISION_YAW_MIN_PCT floor must NOT spin Ch4 just because the bbox is
+    # large. A close (high-fill) target hard to one side (ex=0.8) is the exact
+    # case that trips the floor when yaw IS active; with axes={'lat'} it must not.
+    big_offset = _sample(ex=0.8, w_frac=0.5, h_frac=0.5)   # area-fill 0.5 >= 0.25
+    _, pix, _ = _align(_FakeVision(big_offset), axes={'lat'})
+    assert pix.rc, 'expected RC frames to be written'
+    assert all(frame['yaw'] == 1500 for frame in pix.rc), \
+        f'yaw driven without a yaw axis: {[f["yaw"] for f in pix.rc]}'
+
+
+def test_yaw_floor_DOES_drive_when_yaw_axis_present():
+    # Positive control: the SAME high-fill off-centre target WITH yaw requested
+    # must drive Ch4 off-neutral (proves the test above would catch a regression
+    # that re-introduced yaw drive, rather than passing vacuously).
+    big_offset = _sample(ex=0.8, w_frac=0.5, h_frac=0.5)
+    _, pix, _ = _align(_FakeVision(big_offset), axes={'yaw', 'lat'})
+    assert any(frame['yaw'] != 1500 for frame in pix.rc), \
+        'yaw axis requested but Ch4 never left neutral'
+
+
+# --------------------------------------------------------------------------- #
 #  align_loop -- inertial arrival brake                                        #
 # --------------------------------------------------------------------------- #
 def test_align_brake_fires_after_sustained_strafe():
