@@ -396,7 +396,7 @@ Engine: `motion_vision.align_loop` / `move_loop`. Source of truth for signatures
 
 | DSL method | Action verb | What it does |
 |---|---|---|
-| `vision.align(target, lat=, yaw=, depth=, err=, duration=, gain=, lat_gain=, yaw_gain=, depth_gain=, brake=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one axis. |
+| `vision.align(target, lat=, yaw=, depth=, err=, duration=, gain=, lat_gain=, yaw_gain=, depth_gain=, brake=, hold=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one axis. `hold=`s turns it into an **active station-keep**: keeps correcting on-target for `hold` s (fights water inertia for a torpedo/dropper shot) before exiting; counts against `duration` (budget `duration ≥ approach + hold`); holds lat/yaw/depth only, **not** forward range. |
 | `vision.move(target, fwd=, mode=, maintain=, hold=, err=, duration=, gain=, lat_gain=, brake=, fallback=)` | `vision_move` | Drive forward until bbox fills `fwd`% (`mode`=area/width/height). `maintain`=±px lateral offset; never re-centres yaw/depth. |
 
 - **`gain` is a hard max-speed cap** (% thrust), not a target speed — the AUV never exceeds it.

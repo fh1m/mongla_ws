@@ -262,7 +262,7 @@ returns a [`VisionResult`](#visionresult) and the mission keeps running.
 
 | Verb | What it does |
 |------|--------------|
-| `vision.align(target, *, lat=, yaw=, depth=, ...)` | Centre `target` on the named axes, each at a signed **pixel offset** from frame centre. |
+| `vision.align(target, *, lat=, yaw=, depth=, hold=, ...)` | Centre `target` on the named axes, each at a signed **pixel offset** from frame centre. `hold=`s = **active station-keep**: keep correcting on-target for `hold` s before exiting (holds the hull steady for a torpedo/dropper shot); counts against `duration`; lat/yaw/depth only, not range. |
 | `vision.move(target, *, fwd=, mode=, ...)` | Drive forward until `target`'s bbox fills `fwd` % of the frame. Never re-centres yaw/depth. |
 
 #### `vision.align` — centre on lat / yaw / depth

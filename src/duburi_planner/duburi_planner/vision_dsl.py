@@ -5,7 +5,8 @@ Exactly two mission-facing verbs, both pixel-native and recover-don't-fail:
     duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
                         err=40, duration=20, gain=30,
                         lat_gain=None, yaw_gain=None, depth_gain=None,
-                        brake=True, brake_gain=None, fallback=None, camera=None)
+                        brake=True, brake_gain=None, hold=None,
+                        fallback=None, camera=None)
 
     duburi.vision.move(target, *, fwd=95, mode='area', maintain=None,
                        hold=None, err=40, duration=20, gain=30,
@@ -125,6 +126,7 @@ class _VisionDSL:
               depth_gain: Optional[float] = None,
               brake: bool = True,
               brake_gain: Optional[float] = None,
+              hold: Optional[float] = None,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -151,6 +153,18 @@ class _VisionDSL:
         NOT kicked, so a fire-on-align shot is never disturbed. Pass
         ``brake=False`` to coast; ``brake_gain`` scales the kick. Yaw/depth
         never brake.
+
+        ``hold`` (seconds) turns align into an ACTIVE station-keep: once
+        centred, the loop keeps running its lat/yaw/depth corrections for
+        ``hold`` s -- fighting water inertia/current -- before returning,
+        instead of exiting the instant it's centred. This is what holds the
+        hull steady on a target for a payload action (``align('hole', yaw=0,
+        lat=0, gain=25, yaw_gain=10, hold=3, brake=False)`` then ``fire()``).
+        It holds lat/yaw/depth only -- NOT forward range (the prior ``move``
+        set the standoff). ``hold`` counts against ``duration``: budget
+        ``duration >= approach + hold`` or the verb TIMEOUTs mid-hold (and a
+        ``if align(hold=3): fire()`` would skip the shot). For a fire-from-lock
+        pass ``brake=False`` so there's no pre-shot lateral nudge.
         """
         active = [(name, val) for name, val in
                   (('lat', lat), ('yaw', yaw), ('depth', depth))
@@ -181,6 +195,7 @@ class _VisionDSL:
                 gain_depth=float(depth_gain) if depth_gain is not None else 0.0,
                 brake_off=(not brake),
                 brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
+                hold_s=float(hold) if hold is not None else 0.0,
                 hold_through_loss=(fallback is None))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
