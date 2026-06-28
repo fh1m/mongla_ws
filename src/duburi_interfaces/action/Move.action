@@ -62,6 +62,10 @@ float32 kp_depth           # P gain on depth pixel error        (0 = use vision.
 float32 kp_forward         # P gain on fill error (vision_move) (0 = use vision.kp_forward)
 float32 lost_grace_s       # seconds to coast on target loss before reporting LOST (0 = 1.0)
 float32 align_stable_frames# ticks within err_px before ALIGNED (0 = use vision.align_stable_frames)
+# ---- anchor (XFeat superglue) fields  (ignored by non-anchor cmds) ------
+float32 theta_thresh       # vision_anchor_align: |theta| rad tolerance for lock (0 = default 0.05)
+float32 min_inliers        # vision_anchor_align: min RANSAC inliers to count a tick locked (0 = trust node)
+string  fire_channels      # vision_anchor_align: CSV payload channels fired ONCE at lock, e.g. "1,2"
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

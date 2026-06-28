@@ -406,3 +406,52 @@ def test_align_hold_defaults_to_zero():
     dsl.align('gate', yaw=0, lat=0)
     _, kwargs = send.call_args
     assert kwargs['hold_s'] == pytest.approx(0.0)
+
+
+# --------------------------------------------------------------------------- #
+#  anchor -- XFeat superglue                                                   #
+# --------------------------------------------------------------------------- #
+def test_anchor_snap_dispatches_verb():
+    send = MagicMock(return_value=_result(1))
+    dsl = _dsl(send)
+    assert dsl.anchor_snap() is True
+    cmd, kwargs = send.call_args[0][0], send.call_args[1]
+    assert cmd == 'vision_anchor_snap'
+    assert kwargs['camera'] == 'forward'
+
+
+def test_anchor_clear_dispatches_verb():
+    send = MagicMock(return_value=_result(1))
+    dsl = _dsl(send)
+    assert dsl.anchor_clear() is True
+    assert send.call_args[0][0] == 'vision_anchor_clear'
+
+
+def test_anchor_align_sends_fire_channels_csv():
+    send = MagicMock(return_value=_result(ALIGNED, 8.0))
+    dsl = _dsl(send)
+    res = dsl.anchor_align(err=15, theta=0.04, hold=2.0, fire=[1, 2], match=20)
+    assert res.ok is True
+    cmd, kwargs = send.call_args[0][0], send.call_args[1]
+    assert cmd == 'vision_anchor_align'
+    assert kwargs['fire_channels'] == '1,2'
+    assert kwargs['hold_s'] == pytest.approx(2.0)
+    assert kwargs['min_inliers'] == pytest.approx(20.0)
+    assert kwargs['theta_thresh'] == pytest.approx(0.04)
+
+
+def test_anchor_align_no_fire_is_empty():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.anchor_align()
+    _, kwargs = send.call_args
+    assert kwargs['fire_channels'] == ''
+    assert kwargs['min_inliers'] == pytest.approx(0.0)
+
+
+def test_anchor_align_single_fire_int():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.anchor_align(fire=1)
+    _, kwargs = send.call_args
+    assert kwargs['fire_channels'] == '1'

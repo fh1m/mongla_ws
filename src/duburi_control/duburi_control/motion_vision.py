@@ -68,6 +68,13 @@ KP_YAW_DEFAULT     = 60.0
 KP_DEPTH_DEFAULT   = 0.05
 KP_FORWARD_DEFAULT = 200.0
 
+# Anchor (geometric superglue) P-gains. lat/depth act on normalized pixel error
+# like the YOLO loop; yaw acts on radians (theta), so its kp is a deg-ish->pct
+# scale tuned far higher than the pixel kps. All pool-tunable.
+KP_ANCHOR_LAT_DEFAULT   = 60.0
+KP_ANCHOR_YAW_DEFAULT   = 120.0   # theta is in radians -> small numbers, big kp
+KP_ANCHOR_DEPTH_DEFAULT = 0.05
+
 # Yaw is THE essential axis for micro-aligning + holding against a small
 # target (the torpedo 'hole'). Pure-proportional yaw falls below the T200
 # spin-up threshold near centre, so a small residual error commands only a
@@ -131,6 +138,14 @@ _PASSTHROUGH_COMMIT_S = 2.0
 
 # Surfacing safety floor: never command shallower than 0.2 m.
 _MIN_DEPTH_M = -0.2
+
+# Nominal half-frame (px) used ONLY to normalize anchor pixel error into the
+# same kp feel as the YOLO loop's [-1,1] ex/ey (which VisionState already
+# normalizes). anchor_node publishes raw pixel error, so we scale by a nominal
+# 640x480 half-frame; exact frame size isn't on the anchor topic and the kp is
+# pool-tuned anyway, so a nominal divisor is sufficient.
+_ANCHOR_HALF_W = 320.0
+_ANCHOR_HALF_H = 240.0
 
 VALID_AXES = {'lat', 'yaw', 'depth'}
 VALID_MODES = {'area', 'width', 'height'}
@@ -707,3 +722,178 @@ def move_loop(*,
             writers.neutral()
         except Exception as exc:   # noqa: BLE001
             log.warning(f"[VIS  ] move cleanup neutral raised: {exc!r}")
+
+
+# ---------------------------------------------------------------------- #
+#  anchor_align_loop -- geometric "superglue" lock on a snapped reference #
+# ---------------------------------------------------------------------- #
+def anchor_align_loop(*,
+                      pixhawk: Pixhawk,
+                      anchor_state,
+                      err_px: float,
+                      theta_thresh: float,
+                      duration: float,
+                      gain: float,
+                      gain_lat: Optional[float] = None,
+                      gain_yaw: Optional[float] = None,
+                      gain_depth: Optional[float] = None,
+                      brake: bool = True,
+                      brake_gain: float = VISION_BRAKE_GAIN,
+                      hold_s: float = 0.0,
+                      match: Optional[float] = None,
+                      kp_lat: float = KP_ANCHOR_LAT_DEFAULT,
+                      kp_yaw: float = KP_ANCHOR_YAW_DEFAULT,
+                      kp_depth: float = KP_ANCHOR_DEPTH_DEFAULT,
+                      lost_grace_s: float = 1.0,
+                      anchor_stable_frames: int = 3,
+                      depth_sign: int = +1,
+                      release_yaw: bool = False,
+                      on_locked=None,
+                      writers=None,
+                      log=None,
+                      abort_fn=None) -> Outcome:
+    """Drive the hull to re-superimpose the live view on the snapped reference.
+
+    Geometric cousin of :func:`align_loop`: instead of a YOLO bbox it reads the
+    homography pose error from ``anchor_state.pose()`` and drives **lat from
+    ``tx``, yaw from ``theta`` (independent axis), depth from ``ty``** -- the
+    same three axes / Ch6+Ch4+depth path as align, so it shares freshness-decay,
+    the arrival brake, the ``hold_s`` active station-keep, and Ch4 arbitration
+    (``release_yaw``). No forward axis (monocular homography has no metric range).
+
+    ``on_locked`` is called EXACTLY ONCE at the first confirmed lock (the verb
+    wires it to ``fire`` so a torpedo leaves mid-hold while the hull is glued).
+    ``match`` (if set) is a minimum inlier count a tick must clear to count as a
+    drive/lock tick. Returns an Outcome -- never raises on a miss.
+    """
+    # Need the anchor node alive + a reference snapped (pose() turns non-None
+    # only after a match against a stored reference). Mirrors _camera_ready.
+    if anchor_state is None or not anchor_state.is_streaming():
+        return Outcome(NO_CAMERA, "anchor not streaming (launch anchor:=true + snap)",
+                       elapsed_s=0.0)
+
+    g_lat   = gain if gain_lat   is None else gain_lat
+    g_yaw   = gain if gain_yaw   is None else gain_yaw
+    g_depth = gain if gain_depth is None else gain_depth
+    max_nudge = _MAX_DEPTH_NUDGE * max(g_depth, 0.0) / 100.0
+    throttle_ch = 65535   # depth axis active -> release Ch3 for ALT_HOLD PID
+
+    depth_setpoint = _read_depth(pixhawk)
+
+    def _drive(lat_pct: float, yaw_pct: float) -> None:
+        if release_yaw:
+            pixhawk.send_rc_translation(
+                throttle=throttle_ch, forward=1500,
+                lateral=Pixhawk.percent_to_pwm(lat_pct))
+        else:
+            pixhawk.send_rc_override(
+                forward=1500, lateral=Pixhawk.percent_to_pwm(lat_pct),
+                yaw=Pixhawk.percent_to_pwm(yaw_pct), throttle=throttle_ch)
+
+    stable      = 0
+    lost_since: Optional[float] = None
+    aligned_at: Optional[float] = None
+    fired       = False
+    last_log    = 0.0
+    last_depth  = 0.0
+    last_err_px = float('inf')
+    lat_ema     = 0.0
+
+    log.debug(
+        f"[ANCH ] anchor_align err={err_px:.0f}px theta_thr={theta_thresh:.3f}rad "
+        f"gain={gain:.0f}% dur={duration:.0f}s hold={hold_s:.0f}s match={match}")
+
+    def _present(sample) -> bool:
+        if sample is None or sample.age_s > _STALE_LIMIT_S:
+            return False
+        if sample.state != 'LOCKED':
+            return False
+        return match is None or sample.conf >= match
+
+    started  = time.monotonic()
+    deadline = started + max(duration, 0.0)
+    try:
+        while True:
+            now     = time.monotonic()
+            elapsed = now - started
+            if abort_fn and abort_fn():
+                return Outcome(ABORTED, "aborted", last_err_px, 0.0, elapsed)
+            if now >= deadline:
+                return Outcome(TIMEOUT, "anchor not locked (duration elapsed)",
+                               last_err_px, 0.0, elapsed)
+
+            sample = anchor_state.pose()
+            if not _present(sample):
+                stable = 0
+                _drive(0.0, 0.0)
+                pixhawk.set_target_depth(depth_setpoint)
+                if lost_since is None:
+                    lost_since = now
+                if (now - lost_since) >= lost_grace_s:
+                    return Outcome(LOST, "anchor lost", last_err_px, 0.0, elapsed)
+                time.sleep(1.0 / LOOP_HZ)
+                continue
+
+            lost_since = None
+            # Pixel error -> command. tx/ty are pixel offsets; normalize by a
+            # nominal half-frame so the kp scale matches the YOLO loop's feel.
+            # (Anchor pose is pixel-native; ex-equivalent = tx, ey-equivalent = ty.)
+            trans_err = math.hypot(sample.tx_px, sample.ty_px)
+            last_err_px = trans_err
+
+            lat_pct = _clamp(sample.tx_px / _ANCHOR_HALF_W * kp_lat, -g_lat, g_lat)
+            yaw_pct = _clamp(sample.theta_rad * kp_yaw, -g_yaw, g_yaw)
+
+            step = _clamp(sample.ty_px / _ANCHOR_HALF_H * kp_depth,
+                          -max_nudge, max_nudge) * depth_sign
+            depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
+
+            # Freshness-decay translation (lat) like align; yaw/depth excluded.
+            lat_pct *= _freshness(sample.age_s)
+            _drive(lat_pct, yaw_pct)
+            lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
+            if (now - last_depth) >= 1.0 / DEPTH_HZ:
+                pixhawk.set_target_depth(depth_setpoint)
+                last_depth = now
+
+            in_band = (trans_err <= err_px) and (abs(sample.theta_rad) <= theta_thresh)
+            stable  = stable + 1 if in_band else 0
+            if stable >= anchor_stable_frames:
+                if aligned_at is None:
+                    aligned_at = now
+                    if not fired and on_locked is not None:
+                        # Fire ONCE at first confirmed lock, mid-hold, while the
+                        # loop keeps gluing the hull to the reference.
+                        fired = True
+                        try:
+                            on_locked()
+                        except Exception as exc:   # noqa: BLE001
+                            log.error(f"[ANCH ] on_locked (fire) raised {exc!r}")
+                    if hold_s > 0.0:
+                        log.info(f"[ANCH ] LOCKED -- gluing {hold_s:.1f}s "
+                                 f"({trans_err:.0f}px, {sample.theta_rad:+.3f}rad)")
+                if hold_s <= 0.0 or (now - aligned_at) >= hold_s:
+                    if brake:
+                        _brake_axis(writers.lateral, lat_ema, brake_gain,
+                                    abort_fn=abort_fn, log=log, label='ABRK')
+                    writers.neutral()
+                    reason = (f"glued {hold_s:.1f}s ({trans_err:.0f}px)" if hold_s > 0.0
+                              else f"locked ({trans_err:.0f}px)")
+                    return Outcome(ALIGNED, reason, trans_err, 0.0, elapsed)
+                # ponytail: aligned_at set once, never reset on a drift-out tick
+                # (same deliberate divergence from move_loop as align_loop) -- a
+                # steady current must not stop the hold from completing; the
+                # in-band gate still guarantees we exit locked.
+
+            if (now - last_log) >= LOG_THROTTLE_S:
+                log.info(
+                    f"[ anchor tx={sample.tx_px:+.0f} ty={sample.ty_px:+.0f}px "
+                    f"th={sample.theta_rad:+.3f} inl={sample.conf:.0f} ] "
+                    f"superglue -> (0,0)")
+                last_log = now
+            time.sleep(1.0 / LOOP_HZ)
+    finally:
+        try:
+            writers.neutral()
+        except Exception as exc:   # noqa: BLE001
+            log.warning(f"[ANCH ] anchor cleanup neutral raised: {exc!r}")

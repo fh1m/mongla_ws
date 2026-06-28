@@ -79,6 +79,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Float32MultiArray, Int32, String
+from geometry_msgs.msg import Vector3
 from std_srvs.srv import SetBool
 from vision_msgs.msg import Detection2DArray
 
@@ -246,6 +247,12 @@ class VisionDisplayNode(Node):
         # depth map (colorized BGR, cached from vis_range_map topic)
         self._depth_map_bgr: np.ndarray | None = None
         self._depth_map_lock = threading.Lock()
+
+        # Anchor (XFeat superglue) HUD state -- best-effort, lock-guarded.
+        self._anchor_state: str | None = None
+        self._anchor_error = None                  # (tx, ty, theta) or None
+        self._anchor_ref_bgr: np.ndarray | None = None
+        self._anchor_lock = threading.Lock()
         self._show_depth_map: bool = False   # toggled by 'D' keypress
 
         # Video file state.
@@ -314,6 +321,9 @@ class VisionDisplayNode(Node):
         trk_topic  = f'/duburi/vision/{camera}/tracks'
         vr_topic   = f'/duburi/vision/{camera}/vis_range'
         vmap_topic = f'/duburi/vision/{camera}/vis_range_map'
+        aerr_topic = f'/duburi/vision/{camera}/anchor_error'
+        ast_topic  = f'/duburi/vision/{camera}/anchor_state'
+        aref_topic = f'/duburi/vision/{camera}/anchor_ref'
         return [
             self.create_subscription(Image,             raw_topic,  self._on_image,          qos_be),
             self.create_subscription(Detection2DArray,  det_topic,  self._on_detections,     10),
@@ -321,6 +331,9 @@ class VisionDisplayNode(Node):
             self.create_subscription(String,            cls_topic,  self._on_classes_filter, 10),
             self.create_subscription(Float32MultiArray, vr_topic,   self._on_vis_range,      10),
             self.create_subscription(Image,             vmap_topic, self._on_depth_map,      2),
+            self.create_subscription(Vector3,           aerr_topic, self._on_anchor_error,   10),
+            self.create_subscription(String,            ast_topic,  self._on_anchor_state,   10),
+            self.create_subscription(Image,             aref_topic, self._on_anchor_ref,     2),
         ]
 
     def _switch_camera(self, name: str) -> None:
@@ -446,6 +459,22 @@ class VisionDisplayNode(Node):
                 self._depth_map_bgr = colorized
         except Exception:
             pass
+
+    def _on_anchor_error(self, msg: Vector3) -> None:
+        with self._anchor_lock:
+            self._anchor_error = (float(msg.x), float(msg.y), float(msg.z))
+
+    def _on_anchor_state(self, msg: String) -> None:
+        with self._anchor_lock:
+            self._anchor_state = str(msg.data)
+
+    def _on_anchor_ref(self, msg: Image) -> None:
+        try:
+            ref = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception:
+            return
+        with self._anchor_lock:
+            self._anchor_ref_bgr = ref
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
@@ -738,6 +767,11 @@ def main(args=None):
                 depth_map_bgr = (node._depth_map_bgr.copy()
                                  if node._show_depth_map and node._depth_map_bgr is not None
                                  else None)
+            with node._anchor_lock:
+                anchor_state   = node._anchor_state
+                anchor_error   = node._anchor_error
+                anchor_ref_bgr = (node._anchor_ref_bgr.copy()
+                                  if node._anchor_ref_bgr is not None else None)
 
             native_h, native_w = frame.shape[:2]
             video_h      = int(native_h * _RENDER_W / native_w)
@@ -758,6 +792,9 @@ def main(args=None):
                 track_ids=display_ids,
                 vis_range_values=vis_range_vals,
                 depth_map_bgr=depth_map_bgr,
+                anchor_state=anchor_state,
+                anchor_error=anchor_error,
+                anchor_ref_bgr=anchor_ref_bgr,
             )
 
             # 1 Hz terminal stats (FPS, detection, vehicle state, pipeline health)

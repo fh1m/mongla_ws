@@ -20,7 +20,8 @@ import cv2
 import numpy as np
 
 from .detection.detector import Detection, largest
-from .draw_widgets import C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, pil_text, pil_text_size
+from .draw_widgets import (
+    C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_DIM, C_TEXT, pil_text, pil_text_size)
 C_RETICLE  = (0, 200, 200)    # bright cyan reticle (was near-black 50,55,55)
 
 
@@ -126,7 +127,10 @@ def render_video_section(frame_bgr: np.ndarray,
                          healthy: bool = True,
                          track_ids=None,
                          vis_range_values: Optional[List[float]] = None,
-                         depth_map_bgr: Optional[np.ndarray] = None) -> np.ndarray:
+                         depth_map_bgr: Optional[np.ndarray] = None,
+                         anchor_state: Optional[str] = None,
+                         anchor_error=None,
+                         anchor_ref_bgr: Optional[np.ndarray] = None) -> np.ndarray:
     """Return annotated copy of frame_bgr with all video overlays applied."""
     if frame_bgr is None:
         return frame_bgr
@@ -257,7 +261,59 @@ def render_video_section(frame_bgr: np.ndarray,
         cv2.rectangle(out, (0, 0), (w, banner_h), C_ERR, -1)
         pil_text(out, 'STALE FRAME', (8, int(banner_h * 0.75)), 0.55 * sf, (255, 255, 255))
 
+    # 6. Anchor (XFeat superglue) overlay -- lock icon + pose + reference inset
+    if anchor_state is not None:
+        draw_anchor_overlay(out, anchor_state, anchor_error, anchor_ref_bgr, sf)
+
     return out
+
+
+def draw_anchor_overlay(out, anchor_state, anchor_error, anchor_ref_bgr, sf):
+    """Lock padlock top-right (green when LOCKED) + pose text + reference inset.
+
+    anchor_error is a 3-tuple/obj (tx, ty, theta) or None. anchor_ref_bgr is the
+    stored reference frame (BGR) or None. All best-effort, HUD-only.
+    """
+    h, w = out.shape[:2]
+    locked = str(anchor_state).upper() == 'LOCKED'
+    col = C_OK if locked else (C_AMBER if str(anchor_state).upper() == 'LOST' else C_DIM)
+
+    # Padlock outline (shackle arc + body) at top-right.
+    bx, by = w - int(46 * sf), int(10 * sf)
+    bw, bh = int(26 * sf), int(20 * sf)
+    cv2.rectangle(out, (bx, by + int(8 * sf)), (bx + bw, by + int(8 * sf) + bh),
+                  col, max(1, int(2 * sf)), cv2.LINE_AA)
+    cv2.ellipse(out, (bx + bw // 2, by + int(8 * sf)), (int(8 * sf), int(8 * sf)),
+                0, 180, 360, col, max(1, int(2 * sf)), cv2.LINE_AA)
+    cv2.circle(out, (bx + bw // 2, by + int(8 * sf) + bh // 2),
+               max(1, int(2 * sf)), col, -1, cv2.LINE_AA)
+    pil_text(out, str(anchor_state).upper(),
+             (bx - int(2 * sf), by + int(8 * sf) + bh + int(2 * sf)), 0.26 * sf, col)
+
+    # Pose readout (tx/ty/theta) just under the icon.
+    if anchor_error is not None:
+        try:
+            tx, ty, th = (anchor_error.tx_px, anchor_error.ty_px, anchor_error.theta_rad)
+        except AttributeError:
+            tx, ty, th = anchor_error[0], anchor_error[1], anchor_error[2]
+        pil_text(out, f'tx{tx:+.0f} ty{ty:+.0f} th{th:+.2f}',
+                 (bx - int(70 * sf), by + int(8 * sf) + bh + int(14 * sf)),
+                 0.24 * sf, C_TEXT)
+
+    # Reference snapshot inset, bottom-right, medium + clearly bordered so the
+    # operator can eyeball live-vs-reference match quality.
+    if anchor_ref_bgr is not None and getattr(anchor_ref_bgr, 'size', 0) > 0:
+        iw = int(w * 0.26)
+        ih = int(iw * anchor_ref_bgr.shape[0] / max(anchor_ref_bgr.shape[1], 1))
+        ih = max(1, min(ih, int(h * 0.30)))
+        ix, iy = w - iw - int(8 * sf), h - ih - int(8 * sf)
+        if ix > 0 and iy > 0:
+            roi = cv2.resize(anchor_ref_bgr, (iw, ih))
+            out[iy:iy + ih, ix:ix + iw] = roi
+            cv2.rectangle(out, (ix - 1, iy - 1), (ix + iw, iy + ih),
+                          col, max(1, int(2 * sf)), cv2.LINE_AA)
+            pil_text(out, 'ANCHOR REF', (ix + int(3 * sf), iy + int(3 * sf)),
+                     0.26 * sf, C_OK)
 
 
 # ── Standalone helpers (for external callers) ─────────────────────────────── #

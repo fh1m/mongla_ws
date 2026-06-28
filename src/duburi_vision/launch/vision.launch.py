@@ -99,6 +99,10 @@ def generate_launch_description():
         DeclareLaunchArgument('max_predict',   default_value='10'),
         DeclareLaunchArgument('depth',         default_value='false',
                               description='Start depth_estimation_node (monocular vis_range)'),
+        DeclareLaunchArgument('anchor',        default_value='false',
+                              description='Start anchor_node (XFeat superglue lock). Loads XFeat '
+                                          'via torch.hub on first run -- pre-download on the Jetson '
+                                          '(no pool internet). Off until tested.'),
         DeclareLaunchArgument('depth_model',   default_value='',
                               description='DA V2-Small ONNX path; empty = bbox-area fallback'),
     ]
@@ -189,6 +193,23 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('depth')),
     )
 
+    # Anchor (XFeat superglue) -- optional, off by default until tested.
+    # Own logger pinned to info so the [ANCHOR] canary shows through _QUIET.
+    anchor_node = Node(
+        package='duburi_vision', executable='anchor_node',
+        name=['duburi_anchor_', cam], output='screen',
+        ros_arguments=['--log-level', 'warn',
+                       '--log-level', ['duburi_anchor_', cam, ':=info']],
+        parameters=[{
+            'cam':         cam,
+            'device':      LaunchConfiguration('device_cls'),
+            'top_k':       2048,
+            'min_inliers': 12,
+            'skip_frames': 3,
+        }],
+        condition=IfCondition(LaunchConfiguration('anchor')),
+    )
+
     image_viewer = Node(
         package='duburi_vision', executable='vision_display',
         name='duburi_image_view', output='screen',
@@ -207,5 +228,5 @@ def generate_launch_description():
 
     return LaunchDescription(
         args + [camera_node, detector_node, tracker_node, depth_node,
-                image_viewer, shutdown_on_viewer_exit]
+                anchor_node, image_viewer, shutdown_on_viewer_exit]
     )

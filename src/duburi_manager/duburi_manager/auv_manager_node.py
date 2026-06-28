@@ -54,6 +54,7 @@ from .connection_config import (                                             # n
 )
 from .dispatch_policy   import goal_acceptance                           # noqa: E402
 from .vision_state     import VisionState                                # noqa: E402
+from .anchor_state     import AnchorState                                # noqa: E402
 from .vision_tunables  import (                                          # noqa: E402
     declare_vision_params,
     runtime_defaults_for_command,
@@ -328,9 +329,13 @@ class AUVManagerNode(Node):
         self._payload_thread.start()
 
     def _setup_vision_pool(self) -> None:
-        """Initialise the lazy per-camera VisionState pool."""
+        """Initialise the lazy per-camera VisionState + AnchorState pools."""
         self._vision_states: dict = {}
         self._vision_lock         = threading.Lock()
+        # Anchor (XFeat superglue): lazy per-camera reader + Trigger clients.
+        self._anchor_states:  dict = {}
+        self._anchor_clients: dict = {}
+        self._anchor_lock          = threading.Lock()
 
     def _setup_heartbeat_and_payload(self) -> None:
         """Start heartbeat, join payload connect thread, build Duburi facade."""
@@ -357,6 +362,9 @@ class AUVManagerNode(Node):
             smooth_translate=self._smooth_tr,
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
+            anchor_state_provider=self._anchor_state_for,
+            anchor_snap_fn=lambda cam: self._anchor_trigger(cam, 'snap'),
+            anchor_clear_fn=lambda cam: self._anchor_trigger(cam, 'clear'),
             heartbeat=self.heartbeat,
             payload=self._payload,
         )
@@ -436,6 +444,62 @@ class AUVManagerNode(Node):
             if cache_key not in self._vision_states:
                 self._vision_states[cache_key] = vstate
             return self._vision_states[cache_key]
+
+    # ================================================================== #
+    #  Anchor (XFeat superglue) pool -- reader + Trigger service clients  #
+    # ================================================================== #
+
+    def _anchor_state_for(self, camera: str):
+        """Return (and build on first call) the AnchorState for `camera`.
+
+        Mirrors `_vision_state_for` but for the anchor_node topics. No
+        preflight wait -- the anchor loop returns NO_CAMERA fast if the node
+        isn't streaming, and a reference must be snapped first anyway.
+        """
+        with self._anchor_lock:
+            cached = self._anchor_states.get(camera)
+            if cached is not None:
+                return cached
+            self.get_logger().info(
+                f'[ANCH ] building AnchorState for camera={camera!r}')
+            astate = AnchorState(self, camera=camera, logger=self.get_logger())
+            self._anchor_states[camera] = astate
+            return astate
+
+    def _anchor_trigger(self, camera: str, which: str) -> bool:
+        """Call the anchor_node snap/clear Trigger service for `camera`.
+
+        Synchronous against the MultiThreadedExecutor (the response future is
+        completed by another executor thread while we wait here). Returns False
+        on missing service / timeout / failed response -- never raises into the
+        action callback.
+        """
+        from std_srvs.srv import Trigger
+        topic = f'/duburi/vision/{camera}/anchor_{which}'
+        with self._anchor_lock:
+            client = self._anchor_clients.get(topic)
+            if client is None:
+                client = self.create_client(Trigger, topic)
+                self._anchor_clients[topic] = client
+
+        if not client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().warning(
+                f'[ANCH ] {which} service unavailable for {camera!r} '
+                f'(is anchor_node running? launch vision.launch.py anchor:=true)')
+            return False
+
+        future = client.call_async(Trigger.Request())
+        deadline = time.monotonic() + 5.0
+        while not future.done() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        if not future.done():
+            self.get_logger().warning(f'[ANCH ] {which} call timed out for {camera!r}')
+            return False
+        res = future.result()
+        ok = bool(res and res.success)
+        if not ok and res is not None:
+            self.get_logger().warning(f'[ANCH ] {which} -> {res.message}')
+        return ok
 
     # ================================================================== #
     #  DVL auto-connect background loop                                   #

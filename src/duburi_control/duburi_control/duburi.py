@@ -179,6 +179,9 @@ class Duburi(VisionVerbs):
                  smooth_translate=False,
                  yaw_source=None,
                  vision_state_provider=None,
+                 anchor_state_provider=None,
+                 anchor_snap_fn=None,
+                 anchor_clear_fn=None,
                  heartbeat=None,
                  quick_settle=False,
                  payload=None):
@@ -224,6 +227,11 @@ class Duburi(VisionVerbs):
         self.smooth_translate  = smooth_translate
         self.yaw_source        = yaw_source
         self.vision_state_provider = vision_state_provider
+        # Anchor (XFeat superglue) hooks, wired by the manager like
+        # vision_state_provider so VisionVerbs stays rclpy-free.
+        self.anchor_state_provider = anchor_state_provider
+        self.anchor_snap_fn        = anchor_snap_fn
+        self.anchor_clear_fn       = anchor_clear_fn
         self._heartbeat        = heartbeat
         self.quick_settle      = bool(quick_settle)
         self._payload          = payload
