@@ -34,9 +34,15 @@ from geometry_msgs.msg import Vector3
 from std_msgs.msg      import String, Float32
 from std_srvs.srv      import Trigger
 from duburi_interfaces.srv import AnchorRef
+from vision_msgs.msg   import Detection2DArray
 from cv_bridge         import CvBridge
 
 from duburi_vision.anchor.references import save_reference, load_reference
+from duburi_vision.anchor.crop_gate import qualifying_bbox
+
+# How long to wait for a qualifying detection before falling back to a
+# whole-frame snap (seconds).
+_SNAP_DETECT_TIMEOUT_S = 3.0
 
 STATE_IDLE   = 'IDLE'
 STATE_LOCKED = 'LOCKED'
@@ -84,11 +90,20 @@ class AnchorNode(Node):
         self._matcher = None
         self._snap_pending = threading.Event()
         self._pending_name = ''              # disk name to save the captured ref under
+        self._snap_target  = ''              # detection-gated snap: class to wait for
+        self._snap_conf    = 0.0             #   min score
+        self._snap_err     = 0.0             #   centring tolerance px (<=0 = no gate)
+        self._snap_deadline = 0.0            #   monotonic 3 s fallback deadline
         self._ref_frame    = None            # last captured reference (BGR) for debug pub
         self._last_ref_pub = 0.0
         threading.Thread(target=self._load_matcher_async, daemon=True).start()
 
         self._sub = self.create_subscription(Image, ns_in, self._on_image, 5)
+        # Detections (for snap-at-detection cropping). Cached latest only.
+        self._det_lock  = threading.Lock()
+        self._det_array = None
+        self.create_subscription(
+            Detection2DArray, f'{ns_out}/detections', self._on_detections, 5)
 
         # Single-slot worker: subscriber drops stale, worker always matches the
         # newest frame -- same decouple-and-drop pattern as detector_node.
@@ -128,22 +143,22 @@ class AnchorNode(Node):
 
         name = str(getattr(req, 'name', '') or '').strip()
 
-        # load=true: read the named PNG from disk and set it as the reference
-        # NOW (no live frame needed) -- e.g. anchor_align('hole') reloading a
-        # pre-run snapshot at competition.
+        # load=true: read the named PNG (+bbox sidecar) from disk and set it as
+        # the reference NOW -- e.g. anchor_align('hole') reloading a pre-run
+        # snapshot at competition. A crop reference keeps its bbox geometry.
         if getattr(req, 'load', False):
             if not name:
                 resp.success = False
                 resp.message = 'load requested but no name given'
                 return resp
-            img = load_reference(name)
+            img, bbox = load_reference(name)
             if img is None:
                 resp.success = False
                 resp.message = f'reference {name!r} not found on disk'
                 return resp
-            ok = self._matcher.set_reference(img)
+            ok = self._matcher.set_reference(img, bbox=bbox)
             if ok:
-                self._ref_frame = img
+                self._ref_frame = self._crop_for_inset(img, bbox)
                 self._publish_reference(self._make_header())
             resp.success = bool(ok)
             resp.message = (f'loaded reference {name!r}' if ok
@@ -153,13 +168,19 @@ class AnchorNode(Node):
 
         # load=false: capture the next live frame (and save it if a name was given).
         self._pending_name = name
+        self._snap_target  = str(getattr(req, 'target_class', '') or '').strip()
+        self._snap_conf    = float(getattr(req, 'conf', 0.0) or 0.0)
+        self._snap_err     = float(getattr(req, 'err_px', 0.0) or 0.0)
+        self._snap_deadline = time.monotonic() + _SNAP_DETECT_TIMEOUT_S
         self._snap_pending.set()
         resp.success = True
-        resp.message = (f'capturing next frame -> references/{name}.png'
-                        if name else 'capturing next frame (in-memory)')
-        self.get_logger().info(
-            f'[ANCHOR] snap requested -- next frame'
-            + (f' (save {name!r})' if name else ''))
+        if self._snap_target:
+            resp.message = (f'waiting <=3s for {self._snap_target!r} (conf>={self._snap_conf}) '
+                            f'to crop' + (f' -> references/{name}.png' if name else ''))
+        else:
+            resp.message = (f'capturing next frame -> references/{name}.png'
+                            if name else 'capturing next frame (in-memory)')
+        self.get_logger().info('[ANCHOR] snap requested -- ' + resp.message)
         return resp
 
     def _handle_clear(self, _req, resp):
@@ -171,6 +192,30 @@ class AnchorNode(Node):
         resp.message = 'reference cleared'
         self.get_logger().info('[ANCHOR] reference cleared')
         return resp
+
+    # ---- detection-gated crop snap ------------------------------------- #
+    def _on_detections(self, msg: Detection2DArray):
+        with self._det_lock:
+            self._det_array = msg
+
+    def _qualifying_bbox(self, frame):
+        """The padded crop bbox for the pending snap target, or None this tick."""
+        with self._det_lock:
+            arr = self._det_array
+        if arr is None:
+            return None
+        h, w = frame.shape[:2]
+        return qualifying_bbox(arr.detections, w, h, self._snap_target,
+                               self._snap_conf, self._snap_err)
+
+    @staticmethod
+    def _crop_for_inset(frame, bbox):
+        """The crop region (for the HUD reference inset), or the whole frame."""
+        if bbox is None:
+            return frame
+        x1, y1, x2, y2 = bbox
+        roi = frame[y1:y2, x1:x2]
+        return roi if roi.size > 0 else frame
 
     # ---- image path ---------------------------------------------------- #
     def _on_image(self, msg: Image):
@@ -200,15 +245,27 @@ class AnchorNode(Node):
                 self.get_logger().warning(f'[ANCHOR] cv_bridge decode failed: {exc!r}')
                 continue
 
-            # Pending snap consumes this frame as the reference.
+            # Pending snap consumes a frame as the reference.
             if self._snap_pending.is_set():
+                bbox = None
+                if self._snap_target:
+                    # Detection-gated crop snap: wait (up to 3 s) for a qualifying
+                    # detection on THIS frame; crop it. Fall back to whole frame
+                    # at the deadline. Keep waiting otherwise (don't clear).
+                    bbox = self._qualifying_bbox(frame)
+                    if bbox is None and time.monotonic() < self._snap_deadline:
+                        continue   # no match yet, still within 3 s -> next frame
+                    if bbox is None:
+                        self.get_logger().info(
+                            f'[ANCHOR] no {self._snap_target!r} in 3s -- whole-frame snap')
                 self._snap_pending.clear()
                 name = self._pending_name
                 self._pending_name = ''
-                if matcher.set_reference(frame):
-                    self._ref_frame = frame
+                self._snap_target = ''
+                if matcher.set_reference(frame, bbox=bbox):
+                    self._ref_frame = self._crop_for_inset(frame, bbox)
                     if name:
-                        path = save_reference(name, frame)
+                        path = save_reference(name, frame, bbox=bbox)
                         self.get_logger().info(
                             f'[ANCHOR] reference saved -> {path}' if path
                             else f'[ANCHOR] WARN: failed to save reference {name!r}')

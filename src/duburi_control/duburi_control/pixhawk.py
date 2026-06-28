@@ -565,6 +565,21 @@ class Pixhawk:
         return max(1100, min(1900, int(1500 + (percent / 100.0) * 400)))
 
     @staticmethod
+    def gain_to_pwm(value, pass_through=False):
+        """Map a gain value to PWM -- percent (default) or RAW PWM delta.
+
+        pass_through=False : ``value`` is a percent -> percent_to_pwm. gain=4 -> 1516.
+        pass_through=True  : ``value`` is a RAW PWM delta -> 1500 + value, kept
+                             inside [1100, 1900]. gain=4 -> 1504. Lets the operator
+                             command sub-percent micro-thrust to find the minimum
+                             PWM that moves the 20 kg hull. The clamp is preserved
+                             so a fat-fingered gain=900 -> 1900, not 2400.
+        """
+        if pass_through:
+            return max(1100, min(1900, int(1500 + value)))
+        return max(1100, min(1900, int(1500 + (value / 100.0) * 400)))
+
+    @staticmethod
     def heading_error(target, current):
         """Shortest-path error on 0-360 deg circle. Returns -180..180."""
         return (target - current + 540) % 360 - 180

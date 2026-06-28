@@ -586,28 +586,28 @@ class DuburiMission:
                           timeout=timeout, settle=settle)
 
     def move_forward(self, seconds: float, *, gain: float = 80.0,
-                     settle: float = 0.0):
+                     settle: float = 0.0, pass_through: bool = False):
         return self._send('move_forward',
                           duration=float(seconds),
-                          gain=gain, settle=settle)
+                          gain=gain, settle=settle, pass_through=pass_through)
 
     def move_back(self, seconds: float, *, gain: float = 80.0,
-                  settle: float = 0.0):
+                  settle: float = 0.0, pass_through: bool = False):
         return self._send('move_back',
                           duration=float(seconds),
-                          gain=gain, settle=settle)
+                          gain=gain, settle=settle, pass_through=pass_through)
 
     def move_left(self, seconds: float, *, gain: float = 80.0,
-                  settle: float = 0.0):
+                  settle: float = 0.0, pass_through: bool = False):
         return self._send('move_left',
                           duration=float(seconds),
-                          gain=gain, settle=settle)
+                          gain=gain, settle=settle, pass_through=pass_through)
 
     def move_right(self, seconds: float, *, gain: float = 80.0,
-                   settle: float = 0.0):
+                   settle: float = 0.0, pass_through: bool = False):
         return self._send('move_right',
                           duration=float(seconds),
-                          gain=gain, settle=settle)
+                          gain=gain, settle=settle, pass_through=pass_through)
 
     def yaw_left(self, degrees: float, *, timeout: float = 30.0,
                  settle: float = 0.0):
@@ -639,10 +639,12 @@ class DuburiMission:
                           timeout=timeout, settle=settle)
 
     def arc(self, seconds: float, *, gain: float = 50.0,
-            yaw_rate_pct: float = 30.0, settle: float = 0.0):
+            yaw_rate_pct: float = 30.0, settle: float = 0.0,
+            pass_through: bool = False):
         return self._send('arc',
                           duration=float(seconds), gain=gain,
-                          yaw_rate_pct=yaw_rate_pct, settle=settle)
+                          yaw_rate_pct=yaw_rate_pct, settle=settle,
+                          pass_through=pass_through)
 
     def style_roll(self, *, gain: float = 60.0, timeout: float = 20.0,
                   flips: int = 1, headroom: float = 1.0):

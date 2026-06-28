@@ -84,14 +84,23 @@ class XFeatMatcher(AnchorMatcher):
     def clear_reference(self) -> None:
         self._ref = None
 
-    def set_reference(self, frame_bgr: np.ndarray) -> bool:
-        d = self._describe(frame_bgr)
+    def set_reference(self, frame_bgr: np.ndarray, bbox=None) -> bool:
+        """Capture ``frame_bgr`` as the reference.
+
+        ``bbox=(x1,y1,x2,y2)`` restricts the reference to that pixel region (a
+        detection's bounding box) so the lock keys on the target, not moving
+        background. The keypoints are still expressed in FULL-frame coordinates
+        (see ``_describe``), so the homography stays single-coordinate-system
+        and ``extract_error`` -- including its sign convention -- is unchanged.
+        """
+        d = self._describe(frame_bgr, bbox=bbox)
         if d is None:
             return False
         self._ref = d
         if self._log:
             n = int(d['keypoints'].shape[0]) if hasattr(d['keypoints'], 'shape') else 0
-            self._log.info(f'[ANCHOR] reference captured ({n} keypoints)')
+            tag = f' (crop {tuple(int(v) for v in bbox)})' if bbox is not None else ''
+            self._log.info(f'[ANCHOR] reference captured ({n} keypoints){tag}')
         return True
 
     def match(self, frame_bgr: np.ndarray) -> Optional[AnchorError]:
@@ -138,15 +147,41 @@ class XFeatMatcher(AnchorMatcher):
 
     # ---- internal ------------------------------------------------------ #
 
-    def _describe(self, frame_bgr: np.ndarray) -> Optional[dict]:
+    def _describe(self, frame_bgr: np.ndarray, bbox=None) -> Optional[dict]:
         if frame_bgr is None or getattr(frame_bgr, 'size', 0) == 0:
             return None
+        h, w = frame_bgr.shape[:2]
+
+        # Crop reference: describe only the bbox region, then SHIFT the keypoints
+        # back into full-frame coordinates by (x1,y1). image_size stays the FULL
+        # frame, so the reference is "full-frame keypoints confined to the bbox"
+        # -- the homography is single-coordinate-system and extract_error (which
+        # pushes the full-frame centre) is byte-identical to the whole-frame
+        # path. The crop only changes WHICH keypoints exist, never the frame or
+        # any sign. (Crop-local coords would mix origins and corrupt the pose.)
+        ox = oy = 0
+        described = frame_bgr
+        if bbox is not None:
+            x1, y1, x2, y2 = (int(round(v)) for v in bbox)
+            x1 = max(0, min(x1, w - 1)); x2 = max(x1 + 1, min(x2, w))
+            y1 = max(0, min(y1, h - 1)); y2 = max(y1 + 1, min(y2, h))
+            described = frame_bgr[y1:y2, x1:x2]
+            if described.size == 0:
+                described = frame_bgr   # degenerate bbox -> whole frame
+            else:
+                ox, oy = x1, y1
+
         try:
-            out = self._model.detectAndCompute(frame_bgr, top_k=self._top_k)[0]
+            out = self._model.detectAndCompute(described, top_k=self._top_k)[0]
         except Exception as exc:   # noqa: BLE001
             if self._log:
                 self._log.warning(f'[ANCHOR] detectAndCompute failed: {exc!r}')
             return None
-        h, w = frame_bgr.shape[:2]
-        out['image_size'] = (w, h)   # LighterGlue needs (W, H)
+
+        if ox or oy:
+            kp = np.asarray(out['keypoints'], dtype=np.float64).copy()
+            kp[:, 0] += ox
+            kp[:, 1] += oy
+            out['keypoints'] = kp
+        out['image_size'] = (w, h)   # FULL frame (W, H) -- LighterGlue position prior
         return out

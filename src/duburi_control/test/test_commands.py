@@ -35,7 +35,8 @@ def test_fields_for_substitutes_default_when_unset():
     goal.duration = 5.0
     # gain + settle left as rosidl default 0.0 -> dispatcher should fill defaults
     kwargs = fields_for('move_forward', goal)
-    assert kwargs == {'duration': 5.0, 'gain': 80.0, 'settle': 0.0}
+    assert kwargs == {'duration': 5.0, 'gain': 80.0, 'settle': 0.0,
+                      'pass_through': False}
 
 
 def test_arc_command_has_yaw_rate_field():

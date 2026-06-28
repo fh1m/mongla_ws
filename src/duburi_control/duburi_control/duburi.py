@@ -389,15 +389,15 @@ class Duburi(VisionVerbs):
     #  Forward / Back  -- Ch5                                            #
     # ================================================================== #
 
-    def move_forward(self, duration, gain=80.0, settle=0.0):
+    def move_forward(self, duration, gain=80.0, settle=0.0, pass_through=False):
         """impl: motion_forward.drive_forward_constant/_eased -> pixhawk.send_rc_translation."""
-        return self._drive_forward(+1, duration, gain, settle)
+        return self._drive_forward(+1, duration, gain, settle, pass_through)
 
-    def move_back(self, duration, gain=80.0, settle=0.0):
+    def move_back(self, duration, gain=80.0, settle=0.0, pass_through=False):
         """impl: motion_forward.drive_forward_constant/_eased -> pixhawk.send_rc_translation."""
-        return self._drive_forward(-1, duration, gain, settle)
+        return self._drive_forward(-1, duration, gain, settle, pass_through)
 
-    def _drive_forward(self, signed_dir, duration, gain, settle):
+    def _drive_forward(self, signed_dir, duration, gain, settle, pass_through=False):
         verb = 'move_forward' if signed_dir > 0 else 'move_back'
         with self._command_scope(verb):
             self._send_neutral_and_settle(axes=frozenset({'forward'}))
@@ -405,15 +405,17 @@ class Duburi(VisionVerbs):
                    else drive_forward_constant)
             mode = 'EASED' if self.smooth_translate else 'CONSTANT'
             label = 'forward' if signed_dir > 0 else 'back'
+            unit = 'PWM' if pass_through else '%'
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
-                f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
+                f'gain={gain:.0f}{unit}  ({mode})  settle={settle:.1f}s'
+                + ('  RAW-PWM' if pass_through else ''))
             # Heading lock stays ACTIVE during timed forward/back moves.
             # _writers() already releases Ch4 when lock is running so the
             # HeadingLock thread remains the sole Ch4 author.
             run(self.pixhawk, signed_dir, duration, int(gain), self.log,
                 self._writers(), yaw_source=self.yaw_source, settle=settle,
-                abort_fn=self._abort_fn)
+                abort_fn=self._abort_fn, pass_through=pass_through)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
@@ -423,15 +425,15 @@ class Duburi(VisionVerbs):
     #  Left / Right  -- Ch6                                              #
     # ================================================================== #
 
-    def move_left(self, duration, gain=80.0, settle=0.0):
+    def move_left(self, duration, gain=80.0, settle=0.0, pass_through=False):
         """impl: motion_lateral.drive_lateral_constant/_eased -> pixhawk.send_rc_translation."""
-        return self._drive_lateral(-1, duration, gain, settle)
+        return self._drive_lateral(-1, duration, gain, settle, pass_through)
 
-    def move_right(self, duration, gain=80.0, settle=0.0):
+    def move_right(self, duration, gain=80.0, settle=0.0, pass_through=False):
         """impl: motion_lateral.drive_lateral_constant/_eased -> pixhawk.send_rc_translation."""
-        return self._drive_lateral(+1, duration, gain, settle)
+        return self._drive_lateral(+1, duration, gain, settle, pass_through)
 
-    def _drive_lateral(self, signed_dir, duration, gain, settle):
+    def _drive_lateral(self, signed_dir, duration, gain, settle, pass_through=False):
         verb = 'move_right' if signed_dir > 0 else 'move_left'
         with self._command_scope(verb):
             self._send_neutral_and_settle(axes=frozenset({'lateral'}))
@@ -439,14 +441,16 @@ class Duburi(VisionVerbs):
                    else drive_lateral_constant)
             mode = 'EASED' if self.smooth_translate else 'CONSTANT'
             label = 'right' if signed_dir > 0 else 'left'
+            unit = 'PWM' if pass_through else '%'
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
-                f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
+                f'gain={gain:.0f}{unit}  ({mode})  settle={settle:.1f}s'
+                + ('  RAW-PWM' if pass_through else ''))
             # Heading lock stays ACTIVE during timed lateral moves.
             # _writers() already releases Ch4 when lock is running.
             run(self.pixhawk, signed_dir, duration, int(gain), self.log,
                 self._writers(), yaw_source=self.yaw_source, settle=settle,
-                abort_fn=self._abort_fn)
+                abort_fn=self._abort_fn, pass_through=pass_through)
             depth = self._current_depth()
             return self._make_result(
                 True, f'move_{label}: completed',
@@ -456,7 +460,8 @@ class Duburi(VisionVerbs):
     #  arc -- forward thrust + yaw rate at the same time                  #
     # ================================================================== #
 
-    def arc(self, duration, gain=50.0, yaw_rate_pct=30.0, settle=0.0):
+    def arc(self, duration, gain=50.0, yaw_rate_pct=30.0, settle=0.0,
+            pass_through=False):
         """Curved car-style motion: Ch5 + Ch4 in the same packet.
 
         Heading-lock is incompatible by design (`arc` changes heading).
@@ -468,15 +473,17 @@ class Duburi(VisionVerbs):
         with self._command_scope('arc'):
             self._send_neutral_and_settle(axes=frozenset({'forward', 'yaw'}))
             self._ensure_yaw_capable_mode()
+            unit = 'PWM' if pass_through else '%'
             self.log.info(
-                f'[CMD  ] arc  {duration:.1f}s  gain={gain:.0f}%  '
-                f'yaw_rate={yaw_rate_pct:+.0f}%  settle={settle:.1f}s')
+                f'[CMD  ] arc  {duration:.1f}s  gain={gain:.0f}{unit}  '
+                f'yaw_rate={yaw_rate_pct:+.0f}{unit}  settle={settle:.1f}s'
+                + ('  RAW-PWM' if pass_through else ''))
             with self._suspend_heading_lock():
                 signed_dir = +1 if gain >= 0 else -1
                 motion_arc(self.pixhawk, signed_dir, duration, abs(int(gain)),
                            yaw_rate_pct, self.log,
                            yaw_source=self.yaw_source, settle=settle,
-                           abort_fn=self._abort_fn)
+                           abort_fn=self._abort_fn, pass_through=pass_through)
             new_heading = self._current_heading()
             self._retarget_heading_lock(new_heading)
             return self._make_result(

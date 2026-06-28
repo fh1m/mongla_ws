@@ -64,6 +64,25 @@ def test_drive_forward_constant_writes_forward_only(patched_sleep):
     assert 1700 <= max(pwms) <= 1900
 
 
+def test_drive_forward_pass_through_sends_raw_pwm(patched_sleep):
+    # pass_through=True: gain=10 -> Ch5 = 1510 (raw delta), NOT
+    # percent_to_pwm(10)=1540. The 20kg stiction probe.
+    pixhawk = FakePixhawk()
+    log     = ThrottleLogger()
+    writers = make_writers(pixhawk, release_yaw=False)
+
+    drive_forward_constant(pixhawk, +1, duration=0.1, gain=10, log=log,
+                           writers=writers, settle=0.0, pass_through=True)
+
+    forward_writes = [c for c in pixhawk.calls
+                      if c[0] == 'send_rc_override' and 'forward' in c[1]]
+    pwms = [c[1]['forward'] for c in forward_writes if c[1]['forward'] != 1500]
+    assert pwms, 'expected forward writes'
+    assert max(pwms) == 1510            # raw 1500+10, not percent 1540
+    # No reverse-kick brake under pass_through (would corrupt the observation).
+    assert all(p >= 1500 for p in pwms), 'pass_through must not reverse-kick'
+
+
 def test_drive_forward_eased_uses_translation_when_lock_active(patched_sleep):
     pixhawk = FakePixhawk()
     log     = ThrottleLogger()

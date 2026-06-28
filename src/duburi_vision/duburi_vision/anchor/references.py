@@ -13,9 +13,10 @@ package dir next to this file.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
@@ -52,18 +53,46 @@ def reference_path(name: str) -> Path:
     return references_dir() / f'{_safe_name(name)}.png'
 
 
-def save_reference(name: str, frame_bgr: np.ndarray) -> Optional[Path]:
-    """Write ``frame_bgr`` to references/<name>.png. Returns the path or None."""
+def save_reference(name: str, frame_bgr: np.ndarray, bbox=None) -> Optional[Path]:
+    """Write ``frame_bgr`` to references/<name>.png (the FULL frame).
+
+    When ``bbox=(x1,y1,x2,y2)`` is given (a crop reference), also write
+    ``<name>.json`` carrying the bbox so ``load_reference`` can re-crop on
+    reload and keep the crop geometry. Returns the image path or None.
+    """
     if frame_bgr is None or getattr(frame_bgr, 'size', 0) == 0:
         return None
     path = reference_path(name)
-    return path if cv2.imwrite(str(path), frame_bgr) else None
+    if not cv2.imwrite(str(path), frame_bgr):
+        return None
+    side = path.with_suffix('.json')
+    if bbox is not None:
+        side.write_text(json.dumps({'bbox': [int(round(v)) for v in bbox]}))
+    elif side.exists():
+        side.unlink()   # stale sidecar from a prior crop save of the same name
+    return path
 
 
-def load_reference(name: str) -> Optional[np.ndarray]:
-    """Read references/<name>.png as BGR, or None if missing/unreadable."""
+def load_reference(name: str) -> Tuple[Optional[np.ndarray], Optional[tuple]]:
+    """Read references/<name>.png -> (frame_bgr, bbox|None).
+
+    ``bbox`` is read from the sidecar JSON if present (crop reference), else
+    None (whole-frame reference). Returns (None, None) when the PNG is missing.
+    """
     path = reference_path(name)
     if not path.exists():
-        return None
+        return None, None
     img = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    return img if img is not None and img.size > 0 else None
+    if img is None or img.size == 0:
+        return None, None
+    bbox = None
+    side = path.with_suffix('.json')
+    if side.exists():
+        try:
+            data = json.loads(side.read_text())
+            b = data.get('bbox')
+            if isinstance(b, list) and len(b) == 4:
+                bbox = tuple(int(v) for v in b)
+        except Exception:
+            bbox = None
+    return img, bbox

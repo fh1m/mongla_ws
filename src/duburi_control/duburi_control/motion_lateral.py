@@ -31,7 +31,7 @@ _DVL_TIMEOUT_K = 10.0
 
 def drive_lateral_constant(pixhawk, signed_dir, duration, gain, log,
                            writers, yaw_source=None, settle=0.0,
-                           abort_fn=None):
+                           abort_fn=None, pass_through=False):
     """Constant gain on Ch6, reverse-kick brake, then settle."""
     label = 'RIGHT' if signed_dir > 0 else 'LEFT'
     axis_writer = writers.lateral
@@ -39,17 +39,21 @@ def drive_lateral_constant(pixhawk, signed_dir, duration, gain, log,
 
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda _t: 1.0,
-                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn,
+                pass_through=pass_through)
 
-    brake_kick_then_settle(
-        axis_writer, writers,
-        brake_pct=-signed_dir * REVERSE_KICK_PCT,
-        log=log, axis_label=label, extra_settle=settle, abort_fn=abort_fn)
+    if pass_through:
+        final_settle(writers, log, extra=settle, abort_fn=abort_fn)
+    else:
+        brake_kick_then_settle(
+            axis_writer, writers,
+            brake_pct=-signed_dir * REVERSE_KICK_PCT,
+            log=log, axis_label=label, extra_settle=settle, abort_fn=abort_fn)
 
 
 def drive_lateral_eased(pixhawk, signed_dir, duration, gain, log,
                         writers, yaw_source=None, settle=0.0,
-                        abort_fn=None):
+                        abort_fn=None, pass_through=False):
     """Smootherstep envelope on Ch6, settle only (ease-out IS the brake)."""
     label = 'RIGHT' if signed_dir > 0 else 'LEFT'
     axis_writer = writers.lateral
@@ -58,7 +62,8 @@ def drive_lateral_eased(pixhawk, signed_dir, duration, gain, log,
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda elapsed:
                     trapezoid_ramp(elapsed, duration, EASE_SECONDS),
-                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn,
+                pass_through=pass_through)
 
     log.info(f'[{label:<5}] settle (ease-out = brake)')
     final_settle(writers, log, extra=settle, abort_fn=abort_fn)

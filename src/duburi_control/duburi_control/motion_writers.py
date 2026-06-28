@@ -96,7 +96,8 @@ def read_heading(pixhawk, yaw_source):
 
 
 def thrust_loop(pixhawk, axis_writer, duration, gain, log,
-                throttle_curve, axis_label, yaw_source=None, abort_fn=None):
+                throttle_curve, axis_label, yaw_source=None, abort_fn=None,
+                pass_through=False):
     """Drive ONE channel for `duration` seconds at `gain * curve(t)`.
 
     `axis_writer(pwm: int)` writes the active axis (Ch5 or Ch6). The
@@ -119,7 +120,9 @@ def thrust_loop(pixhawk, axis_writer, duration, gain, log,
             break
 
         scale = throttle_curve(elapsed)
-        pwm   = Pixhawk.percent_to_pwm(gain * scale)
+        # pass_through -> `gain` is a raw PWM delta (still shaped by the curve);
+        # else a percent. Single conversion chokepoint for the raw-PWM probe.
+        pwm   = Pixhawk.gain_to_pwm(gain * scale, pass_through)
         axis_writer(pwm)
 
         heading = read_heading(pixhawk, yaw_source)
