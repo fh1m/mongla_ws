@@ -301,18 +301,32 @@ def test_anchor_locks_when_centered():
     assert writers.neutralised >= 1
 
 
-def test_anchor_drives_lat_from_tx_and_yaw_from_theta():
-    # Off-centre target right (tx>0) + rotated (theta>0) but NOT in band ->
-    # times out while continuously commanding lateral RIGHT and yaw.
+def test_anchor_opposes_drift():
+    # PHYSICS / negative feedback: a rightward AUV drift surfaces as tx<0 (the
+    # reference appears LEFT) -> the loop must strafe LEFT (Ch6<1500) to close
+    # it, mirroring align_loop for the same drift. A shallow drift surfaces as
+    # ty>0 -> descend (depth setpoint goes below the -0.5 start). theta>deadband
+    # -> yaw engaged. NOT in band -> times out while continuously correcting.
     pix = _FakePixhawk()
     out, _, _ = _anchor(
-        _FakeAnchorState(_anchor_sample(tx=200.0, ty=0.0, theta=0.3)),
+        _FakeAnchorState(_anchor_sample(tx=-200.0, ty=100.0, theta=0.3)),
         pix=pix, err_px=10.0, theta_thresh=0.01, duration=0.25)
     assert out.code == TIMEOUT
     lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
     yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
-    assert lat and max(lat) > 1500           # tx>0 -> strafe right
-    assert yaw and max(yaw) > 1500           # theta>0 -> yaw right
+    assert lat and min(lat) < 1500           # tx<0 (drifted right) -> strafe LEFT
+    assert yaw and max(yaw) > 1500           # theta>0 (outside deadband) -> yaw
+    assert pix.depths and min(pix.depths) < -0.5   # ty>0 -> descend below start
+
+
+def test_anchor_yaw_deadband_suppresses_small_roll():
+    # Small image roll (|theta| <= deadband) must NOT drive yaw even with a big
+    # tx -- otherwise wave-induced roll limit-cycles the hull during a fire-hold.
+    pix = _FakePixhawk()
+    _anchor(_FakeAnchorState(_anchor_sample(tx=-200.0, theta=0.01)),
+            pix=pix, err_px=5.0, theta_thresh=0.001, duration=0.2)
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert not yaw                           # theta inside deadband -> yaw neutral
 
 
 def test_anchor_lost_after_grace():

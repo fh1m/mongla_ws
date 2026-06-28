@@ -120,10 +120,15 @@ class XFeatMatcher(AnchorMatcher):
                                0.0 if n_match == 0 else 1.0)
 
         import cv2
-        # H maps LIVE points -> REFERENCE points: applying H to the live centre
-        # tells us where the reference wants that centre to be (= the error).
+        # H maps REFERENCE points -> LIVE points (src=ref, dst=cur). Pushing the
+        # REFERENCE centre through H then yields "where the reference appears in
+        # the live frame" -- a direct analog of a YOLO bbox offset, so the pose
+        # error has the SAME sign as align_loop's ex/ey and the control laws are
+        # sign-identical to (pool-verified) align_loop. NOTE: src/dst order is
+        # load-bearing -- swapping it inverts every axis into POSITIVE feedback
+        # (the hull drives away from the lock). Do not "simplify" the arg order.
         H, mask = cv2.findHomography(
-            mkpts_cur, mkpts_ref, cv2.RANSAC, _RANSAC_REPROJ_PX)
+            mkpts_ref, mkpts_cur, cv2.RANSAC, _RANSAC_REPROJ_PX)
         if H is None or mask is None:
             return AnchorError(0.0, 0.0, 0.0, n_match, 0.0)
 

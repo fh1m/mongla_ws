@@ -57,12 +57,16 @@ def test_degenerate_homography_is_safe():
 #  XFeatMatcher -- fake hub model                                             #
 # --------------------------------------------------------------------------- #
 class _FakeXFeatModel:
-    """Returns a fixed keypoint grid; match shifts current pts by +dx in x.
+    """Returns a fixed keypoint grid; match models a physical AUV drift.
 
-    set DX to control the horizontal shift between current and reference
-    correspondences so findHomography recovers a known tx.
+    DRIFT_RIGHT_PX = how far the AUV has strafed RIGHT of the reference pose. A
+    forward camera then sees the scene shifted LEFT, so the live (current)
+    features sit DRIFT_RIGHT_PX to the left of the reference features. The
+    matcher's ref->live homography must report tx < 0 (reference appears left ->
+    strafe LEFT to close the loop) -- this is what makes the control negative
+    feedback rather than runaway.
     """
-    DX = 0.0
+    DRIFT_RIGHT_PX = 0.0
 
     def to(self, _device):
         return self
@@ -80,14 +84,12 @@ class _FakeXFeatModel:
         }]
 
     def match_lighterglue(self, d0, d1, min_conf=0.1):
-        # d0 = current, d1 = reference. Current pts are the reference pts shifted
-        # by +DX in x, so H(current->reference) recovers -DX... we want the live
-        # centre to map +DX when the reference sits to the right: build current
-        # = reference - DX so applying H to live moves it +DX. Keep it simple:
-        # current keypoints are reference shifted by -DX.
+        # d0 = current (live), d1 = reference. AUV drifted right -> live features
+        # shifted left -> cur_x = ref_x - DRIFT_RIGHT_PX. xfeat.match then computes
+        # findHomography(ref, cur) (ref->live), so tx = -DRIFT_RIGHT_PX.
         ref = np.asarray(d1['keypoints'], dtype=np.float32)
         cur = ref.copy()
-        cur[:, 0] -= self.DX
+        cur[:, 0] -= self.DRIFT_RIGHT_PX
         idx = np.stack([np.arange(len(ref)), np.arange(len(ref))], axis=1)
         return cur, ref, idx
 
@@ -108,9 +110,9 @@ def _fake_torch(monkeypatch):
     return fake_torch
 
 
-def _matcher(monkeypatch, dx=0.0):
+def _matcher(monkeypatch, drift_right=0.0):
     _fake_torch(monkeypatch)
-    _FakeXFeatModel.DX = dx
+    _FakeXFeatModel.DRIFT_RIGHT_PX = drift_right
     from duburi_vision.anchor.xfeat import XFeatMatcher
     return XFeatMatcher(top_k=64, device='cpu')
 
@@ -123,7 +125,7 @@ def test_match_none_before_reference(monkeypatch):
 
 
 def test_same_frame_near_zero_error(monkeypatch):
-    m = _matcher(monkeypatch, dx=0.0)
+    m = _matcher(monkeypatch, drift_right=0.0)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     assert m.set_reference(frame) is True
     e = m.match(frame)
@@ -132,12 +134,39 @@ def test_same_frame_near_zero_error(monkeypatch):
     assert abs(e.ty_px) < 1e-3
 
 
-def test_shifted_frame_positive_tx(monkeypatch):
-    # Reference is 30px to the right of the current view -> +tx.
-    m = _matcher(monkeypatch, dx=30.0)
+def test_rightward_drift_gives_negative_tx(monkeypatch):
+    # PHYSICS, not convention: AUV strafed 30px RIGHT of the reference -> the
+    # reference content now appears LEFT in the live frame -> tx < 0 so the
+    # control law (strafe toward +tx) drives LEFT, opposing the drift. A
+    # positive tx here would mean the loop runs AWAY from the lock (the bug).
+    m = _matcher(monkeypatch, drift_right=30.0)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     assert m.set_reference(frame) is True
     e = m.match(frame)
     assert e is not None
-    assert e.tx_px == pytest.approx(30.0, abs=2.0)
+    assert e.tx_px == pytest.approx(-30.0, abs=2.0)
     assert e.n_inliers >= 8
+
+
+# --------------------------------------------------------------------------- #
+#  references -- disk save/load round-trip                                    #
+# --------------------------------------------------------------------------- #
+def test_reference_save_load_roundtrip(monkeypatch, tmp_path):
+    from duburi_vision.anchor import references
+    monkeypatch.setattr(references, 'references_dir', lambda: tmp_path)
+    frame = np.full((48, 64, 3), 127, dtype=np.uint8)
+    frame[10:20, 30:40] = 255
+    assert references.load_reference('hole') is None          # absent
+    path = references.save_reference('hole', frame)
+    assert path is not None and path.exists()
+    back = references.load_reference('hole')
+    assert back is not None and back.shape == frame.shape
+
+
+def test_reference_name_is_sanitised(monkeypatch, tmp_path):
+    from duburi_vision.anchor import references
+    monkeypatch.setattr(references, 'references_dir', lambda: tmp_path)
+    # Path-traversal / spaces must not escape the references dir.
+    p = references.reference_path('../../etc/pwn name')
+    assert p.parent == tmp_path
+    assert '/' not in p.name[:-4]            # only the .png slash-free stem

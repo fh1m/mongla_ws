@@ -75,6 +75,16 @@ KP_ANCHOR_LAT_DEFAULT   = 60.0
 KP_ANCHOR_YAW_DEFAULT   = 120.0   # theta is in radians -> small numbers, big kp
 KP_ANCHOR_DEPTH_DEFAULT = 0.05
 
+# theta = atan2(H[1,0],H[0,0]) is in-plane IMAGE ROLL. On a FORWARD camera that
+# is camera roll about the optical axis, NOT yaw -- AUV yaw shows up as a
+# horizontal translation (tx), which lateral already corrects. So on the
+# forward/torpedo path yaw is the WEAK axis: a wave-induced image roll would
+# otherwise make yaw chase a signal it cannot null (yawing doesn't reduce image
+# roll) and slowly creep the hull off-aim mid-fire. Deadband theta so only a
+# real, sustained rotation engages yaw. (theta->yaw IS the clean primary axis
+# for the DOWNWARD camera, where the optical axis is vertical = yaw.) Pool-tunable.
+ANCHOR_THETA_DEADBAND_RAD = 0.02   # ~1.1 deg; |theta| below this -> yaw neutral
+
 # Yaw is THE essential axis for micro-aligning + holding against a small
 # target (the torpedo 'hole'). Pure-proportional yaw falls below the T200
 # spin-up threshold near centre, so a small residual error commands only a
@@ -841,9 +851,22 @@ def anchor_align_loop(*,
             trans_err = math.hypot(sample.tx_px, sample.ty_px)
             last_err_px = trans_err
 
+            # Sign convention (post ref->live homography swap): tx>0 = reference
+            # appears RIGHT of live centre = target right -> strafe RIGHT (Ch6>1500,
+            # positive lat_pct). Identical to align_loop's ex law -> closes the loop
+            # (a rightward drift gives tx<0 -> strafe left). NO negation.
             lat_pct = _clamp(sample.tx_px / _ANCHOR_HALF_W * kp_lat, -g_lat, g_lat)
-            yaw_pct = _clamp(sample.theta_rad * kp_yaw, -g_yaw, g_yaw)
 
+            # Yaw: deadband image-roll noise (theta is roll on the forward cam) so
+            # it can't limit-cycle the hull during a fire-hold. Outside the band,
+            # same positive law.
+            if abs(sample.theta_rad) <= ANCHOR_THETA_DEADBAND_RAD:
+                yaw_pct = 0.0
+            else:
+                yaw_pct = _clamp(sample.theta_rad * kp_yaw, -g_yaw, g_yaw)
+
+            # Depth: ty>0 = reference appears BELOW -> descend (depth_setpoint more
+            # negative). Same as align_loop's ey law.
             step = _clamp(sample.ty_px / _ANCHOR_HALF_H * kp_depth,
                           -max_nudge, max_nudge) * depth_sign
             depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)

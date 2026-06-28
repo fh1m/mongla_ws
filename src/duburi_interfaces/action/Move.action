@@ -66,6 +66,8 @@ float32 align_stable_frames# ticks within err_px before ALIGNED (0 = use vision.
 float32 theta_thresh       # vision_anchor_align: |theta| rad tolerance for lock (0 = default 0.05)
 float32 min_inliers        # vision_anchor_align: min RANSAC inliers to count a tick locked (0 = trust node)
 string  fire_channels      # vision_anchor_align: CSV payload channels fired ONCE at lock, e.g. "1,2"
+string  ref_name           # anchor snap: save the captured reference to references/<name>.png;
+                           # anchor_align: load references/<name>.png before locking ('' = live in-memory)
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

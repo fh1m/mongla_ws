@@ -1,0 +1,3 @@
+# Named anchor references (XFeat superglue) are saved here as <name>.png
+# by duburi.vision.anchor_snap(name=...). Committed so pre-run snapshots
+# survive restarts and reload on competition day. Safe to delete stale refs.

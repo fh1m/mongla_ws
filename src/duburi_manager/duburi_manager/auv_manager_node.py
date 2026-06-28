@@ -363,8 +363,8 @@ class AUVManagerNode(Node):
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
             anchor_state_provider=self._anchor_state_for,
-            anchor_snap_fn=lambda cam: self._anchor_trigger(cam, 'snap'),
-            anchor_clear_fn=lambda cam: self._anchor_trigger(cam, 'clear'),
+            anchor_snap_fn=self._anchor_snap_call,
+            anchor_clear_fn=lambda cam: self._anchor_clear_call(cam),
             heartbeat=self.heartbeat,
             payload=self._payload,
         )
@@ -466,39 +466,53 @@ class AUVManagerNode(Node):
             self._anchor_states[camera] = astate
             return astate
 
-    def _anchor_trigger(self, camera: str, which: str) -> bool:
-        """Call the anchor_node snap/clear Trigger service for `camera`.
+    def _anchor_snap_call(self, camera: str, name: str = '',
+                          load: bool = False) -> bool:
+        """Call the anchor_node AnchorRef snap service (capture / save / load)."""
+        from duburi_interfaces.srv import AnchorRef
+        req = AnchorRef.Request()
+        req.name = str(name or '')
+        req.load = bool(load)
+        return self._anchor_service_call(
+            camera, 'anchor_snap', AnchorRef, req, 'snap')
 
-        Synchronous against the MultiThreadedExecutor (the response future is
-        completed by another executor thread while we wait here). Returns False
-        on missing service / timeout / failed response -- never raises into the
-        action callback.
-        """
+    def _anchor_clear_call(self, camera: str) -> bool:
+        """Call the anchor_node Trigger clear service."""
         from std_srvs.srv import Trigger
-        topic = f'/duburi/vision/{camera}/anchor_{which}'
+        return self._anchor_service_call(
+            camera, 'anchor_clear', Trigger, Trigger.Request(), 'clear')
+
+    def _anchor_service_call(self, camera, which, srv_type, request, label) -> bool:
+        """Synchronous anchor service call against the MultiThreadedExecutor.
+
+        The response future is completed by another executor thread while we
+        wait here. Returns False on missing service / timeout / failed response
+        -- never raises into the action callback.
+        """
+        topic = f'/duburi/vision/{camera}/{which}'
         with self._anchor_lock:
             client = self._anchor_clients.get(topic)
             if client is None:
-                client = self.create_client(Trigger, topic)
+                client = self.create_client(srv_type, topic)
                 self._anchor_clients[topic] = client
 
         if not client.wait_for_service(timeout_sec=2.0):
             self.get_logger().warning(
-                f'[ANCH ] {which} service unavailable for {camera!r} '
+                f'[ANCH ] {label} service unavailable for {camera!r} '
                 f'(is anchor_node running? launch vision.launch.py anchor:=true)')
             return False
 
-        future = client.call_async(Trigger.Request())
+        future = client.call_async(request)
         deadline = time.monotonic() + 5.0
         while not future.done() and time.monotonic() < deadline:
             time.sleep(0.02)
         if not future.done():
-            self.get_logger().warning(f'[ANCH ] {which} call timed out for {camera!r}')
+            self.get_logger().warning(f'[ANCH ] {label} call timed out for {camera!r}')
             return False
         res = future.result()
         ok = bool(res and res.success)
         if not ok and res is not None:
-            self.get_logger().warning(f'[ANCH ] {which} -> {res.message}')
+            self.get_logger().warning(f'[ANCH ] {label} -> {res.message}')
         return ok
 
     # ================================================================== #

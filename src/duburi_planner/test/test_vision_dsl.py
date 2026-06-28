@@ -455,3 +455,28 @@ def test_anchor_align_single_fire_int():
     dsl.anchor_align(fire=1)
     _, kwargs = send.call_args
     assert kwargs['fire_channels'] == '1'
+
+
+def test_anchor_snap_with_name_sends_ref_name():
+    send = MagicMock(return_value=_result(1))
+    dsl = _dsl(send)
+    assert dsl.anchor_snap('hole') is True
+    _, kwargs = send.call_args
+    assert kwargs['ref_name'] == 'hole'
+
+
+def test_anchor_snap_no_name_is_empty_ref():
+    send = MagicMock(return_value=_result(1))
+    dsl = _dsl(send)
+    dsl.anchor_snap()
+    _, kwargs = send.call_args
+    assert kwargs['ref_name'] == ''
+
+
+def test_anchor_align_positional_name_loads_disk_ref():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.anchor_align('hole', hold=2.0)
+    _, kwargs = send.call_args
+    assert kwargs['ref_name'] == 'hole'
+    assert kwargs['hold_s'] == pytest.approx(2.0)
