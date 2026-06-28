@@ -358,6 +358,32 @@ def test_move_passes_fill_and_mode_to_server():
 
 
 # --------------------------------------------------------------------------- #
+#  align fire / fire_t -> goal fields (mid-hold payload fire)                  #
+# --------------------------------------------------------------------------- #
+def test_align_fire_list_sends_csv_channels_and_fire_t():
+    send = MagicMock(return_value=_result(ALIGNED))
+    _dsl(send).align('hole', yaw=0, lat=0, hold=4, fire=[1, 2], fire_t=1)
+    _, kwargs = send.call_args
+    assert kwargs['fire_channels'] == '1,2'
+    assert kwargs['fire_t'] == pytest.approx(1.0)
+
+
+def test_align_fire_scalar_sends_single_channel():
+    send = MagicMock(return_value=_result(ALIGNED))
+    _dsl(send).align('hole', yaw=0, hold=3, fire=1)
+    _, kwargs = send.call_args
+    assert kwargs['fire_channels'] == '1'
+
+
+def test_align_no_fire_defaults_to_empty():
+    send = MagicMock(return_value=_result(ALIGNED))
+    _dsl(send).align('gate', yaw=0, lat=0)
+    _, kwargs = send.call_args
+    assert kwargs['fire_channels'] == ''
+    assert kwargs['fire_t'] == pytest.approx(0.0)
+
+
+# --------------------------------------------------------------------------- #
 #  In-process detector param control + loud preflight                          #
 # --------------------------------------------------------------------------- #
 def test_param_value_types():

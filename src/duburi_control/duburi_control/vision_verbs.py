@@ -13,9 +13,10 @@ Mixed into ``Duburi`` via multiple inheritance; uses only the base
 facade helpers (``_command_scope``, ``_writers``, ``_resolve_vision_state``,
 ``_send_neutral_and_settle``, ``_ensure_alt_hold``, ``_suspend_heading_lock``,
 ``_retarget_heading_lock``, ``_current_heading``, ``_make_result``,
-``_lock_active``, ``_abort_fn``) -- nothing rclpy-aware.
+``_lock_active``, ``_abort_fn``, ``_fire_payload``) -- nothing rclpy-aware.
 """
 
+import threading
 from contextlib import nullcontext
 
 from .motion_vision import (
@@ -35,6 +36,27 @@ def _parse_axes(csv: str):
     return out
 
 
+def _parse_channels(csv: str):
+    """``'1,2'`` -> ``[1, 2]``. Whitespace tolerant; ignores junk; clamps 1-4.
+
+    Payload channels are 1=torpedo_1, 2=torpedo_2, 3=dropper_1, 4=dropper_2;
+    anything out of 1-4 (or non-numeric) is dropped. Preserves order so a
+    mission fires them one-by-one in the order given.
+    """
+    out = []
+    for token in (csv or '').split(','):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            ch = int(float(token))
+        except ValueError:
+            continue
+        if 1 <= ch <= 4:
+            out.append(ch)
+    return out
+
+
 class VisionVerbs:
     """Camera-driven verbs for the Duburi facade. Never instantiated alone."""
 
@@ -47,6 +69,7 @@ class VisionVerbs:
                      gain_lat=0.0, gain_yaw=0.0, gain_depth=0.0,
                      brake_off=False, brake_gain=0.0, hold_s=0.0,
                      hold_through_loss=False,
+                     fire_channels='', fire_t=0.0,
                      kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
                      lost_grace_s=0.0, align_stable_frames=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
@@ -55,6 +78,16 @@ class VisionVerbs:
         uses its matching ``offset_*`` (signed px, 0 = centre). Returns a
         Move.Result with ``success=True`` and the outcome code in
         ``final_value``.
+
+        ``fire_channels`` (CSV, e.g. ``'1,2'``) fires those payload channels
+        ONCE, on the first stably-aligned tick at or after ``fire_t`` s into the
+        hold window, on a BACKGROUND THREAD so the 20 Hz correction loop never
+        stalls on the payload write (the CH340 reconnect path can sleep ~2 s).
+        The shot leaves while the loop is still gluing the hull to the target --
+        no align-then-fire drift. The fire is GATED on alignment: if the lock is
+        never held during the hold, the shot is NOT fired (never off-target).
+        ``fire_t`` is clamped to 0 when >= ``hold_s`` (or hold_s<=0) so a held
+        lock always fires mid-hold rather than on the drifting exit tick.
         """
         axis_set = _parse_axes(axes) & {'lat', 'yaw', 'depth'}
         if not axis_set:
@@ -70,6 +103,19 @@ class VisionVerbs:
         if 'depth' in axis_set:
             offsets['depth'] = float(offset_depth)
 
+        # Mid-hold payload fire. Clamp fire_t < hold_s so the shot always leaves
+        # WHILE the loop still corrects (firing on the drifting exit tick is the
+        # wide-shot we're eliminating); warn loudly on a misconfig.
+        channels = _parse_channels(fire_channels)
+        eff_fire_t = float(fire_t)
+        if channels and (float(hold_s) <= 0.0 or eff_fire_t >= float(hold_s)):
+            self.log.warning(
+                f'[CMD  ] vision_align fire_t={eff_fire_t:.1f}s >= hold_s='
+                f'{float(hold_s):.1f}s -- clamping fire_t to 0 (fire at hold '
+                f'start). Set hold_s > fire_t for a delayed mid-hold shot.')
+            eff_fire_t = 0.0
+        on_locked = (lambda: self._fire_async(channels)) if channels else None
+
         with self._command_scope('vision_align'):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
@@ -81,11 +127,12 @@ class VisionVerbs:
                 self._ensure_alt_hold('vision_align')
 
             stable = int(align_stable_frames) or 3
+            fire_note = (f' fire={channels}@{eff_fire_t:.1f}s' if channels else '')
             self.log.info(
                 f'[CMD  ] vision_align camera={camera!r} class={target_class!r} '
                 f'axes={sorted(axis_set)} err={float(err_px):.0f}px '
                 f'gain={float(gain):.0f}% dur={float(duration):.0f}s '
-                f'hold={float(hold_s):.0f}s')
+                f'hold={float(hold_s):.0f}s{fire_note}')
 
             # Ch4 arbitration: when yaw IS an align axis we suspend the lock
             # and the loop drives Ch4 itself. When yaw is NOT an axis but a
@@ -113,6 +160,8 @@ class VisionVerbs:
                     align_stable_frames=stable,
                     depth_sign=depth_sign,
                     release_yaw=release_yaw,
+                    on_locked=on_locked,
+                    fire_t=eff_fire_t,
                     writers=self._writers(), log=self.log,
                     abort_fn=self._abort_fn)
             if touches_yaw:
@@ -122,6 +171,34 @@ class VisionVerbs:
                 True, f'vision_align: {outcome.reason}',
                 final_value=float(outcome.code),
                 error_value=float(outcome.last_err_px))
+
+    def _fire_async(self, channels):
+        """Fire payload ``channels`` one-by-one on a daemon thread (non-blocking).
+
+        Called from inside the align hold loop via ``on_locked``; returns
+        immediately so the 20 Hz station-keep keeps correcting while the payload
+        actuates (``payload.fire`` can sleep ~2 s on a CH340 reconnect). Each
+        channel re-checks the cooperative abort right before its write, so a
+        torpedo never leaves after an emergency stop. The shared payload serial
+        is serialised inside ``PayloadDriver.fire`` (a lock), so overlapping a
+        later standalone ``fire()`` goal is safe.
+        """
+        abort_fn = self._abort_fn
+
+        def _run():
+            for ch in channels:
+                if abort_fn is not None and abort_fn():
+                    self.log.warning(
+                        f'[FIRE ] abort signalled -- skipping ch={ch} '
+                        f'(remaining {channels} cancelled)')
+                    return
+                try:
+                    self._fire_payload(ch)
+                except Exception as exc:   # noqa: BLE001 -- thread must not crash silently
+                    self.log.error(f'[FIRE ] ch={ch} raised {exc!r}')
+
+        threading.Thread(target=_run, name='vision_align_fire',
+                         daemon=True).start()
 
     # ================================================================== #
     #  vision_move -- drive forward to a bbox fill ratio                  #

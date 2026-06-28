@@ -54,6 +54,10 @@ float32 brake_gain         # reverse-kick scale vs exit-velocity EMA (0 = defaul
 float32 err_px             # pixel tolerance: aligned when |err| <= this (0 = default 40)
 bool    hold_through_loss  # true = coast/hold on target loss until duration (no fallback)
 float32 fire_channel       # ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=log-stub
+# vision_align mid-hold fire: actuate payload WHILE the hold loop still corrects, so
+# the shot leaves while glued to the target (no align-then-fire drift gap).
+string  fire_channels      # vision_align: CSV channels fired once mid-hold, e.g. "1,2" ('' = none)
+float32 fire_t             # seconds into the hold to fire (0 = at hold start; must be < hold_s)
 # vision tuning -- NOT mission-facing; the manager fills these from vision.* ROS
 # params at dispatch (rosidl-zero triggers substitution). Mission DSL leaves them 0.
 float32 kp_lat             # P gain on lateral/yaw pixel error  (0 = use vision.kp_lat)

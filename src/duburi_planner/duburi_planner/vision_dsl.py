@@ -127,6 +127,8 @@ class _VisionDSL:
               brake: bool = True,
               brake_gain: Optional[float] = None,
               hold: Optional[float] = None,
+              fire=None,
+              fire_t: Optional[float] = None,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -157,14 +159,33 @@ class _VisionDSL:
         ``hold`` (seconds) turns align into an ACTIVE station-keep: once
         centred, the loop keeps running its lat/yaw/depth corrections for
         ``hold`` s -- fighting water inertia/current -- before returning,
-        instead of exiting the instant it's centred. This is what holds the
-        hull steady on a target for a payload action (``align('hole', yaw=0,
-        lat=0, gain=25, yaw_gain=10, hold=3, brake=False)`` then ``fire()``).
-        It holds lat/yaw/depth only -- NOT forward range (the prior ``move``
-        set the standoff). ``hold`` counts against ``duration``: budget
-        ``duration >= approach + hold`` or the verb TIMEOUTs mid-hold (and a
-        ``if align(hold=3): fire()`` would skip the shot). For a fire-from-lock
-        pass ``brake=False`` so there's no pre-shot lateral nudge.
+        instead of exiting the instant it's centred. It holds lat/yaw/depth
+        only -- NOT forward range (the prior ``move`` set the standoff).
+        ``hold`` counts against ``duration``: budget ``duration >= approach +
+        hold`` or the verb TIMEOUTs mid-hold. For a fire-from-lock pass
+        ``brake=False`` so there's no pre-shot lateral nudge.
+
+        ``fire`` (channel int or list, e.g. ``fire=1`` or ``fire=[1, 2]`` --
+        1/2=torpedo, 3/4=dropper) fires the payload WHILE the hold loop is
+        still correcting, ``fire_t`` seconds into the hold (0 = at hold start),
+        on a background thread so the 20 Hz correction never stalls on the
+        payload write. This is the accurate-shot pattern: instead of
+        ``align(hold=3)`` THEN ``fire()`` (the gap drifts the hull off the hole
+        and the shot misses), the torpedo leaves WHILE glued::
+
+            align('hole', yaw=0, lat=0, depth=0, hold=4, fire=1, fire_t=1,
+                  brake=False)
+
+        Requires ``hold > fire_t`` (else fire_t is clamped to 0 -- fire at hold
+        start). Multiple channels fire one-by-one. The fire is GATED on
+        alignment: it leaves on the first stably-aligned tick at or after
+        ``fire_t``; if the hull never holds the lock during the hold window the
+        shot is NOT fired (deliberate -- a torpedo never launches off-target).
+        So budget enough ``hold`` to actually settle on the target before
+        ``fire_t``. CAVEAT: on a CH340 payload reconnect the shot can leave up
+        to ~2 s late (threading keeps the loop alive, it can't make the board
+        faster) -- use a small ``fire_t`` and generous ``hold`` so a delayed
+        shot still lands inside the hold window.
         """
         active = [(name, val) for name, val in
                   (('lat', lat), ('yaw', yaw), ('depth', depth))
@@ -185,6 +206,12 @@ class _VisionDSL:
         self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))
         tgt     = self._resolve_target(target, cam)
 
+        # fire: int | list | None -> CSV channels for the goal ('' = no fire).
+        fire_csv = ''
+        if fire is not None:
+            seq = fire if isinstance(fire, (list, tuple)) else [fire]
+            fire_csv = ','.join(str(int(c)) for c in seq)
+
         def _one_shot(remaining: float):
             return self._send(
                 'vision_align',
@@ -199,7 +226,9 @@ class _VisionDSL:
                 brake_off=(not brake),
                 brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
                 hold_s=float(hold) if hold is not None else 0.0,
-                hold_through_loss=(fallback is None))
+                hold_through_loss=(fallback is None),
+                fire_channels=fire_csv,
+                fire_t=float(fire_t) if fire_t is not None else 0.0)
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)

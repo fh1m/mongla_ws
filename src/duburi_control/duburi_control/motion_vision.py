@@ -277,6 +277,8 @@ def align_loop(*,
                align_stable_frames: int = 3,
                depth_sign: int = +1,
                release_yaw: bool = False,
+               on_locked=None,
+               fire_t: float = 0.0,
                writers=None,
                log=None,
                abort_fn=None) -> Outcome:
@@ -291,6 +293,16 @@ def align_loop(*,
     (fighting water inertia) before exiting ALIGNED, instead of exiting on the
     first stable tick. hold_s counts against ``duration`` -- budget
     duration >= approach + hold_s or the verb TIMEOUTs mid-hold.
+
+    ``on_locked`` (if given) is called AT MOST ONCE, on the first STABLY-ALIGNED
+    tick at or after ``fire_t`` seconds into the hold window (measured from the
+    first stable tick), BEFORE the hold-exit check -- so a payload fire fires
+    mid-hold while the loop is still correcting, not on the drifting exit tick.
+    It is gated on the target being in-band: if alignment is never held during
+    the window, ``on_locked`` is NOT called (a torpedo never fires off-target).
+    The caller is expected to make ``on_locked`` non-blocking (it spawns the fire
+    on a background thread); the 20 Hz loop must not stall. ``fire_t`` should be
+    < hold_s (the verb clamps it upstream).
     """
     bad = axes - VALID_AXES
     if bad:
@@ -339,6 +351,7 @@ def align_loop(*,
     stable      = 0
     lost_since: Optional[float] = None
     aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
+    fired       = False  # on_locked fired once at fire_t into the hold (payload mid-hold)
     last_log    = 0.0
     last_depth  = 0.0
     last_err_px = float('inf')
@@ -462,6 +475,18 @@ def align_loop(*,
                     if hold_s > 0.0:
                         log.info(f"[VIS  ] align HELD -- station-keeping "
                                  f"{hold_s:.1f}s ({worst:.0f}px)")
+                # Mid-hold fire: BEFORE the exit check so the payload actuates
+                # while the loop is still correcting (not on the drifting exit
+                # tick). on_locked is non-blocking (spawns a thread) so a slow
+                # payload reconnect can't stall the 20 Hz station-keep. fire_t is
+                # clamped < hold_s upstream, so this trips while still holding.
+                if on_locked is not None and not fired and \
+                        (now - aligned_at) >= fire_t:
+                    fired = True
+                    try:
+                        on_locked()
+                    except Exception as exc:   # noqa: BLE001 -- fire must not kill the loop
+                        log.error(f"[VIS  ] on_locked (fire) raised {exc!r}")
                 if hold_s <= 0.0 or (now - aligned_at) >= hold_s:
                     # Arrival / hold complete: bleed lateral inertia so the hull
                     # stops square and the next mission step starts from the
