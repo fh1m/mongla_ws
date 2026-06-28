@@ -180,6 +180,9 @@ class _VisionDSL:
         axes_csv = ','.join(name for name, _ in active)
         offsets = {name: float(val) for name, val in active}
         cam     = self._resolve_camera(camera)
+        # Loud preflight: align needs live detections -- abort if the detector
+        # node for this camera isn't running (rather than idle on err=+inf).
+        self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))
         tgt     = self._resolve_target(target, cam)
 
         def _one_shot(remaining: float):
@@ -242,6 +245,9 @@ class _VisionDSL:
         :class:`VisionResult`; never raises on a miss.
         """
         cam = self._resolve_camera(camera)
+        # Loud preflight: move needs live detections -- abort if the detector
+        # node for this camera isn't running (rather than idle on err=+inf).
+        self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))
         tgt = self._resolve_target(target, cam)
         maintain_on = maintain is not None
         # fwd=None -> pass-through: wire a negative sentinel so it survives
