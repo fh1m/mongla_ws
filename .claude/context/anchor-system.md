@@ -153,8 +153,13 @@ mid-hold while glued.
   will hold at*.
 - **No metric range.** Monocular homography has scale ambiguity — there is **no forward
   axis**. A prior YOLO `move` sets the standoff; anchor holds the *viewpoint*, not distance.
-- **Needs texture.** Low-texture / blank water → few keypoints → `LOST`. The torpedo board,
-  gate lattice, and pool-floor markings are good; open blue water is not.
+- **Needs texture.** Low-texture / blank water → few keypoints. A snap on such a frame is now
+  **REJECTED** at `set_reference` (`< _MIN_KP_REF=16` keypoints) so the service fails with a
+  reason ("reference REJECTED -- only N keypoints; aim at a textured target / get closer")
+  instead of silently storing a dud that LOSTs forever. In-flight, a frame with `< 4`
+  keypoints short-circuits to no-lock **before** `match_lighterglue` — this is the guard for
+  the `IndexError: max(): ... non-zero size` crash a blank frame would otherwise throw. The
+  torpedo board, gate lattice, and pool-floor markings are good; open blue water is not.
 - **Snap↔match drift.** Lighting, turbidity, and big viewpoint change between snap and match
   degrade matching. Re-snap if the scene has changed materially.
 - **theta=roll on forward cam** (see §4c) — yaw is the weak axis there; lean on lat/depth.
@@ -174,9 +179,17 @@ beforehand:
 python3 - <<'PY'
 import torch, numpy as np
 xf = torch.hub.load('verlab/accelerated_features', 'XFeat', pretrained=True, top_k=2048)
-a = np.zeros((480,640,3), np.uint8); b = a.copy(); b[100:200,100:200] = 255
-d0 = xf.detectAndCompute(a)[0]; d0['image_size'] = (640,480)
-d1 = xf.detectAndCompute(b)[0]; d1['image_size'] = (640,480)
+# IMPORTANT: warm on a TEXTURED frame, NOT np.zeros. A blank/low-texture image
+# yields ZERO keypoints, and LighterGlue's filter_matches then reduces a
+# zero-size dim -> `IndexError: max(): Expected reduction dim 1 to have
+# non-zero size`. Random noise gives real keypoints so the full match path
+# (and the lazy LighterGlue download) actually runs. This is the same
+# condition the matcher's _MIN_KP_REF / _MIN_KP_MATCH guards reject in-flight.
+rng = np.random.default_rng(0)
+a = rng.integers(0, 255, (480, 640, 3), dtype=np.uint8)
+b = rng.integers(0, 255, (480, 640, 3), dtype=np.uint8)
+d0 = xf.detectAndCompute(a)[0]; d0['image_size'] = (640, 480)
+d1 = xf.detectAndCompute(b)[0]; d1['image_size'] = (640, 480)
 xf.match_lighterglue(d0, d1)        # <-- forces LighterGlue's lazy download too
 print("warm: XFeat + LighterGlue cached")
 PY
@@ -212,13 +225,19 @@ never auto-spawns nodes).
    sign — stop and recheck §4a. (Unit tests assert the *convention*; this asserts the
    *physical* mounting.)
 2. **Lock test.** Snap at the standoff; `anchor_align(err=20, theta=0.05, hold=5)`. The HUD
-   padlock should go green (LOCKED) and the hull hold within err for the hold window.
+   padlock should go green (LOCKED) and the hull hold within err for the hold window. The
+   reference inset now draws the **match overlay** — green dots on matched reference keypoints
+   with short vectors to their live positions, and a `matches: N inliers` count (green once it
+   clears `min_inliers`, amber below). No green / "no match" = the lock is not real; re-snap on
+   more texture. If snap fails with **"anchor model FAILED to load: …"** the weights were not
+   pre-downloaded (§7) — distinct from the transient "matcher still loading".
 3. **Fire test.** `anchor_align(err=15, hold=3, fire=[1], brake=False)` → the torpedo should
    leave once, mid-hold, while glued.
 4. **Named-reference reload.** `anchor_snap('hole')`, restart the stack, `anchor_align('hole')`
    → re-locks from `references/hole.png` with no live snap.
 5. **Crop-snap-at-detection.** `anchor_snap(target='hole', conf=0.6, err=40)` → verify the
-   HUD reference inset shows the **crop** (not the whole frame); then move too close so YOLO
+   HUD reference inset shows the full frame with an **amber rectangle around the cropped
+   region** plus the green match overlay clustered inside it; then move too close so YOLO
    drops the bbox → confirm the anchor lock still holds geometrically.
 6. **3 s fallback.** `anchor_snap(target='absent_class', conf=0.9)` with that class not in
    view → confirm `[ANCHOR] no … in 3s -- whole-frame snap` and a whole-frame reference.
