@@ -135,12 +135,13 @@ Tunable live (between runs, no rebuild):
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import time as _time
 
 import rclpy
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from rcl_interfaces.srv import SetParameters, GetParameters
+from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
 from sensor_msgs.msg import CameraInfo
 from vision_msgs.msg import Detection2DArray
 
@@ -261,6 +262,20 @@ def _to_float(value):
     return value
 
 
+def _param_value(value) -> ParameterValue:
+    """Wrap a Python value in a typed rcl_interfaces ParameterValue.
+
+    bool is checked before int (bool is a subclass of int in Python).
+    """
+    if isinstance(value, bool):
+        return ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=value)
+    if isinstance(value, float):
+        return ParameterValue(type=ParameterType.PARAMETER_DOUBLE, double_value=value)
+    if isinstance(value, int):
+        return ParameterValue(type=ParameterType.PARAMETER_INTEGER, integer_value=value)
+    return ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=str(value))
+
+
 class DuburiMission:
     """Mission-author API. Wraps DuburiClient with human verbs + sticky context.
 
@@ -297,6 +312,12 @@ class DuburiMission:
         self._info_subs: dict[str, object] = {}   # camera_info subs (kept alive)
         self._img_size:  dict[str, tuple] = {}    # camera -> (width, height)
         self._det_warm:  set[str] = set()         # cameras that have produced a frame
+        # Detector parameter control (in-process, reliable -- replaces flaky
+        # subprocess `ros2 param set`). node-name -> SetParameters client; the
+        # set of nodes whose existence has been confirmed (so the loud preflight
+        # probes each detector node at most once).
+        self._param_clients: dict[str, object] = {}
+        self._detector_ok:   set[str] = set()
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
         self._mission_start: float = _time.monotonic()
@@ -730,28 +751,79 @@ class DuburiMission:
             return node
         return f'/duburi_detector_{camera or self.camera}'
 
+    def _ensure_detector(self, node: str, *, timeout: float = 5.0) -> None:
+        """Abort the mission LOUDLY if detector ``node`` is not on the graph.
+
+        Probed at most once per node (cached in ``_detector_ok``). This is the
+        single guard that turns "someone forgot to start the vision stack" from
+        a silent warning + a mission that idles on err=+inf (the pool-test
+        failure) into an immediate, actionable abort. Called from every detector
+        param op AND from the vision verbs (align/move/anchor) so a mission that
+        skips set_model still can't run blind.
+        """
+        if node in self._detector_ok:
+            return
+        ros_node = self.client.node
+        cli = ros_node.create_client(GetParameters, f'{node}/get_parameters')
+        try:
+            if not cli.wait_for_service(timeout_sec=timeout):
+                cam = node.rsplit('duburi_detector_', 1)[-1]
+                raise RuntimeError(
+                    f"Detector node {node} NOT FOUND after {timeout:.0f}s -- the "
+                    f"vision stack is not running, but this mission uses vision. "
+                    f"Start it, e.g.:\n"
+                    f"  ros2 launch duburi_vision vision.launch.py camera:={cam} "
+                    f"model:=<stem> classes:=<csv>\n"
+                    f"(aborting loudly so a missing detector can't cost a run)")
+        finally:
+            ros_node.destroy_client(cli)
+        self._detector_ok.add(node)
+
+    def _set_detector_param(self, node: str, name: str, value) -> None:
+        """Set one detector parameter in-process via SetParameters (reliable).
+
+        Replaces the old ``subprocess('ros2 param set')`` which spun up a fresh
+        CLI node that had to re-discover the detector every call (the flaky,
+        silent "Node not found" source). Raises on absence (via _ensure_detector)
+        or rejection so failures are loud, not swallowed warnings.
+        """
+        self._ensure_detector(node)
+        ros_node = self.client.node
+        cli = self._param_clients.get(node)
+        if cli is None:
+            cli = ros_node.create_client(SetParameters, f'{node}/set_parameters')
+            self._param_clients[node] = cli
+        if not cli.wait_for_service(timeout_sec=3.0):
+            raise RuntimeError(f'{node}/set_parameters unavailable')
+        req = SetParameters.Request(
+            parameters=[Parameter(name=name, value=_param_value(value))])
+        fut = cli.call_async(req)
+        rclpy.spin_until_future_complete(ros_node, fut, timeout_sec=5.0)
+        resp = fut.result()
+        if resp is None:
+            raise RuntimeError(f'set {node}.{name} timed out (no response)')
+        res = resp.results[0]
+        if not res.successful:
+            raise RuntimeError(f'set {node}.{name}={value!r} rejected: {res.reason}')
+
     def set_model(self, name: str, *,
                   camera: str | None = None, node: str | None = None) -> None:
         """Switch active detector model by registry name (hot, no restart).
 
         Requires the detector to have been launched with a ``models`` registry.
         Targets ``/duburi_detector_<camera>`` (camera defaults to the mission's).
+        Raises if the node is absent or the switch is rejected (loud, not silent).
         """
         node = self._detector_node(camera, node)
-        result = subprocess.run(
-            ['ros2', 'param', 'set', node, 'active_model', name],
-            capture_output=True, text=True, timeout=5)
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            if 'no registry' in stderr or 'not in registry' in stderr:
-                self.log.warning(
-                    f'[DSL  ] set_model({name!r}): {stderr}  '
-                    f'-- launch with models:="..." to enable hot switching')
-            else:
-                self.log.warning(
-                    f'[DSL  ] set_model({name!r}) on {node} failed: {stderr!r}')
-        else:
-            self.log.info(f'[DSL  ] {node} active_model → {name!r}')
+        try:
+            self._set_detector_param(node, 'active_model', str(name))
+        except RuntimeError as exc:
+            if 'registry' in str(exc).lower():
+                raise RuntimeError(
+                    f'set_model({name!r}): {exc} -- launch with models:="..." '
+                    f'to enable hot model switching') from None
+            raise
+        self.log.info(f'[DSL  ] {node} active_model → {name!r}')
 
     def use(self, model: str, classes: str | list | None = None, *,
             camera: str | None = None, node: str | None = None) -> None:
@@ -789,52 +861,29 @@ class DuburiMission:
             classes_str = ','.join(str(c).strip() for c in classes)
         else:
             classes_str = str(classes).strip()
-        result = subprocess.run(
-            ['ros2', 'param', 'set', node, 'classes', classes_str],
-            capture_output=True, text=True, timeout=5)
-        if result.returncode != 0:
-            self.log.warning(
-                f"[DSL  ] set_classes on {node} failed: {result.stderr.strip()!r}")
-        else:
-            self.log.info(f"[DSL  ] {node} classes → {classes_str!r}")
+        self._set_detector_param(node, 'classes', classes_str)
+        self.log.info(f"[DSL  ] {node} classes → {classes_str!r}")
 
     def set_conf(self, conf: float, *,
                  camera: str | None = None, node: str | None = None) -> None:
         """Set YOLO confidence threshold live. Takes effect on next inference tick."""
         node = self._detector_node(camera, node)
-        result = subprocess.run(
-            ['ros2', 'param', 'set', node, 'conf', str(float(conf))],
-            capture_output=True, text=True, timeout=5)
-        if result.returncode != 0:
-            self.log.warning(f"[DSL  ] set_conf({conf}) on {node} failed: {result.stderr.strip()!r}")
-        else:
-            self.log.info(f"[DSL  ] {node} conf → {conf:.3f}")
+        self._set_detector_param(node, 'conf', float(conf))
+        self.log.info(f"[DSL  ] {node} conf → {float(conf):.3f}")
 
     def pause_detector(self, camera: str | None = None, *,
                        node: str | None = None) -> None:
         """Pause inference on a detector node (frame still consumed from queue)."""
         node = self._detector_node(camera, node)
-        result = subprocess.run(
-            ['ros2', 'param', 'set', node, 'paused', 'true'],
-            capture_output=True, text=True, timeout=5)
-        if result.returncode != 0:
-            self.log.warning(
-                f"[DSL  ] pause_detector on {node} failed: {result.stderr.strip()!r}")
-        else:
-            self.log.info(f"[DSL  ] {node} paused")
+        self._set_detector_param(node, 'paused', True)
+        self.log.info(f"[DSL  ] {node} paused")
 
     def resume_detector(self, camera: str | None = None, *,
                         node: str | None = None) -> None:
         """Resume inference on a detector node."""
         node = self._detector_node(camera, node)
-        result = subprocess.run(
-            ['ros2', 'param', 'set', node, 'paused', 'false'],
-            capture_output=True, text=True, timeout=5)
-        if result.returncode != 0:
-            self.log.warning(
-                f"[DSL  ] resume_detector on {node} failed: {result.stderr.strip()!r}")
-        else:
-            self.log.info(f"[DSL  ] {node} resumed")
+        self._set_detector_param(node, 'paused', False)
+        self.log.info(f"[DSL  ] {node} resumed")
 
     # ================================================================== #
     #  Mission countdown                                                   #

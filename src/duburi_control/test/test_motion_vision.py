@@ -187,6 +187,32 @@ def test_align_no_camera_until_info_seen():
     assert out.code == NO_CAMERA
 
 
+def test_align_never_detected_message_on_timeout():
+    # Target never appears + hold_through_loss keeps the loop alive to the
+    # deadline -> TIMEOUT with the distinct "NEVER detected" reason (the pool
+    # failure: wrong model/classes meant 'rescue' was never produced).
+    out, _, _ = _align(_FakeVision(None), hold_through_loss=True)
+    assert out.code == TIMEOUT
+    assert 'NEVER detected' in out.reason
+
+
+def test_align_never_detected_message_on_lost():
+    # Same never-seen condition without hold -> LOST after grace, but the
+    # reason says NEVER detected (not the misleading "lost", which implies
+    # it was there and went away).
+    out, _, _ = _align(_FakeVision(None))
+    assert out.code == LOST
+    assert 'NEVER detected' in out.reason
+
+
+def test_align_seen_then_lost_says_lost_not_never():
+    # Present once, then gone -> the honest "lost" wording, NOT "NEVER".
+    samples = [_sample(ex=0.0, ey=0.0), None, None, None, None]
+    out, _, _ = _align(_FakeVision(samples), align_stable_frames=99)
+    assert out.code == LOST
+    assert 'lost' in out.reason and 'NEVER' not in out.reason
+
+
 def test_align_release_yaw_writes_translation_not_ch4():
     # When the heading lock owns Ch4, a lat-only align must drive lateral via
     # send_rc_translation and never write Ch4 through send_rc_override.

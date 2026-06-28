@@ -368,6 +368,9 @@ def align_loop(*,
     last_depth  = 0.0
     last_err_px = float('inf')
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
+    saw_target  = False  # True once any frame yields the target -> distinguishes
+                         #   "never detected" (wrong model/classes/view) from
+                         #   "seen but couldn't converge" at exit.
 
     log.debug(
         f"[VIS  ] align class={target_class!r} axes={sorted(axes)} "
@@ -384,8 +387,10 @@ def align_loop(*,
             if abort_fn and abort_fn():
                 return Outcome(ABORTED, "aborted", last_err_px, 0.0, elapsed)
             if now >= deadline:
-                return Outcome(TIMEOUT, "not aligned (duration elapsed)",
-                               last_err_px, 0.0, elapsed)
+                reason = ("not aligned (duration elapsed)" if saw_target else
+                          f"target {target_class!r} NEVER detected -- check "
+                          f"model/classes/camera view")
+                return Outcome(TIMEOUT, reason, last_err_px, 0.0, elapsed)
 
             sample = vision_state.bbox_error(target_class)
             if not _present(sample):
@@ -396,8 +401,10 @@ def align_loop(*,
                 if lost_since is None:
                     lost_since = now
                 if (not hold_through_loss) and (now - lost_since) >= lost_grace_s:
-                    return Outcome(LOST, f"target {target_class!r} lost",
-                                   last_err_px, 0.0, elapsed)
+                    reason = (f"target {target_class!r} lost" if saw_target else
+                              f"target {target_class!r} NEVER detected -- check "
+                              f"model/classes/camera view")
+                    return Outcome(LOST, reason, last_err_px, 0.0, elapsed)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
@@ -411,6 +418,7 @@ def align_loop(*,
                 time.sleep(1.0 / LOOP_HZ)
                 continue
 
+            saw_target = True
             lost_since = None
             yaw_pct = lat_pct = 0.0
             in_band = []
@@ -620,8 +628,12 @@ def move_loop(*,
             if abort_fn and abort_fn():
                 return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed)
             if now >= deadline:
-                reason = ("passed-through window not closed (duration elapsed)"
-                          if passthrough else "fill not reached (duration elapsed)")
+                if not seen_once:
+                    reason = (f"target {target_class!r} NEVER detected -- check "
+                              f"model/classes/camera view")
+                else:
+                    reason = ("passed-through window not closed (duration elapsed)"
+                              if passthrough else "fill not reached (duration elapsed)")
                 return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed)
 
             sample  = vision_state.bbox_error(target_class)
@@ -650,8 +662,10 @@ def move_loop(*,
                 if lost_since is None:
                     lost_since = now
                 if (not hold_through_loss) and (now - lost_since) >= lost_grace_s:
-                    return Outcome(LOST, f"target {target_class!r} lost",
-                                   last_lat_err, last_fill, elapsed)
+                    reason = (f"target {target_class!r} lost" if seen_once else
+                              f"target {target_class!r} NEVER detected -- check "
+                              f"model/classes/camera view")
+                    return Outcome(LOST, reason, last_lat_err, last_fill, elapsed)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
