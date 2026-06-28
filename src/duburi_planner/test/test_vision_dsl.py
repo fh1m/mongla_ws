@@ -41,6 +41,26 @@ def _dsl(send):
 
 
 # --------------------------------------------------------------------------- #
+#  Loud-abort contract: a missing detector must RAISE out of the verb, NOT be  #
+#  swallowed by the never-raise wrapper into a silent FAILED (the pool bug).   #
+# --------------------------------------------------------------------------- #
+def test_align_propagates_detector_preflight_abort():
+    m = _mission(MagicMock(return_value=_result(ALIGNED)))
+    m._ensure_detector.side_effect = RuntimeError('Detector node ... NOT FOUND')
+    m._detector_node.return_value = '/duburi_detector_forward'
+    with pytest.raises(RuntimeError, match='NOT FOUND'):
+        _VisionDSL(m).align('gate', yaw=0, lat=0)
+
+
+def test_move_propagates_detector_preflight_abort():
+    m = _mission(MagicMock(return_value=_result(ALIGNED, 0.9)))
+    m._ensure_detector.side_effect = RuntimeError('Detector node ... NOT FOUND')
+    m._detector_node.return_value = '/duburi_detector_forward'
+    with pytest.raises(RuntimeError, match='NOT FOUND'):
+        _VisionDSL(m).move('gate', fwd=80)
+
+
+# --------------------------------------------------------------------------- #
 #  align                                                                       #
 # --------------------------------------------------------------------------- #
 def test_align_ok_on_aligned():
