@@ -39,6 +39,7 @@ from cv_bridge         import CvBridge
 
 from duburi_vision.anchor.references import save_reference, load_reference
 from duburi_vision.anchor.crop_gate import qualifying_bbox
+from duburi_vision.anchor.overlay import draw_match_overlay
 
 # How long to wait for a qualifying detection before falling back to a
 # whole-frame snap (seconds).
@@ -88,13 +89,15 @@ class AnchorNode(Node):
         # Matcher loads async so the subscriber + services come up immediately
         # (mirrors detector_node's async single-model load).
         self._matcher = None
+        self._load_error = None              # str once the model load FAILED (vs None=loading)
         self._snap_pending = threading.Event()
         self._pending_name = ''              # disk name to save the captured ref under
         self._snap_target  = ''              # detection-gated snap: class to wait for
         self._snap_conf    = 0.0             #   min score
         self._snap_err     = 0.0             #   centring tolerance px (<=0 = no gate)
         self._snap_deadline = 0.0            #   monotonic 3 s fallback deadline
-        self._ref_frame    = None            # last captured reference (BGR) for debug pub
+        self._ref_frame    = None            # last captured reference (full BGR) for debug pub
+        self._ref_bbox     = None            # crop bbox of the reference (drawn on the inset)
         self._last_ref_pub = 0.0
         threading.Thread(target=self._load_matcher_async, daemon=True).start()
 
@@ -132,13 +135,18 @@ class AnchorNode(Node):
                 min_conf=float(self.get_parameter('min_conf').value),
                 logger=self.get_logger())
         except Exception as exc:   # noqa: BLE001
-            self.get_logger().fatal(f'[ANCHOR] XFeatMatcher init FAILED: {exc}')
+            self._load_error = str(exc)
+            self.get_logger().fatal(
+                f'[ANCHOR] XFeatMatcher init FAILED: {exc} -- pre-download the '
+                f'XFeat/LighterGlue weights on the Jetson (no pool internet)')
 
     # ---- services ------------------------------------------------------ #
     def _handle_snap(self, req, resp):
         if self._matcher is None or not self._matcher.is_loaded():
             resp.success = False
-            resp.message = 'matcher still loading'
+            resp.message = (f'anchor model FAILED to load: {self._load_error} '
+                            f'(pre-download XFeat weights on the Jetson)'
+                            if self._load_error else 'matcher still loading')
             return resp
 
         name = str(getattr(req, 'name', '') or '').strip()
@@ -158,11 +166,13 @@ class AnchorNode(Node):
                 return resp
             ok = self._matcher.set_reference(img, bbox=bbox)
             if ok:
-                self._ref_frame = self._crop_for_inset(img, bbox)
+                self._ref_frame = img.copy()
+                self._ref_bbox  = bbox
                 self._publish_reference(self._make_header())
             resp.success = bool(ok)
             resp.message = (f'loaded reference {name!r}' if ok
-                            else f'failed to describe reference {name!r}')
+                            else f'reference {name!r} rejected (too few keypoints / '
+                                 f'low texture)')
             self.get_logger().info(f'[ANCHOR] load {name!r} -> {resp.success}')
             return resp
 
@@ -187,6 +197,7 @@ class AnchorNode(Node):
         if self._matcher is not None:
             self._matcher.clear_reference()
         self._ref_frame = None
+        self._ref_bbox  = None
         self._publish_state(STATE_IDLE)
         resp.success = True
         resp.message = 'reference cleared'
@@ -207,15 +218,6 @@ class AnchorNode(Node):
         h, w = frame.shape[:2]
         return qualifying_bbox(arr.detections, w, h, self._snap_target,
                                self._snap_conf, self._snap_err)
-
-    @staticmethod
-    def _crop_for_inset(frame, bbox):
-        """The crop region (for the HUD reference inset), or the whole frame."""
-        if bbox is None:
-            return frame
-        x1, y1, x2, y2 = bbox
-        roi = frame[y1:y2, x1:x2]
-        return roi if roi.size > 0 else frame
 
     # ---- image path ---------------------------------------------------- #
     def _on_image(self, msg: Image):
@@ -263,13 +265,20 @@ class AnchorNode(Node):
                 self._pending_name = ''
                 self._snap_target = ''
                 if matcher.set_reference(frame, bbox=bbox):
-                    self._ref_frame = self._crop_for_inset(frame, bbox)
+                    self._ref_frame = frame.copy()
+                    self._ref_bbox  = bbox
                     if name:
                         path = save_reference(name, frame, bbox=bbox)
                         self.get_logger().info(
                             f'[ANCHOR] reference saved -> {path}' if path
                             else f'[ANCHOR] WARN: failed to save reference {name!r}')
                     self._publish_reference(msg.header)
+                else:
+                    # set_reference rejected the frame (too few keypoints) -- say so
+                    # instead of silently leaving the old/empty reference in place.
+                    self.get_logger().warning(
+                        '[ANCHOR] snap rejected -- low-texture frame/crop '
+                        '(aim at a textured target / get closer)')
                 continue
 
             if not matcher.has_reference():
@@ -317,8 +326,11 @@ class AnchorNode(Node):
     def _publish_reference(self, header):
         if self._ref_frame is None or self._pub_ref.get_subscription_count() == 0:
             return
+        last = self._matcher.last_match() if self._matcher is not None else None
+        overlaid = draw_match_overlay(
+            self._ref_frame, last, self._ref_bbox, self._min_inliers)
         try:
-            img = self._bridge.cv2_to_imgmsg(self._ref_frame, encoding='bgr8')
+            img = self._bridge.cv2_to_imgmsg(overlaid, encoding='bgr8')
             img.header = header
             self._pub_ref.publish(img)
             self._last_ref_pub = time.monotonic()

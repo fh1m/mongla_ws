@@ -29,6 +29,30 @@ from .homography import extract_error
 _RANSAC_REPROJ_PX = 5.0
 # Below this many LighterGlue correspondences we can't fit a stable homography.
 _MIN_MATCHES_FOR_H = 8
+# A reference needs at least this many keypoints to be worth locking on -- a
+# low-texture frame (blank pool water, a tiny crop) yields ~0 and is rejected
+# at snap rather than stored as a dud that LOSTs forever.
+_MIN_KP_REF = 16
+# Below this many keypoints on EITHER side, skip match_lighterglue entirely:
+# LighterGlue's filter_matches reduces a zero-size dim and raises IndexError
+# ("max(): Expected reduction dim 1 to have non-zero size") on an empty set.
+_MIN_KP_MATCH = 4
+
+
+def _kp_count(d) -> int:
+    """Number of keypoints in an XFeat describe dict (0 if absent/malformed)."""
+    if d is None:
+        return 0
+    kp = d.get('keypoints')
+    if kp is None:
+        return 0
+    try:
+        return int(kp.shape[0])
+    except Exception:   # noqa: BLE001
+        try:
+            return len(kp)
+        except Exception:   # noqa: BLE001
+            return 0
 
 
 class XFeatMatcher(AnchorMatcher):
@@ -54,12 +78,25 @@ class XFeatMatcher(AnchorMatcher):
         # makes a silent re-download obvious (it would hang/log a download).
         self._model = torch.hub.load(
             hub_repo, 'XFeat', pretrained=True, top_k=self._top_k)
+        # Move to the requested device. Don't swallow a failure silently (a
+        # model left on the wrong device produces cryptic zero-match runs) --
+        # log it and fall back to cpu so the device we report is the device we
+        # actually use.
         try:
             self._model = self._model.to(self._device)
-        except Exception:
-            pass  # some builds bind device internally; non-fatal
+        except Exception as exc:   # noqa: BLE001
+            if self._log:
+                self._log.warning(
+                    f'[ANCHOR] .to({self._device!r}) failed ({exc}); '
+                    f'falling back to cpu')
+            self._device = 'cpu'
+            try:
+                self._model = self._model.to('cpu')
+            except Exception:   # noqa: BLE001
+                pass  # some builds bind device internally; leave as-is
 
         self._ref: Optional[dict] = None
+        self._last_match = None   # (mkpts_ref, mkpts_cur, inlier_mask) for HUD overlay
         self._loaded = True
 
         if self._log:
@@ -96,9 +133,19 @@ class XFeatMatcher(AnchorMatcher):
         d = self._describe(frame_bgr, bbox=bbox)
         if d is None:
             return False
+        n = _kp_count(d)
+        if n < _MIN_KP_REF:
+            # Reject a low-texture reference loudly instead of storing a dud that
+            # would make every later match() short-circuit to LOST with no clue.
+            if self._log:
+                tag = ' crop' if bbox is not None else ''
+                self._log.warning(
+                    f'[ANCHOR] reference REJECTED -- only {n} keypoints{tag} '
+                    f'(need {_MIN_KP_REF}); aim at a textured target / get closer')
+            return False
         self._ref = d
+        self._last_match = None
         if self._log:
-            n = int(d['keypoints'].shape[0]) if hasattr(d['keypoints'], 'shape') else 0
             tag = f' (crop {tuple(int(v) for v in bbox)})' if bbox is not None else ''
             self._log.info(f'[ANCHOR] reference captured ({n} keypoints){tag}')
         return True
@@ -109,6 +156,13 @@ class XFeatMatcher(AnchorMatcher):
         cur = self._describe(frame_bgr)
         if cur is None:
             return None
+
+        # Guard the zero-keypoint crash: LighterGlue's filter_matches reduces a
+        # zero-size dim and raises IndexError when either side is (near-)empty.
+        # Short-circuit to a clean no-lock result instead of entering that path.
+        if _kp_count(cur) < _MIN_KP_MATCH or _kp_count(self._ref) < _MIN_KP_MATCH:
+            self._last_match = None
+            return AnchorError(0.0, 0.0, 0.0, 0, 0.0)
 
         try:
             mkpts_cur, mkpts_ref, _idx = self._model.match_lighterglue(
@@ -125,6 +179,7 @@ class XFeatMatcher(AnchorMatcher):
         mkpts_ref = np.asarray(mkpts_ref, dtype=np.float64)
         n_match = int(mkpts_cur.shape[0])
         if n_match < _MIN_MATCHES_FOR_H:
+            self._last_match = None
             return AnchorError(0.0, 0.0, 0.0, n_match,
                                0.0 if n_match == 0 else 1.0)
 
@@ -139,11 +194,24 @@ class XFeatMatcher(AnchorMatcher):
         H, mask = cv2.findHomography(
             mkpts_ref, mkpts_cur, cv2.RANSAC, _RANSAC_REPROJ_PX)
         if H is None or mask is None:
+            self._last_match = None
             return AnchorError(0.0, 0.0, 0.0, n_match, 0.0)
 
+        # Stash the correspondences (full-frame coords) for the HUD overlay so
+        # the operator can SEE the matched points / inlier count on the ref inset.
+        self._last_match = (mkpts_ref, mkpts_cur, mask)
         n_inliers = int(mask.sum())
         confidence = n_inliers / max(n_match, 1)
         return extract_error(H, frame_bgr.shape, n_inliers, confidence)
+
+    def last_match(self):
+        """The most recent (mkpts_ref, mkpts_cur, inlier_mask), or None.
+
+        Full-frame pixel coords; consumed by anchor_node to draw the green
+        match overlay on the reference inset. None when the last match found
+        too few correspondences to fit a homography.
+        """
+        return self._last_match
 
     # ---- internal ------------------------------------------------------ #
 

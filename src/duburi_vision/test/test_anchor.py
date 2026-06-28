@@ -266,3 +266,96 @@ def test_qualifying_bbox_none_when_absent():
     dets = [_det('gate', 0.9, 320, 240, 80, 80)]
     assert qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=40) is None
     assert qualifying_bbox([], 640, 480, 'hole', conf=0.5, err_px=40) is None
+
+
+# --------------------------------------------------------------------------- #
+#  empty / low-texture keypoint guard (the IndexError crash root cause)        #
+# --------------------------------------------------------------------------- #
+def _matcher_model(monkeypatch, model):
+    """Build an XFeatMatcher backed by an arbitrary fake hub model."""
+    fake_torch = types.ModuleType('torch')
+
+    class _Cuda:
+        @staticmethod
+        def is_available():
+            return False
+    fake_torch.cuda = _Cuda()
+    fake_torch.hub = types.SimpleNamespace(load=lambda *a, **k: model)
+    monkeypatch.setitem(sys.modules, 'torch', fake_torch)
+    from duburi_vision.anchor.xfeat import XFeatMatcher
+    return XFeatMatcher(top_k=64, device='cpu')
+
+
+def _kp_dict(n):
+    kpts = np.array([[10.0 + i, 10.0 + i] for i in range(n)], dtype=np.float32)
+    return [{
+        'keypoints':   kpts,
+        'scores':      np.ones(len(kpts), dtype=np.float32),
+        'descriptors': np.zeros((len(kpts), 64), dtype=np.float32),
+    }]
+
+
+class _FewKPModel(_FakeXFeatModel):
+    """detectAndCompute returns too few keypoints (low-texture frame)."""
+    N = 2
+
+    def detectAndCompute(self, frame, top_k=None):
+        return _kp_dict(self.N)
+
+
+class _DwindlingModel(_FakeXFeatModel):
+    """16 keypoints for the reference snap, then 2 -- and match must NOT be
+    called on the too-few frame (that is the IndexError path)."""
+    def __init__(self):
+        self._calls = 0
+
+    def detectAndCompute(self, frame, top_k=None):
+        self._calls += 1
+        return _kp_dict(16 if self._calls == 1 else 2)
+
+    def match_lighterglue(self, *a, **k):
+        raise AssertionError('match_lighterglue must not run on <4 keypoints')
+
+
+def test_set_reference_rejects_low_texture(monkeypatch):
+    m = _matcher_model(monkeypatch, _FewKPModel())
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    assert m.set_reference(frame) is False     # 2 kp < _MIN_KP_REF -> rejected
+    assert m.has_reference() is False
+
+
+def test_match_short_circuits_on_few_keypoints(monkeypatch):
+    # Reference snaps fine (16 kp); the live frame then yields 2 kp. match()
+    # must short-circuit to a clean no-lock result WITHOUT entering
+    # match_lighterglue (which raises IndexError on an empty reduction).
+    m = _matcher_model(monkeypatch, _DwindlingModel())
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    assert m.set_reference(frame) is True
+    e = m.match(frame)                          # would AssertionError if it ran
+    assert e is not None and e.n_inliers == 0
+    assert m.last_match() is None
+
+
+def test_last_match_populated_after_good_match(monkeypatch):
+    m = _matcher(monkeypatch, drift_right=10.0)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    assert m.set_reference(frame) is True
+    assert m.match(frame) is not None
+    lm = m.last_match()
+    assert lm is not None and len(lm) == 3      # (ref, cur, mask)
+
+
+# --------------------------------------------------------------------------- #
+#  match overlay -- pure draw (no ROS)                                         #
+# --------------------------------------------------------------------------- #
+def test_draw_match_overlay_runs_and_is_none_safe():
+    from duburi_vision.anchor.overlay import draw_match_overlay
+    img = np.zeros((100, 120, 3), dtype=np.uint8)
+    ref  = np.array([[10, 10], [50, 50], [80, 40]], dtype=np.float64)
+    cur  = np.array([[12, 11], [48, 52], [82, 39]], dtype=np.float64)
+    mask = np.array([[1], [1], [0]], dtype=np.uint8)
+    out = draw_match_overlay(img, (ref, cur, mask), (5, 5, 90, 90), min_inliers=2)
+    assert out.shape == img.shape
+    assert (out[:, :, 1] > 0).any()             # something green was drawn
+    # None match (no lock) must not raise and still annotates.
+    assert draw_match_overlay(img, None, None, min_inliers=2).shape == img.shape

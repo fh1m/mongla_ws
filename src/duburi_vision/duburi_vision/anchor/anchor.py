@@ -69,3 +69,11 @@ class AnchorMatcher(ABC):
     def clear_reference(self) -> None:
         """Drop the stored reference so the next snap starts fresh. Override."""
         return None
+
+    def last_match(self):
+        """Most recent (mkpts_ref, mkpts_cur, inlier_mask), or None. Override.
+
+        Full-frame pixel coords; lets the node draw a match overlay on the HUD
+        reference inset. Default None for matchers that don't expose it.
+        """
+        return None
