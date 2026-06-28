@@ -33,7 +33,10 @@ from sensor_msgs.msg   import Image
 from geometry_msgs.msg import Vector3
 from std_msgs.msg      import String, Float32
 from std_srvs.srv      import Trigger
+from duburi_interfaces.srv import AnchorRef
 from cv_bridge         import CvBridge
+
+from duburi_vision.anchor.references import save_reference, load_reference
 
 STATE_IDLE   = 'IDLE'
 STATE_LOCKED = 'LOCKED'
@@ -71,14 +74,16 @@ class AnchorNode(Node):
         self._pub_ref   = self.create_publisher(Image,   f'{ns_out}/anchor_ref',   2)
 
         # Services (absolute, camera-namespaced so the manager client name is
-        # deterministic regardless of this node's runtime name).
-        self.create_service(Trigger, f'{ns_out}/anchor_snap',  self._handle_snap)
-        self.create_service(Trigger, f'{ns_out}/anchor_clear', self._handle_clear)
+        # deterministic regardless of this node's runtime name). snap = AnchorRef
+        # (name/load fields for disk save+load); clear = bare Trigger.
+        self.create_service(AnchorRef, f'{ns_out}/anchor_snap',  self._handle_snap)
+        self.create_service(Trigger,   f'{ns_out}/anchor_clear', self._handle_clear)
 
         # Matcher loads async so the subscriber + services come up immediately
         # (mirrors detector_node's async single-model load).
         self._matcher = None
         self._snap_pending = threading.Event()
+        self._pending_name = ''              # disk name to save the captured ref under
         self._ref_frame    = None            # last captured reference (BGR) for debug pub
         self._last_ref_pub = 0.0
         threading.Thread(target=self._load_matcher_async, daemon=True).start()
@@ -115,15 +120,46 @@ class AnchorNode(Node):
             self.get_logger().fatal(f'[ANCHOR] XFeatMatcher init FAILED: {exc}')
 
     # ---- services ------------------------------------------------------ #
-    def _handle_snap(self, _req, resp):
+    def _handle_snap(self, req, resp):
         if self._matcher is None or not self._matcher.is_loaded():
             resp.success = False
             resp.message = 'matcher still loading'
             return resp
+
+        name = str(getattr(req, 'name', '') or '').strip()
+
+        # load=true: read the named PNG from disk and set it as the reference
+        # NOW (no live frame needed) -- e.g. anchor_align('hole') reloading a
+        # pre-run snapshot at competition.
+        if getattr(req, 'load', False):
+            if not name:
+                resp.success = False
+                resp.message = 'load requested but no name given'
+                return resp
+            img = load_reference(name)
+            if img is None:
+                resp.success = False
+                resp.message = f'reference {name!r} not found on disk'
+                return resp
+            ok = self._matcher.set_reference(img)
+            if ok:
+                self._ref_frame = img
+                self._publish_reference(self._make_header())
+            resp.success = bool(ok)
+            resp.message = (f'loaded reference {name!r}' if ok
+                            else f'failed to describe reference {name!r}')
+            self.get_logger().info(f'[ANCHOR] load {name!r} -> {resp.success}')
+            return resp
+
+        # load=false: capture the next live frame (and save it if a name was given).
+        self._pending_name = name
         self._snap_pending.set()
         resp.success = True
-        resp.message = 'reference will be captured on next frame'
-        self.get_logger().info('[ANCHOR] snap requested -- capturing next frame')
+        resp.message = (f'capturing next frame -> references/{name}.png'
+                        if name else 'capturing next frame (in-memory)')
+        self.get_logger().info(
+            f'[ANCHOR] snap requested -- next frame'
+            + (f' (save {name!r})' if name else ''))
         return resp
 
     def _handle_clear(self, _req, resp):
@@ -167,8 +203,15 @@ class AnchorNode(Node):
             # Pending snap consumes this frame as the reference.
             if self._snap_pending.is_set():
                 self._snap_pending.clear()
+                name = self._pending_name
+                self._pending_name = ''
                 if matcher.set_reference(frame):
                     self._ref_frame = frame
+                    if name:
+                        path = save_reference(name, frame)
+                        self.get_logger().info(
+                            f'[ANCHOR] reference saved -> {path}' if path
+                            else f'[ANCHOR] WARN: failed to save reference {name!r}')
                     self._publish_reference(msg.header)
                 continue
 
@@ -206,6 +249,13 @@ class AnchorNode(Node):
         if rclpy.ok():
             s = String(); s.data = state
             self._pub_state.publish(s)
+
+    def _make_header(self):
+        from std_msgs.msg import Header
+        h = Header()
+        h.stamp = self.get_clock().now().to_msg()
+        h.frame_id = self._cam
+        return h
 
     def _publish_reference(self, header):
         if self._ref_frame is None or self._pub_ref.get_subscription_count() == 0:

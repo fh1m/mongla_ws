@@ -279,10 +279,12 @@ COMMANDS = {
     'vision_anchor_snap': {
         'help':     'Capture the current camera view as the anchor REFERENCE '
                     '(non-blocking). The anchor_node stores the next frame; '
-                    'anchor_align then drives the hull back onto it. Requires the '
-                    'anchor node (launch vision.launch.py anchor:=true).',
-        'fields':   ['camera'],
-        'defaults': {'camera': 'forward'},
+                    'anchor_align then drives the hull back onto it. Pass ref_name '
+                    'to ALSO save it to references/<ref_name>.png so it survives '
+                    'restarts and reloads on competition day. Requires the anchor '
+                    'node (launch vision.launch.py anchor:=true).',
+        'fields':   ['camera', 'ref_name'],
+        'defaults': {'camera': 'forward', 'ref_name': ''},
     },
     'vision_anchor_clear': {
         'help':     'Drop the stored anchor reference so the next anchor_snap '
@@ -303,13 +305,13 @@ COMMANDS = {
         'fields':   ['camera', 'err_px', 'theta_thresh', 'duration', 'gain',
                      'gain_lat', 'gain_yaw', 'gain_depth',
                      'brake_off', 'brake_gain', 'hold_s', 'fire_channels',
-                     'min_inliers', 'kp_lat', 'kp_yaw', 'kp_depth',
+                     'min_inliers', 'ref_name', 'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames'],   # field names == method params
         'defaults': {'camera': 'forward', 'err_px': 20.0, 'theta_thresh': 0.05,
                      'duration': 30.0, 'gain': 30.0,
                      'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
                      'brake_off': False, 'brake_gain': 0.0, 'hold_s': 0.0,
-                     'fire_channels': '', 'min_inliers': 0.0,
+                     'fire_channels': '', 'min_inliers': 0.0, 'ref_name': '',
                      'kp_lat': 60.0, 'kp_yaw': 120.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0},
     },
@@ -318,7 +320,7 @@ COMMANDS = {
 
 # Field names that carry a string instead of a float (everything else is float).
 STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
-                 'fire_channels')
+                 'fire_channels', 'ref_name')
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off')

@@ -1,0 +1,13 @@
+# Capture or load an anchor reference frame for the XFeat superglue lock.
+#
+#   load=false : capture the next live frame as the reference. If `name` is
+#                non-empty, ALSO save it to disk (references/<name>.png) so it
+#                survives restarts and can be reloaded on competition day.
+#   load=true  : load references/<name>.png from disk and set it as the
+#                reference (no live frame needed).
+#   name=''    : in-memory only (capture, no save).
+string name
+bool   load
+---
+bool   success
+string message

@@ -270,16 +270,21 @@ class _VisionDSL:
     # ================================================================== #
     #  anchor -- XFeat geometric "superglue" lock                         #
     # ================================================================== #
-    def anchor_snap(self, camera=None) -> bool:
+    def anchor_snap(self, name=None, camera=None) -> bool:
         """Capture the current view as the anchor reference (non-blocking).
 
         ``duburi.vision.anchor_snap()`` -- the anchor_node stores the next
-        frame; a later ``anchor_align`` drives the hull back onto it. Returns
-        True on success. Requires the anchor node (launch ``anchor:=true``).
+        frame; a later ``anchor_align`` drives the hull back onto it. Pass
+        ``name`` to ALSO save it to ``references/<name>.png`` so it survives a
+        restart and can be reloaded with ``anchor_align('<name>')`` on
+        competition day (great for reproducible runs -- snap every prop once,
+        re-lock them later). Returns True on success. Requires the anchor node
+        (launch ``anchor:=true``).
         """
         cam = self._resolve_camera(camera)
         try:
-            res = self._send('vision_anchor_snap', camera=cam)
+            res = self._send('vision_anchor_snap', camera=cam,
+                             ref_name=str(name) if name else '')
         except (MoveFailed, MoveRejected) as exc:
             self.log.error(f'[ANCH ] snap failed ({exc}); mission continues')
             return False
@@ -295,13 +300,13 @@ class _VisionDSL:
             return False
         return bool(round(getattr(res, 'final_value', 0.0)))
 
-    def anchor_align(self, *, err: float = 20.0, theta: float = 0.05,
+    def anchor_align(self, name=None, *, err: float = 20.0, theta: float = 0.05,
                      duration: float = 30.0, hold=None, fire=None,
                      match=None, gain: float = 30.0,
                      lat_gain=None, yaw_gain=None, depth_gain=None,
                      brake: bool = True, brake_gain=None,
                      camera=None) -> VisionResult:
-        """Superglue the hull to the snapped reference (lat / yaw / depth).
+        """Superglue the hull to a reference (lat / yaw / depth).
 
         Geometric lock on XFeat+LighterGlue keypoints (no YOLO bbox needed):
         drives lat from the homography tx, yaw from theta, depth from ty until
@@ -311,7 +316,13 @@ class _VisionDSL:
         mid-hold while the hull is glued. ``match`` = min RANSAC inliers a tick
         must clear to count as locked (None = trust the node's verdict). No
         forward axis (a monocular homography has no metric range -- a prior
-        ``move`` sets the standoff). Returns a :class:`VisionResult`.
+        ``move`` sets the standoff).
+
+        ``name`` (positional) loads ``references/<name>.png`` from disk as the
+        reference BEFORE locking -- ``anchor_align('hole')`` re-locks a snapshot
+        saved earlier with ``anchor_snap('hole')`` (reproducible runs; no live
+        snap needed). Omit it to lock on the last in-memory snap. Returns a
+        :class:`VisionResult`.
         """
         cam = self._resolve_camera(camera)
         if fire is None:
@@ -333,9 +344,11 @@ class _VisionDSL:
                 brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
                 hold_s=float(hold) if hold is not None else 0.0,
                 fire_channels=channels,
-                min_inliers=float(match) if match is not None else 0.0)
+                min_inliers=float(match) if match is not None else 0.0,
+                ref_name=str(name) if name else '')
 
-        return self._orchestrate('anchor', 'reference', cam, duration, None,
+        label = f'reference {name!r}' if name else 'reference'
+        return self._orchestrate('anchor', label, cam, duration, None,
                                  _one_shot)
 
     # ================================================================== #

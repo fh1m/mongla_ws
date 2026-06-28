@@ -83,6 +83,7 @@ def _setup(context, *_args, **_kwargs):
             'paused':      'false',     # video testing wants live detections
             'viewer':      LaunchConfiguration('viewer'),
             'tracking':    LaunchConfiguration('tracking'),
+            'anchor':      LaunchConfiguration('anchor'),
             'imgsz':       LaunchConfiguration('imgsz'),
             'max_det':     LaunchConfiguration('max_det'),
         }.items(),
@@ -114,6 +115,9 @@ def generate_launch_description():
         DeclareLaunchArgument('viewer',      default_value='true',
                               description='Open the HUD (viewer:=false = headless autonomous run).'),
         DeclareLaunchArgument('tracking',    default_value='true'),
+        DeclareLaunchArgument('anchor',      default_value='false',
+                              description='Start anchor_node (XFeat superglue) for homography '
+                                          'lock testing against the video sources.'),
         DeclareLaunchArgument('imgsz',       default_value='640'),
         DeclareLaunchArgument('max_det',     default_value='100'),
         OpaqueFunction(function=_setup),

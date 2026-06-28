@@ -204,19 +204,21 @@ class VisionVerbs:
     # ================================================================== #
     #  anchor verbs -- XFeat geometric superglue lock                     #
     # ================================================================== #
-    def vision_anchor_snap(self, camera):
+    def vision_anchor_snap(self, camera, ref_name=''):
         """Capture the current view as the anchor reference (non-blocking).
 
         Calls the manager-wired snap service on anchor_node; the node stores
-        the NEXT frame as its reference. Returns success + final_value 1/0.
+        the NEXT frame as its reference. When ``ref_name`` is given the node
+        also saves it to references/<ref_name>.png. Returns final_value 1/0.
         """
         fn = getattr(self, 'anchor_snap_fn', None)
         if fn is None:
             return self._make_result(
                 False, 'anchor_snap: no service wired (launch anchor:=true)',
                 final_value=0.0, error_value=0.0)
-        ok = bool(fn(camera))
-        self.log.info(f'[CMD  ] vision_anchor_snap camera={camera!r} -> {ok}')
+        ok = bool(fn(camera, str(ref_name or ''), False))
+        tag = f' name={ref_name!r}' if ref_name else ''
+        self.log.info(f'[CMD  ] vision_anchor_snap camera={camera!r}{tag} -> {ok}')
         return self._make_result(
             ok, 'anchor reference captured' if ok else 'anchor snap failed',
             final_value=1.0 if ok else 0.0, error_value=0.0)
@@ -237,7 +239,7 @@ class VisionVerbs:
                             duration=30.0, gain=30.0,
                             gain_lat=0.0, gain_yaw=0.0, gain_depth=0.0,
                             brake_off=False, brake_gain=0.0, hold_s=0.0,
-                            fire_channels='', min_inliers=0.0,
+                            fire_channels='', min_inliers=0.0, ref_name='',
                             kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
                             lost_grace_s=0.0, align_stable_frames=0.0):
         """Superglue the hull to the snapped reference (lat/yaw/depth).
@@ -252,6 +254,16 @@ class VisionVerbs:
             return self._make_result(
                 True, 'vision_anchor_align: no anchor_state wired',
                 final_value=3.0, error_value=0.0)   # NO_CAMERA-ish
+
+        # Named reference -> load it from disk into the node BEFORE locking, so
+        # anchor_align('hole') re-locks a pre-run snapshot with no live snap.
+        if ref_name:
+            snap_fn = getattr(self, 'anchor_snap_fn', None)
+            if snap_fn is None or not bool(snap_fn(camera, str(ref_name), True)):
+                return self._make_result(
+                    True, f'vision_anchor_align: reference {ref_name!r} not loaded',
+                    final_value=3.0, error_value=0.0)   # NO_CAMERA-ish
+            self.log.info(f'[CMD  ] anchor_align loaded reference {ref_name!r}')
 
         channels = _parse_channels(fire_channels)
 

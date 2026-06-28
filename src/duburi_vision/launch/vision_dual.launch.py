@@ -80,6 +80,10 @@ def generate_launch_description():
                               description='Start both detectors paused (resume_detector per task)'),
         DeclareLaunchArgument('viewer',       default_value='true'),
         DeclareLaunchArgument('tracking',     default_value='true'),
+        DeclareLaunchArgument('anchor',       default_value='false',
+                              description='Start anchor_node (XFeat superglue) on both cameras. '
+                                          'Loads XFeat via torch.hub on first run -- pre-download '
+                                          'on the Jetson (no pool internet). Off until tested.'),
         # Per-camera video sources. A non-empty path runs that camera off a
         # dataset clip instead of the live webcam (forward = gate clip, downward
         # = bin clip) -- lets a full dual-camera mission be exercised against real
@@ -146,6 +150,24 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('tracking')),
         )
 
+    def anchor(profile: str) -> Node:
+        # XFeat superglue lock for this camera (off by default). Own logger
+        # pinned to info so the [ANCHOR] canary shows through _QUIET.
+        return Node(
+            package='duburi_vision', executable='anchor_node',
+            name=f'duburi_anchor_{profile}', output='screen',
+            ros_arguments=['--log-level', 'warn',
+                           '--log-level', f'duburi_anchor_{profile}:=info'],
+            parameters=[{
+                'cam':         profile,
+                'device':      LaunchConfiguration('device_cls'),
+                'top_k':       2048,
+                'min_inliers': 12,
+                'skip_frames': 3,
+            }],
+            condition=IfCondition(LaunchConfiguration('anchor')),
+        )
+
     # Enable the HUD's video playback controls + warm-up splash whenever either
     # camera is a file source (Space=pause, ,/.=frame-step, arrows=seek).
     any_video = PythonExpression([
@@ -169,6 +191,8 @@ def generate_launch_description():
         detector('downward', 'dwn_model', 'dwn_classes', 'dwn_conf'),
         tracker('forward'),
         tracker('downward'),
+        anchor('forward'),
+        anchor('downward'),
         viewer,
         shutdown_on_exit,
     ])
