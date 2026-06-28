@@ -36,6 +36,7 @@ setup(
             'vision_display      = duburi_vision.utils.display_node:main',
             'export_engine       = duburi_vision.utils.export_engine:main',
             'depth_estimation_node = duburi_vision.depth.depth_estimation_node:main',
+            'anchor_node         = duburi_vision.anchor.anchor_node:main',
         ],
     },
 )

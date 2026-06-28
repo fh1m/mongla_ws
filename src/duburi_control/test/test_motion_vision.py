@@ -252,6 +252,95 @@ def test_align_hold_keeps_correcting_then_exits_aligned():
     assert out.elapsed_s > base.elapsed_s + hold_s * 0.5
 
 
+# --------------------------------------------------------------------------- #
+#  anchor_align_loop                                                           #
+# --------------------------------------------------------------------------- #
+def _anchor_sample(tx=0.0, ty=0.0, theta=0.0, state='LOCKED', conf=30.0, age_s=0.0):
+    return SimpleNamespace(tx_px=tx, ty_px=ty, theta_rad=theta,
+                           state=state, conf=conf, age_s=age_s)
+
+
+class _FakeAnchorState:
+    """is_streaming() + pose() stand-in (mirrors _FakeVision)."""
+    def __init__(self, samples, streaming=True):
+        self._samples = samples
+        self._i = 0
+        self._streaming = streaming
+
+    def is_streaming(self):
+        return self._streaming
+
+    def pose(self):
+        if isinstance(self._samples, list):
+            s = self._samples[min(self._i, len(self._samples) - 1)]
+            self._i += 1
+            return s
+        return self._samples
+
+
+def _anchor(astate, pix=None, **kw):
+    from duburi_control.motion_vision import anchor_align_loop
+    pix = pix or _FakePixhawk()
+    writers = _FakeWriters()
+    defaults = dict(
+        pixhawk=pix, anchor_state=astate, err_px=40.0, theta_thresh=0.1,
+        duration=0.4, gain=30.0, anchor_stable_frames=3, lost_grace_s=0.1,
+        writers=writers, log=_Log(), abort_fn=None)
+    defaults.update(kw)
+    return anchor_align_loop(**defaults), pix, writers
+
+
+def test_anchor_no_camera_when_not_streaming():
+    out, _, _ = _anchor(_FakeAnchorState(_anchor_sample(), streaming=False))
+    assert out.code == NO_CAMERA
+
+
+def test_anchor_locks_when_centered():
+    out, _, writers = _anchor(_FakeAnchorState(_anchor_sample(tx=0.0, ty=0.0, theta=0.0)))
+    assert out.code == ALIGNED
+    assert writers.neutralised >= 1
+
+
+def test_anchor_drives_lat_from_tx_and_yaw_from_theta():
+    # Off-centre target right (tx>0) + rotated (theta>0) but NOT in band ->
+    # times out while continuously commanding lateral RIGHT and yaw.
+    pix = _FakePixhawk()
+    out, _, _ = _anchor(
+        _FakeAnchorState(_anchor_sample(tx=200.0, ty=0.0, theta=0.3)),
+        pix=pix, err_px=10.0, theta_thresh=0.01, duration=0.25)
+    assert out.code == TIMEOUT
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    assert lat and max(lat) > 1500           # tx>0 -> strafe right
+    assert yaw and max(yaw) > 1500           # theta>0 -> yaw right
+
+
+def test_anchor_lost_after_grace():
+    out, _, _ = _anchor(
+        _FakeAnchorState(_anchor_sample(state='LOST')),
+        lost_grace_s=0.1, duration=1.0)
+    assert out.code == LOST
+
+
+def test_anchor_on_locked_fires_once():
+    calls = []
+    out, _, _ = _anchor(
+        _FakeAnchorState(_anchor_sample(tx=0.0, ty=0.0, theta=0.0)),
+        hold_s=0.2, duration=2.0, on_locked=lambda: calls.append(1))
+    assert out.code == ALIGNED
+    assert sum(calls) == 1                    # fired exactly once across the hold
+
+
+def test_anchor_freshness_decays_lat_when_stale():
+    # A stale sample (age beyond ZERO_S) must zero the lateral command even
+    # though tx is large -- proves anchor reuses _freshness like align.
+    pix = _FakePixhawk()
+    _anchor(_FakeAnchorState(_anchor_sample(tx=300.0, age_s=1.0, state='LOCKED')),
+            pix=pix, err_px=5.0, duration=0.2)
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    assert not lat                            # fully decayed -> neutral lateral
+
+
 def test_align_gain_caps_speed():
     # Full-right target (ex=1.0) with kp=60 would command 60% but gain=30
     # must clamp it. Lateral PWM never exceeds percent_to_pwm(gain).

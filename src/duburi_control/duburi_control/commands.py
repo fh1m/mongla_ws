@@ -273,11 +273,52 @@ COMMANDS = {
         'fields':   ['fire_channel'],
         'defaults': {'fire_channel': 1.0},
     },
+    # ---- Anchor (XFeat + LighterGlue geometric superglue) ------------- #
+    # Command name == Duburi method name (manager dispatches getattr(duburi,cmd));
+    # the DSL exposes them as duburi.vision.anchor_snap/clear/align.
+    'vision_anchor_snap': {
+        'help':     'Capture the current camera view as the anchor REFERENCE '
+                    '(non-blocking). The anchor_node stores the next frame; '
+                    'anchor_align then drives the hull back onto it. Requires the '
+                    'anchor node (launch vision.launch.py anchor:=true).',
+        'fields':   ['camera'],
+        'defaults': {'camera': 'forward'},
+    },
+    'vision_anchor_clear': {
+        'help':     'Drop the stored anchor reference so the next anchor_snap '
+                    'starts fresh.',
+        'fields':   ['camera'],
+        'defaults': {'camera': 'forward'},
+    },
+    'vision_anchor_align': {
+        'help':     'Superglue the hull to the snapped reference: drive lat from '
+                    'the homography tx, yaw from theta, depth from ty until the live '
+                    'view re-superimposes within err_px / theta_thresh, then hold for '
+                    'hold_s (active station-keep). Optionally fire fire_channels (CSV, '
+                    'e.g. "1,2") ONCE at first lock -- a torpedo leaves mid-hold while '
+                    'the hull is glued. match = min RANSAC inliers to count a tick as '
+                    'locked (0 = trust the node). gain caps speed; gain_lat/yaw/depth '
+                    'override per axis. No forward axis (homography has no metric range). '
+                    'Always returns success=True; outcome code in final_value.',
+        'fields':   ['camera', 'err_px', 'theta_thresh', 'duration', 'gain',
+                     'gain_lat', 'gain_yaw', 'gain_depth',
+                     'brake_off', 'brake_gain', 'hold_s', 'fire_channels',
+                     'min_inliers', 'kp_lat', 'kp_yaw', 'kp_depth',
+                     'lost_grace_s', 'align_stable_frames'],   # field names == method params
+        'defaults': {'camera': 'forward', 'err_px': 20.0, 'theta_thresh': 0.05,
+                     'duration': 30.0, 'gain': 30.0,
+                     'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
+                     'brake_off': False, 'brake_gain': 0.0, 'hold_s': 0.0,
+                     'fire_channels': '', 'min_inliers': 0.0,
+                     'kp_lat': 60.0, 'kp_yaw': 120.0, 'kp_depth': 0.05,
+                     'lost_grace_s': 1.0, 'align_stable_frames': 3.0},
+    },
 }
 
 
 # Field names that carry a string instead of a float (everything else is float).
-STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode')
+STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
+                 'fire_channels')
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off')

@@ -50,6 +50,9 @@ def render_all(frame_bgr: np.ndarray,
                track_ids=None,
                vis_range_values: Optional[List[float]] = None,
                depth_map_bgr=None,
+               anchor_state=None,
+               anchor_error=None,
+               anchor_ref_bgr=None,
                **_ignored,
                ) -> np.ndarray:
     """Return annotated video frame with bbox + alignment overlays.
@@ -67,4 +70,7 @@ def render_all(frame_bgr: np.ndarray,
         track_ids=track_ids,
         vis_range_values=vis_range_values,
         depth_map_bgr=depth_map_bgr,
+        anchor_state=anchor_state,
+        anchor_error=anchor_error,
+        anchor_ref_bgr=anchor_ref_bgr,
     )

@@ -268,6 +268,77 @@ class _VisionDSL:
                                  _one_shot)
 
     # ================================================================== #
+    #  anchor -- XFeat geometric "superglue" lock                         #
+    # ================================================================== #
+    def anchor_snap(self, camera=None) -> bool:
+        """Capture the current view as the anchor reference (non-blocking).
+
+        ``duburi.vision.anchor_snap()`` -- the anchor_node stores the next
+        frame; a later ``anchor_align`` drives the hull back onto it. Returns
+        True on success. Requires the anchor node (launch ``anchor:=true``).
+        """
+        cam = self._resolve_camera(camera)
+        try:
+            res = self._send('vision_anchor_snap', camera=cam)
+        except (MoveFailed, MoveRejected) as exc:
+            self.log.error(f'[ANCH ] snap failed ({exc}); mission continues')
+            return False
+        return bool(round(getattr(res, 'final_value', 0.0)))
+
+    def anchor_clear(self, camera=None) -> bool:
+        """Drop the stored anchor reference so the next snap starts fresh."""
+        cam = self._resolve_camera(camera)
+        try:
+            res = self._send('vision_anchor_clear', camera=cam)
+        except (MoveFailed, MoveRejected) as exc:
+            self.log.error(f'[ANCH ] clear failed ({exc}); mission continues')
+            return False
+        return bool(round(getattr(res, 'final_value', 0.0)))
+
+    def anchor_align(self, *, err: float = 20.0, theta: float = 0.05,
+                     duration: float = 30.0, hold=None, fire=None,
+                     match=None, gain: float = 30.0,
+                     lat_gain=None, yaw_gain=None, depth_gain=None,
+                     brake: bool = True, brake_gain=None,
+                     camera=None) -> VisionResult:
+        """Superglue the hull to the snapped reference (lat / yaw / depth).
+
+        Geometric lock on XFeat+LighterGlue keypoints (no YOLO bbox needed):
+        drives lat from the homography tx, yaw from theta, depth from ty until
+        the live view re-superimposes within ``err`` px and ``theta`` rad, then
+        actively holds for ``hold`` s. ``fire`` (int or list, e.g. ``[1, 2]``)
+        fires those payload channels ONCE at first lock -- a torpedo leaves
+        mid-hold while the hull is glued. ``match`` = min RANSAC inliers a tick
+        must clear to count as locked (None = trust the node's verdict). No
+        forward axis (a monocular homography has no metric range -- a prior
+        ``move`` sets the standoff). Returns a :class:`VisionResult`.
+        """
+        cam = self._resolve_camera(camera)
+        if fire is None:
+            channels = ''
+        elif isinstance(fire, (list, tuple)):
+            channels = ','.join(str(int(c)) for c in fire)
+        else:
+            channels = str(int(fire))
+
+        def _one_shot(remaining: float):
+            return self._send(
+                'vision_anchor_align',
+                camera=cam, err_px=float(err), theta_thresh=float(theta),
+                duration=remaining, gain=float(gain),
+                gain_lat=float(lat_gain) if lat_gain is not None else 0.0,
+                gain_yaw=float(yaw_gain) if yaw_gain is not None else 0.0,
+                gain_depth=float(depth_gain) if depth_gain is not None else 0.0,
+                brake_off=(not brake),
+                brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
+                hold_s=float(hold) if hold is not None else 0.0,
+                fire_channels=channels,
+                min_inliers=float(match) if match is not None else 0.0)
+
+        return self._orchestrate('anchor', 'reference', cam, duration, None,
+                                 _one_shot)
+
+    # ================================================================== #
     #  Shared orchestration: bounded verb + client-side fallback          #
     # ================================================================== #
     def _orchestrate(self, verb: str, target: str, camera: str,
