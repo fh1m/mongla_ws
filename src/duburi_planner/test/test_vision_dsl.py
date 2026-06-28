@@ -337,6 +337,70 @@ def test_move_passes_fill_and_mode_to_server():
     assert kwargs['mode'] == 'height'
 
 
+# --------------------------------------------------------------------------- #
+#  In-process detector param control + loud preflight                          #
+# --------------------------------------------------------------------------- #
+def test_param_value_types():
+    # bool is checked before int (bool subclasses int) so a paused flag never
+    # gets coerced to an integer parameter.
+    import duburi_planner.duburi_dsl as dd
+    assert dd._param_value(True).type == dd.ParameterType.PARAMETER_BOOL
+    assert dd._param_value(True).bool_value is True
+    assert dd._param_value(0.6).type == dd.ParameterType.PARAMETER_DOUBLE
+    assert dd._param_value(0.6).double_value == pytest.approx(0.6)
+    assert dd._param_value(3).type == dd.ParameterType.PARAMETER_INTEGER
+    assert dd._param_value('gate').type == dd.ParameterType.PARAMETER_STRING
+    assert dd._param_value('gate').string_value == 'gate'
+
+
+def test_ensure_detector_aborts_loudly_when_node_absent():
+    # The whole point of the fix: a missing detector node is a LOUD abort
+    # (RuntimeError) with an actionable launch hint, not a swallowed warning.
+    import duburi_planner.duburi_dsl as dd
+    client = MagicMock()
+    client.node.create_client.return_value.wait_for_service.return_value = False
+    m = dd.DuburiMission(client, MagicMock(), camera='forward')
+    with pytest.raises(RuntimeError, match='NOT FOUND'):
+        m._ensure_detector('/duburi_detector_forward', timeout=0.01)
+
+
+def test_set_detector_param_sends_typed_param(monkeypatch):
+    import duburi_planner.duburi_dsl as dd
+    client = MagicMock()
+    m = dd.DuburiMission(client, MagicMock(), camera='forward')
+    monkeypatch.setattr(m, '_ensure_detector', lambda *a, **k: None)
+    cli = MagicMock()
+    cli.wait_for_service.return_value = True
+    cli.call_async.return_value.result.return_value = SimpleNamespace(
+        results=[SimpleNamespace(successful=True, reason='')])
+    client.node.create_client.return_value = cli
+    monkeypatch.setattr(dd.rclpy, 'spin_until_future_complete', lambda *a, **k: None)
+
+    m._set_detector_param('/duburi_detector_forward', 'conf', 0.6)
+
+    req = cli.call_async.call_args[0][0]
+    p = req.parameters[0]
+    assert p.name == 'conf'
+    assert p.value.type == dd.ParameterType.PARAMETER_DOUBLE
+    assert p.value.double_value == pytest.approx(0.6)
+
+
+def test_set_detector_param_raises_on_rejection(monkeypatch):
+    import duburi_planner.duburi_dsl as dd
+    client = MagicMock()
+    m = dd.DuburiMission(client, MagicMock(), camera='forward')
+    monkeypatch.setattr(m, '_ensure_detector', lambda *a, **k: None)
+    cli = MagicMock()
+    cli.wait_for_service.return_value = True
+    cli.call_async.return_value.result.return_value = SimpleNamespace(
+        results=[SimpleNamespace(successful=False, reason='not in registry')])
+    client.node.create_client.return_value = cli
+    monkeypatch.setattr(dd.rclpy, 'spin_until_future_complete', lambda *a, **k: None)
+
+    with pytest.raises(RuntimeError, match='registry'):
+        m.set_model('bogus_model')
+
+
 def test_move_passthrough_sends_negative_sentinel():
     # move('gate') with no fwd = pass-through. The DSL must wire fwd_fill=-1
     # (a value that survives the manager's 0.0==unset rule) so the control
