@@ -76,26 +76,31 @@ COMMANDS = {
 
     # ---- Forward / back  (Ch5) ------------------------------------- #
     'move_forward': {
-        'help':     'Drive forward for `duration` s at `gain` percent thrust.',
-        'fields':   ['duration', 'gain', 'settle'],
-        'defaults': {'gain': 80.0, 'settle': 0.0},
+        'help':     'Drive forward for `duration` s at `gain` percent thrust. '
+                    'pass_through=true -> `gain` is a RAW PWM delta (1500+gain) instead of '
+                    'a percent, to probe the minimum PWM that moves the 20kg hull.',
+        'fields':   ['duration', 'gain', 'settle', 'pass_through'],
+        'defaults': {'gain': 80.0, 'settle': 0.0, 'pass_through': False},
     },
     'move_back': {
-        'help':     'Drive backward for `duration` s at `gain` percent thrust.',
-        'fields':   ['duration', 'gain', 'settle'],
-        'defaults': {'gain': 80.0, 'settle': 0.0},
+        'help':     'Drive backward for `duration` s at `gain` percent thrust. '
+                    'pass_through=true -> `gain` is a RAW PWM delta (see move_forward).',
+        'fields':   ['duration', 'gain', 'settle', 'pass_through'],
+        'defaults': {'gain': 80.0, 'settle': 0.0, 'pass_through': False},
     },
 
     # ---- Left / right  (Ch6) --------------------------------------- #
     'move_left': {
-        'help':     'Strafe left for `duration` s at `gain` percent thrust.',
-        'fields':   ['duration', 'gain', 'settle'],
-        'defaults': {'gain': 80.0, 'settle': 0.0},
+        'help':     'Strafe left for `duration` s at `gain` percent thrust. '
+                    'pass_through=true -> `gain` is a RAW PWM delta (see move_forward).',
+        'fields':   ['duration', 'gain', 'settle', 'pass_through'],
+        'defaults': {'gain': 80.0, 'settle': 0.0, 'pass_through': False},
     },
     'move_right': {
-        'help':     'Strafe right for `duration` s at `gain` percent thrust.',
-        'fields':   ['duration', 'gain', 'settle'],
-        'defaults': {'gain': 80.0, 'settle': 0.0},
+        'help':     'Strafe right for `duration` s at `gain` percent thrust. '
+                    'pass_through=true -> `gain` is a RAW PWM delta (see move_forward).',
+        'fields':   ['duration', 'gain', 'settle', 'pass_through'],
+        'defaults': {'gain': 80.0, 'settle': 0.0, 'pass_through': False},
     },
 
     # ---- Style maneuvers ------------------------------------------- #
@@ -123,9 +128,11 @@ COMMANDS = {
     # ---- Curved (car-style) motion --------------------------------- #
     'arc': {
         'help':     'Curved motion: forward thrust + yaw rate at the same time. '
-                    'gain is forward thrust pct; yaw_rate_pct is signed yaw stick.',
-        'fields':   ['duration', 'gain', 'yaw_rate_pct', 'settle'],
-        'defaults': {'gain': 50.0, 'yaw_rate_pct': 30.0, 'settle': 0.0},
+                    'gain is forward thrust pct; yaw_rate_pct is signed yaw stick. '
+                    'pass_through=true -> gain + yaw_rate_pct are RAW PWM deltas.',
+        'fields':   ['duration', 'gain', 'yaw_rate_pct', 'settle', 'pass_through'],
+        'defaults': {'gain': 50.0, 'yaw_rate_pct': 30.0, 'settle': 0.0,
+                     'pass_through': False},
     },
 
     # ---- Yaw  (sharp pivots) --------------------------------------- #
@@ -281,10 +288,14 @@ COMMANDS = {
                     '(non-blocking). The anchor_node stores the next frame; '
                     'anchor_align then drives the hull back onto it. Pass ref_name '
                     'to ALSO save it to references/<ref_name>.png so it survives '
-                    'restarts and reloads on competition day. Requires the anchor '
-                    'node (launch vision.launch.py anchor:=true).',
-        'fields':   ['camera', 'ref_name'],
-        'defaults': {'camera': 'forward', 'ref_name': ''},
+                    'restarts and reloads on competition day. With target_class+conf '
+                    '(+err_px centring gate), waits up to 3s for that detection and '
+                    'snaps JUST its bbox crop (keys the lock on the target, not the '
+                    'background); falls back to the whole frame after 3s. Requires '
+                    'the anchor node (launch vision.launch.py anchor:=true).',
+        'fields':   ['camera', 'ref_name', 'target_class', 'conf', 'err_px'],
+        'defaults': {'camera': 'forward', 'ref_name': '', 'target_class': '',
+                     'conf': 0.5, 'err_px': 40.0},
     },
     'vision_anchor_clear': {
         'help':     'Drop the stored anchor reference so the next anchor_snap '
@@ -323,7 +334,7 @@ STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
                  'fire_channels', 'ref_name')
 
 # Field names that carry a bool. rosidl init these to False.
-BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off')
+BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'pass_through')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):

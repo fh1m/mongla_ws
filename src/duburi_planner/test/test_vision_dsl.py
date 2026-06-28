@@ -471,6 +471,17 @@ def test_anchor_snap_no_name_is_empty_ref():
     dsl.anchor_snap()
     _, kwargs = send.call_args
     assert kwargs['ref_name'] == ''
+    assert kwargs['target_class'] == ''      # whole-frame snap
+
+
+def test_anchor_snap_target_sends_detection_gate():
+    send = MagicMock(return_value=_result(1))
+    dsl = _dsl(send)
+    dsl.anchor_snap(target='hole', conf=0.6, err=30)
+    _, kwargs = send.call_args
+    assert kwargs['target_class'] == 'hole'
+    assert kwargs['conf'] == pytest.approx(0.6)
+    assert kwargs['err_px'] == pytest.approx(30.0)
 
 
 def test_anchor_align_positional_name_loads_disk_ref():

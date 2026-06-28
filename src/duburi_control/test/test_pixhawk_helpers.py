@@ -27,6 +27,26 @@ def test_percent_to_pwm_clamps():
     assert Pixhawk.percent_to_pwm(-999) == 1100
 
 
+def test_gain_to_pwm_percent_mode_matches_percent_to_pwm():
+    # pass_through=False is the percent path (unchanged behaviour).
+    assert Pixhawk.gain_to_pwm(0, False) == 1500
+    assert Pixhawk.gain_to_pwm(50, False) == 1700
+    assert Pixhawk.gain_to_pwm(4, False) == 1516
+
+
+def test_gain_to_pwm_raw_mode_is_direct_delta():
+    # pass_through=True: value is a RAW PWM delta off 1500 (the 20kg stiction probe).
+    assert Pixhawk.gain_to_pwm(0, True) == 1500
+    assert Pixhawk.gain_to_pwm(4, True) == 1504
+    assert Pixhawk.gain_to_pwm(-4, True) == 1496
+
+
+def test_gain_to_pwm_raw_mode_keeps_clamp():
+    # A fat-fingered raw value must NOT escape [1100, 1900].
+    assert Pixhawk.gain_to_pwm(900, True) == 1900
+    assert Pixhawk.gain_to_pwm(-900, True) == 1100
+
+
 def test_heading_error_zero():
     assert Pixhawk.heading_error(90.0, 90.0) == pytest.approx(0.0)
 

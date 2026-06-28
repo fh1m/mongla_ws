@@ -467,12 +467,19 @@ class AUVManagerNode(Node):
             return astate
 
     def _anchor_snap_call(self, camera: str, name: str = '',
-                          load: bool = False) -> bool:
-        """Call the anchor_node AnchorRef snap service (capture / save / load)."""
+                          load: bool = False, target_class: str = '',
+                          conf: float = 0.0, err_px: float = 0.0) -> bool:
+        """Call the anchor_node AnchorRef snap service (capture / save / load).
+
+        ``target_class`` (+conf/err_px) requests a detection-gated crop snap.
+        """
         from duburi_interfaces.srv import AnchorRef
         req = AnchorRef.Request()
         req.name = str(name or '')
         req.load = bool(load)
+        req.target_class = str(target_class or '')
+        req.conf = float(conf)
+        req.err_px = float(err_px)
         return self._anchor_service_call(
             camera, 'anchor_snap', AnchorRef, req, 'snap')
 

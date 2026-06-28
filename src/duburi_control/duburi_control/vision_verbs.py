@@ -204,20 +204,26 @@ class VisionVerbs:
     # ================================================================== #
     #  anchor verbs -- XFeat geometric superglue lock                     #
     # ================================================================== #
-    def vision_anchor_snap(self, camera, ref_name=''):
+    def vision_anchor_snap(self, camera, ref_name='', target_class='',
+                           conf=0.5, err_px=40.0):
         """Capture the current view as the anchor reference (non-blocking).
 
         Calls the manager-wired snap service on anchor_node; the node stores
-        the NEXT frame as its reference. When ``ref_name`` is given the node
-        also saves it to references/<ref_name>.png. Returns final_value 1/0.
+        the NEXT frame as its reference. ``ref_name`` saves it to
+        references/<ref_name>.png. ``target_class`` (+``conf``/``err_px``)
+        switches to detection-gated crop snap (the node waits up to 3 s for
+        that detection and crops its bbox; whole-frame fallback after 3 s).
+        Returns final_value 1/0.
         """
         fn = getattr(self, 'anchor_snap_fn', None)
         if fn is None:
             return self._make_result(
                 False, 'anchor_snap: no service wired (launch anchor:=true)',
                 final_value=0.0, error_value=0.0)
-        ok = bool(fn(camera, str(ref_name or ''), False))
+        ok = bool(fn(camera, str(ref_name or ''), False,
+                     str(target_class or ''), float(conf), float(err_px)))
         tag = f' name={ref_name!r}' if ref_name else ''
+        tag += f' target={target_class!r}' if target_class else ''
         self.log.info(f'[CMD  ] vision_anchor_snap camera={camera!r}{tag} -> {ok}')
         return self._make_result(
             ok, 'anchor reference captured' if ok else 'anchor snap failed',

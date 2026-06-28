@@ -6,8 +6,17 @@
 #   load=true  : load references/<name>.png from disk and set it as the
 #                reference (no live frame needed).
 #   name=''    : in-memory only (capture, no save).
-string name
-bool   load
+#
+# Snap-at-detection (load=false only): when `target_class` is set, wait up to
+# 3 s for a detection of that class with score >= `conf` within `err_px` of the
+# frame centre, then capture JUST that bbox crop (keys the lock on the target,
+# not the background). err_px <= 0 disables the centring gate. If no qualifying
+# detection appears within 3 s, the whole available frame is captured instead.
+string  name
+bool    load
+string  target_class
+float64 conf
+float64 err_px
 ---
 bool   success
 string message

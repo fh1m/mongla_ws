@@ -16,6 +16,9 @@ string  target_name  # mode string  (set_mode)
 float32 timeout      # max wait (all commands; lock_heading auto-releases)
 float32 settle       # post-command neutral-hold seconds; 0 = axis-natural settle only
 float32 yaw_rate_pct # signed -100..+100 percent yaw stick; `arc`
+bool    pass_through # move_*/arc: interpret `gain` (+`yaw_rate_pct`) as a RAW PWM delta
+                     # (1500 +/- value, clamped 1100-1900) instead of a percent -- lets the
+                     # operator probe the minimum PWM that moves the 20kg hull. Default false.
 
 # ---- style_* fields  (ignored by every non-style command) ----------
 float32 flips        # style_*: number of complete 360° rotations (default 1)
@@ -68,6 +71,7 @@ float32 min_inliers        # vision_anchor_align: min RANSAC inliers to count a 
 string  fire_channels      # vision_anchor_align: CSV payload channels fired ONCE at lock, e.g. "1,2"
 string  ref_name           # anchor snap: save the captured reference to references/<name>.png;
                            # anchor_align: load references/<name>.png before locking ('' = live in-memory)
+float32 conf               # anchor snap-at-detection: min detection score to crop on (with target_class + err_px)
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

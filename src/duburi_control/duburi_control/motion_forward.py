@@ -46,7 +46,7 @@ _DVL_TIMEOUT_K = 10.0   # generous extra timeout: metres / 0.05 + this
 # ---------------------------------------------------------------------- #
 def drive_forward_constant(pixhawk, signed_dir, duration, gain, log,
                            writers, yaw_source=None, settle=0.0,
-                           abort_fn=None):
+                           abort_fn=None, pass_through=False):
     """Constant gain on Ch5, reverse-kick brake, then settle."""
     label = 'FWD' if signed_dir > 0 else 'BACK'
     axis_writer = writers.forward
@@ -54,17 +54,24 @@ def drive_forward_constant(pixhawk, signed_dir, duration, gain, log,
 
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda _t: 1.0,
-                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn,
+                pass_through=pass_through)
 
-    brake_kick_then_settle(
-        axis_writer, writers,
-        brake_pct=-signed_dir * REVERSE_KICK_PCT,
-        log=log, axis_label=label, extra_settle=settle, abort_fn=abort_fn)
+    if pass_through:
+        # No reverse-kick: the brake is a fixed -25% percent jerk that would
+        # both corrupt a micro-PWM stiction observation and (at sub-stiction
+        # gains) be the only thing that moves the hull. Just go neutral.
+        final_settle(writers, log, extra=settle, abort_fn=abort_fn)
+    else:
+        brake_kick_then_settle(
+            axis_writer, writers,
+            brake_pct=-signed_dir * REVERSE_KICK_PCT,
+            log=log, axis_label=label, extra_settle=settle, abort_fn=abort_fn)
 
 
 def drive_forward_eased(pixhawk, signed_dir, duration, gain, log,
                         writers, yaw_source=None, settle=0.0,
-                        abort_fn=None):
+                        abort_fn=None, pass_through=False):
     """Smootherstep envelope on Ch5, settle only (ease-out IS the brake)."""
     label = 'FWD' if signed_dir > 0 else 'BACK'
     axis_writer = writers.forward
@@ -73,7 +80,8 @@ def drive_forward_eased(pixhawk, signed_dir, duration, gain, log,
     thrust_loop(pixhawk, axis_writer, duration, signed_gain, log,
                 throttle_curve=lambda elapsed:
                     trapezoid_ramp(elapsed, duration, EASE_SECONDS),
-                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn)
+                axis_label=label, yaw_source=yaw_source, abort_fn=abort_fn,
+                pass_through=pass_through)
 
     log.info(f'[{label:<5}] settle (ease-out = brake)')
     final_settle(writers, log, extra=settle, abort_fn=abort_fn)
@@ -83,7 +91,7 @@ def drive_forward_eased(pixhawk, signed_dir, duration, gain, log,
 #  arc -- forward thrust + yaw rate in the same packet                    #
 # ---------------------------------------------------------------------- #
 def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
-        yaw_source=None, settle=0.0, abort_fn=None):
+        yaw_source=None, settle=0.0, abort_fn=None, pass_through=False):
     """Drive Ch5 + Ch4 simultaneously for a curved car-style trajectory.
 
     `signed_dir` controls forward/back ({+1, -1}); `gain` the magnitude
@@ -111,8 +119,8 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
             if abort_fn and abort_fn():
                 break
 
-            fwd_pwm = Pixhawk.percent_to_pwm(fwd_pct)
-            yaw_pwm = Pixhawk.percent_to_pwm(yaw_pct)
+            fwd_pwm = Pixhawk.gain_to_pwm(fwd_pct, pass_through)
+            yaw_pwm = Pixhawk.gain_to_pwm(yaw_pct, pass_through)
             pixhawk.send_rc_override(forward=fwd_pwm, yaw=yaw_pwm)
 
             heading = read_heading(pixhawk, yaw_source)

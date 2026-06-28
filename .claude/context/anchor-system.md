@@ -18,7 +18,7 @@ bbox at all**. It also works on un-modelled scenery (any textured prop), which m
 ## 2. The three verbs
 
 ```python
-duburi.vision.anchor_snap(name=None)                    # capture reference (non-blocking)
+duburi.vision.anchor_snap(name=None, *, target=None, conf=0.5, err=40)  # capture reference
 duburi.vision.anchor_align(name=None, *, err=20, theta=0.05, duration=30,
                            hold=None, fire=None, match=None,
                            gain=30, lat_gain=, yaw_gain=, depth_gain=, brake=True)
@@ -28,6 +28,12 @@ duburi.vision.anchor_clear()                            # free the live referenc
 - **`anchor_snap()`** — anchor_node stores the **next** frame as the reference (in RAM).
   **`anchor_snap('hole')`** also saves it to `references/hole.png` (versioned in the repo)
   so it survives restarts and reloads on competition day.
+  **`anchor_snap(target='hole', conf=0.6, err=40)`** — *snap-at-detection*: wait up to **3 s**
+  for a `hole` detection with score≥`conf` within `err` px of centre, then snap **just that
+  bbox crop** (keys the lock on the target, not moving background — ideal when YOLO loses
+  the box up close). `err≤0` disables the centring gate; no qualifying detection in 3 s →
+  whole-frame snap. Combine with `name=` to also save the crop (full-frame PNG + a bbox
+  sidecar so the crop geometry survives reload).
 - **`anchor_align()`** — locks on the last in-memory snap. **`anchor_align('hole')`**
   loads `references/hole.png` from disk first, then locks — no live snap needed.
   - `err`/`theta`: lock tolerance in px / rad. `hold`: active station-keep seconds (reuses
@@ -92,6 +98,18 @@ sees scene shift LEFT → reference appears left → `tx<0` → Ch6<1500 → str
 the error. (Same derivation gives descend-when-shallow and yaw-toward.) Lateral is
 **freshness-decayed** (`_freshness(age_s)`) so a stale/slow match can't blind-drive; yaw
 and depth are not (Ch4 is a rate ArduSub bleeds; depth is ArduSub's hold).
+
+### 4b-crop. Crop reference keeps the SAME coordinate frame (signs unchanged)
+A snap-at-detection crops the bbox, but `xfeat._describe(frame, bbox)` then **offsets the
+cropped keypoints back into full-frame coords** (`kp += (x1,y1)`) and keeps `image_size` =
+full frame. So the reference is "full-frame keypoints confined to the bbox region" — the
+homography is single-coordinate-system and `extract_error` (with all its signs) is
+**byte-identical** to a whole-frame reference. The crop only changes *which* keypoints exist
+(target, not background). **Dependency:** `extract_error` pushes the frame centre, so a
+near-centre crop is robust interpolation; a far-off-centre crop extrapolates → the `err`
+centring gate keeps snaps near-centre. **Semantic:** a target snapped 30 px off-centre holds
+at that 30-px-off snap position (anchor re-superimposes the snapped *view*), not dead-centre
+— set `err` small for dead-centre. Disk crops persist via a `<name>.json` bbox sidecar.
 
 ### 4c. theta→yaw is the WEAK axis on the forward camera
 `theta = atan2(H[1,0],H[0,0])` is in-plane **image roll** = camera roll about the optical
@@ -199,6 +217,20 @@ never auto-spawns nodes).
    leave once, mid-hold, while glued.
 4. **Named-reference reload.** `anchor_snap('hole')`, restart the stack, `anchor_align('hole')`
    → re-locks from `references/hole.png` with no live snap.
+5. **Crop-snap-at-detection.** `anchor_snap(target='hole', conf=0.6, err=40)` → verify the
+   HUD reference inset shows the **crop** (not the whole frame); then move too close so YOLO
+   drops the bbox → confirm the anchor lock still holds geometrically.
+6. **3 s fallback.** `anchor_snap(target='absent_class', conf=0.9)` with that class not in
+   view → confirm `[ANCHOR] no … in 3s -- whole-frame snap` and a whole-frame reference.
+7. **20 kg stiction calibration (`pass_through`).** `ros2 run duburi_planner duburi
+   move_forward --duration 2 --gain N --pass_through` (bare flag), N from ~2 upward until the
+   hull just moves; record per axis (forward via move_forward, lateral via move_left).
+   **⚠️ ArduSub applies an RC deadzone (`RC*_DZ`, often ~30 PWM) to `RC_CHANNELS_OVERRIDE`
+   *before* the motor matrix** — a 4-PWM delta (1504) is likely zeroed by ArduSub before the
+   thrusters, so a sub-~30 ramp measures the **deadzone**, not the hull. For a true hull
+   number set `RC*_DZ=0` for the test; otherwise read N as "min PWM that moves the hull
+   *through the full ArduSub pipeline*." `pass_through` skips the reverse-kick brake so a
+   sub-stiction probe isn't yanked back.
 
 ## 10. Clever XFeat+LighterGlue uses (menu — phase-2 builds)
 

@@ -270,21 +270,30 @@ class _VisionDSL:
     # ================================================================== #
     #  anchor -- XFeat geometric "superglue" lock                         #
     # ================================================================== #
-    def anchor_snap(self, name=None, camera=None) -> bool:
+    def anchor_snap(self, name=None, *, target=None, conf=0.5, err=40.0,
+                    camera=None) -> bool:
         """Capture the current view as the anchor reference (non-blocking).
 
         ``duburi.vision.anchor_snap()`` -- the anchor_node stores the next
         frame; a later ``anchor_align`` drives the hull back onto it. Pass
         ``name`` to ALSO save it to ``references/<name>.png`` so it survives a
-        restart and can be reloaded with ``anchor_align('<name>')`` on
-        competition day (great for reproducible runs -- snap every prop once,
-        re-lock them later). Returns True on success. Requires the anchor node
-        (launch ``anchor:=true``).
+        restart and can be reloaded with ``anchor_align('<name>')`` (reproducible
+        runs -- snap every prop once, re-lock them later).
+
+        ``target`` switches to **detection-gated crop snap**: the node waits up
+        to 3 s for a detection of that class with score >= ``conf`` within
+        ``err`` px of centre, then snaps JUST that bbox crop (keys the lock on
+        the target, not the moving background -- ideal for the torpedo hole that
+        YOLO loses up close). ``err<=0`` disables the centring gate. If the
+        target never appears in 3 s, the whole frame is snapped instead.
+        Returns True on success. Requires the anchor node (``anchor:=true``).
         """
         cam = self._resolve_camera(camera)
         try:
             res = self._send('vision_anchor_snap', camera=cam,
-                             ref_name=str(name) if name else '')
+                             ref_name=str(name) if name else '',
+                             target_class=str(target) if target else '',
+                             conf=float(conf), err_px=float(err))
         except (MoveFailed, MoveRejected) as exc:
             self.log.error(f'[ANCH ] snap failed ({exc}); mission continues')
             return False

@@ -97,13 +97,24 @@ def _build_parser():
                 if live_tuned and has_default
                 else (f'(default: {spec["defaults"][field]})'
                       if has_default else '(required)'))
-            cmd_parser.add_argument(
-                f'--{field}',
-                type=arg_type,
-                required=not has_default,
-                default=cli_default,
-                help=help_default,
-            )
+            if field in BOOL_FIELDS:
+                # Bool fields work as a BARE flag (`--pass_through` -> True) while
+                # still accepting an explicit value (`--pass_through false`).
+                cmd_parser.add_argument(
+                    f'--{field}',
+                    type=arg_type, nargs='?', const=True,
+                    required=not has_default,
+                    default=cli_default,
+                    help=help_default,
+                )
+            else:
+                cmd_parser.add_argument(
+                    f'--{field}',
+                    type=arg_type,
+                    required=not has_default,
+                    default=cli_default,
+                    help=help_default,
+                )
     return parser
 
 

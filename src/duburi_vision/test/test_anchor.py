@@ -156,11 +156,11 @@ def test_reference_save_load_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setattr(references, 'references_dir', lambda: tmp_path)
     frame = np.full((48, 64, 3), 127, dtype=np.uint8)
     frame[10:20, 30:40] = 255
-    assert references.load_reference('hole') is None          # absent
+    assert references.load_reference('hole') == (None, None)   # absent
     path = references.save_reference('hole', frame)
     assert path is not None and path.exists()
-    back = references.load_reference('hole')
-    assert back is not None and back.shape == frame.shape
+    back, bbox = references.load_reference('hole')
+    assert back is not None and back.shape == frame.shape and bbox is None
 
 
 def test_reference_name_is_sanitised(monkeypatch, tmp_path):
@@ -170,3 +170,99 @@ def test_reference_name_is_sanitised(monkeypatch, tmp_path):
     p = references.reference_path('../../etc/pwn name')
     assert p.parent == tmp_path
     assert '/' not in p.name[:-4]            # only the .png slash-free stem
+
+
+def test_reference_bbox_sidecar_roundtrip(monkeypatch, tmp_path):
+    from duburi_vision.anchor import references
+    monkeypatch.setattr(references, 'references_dir', lambda: tmp_path)
+    frame = np.full((48, 64, 3), 100, dtype=np.uint8)
+    # Whole-frame: no sidecar, bbox None on load.
+    references.save_reference('whole', frame)
+    img, bbox = references.load_reference('whole')
+    assert img is not None and bbox is None
+    # Crop: sidecar written, bbox restored on load.
+    references.save_reference('crop', frame, bbox=(10, 12, 40, 44))
+    img, bbox = references.load_reference('crop')
+    assert img is not None and bbox == (10, 12, 40, 44)
+
+
+# --------------------------------------------------------------------------- #
+#  crop reference -- keypoints offset into full-frame coords                  #
+# --------------------------------------------------------------------------- #
+def test_crop_reference_offsets_keypoints_to_full_frame(monkeypatch):
+    # A bbox crop must store keypoints in FULL-frame coords (offset by x1,y1)
+    # and full-frame image_size, so extract_error -- and its sign -- is unchanged.
+    m = _matcher(monkeypatch, drift_right=0.0)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    bbox = (200, 150, 360, 330)   # off-centre-ish crop
+    assert m.set_reference(frame, bbox=bbox) is True
+    ref = m._ref
+    assert ref['image_size'] == (640, 480)          # FULL frame, not crop
+    kp = np.asarray(ref['keypoints'])
+    # The fake grid spans 20-80% of the CROP; offset must push them past x1=200.
+    assert kp[:, 0].min() >= 200 - 1
+    assert kp[:, 0].max() <= 360 + 1
+
+
+def test_crop_reference_preserves_sign(monkeypatch):
+    # Rightward drift with a crop reference must STILL give tx<0 (the sign fix
+    # is inherited because keypoints live in full-frame coords). Note: this
+    # exercises the OFFSET WIRING + sign math; the fake match ignores live
+    # descriptors, so real-model crop-match quality is pool-gated.
+    m = _matcher(monkeypatch, drift_right=25.0)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    assert m.set_reference(frame, bbox=(240, 180, 400, 300)) is True
+    e = m.match(frame)
+    assert e is not None
+    assert e.tx_px < 0
+
+
+# --------------------------------------------------------------------------- #
+#  crop_gate -- detection-gated snap selection (pure)                         #
+# --------------------------------------------------------------------------- #
+def _det(cls, score, cx, cy, sx, sy):
+    """Hand-built Detection2D duck-type for the gate."""
+    from types import SimpleNamespace as NS
+    return NS(
+        bbox=NS(center=NS(position=NS(x=cx, y=cy)), size_x=sx, size_y=sy),
+        results=[NS(hypothesis=NS(class_id=cls, score=score))])
+
+
+def test_qualifying_bbox_picks_centred_target():
+    from duburi_vision.anchor.crop_gate import qualifying_bbox
+    dets = [_det('hole', 0.8, 320, 240, 80, 80),     # centred, qualifies
+            _det('gate', 0.9, 320, 240, 200, 200)]   # wrong class
+    box = qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=40, pad=1.0)
+    assert box == (280, 200, 360, 280)               # 80x80 around (320,240)
+
+
+def test_qualifying_bbox_case_insensitive_and_conf_gate():
+    from duburi_vision.anchor.crop_gate import qualifying_bbox
+    dets = [_det('HOLE', 0.4, 320, 240, 80, 80)]     # right class, too low conf
+    assert qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=0) is None
+    dets = [_det('HOLE', 0.7, 320, 240, 80, 80)]     # case-insensitive match
+    assert qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=0) is not None
+
+
+def test_qualifying_bbox_centre_gate_rejects_off_centre():
+    from duburi_vision.anchor.crop_gate import qualifying_bbox
+    # cx=500 is 180px right of centre (320) -> outside err=40 -> rejected.
+    dets = [_det('hole', 0.9, 500, 240, 80, 80)]
+    assert qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=40) is None
+    # err<=0 disables the gate -> the same off-centre detection qualifies.
+    assert qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=0) is not None
+
+
+def test_qualifying_bbox_pads_and_clamps_to_frame():
+    from duburi_vision.anchor.crop_gate import qualifying_bbox
+    # Near the left edge: pad would go negative -> clamp x1 to 0.
+    dets = [_det('hole', 0.9, 30, 240, 80, 80)]
+    box = qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=0, pad=1.3)
+    assert box is not None and box[0] == 0
+
+
+def test_qualifying_bbox_none_when_absent():
+    from duburi_vision.anchor.crop_gate import qualifying_bbox
+    dets = [_det('gate', 0.9, 320, 240, 80, 80)]
+    assert qualifying_bbox(dets, 640, 480, 'hole', conf=0.5, err_px=40) is None
+    assert qualifying_bbox([], 640, 480, 'hole', conf=0.5, err_px=40) is None
