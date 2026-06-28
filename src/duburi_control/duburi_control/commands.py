@@ -220,6 +220,11 @@ COMMANDS = {
                     'correcting for hold_s seconds (fighting water inertia, e.g. to hold a '
                     'torpedo-hole lock steady for the shot) before exiting -- budget '
                     'duration >= approach + hold_s. '
+                    'fire_channels (CSV e.g. "1,2") fires those payload channels ONCE '
+                    'mid-hold, fire_t seconds into the hold (0 = at hold start), on a '
+                    'background thread so the loop keeps correcting while the shot leaves '
+                    '-- so a torpedo launches while still glued to the hole (no '
+                    'align-then-fire drift). Requires fire_t < hold_s (else clamped to 0). '
                     'On duration expiry it logs NOT-aligned and the mission continues. '
                     'hold_through_loss=true coasts on target loss (set by the DSL when '
                     'no fallback search is supplied).',
@@ -228,6 +233,7 @@ COMMANDS = {
                      'err_px', 'duration', 'gain',
                      'gain_lat', 'gain_yaw', 'gain_depth',
                      'brake_off', 'brake_gain', 'hold_s', 'hold_through_loss',
+                     'fire_channels', 'fire_t',
                      'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames'],
         'defaults': {'camera': 'forward', 'target_class': '',
@@ -237,6 +243,7 @@ COMMANDS = {
                      'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
                      'brake_off': False, 'brake_gain': 0.0, 'hold_s': 0.0,
                      'hold_through_loss': False,
+                     'fire_channels': '', 'fire_t': 0.0,
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0},
     },
@@ -277,7 +284,8 @@ COMMANDS = {
 
 
 # Field names that carry a string instead of a float (everything else is float).
-STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode')
+STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
+                 'fire_channels')
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off')

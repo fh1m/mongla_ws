@@ -278,6 +278,62 @@ def test_align_hold_keeps_correcting_then_exits_aligned():
     assert out.elapsed_s > base.elapsed_s + hold_s * 0.5
 
 
+def test_align_fires_on_locked_once_mid_hold():
+    # on_locked fires EXACTLY once, mid-hold, while the loop keeps correcting.
+    calls = []
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3, duration=2.0,
+                         on_locked=lambda: calls.append(1), fire_t=0.0)
+    assert out.code == ALIGNED
+    assert len(calls) == 1               # fired exactly once, not every tick
+    # The loop kept issuing lateral corrections (fire didn't end the hold).
+    lat_cmds = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    assert lat_cmds, 'expected corrections to continue after the fire'
+
+
+def test_align_fire_t_delays_until_into_hold():
+    # With fire_t close to the full hold, the fire still happens (before exit),
+    # but not on the very first held tick.
+    calls = []
+    _align(_FakeVision(_sample(ex=0.1)), hold_s=0.4, duration=2.0,
+           on_locked=lambda: calls.append(1), fire_t=0.2)
+    assert calls == [1]                  # fired once, inside the hold window
+
+
+def test_align_no_fire_without_on_locked():
+    # No on_locked -> the loop behaves exactly as before (no fire path).
+    out, _, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.2, duration=2.0)
+    assert out.code == ALIGNED
+
+
+def test_align_on_locked_exception_does_not_kill_loop():
+    # A throwing on_locked must not abort the hold -- the verb still returns
+    # ALIGNED (a payload glitch can't crash the control loop).
+    def boom():
+        raise RuntimeError('serial blew up')
+    out, _, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.2, duration=2.0,
+                       on_locked=boom, fire_t=0.0)
+    assert out.code == ALIGNED
+
+
+def test_align_does_not_fire_when_never_aligned():
+    # The fire is GATED on alignment, not pure time: a target that is DETECTED
+    # but never centred (out of band) never opens the hold/fire gate, so the
+    # torpedo is NEVER fired off-target. ex=5.0 -> ~1600px, far outside err=40.
+    calls = []
+    out, _, _ = _align(_FakeVision(_sample(ex=5.0)), hold_s=0.3, duration=0.4,
+                       on_locked=lambda: calls.append(1), fire_t=0.0)
+    assert calls == []                   # never aligned -> never fired
+    assert out.code != ALIGNED           # and it did not falsely report aligned
+
+
+def test_align_does_not_fire_when_target_absent():
+    # No detection at all -> never aligned -> never fired (LOST/TIMEOUT, not a shot).
+    calls = []
+    _align(_FakeVision(None), hold_s=0.3, duration=0.4,
+           on_locked=lambda: calls.append(1), fire_t=0.0)
+    assert calls == []
+
+
 def test_align_gain_caps_speed():
     # Full-right target (ex=1.0) with kp=60 would command 60% but gain=30
     # must clamp it. Lateral PWM never exceeds percent_to_pwm(gain).

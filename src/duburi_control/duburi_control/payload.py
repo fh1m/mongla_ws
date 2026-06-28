@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Optional
 
@@ -63,6 +64,11 @@ class PayloadDriver:
         self._port_path: str = ''
         self._wired = wired_channels          # None = accept all 4
         self._reconnect_settle_s = reconnect_settle_s  # ESP32 boot wait after re-enum
+        # Serialise fire() writes: a background mid-hold fire thread (which may be
+        # mid-reconnect for ~reconnect_settle_s) must not interleave on the serial
+        # port with a later standalone fire() goal. Guards fire-vs-fire ONLY --
+        # the payload port is separate from the Pixhawk RC port.
+        self._fire_lock = threading.Lock()
 
     @staticmethod
     def auto_detect_port(exclude: set[str] | None = None) -> str | None:
@@ -199,35 +205,38 @@ class PayloadDriver:
         if self._wired is not None and channel not in self._wired:
             _LOG.error('[PAYLOAD] ch=%d not in wired set %s — blocked', channel, self._wired)
             return False
-        if not self.is_ready:
-            _LOG.info('[PAYLOAD] fire ch=%d — port not ready, attempting auto-reconnect...', channel)
-            self.connect()
-        if not self.is_ready:
-            _LOG.warning('[PAYLOAD] fire ch=%d — not connected (board absent or still re-enumerating)',
-                         channel)
-            return False
-        name = CHANNEL_NAMES[channel]
-        try:
-            self._port.write(bytes([0x30 + channel]))  # type: ignore[union-attr]
-            self._port.flush()                          # type: ignore[union-attr]
-            _LOG.info("[PAYLOAD] serial '%d' sent → %s LAUNCHED", channel, name)
-            return True
-        except Exception as exc:
-            _LOG.error('[PAYLOAD] write error ch=%d (%s): %s — reconnecting + retry', channel, name, exc)
-            self._close_dead()
-            if self._wait_and_reconnect():
-                # ponytail: settle for ESP32 boot before retry; CH340 enumerates ~1s before ESP32 ready
-                time.sleep(self._reconnect_settle_s)
-                try:
-                    self._port.write(bytes([0x30 + channel]))  # type: ignore[union-attr]
-                    self._port.flush()                          # type: ignore[union-attr]
-                    _LOG.warning('[PAYLOAD] ch=%d retry fired after reconnect (%.1fs settle)',
-                                 channel, self._reconnect_settle_s)
-                    return True
-                except Exception as exc2:
-                    _LOG.error('[PAYLOAD] ch=%d retry failed: %s', channel, exc2)
-                    self._close_dead()
-            return False
+        # One writer at a time: a mid-hold fire thread (possibly sleeping in the
+        # reconnect retry) must not interleave on the port with another fire.
+        with self._fire_lock:
+            if not self.is_ready:
+                _LOG.info('[PAYLOAD] fire ch=%d — port not ready, attempting auto-reconnect...', channel)
+                self.connect()
+            if not self.is_ready:
+                _LOG.warning('[PAYLOAD] fire ch=%d — not connected (board absent or still re-enumerating)',
+                             channel)
+                return False
+            name = CHANNEL_NAMES[channel]
+            try:
+                self._port.write(bytes([0x30 + channel]))  # type: ignore[union-attr]
+                self._port.flush()                          # type: ignore[union-attr]
+                _LOG.info("[PAYLOAD] serial '%d' sent → %s LAUNCHED", channel, name)
+                return True
+            except Exception as exc:
+                _LOG.error('[PAYLOAD] write error ch=%d (%s): %s — reconnecting + retry', channel, name, exc)
+                self._close_dead()
+                if self._wait_and_reconnect():
+                    # ponytail: settle for ESP32 boot before retry; CH340 enumerates ~1s before ESP32 ready
+                    time.sleep(self._reconnect_settle_s)
+                    try:
+                        self._port.write(bytes([0x30 + channel]))  # type: ignore[union-attr]
+                        self._port.flush()                          # type: ignore[union-attr]
+                        _LOG.warning('[PAYLOAD] ch=%d retry fired after reconnect (%.1fs settle)',
+                                     channel, self._reconnect_settle_s)
+                        return True
+                    except Exception as exc2:
+                        _LOG.error('[PAYLOAD] ch=%d retry failed: %s', channel, exc2)
+                        self._close_dead()
+                return False
 
     def disconnect(self) -> None:
         """Close the serial port."""
