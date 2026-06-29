@@ -62,6 +62,9 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `stop` | — | Neutral all channels (active hold) |
 | `surface` | — | **Safety**: ascend to 0 m. Bypasses command_active gate (works during a running mission) |
 | `pause` | duration→2 s | Release RC override |
+| `head` | — | Read live heading (deg) at execution time → `final_value`; also usable as the `--target head` magic value on other verbs |
+| `style_roll` | gain→60 %, timeout→20 s (per flip), flips→1, headroom→1.0 m | Style: N×360° roll in ACRO (surface-depth guarded); BNO-confirmed |
+| `style_yaw` | flips→1, deg_per_step→90 °, settle→1 s | Style: N×360° yaw spin in ALT_HOLD (no mode change — safest style verb) |
 | `move_forward` | **duration** required, gain→80 %, settle→0 s | Open-loop forward thrust |
 | `move_back` | **duration** required, gain→80 %, settle→0 s | Open-loop reverse thrust |
 | `move_left` | **duration** required, gain→80 %, settle→0 s | Open-loop lateral strafe left |
@@ -78,8 +81,8 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `move_forward_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop forward (heading lock stays active) |
 | `move_back_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop backward (same as move_forward_dist with reversed direction) |
 | `move_lateral_dist` | **distance_m** required (±), gain→36 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop lateral (heading lock stays active) |
-| `vision_align` | camera→forward, target_class→'', axes→'' (≥1 of lat,yaw,depth), offset_lat/yaw/depth→0 px, err_px→40, duration→20 s, gain→30 %, gain_lat/yaw/depth→0 (inherit gain), brake_off→false (brake on), brake_gain→0 (default), hold_s→0 s, hold_through_loss→false, fire_channels→'' (none), fire_t→0 s, kp_lat→60, kp_yaw→60, kp_depth→0.05, lost_grace_s→1.0, align_stable_frames→3 | Centre target on lat/yaw/depth at signed pixel offsets; per-axis gain caps; lateral arrival brake; optional mid-hold payload fire (`fire_channels`/`fire_t`) |
-| `vision_move` | camera→forward, target_class→'', fwd_fill→95 %, mode→area, maintain_px→0/maintain_on→false, hold_s→0 s, err_px→40, duration→20 s, gain→30 %, hold_through_loss→false, kp_forward→200, kp_lat→60, lost_grace_s→1.0 | Drive forward until target's bbox fills fwd_fill% of frame |
+| `vision_align` | camera→forward, target_class→'', axes→'' (≥1 of lat,yaw,depth), offset_lat/yaw/depth→0 px, err_px→40, duration→20 s, gain→30 %, gain_lat/yaw/depth→0 (inherit gain), brake_off→false (brake on), brake_gain→0 (default), hold_s→0 s, hold_through_loss→false, fire_channels→'' (none), fire_t→0 s, kp_lat→60, kp_yaw→60, kp_depth→0.05, lost_grace_s→1.0, align_stable_frames→3, **lock_target→false, ctrl_conf→0, range_gain_floor→1.0, ki_lat→0** (precision) | Centre target on lat/yaw/depth at signed pixel offsets; per-axis gain caps; lateral arrival brake; optional mid-hold payload fire (`fire_channels`/`fire_t`); precision close-in layer (`lock_target`/`ctrl_conf`/`range_gain_floor`/`ki_lat`). `err=0`=default, not zero-tolerance |
+| `vision_move` | camera→forward, target_class→'', fwd_fill→95 %, mode→area, maintain_px→0/maintain_on→false, hold_s→0 s, err_px→40, duration→20 s, gain→30 %, gain_lat→0, brake_off→false, brake_gain→0, range_gain_floor→1.0, hold_through_loss→false, kp_forward→200, kp_lat→60, lost_grace_s→1.0 | Drive forward until target's bbox fills fwd_fill% of frame |
 | `fire` | fire_channel→1.0 (1/2=torpedo, 3/4=dropper) | Fire ESP32 payload channel directly |
 
 ---
@@ -271,7 +274,7 @@ Currents and battery state change the metres-per-second mapping every run — us
 |---|---|
 | CLI | `duburi lock_heading [--target 0] [--timeout 300]` |
 | DSL | `duburi.lock_heading(degrees=0.0, timeout=300.0)` — returns immediately (non-blocking) |
-| MAVLink | Background thread streams `RC_CHANNELS_OVERRIDE` Ch4 only @ 20 Hz |
+| MAVLink | Background thread streams `RC_CHANNELS_OVERRIDE` Ch4 only @ 50 Hz (via `send_rc_yaw_only`; other channels at NO_OVERRIDE) |
 | Behaviour | `target=0` = lock current heading. Reads `yaw_source` (BNO085 / AHRS), proportional Ch4 rate command. Pauses Heartbeat (the lock IS the heartbeat). |
 | `[MAV ]` | `[MAV send_rc_override] yaw=<pwm>` per tick |
 | See | [`heading-lock.md`](./heading-lock.md) for state diagram and failure modes |
@@ -553,27 +556,38 @@ required. Aligned when **every** active axis stays within `err_px` for
 | `offset_lat` | float (px) | `0.0` | signed px | keep target this many px RIGHT of centre (− = left); used only if `lat` in `axes` |
 | `offset_yaw` | float (px) | `0.0` | signed px | same, via heading; used only if `yaw` in `axes` |
 | `offset_depth` | float (px) | `0.0` | signed px | keep target this many px BELOW centre (− = above); used only if `depth` in `axes` |
-| `err_px` | float (px) | `40.0` | `> 0` | per-axis pixel tolerance; "in band" when `\|err\| ≤ err_px` |
+| `err_px` | float (px) | `40.0` | `≥ 0` | per-axis pixel tolerance; "in band" when `\|err\| ≤ err_px`. **`0` = "use default/`vision.err_px`"**, NOT zero tolerance (rosidl `0`==unset). A small positive value is the tight knob; the effective deadband is floored at `MIN_ALIGN_ERR_PX` (≈5 px) so an over-tight `err` can't perpetually TIMEOUT — the floored value is logged at align start and stated in the outcome (`aligned (N/Mpx)`). |
 | `duration` | float (s) | `20.0` | `> 0` | total time budget (DSL-owned; spans fallback cycles) |
 | `gain` | float (%) | `30.0` | `0 – 100` | **hard max-speed cap** on each axis, not a target speed |
+| `gain_lat` / `gain_yaw` / `gain_depth` | float (%) | `0.0` | `0 – 100` | per-axis speed cap; **`0` = inherit `gain`** (NOT disable — omit the axis to drop it) |
+| `brake_off` | bool | `false` | `true`/`false` | `true` = coast (disable the arrival reverse-kick brake); default `false` = brake on. Pass `true` on a fire-from-lock path |
+| `brake_gain` | float | `0.0` | `≥ 0` | scales the arrival reverse-kick vs the exit-velocity EMA (`0` = default) |
+| `hold_s` | float (s) | `0.0` | `≥ 0` | active station-keep after centring (fights inertia for a payload shot); `0` = exit on first stable tick |
+| `fire_channels` | string (CSV) | `''` | e.g. `"1,2"` | payload channels fired ONCE mid-hold (1/2=torpedo, 3/4=dropper); `''` = no fire |
+| `fire_t` | float (s) | `0.0` | `< hold_s` | seconds into the hold to fire; clamped to `0` if `≥ hold_s` |
 | `hold_through_loss` | bool | `false` | `true`/`false` | coast through target loss instead of returning `LOST`. The DSL sets this `true` automatically when no `fallback` is given |
+| `lock_target` | bool | `false` | `true`/`false` | **precision (`lock_on`):** once acquired, steer to the box NEAREST the last-accepted centre (within a gate), not the largest — a 2nd hole / spurious box can't steal the aim. See [`precision-alignment.md`](precision-alignment.md) |
+| `ctrl_conf` | float | `0.0` | `0 – 1` | **precision:** control-side min detection score to accept a box (0 = off; distinct from the detector's global `conf`) (live: `vision.ctrl_conf`) |
+| `range_gain_floor` | float | `1.0` | `0 – 1` | **precision:** lat/depth kp multiplier as the bbox FILLS the frame (close) — softens close-in overshoot of the 20 kg hull (`1.0`=off, `~0.3`=gentle) (live: `vision.range_gain_floor`) |
+| `ki_lat` | float | `0.0` | `≥ 0` | **precision:** lateral integral gain; cancels the steady-current offset of the open-loop Ch6 axis during the hold (`0`=off; enable AFTER damping) (live: `vision.ki_lat`) |
 | `kp_lat` | float | `60.0` | `> 0` | P gain on Ch6 lateral (live: `vision.kp_lat`) |
 | `kp_yaw` | float | `60.0` | `> 0` | P gain on Ch4 yaw (live: `vision.kp_yaw`) |
 | `kp_depth` | float (m/unit) | `0.05` | `> 0` | metres of depth nudge per unit normalized error per 5 Hz tick (live: `vision.kp_depth`) |
 | `lost_grace_s` | float (s) | `1.0` | `≥ 0` | seconds the server coasts on loss before reporting `LOST` (live: `vision.lost_grace_s`) |
-| `align_stable_frames` | float | `3.0` | `≥ 1` | consecutive in-band ticks (~20 Hz) before `ALIGNED` (~0.15 s) (live: `vision.align_stable_frames`) |
+| `align_stable_frames` | float | `3.0` | `≥ 1` | consecutive in-band ticks (~20 Hz vision loop) before `ALIGNED` (~0.15 s) (live: `vision.align_stable_frames`) |
 
 | Aspect | Value |
 |---|---|
 | CLI | `duburi vision_align --camera forward --target_class gate --axes yaw,lat [--offset_yaw 0] [--offset_lat 0] [--err_px 40] [--duration 20] [--gain 30] [--gain_yaw 10] [--gain_lat 0] [--gain_depth 0] [--brake_off] [--hold_s 4] [--fire_channels 1,2] [--fire_t 1]` |
-| DSL | `duburi.vision.align('gate', yaw=0, lat=0, err=40, duration=20, gain=30, lat_gain=None, yaw_gain=None, depth_gain=None, brake=True, brake_gain=None, hold=None, fire=None, fire_t=None, fallback=None, camera=None)` |
-| Facade | `Duburi.vision_align(camera, target_class, axes, offset_lat=, offset_yaw=, offset_depth=, err_px=, duration=, gain=, gain_lat=, gain_yaw=, gain_depth=, brake_off=, brake_gain=, hold_s=, hold_through_loss=, fire_channels=, fire_t=, kp_lat=, kp_yaw=, kp_depth=, lost_grace_s=, align_stable_frames=)` |
+| DSL | `duburi.vision.align('gate', yaw=0, lat=0, err=40, duration=20, gain=30, lat_gain=None, yaw_gain=None, depth_gain=None, brake=True, brake_gain=None, hold=None, fire=None, fire_t=None, lock_on=False, fallback=None, camera=None)` |
+| Facade | `Duburi.vision_align(camera, target_class, axes, offset_lat=, offset_yaw=, offset_depth=, err_px=, duration=, gain=, gain_lat=, gain_yaw=, gain_depth=, brake_off=, brake_gain=, hold_s=, hold_through_loss=, fire_channels=, fire_t=, kp_lat=, kp_yaw=, kp_depth=, lost_grace_s=, align_stable_frames=, lock_target=, ctrl_conf=, range_gain_floor=, ki_lat=)` |
+| Precision | `lock_on=True` (continuity lock) + the deck ROS params `vision.ctrl_conf` / `vision.range_gain_floor` / `vision.ki_lat` form the close-in robustness layer (kill last-moment misclass + hold the 20 kg hull on a small target). All opt-in/off by default. Full guide + pool runbook: [`precision-alignment.md`](precision-alignment.md). |
 | Mid-hold fire | `fire=` (int or list, 1/2=torpedo 3/4=dropper) + `fire_t=` (s into the `hold` window; 0=at lock) fire the payload **while the loop is still correcting** — gated on alignment (no off-target shot), non-blocking (background thread), requires `fire_t < hold` (else clamped to 0). Wire fields `fire_channels` (CSV) + `fire_t`. Pair with `brake=False`. Full detail: [`vision-results.md`](vision-results.md) §4. |
 | Per-axis gain | `lat_gain`/`yaw_gain`/`depth_gain` cap one axis; **unset/0 = inherit `gain`, NOT disable** (omit `lat`/`yaw`/`depth` to drop an axis). The yaw spin-up floor only engages close-up (large bbox ≥ `VISION_YAW_FLOOR_FILL`); far-field yaw is pure-proportional so it cannot limit-cycle/wobble. |
 | Arrival brake | `brake=True` (default) reverse-kicks the **lateral** axis on arrival to bleed water inertia so the hull stops square (yaw/depth never brake). Self-gating on the exit-velocity EMA: a gently-converged lock usually exits ~0 and is not kicked, but a fast snap-in can cross the gate → **pass `brake=False` on the torpedo fire path**. `brake=False` coasts; `brake_gain` scales it. Wire field is `brake_off` (default false = brake on). |
 | MAVLink | `RC_CHANNELS_OVERRIDE` Ch6 (lat) + Ch4 (yaw) @ 20 Hz; `SET_POSITION_TARGET_GLOBAL_INT` (alt) @ 5 Hz when `depth` is active |
 | Mode | auto-engages `ALT_HOLD` when `depth` is an axis; a downward camera (`downward`/`sim_bottom`) inverts the depth sign automatically |
-| Heading lock | when `yaw` is an axis the loop owns Ch4 (lock suspended, retargeted on exit); when `yaw` is NOT an axis and a lock is live, the lock keeps Ch4 and the loop writes lateral only (no fight) |
+| Heading lock | Ch4 is gated on the **yaw axis**, not lock-state: when `yaw` is an axis the loop owns Ch4 (lock suspended, retargeted on exit); when `yaw` is NOT an axis the verb **never writes Ch4** (`release_yaw`, lateral via `send_rc_translation`) — a live lock holds heading on BNO, else Ch4 falls to the heartbeat/ArduSub. The align-yaw jitter cure is the `heading_lock` floor taper, NOT releasing the lock ([`heading-lock.md`](heading-lock.md), [`known-issues.md`](known-issues.md) D7/D8) |
 | Result | `final_value` = outcome code (0–4); `error_value` = worst per-axis residual px. Also: `end_x_px`/`end_y_px` (signed target-from-centre px, NaN if never seen), `elapsed_s` — surfaced on the DSL `VisionResult` as `x_px`/`y_px`/`saw_target`/`elapsed_s` for hybrid recovery ([`vision-results.md`](vision-results.md)). |
 | `[MAV ]` | `[MAV send_rc_override cmd=vision_align] yaw=<pwm> lat=<pwm>` |
 
@@ -603,6 +617,10 @@ to ArduSub's ALT_HOLD, yaw to the heading lock or the autopilot.
 | `err_px` | float (px) | `40.0` | `> 0` | pixel tolerance for the `maintain` offset |
 | `duration` | float (s) | `20.0` | `> 0` | total time budget (DSL-owned) |
 | `gain` | float (%) | `30.0` | `0 – 100` | **hard max-speed cap** (forward and lateral), not a target speed |
+| `gain_lat` | float (%) | `0.0` | `0 – 100` | speed cap for the `maintain` strafe; `0` = inherit `gain` |
+| `brake_off` | bool | `false` | `true`/`false` | `true` = coast (disable the fill-stop arrival brake) |
+| `brake_gain` | float | `0.0` | `≥ 0` | scales the arrival reverse-kick (`0` = default) |
+| `range_gain_floor` | float | `1.0` | `0 – 1` | lat (`maintain`) kp multiplier as the bbox fills (`1.0`=off) (live: `vision.range_gain_floor`) |
 | `hold_through_loss` | bool | `false` | `true`/`false` | coast through loss; DSL sets `true` when no `fallback` |
 | `kp_forward` | float | `200.0` | `> 0` | P gain on Ch5 forward (live: `vision.kp_forward`) |
 | `kp_lat` | float | `60.0` | `> 0` | P gain on Ch6 lateral for `maintain` (live: `vision.kp_lat`) |
@@ -642,6 +660,9 @@ these apply.
 | `lost_grace_s` | `vision.lost_grace_s` | `1.0` | seconds the server coasts on target loss before reporting `LOST` |
 | `fwd_fill` | `vision.frame_fill_default` | `95.0` | `vision_move` fill target when the mission leaves `fwd_fill` at 0 |
 | `align_stable_frames` | `vision.align_stable_frames` | `3.0` | in-band ticks before `vision_align` reports `ALIGNED` (~0.15 s @ 20 Hz) |
+| `range_gain_floor` | `vision.range_gain_floor` | `1.0` | **precision:** lat/depth kp multiplier as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
+| `ki_lat` | `vision.ki_lat` | `0.0` | **precision:** lateral integral gain; nulls a steady-current offset during the hold (`0`=off) |
+| `ctrl_conf` | `vision.ctrl_conf` | `0.0` | **precision:** control-side min detection score to accept a box (`0`=off) |
 
 Defaults live in
 [`vision_tunables.py`](../../src/duburi_manager/duburi_manager/vision_tunables.py)
@@ -757,14 +778,17 @@ Drop `<stem>.pt` in `src/duburi_vision/models/`. **No YAML required** — the de
 reads class names from the embedded `model.names` table. Only add a `<stem>.yaml`
 if you need to remap integer IDs to human names.
 
-Current model stems (pool day):
+Model stems are **illustrative** — the set is reorganised per competition. **Run
+`ls src/duburi_vision/models/*.pt` for your actual stems** (weights are gitignored);
+the launch-file `model:=` defaults below may name a stem you no longer carry.
+Examples seen historically:
 
 | Stem | Classes | Use |
 |---|---|---|
-| `gate_flare_medium_100ep` | gate, flare | **Default** — used by `bringup.launch.py vision:=true` |
+| `gate_rescue_repair` | gate, rescue, repair | Gate + flare-board task (forward cam) |
+| `bin_fire_blood` | fire, blood | Bin task (downward cam) |
+| `gate_flare_medium_100ep` | gate, flare | Earlier prequal default |
 | `gate_nano_100ep` | gate | Gate-only, faster on Jetson Orin |
-| `gate_medium_100ep` | gate | Gate-only, higher accuracy |
-| `flare_medium_100ep` | flare | Flare-only |
 
 Pass the stem at launch — no path, no `.pt` extension:
 

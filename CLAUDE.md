@@ -193,6 +193,7 @@ duburi_ws/src/
 │       │   ├── fsm_{slalom,bin,torpedo,return,full_2026}.py  # ★ YASMIN FSM launchers
 │       │   ├── {gate_flare_fsm,prequal_fsm,gate_then_bin_fsm}.py  # prior FSM missions (kept)
 │       │   ├── {gate_prequal,robosub_prequal,gate_flare_prequal,gate_flare_autonomous}.py
+│       │   ├── {robosub_gate_rescue,pool_day_practice,pool_day_torpedo}.py  # pool-day runs
 │       │   └── demo_{arc,find_person,heading_lock,move_see,square,pursue}.py
 │       └── state_machines/       # YASMIN FSM layer (BUILT) — see fsm-guide.md
 │           ├── core/{outcomes,blackboard,vehicle_profile,base_state}.py
@@ -362,10 +363,16 @@ Adapted for our context:
 
 ### Key ROS params on `auv_manager_node`
 
-| Param | Default | Notes |
+> **Default column = `bringup.launch.py` (operator) default.** The node's *own*
+> `declare_parameter` defaults differ for two: `mode=auto` and
+> `yaw_source=mavlink_ahrs` (a bare `ros2 run duburi_manager start` gets those;
+> the launch file overrides to `pool`/`dvl` for pool use). Full param table +
+> the split: [`ros2-conventions.md`](.claude/context/ros2-conventions.md).
+
+| Param | Default (launch) | Notes |
 |---|---|---|
-| `mode` | `pool` | `pool`\|`sim`\|`auto`\|`laptop`\|`desk` (see §3) |
-| `yaw_source` | `dvl` | `dvl`\|`bno085_dvl`\|`bno085`\|`mavlink_ahrs` — also drives VehicleProfile.auto() |
+| `mode` | `pool` | `pool`\|`sim`\|`auto`\|`laptop`\|`desk` (see §3); **node default `auto`** |
+| `yaw_source` | `dvl` | `dvl`\|`bno085_dvl`\|`bno085`\|`mavlink_ahrs` — also drives VehicleProfile.auto(); **node default `mavlink_ahrs`** |
 | `dvl_auto_connect` | `true` | Background retry loop; `dvl_connect` verb for manual override |
 | `nucleus_dvl_host` | `192.168.2.201` | DVL TCP host; port `9000`, password `nortek` |
 | `bno085_port` | `auto` | ESP32-C3 HWCDC port; `auto` = VID/PID scan (303a:1001); explicit path skips scan |
@@ -592,7 +599,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `detected-paradigm.md`          | **`duburi.detected()` deep reference** — mechanics, rules, orbit trap, errors, testing, canonical templates |
 | `mission-cookbook.md`           | Mission DSL cookbook — working principles + 10 ready-to-steal samples |
 | `testing-guide.md`              | Every test: unit, bringup, mission smoke, in-water checklist        |
-| `ros2-conventions.md`           | ROS2 coding conventions + complete 27-command reference table       |
+| `ros2-conventions.md`           | ROS2 coding conventions + complete 28-verb command reference table   |
 
 **ArduSub & MAVLink:**
 
