@@ -13,6 +13,23 @@
 > [`development-board.md`](./development-board.md) — start there.** This file
 > is the resolved-bug history; the board is the dashboard.
 
+> **Yaw never settled / wobbled to TIMEOUT (FIXED 2026-06).** Pool testing on
+> the BNO heading source: `yaw_left`/`yaw_right`/`turn` reached the target but
+> wobbled and never declared locked, so every yaw command TIMEOUTed. Cause: the
+> shared settle path `_YawPID.update` in `motion_yaw.py` applied a **hard 7.5%
+> min-speed floor** (`max(YAW_SPEED_MIN_PCT, |raw|)`) at *every* error past a
+> (regression-tightened) **1° tolerance** — the Ch4 yaw rate couldn't decay near
+> target, so a 20 kg hull (+BNO/actuator latency at 10 Hz) overshot the band and
+> limit-cycled. The floor also masked the anti-stall integral. Introduced by
+> `6e9f40b` (`YAW_TOL_DEG` 2°→1° + the hard floor), surfaced only when yaw-with-BNO
+> was exercised hard (BNO didn't cause it; it widened the overshoot). **Fix:** the
+> floor now **tapers to 0 across an approach band** (`_yaw_floor`, full only outside
+> `YAW_APPROACH_BAND_DEG=6°`, →0 at tol) so the command eases in and the integral is
+> unmasked; `YAW_TOL_DEG` restored to **2°**. `heading_lock` untouched (its 50 Hz
+> continuous hold was never affected). **Pool tuning order:** confirm it *declares*
+> success → tighten `YAW_TOL_DEG`/raise rate (scale `YAW_LOCK_N`) for precision →
+> adjust band width / `YAW_KI` if it stalls in the taper zone.
+
 This file lists concrete code bugs the audit found. Every entry has:
 
 - **File + line range** so the next code sprint can jump straight in.
