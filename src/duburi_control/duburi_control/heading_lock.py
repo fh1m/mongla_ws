@@ -2,7 +2,7 @@
 """Continuous heading-lock streamer (depth-hold's yaw cousin).
 
 A ``HeadingLock`` is a daemon thread that runs a proportional
-Ch4-rate-override loop at 20 Hz against the heading read from the
+Ch4-rate-override loop at 50 Hz against the heading read from the
 configured ``YawSource`` (BNO085, AHRS, etc.). While the lock is
 active the vehicle's yaw rate is authored entirely by this loop;
 ArduSub's own compass/AHRS does not close the heading loop.

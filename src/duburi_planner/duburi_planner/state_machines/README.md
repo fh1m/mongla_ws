@@ -1,40 +1,49 @@
-# State-machine planning (reserved)
+# State-machine planning (YASMIN — BUILT)
 
-Empty stub. The eventual home for YASMIN-based mission state machines.
+The YASMIN FSM layer is **built and runnable**. It wraps the same DSL/`DuburiClient`
+surface the script missions use, so the MAVLink + control path stays uniform — each
+state is a thin adapter over a `duburi.*` verb with explicit outcomes, timeouts, and
+retries. Run a plan via the mission runner (the `fsm_*` launchers in `../missions/`):
 
-## Why empty today
+```bash
+ros2 run duburi_planner mission fsm_full_2026     # full 5-task YASMIN FSM
+ros2 run duburi_planner mission fsm_torpedo        # standalone torpedo FSM
+ros2 run duburi_planner mission gate_flare_fsm     # gate + flare (auto-detects vehicle)
+```
 
-The Python script-based missions in `../missions/` are the simplest
-thing that works for the AUV's current mission set (linear sequences
-with optional retries on a per-step basis). State machines pay off
-when:
+Full user guide (fundamentals, `VehicleProfile`, the state library, pool-day workflow,
+adding a task): [`.claude/context/fsm-guide.md`](../../../../../.claude/context/fsm-guide.md).
+Vision-guided FSM design: [`.claude/context/fsm-vision-missions.md`](../../../../../.claude/context/fsm-vision-missions.md).
 
-  * A mission has branching logic that depends on perception
-    (e.g. "if torpedo is acquired: shoot, else: search again").
-  * Multiple operators want to share, version, and visualize plans.
-  * A run is long enough that automatic recovery (retry, abort,
-    safe-mode) has to be declarative rather than threaded through
-    every script.
-
-When that day arrives, this folder will hold YASMIN states that wrap
-`DuburiClient` calls -- the same client the script missions use, so
-the MAVLink + control surface stays uniform.
-
-## Planned layout
+## Layout (as built)
 
 ```
 state_machines/
-  __init__.py                # exports build_<plan>_fsm()
+  core/
+    outcomes.py            # shared outcome constants (SUCCEED/FAIL/ABORT/...)
+    blackboard.py          # typed shared state passed between states
+    vehicle_profile.py     # VehicleProfile.auto() — DVL => Duburi 4.5, else Dubomini (timed)
+    base_state.py          # BaseState: DuburiClient adapter + abort/timeout plumbing
   states/
-    __init__.py
-    move_forward_state.py    # YasminState wrapping client.move_forward
-    yaw_state.py             # similar for yaw_left / yaw_right / arc
-    set_depth_state.py
-    lock_heading_state.py    # async: starts lock, returns immediately
+    navigation.py          # Arm / Disarm / SetDepth / LockHeading / Move{Forward,Back,Lateral} / Turn / Surface
+    vision.py              # VisionSearch / VisionAlign / VisionMove
+    utility.py             # Countdown / Pause / LogScore / SetDetector / Fire / StyleRoll
   plans/
-    __init__.py
-    qualifier_run.py         # build_qualifier_fsm() -> StateMachine
+    gate_flare.py  prequal.py  gate_then_bin.py  slalom.py
+    bin_drop.py  torpedo_fire.py  return_gate.py  full_competition.py
 ```
+
+Each `plans/<name>.py` exposes a `build_*_fsm(duburi, profile)` that assembles the
+states into a `StateMachine`; the matching `missions/fsm_*.py` launcher builds the
+profile (`VehicleProfile.auto()`) and runs it.
+
+## When to reach for the FSM vs a script mission
+
+- **Script `missions/*.py` (detected()-paradigm):** prototyping, per-subsystem unit
+  tests, linear sequences. The simplest thing that works; edit + run, no rebuild.
+- **YASMIN FSM:** competition runs needing declarative branching on perception
+  ("if torpedo acquired: fire, else: search"), explicit per-state timeout/retry/abort,
+  and dual-vehicle reuse (one plan, `VehicleProfile` picks DVL-distance vs timed moves).
 
 ## References
 
