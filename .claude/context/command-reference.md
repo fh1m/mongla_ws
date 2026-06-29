@@ -84,6 +84,9 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `vision_align` | camera→forward, target_class→'', axes→'' (≥1 of lat,yaw,depth), offset_lat/yaw/depth→0 px, err_px→40, duration→20 s, gain→30 %, gain_lat/yaw/depth→0 (inherit gain), brake_off→false (brake on), brake_gain→0 (default), hold_s→0 s, hold_through_loss→false, fire_channels→'' (none), fire_t→0 s, kp_lat→60, kp_yaw→60, kp_depth→0.05, lost_grace_s→1.0, align_stable_frames→3, **lock_target→false, ctrl_conf→0, range_gain_floor→1.0, ki_lat→0** (precision) | Centre target on lat/yaw/depth at signed pixel offsets; per-axis gain caps; lateral arrival brake; optional mid-hold payload fire (`fire_channels`/`fire_t`); precision close-in layer (`lock_target`/`ctrl_conf`/`range_gain_floor`/`ki_lat`). `err=0`=default, not zero-tolerance |
 | `vision_move` | camera→forward, target_class→'', fwd_fill→95 %, mode→area, maintain_px→0/maintain_on→false, hold_s→0 s, err_px→40, duration→20 s, gain→30 %, gain_lat→0, brake_off→false, brake_gain→0, range_gain_floor→1.0, hold_through_loss→false, kp_forward→200, kp_lat→60, lost_grace_s→1.0 | Drive forward until target's bbox fills fwd_fill% of frame |
 | `fire` | fire_channel→1.0 (1/2=torpedo, 3/4=dropper) | Fire ESP32 payload channel directly |
+| `vision_anchor_snap` | camera→forward, ref_name→'', target_class→'', conf→0.5, err_px→40 | **`lock`:** capture current view as the XFeat reference (or snap-at-detection) |
+| `vision_anchor_align` | camera→forward, err_px→20, theta_thresh→0.05, duration→30, gain→30, hold_s→0, fire_channels→'', min_inliers→0, ref_name→'' | **`lock`:** superglue the hull to the reference (lat/yaw/depth, no range); fire mid-hold |
+| `vision_anchor_clear` | camera→forward | **`lock`:** drop the stored anchor reference |
 
 ---
 
@@ -712,6 +715,24 @@ and the per-call kwargs `on_lost=`, `gate_guard=`, `pass_at=`, `dist=`,
 `metric=`, `speed=`, `settle=`, `dwell=`, `move=`, plus per-call `kp_*=`
 overrides (gains now live only as `vision.*` ROS params). `stale_after=`
 survives only on `duburi.detected(target, stale_after=1.0)`.
+
+### Anchor verbs (XFeat + LighterGlue geometric "superglue" lock — `lock` branch)
+
+Three extra `/duburi/move` verbs (present on the **`lock`** branch only; needs
+`anchor:=true` at vision launch and pre-downloaded `torch.hub` weights). They drive a
+**homography pose error** instead of a YOLO bbox, so the hull holds a fine lock **with no
+detection** (a torpedo hole up close). Full reference: [`anchor-system.md`](anchor-system.md).
+
+| Verb | DSL | Key fields | Notes |
+|---|---|---|---|
+| `vision_anchor_snap` | `vision.anchor_snap(name=, target=, conf=, err=)` | `camera`, `ref_name`, `target_class`, `conf`, `err_px` | Capture the current view as the reference (non-blocking). `ref_name` saves `references/<name>.png`; `target_class` (+`conf`/`err_px`) = snap-at-detection (wait ≤3 s, crop that bbox; whole-frame fallback). Returns `final_value` 1/0 |
+| `vision_anchor_align` | `vision.anchor_align(name=, err=, theta=, hold=, fire=, match=, gain=, …)` | `camera`, `err_px`, `theta_thresh`, `duration`, `gain`, `gain_lat/yaw/depth`, `brake_off`, `brake_gain`, `hold_s`, `fire_channels`, `min_inliers`, `ref_name` | Drive lat←`tx`, yaw←`theta` (image-roll, deadbanded on the forward cam), depth←`ty` until the live view re-superimposes on the reference within `err_px`/`theta`; `hold=`s active station-keep; `fire` once mid-hold at lock. **No forward axis** (monocular homography has no range) |
+| `vision_anchor_clear` | `vision.anchor_clear()` | `camera` | Drop the stored reference so the next snap starts fresh |
+
+- **Ch4 arbitration:** anchor always drives Ch4 (yaw from `theta`), so it **suspends** the
+  heading lock for the run and retargets it to the achieved heading on exit (like a yaw-axis
+  `vision_align`). Default-off: `anchor:=false`.
+- Sign convention is ref→live so it matches `vision_align`'s lat/depth law; swapping inverts to runaway.
 
 ---
 

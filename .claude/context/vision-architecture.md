@@ -51,6 +51,11 @@ src/duburi_vision/duburi_vision/
       depth_anything_v2_small.onnx   # DA V2-Small (not tracked in git — see .gitignore)
       README.md                      # placement, launch params, re-export instructions
       .gitignore                     # ignores *.onnx *.pt *.bin *.pth
+  anchor/                    # ★ lock branch — XFeat + LighterGlue geometric superglue lock
+    __init__.py
+    anchor_node.py           # AnchorNode: homography pose error vs a snapped reference
+                             #   subscribes image_raw; snap/clear services; anchor:=true to start
+    xfeat.py                 # XFeat sparse feature describe/match wrapper (torch.hub weights)
 config/
   cameras.yaml           # camera profiles
   detector.yaml          # model + class params
@@ -74,6 +79,13 @@ no `to_ros.py`, no `nodes/` or `viz/` subfolders. Per-user request,
 /duburi/vision/<cam>/vis_range        std_msgs/Float32MultiArray   (depth_estimation_node, one float per detection, 0=far 1=close)
 /duburi/vision/<cam>/vis_range_map    sensor_msgs/Image            (depth_estimation_node, float32 depth map, debug only)
 /duburi/vision/<cam>/image_debug      sensor_msgs/Image            (detector_node, rate-limited)
+
+# anchor_node (★ lock branch, anchor:=true) — geometric superglue lock
+/duburi/vision/<cam>/anchor_error     geometry_msgs/Vector3        (x=tx, y=ty, z=theta — homography pose error)
+/duburi/vision/<cam>/anchor_state     std_msgs/String              (IDLE | LOCKED | LOST)
+/duburi/vision/<cam>/anchor_conf      std_msgs/Float32             (RANSAC inlier count)
+/duburi/vision/<cam>/anchor_ref       sensor_msgs/Image            (stored reference, debug)
+# services:  …/anchor_snap (duburi_interfaces/AnchorRef)   …/anchor_clear (std_srvs/Trigger)
 ```
 
 `/classes_filter` is published once at `detector_node` startup with the initial `classes` param,

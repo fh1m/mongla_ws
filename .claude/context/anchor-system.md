@@ -268,5 +268,8 @@ never auto-spawns nodes).
 
 Background "superglue streamer" (persistent Ch6+Ch4+depth like heading_lock →
 fire-many-while-glued, `vision.move(sticky=True)`); descriptor-cached refs (vs PNG);
-snap-at-detection (`anchor_snap(target=, conf=, err=)` cropping the perfectly-aligned
-moment); full downward-camera sign re-derivation.
+full downward-camera sign re-derivation.
+
+> **Already built (was once backlog):** snap-at-detection
+> (`anchor_snap(target=, conf=, err=)` crops the detection's bbox at the
+> aligned moment — see §2 / §4b) shipped on `lock`; it is no longer pending.
