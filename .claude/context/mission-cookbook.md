@@ -403,8 +403,12 @@ duburi.vision.move('blood', fwd=30, mode='height', hold=2.0)       # close in, h
 
 #### The `VisionResult` it returns
 
-Both verbs return `VisionResult(ok, reason, code, last_err_px, fill)`,
-**truthy only when the goal was achieved**, so you branch on it directly:
+Both verbs return `VisionResult(ok, reason, code, last_err_px, fill, x_px, y_px,
+saw_target, elapsed_s)`, **truthy only when the goal was achieved** — but also
+carrying **where/how it ended** (`x_px`/`y_px` signed target-from-centre px, `NaN`
+if never seen; `saw_target`) so a missed align can run tested open-loop recovery
+(the hybrid vision+control paradigm — full guide: [`vision-results.md`](vision-results.md)).
+You branch on it directly:
 
 ```python
 # yaw_gain low -> slow, stable yaw so the 20 kg hull holds the hole steady to fire.
