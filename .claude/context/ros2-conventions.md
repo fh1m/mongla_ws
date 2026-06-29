@@ -180,7 +180,11 @@ the active station-keep `hold_s`, **mid-hold fire** `fire_channels`/`fire_t`, th
 **precision** knobs `lock_target`/`ctrl_conf`/`range_gain_floor`/`ki_lat`, and the
 tuning fields `kp_lat`/`kp_yaw`/`kp_depth`/`lost_grace_s`/`align_stable_frames`/
 `hold_through_loss`; `vision_move` also takes `gain_lat`, `brake_off`/`brake_gain`,
-`range_gain_floor`, `kp_forward`/`kp_lat`/`lost_grace_s`/`hold_through_loss`. The control loop reads
+`range_gain_floor`, `kp_forward`/`kp_lat`/`lost_grace_s`/`hold_through_loss`. On the **`lock`**
+branch, three **anchor** verbs `vision_anchor_snap` / `vision_anchor_align` / `vision_anchor_clear`
+add a geometric XFeat+LighterGlue superglue lock (homography pose error, no YOLO bbox) — see
+[`anchor-system.md`](anchor-system.md) and [`command-reference.md`](command-reference.md) §9.
+The control loop reads
 `/duburi/vision/<cam>/detections` directly; the tracker's `/tracks` feeds
 the HUD only (no `--tracking` flag). The standalone `fire` verb
 (`fire_channel`: 1/2=torpedo, 3/4=dropper) actuates payloads — there is no

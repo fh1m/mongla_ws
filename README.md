@@ -391,6 +391,19 @@ def sweep(duburi, should_stop):          # pure-control search; bails the moment
         duburi.yaw_right(15); duburi.pause(0.4)
 ```
 
+**Anchor "superglue" lock (`lock` branch only).** Three extra verbs hold a fine geometric
+lock with **no YOLO bbox** — XFeat + LighterGlue homography against a snapped reference (the
+torpedo hole up close). Launch vision with `anchor:=true`:
+
+```python
+duburi.vision.anchor_snap('hole', target='hole', conf=0.6)   # crop the detection as the reference
+res = duburi.vision.anchor_align('hole', err=15, hold=4, fire=[1])  # re-superimpose + fire mid-hold
+duburi.vision.anchor_clear()
+```
+
+It drives lat←`tx`, yaw←`theta`, depth←`ty` (no forward axis — monocular has no range) and
+suspends the heading lock for the run. Full guide: [`anchor-system.md`](.claude/context/anchor-system.md).
+
 ## Detection, models & the `detected()` paradigm
 
 | DSL call | Does |
@@ -525,6 +538,7 @@ VisionSearch/VisionAlign/VisionMove · **utility** = Countdown/Pause/LogScore/Se
 | Detector | `ros2 run duburi_vision detector_node --ros-args -p camera:=forward` | `ros2 topic hz …/detections` (~15-25) |
 | Tracker | `ros2 run duburi_vision tracker_node --ros-args -p camera:=forward` | `ros2 topic hz …/tracks` |
 | Depth (vis_range) | `ros2 run duburi_vision depth_estimation_node --ros-args -p camera:=forward` | `ros2 topic echo …/vis_range` |
+| Anchor (XFeat lock, `lock`) | `ros2 run duburi_vision anchor_node --ros-args -p camera:=forward` (or launch `anchor:=true`) | `…/anchor_state` after a snap |
 | HUD viewer | `ros2 run duburi_vision vision_display --ros-args -p camera:=forward` | OpenCV window |
 | Full stack | `ros2 launch duburi_manager bringup.launch.py vision:=true` | banner + `/duburi/state` |
 

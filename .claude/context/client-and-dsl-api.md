@@ -271,15 +271,25 @@ duburi.log_scoreboard(json_path='/tmp/run.json')  # + write to explicit path
 
 ### Vision verbs (`duburi.vision.*`)
 
-`duburi.vision` is a `_VisionDSL` sub-namespace with **exactly two**
-pixel-native verbs. Both block until they reach their goal, time out, or
-exhaust their `duration` budget, and **neither ever raises** — each
-returns a [`VisionResult`](#visionresult) and the mission keeps running.
+`duburi.vision` is a `_VisionDSL` sub-namespace with the **two** pixel-native
+verbs (plus three **anchor** verbs on the `lock` branch). Both pixel verbs block
+until they reach their goal, time out, or exhaust their `duration` budget, and
+**neither ever raises** — each returns a [`VisionResult`](#visionresult) and the
+mission keeps running.
 
 | Verb | What it does |
 |------|--------------|
-| `vision.align(target, *, lat=, yaw=, depth=, hold=, ...)` | Centre `target` on the named axes, each at a signed **pixel offset** from frame centre. `hold=`s = **active station-keep**: keep correcting on-target for `hold` s before exiting (holds the hull steady for a torpedo/dropper shot); counts against `duration`; lat/yaw/depth only, not range. |
+| `vision.align(target, *, lat=, yaw=, depth=, hold=, lock_on=, ...)` | Centre `target` on the named axes, each at a signed **pixel offset** from frame centre. `hold=`s = **active station-keep**: keep correcting on-target for `hold` s before exiting (holds the hull steady for a torpedo/dropper shot); counts against `duration`; lat/yaw/depth only, not range. `lock_on=True` = precision continuity lock. |
 | `vision.move(target, *, fwd=, mode=, ...)` | Drive forward until `target`'s bbox fills `fwd` % of the frame. Never re-centres yaw/depth. |
+| `vision.anchor_snap(name=, target=, conf=, err=)` | **`lock`:** capture the current view as the XFeat reference (or snap-at-detection). → `bool` |
+| `vision.anchor_align(name=, err=, theta=, hold=, fire=, match=, …)` | **`lock`:** superglue the hull to the reference (lat←tx, yaw←theta, depth←ty; no range) until within `err`/`theta`; `hold=` station-keep; `fire` once mid-hold. → `VisionResult` |
+| `vision.anchor_clear()` | **`lock`:** drop the stored anchor reference. → `bool` |
+
+> The anchor verbs drive a **homography pose error** (XFeat + LighterGlue), so they
+> hold a fine lock **with no YOLO bbox** (a torpedo hole up close). They wire the
+> extra `Move.Goal` fields `theta_thresh`, `min_inliers`, `ref_name`, `conf` and need
+> `anchor:=true` at vision launch + pre-downloaded `torch.hub` weights. Full reference:
+> [`anchor-system.md`](anchor-system.md).
 
 #### `vision.align` — centre on lat / yaw / depth
 

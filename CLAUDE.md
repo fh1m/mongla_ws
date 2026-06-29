@@ -213,7 +213,8 @@ duburi_ws/src/
     │   ├── detection/{detector,yolo,gpu,messages}.py
     │   ├── tracking/             # ByteTrack + Kalman smoother
     │   ├── depth/depth_estimation_node.py   # ONNX Depth Anything V2-Small + bbox fallback
-    │   └── utils/{check_pipeline,check_thrust}.py
+    │   ├── anchor/{anchor_node,xfeat}.py     # ★ lock — XFeat+LighterGlue superglue lock (anchor:=true)
+    │   └── utils/{check_pipeline,check_thrust,check_tracker,display_node,export_engine}.py
     ├── config/{cameras,detector}.yaml
     ├── models/                   # *.pt weights (gitignored) + committed class-index YAMLs
     └── launch/{vision,vision_dual,video}.launch.py  # 1-cam + 2-cam live + 2-cam dataset-video preset; detector node = duburi_detector_<camera>
@@ -599,7 +600,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `detected-paradigm.md`          | **`duburi.detected()` deep reference** — mechanics, rules, orbit trap, errors, testing, canonical templates |
 | `mission-cookbook.md`           | Mission DSL cookbook — working principles + 10 ready-to-steal samples |
 | `testing-guide.md`              | Every test: unit, bringup, mission smoke, in-water checklist        |
-| `ros2-conventions.md`           | ROS2 coding conventions + complete 28-verb command reference table   |
+| `ros2-conventions.md`           | ROS2 coding conventions + complete command reference table (28 verbs; 31 with the `lock` anchor verbs) |
 
 **ArduSub & MAVLink:**
 
