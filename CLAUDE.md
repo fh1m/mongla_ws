@@ -288,6 +288,7 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 | `duburi.mission_reset()` | **Call at start of every `run()`.** Stops heading lock, clears `_abort_event`, sends RC neutral. Safe before arm (`_UNARM_SAFE`). Prevents state carry-over across back-to-back pool runs. |
 
 **RC direction (current Duburi hull, pool-verified 2026-06):** Ch4 > 1500 = yaw RIGHT; Ch5 > 1500 = forward; Ch6 > 1500 = strafe RIGHT. (The 2023 reference hull was RC4-reversed — Ch4 > 1500 = LEFT there; polarity is an `RC4_REVERSED`/frame-config property, so re-confirm per hull with a bare `Ch4=1600` check. `heading_lock`/`motion_yaw` are polarity-correct regardless — they derive Ch4 sign from `heading_error` math, never from this label.)
+**Yaw settle (`yaw_left/right/turn`):** `motion_yaw._YawPID` closes Ch4 on `yaw_source` (BNO) with a stiction-breaking speed floor that **tapers to 0 across an approach band** (`YAW_APPROACH_BAND_DEG`) so the hull eases into the `YAW_TOL_DEG` (2°) lock instead of limit-cycling on a hard floor. If yaw wobbles/TIMEOUTs on pool day, tune in this order: confirm it declares locked → tighten `YAW_TOL_DEG` for precision → adjust band / `YAW_KI`. See [`known-issues.md`](.claude/context/known-issues.md) (yaw-wobble entry). `heading_lock` is a separate 50 Hz continuous hold.
 **Heartbeat:** owned by `auv_manager_node` ROS2 timer — do not roll your own.
 **Stream rates:** pinned at startup via `MAV_CMD_SET_MESSAGE_INTERVAL` (AHRS2=50 Hz, RC=5 Hz, BAT=1 Hz).
 
