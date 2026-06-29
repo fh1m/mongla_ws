@@ -9,11 +9,18 @@ still works when yaw_source is None.
 """
 
 import logging
+import math
 import time
 
 import pytest
 
-from duburi_control.heading_lock import HeadingLock
+from duburi_control.heading_lock import (
+    HeadingLock,
+    _lock_floor, _lock_command,
+    LOCK_DEADBAND_DEG, LOCK_APPROACH_BAND_DEG,
+    LOCK_SPEED_MIN_PCT, LOCK_PCT_MAX, LOCK_KP_PCT_PER_DEG,
+)
+from duburi_control.pixhawk import Pixhawk
 
 
 class ThrottleLogger:
@@ -207,3 +214,115 @@ def test_heading_lock_works_with_no_yaw_source():
 
     assert _yaw_packets(pixhawk), (
         'lock must emit Ch4 packets even without an external yaw_source')
+
+
+# =========================================================================== #
+#  Tapered stiction floor (2026-06 align-jitter fix)                           #
+#                                                                              #
+#  The HARD min-PWM floor was a relay on the Ch4 yaw RATE: holding a still hull #
+#  it barely fired (error in the deadband), but rejecting the continuous yaw    #
+#  moment a lat-only vision_align induces it kicked >=5% every tick -> overshoot #
+#  -> sign flip -> limit-cycle = the align-yaw jitter. The floor now tapers to 0 #
+#  at the deadband edge (mirror of the motion_yaw `ab2014f` fix). `_lock_floor`  #
+#  / `_lock_command` are pure, so this needs no thread.                         #
+# =========================================================================== #
+def _approx(x, tol=1e-6):
+    class _A:
+        def __eq__(_s, other): return abs(other - x) <= tol
+        def __repr__(_s): return f"~{x}"
+    return _A()
+
+
+def test_floor_full_outside_band():
+    assert _lock_floor(LOCK_APPROACH_BAND_DEG) == LOCK_SPEED_MIN_PCT
+    assert _lock_floor(LOCK_APPROACH_BAND_DEG + 45.0) == LOCK_SPEED_MIN_PCT
+
+
+def test_floor_zero_at_deadband_edge():
+    # The fix: at the deadband edge the floor is ~0 so the command decays to a
+    # stop instead of relay-bouncing at the hard 5% floor.
+    assert _lock_floor(LOCK_DEADBAND_DEG) == 0.0
+
+
+def test_floor_monotonic_linear_in_band():
+    mid = 0.5 * (LOCK_DEADBAND_DEG + LOCK_APPROACH_BAND_DEG)
+    f_mid = _lock_floor(mid)
+    assert 0.0 < f_mid < LOCK_SPEED_MIN_PCT
+    assert f_mid == _approx(LOCK_SPEED_MIN_PCT * 0.5)
+
+
+def test_command_inside_deadband_is_zero():
+    assert _lock_command(0.0) == 0.0
+    assert _lock_command(LOCK_DEADBAND_DEG - 0.01) == 0.0
+    assert _lock_command(-(LOCK_DEADBAND_DEG - 0.01)) == 0.0
+
+
+def test_command_near_edge_decays_not_pinned_to_floor():
+    # THE regression guard. Just outside the deadband the command must be SMALL
+    # (P with ~0 floor), NOT pinned at the old hard 5% floor.
+    out = abs(_lock_command(LOCK_DEADBAND_DEG + 0.2))
+    assert out < LOCK_SPEED_MIN_PCT, (
+        f"near-edge command {out:.2f}% must decay below the {LOCK_SPEED_MIN_PCT}% "
+        "floor, not be pinned to it (the relay limit-cycle)")
+
+
+def test_command_large_error_floored_and_capped():
+    assert _lock_command(180.0) == _approx(LOCK_PCT_MAX)
+    assert abs(_lock_command(LOCK_APPROACH_BAND_DEG + 1.0)) >= LOCK_SPEED_MIN_PCT - 1e-9
+
+
+def test_command_sign_follows_error():
+    assert _lock_command(30.0) > 0
+    assert _lock_command(-30.0) < 0
+
+
+# ---- Closed-loop toy plant: taper rejects disturbance with a small dither --- #
+def _simulate(command_fn, *, start=4.0, target=0.0, disturbance_dps=2.0,
+              steps=800, dt=0.05, gain_dps_per_pct=4.0, latency=1):
+    """Kinematic yaw plant under a CONSTANT yaw disturbance (the lateral-thrust
+    moment a strafing align injects). Heading integrates commanded rate + the
+    disturbance with one tick of latency. Returns the heading-error history.
+    """
+    heading = start
+    pending = [0.0] * max(1, latency)
+    hist = []
+    for _ in range(steps):
+        err = Pixhawk.heading_error(target, heading)
+        cmd = command_fn(err)
+        applied = pending.pop(0)
+        pending.append(cmd)
+        heading = (heading
+                   + (applied * gain_dps_per_pct + disturbance_dps) * dt) % 360.0
+        hist.append(Pixhawk.heading_error(target, heading))
+    return hist
+
+
+def _peak_to_peak(hist, window=200):
+    tail = hist[-window:]
+    return max(tail) - min(tail)
+
+
+def _hard_floor_command(error):
+    """The OLD hard-floor law (pins the fix to the mechanism)."""
+    if abs(error) <= LOCK_DEADBAND_DEG:
+        return 0.0
+    speed = max(LOCK_SPEED_MIN_PCT,
+                min(LOCK_PCT_MAX, abs(error) * LOCK_KP_PCT_PER_DEG))
+    return math.copysign(speed, error)
+
+
+def test_tapered_law_holds_within_small_band():
+    hist = _simulate(_lock_command)
+    worst = max(abs(e) for e in hist[-200:])
+    assert worst < 4.0, (
+        f"tapered law should hold heading within a small band under a steady "
+        f"disturbance; last200 max|err|={worst:.2f}")
+
+
+def test_tapered_law_dithers_less_than_hard_floor():
+    soft = _peak_to_peak(_simulate(_lock_command))
+    hard = _peak_to_peak(_simulate(_hard_floor_command))
+    assert hard > soft + 0.5, (
+        f"hard-floor peak-to-peak {hard:.2f} must exceed tapered {soft:.2f} by a "
+        "clear margin -- the relay limit-cycle the taper removes (if not, the toy "
+        "plant no longer reproduces the bug)")

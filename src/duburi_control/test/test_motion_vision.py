@@ -217,6 +217,29 @@ def test_align_seen_then_lost_says_lost_not_never():
     assert 'lost' in out.reason and 'NEVER' not in out.reason
 
 
+def test_align_err_below_floor_still_completes():
+    # An over-tight positive err must be clamped to MIN_ALIGN_ERR_PX so the loop
+    # can converge on bbox-jitter-sized residual instead of perpetually TIMEOUTing.
+    # ex=0.01 on a 640px frame -> ~3.2px residual: above err=1 (would never lock)
+    # but inside the 5px floor -> ALIGNED.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.01)), axes={'lat'},
+                       kp_lat=60.0, gain=30.0, err_px=1.0, duration=1.0)
+    assert out.code == ALIGNED, (
+        f'err below MIN_ALIGN_ERR_PX must be floored so a ~3px residual locks; '
+        f'got {out.code} ({out.reason})')
+    assert '/5px' in out.reason, (
+        f'success line must state the effective deadband, got {out.reason!r}')
+
+
+def test_align_err_above_floor_is_honored():
+    # A tight-but-achievable err (8px) is NOT floored: a 3px residual locks and
+    # the reason states the real 8px deadband.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.01)), axes={'lat'},
+                       kp_lat=60.0, gain=30.0, err_px=8.0, duration=1.0)
+    assert out.code == ALIGNED
+    assert '/8px' in out.reason, f'expected the honored 8px deadband, got {out.reason!r}'
+
+
 def test_align_release_yaw_writes_translation_not_ch4():
     # When the heading lock owns Ch4, a lat-only align must drive lateral via
     # send_rc_translation and never write Ch4 through send_rc_override.
@@ -617,22 +640,20 @@ def test_brake_reads_post_decay_command():
 
 
 def test_align_operator_line_format():
-    # Output-level pin on the shared align-line shape -- signed lat px, the
-    # class, and the "center -> (0,0)" target. The detector node owns the
-    # always-on operator copy; this per-verb copy is emitted at debug (so it
-    # doesn't duplicate the detector line in the mission terminal), but the
-    # format string is shared, so this remains the regression pin for its shape.
+    # Output-level pin on the per-verb bearing line: signed lat px + class +
+    # residual/deadband. Worded 'offset ... -> err N/Mpx' (NOT "aligned") so it
+    # never reads as a verdict; the detector node owns the always-on copy.
     log = _CapLog()
     # ex=0.5 on a 640px frame -> +160px to the right of centre; never reaches
-    # the err band, so the loop logs the operator line and times out.
+    # the err band, so the loop logs the offset line and times out.
     align_loop(pixhawk=_FakePixhawk(), vision_state=_FakeVision(_sample(ex=0.5)),
                target_class='gate', axes={'lat'}, offsets={}, err_px=10.0,
                duration=0.3, gain=30.0, kp_lat=60.0,
                writers=_FakeWriters(), log=log, abort_fn=None)
-    line = next((m for m in log.debugs if m.startswith('[ align')), None)
-    assert line is not None, f'expected an operator align line, got {log.debugs}'
+    line = next((m for m in log.debugs if m.startswith('[ offset')), None)
+    assert line is not None, f'expected an operator offset line, got {log.debugs}'
     assert 'lat=+160' in line, f'expected signed lat px in {line!r}'
-    assert "['gate']" in line and 'center -> (0,0)' in line, f'bad format: {line!r}'
+    assert "'gate'" in line and '/10px' in line, f'bad format: {line!r}'
 
 
 # --------------------------------------------------------------------------- #

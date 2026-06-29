@@ -132,6 +132,17 @@ VISION_I_LAT_MAX = 15.0   # |lateral integral| clamp, % thrust
 # between ticks). Acquisition (no prior centre) stays largest-area.
 VISION_LOCK_GATE_NORM = 0.30   # max normalized centre jump to stay locked
 
+# --- Minimum achievable deadband ------------------------------------------- #
+# A 20 kg hull on open-loop Ch6 thrust against a bbox that itself jitters a few
+# px per frame cannot hold a literal 0 px error -- and `err=0` from the operator
+# means "use the default" anyway (the rosidl-0 = unset live-tuning convention in
+# commands.fields_for, NOT a literal zero deadband). So clamp the EFFECTIVE
+# deadband to this floor: an over-tight POSITIVE err (e.g. err=1) still completes
+# instead of perpetually TIMEOUTing on noise it can never satisfy. The align
+# entry log prints the effective value so a floor is never silent. Pool-tunable
+# to the detector's real per-frame bbox jitter.
+MIN_ALIGN_ERR_PX = 5.0
+
 # Freshness-decay of the translational command. The loop runs at VISION_LOOP_HZ
 # (20 Hz) but the detector may publish far slower (3-4 Hz when inference-bound),
 # so the same bbox error is re-used for several ticks. Re-commanding the same P
@@ -446,11 +457,18 @@ def align_loop(*,
                          #   "never detected" (wrong model/classes/view) from
                          #   "seen but couldn't converge" at exit.
 
-    log.debug(
+    # Effective deadband: clamp to a physical floor so an over-tight err can't
+    # perpetually TIMEOUT on bbox jitter. err_px here is already post-coercion
+    # (commands.fields_for turned a rosidl-0 "unset" into the default/param), so
+    # this only ever floors a genuinely tiny positive request -- logged, never
+    # silent, so 'aligned (Npx)' is always read against the real deadband.
+    eff_err = max(float(err_px), MIN_ALIGN_ERR_PX)
+    floored = eff_err > float(err_px)
+    log.info(
         f"[VIS  ] align class={target_class!r} axes={sorted(axes)} "
-        f"offsets={ {k: round(v) for k, v in offsets.items()} } "
-        f"err={err_px:.0f}px gain={gain:.0f}% dur={duration:.0f}s "
-        f"hold={hold_s:.0f}s hold_thru_loss={hold_through_loss}")
+        f"err={eff_err:.0f}px"
+        f"{' (floored from %.0f)' % err_px if floored else ''} "
+        f"gain={gain:.0f}% dur={duration:.0f}s hold={hold_s:.0f}s")
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
@@ -538,7 +556,7 @@ def align_loop(*,
                     lat_i = _clamp(lat_i + ki_lat * ctrl * dt,
                                    -i_lat_max, i_lat_max)
                 lat_pct = _clamp(p_lat + lat_i, -g_lat, g_lat)
-                in_band.append(epx <= err_px)
+                in_band.append(epx <= eff_err)
 
             if 'yaw' in axes:
                 ctrl = sample.ex - offsets.get('yaw', 0.0) / half_w
@@ -554,14 +572,14 @@ def align_loop(*,
                 # floor is suppressed: a hard minimum on a rate channel is a
                 # relay that limit-cycles the hull, which is the far-field
                 # wobble. See VISION_YAW_FLOOR_FILL.
-                if epx <= err_px:
+                if epx <= eff_err:
                     yaw_pct = 0.0
                 else:
                     mag = min(abs(ctrl * kp_yaw), g_yaw)
                     if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
                         mag = max(mag, min(VISION_YAW_MIN_PCT, g_yaw))
                     yaw_pct = math.copysign(mag, ctrl)
-                in_band.append(epx <= err_px)
+                in_band.append(epx <= eff_err)
 
             if use_depth:
                 ctrl = sample.ey - offsets.get('depth', 0.0) / half_h
@@ -570,7 +588,7 @@ def align_loop(*,
                 step = _clamp(ctrl * kp_depth * rgain,
                               -max_nudge, max_nudge) * depth_sign
                 depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
-                in_band.append(epx <= err_px)
+                in_band.append(epx <= eff_err)
 
             last_err_px = worst
             # Freshness-decay: pace LATERAL authority to measurement freshness so
@@ -625,8 +643,12 @@ def align_loop(*,
                         _brake_axis(writers.lateral, lat_ema, brake_gain,
                                     abort_fn=abort_fn, log=log, label='VBRK')
                     writers.neutral()
-                    reason = (f"held {hold_s:.1f}s ({worst:.0f}px)" if hold_s > 0.0
-                              else f"aligned ({worst:.0f}px)")
+                    # State the deadband next to the residual so 'aligned
+                    # (Npx)' is never misread as "should have been 0" -- N is
+                    # within the eff_err deadband by construction.
+                    reason = (f"held {hold_s:.1f}s ({worst:.0f}/{eff_err:.0f}px)"
+                              if hold_s > 0.0
+                              else f"aligned ({worst:.0f}/{eff_err:.0f}px)")
                     return Outcome(ALIGNED, reason, worst, 0.0, elapsed,
                                    end_x_px, end_y_px)
                 # else: inside the hold window -- fall through to the loop tail
@@ -639,17 +661,14 @@ def align_loop(*,
                 # "fix" this to match move.
 
             if (now - last_log) >= LOG_THROTTLE_S:
-                # The detector node owns the always-on operator alignment line
-                # (same format, against the loaded class, regardless of verb), so
-                # this per-verb copy is demoted to debug to avoid a duplicate
-                # line in the mission terminal.
+                # The detector node owns the always-on operator bearing line, so
+                # this per-verb copy is demoted to debug to avoid a duplicate in
+                # the mission terminal. Worded as live offset, not a verdict.
                 x_off = sample.ex * half_w
                 y_off = sample.ey * half_h
-                cx    = half_w + x_off
-                cy    = half_h + y_off
                 log.debug(
-                    f"[ align lat={x_off:+.0f} depth={y_off:+.0f}px ] "
-                    f"({cx:.0f},{cy:.0f}) align ['{target_class}'] center -> (0,0)")
+                    f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
+                    f"'{target_class}' -> err {worst:.0f}/{eff_err:.0f}px")
                 last_log = now
             time.sleep(1.0 / LOOP_HZ)
     finally:
