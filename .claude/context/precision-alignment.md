@@ -1,0 +1,198 @@
+# Precision terminal alignment — hold steady & don't miss the hole
+
+> **Status:** BUILT on `main`. Every knob is **opt-in** — an un-tuned run behaves
+> exactly like before (`range_gain_floor=1.0`, `ki_lat=0`, `ctrl_conf=0`,
+> `lock_on=False`). Turn them on per the pool runbook in §6.
+
+This is the operator guide for the close-in robustness layer added after the
+2026-06 torpedo testing. It fixes the two failure modes that cost the shot:
+
+1. **Last-moment misclassification** — just before firing, the detector makes a
+   *different* box the control target (a second hole on the board, or a spurious
+   box), the hull yaws/strafes to it, and the torpedo misses.
+2. **Can't hold a 20 kg hull still on the hole** — the AUV oscillates / overshoots
+   the small target at the 0.72 m standoff, and a steady pool current pushes it
+   off-centre.
+
+They generalise to every close-in task (torpedo, bins, gate-through). All of this
+is YOLO-bbox control on `main` — it is **not** the anchor/XFeat lock (that's a
+separate `lock`-branch tool; see [`anchor-system.md`](anchor-system.md)).
+
+---
+
+## 1. Why it happens (one paragraph each)
+
+**Misclassification.** The control loop picks the **largest-area box matching the
+class** every tick from raw `/detections` (`VisionState.bbox_error`). It has no
+memory and no score gate, so a torpedo board with **two holes** (both class
+`hole`) lets "largest wins" flip between openings, and a one-frame spurious box is
+steered toward immediately — during the `hold` window that's a nudge right before
+the shot.
+
+**Can't hold still.** The law is P-control on *normalized* pixel error, so the
+image shift per unit hull motion grows ~`1/range` (~ bbox fill). A `kp` that's
+critically damped far away is **over-gained up close** → the heavy hull
+oscillates. And the lateral axis (Ch6) is open-loop thrust with no downstream
+position hold, so a steady current leaves a standing offset pure-P can't null.
+
+---
+
+## 2. The knobs (what each one does)
+
+| Knob | Where you set it | Default (off) | Fixes | What it does |
+|---|---|---|---|---|
+| `lock_on=True` | **per-call** on `vision.align(...)` | `False` | misclass | Once the target is acquired, steer to the box **nearest the last-accepted centre** (within a gate), not the largest — a 2nd hole / spurious box can't steal the aim. Resets to largest-area acquisition after a real loss. |
+| `vision.ctrl_conf` | **ROS param** (deck) | `0.0` | misclass | Control-side **minimum detection score** to accept a box as the target. Distinct from the detector's global `conf`: gates only what the *control loop* steers on. |
+| `vision.range_gain_floor` | **ROS param** (deck) | `1.0` | overshoot | Scales **lat/depth** kp **down** as the bbox fills the frame (close). `1.0` = off; `~0.3` = gentle close-in. Applies to `align` and `move`'s `maintain`. |
+| `vision.ki_lat` | **ROS param** (deck) | `0.0` | current drift | **Lateral** integral gain; cancels the steady-current offset, accumulated **only during the hold**, clamped, frozen on saturation, reset on loss. **Lateral only** by design. |
+
+**Why those axis choices** (don't "fix" them):
+- The integral is **lateral-only**. Yaw is a Ch4 *rate* (ArduSub's rate loop
+  already integrates → an I-term double-integrates/winds up); depth is ALT_HOLD
+  (its own integral). Only open-loop Ch6 lateral has a true steady-state offset.
+- The range-gain softening **excludes yaw** — near-field yaw has a separate
+  stiction *floor* that deliberately *adds* authority; and at the hole we hand
+  yaw to `heading_lock` entirely (see §4).
+
+Code-tunable constants (rarely touched; edit `motion_vision.py` if a target
+legitimately moves faster than the gate or the ramp window is wrong):
+`VISION_RANGE_GAIN_FILL_LO=0.25`, `VISION_RANGE_GAIN_FILL_HI=0.60`,
+`VISION_I_LAT_MAX=15.0`, `VISION_LOCK_GATE_NORM=0.30`.
+
+---
+
+## 3. How to enable it in a mission
+
+`lock_on` is a **per-call** argument (a structural choice — which phase needs the
+lock); the gain/conf/integral knobs are **deck ROS params** (tuning values you
+dial in water). Keep them separate: the mission says *what to do*, the params say
+*how hard*.
+
+```python
+# Terminal hole lock: lat+depth only (yaw delegated to heading_lock, see §4),
+# continuity lock ON so a 2nd hole can't steal the aim, fire MID-HOLD.
+duburi.set_classes('hole', node='/duburi_detector_forward')
+res = duburi.vision.align(
+    'hole', camera='forward',
+    lat=0, depth=0,              # NO yaw -> heading_lock holds Ch4
+    err=15, gain=12, duration=25,
+    lock_on=True,               # continuity lock (misclass fix)
+    hold=4, fire=1, fire_t=1,   # station-keep + mid-hold torpedo
+    brake=False)                # never brake on a fire-from-lock
+```
+
+Tuning is live from the deck and applies on the **next** goal — no mission edit,
+no restart:
+
+```bash
+ros2 param set /duburi_manager vision.range_gain_floor 0.35   # soften close-in gain
+ros2 param set /duburi_manager vision.ctrl_conf        0.55   # reject low-score boxes
+ros2 param set /duburi_manager vision.ki_lat           0.4    # null steady current
+```
+
+You can also branch on the rich result (see [`vision-results.md`](vision-results.md)):
+
+```python
+if not res and res.saw_target and res.x_px > 30:
+    duburi.move_right(1)        # ended off to the right -> nudge, then retry/fire
+```
+
+---
+
+## 4. The phased pattern (state-machine framing)
+
+Compose the verbs into three phases — this is how the fixes work together:
+
+```
+COARSE   align('torpedo', yaw=0, lat=0, depth=0)        # all axes: square up + null heading
+   |     lock_heading()                                 # hand heading to the background lock
+APPROACH move('blood', fwd=.., mode='height')           # drive in; heading held by the lock
+   |
+TERMINAL align('hole', lat=0, depth=0, lock_on=True,    # lat+depth only -> Ch4 owned by lock
+                hold=4, fire=1, fire_t=1, brake=False)  # steady, no yaw wobble, fire mid-hold
+   |     unlock_heading()
+```
+
+**Why omit `yaw` at the hole.** An `align` call that does **not** include the
+`yaw` axis, **while a heading lock is active**, automatically leaves the lock
+driving Ch4 (the verb takes the `release_yaw` path and writes lateral via
+`send_rc_translation`). So heading is held by the steady `heading_lock` P-loop
+instead of the vision-yaw relay that limit-cycles a heavy hull up close. **Null
+the heading during COARSE, then `lock_heading()` before the terminal phase** so
+the lock captures the right heading. **The lock must be ACTIVE for this to work:**
+`lock_heading()` activates immediately only when the vehicle is **armed** (mid-
+mission, after `set_depth`/`align`/`move`, it is). If you script it from a disarmed
+state, activation is *deferred* to the first armed command — then a yaw-less
+`align` would briefly hold heading via neither lock nor vision. The reference
+mission is
+[`missions/task_torpedo.py`](../../src/duburi_planner/duburi_planner/missions/task_torpedo.py).
+
+---
+
+## 5. What NOT to do
+
+- **Don't enable `ki_lat` before damping the loop.** An integral on an
+  under-damped (oscillating) loop makes it *worse*. Order: tune
+  `range_gain_floor` until the close-in oscillation stops, *then* raise `ki_lat`.
+- **Don't keep `yaw` in the terminal `align`** if you want heading held by the
+  lock — including the yaw axis *suspends* the heading lock and re-introduces the
+  Ch4 vision-yaw wobble. Pick one owner of Ch4.
+- **Don't set `range_gain_floor=0`.** `0` is the "unset" sentinel (→ falls back to
+  the param/`1.0`); a true 0 would kill lat/depth authority up close anyway.
+  Use `~0.3` for gentle, `1.0` for off.
+- **Don't use `lock_on` for far-field acquisition / search.** It's for *after*
+  you've acquired the target; during search you want largest-area + the
+  mission's `fallback`. Turn it on only for the terminal lock.
+- **Don't rely on `ctrl_conf` to fix two *real* holes** — both are
+  high-confidence, so a conf floor won't separate them. That's exactly what
+  `lock_on` (nearest-to-last) is for. Conf floors fix *low-score flickers*.
+- **Don't fire on `align`-then-`fire`** for a tight target — use the mid-hold
+  `fire=`/`fire_t=` (the gap between a finished align and a separate fire drifts
+  the hull off the hole). See [`vision-results.md`](vision-results.md) §4.
+
+---
+
+## 6. Pool runbook (cheapest rung first)
+
+1. **Misclassification — try the free fix first.** Raise the **detector** global
+   conf and see if the wrong box stops appearing:
+   ```bash
+   ros2 param set /duburi_detector_forward conf 0.6     # or duburi.set_conf(0.6) in a mission
+   ```
+   If that fixes it, you're done. If it *persists*, the bad box is
+   high-confidence (a genuine second hole) → enable the **control-side** floor and
+   the continuity lock:
+   ```bash
+   ros2 param set /duburi_manager vision.ctrl_conf 0.55
+   ```
+   and run the terminal align with `lock_on=True` (mission already does).
+2. **Overshoot / can't hold still — damp first.** Lower the close-in gain until
+   the hull stops oscillating on the hole:
+   ```bash
+   ros2 param set /duburi_manager vision.range_gain_floor 0.35   # try 0.5 -> 0.3
+   ```
+3. **Steady drift under current — integral last.** Only after step 2 is stable:
+   ```bash
+   ros2 param set /duburi_manager vision.ki_lat 0.4             # raise slowly
+   ```
+4. **Terminal phase check.** With `lock_heading` engaged and a yaw-less terminal
+   `align`, confirm Ch4 is steady (no vision-yaw wobble) and the hull holds within
+   `err` for the hold while the torpedo leaves mid-hold.
+
+All four params are read fresh on every new goal, so tune between attempts without
+restarting anything.
+
+---
+
+## 7. Other tasks
+
+- **Bins (downward cam):** same pattern — `align('fire', lat=0, depth=0,
+  lock_on=True, hold=…, fire=3, brake=False)` to lock a dropper on the bin
+  marker; raise `range_gain_floor` for the close hold. (`lock_on` works on any
+  camera.) **Always `brake=False` on a fire-from-hold** (see §5).
+- **Gate-through / slalom:** `range_gain_floor` also softens `move`'s `maintain`
+  strafe, so the lateral offset hold is gentler as the target fills the frame.
+
+See also: [`vision-results.md`](vision-results.md) (branch on where/how a verb
+ended), [`fsm-vision-missions.md`](fsm-vision-missions.md) (search patterns +
+mission design), [`command-reference.md`](command-reference.md) (full verb table).

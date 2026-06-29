@@ -12,8 +12,9 @@ from types import SimpleNamespace
 import pytest
 
 from duburi_control.motion_vision import (
-    align_loop, move_loop, _fill, _clamp, _present, _freshness,
+    align_loop, move_loop, _fill, _clamp, _present, _freshness, _range_gain,
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S,
+    VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA,
 )
 
@@ -53,7 +54,10 @@ class _FakeVision:
     def list_classes(self):
         return list(self._classes)
 
-    def bbox_error(self, _cls):
+    def bbox_error(self, _cls, **_kw):
+        # accepts the continuity-lock kwargs (near/gate_norm/min_score) the loop
+        # now passes; this double just replays its scripted samples.
+        self.last_kw = _kw
         if isinstance(self._samples, list):
             s = self._samples[min(self._i, len(self._samples) - 1)]
             self._i += 1
@@ -898,3 +902,89 @@ def test_move_passthrough_ignores_fill_stop():
     fwd = [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
     assert fwd, 'pass-through must keep commanding forward thrust'
     assert max(fwd) <= cap
+
+
+# --------------------------------------------------------------------------- #
+#  Precision-alignment layers (range gain, lateral I-term, continuity lock)    #
+# --------------------------------------------------------------------------- #
+def test_range_gain_pure():
+    # Far (low fill) -> full gain; close (high fill) -> floored; linear between.
+    assert _range_gain(0.0, 0.3) == pytest.approx(1.0)
+    assert _range_gain(VISION_RANGE_GAIN_FILL_LO, 0.3) == pytest.approx(1.0)
+    assert _range_gain(VISION_RANGE_GAIN_FILL_HI, 0.3) == pytest.approx(0.3)
+    assert _range_gain(1.0, 0.3) == pytest.approx(0.3)
+    mid = 0.5 * (VISION_RANGE_GAIN_FILL_LO + VISION_RANGE_GAIN_FILL_HI)
+    assert 0.3 < _range_gain(mid, 0.3) < 1.0
+    # floor>=1.0 (or hi<=lo) is a no-op.
+    assert _range_gain(0.9, 1.0) == pytest.approx(1.0)
+
+
+def _max_lat_dev(pix):
+    """Largest |lateral-1500| the loop commanded (0 if it never strafed)."""
+    devs = [abs(c['lateral'] - 1500) for c in pix.rc if 'lateral' in c]
+    return max(devs) if devs else 0
+
+
+def test_range_gain_softens_lateral_when_close():
+    # Same off-centre error, but a CLOSE target (high fill) must be driven more
+    # gently than a FAR one (low fill) -- the 1/range damping fix.
+    far  = _FakeVision(_sample(ex=0.5, w_frac=0.1, h_frac=0.1))   # fill 0.10 -> 1.0x
+    near = _FakeVision(_sample(ex=0.5, w_frac=0.8, h_frac=0.8))   # fill 0.80 -> floor
+    _, pix_far, _  = _align(far,  axes={'lat'}, gain=100.0, range_gain_floor=0.3)
+    _, pix_near, _ = _align(near, axes={'lat'}, gain=100.0, range_gain_floor=0.3)
+    assert _max_lat_dev(pix_near) < _max_lat_dev(pix_far)
+    # floor=1.0 is OFF -> close target driven exactly like the far one's law.
+    _, pix_off, _ = _align(near, axes={'lat'}, gain=100.0, range_gain_floor=1.0)
+    assert _max_lat_dev(pix_off) > _max_lat_dev(pix_near)
+
+
+def test_lateral_integral_grows_during_hold():
+    # An in-band but non-zero lateral residual (a steady current) builds the
+    # lateral integral during the hold, so the commanded strafe exceeds pure-P.
+    s = _sample(ex=0.1, w_frac=0.3, h_frac=0.3)   # 32px residual <= 40 err -> in band
+    _, pix_p,  _ = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                          hold_s=0.4, duration=0.7, ki_lat=0.0)
+    _, pix_pi, _ = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                          hold_s=0.4, duration=0.7, ki_lat=200.0, i_lat_max=15.0)
+    assert _max_lat_dev(pix_pi) > _max_lat_dev(pix_p)
+
+
+def test_lateral_integral_clamped():
+    # The integral is bounded: a huge ki can't drive past P + i_lat_max (then
+    # the g_lat cap). With i_lat_max small the extra deflection stays small.
+    s = _sample(ex=0.1, w_frac=0.3, h_frac=0.3)
+    _, pix, _ = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                       hold_s=0.4, duration=0.7, ki_lat=999.0, i_lat_max=5.0)
+    # p = 0.1*60 = 6%; + i_lat_max 5% = 11% -> PWM 1500 + 0.11*400 = 1544.
+    assert _max_lat_dev(pix) <= _FakePixhawk.percent_to_pwm(11.0) - 1500 + 1
+
+
+def test_lock_on_passes_near_and_gate():
+    # With lock_on the loop hands bbox_error a `near` hint (the last accepted
+    # centre) and a positive gate; ctrl_conf rides through as min_score.
+    vis = _FakeVision(_sample(ex=0.2, ey=-0.1, w_frac=0.3, h_frac=0.3))
+    _align(vis, axes={'lat'}, lock_on=True, ctrl_conf=0.55)
+    kw = vis.last_kw
+    assert kw['gate_norm'] == pytest.approx(VISION_LOCK_GATE_NORM)
+    assert kw['min_score'] == pytest.approx(0.55)
+    assert kw['near'] == pytest.approx((0.2, -0.1))   # last accepted centre
+
+
+def test_lock_off_is_largest_box():
+    # Default: no near hint, gate disabled -> bbox_error keeps largest-area.
+    vis = _FakeVision(_sample(ex=0.2, w_frac=0.3, h_frac=0.3))
+    _align(vis, axes={'lat'}, lock_on=False)
+    assert vis.last_kw['near'] is None
+    assert vis.last_kw['gate_norm'] == 0.0
+
+
+def test_hold_against_current_does_not_brake_kick():
+    # A hull holding STILL against a steady current carries a large lateral
+    # integral but ~0 travel momentum. The arrival brake EMA tracks the
+    # PROPORTIONAL command only, so an in-band converged exit is NOT reverse-
+    # kicked even with a big integral (regression: EMA must exclude lat_i).
+    s = _sample(ex=0.02, w_frac=0.3, h_frac=0.3)   # 6.4px residual, well in band
+    _, _, writers = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                           hold_s=0.3, duration=0.6,
+                           ki_lat=200.0, i_lat_max=15.0)   # brake on by default
+    assert writers.laterals == []      # no reverse-kick on a steady hold

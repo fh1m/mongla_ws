@@ -66,6 +66,17 @@ float32 kp_depth           # P gain on depth pixel error        (0 = use vision.
 float32 kp_forward         # P gain on fill error (vision_move) (0 = use vision.kp_forward)
 float32 lost_grace_s       # seconds to coast on target loss before reporting LOST (0 = 1.0)
 float32 align_stable_frames# ticks within err_px before ALIGNED (0 = use vision.align_stable_frames)
+# precision-alignment knobs (close-in robustness; all opt-in, 0/false = behave as before).
+bool    lock_target        # vision_align: once a target is acquired, steer to the box
+                           #   NEAREST the last-accepted centre (within a gate) instead of the
+                           #   largest -- so a 2nd hole / spurious box can't steal the aim
+float32 ctrl_conf          # vision_align: control-side min detection score to accept a box as
+                           #   the target (0 = off; distinct from the detector's global conf)
+float32 range_gain_floor   # vision_align/move: lat/depth kp multiplier when the bbox FILLS the
+                           #   frame (close) -- softens gain to stop the close-in overshoot of a
+                           #   20 kg hull (1.0 = off, ~0.3 = gentle; 0 = use vision.range_gain_floor)
+float32 ki_lat             # vision_align: lateral integral gain, cancels the steady-current
+                           #   offset of the open-loop Ch6 axis during the hold (0 = off)
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

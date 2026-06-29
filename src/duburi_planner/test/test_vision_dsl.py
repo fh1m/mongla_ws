@@ -429,6 +429,23 @@ def test_align_no_fire_defaults_to_empty():
 
 
 # --------------------------------------------------------------------------- #
+#  align lock_on -> lock_target goal field (continuity lock)                   #
+# --------------------------------------------------------------------------- #
+def test_align_lock_on_sets_lock_target():
+    send = MagicMock(return_value=_result(ALIGNED))
+    _dsl(send).align('hole', lat=0, depth=0, lock_on=True)
+    _, kwargs = send.call_args
+    assert kwargs['lock_target'] is True
+
+
+def test_align_lock_off_by_default():
+    send = MagicMock(return_value=_result(ALIGNED))
+    _dsl(send).align('gate', yaw=0, lat=0)
+    _, kwargs = send.call_args
+    assert kwargs['lock_target'] is False
+
+
+# --------------------------------------------------------------------------- #
 #  In-process detector param control + loud preflight                          #
 # --------------------------------------------------------------------------- #
 def test_param_value_types():

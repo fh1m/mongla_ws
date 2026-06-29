@@ -72,7 +72,9 @@ class VisionVerbs:
                      hold_through_loss=False,
                      fire_channels='', fire_t=0.0,
                      kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
-                     lost_grace_s=0.0, align_stable_frames=0.0):
+                     lost_grace_s=0.0, align_stable_frames=0.0,
+                     lock_target=False, ctrl_conf=0.0,
+                     range_gain_floor=0.0, ki_lat=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -161,6 +163,10 @@ class VisionVerbs:
                     align_stable_frames=stable,
                     depth_sign=depth_sign,
                     release_yaw=release_yaw,
+                    lock_on=bool(lock_target),
+                    ctrl_conf=float(ctrl_conf),
+                    range_gain_floor=float(range_gain_floor) or 1.0,
+                    ki_lat=float(ki_lat),
                     on_locked=on_locked,
                     fire_t=eff_fire_t,
                     report_fn=self.report_vision,
@@ -212,7 +218,8 @@ class VisionVerbs:
                     err_px=40.0, duration=20.0, gain=30.0, gain_lat=0.0,
                     brake_off=False, brake_gain=0.0,
                     hold_through_loss=False,
-                    kp_forward=0.0, kp_lat=0.0, lost_grace_s=0.0):
+                    kp_forward=0.0, kp_lat=0.0, lost_grace_s=0.0,
+                    range_gain_floor=0.0):
         """Drive forward until ``target_class`` fills ``fwd_fill`` % of the frame.
 
         ``mode`` is the fill metric (area/width/height). ``maintain_on``
@@ -259,6 +266,7 @@ class VisionVerbs:
                 lost_grace_s=float(lost_grace_s) or 1.0,
                 hold_through_loss=bool(hold_through_loss),
                 release_yaw=self._lock_active(),
+                range_gain_floor=float(range_gain_floor) or 1.0,
                 report_fn=self.report_vision,
                 writers=self._writers(), log=self.log,
                 abort_fn=self._abort_fn)

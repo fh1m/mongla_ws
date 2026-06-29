@@ -165,6 +165,7 @@ class _VisionDSL:
               hold: Optional[float] = None,
               fire=None,
               fire_t: Optional[float] = None,
+              lock_on: bool = False,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -222,6 +223,18 @@ class _VisionDSL:
         to ~2 s late (threading keeps the loop alive, it can't make the board
         faster) -- use a small ``fire_t`` and generous ``hold`` so a delayed
         shot still lands inside the hold window.
+
+        ``lock_on`` (default False) turns on the continuity lock: once the target
+        is acquired, the loop steers to the detection NEAREST the last-accepted
+        centre (within a gate) instead of the largest box -- so a second hole /
+        spurious box can't steal the aim during a close-in fire. Use it on the
+        terminal hole/bin lock (``align('hole', lat=0, depth=0, lock_on=True,
+        hold=..., fire=1)``); leave it off for far-field acquisition. The
+        control-side conf floor (``vision.ctrl_conf``), the close-in gain
+        softening (``vision.range_gain_floor``) and the hold integral
+        (``vision.ki_lat``) are deck ROS params -- set them with
+        ``ros2 param set /duburi_manager vision.<name> <value>`` (they apply on
+        the next goal); see ``.claude/context/precision-alignment.md``.
         """
         active = [(name, val) for name, val in
                   (('lat', lat), ('yaw', yaw), ('depth', depth))
@@ -264,7 +277,8 @@ class _VisionDSL:
                 hold_s=float(hold) if hold is not None else 0.0,
                 hold_through_loss=(fallback is None),
                 fire_channels=fire_csv,
-                fire_t=float(fire_t) if fire_t is not None else 0.0)
+                fire_t=float(fire_t) if fire_t is not None else 0.0,
+                lock_target=bool(lock_on))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)
