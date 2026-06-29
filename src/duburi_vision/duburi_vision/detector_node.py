@@ -389,14 +389,16 @@ class DetectorNode(Node):
         return SetParametersResult(successful=True)
 
     def _log_alignment(self, primary, frame) -> None:
-        """Always-on operator alignment line for the currently-loaded class.
+        """Always-on operator BEARING line for the currently-loaded class.
 
         Fires whenever the detector sees its loaded class (``detections`` are
         already class-filtered, so ``primary`` is that class) -- independent of
-        whether a vision verb is running. Reports the bbox-centre pixel offset
-        from frame centre on lateral (x) and depth (y), matching the format the
-        vision verbs emit so the operator reads one consistent line. Throttled
-        so it doesn't flood at detection rate.
+        whether a vision verb is running. Reports the RAW bbox-centre pixel
+        offset from frame centre on lateral (x) and depth (y). This is live
+        telemetry, NOT an alignment verdict: it is deliberately worded distinct
+        from a vision verb's ``aligned (N/Mpx)`` outcome so the operator never
+        reads this continuous offset as "the verb aligned N px off-target".
+        Throttled so it doesn't flood at detection rate.
         """
         now = time.monotonic()
         if (now - self._last_align_log) < ALIGN_LOG_THROTTLE_S:
@@ -407,8 +409,8 @@ class DetectorNode(Node):
         x_off  = cx - w * 0.5    # +right of centre
         y_off  = cy - h * 0.5    # +below centre (drives depth)
         self.get_logger().info(
-            f"[ align lat={x_off:+.0f} depth={y_off:+.0f}px ] "
-            f"({cx:.0f},{cy:.0f}) align ['{primary.class_name}'] center -> (0,0)")
+            f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
+            f"'{primary.class_name}' bearing (live, off-centre)")
 
     def _log_health(self):
         now = time.monotonic()

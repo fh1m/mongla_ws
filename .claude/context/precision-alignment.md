@@ -45,6 +45,11 @@ position hold, so a steady current leaves a standing offset pure-P can't null.
 | `vision.ctrl_conf` | **ROS param** (deck) | `0.0` | misclass | Control-side **minimum detection score** to accept a box as the target. Distinct from the detector's global `conf`: gates only what the *control loop* steers on. |
 | `vision.range_gain_floor` | **ROS param** (deck) | `1.0` | overshoot | Scales **lat/depth** kp **down** as the bbox fills the frame (close). `1.0` = off; `~0.3` = gentle close-in. Applies to `align` and `move`'s `maintain`. |
 | `vision.ki_lat` | **ROS param** (deck) | `0.0` | current drift | **Lateral** integral gain; cancels the steady-current offset, accumulated **only during the hold**, clamped, frozen on saturation, reset on loss. **Lateral only** by design. |
+| `err=<px>` | **per-call** on `vision.align(...)` | `40` | tightness | Pixel deadband. A **small positive** value is the tight knob (`err=8`). **`err=0` ≠ zero tolerance** — it means "use the default / `vision.err_px` param" (rosidl `0==unset` is load-bearing for live-tuning; an explicit 0 and an omitted field are indistinguishable on the wire). The effective deadband is floored at `MIN_ALIGN_ERR_PX` (≈5px bbox jitter) so an over-tight `err` can't perpetually TIMEOUT, and is **printed at align start** + stated in the success line (`aligned (N/Mpx)`) so it's never a surprise. |
+
+**Reading the logs (don't confuse these two lines):**
+- The detector's always-on `[ offset lat=… depth=…px ] '<class>' bearing (live)` is **raw bbox offset telemetry** — it fires whenever the class is seen, verb running or not. It is *not* an alignment verdict.
+- The verb's `vision_align: aligned (N/Mpx)` is the **outcome**: residual `N` within the effective deadband `M`.
 
 **Why those axis choices** (don't "fix" them):
 - The integral is **lateral-only**. Yaw is a Ch4 *rate* (ArduSub's rate loop
@@ -114,17 +119,27 @@ TERMINAL align('hole', lat=0, depth=0, lock_on=True,    # lat+depth only -> Ch4 
 ```
 
 **Why omit `yaw` at the hole.** An `align` call that does **not** include the
-`yaw` axis, **while a heading lock is active**, automatically leaves the lock
-driving Ch4 (the verb takes the `release_yaw` path and writes lateral via
-`send_rc_translation`). So heading is held by the steady `heading_lock` P-loop
-instead of the vision-yaw relay that limit-cycles a heavy hull up close. **Null
-the heading during COARSE, then `lock_heading()` before the terminal phase** so
-the lock captures the right heading. **The lock must be ACTIVE for this to work:**
-`lock_heading()` activates immediately only when the vehicle is **armed** (mid-
-mission, after `set_depth`/`align`/`move`, it is). If you script it from a disarmed
-state, activation is *deferred* to the first armed command — then a yaw-less
-`align` would briefly hold heading via neither lock nor vision. The reference
-mission is
+`yaw` axis **never writes Ch4** — the verb takes the `release_yaw` path and
+writes lateral via `send_rc_translation`, gated purely on the *yaw axis being
+absent* (not on lock-state, since 2026-06-29). So if a `heading_lock` is active
+it holds heading on its steady BNO P-loop; if not, Ch4 falls to the heartbeat /
+ArduSub — either way the verb stays off the yaw channel instead of fighting it.
+**Null the heading during COARSE, then `lock_heading()` before the terminal
+phase** so the lock captures the right heading and the hull holds steady on BNO
+while lat/depth correct.
+
+> **"The yaw jitters while I align — should I release the heading lock?" No.**
+> Releasing it hands yaw to ArduSub's aluminum-hull compass — the *worst* jitter
+> source. The wobble was the lock's old hard min-PWM floor limit-cycling against
+> the lateral-strafe yaw moment (a relay on a rate channel); fixed 2026-06-29 by
+> **tapering** the floor (`heading_lock`, mirrors the `motion_yaw` `ab2014f`
+> fix — see [`known-issues.md`](known-issues.md) D7). Keep the BNO lock; it is
+> the right heading authority up close.
+
+**The lock must be ACTIVE for a steady hold:** `lock_heading()` activates
+immediately only when the vehicle is **armed** (mid-mission, after
+`set_depth`/`align`/`move`, it is). If you script it from a disarmed state,
+activation is *deferred* to the first armed command. The reference mission is
 [`missions/task_torpedo.py`](../../src/duburi_planner/duburi_planner/missions/task_torpedo.py).
 
 ---

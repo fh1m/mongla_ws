@@ -180,6 +180,41 @@ def test_lat_only_align_keeps_lock_and_releases_ch4():
     duburi.unlock_heading()
 
 
+def test_lat_only_align_no_lock_still_releases_ch4():
+    """NO lock + vision_align(lat) only -> the verb must STILL leave Ch4 alone.
+
+    The 2026-06 fix: Ch4 release is gated on the YAW AXIS, not on lock-state.
+    Before the fix a no-lock lat-only align spammed Ch4=1500 every tick (which
+    fights ArduSub's heading hold / a later lock); now it never authors Ch4
+    unless yaw is a requested axis.
+    """
+    duburi, pix, hb = _make(armed=True)         # NO lock_heading
+    assert duburi._lock_active() is False
+    pix.rc.clear(); pix.translations.clear()
+
+    duburi.vision_align(camera='forward', target_class='gate', axes='lat',
+                        err_px=40.0, duration=0.2, gain=30.0, kp_lat=60.0)
+
+    assert pix.translations, 'lat-only align must drive lateral via translation'
+    yaw_writes = [c for c in pix.rc if 'yaw' in c and c.get('yaw') is not None]
+    assert not yaw_writes, (
+        'lat-only align with no lock must NOT author Ch4 (the 1500-spam bug)')
+
+
+def test_vision_move_always_releases_ch4():
+    """vision_move never computes a yaw command, so it must ALWAYS leave Ch4
+    alone (translation), with or without a lock."""
+    duburi, pix, hb = _make(armed=True)         # NO lock
+    pix.rc.clear(); pix.translations.clear()
+
+    duburi.vision_move(camera='forward', target_class='gate', fwd_fill=95.0,
+                       duration=0.2, gain=30.0)
+
+    assert pix.translations, 'move must drive forward via send_rc_translation'
+    yaw_writes = [c for c in pix.rc if 'yaw' in c and c.get('yaw') is not None]
+    assert not yaw_writes, 'move must never author Ch4 (no yaw command)'
+
+
 def test_deferred_lock_then_yaw_align_first_command():
     """Deferred lock + vision_align(yaw) as first armed command.
 

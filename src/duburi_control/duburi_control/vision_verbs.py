@@ -137,12 +137,16 @@ class VisionVerbs:
                 f'gain={float(gain):.0f}% dur={float(duration):.0f}s '
                 f'hold={float(hold_s):.0f}s{fire_note}')
 
-            # Ch4 arbitration: when yaw IS an align axis we suspend the lock
-            # and the loop drives Ch4 itself. When yaw is NOT an axis but a
-            # lock is live, the lock owns Ch4 -- tell the loop to write
-            # lateral via send_rc_translation so it never clobbers the lock's
-            # yaw stream (the lat/depth-only-align-fights-lock bug).
-            release_yaw = self._lock_active() and not touches_yaw
+            # Ch4 arbitration, gated on the YAW AXIS (not on lock-state): the
+            # verb writes Ch4 ONLY when yaw is a requested align axis. When yaw
+            # is an axis we suspend the lock and the loop drives Ch4 itself.
+            # When yaw is NOT an axis we ALWAYS release Ch4 (send_rc_translation,
+            # lateral-only) so the verb never commands yaw the operator didn't
+            # ask for, and never clobbers a live lock's Ch4 stream (the
+            # lat/depth-align-fights-lock jitter). With a lock active the lock
+            # holds heading on BNO; with no lock, Ch4 falls to the heartbeat /
+            # ArduSub -- either way the verb stays off the yaw channel.
+            release_yaw = not touches_yaw
             with self._suspend_heading_lock() if touches_yaw else nullcontext():
                 outcome = align_loop(
                     pixhawk=self.pixhawk, vision_state=vstate,
@@ -265,7 +269,10 @@ class VisionVerbs:
                 kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
                 lost_grace_s=float(lost_grace_s) or 1.0,
                 hold_through_loss=bool(hold_through_loss),
-                release_yaw=self._lock_active(),
+                # move never computes a yaw command, so it must ALWAYS leave Ch4
+                # alone (lock owns it on BNO, else heartbeat/ArduSub hold) --
+                # never write Ch4=1500 against a live lock.
+                release_yaw=True,
                 range_gain_floor=float(range_gain_floor) or 1.0,
                 report_fn=self.report_vision,
                 writers=self._writers(), log=self.log,

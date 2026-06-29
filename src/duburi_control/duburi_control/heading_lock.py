@@ -86,6 +86,54 @@ LOCK_KP_PCT_PER_DEG = 1.2    # increased from 0.6 for reliable small corrections
 LOCK_SPEED_MIN_PCT  = 5.0    # floor: minimum thrust to spin T200 above deadband
 LOCK_PCT_MAX        = 22.5   # ceiling: matches yaw_snap max so corrective bursts are consistent
 LOCK_DEADBAND_DEG   = 1.0
+# Floor taper band. A HARD min-PWM floor on Ch4 (a yaw RATE) is a relay feeding
+# ArduSub's yaw integrator: holding a still hull it barely fires (error stays in
+# the deadband), but rejecting a CONTINUOUS lateral-thrust yaw moment (a lat-only
+# vision_align strafing Ch6 on an off-CG vectored frame) it kicks >=floor every
+# tick -> overshoot -> sign flip -> limit-cycle = the align-yaw jitter. Mirror the
+# motion_yaw `ab2014f` fix: taper the floor to 0 across an approach band so the
+# command decays into the deadband instead of relay-bouncing. Only 1-6deg softens;
+# >=band keeps the full stiction-break floor, <=deadband still commands 0. Pure-P
+# (no integral) so under a sustained disturbance this settles to a small bounded
+# heading offset rather than wobbling -- raise LOCK_KP_PCT_PER_DEG or add a
+# LOCK_KI follow-up if that droop is too large (pool-tunable).
+LOCK_APPROACH_BAND_DEG = 6.0
+
+
+def _lock_floor(abs_error_deg: float) -> float:
+    """Stiction-breaking speed floor (%), tapered across the approach band.
+
+    Full ``LOCK_SPEED_MIN_PCT`` at/above ``LOCK_APPROACH_BAND_DEG`` (brisk
+    correction, break T200 stiction), then linearly to **0 at the deadband
+    edge** so the command can decay and the hull eases back to heading instead
+    of being driven across the deadband at a hard floor (the relay limit-cycle).
+    Pure / side-effect-free. Only meaningful for ``abs_error_deg >
+    LOCK_DEADBAND_DEG`` (inside the deadband the loop commands 0, never calls
+    this).
+    """
+    if abs_error_deg >= LOCK_APPROACH_BAND_DEG:
+        return LOCK_SPEED_MIN_PCT
+    span = LOCK_APPROACH_BAND_DEG - LOCK_DEADBAND_DEG
+    if span <= 0.0:
+        return LOCK_SPEED_MIN_PCT
+    frac = (abs_error_deg - LOCK_DEADBAND_DEG) / span   # 1.0 at band edge -> 0 at deadband
+    return LOCK_SPEED_MIN_PCT * max(0.0, frac)
+
+
+def _lock_command(error_deg: float) -> float:
+    """Signed Ch4 yaw-rate command (%) for a heading error -- pure, the law.
+
+    0 inside ``LOCK_DEADBAND_DEG`` (don't twitch on noise). Outside it,
+    proportional ``LOCK_KP_PCT_PER_DEG`` capped at ``LOCK_PCT_MAX``, with the
+    TAPERED stiction floor (``_lock_floor``) underneath so corrections actually
+    spin the T200s without the hard-floor relay that limit-cycles the hull under
+    a sustained lateral-thrust yaw moment. Sign follows the error.
+    """
+    if abs(error_deg) <= LOCK_DEADBAND_DEG:
+        return 0.0
+    mag   = min(LOCK_PCT_MAX, abs(error_deg) * LOCK_KP_PCT_PER_DEG)
+    speed = max(_lock_floor(abs(error_deg)), mag)
+    return math.copysign(speed, error_deg)
 
 
 class HeadingLock:
@@ -214,13 +262,11 @@ class HeadingLock:
                     self._log.info('[LOCK ] yaw source recovered')
                     warned_dead = False
 
-                error = Pixhawk.heading_error(target, current)
-                if abs(error) <= LOCK_DEADBAND_DEG:
-                    yaw_pct = 0.0
-                else:
-                    raw = abs(error) * LOCK_KP_PCT_PER_DEG
-                    speed = max(LOCK_SPEED_MIN_PCT, min(LOCK_PCT_MAX, raw))
-                    yaw_pct = math.copysign(speed, error)
+                error   = Pixhawk.heading_error(target, current)
+                # Tapered-floor P law (see _lock_command/_lock_floor): the floor
+                # decays to 0 at the deadband edge so the hull eases in instead
+                # of relay-bouncing under a sustained yaw disturbance (the jitter).
+                yaw_pct = _lock_command(error)
 
                 try:
                     # send_rc_yaw_only leaves Ch5/Ch6 at NO_OVERRIDE (65535)

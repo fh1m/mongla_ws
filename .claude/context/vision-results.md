@@ -252,9 +252,11 @@ ros2 topic echo /duburi/move/_action/feedback
   `res.y_px`, but **live, every tick** (vs the single end value the result returns).
 - They are `NaN` when no vision verb is active (or no fresh detection), and the
   `status_line` shows `VIS:(x,y)px` only while a target is being tracked.
-- The detector node *also* prints the always-on operator alignment line
-  (`[ align lat=… depth=…px ]`) to the console regardless of any verb — that's the
-  same signal for a quick eyeball without echoing the topic.
+- The detector node *also* prints the always-on operator **bearing** line
+  (`[ offset lat=… depth=…px ] '<class>' bearing (live)`) to the console
+  regardless of any verb — raw bbox offset for a quick eyeball without echoing
+  the topic. It is telemetry, **not** an alignment verdict (the verb's
+  `aligned (N/Mpx)` is the verdict).
 
 ---
 
