@@ -335,7 +335,7 @@ miss they log the outcome and return so the next step runs. Control reads raw `/
 ```python
 duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
                     err=40, duration=20, gain=30, hold=None,
-                    fire=None, fire_t=None, fallback=None, camera=None)
+                    fire=None, fire_t=None, lock_on=False, fallback=None, camera=None)
 duburi.vision.move(target, *, fwd=None, mode='area', maintain=None, hold=None,
                    err=40, duration=20, gain=30, fallback=None, camera=None)
 ```
@@ -346,14 +346,23 @@ duburi.vision.move(target, *, fwd=None, mode='area', maintain=None, hold=None,
 | `lat` / `yaw` / `depth` | align | `None` = axis off; a **number** = on, as a signed px offset from centre (`0` = centre). ≥1 required |
 | `hold` | align | seconds to **active station-keep** after centring (fights inertia for a payload shot) |
 | `fire` / `fire_t` | align | fire a payload **mid-hold while still correcting** — `fire` = channel int/list (1/2 torpedo, 3/4 dropper), `fire_t` = s into the hold. Gated on alignment, non-blocking, `fire_t < hold` |
+| `lock_on` | align | **precision continuity lock:** steer to the box nearest the last centre (not the largest) so a 2nd hole / spurious box can't steal the aim on a close-in shot. Off by default |
 | `fwd` | move | bbox fill % to stop at (`mode`=`area`·`width`·`height`); **`None` = pass-through** (drive until target seen-then-gone + commit) |
 | `maintain` | move | ±px lateral offset held while driving (`None` = pure forward) |
 | `hold` | move | seconds to station-keep once the fill target is reached |
-| `err` | both | pixel tolerance for "aligned" (default 40) |
+| `err` | both | pixel tolerance for "aligned" (default 40). **`err=0` = "use default/`vision.err_px`", NOT zero-tolerance** (rosidl 0==unset); pass a small positive value for tight — the deadband is floored at ~5 px and stated in the `aligned (N/Mpx)` outcome |
 | `duration` | both | total time budget (s); fallback cycles count against it |
 | `gain` | both | **max-speed cap** (% thrust) — never exceeded |
 | `fallback` | both | search `fn(duburi)` or `fn(duburi, should_stop)` run on target loss, then the verb re-enters |
 | `camera` | both | overrides the sticky `duburi.camera` |
+
+> **Yaw / Ch4 during a vision verb.** A verb writes Ch4 **only when `yaw` is a
+> requested align axis**; `align` without `yaw` (and **all** `move`) leave Ch4 to a
+> live `heading_lock` (BNO) or the autopilot, never fighting it. If yaw *jitters*
+> while aligning, the cure is the `heading_lock` floor taper (already shipped), **not**
+> releasing the lock — releasing it hands yaw to ArduSub's untrusted hull compass.
+> The close-in precision layer (`lock_on` + `vision.ctrl_conf`/`range_gain_floor`/`ki_lat`)
+> is in [`precision-alignment.md`](.claude/context/precision-alignment.md).
 
 **Outcome — branch on WHERE/HOW it finished (hybrid vision+control).** Both return a
 `VisionResult` (truthy only on success) carrying `x_px`/`y_px` (signed target-from-centre
@@ -427,6 +436,9 @@ ros2 param set /duburi_detector_forward active_model flare       # hot model swa
 | `lost_grace_s` | 1.0 | coast seconds on target loss before `LOST` → `fallback` |
 | `frame_fill_default` | 95 | `vision_move` fill target when `fwd` is unset |
 | `align_stable_frames` | 3 | in-band ticks before `ALIGNED` |
+| `range_gain_floor` | 1.0 | **precision:** soften lat/depth gain as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
+| `ki_lat` | 0.0 | **precision:** lateral integral; nulls a steady-current offset during the hold (`0`=off) |
+| `ctrl_conf` | 0.0 | **precision:** control-side min detection score to accept a box (`0`=off) |
 
 Defaults: [`vision_tunables.py`](src/duburi_manager/duburi_manager/vision_tunables.py). Pool-day
 phase constants (depths, headings, fill %, gains) live in
@@ -515,6 +527,12 @@ VisionSearch/VisionAlign/VisionMove · **utility** = Countdown/Pause/LogScore/Se
 | Depth (vis_range) | `ros2 run duburi_vision depth_estimation_node --ros-args -p camera:=forward` | `ros2 topic echo …/vis_range` |
 | HUD viewer | `ros2 run duburi_vision vision_display --ros-args -p camera:=forward` | OpenCV window |
 | Full stack | `ros2 launch duburi_manager bringup.launch.py vision:=true` | banner + `/duburi/state` |
+
+**Preflight / utility scripts** (`ros2 run duburi_<pkg> <script>`): `bringup_check`
+(network + serial + Jetson-power preflight), `vision_check` (topic-only health probe),
+`vision_thrust_check` (detection→RC echo, disarmed-safe), `tracker_check` (tracker smoke
+test), `vision_node` (in-process camera+detector smoke test), `export_engine` (build
+TensorRT `.engine` files **on the Jetson** for 20–30 Hz inference).
 
 Failure order: no `/duburi/state` → manager/UDP · no `image_raw` → camera (perms:
 `sudo usermod -aG video $USER`) · no `detections` → detector (model/CUDA, check `[DET]`).

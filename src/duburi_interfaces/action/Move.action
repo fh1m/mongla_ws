@@ -1,13 +1,12 @@
 # Goal — one field per command type, unused fields are zero/empty.
 # `cmd` is any verb in the COMMANDS registry (duburi_control/commands.py is
 # the single source of truth; this list is illustrative, not exhaustive):
-string  cmd          # arm | disarm | set_mode | stop | pause | surface |
-                     # move_forward | move_back | move_left | move_right |
-                     # move_forward_dist | move_lateral_dist |
-                     # yaw_left | yaw_right | turn | arc | set_depth |
-                     # lock_heading | unlock_heading | look_around |
-                     # style_yaw | style_roll | style_pitch | dvl_connect |
-                     # vision_align | vision_move | fire | mission_reset
+string  cmd          # arm | disarm | set_mode | head | stop | pause | surface |
+                     # mission_reset | move_forward | move_back | move_left |
+                     # move_right | move_forward_dist | move_back_dist |
+                     # move_lateral_dist | yaw_left | yaw_right | turn | arc |
+                     # set_depth | lock_heading | unlock_heading | dvl_connect |
+                     # style_yaw | style_roll | vision_align | vision_move | fire
 float32 duration     # seconds  (move_*, arc, pause, vision_*)
 float32 gain         # 0-100 %  (move_*, arc; vision_*: hard max-speed cap)
 float32 target       # metres   (set_depth) or
