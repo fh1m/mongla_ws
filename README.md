@@ -334,7 +334,8 @@ miss they log the outcome and return so the next step runs. Control reads raw `/
 
 ```python
 duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
-                    err=40, duration=20, gain=30, fallback=None, camera=None)
+                    err=40, duration=20, gain=30, hold=None,
+                    fire=None, fire_t=None, fallback=None, camera=None)
 duburi.vision.move(target, *, fwd=None, mode='area', maintain=None, hold=None,
                    err=40, duration=20, gain=30, fallback=None, camera=None)
 ```
@@ -343,6 +344,8 @@ duburi.vision.move(target, *, fwd=None, mode='area', maintain=None, hold=None,
 |-----|-----------|---------|
 | `target` | both | class string, or `duburi.models.<alias>.<class>` (auto-switches model + class) |
 | `lat` / `yaw` / `depth` | align | `None` = axis off; a **number** = on, as a signed px offset from centre (`0` = centre). ≥1 required |
+| `hold` | align | seconds to **active station-keep** after centring (fights inertia for a payload shot) |
+| `fire` / `fire_t` | align | fire a payload **mid-hold while still correcting** — `fire` = channel int/list (1/2 torpedo, 3/4 dropper), `fire_t` = s into the hold. Gated on alignment, non-blocking, `fire_t < hold` |
 | `fwd` | move | bbox fill % to stop at (`mode`=`area`·`width`·`height`); **`None` = pass-through** (drive until target seen-then-gone + commit) |
 | `maintain` | move | ±px lateral offset held while driving (`None` = pure forward) |
 | `hold` | move | seconds to station-keep once the fill target is reached |
@@ -352,10 +355,15 @@ duburi.vision.move(target, *, fwd=None, mode='area', maintain=None, hold=None,
 | `fallback` | both | search `fn(duburi)` or `fn(duburi, should_stop)` run on target loss, then the verb re-enters |
 | `camera` | both | overrides the sticky `duburi.camera` |
 
-**Outcome** — both return a `VisionResult` (truthy only on success):
-`0 ALIGNED · 1 LOST · 2 TIMEOUT · 3 NO_CAMERA · 4 ABORTED` (+ DSL-only `FAILED` for setup
-errors, non-fatal). **Firing** = align then fire:
-`if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12).ok: duburi.fire(1)`.
+**Outcome — branch on WHERE/HOW it finished (hybrid vision+control).** Both return a
+`VisionResult` (truthy only on success) carrying `x_px`/`y_px` (signed target-from-centre
+px at the last seen frame, `NaN` if never seen), `saw_target`, `last_err_px`, `fill`,
+`elapsed_s`, `status` (`0 ALIGNED · 1 LOST · 2 TIMEOUT · 3 NO_CAMERA · 4 ABORTED`, + DSL
+`FAILED`). So a missed align can still recover: `if res: ... elif res.saw_target:
+duburi.move_right(1) if res.x_px > 30 else duburi.move_left(1)`. Full contract, recovery
+patterns, mid-hold fire, live `err_x_px` feedback, do's & don'ts →
+[`vision-results.md`](.claude/context/vision-results.md). **Firing** = mid-hold (above) or
+the simple `if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12).ok: duburi.fire(1)`.
 
 ```python
 # Gate pass: register model, search via fallback, centre, drive through

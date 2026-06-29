@@ -211,7 +211,9 @@ a target while holding station — no busy-loop, no `move` between polls:
 if duburi.wait_for('gate', timeout=8):
     duburi.vision.align('gate', yaw=0, lat=0)
 else:
-    duburi.recover()                 # never appeared in 8 s
+    # never appeared in 8 s -> mission-authored recovery (no `duburi.recover()` verb):
+    while not duburi.detected('gate'):     # e.g. search while moving
+        duburi.move_forward(0.6, gain=35)
 ```
 
 `wait_for` is for waiting **in place**; to search while *moving*, use a

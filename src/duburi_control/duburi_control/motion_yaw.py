@@ -59,19 +59,34 @@ from .motion_easing  import smootherstep
 from .motion_rates import YAW_RATE_HZ            # noqa: F401  (re-export)
 from .motion_rates import LOG_THROTTLE_S as LOG_THROTTLE
 
-YAW_TOL_DEG   = 1.0    # heading tolerance for "locked" (matches proven 1° floor)
-YAW_LOCK_N    = 5      # consecutive frames within tol before success
+YAW_TOL_DEG   = 2.0    # heading tolerance for "locked". 2° is the pre-regression
+                       # proven value: sub-degree settle on a 20 kg hull at
+                       # YAW_RATE_HZ is unrealistic, and SUSTAINED precision after
+                       # a turn is heading_lock's job, not the turn's success gate.
+                       # (Was briefly 1.0 -> combined with the hard floor below it
+                       # made every yaw command wobble forever and TIMEOUT.)
+YAW_LOCK_N    = 5      # consecutive frames within tol before success (~0.5 s at
+                       # YAW_RATE_HZ=10). If YAW_RATE_HZ is ever raised, scale this
+                       # to keep the same ~0.5 s dwell or a 0.1 s blip declares OK.
 
-# ---- Rate-loop tunables (min-speed clamped, matching sample_codebase) -------
-# T200 thrusters need ~20 PWM units (5%) above neutral to overcome static
-# friction. Pure proportional at small errors falls below this threshold and
-# the sub stops turning before reaching the target. The proven formula from
-# competition testing uses max(30, ...) in raw PWM units, which in our
-# percent_to_pwm system (±400 range) equals max(7.5%, ...).
-YAW_SPEED_MIN_PCT  = 7.5    # floor: 30 PWM / 400 range * 100
-YAW_SPEED_MAX_PCT  = 22.5   # ceiling: 90 PWM / 400 range * 100
-STALE_HOLD_S       = 0.5    # if yaw_source goes silent longer than this,
-                             # park Ch4 at 1500 instead of guessing
+# ---- Rate-loop tunables (floor TAPERED across an approach band) -------------
+# T200 thrusters need ~30 PWM (7.5%) above neutral to overcome static friction,
+# so during the bulk of a turn we floor the rate to that -- pure proportional
+# falls below it near target and the sub stalls SHORT. BUT a HARD floor at every
+# error > tol is its own bug: it pins Ch4 at 7.5% right up to the tol edge, and a
+# heavy hull (+ BNO/actuator latency, 100 ms pulses at 10 Hz) overshoots the band,
+# flips sign, and limit-cycles forever -> never YAW_LOCK_N in-band -> TIMEOUT.
+# Fix: the floor is full only OUTSIDE an approach band, then TAPERS LINEARLY to
+# zero at the tol edge (see _yaw_floor). Inside the band the command decays and
+# the anti-stall integral (previously masked by max(floor, .)) is unmasked, so
+# the hull eases in and a residual stall winds up gently instead of being driven
+# through the target. heading_lock keeps its own (continuous-hold) floor -- this
+# taper is only for the discrete "turn then declare locked" path.
+YAW_SPEED_MIN_PCT     = 7.5    # full floor: 30 PWM / 400 range * 100 (outside band)
+YAW_SPEED_MAX_PCT     = 22.5   # ceiling: 90 PWM / 400 range * 100
+YAW_APPROACH_BAND_DEG = 6.0    # |error| below this -> floor tapers MIN_PCT -> 0 at tol
+STALE_HOLD_S          = 0.5    # if yaw_source goes silent longer than this,
+                               # park Ch4 at 1500 instead of guessing
 
 # ---- PID gains for commanded yaw turns ----------------------------------------
 # Kp: scales proportionally -- 1.2 %/deg gives ~11% at 9 deg error (well above
@@ -90,6 +105,25 @@ YAW_AVG_DPS   = 30.0   # average deg/s across a glided turn
 # 90 deg -> 3.0 s, 45 deg -> 1.5 s, 180 deg -> 6.0 s.
 # Peak rate = avg x 1.875 (smootherstep peak derivative).
 YAW_MIN_DUR   = 1.5    # lower bound so small turns still get a glide
+
+
+def _yaw_floor(abs_error_deg: float) -> float:
+    """Stiction-breaking speed floor (%), tapered across the approach band.
+
+    Full ``YAW_SPEED_MIN_PCT`` at/above ``YAW_APPROACH_BAND_DEG`` (brisk travel,
+    break T200 stiction), then linearly to **0 at the lock tolerance** so the
+    command can decay and the hull eases into the band instead of being driven
+    through it at a hard floor (the limit-cycle bug). Pure / side-effect-free.
+    Only meaningful for ``abs_error_deg > YAW_TOL_DEG`` (inside tol the loop
+    commands 0 and never calls this).
+    """
+    if abs_error_deg >= YAW_APPROACH_BAND_DEG:
+        return YAW_SPEED_MIN_PCT
+    span = YAW_APPROACH_BAND_DEG - YAW_TOL_DEG
+    if span <= 0.0:
+        return YAW_SPEED_MIN_PCT
+    frac = (abs_error_deg - YAW_TOL_DEG) / span   # 1.0 at band edge -> 0 at tol
+    return YAW_SPEED_MIN_PCT * max(0.0, frac)
 
 
 class _YawPID:
@@ -119,7 +153,12 @@ class _YawPID:
                           self._i_acc + YAW_KI * error_deg))
 
         raw = YAW_KP * error_deg + self._i_acc + d_term
-        speed = max(YAW_SPEED_MIN_PCT, min(YAW_SPEED_MAX_PCT, abs(raw)))
+        # Cap, then apply the TAPERED floor (full only outside the approach band).
+        # Near target the floor relaxes to ~0 so |raw| (P/D + the now-unmasked
+        # integral) decides the command -- the hull eases in instead of limit-
+        # cycling on a hard 7.5% floor.
+        mag   = min(YAW_SPEED_MAX_PCT, abs(raw))
+        speed = max(_yaw_floor(abs(error_deg)), mag)
 
         self._last_e = error_deg
         return math.copysign(speed, raw)

@@ -119,6 +119,47 @@ VISION_BRAKE_MIN_PCT = 6.0    # gate: skip the kick below this |EMA| (deadband e
 VISION_BRAKE_CAP_PCT = 30.0   # never reverse-kick harder than this
 _BRAKE_EMA_ALPHA     = 0.3    # per-tick EMA weight (~0.4 s memory at LOOP_HZ)
 
+# --- Range-adaptive gain schedule (Layer 1) -------------------------------- #
+# The law is P on NORMALIZED pixel error, so the image shift per unit hull
+# motion grows ~1/range (~ bbox fill): a kp critically damped far-field is
+# OVER-gained close-in, oscillating the 20 kg hull off a small target. Scale the
+# lat/depth kp DOWN as fill grows -- 1.0 below FILL_LO (far, full gain), ramping
+# linearly to `floor` at/above FILL_HI (close, gentle). `floor` is the only deck
+# knob (vision.range_gain_floor; 1.0 = off); the ramp endpoints stay constants.
+# Yaw is EXCLUDED -- terminal yaw is delegated to heading_lock, and near-field
+# yaw has its own stiction floor that ADDS authority (opposite intent).
+VISION_RANGE_GAIN_FILL_LO = 0.25   # fill below which lat/depth gain is unscaled
+VISION_RANGE_GAIN_FILL_HI = 0.60   # fill at/above which gain is fully floored
+
+# --- Lateral anti-windup integral (Layer 2) -------------------------------- #
+# Ch6 lateral is OPEN-LOOP thrust with no downstream position hold, so a steady
+# current leaves a steady-state offset pure-P cannot null. A small bounded
+# I-term (accumulated ONLY while holding, clamped to ±I_LAT_MAX, frozen on
+# output saturation, reset on target loss) cancels it. ki rides
+# vision.ki_lat (default 0 = OFF until the range damping is confirmed -- an
+# integral on an under-damped loop makes it worse). Yaw/depth get NO I-term
+# (Ch4 rate + ALT_HOLD already integrate downstream).
+VISION_I_LAT_MAX = 15.0   # |lateral integral| clamp, % thrust
+
+# --- Continuity lock (Layer 3) --------------------------------------------- #
+# Once a target is acquired, prefer the detection NEAREST the last-accepted
+# centre within this normalized gate (not the largest box) so a second hole /
+# spurious box can't steal the aim. Enabled per-call via lock_on; the gate width
+# is a constant (re-tune in code if a target legitimately moves faster than this
+# between ticks). Acquisition (no prior centre) stays largest-area.
+VISION_LOCK_GATE_NORM = 0.30   # max normalized centre jump to stay locked
+
+# --- Minimum achievable deadband ------------------------------------------- #
+# A 20 kg hull on open-loop Ch6 thrust against a bbox that itself jitters a few
+# px per frame cannot hold a literal 0 px error -- and `err=0` from the operator
+# means "use the default" anyway (the rosidl-0 = unset live-tuning convention in
+# commands.fields_for, NOT a literal zero deadband). So clamp the EFFECTIVE
+# deadband to this floor: an over-tight POSITIVE err (e.g. err=1) still completes
+# instead of perpetually TIMEOUTing on noise it can never satisfy. The align
+# entry log prints the effective value so a floor is never silent. Pool-tunable
+# to the detector's real per-frame bbox jitter.
+MIN_ALIGN_ERR_PX = 5.0
+
 # Freshness-decay of the translational command. The loop runs at VISION_LOOP_HZ
 # (20 Hz) but the detector may publish far slower (3-4 Hz when inference-bound),
 # so the same bbox error is re-used for several ticks. Re-commanding the same P
@@ -169,12 +210,21 @@ class Outcome:
     worst per-axis pixel error at exit (align) or the lateral error
     (move). ``fill`` is the bbox fill fraction at exit (move; 0 for
     align).
+
+    ``end_x_px`` / ``end_y_px`` are the SIGNED pixel offset of the target from
+    frame CENTRE at the LAST SEEN frame (+x = target right of centre, +y =
+    below). They are ``nan`` when the target was never seen during the verb,
+    which lets a mission tell "ended off to the left" from "never detected".
+    Offset-independent (raw observable) -- distinct from ``last_err_px`` which
+    is the residual from the goal (centre+offset).
     """
     code:        int
     reason:      str
     last_err_px: float = 0.0
     fill:        float = 0.0
     elapsed_s:   float = 0.0
+    end_x_px:    float = math.nan
+    end_y_px:    float = math.nan
 
     @property
     def ok(self) -> bool:
@@ -199,6 +249,24 @@ def _freshness(age_s: float) -> float:
         return 0.0
     span = VISION_FRESH_ZERO_S - VISION_FRESH_FULL_S
     return (VISION_FRESH_ZERO_S - age_s) / span
+
+
+def _range_gain(fill: float, floor: float,
+                lo: float = VISION_RANGE_GAIN_FILL_LO,
+                hi: float = VISION_RANGE_GAIN_FILL_HI) -> float:
+    """kp multiplier in [floor, 1] that DROPS as bbox fill (closeness) rises.
+
+    1.0 below `lo` fill (far -> full gain), ramping linearly to `floor` at/above
+    `hi` fill (close -> gentle), cancelling the ~1/range loop-gain rise of
+    normalized-pixel P-control so the hull stays damped from far to close.
+    `floor` >= 1.0 (or hi<=lo) is a no-op. Pure; unit-tests without ROS.
+    """
+    if floor >= 1.0 or hi <= lo or fill <= lo:
+        return 1.0
+    if fill >= hi:
+        return floor
+    frac = (fill - lo) / (hi - lo)
+    return 1.0 + (floor - 1.0) * frac
 
 
 def _brake_axis(axis_writer, ema_pct: float, brake_gain: float,
@@ -302,6 +370,14 @@ def align_loop(*,
                align_stable_frames: int = 3,
                depth_sign: int = +1,
                release_yaw: bool = False,
+               lock_on: bool = False,
+               ctrl_conf: float = 0.0,
+               range_gain_floor: float = 1.0,
+               ki_lat: float = 0.0,
+               i_lat_max: float = VISION_I_LAT_MAX,
+               on_locked=None,
+               fire_t: float = 0.0,
+               report_fn=None,
                writers=None,
                log=None,
                abort_fn=None) -> Outcome:
@@ -316,6 +392,32 @@ def align_loop(*,
     (fighting water inertia) before exiting ALIGNED, instead of exiting on the
     first stable tick. hold_s counts against ``duration`` -- budget
     duration >= approach + hold_s or the verb TIMEOUTs mid-hold.
+
+    ``on_locked`` (if given) is called AT MOST ONCE, on the first STABLY-ALIGNED
+    tick at or after ``fire_t`` seconds into the hold window (measured from the
+    first stable tick), BEFORE the hold-exit check -- so a payload fire fires
+    mid-hold while the loop is still correcting, not on the drifting exit tick.
+    It is gated on the target being in-band: if alignment is never held during
+    the window, ``on_locked`` is NOT called (a torpedo never fires off-target).
+    The caller is expected to make ``on_locked`` non-blocking (it spawns the fire
+    on a background thread); the 20 Hz loop must not stall. ``fire_t`` should be
+    < hold_s (the verb clamps it upstream).
+
+    ``report_fn`` (if given) is called every PRESENT tick with the signed
+    from-centre pixel offset ``(x_off, y_off)`` of the target -- a live-telemetry
+    sink for action feedback. It stays rclpy-free (just a callable); the caller
+    wires it to a shared slot the manager's feedback pump reads.
+
+    Precision knobs (all default to "no change"):
+      * ``lock_on`` -- after the target is acquired, steer to the detection
+        NEAREST the last-accepted centre within ``VISION_LOCK_GATE_NORM`` (not the
+        largest box), so a second hole / spurious box can't steal the aim. Resets
+        to largest-area acquisition after a real loss (LOST exit).
+      * ``ctrl_conf`` -- control-side minimum detection score to accept a box.
+      * ``range_gain_floor`` -- scales lat/depth kp DOWN as the bbox fills the
+        frame (close) to stop the close-in overshoot (1.0 = off).
+      * ``ki_lat`` -- lateral integral gain; cancels the steady-current offset of
+        the open-loop Ch6 axis, accumulated only during the hold (0 = off).
     """
     bad = axes - VALID_AXES
     if bad:
@@ -364,19 +466,34 @@ def align_loop(*,
     stable      = 0
     lost_since: Optional[float] = None
     aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
+    fired       = False  # on_locked fired once at fire_t into the hold (payload mid-hold)
     last_log    = 0.0
     last_depth  = 0.0
     last_err_px = float('inf')
+    end_x_px    = math.nan  # signed from-centre px of target at last seen frame
+    end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
+    lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
+    dt          = 1.0 / LOOP_HZ              # fixed tick (loop sleeps this each pass)
+    gate_norm   = VISION_LOCK_GATE_NORM if lock_on else 0.0
+    locked_ex: Optional[float] = None        # last-accepted centre -> continuity lock
+    locked_ey: Optional[float] = None
     saw_target  = False  # True once any frame yields the target -> distinguishes
                          #   "never detected" (wrong model/classes/view) from
                          #   "seen but couldn't converge" at exit.
 
-    log.debug(
+    # Effective deadband: clamp to a physical floor so an over-tight err can't
+    # perpetually TIMEOUT on bbox jitter. err_px here is already post-coercion
+    # (commands.fields_for turned a rosidl-0 "unset" into the default/param), so
+    # this only ever floors a genuinely tiny positive request -- logged, never
+    # silent, so 'aligned (Npx)' is always read against the real deadband.
+    eff_err = max(float(err_px), MIN_ALIGN_ERR_PX)
+    floored = eff_err > float(err_px)
+    log.info(
         f"[VIS  ] align class={target_class!r} axes={sorted(axes)} "
-        f"offsets={ {k: round(v) for k, v in offsets.items()} } "
-        f"err={err_px:.0f}px gain={gain:.0f}% dur={duration:.0f}s "
-        f"hold={hold_s:.0f}s hold_thru_loss={hold_through_loss}")
+        f"err={eff_err:.0f}px"
+        f"{' (floored from %.0f)' % err_px if floored else ''} "
+        f"gain={gain:.0f}% dur={duration:.0f}s hold={hold_s:.0f}s")
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
@@ -385,16 +502,26 @@ def align_loop(*,
             now     = time.monotonic()
             elapsed = now - started
             if abort_fn and abort_fn():
-                return Outcome(ABORTED, "aborted", last_err_px, 0.0, elapsed)
+                return Outcome(ABORTED, "aborted", last_err_px, 0.0, elapsed,
+                               end_x_px, end_y_px)
             if now >= deadline:
                 reason = ("not aligned (duration elapsed)" if saw_target else
                           f"target {target_class!r} NEVER detected -- check "
                           f"model/classes/camera view")
-                return Outcome(TIMEOUT, reason, last_err_px, 0.0, elapsed)
+                return Outcome(TIMEOUT, reason, last_err_px, 0.0, elapsed,
+                               end_x_px, end_y_px)
 
-            sample = vision_state.bbox_error(target_class)
+            # Continuity lock: once acquired, prefer the box NEAREST the last
+            # centre (within gate_norm) over the largest, so a 2nd hole / spurious
+            # box can't steal the aim. near=None (pre-acquire) or gate_norm=0
+            # (lock_on off) -> largest-area, unchanged. ctrl_conf gates low-score
+            # boxes out of the control target.
+            near = (locked_ex, locked_ey) if locked_ex is not None else None
+            sample = vision_state.bbox_error(
+                target_class, near=near, gate_norm=gate_norm, min_score=ctrl_conf)
             if not _present(sample):
                 stable = 0
+                lat_i = 0.0   # bleed integral windup while blind
                 _drive(0.0, 0.0)
                 if use_depth:
                     pixhawk.set_target_depth(depth_setpoint)
@@ -404,7 +531,8 @@ def align_loop(*,
                     reason = (f"target {target_class!r} lost" if saw_target else
                               f"target {target_class!r} NEVER detected -- check "
                               f"model/classes/camera view")
-                    return Outcome(LOST, reason, last_err_px, 0.0, elapsed)
+                    return Outcome(LOST, reason, last_err_px, 0.0, elapsed,
+                                   end_x_px, end_y_px)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
@@ -420,7 +548,22 @@ def align_loop(*,
 
             saw_target = True
             lost_since = None
-            yaw_pct = lat_pct = 0.0
+            # Re-arm the continuity lock on the accepted box (used as `near` next
+            # tick) ONLY when lock_on -- otherwise leave near=None so selection
+            # stays largest-area. After a real loss the loop exits LOST, so a
+            # fresh verb call re-acquires largest -- no stale lock survives.
+            if lock_on:
+                locked_ex, locked_ey = sample.ex, sample.ey
+            # Range-adaptive gain: soften lat/depth kp as the bbox fills the frame
+            # (close) so the 20 kg hull doesn't overshoot a small target.
+            rgain = _range_gain(_fill(sample, 'area'), range_gain_floor)
+            # Signed from-centre offset of the target THIS tick: the end-position
+            # the verb returns, and the live value report_fn streams to feedback.
+            end_x_px = sample.ex * half_w
+            end_y_px = sample.ey * half_h
+            if report_fn is not None:
+                report_fn(end_x_px, end_y_px)
+            yaw_pct = lat_pct = p_lat = 0.0
             in_band = []
             worst   = 0.0
 
@@ -428,8 +571,17 @@ def align_loop(*,
                 ctrl = sample.ex - offsets.get('lat', 0.0) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
-                lat_pct = _clamp(ctrl * kp_lat, -g_lat, g_lat)
-                in_band.append(epx <= err_px)
+                p_lat = ctrl * kp_lat * rgain
+                # Lateral integral (Layer 2): Ch6 is open-loop, so only the
+                # integral nulls a steady-current offset. Accumulate ONLY during
+                # the hold (aligned_at set), conditional on the output not being
+                # saturated (anti-windup), clamped. ki_lat=0 -> exactly P.
+                if ki_lat > 0.0 and aligned_at is not None \
+                        and abs(p_lat + lat_i) < g_lat:
+                    lat_i = _clamp(lat_i + ki_lat * ctrl * dt,
+                                   -i_lat_max, i_lat_max)
+                lat_pct = _clamp(p_lat + lat_i, -g_lat, g_lat)
+                in_band.append(epx <= eff_err)
 
             if 'yaw' in axes:
                 ctrl = sample.ex - offsets.get('yaw', 0.0) / half_w
@@ -445,31 +597,38 @@ def align_loop(*,
                 # floor is suppressed: a hard minimum on a rate channel is a
                 # relay that limit-cycles the hull, which is the far-field
                 # wobble. See VISION_YAW_FLOOR_FILL.
-                if epx <= err_px:
+                if epx <= eff_err:
                     yaw_pct = 0.0
                 else:
                     mag = min(abs(ctrl * kp_yaw), g_yaw)
                     if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
                         mag = max(mag, min(VISION_YAW_MIN_PCT, g_yaw))
                     yaw_pct = math.copysign(mag, ctrl)
-                in_band.append(epx <= err_px)
+                in_band.append(epx <= eff_err)
 
             if use_depth:
                 ctrl = sample.ey - offsets.get('depth', 0.0) / half_h
                 epx  = abs(ctrl) * half_h
                 worst = max(worst, epx)
-                step = _clamp(ctrl * kp_depth, -max_nudge, max_nudge) * depth_sign
+                step = _clamp(ctrl * kp_depth * rgain,
+                              -max_nudge, max_nudge) * depth_sign
                 depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
-                in_band.append(epx <= err_px)
+                in_band.append(epx <= eff_err)
 
             last_err_px = worst
             # Freshness-decay: pace LATERAL authority to measurement freshness so
             # the loop doesn't blind-drive on a stale bbox between slow frames
             # (yaw/depth excluded -- ArduSub bleeds Ch4, holds depth). At healthy
             # FPS fresh==1.0 so this is a no-op.
-            lat_pct *= _freshness(sample.age_s)
+            fresh = _freshness(sample.age_s)
+            lat_pct *= fresh
             _drive(lat_pct, yaw_pct)
-            lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
+            # Brake EMA tracks the PROPORTIONAL command only (a travel-momentum
+            # proxy), NOT the full lat_pct: a hull holding STILL against a steady
+            # current carries a nonzero integral (lat_i) but ~0 motion, so
+            # including it would make the arrival brake reverse-kick a stationary
+            # hull off the spot it was holding. Exclude lat_i here.
+            lat_ema += _BRAKE_EMA_ALPHA * (p_lat * fresh - lat_ema)
             if use_depth and (now - last_depth) >= 1.0 / DEPTH_HZ:
                 pixhawk.set_target_depth(depth_setpoint)
                 last_depth = now
@@ -487,6 +646,18 @@ def align_loop(*,
                     if hold_s > 0.0:
                         log.info(f"[VIS  ] align HELD -- station-keeping "
                                  f"{hold_s:.1f}s ({worst:.0f}px)")
+                # Mid-hold fire: BEFORE the exit check so the payload actuates
+                # while the loop is still correcting (not on the drifting exit
+                # tick). on_locked is non-blocking (spawns a thread) so a slow
+                # payload reconnect can't stall the 20 Hz station-keep. fire_t is
+                # clamped < hold_s upstream, so this trips while still holding.
+                if on_locked is not None and not fired and \
+                        (now - aligned_at) >= fire_t:
+                    fired = True
+                    try:
+                        on_locked()
+                    except Exception as exc:   # noqa: BLE001 -- fire must not kill the loop
+                        log.error(f"[VIS  ] on_locked (fire) raised {exc!r}")
                 if hold_s <= 0.0 or (now - aligned_at) >= hold_s:
                     # Arrival / hold complete: bleed lateral inertia so the hull
                     # stops square and the next mission step starts from the
@@ -497,9 +668,14 @@ def align_loop(*,
                         _brake_axis(writers.lateral, lat_ema, brake_gain,
                                     abort_fn=abort_fn, log=log, label='VBRK')
                     writers.neutral()
-                    reason = (f"held {hold_s:.1f}s ({worst:.0f}px)" if hold_s > 0.0
-                              else f"aligned ({worst:.0f}px)")
-                    return Outcome(ALIGNED, reason, worst, 0.0, elapsed)
+                    # State the deadband next to the residual so 'aligned
+                    # (Npx)' is never misread as "should have been 0" -- N is
+                    # within the eff_err deadband by construction.
+                    reason = (f"held {hold_s:.1f}s ({worst:.0f}/{eff_err:.0f}px)"
+                              if hold_s > 0.0
+                              else f"aligned ({worst:.0f}/{eff_err:.0f}px)")
+                    return Outcome(ALIGNED, reason, worst, 0.0, elapsed,
+                                   end_x_px, end_y_px)
                 # else: inside the hold window -- fall through to the loop tail
                 # and keep correcting (the per-tick _drive above already ran).
                 # ponytail: aligned_at is set ONCE and never reset (unlike
@@ -510,17 +686,14 @@ def align_loop(*,
                 # "fix" this to match move.
 
             if (now - last_log) >= LOG_THROTTLE_S:
-                # The detector node owns the always-on operator alignment line
-                # (same format, against the loaded class, regardless of verb), so
-                # this per-verb copy is demoted to debug to avoid a duplicate
-                # line in the mission terminal.
+                # The detector node owns the always-on operator bearing line, so
+                # this per-verb copy is demoted to debug to avoid a duplicate in
+                # the mission terminal. Worded as live offset, not a verdict.
                 x_off = sample.ex * half_w
                 y_off = sample.ey * half_h
-                cx    = half_w + x_off
-                cy    = half_h + y_off
                 log.debug(
-                    f"[ align lat={x_off:+.0f} depth={y_off:+.0f}px ] "
-                    f"({cx:.0f},{cy:.0f}) align ['{target_class}'] center -> (0,0)")
+                    f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
+                    f"'{target_class}' -> err {worst:.0f}/{eff_err:.0f}px")
                 last_log = now
             time.sleep(1.0 / LOOP_HZ)
     finally:
@@ -554,6 +727,8 @@ def move_loop(*,
               lost_grace_s: float = 1.0,
               hold_through_loss: bool = False,
               release_yaw: bool = False,
+              range_gain_floor: float = 1.0,
+              report_fn=None,
               writers=None,
               log=None,
               abort_fn=None) -> Outcome:
@@ -576,6 +751,10 @@ def move_loop(*,
     driving; depth and yaw are never commanded (ArduSub holds depth;
     heading lock or the autopilot holds yaw). Returns an Outcome -- never
     raises on a miss.
+
+    ``report_fn`` (if given) is called every PRESENT tick with the signed
+    from-centre pixel offset ``(x_off, y_off)`` -- the live-telemetry sink for
+    action feedback (same contract as align_loop).
     """
     if mode not in VALID_MODES:
         raise ValueError(f"move_loop: mode must be one of {sorted(VALID_MODES)}")
@@ -585,6 +764,7 @@ def move_loop(*,
                        elapsed_s=0.0)
     width, height = vision_state.image_size()
     half_w = width * 0.5
+    half_h = height * 0.5
 
     # Lateral 'maintain' strafe gets its own cap; forward stays capped by `gain`.
     g_lat = gain if gain_lat is None else gain_lat
@@ -607,6 +787,8 @@ def move_loop(*,
     last_log     = 0.0
     last_fill    = 0.0
     last_lat_err = 0.0
+    end_x_px     = math.nan   # signed from-centre px of target at last seen frame
+    end_y_px     = math.nan
     fwd_ema      = 0.0   # trailing EMA of forward command -> brake proxy (fill-stop)
     lat_ema      = 0.0   # trailing EMA of the maintain strafe command -> brake proxy
 
@@ -626,7 +808,8 @@ def move_loop(*,
             now     = time.monotonic()
             elapsed = now - started
             if abort_fn and abort_fn():
-                return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed)
+                return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed,
+                               end_x_px, end_y_px)
             if now >= deadline:
                 if not seen_once:
                     reason = (f"target {target_class!r} NEVER detected -- check "
@@ -634,7 +817,8 @@ def move_loop(*,
                 else:
                     reason = ("passed-through window not closed (duration elapsed)"
                               if passthrough else "fill not reached (duration elapsed)")
-                return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed)
+                return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed,
+                               end_x_px, end_y_px)
 
             sample  = vision_state.bbox_error(target_class)
             present = _present(sample)
@@ -651,7 +835,7 @@ def move_loop(*,
                 if now >= commit_until:
                     writers.neutral()
                     return Outcome(ALIGNED, "passed through", last_lat_err,
-                                   last_fill, elapsed)
+                                   last_fill, elapsed, end_x_px, end_y_px)
                 _drive(gain, 0.0)   # no detection -> no lateral, just drive on
                 time.sleep(1.0 / LOOP_HZ)
                 continue
@@ -665,7 +849,8 @@ def move_loop(*,
                     reason = (f"target {target_class!r} lost" if seen_once else
                               f"target {target_class!r} NEVER detected -- check "
                               f"model/classes/camera view")
-                    return Outcome(LOST, reason, last_lat_err, last_fill, elapsed)
+                    return Outcome(LOST, reason, last_lat_err, last_fill, elapsed,
+                                   end_x_px, end_y_px)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
@@ -687,11 +872,17 @@ def move_loop(*,
             fresh = _freshness(sample.age_s)   # pace translational authority to FPS
 
             x_off = sample.ex * half_w         # signed horizontal offset (operator px)
+            # End-position (returned) + live feedback sink.
+            end_x_px = x_off
+            end_y_px = sample.ey * half_h
+            if report_fn is not None:
+                report_fn(end_x_px, end_y_px)
             lat_pct = 0.0
             if maintain_on:
                 ctrl = sample.ex - maintain_px / half_w
                 last_lat_err = abs(ctrl) * half_w
-                lat_pct = _clamp(ctrl * kp_lat, -g_lat, g_lat) * fresh
+                rgain = _range_gain(_fill(sample, mode), range_gain_floor)
+                lat_pct = _clamp(ctrl * kp_lat * rgain, -g_lat, g_lat) * fresh
             lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
 
             if passthrough:
@@ -724,7 +915,7 @@ def move_loop(*,
                     writers.neutral()
                     return Outcome(ALIGNED,
                                    f"reached fill={fill * 100:.0f}%",
-                                   last_lat_err, fill, elapsed)
+                                   last_lat_err, fill, elapsed, end_x_px, end_y_px)
             else:
                 reached_at = None
                 # Freshness-decay forward so a stale frame doesn't blind-drive the

@@ -49,6 +49,25 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # align_stable_frames: ticks (at 20 Hz) every active axis must stay within
     # err_px before vision_align reports ALIGNED. 3 ticks = 0.15 s.
     'vision.align_stable_frames':  3.0,
+    # --- precision-alignment knobs (close-in robustness; all default OFF) -----
+    # range_gain_floor: lat/depth kp multiplier when the bbox FILLS the frame
+    # (close). Normalized-pixel P-control's loop gain rises ~1/range, so a kp
+    # stable far-field over-drives close-in and the 20 kg hull oscillates off a
+    # small target. Scaling kp down near the target (1.0=off, ~0.3=gentle)
+    # restores damping. 1.0 keeps today's behaviour until the operator dials it.
+    'vision.range_gain_floor':     1.0,
+    # ki_lat: lateral integral gain. Ch6 lateral is open-loop thrust with no
+    # downstream position hold, so a steady current leaves a steady-state offset
+    # pure-P can't null. A small ki (active only during the hold, clamped,
+    # frozen on saturation, reset on loss) cancels it. 0 = off until the range
+    # damping above is confirmed in water (an I-term on an under-damped loop
+    # makes it worse).
+    'vision.ki_lat':               0.0,
+    # ctrl_conf: control-side minimum detection score to accept a box as the
+    # target (0 = off). Distinct from the detector node's global `conf`: this
+    # gates only what the CONTROL loop steers on, so a low-score flicker can't
+    # become the aim point without raising the detector floor for everyone.
+    'vision.ctrl_conf':            0.0,
 }
 
 
@@ -66,12 +85,16 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'kp_depth':            'vision.kp_depth',
         'lost_grace_s':        'vision.lost_grace_s',
         'align_stable_frames': 'vision.align_stable_frames',
+        'range_gain_floor':    'vision.range_gain_floor',
+        'ki_lat':              'vision.ki_lat',
+        'ctrl_conf':           'vision.ctrl_conf',
     },
     'vision_move': {
-        'kp_forward':   'vision.kp_forward',
-        'kp_lat':       'vision.kp_lat',
-        'lost_grace_s': 'vision.lost_grace_s',
-        'fwd_fill':     'vision.frame_fill_default',
+        'kp_forward':      'vision.kp_forward',
+        'kp_lat':          'vision.kp_lat',
+        'lost_grace_s':    'vision.lost_grace_s',
+        'fwd_fill':        'vision.frame_fill_default',
+        'range_gain_floor': 'vision.range_gain_floor',
     },
 }
 

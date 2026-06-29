@@ -2,6 +2,10 @@
 
 > **Companion to:** [`fsm-guide.md`](fsm-guide.md) (state library reference, pool-day workflow)
 > **Prerequisite:** [`fsm-guide.md`](fsm-guide.md) §1–4 (VehicleProfile, DuburiState, outcomes)
+> **Close-in shots:** for the terminal lock/hold/fire phase (don't miss the hole,
+> hold a heavy hull steady, ignore a 2nd hole) see
+> [`precision-alignment.md`](precision-alignment.md) — `lock_on`, the deck gain/conf/
+> integral params, and the yaw→`heading_lock` pattern.
 
 This document covers **how to design missions where vision drives every decision**.
 It starts from first principles, builds a vocabulary of patterns, and ends with

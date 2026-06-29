@@ -32,6 +32,7 @@ is unchanged from the old DSL.
 from __future__ import annotations
 
 import inspect
+import math
 import time as _time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
@@ -63,20 +64,55 @@ _CODE_NAME = {
 class VisionResult:
     """Outcome of a vision verb -- truthy only when the goal was achieved.
 
-    ``ok``          -- True iff aligned (align) / reached fill (move).
-    ``reason``      -- human-readable outcome ('ALIGNED', 'TIMEOUT', ...).
-    ``code``        -- the raw integer code from the server.
-    ``last_err_px`` -- worst per-axis pixel error (align) / lateral error (move).
-    ``fill``        -- bbox fill fraction at exit (move; 0 for align).
+    Branch on more than success: a mission can read WHERE and HOW the verb
+    finished and run tested open-loop recovery (the hybrid vision+control
+    paradigm), e.g.::
+
+        res = duburi.vision.align('gate', yaw=0, lat=0)
+        if res:                       # ALIGNED
+            ...                        # proceed
+        elif res.saw_target:          # tried, didn't fully centre
+            if res.x_px < -30: duburi.move_right(1)
+            elif res.x_px > 30: duburi.move_left(1)
+        else:                         # never saw the gate
+            duburi.search()
+
+    Fields:
+      ``ok``          -- True iff aligned (align) / reached fill (move).
+      ``reason``/``status`` -- outcome name ('ALIGNED','LOST','TIMEOUT',
+                          'NO_CAMERA','ABORTED','FAILED').
+      ``code``        -- the raw integer code from the server.
+      ``x_px``/``y_px`` -- SIGNED px of the target from frame CENTRE at the last
+                          seen frame (+x = right, +y = below). ``nan`` when the
+                          target was never seen -> use ``saw_target``.
+      ``saw_target``  -- True iff the target was detected at least once.
+      ``last_err_px`` -- worst residual px from the goal (align) / lateral (move).
+      ``fill``        -- bbox fill fraction at exit [0..1] (move; 0 for align).
+      ``elapsed_s``   -- verb duration.
     """
     ok:          bool
     reason:      str
     code:        int = TIMEOUT
     last_err_px: float = 0.0
     fill:        float = 0.0
+    x_px:        float = math.nan
+    y_px:        float = math.nan
+    saw_target:  bool  = False
+    elapsed_s:   float = 0.0
+
+    @property
+    def status(self) -> str:
+        return self.reason
 
     def __bool__(self) -> bool:           # ``if duburi.vision.align(...):``
         return self.ok
+
+    def __repr__(self) -> str:
+        pos = ('(never seen)' if not self.saw_target
+               else f'ended ({self.x_px:+.0f},{self.y_px:+.0f})px')
+        extra = f' fill={self.fill * 100:.0f}%' if self.fill else ''
+        return (f'VisionResult({self.reason} {pos}{extra} '
+                f'err={self.last_err_px:.0f}px {self.elapsed_s:.1f}s)')
 
 
 class _VisionDSL:
@@ -127,6 +163,9 @@ class _VisionDSL:
               brake: bool = True,
               brake_gain: Optional[float] = None,
               hold: Optional[float] = None,
+              fire=None,
+              fire_t: Optional[float] = None,
+              lock_on: bool = False,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -157,14 +196,45 @@ class _VisionDSL:
         ``hold`` (seconds) turns align into an ACTIVE station-keep: once
         centred, the loop keeps running its lat/yaw/depth corrections for
         ``hold`` s -- fighting water inertia/current -- before returning,
-        instead of exiting the instant it's centred. This is what holds the
-        hull steady on a target for a payload action (``align('hole', yaw=0,
-        lat=0, gain=25, yaw_gain=10, hold=3, brake=False)`` then ``fire()``).
-        It holds lat/yaw/depth only -- NOT forward range (the prior ``move``
-        set the standoff). ``hold`` counts against ``duration``: budget
-        ``duration >= approach + hold`` or the verb TIMEOUTs mid-hold (and a
-        ``if align(hold=3): fire()`` would skip the shot). For a fire-from-lock
-        pass ``brake=False`` so there's no pre-shot lateral nudge.
+        instead of exiting the instant it's centred. It holds lat/yaw/depth
+        only -- NOT forward range (the prior ``move`` set the standoff).
+        ``hold`` counts against ``duration``: budget ``duration >= approach +
+        hold`` or the verb TIMEOUTs mid-hold. For a fire-from-lock pass
+        ``brake=False`` so there's no pre-shot lateral nudge.
+
+        ``fire`` (channel int or list, e.g. ``fire=1`` or ``fire=[1, 2]`` --
+        1/2=torpedo, 3/4=dropper) fires the payload WHILE the hold loop is
+        still correcting, ``fire_t`` seconds into the hold (0 = at hold start),
+        on a background thread so the 20 Hz correction never stalls on the
+        payload write. This is the accurate-shot pattern: instead of
+        ``align(hold=3)`` THEN ``fire()`` (the gap drifts the hull off the hole
+        and the shot misses), the torpedo leaves WHILE glued::
+
+            align('hole', yaw=0, lat=0, depth=0, hold=4, fire=1, fire_t=1,
+                  brake=False)
+
+        Requires ``hold > fire_t`` (else fire_t is clamped to 0 -- fire at hold
+        start). Multiple channels fire one-by-one. The fire is GATED on
+        alignment: it leaves on the first stably-aligned tick at or after
+        ``fire_t``; if the hull never holds the lock during the hold window the
+        shot is NOT fired (deliberate -- a torpedo never launches off-target).
+        So budget enough ``hold`` to actually settle on the target before
+        ``fire_t``. CAVEAT: on a CH340 payload reconnect the shot can leave up
+        to ~2 s late (threading keeps the loop alive, it can't make the board
+        faster) -- use a small ``fire_t`` and generous ``hold`` so a delayed
+        shot still lands inside the hold window.
+
+        ``lock_on`` (default False) turns on the continuity lock: once the target
+        is acquired, the loop steers to the detection NEAREST the last-accepted
+        centre (within a gate) instead of the largest box -- so a second hole /
+        spurious box can't steal the aim during a close-in fire. Use it on the
+        terminal hole/bin lock (``align('hole', lat=0, depth=0, lock_on=True,
+        hold=..., fire=1)``); leave it off for far-field acquisition. The
+        control-side conf floor (``vision.ctrl_conf``), the close-in gain
+        softening (``vision.range_gain_floor``) and the hold integral
+        (``vision.ki_lat``) are deck ROS params -- set them with
+        ``ros2 param set /duburi_manager vision.<name> <value>`` (they apply on
+        the next goal); see ``.claude/context/precision-alignment.md``.
         """
         active = [(name, val) for name, val in
                   (('lat', lat), ('yaw', yaw), ('depth', depth))
@@ -185,6 +255,12 @@ class _VisionDSL:
         self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))
         tgt     = self._resolve_target(target, cam)
 
+        # fire: int | list | None -> CSV channels for the goal ('' = no fire).
+        fire_csv = ''
+        if fire is not None:
+            seq = fire if isinstance(fire, (list, tuple)) else [fire]
+            fire_csv = ','.join(str(int(c)) for c in seq)
+
         def _one_shot(remaining: float):
             return self._send(
                 'vision_align',
@@ -199,7 +275,10 @@ class _VisionDSL:
                 brake_off=(not brake),
                 brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
                 hold_s=float(hold) if hold is not None else 0.0,
-                hold_through_loss=(fallback is None))
+                hold_through_loss=(fallback is None),
+                fire_channels=fire_csv,
+                fire_t=float(fire_t) if fire_t is not None else 0.0,
+                lock_target=bool(lock_on))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)
@@ -406,24 +485,39 @@ class _VisionDSL:
                 return VisionResult(False, 'FAILED', TIMEOUT)
             code   = int(round(getattr(result, 'final_value', TIMEOUT)))
             err_px = float(getattr(result, 'error_value', 0.0))
+            x_px   = float(getattr(result, 'end_x_px', math.nan))
+            y_px   = float(getattr(result, 'end_y_px', math.nan))
+            fill   = float(getattr(result, 'fill_frac', 0.0))
+            elapsed = float(getattr(result, 'elapsed_s', 0.0))
+            saw    = not math.isnan(x_px)
+
+            def _mk(ok, reason):
+                return VisionResult(ok, reason, code, err_px, fill,
+                                    x_px, y_px, saw, elapsed)
+
+            # Where/how it ended -- logged on EVERY terminal outcome (success too)
+            # so practice notes are automatic.
+            pos = (f'ended ({x_px:+.0f},{y_px:+.0f})px' if saw else 'never seen')
 
             if code == ALIGNED:
-                return VisionResult(True, 'ALIGNED', ALIGNED, err_px,
-                                    fill=err_px if verb == 'move' else 0.0)
+                self.log.info(
+                    f"[VIS  ] {verb} {target!r}: ALIGNED -- {pos} "
+                    f"err={err_px:.0f}px{' fill=%.0f%%' % (fill * 100) if verb == 'move' else ''}")
+                return _mk(True, 'ALIGNED')
 
             if code == ABORTED:
-                self.log.warning(f"[VIS  ] {verb} {target!r}: ABORTED")
-                return VisionResult(False, 'ABORTED', ABORTED, err_px)
+                self.log.warning(f"[VIS  ] {verb} {target!r}: ABORTED -- {pos}")
+                return _mk(False, 'ABORTED')
 
             if code == NO_CAMERA:
                 self.log.error(
                     f"[VIS  ] {verb} {target!r}: NO_CAMERA -- pipeline not up "
                     f"(camera={camera!r}); mission continues")
-                return VisionResult(False, 'NO_CAMERA', NO_CAMERA, err_px)
+                return _mk(False, 'NO_CAMERA')
 
             if code == LOST and fallback is not None:
                 if _time.monotonic() >= deadline:
-                    return VisionResult(False, 'TIMEOUT', TIMEOUT, err_px)
+                    return _mk(False, 'TIMEOUT')
                 self.log.info(
                     f"[VIS  ] {verb} {target!r}: target lost -- running "
                     f"fallback {getattr(fallback, '__name__', 'fn')}()")
@@ -433,9 +527,10 @@ class _VisionDSL:
             # LOST without fallback, or TIMEOUT: out of options for this step.
             reason = _CODE_NAME.get(code, str(code))
             self.log.warning(
-                f"[VIS  ] {verb} {target!r}: NOT reached ({reason}) -- "
+                f"[VIS  ] {verb} {target!r}: NOT reached ({reason}) -- {pos} "
+                f"err={err_px:.0f}px saw={saw} elapsed={elapsed:.1f}s -- "
                 f"mission continues")
-            return VisionResult(False, reason, code, err_px)
+            return _mk(False, reason)
 
     def _run_fallback(self, fallback: Callable, target: str,
                       camera: str) -> None:
