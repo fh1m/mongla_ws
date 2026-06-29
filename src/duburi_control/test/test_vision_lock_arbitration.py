@@ -119,7 +119,7 @@ class FakeVision:
     def list_classes(self):
         return ['gate']
 
-    def bbox_error(self, _cls):
+    def bbox_error(self, _cls, **_kw):
         return self._sample
 
 
