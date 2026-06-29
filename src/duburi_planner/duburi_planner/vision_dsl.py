@@ -32,6 +32,7 @@ is unchanged from the old DSL.
 from __future__ import annotations
 
 import inspect
+import math
 import time as _time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
@@ -63,20 +64,55 @@ _CODE_NAME = {
 class VisionResult:
     """Outcome of a vision verb -- truthy only when the goal was achieved.
 
-    ``ok``          -- True iff aligned (align) / reached fill (move).
-    ``reason``      -- human-readable outcome ('ALIGNED', 'TIMEOUT', ...).
-    ``code``        -- the raw integer code from the server.
-    ``last_err_px`` -- worst per-axis pixel error (align) / lateral error (move).
-    ``fill``        -- bbox fill fraction at exit (move; 0 for align).
+    Branch on more than success: a mission can read WHERE and HOW the verb
+    finished and run tested open-loop recovery (the hybrid vision+control
+    paradigm), e.g.::
+
+        res = duburi.vision.align('gate', yaw=0, lat=0)
+        if res:                       # ALIGNED
+            ...                        # proceed
+        elif res.saw_target:          # tried, didn't fully centre
+            if res.x_px < -30: duburi.move_right(1)
+            elif res.x_px > 30: duburi.move_left(1)
+        else:                         # never saw the gate
+            duburi.search()
+
+    Fields:
+      ``ok``          -- True iff aligned (align) / reached fill (move).
+      ``reason``/``status`` -- outcome name ('ALIGNED','LOST','TIMEOUT',
+                          'NO_CAMERA','ABORTED','FAILED').
+      ``code``        -- the raw integer code from the server.
+      ``x_px``/``y_px`` -- SIGNED px of the target from frame CENTRE at the last
+                          seen frame (+x = right, +y = below). ``nan`` when the
+                          target was never seen -> use ``saw_target``.
+      ``saw_target``  -- True iff the target was detected at least once.
+      ``last_err_px`` -- worst residual px from the goal (align) / lateral (move).
+      ``fill``        -- bbox fill fraction at exit [0..1] (move; 0 for align).
+      ``elapsed_s``   -- verb duration.
     """
     ok:          bool
     reason:      str
     code:        int = TIMEOUT
     last_err_px: float = 0.0
     fill:        float = 0.0
+    x_px:        float = math.nan
+    y_px:        float = math.nan
+    saw_target:  bool  = False
+    elapsed_s:   float = 0.0
+
+    @property
+    def status(self) -> str:
+        return self.reason
 
     def __bool__(self) -> bool:           # ``if duburi.vision.align(...):``
         return self.ok
+
+    def __repr__(self) -> str:
+        pos = ('(never seen)' if not self.saw_target
+               else f'ended ({self.x_px:+.0f},{self.y_px:+.0f})px')
+        extra = f' fill={self.fill * 100:.0f}%' if self.fill else ''
+        return (f'VisionResult({self.reason} {pos}{extra} '
+                f'err={self.last_err_px:.0f}px {self.elapsed_s:.1f}s)')
 
 
 class _VisionDSL:
@@ -342,24 +378,39 @@ class _VisionDSL:
                 return VisionResult(False, 'FAILED', TIMEOUT)
             code   = int(round(getattr(result, 'final_value', TIMEOUT)))
             err_px = float(getattr(result, 'error_value', 0.0))
+            x_px   = float(getattr(result, 'end_x_px', math.nan))
+            y_px   = float(getattr(result, 'end_y_px', math.nan))
+            fill   = float(getattr(result, 'fill_frac', 0.0))
+            elapsed = float(getattr(result, 'elapsed_s', 0.0))
+            saw    = not math.isnan(x_px)
+
+            def _mk(ok, reason):
+                return VisionResult(ok, reason, code, err_px, fill,
+                                    x_px, y_px, saw, elapsed)
+
+            # Where/how it ended -- logged on EVERY terminal outcome (success too)
+            # so practice notes are automatic.
+            pos = (f'ended ({x_px:+.0f},{y_px:+.0f})px' if saw else 'never seen')
 
             if code == ALIGNED:
-                return VisionResult(True, 'ALIGNED', ALIGNED, err_px,
-                                    fill=err_px if verb == 'move' else 0.0)
+                self.log.info(
+                    f"[VIS  ] {verb} {target!r}: ALIGNED -- {pos} "
+                    f"err={err_px:.0f}px{' fill=%.0f%%' % (fill * 100) if verb == 'move' else ''}")
+                return _mk(True, 'ALIGNED')
 
             if code == ABORTED:
-                self.log.warning(f"[VIS  ] {verb} {target!r}: ABORTED")
-                return VisionResult(False, 'ABORTED', ABORTED, err_px)
+                self.log.warning(f"[VIS  ] {verb} {target!r}: ABORTED -- {pos}")
+                return _mk(False, 'ABORTED')
 
             if code == NO_CAMERA:
                 self.log.error(
                     f"[VIS  ] {verb} {target!r}: NO_CAMERA -- pipeline not up "
                     f"(camera={camera!r}); mission continues")
-                return VisionResult(False, 'NO_CAMERA', NO_CAMERA, err_px)
+                return _mk(False, 'NO_CAMERA')
 
             if code == LOST and fallback is not None:
                 if _time.monotonic() >= deadline:
-                    return VisionResult(False, 'TIMEOUT', TIMEOUT, err_px)
+                    return _mk(False, 'TIMEOUT')
                 self.log.info(
                     f"[VIS  ] {verb} {target!r}: target lost -- running "
                     f"fallback {getattr(fallback, '__name__', 'fn')}()")
@@ -369,9 +420,10 @@ class _VisionDSL:
             # LOST without fallback, or TIMEOUT: out of options for this step.
             reason = _CODE_NAME.get(code, str(code))
             self.log.warning(
-                f"[VIS  ] {verb} {target!r}: NOT reached ({reason}) -- "
+                f"[VIS  ] {verb} {target!r}: NOT reached ({reason}) -- {pos} "
+                f"err={err_px:.0f}px saw={saw} elapsed={elapsed:.1f}s -- "
                 f"mission continues")
-            return VisionResult(False, reason, code, err_px)
+            return _mk(False, reason)
 
     def _run_fallback(self, fallback: Callable, target: str,
                       camera: str) -> None:

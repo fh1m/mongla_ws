@@ -73,6 +73,7 @@ it on exit; ``lock_heading`` keeps it paused for the entire lock
 lifetime because the lock thread is itself writing the wire.
 """
 
+import math
 import threading
 import time
 from contextlib import contextmanager
@@ -242,6 +243,31 @@ class Duburi(VisionVerbs):
         # Cooperative abort: set by request_abort(), checked every loop tick.
         # Cleared at the START of each command scope so each command starts fresh.
         self._abort_event      = threading.Event()
+
+        # Live vision telemetry slot: the active align/move loop writes the
+        # signed from-centre target px here every tick (report_vision); the
+        # manager's feedback pump reads it (vision_telemetry) to stream live
+        # per-tick error. (x, y, monotonic stamp). ponytail: plain float writes
+        # are GIL-atomic and this is telemetry, not control -- no lock needed.
+        self._vis_x = math.nan
+        self._vis_y = math.nan
+        self._vis_stamp = 0.0
+
+    def report_vision(self, x_px, y_px):
+        """Loop callback: record the live signed target-from-centre px + stamp."""
+        self._vis_x = float(x_px)
+        self._vis_y = float(y_px)
+        self._vis_stamp = time.monotonic()
+
+    def vision_telemetry(self, fresh_s=0.5):
+        """Latest ``(x_px, y_px)`` if reported within ``fresh_s``, else None.
+
+        The feedback pump calls this each publish; None (no recent vision tick,
+        or a non-vision command) maps to NaN feedback.
+        """
+        if (time.monotonic() - self._vis_stamp) <= fresh_s:
+            return (self._vis_x, self._vis_y)
+        return None
 
     def request_abort(self):
         """Signal all running motion loops to exit at their next tick.
@@ -1245,12 +1271,22 @@ class Duburi(VisionVerbs):
         attitude = self.pixhawk.get_attitude()
         return float(attitude['depth']) if attitude else 0.0
 
-    def _make_result(self, success, message, final_value=None, error_value=0.0):
-        """Build a `Move.Result`, defaulting `final_value` to current depth."""
+    def _make_result(self, success, message, final_value=None, error_value=0.0,
+                     end_x_px=math.nan, end_y_px=math.nan,
+                     fill_frac=0.0, elapsed_s=0.0):
+        """Build a `Move.Result`, defaulting `final_value` to current depth.
+
+        ``end_x_px``/``end_y_px``/``fill_frac``/``elapsed_s`` are the vision
+        end-state fields; non-vision callers leave the NaN/0 defaults.
+        """
         result = Move.Result()
         result.success     = bool(success)
         result.message     = str(message)
         result.final_value = float(
             final_value if final_value is not None else self._current_depth())
         result.error_value = float(error_value)
+        result.end_x_px    = float(end_x_px)
+        result.end_y_px    = float(end_y_px)
+        result.fill_frac   = float(fill_frac)
+        result.elapsed_s   = float(elapsed_s)
         return result

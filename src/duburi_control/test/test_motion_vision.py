@@ -334,6 +334,40 @@ def test_align_does_not_fire_when_target_absent():
     assert calls == []
 
 
+# --------------------------------------------------------------------------- #
+#  rich end-state: signed (x,y) where the verb ended + live report_fn          #
+# --------------------------------------------------------------------------- #
+def test_align_returns_signed_end_position():
+    # ex=0.2 -> 64px right (>err=40 -> TIMEOUT, but the END position is carried).
+    # half_w=320, half_h=240 for the default 640x480.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.2, ey=-0.1)), duration=0.3)
+    assert out.code == TIMEOUT
+    assert out.end_x_px == pytest.approx(64.0, abs=1.0)    # signed +, target right
+    assert out.end_y_px == pytest.approx(-24.0, abs=1.0)   # signed -, target above
+
+
+def test_align_end_position_nan_when_never_seen():
+    import math
+    out, _, _ = _align(_FakeVision(None), duration=0.2)
+    assert math.isnan(out.end_x_px) and math.isnan(out.end_y_px)
+
+
+def test_align_report_fn_streams_signed_offsets():
+    calls = []
+    _align(_FakeVision(_sample(ex=0.2, ey=-0.1)), duration=0.2,
+           report_fn=lambda x, y: calls.append((x, y)))
+    assert calls, 'report_fn should fire every present tick'
+    assert calls[-1][0] == pytest.approx(64.0, abs=1.0)
+    assert calls[-1][1] == pytest.approx(-24.0, abs=1.0)
+
+
+def test_move_populates_end_position():
+    out, _, _ = _move(_FakeVision(_sample(ex=0.15, w_frac=0.1, h_frac=0.1)),
+                      duration=0.3)
+    assert out.end_x_px == pytest.approx(48.0, abs=1.0)    # 0.15*320
+    assert out.end_y_px == pytest.approx(0.0, abs=1.0)
+
+
 def test_align_gain_caps_speed():
     # Full-right target (ex=1.0) with kp=60 would command 60% but gain=30
     # must clamp it. Lateral PWM never exceeds percent_to_pwm(gain).

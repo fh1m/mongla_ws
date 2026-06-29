@@ -10,6 +10,7 @@ These pin the recover-don't-fail contract:
 The server action is mocked via a fake `_send`, so no ROS / MAVLink is needed.
 """
 
+import math
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -20,8 +21,10 @@ from duburi_planner.client import MoveFailed
 from duburi_control.motion_vision import ALIGNED, LOST, TIMEOUT, NO_CAMERA
 
 
-def _result(code, err=0.0):
+def _result(code, err=0.0, *, fill=0.0, x=math.nan, y=math.nan, elapsed=0.0):
     return SimpleNamespace(final_value=float(code), error_value=float(err),
+                           fill_frac=float(fill), end_x_px=float(x),
+                           end_y_px=float(y), elapsed_s=float(elapsed),
                            success=True, message=str(code))
 
 
@@ -160,10 +163,10 @@ def test_align_fallback_exception_does_not_propagate():
 #  move                                                                        #
 # --------------------------------------------------------------------------- #
 def test_move_ok_on_reach():
-    dsl = _dsl(MagicMock(return_value=_result(ALIGNED, 0.85)))
+    dsl = _dsl(MagicMock(return_value=_result(ALIGNED, fill=0.85)))
     res = dsl.move('gate', fwd=80)
     assert res.ok is True
-    assert res.fill == pytest.approx(0.85)
+    assert res.fill == pytest.approx(0.85)   # fill now from fill_frac, not error_value
 
 
 def test_move_never_raises_on_timeout():
@@ -177,6 +180,48 @@ def test_move_never_dies_on_server_failure():
     res = dsl.move('gate', fwd=80, duration=0.5)
     assert res.ok is False
     assert res.reason == 'FAILED'
+
+
+# --------------------------------------------------------------------------- #
+#  Rich end-state: where/how the verb finished (hybrid vision+control)         #
+# --------------------------------------------------------------------------- #
+def test_result_carries_end_position_on_timeout():
+    # TIMEOUT but the target WAS seen ending 42px left, 8px below centre:
+    # the mission can branch on x_px even though the verb failed.
+    dsl = _dsl(MagicMock(return_value=_result(TIMEOUT, 42.0, x=-42.0, y=8.0)))
+    res = dsl.align('gate', yaw=0, lat=0, duration=0.5)
+    assert res.ok is False and res.status == 'TIMEOUT'
+    assert res.x_px == pytest.approx(-42.0)
+    assert res.y_px == pytest.approx(8.0)
+    assert res.saw_target is True          # x_px present -> was seen
+
+
+def test_result_saw_target_false_when_never_seen():
+    # NaN end-position (never detected) -> saw_target False, so a mission tells
+    # "ended off-centre" from "never saw it".
+    dsl = _dsl(MagicMock(return_value=_result(LOST, 0.0)))   # x/y default NaN
+    res = dsl.align('gate', yaw=0, lat=0, duration=0.5)
+    assert res.ok is False
+    assert res.saw_target is False
+    assert math.isnan(res.x_px)
+
+
+def test_result_aligned_exposes_end_position_too():
+    # End-state is populated on SUCCESS as well (useful for the next task).
+    dsl = _dsl(MagicMock(return_value=_result(ALIGNED, 5.0, x=2.0, y=-1.0,
+                                              elapsed=3.2)))
+    res = dsl.align('gate', yaw=0, lat=0)
+    assert res.ok is True
+    assert res.x_px == pytest.approx(2.0) and res.saw_target is True
+    assert res.elapsed_s == pytest.approx(3.2)
+
+
+def test_result_bool_still_works_for_back_compat():
+    # The truthiness contract is unchanged: `if duburi.vision.align(...)`.
+    assert bool(_dsl(MagicMock(return_value=_result(ALIGNED, x=0.0))).align(
+        'gate', yaw=0)) is True
+    assert bool(_dsl(MagicMock(return_value=_result(TIMEOUT))).align(
+        'gate', yaw=0, duration=0.3)) is False
 
 
 # --------------------------------------------------------------------------- #
