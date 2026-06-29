@@ -102,6 +102,14 @@ per-call `kp_*` at all — set them via ROS param or the raw CLI fields.
 | `message`       | Human-readable outcome / failure reason                                          |
 | `final_value`   | Axis-correct: yaw deg for yaw verbs, depth m for depth verbs, etc. (see `Move.action` for the full mapping) |
 | `error_value`   | Axis-correct error: heading error deg / depth error m / age-of-last-detection s  |
+| `end_x_px` / `end_y_px` | **Vision verbs:** signed target-from-centre px at the last seen frame (`NaN` if never seen). Surfaced on the DSL `VisionResult` as `x_px`/`y_px`/`saw_target`. Non-vision verbs leave them `NaN`. |
+| `fill_frac`     | **Vision_move:** bbox fill fraction at exit [0..1] (`0` otherwise) → `VisionResult.fill` |
+| `elapsed_s`     | **Vision verbs:** verb duration → `VisionResult.elapsed_s`                        |
+
+> The two-verb DSL returns a `VisionResult` you read directly — you rarely touch the
+> raw `Move.Result`. See [`vision-results.md`](vision-results.md) for the mission-facing
+> contract. **Feedback** (`Move.Feedback`) also gained `err_x_px`/`err_y_px` — the live
+> signed px at ~2.5 Hz during a vision verb.
 
 ### Exceptions
 
@@ -277,10 +285,18 @@ duburi.vision.align(
     err=40,                 # per-axis in-band tolerance (px)
     duration=20,            # total budget (s), including any fallback cycles
     gain=30,                # HARD max-speed cap (% thrust) — never exceeded
+    lat_gain=None, yaw_gain=None, depth_gain=None,   # per-axis cap (None = inherit gain)
+    brake=True, brake_gain=None,   # lateral arrival brake (brake=False to coast / fire)
+    hold=None,              # active station-keep (s) after centring — fights inertia
+    fire=None,              # mid-hold payload fire: channel int or list (1/2 torpedo, 3/4 dropper)
+    fire_t=None,            # s into the hold to fire (0 = at lock); must be < hold
     fallback=None,          # search fn run on target loss (see Fallback)
     camera=None,            # defaults to duburi.camera ('forward')
 ) -> VisionResult
 ```
+
+> `hold` / `fire` / `fire_t` fire a payload **mid-hold while still correcting** —
+> see [`vision-results.md`](vision-results.md) §4 (gated on alignment, non-blocking).
 
 - Each of `lat` / `yaw` / `depth` is `None` (axis off) or a **number**
   (axis on; the number is the signed pixel offset from centre — `0` =
@@ -359,15 +375,31 @@ a bare string is used as-is. Omit `target` to fall back to the sticky
 
 Both verbs return a `VisionResult` dataclass — **truthy only on success**
 (`__bool__` returns `ok`), so `if duburi.vision.align(...):` reads
-naturally.
+naturally. The non-`ok` fields are the **finish-state** a hybrid
+vision+control mission branches on — read **where/how** the verb ended and run
+tested open-loop recovery. Full contract, recovery patterns & pitfalls:
+[`vision-results.md`](vision-results.md).
 
 | Field | Meaning |
 |-------|---------|
-| `ok` | `True` iff aligned (align) / reached fill (move) |
-| `reason` | Outcome string: `'ALIGNED'`, `'LOST'`, `'TIMEOUT'`, `'NO_CAMERA'`, `'ABORTED'`, or `'FAILED'` |
+| `ok` | `True` iff aligned (align) / reached fill (move). `bool(res)` == this. |
+| `status` / `reason` | Outcome string: `'ALIGNED'`, `'LOST'`, `'TIMEOUT'`, `'NO_CAMERA'`, `'ABORTED'`, or `'FAILED'` |
 | `code` | Raw integer outcome code from the server |
-| `last_err_px` | Worst per-axis pixel error (align) / lateral error (move) at exit |
+| `x_px` / `y_px` | **Signed** px of the target from frame **centre** at the last seen frame (`+x`=ended right, `+y`=ended below); **`NaN` if never seen**. Recovery sign matches `align`: `x_px>0` → `move_right`. |
+| `saw_target` | Bool — target detected at least once. **Check before reading `x_px`** (`NaN<threshold` is silently False). |
+| `last_err_px` | Worst residual px from the **goal** (centre+offset) at exit |
 | `fill` | Bbox fill fraction at exit (move; `0` for align) |
+| `elapsed_s` | Verb duration (s) |
+
+Hybrid-recovery shape (full version in [`vision-results.md`](vision-results.md)):
+```python
+res = duburi.vision.align('gate', yaw=0, lat=0)
+if res:               duburi.move_forward(3)                 # aligned
+elif res.saw_target:                                         # saw it, off-centre
+    duburi.move_right(1) if res.x_px > 30 else duburi.move_left(1)
+else:                                                        # never saw it -> search
+    while not duburi.detected('gate'): duburi.move_forward(0.6, gain=35)
+```
 
 Outcome codes (defined in `motion_vision`, copied into
 `Move.Result.final_value`):
@@ -417,10 +449,20 @@ duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
 `hold_through_loss=True` for you) until `duration` runs out. A `fallback`
 that raises is caught and logged — it can never kill the mission.
 
-#### Firing (no more lock-fire verb)
+#### Firing — mid-hold (accurate) or align-then-fire (simple)
 
-There is no vision firing verb. Compose `vision.align` (or `.move`) with
-the standalone `duburi.fire(channel)` control verb:
+**Preferred (accurate):** fire **mid-hold** with `fire`/`fire_t` so the shot leaves
+while `align` is *still correcting* against the target — no align-then-fire drift gap:
+
+```python
+duburi.vision.align('torpedo_hole', yaw=0, lat=0, depth=0, err=12,
+                    gain=25, yaw_gain=10, hold=4, fire=1, fire_t=1, brake=False)
+```
+Gated on alignment (never fires off-target), non-blocking, `fire_t < hold`. See
+[`vision-results.md`](vision-results.md) §4.
+
+**Simple (has a drift gap — only when the hull is already steady):** compose
+`vision.align` (or `.move`) with the standalone `duburi.fire(channel)` verb:
 
 ```python
 if duburi.vision.align('torpedo_hole', yaw=0, lat=0, depth=0, err=12).ok:
