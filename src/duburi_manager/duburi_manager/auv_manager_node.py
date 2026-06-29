@@ -92,14 +92,21 @@ class FeedbackPump:
     control loops close on (BNO when configured, AHRS otherwise). When
     omitted we fall back to Pixhawk AHRS so the old call site still
     works.
+
+    `vision_provider` is an optional ``fn() -> (x_px, y_px) | None`` -- the live
+    signed target-from-centre px the active vision verb reports. When it returns
+    a tuple the feedback carries `err_x_px`/`err_y_px` (else NaN) so an operator
+    can watch a vision verb converge in real time via `ros2 topic echo`.
     """
 
-    def __init__(self, pixhawk, goal_handle, yaw_provider=None):
-        self._pixhawk       = pixhawk
-        self._goal_handle   = goal_handle
-        self._yaw_provider  = yaw_provider
-        self._stop          = threading.Event()
-        self._thread        = threading.Thread(target=self._run, daemon=True)
+    def __init__(self, pixhawk, goal_handle, yaw_provider=None,
+                 vision_provider=None):
+        self._pixhawk         = pixhawk
+        self._goal_handle     = goal_handle
+        self._yaw_provider    = yaw_provider
+        self._vision_provider = vision_provider
+        self._stop            = threading.Event()
+        self._thread          = threading.Thread(target=self._run, daemon=True)
 
     def __enter__(self):
         self._thread.start()
@@ -118,12 +125,17 @@ class FeedbackPump:
                 else:
                     yaw_deg = attitude['yaw']
                 yaw_str = f'{yaw_deg:.1f}' if yaw_deg is not None else 'N/A'
+                vis = (self._vision_provider()
+                       if self._vision_provider is not None else None)
                 feedback              = Move.Feedback()
                 feedback.phase        = 'EXECUTING'
                 feedback.current_value = float(attitude['depth'])
                 feedback.error_value   = 0.0
+                feedback.err_x_px      = float(vis[0]) if vis else math.nan
+                feedback.err_y_px      = float(vis[1]) if vis else math.nan
+                vis_str = f'  VIS:({vis[0]:+.0f},{vis[1]:+.0f})px' if vis else ''
                 feedback.status_line   = (
-                    f'YAW:{yaw_str}  DEPTH:{attitude["depth"]:+.2f}m')
+                    f'YAW:{yaw_str}  DEPTH:{attitude["depth"]:+.2f}m{vis_str}')
                 self._goal_handle.publish_feedback(feedback)
             self._stop.wait(timeout=0.4)
 
@@ -528,7 +540,8 @@ class AUVManagerNode(Node):
 
         try:
             with FeedbackPump(self.pixhawk, goal_handle,
-                              yaw_provider=self._effective_yaw_deg):
+                              yaw_provider=self._effective_yaw_deg,
+                              vision_provider=self.duburi.vision_telemetry):
                 method = getattr(self.duburi, cmd)
                 # Re-snapshot params for every goal so freshly-set
                 # `vision.*` values land on the very next command.

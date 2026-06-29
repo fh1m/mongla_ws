@@ -144,12 +144,21 @@ class Outcome:
     worst per-axis pixel error at exit (align) or the lateral error
     (move). ``fill`` is the bbox fill fraction at exit (move; 0 for
     align).
+
+    ``end_x_px`` / ``end_y_px`` are the SIGNED pixel offset of the target from
+    frame CENTRE at the LAST SEEN frame (+x = target right of centre, +y =
+    below). They are ``nan`` when the target was never seen during the verb,
+    which lets a mission tell "ended off to the left" from "never detected".
+    Offset-independent (raw observable) -- distinct from ``last_err_px`` which
+    is the residual from the goal (centre+offset).
     """
     code:        int
     reason:      str
     last_err_px: float = 0.0
     fill:        float = 0.0
     elapsed_s:   float = 0.0
+    end_x_px:    float = math.nan
+    end_y_px:    float = math.nan
 
     @property
     def ok(self) -> bool:
@@ -279,6 +288,7 @@ def align_loop(*,
                release_yaw: bool = False,
                on_locked=None,
                fire_t: float = 0.0,
+               report_fn=None,
                writers=None,
                log=None,
                abort_fn=None) -> Outcome:
@@ -303,6 +313,11 @@ def align_loop(*,
     The caller is expected to make ``on_locked`` non-blocking (it spawns the fire
     on a background thread); the 20 Hz loop must not stall. ``fire_t`` should be
     < hold_s (the verb clamps it upstream).
+
+    ``report_fn`` (if given) is called every PRESENT tick with the signed
+    from-centre pixel offset ``(x_off, y_off)`` of the target -- a live-telemetry
+    sink for action feedback. It stays rclpy-free (just a callable); the caller
+    wires it to a shared slot the manager's feedback pump reads.
     """
     bad = axes - VALID_AXES
     if bad:
@@ -355,6 +370,8 @@ def align_loop(*,
     last_log    = 0.0
     last_depth  = 0.0
     last_err_px = float('inf')
+    end_x_px    = math.nan  # signed from-centre px of target at last seen frame
+    end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
     saw_target  = False  # True once any frame yields the target -> distinguishes
                          #   "never detected" (wrong model/classes/view) from
@@ -373,12 +390,14 @@ def align_loop(*,
             now     = time.monotonic()
             elapsed = now - started
             if abort_fn and abort_fn():
-                return Outcome(ABORTED, "aborted", last_err_px, 0.0, elapsed)
+                return Outcome(ABORTED, "aborted", last_err_px, 0.0, elapsed,
+                               end_x_px, end_y_px)
             if now >= deadline:
                 reason = ("not aligned (duration elapsed)" if saw_target else
                           f"target {target_class!r} NEVER detected -- check "
                           f"model/classes/camera view")
-                return Outcome(TIMEOUT, reason, last_err_px, 0.0, elapsed)
+                return Outcome(TIMEOUT, reason, last_err_px, 0.0, elapsed,
+                               end_x_px, end_y_px)
 
             sample = vision_state.bbox_error(target_class)
             if not _present(sample):
@@ -392,7 +411,8 @@ def align_loop(*,
                     reason = (f"target {target_class!r} lost" if saw_target else
                               f"target {target_class!r} NEVER detected -- check "
                               f"model/classes/camera view")
-                    return Outcome(LOST, reason, last_err_px, 0.0, elapsed)
+                    return Outcome(LOST, reason, last_err_px, 0.0, elapsed,
+                                   end_x_px, end_y_px)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
@@ -408,6 +428,12 @@ def align_loop(*,
 
             saw_target = True
             lost_since = None
+            # Signed from-centre offset of the target THIS tick: the end-position
+            # the verb returns, and the live value report_fn streams to feedback.
+            end_x_px = sample.ex * half_w
+            end_y_px = sample.ey * half_h
+            if report_fn is not None:
+                report_fn(end_x_px, end_y_px)
             yaw_pct = lat_pct = 0.0
             in_band = []
             worst   = 0.0
@@ -499,7 +525,8 @@ def align_loop(*,
                     writers.neutral()
                     reason = (f"held {hold_s:.1f}s ({worst:.0f}px)" if hold_s > 0.0
                               else f"aligned ({worst:.0f}px)")
-                    return Outcome(ALIGNED, reason, worst, 0.0, elapsed)
+                    return Outcome(ALIGNED, reason, worst, 0.0, elapsed,
+                                   end_x_px, end_y_px)
                 # else: inside the hold window -- fall through to the loop tail
                 # and keep correcting (the per-tick _drive above already ran).
                 # ponytail: aligned_at is set ONCE and never reset (unlike
@@ -554,6 +581,7 @@ def move_loop(*,
               lost_grace_s: float = 1.0,
               hold_through_loss: bool = False,
               release_yaw: bool = False,
+              report_fn=None,
               writers=None,
               log=None,
               abort_fn=None) -> Outcome:
@@ -576,6 +604,10 @@ def move_loop(*,
     driving; depth and yaw are never commanded (ArduSub holds depth;
     heading lock or the autopilot holds yaw). Returns an Outcome -- never
     raises on a miss.
+
+    ``report_fn`` (if given) is called every PRESENT tick with the signed
+    from-centre pixel offset ``(x_off, y_off)`` -- the live-telemetry sink for
+    action feedback (same contract as align_loop).
     """
     if mode not in VALID_MODES:
         raise ValueError(f"move_loop: mode must be one of {sorted(VALID_MODES)}")
@@ -585,6 +617,7 @@ def move_loop(*,
                        elapsed_s=0.0)
     width, height = vision_state.image_size()
     half_w = width * 0.5
+    half_h = height * 0.5
 
     # Lateral 'maintain' strafe gets its own cap; forward stays capped by `gain`.
     g_lat = gain if gain_lat is None else gain_lat
@@ -607,6 +640,8 @@ def move_loop(*,
     last_log     = 0.0
     last_fill    = 0.0
     last_lat_err = 0.0
+    end_x_px     = math.nan   # signed from-centre px of target at last seen frame
+    end_y_px     = math.nan
     fwd_ema      = 0.0   # trailing EMA of forward command -> brake proxy (fill-stop)
     lat_ema      = 0.0   # trailing EMA of the maintain strafe command -> brake proxy
 
@@ -626,7 +661,8 @@ def move_loop(*,
             now     = time.monotonic()
             elapsed = now - started
             if abort_fn and abort_fn():
-                return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed)
+                return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed,
+                               end_x_px, end_y_px)
             if now >= deadline:
                 if not seen_once:
                     reason = (f"target {target_class!r} NEVER detected -- check "
@@ -634,7 +670,8 @@ def move_loop(*,
                 else:
                     reason = ("passed-through window not closed (duration elapsed)"
                               if passthrough else "fill not reached (duration elapsed)")
-                return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed)
+                return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed,
+                               end_x_px, end_y_px)
 
             sample  = vision_state.bbox_error(target_class)
             present = _present(sample)
@@ -651,7 +688,7 @@ def move_loop(*,
                 if now >= commit_until:
                     writers.neutral()
                     return Outcome(ALIGNED, "passed through", last_lat_err,
-                                   last_fill, elapsed)
+                                   last_fill, elapsed, end_x_px, end_y_px)
                 _drive(gain, 0.0)   # no detection -> no lateral, just drive on
                 time.sleep(1.0 / LOOP_HZ)
                 continue
@@ -665,7 +702,8 @@ def move_loop(*,
                     reason = (f"target {target_class!r} lost" if seen_once else
                               f"target {target_class!r} NEVER detected -- check "
                               f"model/classes/camera view")
-                    return Outcome(LOST, reason, last_lat_err, last_fill, elapsed)
+                    return Outcome(LOST, reason, last_lat_err, last_fill, elapsed,
+                                   end_x_px, end_y_px)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
                     if live:
@@ -687,6 +725,11 @@ def move_loop(*,
             fresh = _freshness(sample.age_s)   # pace translational authority to FPS
 
             x_off = sample.ex * half_w         # signed horizontal offset (operator px)
+            # End-position (returned) + live feedback sink.
+            end_x_px = x_off
+            end_y_px = sample.ey * half_h
+            if report_fn is not None:
+                report_fn(end_x_px, end_y_px)
             lat_pct = 0.0
             if maintain_on:
                 ctrl = sample.ex - maintain_px / half_w
@@ -724,7 +767,7 @@ def move_loop(*,
                     writers.neutral()
                     return Outcome(ALIGNED,
                                    f"reached fill={fill * 100:.0f}%",
-                                   last_lat_err, fill, elapsed)
+                                   last_lat_err, fill, elapsed, end_x_px, end_y_px)
             else:
                 reached_at = None
                 # Freshness-decay forward so a stale frame doesn't blind-drive the

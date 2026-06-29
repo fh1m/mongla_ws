@@ -85,18 +85,32 @@ float32 align_stable_frames# ticks within err_px before ALIGNED (0 = use vision.
 #   vision_align         :  success     = True (the verb ran; never fails the mission)
 #                           final_value = outcome code (0=ALIGNED,1=LOST,2=TIMEOUT,
 #                                         3=NO_CAMERA,4=ABORTED)
-#                           error_value = worst per-axis pixel error at exit
+#                           error_value = worst per-axis residual px from the goal
 #   vision_move          :  success     = True (the verb ran)
 #                           final_value = outcome code (0=REACHED, see above)
-#                           error_value = bbox fill fraction at exit [0..1]
+#                           error_value = lateral residual px (maintain) at exit
+# vision_align / vision_move ALSO set the rich end-state fields below so a mission
+# can branch on WHERE/HOW the verb finished (hybrid vision+control recovery):
+#   end_x_px / end_y_px = SIGNED px of the target from frame CENTRE at the last
+#                         seen frame (+x = right, +y = below); NaN = never seen.
+#   fill_frac           = bbox fill fraction at exit [0..1] (vision_move; 0 align).
+#   elapsed_s           = verb duration. (Non-vision verbs leave these NaN/0.)
 bool    success
 string  message
 float32 final_value
 float32 error_value
+float32 end_x_px
+float32 end_y_px
+float32 fill_frac
+float32 elapsed_s
 ---
 # Feedback — streamed at ~2.5 Hz while the goal is EXECUTING.
 # current_value is depth (m); status_line is a human-readable one-liner.
+# err_x_px / err_y_px stream the live SIGNED target-from-centre px during a
+# vision verb (NaN otherwise) so an operator can watch convergence in real time.
 string  phase        # e.g. "EXECUTING", "DONE"
 float32 current_value
 float32 error_value
+float32 err_x_px
+float32 err_y_px
 string  status_line  # human-readable one-liner

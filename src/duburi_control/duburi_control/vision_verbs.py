@@ -13,7 +13,8 @@ Mixed into ``Duburi`` via multiple inheritance; uses only the base
 facade helpers (``_command_scope``, ``_writers``, ``_resolve_vision_state``,
 ``_send_neutral_and_settle``, ``_ensure_alt_hold``, ``_suspend_heading_lock``,
 ``_retarget_heading_lock``, ``_current_heading``, ``_make_result``,
-``_lock_active``, ``_abort_fn``, ``_fire_payload``) -- nothing rclpy-aware.
+``_lock_active``, ``_abort_fn``, ``_fire_payload``, ``report_vision``) --
+nothing rclpy-aware.
 """
 
 import threading
@@ -162,6 +163,7 @@ class VisionVerbs:
                     release_yaw=release_yaw,
                     on_locked=on_locked,
                     fire_t=eff_fire_t,
+                    report_fn=self.report_vision,
                     writers=self._writers(), log=self.log,
                     abort_fn=self._abort_fn)
             if touches_yaw:
@@ -170,7 +172,9 @@ class VisionVerbs:
             return self._make_result(
                 True, f'vision_align: {outcome.reason}',
                 final_value=float(outcome.code),
-                error_value=float(outcome.last_err_px))
+                error_value=float(outcome.last_err_px),
+                end_x_px=outcome.end_x_px, end_y_px=outcome.end_y_px,
+                fill_frac=0.0, elapsed_s=outcome.elapsed_s)
 
     def _fire_async(self, channels):
         """Fire payload ``channels`` one-by-one on a daemon thread (non-blocking).
@@ -255,13 +259,16 @@ class VisionVerbs:
                 lost_grace_s=float(lost_grace_s) or 1.0,
                 hold_through_loss=bool(hold_through_loss),
                 release_yaw=self._lock_active(),
+                report_fn=self.report_vision,
                 writers=self._writers(), log=self.log,
                 abort_fn=self._abort_fn)
             self._send_neutral_and_settle()
             return self._make_result(
                 True, f'vision_move: {outcome.reason}',
                 final_value=float(outcome.code),
-                error_value=float(outcome.fill))
+                error_value=float(outcome.last_err_px),
+                end_x_px=outcome.end_x_px, end_y_px=outcome.end_y_px,
+                fill_frac=float(outcome.fill), elapsed_s=outcome.elapsed_s)
 
     # ---- vision helper (private) ------------------------------------- #
     def _resolve_vision_state(self, camera):
