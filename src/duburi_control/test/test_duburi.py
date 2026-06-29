@@ -342,3 +342,38 @@ def test_motion_succeeds_after_arm(monkeypatch):
     d.arm()
     result = d.move_forward(duration=0.05, gain=50.0)
     assert result.success is True
+
+
+# --------------------------------------------------------------------------- #
+#  Vision telemetry slot + rich _make_result (live feedback + end-state)       #
+# --------------------------------------------------------------------------- #
+def test_report_vision_then_telemetry_fresh(duburi):
+    duburi.report_vision(-42.0, 8.0)
+    assert duburi.vision_telemetry() == (-42.0, 8.0)
+
+
+def test_vision_telemetry_stale_returns_none(duburi):
+    duburi.report_vision(10.0, 20.0)
+    # A tiny freshness window must elapse -> stale -> None (no live verb).
+    time.sleep(0.05)
+    assert duburi.vision_telemetry(fresh_s=0.001) is None
+
+
+def test_vision_telemetry_none_before_any_report(duburi):
+    assert duburi.vision_telemetry() is None
+
+
+def test_make_result_sets_vision_fields(duburi):
+    r = duburi._make_result(True, 'x', final_value=0.0, error_value=12.0,
+                            end_x_px=-42.0, end_y_px=8.0,
+                            fill_frac=0.6, elapsed_s=3.1)
+    assert r.end_x_px == pytest.approx(-42.0)
+    assert r.end_y_px == pytest.approx(8.0)
+    assert r.fill_frac == pytest.approx(0.6)
+    assert r.elapsed_s == pytest.approx(3.1)
+
+
+def test_make_result_defaults_nan_for_non_vision(duburi):
+    r = duburi._make_result(True, 'arm', final_value=-0.5)
+    assert math.isnan(r.end_x_px) and math.isnan(r.end_y_px)
+    assert r.fill_frac == 0.0 and r.elapsed_s == 0.0

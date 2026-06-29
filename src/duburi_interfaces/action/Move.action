@@ -57,6 +57,10 @@ float32 brake_gain         # reverse-kick scale vs exit-velocity EMA (0 = defaul
 float32 err_px             # pixel tolerance: aligned when |err| <= this (0 = default 40)
 bool    hold_through_loss  # true = coast/hold on target loss until duration (no fallback)
 float32 fire_channel       # ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=log-stub
+# vision_align mid-hold fire: actuate payload WHILE the hold loop still corrects, so
+# the shot leaves while glued to the target (no align-then-fire drift gap).
+string  fire_channels      # vision_align: CSV channels fired once mid-hold, e.g. "1,2" ('' = none)
+float32 fire_t             # seconds into the hold to fire (0 = at hold start; must be < hold_s)
 # vision tuning -- NOT mission-facing; the manager fills these from vision.* ROS
 # params at dispatch (rosidl-zero triggers substitution). Mission DSL leaves them 0.
 float32 kp_lat             # P gain on lateral/yaw pixel error  (0 = use vision.kp_lat)
@@ -66,12 +70,24 @@ float32 kp_forward         # P gain on fill error (vision_move) (0 = use vision.
 float32 lost_grace_s       # seconds to coast on target loss before reporting LOST (0 = 1.0)
 float32 align_stable_frames# ticks within err_px before ALIGNED (0 = use vision.align_stable_frames)
 # ---- anchor (XFeat superglue) fields  (ignored by non-anchor cmds) ------
+# NOTE: anchor reuses the shared `fire_channels` field above (declared once for
+# vision_align mid-hold) -- do NOT re-declare it here (duplicate = invalid msg).
 float32 theta_thresh       # vision_anchor_align: |theta| rad tolerance for lock (0 = default 0.05)
 float32 min_inliers        # vision_anchor_align: min RANSAC inliers to count a tick locked (0 = trust node)
-string  fire_channels      # vision_anchor_align: CSV payload channels fired ONCE at lock, e.g. "1,2"
 string  ref_name           # anchor snap: save the captured reference to references/<name>.png;
                            # anchor_align: load references/<name>.png before locking ('' = live in-memory)
 float32 conf               # anchor snap-at-detection: min detection score to crop on (with target_class + err_px)
+# precision-alignment knobs (close-in robustness; all opt-in, 0/false = behave as before).
+bool    lock_target        # vision_align: once a target is acquired, steer to the box
+                           #   NEAREST the last-accepted centre (within a gate) instead of the
+                           #   largest -- so a 2nd hole / spurious box can't steal the aim
+float32 ctrl_conf          # vision_align: control-side min detection score to accept a box as
+                           #   the target (0 = off; distinct from the detector's global conf)
+float32 range_gain_floor   # vision_align/move: lat/depth kp multiplier when the bbox FILLS the
+                           #   frame (close) -- softens gain to stop the close-in overshoot of a
+                           #   20 kg hull (1.0 = off, ~0.3 = gentle; 0 = use vision.range_gain_floor)
+float32 ki_lat             # vision_align: lateral integral gain, cancels the steady-current
+                           #   offset of the open-loop Ch6 axis during the hold (0 = off)
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]
@@ -91,18 +107,32 @@ float32 conf               # anchor snap-at-detection: min detection score to cr
 #   vision_align         :  success     = True (the verb ran; never fails the mission)
 #                           final_value = outcome code (0=ALIGNED,1=LOST,2=TIMEOUT,
 #                                         3=NO_CAMERA,4=ABORTED)
-#                           error_value = worst per-axis pixel error at exit
+#                           error_value = worst per-axis residual px from the goal
 #   vision_move          :  success     = True (the verb ran)
 #                           final_value = outcome code (0=REACHED, see above)
-#                           error_value = bbox fill fraction at exit [0..1]
+#                           error_value = lateral residual px (maintain) at exit
+# vision_align / vision_move ALSO set the rich end-state fields below so a mission
+# can branch on WHERE/HOW the verb finished (hybrid vision+control recovery):
+#   end_x_px / end_y_px = SIGNED px of the target from frame CENTRE at the last
+#                         seen frame (+x = right, +y = below); NaN = never seen.
+#   fill_frac           = bbox fill fraction at exit [0..1] (vision_move; 0 align).
+#   elapsed_s           = verb duration. (Non-vision verbs leave these NaN/0.)
 bool    success
 string  message
 float32 final_value
 float32 error_value
+float32 end_x_px
+float32 end_y_px
+float32 fill_frac
+float32 elapsed_s
 ---
 # Feedback — streamed at ~2.5 Hz while the goal is EXECUTING.
 # current_value is depth (m); status_line is a human-readable one-liner.
+# err_x_px / err_y_px stream the live SIGNED target-from-centre px during a
+# vision verb (NaN otherwise) so an operator can watch convergence in real time.
 string  phase        # e.g. "EXECUTING", "DONE"
 float32 current_value
 float32 error_value
+float32 err_x_px
+float32 err_y_px
 string  status_line  # human-readable one-liner

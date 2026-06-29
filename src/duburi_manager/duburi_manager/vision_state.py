@@ -34,10 +34,11 @@ Threading model:
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from rclpy.node import Node
 from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
@@ -166,10 +167,22 @@ class VisionState:
                 best_detection = detection
         return best_detection
 
-    def bbox_error(self, class_name: str = '') -> Optional[Sample]:
-        """Pick the largest matching detection and return a normalized Sample.
+    def bbox_error(self, class_name: str = '', *,
+                   near: Optional[Tuple[float, float]] = None,
+                   gate_norm: float = 0.0,
+                   min_score: float = 0.0) -> Optional[Sample]:
+        """Pick a matching detection and return a normalized Sample.
 
-        Returns None when no matching detection is cached, or before the
+        Default (``near=None`` or ``gate_norm<=0``): the LARGEST-area matching
+        box, exactly as before. With ``near=(ex,ey)`` and ``gate_norm>0``
+        (the continuity lock): among matching boxes within ``gate_norm`` of
+        ``near`` in normalized centre space, the one NEAREST ``near`` -- so a
+        second hole / spurious box can't steal the aim once a target is locked;
+        if none are inside the gate, returns None (a transient loss the control
+        loop rides on its grace timer). ``min_score`` drops boxes below that
+        detection score from consideration (control-side conf floor).
+
+        Returns None when no qualifying detection is cached, or before the
         first CameraInfo arrives (image size still (0,0)) so the control
         loop never steers on a mis-scaled pixel error.
         """
@@ -184,16 +197,33 @@ class VisionState:
         if image_width <= 0 or image_height <= 0:
             return None
 
-        # Find largest matching detection AND its index (for vis_range lookup).
+        half_w = image_width  * 0.5
+        half_h = image_height * 0.5
+        use_near = near is not None and gate_norm > 0.0
+
+        # One pass: per candidate compute a selection metric -- nearest-to-`near`
+        # (continuity lock) or largest-area (default). Track the winner's index
+        # for the parallel vis_range lookup.
         best_detection: Optional[Detection2D] = None
-        best_area:      float = 0.0
+        best_metric:    Optional[float] = None
         best_index:     int   = 0
         for idx, det in enumerate(detections_array.detections):
             if class_name and not _hypothesis_matches(det, class_name):
                 continue
-            area = float(det.bbox.size_x) * float(det.bbox.size_y)
-            if area > best_area:
-                best_area      = area
+            if min_score > 0.0 and _hypothesis_score(det) < min_score:
+                continue
+            if use_near:
+                cx, cy = _bbox_center(det.bbox)
+                ex = (cx - half_w) / half_w
+                ey = (cy - half_h) / half_h
+                dist = math.hypot(ex - near[0], ey - near[1])
+                if dist > gate_norm:
+                    continue
+                metric = -dist                      # nearest wins
+            else:
+                metric = float(det.bbox.size_x) * float(det.bbox.size_y)  # largest
+            if best_metric is None or metric > best_metric:
+                best_metric    = metric
                 best_detection = det
                 best_index     = idx
         if best_detection is None:

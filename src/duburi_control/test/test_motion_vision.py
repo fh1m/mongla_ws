@@ -12,8 +12,9 @@ from types import SimpleNamespace
 import pytest
 
 from duburi_control.motion_vision import (
-    align_loop, move_loop, _fill, _clamp, _present, _freshness,
+    align_loop, move_loop, _fill, _clamp, _present, _freshness, _range_gain,
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S,
+    VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA,
 )
 
@@ -53,7 +54,10 @@ class _FakeVision:
     def list_classes(self):
         return list(self._classes)
 
-    def bbox_error(self, _cls):
+    def bbox_error(self, _cls, **_kw):
+        # accepts the continuity-lock kwargs (near/gate_norm/min_score) the loop
+        # now passes; this double just replays its scripted samples.
+        self.last_kw = _kw
         if isinstance(self._samples, list):
             s = self._samples[min(self._i, len(self._samples) - 1)]
             self._i += 1
@@ -211,6 +215,29 @@ def test_align_seen_then_lost_says_lost_not_never():
     out, _, _ = _align(_FakeVision(samples), align_stable_frames=99)
     assert out.code == LOST
     assert 'lost' in out.reason and 'NEVER' not in out.reason
+
+
+def test_align_err_below_floor_still_completes():
+    # An over-tight positive err must be clamped to MIN_ALIGN_ERR_PX so the loop
+    # can converge on bbox-jitter-sized residual instead of perpetually TIMEOUTing.
+    # ex=0.01 on a 640px frame -> ~3.2px residual: above err=1 (would never lock)
+    # but inside the 5px floor -> ALIGNED.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.01)), axes={'lat'},
+                       kp_lat=60.0, gain=30.0, err_px=1.0, duration=1.0)
+    assert out.code == ALIGNED, (
+        f'err below MIN_ALIGN_ERR_PX must be floored so a ~3px residual locks; '
+        f'got {out.code} ({out.reason})')
+    assert '/5px' in out.reason, (
+        f'success line must state the effective deadband, got {out.reason!r}')
+
+
+def test_align_err_above_floor_is_honored():
+    # A tight-but-achievable err (8px) is NOT floored: a 3px residual locks and
+    # the reason states the real 8px deadband.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.01)), axes={'lat'},
+                       kp_lat=60.0, gain=30.0, err_px=8.0, duration=1.0)
+    assert out.code == ALIGNED
+    assert '/8px' in out.reason, f'expected the honored 8px deadband, got {out.reason!r}'
 
 
 def test_align_release_yaw_writes_translation_not_ch4():
@@ -379,6 +406,96 @@ def test_anchor_freshness_decays_lat_when_stale():
             pix=pix, err_px=5.0, duration=0.2)
     lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
     assert not lat                            # fully decayed -> neutral lateral
+
+
+def test_align_fires_on_locked_once_mid_hold():
+    # on_locked fires EXACTLY once, mid-hold, while the loop keeps correcting.
+    calls = []
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3, duration=2.0,
+                         on_locked=lambda: calls.append(1), fire_t=0.0)
+    assert out.code == ALIGNED
+    assert len(calls) == 1               # fired exactly once, not every tick
+    # The loop kept issuing lateral corrections (fire didn't end the hold).
+    lat_cmds = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    assert lat_cmds, 'expected corrections to continue after the fire'
+
+
+def test_align_fire_t_delays_until_into_hold():
+    # With fire_t close to the full hold, the fire still happens (before exit),
+    # but not on the very first held tick.
+    calls = []
+    _align(_FakeVision(_sample(ex=0.1)), hold_s=0.4, duration=2.0,
+           on_locked=lambda: calls.append(1), fire_t=0.2)
+    assert calls == [1]                  # fired once, inside the hold window
+
+
+def test_align_no_fire_without_on_locked():
+    # No on_locked -> the loop behaves exactly as before (no fire path).
+    out, _, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.2, duration=2.0)
+    assert out.code == ALIGNED
+
+
+def test_align_on_locked_exception_does_not_kill_loop():
+    # A throwing on_locked must not abort the hold -- the verb still returns
+    # ALIGNED (a payload glitch can't crash the control loop).
+    def boom():
+        raise RuntimeError('serial blew up')
+    out, _, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.2, duration=2.0,
+                       on_locked=boom, fire_t=0.0)
+    assert out.code == ALIGNED
+
+
+def test_align_does_not_fire_when_never_aligned():
+    # The fire is GATED on alignment, not pure time: a target that is DETECTED
+    # but never centred (out of band) never opens the hold/fire gate, so the
+    # torpedo is NEVER fired off-target. ex=5.0 -> ~1600px, far outside err=40.
+    calls = []
+    out, _, _ = _align(_FakeVision(_sample(ex=5.0)), hold_s=0.3, duration=0.4,
+                       on_locked=lambda: calls.append(1), fire_t=0.0)
+    assert calls == []                   # never aligned -> never fired
+    assert out.code != ALIGNED           # and it did not falsely report aligned
+
+
+def test_align_does_not_fire_when_target_absent():
+    # No detection at all -> never aligned -> never fired (LOST/TIMEOUT, not a shot).
+    calls = []
+    _align(_FakeVision(None), hold_s=0.3, duration=0.4,
+           on_locked=lambda: calls.append(1), fire_t=0.0)
+    assert calls == []
+
+
+# --------------------------------------------------------------------------- #
+#  rich end-state: signed (x,y) where the verb ended + live report_fn          #
+# --------------------------------------------------------------------------- #
+def test_align_returns_signed_end_position():
+    # ex=0.2 -> 64px right (>err=40 -> TIMEOUT, but the END position is carried).
+    # half_w=320, half_h=240 for the default 640x480.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.2, ey=-0.1)), duration=0.3)
+    assert out.code == TIMEOUT
+    assert out.end_x_px == pytest.approx(64.0, abs=1.0)    # signed +, target right
+    assert out.end_y_px == pytest.approx(-24.0, abs=1.0)   # signed -, target above
+
+
+def test_align_end_position_nan_when_never_seen():
+    import math
+    out, _, _ = _align(_FakeVision(None), duration=0.2)
+    assert math.isnan(out.end_x_px) and math.isnan(out.end_y_px)
+
+
+def test_align_report_fn_streams_signed_offsets():
+    calls = []
+    _align(_FakeVision(_sample(ex=0.2, ey=-0.1)), duration=0.2,
+           report_fn=lambda x, y: calls.append((x, y)))
+    assert calls, 'report_fn should fire every present tick'
+    assert calls[-1][0] == pytest.approx(64.0, abs=1.0)
+    assert calls[-1][1] == pytest.approx(-24.0, abs=1.0)
+
+
+def test_move_populates_end_position():
+    out, _, _ = _move(_FakeVision(_sample(ex=0.15, w_frac=0.1, h_frac=0.1)),
+                      duration=0.3)
+    assert out.end_x_px == pytest.approx(48.0, abs=1.0)    # 0.15*320
+    assert out.end_y_px == pytest.approx(0.0, abs=1.0)
 
 
 def test_align_gain_caps_speed():
@@ -626,22 +743,20 @@ def test_brake_reads_post_decay_command():
 
 
 def test_align_operator_line_format():
-    # Output-level pin on the shared align-line shape -- signed lat px, the
-    # class, and the "center -> (0,0)" target. The detector node owns the
-    # always-on operator copy; this per-verb copy is emitted at debug (so it
-    # doesn't duplicate the detector line in the mission terminal), but the
-    # format string is shared, so this remains the regression pin for its shape.
+    # Output-level pin on the per-verb bearing line: signed lat px + class +
+    # residual/deadband. Worded 'offset ... -> err N/Mpx' (NOT "aligned") so it
+    # never reads as a verdict; the detector node owns the always-on copy.
     log = _CapLog()
     # ex=0.5 on a 640px frame -> +160px to the right of centre; never reaches
-    # the err band, so the loop logs the operator line and times out.
+    # the err band, so the loop logs the offset line and times out.
     align_loop(pixhawk=_FakePixhawk(), vision_state=_FakeVision(_sample(ex=0.5)),
                target_class='gate', axes={'lat'}, offsets={}, err_px=10.0,
                duration=0.3, gain=30.0, kp_lat=60.0,
                writers=_FakeWriters(), log=log, abort_fn=None)
-    line = next((m for m in log.debugs if m.startswith('[ align')), None)
-    assert line is not None, f'expected an operator align line, got {log.debugs}'
+    line = next((m for m in log.debugs if m.startswith('[ offset')), None)
+    assert line is not None, f'expected an operator offset line, got {log.debugs}'
     assert 'lat=+160' in line, f'expected signed lat px in {line!r}'
-    assert "['gate']" in line and 'center -> (0,0)' in line, f'bad format: {line!r}'
+    assert "'gate'" in line and '/10px' in line, f'bad format: {line!r}'
 
 
 # --------------------------------------------------------------------------- #
@@ -911,3 +1026,89 @@ def test_move_passthrough_ignores_fill_stop():
     fwd = [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
     assert fwd, 'pass-through must keep commanding forward thrust'
     assert max(fwd) <= cap
+
+
+# --------------------------------------------------------------------------- #
+#  Precision-alignment layers (range gain, lateral I-term, continuity lock)    #
+# --------------------------------------------------------------------------- #
+def test_range_gain_pure():
+    # Far (low fill) -> full gain; close (high fill) -> floored; linear between.
+    assert _range_gain(0.0, 0.3) == pytest.approx(1.0)
+    assert _range_gain(VISION_RANGE_GAIN_FILL_LO, 0.3) == pytest.approx(1.0)
+    assert _range_gain(VISION_RANGE_GAIN_FILL_HI, 0.3) == pytest.approx(0.3)
+    assert _range_gain(1.0, 0.3) == pytest.approx(0.3)
+    mid = 0.5 * (VISION_RANGE_GAIN_FILL_LO + VISION_RANGE_GAIN_FILL_HI)
+    assert 0.3 < _range_gain(mid, 0.3) < 1.0
+    # floor>=1.0 (or hi<=lo) is a no-op.
+    assert _range_gain(0.9, 1.0) == pytest.approx(1.0)
+
+
+def _max_lat_dev(pix):
+    """Largest |lateral-1500| the loop commanded (0 if it never strafed)."""
+    devs = [abs(c['lateral'] - 1500) for c in pix.rc if 'lateral' in c]
+    return max(devs) if devs else 0
+
+
+def test_range_gain_softens_lateral_when_close():
+    # Same off-centre error, but a CLOSE target (high fill) must be driven more
+    # gently than a FAR one (low fill) -- the 1/range damping fix.
+    far  = _FakeVision(_sample(ex=0.5, w_frac=0.1, h_frac=0.1))   # fill 0.10 -> 1.0x
+    near = _FakeVision(_sample(ex=0.5, w_frac=0.8, h_frac=0.8))   # fill 0.80 -> floor
+    _, pix_far, _  = _align(far,  axes={'lat'}, gain=100.0, range_gain_floor=0.3)
+    _, pix_near, _ = _align(near, axes={'lat'}, gain=100.0, range_gain_floor=0.3)
+    assert _max_lat_dev(pix_near) < _max_lat_dev(pix_far)
+    # floor=1.0 is OFF -> close target driven exactly like the far one's law.
+    _, pix_off, _ = _align(near, axes={'lat'}, gain=100.0, range_gain_floor=1.0)
+    assert _max_lat_dev(pix_off) > _max_lat_dev(pix_near)
+
+
+def test_lateral_integral_grows_during_hold():
+    # An in-band but non-zero lateral residual (a steady current) builds the
+    # lateral integral during the hold, so the commanded strafe exceeds pure-P.
+    s = _sample(ex=0.1, w_frac=0.3, h_frac=0.3)   # 32px residual <= 40 err -> in band
+    _, pix_p,  _ = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                          hold_s=0.4, duration=0.7, ki_lat=0.0)
+    _, pix_pi, _ = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                          hold_s=0.4, duration=0.7, ki_lat=200.0, i_lat_max=15.0)
+    assert _max_lat_dev(pix_pi) > _max_lat_dev(pix_p)
+
+
+def test_lateral_integral_clamped():
+    # The integral is bounded: a huge ki can't drive past P + i_lat_max (then
+    # the g_lat cap). With i_lat_max small the extra deflection stays small.
+    s = _sample(ex=0.1, w_frac=0.3, h_frac=0.3)
+    _, pix, _ = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                       hold_s=0.4, duration=0.7, ki_lat=999.0, i_lat_max=5.0)
+    # p = 0.1*60 = 6%; + i_lat_max 5% = 11% -> PWM 1500 + 0.11*400 = 1544.
+    assert _max_lat_dev(pix) <= _FakePixhawk.percent_to_pwm(11.0) - 1500 + 1
+
+
+def test_lock_on_passes_near_and_gate():
+    # With lock_on the loop hands bbox_error a `near` hint (the last accepted
+    # centre) and a positive gate; ctrl_conf rides through as min_score.
+    vis = _FakeVision(_sample(ex=0.2, ey=-0.1, w_frac=0.3, h_frac=0.3))
+    _align(vis, axes={'lat'}, lock_on=True, ctrl_conf=0.55)
+    kw = vis.last_kw
+    assert kw['gate_norm'] == pytest.approx(VISION_LOCK_GATE_NORM)
+    assert kw['min_score'] == pytest.approx(0.55)
+    assert kw['near'] == pytest.approx((0.2, -0.1))   # last accepted centre
+
+
+def test_lock_off_is_largest_box():
+    # Default: no near hint, gate disabled -> bbox_error keeps largest-area.
+    vis = _FakeVision(_sample(ex=0.2, w_frac=0.3, h_frac=0.3))
+    _align(vis, axes={'lat'}, lock_on=False)
+    assert vis.last_kw['near'] is None
+    assert vis.last_kw['gate_norm'] == 0.0
+
+
+def test_hold_against_current_does_not_brake_kick():
+    # A hull holding STILL against a steady current carries a large lateral
+    # integral but ~0 travel momentum. The arrival brake EMA tracks the
+    # PROPORTIONAL command only, so an in-band converged exit is NOT reverse-
+    # kicked even with a big integral (regression: EMA must exclude lat_i).
+    s = _sample(ex=0.02, w_frac=0.3, h_frac=0.3)   # 6.4px residual, well in band
+    _, _, writers = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
+                           hold_s=0.3, duration=0.6,
+                           ki_lat=200.0, i_lat_max=15.0)   # brake on by default
+    assert writers.laterals == []      # no reverse-kick on a steady hold

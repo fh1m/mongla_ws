@@ -78,7 +78,7 @@ All verbs at a glance (canonical list: `COMMANDS` registry in `duburi_control/co
 | `move_forward_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop forward (heading lock stays active) |
 | `move_back_dist` | **distance_m** required, gain→60 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop backward (same as move_forward_dist with reversed direction) |
 | `move_lateral_dist` | **distance_m** required (±), gain→36 %, dvl_tolerance→0.1 m, settle→0 s | DVL closed-loop lateral (heading lock stays active) |
-| `vision_align` | camera→forward, target_class→'', axes→'' (≥1 of lat,yaw,depth), offset_lat/yaw/depth→0 px, err_px→40, duration→20 s, gain→30 %, gain_lat/yaw/depth→0 (inherit gain), brake_off→false (brake on), brake_gain→0 (default), hold_through_loss→false, kp_lat→60, kp_yaw→60, kp_depth→0.05, lost_grace_s→1.0, align_stable_frames→3 | Centre target on lat/yaw/depth at signed pixel offsets; per-axis gain caps; lateral arrival brake |
+| `vision_align` | camera→forward, target_class→'', axes→'' (≥1 of lat,yaw,depth), offset_lat/yaw/depth→0 px, err_px→40, duration→20 s, gain→30 %, gain_lat/yaw/depth→0 (inherit gain), brake_off→false (brake on), brake_gain→0 (default), hold_s→0 s, hold_through_loss→false, fire_channels→'' (none), fire_t→0 s, kp_lat→60, kp_yaw→60, kp_depth→0.05, lost_grace_s→1.0, align_stable_frames→3 | Centre target on lat/yaw/depth at signed pixel offsets; per-axis gain caps; lateral arrival brake; optional mid-hold payload fire (`fire_channels`/`fire_t`) |
 | `vision_move` | camera→forward, target_class→'', fwd_fill→95 %, mode→area, maintain_px→0/maintain_on→false, hold_s→0 s, err_px→40, duration→20 s, gain→30 %, hold_through_loss→false, kp_forward→200, kp_lat→60, lost_grace_s→1.0 | Drive forward until target's bbox fills fwd_fill% of frame |
 | `fire` | fire_channel→1.0 (1/2=torpedo, 3/4=dropper) | Fire ESP32 payload channel directly |
 
@@ -466,16 +466,29 @@ as an integer code, and `error_value` carries the residual error.
 | `NO_CAMERA` | `3` | camera pipeline never published `CameraInfo` (not up) |
 | `ABORTED`   | `4` | cooperative abort (goal cancelled) |
 
-The DSL wraps that code in a `VisionResult(ok, reason, code, last_err_px, fill)`:
+The DSL wraps that code in a `VisionResult(ok, reason, code, last_err_px, fill,
+x_px, y_px, saw_target, elapsed_s)` -- the **finish-state** a hybrid
+vision+control mission branches on. Full contract, recovery patterns, and pitfalls:
+[`vision-results.md`](vision-results.md).
 
 * `ok` / truthiness -- **True only on `ALIGNED`** (so `if duburi.vision.align(...):` works).
-* `reason` -- `'ALIGNED'`, `'LOST'`, `'TIMEOUT'`, `'NO_CAMERA'`, `'ABORTED'`, or `'FAILED'`.
-* `last_err_px` -- worst per-axis pixel error at exit (align) / lateral error (move).
+* `status` / `reason` -- `'ALIGNED'`, `'LOST'`, `'TIMEOUT'`, `'NO_CAMERA'`, `'ABORTED'`, or `'FAILED'`.
+* `x_px` / `y_px` -- **signed** px of the target from frame **centre** at the last seen
+  frame (`+x`=ended right, `+y`=ended below); **`NaN` when never seen**. The raw
+  observable -- offset-blind. Recovery sign matches `align`: `x_px>0` → `move_right`.
+* `saw_target` -- bool; was the target detected at least once. **Check this before
+  reading `x_px`** (`NaN<threshold` is silently False).
+* `last_err_px` -- worst residual px from the **goal** (centre+offset) at exit.
 * `fill` -- bbox fill fraction at exit (move; `0` for align).
+* `elapsed_s` -- verb duration.
 
 `'FAILED'` (with `code=TIMEOUT`) is a DSL-only outcome for a server/setup
 error -- bad camera name, `ALT_HOLD` rejected, disarmed, server abort.
 Still non-fatal: the mission moves on to its next step.
+
+**Live feedback:** during the verb, `Move.Feedback.err_x_px`/`err_y_px` carry the same
+signed px live at ~2.5 Hz (`ros2 topic echo /duburi/move/_action/feedback`; `NaN` when
+no vision verb active).
 
 ### Search / recovery via `fallback`
 
@@ -552,15 +565,16 @@ required. Aligned when **every** active axis stays within `err_px` for
 
 | Aspect | Value |
 |---|---|
-| CLI | `duburi vision_align --camera forward --target_class gate --axes yaw,lat [--offset_yaw 0] [--offset_lat 0] [--err_px 40] [--duration 20] [--gain 30] [--gain_yaw 10] [--gain_lat 0] [--gain_depth 0] [--brake_off]` |
-| DSL | `duburi.vision.align('gate', yaw=0, lat=0, err=40, duration=20, gain=30, lat_gain=None, yaw_gain=None, depth_gain=None, brake=True, brake_gain=None, fallback=None, camera=None)` |
-| Facade | `Duburi.vision_align(camera, target_class, axes, offset_lat=, offset_yaw=, offset_depth=, err_px=, duration=, gain=, gain_lat=, gain_yaw=, gain_depth=, brake_off=, brake_gain=, hold_through_loss=, kp_lat=, kp_yaw=, kp_depth=, lost_grace_s=, align_stable_frames=)` |
+| CLI | `duburi vision_align --camera forward --target_class gate --axes yaw,lat [--offset_yaw 0] [--offset_lat 0] [--err_px 40] [--duration 20] [--gain 30] [--gain_yaw 10] [--gain_lat 0] [--gain_depth 0] [--brake_off] [--hold_s 4] [--fire_channels 1,2] [--fire_t 1]` |
+| DSL | `duburi.vision.align('gate', yaw=0, lat=0, err=40, duration=20, gain=30, lat_gain=None, yaw_gain=None, depth_gain=None, brake=True, brake_gain=None, hold=None, fire=None, fire_t=None, fallback=None, camera=None)` |
+| Facade | `Duburi.vision_align(camera, target_class, axes, offset_lat=, offset_yaw=, offset_depth=, err_px=, duration=, gain=, gain_lat=, gain_yaw=, gain_depth=, brake_off=, brake_gain=, hold_s=, hold_through_loss=, fire_channels=, fire_t=, kp_lat=, kp_yaw=, kp_depth=, lost_grace_s=, align_stable_frames=)` |
+| Mid-hold fire | `fire=` (int or list, 1/2=torpedo 3/4=dropper) + `fire_t=` (s into the `hold` window; 0=at lock) fire the payload **while the loop is still correcting** — gated on alignment (no off-target shot), non-blocking (background thread), requires `fire_t < hold` (else clamped to 0). Wire fields `fire_channels` (CSV) + `fire_t`. Pair with `brake=False`. Full detail: [`vision-results.md`](vision-results.md) §4. |
 | Per-axis gain | `lat_gain`/`yaw_gain`/`depth_gain` cap one axis; **unset/0 = inherit `gain`, NOT disable** (omit `lat`/`yaw`/`depth` to drop an axis). The yaw spin-up floor only engages close-up (large bbox ≥ `VISION_YAW_FLOOR_FILL`); far-field yaw is pure-proportional so it cannot limit-cycle/wobble. |
 | Arrival brake | `brake=True` (default) reverse-kicks the **lateral** axis on arrival to bleed water inertia so the hull stops square (yaw/depth never brake). Self-gating on the exit-velocity EMA: a gently-converged lock usually exits ~0 and is not kicked, but a fast snap-in can cross the gate → **pass `brake=False` on the torpedo fire path**. `brake=False` coasts; `brake_gain` scales it. Wire field is `brake_off` (default false = brake on). |
 | MAVLink | `RC_CHANNELS_OVERRIDE` Ch6 (lat) + Ch4 (yaw) @ 20 Hz; `SET_POSITION_TARGET_GLOBAL_INT` (alt) @ 5 Hz when `depth` is active |
 | Mode | auto-engages `ALT_HOLD` when `depth` is an axis; a downward camera (`downward`/`sim_bottom`) inverts the depth sign automatically |
 | Heading lock | when `yaw` is an axis the loop owns Ch4 (lock suspended, retargeted on exit); when `yaw` is NOT an axis and a lock is live, the lock keeps Ch4 and the loop writes lateral only (no fight) |
-| Result | `final_value` = outcome code (0–4); `error_value` = worst per-axis pixel error at exit |
+| Result | `final_value` = outcome code (0–4); `error_value` = worst per-axis residual px. Also: `end_x_px`/`end_y_px` (signed target-from-centre px, NaN if never seen), `elapsed_s` — surfaced on the DSL `VisionResult` as `x_px`/`y_px`/`saw_target`/`elapsed_s` for hybrid recovery ([`vision-results.md`](vision-results.md)). |
 | `[MAV ]` | `[MAV send_rc_override cmd=vision_align] yaw=<pwm> lat=<pwm>` |
 
 > **DSL axis idiom:** in `duburi.vision.align(...)` each of `lat=` / `yaw=`

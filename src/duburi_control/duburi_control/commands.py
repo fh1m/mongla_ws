@@ -227,16 +227,29 @@ COMMANDS = {
                     'correcting for hold_s seconds (fighting water inertia, e.g. to hold a '
                     'torpedo-hole lock steady for the shot) before exiting -- budget '
                     'duration >= approach + hold_s. '
+                    'fire_channels (CSV e.g. "1,2") fires those payload channels ONCE '
+                    'mid-hold, fire_t seconds into the hold (0 = at hold start), on a '
+                    'background thread so the loop keeps correcting while the shot leaves '
+                    '-- so a torpedo launches while still glued to the hole (no '
+                    'align-then-fire drift). Requires fire_t < hold_s (else clamped to 0). '
                     'On duration expiry it logs NOT-aligned and the mission continues. '
                     'hold_through_loss=true coasts on target loss (set by the DSL when '
-                    'no fallback search is supplied).',
+                    'no fallback search is supplied). '
+                    'lock_target=true locks onto the acquired target (steers to the box '
+                    'nearest the last-accepted centre, not the largest) so a second hole / '
+                    'spurious box cannot steal the aim. ctrl_conf is a control-side min '
+                    'score to accept a box. range_gain_floor softens lat/depth gain when '
+                    'the bbox fills the frame (close) to stop overshoot. ki_lat adds a '
+                    'lateral integral during the hold to null a steady current.',
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
                      'gain_lat', 'gain_yaw', 'gain_depth',
                      'brake_off', 'brake_gain', 'hold_s', 'hold_through_loss',
+                     'fire_channels', 'fire_t',
                      'kp_lat', 'kp_yaw', 'kp_depth',
-                     'lost_grace_s', 'align_stable_frames'],
+                     'lost_grace_s', 'align_stable_frames',
+                     'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
@@ -244,8 +257,11 @@ COMMANDS = {
                      'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
                      'brake_off': False, 'brake_gain': 0.0, 'hold_s': 0.0,
                      'hold_through_loss': False,
+                     'fire_channels': '', 'fire_t': 0.0,
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
-                     'lost_grace_s': 1.0, 'align_stable_frames': 3.0},
+                     'lost_grace_s': 1.0, 'align_stable_frames': 3.0,
+                     'lock_target': False, 'ctrl_conf': 0.0,
+                     'range_gain_floor': 1.0, 'ki_lat': 0.0},
     },
     'vision_move': {
         'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '
@@ -264,7 +280,7 @@ COMMANDS = {
                      'maintain_px', 'maintain_on', 'hold_s',
                      'err_px', 'duration', 'gain', 'gain_lat',
                      'brake_off', 'brake_gain', 'hold_through_loss',
-                     'kp_forward', 'kp_lat', 'lost_grace_s'],
+                     'kp_forward', 'kp_lat', 'lost_grace_s', 'range_gain_floor'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'fwd_fill': 95.0, 'mode': 'area',
                      'maintain_px': 0.0, 'maintain_on': False,
@@ -272,7 +288,8 @@ COMMANDS = {
                      'duration': 20.0, 'gain': 30.0, 'gain_lat': 0.0,
                      'brake_off': False, 'brake_gain': 0.0,
                      'hold_through_loss': False,
-                     'kp_forward': 200.0, 'kp_lat': 60.0, 'lost_grace_s': 1.0},
+                     'kp_forward': 200.0, 'kp_lat': 60.0, 'lost_grace_s': 1.0,
+                     'range_gain_floor': 1.0},
     },
     'fire': {
         'help':     'Fire ESP32 payload channel. 1/2 = torpedo, 3/4 = dropper. '
@@ -334,7 +351,8 @@ STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
                  'fire_channels', 'ref_name')
 
 # Field names that carry a bool. rosidl init these to False.
-BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'pass_through')
+BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'pass_through',
+               'lock_target')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):
