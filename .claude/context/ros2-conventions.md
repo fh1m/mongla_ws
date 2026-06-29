@@ -1,7 +1,8 @@
 # ROS2 Conventions — Duburi AUV Codebase
 
 ROS2 surface and coding standards for `duburi_ws`. The surface is
-deliberately tiny: **one action, one telemetry topic, six parameters**.
+deliberately tiny: **one action, one telemetry topic, and a small set of
+manager ROS params** (the manager declares 14 + a `vision.*` tuning layer).
 If you're tempted to add a topic or service, reread this file and the
 [architecture section of CLAUDE.md](../../CLAUDE.md#4-software-architecture)
 first.
@@ -24,31 +25,40 @@ goes through this single endpoint.
 
 | Goal field            | Meaning                                                          |
 |-----------------------|------------------------------------------------------------------|
-| `command_type` (str)  | Verb name — must match a key in `duburi_control.commands.COMMANDS` |
-| `duration` (float)    | Seconds — used by `move_*`, `pause`                              |
-| `gain` (float)        | Percent thrust 0..100 — used by `move_*`                         |
-| `target` (float)      | Magnitude — degrees for `yaw_*`, metres for `set_depth`          |
+| `cmd` (str)           | Verb name — must match a key in `duburi_control.commands.COMMANDS` |
+| `duration` (float)    | Seconds — used by `move_*`, `arc`, `pause`, `vision_*`           |
+| `gain` (float)        | Percent thrust 0..100 — `move_*`/`arc`; `vision_*`: max-speed cap |
+| `target` (float)      | Magnitude — degrees for `yaw_*`/`turn`, metres for `set_depth`   |
 | `target_name` (str)   | String payload — mode name for `set_mode`                        |
 | `timeout` (float)     | Per-command timeout (seconds)                                    |
 
-> The full set of verbs and their accepted fields lives in
-> [`duburi_control/commands.py`](../../src/duburi_control/duburi_control/commands.py).
-> The action server, the `duburi` CLI, and the Python `DuburiClient` all
-> read from that registry — there is no second list to keep in sync.
+> Above is the common core. `Move.action` carries ~52 goal fields total
+> (style, DVL, the full `vision_align`/`vision_move` surface incl. the
+> precision + mid-hold-fire knobs, and on `lock` the anchor fields). The
+> authoritative per-verb field list lives in
+> [`duburi_control/commands.py`](../../src/duburi_control/duburi_control/commands.py);
+> the action server, the `duburi` CLI, and the Python `DuburiClient` all read
+> from that registry — there is no second list to keep in sync.
 
 | Result field          | Meaning                                                          |
 |-----------------------|------------------------------------------------------------------|
-| `success` (bool)      | Did the maneuver complete?                                       |
+| `success` (bool)      | Did the maneuver complete? (vision verbs always `True`)          |
 | `message` (str)       | Human-readable status — `'completed'`, `'NO_ACK'`, `'DENIED'`, ... |
-| `final_value` (float) | Final reading on the moved axis (yaw °, depth m, depth m for linear) |
-| `error_value` (float) | Remaining error at exit (`|target − final|`)                     |
+| `final_value` (float) | Final reading on the moved axis (yaw °, depth m); vision: outcome code 0–4 |
+| `error_value` (float) | Remaining error at exit (`|target − final|`); vision: worst residual px |
+| `end_x_px` (float)    | vision: SIGNED target-from-centre px at last seen frame (`NaN`=never seen) |
+| `end_y_px` (float)    | vision: SIGNED target-from-centre px at last seen frame (`NaN`=never seen) |
+| `fill_frac` (float)   | vision_move: bbox fill fraction at exit [0..1] (0 for align)     |
+| `elapsed_s` (float)   | vision: verb duration s (non-vision verbs leave 0)              |
 
 | Feedback field        | Meaning                                                          |
 |-----------------------|------------------------------------------------------------------|
-| `current` (float)     | Current axis reading                                             |
-| `target` (float)      | Goal axis reading                                                |
-| `error` (float)       | `target - current`                                               |
-| `state` (str)         | `'EXECUTING'` while running                                      |
+| `phase` (str)         | e.g. `'EXECUTING'`, `'DONE'`                                     |
+| `current_value` (float) | Current axis reading (depth m)                                |
+| `error_value` (float) | Remaining error                                                 |
+| `err_x_px` (float)    | vision: live SIGNED target-from-centre px (`NaN` otherwise)     |
+| `err_y_px` (float)    | vision: live SIGNED target-from-centre px (`NaN` otherwise)     |
+| `status_line` (str)   | Human-readable one-liner                                         |
 
 **Rule:** add a new verb by adding **one row** to `COMMANDS` and **one
 method** to `Duburi` (in `duburi_control/duburi.py`). The action server,
@@ -76,22 +86,38 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 
 ### ROS params on `auv_manager_node`
 
-| Param                   | Type   | Default         | Notes                                                                        |
+> **Two default layers — don't confuse them.** The column below is the **node's
+> own `declare_parameter` default** (what you get from a bare
+> `ros2 run duburi_manager start`). The operator-facing **`bringup.launch.py`
+> overrides some of these** for pool use (`mode:=pool`, `yaw_source:=dvl`) — so a
+> launched stack and a bare `ros2 run` can pick different profiles. `mode:=auto`
+> probes the environment (UDP 14550 busy → `pool`; Pixhawk USB → `desk`; else `sim`).
+
+| Param                   | Type   | Node default    | Notes                                                                        |
 |-------------------------|--------|-----------------|------------------------------------------------------------------------------|
-| `mode`                  | string | `pool`          | `auto`, `pool`, `sim`, `laptop`, `desk` (see `connection_config.PROFILES`)  |
+| `mode`                  | string | `auto`          | `auto`, `pool`, `sim`, `laptop`, `desk` (bringup.launch default: `pool`)     |
+| `mav_device`            | string | `''`            | Override the connection string (e.g. `/dev/ttyACM0`, `udpin:0.0.0.0:14560`); `''` = use the mode profile |
 | `smooth_yaw`            | bool   | `false`         | `true` → `yaw_glide` (smootherstep setpoint sweep)                           |
 | `smooth_translate`      | bool   | `false`         | `true` → `drive_*_eased` (trapezoid thrust + settle-only brake)              |
-| `yaw_source`            | string | `dvl`           | `dvl` \| `bno085_dvl` \| `bno085` \| `mavlink_ahrs`                         |
-| `bno085_port`           | string | `/dev/ttyACM0`  | USB CDC device path (bno085 sources only)                                    |
+| `yaw_source`            | string | `mavlink_ahrs`  | `mavlink_ahrs` \| `bno085` \| `bno085_dvl` \| `dvl` (bringup.launch default: `dvl`) |
+| `bno085_port`           | string | `auto`          | `auto` = VID/PID scan (303a:1001); explicit path skips the scan              |
 | `bno085_baud`           | int    | `115200`        | BNO085 stream baud rate                                                      |
+| `payload_port`          | string | `auto`          | ESP32 payload (fire/drop) board; `auto` = VID/PID scan (1a86:7523)           |
 | `nucleus_dvl_host`      | string | `192.168.2.201` | DVL TCP hostname                                                             |
 | `nucleus_dvl_port`      | int    | `9000`          | DVL TCP port                                                                 |
 | `nucleus_dvl_password`  | string | `nortek`        | DVL authentication password                                                  |
 | `dvl_auto_connect`      | bool   | `true`          | Auto-connect DVL at startup (background retry loop)                          |
 | `dvl_retry_s`           | float  | `5.0`           | Seconds between auto-connect retry attempts                                  |
+| `debug`                 | bool   | `false`         | `true` → per-command `[MAV …]` tracing + DEBUG logging                       |
+
+Plus the `vision.*` tuning layer (10 params: `kp_lat/kp_yaw/kp_depth/kp_forward`,
+`lost_grace_s`, `frame_fill_default`, `align_stable_frames`, `range_gain_floor`,
+`ki_lat`, `ctrl_conf`) — see [`command-reference.md`](command-reference.md) §9 and
+[`vision_tunables.py`](../../src/duburi_manager/duburi_manager/vision_tunables.py).
 
 `sensors_node` accepts a strict subset (`yaw_source`, `bno085_port`,
-`bno085_baud`, plus `calibrate` bool) for diagnostic-only use.
+`bno085_baud`, plus `calibrate` bool, `mavlink_url`, `print_period_s`) for
+diagnostic-only use.
 
 ---
 
@@ -106,7 +132,9 @@ All verbs listed here are entries in `duburi_control/commands.py` and are availa
 | `arm`              | `timeout`                           | Waits for ACK                                       |
 | `disarm`           | `timeout`                           | Clears RC overrides, then disarms                   |
 | `set_mode`         | `target_name` (str)                 | Mode name: `ALT_HOLD`, `POSHOLD`, `MANUAL`, …       |
-| `stop`             | —                                   | Active neutral RC (1500) for 0.6 s                  |
+| `stop`             | —                                   | **Safety**: active neutral RC (1500) on all channels |
+| `surface`          | —                                   | **Safety**: ascend to 0 m; bypasses the command_active gate (runs mid-mission) |
+| `mission_reset`    | —                                   | Stop heading lock + clear abort + RC neutral; **call at start of every `run()`** |
 | `pause`            | `duration`                          | Release all RC overrides; autopilot takes over       |
 | `head`             | —                                   | Read-only: returns current yaw in `final_value`     |
 | `move_forward`     | `duration`, `gain`, `settle`        | Ch5 forward thrust, open-loop timed                 |
@@ -114,10 +142,13 @@ All verbs listed here are entries in `duburi_control/commands.py` and are availa
 | `move_left`        | `duration`, `gain`, `settle`        | Ch6 lateral left, open-loop timed                   |
 | `move_right`       | `duration`, `gain`, `settle`        | Ch6 lateral right, open-loop timed                  |
 | `arc`              | `duration`, `gain`, `yaw_rate_pct`, `settle` | Ch5 + Ch4 combined; curved trajectory        |
+| `style_roll`       | `gain`, `timeout`, `flips`, `headroom` | N×360° roll in ACRO (surface-depth guarded)      |
+| `style_yaw`        | `flips`, `deg_per_step`, `settle`   | N×360° yaw spin in ALT_HOLD (no mode change)        |
 | `yaw_left`         | `target` (deg), `timeout`, `settle` | Pivot left by N degrees                             |
 | `yaw_right`        | `target` (deg), `timeout`, `settle` | Pivot right by N degrees                            |
+| `turn`             | `target` (deg), `timeout`, `settle` | Rotate to **absolute** heading (0–360), direction auto |
 | `set_depth`        | `target` (m neg), `timeout`, `settle` | Engage ALT_HOLD + drive to depth                  |
-| `lock_heading`     | `target` (deg), `timeout`           | 20 Hz background yaw lock; `target=0` = current     |
+| `lock_heading`     | `target` (deg), `timeout`           | 50 Hz background yaw lock; `target=0` = current     |
 | `unlock_heading`   | —                                   | Cancels the heading lock thread                     |
 
 ### DVL (pool only — requires Nortek Nucleus 1000)
@@ -143,11 +174,13 @@ rides in `final_value` as an integer code (`0`=ALIGNED, `1`=LOST,
 | `vision_align` | `vision.align()` | `camera`, `target_class`, `axes` (CSV of `lat,yaw,depth`), `offset_lat/yaw/depth`, `err_px`, `duration`, `gain` | Centre target on each active axis at its signed pixel offset (`0`=centre). Aligned when every axis is within `err_px` for `align_stable_frames` ticks. |
 | `vision_move`  | `vision.move()`  | `camera`, `target_class`, `fwd_fill`, `mode` (`area`/`width`/`height`), `maintain_px`, `maintain_on`, `hold_s`, `err_px`, `duration`, `gain` | Drive forward until the bbox fills `fwd_fill`% of the frame. `maintain_px` holds a lateral offset; never re-centres yaw/depth. |
 
-Per-goal tuning fields (normally left unset so the live `vision.*` ROS
-params on the manager apply): `vision_align` also takes `kp_lat`, `kp_yaw`,
-`kp_depth`, `lost_grace_s`, `align_stable_frames`, `hold_through_loss`;
-`vision_move` also takes `kp_forward`, `kp_lat`, `lost_grace_s`,
-`hold_through_loss`. The control loop reads
+Beyond the core fields, `vision_align` also takes per-axis caps
+`gain_lat`/`gain_yaw`/`gain_depth`, the arrival-brake (`brake_off`/`brake_gain`),
+the active station-keep `hold_s`, **mid-hold fire** `fire_channels`/`fire_t`, the
+**precision** knobs `lock_target`/`ctrl_conf`/`range_gain_floor`/`ki_lat`, and the
+tuning fields `kp_lat`/`kp_yaw`/`kp_depth`/`lost_grace_s`/`align_stable_frames`/
+`hold_through_loss`; `vision_move` also takes `gain_lat`, `brake_off`/`brake_gain`,
+`range_gain_floor`, `kp_forward`/`kp_lat`/`lost_grace_s`/`hold_through_loss`. The control loop reads
 `/duburi/vision/<cam>/detections` directly; the tracker's `/tracks` feeds
 the HUD only (no `--tracking` flag). The standalone `fire` verb
 (`fire_channel`: 1/2=torpedo, 3/4=dropper) actuates payloads — there is no
@@ -410,5 +443,5 @@ back the timestamp unless you're debugging a timing issue.
 - Don't add a launch file with one node in it. `ros2 run ... --ros-args
   -p mode:=...` is the documented entry point.
 - Don't introduce `std_srvs` services for arm/disarm — the action
-  handles them via `command_type`.
+  handles them via the `cmd` field.
 - Don't add new QoS profiles unless you benchmarked them. Defaults work.

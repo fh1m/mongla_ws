@@ -8,7 +8,7 @@
 ## 1. The pitch in one sentence
 
 `lock_heading` spawns a daemon thread that runs a **proportional Ch4
-yaw-rate** loop at 20 Hz against the heading reported by the
+yaw-rate** loop at 50 Hz against the heading reported by the
 configured `YawSource`, while the rest of the motion verbs leave Ch4
 neutral so the lock thread is the only writer on that axis. It is
 the spiritual cousin of ArduSub's onboard `ALT_HOLD` for depth --
@@ -38,15 +38,28 @@ it sees Ch4 != 1500.
 
 ## 3. How the loop works
 
-Each tick at `LOCK_STREAM_HZ` (20 Hz):
+Each tick at `LOCK_STREAM_HZ` (50 Hz, matched to the BNO085 firmware rate):
 
 1. Read `current` from the `yaw_source` (or AHRS if no source given).
 2. `error = Pixhawk.heading_error(target, current)`, in `[-180, 180]`.
-3. Apply `LOCK_DEADBAND_DEG` deadband so noise does not twitch the
-   sub. Outside the deadband:
-   `yaw_pct = error * LOCK_KP_PCT_PER_DEG`, clamped to `+/-LOCK_PCT_MAX`.
-4. `pixhawk.send_rc_override(yaw=percent_to_pwm(yaw_pct))`.
-   ArduSub treats Ch4 != 1500 as a pilot yaw-rate command, so the
+3. Inside `LOCK_DEADBAND_DEG` -> command `0` (noise must not twitch the
+   sub). Outside it, the law is `_lock_command(error)`:
+   `mag = min(LOCK_PCT_MAX, |error| * LOCK_KP_PCT_PER_DEG)`, then
+   `speed = max(_lock_floor(|error|), mag)`, signed by the error.
+   `_lock_floor` is a **stiction-break floor that TAPERS to 0 at the
+   deadband edge**: full `LOCK_SPEED_MIN_PCT` at/above
+   `LOCK_APPROACH_BAND_DEG`, decaying linearly to 0 at `LOCK_DEADBAND_DEG`.
+   A hard floor on a yaw *rate* channel is a relay that limit-cycles the
+   hull when it has to reject a sustained disturbance (e.g. the lateral
+   strafe of a `vision_align`) -- the taper kills that wobble while still
+   breaking T200 stiction for real corrections (see
+   [`known-issues.md`](./known-issues.md) D7). **The cure for align-yaw
+   jitter is this taper, NOT releasing the lock** -- releasing it hands
+   yaw to ArduSub's untrusted hull compass.
+4. `pixhawk.send_rc_yaw_only(percent_to_pwm(yaw_pct))` -- writes **only
+   Ch4** (Ch5/Ch6/Ch3 stay at NO_OVERRIDE 65535) so a concurrent DVL
+   forward/lateral move's Ch5/Ch6 thrust is never clobbered by a lock
+   tick. ArduSub treats Ch4 != 1500 as a pilot yaw-rate command, so the
    Python-side `yaw_source` is the sole feedback closing the loop.
 
 There is no `SET_ATTITUDE_TARGET` involved -- that approach was
@@ -58,11 +71,13 @@ Tunables live at the top of
 [`heading_lock.py`](../../src/duburi_control/duburi_control/heading_lock.py):
 
 ```python
-LOCK_KP_PCT_PER_DEG = 0.6        # gentle -- correcting drift, not turning
-LOCK_DEADBAND_DEG   = 0.5
-LOCK_PCT_MAX        = 18.0       # clamp; never saturates the bus
-DRIFT_LOG_SEC       = 1.0        # [LOCK ] heartbeat cadence
-SOURCE_DEAD_S       = 2.0        # warn after this many silent seconds
+LOCK_KP_PCT_PER_DEG    = 1.2     # proportional gain (% thrust per deg)
+LOCK_SPEED_MIN_PCT     = 5.0     # stiction-break floor (tapered, see below)
+LOCK_PCT_MAX           = 22.5    # clamp; matches yaw_snap max
+LOCK_DEADBAND_DEG      = 1.0     # inside this -> command 0
+LOCK_APPROACH_BAND_DEG = 6.0     # floor tapers full->0 across deadband..band
+DRIFT_LOG_SEC          = 1.0     # [LOCK ] heartbeat cadence
+SOURCE_DEAD_S          = 0.5     # release Ch4 after this many silent seconds
 ```
 
 ## 4. Source-agnostic by design
@@ -150,18 +165,22 @@ them stepping on each other:
 
 * While `lock_heading` is active, `Heartbeat` is **paused** (the
   Duburi facade calls `self._heartbeat.pause()` inside
-  `lock_heading`). The lock thread is now the sole authoritative
-  writer on Ch4, AND it writes a full RC packet every 50 ms, which
-  inherently keeps `FS_PILOT_INPUT` from triggering.
+  `lock_heading`). The heartbeat sends a *full neutral* 6-channel
+  override including `Ch4=1500`, which would fight the lock's Ch4
+  stream -- so it is paused and the lock becomes the sole Ch4 writer.
+  The lock's own Ch4 packet at 50 Hz (20 ms) keeps `FS_PILOT_INPUT`
+  from triggering on its own.
 * `unlock_heading` resumes the Heartbeat so the wire stays warm
   during whatever runs next. The same heartbeat hold is released on
   the two other lock-exit paths — a `timeout` (via the `on_exit`
   callback) and `disarm()` — so the Heartbeat is never left paused
   after a lock ends.
 
-This is why the lock uses `send_rc_override` (full 6-channel write)
-rather than `send_rc_translation` -- it owns the whole pilot input
-slot, including the neutral throttle/forward/lateral fields.
+The lock uses `send_rc_yaw_only` (writes **only Ch4**, all other
+channels at NO_OVERRIDE 65535) rather than a full 6-channel
+`send_rc_override` -- so a concurrent DVL `move_*_dist` can drive
+Ch5/Ch6 through its own `send_rc_translation` while the lock holds
+Ch4, with neither writer clobbering the other's channels.
 
 ## 7. Interaction contract with motion commands
 
@@ -194,7 +213,7 @@ the axis module.
 | Failure                              | Behaviour                                                         |
 | ------------------------------------ | ----------------------------------------------------------------- |
 | Source returns `None` for a tick     | Last valid heading held; loop never blocks.                       |
-| Source dead > `SOURCE_DEAD_S` (2 s)  | `[LOCK ] WARN yaw source silent` log every 2 s; loop releases Ch4 (1500) so the sub does not yaw on stale data; recovers automatically when samples resume. |
+| Source dead > `SOURCE_DEAD_S` (0.5 s) | `[LOCK ] WARN yaw source silent` log; loop releases Ch4 (1500) so the sub does not yaw on stale data; recovers automatically (with an INFO log) when samples resume. |
 | Operator forgets `unlock_heading`    | `timeout` (default 300 s) fires the `on_exit` callback: Ch4 released, `Duburi._heading_lock` cleared, Heartbeat hold released — so a timed-out lock can't linger as an "active" zombie. |
 | `disarm()` while a lock is active    | `disarm()` stops/joins the lock and releases the Heartbeat hold before dropping to MANUAL, so the Ch4 yaw-rate stream stops cleanly. FSM `DisarmState` also calls `release_heading()` first. |
 | Manager process exits                | `daemon=True` kills the thread; manager's `finally` calls `pixhawk.send_neutral()` and stops the lock first. |
@@ -222,7 +241,7 @@ Watch for these log lines:
 
 To inspect the per-frame MAVLink trace, restart the manager with
 `debug:=true` (it raises the logger to DEBUG and enables the
-per-command tag) -- you'll see one `[MAV send_rc_override] yaw=1543`
+per-command tag) -- you'll see one `[MAV send_rc_yaw_only] yaw=1543`
 line for every Ch4 write the lock makes (no `cmd=` because the lock
 runs in its own thread and contextvars don't cross thread boundaries):
 

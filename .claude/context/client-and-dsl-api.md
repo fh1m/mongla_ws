@@ -78,7 +78,15 @@ Their fields below; everything else is the open-loop motion surface.
 | `mode`               | string   | vision_move — fill metric: `area` / `width` / `height` |
 | `maintain_px`        | float32  | vision_move — lateral px offset held while driving |
 | `maintain_on`        | bool     | vision_move — enable `maintain_px` (else pure forward) |
-| `hold_s`             | float32  | vision_move — seconds to station-keep after reaching fill |
+| `hold_s`             | float32  | vision_align (active station-keep), vision_move (after reaching fill) |
+| `brake_off`/`brake_gain` | bool/float32 | vision_align, vision_move — disable / scale the arrival reverse-kick brake |
+| `fire_channels`      | string   | vision_align — CSV payload channels fired ONCE mid-hold, e.g. `"1,2"` |
+| `fire_t`             | float32  | vision_align — seconds into the hold to fire (must be `< hold_s`) |
+| `lock_target`        | bool     | vision_align — **precision (`lock_on`):** steer to the box nearest the last centre, not the largest |
+| `ctrl_conf`          | float32  | vision_align — **precision:** control-side min detection score (live: `vision.ctrl_conf`) |
+| `range_gain_floor`   | float32  | vision_align, vision_move — **precision:** lat/depth kp multiplier as the bbox fills (live: `vision.range_gain_floor`) |
+| `ki_lat`             | float32  | vision_align — **precision:** lateral integral gain during the hold (live: `vision.ki_lat`) |
+| `pass_through`       | bool     | move_*/arc — reinterpret `gain`(+`yaw_rate_pct`) as a RAW PWM delta (1500±value) |
 | `hold_through_loss`  | bool     | vision_align, vision_move — coast on target loss (the DSL sets this when no `fallback` is supplied) |
 | `kp_lat`             | float32  | vision_align, vision_move             |
 | `kp_yaw`             | float32  | vision_align                          |
@@ -290,6 +298,7 @@ duburi.vision.align(
     hold=None,              # active station-keep (s) after centring — fights inertia
     fire=None,              # mid-hold payload fire: channel int or list (1/2 torpedo, 3/4 dropper)
     fire_t=None,            # s into the hold to fire (0 = at lock); must be < hold
+    lock_on=False,          # precision continuity lock: steer to the box nearest the last centre
     fallback=None,          # search fn run on target loss (see Fallback)
     camera=None,            # defaults to duburi.camera ('forward')
 ) -> VisionResult
@@ -297,6 +306,13 @@ duburi.vision.align(
 
 > `hold` / `fire` / `fire_t` fire a payload **mid-hold while still correcting** —
 > see [`vision-results.md`](vision-results.md) §4 (gated on alignment, non-blocking).
+>
+> `lock_on=True` + the deck params `vision.ctrl_conf` / `vision.range_gain_floor` /
+> `vision.ki_lat` are the close-in precision layer (kill last-moment misclass +
+> hold a 20 kg hull on a small target). All off by default —
+> [`precision-alignment.md`](precision-alignment.md). Note **`err=0` means "use the
+> default", not zero-tolerance** (rosidl 0==unset); pass a small positive `err` for
+> a tight deadband (floored at ~5 px).
 
 - Each of `lat` / `yaw` / `depth` is `None` (axis off) or a **number**
   (axis on; the number is the signed pixel offset from centre — `0` =
@@ -485,6 +501,9 @@ mission edit:
 | `vision.lost_grace_s` | `1.0` | both — coast seconds before LOST |
 | `vision.frame_fill_default` | `95.0` | move `fwd_fill` when left unset |
 | `vision.align_stable_frames` | `3` | align in-band ticks before ALIGNED |
+| `vision.range_gain_floor` | `1.0` | **precision:** lat/depth kp multiplier as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
+| `vision.ki_lat` | `0.0` | **precision:** lateral integral gain; nulls a steady-current offset during the hold (`0`=off) |
+| `vision.ctrl_conf` | `0.0` | **precision:** control-side min detection score to accept a box (`0`=off) |
 
 ```bash
 ros2 param set /duburi_manager vision.kp_yaw 80.0
