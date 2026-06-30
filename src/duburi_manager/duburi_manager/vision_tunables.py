@@ -75,7 +75,7 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # occlusion doesn't lose a torpedo-hole lock or drift the hull off a pipe.
     # MUST be < lost_grace_s and < the tracker buffer in wall-time. Opt-in,
     # pool-validated before enabling -- see precision-alignment.md / known-issues.
-    'vision.coast_s':              0.0,
+    'vision.coast_s':              0.8,
 }
 
 

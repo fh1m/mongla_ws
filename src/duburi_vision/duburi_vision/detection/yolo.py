@@ -183,7 +183,11 @@ class YoloDetector(Detector):
 
         resolved_path = _resolve_model_path(model_path)
         self._is_engine = str(resolved_path).endswith('.engine')
-        self._model = YOLO(resolved_path)
+        # All Duburi models are detectors. A TensorRT .engine carries no task
+        # metadata, so ultralytics otherwise WARNs "Unable to automatically
+        # guess model task, assuming 'task=detect'" once per engine at load;
+        # state it explicitly to silence that and avoid a wrong guess.
+        self._model = YOLO(resolved_path, task='detect')
         # A TensorRT engine is already bound to the device it was built on;
         # YOLO.to() can raise for engines, so only move .pt models.
         if not self._is_engine:

@@ -1,6 +1,7 @@
 names:
-  0: gate
+  0: sos
   1: rescue
-  2: repair
+  2: survey
+  3: repair
 path: .
 train: train.txt
