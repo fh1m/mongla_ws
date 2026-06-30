@@ -278,7 +278,7 @@ returns a [`VisionResult`](#visionresult) and the mission keeps running.
 
 | Verb | What it does |
 |------|--------------|
-| `vision.align(target, *, lat=, yaw=, depth=, hold=, ...)` | Centre `target` on the named axes, each at a signed **pixel offset** from frame centre. `hold=`s = **active station-keep**: keep correcting on-target for `hold` s before exiting (holds the hull steady for a torpedo/dropper shot); counts against `duration`; lat/yaw/depth only, not range. |
+| `vision.align(target, *, lat=, yaw=, depth=, fwd=, fwd_mode=, hold=, ...)` | Centre `target` on the named axes, each at a signed **pixel offset** from frame centre. `hold=`s = **active station-keep**: keep correcting on-target for `hold` s before exiting (holds the hull steady for a torpedo/dropper shot); counts against `duration`. **`fwd=`** (% fill, `fwd_mode=`area/width/height) adds a **forward range-hold axis** — align ALSO drives forward to that standoff and holds it, so one verb does forward-standoff + lat/depth + hold + mid-hold fire (the torpedo standoff shot; one-sided forward, never reverses; fire gated on the standoff too). `fwd` unset = lat/yaw/depth only. |
 | `vision.move(target, *, fwd=, mode=, ...)` | Drive forward until `target`'s bbox fills `fwd` % of the frame. Never re-centres yaw/depth. |
 
 #### `vision.align` — centre on lat / yaw / depth

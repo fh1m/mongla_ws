@@ -166,6 +166,8 @@ class _VisionDSL:
               fire=None,
               fire_t: Optional[float] = None,
               lock_on: bool = False,
+              fwd: Optional[float] = None,
+              fwd_mode: str = 'area',
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -194,13 +196,25 @@ class _VisionDSL:
         never brake.
 
         ``hold`` (seconds) turns align into an ACTIVE station-keep: once
-        centred, the loop keeps running its lat/yaw/depth corrections for
-        ``hold`` s -- fighting water inertia/current -- before returning,
-        instead of exiting the instant it's centred. It holds lat/yaw/depth
-        only -- NOT forward range (the prior ``move`` set the standoff).
-        ``hold`` counts against ``duration``: budget ``duration >= approach +
-        hold`` or the verb TIMEOUTs mid-hold. For a fire-from-lock pass
-        ``brake=False`` so there's no pre-shot lateral nudge.
+        centred, the loop keeps running its corrections for ``hold`` s --
+        fighting water inertia/current -- before returning, instead of exiting
+        the instant it's centred. It holds lat/yaw/depth (and forward range when
+        ``fwd`` is set). ``hold`` counts against ``duration``: budget
+        ``duration >= approach + hold`` or the verb TIMEOUTs mid-hold. For a
+        fire-from-lock pass ``brake=False`` so there's no pre-shot lateral nudge.
+
+        ``fwd`` (% frame fill, optional) adds a forward range-hold axis so align
+        ALSO drives the hull forward to that standoff and holds it -- ONE verb
+        does forward-standoff + lat/depth centering + station-keep + mid-hold
+        fire (the unified torpedo standoff shot). ``fwd_mode`` is the fill metric
+        (area/width/height; ``height`` for the torpedo board/hole). The forward
+        term is ONE-SIDED (drives forward while too far, neutral at/past the
+        standoff -- never reverses), and the fire is gated on reaching the
+        standoff too. Leave ``fwd=None`` (default) for the lat/yaw/depth-only
+        align (e.g. a coarse board centre)::
+
+            align('hole', lat=0, depth=0, fwd=25, fwd_mode='height',
+                  lock_on=True, hold=4, fire=1, fire_t=1.5, brake=False)
 
         ``fire`` (channel int or list, e.g. ``fire=1`` or ``fire=[1, 2]`` --
         1/2=torpedo, 3/4=dropper) fires the payload WHILE the hold loop is
@@ -278,7 +292,9 @@ class _VisionDSL:
                 hold_through_loss=(fallback is None),
                 fire_channels=fire_csv,
                 fire_t=float(fire_t) if fire_t is not None else 0.0,
-                lock_target=bool(lock_on))
+                lock_target=bool(lock_on),
+                fwd_fill=float(fwd) if fwd is not None else 0.0,
+                mode=str(fwd_mode))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)

@@ -74,7 +74,8 @@ class VisionVerbs:
                      kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
                      lost_grace_s=0.0, align_stable_frames=0.0,
                      lock_target=False, ctrl_conf=0.0,
-                     range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0):
+                     range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
+                     fwd_fill=0.0, mode='area', kp_forward=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -91,6 +92,14 @@ class VisionVerbs:
         never held during the hold, the shot is NOT fired (never off-target).
         ``fire_t`` is clamped to 0 when >= ``hold_s`` (or hold_s<=0) so a held
         lock always fires mid-hold rather than on the drifting exit tick.
+
+        ``fwd_fill`` (> 0) adds a forward range-hold axis: align ALSO drives
+        forward until the bbox fills ``fwd_fill`` %% of the frame (``mode`` =
+        area/width/height), then holds that standoff -- so ONE verb does
+        forward-standoff + lat/depth centering + station-keep + mid-hold fire (the
+        unified torpedo standoff shot). The shot is gated on the standoff range too
+        (forward joins the in-band check). ``fwd_fill`` = 0 (default) -> no forward
+        axis, unchanged. ``kp_forward`` overrides the fill P-gain (0 = default).
         """
         axis_set = _parse_axes(axes) & {'lat', 'yaw', 'depth'}
         if not axis_set:
@@ -131,9 +140,11 @@ class VisionVerbs:
 
             stable = int(align_stable_frames) or 3
             fire_note = (f' fire={channels}@{eff_fire_t:.1f}s' if channels else '')
+            fwd_note = (f' fwd>={float(fwd_fill):.0f}%({mode})'
+                        if float(fwd_fill) > 0.0 else '')
             self.log.info(
                 f'[CMD  ] vision_align camera={camera!r} class={target_class!r} '
-                f'axes={sorted(axis_set)} err={float(err_px):.0f}px '
+                f'axes={sorted(axis_set)}{fwd_note} err={float(err_px):.0f}px '
                 f'gain={float(gain):.0f}% dur={float(duration):.0f}s '
                 f'hold={float(hold_s):.0f}s{fire_note}')
 
@@ -172,6 +183,9 @@ class VisionVerbs:
                     range_gain_floor=float(range_gain_floor) or 1.0,
                     ki_lat=float(ki_lat),
                     coast_s=float(coast_s),
+                    fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)
+                    fwd_mode=str(mode) or 'area',
+                    kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
                     on_locked=on_locked,
                     fire_t=eff_fire_t,
                     report_fn=self.report_vision,
