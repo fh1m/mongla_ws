@@ -12,8 +12,8 @@ ros2 run duburi_planner mission gate_flare_fsm     # gate + flare (auto-detects 
 ```
 
 Full user guide (fundamentals, `VehicleProfile`, the state library, pool-day workflow,
-adding a task): [`.claude/context/fsm-guide.md`](../../../../../.claude/context/fsm-guide.md).
-Vision-guided FSM design: [`.claude/context/fsm-vision-missions.md`](../../../../../.claude/context/fsm-vision-missions.md).
+adding a task): [`.claude/context/fsm-guide.md`](../../../../.claude/context/fsm-guide.md).
+Vision-guided FSM design: [`.claude/context/fsm-vision-missions.md`](../../../../.claude/context/fsm-vision-missions.md).
 
 ## Layout (as built)
 
