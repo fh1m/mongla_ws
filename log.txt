@@ -1,0 +1,83 @@
+[INFO] [launch]: All log files can be found below /home/duburi-jetson/.ros/log/2026-06-30-14-01-52-653518-ubuntu-34001
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [camera_node-1]: process started with pid [34002]
+[INFO] [detector_node-2]: process started with pid [34004]
+[INFO] [tracker_node-3]: process started with pid [34006]
+[INFO] [vision_display-4]: process started with pid [34008]
+[vision_display-4] libEGL warning: DRI3: failed to query the version
+[detector_node-2] libEGL warning: DRI3: failed to query the version
+[tracker_node-3] libEGL warning: DRI3: failed to query the version
+[camera_node-1] libEGL warning: DRI3: failed to query the version
+[detector_node-2] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:549: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
+[detector_node-2]   setattr(self, word, getattr(machar, word).flat[0])
+[detector_node-2] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
+[detector_node-2]   return self._float_to_str(self.smallest_subnormal)
+[detector_node-2] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:549: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
+[detector_node-2]   setattr(self, word, getattr(machar, word).flat[0])
+[detector_node-2] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
+[detector_node-2]   return self._float_to_str(self.smallest_subnormal)
+[tracker_node-3] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:549: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
+[tracker_node-3]   setattr(self, word, getattr(machar, word).flat[0])
+[tracker_node-3] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
+[tracker_node-3]   return self._float_to_str(self.smallest_subnormal)
+[tracker_node-3] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:549: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
+[tracker_node-3]   setattr(self, word, getattr(machar, word).flat[0])
+[tracker_node-3] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
+[tracker_node-3]   return self._float_to_str(self.smallest_subnormal)
+[vision_display-4] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:549: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
+[vision_display-4]   setattr(self, word, getattr(machar, word).flat[0])
+[vision_display-4] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float64'> type is zero.
+[vision_display-4]   return self._float_to_str(self.smallest_subnormal)
+[vision_display-4] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:549: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
+[vision_display-4]   setattr(self, word, getattr(machar, word).flat[0])
+[vision_display-4] /home/duburi-jetson/.local/lib/python3.10/site-packages/numpy/core/getlimits.py:89: UserWarning: The value of the smallest subnormal for <class 'numpy.float32'> type is zero.
+[vision_display-4]   return self._float_to_str(self.smallest_subnormal)
+[tracker_node-3] FutureWarning: target=None is deprecated since `v0.8`; use `TargetMode.NOTIFY` instead. Will be removed in `v1.0`.
+[vision_display-4] [INFO] [1782806515.809069878] [duburi_image_view]: [DISP ] subscribing /duburi/vision/forward/image_raw (full-rate) + /duburi/vision/forward/detections
+[detector_node-2] [INFO] [DET  ] registry mode: loading 3 model(s) in parallel: ['slalom_red_pipe', 'gate_rescue_repair', 'torpedo_blood_hole']
+[vision_display-4] [INFO] [1782806518.022763729] [duburi_image_view]: [VIS] fps=0.5 dets=0 cam=OK det=ERR trk=ERR
+[vision_display-4] [INFO] [1782806519.143998834] [duburi_image_view]: [VIS] fps=14.2 dets=0 cam=OK det=ERR trk=ERR
+[vision_display-4] [INFO] [1782806520.146650438] [duburi_image_view]: [VIS] fps=12.0 dets=0 cam=OK det=ERR trk=ERR
+[detector_node-2] [INFO] [VIS  ] using cuda:0 (Orin)  torch=2.10.0  cuda=12.6
+[detector_node-2] [INFO] [VIS  ] using cuda:0 (Orin)  torch=2.10.0  cuda=12.6
+[detector_node-2] [INFO] [VIS  ] using cuda:0 (Orin)  torch=2.10.0  cuda=12.6
+[detector_node-2] [INFO] [YOLO ] backend=TensorRT engine  (gate_rescue_repair.engine)
+[detector_node-2] [INFO] [YOLO ] backend=TensorRT engine  (torpedo_blood_hole.engine)
+[detector_node-2] [INFO] [YOLO ] backend=TensorRT engine  (slalom_red_pipe.engine)
+[detector_node-2] [INFO] [YOLO ] model: gate_rescue_repair.engine (640×640)
+[detector_node-2] [YOLO ] available classes (3):
+[detector_node-2]       0: gate               1: rescue             2: repair         
+[detector_node-2] [INFO] [YOLO ] model: torpedo_blood_hole.engine (640×640)
+[detector_node-2] [YOLO ] available classes (3):
+[detector_node-2]       0: torpedo            1: blood              2: hole           
+[detector_node-2] [INFO] [YOLO ] model: slalom_red_pipe.engine (640×640)
+[detector_node-2] [YOLO ] available classes (1):
+[detector_node-2]       0: red_pipe       
+[detector_node-2] Loading /home/duburi-jetson/workspaces/duburi_ws/src/duburi_vision/models/gate_rescue_repair.engine for TensorRT inference...
+[detector_node-2] Loading /home/duburi-jetson/workspaces/duburi_ws/src/duburi_vision/models/torpedo_blood_hole.engine for TensorRT inference...
+[detector_node-2] Loading /home/duburi-jetson/workspaces/duburi_ws/src/duburi_vision/models/slalom_red_pipe.engine for TensorRT inference...
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] The logger passed into createInferRuntime differs from one already provided for an existing builder, runtime, or refitter. Uses of the global logger, returned by nvinfer1::getLogger(), will return the existing value.
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] The logger passed into createInferRuntime differs from one already provided for an existing builder, runtime, or refitter. Uses of the global logger, returned by nvinfer1::getLogger(), will return the existing value.
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] Loaded engine size: 8 MiB
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [W] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] Loaded engine size: 8 MiB
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [W] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] Loaded engine size: 8 MiB
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [W] Using an engine plan file across different models of devices is not recommended and is likely to affect performance or even cause errors.
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: CPU +1, GPU +9, now: CPU 1, GPU 24 (MiB)
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: CPU +0, GPU +9, now: CPU 1, GPU 33 (MiB)
+[detector_node-2] [06/30/2026-14:02:00] [TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: CPU +1, GPU +9, now: CPU 2, GPU 42 (MiB)
+[detector_node-2] [INFO] [YOLO ] slalom_red_pipe.engine ready on cuda:0  conf=0.6  iou=0.5  imgsz=640  half=True  active_filter=['red_pipe']
+[detector_node-2] [INFO] [DET  ] registry['slalom_red_pipe'] ready
+[detector_node-2] [INFO] [YOLO ] gate_rescue_repair.engine ready on cuda:0  conf=0.6  iou=0.5  imgsz=640  half=True  active_filter=['gate', 'repair', 'rescue']
+[detector_node-2] [INFO] [YOLO ] torpedo_blood_hole.engine ready on cuda:0  conf=0.6  iou=0.5  imgsz=640  half=True  active_filter=['blood', 'hole', 'torpedo']
+[detector_node-2] [INFO] [DET  ] registry['gate_rescue_repair'] ready
+[detector_node-2] [INFO] [DET  ] registry['torpedo_blood_hole'] ready
+[vision_display-4] [INFO] [1782806521.352603424] [duburi_image_view]: [VIS] fps=9.2 dets=0 cam=OK det=ERR trk=ERR
+[detector_node-2] [INFO] [DET  ] subscribed '/duburi/vision/forward/image_raw' -> /duburi/vision/forward/detections  (+ image_debug)  registry=['slalom_red_pipe', 'gate_rescue_repair', 'torpedo_blood_hole']  active='slalom_red_pipe'
+[vision_display-4] [INFO] [1782806522.422584503] [duburi_image_view]: [VIS] fps=14.0 dets=0 cam=OK det=OK trk=OK
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [camera_node-1]: process has finished cleanly [pid 34002]
+[INFO] [vision_display-4]: process has finished cleanly [pid 34008]
+[INFO] [tracker_node-3]: process has finished cleanly [pid 34006]
+[INFO] [detector_node-2]: process has finished cleanly [pid 34004]
