@@ -68,6 +68,23 @@ KP_YAW_DEFAULT     = 60.0
 KP_DEPTH_DEFAULT   = 0.05
 KP_FORWARD_DEFAULT = 200.0
 
+# align_loop's optional SETTLE gate (opt-in; off by default). Why align can end
+# off-target while move's `maintain` centering looks near-perfect: move never
+# exits on lateral (it exits on forward fill), so lateral is corrected for the
+# whole approach and is genuinely SETTLED (~0 velocity) when it stops. align
+# exits the instant POSITION is in-band for align_stable_frames ticks -- a
+# *position* gate, not a *settle* gate -- so a hull strafing THROUGH centre at
+# speed can satisfy the band mid-pass, declare ALIGNED, exit, and coast out on
+# inertia (and the returned px was measured BEFORE the arrival brake, so it reads
+# clean while the hull ends dirty). The settle gate ports move's behaviour: when
+# settle_px>0, a tick only counts toward `stable` if the worst error is in-band
+# AND barely moving frame-to-frame (|Δworst| <= settle_px) -- i.e. the hull has
+# actually stopped on target, not just passed through. Keyed on ERROR VELOCITY
+# (Δworst), NOT command magnitude, so a steady current (which holds a non-zero
+# command at a perfect lock) does NOT block the gate -- only genuine motion does.
+# settle_px=0 (default) -> gate off, exit path byte-identical to before.
+SETTLE_PX_DEFAULT = 0.0   # 0 = settle gate off (legacy exit-on-position-in-band)
+
 # align_loop's optional forward range-hold axis (the unified torpedo standoff shot).
 # When fwd_fill>0 align ALSO drives forward toward that fill (same _fill law as
 # move_loop) so ONE verb does forward-standoff + lat/depth + hold + fire. The term
@@ -398,6 +415,7 @@ def align_loop(*,
                fwd_fill: float = 0.0,
                fwd_mode: str = 'area',
                kp_forward: float = KP_FORWARD_DEFAULT,
+               settle_px: float = SETTLE_PX_DEFAULT,
                on_locked=None,
                fire_t: float = 0.0,
                report_fn=None,
@@ -441,6 +459,12 @@ def align_loop(*,
         frame (close) to stop the close-in overshoot (1.0 = off).
       * ``ki_lat`` -- lateral integral gain; cancels the steady-current offset of
         the open-loop Ch6 axis, accumulated only during the hold (0 = off).
+      * ``settle_px`` -- settle gate (0 = off). When > 0, a tick only counts toward
+        the stable-frame exit if the worst error is in-band AND barely moving
+        (|Δworst| <= settle_px) -- so align exits SETTLED on target (like move's
+        continuously-held lateral) instead of mid-pass through the band. Keyed on
+        error velocity, so a steady current does not block it (that is ``ki_lat``'s
+        job). Use it when an align must END accurate (terminal locks).
 
     Forward range-hold axis (``fwd_fill`` > 0; the unified standoff shot):
       align ALSO drives forward toward ``fwd_fill`` (fraction of frame, measured by
@@ -506,6 +530,7 @@ def align_loop(*,
     last_depth  = 0.0
     last_err_px = float('inf')
     last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
+    prev_worst: Optional[float] = None   # settle gate: worst error last tick (for |Δworst|)
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
@@ -695,7 +720,16 @@ def align_loop(*,
                 pixhawk.set_target_depth(depth_setpoint)
                 last_depth = now
 
-            stable = stable + 1 if all(in_band) else 0
+            # Settle gate (opt-in): require the hull to also be barely MOVING, not
+            # just in-band, before a tick counts toward the stable-frame exit -- so
+            # align ends settled on target (like move's held lateral) instead of
+            # mid-pass through the band. Keyed on |Δworst| (error velocity), so a
+            # steady current that holds a non-zero command at a perfect lock does
+            # NOT block it. settle_px=0 -> settled always True -> legacy behaviour.
+            settled = (settle_px <= 0.0 or prev_worst is None
+                       or abs(worst - prev_worst) <= settle_px)
+            prev_worst = worst
+            stable = stable + 1 if (all(in_band) and settled) else 0
             if stable >= align_stable_frames:
                 # First confirmed-centred tick opens the hold window. With
                 # hold_s>0 we keep the loop ALIVE and correcting for hold_s --

@@ -238,7 +238,10 @@ COMMANDS = {
                     'kp_forward gain): align ALSO drives forward to that fill %% and holds '
                     'the standoff -- one verb does forward-standoff + lat/depth + hold + '
                     'mid-hold fire (the torpedo standoff shot). The fire is gated on the '
-                    'standoff too. fwd_fill=0 (default) = no forward axis.',
+                    'standoff too. fwd_fill=0 (default) = no forward axis. '
+                    'settle_px>0 = SETTLE GATE: only declare aligned once the hull is '
+                    'in-band AND barely moving (|Δerr|<=settle_px) so it ends settled on '
+                    'target like vision_move (not mid-pass through the band); 0=off.',
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
@@ -248,7 +251,7 @@ COMMANDS = {
                      'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames',
                      'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat',
-                     'coast_s', 'fwd_fill', 'mode', 'kp_forward'],
+                     'coast_s', 'fwd_fill', 'mode', 'kp_forward', 'settle_px'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
@@ -261,7 +264,8 @@ COMMANDS = {
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0,
                      'lock_target': False, 'ctrl_conf': 0.0,
                      'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.0,
-                     'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0},
+                     'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0,
+                     'settle_px': 0.0},
     },
     'vision_move': {
         'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '

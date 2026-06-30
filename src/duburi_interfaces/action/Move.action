@@ -76,6 +76,11 @@ float32 range_gain_floor   # vision_align/move: lat/depth kp multiplier when the
                            #   20 kg hull (1.0 = off, ~0.3 = gentle; 0 = use vision.range_gain_floor)
 float32 ki_lat             # vision_align: lateral integral gain, cancels the steady-current
                            #   offset of the open-loop Ch6 axis during the hold (0 = off)
+float32 settle_px          # vision_align: settle gate -- only declare aligned once the hull is
+                           #   in-band AND barely moving (|Δerr| px <= this), so align ends
+                           #   SETTLED on target (like vision_move's held lateral) instead of
+                           #   exiting mid-pass through the band. Keyed on error velocity, so a
+                           #   steady current does not block it (that is ki_lat's job). 0 = off
 float32 coast_s            # vision_align/move: gap-bridging coast window (s). >0 lets the loop
                            #   steer on the tracker's predicted box of the LOCKED target id for up
                            #   to coast_s after a detection drops, at decaying authority -- a brief

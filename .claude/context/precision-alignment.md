@@ -45,6 +45,7 @@ position hold, so a steady current leaves a standing offset pure-P can't null.
 | `vision.ctrl_conf` | **ROS param** (deck) | `0.0` | misclass | Control-side **minimum detection score** to accept a box as the target. Distinct from the detector's global `conf`: gates only what the *control loop* steers on. |
 | `vision.range_gain_floor` | **ROS param** (deck) | `1.0` | overshoot | Scales **lat/depth** kp **down** as the bbox fills the frame (close). `1.0` = off; `~0.3` = gentle close-in. Applies to `align` and `move`'s `maintain`. |
 | `vision.ki_lat` | **ROS param** (deck) | `0.0` | current drift | **Lateral** integral gain; cancels the steady-current offset, accumulated **only during the hold**, clamped, frozen on saturation, reset on loss. **Lateral only** by design. |
+| `settle=<px>` | **per-call** on `vision.align(...)` | `None` (off) | **align ends off-target** (the "move centres better than align" report) | **Settle gate.** `align` exits the instant *position* is in-band for `align_stable_frames` ticks — so a hull strafing **through** centre at speed can declare ALIGNED mid-pass and coast out on inertia (and the returned px is measured *before* the arrival brake, so it reads clean while the hull ends dirty). `move`'s `maintain` looks near-perfect because it never exits on lateral — it corrects continuously and is genuinely settled when it stops. `settle>0` ports that: a tick only counts toward the exit if the worst error is in-band **AND** barely moving (`|Δerr| ≤ settle`), so `align` ends **settled** on target. Keyed on **error velocity**, not command magnitude, so a steady current (which holds a non-zero command at a perfect lock) does **not** block it — that steady-state offset is `ki_lat`'s job. **Per-call, not a deck param, and NOT for the terminal fire-lock:** the mid-hold `fire` rides the same stable-frame counter, so a `settle` below the bbox jitter (~5px) can **suppress the shot**. Use it on a **coarse** exit-and-move-on align (e.g. the board centre, so `lock_heading` captures a clean heading); the fire-lock wants `lock_on` + `hold` + `ki_lat` instead. |
 | `err=<px>` | **per-call** on `vision.align(...)` | `40` | tightness | Pixel deadband. A **small positive** value is the tight knob (`err=8`). **`err=0` ≠ zero tolerance** — it means "use the default / `vision.err_px` param" (rosidl `0==unset` is load-bearing for live-tuning; an explicit 0 and an omitted field are indistinguishable on the wire). The effective deadband is floored at `MIN_ALIGN_ERR_PX` (≈5px bbox jitter) so an over-tight `err` can't perpetually TIMEOUT, and is **printed at align start** + stated in the success line (`aligned (N/Mpx)`) so it's never a surprise. |
 | `vision.coast_s` | **ROS param** (deck) | `0.0` | detection flicker | **Gap-bridging coast.** When the `hole` detection drops for a fraction of a second, the lock loses the axis it was steering on and the hull drifts off-aim — the torpedo misses. With `coast_s>0`, the loop keeps steering on the tracker's **coasted (Kalman-predicted) box of the locked id** for up to `coast_s` after the real detection drops, at **decaying authority**, so the bbox never "disappears" for a brief flicker. **Opt-in / pool-gated** — a live detection always overrides, and the coast is conf-exempt **only for the locked id** (see [`known-issues.md`](known-issues.md) D10). Pair with `lock_on=True` so the id you coast is the right hole. **Ladder:** `coast_s` (~0.8) **must** be `< vision.lost_grace_s` (1.0) and `<` the tracker `max_predict`/buffer in wall-time. |
 
@@ -109,6 +110,14 @@ no restart:
 ros2 param set /duburi_manager vision.range_gain_floor 0.35   # soften close-in gain
 ros2 param set /duburi_manager vision.ctrl_conf        0.55   # reject low-score boxes
 ros2 param set /duburi_manager vision.ki_lat           0.4    # null steady current
+```
+
+`settle` is the exception — it's a **per-call** `vision.align(settle=<px>)` kwarg, not
+a deck param (it also gates the mid-hold fire, so a global value could silently
+suppress the torpedo shot). Put it on a coarse exit-and-move-on align in mission code:
+
+```python
+duburi.vision.align('torpedo', yaw=0, lat=0, depth=0, settle=8, ...)  # exit settled
 ```
 
 You can also branch on the rich result (see [`vision-results.md`](vision-results.md)):

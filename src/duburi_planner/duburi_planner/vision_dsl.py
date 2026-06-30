@@ -168,6 +168,7 @@ class _VisionDSL:
               lock_on: bool = False,
               fwd: Optional[float] = None,
               fwd_mode: str = 'area',
+              settle: Optional[float] = None,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -238,6 +239,19 @@ class _VisionDSL:
         faster) -- use a small ``fire_t`` and generous ``hold`` so a delayed
         shot still lands inside the hold window.
 
+        ``settle`` (px, default None=off) is a per-call SETTLE GATE: align only
+        declares aligned once the worst error is in-band AND barely moving
+        (``|Δerr| <= settle``) between ticks -- so it ends SETTLED on target (like
+        ``move``'s continuously-held lateral) instead of exiting mid-pass through
+        the band and coasting off on inertia. Use it on a COARSE align that must
+        exit clean for the next step (e.g. the board centre, so ``lock_heading``
+        captures a steady heading). **Do NOT use it on a terminal fire-lock**: the
+        mid-hold ``fire`` is gated on the same stable-frame counter, so a settle
+        threshold below the bbox jitter (~5px) can suppress the shot -- the fire
+        lock wants ``lock_on`` + ``hold`` + ``ki_lat``, not ``settle``. Keyed on
+        error velocity, so a steady current does not block it (that is
+        ``vision.ki_lat``'s job).
+
         ``lock_on`` (default False) turns on the continuity lock: once the target
         is acquired, the loop steers to the detection NEAREST the last-accepted
         centre (within a gate) instead of the largest box -- so a second hole /
@@ -294,7 +308,8 @@ class _VisionDSL:
                 fire_t=float(fire_t) if fire_t is not None else 0.0,
                 lock_target=bool(lock_on),
                 fwd_fill=float(fwd) if fwd is not None else 0.0,
-                mode=str(fwd_mode))
+                mode=str(fwd_mode),
+                settle_px=float(settle) if settle is not None else 0.0)
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)
