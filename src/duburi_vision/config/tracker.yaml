@@ -47,6 +47,9 @@ tracker_node:
     kalman_measurement_noise: 2.0
 
     # After this many consecutive Kalman-predicted frames (no real detection),
-    # the track output is suppressed. 15 frames = 0.75 s at 20 Hz — keeps
-    # tracks alive through brief occlusion without flooding with ghost boxes.
-    max_predict_frames: 15
+    # the smoother suppresses the track from /tracks. This is the 4th rung of
+    # the control coast ladder (_freshness < coast_s < lost_grace_s < buffer):
+    # it MUST exceed the control loop's vision.coast_s in FRAMES, or a coasted
+    # target vanishes off /tracks before coast_s elapses and the coast truncates
+    # early. 30 frames = 1.5 s at 20 Hz, headroom over a typical coast_s~0.8 s.
+    max_predict_frames: 30

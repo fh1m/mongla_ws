@@ -839,8 +839,13 @@ def move_loop(*,
                 return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed,
                                end_x_px, end_y_px)
 
+            # Pass-through (fwd=None) must DETECT "target gone" to fire its commit
+            # window, so it deliberately does NOT coast -- a coasted box would
+            # keep present=True and delay the commit by up to coast_s. Fill-stop
+            # moves coast normally.
+            eff_coast = 0.0 if passthrough else coast_s
             sample  = vision_state.bbox_error(
-                target_class, locked_id=locked_id, coast_s=coast_s)
+                target_class, locked_id=locked_id, coast_s=eff_coast)
             present = _present(sample)
             if present and not sample.coasted and sample.track_id >= 0:
                 locked_id = sample.track_id   # follow this id when a gap coasts
