@@ -20,6 +20,8 @@ day if the hull oscillates on the hole or jumps to the wrong opening):
     ros2 param set /duburi_manager vision.range_gain_floor 0.35   # soften close-in gain
     ros2 param set /duburi_manager vision.ctrl_conf        0.55   # reject low-score boxes
     ros2 param set /duburi_manager vision.ki_lat           0.4    # null steady current (after damping)
+(The coarse board align uses a per-call settle= so it exits squared-up for lock_heading;
+the terminal fire-lock deliberately does NOT -- settle would gate the mid-hold fire.)
 Standoff range itself is TORPEDO_STANDOFF_FILL in competition_config.py (smaller
 fill = the hull parks further back). Read the live `[ align … fwd>=…% ]` line to
 calibrate it to ~0.3-0.46m off the board.
@@ -63,9 +65,11 @@ def run(duburi, log=None):
     duburi.set_classes('torpedo,blood,hole', node=_FWD)
 
     # ── 1. Coarse align on the board (yaw+lat+depth), no forward ──────────────
+    #     settle= so the board centre exits SETTLED (hull stopped, not strafing
+    #     through centre) -> lock_heading below captures a clean, steady heading.
     duburi.vision.align(
         'torpedo', camera='forward', yaw=0, lat=0, depth=0,
-        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=15,
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=15, settle=8,
         fallback=creep_forward)
 
     # Heading is now nulled on the board. Hand yaw to the background heading lock

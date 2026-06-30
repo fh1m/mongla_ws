@@ -75,7 +75,8 @@ class VisionVerbs:
                      lost_grace_s=0.0, align_stable_frames=0.0,
                      lock_target=False, ctrl_conf=0.0,
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
-                     fwd_fill=0.0, mode='area', kp_forward=0.0):
+                     fwd_fill=0.0, mode='area', kp_forward=0.0,
+                     settle_px=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -186,6 +187,7 @@ class VisionVerbs:
                     fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)
                     fwd_mode=str(mode) or 'area',
                     kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
+                    settle_px=float(settle_px),
                     on_locked=on_locked,
                     fire_t=eff_fire_t,
                     report_fn=self.report_vision,

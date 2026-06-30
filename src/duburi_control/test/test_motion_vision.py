@@ -1144,3 +1144,74 @@ def test_align_forward_decays_with_authority():
         axes={'lat'}, fwd_fill=0.5, fwd_mode='height', duration=0.3)
     assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
         "a stale sample must not drive forward (freshness-decayed to neutral)"
+
+
+# --------------------------------------------------------------------------- #
+#  align_loop settle gate (opt-in; ports move's "settled when it stops")       #
+# --------------------------------------------------------------------------- #
+# Samples that stay IN-BAND on lat (epx < eff_err=40) but jump frame-to-frame:
+# ex=0.09 -> epx≈28.8px, ex=0.0 -> 0px. Both in band, but |Δworst|≈28.8px > a
+# small settle_px -> the hull is "passing through" the band, not settled.
+_OSCILLATING = [_sample(ex=0.09), _sample(ex=0.0)] * 40
+
+
+def test_settle_off_exits_on_oscillating_in_band():
+    # settle_px=0 (default): position-in-band for align_stable_frames is enough,
+    # so an in-band-but-moving hull still declares ALIGNED (today's behaviour).
+    out, _, _ = _align(_FakeVision(list(_OSCILLATING)), axes={'lat'},
+                       settle_px=0.0, duration=0.6)
+    assert out.code == ALIGNED
+
+
+def test_settle_gate_blocks_exit_while_moving():
+    # settle_px>0: the same in-band-but-moving hull must NOT declare aligned --
+    # |Δworst|≈28.8px exceeds settle_px=10, so `stable` keeps resetting -> TIMEOUT
+    # rather than a premature mid-pass ALIGNED that would coast off target.
+    out, _, _ = _align(_FakeVision(list(_OSCILLATING)), axes={'lat'},
+                       settle_px=10.0, duration=0.6)
+    assert out.code == TIMEOUT
+
+
+def test_settle_gate_exits_when_settled():
+    # settle_px>0 with a genuinely settled hull (centred every tick, |Δworst|=0)
+    # -> declares ALIGNED. The gate adds a settle requirement, it doesn't block a
+    # hull that has actually stopped on target.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0)), axes={'lat'},
+                       settle_px=10.0, duration=0.6)
+    assert out.code == ALIGNED
+
+
+def test_settle_gate_droop_safe_steady_offset_still_in_band():
+    # A steady (non-moving) sample that is IN-BAND exits even with the gate on --
+    # confirming the gate keys on error VELOCITY (|Δworst|), not absolute error or
+    # command, so a steady-state hold (e.g. against a current, once ki_lat nulls
+    # it into the band) is never blocked.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.05)), axes={'lat'},   # epx≈16px, in band, steady
+                       settle_px=5.0, err_px=40.0, duration=0.6)
+    assert out.code == ALIGNED
+
+
+def test_settle_gate_does_not_block_fire_when_settled():
+    # The mid-hold fire rides the SAME stable-frame counter the settle gate
+    # gates. With a genuinely settled lock (centred every tick, |Δworst|=0) the
+    # gate passes, so settle_px + hold + on_locked still fires -- the settle gate
+    # doesn't break a settled fire-from-lock.
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0)), axes={'lat'},
+                       settle_px=10.0, hold_s=0.3, duration=1.0,
+                       on_locked=lambda: fired.append(1))
+    assert out.code == ALIGNED
+    assert fired == [1]
+
+
+def test_settle_gate_below_jitter_can_suppress_fire():
+    # Guard the documented footgun: a settle_px BELOW the bbox jitter (the hull
+    # is in-band but the box wobbles |Δworst|≈28.8px each tick) keeps resetting
+    # `stable`, so the mid-hold fire never trips and the verb TIMEOUTs. This is
+    # exactly why `settle` must NOT be put on a terminal fire-lock.
+    fired = []
+    out, _, _ = _align(_FakeVision(list(_OSCILLATING)), axes={'lat'},
+                       settle_px=4.0, hold_s=0.3, duration=0.6,
+                       on_locked=lambda: fired.append(1))
+    assert out.code == TIMEOUT
+    assert fired == []

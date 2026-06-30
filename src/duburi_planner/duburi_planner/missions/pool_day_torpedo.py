@@ -15,6 +15,8 @@ Live gain tuning (between runs, no rebuild):
     ros2 param set /duburi_manager vision.kp_yaw 70.0
     ros2 param set /duburi_manager vision.kp_lat 60.0
     ros2 param set /duburi_manager vision.kp_depth 0.05
+(The coarse board align uses a per-call settle= to exit squared-up; the terminal
+fire-lock deliberately does NOT -- settle would gate the mid-hold fire.)
 
 Ctrl-C at any time → AUV stops and disarms cleanly.
 """
@@ -106,9 +108,10 @@ def run(duburi, log=None):
 
         # ── 3. Coarse align on the board (yaw + lat + depth) ──────────────────
         info('Coarse align on torpedo board ...')
+        # settle= -> exit SETTLED (hull stopped) so lock_heading captures a clean heading.
         duburi.vision.align(
             'torpedo', camera='forward', yaw=0, lat=0, depth=0,
-            err=BOARD_ERR_PX, gain=BOARD_GAIN, duration=BOARD_ALIGN_S,
+            err=BOARD_ERR_PX, gain=BOARD_GAIN, duration=BOARD_ALIGN_S, settle=8,
             fallback=creep_forward)
 
         # Hand yaw to the background heading lock so the approach + terminal lock
