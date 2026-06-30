@@ -294,6 +294,13 @@ vision launch (`vision.launch.py`) with confusing tracebacks, so they live here.
 All three were hit on the Orin Nano on the same day; symptom was every node dying
 before the camera frame loop started.
 
+> **Live-checked on the Jetson (Orin Nano, JetPack 6.2, py3.10) — 2026-06-30, by Claude.**
+> After the three fixes below, `ros2 launch duburi_vision vision.launch.py` was run on
+> the actual hardware and came up healthy: all 3 TensorRT engines loaded
+> (`slalom_red_pipe` / `gate_rescue_repair` / `torpedo_blood_hole`) and the display
+> reported `cam=OK det=OK trk=OK`. `trackers==2.4.0` confirmed importing and building
+> `engine=ocsort` on numpy 1.26.4 on-device.
+
 ### E1. NumPy 2.x ABI break kills every vision node (`_ARRAY_API not found`)
 - **Symptom:** every node (`camera_node`/`detector_node`/`vision_display`) crashes at
   `from cv_bridge import CvBridge` with

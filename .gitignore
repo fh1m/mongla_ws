@@ -28,6 +28,10 @@ env/
 
 # ─── IDE / editor ──────────────────────────────────────────────────────
 .vscode/
+# …but DO share the workspace perf config (watcher/search excludes for the
+# generated colcon trees) — keeps editing snappy over VSCode Remote-SSH.
+!.vscode/
+!.vscode/settings.json
 .idea/
 *.swp
 *~
