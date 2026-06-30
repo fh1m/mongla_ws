@@ -1,0 +1,41 @@
+# Duburi-ws — JETSON-VALIDATED exact pins (Orin Nano, JetPack 6.2, py3.10)
+# =====================================================================
+# Companion to requirements.txt. requirements.txt is lower-bound only so
+# desktop/CI keep getting patches; THIS file is the exact, on-device-verified
+# set that the vision stack actually runs on the AUV Jetson. Use it when a
+# fresh install or a stray `pip install` drifts the env and vision.launch.py
+# starts crashing. Full symptom catalogue: .claude/context/known-issues.md
+# §E1–E4 (numpy ABI / headless OpenCV / broken trackers wheel / no $DISPLAY).
+#
+# Apply (does NOT touch torch/torchvision — keep the NVIDIA JetPack wheels):
+#
+#     pip install --no-deps --force-reinstall -r requirements-jetson.txt
+#
+# The --no-deps is REQUIRED: trackers' metadata pins numpy>=2.0.2 (a red
+# herring — it runs fine on 1.26.4) and would otherwise drag numpy 2 +
+# opencv-python back in and re-break cv_bridge / the system OpenCV.
+# ---------------------------------------------------------------------
+
+# E1 — ROS Humble cv_bridge + system cv2 are NumPy-1.x ABI. numpy 2.x →
+#      "_ARRAY_API not found" crashes every vision node. ultralytics also
+#      wants numpy<2. 1.26.4 is the last 1.x release.
+numpy==1.26.4
+
+# E3 — Roboflow trackers = OC-SORT / ByteTrack engine behind the Tracker ABC.
+#      PIN 2.4.0: the 2.5.0 PyPI wheel is a broken 9.7 kB dud that ships NO
+#      `trackers/` module (import fails → silent legacy_bytetrack fallback).
+#      2.4.0 (126 kB) has the code and builds engine=ocsort on numpy 1.26.4.
+trackers==2.4.0
+
+# ---------------------------------------------------------------------
+# DO **NOT** pip-install OpenCV on the Jetson (E2). pip opencv-python /
+# opencv-python-headless shadow the GUI-capable JetPack system cv2 (the
+# headless wheel has no GTK → vision_display dies on cv2.namedWindow) and
+# they pull numpy>=2 (re-triggering E1). If they crept in, remove them:
+#
+#     pip uninstall -y opencv-python opencv-python-headless
+#
+# Verify the survivor is the system build, NOT ~/.local:
+#     python3 -c "import cv2; print(cv2.__version__, cv2.__file__)"
+#     # want 4.12.0 under /usr/local/lib or /usr/lib  (GTK3 build)
+# ---------------------------------------------------------------------
