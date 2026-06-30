@@ -34,10 +34,12 @@ pyserial>=3.5
 numpy>=1.24,<2.0
 
 # OpenCV: used by camera_node, draw, ros_topic, webcam adapter.
-# On Jetson, prefer the apt package `python3-opencv` (built against the
-# system FFmpeg + CUDA backend); skip this line in that case. On x86 dev
-# boxes pip is fine.
-opencv-python>=4.8
+# *** JETSON: do NOT pip-install this. *** The apt `python3-opencv` /
+# JetPack system cv2 is GUI-capable (GTK) and NumPy-1.x ABI; a pip
+# opencv-python(-headless) shadows it (headless has no window backend →
+# vision_display dies) AND pulls numpy>=2 (breaks cv_bridge). See
+# requirements-jetson.txt + known-issues §E2. On x86 dev boxes pip is fine.
+opencv-python>=4.8; platform_machine == "x86_64"
 
 # ---- Vision: object detection (YOLO) ----------------------------------
 # Ultralytics pulls torch/torchvision as transitive deps. On Jetson
@@ -45,11 +47,15 @@ opencv-python>=4.8
 # pip doesn't replace them with the CPU-only PyPI wheels.
 ultralytics>=8.1.0
 
-# ---- Vision: tracking (ByteTrack + Kalman) ----------------------------
-# supervision provides the ByteTrack implementation used by
-# `duburi_vision.tracking.bytetrack` (+ `draw_video`); filterpy provides
-# the Kalman filter used by `duburi_vision.tracking.kalman` to smooth
-# track bboxes. Both are declared in duburi_vision/setup.py install_requires.
+# ---- Vision: tracking (OC-SORT / ByteTrack + Kalman) ------------------
+# Roboflow `trackers` is the primary engine behind the Tracker ABC
+# (tracker_node, OC-SORT default); supervision provides the legacy
+# ByteTrack fallback (+ `draw_video`); filterpy provides the Kalman filter
+# used by `duburi_vision.tracking.kalman` to smooth track bboxes.
+# *** JETSON: pin trackers==2.4.0 and install --no-deps. *** The 2.5.0
+# PyPI wheel is a broken dud with no module, and the numpy>=2 dep-pin is a
+# red herring — see requirements-jetson.txt + known-issues §E3.
+trackers>=2.4.0,<2.5.0
 supervision>=0.18.0
 filterpy>=1.4.5
 

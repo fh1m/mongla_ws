@@ -166,6 +166,9 @@ class _VisionDSL:
               fire=None,
               fire_t: Optional[float] = None,
               lock_on: bool = False,
+              fwd: Optional[float] = None,
+              fwd_mode: str = 'area',
+              settle: Optional[float] = None,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -194,13 +197,25 @@ class _VisionDSL:
         never brake.
 
         ``hold`` (seconds) turns align into an ACTIVE station-keep: once
-        centred, the loop keeps running its lat/yaw/depth corrections for
-        ``hold`` s -- fighting water inertia/current -- before returning,
-        instead of exiting the instant it's centred. It holds lat/yaw/depth
-        only -- NOT forward range (the prior ``move`` set the standoff).
-        ``hold`` counts against ``duration``: budget ``duration >= approach +
-        hold`` or the verb TIMEOUTs mid-hold. For a fire-from-lock pass
-        ``brake=False`` so there's no pre-shot lateral nudge.
+        centred, the loop keeps running its corrections for ``hold`` s --
+        fighting water inertia/current -- before returning, instead of exiting
+        the instant it's centred. It holds lat/yaw/depth (and forward range when
+        ``fwd`` is set). ``hold`` counts against ``duration``: budget
+        ``duration >= approach + hold`` or the verb TIMEOUTs mid-hold. For a
+        fire-from-lock pass ``brake=False`` so there's no pre-shot lateral nudge.
+
+        ``fwd`` (% frame fill, optional) adds a forward range-hold axis so align
+        ALSO drives the hull forward to that standoff and holds it -- ONE verb
+        does forward-standoff + lat/depth centering + station-keep + mid-hold
+        fire (the unified torpedo standoff shot). ``fwd_mode`` is the fill metric
+        (area/width/height; ``height`` for the torpedo board/hole). The forward
+        term is ONE-SIDED (drives forward while too far, neutral at/past the
+        standoff -- never reverses), and the fire is gated on reaching the
+        standoff too. Leave ``fwd=None`` (default) for the lat/yaw/depth-only
+        align (e.g. a coarse board centre)::
+
+            align('hole', lat=0, depth=0, fwd=25, fwd_mode='height',
+                  lock_on=True, hold=4, fire=1, fire_t=1.5, brake=False)
 
         ``fire`` (channel int or list, e.g. ``fire=1`` or ``fire=[1, 2]`` --
         1/2=torpedo, 3/4=dropper) fires the payload WHILE the hold loop is
@@ -223,6 +238,19 @@ class _VisionDSL:
         to ~2 s late (threading keeps the loop alive, it can't make the board
         faster) -- use a small ``fire_t`` and generous ``hold`` so a delayed
         shot still lands inside the hold window.
+
+        ``settle`` (px, default None=off) is a per-call SETTLE GATE: align only
+        declares aligned once the worst error is in-band AND barely moving
+        (``|Δerr| <= settle``) between ticks -- so it ends SETTLED on target (like
+        ``move``'s continuously-held lateral) instead of exiting mid-pass through
+        the band and coasting off on inertia. Use it on a COARSE align that must
+        exit clean for the next step (e.g. the board centre, so ``lock_heading``
+        captures a steady heading). **Do NOT use it on a terminal fire-lock**: the
+        mid-hold ``fire`` is gated on the same stable-frame counter, so a settle
+        threshold below the bbox jitter (~5px) can suppress the shot -- the fire
+        lock wants ``lock_on`` + ``hold`` + ``ki_lat``, not ``settle``. Keyed on
+        error velocity, so a steady current does not block it (that is
+        ``vision.ki_lat``'s job).
 
         ``lock_on`` (default False) turns on the continuity lock: once the target
         is acquired, the loop steers to the detection NEAREST the last-accepted
@@ -278,7 +306,10 @@ class _VisionDSL:
                 hold_through_loss=(fallback is None),
                 fire_channels=fire_csv,
                 fire_t=float(fire_t) if fire_t is not None else 0.0,
-                lock_target=bool(lock_on))
+                lock_target=bool(lock_on),
+                fwd_fill=float(fwd) if fwd is not None else 0.0,
+                mode=str(fwd_mode),
+                settle_px=float(settle) if settle is not None else 0.0)
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)

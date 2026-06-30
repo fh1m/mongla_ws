@@ -287,6 +287,111 @@ Next-up candidates not from this audit (keep here as a hand-off list):
 
 ---
 
+## Jetson environment / dependency pitfalls (JetPack 6.2, py3.10) — **2026-06-30**
+
+These are **environment** problems, not code bugs — but they take down the whole
+vision launch (`vision.launch.py`) with confusing tracebacks, so they live here.
+All three were hit on the Orin Nano on the same day; symptom was every node dying
+before the camera frame loop started.
+
+> **Live-checked on the Jetson (Orin Nano, JetPack 6.2, py3.10) — 2026-06-30, by Claude.**
+> After the three fixes below, `ros2 launch duburi_vision vision.launch.py` was run on
+> the actual hardware and came up healthy: all 3 TensorRT engines loaded
+> (`slalom_red_pipe` / `gate_rescue_repair` / `torpedo_blood_hole`) and the display
+> reported `cam=OK det=OK trk=OK`. `trackers==2.4.0` confirmed importing and building
+> `engine=ocsort` on numpy 1.26.4 on-device.
+
+### E1. NumPy 2.x ABI break kills every vision node (`_ARRAY_API not found`)
+- **Symptom:** every node (`camera_node`/`detector_node`/`vision_display`) crashes at
+  `from cv_bridge import CvBridge` with
+  `A module that was compiled using NumPy 1.x cannot be run in NumPy 2.2.6 …`
+  → `AttributeError: _ARRAY_API not found`.
+- **Root cause:** a user-site `numpy 2.2.6` (`~/.local/lib/...`) shadowed the
+  JetPack/ROS system numpy. ROS Humble's `cv_bridge` boost extension **and** the
+  system `cv2` are compiled against the NumPy 1.x C-ABI and segfault under 2.x.
+  `ultralytics` also pins `numpy<2.0.0`.
+- **Fix:** `pip3 install "numpy==1.26.4"` (last 1.x; correct target for this stack).
+- **Guard:** do not let any `pip install` pull numpy 2 back. If something forces it,
+  reinstall 1.26.4 and that package with `--no-deps`.
+
+### E2. `vision_display` crashes with `namedWindow … rebuild with GTK` (headless OpenCV)
+- **Symptom:** `cv2.error: (-2:Unspecified error) The function is not implemented.
+  Rebuild the library with … GTK+ … support` at `cv2.namedWindow`, then `exit code -6`.
+- **Root cause:** pip `opencv-python-headless` (no GUI) + `opencv-python` were
+  installed in user-site and **shadowed** the GUI-capable JetPack system OpenCV.
+  The headless wheel wins → no window backend. (These wheels also want numpy≥2,
+  compounding E1.)
+- **Fix:** `pip3 uninstall -y opencv-python opencv-python-headless` → import falls
+  back to the system `cv2` (4.12.0, **GTK3** build, numpy-1.x compatible). Verify:
+  `python3 -c "import cv2; print(cv2.__file__)"` should be under `/usr/local/lib` or
+  `/usr/lib`, **not** `~/.local`.
+
+### E3. Roboflow `trackers` "unavailable" — the **2.5.0 PyPI wheel is broken**, NOT a numpy pin
+- **Symptom:** `tracker_node` logs
+  `roboflow trackers unavailable (… Install: pip install trackers); falling back to
+  legacy_bytetrack`, even though `pip show trackers` reports it installed.
+- **Root cause (the trap):** the **`trackers 2.5.0` wheel on PyPI is a 9.7 kB dud** —
+  it ships only `dist-info` metadata + a CLI stub and **contains no `trackers/`
+  package**, so `import trackers` → `ModuleNotFoundError`. `--force-reinstall` just
+  reuses the same empty wheel. The `numpy>=2.0.2` pin in its metadata is a **red
+  herring** — it is purely conservative; the code runs fine on numpy 1.26.4.
+- **Fix:** install the **last good release, `2.4.0`** (126 kB, real code), with
+  `--no-deps` so it can't drag numpy 2 / `opencv-python` back and re-trigger E1/E2:
+  ```bash
+  pip3 install --no-deps --force-reinstall "trackers==2.4.0"
+  ```
+  Verified on numpy 1.26.4: `tr.OCSORTTracker` + `tr.ByteTrackTracker` instantiate
+  and run real `update()` calls; the node wrapper builds `engine=ocsort`. So OC-SORT
+  (the documented default) **does** work on this Jetson — you do **not** have to
+  accept the legacy ByteTrack fallback.
+- **Watch:** if a future `pip install` upgrades to `trackers 2.5.0`, the engine
+  silently disappears again (broken wheel). Re-pin to `2.4.0 --no-deps`. Re-evaluate
+  when Roboflow ships a `>2.5.0` whose wheel actually contains the module.
+
+> **One-shot recovery (all three at once):**
+> ```bash
+> pip3 install "numpy==1.26.4"
+> pip3 uninstall -y opencv-python opencv-python-headless
+> pip3 install --no-deps --force-reinstall "trackers==2.4.0"
+> ```
+> Benign remaining log noise (safe to ignore): numpy "smallest subnormal … is zero"
+> UserWarning (aarch64 build quirk), TRT `NvMapMemAlloc … error 12` / "engine plan
+> across different models of devices", and the `target=None deprecated` FutureWarning.
+
+### E4. cv2 windows die under VSCode Remote-SSH — `Can't initialize GTK backend` (no `$DISPLAY`)
+- **Symptom (distinct from E2!):** launched from a **VSCode Remote-SSH / plain-ssh**
+  terminal, `vision_display` crashes at `cv2.namedWindow` with
+  `Can't initialize GTK backend in function 'cvInitSystem'` and exit code 1. The
+  detector then takes ~15 s to SIGKILL (TensorRT load blocks the SIGINT handler —
+  benign). E2 was *headless OpenCV* (no GTK compiled in); **E4 is the opposite** —
+  OpenCV *has* GTK, but a headless SSH shell has **no display server** (`$DISPLAY`
+  empty), so the GUI has nowhere to draw. (Over the old full remote-desktop session
+  it worked because that terminal inherited the desktop's `DISPLAY`.)
+- **Root cause:** the GNOME/Xorg session runs on display **`:1`** (owned by the same
+  `duburi-jetson` user; socket `/tmp/.X11-unix/X1`). A VSCode Remote-SSH integrated
+  terminal starts with `$DISPLAY` unset and never inherits it.
+- **Fix (host-local, in `~/.zshrc`):** when `$DISPLAY` is empty, auto-point GUI apps
+  at the live local X socket — guarded so it never clobbers a real desktop terminal:
+  ```sh
+  if [ -z "$DISPLAY" ]; then
+      for _d in /tmp/.X11-unix/X*; do
+          [ -S "$_d" ] && export DISPLAY=":${_d##*/X}" && break
+      done; unset _d
+  fi
+  ```
+  `DISPLAY=:1` alone is enough (it falls back to the valid `~/.Xauthority` cookie).
+  Verified on-device: a fresh headless zsh resolves `DISPLAY=:1` and `vision_display`
+  opens its HUD without error.
+- **Where the window appears:** on the **Jetson's** display `:1` — so you still *view*
+  it via remote desktop / VNC, but **all editing + launching happens in VSCode
+  Remote-SSH** (the latency win). NOT in the committed `.vscode/settings.json`:
+  hardcoding `DISPLAY` there would break a teammate's *local* VSCode (forcing `:1`
+  over their real `:0`). To drop remote desktop for *viewing* too, expose the
+  annotated `…/image_debug` topic via `web_video_server`/Foxglove (browser over
+  VSCode's auto port-forward) — not installed today; future task.
+
+---
+
 ## Forks we evaluated (so we don't revisit)
 
 ### `BumblebeeAS/ardupilot_fix` — STALE DUD (evaluated 2026-04)
