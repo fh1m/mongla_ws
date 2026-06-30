@@ -87,6 +87,11 @@ float32 range_gain_floor   # vision_align/move: lat/depth kp multiplier when the
                            #   20 kg hull (1.0 = off, ~0.3 = gentle; 0 = use vision.range_gain_floor)
 float32 ki_lat             # vision_align: lateral integral gain, cancels the steady-current
                            #   offset of the open-loop Ch6 axis during the hold (0 = off)
+float32 coast_s            # vision_align/move: gap-bridging coast window (s). >0 lets the loop
+                           #   steer on the tracker's predicted box of the LOCKED target id for up
+                           #   to coast_s after a detection drops, at decaying authority -- a brief
+                           #   occlusion keeps the lock instead of stopping. A live detection always
+                           #   overrides. 0 = OFF (use vision.coast_s). MUST be < lost_grace_s.
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

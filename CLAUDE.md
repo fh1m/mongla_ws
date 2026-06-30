@@ -211,7 +211,7 @@ duburi_ws/src/
     │   ├── camera_node.py / detector_node.py / tracker_node.py / depth_estimation_node.py
     │   ├── cameras/{webcam,ros_topic,jetson_stub,blueos_stub}.py
     │   ├── detection/{detector,yolo,gpu,messages}.py
-    │   ├── tracking/             # ByteTrack + Kalman smoother
+    │   ├── tracking/             # Roboflow OC-SORT/ByteTrack (Tracker ABC) + Kalman smoother
     │   ├── depth/depth_estimation_node.py   # ONNX Depth Anything V2-Small + bbox fallback
     │   ├── anchor/{anchor_node,xfeat}.py     # ★ lock — XFeat+LighterGlue superglue lock (anchor:=true)
     │   └── utils/{check_pipeline,check_thrust,check_tracker,display_node,export_engine}.py
@@ -264,7 +264,7 @@ duburi_ws/src/
 | `sensors_node`                   | `duburi_sensors`| Standalone yaw-source diagnostic — does NOT touch thrusters or arming |
 | `camera_node`                    | `duburi_vision` | Camera source → `/duburi/vision/<cam>/image_raw` + `camera_info` |
 | `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO11 (yolov11n) -> `/duburi/vision/<cam>/detections` + `image_debug` + `classes_filter` |
-| `tracker_node`                   | `duburi_vision` | ByteTrack + Kalman smoother; `detections` → `tracks` (stable IDs + smooth bboxes) |
+| `tracker_node`                   | `duburi_vision` | **Roboflow `trackers`** (OC-SORT default, `tracker_type=`) + Kalman smoother; `detections` → `tracks` (stable IDs + coasted boxes during gaps). OC-SORT re-associates the same id after a dropout (vs ByteTrack spawning a duplicate) |
 | `depth_estimation_node`          | `duburi_vision` | Monocular proximity (`vis_range`); ONNX Depth Anything V2-Small + bbox-area fallback. `depth:=true`. |
 | `vision_display`                 | `duburi_vision` | Mission-control HUD; overlays detections/tracks/vis_range + UI strip. **D** toggles depth inset. |
 | `vision_node`                    | `duburi_vision` | In-process camera+detector smoke test (cousin of `sensors_node`) |
@@ -426,6 +426,8 @@ Engine: `motion_vision.align_loop` / `move_loop`. Source of truth for signatures
 
 Gains are live-tunable (apply on the NEXT goal): `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
 Key vision ROS params (all on `/duburi_manager`): `vision.kp_lat`/`kp_yaw` (60.0), `vision.kp_depth` (0.05), `vision.kp_forward` (200.0), `vision.lost_grace_s` (1.0), `vision.frame_fill_default` (95.0), `vision.align_stable_frames` (3.0); precision knobs (off by default) `vision.range_gain_floor` (1.0), `vision.ki_lat` (0.0), `vision.ctrl_conf` (0.0) — see [`precision-alignment.md`](.claude/context/precision-alignment.md). Defaults live in [`vision_tunables.py`](src/duburi_manager/duburi_manager/vision_tunables.py).
+
+**Tracking + gap-bridging coast (Roboflow `trackers`).** `tracker_node` runs OC-SORT (default) / ByteTrack via the Roboflow `trackers` lib behind the `Tracker` ABC, publishing stable ids + coasted (Kalman-predicted) boxes on `/tracks`. **`vision.coast_s` (default `0`=OFF)** lets the control loop steer on the coasted box of the **locked target id** for up to `coast_s` after a real detection drops — so a brief YOLO flicker doesn't lose a torpedo-hole lock or drift the hull off a slalom pipe. **Opt-in, pool-gated** (it reverses an earlier fix; see [`known-issues.md`](.claude/context/known-issues.md) D10). Anti-bug invariants: a live `/detections` box ALWAYS overrides a coast; coast authority decays by **true detection-age** (not message age); a coasted box is conf-exempt **only for the locked id**. **Three distinct conf gates** (don't conflate): detector `conf` (what YOLO emits) → tracker `track_activation_threshold`/`high_conf_det_threshold` (spawn-id vs two-stage association) → control `vision.ctrl_conf` (what the loop steers on; the coast is exempt for the locked id). **Coast timeout ladder:** `_freshness` (0.4s) < `vision.coast_s` (~0.8) < `vision.lost_grace_s` (1.0) < tracker `max_predict`/buffer wall-time (the 4th rung — keep `max_predict` ≥ `coast_s` in frames or the coast truncates early).
 **Vision queries** (client-side cache reads, distinct from the two action verbs; each pumps the node before answering — the default camera is subscribed eagerly so the first call never false-negates): `duburi.detected('gate', stale_after=1.0)` — "seen within the last `stale_after` s?" (True/False, **case-insensitive**). detected()/wait_for() use a **per-class last-seen recency window** (`stale_after`, default 1.0 s), NOT just the single latest raw frame — so a class that flickers out of individual `/detections` frames at low FPS still counts as present until the window lapses (the reacquire-side analogue of the control loop's `lost_grace_s`; the HUD looks continuous because it overlays Kalman-smoothed `/tracks`, while these queries read raw `/detections`). `duburi.wait_for('gate', timeout=8)` — block until seen/timeout (loop-free acquire). `duburi.where('gate')` → `'left'`|`'center'`|`'right'`|`'unknown'` (+ `where_offset` for signed `[-1,+1]`) — **where() reads the current frame** (bearing must be live, never a remembered spot). An `if detected()` runs once — a moving search needs a `while`. All three work inside a vision `fallback`.
 `duburi.models(gate='gate_flare_medium_100ep')` — model registry; `duburi.models.gate.gate` returns `ClassRef` (auto-switches model+class when passed as `target`).
 

@@ -16,7 +16,7 @@ src/duburi_vision/duburi_vision/
                          #   draw_classes_panel() configured-class list; detected classes light up
   camera_node.py         # publish image_raw + camera_info
   detector_node.py       # subscribe image_raw -> detections + image_debug
-  tracker_node.py        # subscribe detections -> tracks (ByteTrack + Kalman)
+  tracker_node.py        # subscribe detections -> tracks (Roboflow OC-SORT/ByteTrack + Kalman)
   vision_node.py         # in-process diag (cousin of sensors_node)
   cameras/
     camera.py            # Camera ABC (the only base in the tree)
@@ -30,9 +30,10 @@ src/duburi_vision/duburi_vision/
     gpu.py               # select_device() -- fail-fast CUDA check
     messages.py          # Detection -> vision_msgs converters (+ array_to_detections)
   tracking/
-    __init__.py          # exports Tracker, TrackedDetection, ByteTrackWrapper, TrackKalmanSmoother
-    tracker.py           # Tracker ABC + TrackedDetection dataclass
-    bytetrack.py         # supervision.ByteTrack wrapper (occlusion bridging via lost_tracks)
+    __init__.py          # exports Tracker, TrackedDetection, RoboflowTracker, ByteTrackWrapper, TrackKalmanSmoother
+    tracker.py           # Tracker ABC + TrackedDetection dataclass (predicted=True/score=0.0 = coasted)
+    roboflow_tracker.py  # Roboflow `trackers` OC-SORT/ByteTrack (DEFAULT); coasted boxes from tracked_objects
+    bytetrack.py         # supervision.ByteTrack wrapper (legacy_bytetrack fallback)
     kalman.py            # PerTrackKalman + TrackKalmanSmoother (filterpy 4-state CV)
   preflight.py           # assert_vision_ready / wait_vision_state_ready
   utils/
@@ -59,7 +60,7 @@ src/duburi_vision/duburi_vision/
 config/
   cameras.yaml           # camera profiles
   detector.yaml          # model + class params
-  tracker.yaml           # ByteTrack + Kalman thresholds (all as ROS params)
+  tracker.yaml           # tracker_type (ocsort default) + association + Kalman thresholds (ROS params)
 test/
   test_depth_estimation.py  # standalone 9-check test: onnxruntime, bbox fallback, ONNX inference
 ```
@@ -95,35 +96,43 @@ current class filter without polling `ros2 param get`. This means class changes 
 (`duburi.set_classes()`), or mission code (`duburi.models(...)`) all propagate automatically.
 
 `/tracks` uses the same message type as `/detections`. The difference:
-- `Detection2D.tracking_id` is populated with a stable ByteTrack integer ID (stringified)
+- `Detection2D.id` is populated with a stable tracker integer ID (stringified; Roboflow OC-SORT by default)
 - Bbox center (`cx`, `cy`) is Kalman-smoothed; jitter from YOLO NMS is filtered out
 - Entries with `score=0.0` are Kalman-only predictions (detector missed that frame)
 
-**The vision control loop reads `/detections` only.** `VisionState` (in
-`duburi_manager`) subscribes `/duburi/vision/<cam>/detections` and
-`camera_info`, caches the latest array, and computes `bbox_error()` in
-normalized pixels via `info_seen()`-gated scaling — so a box visible on the
-operator HUD is a box the controller acts on. There is **no** `--tracking`
-flag and **no** `vision.use_tracks` param on the manager: the tracker's
-`/tracks` (ByteTrack IDs + Kalman smoothing) is consumed by
-`vision_display` and analysis tooling for the HUD only, never by the
-control path. (`depth_estimation_node` has its own independent `use_tracks`
-param that merely selects which topic *it* reads for detection ordering.)
+**The vision control loop reads `/detections` first; `/tracks` only fills a gap
+when `vision.coast_s>0`.** `VisionState` (in `duburi_manager`) subscribes
+`/duburi/vision/<cam>/detections` (primary, authoritative) + `camera_info`, and
+computes `bbox_error()` in normalized pixels via `info_seen()`-gated scaling — so
+a box visible on the operator HUD is a box the controller acts on. It **also**
+subscribes `/tracks` as the **coast source**, but consults it ONLY when
+`coast_s>0` AND no live detection matches this tick: it then steers on the
+tracker's coasted (Kalman-predicted) box of the **locked target id**, at decaying
+authority, for up to `coast_s` (the gap-bridging path — see `known-issues.md`
+D10). **`coast_s=0` (default) ⇒ control reads raw `/detections` exactly as
+before** — a live box always overrides a coast, and a coasted box is conf-exempt
+only for the locked id. There is **no** `--tracking` flag and **no**
+`vision.use_tracks` param: outside the opt-in coast, `/tracks` (Roboflow OC-SORT
+ids + Kalman smoothing) feeds `vision_display` / analysis for the HUD only.
+(`depth_estimation_node` has its own independent `use_tracks` param that merely
+selects which topic *it* reads for detection ordering.)
 
 ## Dataflow (with tracker_node)
 
 ```
 camera_node ──/image_raw──▶ detector_node ──/detections──┬──▶ tracker_node ──/tracks──▶ vision_display (HUD)
-                                  │                       │
-                            /image_debug                  └──▶ VisionState (duburi_manager) ──▶ motion_vision
-                           /classes_filter                     (control loop — reads /detections only)
-                                  │
+                                  │                       │                              │
+                            /image_debug                  └──▶ VisionState ──▶ motion_vision
+                           /classes_filter                     (reads /detections; /tracks
+                                  │                             ONLY as coast source if coast_s>0) ◀── /tracks
                                   └──▶ vision_display (subscribes image_raw + detections + tracks +
                                        state + classes_filter; renders HUD overlay)
 ```
 
-The control loop (`VisionState` → `motion_vision`) reads `/detections`
-only; `/tracks` is a display / analysis convenience, never a control input.
+The control loop (`VisionState` → `motion_vision`) reads `/detections` as its
+authoritative input; `/tracks` is a display / analysis convenience EXCEPT for the
+opt-in gap-bridging coast (`vision.coast_s>0`), where it is consulted only to fill
+a tick that has no live detection — never to override one.
 
 `<cam>` is the camera profile name (`laptop`, `sim_front`, `sim_bottom`, ...).
 `vision_msgs/Detection2D.results[0].hypothesis.class_id` is a **string**

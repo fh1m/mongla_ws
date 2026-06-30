@@ -89,7 +89,7 @@ class VisionVerbs:
                      kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
                      lost_grace_s=0.0, align_stable_frames=0.0,
                      lock_target=False, ctrl_conf=0.0,
-                     range_gain_floor=0.0, ki_lat=0.0):
+                     range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -186,6 +186,7 @@ class VisionVerbs:
                     ctrl_conf=float(ctrl_conf),
                     range_gain_floor=float(range_gain_floor) or 1.0,
                     ki_lat=float(ki_lat),
+                    coast_s=float(coast_s),
                     on_locked=on_locked,
                     fire_t=eff_fire_t,
                     report_fn=self.report_vision,
@@ -238,7 +239,7 @@ class VisionVerbs:
                     brake_off=False, brake_gain=0.0,
                     hold_through_loss=False,
                     kp_forward=0.0, kp_lat=0.0, lost_grace_s=0.0,
-                    range_gain_floor=0.0):
+                    range_gain_floor=0.0, coast_s=0.0):
         """Drive forward until ``target_class`` fills ``fwd_fill`` % of the frame.
 
         ``mode`` is the fill metric (area/width/height). ``maintain_on``
@@ -289,6 +290,7 @@ class VisionVerbs:
                 # never write Ch4=1500 against a live lock.
                 release_yaw=True,
                 range_gain_floor=float(range_gain_floor) or 1.0,
+                coast_s=float(coast_s),
                 report_fn=self.report_vision,
                 writers=self._writers(), log=self.log,
                 abort_fn=self._abort_fn)

@@ -107,7 +107,7 @@ class FakeVision:
 
     def __init__(self, ex=0.6, size=(640, 480)):
         self._sample = SimpleNamespace(ex=ex, ey=0.0, w_frac=0.3, h_frac=0.3,
-                                       age_s=0.0)
+                                       age_s=0.0, track_id=-1, coasted=False)
         self._size = size
 
     def image_size(self):

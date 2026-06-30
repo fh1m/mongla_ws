@@ -42,9 +42,42 @@ from sensor_msgs.msg import CameraInfo
 from vision_msgs.msg import Detection2DArray
 
 from duburi_vision.detection.messages import array_to_detections
-from duburi_vision.tracking.bytetrack import ByteTrackWrapper
+from duburi_vision.tracking.bytetrack       import ByteTrackWrapper
+from duburi_vision.tracking.roboflow_tracker import RoboflowTracker
 from duburi_vision.tracking.kalman    import TrackKalmanSmoother
 from duburi_vision.tracking.tracker   import TrackedDetection
+
+
+def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
+                   iou_threshold, track_activation_threshold,
+                   high_conf_det_threshold, log=None):
+    """Build the tracker backend by name.
+
+    'ocsort'/'bytetrack' use the Roboflow `trackers` library;
+    'legacy_bytetrack' falls back to the supervision ByteTrack wrapper. If the
+    Roboflow lib fails to import (bad Jetson install), fall back to legacy with
+    a loud WARN rather than crash the node -- tracking degraded, not dead.
+    """
+    ttype = (tracker_type or 'ocsort').strip().lower()
+    if ttype == 'legacy_bytetrack':
+        return ByteTrackWrapper(
+            track_buffer=track_buffer, min_hits=min_hits,
+            iou_threshold=iou_threshold,
+            track_activation_threshold=track_activation_threshold)
+    try:
+        return RoboflowTracker(
+            tracker_type=ttype, track_buffer=track_buffer, frame_rate=frame_rate,
+            min_hits=min_hits, iou_threshold=iou_threshold,
+            track_activation_threshold=track_activation_threshold,
+            high_conf_det_threshold=high_conf_det_threshold)
+    except ImportError as exc:
+        if log is not None:
+            log.warn(f"[TRK  ] roboflow trackers unavailable ({exc}); "
+                     f"falling back to legacy_bytetrack")
+        return ByteTrackWrapper(
+            track_buffer=track_buffer, min_hits=min_hits,
+            iou_threshold=iou_threshold,
+            track_activation_threshold=track_activation_threshold)
 
 
 class TrackerNode(Node):
@@ -52,10 +85,15 @@ class TrackerNode(Node):
         super().__init__('duburi_tracker')
 
         self.declare_parameter('camera',                      'laptop')
+        # tracker engine: ocsort (Roboflow, default — best dropout recovery) |
+        # bytetrack (Roboflow two-stage) | legacy_bytetrack (supervision fallback)
+        self.declare_parameter('tracker_type',                'ocsort')
+        self.declare_parameter('frame_rate',                  20.0)
         self.declare_parameter('track_buffer',                60)
         self.declare_parameter('min_hits',                    1)
         self.declare_parameter('iou_threshold',               0.2)
         self.declare_parameter('track_activation_threshold',  0.40)
+        self.declare_parameter('high_conf_det_threshold',     0.6)
         self.declare_parameter('classes',                     '')
         self.declare_parameter('enable_kalman',               True)
         self.declare_parameter('kalman_process_noise',        0.1)
@@ -63,22 +101,24 @@ class TrackerNode(Node):
         self.declare_parameter('max_predict_frames',          30)
 
         cam              = str(self.get_parameter('camera').value).strip() or 'cam'
+        tracker_type     = str(self.get_parameter('tracker_type').value).strip().lower()
+        frame_rate       = float(self.get_parameter('frame_rate').value)
         track_buffer     = int(self.get_parameter('track_buffer').value)
         min_hits         = int(self.get_parameter('min_hits').value)
         iou_threshold    = float(self.get_parameter('iou_threshold').value)
         act_thresh       = float(self.get_parameter('track_activation_threshold').value)
+        high_conf        = float(self.get_parameter('high_conf_det_threshold').value)
         self._enable_kal = bool(self.get_parameter('enable_kalman').value)
         proc_noise       = float(self.get_parameter('kalman_process_noise').value)
         meas_noise       = float(self.get_parameter('kalman_measurement_noise').value)
         max_pred         = int(self.get_parameter('max_predict_frames').value)
         self._last_classes = str(self.get_parameter('classes').value)
 
-        self._tracker = ByteTrackWrapper(
-            track_buffer=track_buffer,
-            min_hits=min_hits,
-            iou_threshold=iou_threshold,
-            track_activation_threshold=act_thresh,
-        )
+        self._tracker = _build_tracker(
+            tracker_type, track_buffer=track_buffer, frame_rate=frame_rate,
+            min_hits=min_hits, iou_threshold=iou_threshold,
+            track_activation_threshold=act_thresh, high_conf_det_threshold=high_conf,
+            log=self.get_logger())
         self._kalman = TrackKalmanSmoother(
             process_noise=proc_noise,
             measurement_noise=meas_noise,
@@ -109,8 +149,8 @@ class TrackerNode(Node):
         self.add_on_set_parameters_callback(self._on_param_change)
 
         self.get_logger().info(
-            f"[TRK  ] subscribed {ns}/detections  "
-            f"track_buffer={track_buffer} min_hits={min_hits} "
+            f"[TRK  ] subscribed {ns}/detections  engine={self._tracker.name} "
+            f"track_buffer={track_buffer}@{frame_rate:.0f}Hz min_hits={min_hits} "
             f"act_thresh={act_thresh:.2f} "
             f"kalman={'on' if self._enable_kal else 'off'}")
 

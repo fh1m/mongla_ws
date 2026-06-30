@@ -68,6 +68,14 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # gates only what the CONTROL loop steers on, so a low-score flicker can't
     # become the aim point without raising the detector floor for everyone.
     'vision.ctrl_conf':            0.0,
+    # coast_s: gap-bridging COAST window (seconds). 0 = OFF (default) -> control
+    # reads raw /detections exactly as before. >0 lets the loop steer on the
+    # tracker's coasted (Kalman-predicted) box of the LOCKED target id for up to
+    # coast_s after the real detection drops, at decaying authority, so a brief
+    # occlusion doesn't lose a torpedo-hole lock or drift the hull off a pipe.
+    # MUST be < lost_grace_s and < the tracker buffer in wall-time. Opt-in,
+    # pool-validated before enabling -- see precision-alignment.md / known-issues.
+    'vision.coast_s':              0.0,
 }
 
 
@@ -88,6 +96,7 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'range_gain_floor':    'vision.range_gain_floor',
         'ki_lat':              'vision.ki_lat',
         'ctrl_conf':           'vision.ctrl_conf',
+        'coast_s':             'vision.coast_s',
     },
     'vision_move': {
         'kp_forward':      'vision.kp_forward',
@@ -95,6 +104,7 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'lost_grace_s':    'vision.lost_grace_s',
         'fwd_fill':        'vision.frame_fill_default',
         'range_gain_floor': 'vision.range_gain_floor',
+        'coast_s':          'vision.coast_s',
     },
 }
 
