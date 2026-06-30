@@ -358,6 +358,38 @@ before the camera frame loop started.
 > UserWarning (aarch64 build quirk), TRT `NvMapMemAlloc … error 12` / "engine plan
 > across different models of devices", and the `target=None deprecated` FutureWarning.
 
+### E4. cv2 windows die under VSCode Remote-SSH — `Can't initialize GTK backend` (no `$DISPLAY`)
+- **Symptom (distinct from E2!):** launched from a **VSCode Remote-SSH / plain-ssh**
+  terminal, `vision_display` crashes at `cv2.namedWindow` with
+  `Can't initialize GTK backend in function 'cvInitSystem'` and exit code 1. The
+  detector then takes ~15 s to SIGKILL (TensorRT load blocks the SIGINT handler —
+  benign). E2 was *headless OpenCV* (no GTK compiled in); **E4 is the opposite** —
+  OpenCV *has* GTK, but a headless SSH shell has **no display server** (`$DISPLAY`
+  empty), so the GUI has nowhere to draw. (Over the old full remote-desktop session
+  it worked because that terminal inherited the desktop's `DISPLAY`.)
+- **Root cause:** the GNOME/Xorg session runs on display **`:1`** (owned by the same
+  `duburi-jetson` user; socket `/tmp/.X11-unix/X1`). A VSCode Remote-SSH integrated
+  terminal starts with `$DISPLAY` unset and never inherits it.
+- **Fix (host-local, in `~/.zshrc`):** when `$DISPLAY` is empty, auto-point GUI apps
+  at the live local X socket — guarded so it never clobbers a real desktop terminal:
+  ```sh
+  if [ -z "$DISPLAY" ]; then
+      for _d in /tmp/.X11-unix/X*; do
+          [ -S "$_d" ] && export DISPLAY=":${_d##*/X}" && break
+      done; unset _d
+  fi
+  ```
+  `DISPLAY=:1` alone is enough (it falls back to the valid `~/.Xauthority` cookie).
+  Verified on-device: a fresh headless zsh resolves `DISPLAY=:1` and `vision_display`
+  opens its HUD without error.
+- **Where the window appears:** on the **Jetson's** display `:1` — so you still *view*
+  it via remote desktop / VNC, but **all editing + launching happens in VSCode
+  Remote-SSH** (the latency win). NOT in the committed `.vscode/settings.json`:
+  hardcoding `DISPLAY` there would break a teammate's *local* VSCode (forcing `:1`
+  over their real `:0`). To drop remote desktop for *viewing* too, expose the
+  annotated `…/image_debug` topic via `web_video_server`/Foxglove (browser over
+  VSCode's auto port-forward) — not installed today; future task.
+
 ---
 
 ## Forks we evaluated (so we don't revisit)
