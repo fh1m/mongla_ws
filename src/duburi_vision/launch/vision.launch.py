@@ -98,7 +98,11 @@ def generate_launch_description():
                               description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
         DeclareLaunchArgument('track_buffer',  default_value='30'),
         DeclareLaunchArgument('min_hits',      default_value='1'),
-        DeclareLaunchArgument('max_predict',   default_value='10'),
+        # max_predict is the 4th rung of the coast ladder: the Kalman smoother
+        # drops a track (filters it off /tracks) after this many predicted
+        # frames, so it MUST exceed vision.coast_s in frames or the control coast
+        # truncates early. 30 frames = 1.5 s at 20 Hz, headroom over coast_s~0.8.
+        DeclareLaunchArgument('max_predict',   default_value='30'),
         DeclareLaunchArgument('depth',         default_value='false',
                               description='Start depth_estimation_node (monocular vis_range)'),
         DeclareLaunchArgument('depth_model',   default_value='',
