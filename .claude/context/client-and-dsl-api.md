@@ -79,7 +79,6 @@ Their fields below; everything else is the open-loop motion surface.
 | `maintain_px`        | float32  | vision_move — lateral px offset held while driving |
 | `maintain_on`        | bool     | vision_move — enable `maintain_px` (else pure forward) |
 | `hold_s`             | float32  | vision_align (active station-keep), vision_move (after reaching fill) |
-| `brake_off`/`brake_gain` | bool/float32 | vision_align, vision_move — disable / scale the arrival reverse-kick brake |
 | `fire_channels`      | string   | vision_align — CSV payload channels fired ONCE mid-hold, e.g. `"1,2"` |
 | `fire_t`             | float32  | vision_align — seconds into the hold to fire (must be `< hold_s`) |
 | `lock_target`        | bool     | vision_align — **precision (`lock_on`):** steer to the box nearest the last centre, not the largest |
