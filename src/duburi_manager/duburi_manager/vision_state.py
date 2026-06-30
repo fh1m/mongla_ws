@@ -61,10 +61,12 @@ class Sample:
     ey:       float    # vertical error:   -1=top  edge, 0=centre, +1=bottom edge
     h_frac:   float    # bbox height as fraction of image height (0..1)
     w_frac:   float    # bbox width  as fraction of image width  (0..1)
-    age_s:    float    # how stale this detection is (monotonic seconds)
+    age_s:    float    # time since the last REAL detection of this target (s)
     class_id: str
     score:     float
     vis_range: float = 0.0         # monocular depth estimate from depth_estimation_node (0=far, 1=close)
+    track_id:  int   = -1          # tracker id of this target (-1 = unknown / coast off)
+    coasted:   bool  = False       # True = tracker-predicted box during a detection gap (no live box)
 
 
 class VisionState:
@@ -90,11 +92,21 @@ class VisionState:
         self._vis_range_vals: list = []            # parallel to _latest_array.detections
         self._info_seen:   bool   = False
         self._frames:      int    = 0             # image_raw counter (diag only)
+        # Coast layer (opt-in, used only when bbox_error(coast_s>0)): the /tracks
+        # topic is the coast SOURCE; /detections stays the authoritative primary.
+        self._latest_tracks: Optional[Detection2DArray] = None
+        self._last_real: dict = {}                # track_id -> (monotonic_t, score) of last REAL detection
 
         ns = f'/duburi/vision/{camera}'
         qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
         self._sub_det   = node.create_subscription(
             Detection2DArray, f'{ns}/detections',   self._on_detections, qos)
+        # Coast source. Cheap to subscribe; only CONSULTED when coast_s>0, so a
+        # mission that never sets vision.coast_s behaves exactly as before. If
+        # the tracker node isn't running, this simply never delivers and coast
+        # silently never engages (degrades to raw-/detections behaviour).
+        self._sub_trk   = node.create_subscription(
+            Detection2DArray, f'{ns}/tracks',        self._on_tracks,     qos)
         self._sub_info  = node.create_subscription(
             CameraInfo,       f'{ns}/camera_info',   self._on_info,       qos)
         self._sub_img   = node.create_subscription(
@@ -113,6 +125,10 @@ class VisionState:
         with self._lock:
             self._latest_array = msg
             self._latest_stamp = time.monotonic()
+
+    def _on_tracks(self, msg: Detection2DArray) -> None:
+        with self._lock:
+            self._latest_tracks = msg
 
     def _on_info(self, msg: CameraInfo) -> None:
         if msg.width and msg.height:
@@ -170,7 +186,9 @@ class VisionState:
     def bbox_error(self, class_name: str = '', *,
                    near: Optional[Tuple[float, float]] = None,
                    gate_norm: float = 0.0,
-                   min_score: float = 0.0) -> Optional[Sample]:
+                   min_score: float = 0.0,
+                   locked_id: int = -1,
+                   coast_s: float = 0.0) -> Optional[Sample]:
         """Pick a matching detection and return a normalized Sample.
 
         Default (``near=None`` or ``gate_norm<=0``): the LARGEST-area matching
@@ -182,6 +200,18 @@ class VisionState:
         loop rides on its grace timer). ``min_score`` drops boxes below that
         detection score from consideration (control-side conf floor).
 
+        Coast layer (OPT-IN, ``coast_s>0``): when NO live ``/detections`` box
+        matches, fall back to the tracker's coasted (Kalman-predicted) box of
+        ``locked_id`` from ``/tracks`` -- but ONLY that id, and ONLY while the
+        gap is shorter than ``coast_s``. The returned Sample carries
+        ``coasted=True`` and ``age_s`` = the TRUE time since the last real
+        detection (not message age), so the control loop's freshness/coast
+        decay reduces its authority and the grace timer still fires LOST. A
+        live detection ALWAYS wins (this method tries it first); coast never
+        gates out or overrides a real box. ``coast_s=0`` (default) ⇒ behaviour
+        is byte-identical to the no-coast path. See the prior-bug note in
+        known-issues.md (predicted boxes must not be conf-gated as the locked id).
+
         Returns None when no qualifying detection is cached, or before the
         first CameraInfo arrives (image size still (0,0)) so the control
         loop never steers on a mis-scaled pixel error.
@@ -191,6 +221,7 @@ class VisionState:
             image_width, image_height = self._image_size
             sampled_at_monotonic = self._latest_stamp
             vis_range_vals       = self._vis_range_vals
+            tracks_array         = self._latest_tracks
 
         if detections_array is None:
             return None
@@ -227,6 +258,11 @@ class VisionState:
                 best_detection = det
                 best_index     = idx
         if best_detection is None:
+            # No live detection this tick. Coast the locked target's predicted
+            # box (opt-in) before declaring a loss -- the gap-bridging path.
+            if coast_s > 0.0 and locked_id >= 0:
+                return self._coast_sample(class_name, locked_id, coast_s,
+                                          tracks_array, image_width, image_height)
             return None
 
         vis_range = (float(vis_range_vals[best_index])
@@ -251,10 +287,89 @@ class VisionState:
 
         class_id  = _hypothesis_class_id(detection)
         score     = _hypothesis_score(detection)
+
+        # Coast bookkeeping (only when enabled): tag this live box with its
+        # tracker id (matched from /tracks by centre) and record the real-sighting
+        # time so a later coast knows the true gap. Pure no-op when coast_s=0.
+        track_id = -1
+        if coast_s > 0.0:
+            track_id = self._match_track_id(
+                horizontal_error, vertical_error, tracks_array,
+                image_width, image_height)
+            if track_id >= 0:
+                with self._lock:
+                    self._last_real[track_id] = (time.monotonic(), score)
+
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
                       age_s=time.monotonic() - sampled_at_monotonic,
-                      class_id=class_id, score=score, vis_range=vis_range)
+                      class_id=class_id, score=score, vis_range=vis_range,
+                      track_id=track_id, coasted=False)
+
+    # ------------------------------------------------------------------ #
+    #  Coast layer helpers (used only when bbox_error(coast_s>0))         #
+    # ------------------------------------------------------------------ #
+    _MATCH_GATE_NORM = 0.20   # max normalized centre distance to call a /tracks box "the same"
+
+    def _match_track_id(self, ex: float, ey: float, tracks_array,
+                        image_width: int, image_height: int) -> int:
+        """Tracker id of the REAL /tracks box nearest the live detection at
+        (ex, ey) normalized centre, within a small gate. -1 if none / no tracks."""
+        if tracks_array is None or image_width <= 0 or image_height <= 0:
+            return -1
+        half_w, half_h = image_width * 0.5, image_height * 0.5
+        best_id, best_dist = -1, self._MATCH_GATE_NORM
+        for det in tracks_array.detections:
+            if _track_is_predicted(det):
+                continue                      # match against real boxes only
+            tid = _track_id_of(det)
+            if tid < 0:
+                continue
+            cx, cy = _bbox_center(det.bbox)
+            d = math.hypot((cx - half_w) / half_w - ex, (cy - half_h) / half_h - ey)
+            if d < best_dist:
+                best_dist, best_id = d, tid
+        return best_id
+
+    def _coast_sample(self, class_name: str, locked_id: int, coast_s: float,
+                      tracks_array, image_width: int,
+                      image_height: int) -> Optional[Sample]:
+        """Build a Sample from the coasted (predicted) /tracks box of locked_id.
+
+        Returns None if: no tracks, the locked id has no predicted box this
+        tick, the id was never seen as a real detection, or the gap already
+        exceeds coast_s (-> caller treats as a loss). The Sample is conf-exempt
+        by construction (it is not run through min_score) and carries the TRUE
+        detection-age so downstream authority decays."""
+        if tracks_array is None or image_width <= 0 or image_height <= 0:
+            return None
+        with self._lock:
+            last = self._last_real.get(locked_id)
+        if last is None:
+            return None                        # never had a real sighting -> don't invent one
+        last_t, last_score = last
+        age = time.monotonic() - last_t
+        if age > coast_s:
+            return None                        # coast window elapsed -> loss
+
+        for det in tracks_array.detections:
+            if _track_id_of(det) != locked_id or not _track_is_predicted(det):
+                continue
+            if class_name and not _hypothesis_matches(det, class_name) \
+                    and _hypothesis_class_id(det):
+                continue
+            cx, cy = _bbox_center(det.bbox)
+            ex = max(-1.5, min(1.5, (cx - image_width * 0.5) / (image_width * 0.5)))
+            ey = max(-1.5, min(1.5, (cy - image_height * 0.5) / (image_height * 0.5)))
+            return Sample(
+                ex=ex, ey=ey,
+                h_frac=float(det.bbox.size_y) / float(image_height),
+                w_frac=float(det.bbox.size_x) / float(image_width),
+                age_s=age,                     # true time since last real detection
+                class_id=class_name or _hypothesis_class_id(det),
+                score=last_score,              # last real score (conf-exempt for the locked id)
+                vis_range=0.0, track_id=locked_id, coasted=True)
+        return None
 
     def list_classes(self) -> List[str]:
         """Sorted list of distinct class_id strings in the latest array."""
@@ -288,6 +403,7 @@ class VisionState:
     def close(self) -> None:
         try:
             self._node.destroy_subscription(self._sub_det)
+            self._node.destroy_subscription(self._sub_trk)
             self._node.destroy_subscription(self._sub_info)
             self._node.destroy_subscription(self._sub_img)
             self._node.destroy_subscription(self._sub_vr)
@@ -329,3 +445,19 @@ def _hypothesis_score(det: Detection2D) -> float:
 
 def _hypothesis_matches(det: Detection2D, class_name: str) -> bool:
     return _hypothesis_class_id(det).strip().lower() == class_name.strip().lower()
+
+
+def _track_id_of(det: Detection2D) -> int:
+    """tracker id carried on a /tracks Detection2D (`det.id` = str(track_id)).
+    -1 for a raw /detections box (no id set) or a malformed value."""
+    raw = getattr(det, 'id', '')
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return -1
+
+
+def _track_is_predicted(det: Detection2D) -> bool:
+    """True for a coasted (Kalman-predicted) /tracks box -- the tracker forces
+    its hypothesis score to 0.0; a real box keeps the detector confidence."""
+    return _hypothesis_score(det) <= 0.0

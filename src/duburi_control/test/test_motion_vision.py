@@ -13,6 +13,7 @@ import pytest
 
 from duburi_control.motion_vision import (
     align_loop, move_loop, _fill, _clamp, _present, _freshness, _range_gain,
+    _coast_authority, _authority,
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S,
     VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA,
@@ -22,8 +23,10 @@ from duburi_control.motion_vision import (
 # --------------------------------------------------------------------------- #
 #  Fakes                                                                       #
 # --------------------------------------------------------------------------- #
-def _sample(ex=0.0, ey=0.0, w_frac=0.0, h_frac=0.0, age_s=0.0):
-    return SimpleNamespace(ex=ex, ey=ey, w_frac=w_frac, h_frac=h_frac, age_s=age_s)
+def _sample(ex=0.0, ey=0.0, w_frac=0.0, h_frac=0.0, age_s=0.0,
+            track_id=-1, coasted=False):
+    return SimpleNamespace(ex=ex, ey=ey, w_frac=w_frac, h_frac=h_frac, age_s=age_s,
+                           track_id=track_id, coasted=coasted)
 
 
 class _FakeVision:
@@ -1112,3 +1115,51 @@ def test_hold_against_current_does_not_brake_kick():
                            hold_s=0.3, duration=0.6,
                            ki_lat=200.0, i_lat_max=15.0)   # brake on by default
     assert writers.laterals == []      # no reverse-kick on a steady hold
+
+
+# --------------------------------------------------------------------------- #
+#  Coast (gap-bridging) — _coast_authority + the live/coast authority split    #
+#                                                                              #
+#  Part B of the tracking integration. A coasted box must steer at DECLINING   #
+#  authority over the coast window (never full-blast on a phantom), and must   #
+#  NOT be freshness-decayed (it arrives fresh every tick — that would double-  #
+#  decay and kill the coast inside ~0.4 s). Default coast_s=0 -> no coast.     #
+# --------------------------------------------------------------------------- #
+def test_coast_authority_shape():
+    assert _coast_authority(0.0, 0.8) == 1.0          # full at the instant of loss
+    assert _coast_authority(0.8, 0.8) == 0.0          # zero at the window edge
+    assert _coast_authority(1.0, 0.8) == 0.0          # and beyond
+    mid = _coast_authority(0.4, 0.8)
+    assert 0.4 < mid < 0.6                            # ~halfway, monotonic linear
+    assert _coast_authority(0.4, 0.0) == 0.0          # coast_s<=0 -> disabled
+
+
+def test_authority_splits_live_vs_coasted():
+    # A LIVE sample uses freshness (age = message staleness). A COASTED sample
+    # uses the coast curve — proving freshness is NOT also applied (no double
+    # decay). At age 0.4 s: freshness=0 (FRESH_ZERO_S) but coast(0.4,0.8)=0.5.
+    live   = _sample(ex=0.5, age_s=0.4, coasted=False)
+    coast  = _sample(ex=0.5, age_s=0.4, coasted=True)
+    assert _authority(live, 0.8) == 0.0               # live, stale frame -> blind
+    assert _authority(coast, 0.8) == pytest.approx(0.5, abs=1e-6)  # coast, mid-window
+
+
+def _max_lat_kick(pix):
+    lats = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    return max((p - 1500) for p in lats) if lats else 0
+
+
+def test_coasted_sample_steers_at_reduced_authority():
+    # A coasted box mid-window must drive lateral at LESS than a fresh live box
+    # of the same error — the decaying-authority guarantee that stops a phantom
+    # from being chased at full speed.
+    live  = _FakeVision(_sample(ex=1.0, age_s=0.0, track_id=7, coasted=False))
+    coast = _FakeVision(_sample(ex=1.0, age_s=0.4, track_id=7, coasted=True))
+    _, pl, _ = _align(live,  axes={'lat'}, kp_lat=60.0, gain=30.0,
+                      coast_s=0.8, duration=0.2)
+    _, pc, _ = _align(coast, axes={'lat'}, kp_lat=60.0, gain=30.0,
+                      coast_s=0.8, duration=0.2)
+    live_kick, coast_kick = _max_lat_kick(pl), _max_lat_kick(pc)
+    assert live_kick > 0
+    assert 0 < coast_kick < live_kick, (
+        f"coasted command {coast_kick} must be a fraction of live {live_kick}")

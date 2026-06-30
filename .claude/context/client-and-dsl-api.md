@@ -85,6 +85,7 @@ Their fields below; everything else is the open-loop motion surface.
 | `ctrl_conf`          | float32  | vision_align — **precision:** control-side min detection score (live: `vision.ctrl_conf`) |
 | `range_gain_floor`   | float32  | vision_align, vision_move — **precision:** lat/depth kp multiplier as the bbox fills (live: `vision.range_gain_floor`) |
 | `ki_lat`             | float32  | vision_align — **precision:** lateral integral gain during the hold (live: `vision.ki_lat`) |
+| `coast_s`            | float32  | vision_align, vision_move — **gap-bridging coast (opt-in):** steer on the tracker's predicted box of the locked id for `coast_s` s after a detection drops, decaying authority; `0`=OFF, live detection always wins (live: `vision.coast_s`) |
 | `pass_through`       | bool     | move_*/arc — reinterpret `gain`(+`yaw_rate_pct`) as a RAW PWM delta (1500±value) |
 | `hold_through_loss`  | bool     | vision_align, vision_move — coast on target loss (the DSL sets this when no `fallback` is supplied) |
 | `kp_lat`             | float32  | vision_align, vision_move             |
@@ -513,6 +514,7 @@ mission edit:
 | `vision.range_gain_floor` | `1.0` | **precision:** lat/depth kp multiplier as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
 | `vision.ki_lat` | `0.0` | **precision:** lateral integral gain; nulls a steady-current offset during the hold (`0`=off) |
 | `vision.ctrl_conf` | `0.0` | **precision:** control-side min detection score to accept a box (`0`=off) |
+| `vision.coast_s` | `0.0` | **gap-bridging coast (opt-in):** steer on the tracker's predicted box of the locked id for this many s after a detection drops (`0`=OFF). `< vision.lost_grace_s`. See [`known-issues.md`](known-issues.md) D10 |
 
 ```bash
 ros2 param set /duburi_manager vision.kp_yaw 80.0

@@ -249,7 +249,8 @@ COMMANDS = {
                      'fire_channels', 'fire_t',
                      'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames',
-                     'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat'],
+                     'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat',
+                     'coast_s'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
@@ -261,7 +262,7 @@ COMMANDS = {
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0,
                      'lock_target': False, 'ctrl_conf': 0.0,
-                     'range_gain_floor': 1.0, 'ki_lat': 0.0},
+                     'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.0},
     },
     'vision_move': {
         'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '
@@ -280,7 +281,8 @@ COMMANDS = {
                      'maintain_px', 'maintain_on', 'hold_s',
                      'err_px', 'duration', 'gain', 'gain_lat',
                      'brake_off', 'brake_gain', 'hold_through_loss',
-                     'kp_forward', 'kp_lat', 'lost_grace_s', 'range_gain_floor'],
+                     'kp_forward', 'kp_lat', 'lost_grace_s', 'range_gain_floor',
+                     'coast_s'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'fwd_fill': 95.0, 'mode': 'area',
                      'maintain_px': 0.0, 'maintain_on': False,
@@ -289,7 +291,7 @@ COMMANDS = {
                      'brake_off': False, 'brake_gain': 0.0,
                      'hold_through_loss': False,
                      'kp_forward': 200.0, 'kp_lat': 60.0, 'lost_grace_s': 1.0,
-                     'range_gain_floor': 1.0},
+                     'range_gain_floor': 1.0, 'coast_s': 0.0},
     },
     'fire': {
         'help':     'Fire ESP32 payload channel. 1/2 = torpedo, 3/4 = dropper. '

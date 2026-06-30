@@ -93,10 +93,16 @@ def generate_launch_description():
         DeclareLaunchArgument('viewer',        default_value='true',
                               description='Open the OpenCV vision_display HUD (viewer:=false = headless)'),
         DeclareLaunchArgument('tracking',      default_value='true',
-                              description='Start tracker_node (ByteTrack + Kalman)'),
+                              description='Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman)'),
+        DeclareLaunchArgument('tracker_type',  default_value='ocsort',
+                              description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
         DeclareLaunchArgument('track_buffer',  default_value='30'),
         DeclareLaunchArgument('min_hits',      default_value='1'),
-        DeclareLaunchArgument('max_predict',   default_value='10'),
+        # max_predict is the 4th rung of the coast ladder: the Kalman smoother
+        # drops a track (filters it off /tracks) after this many predicted
+        # frames, so it MUST exceed vision.coast_s in frames or the control coast
+        # truncates early. 30 frames = 1.5 s at 20 Hz, headroom over coast_s~0.8.
+        DeclareLaunchArgument('max_predict',   default_value='30'),
         DeclareLaunchArgument('depth',         default_value='false',
                               description='Start depth_estimation_node (monocular vis_range)'),
         DeclareLaunchArgument('anchor',        default_value='false',
@@ -174,6 +180,7 @@ def generate_launch_description():
         output='screen', ros_arguments=_QUIET,
         parameters=[{
             'camera':             cam,
+            'tracker_type':       LaunchConfiguration('tracker_type'),
             'track_buffer':       LaunchConfiguration('track_buffer'),
             'min_hits':           LaunchConfiguration('min_hits'),
             'max_predict_frames': LaunchConfiguration('max_predict'),

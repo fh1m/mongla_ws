@@ -251,6 +251,39 @@ def _freshness(age_s: float) -> float:
     return (VISION_FRESH_ZERO_S - age_s) / span
 
 
+def _coast_authority(coast_age_s: float, coast_s: float) -> float:
+    """Translational authority [0,1] for a COASTED (tracker-predicted) box.
+
+    1.0 at the instant the real detection drops, decaying LINEARLY to 0.0 by
+    ``coast_s`` (time since the last real detection). Distinct from
+    ``_freshness``: the predicted box itself is fresh every tick (it arrives
+    each frame), so freshness would NOT decay it -- this curve is the SEPARATE,
+    longer window that bounds how long, and how hard, we steer on a guess. Sized
+    so authority reaches ~0 before ``lost_grace_s`` fires LOST. Pure; coast_s<=0
+    -> 0.0 (coasting disabled). See the timeout ladder in precision-alignment.md.
+    """
+    if coast_s <= 0.0:
+        return 0.0
+    if coast_age_s <= 0.0:
+        return 1.0
+    if coast_age_s >= coast_s:
+        return 0.0
+    return (coast_s - coast_age_s) / coast_s
+
+
+def _authority(sample, coast_s: float) -> float:
+    """Per-tick translational authority for `sample`.
+
+    Live box  -> ``_freshness(age)``       (per-frame staleness at low FPS).
+    Coasted   -> ``_coast_authority(age)``  (gap decay; the box is fresh each
+                 tick so freshness must NOT also be applied -- that would
+                 double-decay and kill the coast inside ~0.4 s).
+    """
+    if getattr(sample, 'coasted', False):
+        return _coast_authority(sample.age_s, coast_s)
+    return _freshness(sample.age_s)
+
+
 def _range_gain(fill: float, floor: float,
                 lo: float = VISION_RANGE_GAIN_FILL_LO,
                 hi: float = VISION_RANGE_GAIN_FILL_HI) -> float:
@@ -375,6 +408,7 @@ def align_loop(*,
                range_gain_floor: float = 1.0,
                ki_lat: float = 0.0,
                i_lat_max: float = VISION_I_LAT_MAX,
+               coast_s: float = 0.0,
                on_locked=None,
                fire_t: float = 0.0,
                report_fn=None,
@@ -478,6 +512,7 @@ def align_loop(*,
     gate_norm   = VISION_LOCK_GATE_NORM if lock_on else 0.0
     locked_ex: Optional[float] = None        # last-accepted centre -> continuity lock
     locked_ey: Optional[float] = None
+    locked_id   = -1     # tracker id of the locked target -> coast follows this id
     saw_target  = False  # True once any frame yields the target -> distinguishes
                          #   "never detected" (wrong model/classes/view) from
                          #   "seen but couldn't converge" at exit.
@@ -518,7 +553,8 @@ def align_loop(*,
             # boxes out of the control target.
             near = (locked_ex, locked_ey) if locked_ex is not None else None
             sample = vision_state.bbox_error(
-                target_class, near=near, gate_norm=gate_norm, min_score=ctrl_conf)
+                target_class, near=near, gate_norm=gate_norm, min_score=ctrl_conf,
+                locked_id=locked_id, coast_s=coast_s)
             if not _present(sample):
                 stable = 0
                 lat_i = 0.0   # bleed integral windup while blind
@@ -554,6 +590,11 @@ def align_loop(*,
             # fresh verb call re-acquires largest -- no stale lock survives.
             if lock_on:
                 locked_ex, locked_ey = sample.ex, sample.ey
+            # Capture the tracker id of a LIVE box so a later gap coasts the right
+            # target (VisionState only fills track_id when coast_s>0; a coasted
+            # sample keeps the existing id). No-op when coasting is off.
+            if not sample.coasted and sample.track_id >= 0:
+                locked_id = sample.track_id
             # Range-adaptive gain: soften lat/depth kp as the bbox fills the frame
             # (close) so the 20 kg hull doesn't overshoot a small target.
             rgain = _range_gain(_fill(sample, 'area'), range_gain_floor)
@@ -619,8 +660,9 @@ def align_loop(*,
             # Freshness-decay: pace LATERAL authority to measurement freshness so
             # the loop doesn't blind-drive on a stale bbox between slow frames
             # (yaw/depth excluded -- ArduSub bleeds Ch4, holds depth). At healthy
-            # FPS fresh==1.0 so this is a no-op.
-            fresh = _freshness(sample.age_s)
+            # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
+            # coast curve instead (gap decay), not freshness -- see _authority.
+            fresh = _authority(sample, coast_s)
             lat_pct *= fresh
             _drive(lat_pct, yaw_pct)
             # Brake EMA tracks the PROPORTIONAL command only (a travel-momentum
@@ -728,6 +770,7 @@ def move_loop(*,
               hold_through_loss: bool = False,
               release_yaw: bool = False,
               range_gain_floor: float = 1.0,
+              coast_s: float = 0.0,
               report_fn=None,
               writers=None,
               log=None,
@@ -791,6 +834,7 @@ def move_loop(*,
     end_y_px     = math.nan
     fwd_ema      = 0.0   # trailing EMA of forward command -> brake proxy (fill-stop)
     lat_ema      = 0.0   # trailing EMA of the maintain strafe command -> brake proxy
+    locked_id    = -1    # tracker id of the target -> coast follows this id
 
     # Pass-through commit window: hold_s overrides the module default.
     commit_s = hold_s if hold_s > 0.0 else _PASSTHROUGH_COMMIT_S
@@ -820,8 +864,16 @@ def move_loop(*,
                 return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed,
                                end_x_px, end_y_px)
 
-            sample  = vision_state.bbox_error(target_class)
+            # Pass-through (fwd=None) must DETECT "target gone" to fire its commit
+            # window, so it deliberately does NOT coast -- a coasted box would
+            # keep present=True and delay the commit by up to coast_s. Fill-stop
+            # moves coast normally.
+            eff_coast = 0.0 if passthrough else coast_s
+            sample  = vision_state.bbox_error(
+                target_class, locked_id=locked_id, coast_s=eff_coast)
             present = _present(sample)
+            if present and not sample.coasted and sample.track_id >= 0:
+                locked_id = sample.track_id   # follow this id when a gap coasts
 
             # Pass-through trigger: the target was seen and has now left the
             # frame -- keep driving straight for the commit window so the hull
@@ -869,7 +921,7 @@ def move_loop(*,
             commit_until = None
             fill = _fill(sample, mode)
             last_fill = fill
-            fresh = _freshness(sample.age_s)   # pace translational authority to FPS
+            fresh = _authority(sample, coast_s)   # FPS staleness (live) or coast decay
 
             x_off = sample.ex * half_w         # signed horizontal offset (operator px)
             # End-position (returned) + live feedback sink.

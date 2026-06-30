@@ -76,7 +76,7 @@ developed against an ArduSub SITL + Gazebo loop and field-tested on **Duburi**, 
 **[development board](.claude/context/development-board.md) — start there.**
 
 - **✅ Phase 1 (runs today):** single-body Duburi stack — `detected()` reactive missions,
-  YOLO11 + ByteTrack/Kalman + monocular depth (30 fps), Gate / Return / search-align, the
+  YOLO11 + Roboflow trackers (OC-SORT) + monocular depth (30 fps), Gate / Return / search-align, the
   control / MAVLink / vision core.
 - **✅ Two-verb vision:** the whole vision surface is `vision_align` + `vision_move` —
   pixel-native, `gain` = max-speed cap, misses non-fatal, search/recovery via a `fallback`.
@@ -452,6 +452,7 @@ ros2 param set /duburi_detector_forward active_model flare       # hot model swa
 | `range_gain_floor` | 1.0 | **precision:** soften lat/depth gain as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
 | `ki_lat` | 0.0 | **precision:** lateral integral; nulls a steady-current offset during the hold (`0`=off) |
 | `ctrl_conf` | 0.0 | **precision:** control-side min detection score to accept a box (`0`=off) |
+| `coast_s` | 0.0 | **gap-bridging coast (opt-in):** steer on the tracker's predicted box of the locked id for `coast_s` s after a detection drops (`0`=OFF). Keeps a torpedo/gate lock through a brief flicker. A live detection always overrides; `< lost_grace_s`. See [`known-issues.md`](.claude/context/known-issues.md) D10 |
 
 Defaults: [`vision_tunables.py`](src/duburi_manager/duburi_manager/vision_tunables.py). Pool-day
 phase constants (depths, headings, fill %, gains) live in
@@ -536,7 +537,7 @@ VisionSearch/VisionAlign/VisionMove · **utility** = Countdown/Pause/LogScore/Se
 | DVL | `ros2 run duburi_manager start --ros-args -p yaw_source:=dvl` (auto-connects) | `bringup_check` → `[PASS] Nucleus 1000` |
 | Camera | `ros2 run duburi_vision camera_node --ros-args -p name:=forward -p source:=webcam` | `ros2 topic hz …/image_raw` (~30) |
 | Detector | `ros2 run duburi_vision detector_node --ros-args -p camera:=forward` | `ros2 topic hz …/detections` (~15-25) |
-| Tracker | `ros2 run duburi_vision tracker_node --ros-args -p camera:=forward` | `ros2 topic hz …/tracks` |
+| Tracker | `ros2 run duburi_vision tracker_node --ros-args -p camera:=forward -p tracker_type:=ocsort` | `ros2 topic hz …/tracks` |
 | Depth (vis_range) | `ros2 run duburi_vision depth_estimation_node --ros-args -p camera:=forward` | `ros2 topic echo …/vis_range` |
 | Anchor (XFeat lock, `lock`) | `ros2 run duburi_vision anchor_node --ros-args -p camera:=forward` (or launch `anchor:=true`) | `…/anchor_state` after a snap |
 | HUD viewer | `ros2 run duburi_vision vision_display --ros-args -p camera:=forward` | OpenCV window |
