@@ -93,7 +93,9 @@ def generate_launch_description():
         DeclareLaunchArgument('viewer',        default_value='true',
                               description='Open the OpenCV vision_display HUD (viewer:=false = headless)'),
         DeclareLaunchArgument('tracking',      default_value='true',
-                              description='Start tracker_node (ByteTrack + Kalman)'),
+                              description='Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman)'),
+        DeclareLaunchArgument('tracker_type',  default_value='ocsort',
+                              description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
         DeclareLaunchArgument('track_buffer',  default_value='30'),
         DeclareLaunchArgument('min_hits',      default_value='1'),
         DeclareLaunchArgument('max_predict',   default_value='10'),
@@ -170,6 +172,7 @@ def generate_launch_description():
         output='screen', ros_arguments=_QUIET,
         parameters=[{
             'camera':             cam,
+            'tracker_type':       LaunchConfiguration('tracker_type'),
             'track_buffer':       LaunchConfiguration('track_buffer'),
             'min_hits':           LaunchConfiguration('min_hits'),
             'max_predict_frames': LaunchConfiguration('max_predict'),

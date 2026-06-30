@@ -1,18 +1,35 @@
 tracker_node:
   ros__parameters:
 
-    # ---- ByteTrack association params --------------------------------------- #
-    # Frames to hold a lost track alive before dropping it.
-    # 150 frames at 30 Hz = 5 s of occlusion tolerance — survives turbulence/brief occlusion.
+    # ---- Tracker engine ---------------------------------------------------- #
+    # ocsort (Roboflow, DEFAULT — observation-centric, best dropout recovery:
+    #   re-associates the SAME id when a target reappears after a gap) |
+    # bytetrack (Roboflow two-stage) | legacy_bytetrack (supervision fallback).
+    tracker_type: ocsort
+
+    # Detection publish rate (Hz). Roboflow scales the lost-track buffer by
+    # frame_rate (real coast window ≈ int(frame_rate/30 * track_buffer) frames)
+    # and OC-SORT uses it for its velocity model. Set to the detector's real FPS.
+    frame_rate: 20.0
+
+    # ---- Association params ------------------------------------------------- #
+    # Frames to hold a lost track alive before dropping it (scaled by frame_rate
+    # above). MUST exceed the control loop's coast window (vision.coast_s) in
+    # wall-time so a coasted target outlives the coast — see precision-alignment.md.
     track_buffer: 150
 
     # Consecutive detection frames before a new track is published.
     # 3 = require 3 consecutive frames before publishing (suppresses turbidity false detections).
     min_hits: 3
 
-    # Score threshold above which a new track is immediately activated.
+    # ByteTrack only: score threshold above which a NEW track id is spawned.
     # 0.40 = higher confidence required than the default 0.25 to spawn a new ID.
     track_activation_threshold: 0.40
+
+    # Two-stage split: detections at/above this are stage-1 (high conf); below
+    # are stage-2, kept for association so weak REAL detections still maintain a
+    # track without spawning a new id (shrinks the number of coasted frames).
+    high_conf_det_threshold: 0.6
 
     # IoU threshold for the low-confidence second-pass association.
     # 0.2 = more permissive re-association → fewer ID switches on partial occlusion.
