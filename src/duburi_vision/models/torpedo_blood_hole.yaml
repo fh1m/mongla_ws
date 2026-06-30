@@ -2,3 +2,5 @@ names:
   0: torpedo
   1: blood
   2: hole
+path: .
+train: train.txt

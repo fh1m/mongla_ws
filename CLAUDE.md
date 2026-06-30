@@ -430,6 +430,15 @@ Key vision ROS params (all on `/duburi_manager`): `vision.kp_lat`/`kp_yaw` (60.0
 
 **Detection FPS (Jetson Orin Nano):** the detector prefers a TensorRT `<stem>.engine` over the `<stem>.pt` automatically (`yolo._resolve_model_path`); raw PyTorch @640 is ~3-4 Hz (inference-bound), TensorRT FP16 is ~20-30 Hz (nano/small) / ~10-15 Hz (medium). Build engines **on the Jetson** (device + JetPack-version locked): `ros2 run duburi_vision export_engine --all` — confirm the `[YOLO ] backend=TensorRT engine` log. Also run `sudo nvpmodel -m 0 && sudo jetson_clocks` (MAXN; ~2× alone — `bringup_check` warns if not set). On a dev box without an engine it falls back to `.pt` transparently. The debug overlay is skipped when no viewer is subscribed (`viewer:=false`). **Control/FPS coupling:** the 20 Hz vision loop **freshness-decays** the translational command (lat/fwd, not yaw/depth) by `sample.age_s` — full authority on a fresh frame, decaying to neutral when blind — so low/variable FPS can't make it blind-drive on a stale bbox. Raising FPS (TensorRT) is the primary fix; this is the per-frame guard.
 
+> **Jetson Python deps (JetPack 6.2) — pin or the vision launch dies.** This stack
+> needs **`numpy<2`** (`1.26.4`): ROS Humble `cv_bridge` + system `cv2` are NumPy-1.x
+> ABI (numpy 2 → `_ARRAY_API not found`, every node crashes). Do **not** install pip
+> `opencv-python*` — they shadow the GUI-capable system OpenCV (headless → `cv2.namedWindow`
+> "rebuild with GTK" kills `vision_display`). For OC-SORT, install **`trackers==2.4.0
+> --no-deps`** — the `2.5.0` PyPI wheel is a broken 9.7 kB dud with no module (its
+> `numpy>=2` pin is a red herring; 2.4.0 runs fine on numpy 1.26.4). Full symptoms +
+> one-shot recovery: [`known-issues.md`](.claude/context/known-issues.md) §E1–E3.
+
 **Logging (per-logger levels, not a quiet flag):** the launch files pin each node's *own* logger to `info` while leaving the **process default at `warn`** — so framework/`rcl`/`rmw` "gibberish" is silenced but every Mongla log shows. The manager keeps all its telemetry (`[STATE]`/`[ARDUB]`/`[RC ]`/`[ACT]`) at info always (no `mission_quiet` — plain `ros2 run duburi_manager start` shows it too). The **always-on operator alignment line** is owned by the **detector node** (`detector_node._log_alignment`): `[ align lat=<px> depth=<px>px ] (cx,cy) align ['class'] center -> (0,0)` — emitted continuously (throttled ~0.5 s) for the **currently-loaded class** whenever it's detected, **regardless of whether a vision verb is running**. `lat`=bbox-centre x offset from frame centre, `depth`=y offset. The per-verb `align_loop`/`move_loop` copies are at debug (detector owns the live line); `move` still prints its control-specific `[ move fill=…% lat=…px ]` feedback at info. Full framework/debug output: `--log-level debug` on the relevant node.
 
 ```bash
