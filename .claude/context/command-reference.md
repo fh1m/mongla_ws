@@ -663,6 +663,11 @@ these apply.
 | `range_gain_floor` | `vision.range_gain_floor` | `1.0` | **precision:** lat/depth kp multiplier as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
 | `ki_lat` | `vision.ki_lat` | `0.0` | **precision:** lateral integral gain; nulls a steady-current offset during the hold (`0`=off) |
 | `ctrl_conf` | `vision.ctrl_conf` | `0.0` | **precision:** control-side min detection score to accept a box (`0`=off) |
+| `coast_s` | `vision.coast_s` | `0.0` | **gap-bridging coast (OPT-IN):** steer on the tracker's coasted (Kalman-predicted) box of the LOCKED id for up to this many seconds after a real detection drops, at decaying authority — a brief occlusion keeps a torpedo/gate lock instead of stopping. `0`=OFF (byte-identical). A live detection always overrides; conf-exempt only for the locked id. MUST be `< vision.lost_grace_s` and `< tracker max_predict`/buffer in wall-time. See [`known-issues.md`](known-issues.md) D10. |
+
+> **Three conf gates, don't conflate them:** the detector node's **`conf`** (what YOLO emits — lower it so the tracker's two-stage association keeps weak reals); the tracker node's **`track_activation_threshold`** / **`high_conf_det_threshold`** (spawn a new id vs stage-1/stage-2 association); and the control **`vision.ctrl_conf`** (what the loop steers on — and the gate a coasted box of the locked id is exempt from).
+>
+> **Tracker engine:** `tracker_node` runs the Roboflow `trackers` lib — `tracker_type:=ocsort` (default, re-associates the same id after a dropout) | `bytetrack` | `legacy_bytetrack` (supervision fallback). `/tracks` carries stable ids + coasted boxes (`score=0.0`); it stays display-only unless `vision.coast_s>0`.
 
 Defaults live in
 [`vision_tunables.py`](../../src/duburi_manager/duburi_manager/vision_tunables.py)

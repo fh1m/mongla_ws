@@ -80,6 +80,8 @@ def generate_launch_description():
                               description='Start both detectors paused (resume_detector per task)'),
         DeclareLaunchArgument('viewer',       default_value='true'),
         DeclareLaunchArgument('tracking',     default_value='true'),
+        DeclareLaunchArgument('tracker_type', default_value='ocsort',
+                              description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
         # Per-camera video sources. A non-empty path runs that camera off a
         # dataset clip instead of the live webcam (forward = gate clip, downward
         # = bin clip) -- lets a full dual-camera mission be exercised against real
@@ -142,7 +144,8 @@ def generate_launch_description():
         return Node(
             package='duburi_vision', executable='tracker_node',
             name=f'duburi_tracker_{profile}', output='screen', ros_arguments=_QUIET,
-            parameters=[{'camera': profile}],
+            parameters=[{'camera': profile,
+                         'tracker_type': LaunchConfiguration('tracker_type')}],
             condition=IfCondition(LaunchConfiguration('tracking')),
         )
 
