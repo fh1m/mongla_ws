@@ -39,7 +39,16 @@ SLALOM_FWD_FILL       = 60      # pipe bbox height % of frame at closest pass
 BIN_CENTRE_ERR_PX     = 30      # how tightly to centre over the bin before dropping
 
 # ── Torpedo ──────────────────────────────────────────────────────────────────────
-TORPEDO_BLOOD_FWD_FILL = 30     # blood bbox height % of frame at end of approach
+TORPEDO_BLOOD_FWD_FILL = 30     # blood bbox height % at end of COARSE approach (gets in range)
+# Firing STANDOFF: the terminal align('hole', fwd=…) drives forward to this hole-height
+# fill and HOLDS it while firing. RoboSub awards bonus points for firing FURTHER from the
+# board (far 0.3m / farther 0.46m) AND a large+stable bbox at standoff is far easier to
+# hold steady than point-blank -- so tune this so the hull parks ~0.3-0.46m off the board
+# (smaller fill = further back). Read the live `[ align … fwd>=…% ]` line to calibrate.
+TORPEDO_STANDOFF_FILL  = 35     # hole bbox height % of frame at the firing standoff
+TORPEDO_STANDOFF_HOLD_S = 4.0   # seconds to station-keep (forward+lat+depth) while firing
+TORPEDO_FIRE_T         = 1.0    # seconds into the hold to fire (must be < STANDOFF_HOLD_S;
+                                # leaves ~3 s for a CH340-reconnect-delayed shot to still land)
 
 # ── Search behaviour (mission-authored fallback functions) ──────────────────────
 SEARCH_FORWARD_GAIN   = 40      # % gain for forward creep between detections

@@ -48,6 +48,24 @@ from launch_ros.actions           import Node
 # line, so its own logger is pinned back to info (see _DET_QUIET below).
 _QUIET = ['--log-level', 'warn']
 
+# Non-ROS stderr/stdout noise that BYPASSES the --log-level filter above (it is
+# not rcl logging, so the level pin can't touch it). Squelch at the source via
+# env so the console shows only Mongla [DET]/[YOLO]/[VIS]/[DISP] lines:
+#   PYTHONWARNINGS=ignore -> kills numpy's aarch64 "smallest subnormal is zero"
+#       UserWarning (4×/node) and the supervision/trackers target=None
+#       FutureWarning.
+#   EGL_LOG_LEVEL=fatal   -> kills libEGL "DRI3: failed to query the version"
+#       (emitted by the GL stack under `ssh -X` forwarding).
+# TensorRT's one-shot [TRT] startup lines come from its own C++ logger inside
+# ultralytics and intentionally stay -- they print once and the cross-device
+# "engine plan across different models" line is a real heads-up worth seeing.
+# To get the raw warnings back for debugging, run the node via `ros2 run`
+# (which doesn't inherit this env) or `PYTHONWARNINGS=default`.
+_QUIET_ENV = {
+    'PYTHONWARNINGS': 'ignore',
+    'EGL_LOG_LEVEL':  'fatal',
+}
+
 
 def generate_launch_description():
     args = [
@@ -138,7 +156,7 @@ def generate_launch_description():
 
     camera_node = Node(
         package='duburi_vision', executable='camera_node', name=cam_node,
-        output='screen', ros_arguments=_QUIET,
+        output='screen', ros_arguments=_QUIET, additional_env=_QUIET_ENV,
         parameters=[{
             'profile':         profile_expr,
             'source':          source_expr,
@@ -156,7 +174,7 @@ def generate_launch_description():
 
     detector_node = Node(
         package='duburi_vision', executable='detector_node', name=det_node,
-        output='screen', ros_arguments=_DET_QUIET,
+        output='screen', ros_arguments=_DET_QUIET, additional_env=_QUIET_ENV,
         parameters=[{
             'camera':              cam,
             'model_path':          LaunchConfiguration('model'),
@@ -177,7 +195,7 @@ def generate_launch_description():
 
     tracker_node = Node(
         package='duburi_vision', executable='tracker_node', name=trk_node,
-        output='screen', ros_arguments=_QUIET,
+        output='screen', ros_arguments=_QUIET, additional_env=_QUIET_ENV,
         parameters=[{
             'camera':             cam,
             'tracker_type':       LaunchConfiguration('tracker_type'),
@@ -191,6 +209,7 @@ def generate_launch_description():
     depth_node = Node(
         package='duburi_vision', executable='depth_estimation_node',
         name=['duburi_depth_', cam], output='screen', ros_arguments=_QUIET,
+        additional_env=_QUIET_ENV,
         parameters=[{
             'camera':            cam,
             'model_path':        LaunchConfiguration('depth_model'),
@@ -219,7 +238,7 @@ def generate_launch_description():
 
     image_viewer = Node(
         package='duburi_vision', executable='vision_display',
-        name='duburi_image_view', output='screen',
+        name='duburi_image_view', output='screen', additional_env=_QUIET_ENV,
         parameters=[{
             'camera':          cam,
             'video_file_mode': video_file_mode,

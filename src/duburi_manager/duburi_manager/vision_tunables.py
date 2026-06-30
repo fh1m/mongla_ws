@@ -75,7 +75,13 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # occlusion doesn't lose a torpedo-hole lock or drift the hull off a pipe.
     # MUST be < lost_grace_s and < the tracker buffer in wall-time. Opt-in,
     # pool-validated before enabling -- see precision-alignment.md / known-issues.
-    'vision.coast_s':              0.0,
+    'vision.coast_s':              0.8,
+    # NOTE: settle_px is deliberately NOT a deck param. It is a PER-CALL kwarg on
+    # vision.align (settle=) because, unlike the knobs above, it also gates the
+    # mid-hold fire (both ride the stable-frame counter) -- a global value would
+    # let a deck operator silently suppress the torpedo shot. Set it per-align in
+    # mission code on the COARSE aligns that must exit settled; never on the
+    # terminal fire-lock. See vision_dsl.align() / precision-alignment.md.
 }
 
 

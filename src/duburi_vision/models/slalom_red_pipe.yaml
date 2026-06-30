@@ -1,2 +1,4 @@
 names:
   0: red_pipe
+path: .
+train: train.txt

@@ -86,6 +86,32 @@ If you're on Jetson and get an `opencv-python` build failure, drop
 that line from the requirements (the system `python3-opencv` from
 step 0 is already installed and shadows it).
 
+### 1C. Jetson ONLY -- exact validated pins (do this, then never think about it)
+
+`requirements.txt` is lower-bound (desktop/CI patch flow). On the Jetson the
+vision stack is ABI-sensitive, so apply the on-device-verified pins too:
+
+```bash
+pip install --no-deps --force-reinstall -r requirements-jetson.txt
+```
+
+This pins **`numpy==1.26.4`** (ROS Humble `cv_bridge` + system `cv2` are NumPy-1.x
+ABI; numpy 2 → `_ARRAY_API not found` crashes every node) and **`trackers==2.4.0`**
+(the `2.5.0` PyPI wheel is a broken dud with no module; its `numpy>=2` pin is a red
+herring). `--no-deps` is required so it can't drag numpy 2 / `opencv-python` back in.
+
+**Never `pip install` OpenCV on the Jetson.** If a stray install pulled it in,
+the GUI HUD (`vision_display`) dies on `cv2.namedWindow`. Remove it and fall back
+to the system build:
+
+```bash
+pip uninstall -y opencv-python opencv-python-headless
+python3 -c "import cv2; print(cv2.__version__, cv2.__file__)"   # want /usr/... not ~/.local
+```
+
+Full symptom catalogue + one-shot recovery:
+[`.claude/context/known-issues.md`](../.claude/context/known-issues.md) §E1–E4.
+
 ---
 
 ## 2. udev for the BNO085 ESP32-C3 bridge
@@ -194,6 +220,70 @@ If any of those fail, walk through
 [`.claude/context/testing-guide.md`](../.claude/context/testing-guide.md)
 section 2 -- it covers every common bringup failure with the exact
 log line you'll see.
+
+---
+
+## 5b. Watching the vision HUD over VSCode Remote-SSH
+
+**First, the mental model that trips everyone up:** `ros2 launch duburi_vision
+vision.launch.py …` runs the nodes **on the Jetson** — your VSCode Remote-SSH
+terminal is just a shell *on the Jetson*. So `vision_display`'s OpenCV window is
+created **by a Jetson process, on a Jetson display.** Plugging an external monitor
+into your **dev laptop does nothing** unless the pixels are routed there. A
+headless SSH shell has no `$DISPLAY`, which is the
+`cv2.error: Can't initialize GTK backend` you hit. Three real ways to see it:
+
+### Option A — show it on the Jetson's own display (zero install, default)
+The Jetson runs a GNOME/Xorg session on display **`:1`**. The `~/.zshrc` guard
+(known-issues §E4) auto-sets `DISPLAY=:1` in a headless shell, so a **fresh**
+VSCode terminal just works and the HUD opens on the Jetson's screen — view it on a
+monitor plugged into the **Jetson**, or over your existing remote-desktop/VNC. All
+editing + launching still happen in VSCode (the latency win). If it still errors,
+the terminal predates the `.zshrc` edit — open a new one, or `export DISPLAY=:1`.
+
+### Option B — forward the window to your laptop with `ssh -X` (no extra pkg)
+To render the actual cv2 HUD **on your laptop monitor**, use X11 forwarding — but
+note **VSCode's integrated terminal does NOT forward X11.** Open a *separate*
+terminal on your laptop:
+
+```bash
+ssh -X duburi-jetson@<jetson-ip>
+cd ~/workspaces/duburi_ws && source install/setup.bash
+ros2 launch duburi_vision vision.launch.py camera:=forward \
+    models:="slalom_red_pipe,gate_rescue_repair,torpedo_blood_hole" \
+    classes:=red_pipe,gate,rescue,repair,torpedo,hole,blood conf:=0.60
+```
+
+Your laptop needs an X server: Linux = native; macOS = XQuartz; Windows = VcXsrv or
+WSLg. `ssh -X` sets `DISPLAY` to a tunnel automatically. Honest caveat: X11
+forwarding a full-rate video window over the network is **laggy** — fine for a
+glance, poor for tuning. Keep editing in VSCode; use this throwaway terminal only
+to watch. (`ssh -Y` if `-X` is blocked by the security extension.)
+
+### Option C — browser stream (best for the laptop; lowest lag) ★
+Run the pipeline **headless** (`viewer:=false`, no cv2 window) and serve the
+annotated `image_debug` topic over HTTP; VSCode **auto-forwards the port**, so you
+open it in your laptop browser — works on any laptop monitor, no X server:
+
+```bash
+sudo apt install ros-humble-web-video-server          # one-time
+# terminal 1 — pipeline, no GUI window:
+ros2 launch duburi_vision vision.launch.py camera:=forward viewer:=false \
+    models:="slalom_red_pipe,gate_rescue_repair,torpedo_blood_hole" \
+    classes:=red_pipe,gate,rescue,repair,torpedo,hole,blood conf:=0.60
+# terminal 2 — web server:
+ros2 run web_video_server web_video_server             # serves on :8080
+```
+
+Then open in your laptop browser (VSCode forwards `8080` automatically; check the
+**Ports** tab):
+
+```
+http://localhost:8080/stream?topic=/duburi/vision/forward/image_debug
+```
+
+`rqt_image_view` (`sudo apt install ros-humble-rqt-image-view`) is the same idea but
+still needs X (Option A/B). For headless laptop viewing, Option C wins.
 
 ---
 

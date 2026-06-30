@@ -85,6 +85,34 @@ KP_ANCHOR_DEPTH_DEFAULT = 0.05
 # for the DOWNWARD camera, where the optical axis is vertical = yaw.) Pool-tunable.
 ANCHOR_THETA_DEADBAND_RAD = 0.02   # ~1.1 deg; |theta| below this -> yaw neutral
 
+# align_loop's optional SETTLE gate (opt-in; off by default). Why align can end
+# off-target while move's `maintain` centering looks near-perfect: move never
+# exits on lateral (it exits on forward fill), so lateral is corrected for the
+# whole approach and is genuinely SETTLED (~0 velocity) when it stops. align
+# exits the instant POSITION is in-band for align_stable_frames ticks -- a
+# *position* gate, not a *settle* gate -- so a hull strafing THROUGH centre at
+# speed can satisfy the band mid-pass, declare ALIGNED, exit, and coast out on
+# inertia (and the returned px was measured BEFORE the arrival brake, so it reads
+# clean while the hull ends dirty). The settle gate ports move's behaviour: when
+# settle_px>0, a tick only counts toward `stable` if the worst error is in-band
+# AND barely moving frame-to-frame (|Δworst| <= settle_px) -- i.e. the hull has
+# actually stopped on target, not just passed through. Keyed on ERROR VELOCITY
+# (Δworst), NOT command magnitude, so a steady current (which holds a non-zero
+# command at a perfect lock) does NOT block the gate -- only genuine motion does.
+# settle_px=0 (default) -> gate off, exit path byte-identical to before.
+SETTLE_PX_DEFAULT = 0.0   # 0 = settle gate off (legacy exit-on-position-in-band)
+
+# align_loop's optional forward range-hold axis (the unified torpedo standoff shot).
+# When fwd_fill>0 align ALSO drives forward toward that fill (same _fill law as
+# move_loop) so ONE verb does forward-standoff + lat/depth + hold + fire. The term
+# is ONE-SIDED: drive forward while too far, command exactly 0 at/past the standoff
+# (never reverse -- no reverse-kick, no ramming the board; water drag bleeds a small
+# overshoot). FWD_BAND is the fill deadband within which forward counts as "at
+# standoff" (in-band -> contributes to the stable/fire gate, so the shot only leaves
+# once we are AT the standoff). A fraction of frame, pool-tunable. fwd_fill=0
+# (default) -> no forward axis, align behaviour unchanged bit-for-bit.
+FWD_BAND = 0.03   # |fwd_fill - fill| within this -> at standoff, forward neutral
+
 # Yaw is THE essential axis for micro-aligning + holding against a small
 # target (the torpedo 'hole'). Pure-proportional yaw falls below the T200
 # spin-up threshold near centre, so a small residual error commands only a
@@ -409,6 +437,10 @@ def align_loop(*,
                ki_lat: float = 0.0,
                i_lat_max: float = VISION_I_LAT_MAX,
                coast_s: float = 0.0,
+               fwd_fill: float = 0.0,
+               fwd_mode: str = 'area',
+               kp_forward: float = KP_FORWARD_DEFAULT,
+               settle_px: float = SETTLE_PX_DEFAULT,
                on_locked=None,
                fire_t: float = 0.0,
                report_fn=None,
@@ -452,6 +484,19 @@ def align_loop(*,
         frame (close) to stop the close-in overshoot (1.0 = off).
       * ``ki_lat`` -- lateral integral gain; cancels the steady-current offset of
         the open-loop Ch6 axis, accumulated only during the hold (0 = off).
+      * ``settle_px`` -- settle gate (0 = off). When > 0, a tick only counts toward
+        the stable-frame exit if the worst error is in-band AND barely moving
+        (|Δworst| <= settle_px) -- so align exits SETTLED on target (like move's
+        continuously-held lateral) instead of mid-pass through the band. Keyed on
+        error velocity, so a steady current does not block it (that is ``ki_lat``'s
+        job). Use it when an align must END accurate (terminal locks).
+
+    Forward range-hold axis (``fwd_fill`` > 0; the unified standoff shot):
+      align ALSO drives forward toward ``fwd_fill`` (fraction of frame, measured by
+      ``fwd_mode``), ONE-SIDED -- drive while the bbox is smaller than the standoff,
+      neutral at/past it. Forward joins the in-band stable/fire gate, so a mid-hold
+      fire only leaves once lat/depth AND the standoff range are all satisfied. With
+      ``fwd_fill`` = 0 (default) there is no forward axis and behaviour is unchanged.
     """
     bad = axes - VALID_AXES
     if bad:
@@ -471,6 +516,8 @@ def align_loop(*,
     g_lat   = gain if gain_lat   is None else gain_lat
     g_yaw   = gain if gain_yaw   is None else gain_yaw
     g_depth = gain if gain_depth is None else gain_depth
+    g_fwd   = gain                       # forward range-hold capped by the global gain
+    use_fwd = float(fwd_fill) > 0.0      # optional forward standoff axis
 
     use_depth   = 'depth' in axes
     throttle_ch = 65535 if use_depth else 1500   # release Ch3 for ALT_HOLD depth PID
@@ -478,21 +525,24 @@ def align_loop(*,
 
     depth_setpoint = _read_depth(pixhawk)
 
-    def _drive(lat_pct: float, yaw_pct: float) -> None:
+    def _drive(lat_pct: float, yaw_pct: float, fwd_pct: float = 0.0) -> None:
         """Write the translation/yaw RC frame, honouring an active lock.
 
         When ``release_yaw`` is set the background heading lock owns Ch4,
         so touch only throttle/forward/lateral and leave yaw released --
         writing yaw=1500 here would race the lock's 20 Hz Ch4 stream
         (the same fight ``move_loop`` avoids via ``send_rc_translation``).
+
+        ``fwd_pct`` is the optional forward range-hold command (Ch5); it is 0
+        unless the forward standoff axis is active (``fwd_fill`` > 0).
         """
         if release_yaw:
             pixhawk.send_rc_translation(
-                throttle=throttle_ch, forward=1500,
+                throttle=throttle_ch, forward=Pixhawk.percent_to_pwm(fwd_pct),
                 lateral=Pixhawk.percent_to_pwm(lat_pct))
         else:
             pixhawk.send_rc_override(
-                forward=1500,
+                forward=Pixhawk.percent_to_pwm(fwd_pct),
                 lateral=Pixhawk.percent_to_pwm(lat_pct),
                 yaw=Pixhawk.percent_to_pwm(yaw_pct),
                 throttle=throttle_ch)
@@ -504,6 +554,8 @@ def align_loop(*,
     last_log    = 0.0
     last_depth  = 0.0
     last_err_px = float('inf')
+    last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
+    prev_worst: Optional[float] = None   # settle gate: worst error last tick (for |Δworst|)
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
@@ -524,8 +576,9 @@ def align_loop(*,
     # silent, so 'aligned (Npx)' is always read against the real deadband.
     eff_err = max(float(err_px), MIN_ALIGN_ERR_PX)
     floored = eff_err > float(err_px)
+    fwd_note = f" fwd>={fwd_fill * 100:.0f}%({fwd_mode})" if use_fwd else ""
     log.info(
-        f"[VIS  ] align class={target_class!r} axes={sorted(axes)} "
+        f"[VIS  ] align class={target_class!r} axes={sorted(axes)}{fwd_note} "
         f"err={eff_err:.0f}px"
         f"{' (floored from %.0f)' % err_px if floored else ''} "
         f"gain={gain:.0f}% dur={duration:.0f}s hold={hold_s:.0f}s")
@@ -537,13 +590,13 @@ def align_loop(*,
             now     = time.monotonic()
             elapsed = now - started
             if abort_fn and abort_fn():
-                return Outcome(ABORTED, "aborted", last_err_px, 0.0, elapsed,
+                return Outcome(ABORTED, "aborted", last_err_px, last_fill, elapsed,
                                end_x_px, end_y_px)
             if now >= deadline:
                 reason = ("not aligned (duration elapsed)" if saw_target else
                           f"target {target_class!r} NEVER detected -- check "
                           f"model/classes/camera view")
-                return Outcome(TIMEOUT, reason, last_err_px, 0.0, elapsed,
+                return Outcome(TIMEOUT, reason, last_err_px, last_fill, elapsed,
                                end_x_px, end_y_px)
 
             # Continuity lock: once acquired, prefer the box NEAREST the last
@@ -567,7 +620,7 @@ def align_loop(*,
                     reason = (f"target {target_class!r} lost" if saw_target else
                               f"target {target_class!r} NEVER detected -- check "
                               f"model/classes/camera view")
-                    return Outcome(LOST, reason, last_err_px, 0.0, elapsed,
+                    return Outcome(LOST, reason, last_err_px, last_fill, elapsed,
                                    end_x_px, end_y_px)
                 if (now - last_log) >= LOG_THROTTLE_S:
                     live = _live_classes(vision_state)
@@ -604,7 +657,7 @@ def align_loop(*,
             end_y_px = sample.ey * half_h
             if report_fn is not None:
                 report_fn(end_x_px, end_y_px)
-            yaw_pct = lat_pct = p_lat = 0.0
+            yaw_pct = lat_pct = p_lat = fwd_pct = 0.0
             in_band = []
             worst   = 0.0
 
@@ -656,6 +709,22 @@ def align_loop(*,
                 depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
                 in_band.append(epx <= eff_err)
 
+            if use_fwd:
+                # Forward range-hold (the unified standoff shot). ONE-SIDED: drive
+                # forward while the bbox is smaller than the standoff fill, command
+                # exactly 0 once at/past it (never reverse -> no reverse-kick, no
+                # ramming the board; water drag bleeds a small overshoot). The
+                # standoff band joins in_band so the mid-hold fire / exit only
+                # trips once the range is satisfied too. Same _fill law as move_loop.
+                last_fill = _fill(sample, fwd_mode)   # reported in Outcome.fill
+                fwd_err = float(fwd_fill) - last_fill
+                if fwd_err <= FWD_BAND:
+                    fwd_pct = 0.0
+                    in_band.append(True)
+                else:
+                    fwd_pct = _clamp(fwd_err * kp_forward, 0.0, g_fwd)
+                    in_band.append(False)
+
             last_err_px = worst
             # Freshness-decay: pace LATERAL authority to measurement freshness so
             # the loop doesn't blind-drive on a stale bbox between slow frames
@@ -664,7 +733,8 @@ def align_loop(*,
             # coast curve instead (gap decay), not freshness -- see _authority.
             fresh = _authority(sample, coast_s)
             lat_pct *= fresh
-            _drive(lat_pct, yaw_pct)
+            fwd_pct *= fresh   # forward shares the freshness/coast decay (never braked)
+            _drive(lat_pct, yaw_pct, fwd_pct)
             # Brake EMA tracks the PROPORTIONAL command only (a travel-momentum
             # proxy), NOT the full lat_pct: a hull holding STILL against a steady
             # current carries a nonzero integral (lat_i) but ~0 motion, so
@@ -675,7 +745,16 @@ def align_loop(*,
                 pixhawk.set_target_depth(depth_setpoint)
                 last_depth = now
 
-            stable = stable + 1 if all(in_band) else 0
+            # Settle gate (opt-in): require the hull to also be barely MOVING, not
+            # just in-band, before a tick counts toward the stable-frame exit -- so
+            # align ends settled on target (like move's held lateral) instead of
+            # mid-pass through the band. Keyed on |Δworst| (error velocity), so a
+            # steady current that holds a non-zero command at a perfect lock does
+            # NOT block it. settle_px=0 -> settled always True -> legacy behaviour.
+            settled = (settle_px <= 0.0 or prev_worst is None
+                       or abs(worst - prev_worst) <= settle_px)
+            prev_worst = worst
+            stable = stable + 1 if (all(in_band) and settled) else 0
             if stable >= align_stable_frames:
                 # First confirmed-centred tick opens the hold window. With
                 # hold_s>0 we keep the loop ALIVE and correcting for hold_s --
@@ -716,7 +795,7 @@ def align_loop(*,
                     reason = (f"held {hold_s:.1f}s ({worst:.0f}/{eff_err:.0f}px)"
                               if hold_s > 0.0
                               else f"aligned ({worst:.0f}/{eff_err:.0f}px)")
-                    return Outcome(ALIGNED, reason, worst, 0.0, elapsed,
+                    return Outcome(ALIGNED, reason, worst, last_fill, elapsed,
                                    end_x_px, end_y_px)
                 # else: inside the hold window -- fall through to the loop tail
                 # and keep correcting (the per-tick _drive above already ran).

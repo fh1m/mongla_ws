@@ -16,6 +16,7 @@ from duburi_control.motion_vision import (
     _coast_authority, _authority,
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S,
     VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
+    FWD_BAND,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA,
 )
 
@@ -1163,3 +1164,157 @@ def test_coasted_sample_steers_at_reduced_authority():
     assert live_kick > 0
     assert 0 < coast_kick < live_kick, (
         f"coasted command {coast_kick} must be a fraction of live {live_kick}")
+
+
+# --------------------------------------------------------------------------- #
+#  align_loop forward range-hold axis (the unified torpedo standoff shot)      #
+# --------------------------------------------------------------------------- #
+def _fwd_cmds(pix):
+    """Forward (Ch5) commands from send_rc_override that are not neutral."""
+    return [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+
+
+def test_align_no_forward_axis_when_fwd_fill_zero():
+    # fwd_fill=0 (default) -> align never commands forward (behaviour unchanged).
+    # Target far on the fill metric but centred laterally; forward must stay neutral.
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
+                         axes={'lat'}, duration=0.3)
+    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+        "fwd_fill=0 must never write a forward command"
+
+
+def test_align_forward_drives_when_far():
+    # bbox smaller than the standoff -> drive forward (>1500), one-sided.
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
+                         axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                         duration=0.3)
+    fwds = _fwd_cmds(pix)
+    assert fwds and max(fwds) > 1500, "far target must drive forward"
+
+
+def test_align_forward_one_sided_never_reverses_at_standoff():
+    # bbox AT/PAST the standoff -> forward commanded EXACTLY neutral, never a
+    # reverse PWM (<1500). Pins "no reverse-kick / no ramming the board".
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.9)),
+                         axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                         duration=0.3)
+    assert all(c.get('forward', 1500) <= 1500 for c in pix.rc), \
+        "forward must never reverse (one-sided)"
+    # lat centred AND fill past standoff -> both in-band -> ALIGNED.
+    assert out.code == ALIGNED
+
+
+def test_align_forward_neutral_inside_band():
+    # Within FWD_BAND of the standoff -> forward neutral (no twitch on fill noise).
+    fill = 0.5
+    out, pix, _ = _align(
+        _FakeVision(_sample(ex=0.0, h_frac=fill - FWD_BAND * 0.5)),
+        axes={'lat'}, fwd_fill=fill, fwd_mode='height', duration=0.3)
+    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+        "inside FWD_BAND the forward axis must be neutral"
+
+
+def test_align_forward_gates_fire_until_standoff():
+    # lat centred but bbox far from the standoff -> NOT in-band -> on_locked
+    # (the mid-hold fire) must NEVER trip until the standoff range is reached.
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
+                       axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                       hold_s=0.3, duration=0.5,
+                       on_locked=lambda: fired.append(1))
+    assert fired == [], "fire must be gated on reaching the standoff"
+    assert out.code == TIMEOUT   # never reached the standoff -> no ALIGNED
+
+
+def test_align_forward_fires_once_at_standoff():
+    # lat centred AND bbox at the standoff -> in-band -> the mid-hold fire trips
+    # exactly once while holding.
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.9)),
+                       axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                       hold_s=0.3, duration=1.0,
+                       on_locked=lambda: fired.append(1))
+    assert fired == [1], "standoff lock must fire exactly once mid-hold"
+    assert out.code == ALIGNED
+
+
+def test_align_forward_decays_with_authority():
+    # A STALE sample (age past the freshness-zero) decays the forward command to
+    # ~neutral even though the bbox is far -- forward shares lat's freshness gate,
+    # so a slow/blind frame can't blind-drive the standoff approach.
+    out, pix, _ = _align(
+        _FakeVision(_sample(ex=0.0, h_frac=0.1, age_s=VISION_FRESH_ZERO_S)),
+        axes={'lat'}, fwd_fill=0.5, fwd_mode='height', duration=0.3)
+    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+        "a stale sample must not drive forward (freshness-decayed to neutral)"
+
+
+# --------------------------------------------------------------------------- #
+#  align_loop settle gate (opt-in; ports move's "settled when it stops")       #
+# --------------------------------------------------------------------------- #
+# Samples that stay IN-BAND on lat (epx < eff_err=40) but jump frame-to-frame:
+# ex=0.09 -> epx≈28.8px, ex=0.0 -> 0px. Both in band, but |Δworst|≈28.8px > a
+# small settle_px -> the hull is "passing through" the band, not settled.
+_OSCILLATING = [_sample(ex=0.09), _sample(ex=0.0)] * 40
+
+
+def test_settle_off_exits_on_oscillating_in_band():
+    # settle_px=0 (default): position-in-band for align_stable_frames is enough,
+    # so an in-band-but-moving hull still declares ALIGNED (today's behaviour).
+    out, _, _ = _align(_FakeVision(list(_OSCILLATING)), axes={'lat'},
+                       settle_px=0.0, duration=0.6)
+    assert out.code == ALIGNED
+
+
+def test_settle_gate_blocks_exit_while_moving():
+    # settle_px>0: the same in-band-but-moving hull must NOT declare aligned --
+    # |Δworst|≈28.8px exceeds settle_px=10, so `stable` keeps resetting -> TIMEOUT
+    # rather than a premature mid-pass ALIGNED that would coast off target.
+    out, _, _ = _align(_FakeVision(list(_OSCILLATING)), axes={'lat'},
+                       settle_px=10.0, duration=0.6)
+    assert out.code == TIMEOUT
+
+
+def test_settle_gate_exits_when_settled():
+    # settle_px>0 with a genuinely settled hull (centred every tick, |Δworst|=0)
+    # -> declares ALIGNED. The gate adds a settle requirement, it doesn't block a
+    # hull that has actually stopped on target.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0)), axes={'lat'},
+                       settle_px=10.0, duration=0.6)
+    assert out.code == ALIGNED
+
+
+def test_settle_gate_droop_safe_steady_offset_still_in_band():
+    # A steady (non-moving) sample that is IN-BAND exits even with the gate on --
+    # confirming the gate keys on error VELOCITY (|Δworst|), not absolute error or
+    # command, so a steady-state hold (e.g. against a current, once ki_lat nulls
+    # it into the band) is never blocked.
+    out, _, _ = _align(_FakeVision(_sample(ex=0.05)), axes={'lat'},   # epx≈16px, in band, steady
+                       settle_px=5.0, err_px=40.0, duration=0.6)
+    assert out.code == ALIGNED
+
+
+def test_settle_gate_does_not_block_fire_when_settled():
+    # The mid-hold fire rides the SAME stable-frame counter the settle gate
+    # gates. With a genuinely settled lock (centred every tick, |Δworst|=0) the
+    # gate passes, so settle_px + hold + on_locked still fires -- the settle gate
+    # doesn't break a settled fire-from-lock.
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0)), axes={'lat'},
+                       settle_px=10.0, hold_s=0.3, duration=1.0,
+                       on_locked=lambda: fired.append(1))
+    assert out.code == ALIGNED
+    assert fired == [1]
+
+
+def test_settle_gate_below_jitter_can_suppress_fire():
+    # Guard the documented footgun: a settle_px BELOW the bbox jitter (the hull
+    # is in-band but the box wobbles |Δworst|≈28.8px each tick) keeps resetting
+    # `stable`, so the mid-hold fire never trips and the verb TIMEOUTs. This is
+    # exactly why `settle` must NOT be put on a terminal fire-lock.
+    fired = []
+    out, _, _ = _align(_FakeVision(list(_OSCILLATING)), axes={'lat'},
+                       settle_px=4.0, hold_s=0.3, duration=0.6,
+                       on_locked=lambda: fired.append(1))
+    assert out.code == TIMEOUT
+    assert fired == []
