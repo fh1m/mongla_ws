@@ -16,6 +16,7 @@ from duburi_control.motion_vision import (
     _coast_authority, _authority,
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S,
     VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
+    FWD_BAND,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA,
 )
 
@@ -1060,3 +1061,86 @@ def test_coasted_sample_steers_at_reduced_authority():
     assert live_kick > 0
     assert 0 < coast_kick < live_kick, (
         f"coasted command {coast_kick} must be a fraction of live {live_kick}")
+
+
+# --------------------------------------------------------------------------- #
+#  align_loop forward range-hold axis (the unified torpedo standoff shot)      #
+# --------------------------------------------------------------------------- #
+def _fwd_cmds(pix):
+    """Forward (Ch5) commands from send_rc_override that are not neutral."""
+    return [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+
+
+def test_align_no_forward_axis_when_fwd_fill_zero():
+    # fwd_fill=0 (default) -> align never commands forward (behaviour unchanged).
+    # Target far on the fill metric but centred laterally; forward must stay neutral.
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
+                         axes={'lat'}, duration=0.3)
+    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+        "fwd_fill=0 must never write a forward command"
+
+
+def test_align_forward_drives_when_far():
+    # bbox smaller than the standoff -> drive forward (>1500), one-sided.
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
+                         axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                         duration=0.3)
+    fwds = _fwd_cmds(pix)
+    assert fwds and max(fwds) > 1500, "far target must drive forward"
+
+
+def test_align_forward_one_sided_never_reverses_at_standoff():
+    # bbox AT/PAST the standoff -> forward commanded EXACTLY neutral, never a
+    # reverse PWM (<1500). Pins "no reverse-kick / no ramming the board".
+    out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.9)),
+                         axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                         duration=0.3)
+    assert all(c.get('forward', 1500) <= 1500 for c in pix.rc), \
+        "forward must never reverse (one-sided)"
+    # lat centred AND fill past standoff -> both in-band -> ALIGNED.
+    assert out.code == ALIGNED
+
+
+def test_align_forward_neutral_inside_band():
+    # Within FWD_BAND of the standoff -> forward neutral (no twitch on fill noise).
+    fill = 0.5
+    out, pix, _ = _align(
+        _FakeVision(_sample(ex=0.0, h_frac=fill - FWD_BAND * 0.5)),
+        axes={'lat'}, fwd_fill=fill, fwd_mode='height', duration=0.3)
+    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+        "inside FWD_BAND the forward axis must be neutral"
+
+
+def test_align_forward_gates_fire_until_standoff():
+    # lat centred but bbox far from the standoff -> NOT in-band -> on_locked
+    # (the mid-hold fire) must NEVER trip until the standoff range is reached.
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
+                       axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                       hold_s=0.3, duration=0.5,
+                       on_locked=lambda: fired.append(1))
+    assert fired == [], "fire must be gated on reaching the standoff"
+    assert out.code == TIMEOUT   # never reached the standoff -> no ALIGNED
+
+
+def test_align_forward_fires_once_at_standoff():
+    # lat centred AND bbox at the standoff -> in-band -> the mid-hold fire trips
+    # exactly once while holding.
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.9)),
+                       axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
+                       hold_s=0.3, duration=1.0,
+                       on_locked=lambda: fired.append(1))
+    assert fired == [1], "standoff lock must fire exactly once mid-hold"
+    assert out.code == ALIGNED
+
+
+def test_align_forward_decays_with_authority():
+    # A STALE sample (age past the freshness-zero) decays the forward command to
+    # ~neutral even though the bbox is far -- forward shares lat's freshness gate,
+    # so a slow/blind frame can't blind-drive the standoff approach.
+    out, pix, _ = _align(
+        _FakeVision(_sample(ex=0.0, h_frac=0.1, age_s=VISION_FRESH_ZERO_S)),
+        axes={'lat'}, fwd_fill=0.5, fwd_mode='height', duration=0.3)
+    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+        "a stale sample must not drive forward (freshness-decayed to neutral)"

@@ -75,17 +75,32 @@ dial in water). Keep them separate: the mission says *what to do*, the params sa
 *how hard*.
 
 ```python
-# Terminal hole lock: lat+depth only (yaw delegated to heading_lock, see §4),
-# continuity lock ON so a 2nd hole can't steal the aim, fire MID-HOLD.
+# UNIFIED STANDOFF SHOT: forward-standoff + lat/depth + hold + mid-hold fire in
+# ONE verb. fwd= adds the forward range-hold axis: align drives the hull to the
+# standoff fill and HOLDS it while centering lat/depth -- no separate move()/align
+# seam where the hull drifts. lat+depth only (yaw -> heading_lock, see §4),
+# continuity lock so a 2nd hole can't steal the aim, fire MID-HOLD.
 duburi.set_classes('hole', node='/duburi_detector_forward')
 res = duburi.vision.align(
     'hole', camera='forward',
-    lat=0, depth=0,              # NO yaw -> heading_lock holds Ch4
+    lat=0, depth=0,                       # NO yaw -> heading_lock holds Ch4
+    fwd=35, fwd_mode='height',            # drive to + HOLD the firing standoff
     err=15, gain=12, duration=25,
-    lock_on=True,               # continuity lock (misclass fix)
-    hold=4, fire=1, fire_t=1,   # station-keep + mid-hold torpedo
-    brake=False)                # never brake on a fire-from-lock
+    lock_on=True,                         # continuity lock (misclass fix)
+    hold=4, fire=1, fire_t=1.5,           # station-keep + mid-hold torpedo
+    brake=False)                          # never brake on a fire-from-lock
 ```
+
+The forward term is **one-sided** (drives forward while the bbox is smaller than
+the standoff, neutral at/past it — **never reverses**, so no reverse-kick and no
+ramming the board), and the **mid-hold fire is gated on reaching the standoff too**
+(the shot won't leave while still far). **Fire from a standoff, not point-blank:**
+RoboSub awards bonus points for firing further from the board (far 0.3 m / farther
+0.46 m), and a large+stable bbox at standoff holds far steadier than point-blank —
+tune `fwd` smaller to park further back. This is what fixed the "drives forward
+then drifts back, can't close on the hole" pool failure: the old terminal
+`align('hole')` had **no forward axis**, so the noisy fill-based `move()` was the
+only thing closing distance and it reverse-kicked out on the first fill-touch.
 
 Tuning is live from the deck and applies on the **next** goal — no mission edit,
 no restart:
@@ -112,12 +127,19 @@ Compose the verbs into three phases — this is how the fixes work together:
 ```
 COARSE   align('torpedo', yaw=0, lat=0, depth=0)        # all axes: square up + null heading
    |     lock_heading()                                 # hand heading to the background lock
-APPROACH move('blood', fwd=.., mode='height')           # drive in; heading held by the lock
+APPROACH move('blood', fwd=.., mode='height', brake=False)  # COAST into range (no reverse-kick exit)
    |
 TERMINAL align('hole', lat=0, depth=0, lock_on=True,    # lat+depth only -> Ch4 owned by lock
-                hold=4, fire=1, fire_t=1, brake=False)  # steady, no yaw wobble, fire mid-hold
+                fwd=35, fwd_mode='height',              # forward-standoff in the SAME verb
+                hold=4, fire=1, fire_t=1.5, brake=False)  # steady, no yaw wobble, fire mid-hold
    |     unlock_heading()
 ```
+
+The APPROACH `move('blood')` is now a **coarse** "get into hole-detection range"
+step (`brake=False` so it coasts in without the reverse-kick exit); the TERMINAL
+`align('hole', fwd=..)` then **closes the last bit to the standoff and holds it in
+one verb** — there is no longer a verb seam where the hull drifts forward/back
+between "stopped approaching" and "started the hole lock."
 
 **Why omit `yaw` at the hole.** An `align` call that does **not** include the
 `yaw` axis **never writes Ch4** — the verb takes the `release_yaw` path and
