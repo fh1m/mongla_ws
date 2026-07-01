@@ -1179,6 +1179,7 @@ def anchor_align_loop(*,
     last_depth  = 0.0
     last_err_px = float('inf')
     lat_ema     = 0.0
+    last_frame_at = float('-inf')   # arrival time of the last COUNTED pose (distinct-frame gate)
 
     log.debug(
         f"[ANCH ] anchor_align err={err_px:.0f}px theta_thr={theta_thresh:.3f}rad "
@@ -1251,21 +1252,33 @@ def anchor_align_loop(*,
                 last_depth = now
 
             in_band = (trans_err <= err_px) and (abs(sample.theta_rad) <= theta_thresh)
-            stable  = stable + 1 if in_band else 0
+            # Distinct-frame gate: advance the lock counter on new POSES, not loop
+            # ticks (mirror align_loop) -- a re-read of one frozen pose counts once,
+            # so a stuck homography can't declare a lock (or fire) at low match FPS.
+            sampled_at   = now - sample.age_s
+            is_new_frame = sampled_at > last_frame_at + _FRAME_EPS_S
+            if is_new_frame:
+                last_frame_at = sampled_at
+                stable = stable + 1 if in_band else 0
             if stable >= anchor_stable_frames:
                 if aligned_at is None:
                     aligned_at = now
-                    if not fired and on_locked is not None:
-                        # Fire ONCE at first confirmed lock, mid-hold, while the
-                        # loop keeps gluing the hull to the reference.
-                        fired = True
-                        try:
-                            on_locked()
-                        except Exception as exc:   # noqa: BLE001
-                            log.error(f"[ANCH ] on_locked (fire) raised {exc!r}")
                     if hold_s > 0.0:
                         log.info(f"[ANCH ] LOCKED -- gluing {hold_s:.1f}s "
                                  f"({trans_err:.0f}px, {sample.theta_rad:+.3f}rad)")
+                # Fire ONLY on a FRESH pose, and re-check every tick (not just the
+                # first lock tick) so a lock whose opening frame was slightly stale
+                # still fires on the next fresh one -- mirrors align_loop. Homography
+                # has no coasted concept, but _present accepts a pose up to
+                # _STALE_LIMIT_S (1.0s) old, so a frozen anchor node must not launch
+                # a torpedo on a stale lock.
+                fire_fresh = sample.age_s <= VISION_FRESH_FULL_S
+                if not fired and on_locked is not None and fire_fresh:
+                    fired = True
+                    try:
+                        on_locked()
+                    except Exception as exc:   # noqa: BLE001
+                        log.error(f"[ANCH ] on_locked (fire) raised {exc!r}")
                 if hold_s <= 0.0 or (now - aligned_at) >= hold_s:
                     if brake:
                         _brake_axis(writers.lateral, lat_ema, brake_gain,

@@ -413,6 +413,28 @@ def test_anchor_freshness_decays_lat_when_stale():
     assert not lat                            # fully decayed -> neutral lateral
 
 
+def test_anchor_fire_withheld_on_stale_pose():
+    # V-FIRE (anchor): a frozen anchor node serving a stale-but-"present" pose
+    # (0.10s < age <= 1.0s, still LOCKED) is in-band but must NOT fire a torpedo
+    # -- the lock must be a FRESH pose, mirroring the YOLO align fire guard.
+    calls = []
+    stale = 5 * VISION_FRESH_FULL_S            # past fresh window, still present
+    _anchor(_FakeAnchorState(_anchor_sample(tx=0.0, ty=0.0, theta=0.0, age_s=stale)),
+            hold_s=0.3, duration=1.0, on_locked=lambda: calls.append(1))
+    assert calls == [], 'anchor must not fire on a stale pose'
+
+
+def test_anchor_fire_leaves_on_fresh_pose():
+    # Control case: a fresh, centred, LOCKED pose DOES fire (the guard only
+    # blocks stale poses, never a genuine current lock).
+    calls = []
+    out, _, _ = _anchor(
+        _FakeAnchorState(_anchor_sample(tx=0.0, ty=0.0, theta=0.0, age_s=0.0)),
+        hold_s=0.3, duration=1.0, on_locked=lambda: calls.append(1))
+    assert out.code == ALIGNED
+    assert sum(calls) == 1, 'a fresh anchor lock must fire once'
+
+
 def test_align_fires_on_locked_once_mid_hold():
     # on_locked fires EXACTLY once, mid-hold, while the loop keeps correcting.
     calls = []
