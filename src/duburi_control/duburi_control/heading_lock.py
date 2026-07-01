@@ -99,40 +99,53 @@ LOCK_DEADBAND_DEG   = 1.0
 # LOCK_KI follow-up if that droop is too large (pool-tunable).
 LOCK_APPROACH_BAND_DEG = 6.0
 
+# "Fire-window quiet mode" deadband. During a terminal vision fire-lock (a lat/depth
+# align that hands Ch4 to this lock and holds while a torpedo fires) the operator
+# wants a STEADY launcher heading, not a lock chasing every 1-2deg of BNO / thrust-
+# coupling noise -- that micro-correction is the residual left-right wobble. A wider
+# deadband makes the lock HOLD and only correct real drift, killing the limit-cycle
+# for the fire window. Engaged per-call via HeadingLock.set_hold_mode(True); the
+# default deadband (LOCK_DEADBAND_DEG) is untouched otherwise. At a ~0.4 m standoff a
+# few deg of hull yaw is a small linear error and the align's lat axis still centres
+# the shot. Pool-tunable. Must stay < LOCK_APPROACH_BAND_DEG.
+LOCK_HOLD_DEADBAND_DEG = 3.0
 
-def _lock_floor(abs_error_deg: float) -> float:
+
+def _lock_floor(abs_error_deg: float,
+                deadband_deg: float = LOCK_DEADBAND_DEG) -> float:
     """Stiction-breaking speed floor (%), tapered across the approach band.
 
     Full ``LOCK_SPEED_MIN_PCT`` at/above ``LOCK_APPROACH_BAND_DEG`` (brisk
     correction, break T200 stiction), then linearly to **0 at the deadband
     edge** so the command can decay and the hull eases back to heading instead
     of being driven across the deadband at a hard floor (the relay limit-cycle).
-    Pure / side-effect-free. Only meaningful for ``abs_error_deg >
-    LOCK_DEADBAND_DEG`` (inside the deadband the loop commands 0, never calls
-    this).
+    Pure / side-effect-free. ``deadband_deg`` is the active deadband (widened in
+    fire-window quiet mode). Only meaningful for ``abs_error_deg > deadband_deg``
+    (inside the deadband the loop commands 0, never calls this).
     """
     if abs_error_deg >= LOCK_APPROACH_BAND_DEG:
         return LOCK_SPEED_MIN_PCT
-    span = LOCK_APPROACH_BAND_DEG - LOCK_DEADBAND_DEG
+    span = LOCK_APPROACH_BAND_DEG - deadband_deg
     if span <= 0.0:
         return LOCK_SPEED_MIN_PCT
-    frac = (abs_error_deg - LOCK_DEADBAND_DEG) / span   # 1.0 at band edge -> 0 at deadband
+    frac = (abs_error_deg - deadband_deg) / span   # 1.0 at band edge -> 0 at deadband
     return LOCK_SPEED_MIN_PCT * max(0.0, frac)
 
 
-def _lock_command(error_deg: float) -> float:
+def _lock_command(error_deg: float,
+                  deadband_deg: float = LOCK_DEADBAND_DEG) -> float:
     """Signed Ch4 yaw-rate command (%) for a heading error -- pure, the law.
 
-    0 inside ``LOCK_DEADBAND_DEG`` (don't twitch on noise). Outside it,
-    proportional ``LOCK_KP_PCT_PER_DEG`` capped at ``LOCK_PCT_MAX``, with the
-    TAPERED stiction floor (``_lock_floor``) underneath so corrections actually
-    spin the T200s without the hard-floor relay that limit-cycles the hull under
-    a sustained lateral-thrust yaw moment. Sign follows the error.
+    0 inside ``deadband_deg`` (don't twitch on noise; widened in quiet mode).
+    Outside it, proportional ``LOCK_KP_PCT_PER_DEG`` capped at ``LOCK_PCT_MAX``,
+    with the TAPERED stiction floor (``_lock_floor``) underneath so corrections
+    actually spin the T200s without the hard-floor relay that limit-cycles the
+    hull under a sustained lateral-thrust yaw moment. Sign follows the error.
     """
-    if abs(error_deg) <= LOCK_DEADBAND_DEG:
+    if abs(error_deg) <= deadband_deg:
         return 0.0
     mag   = min(LOCK_PCT_MAX, abs(error_deg) * LOCK_KP_PCT_PER_DEG)
-    speed = max(_lock_floor(abs(error_deg)), mag)
+    speed = max(_lock_floor(abs(error_deg), deadband_deg), mag)
     return math.copysign(speed, error_deg)
 
 
@@ -170,6 +183,10 @@ class HeadingLock:
 
         self._stop_event  = threading.Event()
         self._suspended   = threading.Event()
+        # Active heading deadband (deg). Widened to LOCK_HOLD_DEADBAND_DEG for a
+        # terminal fire-lock via set_hold_mode(True) so the lock holds steady
+        # instead of chasing sub-degree noise; restored on set_hold_mode(False).
+        self._deadband_deg = LOCK_DEADBAND_DEG
         self._thread      = threading.Thread(
             target=self._run, daemon=True, name='HeadingLock')
 
@@ -215,6 +232,17 @@ class HeadingLock:
     def resume(self):
         """Resume streaming after a suspension."""
         self._suspended.clear()
+
+    def set_hold_mode(self, on: bool):
+        """Widen (on) / restore (off) the heading deadband for a fire-window hold.
+
+        In hold mode the lock uses LOCK_HOLD_DEADBAND_DEG so it holds a steady
+        launcher heading instead of micro-correcting sub-degree noise (the
+        terminal yaw wobble). Single float write -> no lock needed; the 50 Hz
+        stream picks it up next tick. Idempotent."""
+        self._deadband_deg = LOCK_HOLD_DEADBAND_DEG if on else LOCK_DEADBAND_DEG
+        self._log.info(f'[LOCK ] hold-mode {"ON" if on else "off"} '
+                       f'(deadband {self._deadband_deg:.1f}deg)')
 
     @property
     def target_deg(self):
@@ -266,7 +294,7 @@ class HeadingLock:
                 # Tapered-floor P law (see _lock_command/_lock_floor): the floor
                 # decays to 0 at the deadband edge so the hull eases in instead
                 # of relay-bouncing under a sustained yaw disturbance (the jitter).
-                yaw_pct = _lock_command(error)
+                yaw_pct = _lock_command(error, self._deadband_deg)
 
                 try:
                     # send_rc_yaw_only leaves Ch5/Ch6 at NO_OVERRIDE (65535)

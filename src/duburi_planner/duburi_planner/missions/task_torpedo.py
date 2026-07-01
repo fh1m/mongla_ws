@@ -103,6 +103,7 @@ def run(duburi, log=None):
             fwd=TORPEDO_STANDOFF_FILL, fwd_mode='height',       # drive to + hold standoff
             err=FINE_ERR_PX, gain=_FINE_GAIN, duration=25,
             lock_on=True, hold=TORPEDO_STANDOFF_HOLD_S,
+            hold_heading=True,                                  # steady launcher heading (no yaw jitter)
             fire=1, fire_t=TORPEDO_FIRE_T, brake=False,         # torpedo_1, mid-hold
             fallback=creep_forward)
         if (not locked) and log:
