@@ -122,13 +122,21 @@ correct. Two agent "CRITICALs" were false (disarm DOES release the heading lock;
 runner DOES stop+disarm on any exception). Fixes landed:
 | Sev | Fix |
 |-----|-----|
-| 🟠 | **Fire-freshness guard** — the mid-hold `on_locked` torpedo/dropper fire now requires a LIVE, FRESH sample (`not coasted and age_s ≤ VISION_FRESH_FULL_S`). Never fires on a tracker-coasted (predicted) box or a frozen detector's stale frame. |
+| 🟠 | **Fire-freshness guard** — the mid-hold `on_locked` torpedo/dropper fire requires a LIVE, FRESH sample. **[SUPERSEDED by D12 below — the age-gate `age_s ≤ VISION_FRESH_FULL_S` became `is_new_frame` because at 3-4 FPS the 0.10 s window was narrower than one frame period and blocked legit fires.]** Never fires on a tracker-coasted (predicted) box or a frozen detector's stale frame. |
 | 🟠 | **Distinct-detection stable gate** — `align_stable_frames` (and the settle gate) now count real detections, not 20 Hz loop ticks (`_FRAME_EPS_S`, keyed on `now - sample.age_s`). At low FPS one lucky frame can no longer declare ALIGNED or arm the fire. Backward-compatible (age_s≈0 = every tick a new frame). Duration budgets re-verified (smallest align 4 s ≫ ~1 s worst-case declare). |
 | 🟠 | **Abort-interruptible settle** — `motion_forward.py` arc + DVL-dist and `motion_lateral.py` DVL-dist settle sleeps → `_interruptible_sleep(dur, abort_fn)` (cancel/safety-verb no longer waits out the settle). |
 | 🟠 | **Mission runner hardening** — `mission.py` now calls `unlock_heading()` on BOTH failure paths (Ctrl-C `_abort_sequence` + the `except`), covering all 16 missions uniformly (no per-mission try/finally churn needed). |
 | 🟠 | **`select_device('auto')` crashed on the Jetson** — `gpu.py:52` split `req` (`'auto'`, no colon) instead of `_DEFAULT` (`'cuda:0'`) → `IndexError` on any CUDA host, so `device: auto` in `detector.yaml` was an instant detector crash on the competition hardware. One-line fix (parse the index from `_DEFAULT`); `test_gpu` now green. |
 | 🟡 | `task_gate` / `pool_day_practice` rescue-align gained `fallback=creep_forward`; redundant arc neutral removed; DVL open-loop-fallback now WARNs (silently-wrong distance visible). |
 | — | **Dropped (non-bugs after verification):** the coast class-filter "fix" (the `and class_id` conjunct is intentional — lets a class-less predicted box coast on the already-matched track_id); per-mission try/finally on 5 non-primary missions (runner backstop + disarm-releases-lock already cover them). |
+
+**Torpedo 10/10 (2026-07-01, D12) — pool feedback: fire 6/10 → target 9-10/10.** main `bbf883a`, lock `868ee99`. Full detail: [`known-issues.md`](known-issues.md) D12.
+| Sev | Fix |
+|-----|-----|
+| 🟠 | **Fire wouldn't leave despite a perfect lock** — D11's `age_s ≤ 0.10 s` fire gate is narrower than one frame period at 3-4 FPS, so an aligned hull kept missing the fire. Now gated on **`is_new_frame and not coasted`** (fire on the tick a new live box lands): FPS-robust AND strictly safer (a frozen detector produces no new frame → can't fire on a stale box even mid-hold-freeze). New `fire_pass=True` opt-in fires at command end if the strict lock never lands (partial-points shot). |
+| 🟠 | **Depth z-wobble** — the depth axis re-chased the ALT_HOLD setpoint every 20 Hz tick (0.4 m/s slew) and dithered inside the deadband. Now steps only at 5 Hz, **frozen inside the deadband**, capped by per-call **`depth_step`** (m; 0.02..0.10 — the sole depth-rate knob; `gain_depth` removed from `align_loop`). |
+| 🟠 | **Terminal yaw jitter** — the hole-lock drops the yaw axis (Ch4 → `heading_lock`, which limit-cycled vs the strafe yaw-moment). New **`hold_heading=True`** widens the lock deadband 1°→3° for the hold (`set_hold_mode`, try/finally). Vision yaw floor also tapered (`_vision_yaw_floor`). Pitch/roll = ArduSub `ATC_*`+trim, not our loop. |
+| 🟡 | Dead-knob cleanup: `gain_depth`/`depth_gain` removed from the `vision_align` path (align has no depth % cap; `depth_step` is the rate knob). Anchor path keeps `gain_depth`. `Move.action` field kept inert for wire compat. |
 
 **Suite after audit: control 212 · manager 46 · planner 137 · (vision unchanged).**
 
