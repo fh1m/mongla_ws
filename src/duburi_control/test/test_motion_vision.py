@@ -7,6 +7,7 @@ loss -> grace -> LOST path are pinned here with lightweight fakes. No ROS /
 MAVLink needed -- only the pure `Pixhawk.percent_to_pwm` static is used.
 """
 
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -1318,3 +1319,78 @@ def test_settle_gate_below_jitter_can_suppress_fire():
                        on_locked=lambda: fired.append(1))
     assert out.code == TIMEOUT
     assert fired == []
+
+
+# --------------------------------------------------------------------------- #
+#  V-FIRE: mid-hold fire only on a LIVE, FRESH detection (never a stale/coast) #
+# --------------------------------------------------------------------------- #
+def test_fire_withheld_on_coasted_sample():
+    # A tracker-coasted (Kalman-predicted) box must NEVER fire a torpedo -- coast
+    # holds the lock, it does not take the shot. Centred + coasted -> no fire.
+    fired = []
+    _align(_FakeVision(_sample(ex=0.0, coasted=True)), axes={'lat'},
+           hold_s=0.3, duration=1.0, on_locked=lambda: fired.append(1))
+    assert fired == [], 'must not fire on a coasted (predicted) box'
+
+
+def test_fire_withheld_on_stale_live_sample():
+    # A frozen detector serving a stale (but < _STALE_LIMIT_S) cached box keeps
+    # the stable counter at threshold -- but the fire must be gated on freshness,
+    # so a box older than VISION_FRESH_FULL_S does NOT fire.
+    fired = []
+    stale = 5 * VISION_FRESH_FULL_S   # well past the fresh window, still "present"
+    _align(_FakeVision(_sample(ex=0.0, age_s=stale)), axes={'lat'},
+           hold_s=0.3, duration=1.0, on_locked=lambda: fired.append(1))
+    assert fired == [], 'must not fire on a stale cached box'
+
+
+def test_fire_leaves_on_fresh_live_sample():
+    # The control case: a fresh, live, centred box DOES fire (the guard only
+    # blocks coasted/stale, never a genuine current sighting).
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=0.0, age_s=0.0)), axes={'lat'},
+                       hold_s=0.3, duration=1.0, on_locked=lambda: fired.append(1))
+    assert out.code == ALIGNED
+    assert fired == [1], 'a fresh live lock must fire'
+
+
+# --------------------------------------------------------------------------- #
+#  V-STABLE: the stable-frame gate counts distinct DETECTIONS, not loop ticks  #
+# --------------------------------------------------------------------------- #
+class _FrozenFrameVision(_FakeVision):
+    """Serves ONE detection with a CONSTANT arrival time (a frozen detector).
+
+    sampled_at = now - age_s is pegged to a fixed monotonic instant, so as the
+    loop's real clock advances the returned age_s grows in lockstep -- the same
+    single frame re-read over and over. This is exactly the low-FPS degeneracy
+    the distinct-frame gate must reject (sampled_at never advances -> never a 2nd
+    distinct frame). age_s is capped below _STALE_LIMIT_S so the box stays
+    "present" (the failure mode is a stuck frame, not a loss).
+    """
+    def __init__(self, ex=0.0, **kw):
+        super().__init__(_sample(ex=ex, age_s=0.0), **kw)
+        self._ex = ex
+        self._t0 = time.monotonic()
+
+    def bbox_error(self, _cls, **_kw):
+        age = min(time.monotonic() - self._t0, 0.9)   # < _STALE_LIMIT_S
+        return _sample(ex=self._ex, age_s=age)
+
+
+def test_stable_gate_ignores_reread_of_one_frozen_frame():
+    # A single frozen frame re-read many times must NOT declare ALIGNED --
+    # sampled_at never advances, so the distinct-frame gate never counts a 2nd
+    # frame. It ends TIMEOUT rather than firing on one lucky frame.
+    out, _, _ = _align(_FrozenFrameVision(ex=0.0),
+                       axes={'lat'}, align_stable_frames=3, duration=0.3)
+    assert out.code == TIMEOUT, f'one frozen frame must not ALIGN (got {out.code})'
+
+
+def test_frozen_frame_does_not_fire():
+    # The safety consequence: a frozen detector must not fire a torpedo on its
+    # one stuck frame (freshness guard AND the distinct-frame gate both block it).
+    fired = []
+    _align(_FrozenFrameVision(ex=0.0), axes={'lat'},
+           align_stable_frames=3, hold_s=0.3, duration=0.3,
+           on_locked=lambda: fired.append(1))
+    assert fired == [], 'a frozen detector must never fire'

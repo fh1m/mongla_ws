@@ -49,7 +49,12 @@ def select_device(requested: str = _DEFAULT, *, logger=None) -> str:
 
     if req == 'auto':
         if cuda_ok:
-            idx = int(req.split(':', 1)[1]) if ':' in _DEFAULT else 0
+            # Parse the device index from _DEFAULT (e.g. 'cuda:0' -> 0). NOTE: split
+            # _DEFAULT, not req -- req is 'auto' here (no colon), so splitting it
+            # crashed with IndexError on any CUDA host whenever _DEFAULT carried an
+            # index (which it always does: 'cuda:0'). That made `device: auto` an
+            # instant detector crash on the Jetson -- the exact competition host.
+            idx = int(_DEFAULT.split(':', 1)[1]) if ':' in _DEFAULT else 0
             _emit(f"[VIS  ] using {_DEFAULT} ({torch.cuda.get_device_name(idx)})  "
                   f"torch={torch.__version__}  cuda={torch.version.cuda}")
             return _DEFAULT

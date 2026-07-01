@@ -202,6 +202,19 @@ MIN_ALIGN_ERR_PX = 5.0
 VISION_FRESH_FULL_S = 0.10   # full authority while the sample is this fresh (~1 frame)
 VISION_FRESH_ZERO_S = 0.40   # linearly decayed to zero by this age (driving blind)
 
+# Distinct-detection gate for the align stable-frame counter. The counter must
+# advance on new DETECTIONS, not 20 Hz control-loop ticks: otherwise, at a low
+# detector FPS (e.g. 3-4 Hz on a raw .pt model) a single in-band frame re-read
+# ``align_stable_frames`` times inside one detection period declares ALIGNED --
+# and could fire a torpedo -- on effectively ONE frame. A detection's arrival
+# time is ``now - sample.age_s`` (constant across re-reads of the same frame);
+# a new frame advances it by more than this epsilon. Sized well under the
+# inter-frame gap at competition FPS (33 ms at 30 Hz) yet above the sub-tick
+# skew between the loop's ``now`` and bbox_error's internal clock. A detector at
+# or above loop rate (age_s ~ 0 every tick) makes every tick a new frame, so
+# behaviour is unchanged there (and the age_s=0 test doubles stay valid).
+_FRAME_EPS_S = 0.005   # min monotonic gap to count a sample as a new detection
+
 # A detection older than this (seconds) counts as "no target this tick".
 # bbox_error() returns None when the class is absent; this only catches a
 # detector that has died while the last box is still cached.
@@ -555,7 +568,8 @@ def align_loop(*,
     last_depth  = 0.0
     last_err_px = float('inf')
     last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
-    prev_worst: Optional[float] = None   # settle gate: worst error last tick (for |Δworst|)
+    prev_worst: Optional[float] = None   # settle gate: worst error last NEW frame (for |Δworst|)
+    last_frame_at = float('-inf')        # arrival time of the last COUNTED detection frame
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
@@ -751,10 +765,24 @@ def align_loop(*,
             # mid-pass through the band. Keyed on |Δworst| (error velocity), so a
             # steady current that holds a non-zero command at a perfect lock does
             # NOT block it. settle_px=0 -> settled always True -> legacy behaviour.
-            settled = (settle_px <= 0.0 or prev_worst is None
-                       or abs(worst - prev_worst) <= settle_px)
-            prev_worst = worst
-            stable = stable + 1 if (all(in_band) and settled) else 0
+            # Distinct-detection gate: advance the stable-frame counter on new
+            # DETECTIONS, not loop ticks (see _FRAME_EPS_S). sampled_at is the
+            # frame's arrival time -- constant across re-reads of one detection,
+            # so a re-read HOLDS the counter (neither advances nor resets) and
+            # only a genuinely new frame moves it. This makes align_stable_frames
+            # mean "N distinct in-band frames", FPS-independent, so a lucky single
+            # frame can't declare ALIGNED (or arm the fire) at low detector FPS.
+            sampled_at   = now - sample.age_s
+            is_new_frame = sampled_at > last_frame_at + _FRAME_EPS_S
+            if is_new_frame:
+                last_frame_at = sampled_at
+                # Settle gate compares against the previous NEW frame's error
+                # (re-reads are numerically identical and would trivially pass),
+                # so |Δworst| is a real cross-frame error velocity.
+                settled = (settle_px <= 0.0 or prev_worst is None
+                           or abs(worst - prev_worst) <= settle_px)
+                prev_worst = worst
+                stable = stable + 1 if (all(in_band) and settled) else 0
             if stable >= align_stable_frames:
                 # First confirmed-centred tick opens the hold window. With
                 # hold_s>0 we keep the loop ALIVE and correcting for hold_s --
@@ -772,7 +800,14 @@ def align_loop(*,
                 # tick). on_locked is non-blocking (spawns a thread) so a slow
                 # payload reconnect can't stall the 20 Hz station-keep. fire_t is
                 # clamped < hold_s upstream, so this trips while still holding.
-                if on_locked is not None and not fired and \
+                # FRESHNESS GUARD: only fire on a LIVE, FRESH detection -- never on
+                # a tracker-coasted (Kalman-predicted) box, and never on a stale
+                # cached box a frozen detector is still serving (the stable counter
+                # can otherwise stand at threshold on a ≤_STALE_LIMIT_S-old frame).
+                # A torpedo must leave on a real, current sighting of the hole.
+                fire_fresh = (not sample.coasted
+                              and sample.age_s <= VISION_FRESH_FULL_S)
+                if on_locked is not None and not fired and fire_fresh and \
                         (now - aligned_at) >= fire_t:
                     fired = True
                     try:

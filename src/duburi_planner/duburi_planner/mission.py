@@ -75,6 +75,10 @@ def _abort_sequence(duburi, log, mission_name: str) -> None:
               lambda: duburi._client._active_goal_handle.cancel_goal()
               if getattr(duburi._client, '_active_goal_handle', None) else None)
 
+    # Release the heading lock FIRST and as its own isolated step: disarm() also
+    # stops it, but doing it explicitly means a leaked lock is dropped even if
+    # disarm() later fails (and covers any mission run outside this runner).
+    _try_step('release heading lock', lambda: duburi.unlock_heading())
     _try_step('stop thrusters', lambda: duburi.stop())
     _try_step('disarm',         lambda: duburi.disarm())
 
@@ -134,11 +138,15 @@ def main(args=None):
         exit_code = 130
     except Exception as exc:
         log.error(f'mission "{parsed.name}" FAILED: {exc}')
-        # A mission that raised mid-flight leaves the sub ARMED. Best-effort
-        # stop+disarm here so an unhandled exception never ends with thrusters
-        # live (the manager's emergency stop is the backstop, not the primary).
-        _try_step('stop thrusters', lambda: duburi.stop())
-        _try_step('disarm',         lambda: duburi.disarm())
+        # A mission that raised mid-flight leaves the sub ARMED (and possibly with
+        # a heading lock streaming Ch4). Best-effort release+stop+disarm here so an
+        # unhandled exception never ends with thrusters live or the lock driving
+        # (the manager's emergency stop is the backstop, not the primary). This
+        # runner backstop covers EVERY mission uniformly, so individual missions
+        # need not each wrap their body in try/finally for safety.
+        _try_step('release heading lock', lambda: duburi.unlock_heading())
+        _try_step('stop thrusters',       lambda: duburi.stop())
+        _try_step('disarm',               lambda: duburi.disarm())
         exit_code = 1
     finally:
         duburi.log_scoreboard(json_path='auto')

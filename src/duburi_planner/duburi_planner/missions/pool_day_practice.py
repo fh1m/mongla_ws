@@ -107,7 +107,8 @@ def run(duburi, log=None):
         duburi.set_classes('rescue,repair', node=_FWD)
         duburi.vision.align(
             'rescue', camera='forward', lat=0,
-            err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=GATE_RESCUE_ALIGN_S)
+            err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=GATE_RESCUE_ALIGN_S,
+            fallback=creep_forward)
 
         duburi.set_depth(GATE_PASS_DEPTH_M, timeout=20)
         duburi.set_classes('gate', node=_FWD)

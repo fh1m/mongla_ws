@@ -577,7 +577,7 @@ required. Aligned when **every** active axis stays within `err_px` for
 | `kp_yaw` | float | `60.0` | `> 0` | P gain on Ch4 yaw (live: `vision.kp_yaw`) |
 | `kp_depth` | float (m/unit) | `0.05` | `> 0` | metres of depth nudge per unit normalized error per 5 Hz tick (live: `vision.kp_depth`) |
 | `lost_grace_s` | float (s) | `1.0` | `≥ 0` | seconds the server coasts on loss before reporting `LOST` (live: `vision.lost_grace_s`) |
-| `align_stable_frames` | float | `3.0` | `≥ 1` | consecutive in-band ticks (~20 Hz vision loop) before `ALIGNED` (~0.15 s) (live: `vision.align_stable_frames`) |
+| `align_stable_frames` | float | `3.0` | `≥ 1` | consecutive in-band **distinct detections** (not loop ticks) before `ALIGNED` — FPS-independent, so a single re-read frame can't declare aligned/arm the fire (~0.15 s @ 20-30 Hz, ~1 s @ 3-4 Hz) (live: `vision.align_stable_frames`) |
 
 | Aspect | Value |
 |---|---|
@@ -663,7 +663,7 @@ these apply.
 | `kp_forward` | `vision.kp_forward` | `200.0` | P gain on Ch5 forward (`vision_move`) |
 | `lost_grace_s` | `vision.lost_grace_s` | `1.0` | seconds the server coasts on target loss before reporting `LOST` |
 | `fwd_fill` | `vision.frame_fill_default` | `95.0` | `vision_move` fill target when the mission leaves `fwd_fill` at 0 |
-| `align_stable_frames` | `vision.align_stable_frames` | `3.0` | in-band ticks before `vision_align` reports `ALIGNED` (~0.15 s @ 20 Hz) |
+| `align_stable_frames` | `vision.align_stable_frames` | `3.0` | in-band **distinct detections** (not ticks) before `vision_align` reports `ALIGNED` (~0.15 s @ 20-30 Hz) |
 | `range_gain_floor` | `vision.range_gain_floor` | `1.0` | **precision:** lat/depth kp multiplier as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
 | `ki_lat` | `vision.ki_lat` | `0.0` | **precision:** lateral integral gain; nulls a steady-current offset during the hold (`0`=off) |
 | `ctrl_conf` | `vision.ctrl_conf` | `0.0` | **precision:** control-side min detection score to accept a box (`0`=off) |
