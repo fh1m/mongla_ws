@@ -4,8 +4,9 @@ Exactly two mission-facing verbs, both pixel-native and recover-don't-fail:
 
     duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
                         err=40, duration=20, gain=30,
-                        lat_gain=None, yaw_gain=None, depth_gain=None,
+                        lat_gain=None, yaw_gain=None, depth_step=None,
                         brake=True, brake_gain=None, hold=None,
+                        fire_pass=False, hold_heading=False,
                         fallback=None, camera=None)
 
     duburi.vision.move(target, *, fwd=95, mode='area', maintain=None,
@@ -159,7 +160,6 @@ class _VisionDSL:
               gain: float = 30.0,
               lat_gain: Optional[float] = None,
               yaw_gain: Optional[float] = None,
-              depth_gain: Optional[float] = None,
               brake: bool = True,
               brake_gain: Optional[float] = None,
               hold: Optional[float] = None,
@@ -182,8 +182,9 @@ class _VisionDSL:
         :class:`VisionResult`; never raises on a miss.
 
         ``gain`` is the global max-speed cap (% thrust). ``lat_gain`` /
-        ``yaw_gain`` / ``depth_gain`` override that cap on one axis;
-        leave them unset to inherit ``gain``. This is for slow, stable
+        ``yaw_gain`` override that cap on the lat/yaw axis; leave them
+        unset to inherit ``gain``. (Depth has no % cap -- its rate is set
+        by ``depth_step``, metres per update.) This is for slow, stable
         per-axis micro-alignment -- e.g. ``align('hole', yaw=0, lat=0,
         gain=25, yaw_gain=10)`` creeps yaw in while lateral stays brisk
         (a 20 kg hull needs the yaw inertia fought gently to hold a tight
@@ -302,7 +303,6 @@ class _VisionDSL:
                 err_px=float(err), duration=remaining, gain=float(gain),
                 gain_lat=float(lat_gain) if lat_gain is not None else 0.0,
                 gain_yaw=float(yaw_gain) if yaw_gain is not None else 0.0,
-                gain_depth=float(depth_gain) if depth_gain is not None else 0.0,
                 brake_off=(not brake),
                 brake_gain=float(brake_gain) if brake_gain is not None else 0.0,
                 hold_s=float(hold) if hold is not None else 0.0,
