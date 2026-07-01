@@ -174,10 +174,13 @@ rides in `final_value` as an integer code (`0`=ALIGNED, `1`=LOST,
 | `vision_align` | `vision.align()` | `camera`, `target_class`, `axes` (CSV of `lat,yaw,depth`), `offset_lat/yaw/depth`, `err_px`, `duration`, `gain` | Centre target on each active axis at its signed pixel offset (`0`=centre). Aligned when every axis is within `err_px` for `align_stable_frames` ticks. |
 | `vision_move`  | `vision.move()`  | `camera`, `target_class`, `fwd_fill`, `mode` (`area`/`width`/`height`), `maintain_px`, `maintain_on`, `hold_s`, `err_px`, `duration`, `gain` | Drive forward until the bbox fills `fwd_fill`% of the frame. `maintain_px` holds a lateral offset; never re-centres yaw/depth. |
 
-Beyond the core fields, `vision_align` also takes per-axis caps
-`gain_lat`/`gain_yaw`/`gain_depth`, the arrival-brake (`brake_off`/`brake_gain`),
-the active station-keep `hold_s`, **mid-hold fire** `fire_channels`/`fire_t`, the
-**precision** knobs `lock_target`/`ctrl_conf`/`range_gain_floor`/`ki_lat`, and the
+Beyond the core fields, `vision_align` also takes the lat/yaw caps
+`gain_lat`/`gain_yaw` (depth has no `%` cap — its rate is `depth_step`, m/update),
+the **forward range-hold** `fwd_fill`/`mode`/`kp_forward` (the standoff shot), the
+arrival-brake (`brake_off`/`brake_gain`), the active station-keep `hold_s`,
+**mid-hold fire** `fire_channels`/`fire_t` (+ `fire_pass_enabled` for a guaranteed
+end-of-command shot), the fire-window quiet mode `hold_heading`, the **precision**
+knobs `lock_target`/`ctrl_conf`/`range_gain_floor`/`ki_lat`/`settle_px`, and the
 tuning fields `kp_lat`/`kp_yaw`/`kp_depth`/`lost_grace_s`/`align_stable_frames`/
 `hold_through_loss`; `vision_move` also takes `gain_lat`, `brake_off`/`brake_gain`,
 `range_gain_floor`, `kp_forward`/`kp_lat`/`lost_grace_s`/`hold_through_loss`. The control loop reads
