@@ -23,6 +23,7 @@ from .motion_easing  import trapezoid_ramp
 from .motion_writers import (
     EASE_SECONDS, LOG_THROTTLE, REVERSE_KICK_PCT,
     thrust_loop, brake_kick_then_settle, final_settle,
+    _interruptible_sleep,
 )
 
 _DVL_POLL_HZ   = 20
@@ -92,8 +93,10 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                and hasattr(yaw_source, 'reset_position'))
 
     if not has_dvl:
-        log.info(f'[{label}] no DVL position source -- open-loop fallback '
-                 f'(rough ~{target_m:.1f}m estimate)')
+        # Open-loop TIME estimate at a HARDCODED 0.2 m/s -- valid only for the
+        # current thruster tune. WARN so a silently-wrong distance is visible.
+        log.warning(f'[{label}] no DVL position source -- OPEN-LOOP fallback at '
+                    f'~0.2 m/s (distance is a rough time estimate, not measured)')
         rough_s = max(1.0, target_m / 0.2)
         drive_lateral_constant(pixhawk, signed_dir, rough_s, gain, log,
                                writers, yaw_source=yaw_source, settle=settle,
@@ -127,4 +130,4 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
 
     writers.neutral()
     if settle > 0.0:
-        time.sleep(settle)
+        _interruptible_sleep(settle, abort_fn)

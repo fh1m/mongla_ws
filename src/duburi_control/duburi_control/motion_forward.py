@@ -35,6 +35,7 @@ from .motion_easing  import trapezoid_ramp
 from .motion_writers import (
     THRUST_RATE_HZ, LOG_THROTTLE, EASE_SECONDS, REVERSE_KICK_PCT,
     thrust_loop, brake_kick_then_settle, final_settle, read_heading,
+    _interruptible_sleep,
 )
 
 _DVL_POLL_HZ   = 20     # position polling rate for distance moves
@@ -143,10 +144,11 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
         f'[{label:<5}] done  start={locked_heading:.1f}  '
         f'end={last_heading:.1f}  swept={swept:+.1f}')
 
-    # Always neutral after arc -- Ch5 + Ch4 both released-then-held at 1500.
-    pixhawk.send_neutral()
+    # The `finally` above already left Ch5+Ch4 neutral; just settle. Interruptible
+    # so a cancel/safety-verb during the settle window returns promptly instead of
+    # waiting out the full sleep (the hull is already at neutral meanwhile).
     log.info(f'[{label:<5}] settle {settle:.1f}s + brake')
-    time.sleep(max(0.6, settle))
+    _interruptible_sleep(max(0.6, settle), abort_fn)
 
 
 # ---------------------------------------------------------------------- #
@@ -176,8 +178,11 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                and hasattr(yaw_source, 'reset_position'))
 
     if not has_dvl:
-        log.info(f'[{label}] no DVL position source -- open-loop fallback '
-                 f'(rough ~{target_m:.1f}m estimate)')
+        # Open-loop TIME estimate at a HARDCODED 0.3 m/s -- only valid for the
+        # current thruster tune. WARN (not info) so a silently-wrong distance
+        # after a retune / DVL dropout is visible on the console.
+        log.warning(f'[{label}] no DVL position source -- OPEN-LOOP fallback at '
+                    f'~0.3 m/s (distance is a rough time estimate, not measured)')
         rough_s = max(1.0, target_m / 0.3)
         drive_forward_constant(pixhawk, signed_dir, rough_s, gain, log,
                                writers, yaw_source=yaw_source, settle=settle,
@@ -211,4 +216,4 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
 
     writers.neutral()
     if settle > 0.0:
-        time.sleep(settle)
+        _interruptible_sleep(settle, abort_fn)

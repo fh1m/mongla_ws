@@ -213,10 +213,17 @@ duburi.vision.align('hole', yaw=0, lat=0, depth=0,
   torpedo, 3/4 = dropper.
 - **`fire_t`** — seconds **into the hold window** to fire. `0` = the instant the lock is
   confirmed. Must be `< hold` (else it's clamped to `0` with a loud warning).
-- **Gated on alignment, not pure time:** the shot leaves on the first **stably-aligned**
-  tick at/after `fire_t`. **If the hull never holds the lock during the hold, the shot
-  is NOT fired** — a torpedo never launches off-target. So budget enough `hold` to
-  actually settle *before* `fire_t`.
+- **Gated on alignment, distinct frames, AND freshness — three conditions, all on the
+  same tick:** the shot leaves on the first **stably-aligned** tick at/after `fire_t`,
+  where "stable" now means `align_stable_frames` **distinct in-band detections** (not
+  20 Hz loop ticks — a re-read frame counts once, so one lucky frame at low FPS can't
+  arm it), **and** the sample must be a **live, fresh** detection (`not coasted`,
+  `age_s ≤ VISION_FRESH_FULL_S` ≈ 0.10 s). So a torpedo **never** fires (a) off-target,
+  (b) on a single frozen frame, or (c) on a tracker-coasted (Kalman-predicted) box
+  during a `coast_s` gap. If the hull never holds a *fresh* lock during the hold, the
+  shot is **not** fired — budget enough `hold` to settle on live detections before
+  `fire_t`, and raise real detector FPS (`[YOLO] backend=TensorRT`) so fresh frames
+  are plentiful (the single biggest lever on fire reliability).
 - **Non-blocking:** the fire runs on a background thread so the 20 Hz correction loop
   never stalls (the payload board can sleep ~2 s on a USB reconnect). The hull keeps
   correcting through the shot.

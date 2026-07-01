@@ -36,10 +36,13 @@ def run(duburi, log=None):
         fallback=creep_forward)
 
     # ── Slide onto the rescue/repair marker (heading fixed) ───────────────────
+    #     fallback so a marker flicker re-searches (creep) instead of silently
+    #     LOSTing and sliding past -- the rescue/repair side is a scoring choice.
     duburi.set_classes('rescue,repair', node=_FWD)
     duburi.vision.align(
         'rescue', camera='forward', lat=0,
-        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=10)
+        err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=10,
+        fallback=creep_forward)
 
     # ── Descend to pass depth, re-filter for the gate outline, drive through ──
     duburi.set_depth(GATE_PASS_DEPTH_M, timeout=20)
