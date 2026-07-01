@@ -326,3 +326,32 @@ def test_tapered_law_dithers_less_than_hard_floor():
         f"hard-floor peak-to-peak {hard:.2f} must exceed tapered {soft:.2f} by a "
         "clear margin -- the relay limit-cycle the taper removes (if not, the toy "
         "plant no longer reproduces the bug)")
+
+
+# --------------------------------------------------------------------------- #
+#  Fire-window quiet mode: a widened deadband holds a steady launcher heading  #
+# --------------------------------------------------------------------------- #
+def test_hold_mode_deadband_widens_the_no_command_zone():
+    from duburi_control.heading_lock import LOCK_HOLD_DEADBAND_DEG
+    # A 2 deg error corrects in normal mode (default deadband 1 deg) but is INSIDE
+    # the widened quiet-mode deadband -> commands 0 (holds steady, no micro-correct).
+    err = 0.5 * (LOCK_DEADBAND_DEG + LOCK_HOLD_DEADBAND_DEG)   # between the two
+    assert abs(_lock_command(err)) > 0.0, 'normal mode must correct this error'
+    assert _lock_command(err, LOCK_HOLD_DEADBAND_DEG) == 0.0, \
+        'quiet-mode (wide deadband) must hold steady inside it'
+    # Well outside even the wide deadband, quiet mode still corrects.
+    big = LOCK_HOLD_DEADBAND_DEG + 2.0
+    assert abs(_lock_command(big, LOCK_HOLD_DEADBAND_DEG)) > 0.0, \
+        'quiet mode must still correct a real drift beyond the wide deadband'
+
+
+def test_set_hold_mode_toggles_active_deadband():
+    from duburi_control.heading_lock import (
+        HeadingLock, LOCK_HOLD_DEADBAND_DEG)
+    lock = HeadingLock(pixhawk=None, target_deg=0.0, yaw_source=None,
+                       log=logging.getLogger('t'))
+    assert lock._deadband_deg == LOCK_DEADBAND_DEG
+    lock.set_hold_mode(True)
+    assert lock._deadband_deg == LOCK_HOLD_DEADBAND_DEG
+    lock.set_hold_mode(False)
+    assert lock._deadband_deg == LOCK_DEADBAND_DEG

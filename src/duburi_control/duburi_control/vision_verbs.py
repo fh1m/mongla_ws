@@ -24,7 +24,7 @@ from .motion_vision import (
     align_loop, move_loop, anchor_align_loop,
     KP_LAT_DEFAULT, KP_YAW_DEFAULT, KP_DEPTH_DEFAULT, KP_FORWARD_DEFAULT,
     KP_ANCHOR_LAT_DEFAULT, KP_ANCHOR_YAW_DEFAULT, KP_ANCHOR_DEPTH_DEFAULT,
-    VISION_BRAKE_GAIN,
+    VISION_BRAKE_GAIN, _MAX_DEPTH_NUDGE,
 )
 
 
@@ -91,7 +91,8 @@ class VisionVerbs:
                      lock_target=False, ctrl_conf=0.0,
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
-                     settle_px=0.0):
+                     settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
+                     hold_heading=False):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -174,40 +175,53 @@ class VisionVerbs:
             # holds heading on BNO; with no lock, Ch4 falls to the heartbeat /
             # ArduSub -- either way the verb stays off the yaw channel.
             release_yaw = not touches_yaw
-            with self._suspend_heading_lock() if touches_yaw else nullcontext():
-                outcome = align_loop(
-                    pixhawk=self.pixhawk, vision_state=vstate,
-                    target_class=target_class, axes=axis_set, offsets=offsets,
-                    err_px=float(err_px), duration=float(duration),
-                    gain=float(gain),
-                    gain_lat=float(gain_lat) or float(gain),
-                    gain_yaw=float(gain_yaw) or float(gain),
-                    gain_depth=float(gain_depth) or float(gain),
-                    brake=not bool(brake_off),
-                    brake_gain=float(brake_gain) or VISION_BRAKE_GAIN,
-                    hold_s=float(hold_s),
-                    kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
-                    kp_yaw=float(kp_yaw) or KP_YAW_DEFAULT,
-                    kp_depth=float(kp_depth) or KP_DEPTH_DEFAULT,
-                    lost_grace_s=float(lost_grace_s) or 1.0,
-                    hold_through_loss=bool(hold_through_loss),
-                    align_stable_frames=stable,
-                    depth_sign=depth_sign,
-                    release_yaw=release_yaw,
-                    lock_on=bool(lock_target),
-                    ctrl_conf=float(ctrl_conf),
-                    range_gain_floor=float(range_gain_floor) or 1.0,
-                    ki_lat=float(ki_lat),
-                    coast_s=float(coast_s),
-                    fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)
-                    fwd_mode=str(mode) or 'area',
-                    kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
-                    settle_px=float(settle_px),
-                    on_locked=on_locked,
-                    fire_t=eff_fire_t,
-                    report_fn=self.report_vision,
-                    writers=self._writers(), log=self.log,
-                    abort_fn=self._abort_fn)
+            # Fire-window quiet mode: only meaningful when yaw is released (the
+            # background heading lock owns Ch4). Widen the lock deadband so it holds
+            # a steady launcher heading instead of chasing sub-deg noise while the
+            # torpedo fires; always restored in the finally. No-op if no lock active.
+            hold_lock = release_yaw and bool(hold_heading)
+            if hold_lock:
+                self._set_lock_hold(True)
+            try:
+                with self._suspend_heading_lock() if touches_yaw else nullcontext():
+                    outcome = align_loop(
+                        pixhawk=self.pixhawk, vision_state=vstate,
+                        target_class=target_class, axes=axis_set, offsets=offsets,
+                        err_px=float(err_px), duration=float(duration),
+                        gain=float(gain),
+                        gain_lat=float(gain_lat) or float(gain),
+                        gain_yaw=float(gain_yaw) or float(gain),
+                        gain_depth=float(gain_depth) or float(gain),
+                        brake=not bool(brake_off),
+                        brake_gain=float(brake_gain) or VISION_BRAKE_GAIN,
+                        hold_s=float(hold_s),
+                        kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
+                        kp_yaw=float(kp_yaw) or KP_YAW_DEFAULT,
+                        kp_depth=float(kp_depth) or KP_DEPTH_DEFAULT,
+                        lost_grace_s=float(lost_grace_s) or 1.0,
+                        hold_through_loss=bool(hold_through_loss),
+                        align_stable_frames=stable,
+                        depth_sign=depth_sign,
+                        release_yaw=release_yaw,
+                        lock_on=bool(lock_target),
+                        ctrl_conf=float(ctrl_conf),
+                        range_gain_floor=float(range_gain_floor) or 1.0,
+                        ki_lat=float(ki_lat),
+                        coast_s=float(coast_s),
+                        fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)
+                        fwd_mode=str(mode) or 'area',
+                        kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
+                        settle_px=float(settle_px),
+                        depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
+                        on_locked=on_locked,
+                        fire_t=eff_fire_t,
+                        fire_pass=bool(fire_pass_enabled),
+                        report_fn=self.report_vision,
+                        writers=self._writers(), log=self.log,
+                        abort_fn=self._abort_fn)
+            finally:
+                if hold_lock:
+                    self._set_lock_hold(False)
             if touches_yaw:
                 self._retarget_heading_lock(self._current_heading())
             self._send_neutral_and_settle()

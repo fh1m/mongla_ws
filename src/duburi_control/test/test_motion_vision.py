@@ -413,20 +413,37 @@ def test_anchor_freshness_decays_lat_when_stale():
     assert not lat                            # fully decayed -> neutral lateral
 
 
-def test_anchor_fire_withheld_on_stale_pose():
-    # V-FIRE (anchor): a frozen anchor node serving a stale-but-"present" pose
-    # (0.10s < age <= 1.0s, still LOCKED) is in-band but must NOT fire a torpedo
-    # -- the lock must be a FRESH pose, mirroring the YOLO align fire guard.
+class _FrozenAnchorState(_FakeAnchorState):
+    """Serves ONE LOCKED pose with a CONSTANT arrival time (a frozen anchor node).
+
+    sampled_at = now - age_s is pegged, so age grows in lockstep -- the same single
+    pose re-read. is_new_frame never advances past the first tick, so neither the
+    stable gate nor the fire may accept it (mirrors _FrozenFrameVision for YOLO)."""
+    def __init__(self, tx=0.0, ty=0.0, theta=0.0, **kw):
+        super().__init__(_anchor_sample(tx=tx, ty=ty, theta=theta), **kw)
+        self._tx, self._ty, self._theta = tx, ty, theta
+        self._t0 = time.monotonic()
+
+    def pose(self):
+        age = min(time.monotonic() - self._t0, 0.9)   # < _STALE_LIMIT_S, stays present
+        return _anchor_sample(tx=self._tx, ty=self._ty, theta=self._theta, age_s=age)
+
+
+def test_anchor_fire_withheld_when_node_frozen():
+    # V-FIRE (anchor): a frozen anchor node re-serves ONE pose (constant sampled_at),
+    # so is_new_frame never advances -- the fire (and the stable gate) must reject it
+    # and NOT launch a torpedo on the stale lock. Mirrors the YOLO frozen-frame guard.
     calls = []
-    stale = 5 * VISION_FRESH_FULL_S            # past fresh window, still present
-    _anchor(_FakeAnchorState(_anchor_sample(tx=0.0, ty=0.0, theta=0.0, age_s=stale)),
-            hold_s=0.3, duration=1.0, on_locked=lambda: calls.append(1))
-    assert calls == [], 'anchor must not fire on a stale pose'
+    out, _, _ = _anchor(_FrozenAnchorState(tx=0.0, ty=0.0, theta=0.0),
+                        anchor_stable_frames=3, hold_s=0.3, duration=0.4,
+                        on_locked=lambda: calls.append(1))
+    assert out.code == TIMEOUT, 'one frozen pose must not LOCK'
+    assert calls == [], 'anchor must not fire on a frozen (stale) pose'
 
 
 def test_anchor_fire_leaves_on_fresh_pose():
-    # Control case: a fresh, centred, LOCKED pose DOES fire (the guard only
-    # blocks stale poses, never a genuine current lock).
+    # Control case: a fresh, centred, LOCKED pose (advancing sampled_at) DOES fire
+    # -- the is_new_frame gate only blocks a frozen node, never a live lock.
     calls = []
     out, _, _ = _anchor(
         _FakeAnchorState(_anchor_sample(tx=0.0, ty=0.0, theta=0.0, age_s=0.0)),
@@ -581,22 +598,28 @@ def test_align_yaw_neutral_when_in_band():
 
 def test_align_yaw_min_floor_spins_thruster_when_close():
     # The hole-lock fix, CLOSE regime: a large bbox (fill >= VISION_YAW_FLOOR_FILL)
-    # means the target is near, so a small OUT-of-band yaw error whose
-    # pure-proportional output is below the T200 spin-up floor must be bumped UP
-    # to the floor -- otherwise micro-corrections die in the dead-zone and the
-    # tight lock stalls just outside err_px.
-    from duburi_control.motion_vision import VISION_YAW_MIN_PCT
+    # means the target is near, so a small OUT-of-band yaw error whose pure-
+    # proportional output is below the stiction floor is bumped UP toward the floor
+    # so micro-corrections don't die in the dead-zone. With the TAPER the lift is
+    # proportional to how far past the deadband we are -- a real bump (> pure P) but
+    # below the full hard floor (no relay slam). This is the anti-jitter fix.
+    from duburi_control.motion_vision import (
+        _vision_yaw_floor, VISION_YAW_MIN_PCT)
     pix = _FakePixhawk()
-    # Big bbox -> close. err_px=10, ex=0.06 -> epx=19.2px (out of band).
-    # Proportional 0.06*60 = 3.6% (pwm 1514) -- below the 5% floor; close so the
-    # floor engages -> must floor to 5% (1520).
-    _align(_FakeVision(_sample(ex=0.06, w_frac=0.6, h_frac=0.6)), pix=pix,
-           axes={'yaw'}, kp_yaw=60.0, gain=30.0, err_px=10.0, duration=0.25)
-    floor_pwm = _FakePixhawk.percent_to_pwm(VISION_YAW_MIN_PCT)   # 1520
+    # Big bbox -> close. err_px=10, ex=0.0625 -> epx=20px (out of band). Tiny kp_yaw
+    # so pure proportional (0.0625*10 = 0.625%) sits below the tapered floor at 20px.
+    ex, kp = 0.0625, 10.0
+    _align(_FakeVision(_sample(ex=ex, w_frac=0.6, h_frac=0.6)), pix=pix,
+           axes={'yaw'}, kp_yaw=kp, gain=30.0, err_px=10.0, duration=0.25)
     yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
     assert yaw, 'expected yaw thrust on a small out-of-band error'
-    assert min(yaw) >= floor_pwm, (
-        'close-up small out-of-band yaw must be floored to the spin-up minimum')
+    floor_pct = _vision_yaw_floor(ex * 320.0, 10.0, min(VISION_YAW_MIN_PCT, 30.0))
+    prop_pwm  = _FakePixhawk.percent_to_pwm(ex * kp)               # pure proportional
+    floor_pwm = _FakePixhawk.percent_to_pwm(floor_pct)            # tapered floor
+    hard_pwm  = _FakePixhawk.percent_to_pwm(VISION_YAW_MIN_PCT)   # full hard floor (1520)
+    assert min(yaw) >= floor_pwm, 'tapered floor must lift the tiny proportional'
+    assert min(yaw) > prop_pwm, 'floor must actually add authority over pure P'
+    assert max(yaw) < hard_pwm, 'taper must NOT slam the full hard floor (no relay)'
 
 
 def test_align_yaw_no_floor_when_far_pure_proportional():
@@ -660,20 +683,20 @@ def test_align_per_axis_gain_unset_inherits_global():
     assert yaw and max(yaw) == cap, 'unset per-axis gain must inherit the global cap'
 
 
-def test_align_per_axis_gain_depth_scales_nudge():
-    # depth setpoint excursion must scale with gain_depth (it drives max_nudge),
-    # independently of the global gain. Larger gain_depth -> larger depth move
-    # over the same run. (Cadence-independent: compares total excursion.)
-    def _depth_excursion(g_depth):
+def test_align_depth_step_scales_nudge():
+    # depth setpoint excursion scales with depth_step (the per-update resolution
+    # knob), NOT gain_depth: a larger depth_step deepens more over the same run.
+    # (gain_depth no longer drives depth -- depth_step is the sole depth-rate knob.)
+    def _depth_excursion(step):
         pix = _FakePixhawk()
         _align(_FakeVision(_sample(ey=1.0, w_frac=0.3, h_frac=0.3)), pix=pix,
-               axes={'depth'}, kp_depth=0.05, gain=40.0, gain_depth=g_depth,
-               err_px=10.0, duration=0.4)
+               axes={'depth'}, kp_depth=0.05, gain=40.0, depth_step=step,
+               err_px=10.0, duration=0.6, align_stable_frames=99)
         return abs(pix.depths[-1] - (-0.5)) if pix.depths else 0.0
-    small = _depth_excursion(10.0)
-    large = _depth_excursion(50.0)
+    small = _depth_excursion(0.02)
+    large = _depth_excursion(0.08)
     assert large > small > 0.0, (
-        'gain_depth must scale the depth nudge (50 deepens more than 10)')
+        'depth_step must scale the depth nudge (0.08 deepens more than 0.02)')
 
 
 def test_align_yaw_and_lat_share_one_override_packet():
@@ -1355,25 +1378,50 @@ def test_fire_withheld_on_coasted_sample():
     assert fired == [], 'must not fire on a coasted (predicted) box'
 
 
-def test_fire_withheld_on_stale_live_sample():
-    # A frozen detector serving a stale (but < _STALE_LIMIT_S) cached box keeps
-    # the stable counter at threshold -- but the fire must be gated on freshness,
-    # so a box older than VISION_FRESH_FULL_S does NOT fire.
-    fired = []
-    stale = 5 * VISION_FRESH_FULL_S   # well past the fresh window, still "present"
-    _align(_FakeVision(_sample(ex=0.0, age_s=stale)), axes={'lat'},
-           hold_s=0.3, duration=1.0, on_locked=lambda: fired.append(1))
-    assert fired == [], 'must not fire on a stale cached box'
-
-
 def test_fire_leaves_on_fresh_live_sample():
     # The control case: a fresh, live, centred box DOES fire (the guard only
-    # blocks coasted/stale, never a genuine current sighting).
+    # blocks coasted / frozen-detector, never a genuine current sighting).
     fired = []
     out, _, _ = _align(_FakeVision(_sample(ex=0.0, age_s=0.0)), axes={'lat'},
                        hold_s=0.3, duration=1.0, on_locked=lambda: fired.append(1))
     assert out.code == ALIGNED
     assert fired == [1], 'a fresh live lock must fire'
+
+
+class _FreezeAfterVision(_FakeVision):
+    """Fresh, ADVANCING detections until ``freeze_after`` s, then a FROZEN frame
+    (constant sampled_at, growing age). Models a detector that dies mid-hold AFTER
+    the lock was already achieved on fresh frames -- the freeze-AFTER-alignment
+    case the fire gate must survive (a held `stable` counter must not fire on a
+    stale box). Distinct from _FrozenFrameVision (frozen from tick 0)."""
+    def __init__(self, ex=0.0, freeze_after=0.25, **kw):
+        super().__init__(_sample(ex=ex, age_s=0.0), **kw)
+        self._ex = ex
+        self._t0 = time.monotonic()
+        self._freeze_after = freeze_after
+        self._frozen_at = None
+
+    def bbox_error(self, _cls, **_kw):
+        now = time.monotonic()
+        if now - self._t0 < self._freeze_after:
+            return _sample(ex=self._ex, age_s=0.0)          # fresh, sampled_at advances
+        if self._frozen_at is None:
+            self._frozen_at = now                            # peg sampled_at here on
+        age = min(now - self._frozen_at, 0.9)                # < _STALE_LIMIT_S (still present)
+        return _sample(ex=self._ex, age_s=age)
+
+
+def test_fire_withheld_when_detector_freezes_after_alignment():
+    # The advisor's discriminating case: the hull locks on fresh frames (stable
+    # reaches threshold), THEN the detector freezes. The re-read HOLDS stable at
+    # threshold, but is_new_frame is False on the frozen frames -> no fire. fire_t
+    # is set so the shot would only come DUE after the freeze, so a freshness gate
+    # keyed on age (e.g. age <= _STALE_LIMIT_S) would WRONGLY fire here.
+    fired = []
+    _align(_FreezeAfterVision(ex=0.0, freeze_after=0.25), axes={'lat'},
+           align_stable_frames=3, hold_s=0.6, duration=0.7, fire_t=0.35,
+           on_locked=lambda: fired.append(1))
+    assert fired == [], 'must not fire once the detector freezes mid-hold'
 
 
 # --------------------------------------------------------------------------- #
@@ -1416,3 +1464,94 @@ def test_frozen_frame_does_not_fire():
            align_stable_frames=3, hold_s=0.3, duration=0.3,
            on_locked=lambda: fired.append(1))
     assert fired == [], 'a frozen detector must never fire'
+
+
+# --------------------------------------------------------------------------- #
+#  fire_pass: guaranteed end-of-command shot (opt-in)                          #
+# --------------------------------------------------------------------------- #
+def test_fire_pass_fires_on_timeout_when_seen_recently():
+    # Never fully aligned (target off-centre) but seen live+recently -> fire_pass
+    # actuates the payload at command end (TIMEOUT) for a guaranteed partial shot.
+    fired = []
+    out, _, _ = _align(_FakeVision(_sample(ex=5.0, age_s=0.0)), axes={'lat'},
+                       duration=0.3, fire_pass=True,
+                       on_locked=lambda: fired.append(1))
+    assert out.code == TIMEOUT
+    assert fired == [1], 'fire_pass must fire at command end on a recent sighting'
+
+
+def test_fire_pass_off_by_default_never_fires_unaligned():
+    # Back-compat / safety: without fire_pass an unaligned run never fires.
+    fired = []
+    _align(_FakeVision(_sample(ex=5.0, age_s=0.0)), axes={'lat'},
+           duration=0.3, on_locked=lambda: fired.append(1))
+    assert fired == [], 'default (fire_pass off) must not fire when unaligned'
+
+
+def test_fire_pass_withheld_when_never_seen():
+    # fire_pass only fires on a recent LIVE sighting -- never into empty water.
+    fired = []
+    _align(_FakeVision(None), axes={'lat'}, duration=0.3, fire_pass=True,
+           on_locked=lambda: fired.append(1))
+    assert fired == [], 'fire_pass must NOT fire when the target was never seen'
+
+
+def test_fire_pass_withheld_on_coasted_only():
+    # A target only ever seen as a coasted (Kalman) box is not a live sighting;
+    # fire_pass must still withhold (last_live_at never advances).
+    fired = []
+    _align(_FakeVision(_sample(ex=5.0, age_s=0.0, coasted=True)), axes={'lat'},
+           duration=0.3, fire_pass=True, on_locked=lambda: fired.append(1))
+    assert fired == [], 'fire_pass must NOT fire on a coasted-only target'
+
+
+# --------------------------------------------------------------------------- #
+#  Depth: deadband-freeze + stepped slew (the z-wobble fix)                    #
+# --------------------------------------------------------------------------- #
+def test_depth_setpoint_frozen_inside_deadband():
+    # An in-band (centred) depth target FREEZES the ALT_HOLD setpoint -- ArduSub
+    # holds instead of chasing bbox-y jitter. Every streamed setpoint == start.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ey=0.0, age_s=0.0)), pix=pix, axes={'depth'},
+           duration=0.3)
+    assert pix.depths, 'depth axis must stream a setpoint'
+    assert all(abs(d - (-0.5)) < 1e-9 for d in pix.depths), \
+        'setpoint must stay frozen at start depth when in-band'
+
+
+def test_depth_step_bounds_setpoint_slew_out_of_band():
+    # Out of the deadband the setpoint steps toward target by <= depth_step per
+    # 5 Hz update (the resolution knob) -- never a fast slew ArduSub can't track.
+    pix = _FakePixhawk()
+    step = 0.05
+    _align(_FakeVision(_sample(ey=1.0, age_s=0.0)), pix=pix, axes={'depth'},
+           depth_step=step, duration=0.6, align_stable_frames=99)
+    assert len(pix.depths) >= 2, 'expected multiple depth updates'
+    deltas = [abs(b - a) for a, b in zip(pix.depths, pix.depths[1:])]
+    assert max(deltas) <= step + 1e-9, \
+        f'each depth update must move <= depth_step ({max(deltas)} > {step})'
+
+
+def test_depth_setpoint_never_shallower_than_floor():
+    # The surface floor (_MIN_DEPTH_M) is preserved: an upward (shallower) target
+    # can't drive the setpoint above the floor.
+    from duburi_control.motion_vision import _MIN_DEPTH_M
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ey=-1.0, age_s=0.0)), pix=pix, axes={'depth'},
+           depth_step=0.1, duration=0.6, align_stable_frames=99, depth_sign=+1)
+    assert all(d <= _MIN_DEPTH_M + 1e-9 for d in pix.depths), \
+        'setpoint must never rise above the surface floor'
+
+
+# --------------------------------------------------------------------------- #
+#  Yaw floor taper (the close-in yaw-jitter fix)                               #
+# --------------------------------------------------------------------------- #
+def test_vision_yaw_floor_tapers_to_zero_at_deadband():
+    from duburi_control.motion_vision import (
+        _vision_yaw_floor, VISION_YAW_APPROACH_BAND_PX as BAND)
+    full, eff = 5.0, 10.0
+    assert _vision_yaw_floor(eff, eff, full) == 0.0            # deadband edge -> 0
+    assert _vision_yaw_floor(eff + BAND, eff, full) == full    # band edge -> full
+    assert _vision_yaw_floor(eff + 2 * BAND, eff, full) == full  # beyond -> full
+    mid = _vision_yaw_floor(eff + 0.5 * BAND, eff, full)
+    assert 0.0 < mid < full, 'floor must taper monotonically inside the band'

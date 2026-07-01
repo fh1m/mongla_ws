@@ -169,6 +169,9 @@ class _VisionDSL:
               fwd: Optional[float] = None,
               fwd_mode: str = 'area',
               settle: Optional[float] = None,
+              depth_step: Optional[float] = None,
+              fire_pass: bool = False,
+              hold_heading: bool = False,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -309,7 +312,10 @@ class _VisionDSL:
                 lock_target=bool(lock_on),
                 fwd_fill=float(fwd) if fwd is not None else 0.0,
                 mode=str(fwd_mode),
-                settle_px=float(settle) if settle is not None else 0.0)
+                settle_px=float(settle) if settle is not None else 0.0,
+                depth_step=float(depth_step) if depth_step is not None else 0.0,
+                fire_pass_enabled=bool(fire_pass),
+                hold_heading=bool(hold_heading))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)
