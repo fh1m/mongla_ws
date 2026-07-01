@@ -457,7 +457,6 @@ def align_loop(*,
                gain: float,
                gain_lat: Optional[float] = None,
                gain_yaw: Optional[float] = None,
-               gain_depth: Optional[float] = None,
                brake: bool = True,
                brake_gain: float = VISION_BRAKE_GAIN,
                hold_s: float = 0.0,
@@ -522,7 +521,8 @@ def align_loop(*,
     ``depth_step`` -- per-UPDATE depth-setpoint resolution (m). The depth axis steps
     the ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update and FREEZES it
     inside the deadband, so ArduSub settles between steps (no z-wobble). 0.02 slow ..
-    0.10 coarse. It is the sole depth-rate knob (gain_depth does NOT scale depth).
+    0.10 coarse -- the SOLE depth-rate knob (depth has no % speed cap like lat/yaw;
+    to drop the depth axis entirely, omit 'depth' from ``axes``).
 
     ``report_fn`` (if given) is called every PRESENT tick with the signed
     from-centre pixel offset ``(x_off, y_off)`` of the target -- a live-telemetry
@@ -578,10 +578,12 @@ def align_loop(*,
     # depth_step is the per-UPDATE setpoint resolution (m): the depth axis moves the
     # ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update, so max slew =
     # depth_step * DEPTH_HZ (0.1 m/s at the 0.02 default). It is the operator's depth-
-    # rate knob (0.02 fine/slow .. 0.10 coarse) -- a metres cap, NOT a % like lat/yaw,
-    # so gain_depth does NOT scale depth. Slower + stepped + deadband-frozen lets
-    # ArduSub's ALT_HOLD PID actually settle between steps instead of chasing a
-    # setpoint that jitters with the bbox (the z-wobble). 0 disables depth motion.
+    # rate knob (0.02 fine/slow .. 0.10 coarse) -- a metres cap, NOT a % like lat/yaw
+    # (depth has no per-axis % gain). Slower + stepped + deadband-frozen lets ArduSub's
+    # ALT_HOLD PID actually settle between steps instead of chasing a setpoint that
+    # jitters with the bbox (the z-wobble). At the engine level max_nudge=0 would
+    # freeze depth entirely, but the verb coerces an unset (0.0) depth_step to the
+    # default -- to skip the depth axis, omit 'depth' from ``axes``.
     max_nudge   = max(float(depth_step), 0.0)
 
     depth_setpoint = _read_depth(pixhawk)
