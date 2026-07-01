@@ -141,6 +141,7 @@ def run(duburi, log=None):
             fwd=HOLE_STANDOFF_FILL, fwd_mode='height',          # drive to + hold standoff
             err=HOLE_ERR_PX, gain=FINE_GAIN, duration=HOLE_LOCK_S,
             lock_on=True, hold=HOLE_HOLD_S,
+            hold_heading=True,                                  # steady launcher heading (no yaw jitter)
             fire=FIRE_CHANNEL, fire_t=FIRE_T, brake=False,      # mid-hold, while glued
             fallback=creep_forward)
         if locked:

@@ -99,6 +99,17 @@ float32 coast_s            # vision_align/move: gap-bridging coast window (s). >
                            #   to coast_s after a detection drops, at decaying authority -- a brief
                            #   occlusion keeps the lock instead of stopping. A live detection always
                            #   overrides. 0 = OFF (use vision.coast_s). MUST be < lost_grace_s.
+float32 depth_step         # vision_align: per-UPDATE depth-setpoint resolution (m). Depth moves the
+                           #   ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update and FREEZES
+                           #   inside the deadband, so ArduSub settles between steps (no z-wobble).
+                           #   0.02 fine/slow .. 0.10 coarse. 0 = default (0.02). Not scaled by gain.
+bool    fire_pass_enabled  # vision_align: if true, fire the payload at command end (TIMEOUT or hold
+                           #   complete) EVEN IF never fully aligned, as long as the target was seen
+                           #   live+recently (within lost_grace_s) -- a guaranteed partial-points shot.
+                           #   Off = fire only on a strict in-band lock (never off-target).
+bool    hold_heading       # vision_align: when yaw is released to the background heading lock, widen
+                           #   the lock's deadband for the hold so the launcher heading holds STEADY
+                           #   instead of micro-correcting sub-deg noise (the terminal yaw jitter).
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

@@ -133,6 +133,14 @@ VISION_YAW_MIN_PCT = 5.0
 # Pool-tunable: confirm the re-engage distance on pool day.
 VISION_YAW_FLOOR_FILL = 0.25
 
+# The close-in yaw floor above must not be a hard relay either: a hard min on the
+# Ch4 rate channel just outside the deadband slams the hull, overshoots, and
+# limit-cycles (the reported terminal yaw jitter). Taper the floor to 0 across
+# this px band above the deadband so a small residual eases in -- mirrors
+# heading_lock._lock_floor / motion_yaw._yaw_floor (the proven fix, applied twice
+# already on the discrete-turn + lock paths). Pool-tunable.
+VISION_YAW_APPROACH_BAND_PX = 40.0
+
 # Inertial arrival brake (lateral + forward-on-fill-stop). The vision loops drive
 # open-loop translation (Ch5/Ch6); on arrival the hull coasts on water inertia in
 # its last travel direction, drifting off the planned position so the next mission
@@ -397,6 +405,23 @@ def _read_depth(pixhawk) -> float:
     return float(att['depth']) if att else 0.0
 
 
+def _vision_yaw_floor(epx: float, eff_err: float, full_pct: float) -> float:
+    """Stiction-breaking yaw floor (%), tapered across the approach band.
+
+    Full ``full_pct`` at/above ``eff_err + VISION_YAW_APPROACH_BAND_PX``, then
+    linearly to 0 at the ``eff_err`` deadband edge, so a small residual near the
+    lock eases in instead of a hard min-PWM relay limit-cycling the hull on the
+    Ch4 rate channel (the close-in yaw wobble). Mirrors heading_lock._lock_floor
+    and motion_yaw._yaw_floor. Pure; only meaningful for ``epx > eff_err`` (inside
+    the deadband the loop commands 0 and never calls this).
+    """
+    band = VISION_YAW_APPROACH_BAND_PX
+    if band <= 0.0 or epx >= eff_err + band:
+        return full_pct
+    frac = (epx - eff_err) / band       # 1.0 at band edge -> 0 at deadband edge
+    return full_pct * max(0.0, frac)
+
+
 def _camera_ready(vision_state) -> bool:
     """True once the camera pipeline has published a CameraInfo.
 
@@ -454,8 +479,10 @@ def align_loop(*,
                fwd_mode: str = 'area',
                kp_forward: float = KP_FORWARD_DEFAULT,
                settle_px: float = SETTLE_PX_DEFAULT,
+               depth_step: float = _MAX_DEPTH_NUDGE,
                on_locked=None,
                fire_t: float = 0.0,
+               fire_pass: bool = False,
                report_fn=None,
                writers=None,
                log=None,
@@ -480,7 +507,22 @@ def align_loop(*,
     the window, ``on_locked`` is NOT called (a torpedo never fires off-target).
     The caller is expected to make ``on_locked`` non-blocking (it spawns the fire
     on a background thread); the 20 Hz loop must not stall. ``fire_t`` should be
-    < hold_s (the verb clamps it upstream).
+    < hold_s (the verb clamps it upstream). The fire is additionally gated on a
+    FRESH detection (``is_new_frame and not sample.coasted``) -- it leaves only on
+    the tick a genuinely new live box lands, so it is FPS-robust (fires promptly at
+    low detector rate) yet never fires on a frozen detector's stale frame or a
+    Kalman-coasted box.
+
+    ``fire_pass`` (opt-in, default off): if ``on_locked`` never fired a strict
+    in-band shot, fire it anyway on a NATURAL exit (TIMEOUT / hold-complete) as long
+    as the target was seen LIVE within ``lost_grace_s`` -- a guaranteed partial-
+    points shot when full alignment was not reached. Never fires when the target was
+    never seen or only coasted.
+
+    ``depth_step`` -- per-UPDATE depth-setpoint resolution (m). The depth axis steps
+    the ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update and FREEZES it
+    inside the deadband, so ArduSub settles between steps (no z-wobble). 0.02 slow ..
+    0.10 coarse. It is the sole depth-rate knob (gain_depth does NOT scale depth).
 
     ``report_fn`` (if given) is called every PRESENT tick with the signed
     from-centre pixel offset ``(x_off, y_off)`` of the target -- a live-telemetry
@@ -528,13 +570,19 @@ def align_loop(*,
     # slows only yaw. (Mirrors the kp_* `or DEFAULT` idiom at the call site.)
     g_lat   = gain if gain_lat   is None else gain_lat
     g_yaw   = gain if gain_yaw   is None else gain_yaw
-    g_depth = gain if gain_depth is None else gain_depth
     g_fwd   = gain                       # forward range-hold capped by the global gain
     use_fwd = float(fwd_fill) > 0.0      # optional forward standoff axis
 
     use_depth   = 'depth' in axes
     throttle_ch = 65535 if use_depth else 1500   # release Ch3 for ALT_HOLD depth PID
-    max_nudge   = _MAX_DEPTH_NUDGE * max(g_depth, 0.0) / 100.0
+    # depth_step is the per-UPDATE setpoint resolution (m): the depth axis moves the
+    # ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update, so max slew =
+    # depth_step * DEPTH_HZ (0.1 m/s at the 0.02 default). It is the operator's depth-
+    # rate knob (0.02 fine/slow .. 0.10 coarse) -- a metres cap, NOT a % like lat/yaw,
+    # so gain_depth does NOT scale depth. Slower + stepped + deadband-frozen lets
+    # ArduSub's ALT_HOLD PID actually settle between steps instead of chasing a
+    # setpoint that jitters with the bbox (the z-wobble). 0 disables depth motion.
+    max_nudge   = max(float(depth_step), 0.0)
 
     depth_setpoint = _read_depth(pixhawk)
 
@@ -560,16 +608,37 @@ def align_loop(*,
                 yaw=Pixhawk.percent_to_pwm(yaw_pct),
                 throttle=throttle_ch)
 
+    def _pass_fire() -> None:
+        """fire_pass fallback: on a NATURAL exit (TIMEOUT / hold-complete) without a
+        strict mid-hold fire, actuate the payload anyway so a detected-but-not-fully-
+        aligned run still scores. Gated on a LIVE (non-coasted) sighting within
+        lost_grace_s -- never fires into empty water or on a Kalman ghost. One-shot
+        (guarded by ``fired``). Opt-in via fire_pass; no-op when off."""
+        nonlocal fired
+        if (not fire_pass or on_locked is None or fired
+                or (time.monotonic() - last_live_at) > lost_grace_s):
+            return
+        fired = True
+        log.info("[VIS  ] fire_pass -- target seen; firing at command end "
+                 "(alignment not required)")
+        try:
+            on_locked()
+        except Exception as exc:   # noqa: BLE001 -- fire must not kill the loop
+            log.error(f"[VIS  ] on_locked (fire_pass) raised {exc!r}")
+
     stable      = 0
     lost_since: Optional[float] = None
     aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
     fired       = False  # on_locked fired once at fire_t into the hold (payload mid-hold)
     last_log    = 0.0
     last_depth  = 0.0
+    depth_ctrl  = 0.0    # depth axis error carried from axis-calc into the 5 Hz step
+    depth_epx   = 0.0
     last_err_px = float('inf')
     last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
     prev_worst: Optional[float] = None   # settle gate: worst error last NEW frame (for |Δworst|)
     last_frame_at = float('-inf')        # arrival time of the last COUNTED detection frame
+    last_live_at  = float('-inf')        # monotonic of the last LIVE (non-coasted) sighting -> fire_pass gate
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
@@ -610,6 +679,7 @@ def align_loop(*,
                 reason = ("not aligned (duration elapsed)" if saw_target else
                           f"target {target_class!r} NEVER detected -- check "
                           f"model/classes/camera view")
+                _pass_fire()   # opt-in guaranteed shot if the target was seen live
                 return Outcome(TIMEOUT, reason, last_err_px, last_fill, elapsed,
                                end_x_px, end_y_px)
 
@@ -651,6 +721,8 @@ def align_loop(*,
 
             saw_target = True
             lost_since = None
+            if not sample.coasted:
+                last_live_at = now   # last LIVE sighting -> fire_pass recency gate
             # Re-arm the continuity lock on the accepted box (used as `near` next
             # tick) ONLY when lock_on -- otherwise leave near=None so selection
             # stays largest-area. After a real loss the loop exits LOST, so a
@@ -709,8 +781,14 @@ def align_loop(*,
                     yaw_pct = 0.0
                 else:
                     mag = min(abs(ctrl * kp_yaw), g_yaw)
+                    # Stiction floor only when close (large bbox), and TAPERED across
+                    # the approach band above the deadband so it eases to 0 at the
+                    # edge instead of a hard min-PWM relay that limit-cycles the hull
+                    # on Ch4 (the close-in yaw wobble). Mirrors the heading_lock /
+                    # motion_yaw taper -- see _vision_yaw_floor.
                     if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
-                        mag = max(mag, min(VISION_YAW_MIN_PCT, g_yaw))
+                        mag = max(mag, _vision_yaw_floor(
+                            epx, eff_err, min(VISION_YAW_MIN_PCT, g_yaw)))
                     yaw_pct = math.copysign(mag, ctrl)
                 in_band.append(epx <= eff_err)
 
@@ -718,9 +796,10 @@ def align_loop(*,
                 ctrl = sample.ey - offsets.get('depth', 0.0) / half_h
                 epx  = abs(ctrl) * half_h
                 worst = max(worst, epx)
-                step = _clamp(ctrl * kp_depth * rgain,
-                              -max_nudge, max_nudge) * depth_sign
-                depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
+                # Carry the depth error into the 5 Hz setpoint step below (do NOT
+                # move the setpoint here every 20 Hz tick -- that gives ArduSub a
+                # target sliding at up to max_nudge*LOOP_HZ and it never settles).
+                depth_ctrl, depth_epx = ctrl, epx
                 in_band.append(epx <= eff_err)
 
             if use_fwd:
@@ -756,6 +835,16 @@ def align_loop(*,
             # hull off the spot it was holding. Exclude lat_i here.
             lat_ema += _BRAKE_EMA_ALPHA * (p_lat * fresh - lat_ema)
             if use_depth and (now - last_depth) >= 1.0 / DEPTH_HZ:
+                # Step the ALT_HOLD setpoint toward the target by AT MOST depth_step,
+                # and ONLY when out of the deadband. Inside the band the setpoint is
+                # FROZEN -- ArduSub holds the last depth instead of dithering on
+                # bbox-y jitter (the z-wobble). Stepped at 5 Hz (not 20) so the depth
+                # PID reaches each step before the next: slow, stable, resolution set
+                # by depth_step. _MIN_DEPTH_M keeps it never shallower than the floor.
+                if depth_epx > eff_err:
+                    step = _clamp(depth_ctrl * kp_depth * rgain,
+                                  -max_nudge, max_nudge) * depth_sign
+                    depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
                 pixhawk.set_target_depth(depth_setpoint)
                 last_depth = now
 
@@ -800,13 +889,16 @@ def align_loop(*,
                 # tick). on_locked is non-blocking (spawns a thread) so a slow
                 # payload reconnect can't stall the 20 Hz station-keep. fire_t is
                 # clamped < hold_s upstream, so this trips while still holding.
-                # FRESHNESS GUARD: only fire on a LIVE, FRESH detection -- never on
-                # a tracker-coasted (Kalman-predicted) box, and never on a stale
-                # cached box a frozen detector is still serving (the stable counter
-                # can otherwise stand at threshold on a ≤_STALE_LIMIT_S-old frame).
-                # A torpedo must leave on a real, current sighting of the hole.
-                fire_fresh = (not sample.coasted
-                              and sample.age_s <= VISION_FRESH_FULL_S)
+                # FRESHNESS GUARD: fire ONLY on the tick a genuinely NEW, non-coasted
+                # detection lands (is_new_frame -- the same distinct-frame signal that
+                # gates `stable`). This guarantees freshness at ANY detector FPS (a
+                # new frame is by definition current), fixing the low-FPS miss where
+                # the old `age_s <= 0.10s` window rarely coincided with the aligned
+                # tick at 3-4 Hz. It is ALSO strictly safer: a FROZEN detector never
+                # produces a new frame, so a stale cached box (or a Kalman-coasted
+                # one) can never fire even while `stable` stands held at threshold
+                # through a mid-hold freeze. A torpedo leaves on a real live sighting.
+                fire_fresh = is_new_frame and not sample.coasted
                 if on_locked is not None and not fired and fire_fresh and \
                         (now - aligned_at) >= fire_t:
                     fired = True
@@ -827,6 +919,10 @@ def align_loop(*,
                     # State the deadband next to the residual so 'aligned
                     # (Npx)' is never misread as "should have been 0" -- N is
                     # within the eff_err deadband by construction.
+                    # If a mid-hold strict fire never landed (e.g. hold completed but
+                    # freshness never coincided), fire_pass still actuates here on a
+                    # live+recent sighting. No-op when off or already fired.
+                    _pass_fire()
                     reason = (f"held {hold_s:.1f}s ({worst:.0f}/{eff_err:.0f}px)"
                               if hold_s > 0.0
                               else f"aligned ({worst:.0f}/{eff_err:.0f}px)")
@@ -1266,13 +1362,14 @@ def anchor_align_loop(*,
                     if hold_s > 0.0:
                         log.info(f"[ANCH ] LOCKED -- gluing {hold_s:.1f}s "
                                  f"({trans_err:.0f}px, {sample.theta_rad:+.3f}rad)")
-                # Fire ONLY on a FRESH pose, and re-check every tick (not just the
-                # first lock tick) so a lock whose opening frame was slightly stale
-                # still fires on the next fresh one -- mirrors align_loop. Homography
-                # has no coasted concept, but _present accepts a pose up to
-                # _STALE_LIMIT_S (1.0s) old, so a frozen anchor node must not launch
-                # a torpedo on a stale lock.
-                fire_fresh = sample.age_s <= VISION_FRESH_FULL_S
+                # Fire ONLY on the tick a genuinely NEW pose lands (is_new_frame),
+                # re-checked every tick -- mirrors align_loop's fire gate. This is
+                # FPS-robust (a new pose is fresh by construction at any rate) AND
+                # safe: a frozen anchor node re-serves ONE pose with a constant
+                # sampled_at, so is_new_frame is never True and it can never launch a
+                # torpedo on a stale lock (even while `stable` stands held at
+                # threshold). Homography has no coasted concept, so no coast check.
+                fire_fresh = is_new_frame
                 if not fired and on_locked is not None and fire_fresh:
                     fired = True
                     try:

@@ -1116,6 +1116,17 @@ class Duburi(VisionVerbs):
         lock = self._heading_lock
         return lock is not None and not lock.is_suspended
 
+    def _set_lock_hold(self, on):
+        """Widen/restore the heading-lock deadband for a fire-window hold.
+
+        Used by vision_align(hold_heading=True) so a terminal fire-lock holds a
+        steady launcher heading instead of micro-correcting sub-deg noise. Safe
+        no-op when no lock is active/live (local ref -- another thread may null
+        self._heading_lock)."""
+        lock = self._heading_lock
+        if lock is not None and not lock.is_suspended:
+            lock.set_hold_mode(bool(on))
+
     @contextmanager
     def _command_scope(self, verb):
         """Wrap a command body: serial lock + heartbeat pause + cmd= tag.

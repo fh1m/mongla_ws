@@ -248,7 +248,15 @@ COMMANDS = {
                     'standoff too. fwd_fill=0 (default) = no forward axis. '
                     'settle_px>0 = SETTLE GATE: only declare aligned once the hull is '
                     'in-band AND barely moving (|Δerr|<=settle_px) so it ends settled on '
-                    'target like vision_move (not mid-pass through the band); 0=off.',
+                    'target like vision_move (not mid-pass through the band); 0=off. '
+                    'depth_step = per-update depth-setpoint resolution (m, 0.02..0.10; 0='
+                    'default 0.02): depth moves SLOWLY in these steps + freezes in the '
+                    'deadband so ArduSub settles (no z-wobble). fire_pass_enabled = fire the '
+                    'payload at command end even if never fully aligned, as long as the '
+                    'target was seen live+recently (a guaranteed partial-points shot). '
+                    'hold_heading = widen the heading-lock deadband during the hold so the '
+                    'launcher heading holds steady (no terminal yaw jitter) when yaw is '
+                    'released to the lock.',
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
@@ -258,7 +266,8 @@ COMMANDS = {
                      'kp_lat', 'kp_yaw', 'kp_depth',
                      'lost_grace_s', 'align_stable_frames',
                      'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat',
-                     'coast_s', 'fwd_fill', 'mode', 'kp_forward', 'settle_px'],
+                     'coast_s', 'fwd_fill', 'mode', 'kp_forward', 'settle_px',
+                     'depth_step', 'fire_pass_enabled', 'hold_heading'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
@@ -272,7 +281,8 @@ COMMANDS = {
                      'lock_target': False, 'ctrl_conf': 0.0,
                      'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.0,
                      'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0,
-                     'settle_px': 0.0},
+                     'settle_px': 0.0, 'depth_step': 0.0,
+                     'fire_pass_enabled': False, 'hold_heading': False},
     },
     'vision_move': {
         'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '
@@ -364,7 +374,7 @@ STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'pass_through',
-               'lock_target')
+               'lock_target', 'fire_pass_enabled', 'hold_heading')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):
