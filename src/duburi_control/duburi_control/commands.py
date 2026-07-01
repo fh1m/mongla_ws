@@ -218,8 +218,9 @@ COMMANDS = {
         'help':     'Centre target_class on the active axes (CSV of lat,yaw,depth) '
                     'each at its signed pixel offset (offset_lat/yaw/depth; 0=centre). '
                     'Aligned when every active axis is within err_px. gain caps speed; '
-                    'gain_lat/gain_yaw/gain_depth override the cap per axis (0 = inherit '
-                    'gain) so e.g. yaw can micro-align slowly while lateral stays brisk. '
+                    'gain_lat/gain_yaw override the cap on the lat/yaw axis (0 = inherit '
+                    'gain) so e.g. yaw can micro-align slowly while lateral stays brisk '
+                    '(depth rate is set by depth_step, not a % cap). '
                     'On arrival the lateral inertia is braked (reverse-kick) so the hull '
                     'stops square; brake_off=true coasts, brake_gain scales the kick. A '
                     'gently-converged lock exits with ~0 momentum and is not kicked. '
@@ -260,7 +261,7 @@ COMMANDS = {
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
-                     'gain_lat', 'gain_yaw', 'gain_depth',
+                     'gain_lat', 'gain_yaw',
                      'brake_off', 'brake_gain', 'hold_s', 'hold_through_loss',
                      'fire_channels', 'fire_t',
                      'kp_lat', 'kp_yaw', 'kp_depth',
@@ -272,7 +273,7 @@ COMMANDS = {
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
                      'duration': 20.0, 'gain': 30.0,
-                     'gain_lat': 0.0, 'gain_yaw': 0.0, 'gain_depth': 0.0,
+                     'gain_lat': 0.0, 'gain_yaw': 0.0,
                      'brake_off': False, 'brake_gain': 0.0, 'hold_s': 0.0,
                      'hold_through_loss': False,
                      'fire_channels': '', 'fire_t': 0.0,

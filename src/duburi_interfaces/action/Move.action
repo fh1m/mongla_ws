@@ -45,7 +45,8 @@ float32 hold_s             # seconds to station-keep after reaching fwd_fill (0 
 # per-axis speed caps -- each overrides `gain` on one axis (0 = inherit gain).
 float32 gain_lat           # lateral speed cap   (vision_align lat; vision_move maintain)
 float32 gain_yaw           # yaw speed cap       (vision_align yaw)
-float32 gain_depth         # depth speed cap     (vision_align depth)
+float32 gain_depth         # INERT (kept for wire compat; anchor_align uses it). vision_align
+                           #   depth rate is set by depth_step (m/update), not a % cap.
 # inertial arrival brake -- bleeds translational momentum so the hull stops where
 # planned (align lateral; move forward+maintain on a fill-stop). Yaw/depth never
 # brake; PASS-THROUGH and abort/loss exits never brake. ON by default: brake_off
