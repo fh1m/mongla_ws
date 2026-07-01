@@ -46,8 +46,11 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # frame_fill_default: % of frame the bbox must fill for vision_move to count
     # as "reached" when the mission leaves fwd_fill at 0.
     'vision.frame_fill_default':  95.0,
-    # align_stable_frames: ticks (at 20 Hz) every active axis must stay within
-    # err_px before vision_align reports ALIGNED. 3 ticks = 0.15 s.
+    # align_stable_frames: distinct in-band DETECTIONS (not 20 Hz loop ticks)
+    # every active axis must satisfy before vision_align reports ALIGNED. Counting
+    # detections (a re-read of one frame counts once) makes this FPS-independent:
+    # at low detector FPS a single lucky frame can no longer declare aligned (or
+    # arm the mid-hold fire). 3 frames ~ 0.1-0.15 s at 20-30 Hz, ~0.75-1 s at 3-4 Hz.
     'vision.align_stable_frames':  3.0,
     # --- precision-alignment knobs (close-in robustness; all default OFF) -----
     # range_gain_floor: lat/depth kp multiplier when the bbox FILLS the frame

@@ -93,7 +93,7 @@ Their fields below; everything else is the open-loop motion surface.
 | `kp_depth`           | float32  | vision_align                          |
 | `kp_forward`         | float32  | vision_move                           |
 | `lost_grace_s`       | float32  | vision_align, vision_move — coast seconds before reporting LOST |
-| `align_stable_frames`| float32  | vision_align — ticks every active axis must stay in-band before ALIGNED |
+| `align_stable_frames`| float32  | vision_align — distinct in-band DETECTIONS (not loop ticks) before ALIGNED; one lucky frame at low FPS can't declare aligned or arm the fire |
 | `fire_channel`       | float32  | `fire` — ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=stub |
 
 The vision `kp_*`, `lost_grace_s`, `align_stable_frames`, and `fwd_fill`

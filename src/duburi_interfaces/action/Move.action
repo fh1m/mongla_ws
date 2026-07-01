@@ -64,7 +64,9 @@ float32 kp_yaw             # P gain on yaw pixel error          (0 = use vision.
 float32 kp_depth           # P gain on depth pixel error        (0 = use vision.kp_depth)
 float32 kp_forward         # P gain on fill error (vision_move) (0 = use vision.kp_forward)
 float32 lost_grace_s       # seconds to coast on target loss before reporting LOST (0 = 1.0)
-float32 align_stable_frames# ticks within err_px before ALIGNED (0 = use vision.align_stable_frames)
+float32 align_stable_frames# distinct in-band DETECTIONS (not loop ticks) before ALIGNED -- a
+                           #   frame re-read at low FPS counts once, so one lucky frame can't
+                           #   declare aligned / arm the fire (0 = use vision.align_stable_frames)
 # precision-alignment knobs (close-in robustness; all opt-in, 0/false = behave as before).
 bool    lock_target        # vision_align: once a target is acquired, steer to the box
                            #   NEAREST the last-accepted centre (within a gate) instead of the

@@ -115,6 +115,23 @@ The 9-verb vision API (`vision_align_yaw/lat/depth`, `vision_align_3d`, `vision_
 
 **Suite (per-package): control 80 · planner 34 · manager 29 · sensors 14 · vision 29 = 186.**
 
+**Pre-competition completion audit (2026-07-01) — full-stack review + surgical fixes:**
+Three parallel subsystem audits (control/vision/sensors+missions) + hand-verification.
+**No fundamental math bugs** — heading-wrap, PWM, easing, pixel normalization all verified
+correct. Two agent "CRITICALs" were false (disarm DOES release the heading lock; the mission
+runner DOES stop+disarm on any exception). Fixes landed:
+| Sev | Fix |
+|-----|-----|
+| 🟠 | **Fire-freshness guard** — the mid-hold `on_locked` torpedo/dropper fire now requires a LIVE, FRESH sample (`not coasted and age_s ≤ VISION_FRESH_FULL_S`). Never fires on a tracker-coasted (predicted) box or a frozen detector's stale frame. |
+| 🟠 | **Distinct-detection stable gate** — `align_stable_frames` (and the settle gate) now count real detections, not 20 Hz loop ticks (`_FRAME_EPS_S`, keyed on `now - sample.age_s`). At low FPS one lucky frame can no longer declare ALIGNED or arm the fire. Backward-compatible (age_s≈0 = every tick a new frame). Duration budgets re-verified (smallest align 4 s ≫ ~1 s worst-case declare). |
+| 🟠 | **Abort-interruptible settle** — `motion_forward.py` arc + DVL-dist and `motion_lateral.py` DVL-dist settle sleeps → `_interruptible_sleep(dur, abort_fn)` (cancel/safety-verb no longer waits out the settle). |
+| 🟠 | **Mission runner hardening** — `mission.py` now calls `unlock_heading()` on BOTH failure paths (Ctrl-C `_abort_sequence` + the `except`), covering all 16 missions uniformly (no per-mission try/finally churn needed). |
+| 🟠 | **`select_device('auto')` crashed on the Jetson** — `gpu.py:52` split `req` (`'auto'`, no colon) instead of `_DEFAULT` (`'cuda:0'`) → `IndexError` on any CUDA host, so `device: auto` in `detector.yaml` was an instant detector crash on the competition hardware. One-line fix (parse the index from `_DEFAULT`); `test_gpu` now green. |
+| 🟡 | `task_gate` / `pool_day_practice` rescue-align gained `fallback=creep_forward`; redundant arc neutral removed; DVL open-loop-fallback now WARNs (silently-wrong distance visible). |
+| — | **Dropped (non-bugs after verification):** the coast class-filter "fix" (the `and class_id` conjunct is intentional — lets a class-less predicted box coast on the already-matched track_id); per-mission try/finally on 5 non-primary missions (runner backstop + disarm-releases-lock already cover them). |
+
+**Suite after audit: control 212 · manager 46 · planner 137 · (vision unchanged).**
+
 ---
 
 ## 5. Bugs / known issues
