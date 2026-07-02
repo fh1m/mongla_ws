@@ -213,17 +213,31 @@ duburi.vision.align('hole', yaw=0, lat=0, depth=0,
   torpedo, 3/4 = dropper.
 - **`fire_t`** — seconds **into the hold window** to fire. `0` = the instant the lock is
   confirmed. Must be `< hold` (else it's clamped to `0` with a loud warning).
-- **Gated on alignment, distinct frames, AND freshness — three conditions, all on the
-  same tick:** the shot leaves on the first **stably-aligned** tick at/after `fire_t`,
-  where "stable" now means `align_stable_frames` **distinct in-band detections** (not
-  20 Hz loop ticks — a re-read frame counts once, so one lucky frame at low FPS can't
-  arm it), **and** the sample must be a **live, fresh** detection (`not coasted`,
-  `age_s ≤ VISION_FRESH_FULL_S` ≈ 0.10 s). So a torpedo **never** fires (a) off-target,
-  (b) on a single frozen frame, or (c) on a tracker-coasted (Kalman-predicted) box
-  during a `coast_s` gap. If the hull never holds a *fresh* lock during the hold, the
-  shot is **not** fired — budget enough `hold` to settle on live detections before
-  `fire_t`, and raise real detector FPS (`[YOLO] backend=TensorRT`) so fresh frames
-  are plentiful (the single biggest lever on fire reliability).
+- **Gated on alignment, distinct frames, AND a fresh new frame — three conditions, all
+  on the same tick:** the shot leaves on the first **stably-aligned** tick at/after
+  `fire_t`, where "stable" means `align_stable_frames` **distinct in-band detections**
+  (not 20 Hz loop ticks — a re-read frame counts once, so one lucky frame at low FPS
+  can't arm it), **and** that tick must be one where a **genuinely new, non-coasted
+  detection just landed** (`is_new_frame and not coasted`). This `is_new_frame` gate
+  (2026-07-01, D12) replaced the old `age_s ≤ 0.10 s` window: at 3-4 Hz that window was
+  *narrower than one frame period*, so a perfectly-aligned hull kept **missing** the
+  fire — while a frozen detector re-serving one stale frame could still satisfy an age
+  gate. Gating on a **new** frame is fresh by construction at ANY FPS (fixes the miss)
+  **and** strictly safer: a frozen detector produces no new frame, so it can't fire on
+  a stale box even while `stable` stands held at threshold through a mid-hold freeze. So
+  a torpedo **never** fires (a) off-target, (b) on a frozen detector's re-read frame, or
+  (c) on a tracker-coasted (Kalman-predicted) box during a `coast_s` gap. Raise real
+  detector FPS (`[YOLO] backend=TensorRT`) so new frames — hence fire opportunities —
+  are plentiful (still the single biggest lever on fire reliability).
+- **`fire_pass=True`** (opt-in) — if the strict in-band fire above never landed, fire
+  the payload anyway on a **natural exit** (TIMEOUT or hold-complete), provided the
+  target was seen **live within `lost_grace_s`** (never on a never-seen or coasted-only
+  target). A guaranteed partial-points shot when full alignment wasn't reached — "fire
+  *something* if we saw it." Off by default (strict lock only).
+- **`hold_heading=True`** (opt-in) — when yaw is released to the background heading lock
+  (the terminal hole-lock drops the yaw axis), widen the lock deadband 1°→3° for the
+  hold so the launcher heading holds **steady** instead of micro-correcting sub-degree
+  noise (the terminal yaw jitter). Use it on the yaw-dropped fire-lock.
 - **Non-blocking:** the fire runs on a background thread so the 20 Hz correction loop
   never stalls (the payload board can sleep ~2 s on a USB reconnect). The hull keeps
   correcting through the shot.

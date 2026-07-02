@@ -60,7 +60,10 @@ Their fields below; everything else is the open-loop motion surface.
 | -------------------- | -------- | ------------------------------------- |
 | `duration`           | float32  | move_*, arc, pause, vision_align, vision_move |
 | `gain`               | float32  | move_*, arc, vision_align, vision_move — for vision it is a **hard max-speed cap** (% thrust) |
-| `gain_lat`/`gain_yaw`/`gain_depth` | float32 | vision_align per-axis speed cap (vision_move uses `gain_lat` for the maintain strafe); **0 = inherit `gain`, not disable** |
+| `gain_lat`/`gain_yaw` | float32 | vision_align per-axis speed cap (vision_move uses `gain_lat` for the maintain strafe); **0 = inherit `gain`, not disable**. Depth has no % cap — its rate is `depth_step` (m/update) |
+| `depth_step` | float32 | vision_align per-update depth-setpoint resolution (m); 0.02 slow .. 0.10 coarse; freezes inside deadband so ArduSub settles (no z-wobble). DSL `depth_step=`; 0 = default 0.02 |
+| `fire_pass_enabled` | bool | vision_align: fire at command end even if never fully aligned, if seen live+recently (partial-points shot). DSL `fire_pass=` |
+| `hold_heading` | bool | vision_align: widen the heading-lock deadband during the hold (yaw-released path) so the launcher heading holds steady (no terminal yaw jitter). DSL `hold_heading=` |
 | `brake_off` / `brake_gain` | bool / float32 | vision arrival brake (on by default). `brake_off=true` coasts; `brake_gain` scales the reverse kick (0 = default). DSL exposes `brake=True`; sends `brake_off = not brake`. Brakes lateral (align) + forward-on-fill-stop (move); never yaw/depth/pass-through |
 | `target`             | float32  | set_depth (m) / yaw_* (deg) / lock_heading (deg) |
 | `target_name`        | string   | set_mode                              |
@@ -302,16 +305,26 @@ duburi.vision.align(
     depth=None,             # None = axis OFF; number = ON (signed px offset from centre)
     err=40,                 # per-axis in-band tolerance (px)
     duration=20,            # total budget (s), including any fallback cycles
-    gain=30,                # HARD max-speed cap (% thrust) — never exceeded
-    lat_gain=None, yaw_gain=None, depth_gain=None,   # per-axis cap (None = inherit gain)
+    gain=30,                # HARD max-speed cap (% thrust) — never exceeded (lat/yaw)
+    lat_gain=None, yaw_gain=None,   # per-axis cap (None = inherit gain). Depth: no % cap
+    depth_step=None,        # depth-setpoint resolution (m/update): 0.02 slow .. 0.10 coarse;
+                            #   freezes in-deadband so ArduSub settles (no z-wobble). None = 0.02
     brake=True, brake_gain=None,   # lateral arrival brake (brake=False to coast / fire)
     hold=None,              # active station-keep (s) after centring — fights inertia
     fire=None,              # mid-hold payload fire: channel int or list (1/2 torpedo, 3/4 dropper)
     fire_t=None,            # s into the hold to fire (0 = at lock); must be < hold
     lock_on=False,          # precision continuity lock: steer to the box nearest the last centre
+    settle=None,            # settle gate (px): end SETTLED not mid-pass — coarse aligns only,
+                            #   NEVER the fire-lock (it gates the mid-hold fire)
+    fire_pass=False,        # fire at command end even if never fully aligned (seen live+recently)
+    hold_heading=False,     # widen heading-lock deadband for the hold (steady launcher heading)
     fallback=None,          # search fn run on target loss (see Fallback)
     camera=None,            # defaults to duburi.camera ('forward')
 ) -> VisionResult
+
+# The mid-hold fire leaves ONLY on the tick a genuinely NEW, non-coasted detection
+# lands (is_new_frame) — FPS-robust yet never on a frozen/coasted box. fwd=<%fill>
+# (+ fwd_mode) adds the forward range-hold standoff axis (the unified torpedo shot).
 ```
 
 > `hold` / `fire` / `fire_t` fire a payload **mid-hold while still correcting** —
