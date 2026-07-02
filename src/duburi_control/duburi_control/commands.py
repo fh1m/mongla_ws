@@ -253,10 +253,13 @@ COMMANDS = {
                     'released to the lock. '
                     'DOWNWARD CAMERA (camera=downward/sim_bottom): the frame rotates -- '
                     'image-X still drives Ch6 lateral, but the depth axis (image-Y) drives '
-                    'Ch5 SURGE fore/aft (two-sided, braked), and fwd_fill descends the '
-                    'ALT_HOLD depth to that bbox fill (bounded by max_depth_m, the deepest '
-                    'allowed m). surge_sign (+1/-1) flips fore/aft for the physical mount '
-                    '(verify DISARMED). fire drops droppers (3/4). See the bin task.',
+                    'Ch5 SURGE fore/aft (two-sided, braked), and fwd_fill DESCENDS the '
+                    'ALT_HOLD depth to that bbox fill using the depth_step logic (proportional, '
+                    'deadband-frozen, one-sided). Bounded by max_depth_m (deepest) and '
+                    'depth_ceiling_m (shallowest -- surface guard so alignment cannot lift the '
+                    'hull out of the water). surge_sign (+1/-1) flips fore/aft for the mount '
+                    '(verify DISARMED). fire drops droppers (3/4). fire_gap spaces multi-channel '
+                    'shots (fire=[1,4]) apart in seconds (solenoid needs the gap). See the bin task.',
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
@@ -268,7 +271,7 @@ COMMANDS = {
                      'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat',
                      'coast_s', 'fwd_fill', 'mode', 'kp_forward', 'settle_px',
                      'depth_step', 'fire_pass_enabled', 'hold_heading',
-                     'surge_sign', 'max_depth_m'],
+                     'surge_sign', 'max_depth_m', 'depth_ceiling_m', 'fire_gap'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
@@ -284,7 +287,8 @@ COMMANDS = {
                      'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0,
                      'settle_px': 0.0, 'depth_step': 0.0,
                      'fire_pass_enabled': False, 'hold_heading': False,
-                     'surge_sign': 0.0, 'max_depth_m': 0.0},
+                     'surge_sign': 0.0, 'max_depth_m': 0.0,
+                     'depth_ceiling_m': 0.0, 'fire_gap': 0.0},
     },
     'vision_move': {
         'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '

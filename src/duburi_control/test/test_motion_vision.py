@@ -1481,6 +1481,42 @@ def test_downward_fill_to_depth_descends_bounded():
         'descent must never pass max_depth_m (the deep floor)'
 
 
+def test_downward_descent_step_bounded_by_depth_step():
+    # The descent uses the depth_step logic: each 5 Hz update moves the setpoint by
+    # AT MOST depth_step m (proportional to the fill deficit, so <= that cap).
+    step = 0.03
+    _, pix, _ = _align(_FakeVision(_sample(ey=0.0, w_frac=0.1, h_frac=0.1)),
+                       axes={'lat', 'depth'}, downward=True, fwd_fill=0.9,
+                       fwd_mode='height', depth_step=step, max_depth_m=-2.0,
+                       err_px=10.0, duration=1.0)
+    deltas = [abs(b - a) for a, b in zip(pix.depths, pix.depths[1:])]
+    assert deltas and max(deltas) <= step + 1e-9, \
+        f'each descent update must move <= depth_step ({max(deltas)} > {step})'
+
+
+def test_downward_descent_frozen_at_fill_target():
+    # Once the bbox fills to the target (deficit within FWD_BAND), the descent
+    # FREEZES -- the setpoint holds instead of chasing bbox jitter (no z-wobble).
+    _, pix, _ = _align(_FakeVision(_sample(ey=0.0, w_frac=0.95, h_frac=0.95)),
+                       axes={'lat', 'depth'}, downward=True, fwd_fill=0.8,
+                       fwd_mode='height', max_depth_m=-2.0, err_px=10.0, duration=0.5)
+    assert all(abs(d - (-0.5)) < 1e-9 for d in pix.depths), \
+        'at/past the fill target the depth setpoint must be frozen (no descent)'
+
+
+def test_depth_ceiling_clamps_forward_ascent():
+    # depth_ceiling_m is the shallowest allowed setpoint on ANY depth motion. A
+    # FORWARD depth align whose target is well ABOVE centre (ey<0 -> ascend) must
+    # never drive the setpoint shallower than the ceiling (surface guard).
+    ceil = -0.4
+    _, pix, _ = _align(_FakeVision(_sample(ey=-1.0)), axes={'lat', 'depth'},
+                       depth_ceiling_m=ceil, err_px=10.0, duration=0.6,
+                       align_stable_frames=99)
+    assert pix.depths, 'depth axis must stream a setpoint'
+    assert max(pix.depths) <= ceil + 1e-9, \
+        'setpoint must never rise shallower than depth_ceiling_m (surface guard)'
+
+
 def test_downward_surge_brakes_on_arrival():
     # Ch5 surge coasts (open-loop timed thrust) like Ch6 -- the arrival brake must
     # kick the forward axis so the hull stops square over the bin. A hard snap-in
