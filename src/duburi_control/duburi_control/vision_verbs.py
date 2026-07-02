@@ -77,7 +77,7 @@ class VisionVerbs:
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
                      settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
-                     hold_heading=False):
+                     hold_heading=False, surge_sign=0.0, max_depth_m=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -137,7 +137,11 @@ class VisionVerbs:
             depth_sign    = -1 if is_downward else +1
             touches_yaw   = 'yaw' in axis_set
             touches_depth = 'depth' in axis_set
-            if touches_depth:
+            # ALT_HOLD needed when we command the depth setpoint (forward 'depth'
+            # axis or downward fill->depth), AND on any downward align -- there the
+            # 'depth' axis drives Ch5 surge while ArduSub must still hold the mission
+            # depth on Ch3 (or we'd sink/surface uncommanded).
+            if touches_depth or is_downward or float(fwd_fill) > 0.0:
                 self._ensure_alt_hold('vision_align')
 
             stable = int(align_stable_frames) or 3
@@ -197,6 +201,11 @@ class VisionVerbs:
                         kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
                         settle_px=float(settle_px),
                         depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
+                        downward=is_downward,
+                        # SIGN-ONLY: coerce to exactly +1/-1 (rosidl-0 -> +1) so it can
+                        # never scale Ch5 past the gain cap -- it only flips fore/aft.
+                        surge_sign=(-1 if float(surge_sign) < 0.0 else +1),
+                        max_depth_m=float(max_depth_m),      # deep floor for fill->depth (0=off)
                         on_locked=on_locked,
                         fire_t=eff_fire_t,
                         fire_pass=bool(fire_pass_enabled),
@@ -264,6 +273,16 @@ class VisionVerbs:
         gate). Returns a Move.Result with ``success=True`` and the
         outcome code in ``final_value``.
         """
+        # Guard: move() is meaningless on a DOWNWARD camera -- surging Ch5 does
+        # not grow a downward target's bbox fill (you descend to approach, you
+        # don't drive into it), so a fill-stop move would drive forever. The bin
+        # task centres with align(camera='downward') and descends via its fill
+        # axis; there is no move() phase. Reject explicitly rather than misbehave.
+        if camera in ('downward', 'sim_bottom'):
+            return self._make_result(
+                True, "vision_move: not supported on a downward camera "
+                      "(use vision_align -- surge doesn't grow downward fill)",
+                final_value=2.0, error_value=0.0)   # TIMEOUT-ish no-op
         # fwd_fill <= 0 is the pass-through sentinel (DSL move(fwd=None) /
         # CLI --fwd_fill -1). Anything > 0 is a real fill-% stop target.
         passthrough = float(fwd_fill) <= 0.0

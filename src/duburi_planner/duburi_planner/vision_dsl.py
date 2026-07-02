@@ -172,6 +172,8 @@ class _VisionDSL:
               depth_step: Optional[float] = None,
               fire_pass: bool = False,
               hold_heading: bool = False,
+              surge_sign: Optional[int] = None,
+              max_depth_m: Optional[float] = None,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -282,6 +284,10 @@ class _VisionDSL:
         axes_csv = ','.join(name for name, _ in active)
         offsets = {name: float(val) for name, val in active}
         cam     = self._resolve_camera(camera)
+        # Auto-switch the live detector to this camera (pause the other, resume this,
+        # point the HUD at it, settle) so `camera='downward'` "just works" and only
+        # one detector runs at a time. Idempotent -- no-op when already live.
+        self._dsl._activate_camera(cam)
         # Loud preflight: align needs live detections -- abort if the detector
         # node for this camera isn't running (rather than idle on err=+inf).
         self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))
@@ -315,7 +321,9 @@ class _VisionDSL:
                 settle_px=float(settle) if settle is not None else 0.0,
                 depth_step=float(depth_step) if depth_step is not None else 0.0,
                 fire_pass_enabled=bool(fire_pass),
-                hold_heading=bool(hold_heading))
+                hold_heading=bool(hold_heading),
+                surge_sign=float(surge_sign) if surge_sign is not None else 0.0,
+                max_depth_m=float(max_depth_m) if max_depth_m is not None else 0.0)
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)
@@ -361,6 +369,10 @@ class _VisionDSL:
         :class:`VisionResult`; never raises on a miss.
         """
         cam = self._resolve_camera(camera)
+        # Auto-switch the live detector to this camera (idempotent). move() is
+        # rejected on a downward camera by the verb, but a forward move after a
+        # downward align still needs to flip the live detector back.
+        self._dsl._activate_camera(cam)
         # Loud preflight: move needs live detections -- abort if the detector
         # node for this camera isn't running (rather than idle on err=+inf).
         self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))

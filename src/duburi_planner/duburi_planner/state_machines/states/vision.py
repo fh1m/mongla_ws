@@ -91,6 +91,8 @@ class VisionAlignState(DuburiState):
         err: float = 40.0,
         gain: float = 30.0,
         duration: float = 20.0,
+        surge_sign: int = 1,
+        max_depth_m: float = 0.0,
         fallback=None,
     ) -> None:
         super().__init__(duburi, profile, [SUCCEED, FAILED])
@@ -102,6 +104,10 @@ class VisionAlignState(DuburiState):
         self._err      = err
         self._gain     = gain
         self._duration = duration
+        # Downward-frame knobs (ignored on a forward camera): Ch5 fore/aft surge
+        # polarity + deepest allowed setpoint for a fill->depth descent.
+        self._surge_sign  = surge_sign
+        self._max_depth_m = max_depth_m
         self._fallback = fallback
         self.TIMEOUT_S = duration + 10.0
 
@@ -110,6 +116,7 @@ class VisionAlignState(DuburiState):
             self._target, camera=self._camera,
             lat=self._lat, yaw=self._yaw, depth=self._depth,
             err=self._err, gain=self._gain, duration=self._duration,
+            surge_sign=self._surge_sign, max_depth_m=self._max_depth_m,
             fallback=self._fallback)
         return SUCCEED if result.ok else FAILED
 

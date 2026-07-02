@@ -454,6 +454,9 @@ def align_loop(*,
                kp_forward: float = KP_FORWARD_DEFAULT,
                settle_px: float = SETTLE_PX_DEFAULT,
                depth_step: float = _MAX_DEPTH_NUDGE,
+               downward: bool = False,
+               surge_sign: int = +1,
+               max_depth_m: float = 0.0,
                on_locked=None,
                fire_t: float = 0.0,
                fire_pass: bool = False,
@@ -498,6 +501,25 @@ def align_loop(*,
     inside the deadband, so ArduSub settles between steps (no z-wobble). 0.02 slow ..
     0.10 coarse -- the SOLE depth-rate knob (depth has no % speed cap like lat/yaw;
     to drop the depth axis entirely, omit 'depth' from ``axes``).
+
+    ``downward`` -- DOWNWARD-CAMERA FRAME REMAP (bottom-mounted cam, looks at the
+    pool floor). The bin task hovers ABOVE the target, so the body axes rotate:
+      * ``lat`` (image-X) -> Ch6 lateral strafe  -- SAME as forward.
+      * ``depth`` (image-Y) -> Ch5 SURGE fore/aft -- REMAPPED. Two-sided P-on-pixel
+        modelled on the lat axis (rgain + freshness-decay + arrival reverse-kick
+        brake), NOT the depth setpoint. Ch5 is open-loop timed thrust so it MUST be
+        braked or the 20 kg hull coasts past the bin. ``surge_sign`` flips its
+        polarity for the physical mount (verify DISARMED with vision_thrust_check --
+        a wrong sign is positive feedback that drives the hull AWAY from the bin).
+      * ``fwd_fill`` (optional) -> DEPTH descent: descend until the bbox fills
+        ``fwd_fill`` of the frame, one-sided, bounded by ``max_depth_m`` (deepest
+        allowed, negative m) so an unreachable fill can't drive into the floor. 0 =
+        no vision depth; ArduSub holds ``set_depth`` (the minimum-viable bin path is
+        lat + surge + set_depth hold + drop).
+      * fire -> dropper (channels 3/4) via ``on_locked`` -- same mechanism as torpedo.
+    yaw is released to ``heading_lock`` (no vision-yaw axis on the bin task).
+    ``move_loop`` is meaningless on a downward camera (surging doesn't grow fill);
+    the DSL guards ``move(camera='downward')``.
 
     ``report_fn`` (if given) is called every PRESENT tick with the signed
     from-centre pixel offset ``(x_off, y_off)`` of the target -- a live-telemetry
@@ -546,10 +568,29 @@ def align_loop(*,
     g_lat   = gain if gain_lat   is None else gain_lat
     g_yaw   = gain if gain_yaw   is None else gain_yaw
     g_fwd   = gain                       # forward range-hold capped by the global gain
-    use_fwd = float(fwd_fill) > 0.0      # optional forward standoff axis
+    use_fwd = float(fwd_fill) > 0.0      # optional forward standoff / downward-descent axis
+
+    # FAIL-SAFE: on a downward camera the fwd_fill axis DESCENDS (one-sided, deeper)
+    # toward the fill target. Without a deep floor (`max_depth_m` < 0) an unreachable
+    # fill would drive the hull into the pool floor. Require the floor to enable the
+    # descent; otherwise drop the fill axis and just hold ArduSub depth. (Forward
+    # cameras are unaffected -- there fwd_fill is a Ch5 standoff, not a descent.)
+    if downward and use_fwd and float(max_depth_m) >= 0.0:
+        log.warning("[VIS  ] downward fill->depth descent needs max_depth_m<0 "
+                    "(deep floor) -- ignoring fwd_fill, holding ArduSub depth")
+        use_fwd = False
 
     use_depth   = 'depth' in axes
-    throttle_ch = 65535 if use_depth else 1500   # release Ch3 for ALT_HOLD depth PID
+    # DOWNWARD: the 'depth' axis drives Ch5 SURGE (image-Y), not the depth setpoint;
+    # ArduSub's ALT_HOLD owns Ch3 (mission set_depth), and the optional fwd_fill axis
+    # descends that setpoint. FORWARD: the 'depth' axis drives the depth setpoint.
+    use_surge   = use_depth and downward          # image-Y -> Ch5 fore/aft
+    use_vdepth  = use_depth and not downward      # image-Y -> depth setpoint (forward)
+    # Stream depth setpoint when a vision axis owns depth: forward 'depth' axis, OR
+    # downward fill->depth descent. Release Ch3 to ALT_HOLD whenever depth is in play
+    # (incl. downward, where ArduSub holds the mission depth while we surge).
+    stream_depth = use_vdepth or (downward and use_fwd)
+    throttle_ch = 65535 if (use_depth or (downward and use_fwd)) else 1500
     # depth_step is the per-UPDATE setpoint resolution (m): the depth axis moves the
     # ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update, so max slew =
     # depth_step * DEPTH_HZ (0.1 m/s at the 0.02 default). It is the operator's depth-
@@ -619,6 +660,8 @@ def align_loop(*,
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
+    surge_ema   = 0.0   # downward: trailing EMA of the signed Ch5 surge command -> brake proxy
+    fill_deficit = 0.0  # downward fill->depth: (target_fill - fill), carried into the 5 Hz step
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
     dt          = 1.0 / LOOP_HZ              # fixed tick (loop sleeps this each pass)
     gate_norm   = VISION_LOCK_GATE_NORM if lock_on else 0.0
@@ -642,6 +685,14 @@ def align_loop(*,
         f"err={eff_err:.0f}px"
         f"{' (floored from %.0f)' % err_px if floored else ''} "
         f"gain={gain:.0f}% dur={duration:.0f}s hold={hold_s:.0f}s")
+    if downward:
+        # Loudly announce the rotated frame so the operator never mistakes a
+        # downward align's axis meanings for the forward ones (see docstring).
+        fill_note = (f", fill->depth descend to {fwd_fill*100:.0f}% "
+                     f"(floor {max_depth_m:.1f}m)" if use_fwd else
+                     ", depth held by ArduSub (no fill axis)")
+        log.info(f"[VIS  ] downward frame: image-X->lat Ch6, image-Y->surge Ch5 "
+                 f"(sign {surge_sign:+d}){fill_note}")
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
@@ -769,7 +820,19 @@ def align_loop(*,
                     yaw_pct = math.copysign(mag, ctrl)
                 in_band.append(epx <= eff_err)
 
-            if use_depth:
+            if use_surge:
+                # DOWNWARD: the 'depth' axis (image-Y) drives Ch5 SURGE fore/aft.
+                # Two-sided P modelled on the lat axis (same kp/cap/rgain), so the
+                # hull drives forward when the bin is ahead and BACK when behind --
+                # the one-sided fwd/fill law can't back up and would never centre.
+                # surge_sign flips polarity for the physical mount (verify disarmed).
+                ctrl = sample.ey - offsets.get('depth', 0.0) / half_h
+                epx  = abs(ctrl) * half_h
+                worst = max(worst, epx)
+                p_surge = ctrl * kp_lat * rgain
+                fwd_pct = _clamp(p_surge, -g_fwd, g_fwd) * surge_sign
+                in_band.append(epx <= eff_err)
+            elif use_vdepth:
                 ctrl = sample.ey - offsets.get('depth', 0.0) / half_h
                 epx  = abs(ctrl) * half_h
                 worst = max(worst, epx)
@@ -779,8 +842,17 @@ def align_loop(*,
                 depth_ctrl, depth_epx = ctrl, epx
                 in_band.append(epx <= eff_err)
 
-            if use_fwd:
-                # Forward range-hold (the unified standoff shot). ONE-SIDED: drive
+            if use_fwd and downward:
+                # DOWNWARD: the fill axis drives a DEPTH DESCENT (get closer to the
+                # bin for the drop), not Ch5. One-sided: descend while the bbox is
+                # smaller than fwd_fill, hold at/past it. Carried into the 5 Hz depth
+                # step (deep-floor bounded there). Never surges Ch5 here -- Ch5 is the
+                # surge axis above.
+                last_fill = _fill(sample, fwd_mode)   # reported in Outcome.fill
+                fill_deficit = float(fwd_fill) - last_fill
+                in_band.append(fill_deficit <= FWD_BAND)
+            elif use_fwd:
+                # FORWARD range-hold (the unified standoff shot). ONE-SIDED: drive
                 # forward while the bbox is smaller than the standoff fill, command
                 # exactly 0 once at/past it (never reverse -> no reverse-kick, no
                 # ramming the board; water drag bleeds a small overshoot). The
@@ -811,17 +883,33 @@ def align_loop(*,
             # including it would make the arrival brake reverse-kick a stationary
             # hull off the spot it was holding. Exclude lat_i here.
             lat_ema += _BRAKE_EMA_ALPHA * (p_lat * fresh - lat_ema)
-            if use_depth and (now - last_depth) >= 1.0 / DEPTH_HZ:
-                # Step the ALT_HOLD setpoint toward the target by AT MOST depth_step,
-                # and ONLY when out of the deadband. Inside the band the setpoint is
-                # FROZEN -- ArduSub holds the last depth instead of dithering on
-                # bbox-y jitter (the z-wobble). Stepped at 5 Hz (not 20) so the depth
-                # PID reaches each step before the next: slow, stable, resolution set
-                # by depth_step. _MIN_DEPTH_M keeps it never shallower than the floor.
-                if depth_epx > eff_err:
-                    step = _clamp(depth_ctrl * kp_depth * rgain,
-                                  -max_nudge, max_nudge) * depth_sign
-                    depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
+            if use_surge:
+                # Downward Ch5 surge is open-loop timed thrust (like lat/Ch6) -- track
+                # its EMA so the arrival brake bleeds the fore/aft coast, or the hull
+                # sails past the bin. fwd_pct already carries the signed, fresh-decayed
+                # surge command, so the EMA is the true momentum proxy and the brake
+                # reverse-kicks opposite it regardless of surge_sign.
+                surge_ema += _BRAKE_EMA_ALPHA * (fwd_pct - surge_ema)
+            if stream_depth and (now - last_depth) >= 1.0 / DEPTH_HZ:
+                # Step the ALT_HOLD setpoint at 5 Hz (not 20) so the depth PID reaches
+                # each step before the next: slow, stable, resolution = depth_step.
+                if use_vdepth:
+                    # FORWARD: image-Y drives the setpoint; FROZEN inside the deadband
+                    # (no z-wobble). _MIN_DEPTH_M keeps it never shallower than the floor.
+                    if depth_epx > eff_err:
+                        step = _clamp(depth_ctrl * kp_depth * rgain,
+                                      -max_nudge, max_nudge) * depth_sign
+                        depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
+                else:
+                    # DOWNWARD fill->depth: descend (deeper) while the bbox is smaller
+                    # than fwd_fill; hold at/past it. ONE-SIDED (never ascends on
+                    # overshoot). Bounded BOTH ways: never shallower than _MIN_DEPTH_M,
+                    # never DEEPER than max_depth_m (the deep floor) so an unreachable
+                    # fill target can't drive the hull into the pool floor.
+                    if fill_deficit > FWD_BAND:
+                        depth_setpoint = min(depth_setpoint - max_nudge, _MIN_DEPTH_M)
+                        if max_depth_m < 0.0:
+                            depth_setpoint = max(depth_setpoint, max_depth_m)
                 pixhawk.set_target_depth(depth_setpoint)
                 last_depth = now
 
@@ -891,6 +979,12 @@ def align_loop(*,
                     # Yaw/depth never brake.
                     if brake and 'lat' in axes:
                         _brake_axis(writers.lateral, lat_ema, brake_gain,
+                                    abort_fn=abort_fn, log=log, label='VBRK')
+                    # Downward: also bleed the Ch5 SURGE coast (fore/aft) so the hull
+                    # stops square over the bin instead of sailing past. Ch5 open-loop
+                    # timed thrust coasts exactly like Ch6 -- same self-gating brake.
+                    if brake and use_surge:
+                        _brake_axis(writers.forward, surge_ema, brake_gain,
                                     abort_fn=abort_fn, log=log, label='VBRK')
                     writers.neutral()
                     # State the deadband next to the residual so 'aligned

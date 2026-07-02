@@ -1413,3 +1413,79 @@ def test_vision_yaw_floor_tapers_to_zero_at_deadband():
     assert _vision_yaw_floor(eff + 2 * BAND, eff, full) == full  # beyond -> full
     mid = _vision_yaw_floor(eff + 0.5 * BAND, eff, full)
     assert 0.0 < mid < full, 'floor must taper monotonically inside the band'
+
+
+# --------------------------------------------------------------------------- #
+#  DOWNWARD-camera frame remap (bin task): image-Y -> Ch5 surge, fill -> depth #
+# --------------------------------------------------------------------------- #
+def _fwd_pwms(pix):
+    """Ch5 (forward/surge) PWMs commanded via send_rc_override, excluding neutral."""
+    return [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+
+
+def test_downward_surge_drives_ch5_from_image_y():
+    # DOWNWARD: the 'depth' axis (image-Y) drives Ch5 SURGE, two-sided. A target
+    # BELOW centre (ey>0) drives forward (Ch5>1500); ABOVE (ey<0) drives back.
+    fwd = _fwd_pwms(_align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
+                           downward=True, err_px=10.0, duration=0.25)[1])
+    assert fwd and max(fwd) > 1500, 'target below (ey>0) must surge FORWARD on Ch5'
+    back = _fwd_pwms(_align(_FakeVision(_sample(ey=-1.0)), axes={'lat', 'depth'},
+                            downward=True, err_px=10.0, duration=0.25)[1])
+    assert back and min(back) < 1500, 'target above (ey<0) must surge BACK on Ch5'
+
+
+def test_downward_surge_sign_flips_fore_aft():
+    # surge_sign=-1 reverses the Ch5 polarity for a flipped physical mount.
+    fwd = _fwd_pwms(_align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
+                           downward=True, surge_sign=-1, err_px=10.0,
+                           duration=0.25)[1])
+    assert fwd and max(fwd) < 1500, 'surge_sign=-1 must reverse fore/aft'
+
+
+def test_downward_lat_still_drives_ch6():
+    # image-X still drives Ch6 lateral on a downward camera (unchanged).
+    _, pix, _ = _align(_FakeVision(_sample(ex=1.0)), axes={'lat', 'depth'},
+                       downward=True, err_px=10.0, duration=0.25)
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    assert lat and max(lat) > 1500, 'target right (ex>0) must strafe RIGHT on Ch6'
+
+
+def test_downward_depth_axis_does_not_move_setpoint():
+    # On downward the 'depth' axis is SURGE, so it must NOT step the ALT_HOLD depth
+    # setpoint (that would sink/surface the hull). Any streamed depth == start.
+    _, pix, _ = _align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
+                       downward=True, err_px=10.0, duration=0.3)
+    assert all(abs(d - (-0.5)) < 1e-9 for d in pix.depths), \
+        'downward depth axis must not drive the depth setpoint (it is surge)'
+
+
+def test_forward_depth_axis_unchanged_regression():
+    # FORWARD camera (downward=False, the default): the 'depth' axis still drives
+    # the depth setpoint and NOT Ch5 -- the remap must not leak into forward.
+    _, pix, _ = _align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
+                       err_px=10.0, duration=0.3)
+    assert not _fwd_pwms(pix), 'forward depth axis must never drive Ch5 surge'
+    assert pix.depths and pix.depths[-1] < -0.5, \
+        'forward depth axis must still deepen the setpoint on ey>0'
+
+
+def test_downward_fill_to_depth_descends_bounded():
+    # DOWNWARD + fwd_fill: descend (deeper) while the bbox is below the fill target,
+    # bounded by max_depth_m so it can't drive into the pool floor.
+    floor = -0.56
+    _, pix, _ = _align(_FakeVision(_sample(ey=0.0, w_frac=0.1, h_frac=0.1)),
+                       axes={'lat', 'depth'}, downward=True, fwd_fill=0.8,
+                       fwd_mode='height', max_depth_m=floor, err_px=10.0, duration=1.0)
+    assert pix.depths and pix.depths[-1] < -0.5, 'fill<target must DESCEND (deeper)'
+    assert min(pix.depths) >= floor - 1e-9, \
+        'descent must never pass max_depth_m (the deep floor)'
+
+
+def test_downward_surge_brakes_on_arrival():
+    # Ch5 surge coasts (open-loop timed thrust) like Ch6 -- the arrival brake must
+    # kick the forward axis so the hull stops square over the bin. A hard snap-in
+    # (large ey then centred) crosses the brake gate -> writers.forward is written.
+    seq = [_sample(ey=0.8)] * 4 + [_sample(ey=0.0)] * 4
+    _, _, writers = _align(_FakeVision(seq), axes={'lat', 'depth'}, downward=True,
+                           align_stable_frames=3, err_px=10.0, duration=0.6)
+    assert writers.forwards, 'downward arrival must brake the Ch5 surge coast'
