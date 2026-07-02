@@ -62,6 +62,18 @@ Each tick at `LOCK_STREAM_HZ` (50 Hz, matched to the BNO085 firmware rate):
    tick. ArduSub treats Ch4 != 1500 as a pilot yaw-rate command, so the
    Python-side `yaw_source` is the sole feedback closing the loop.
 
+**Fire-window quiet mode (2026-07-01, D12).** The active deadband is a
+per-instance field (`self._deadband_deg`, default `LOCK_DEADBAND_DEG`),
+toggled by `HeadingLock.set_hold_mode(on)`. A terminal `vision_align`
+that releases yaw to the lock (the torpedo hole-lock: `lat`/`depth` only)
+and passes `hold_heading=True` calls `set_hold_mode(True)` for the
+duration of the call (try/finally restores it), widening the deadband to
+`LOCK_HOLD_DEADBAND_DEG` (3.0°). This makes the lock **hold a steady
+launcher heading** instead of chasing sub-degree BNO / thrust-coupling
+noise -- the residual terminal yaw jitter -- while the torpedo fires.
+`_lock_command`/`_lock_floor` take the active deadband as a param so they
+stay pure/testable; the default path (setter never called) is unchanged.
+
 There is no `SET_ATTITUDE_TARGET` involved -- that approach was
 considered and dropped because the rate-override path is simpler,
 matches what ArduSub does for joystick pilots, and avoids stream-
@@ -74,7 +86,8 @@ Tunables live at the top of
 LOCK_KP_PCT_PER_DEG    = 1.2     # proportional gain (% thrust per deg)
 LOCK_SPEED_MIN_PCT     = 5.0     # stiction-break floor (tapered, see below)
 LOCK_PCT_MAX           = 22.5    # clamp; matches yaw_snap max
-LOCK_DEADBAND_DEG      = 1.0     # inside this -> command 0
+LOCK_DEADBAND_DEG      = 1.0     # inside this -> command 0 (normal)
+LOCK_HOLD_DEADBAND_DEG = 3.0     # widened deadband in fire-window quiet mode (set_hold_mode)
 LOCK_APPROACH_BAND_DEG = 6.0     # floor tapers full->0 across deadband..band
 DRIFT_LOG_SEC          = 1.0     # [LOCK ] heartbeat cadence
 SOURCE_DEAD_S          = 0.5     # release Ch4 after this many silent seconds

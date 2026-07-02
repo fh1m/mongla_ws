@@ -990,13 +990,17 @@ if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
     duburi.fire(1)           # torpedo_1 (ESP32 serial 1/2)
 ```
 
-> **Per-axis gain for stable holds.** `lat_gain`/`yaw_gain`/`depth_gain` cap one
-> axis independently of the global `gain` (unset = inherit it). Yaw is the axis to
-> slow down for a torpedo hole-lock: far from the target a brisk yaw overshoots and
-> wobbles, so dial `yaw_gain` low (≈8–12) for a slow, settle-able correction while
-> `lat`/`depth` stay responsive. The yaw spin-up floor only engages once the bbox is
-> large (close), so a low `yaw_gain` far out stays pure-proportional and won't
-> limit-cycle.
+> **Per-axis gain for stable holds.** `lat_gain`/`yaw_gain` cap the lat/yaw axis
+> independently of the global `gain` (unset = inherit it). **Depth has no `%` cap** —
+> its rate is `depth_step` (m/update, 0.02 slow .. 0.10 coarse); depth steps the
+> ArduSub setpoint at 5 Hz and freezes inside the deadband so there's no z-wobble.
+> Yaw is the axis to slow down for a torpedo hole-lock: far from the target a brisk
+> yaw overshoots and wobbles, so dial `yaw_gain` low (≈8–12) for a slow, settle-able
+> correction while `lat`/`depth` stay responsive. The yaw spin-up floor only engages
+> once the bbox is large (close) and is tapered to 0 at the deadband edge, so it
+> eases in instead of relay-slamming; a low `yaw_gain` far out stays pure-proportional
+> and won't limit-cycle. At the hole, **drop the yaw axis** and add `hold_heading=True`
+> so the background heading lock holds a steady launcher heading during the fire.
 
 > **Inertial arrival brake (`brake=True`, default).** Vision verbs reverse-kick on
 > arrival to bleed water inertia so a step ends at a predictable, drift-free
