@@ -61,7 +61,9 @@ HOLE_HOLD_S            = 4.0    # station-keep (forward+lat+depth) while firing
 FIRE_T                 = 1.5    # seconds into the hold to fire (must be < HOLE_HOLD_S)
 
 # ── FIRE ─────────────────────────────────────────────────────────────────────
-FIRE_CHANNEL           = 1      # 1=torpedo_1  2=torpedo_2  (always explicit)
+FIRE_CHANNEL           = 1      # 1=torpedo_1  2=torpedo_2  (int) OR [1,2] for BOTH
+FIRE_GAP_S             = 1.0    # seconds between shots when FIRE_CHANNEL is a list
+                                # (solenoid launcher misfires if two fire together)
 
 # ── SEARCH (mission-authored fallback) ────────────────────────────────────────
 SEARCH_FORWARD_GAIN    = 40     # % thrust per creep
@@ -142,7 +144,7 @@ def run(duburi, log=None):
             err=HOLE_ERR_PX, gain=FINE_GAIN, duration=HOLE_LOCK_S,
             lock_on=True, hold=HOLE_HOLD_S,
             hold_heading=True,                                  # steady launcher heading (no yaw jitter)
-            fire=FIRE_CHANNEL, fire_t=FIRE_T, brake=False,      # mid-hold, while glued
+            fire=FIRE_CHANNEL, fire_t=FIRE_T, fire_gap=FIRE_GAP_S, brake=False,  # mid-hold
             fallback=creep_forward)
         if locked:
             info(f'Standoff lock held — fired ESP32 channel {FIRE_CHANNEL} mid-hold')

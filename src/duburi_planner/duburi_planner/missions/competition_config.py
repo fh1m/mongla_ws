@@ -35,8 +35,23 @@ GATE_PASS_FWD_FILL    = 80      # gate bbox height % of frame that means "throug
 SLALOM_PIPE_OFFSET_PX = 80      # lateral pixel offset from pipe centre (positive=right)
 SLALOM_FWD_FILL       = 60      # pipe bbox height % of frame at closest pass
 
-# ── Bin ─────────────────────────────────────────────────────────────────────────
+# ── Bin (DOWNWARD camera: image-X→lat Ch6, image-Y→surge Ch5, fill→depth) ────────
 BIN_CENTRE_ERR_PX     = 30      # how tightly to centre over the bin before dropping
+BIN_SURGE_SIGN        = +1      # Ch5 fore/aft polarity for the bottom-cam mount.
+                                # VERIFY DISARMED (vision_thrust_check --camera downward):
+                                # a bin AHEAD in the image must drive the hull FORWARD.
+                                # Flip to -1 if it drives backward. Wrong sign = runaway.
+BIN_DESCEND_FILL      = 0       # optional: descend until the bin fills this % (height) for a
+                                # closer drop. 0 = OFF (hold BIN_DEPTH_M; core path). When >0,
+                                # bounded by BIN_MAX_DEPTH_M so it can't drive into the floor.
+BIN_MAX_DEPTH_M       = -1.6    # deepest allowed setpoint for BIN_DESCEND_FILL (negative m)
+BIN_DEPTH_CEILING_M   = -0.4    # SHALLOWEST setpoint on the downward align -- surface guard so
+                                # ratio/alignment can't lift the hull out of the water (negative m).
+BIN_DROPPER_CHANNEL   = 3       # 3 = dropper_1, 4 = dropper_2 (marker drop)
+
+# ── Payload fire ─────────────────────────────────────────────────────────────────
+FIRE_GAP_S            = 1.0     # seconds BETWEEN channels when firing a LIST (fire=[1,4]/[2,3]).
+                                # The solenoid launcher misfires if two go together -- space them.
 
 # ── Torpedo ──────────────────────────────────────────────────────────────────────
 TORPEDO_BLOOD_FWD_FILL = 30     # blood bbox height % at end of COARSE approach (gets in range)

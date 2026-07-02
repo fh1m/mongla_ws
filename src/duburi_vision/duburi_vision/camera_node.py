@@ -57,6 +57,11 @@ class CameraNode(Node):
         self.declare_parameter('name',            '')
         self.declare_parameter('topic',           '')        # for source=ros_topic
         self.declare_parameter('device',          -1)        # -1 = use profile default; ≥0 overrides
+        # PORT-STABLE identity for identical cameras (same VID/PID): a /dev/v4l/by-path/…
+        # symlink pins the camera to a physical USB PORT, so 'forward'/'downward' never
+        # swap on reboot/re-enumeration (unlike /dev/videoN indices). Non-empty wins over
+        # `device`. See .claude/context/dual-camera-setup.md.
+        self.declare_parameter('device_path',     '')        # e.g. /dev/v4l/by-path/...-video-index0
         self.declare_parameter('width',           640)
         self.declare_parameter('height',          480)
         # fps / publish_rate_hz declared as int so launch ints pass through
@@ -115,6 +120,8 @@ class CameraNode(Node):
             f"{ns}/image_raw  @ {rate:.1f} Hz")
 
     def _build_camera(self):
+        # A by-path symlink (port-stable) wins over the int device index everywhere.
+        device_path = str(self.get_parameter('device_path').value).strip()
         profile_name = str(self.get_parameter('profile').value).strip()
         if profile_name:
             profile = get_profile(profile_name)
@@ -122,14 +129,18 @@ class CameraNode(Node):
                 profile.setdefault('name', profile_name)
             else:
                 profile['name'] = str(self.get_parameter('name').value).strip()
-            # Allow explicit device override; -1 sentinel means "use profile default".
-            dev_param = self.get_parameter('device').value
-            try:
-                dev_int = int(dev_param)
-            except (TypeError, ValueError):
-                dev_int = -1
-            if dev_int >= 0:
-                profile['device'] = dev_int
+            # device_path (by-path symlink) > int device override > profile default.
+            if device_path:
+                profile['device'] = device_path
+                self.get_logger().info(f'[CAM  ] device_path (port-stable) → {device_path}')
+            else:
+                dev_param = self.get_parameter('device').value
+                try:
+                    dev_int = int(dev_param)
+                except (TypeError, ValueError):
+                    dev_int = -1
+                if dev_int >= 0:
+                    profile['device'] = dev_int
             return make_camera_from_profile(
                 profile, node=self, logger=self.get_logger())
 
@@ -146,13 +157,17 @@ class CameraNode(Node):
                           or source,
         }
         if source == 'webcam':
-            dev = self.get_parameter('device').value
-            try:
-                dev = int(dev)
-            except (TypeError, ValueError):
-                pass
-            if isinstance(dev, int) and dev < 0:
-                dev = 0  # no explicit override → first available device
+            if device_path:
+                dev = device_path   # by-path symlink (port-stable) wins
+                self.get_logger().info(f'[CAM  ] device_path (port-stable) → {device_path}')
+            else:
+                dev = self.get_parameter('device').value
+                try:
+                    dev = int(dev)
+                except (TypeError, ValueError):
+                    pass
+                if isinstance(dev, int) and dev < 0:
+                    dev = 0  # no explicit override → first available device
             kwargs.update(
                 device=dev,
                 width=int(self.get_parameter('width').value),
