@@ -25,6 +25,8 @@ _PTF: dict = {}   # int -> FreeTypeFont (or default ImageFont)
 _PTF_PATH: str | None = None
 _TEXT_CACHE: dict = {}        # (text, px, r, g, b) -> (surf_rgba: np.ndarray, th: int)
 _TEXT_CACHE_MAX = 512         # evict-all when full (simple; HUD strings are bounded)
+_SIZE_CACHE: dict = {}        # (text, px) -> (w, h); font.getbbox is ~1.5ms/call (FPS killer)
+_SIZE_CACHE_MAX = 512
 
 _MONO_CANDIDATES = (
     '/usr/local/share/fonts/TTF/IosevkaNerdFontMono-Regular.ttf',
@@ -123,13 +125,25 @@ def pil_text(img: np.ndarray, text: str, org: tuple,
 
 
 def pil_text_size(text: str, cv2_fs: float) -> tuple[int, int]:
-    """Return (width, height) of text rendered at given cv2-style scale."""
+    """Return (width, height) of text rendered at given cv2-style scale.
+
+    Cached by (text, px): FreeType ``font.getbbox`` is ~1.5 ms/call, and the HUD
+    measures every label + panel line every frame -- uncached it was the render
+    bottleneck (~9 ms/frame for 6 labels). The HUD's string set is tiny + bounded."""
     if not text:
         return (0, 0)
     px = max(8, round(cv2_fs * _CV2FS_TO_PX))
+    key = (text, px)
+    hit = _SIZE_CACHE.get(key)
+    if hit is not None:
+        return hit
     font = _pil_font(px)
     try:
         bbox = font.getbbox(text)
-        return (max(0, int(bbox[2] - bbox[0])), max(0, int(bbox[3] - bbox[1])))
+        size = (max(0, int(bbox[2] - bbox[0])), max(0, int(bbox[3] - bbox[1])))
     except Exception:
-        return (0, 0)
+        size = (0, 0)
+    if len(_SIZE_CACHE) >= _SIZE_CACHE_MAX:
+        _SIZE_CACHE.clear()
+    _SIZE_CACHE[key] = size
+    return size
