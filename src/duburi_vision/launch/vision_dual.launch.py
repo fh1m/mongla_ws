@@ -51,9 +51,19 @@ _QUIET = ['--log-level', 'warn']
 def generate_launch_description():
     args = [
         DeclareLaunchArgument('fwd_device',   default_value='0',
-                              description='/dev/videoN for the forward camera'),
+                              description='/dev/videoN index for the forward camera (fallback '
+                                          'when fwd_device_path is empty)'),
         DeclareLaunchArgument('dwn_device',   default_value='4',
-                              description='/dev/videoN for the downward camera'),
+                              description='/dev/videoN index for the downward camera (fallback '
+                                          'when dwn_device_path is empty)'),
+        # PORT-STABLE identity for two IDENTICAL cameras (same VID/PID). Set these to the
+        # /dev/v4l/by-path/…-video-index0 symlinks so forward/downward never swap on
+        # reboot/re-plug. Empty => fall back to the int index above. Non-empty wins.
+        # See .claude/context/dual-camera-setup.md for how to find the by-path values.
+        DeclareLaunchArgument('fwd_device_path', default_value='',
+                              description='by-path symlink for the forward camera (port-stable)'),
+        DeclareLaunchArgument('dwn_device_path', default_value='',
+                              description='by-path symlink for the downward camera (port-stable)'),
         # Forward camera -- gate / slalom / torpedo tasks
         DeclareLaunchArgument('fwd_model',    default_value='gate_rescue_repair',
                               description='YOLO model stem for the forward detector'),
@@ -98,7 +108,8 @@ def generate_launch_description():
                               description='Loop the downward video at EOF (video source only).'),
     ]
 
-    def camera(profile: str, device_arg: str, video_arg: str, loop_arg: str) -> Node:
+    def camera(profile: str, device_arg: str, video_arg: str, loop_arg: str,
+               device_path_arg: str) -> Node:
         # Source-aware: a non-empty video path runs this camera off a file
         # (source=video_file, profile cleared so camera_node takes the path);
         # empty falls back to the live webcam profile. The node NAME stays the
@@ -116,6 +127,7 @@ def generate_launch_description():
                 'source':  src,
                 'name':    profile,
                 'device':  LaunchConfiguration(device_arg),
+                'device_path': LaunchConfiguration(device_path_arg),
                 'path':    video,
                 'loop':    LaunchConfiguration(loop_arg),
             }],
@@ -166,8 +178,8 @@ def generate_launch_description():
     )
 
     return LaunchDescription(args + [
-        camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop'),
-        camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop'),
+        camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop', 'fwd_device_path'),
+        camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop', 'dwn_device_path'),
         detector('forward',  'fwd_model', 'fwd_classes', 'fwd_conf'),
         detector('downward', 'dwn_model', 'dwn_classes', 'dwn_conf'),
         tracker('forward'),

@@ -45,7 +45,13 @@ BIN_DESCEND_FILL      = 0       # optional: descend until the bin fills this % (
                                 # closer drop. 0 = OFF (hold BIN_DEPTH_M; core path). When >0,
                                 # bounded by BIN_MAX_DEPTH_M so it can't drive into the floor.
 BIN_MAX_DEPTH_M       = -1.6    # deepest allowed setpoint for BIN_DESCEND_FILL (negative m)
+BIN_DEPTH_CEILING_M   = -0.4    # SHALLOWEST setpoint on the downward align -- surface guard so
+                                # ratio/alignment can't lift the hull out of the water (negative m).
 BIN_DROPPER_CHANNEL   = 3       # 3 = dropper_1, 4 = dropper_2 (marker drop)
+
+# ── Payload fire ─────────────────────────────────────────────────────────────────
+FIRE_GAP_S            = 1.0     # seconds BETWEEN channels when firing a LIST (fire=[1,4]/[2,3]).
+                                # The solenoid launcher misfires if two go together -- space them.
 
 # ── Torpedo ──────────────────────────────────────────────────────────────────────
 TORPEDO_BLOOD_FWD_FILL = 30     # blood bbox height % at end of COARSE approach (gets in range)

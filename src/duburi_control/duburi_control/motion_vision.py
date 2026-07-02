@@ -457,6 +457,7 @@ def align_loop(*,
                downward: bool = False,
                surge_sign: int = +1,
                max_depth_m: float = 0.0,
+               depth_ceiling_m: float = 0.0,
                on_locked=None,
                fire_t: float = 0.0,
                fire_pass: bool = False,
@@ -511,13 +512,17 @@ def align_loop(*,
         braked or the 20 kg hull coasts past the bin. ``surge_sign`` flips its
         polarity for the physical mount (verify DISARMED with vision_thrust_check --
         a wrong sign is positive feedback that drives the hull AWAY from the bin).
-      * ``fwd_fill`` (optional) -> DEPTH descent: descend until the bbox fills
-        ``fwd_fill`` of the frame, one-sided, bounded by ``max_depth_m`` (deepest
-        allowed, negative m) so an unreachable fill can't drive into the floor. 0 =
-        no vision depth; ArduSub holds ``set_depth`` (the minimum-viable bin path is
-        lat + surge + set_depth hold + drop).
+      * ``fwd_fill`` (optional) -> DEPTH DESCENT = the "approach" (get closer to the
+        bin for the drop). Driven by the SAME depth_step logic as the forward depth
+        axis: PROPORTIONAL to the fill deficit, capped at ``depth_step`` m/update,
+        deadband-frozen at the fill target. ONE-SIDED (descends only -> can't
+        surface). Bounded shallow by ``depth_ceiling_m`` (surface guard) and deep by
+        ``max_depth_m`` (floor). 0 = no vision depth; ArduSub holds ``set_depth`` (the
+        minimum-viable bin path is lat + surge + set_depth hold + drop).
       * fire -> dropper (channels 3/4) via ``on_locked`` -- same mechanism as torpedo.
-    yaw is released to ``heading_lock`` (no vision-yaw axis on the bin task).
+    ``depth_ceiling_m`` (< 0) is the shallowest setpoint allowed on ANY depth motion
+    (defaults to _MIN_DEPTH_M); a bin mission sets e.g. -0.4 so alignment can't
+    surface the hull. yaw is released to ``heading_lock`` (no vision-yaw on the bin).
     ``move_loop`` is meaningless on a downward camera (surging doesn't grow fill);
     the DSL guards ``move(camera='downward')``.
 
@@ -601,6 +606,12 @@ def align_loop(*,
     # freeze depth entirely, but the verb coerces an unset (0.0) depth_step to the
     # default -- to skip the depth axis, omit 'depth' from ``axes``.
     max_nudge   = max(float(depth_step), 0.0)
+    # Shallowest depth the setpoint may reach (negative m). Guards the DOWNWARD path
+    # especially: ratio/alignment math must never drive the hull toward the surface.
+    # Defaults to the global _MIN_DEPTH_M when unset (depth_ceiling_m >= 0), so the
+    # forward path is byte-unchanged; a mission passes e.g. -0.4 to keep the bin run
+    # safely submerged.
+    eff_ceiling = float(depth_ceiling_m) if float(depth_ceiling_m) < 0.0 else _MIN_DEPTH_M
 
     depth_setpoint = _read_depth(pixhawk)
 
@@ -689,8 +700,9 @@ def align_loop(*,
         # Loudly announce the rotated frame so the operator never mistakes a
         # downward align's axis meanings for the forward ones (see docstring).
         fill_note = (f", fill->depth descend to {fwd_fill*100:.0f}% "
-                     f"(floor {max_depth_m:.1f}m)" if use_fwd else
-                     ", depth held by ArduSub (no fill axis)")
+                     f"@ depth_step={max_nudge:.02f}m (ceil {eff_ceiling:.1f}m, "
+                     f"floor {max_depth_m:.1f}m)" if use_fwd else
+                     f", depth held by ArduSub (no fill axis; ceil {eff_ceiling:.1f}m)")
         log.info(f"[VIS  ] downward frame: image-X->lat Ch6, image-Y->surge Ch5 "
                  f"(sign {surge_sign:+d}){fill_note}")
 
@@ -895,19 +907,22 @@ def align_loop(*,
                 # each step before the next: slow, stable, resolution = depth_step.
                 if use_vdepth:
                     # FORWARD: image-Y drives the setpoint; FROZEN inside the deadband
-                    # (no z-wobble). _MIN_DEPTH_M keeps it never shallower than the floor.
+                    # (no z-wobble). eff_ceiling keeps it never shallower than the floor.
                     if depth_epx > eff_err:
                         step = _clamp(depth_ctrl * kp_depth * rgain,
                                       -max_nudge, max_nudge) * depth_sign
-                        depth_setpoint = min(depth_setpoint - step, _MIN_DEPTH_M)
+                        depth_setpoint = min(depth_setpoint - step, eff_ceiling)
                 else:
-                    # DOWNWARD fill->depth: descend (deeper) while the bbox is smaller
-                    # than fwd_fill; hold at/past it. ONE-SIDED (never ascends on
-                    # overshoot). Bounded BOTH ways: never shallower than _MIN_DEPTH_M,
-                    # never DEEPER than max_depth_m (the deep floor) so an unreachable
-                    # fill target can't drive the hull into the pool floor.
+                    # DOWNWARD fill->depth: the "approach" (get closer to the bin for the
+                    # drop), driven by the SAME depth_step logic as the forward axis --
+                    # PROPORTIONAL to the fill deficit, capped at depth_step/update, and
+                    # FROZEN inside the fill deadband (FWD_BAND) so it settles instead of
+                    # chasing bbox jitter. ONE-SIDED (descends deeper only, never ascends
+                    # -> can't surface). Bounded both ways: never shallower than
+                    # eff_ceiling (surface guard), never deeper than max_depth_m (floor).
                     if fill_deficit > FWD_BAND:
-                        depth_setpoint = min(depth_setpoint - max_nudge, _MIN_DEPTH_M)
+                        step = min(fill_deficit, 1.0) * max_nudge   # decelerates as it nears
+                        depth_setpoint = min(depth_setpoint - step, eff_ceiling)
                         if max_depth_m < 0.0:
                             depth_setpoint = max(depth_setpoint, max_depth_m)
                 pixhawk.set_target_depth(depth_setpoint)

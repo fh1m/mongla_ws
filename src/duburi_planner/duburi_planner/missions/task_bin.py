@@ -31,6 +31,7 @@ from duburi_planner.missions.competition_config import (
     BIN_SURGE_SIGN,
     BIN_DESCEND_FILL,
     BIN_MAX_DEPTH_M,
+    BIN_DEPTH_CEILING_M,
     BIN_DROPPER_CHANNEL,
     ALIGN_GAIN,
     SEARCH_FORWARD_GAIN,
@@ -57,23 +58,27 @@ def run(duburi, log=None):
     # lat = left/right (Ch6), depth axis = fore/aft SURGE (Ch5, two-sided + braked).
     # ArduSub holds BIN_DEPTH_M. Optional BIN_DESCEND_FILL>0 descends for a closer
     # drop (bounded by BIN_MAX_DEPTH_M). Creep-search finds the bin on target loss.
-    aligned = duburi.vision.align(
-        'fire', camera='downward', lat=0, depth=0,
-        fwd=(BIN_DESCEND_FILL or None), fwd_mode='height',
-        err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, duration=25,
-        surge_sign=BIN_SURGE_SIGN, max_depth_m=BIN_MAX_DEPTH_M,
-        fallback=creep_forward)
+    try:
+        aligned = duburi.vision.align(
+            'fire', camera='downward', lat=0, depth=0,
+            fwd=(BIN_DESCEND_FILL or None), fwd_mode='height',
+            err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, duration=25,
+            surge_sign=BIN_SURGE_SIGN, max_depth_m=BIN_MAX_DEPTH_M,
+            depth_ceiling=BIN_DEPTH_CEILING_M,   # never surface during alignment
+            fallback=creep_forward)
 
-    # Drop ONLY when centred -- a blind drop wastes the marker into empty water.
-    if aligned:
-        duburi.pause(3.0)                   # settle over the bin before the drop
-        duburi.fire(BIN_DROPPER_CHANNEL)    # dropper — channel always explicit
-        duburi.pause(2.0)                   # confirm drop complete
-    elif log:
-        log('[bin_task] never centred over the bin — marker HELD (no blind drop); '
-            'check the downward detector resumed and BIN_SURGE_SIGN')
-
-    duburi.use_camera('forward')        # back to forward (pauses downward detector)
+        # Drop ONLY when centred -- a blind drop wastes the marker into empty water.
+        if aligned:
+            duburi.pause(3.0)                   # settle over the bin before the drop
+            duburi.fire(BIN_DROPPER_CHANNEL)    # dropper — channel always explicit
+            duburi.pause(2.0)                   # confirm drop complete
+        elif log:
+            log('[bin_task] never centred over the bin — marker HELD (no blind drop); '
+                'check the downward detector resumed and BIN_SURGE_SIGN')
+    finally:
+        # Always restore the forward camera (pauses the downward detector) even if a
+        # fire/pause above raised -- never leave the downward detector live.
+        duburi.use_camera('forward')
 
 
 # ── Mission-authored fallback search patterns (pure control) ────────────────────
