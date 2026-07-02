@@ -18,6 +18,7 @@ nothing rclpy-aware.
 """
 
 import threading
+import time
 from contextlib import nullcontext
 
 from .motion_vision import (
@@ -92,7 +93,8 @@ class VisionVerbs:
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
                      settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
-                     hold_heading=False):
+                     hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
+                     depth_ceiling_m=0.0, fire_gap=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -143,7 +145,11 @@ class VisionVerbs:
                 f'{float(hold_s):.1f}s -- clamping fire_t to 0 (fire at hold '
                 f'start). Set hold_s > fire_t for a delayed mid-hold shot.')
             eff_fire_t = 0.0
-        on_locked = (lambda: self._fire_async(channels)) if channels else None
+        # Inter-channel delay when firing MULTIPLE payloads (e.g. fire=[1,4]): the
+        # solenoid launcher misfires if two go together, so space them fire_gap s
+        # apart (0 = back-to-back; single-channel fires are unaffected).
+        gap_s = float(fire_gap) if float(fire_gap) > 0.0 else 0.0
+        on_locked = (lambda: self._fire_async(channels, gap_s)) if channels else None
 
         with self._command_scope('vision_align'):
             self._send_neutral_and_settle()
@@ -152,7 +158,11 @@ class VisionVerbs:
             depth_sign    = -1 if is_downward else +1
             touches_yaw   = 'yaw' in axis_set
             touches_depth = 'depth' in axis_set
-            if touches_depth:
+            # ALT_HOLD needed when we command the depth setpoint (forward 'depth'
+            # axis or downward fill->depth), AND on any downward align -- there the
+            # 'depth' axis drives Ch5 surge while ArduSub must still hold the mission
+            # depth on Ch3 (or we'd sink/surface uncommanded).
+            if touches_depth or is_downward or float(fwd_fill) > 0.0:
                 self._ensure_alt_hold('vision_align')
 
             stable = int(align_stable_frames) or 3
@@ -212,6 +222,12 @@ class VisionVerbs:
                         kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
                         settle_px=float(settle_px),
                         depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
+                        downward=is_downward,
+                        # SIGN-ONLY: coerce to exactly +1/-1 (rosidl-0 -> +1) so it can
+                        # never scale Ch5 past the gain cap -- it only flips fore/aft.
+                        surge_sign=(-1 if float(surge_sign) < 0.0 else +1),
+                        max_depth_m=float(max_depth_m),      # deep floor for fill->depth (0=off)
+                        depth_ceiling_m=float(depth_ceiling_m),  # shallow surface guard (0=default)
                         on_locked=on_locked,
                         fire_t=eff_fire_t,
                         fire_pass=bool(fire_pass_enabled),
@@ -231,7 +247,7 @@ class VisionVerbs:
                 end_x_px=outcome.end_x_px, end_y_px=outcome.end_y_px,
                 fill_frac=0.0, elapsed_s=outcome.elapsed_s)
 
-    def _fire_async(self, channels):
+    def _fire_async(self, channels, gap_s: float = 0.0):
         """Fire payload ``channels`` one-by-one on a daemon thread (non-blocking).
 
         Called from inside the align hold loop via ``on_locked``; returns
@@ -241,16 +257,33 @@ class VisionVerbs:
         torpedo never leaves after an emergency stop. The shared payload serial
         is serialised inside ``PayloadDriver.fire`` (a lock), so overlapping a
         later standalone ``fire()`` goal is safe.
+
+        ``gap_s`` > 0 spaces MULTIPLE channels apart (fire=[1,4]): the solenoid
+        launcher misfires when two fire together, so we wait gap_s BETWEEN shots
+        (never before the first, and never after the last). The wait is abort-
+        interruptible in gap_s slices so an emergency stop still cancels promptly.
         """
         abort_fn = self._abort_fn
 
         def _run():
-            for ch in channels:
+            for i, ch in enumerate(channels):
                 if abort_fn is not None and abort_fn():
                     self.log.warning(
                         f'[FIRE ] abort signalled -- skipping ch={ch} '
-                        f'(remaining {channels} cancelled)')
+                        f'(remaining {channels[i:]} cancelled)')
                     return
+                # Space multi-channel shots apart (not before the first).
+                if i > 0 and gap_s > 0.0:
+                    self.log.info(f'[FIRE ] waiting {gap_s:.1f}s before ch={ch} '
+                                  f'(solenoid needs the gap)')
+                    waited = 0.0
+                    while waited < gap_s:
+                        if abort_fn is not None and abort_fn():
+                            self.log.warning('[FIRE ] abort during inter-shot gap '
+                                             f'-- {channels[i:]} cancelled')
+                            return
+                        time.sleep(min(0.1, gap_s - waited))
+                        waited += 0.1
                 try:
                     self._fire_payload(ch)
                 except Exception as exc:   # noqa: BLE001 -- thread must not crash silently
@@ -279,6 +312,16 @@ class VisionVerbs:
         gate). Returns a Move.Result with ``success=True`` and the
         outcome code in ``final_value``.
         """
+        # Guard: move() is meaningless on a DOWNWARD camera -- surging Ch5 does
+        # not grow a downward target's bbox fill (you descend to approach, you
+        # don't drive into it), so a fill-stop move would drive forever. The bin
+        # task centres with align(camera='downward') and descends via its fill
+        # axis; there is no move() phase. Reject explicitly rather than misbehave.
+        if camera in ('downward', 'sim_bottom'):
+            return self._make_result(
+                True, "vision_move: not supported on a downward camera "
+                      "(use vision_align -- surge doesn't grow downward fill)",
+                final_value=2.0, error_value=0.0)   # TIMEOUT-ish no-op
         # fwd_fill <= 0 is the pass-through sentinel (DSL move(fwd=None) /
         # CLI --fwd_fill -1). Anything > 0 is a real fill-% stop target.
         passthrough = float(fwd_fill) <= 0.0

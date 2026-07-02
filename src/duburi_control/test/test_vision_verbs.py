@@ -82,3 +82,45 @@ def test_fire_async_is_non_blocking():
     h._fire_async([1, 2, 3])
     assert (time.monotonic() - t0) < 0.05        # returned without waiting on fires
     assert _wait_for(lambda: h.fired == [1, 2, 3])
+
+
+# --------------------------------------------------------------------------- #
+#  fire_gap -- space multi-channel shots (solenoid can't fire two together)    #
+# --------------------------------------------------------------------------- #
+def test_fire_async_gap_spaces_multiple_channels():
+    # Two channels with a 0.3s gap: both fire, and the SECOND lands >= ~0.3s after
+    # the first (spaced, not simultaneous).
+    h = _FireHarness()
+    stamps = {}
+    orig = h._fire_payload
+    def _timed(ch):
+        stamps[ch] = time.monotonic()
+        return orig(ch)
+    h._fire_payload = _timed
+    h._fire_async([1, 4], gap_s=0.3)
+    assert _wait_for(lambda: h.fired == [1, 4]), f'fired={h.fired}'
+    assert stamps[4] - stamps[1] >= 0.25, 'second shot must be spaced ~gap_s after the first'
+
+
+def test_fire_async_no_gap_before_single_channel():
+    # A single channel is unaffected by gap_s (no leading wait).
+    h = _FireHarness()
+    t0 = time.monotonic()
+    h._fire_async([3], gap_s=1.0)
+    assert _wait_for(lambda: h.fired == [3])
+    assert (time.monotonic() - t0) < 0.3, 'single-channel fire must not wait a gap'
+
+
+def test_fire_async_gap_aborts_mid_sequence():
+    # An abort during the inter-shot gap cancels the remaining channels.
+    h = _FireHarness()
+    orig = h._fire_payload
+    def _abort_after_first(ch):
+        orig(ch)
+        h._abort = True          # trip abort right after the first shot
+        return True
+    h._fire_payload = _abort_after_first
+    h._fire_async([1, 2], gap_s=0.5)
+    assert _wait_for(lambda: h.fired == [1])     # first fired
+    time.sleep(0.7)
+    assert h.fired == [1], 'abort during the gap must cancel the 2nd shot'

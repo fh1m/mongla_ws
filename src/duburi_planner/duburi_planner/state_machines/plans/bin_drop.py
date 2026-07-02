@@ -38,6 +38,8 @@ BIN_DROP_DEFAULTS: dict = {
     'align_duration':    20.0,
     'align_err_px':      30,        # tight centring over the bin
     'align_gain':        30,
+    'surge_sign':        1,         # downward Ch5 fore/aft polarity; -1 if reversed
+                                    # (VERIFY DISARMED: vision_thrust_check --camera downward)
     'model':            'bin_fire_blood',
     'classes':          'fire,blood',
     'camera_downward':  'downward',
@@ -96,14 +98,16 @@ def build_bin_drop_fsm(
                                    timeout=p['find_timeout']),
                  transitions={SUCCEED: 'HOME_BIN', TIMEOUT: 'SWITCH_FORWARD', ABORT: 'SURFACE'})
 
-    # Downward camera: lat (Ch6) handles left/right, depth axis handles
-    # fore/aft (image-Y maps to fore/aft below the AUV).
+    # Downward frame: lat (Ch6) = left/right, the depth AXIS drives Ch5 SURGE
+    # fore/aft (image-Y, two-sided + braked); ArduSub holds bin_depth_m on Ch3.
+    # surge_sign flips fore/aft for the mount (verify disarmed).
     sm.add_state('HOME_BIN',
                  VisionAlignState(duburi, profile,
                                   target='fire',
                                   camera=p['camera_downward'],
                                   lat=0, depth=0,
                                   err=p['align_err_px'], gain=p['align_gain'],
+                                  surge_sign=p['surge_sign'],
                                   duration=p['align_duration']),
                  transitions={SUCCEED: 'CONFIRM_PAUSE',
                               FAILED: 'SWITCH_FORWARD',

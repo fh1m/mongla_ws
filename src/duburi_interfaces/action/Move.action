@@ -111,6 +111,19 @@ bool    fire_pass_enabled  # vision_align: if true, fire the payload at command 
 bool    hold_heading       # vision_align: when yaw is released to the background heading lock, widen
                            #   the lock's deadband for the hold so the launcher heading holds STEADY
                            #   instead of micro-correcting sub-deg noise (the terminal yaw jitter).
+# ---- downward-camera frame remap (camera=downward/sim_bottom) ----
+float32 surge_sign         # vision_align downward: +1/-1 polarity of the Ch5 SURGE axis (image-Y ->
+                           #   fore/aft). Flips for the physical bottom-cam mount. 0 = +1 (rosidl unset).
+                           #   VERIFY DISARMED (vision_thrust_check) -- a wrong sign drives AWAY from the bin.
+float32 max_depth_m        # vision_align downward fwd_fill->depth: deepest allowed setpoint (negative m)
+                           #   for the descend-to-fill, so an unreachable fill can't drive into the floor.
+                           #   0 = off (no deep bound; only the shallow _MIN_DEPTH_M applies).
+float32 depth_ceiling_m    # vision_align: SHALLOWEST allowed depth setpoint (negative m) on ANY depth
+                           #   motion -- the surface guard so ratio/alignment math can't lift the hull out
+                           #   of the water. 0 = default (_MIN_DEPTH_M, -0.2 m). Bin mission sets ~ -0.4.
+float32 fire_gap           # vision_align: seconds BETWEEN channels when firing a LIST (fire=[1,4]) -- the
+                           #   solenoid launcher misfires if two go together. 0 = back-to-back (single-shot
+                           #   unaffected). ~1.0 for the dual torpedo/dropper drop.
 ---
 # Result — axis-correct (set on the axis the command actually moves):
 #   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]

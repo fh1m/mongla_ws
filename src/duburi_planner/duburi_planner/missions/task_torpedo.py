@@ -39,6 +39,7 @@ from duburi_planner.missions.competition_config import (
     TORPEDO_STANDOFF_FILL,
     TORPEDO_STANDOFF_HOLD_S,
     TORPEDO_FIRE_T,
+    FIRE_GAP_S,
     ALIGN_ERR_PX,
     FINE_ERR_PX,
     ALIGN_GAIN,
@@ -104,7 +105,8 @@ def run(duburi, log=None):
             err=FINE_ERR_PX, gain=_FINE_GAIN, duration=25,
             lock_on=True, hold=TORPEDO_STANDOFF_HOLD_S,
             hold_heading=True,                                  # steady launcher heading (no yaw jitter)
-            fire=1, fire_t=TORPEDO_FIRE_T, brake=False,         # torpedo_1, mid-hold
+            fire=1, fire_t=TORPEDO_FIRE_T, fire_gap=FIRE_GAP_S, brake=False,  # torpedo_1, mid-hold
+            #  ^ fire=[1,2] to launch BOTH torpedoes -- fire_gap spaces them (solenoid)
             fallback=creep_forward)
         if (not locked) and log:
             log('[torpedo_task] hole standoff never locked — fire was withheld '

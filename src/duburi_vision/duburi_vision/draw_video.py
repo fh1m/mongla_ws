@@ -38,48 +38,41 @@ def _depth_color(v: float) -> tuple:
 C_HAIRLINE = (0, 180, 255)    # orange-yellow target hairlines
 
 
-# ── Supervision annotators (lazy-init shared with draw.py) ────────────────── #
-
-_SV: dict = {}   # keyed by rounded sf value
-
-
-def _get_sv(sf: float = 1.0) -> dict:
-    key = round(sf, 2)
-    if key not in _SV:
-        import supervision as sv
-        _SV[key] = {
-            'trace': sv.TraceAnnotator(
-                position=sv.Position.CENTER,
-                trace_length=40,
-                thickness=max(1, int(2 * sf)),
-                color_lookup=sv.ColorLookup.CLASS),
-            'box': sv.BoxAnnotator(
-                color_lookup=sv.ColorLookup.CLASS,
-                thickness=max(2, int(3 * sf))),
-            'corners': sv.BoxCornerAnnotator(
-                thickness=max(2, int(3 * sf)),
-                corner_length=max(8, int(16 * sf)),
-                color=sv.Color.WHITE),
-            'dot': sv.DotAnnotator(
-                radius=max(5, int(8 * sf)),
-                color_lookup=sv.ColorLookup.CLASS,
-                outline_thickness=max(1, int(2 * sf)),
-                outline_color=sv.Color.WHITE),
-        }
-    return _SV[key]
+# NOTE: the supervision annotator suite (Box/BoxCorner/Dot/Trace) was removed from
+# the render path -- it cost ~15 ms/frame at 1920p (the FPS bottleneck) and its
+# per-ID trace smeared. Boxes/corners/dots are now direct cv2 (_draw_boxes_fast),
+# the trail a bounded polyline (_update_and_draw_trail): ~10x cheaper, sharper.
 
 
-def _to_sv(detections: List[Detection], track_ids=None):
-    import supervision as sv
-    if not detections:
-        return sv.Detections.empty()
-    xyxy   = np.array([list(d.xyxy) for d in detections], dtype=float)
-    conf   = np.array([d.score      for d in detections], dtype=float)
-    cls_id = np.array([d.class_id   for d in detections], dtype=int)
-    sv_det = sv.Detections(xyxy=xyxy, confidence=conf, class_id=cls_id)
-    if track_ids is not None and len(track_ids) == len(detections):
-        sv_det.tracker_id = np.array(track_ids, dtype=int)
-    return sv_det
+# ── Primary-target trail: a bounded, age-faded polyline (replaces the laggy
+# per-ID supervision trace). O(N) with N=_TRAIL_LEN -- negligible cost, and it
+# NEVER smears because it tracks one point and clears on target loss. Keyed so
+# side-by-side's two render passes don't share a buffer.
+from collections import deque   # noqa: E402  (local to the trail feature)
+
+_TRAIL: dict = {}
+_TRAIL_LEN = 28
+
+
+def _update_and_draw_trail(out, key, pt, sf, base_col=(0, 200, 255)) -> None:
+    dq = _TRAIL.get(key)
+    if dq is None:
+        dq = _TRAIL[key] = deque(maxlen=_TRAIL_LEN)
+    if pt is None:
+        dq.clear()          # target lost -> drop the trail (no stale lag)
+        return
+    dq.append((int(pt[0]), int(pt[1])))
+    n = len(dq)
+    if n < 2:
+        return
+    pts = list(dq)
+    b, g, r = base_col
+    thick = max(1, int(3 * sf))
+    for i in range(1, n):
+        f = i / (n - 1)                      # 0=oldest -> 1=newest
+        col = (int(b * f), int(g * f), int(r * f))   # fade toward black with age
+        cv2.line(out, pts[i - 1], pts[i], col,
+                 max(1, int(thick * (0.4 + 0.6 * f))), cv2.LINE_AA)
 
 
 def _draw_labels(out: np.ndarray, detections: list, track_ids, sf: float) -> None:
@@ -89,9 +82,9 @@ def _draw_labels(out: np.ndarray, detections: list, track_ids, sf: float) -> Non
     Placed above the top edge; falls inside top edge when no space above.
     """
     h_f, w_f = out.shape[:2]
-    fs = max(0.28, 0.34 * sf)
-    pad_x = max(4, int(6 * sf))
-    pad_y = max(3, int(4 * sf))
+    fs = max(0.5, 0.52 * sf)   # bumped from 0.34 -- readable on a laptop
+    pad_x = max(6, int(9 * sf))
+    pad_y = max(4, int(6 * sf))
     for i, d in enumerate(detections):
         tid = (track_ids[i] if track_ids and i < len(track_ids)
                and track_ids[i] is not None else None)
@@ -108,10 +101,12 @@ def _draw_labels(out: np.ndarray, detections: list, track_ids, sf: float) -> Non
             by1, by2 = y1, min(y1 + pill_h, h_f - 1)
         bx1, bx2 = x1, min(x1 + pill_w, w_f - 1)
 
-        # Semi-transparent near-black background
-        ov = out.copy()
-        cv2.rectangle(ov, (bx1, by1), (bx2, by2), (12, 12, 12), -1)
-        cv2.addWeighted(ov, 0.78, out, 0.22, 0, out)
+        # Semi-transparent near-black background -- blend ONLY the pill ROI, not a
+        # full-frame copy per label (the old cost that scaled with detection count).
+        if bx2 > bx1 and by2 > by1:
+            roi = out[by1:by2, bx1:bx2]
+            dark = np.full_like(roi, 12)
+            cv2.addWeighted(dark, 0.78, roi, 0.22, 0, roi)
 
         # White text; y_bottom = by2 - pad_y
         pil_text(out, label, (bx1 + pad_x, by2 - pad_y), fs, (235, 235, 235))
@@ -130,42 +125,51 @@ def render_video_section(frame_bgr: np.ndarray,
                          depth_map_bgr: Optional[np.ndarray] = None,
                          anchor_state: Optional[str] = None,
                          anchor_error=None,
-                         anchor_ref_bgr: Optional[np.ndarray] = None) -> np.ndarray:
+                         anchor_ref_bgr: Optional[np.ndarray] = None,
+                         draw_trail: bool = True,
+                         trail_key: str = 'main') -> np.ndarray:
     """Return annotated copy of frame_bgr with all video overlays applied."""
     if frame_bgr is None:
         return frame_bgr
 
     out = frame_bgr.copy()
     h, w = out.shape[:2]
-    sf = max(0.6, w / 1920.0)  # calibrated for 1920px native render
+    # Scale factor: overlays are calibrated for a 1920px render and shrink with the
+    # window. Floor RAISED to 0.9 (was 0.6) so boxes/labels stay legible on a
+    # laptop; +0.15 so everything reads a touch larger than the old baseline.
+    sf = max(0.9, w / 1920.0) + 0.15
 
     cx_frame, cy_frame = w // 2, h // 2
+    _rt = max(1, int(2 * sf))   # reticle thickness -- scaled, was hardcoded 1px
 
     # 1. Reticle + deadband box
     if show_reticle:
-        _dashed_line(out, (cx_frame, 0), (cx_frame, h), C_RETICLE, dash=8, gap=6, thickness=1)
-        _dashed_line(out, (0, cy_frame), (w, cy_frame), C_RETICLE, dash=8, gap=6, thickness=1)
-        cv2.circle(out, (cx_frame, cy_frame), 4, C_RETICLE, 1, cv2.LINE_AA)
-        cv2.circle(out, (cx_frame, cy_frame), 1, C_RETICLE, -1, cv2.LINE_AA)
+        _dashed_line(out, (cx_frame, 0), (cx_frame, h), C_RETICLE, dash=10, gap=7, thickness=_rt)
+        _dashed_line(out, (0, cy_frame), (w, cy_frame), C_RETICLE, dash=10, gap=7, thickness=_rt)
+        cv2.circle(out, (cx_frame, cy_frame), max(5, int(6 * sf)), C_RETICLE, _rt, cv2.LINE_AA)
+        cv2.circle(out, (cx_frame, cy_frame), 2, C_RETICLE, -1, cv2.LINE_AA)
         db_px = int(deadband * w / 2)
         db_py = int(deadband * h / 2)
         cv2.rectangle(out,
                       (cx_frame - db_px, cy_frame - db_py),
                       (cx_frame + db_px, cy_frame + db_py),
-                      C_RETICLE, 1, cv2.LINE_AA)
+                      C_RETICLE, _rt, cv2.LINE_AA)
 
-    # 2. Supervision annotation suite: trails → box → corners → dot → depth borders → labels
+    # 2. Bounded primary-target trail (age-faded polyline; clears on loss so it
+    #    never smears). Drawn UNDER the boxes. draw_trail=False for the secondary
+    #    side-by-side pass so the two views don't share the buffer.
     primary = primary or largest(detections)
-    if detections:
-        sv = _get_sv(sf)
-        sv_all = _to_sv(detections, track_ids)
-        if sv_all.tracker_id is not None:
-            out = sv['trace'].annotate(scene=out, detections=sv_all)
-        out = sv['box'].annotate(scene=out, detections=sv_all)
-        out = sv['corners'].annotate(scene=out, detections=sv_all)
-        out = sv['dot'].annotate(scene=out, detections=sv_all)
+    if draw_trail:
+        _pt = (int(primary.cx), int(primary.cy)) if primary is not None else None
+        _update_and_draw_trail(out, trail_key, _pt, sf)
 
-        # Depth-colored 2px border overlay — FAR=blue, MID=green, CLOSE=red
+    # 3. Annotation suite: box → corners → dot → depth borders → labels.
+    #    Direct cv2 (see _draw_boxes_fast) -- the supervision annotators cost ~15 ms/
+    #    frame at 1920p and were the FPS bottleneck; this is ~10x cheaper.
+    if detections:
+        _draw_boxes_fast(out, detections, sf)
+
+        # Depth-colored border overlay — FAR=blue, MID=green, CLOSE=red
         vr_list = vis_range_values or []
         if vr_list:
             for i, d in enumerate(detections):
@@ -173,7 +177,8 @@ def render_video_section(frame_bgr: np.ndarray,
                     break
                 dc = _depth_color(vr_list[i])
                 x1d, y1d, x2d, y2d = (int(v) for v in d.xyxy)
-                cv2.rectangle(out, (x1d, y1d), (x2d, y2d), dc, 2, cv2.LINE_AA)
+                cv2.rectangle(out, (x1d, y1d), (x2d, y2d), dc,
+                              max(2, int(3 * sf)), cv2.LINE_AA)
 
         # Dark pill labels: class  conf%  (with track ID prefix when tracked)
         _draw_labels(out, detections, track_ids, sf)
@@ -186,20 +191,20 @@ def render_video_section(frame_bgr: np.ndarray,
         ey  = (primary.cy - h / 2.0) / max(h / 2.0, 1.0)
         aligned = abs(ex) < deadband and abs(ey) < deadband
 
-        cv2.rectangle(out, (x1p, y1p), (x2p, y2p), C_ACCENT, 1, cv2.LINE_AA)
-        _draw_corners(out, x1p, y1p, x2p, y2p, C_ACCENT, length=15, thickness=3)
-        cv2.circle(out, (cx_t, cy_t), 4, C_HAIRLINE, -1, cv2.LINE_AA)
+        cv2.rectangle(out, (x1p, y1p), (x2p, y2p), C_ACCENT, max(2, int(2 * sf)), cv2.LINE_AA)
+        _draw_corners(out, x1p, y1p, x2p, y2p, C_ACCENT,
+                      length=max(18, int(24 * sf)), thickness=max(3, int(4 * sf)))
+        cv2.circle(out, (cx_t, cy_t), max(5, int(6 * sf)), C_HAIRLINE, -1, cv2.LINE_AA)
 
-        # Glow hairlines: wide dim underlay + thin bright overlay
-        _glow = (0, 70, 100)
-        _dashed_line(out, (cx_t, 0),    (cx_t, y1p), _glow,     dash=5, gap=5, thickness=3)
-        _dashed_line(out, (cx_t, 0),    (cx_t, y1p), C_HAIRLINE, dash=5, gap=5, thickness=1)
-        _dashed_line(out, (cx_t, y2p),  (cx_t, h),   _glow,     dash=5, gap=5, thickness=3)
-        _dashed_line(out, (cx_t, y2p),  (cx_t, h),   C_HAIRLINE, dash=5, gap=5, thickness=1)
-        _dashed_line(out, (0,    cy_t), (x1p, cy_t), _glow,     dash=5, gap=5, thickness=3)
-        _dashed_line(out, (0,    cy_t), (x1p, cy_t), C_HAIRLINE, dash=5, gap=5, thickness=1)
-        _dashed_line(out, (x2p,  cy_t), (w,   cy_t), _glow,     dash=5, gap=5, thickness=3)
-        _dashed_line(out, (x2p,  cy_t), (w,   cy_t), C_HAIRLINE, dash=5, gap=5, thickness=1)
+        # Full-frame crosshair hairlines from the target centre to the frame edges.
+        # SOLID (4 cv2.line calls), NOT dashed: the old dashed+glow variant built
+        # ~1300 anti-aliased segments per frame and was THE HUD FPS bottleneck
+        # (~15 ms/frame at 1920p). Solid reads just as clearly and is ~50x cheaper.
+        _bt = max(2, int(2 * sf))
+        cv2.line(out, (cx_t, 0),   (cx_t, y1p), C_HAIRLINE, _bt, cv2.LINE_AA)
+        cv2.line(out, (cx_t, y2p), (cx_t, h),   C_HAIRLINE, _bt, cv2.LINE_AA)
+        cv2.line(out, (0,   cy_t), (x1p, cy_t), C_HAIRLINE, _bt, cv2.LINE_AA)
+        cv2.line(out, (x2p, cy_t), (w,   cy_t), C_HAIRLINE, _bt, cv2.LINE_AA)
 
         # Deadband fill: faint green tint when target is inside deadband
         if aligned:
@@ -372,7 +377,31 @@ def _draw_corners(img, x1, y1, x2, y2, color, length=14, thickness=3):
         cv2.line(img, (px, py), (px, py + dy * length), color, thickness, cv2.LINE_AA)
 
 
-# Pre-warm supervision annotators at sf=1.0 (native 1920px render scale).
-# Without this the first detection frame triggers annotator construction + cuDNN
-# cache miss simultaneously, causing a visible stutter.
-_get_sv(1.0)
+# Per-class colours for the fast box drawer (BGR). Cycles by class_id.
+_CLASS_PALETTE = [
+    (255, 100,  50), ( 50, 220, 100), ( 50, 100, 255),
+    (255, 200,  50), (180,  50, 255), ( 50, 255, 220),
+]
+
+
+def _draw_boxes_fast(out, detections, sf) -> None:
+    """Direct cv2 box + corner + centre-dot draw for every detection.
+
+    Replaces the supervision BoxAnnotator/BoxCornerAnnotator/DotAnnotator suite,
+    which cost ~15 ms/frame at 1920p (measured) -- the HUD's FPS bottleneck. Pure
+    cv2 is ~10x cheaper and lets us size everything by sf. Class-coloured; boxes
+    are bold + high-contrast so they read on a laptop (the operator's complaint)."""
+    box_th = max(3, int(4 * sf))
+    cor_th = max(3, int(5 * sf))
+    cor_ln = max(14, int(26 * sf))
+    dot_r  = max(5, int(8 * sf))
+    dot_th = max(2, int(3 * sf))
+    for d in detections:
+        col = _CLASS_PALETTE[int(d.class_id) % len(_CLASS_PALETTE)]
+        x1, y1, x2, y2 = (int(v) for v in d.xyxy)
+        cv2.rectangle(out, (x1, y1), (x2, y2), col, box_th, cv2.LINE_AA)
+        _draw_corners(out, x1, y1, x2, y2, (255, 255, 255),
+                      length=cor_ln, thickness=cor_th)
+        cx, cy = int(d.cx), int(d.cy)
+        cv2.circle(out, (cx, cy), dot_r, col, -1, cv2.LINE_AA)
+        cv2.circle(out, (cx, cy), dot_r, (255, 255, 255), dot_th, cv2.LINE_AA)

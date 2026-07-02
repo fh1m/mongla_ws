@@ -139,10 +139,11 @@ import sys
 import time as _time
 
 import rclpy
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 from rcl_interfaces.srv import SetParameters, GetParameters
 from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
 from sensor_msgs.msg import CameraInfo
+from std_msgs.msg import String
 from vision_msgs.msg import Detection2DArray
 
 from .model_context import ClassRef, ModelRegistry
@@ -318,6 +319,13 @@ class DuburiMission:
         # probes each detector node at most once).
         self._param_clients: dict[str, object] = {}
         self._detector_ok:   set[str] = set()
+        # Single-live-detector orchestration (Jetson VRAM: never run two detectors
+        # at once). `_live_camera` is the camera whose detector is currently
+        # resumed; a vision verb / use_camera on a DIFFERENT camera pauses the old
+        # one, resumes the new, points the HUD at it, and settles -- see
+        # _activate_camera. None = nothing resumed yet (launch starts both paused).
+        self._live_camera: str | None = None
+        self._active_cam_pub = None   # lazily-created latched String publisher (HUD follow)
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
         self._mission_start: float = _time.monotonic()
@@ -690,23 +698,74 @@ class DuburiMission:
     #  DVL                                                                 #
     # ================================================================== #
 
-    def use_camera(self, name: str) -> None:
-        """Switch the sticky camera for all subsequent vision verbs.
+    # Settle after a live-detector switch so the resumed detector's first frames
+    # land (and the paused one's queue drains) before the loop steers on them --
+    # otherwise the first align tick acquires on a cold/empty detector.
+    _CAM_SWITCH_SETTLE_S = 0.6
 
-        Logs the switch so pool-side operators see the transition in the
-        console. Does not affect already-running vision verbs.
+    def use_camera(self, name: str) -> None:
+        """Switch the sticky camera for all subsequent vision verbs AND make it the
+        single live detector (pause the other, resume this one, point the HUD at it).
+
+        Logs the switch so pool-side operators see the transition. Idempotent on the
+        detector switch (no-op when already live). Best-effort: a missing detector
+        node warns rather than crashing, so pure-control / single-camera runs are
+        unaffected.
 
         Example::
 
-            duburi.use_camera('downward')
-            duburi.vision.align('bin_marker', lat=0, depth=0, err=30)
-            duburi.use_camera('forward')
+            duburi.use_camera('downward')            # downward detector live, HUD flips
+            duburi.vision.align('fire', lat=0, depth=0, err=30)
+            duburi.use_camera('forward')             # back to forward
         """
         self.log.info(f'[MISSION] camera → {name!r}')
         self.camera = name
         # Eager-subscribe so discovery warms before the first detected()/where()
         # on the new camera (otherwise that first query false-negates).
         self._subscribe_detections(name)
+        self._activate_camera(name)
+
+    def _activate_camera(self, name: str) -> None:
+        """Make ``name`` the ONLY live detector + point the HUD at it. Idempotent.
+
+        Called by ``use_camera`` and automatically by a vision verb whose camera
+        differs from the live one, so ``camera='downward'`` in a verb "just works"
+        (never two detectors at once on the Jetson). Best-effort on the detector
+        params: a missing node warns, doesn't raise -- a pure-control sim has no
+        detectors and must not crash here."""
+        if name == self._live_camera:
+            return
+        prev = self._live_camera
+        self._publish_active_camera(name)   # HUD follows (latched topic; always safe)
+        if prev is not None:
+            try:
+                self.pause_detector(prev)   # exclusivity: only one detector runs
+            except Exception as exc:        # noqa: BLE001 -- best-effort
+                self.log.warning(f'[CAM  ] pause {prev!r} detector skipped: {exc}')
+        switched = False
+        try:
+            self.resume_detector(name)
+            switched = True
+        except Exception as exc:            # noqa: BLE001 -- best-effort (no detector = sim)
+            self.log.warning(f'[CAM  ] resume {name!r} detector skipped: {exc}')
+        if switched:
+            _time.sleep(self._CAM_SWITCH_SETTLE_S)   # let first live frames land
+        self._live_camera = name
+
+    def _publish_active_camera(self, name: str) -> None:
+        """Publish the active camera on a LATCHED topic so the HUD auto-follows the
+        mission (manual f/d/b keys remain an override). Lazily create the publisher."""
+        try:
+            if self._active_cam_pub is None:
+                qos = QoSProfile(
+                    depth=1,
+                    reliability=QoSReliabilityPolicy.RELIABLE,
+                    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)   # latched
+                self._active_cam_pub = self.client.node.create_publisher(
+                    String, '/duburi/vision/active_camera', qos)
+            self._active_cam_pub.publish(String(data=str(name)))
+        except Exception as exc:            # noqa: BLE001 -- HUD follow is best-effort
+            self.log.warning(f'[CAM  ] active_camera publish skipped: {exc}')
 
     def dvl_connect(self):
         """Connect Nortek Nucleus 1000 DVL over TCP."""
@@ -874,15 +933,25 @@ class DuburiMission:
     def pause_detector(self, camera: str | None = None, *,
                        node: str | None = None) -> None:
         """Pause inference on a detector node (frame still consumed from queue)."""
+        cam  = camera or self.camera
         node = self._detector_node(camera, node)
         self._set_detector_param(node, 'paused', True)
+        # Keep the exclusivity tracker honest: if we just paused the live detector,
+        # nothing is live now, so the next _activate_camera re-resumes it.
+        if self._live_camera == cam:
+            self._live_camera = None
         self.log.info(f"[DSL  ] {node} paused")
 
     def resume_detector(self, camera: str | None = None, *,
                         node: str | None = None) -> None:
         """Resume inference on a detector node."""
+        cam  = camera or self.camera
         node = self._detector_node(camera, node)
         self._set_detector_param(node, 'paused', False)
+        # This camera is now the live detector. Recording it means a later switch
+        # to a DIFFERENT camera pauses THIS one (never two detectors on the Jetson),
+        # even when a mission resumed it manually rather than via _activate_camera.
+        self._live_camera = cam
         self.log.info(f"[DSL  ] {node} resumed")
 
     # ================================================================== #

@@ -53,12 +53,17 @@ def render_all(frame_bgr: np.ndarray,
                anchor_state=None,
                anchor_error=None,
                anchor_ref_bgr=None,
+               draw_trail: bool = True,
+               trail_key: str = 'main',
                **_ignored,
                ) -> np.ndarray:
     """Return annotated video frame with bbox + alignment overlays.
 
     Strip kwargs (fps, state, sparklines, etc.) are accepted but ignored —
     stats are printed to the terminal by VisionDisplayNode at 1 Hz instead.
+    ``draw_trail``/``trail_key`` control the bounded primary-target trail (the
+    secondary side-by-side pass passes draw_trail=False so the two views don't
+    share the buffer).
     """
     primary = primary or largest(detections)
     return render_video_section(
@@ -73,4 +78,6 @@ def render_all(frame_bgr: np.ndarray,
         anchor_state=anchor_state,
         anchor_error=anchor_error,
         anchor_ref_bgr=anchor_ref_bgr,
+        draw_trail=draw_trail,
+        trail_key=trail_key,
     )
