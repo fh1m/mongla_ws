@@ -39,6 +39,8 @@ BIN_HEADING_DEG          = None  # heading from torpedo to bin
 ALIGN_ERR_PX             = 40    # "centred" pixel tolerance
 FINE_ERR_PX              = 14    # tight tolerance for the torpedo hole lock
 BIN_CENTRE_ERR_PX        = 30    # centring tolerance over the bin
+BIN_SURGE_SIGN           = +1    # downward Ch5 fore/aft polarity -- verify DISARMED
+                                 # (vision_thrust_check --camera downward); -1 if reversed
 ALIGN_GAIN               = 30    # max speed while centring
 APPROACH_GAIN            = 35    # max speed while driving forward
 FINE_GAIN                = 12    # slow + precise for the fire lock
@@ -188,14 +190,16 @@ def run(duburi, log=None):
             duburi.turn(BIN_HEADING_DEG)
         duburi.set_depth(BIN_DEPTH_M, timeout=30)
 
+        # use_camera auto-switches the live detector to downward (pauses forward)
+        # + flips the HUD. Downward frame: lat=left/right (Ch6), depth axis=fore/aft
+        # SURGE (Ch5, two-sided + braked); ArduSub holds BIN_DEPTH_M on Ch3.
         duburi.use_camera('downward')
-        duburi.resume_detector('downward')
         duburi.set_model('bin_fire_blood', node=_DWN)
         duburi.set_classes('fire,blood', node=_DWN)
 
         if duburi.vision.align(
                 'fire', camera='downward', lat=0, depth=0,
-                err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN,
+                err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, surge_sign=BIN_SURGE_SIGN,
                 duration=BIN_ALIGN_DURATION_S, fallback=creep_forward):
             info('[bin] aligned — holding for stability...')
             duburi.pause(BIN_STABILITY_PAUSE_S)
@@ -204,8 +208,7 @@ def run(duburi, log=None):
         else:
             info('[bin] never centred — skipping drop')
 
-        duburi.pause_detector('downward')
-        duburi.use_camera('forward')
+        duburi.use_camera('forward')   # auto-pauses the downward detector
 
     except Exception as exc:
         if log:

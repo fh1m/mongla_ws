@@ -137,7 +137,8 @@ def build_gate_then_bin_fsm(
                  VisionAlignState(duburi, profile,
                                   target='bin_a',
                                   camera='downward',      # explicit
-                                  lat=0, depth=0,         # downward cam: lat + fore/aft
+                                  lat=0, depth=0,         # downward: lat=left/right (Ch6),
+                                                          # depth axis = fore/aft SURGE (Ch5)
                                   err=p['bin_err_px'],
                                   duration=p['bin_align_duration']),
                  transitions={SUCCEED: 'DROP_BIN',
