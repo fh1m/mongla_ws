@@ -76,7 +76,7 @@ import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32, Float32MultiArray, Int32, String
 from std_srvs.srv import SetBool
@@ -261,6 +261,14 @@ class VisionDisplayNode(Node):
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
         self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
+        # Auto-follow the mission's active camera: the planner publishes it (latched)
+        # on /duburi/vision/active_camera when a verb / use_camera switches cameras,
+        # so the HUD flips to the downward view for a bin task without an operator
+        # key press. Manual f/d/b keys still override until the next mission switch.
+        _latched = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                              durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(String, '/duburi/vision/active_camera',
+                                 self._on_active_camera, _latched)
         self.create_timer(1.0, self._check_waiting)
         # 20 Hz timer: processes camera-switch/side-by-side requests from the display thread.
         # create/destroy_subscription must happen inside the executor to avoid wait-set races.
@@ -293,6 +301,17 @@ class VisionDisplayNode(Node):
         if elapsed >= _WAIT_LOG_INTERVAL:
             self.get_logger().warn('[DISP ] no frames yet — is the pipeline running? (try launch_pipeline:=true)')
             self._last_wait_log = now
+
+    def _on_active_camera(self, msg: String) -> None:
+        """Mission switched cameras -> follow it (deferred, like a keypress). Ignored
+        while side-by-side is on (operator is watching both) or already on it."""
+        name = (msg.data or '').strip()
+        if not name or self._side_by_side or name == self._active_camera:
+            return
+        if name not in self._cameras_available:
+            return
+        self.get_logger().info(f'[DISP ] mission camera -> {name} (auto-follow)')
+        self._pending_sub_action = name
 
     def _process_pending_sub_action(self) -> None:
         """Execute deferred subscription changes. Runs on the executor thread (timer cb)."""
@@ -589,6 +608,77 @@ _C_SP_TEXT   = (240, 235, 220)   # bright warm white
 _C_SP_DIM    = (130, 95, 65)     # muted slate
 
 
+def _draw_mission_panel(out, *, camera, fps, primary, native_w, native_h,
+                        deadband, state) -> None:
+    """Compact top-left mission-status panel: what the AUV sees + how well it's on it.
+
+    Answers the operator's questions at a glance: which camera frame is live
+    (FORWARD/DOWNWARD, colour-coded), the target class + confidence, the signed
+    alignment offset in px + IN-BAND/OFF, live FPS, and depth/armed. On the
+    downward frame it also prints the rotated axis legend (Y->surge, X->lat) so the
+    offset numbers are unambiguous. Cheap: one ROI blend + a few text lines --
+    drawn in the display node (off the detector/GPU path), no FPS cost."""
+    h, w = out.shape[:2]
+    sf = max(0.9, w / 1920.0)
+    downward = camera in ('downward', 'sim_bottom')
+    badge = 'DOWNWARD' if downward else 'FORWARD'
+    badge_col = (255, 210, 40) if downward else (60, 230, 120)   # cyan-ish / green (BGR)
+
+    # Build the info lines.
+    if primary is not None:
+        dx = primary.cx - native_w / 2.0
+        dy = primary.cy - native_h / 2.0
+        ex = dx / max(native_w / 2.0, 1.0)
+        ey = dy / max(native_h / 2.0, 1.0)
+        in_band = abs(ex) < deadband and abs(ey) < deadband
+        tgt_line = f'{primary.class_name}  {int(primary.score * 100)}%'
+        off_line = f'dx {dx:+.0f}  dy {dy:+.0f} px'
+        status, status_col = (('ON TARGET', (60, 230, 120)) if in_band
+                              else ('OFF  ', (40, 190, 255)))
+    else:
+        tgt_line = 'no target'
+        off_line = 'searching...'
+        status, status_col = 'LOST', (60, 60, 235)
+
+    lines = [
+        (tgt_line, (235, 235, 235)),
+        (off_line, (200, 200, 200)),
+        (status,   status_col),
+        (f'FPS {fps:4.1f}', (200, 200, 200)),
+    ]
+    if downward:
+        lines.append(('axes: Y->surge  X->lat', (180, 180, 120)))
+    if state is not None:
+        arm = 'ARMED' if getattr(state, 'armed', False) else 'safe'
+        lines.append((f'{state.depth_m:+.2f} m   {arm}',
+                      (60, 60, 235) if getattr(state, 'armed', False) else (170, 170, 170)))
+
+    fs_badge = 0.95 * sf
+    fs_line  = 0.62 * sf
+    pad      = int(14 * sf)
+    line_h   = int(pil_text_size('Ag', fs_line)[1] * 1.5)
+    bw_badge = pil_text_size(badge, fs_badge)[0]
+    box_w = max(bw_badge, max(pil_text_size(t, fs_line)[0] for t, _ in lines)) + pad * 2
+    box_h = pad * 2 + int(pil_text_size(badge, fs_badge)[1] * 1.6) + line_h * len(lines)
+    box_w = min(box_w, w - 4)
+
+    # Semi-transparent dark panel background (single ROI blend).
+    x0, y0 = 4, 4
+    x1, y1 = min(x0 + box_w, w - 1), min(y0 + box_h, h - 1)
+    roi = out[y0:y1, x0:x1]
+    if roi.size:
+        dark = np.full_like(roi, 15)
+        cv2.addWeighted(dark, 0.62, roi, 0.38, 0, roi)
+        cv2.rectangle(out, (x0, y0), (x1, y1), badge_col, max(1, int(2 * sf)), cv2.LINE_AA)
+
+    yy = y0 + pad + int(pil_text_size(badge, fs_badge)[1])
+    pil_text(out, badge, (x0 + pad, yy), fs_badge, badge_col)
+    yy += int(pil_text_size(badge, fs_badge)[1] * 0.6)
+    for text, col in lines:
+        yy += line_h
+        pil_text(out, text, (x0 + pad, yy), fs_line, col)
+
+
 def _render_splash(w: int, h: int, elapsed: float, camera: str,
                    fade: float = 1.0) -> np.ndarray:
     """Blue 'Initializing Vision System' splash. fade=1.0 fully opaque, 0.0 transparent."""
@@ -810,9 +900,11 @@ def main(args=None):
                     sec_resized = cv2.resize(
                         sec_frame, (int(sec_frame.shape[1] * h_target / sec_frame.shape[0]), h_target),
                         interpolation=cv2.INTER_LINEAR)
-                    # Annotate secondary with detections
+                    # Annotate secondary with detections (no trail -- the primary owns
+                    # the 'main' trail buffer; a second writer would smear it).
                     if sec_dets:
-                        sec_resized = draw.render_all(sec_resized, sec_dets)
+                        sec_resized = draw.render_all(sec_resized, sec_dets,
+                                                      draw_trail=False)
                     # Camera name labels
                     cv2.putText(out, node._active_camera.upper(),
                                 (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 160), 2, cv2.LINE_AA)
@@ -821,10 +913,14 @@ def main(args=None):
                                 (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2, cv2.LINE_AA)
                     out = np.hstack([out, sec_resized])
 
-            # Camera name badge (single-camera mode)
+            # Mission-status panel (single-camera mode): camera frame + target +
+            # alignment offset + FPS + depth/armed, so an operator can read what the
+            # AUV is doing and how well. Display-only (off the detector/GPU path).
             if not node._side_by_side:
-                cv2.putText(out, node._active_camera.upper(),
-                            (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 160), 2, cv2.LINE_AA)
+                _draw_mission_panel(
+                    out, camera=node._active_camera, fps=node._fps_display,
+                    primary=primary, native_w=native_w, native_h=native_h,
+                    deadband=0.05, state=node._state)
 
             if out.shape[0] != _SP_H or out.shape[1] != _SP_W:
                 out = cv2.resize(out, (_SP_W, _SP_H), interpolation=cv2.INTER_LINEAR)
