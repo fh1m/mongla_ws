@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from duburi_planner.vision_dsl import _VisionDSL, VisionResult
+from duburi_planner.vision_dsl import _AnchorDSL, _VisionDSL, VisionResult
 from duburi_planner.client import MoveFailed
 from duburi_control.motion_vision import ALIGNED, LOST, TIMEOUT, NO_CAMERA
 
@@ -663,3 +663,93 @@ def test_anchor_align_positional_name_loads_disk_ref():
     _, kwargs = send.call_args
     assert kwargs['ref_name'] == 'hole'
     assert kwargs['hold_s'] == pytest.approx(2.0)
+
+
+# --------------------------------------------------------------------------- #
+#  duburi.anchor.* -- redesigned XFeat feature-lock namespace                  #
+#  (delegates to the proven vision.anchor_* verbs; these pin the routing)      #
+# --------------------------------------------------------------------------- #
+def _anchor_dsl(send):
+    """An _AnchorDSL whose delegate `.vision` is a real _VisionDSL over `send`."""
+    m = _mission(send)
+    m.vision = _VisionDSL(m)
+    return _AnchorDSL(m)
+
+
+def test_anchor_ns_snap_frame_is_whole_frame():
+    send = MagicMock(return_value=_result(1))
+    a = _anchor_dsl(send)
+    assert a.snap(source='frame') is True
+    cmd, kwargs = send.call_args[0][0], send.call_args[1]
+    assert cmd == 'vision_anchor_snap'
+    assert kwargs['target_class'] == ''      # whole-frame: no detection gate
+    assert kwargs['ref_name'] == ''          # not persisted
+
+
+def test_anchor_ns_snap_detection_sends_gate():
+    send = MagicMock(return_value=_result(1))
+    a = _anchor_dsl(send)
+    a.snap(source='detection', target='hole', conf=0.6, err=30)
+    _, kwargs = send.call_args
+    assert kwargs['target_class'] == 'hole'
+    assert kwargs['conf'] == pytest.approx(0.6)
+    assert kwargs['err_px'] == pytest.approx(30.0)
+
+
+def test_anchor_ns_snap_detection_defaults_to_sticky_target():
+    send = MagicMock(return_value=_result(1))
+    a = _anchor_dsl(send)                     # _mission sets target='gate'
+    a.snap(source='detection')
+    _, kwargs = send.call_args
+    assert kwargs['target_class'] == 'gate'
+
+
+def test_anchor_ns_save_persists_ref_name():
+    send = MagicMock(return_value=_result(1))
+    a = _anchor_dsl(send)
+    assert a.save('gate', source='detection', target='gate') is True
+    _, kwargs = send.call_args
+    assert kwargs['ref_name'] == 'gate'       # persisted to references/gate.png
+    assert kwargs['target_class'] == 'gate'
+
+
+def test_anchor_ns_snap_save_kw_persists():
+    send = MagicMock(return_value=_result(1))
+    a = _anchor_dsl(send)
+    a.snap(source='frame', save='board')
+    _, kwargs = send.call_args
+    assert kwargs['ref_name'] == 'board'
+
+
+def test_anchor_ns_snap_bad_source_raises():
+    a = _anchor_dsl(MagicMock(return_value=_result(1)))
+    with pytest.raises(ValueError):
+        a.snap(source='disk')                 # only detection|frame
+
+
+def test_anchor_ns_align_ref_loads_and_locks():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    a = _anchor_dsl(send)
+    res = a.align('hole', hold=2.0, fire=[1, 2], match=20)
+    assert res.ok is True
+    cmd, kwargs = send.call_args[0][0], send.call_args[1]
+    assert cmd == 'vision_anchor_align'
+    assert kwargs['ref_name'] == 'hole'
+    assert kwargs['fire_channels'] == '1,2'
+    assert kwargs['hold_s'] == pytest.approx(2.0)
+    assert kwargs['min_inliers'] == pytest.approx(20.0)
+
+
+def test_anchor_ns_align_no_ref_locks_last_snap():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    a = _anchor_dsl(send)
+    a.align()
+    _, kwargs = send.call_args
+    assert kwargs['ref_name'] == ''
+
+
+def test_anchor_ns_clear_dispatches():
+    send = MagicMock(return_value=_result(1))
+    a = _anchor_dsl(send)
+    assert a.clear() is True
+    assert send.call_args[0][0] == 'vision_anchor_clear'

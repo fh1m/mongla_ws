@@ -609,3 +609,102 @@ class _VisionDSL:
     @property
     def log(self):
         return self._dsl.log
+
+
+class _AnchorDSL:
+    """duburi.anchor.* -- the XFeat feature-lock namespace (redesigned surface).
+
+    A clean, dedicated namespace over the XFeat + LighterGlue homography lock
+    that previously lived under the awkward ``duburi.vision.anchor_*`` names.
+    Three sources of a reference, one lock verb::
+
+        duburi.anchor.snap(source='detection', target='hole')   # ref = a detection crop
+        duburi.anchor.snap(source='frame')                      # ref = the whole frame
+        duburi.anchor.save('gate', source='detection', target='gate')  # snap + persist to disk
+        duburi.anchor.align(ref='gate', hold=3, fire=1)         # lock onto a saved/last ref
+        duburi.anchor.clear()
+
+    ``snap`` sets the reference the lock keys on: a **detection crop** (keys on
+    the target, not moving background -- best for the torpedo hole YOLO loses up
+    close), or the **whole frame**. ``save(name, ...)`` does the same and ALSO
+    writes ``references/<name>.png`` so the reference survives a restart -- snap a
+    prop the day before, reload it on competition day. ``align(ref='<name>')``
+    loads that saved PNG and superglues the hull back onto it; ``align()`` (no
+    ref) locks the last in-memory snap.
+
+    This is a thin, well-named surface -- it delegates to the proven anchor verb
+    implementations on ``duburi.vision`` (unchanged control path). The old
+    ``duburi.vision.anchor_snap/clear/align`` remain as back-compat aliases.
+    """
+
+    def __init__(self, mission: 'DuburiMission'):
+        self._dsl = mission
+
+    @property
+    def log(self):
+        return self._dsl.log
+
+    def snap(self, source: str = 'detection', *, target=None,
+             conf: float = 0.5, err: float = 40.0,
+             save: Optional[str] = None, camera=None) -> bool:
+        """Capture the anchor reference from a detection crop or the whole frame.
+
+        ``source='detection'`` waits up to 3 s for a centred detection of
+        ``target`` (score >= ``conf``, within ``err`` px of centre) and snaps
+        JUST that bbox crop; falls back to a whole-frame snap if it never
+        appears. ``source='frame'`` snaps the whole frame immediately. Pass
+        ``save='<name>'`` to ALSO persist it to ``references/<name>.png``.
+        Returns True on success. (To LOAD a saved reference, pass it to
+        ``align(ref='<name>')``.)
+        """
+        v = self._dsl.vision
+        if source == 'frame':
+            return v.anchor_snap(save, target=None, conf=conf, err=err, camera=camera)
+        if source == 'detection':
+            tgt = target if target else self._dsl.target
+            if not tgt:
+                raise ValueError(
+                    "anchor.snap(source='detection') needs target=<class>, e.g. "
+                    "anchor.snap(source='detection', target='hole'). Use "
+                    "source='frame' to snap the whole view.")
+            return v.anchor_snap(save, target=tgt, conf=conf, err=err, camera=camera)
+        raise ValueError(
+            "anchor.snap source must be 'detection' or 'frame' (to LOAD a saved "
+            "reference, use anchor.align(ref='<name>')).")
+
+    def save(self, name: str, *, source: str = 'detection', target=None,
+             conf: float = 0.5, err: float = 40.0, camera=None) -> bool:
+        """Snap the reference AND persist it to ``references/<name>.png``.
+
+        Sugar for ``snap(source=..., save=name)`` -- capture a prop's reference
+        once (deck-side) so ``align(ref='<name>')`` can re-lock it on comp day.
+        """
+        return self.snap(source=source, target=target, conf=conf, err=err,
+                          save=name, camera=camera)
+
+    def align(self, ref: Optional[str] = None, *, err: float = 20.0,
+              theta: float = 0.05, duration: float = 30.0, hold=None,
+              fire=None, match=None, gain: float = 30.0,
+              lat_gain=None, yaw_gain=None, depth_gain=None,
+              brake: bool = True, brake_gain=None, camera=None) -> VisionResult:
+        """Superglue the hull to the reference via the XFeat homography.
+
+        Drives lat from the homography ``tx``, yaw from ``theta``, depth from
+        ``ty`` until the live view re-superimposes within ``err`` px / ``theta``
+        rad, then holds for ``hold`` s. ``ref='<name>'`` loads
+        ``references/<name>.png`` first (reproducible re-lock); ``ref=None``
+        locks the last snap. ``fire`` (int or list) fires those payload channels
+        ONCE at first lock -- the torpedo leaves mid-hold while glued. ``match``
+        = min RANSAC inliers a tick must clear to count as locked. No forward
+        axis (a monocular homography has no metric range; a prior ``move`` sets
+        the standoff). Returns a :class:`VisionResult` (truthy on lock).
+        """
+        return self._dsl.vision.anchor_align(
+            ref, err=err, theta=theta, duration=duration, hold=hold, fire=fire,
+            match=match, gain=gain, lat_gain=lat_gain, yaw_gain=yaw_gain,
+            depth_gain=depth_gain, brake=brake, brake_gain=brake_gain,
+            camera=camera)
+
+    def clear(self, *, camera=None) -> bool:
+        """Drop the stored reference so the next ``snap`` starts fresh."""
+        return self._dsl.vision.anchor_clear(camera=camera)

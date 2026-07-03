@@ -147,7 +147,7 @@ from std_msgs.msg import String
 from vision_msgs.msg import Detection2DArray
 
 from .model_context import ClassRef, ModelRegistry
-from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by DuburiMission
+from .vision_dsl import _AnchorDSL, _VisionDSL  # noqa: F401 -- used by DuburiMission
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -297,6 +297,7 @@ class DuburiMission:
         self.camera = camera
         self.target = target
         self.vision = _VisionDSL(self)
+        self.anchor = _AnchorDSL(self)   # duburi.anchor.* -- XFeat feature-lock namespace
         self.models = ModelRegistry()
         # Detection cache: camera -> (monotonic_stamp, [DetRecord, ...]).
         # Refreshed by ROS callbacks; detected()/where() actively pump the node
