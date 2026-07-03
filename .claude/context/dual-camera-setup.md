@@ -94,12 +94,16 @@ The `KERNELS` value is the **interface** node (`<hub>.<port>:1.0`), e.g. `1-2.2:
 `ID_PATH`/`platform-...` string. `ATTR{index}=="0"` is **required**: each cam exposes 4 video
 nodes and *two* report `:capture:` (index0 = the real MJPEG stream, index2 = a metadata node),
 so `index==0` picks the stream. This is the **live, deployed rule on THIS Jetson** (2026-07-03,
-verified: forward = bottom-LEFT socket = port `1-2.2`; downward = bottom-RIGHT = port `1-2.4`):
+verified: both cams in the **UPPER** USB row — forward = upper-LEFT socket = port `1-2.1`;
+downward = upper-RIGHT = port `1-2.3`. The bottom row is `1-2.2`/`1-2.4`; the upper ports
+enumerate both cameras cleanly whereas a bottom-port attempt only brought up one):
 ```
-# Whatever plugs into bottom-LEFT (port 1-2.2) = FORWARD; bottom-RIGHT (1-2.4) = DOWNWARD.
-SUBSYSTEM=="video4linux", KERNELS=="1-2.2:1.0", ATTR{index}=="0", SYMLINK+="duburi_cam_forward",  MODE="0666"
-SUBSYSTEM=="video4linux", KERNELS=="1-2.4:1.0", ATTR{index}=="0", SYMLINK+="duburi_cam_downward", MODE="0666"
+# Whatever plugs into upper-LEFT (port 1-2.1) = FORWARD; upper-RIGHT (1-2.3) = DOWNWARD.
+SUBSYSTEM=="video4linux", KERNELS=="1-2.1:1.0", ATTR{index}=="0", SYMLINK+="duburi_cam_forward",  MODE="0666"
+SUBSYSTEM=="video4linux", KERNELS=="1-2.3:1.0", ATTR{index}=="0", SYMLINK+="duburi_cam_downward", MODE="0666"
 ```
+> The canonical copy of this rule lives at `~/ESSENTIALS/99-duburi-cameras.rules` and is
+> deployed by `~/ESSENTIALS/install.sh`. Edit the ports there if you re-cable.
 ```bash
 sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=video4linux
 ls -l /dev/duburi_cam_*   # expect duburi_cam_forward -> ../video0, duburi_cam_downward -> ../video4
