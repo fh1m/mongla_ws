@@ -133,6 +133,80 @@ Run BOTH pipelines at once to confirm the two fit the bus concurrently (watch fo
 
 ---
 
+## 4b. Which camera runs which model / classes (launch args + DSL)
+
+### At launch — per-camera args on `vision_dual.launch.py`
+Each camera has an independent model / class-filter / confidence. Defaults in parentheses:
+
+| Forward cam | Downward cam | Meaning |
+|-------------|--------------|---------|
+| `fwd_model:=` (`gate_rescue_repair`) | `dwn_model:=` (`bin_fire_blood`) | YOLO model **stem** (resolves `<stem>.engine` in `src/duburi_vision/models/`, `.pt` fallback) |
+| `fwd_classes:=` (`gate,rescue,repair`) | `dwn_classes:=` (`fire,blood`) | class filter (comma list; empty = all classes) |
+| `fwd_conf:=` (`0.35`) | `dwn_conf:=` (`0.35`) | confidence floor |
+| `fwd_device_path:=` | `dwn_device_path:=` | port-stable symlink (see §3c) |
+
+Other args: `paused:=` (`true` — see §4c, **keep it true**), `viewer:=` (`true`), `tracking:=` (`true`),
+`anchor:=` (`false`), `device_cls:=` (`cuda:0`).
+
+```bash
+# Competition default (gate on forward, bin on downward), headless, detectors paused:
+ros2 launch duburi_vision vision_dual.launch.py viewer:=false paused:=true \
+    fwd_device_path:=/dev/duburi_cam_forward dwn_device_path:=/dev/duburi_cam_downward
+
+# Different models/classes per camera (e.g. slalom forward, octagon downward):
+ros2 launch duburi_vision vision_dual.launch.py \
+    fwd_model:=slalom_red_pipe fwd_classes:=red_pipe fwd_conf:=0.4 \
+    dwn_model:=octagon         dwn_classes:=octagon  dwn_conf:=0.3 \
+    fwd_device_path:=/dev/duburi_cam_forward dwn_device_path:=/dev/duburi_cam_downward
+
+# SINGLE camera only (the memory-safest option for a one-camera task — one detector,
+# one CUDA context; cannot hit the dual-detector OOM):
+ros2 launch duburi_vision vision.launch.py camera:=forward \
+    model:=gate_rescue_repair classes:=gate,rescue,repair \
+    device_path:=/dev/duburi_cam_forward
+```
+
+### Mid-mission — switching camera / model from the DSL (already wired)
+The mission DSL (`DuburiMission`, `duburi.*`) drives it live — **no relaunch**:
+
+```python
+duburi.use_camera('downward')            # downward detector LIVE, forward auto-PAUSED, HUD flips
+duburi.vision.align('fire', lat=0, depth=0, err=30)
+duburi.use_camera('forward')             # back to forward (downward auto-paused)
+
+duburi.set_model('torpedo_blood_hole')   # hot model swap on the current camera (needs models:= registry)
+duburi.use('gate', 'gate')               # model + class filter together
+duburi.set_classes(['fire','blood'])     # class filter only
+duburi.pause_detector('downward')        # manual pause / resume
+duburi.resume_detector('forward')
+```
+
+A vision verb with `camera='downward'` **auto-activates** that camera too (same guard). `duburi.detected()`,
+`where()`, `wait_for()` all read whichever camera is current. Missions: see `task_bin.py` (downward),
+`task_gate.py` (forward).
+
+## 4c. ⚠️ Memory guard — the dual-detector OOM (why the Jetson crashed)
+
+`vision_dual` starts **two detector processes**, so there are **two CUDA contexts** (~1 GB each in the
+shared unified pool) *regardless of* `paused` — `paused` only stops per-frame **inference**, not the
+context/engine load. The crash happens when **both detectors INFER at once** (concurrent GPU work spikes
+the pool → `NvMap error 12` / NVML assert / hard lock). Rules that prevent it:
+
+1. **Never launch `paused:=false`.** Keep the default `paused:=true` and make exactly one camera live via
+   `duburi.use_camera(...)`. The DSL enforces exclusivity — `_activate_camera` **pauses the previous
+   detector before resuming the next**, so only one ever infers ("never two detectors on the Jetson").
+   The failure mode is bypassing it: `paused:=false`, or calling `resume_detector` on both without an
+   intervening `use_camera`.
+2. **One-camera task → use `vision.launch.py camera:=<cam>`** (single detector; the dual-OOM is impossible).
+3. **Trim + max before a dual run:** `pkill -f chrome` (or headless), `duburi_max`, and `duburi_clean`
+   between runs. The desktop shares the same pool (see `xfeat-setup.md` §3).
+4. **System safety net — `earlyoom`** (in `~/ESSENTIALS`): if memory still runs out, earlyoom SIGTERMs the
+   heaviest process (a detector) **instead of the kernel hard-locking the whole Jetson** — you lose the
+   vision task, not the vehicle. Install: `~/ESSENTIALS/install.sh` (see that README).
+5. `anchor:=true` adds XFeat on top — run it with **one** detector, never two + anchor (`xfeat-setup.md` §3).
+
+---
+
 ## 5. In the mission stack (already wired — just confirm)
 - `vision_dual.launch.py` brings up both cameras + both detectors (start **paused**) + one HUD.
 - A vision verb / `use_camera('downward')` **auto-switches** the live detector (pauses forward,
