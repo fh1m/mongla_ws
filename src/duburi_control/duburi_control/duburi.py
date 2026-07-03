@@ -181,6 +181,7 @@ class Duburi(VisionVerbs):
                  yaw_source=None,
                  vision_state_provider=None,
                  anchor_state_provider=None,
+                 feature_state_provider=None,
                  anchor_snap_fn=None,
                  anchor_clear_fn=None,
                  heartbeat=None,
@@ -231,6 +232,10 @@ class Duburi(VisionVerbs):
         # Anchor (XFeat superglue) hooks, wired by the manager like
         # vision_state_provider so VisionVerbs stays rclpy-free.
         self.anchor_state_provider = anchor_state_provider
+        # use_feature fusion: manager-built VisionState wrapper that falls back to
+        # the XFeat anchor pose when the detector drops (rclpy-free here, same as
+        # vision_state_provider). None -> use_feature degrades to detection-only.
+        self.feature_state_provider = feature_state_provider
         self.anchor_snap_fn        = anchor_snap_fn
         self.anchor_clear_fn       = anchor_clear_fn
         self._heartbeat        = heartbeat

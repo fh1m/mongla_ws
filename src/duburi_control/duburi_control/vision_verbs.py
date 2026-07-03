@@ -94,7 +94,7 @@ class VisionVerbs:
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
                      settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
                      hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
-                     depth_ceiling_m=0.0, fire_gap=0.0):
+                     depth_ceiling_m=0.0, fire_gap=0.0, use_feature=False):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -154,6 +154,22 @@ class VisionVerbs:
         with self._command_scope('vision_align'):
             self._send_neutral_and_settle()
             vstate = self._resolve_vision_state(camera)
+            # use_feature: swap in the manager-built VisionState wrapper that
+            # substitutes the XFeat anchor pose when the detector drops a tick
+            # (detection stays PRIMARY; needs a snapped/loaded reference). Falls
+            # back to the plain detector run if no anchor is wired.
+            if bool(use_feature):
+                fused_fn = getattr(self, 'feature_state_provider', None)
+                fused = fused_fn(camera) if fused_fn is not None else None
+                if fused is not None:
+                    vstate = fused
+                    self.log.info(
+                        '[CMD  ] vision_align use_feature=ON -- XFeat anchor is a '
+                        'detection fallback (snap/load a reference to engage it)')
+                else:
+                    self.log.warning(
+                        '[CMD  ] vision_align use_feature requested but no anchor '
+                        'wired (launch anchor:=true) -- detection-only')
             is_downward   = camera in ('downward', 'sim_bottom')
             depth_sign    = -1 if is_downward else +1
             touches_yaw   = 'yaw' in axis_set

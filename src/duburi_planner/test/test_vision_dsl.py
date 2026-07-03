@@ -753,3 +753,22 @@ def test_anchor_ns_clear_dispatches():
     a = _anchor_dsl(send)
     assert a.clear() is True
     assert send.call_args[0][0] == 'vision_anchor_clear'
+
+
+# --------------------------------------------------------------------------- #
+#  use_feature -- XFeat anchor detection-fallback fusion threads to the goal   #
+# --------------------------------------------------------------------------- #
+def test_align_use_feature_threads_to_goal():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.align('hole', lat=0, depth=0, use_feature=True)
+    _, kwargs = send.call_args
+    assert kwargs['use_feature'] is True
+
+
+def test_align_use_feature_defaults_false():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.align('hole', lat=0)
+    _, kwargs = send.call_args
+    assert kwargs['use_feature'] is False

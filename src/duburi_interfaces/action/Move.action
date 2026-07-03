@@ -111,6 +111,10 @@ bool    fire_pass_enabled  # vision_align: if true, fire the payload at command 
 bool    hold_heading       # vision_align: when yaw is released to the background heading lock, widen
                            #   the lock's deadband for the hold so the launcher heading holds STEADY
                            #   instead of micro-correcting sub-deg noise (the terminal yaw jitter).
+bool    use_feature        # vision_align: fuse the XFeat anchor pose as a DETECTION FALLBACK -- when
+                           #   the detector returns no box on a tick AND the anchor is LOCKED, steer
+                           #   on the homography tx/ty (sustained-dropout / cloudy-day robustness).
+                           #   Detection stays primary; needs a snapped/loaded reference. default false.
 # ---- downward-camera frame remap (camera=downward/sim_bottom) ----
 float32 surge_sign         # vision_align downward: +1/-1 polarity of the Ch5 SURGE axis (image-Y ->
                            #   fore/aft). Flips for the physical bottom-cam mount. 0 = +1 (rosidl unset).

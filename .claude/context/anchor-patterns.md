@@ -85,6 +85,29 @@ Use for a dropper hover, a station-keep in current, or any "get on it, then don'
 
 ---
 
+## Pattern 4 — `use_feature=True` (the fallback fused into ONE verb)
+
+Patterns 1–3 compose two verbs. `vision.align(..., use_feature=True)` folds the anchor in as
+a **detection fallback inside the normal align loop**: the detector stays primary, but on any
+tick where YOLO returns no box **and** the anchor is `LOCKED`, the loop steers on the
+homography pose instead — so a *sustained* detector dropout (murky water, a cloud passing) is
+ridden out without losing the hold. It needs a reference snapped/loaded first (it never
+auto-snaps), and degrades to detection-only when there's no lock.
+
+```python
+duburi.anchor.snap(source='detection', target='hole')       # give the fallback something to hold
+duburi.vision.align('hole', lat=0, depth=0, hold=4, fire=1,  # detector primary ...
+                    use_feature=True)                        # ... XFeat holds the gaps
+```
+
+Semantics (v1, deliberately conservative): detection **primary** (no blend/averaging);
+substitute **only** on a locked anchor; `ex`/`ey` from `tx`/`ty` normalized by the real image
+size; `theta` ignored (align drives lat/yaw from horizontal, depth from vertical); range axis
+untouched (holds lat/yaw/depth, not `fwd`). Off by default — existing missions are unchanged.
+Use Pattern 1's explicit `anchor.align` when you want the homography to be the *sole* driver
+(the terminal glue lock); use `use_feature` when you want YOLO to lead and XFeat to **cover its
+gaps**.
+
 ## Pool runbook / gotchas
 
 - Launch with `anchor:=true` (see [`xfeat-setup.md`](xfeat-setup.md)) — pre-download weights.
