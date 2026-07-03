@@ -88,6 +88,8 @@ class VisionAlignState(DuburiState):
         yaw=None,
         lat=None,
         depth=None,
+        fwd=None,
+        fwd_mode: str = 'area',
         err: float = 40.0,
         gain: float = 30.0,
         duration: float = 20.0,
@@ -101,6 +103,12 @@ class VisionAlignState(DuburiState):
         self._yaw      = _axis(yaw)
         self._lat      = _axis(lat)
         self._depth    = _axis(depth)
+        # ``fwd`` on a DOWNWARD camera is the Ch5 fore/aft SURGE pixel offset (the
+        # kwargs remap there -- see vision_dsl.align); on a forward camera it is the
+        # optional fill%% standoff. ``fwd_mode`` measures the fill. Passed straight
+        # through to duburi.vision.align, which owns the downward swap.
+        self._fwd      = _axis(fwd)
+        self._fwd_mode = fwd_mode
         self._err      = err
         self._gain     = gain
         self._duration = duration
@@ -115,6 +123,7 @@ class VisionAlignState(DuburiState):
         result = self.duburi.vision.align(
             self._target, camera=self._camera,
             lat=self._lat, yaw=self._yaw, depth=self._depth,
+            fwd=self._fwd, fwd_mode=self._fwd_mode,
             err=self._err, gain=self._gain, duration=self._duration,
             surge_sign=self._surge_sign, max_depth_m=self._max_depth_m,
             fallback=self._fallback)
