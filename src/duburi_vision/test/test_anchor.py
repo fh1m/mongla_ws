@@ -359,3 +359,27 @@ def test_draw_match_overlay_runs_and_is_none_safe():
     assert (out[:, :, 1] > 0).any()             # something green was drawn
     # None match (no lock) must not raise and still annotates.
     assert draw_match_overlay(img, None, None, min_inliers=2).shape == img.shape
+
+
+# --------------------------------------------------------------------------- #
+#  Robust homography estimator selection (MAGSAC with RANSAC fallback)         #
+# --------------------------------------------------------------------------- #
+def test_robust_method_prefers_magsac():
+    from types import SimpleNamespace
+    from duburi_vision.anchor.xfeat import _robust_method
+    fake_cv2 = SimpleNamespace(USAC_MAGSAC=38, RANSAC=8)
+    assert _robust_method(fake_cv2) == 38          # MAGSAC when available
+
+
+def test_robust_method_falls_back_to_ransac():
+    from types import SimpleNamespace
+    from duburi_vision.anchor.xfeat import _robust_method
+    fake_cv2 = SimpleNamespace(RANSAC=8)           # no USAC_MAGSAC (old OpenCV)
+    assert _robust_method(fake_cv2) == 8
+
+
+def test_real_cv2_exposes_a_usable_method():
+    import cv2
+    from duburi_vision.anchor.xfeat import _robust_method
+    m = _robust_method(cv2)
+    assert isinstance(m, int)                      # a real cv2 estimator flag
