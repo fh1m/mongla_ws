@@ -125,3 +125,21 @@ gaps**.
   drift-hold, never the pipe alone. The detection + heading-lock pass remains primary.
 
 Runnable demo of Patterns 1–3: `ros2 run duburi_planner mission demo_anchor`.
+
+## Litmus test — fire the torpedo from a standalone XFeat lock (pool proof)
+
+The single mission that proves the whole system, watched live on the OpenCV HUD:
+
+```bash
+# HUD + anchor node up so you SEE the lock fire:
+ros2 launch duburi_vision vision.launch.py camera:=forward anchor:=true viewer:=true
+ros2 run duburi_planner mission xfeat_torpedo
+```
+
+`xfeat_torpedo` (Pattern 1, focused): detection acquires the hole + standoff, XFeat snaps the
+hole crop, then the **homography lock alone** drives lat/yaw/depth and fires the torpedo
+mid-hold. On the HUD you should see the **bottom-right ANCHOR REF inset with green match
+lines**, the **padlock turn green (LOCKED)**, inliers climb past `XFEAT_MIN_INLIERS`, and the
+shot leave while LOCKED. Fire is gated on the lock — a bad/low-inlier match never fires. If the
+inset shows a snapshot but few/no green lines, the reference was low-texture: get closer / aim
+at the hole rim before firing. Set `XFEAT_FIRE_CHANNEL=None` for a dry lock-only rehearsal.
