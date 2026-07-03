@@ -186,6 +186,25 @@ class _VisionDSL:
         centre). At least one axis is required. Returns a
         :class:`VisionResult`; never raises on a miss.
 
+        DOWNWARD CAMERA (``camera='downward'``) -- the kwargs REMAP because the
+        bottom cam looks straight down (full table: downward-camera.md)::
+
+            forward cam :  lat=Ch6 strafe   depth=Ch3 up/down   fwd=fwd standoff(fill)
+            downward cam:  lat=Ch6 strafe   fwd=Ch5 surge px     depth=descent(fill%)
+
+        i.e. on downward ``fwd`` is the fore/aft SURGE pixel offset (image-Y, 0 =
+        centre) and ``depth`` is the DESCENT target as a bbox fill %% (measured by
+        ``fwd_mode`` = area/width/height). ``lat`` is unchanged. The centring axes
+        are then ``lat`` + ``fwd``; ``depth`` is the optional approach. A bin drop
+        reads ``align('fire', camera='downward', lat=0, fwd=0, depth=30,
+        fwd_mode='height', surge_sign=…, max_depth_m=<neg floor>)``. Physically
+        identical to the old ``lat/depth/fwd`` downward form -- ONLY the kwarg names
+        swap; the Ch5 output and ``surge_sign`` behaviour are byte-identical, so a
+        previously-verified sign stays valid. (A DISARMED ``vision_thrust_check
+        --camera downward`` is still the standard pre-armed check -- it just
+        confirms you're now driving surge with the ``fwd=`` kwarg, not re-hunting a
+        changed sign.)
+
         ``gain`` is the global max-speed cap (% thrust). ``lat_gain`` /
         ``yaw_gain`` override that cap on the lat/yaw axis; leave them
         unset to inherit ``gain``. (Depth has no % cap -- its rate is set
@@ -273,20 +292,36 @@ class _VisionDSL:
         ``ros2 param set /duburi_manager vision.<name> <value>`` (they apply on
         the next goal); see ``.claude/context/precision-alignment.md``.
         """
+        cam = self._resolve_camera(camera)
+        # ── DOWNWARD-CAMERA ARG SWAP (operator-facing kwarg remap) ──────────────
+        # The bottom cam looks straight down, so the axes you *think* in rotate.
+        # `lat` stays Ch6 strafe (image-X), but the other two SWAP so the kwargs
+        # match hovering over a bin/target:
+        #     fwd   -> Ch5 SURGE fore/aft  (image-Y pixel offset; 0 = centre)
+        #     depth -> DEPTH DESCENT       (bbox fill %, measured by `fwd_mode`)
+        # So `fwd` is ALWAYS the fore/aft joystick and `depth` ALWAYS drives the
+        # real depth setpoint. This is a PURE kwarg remap: physically identical to
+        # the align engine's existing downward frame-rotation (Ch5 surge from the
+        # image-Y pixel, fill->depth descent) -- align_loop, the wire fields, and
+        # every thruster sign are UNCHANGED. Only which kwarg you type is swapped.
+        # Full axis table + why: .claude/context/downward-camera.md + CLAUDE.md.
+        if cam in ('downward', 'sim_bottom'):
+            depth, fwd = fwd, depth   # fwd->depth-axis (Ch5 surge); depth->fwd_fill (descent)
+
         active = [(name, val) for name, val in
                   (('lat', lat), ('yaw', yaw), ('depth', depth))
                   if val is not None]
         if not active:
             raise ValueError(
-                "vision.align needs at least one axis as a KEYWORD with a "
-                "number: align('gate', yaw=0, lat=0) centres on yaw+lat "
-                "(0 = centre, a number = signed px offset). Bare names like "
-                "align('gate', yaw, lat) do not work -- the axes are "
-                "keyword-only.")
+                "vision.align needs at least one centring axis as a KEYWORD with "
+                "a number: align('gate', yaw=0, lat=0) centres on yaw+lat "
+                "(0 = centre, a number = signed px offset). On camera='downward' "
+                "the centring axes are lat (Ch6) + fwd (Ch5 surge); `depth` there "
+                "is the fill%->descent add-on, not a centring axis. Bare names "
+                "like align('gate', yaw, lat) do not work -- axes are keyword-only.")
 
         axes_csv = ','.join(name for name, _ in active)
         offsets = {name: float(val) for name, val in active}
-        cam     = self._resolve_camera(camera)
         # Auto-switch the live detector to this camera (pause the other, resume this,
         # point the HUD at it, settle) so `camera='downward'` "just works" and only
         # one detector runs at a time. Idempotent -- no-op when already live.

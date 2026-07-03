@@ -109,6 +109,12 @@ untouched (holds lat/yaw/depth, not `fwd`). Off by default — existing missions
 has no bbox size, so on a dropout the forward axis would read fill≈0 ("far") and drive forward
 blind. The verb **ignores `fwd=` when `use_feature` is on** (logs it) — set the standoff with a
 prior `move()`/`align(fwd=)` *before* the fused hold.
+
+**`use_feature` is a FORWARD-camera fallback — do NOT combine with `camera='downward'`.** On
+downward the kwargs remap (`fwd`→surge, `depth`→fill descent, see [`downward-camera.md`]) and the
+anchor-substitute Sample has no downward-frame notion; the descent (`fwd_fill`) would be zeroed by
+the fwd-guard above. XFeat is for the forward torpedo/gate work; the bin task uses the plain
+downward detector path. (No current mission combines them.)
 Use Pattern 1's explicit `anchor.align` when you want the homography to be the *sole* driver
 (the terminal glue lock); use `use_feature` when you want YOLO to lead and XFeat to **cover its
 gaps**.

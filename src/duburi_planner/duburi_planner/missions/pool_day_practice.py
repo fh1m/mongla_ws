@@ -198,7 +198,7 @@ def run(duburi, log=None):
         duburi.set_classes('fire,blood', node=_DWN)
 
         if duburi.vision.align(
-                'fire', camera='downward', lat=0, depth=0,
+                'fire', camera='downward', lat=0, fwd=0,   # downward: lat=Ch6, fwd=Ch5 surge
                 err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, surge_sign=BIN_SURGE_SIGN,
                 duration=BIN_ALIGN_DURATION_S, fallback=creep_forward):
             info('[bin] aligned — holding for stability...')
