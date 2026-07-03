@@ -47,6 +47,9 @@ from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection2D, Detection2DArray
 
+# STATE_LOCKED gates the use_feature fallback (substitute only on a genuine lock).
+from .anchor_state import STATE_LOCKED
+
 
 @dataclass
 class Sample:
@@ -461,3 +464,82 @@ def _track_is_predicted(det: Detection2D) -> bool:
     """True for a coasted (Kalman-predicted) /tracks box -- the tracker forces
     its hypothesis score to 0.0; a real box keeps the detector confidence."""
     return _hypothesis_score(det) <= 0.0
+
+
+class FeatureFusedVisionState:
+    """VisionState wrapper: XFeat anchor pose as a DETECTION FALLBACK (``use_feature``).
+
+    A drop-in for ``VisionState`` (implements the exact two-method surface the
+    control loop uses -- ``image_size`` + ``bbox_error``) that makes ``align_loop``
+    survive a *sustained* detector dropout without any change to the pool-tested
+    loop. Semantics (deliberately conservative -- v1):
+
+      * Detection stays PRIMARY -- when ``bbox_error`` returns a real box, it is
+        returned unchanged (no blend, no averaging with the anchor).
+      * ONLY when the detector returns None on a tick AND the XFeat anchor is
+        genuinely ``LOCKED`` is an anchor-derived Sample substituted, so the hull
+        keeps holding the target through the gap (cloudy-day / flicker robustness
+        that outlasts the ~sub-second tracker coast).
+      * The substitute's ``ex``/``ey`` come from the homography ``tx``/``ty``
+        normalized by the REAL image size (from the wrapped VisionState), never a
+        hardcoded half-frame. ``theta`` is ignored -- ``align_loop`` drives lat+yaw
+        from horizontal position and depth from vertical; blending an image-roll
+        into that would drive the hull wrong.
+      * ``coasted=False`` + the anchor's real ``age_s`` so the substitute gets
+        normal freshness-gated authority (a ``coasted`` sample would be zeroed
+        unless ``coast_s>0``). Range is neutral (``h_frac=w_frac=0``) -- fusion v1
+        holds lat/yaw/depth, it does not drive the forward/fill axis.
+
+    It NEVER snaps a reference (reads an existing anchor pose only -- the mission
+    owns snapping) and, with no anchor node / no lock, degrades transparently to
+    detection-only. Enabled only by ``vision.align(use_feature=True)``; off, this
+    class is never constructed, so existing behaviour is byte-identical.
+    """
+
+    def __init__(self, vision_state, anchor_state, *, target_class: str = '',
+                 logger=None):
+        self._vs      = vision_state
+        self._as      = anchor_state
+        self._target  = target_class
+        self._log     = logger
+        self._did_sub = False   # one-shot "substituting on anchor" log
+        self._did_deg = False   # one-shot "no anchor -> detection-only" log
+
+    # ---- VisionState surface (delegate everything else) ---------------- #
+    def image_size(self):
+        return self._vs.image_size()
+
+    def __getattr__(self, name):
+        # Any method the loop or diagnostics might call (is_fresh, list_classes,
+        # close, ...) transparently falls through to the wrapped VisionState.
+        return getattr(self._vs, name)
+
+    def bbox_error(self, class_name: str = '', **kw):
+        sample = self._vs.bbox_error(class_name, **kw)
+        if sample is not None:
+            return sample                          # detector PRIMARY -- unchanged
+
+        # Detector saw nothing this tick -> try the XFeat anchor as a fallback.
+        pose = self._as.pose() if self._as is not None else None
+        if pose is None or pose.state != STATE_LOCKED:
+            if not self._did_deg and self._log is not None:
+                self._did_deg = True
+                self._log.info(
+                    '[FUSE ] use_feature: no LOCKED anchor -- detection-only '
+                    '(snap a reference first for the fallback to engage)')
+            return None                            # degrade to detection-only
+
+        w, h = self._vs.image_size()
+        if w <= 0 or h <= 0:
+            return None
+        ex = max(-1.5, min(1.5, pose.tx_px / (w * 0.5)))
+        ey = max(-1.5, min(1.5, pose.ty_px / (h * 0.5)))
+        if not self._did_sub and self._log is not None:
+            self._did_sub = True
+            self._log.info(
+                f'[FUSE ] use_feature: detector lost -> substituting XFeat anchor '
+                f'pose (conf={pose.conf:.0f} inliers) as the source of truth')
+        return Sample(
+            ex=ex, ey=ey, h_frac=0.0, w_frac=0.0, age_s=pose.age_s,
+            class_id=(class_name or self._target or 'feature'),
+            score=1.0, vis_range=0.0, track_id=-1, coasted=False)

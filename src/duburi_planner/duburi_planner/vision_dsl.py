@@ -176,6 +176,7 @@ class _VisionDSL:
               max_depth_m: Optional[float] = None,
               depth_ceiling: Optional[float] = None,
               fire_gap: Optional[float] = None,
+              use_feature: bool = False,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -327,7 +328,8 @@ class _VisionDSL:
                 surge_sign=float(surge_sign) if surge_sign is not None else 0.0,
                 max_depth_m=float(max_depth_m) if max_depth_m is not None else 0.0,
                 depth_ceiling_m=float(depth_ceiling) if depth_ceiling is not None else 0.0,
-                fire_gap=float(fire_gap) if fire_gap is not None else 0.0)
+                fire_gap=float(fire_gap) if fire_gap is not None else 0.0,
+                use_feature=bool(use_feature))
 
         return self._orchestrate('align', tgt, cam, duration, fallback,
                                  _one_shot)

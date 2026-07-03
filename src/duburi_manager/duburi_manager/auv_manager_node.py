@@ -53,7 +53,7 @@ from .connection_config import (                                             # n
     DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
 )
 from .dispatch_policy   import goal_acceptance                           # noqa: E402
-from .vision_state     import VisionState                                # noqa: E402
+from .vision_state     import VisionState, FeatureFusedVisionState       # noqa: E402
 from .anchor_state     import AnchorState                                # noqa: E402
 from .vision_tunables  import (                                          # noqa: E402
     declare_vision_params,
@@ -375,6 +375,7 @@ class AUVManagerNode(Node):
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
             anchor_state_provider=self._anchor_state_for,
+            feature_state_provider=self._feature_state_for,
             anchor_snap_fn=self._anchor_snap_call,
             anchor_clear_fn=lambda cam: self._anchor_clear_call(cam),
             heartbeat=self.heartbeat,
@@ -477,6 +478,21 @@ class AUVManagerNode(Node):
             astate = AnchorState(self, camera=camera, logger=self.get_logger())
             self._anchor_states[camera] = astate
             return astate
+
+    def _feature_state_for(self, camera: str):
+        """VisionState wrapped so use_feature can fall back to the XFeat anchor.
+
+        Builds both the detector VisionState and the anchor AnchorState for the
+        camera and returns a fresh FeatureFusedVisionState wrapping them (one per
+        goal, so its one-shot 'substituting' log fires per verb). Returns None if
+        the VisionState itself can't be built -- then use_feature degrades to a
+        plain detector run in vision_align.
+        """
+        vs = self._vision_state_for(camera)
+        if vs is None:
+            return None
+        astate = self._anchor_state_for(camera)
+        return FeatureFusedVisionState(vs, astate, logger=self.get_logger())
 
     def _anchor_snap_call(self, camera: str, name: str = '',
                           load: bool = False, target_class: str = '',
