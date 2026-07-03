@@ -36,7 +36,10 @@ Camera / display keyboard shortcuts (always active)
   f            → switch to forward camera
   d            → switch to downward camera
   D            → toggle depth map overlay
-  b            → toggle side-by-side view (both cameras with detections)
+
+Only ONE camera is ever subscribed/streamed at a time (Jetson USB-2 bus +
+unified-memory budget); the old 'b' side-by-side view was removed because it
+force-streamed BOTH cameras at once. Switch with f/d instead.
 
 Video file keyboard shortcuts (active when video_file_mode:=true)
 -----------------------------------------------------------------
@@ -186,16 +189,11 @@ class VisionDisplayNode(Node):
         self._yaw_source    = self.get_parameter('yaw_source').get_parameter_value().string_value
         self._pipeline_procs: list[subprocess.Popen] = []
 
-        # Runtime camera switching state
-        self._side_by_side      = False
-        self._secondary_frame: np.ndarray | None = None
-        self._secondary_lock    = threading.Lock()
-        self._secondary_dets: list = []
-        self._secondary_dets_lock = threading.Lock()
-        self._secondary_subs: list = []
+        # Runtime camera switching state. Exactly ONE camera is subscribed at a
+        # time -- the HUD never streams both at once (Jetson USB-2 / memory budget).
         self._cam_subs: list = []  # 6 camera-specific subs, replaced by _switch_camera
         # Deferred subscription action (set by main thread, executed by timer in executor).
-        # Values: None | 'enable_sbs' | 'disable_sbs' | '<camera_name>'
+        # Values: None | '<camera_name>'
         self._pending_sub_action: str | None = None
 
         if launch_pipeline:
@@ -264,13 +262,13 @@ class VisionDisplayNode(Node):
         # Auto-follow the mission's active camera: the planner publishes it (latched)
         # on /duburi/vision/active_camera when a verb / use_camera switches cameras,
         # so the HUD flips to the downward view for a bin task without an operator
-        # key press. Manual f/d/b keys still override until the next mission switch.
+        # key press. Manual f/d keys still override until the next mission switch.
         _latched = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
                               durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, '/duburi/vision/active_camera',
                                  self._on_active_camera, _latched)
         self.create_timer(1.0, self._check_waiting)
-        # 20 Hz timer: processes camera-switch/side-by-side requests from the display thread.
+        # 20 Hz timer: processes camera-switch requests from the display thread.
         # create/destroy_subscription must happen inside the executor to avoid wait-set races.
         self.create_timer(0.05, self._process_pending_sub_action)
         self._cam_subs = self._create_cam_subs(camera, qos_be)
@@ -304,9 +302,9 @@ class VisionDisplayNode(Node):
 
     def _on_active_camera(self, msg: String) -> None:
         """Mission switched cameras -> follow it (deferred, like a keypress). Ignored
-        while side-by-side is on (operator is watching both) or already on it."""
+        when already on that camera."""
         name = (msg.data or '').strip()
-        if not name or self._side_by_side or name == self._active_camera:
+        if not name or name == self._active_camera:
             return
         if name not in self._cameras_available:
             return
@@ -319,12 +317,7 @@ class VisionDisplayNode(Node):
         if action is None:
             return
         self._pending_sub_action = None
-        if action == 'enable_sbs':
-            self._enable_side_by_side()
-        elif action == 'disable_sbs':
-            self._disable_side_by_side()
-        else:
-            self._switch_camera(action)
+        self._switch_camera(action)
 
     def _create_cam_subs(self, camera: str, qos_be) -> list:
         raw_topic  = f'/duburi/vision/{camera}/image_raw'
@@ -369,49 +362,6 @@ class VisionDisplayNode(Node):
         self._last_det_t   = 0.0
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
         self._cam_subs = self._create_cam_subs(name, qos_be)
-
-    def _secondary_camera_name(self) -> str | None:
-        """Return the 'other' camera from _cameras_available, or None."""
-        others = [c for c in self._cameras_available if c != self._active_camera]
-        return others[0] if others else None
-
-    def _enable_side_by_side(self) -> None:
-        sec = self._secondary_camera_name()
-        if sec is None:
-            return
-        qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
-        self._secondary_subs = [
-            self.create_subscription(
-                Image, f'/duburi/vision/{sec}/image_raw',
-                self._on_secondary_image, qos_be),
-            self.create_subscription(
-                Detection2DArray, f'/duburi/vision/{sec}/detections',
-                self._on_secondary_detections, 10),
-        ]
-        self.get_logger().info(f'[DISPLAY] side-by-side ON  ({self._active_camera} | {sec})')
-
-    def _disable_side_by_side(self) -> None:
-        for sub in self._secondary_subs:
-            self.destroy_subscription(sub)
-        self._secondary_subs.clear()
-        with self._secondary_lock:
-            self._secondary_frame = None
-        with self._secondary_dets_lock:
-            self._secondary_dets.clear()
-        self.get_logger().info('[DISPLAY] side-by-side OFF')
-
-    def _on_secondary_image(self, msg: Image) -> None:
-        try:
-            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        except Exception:
-            return
-        with self._secondary_lock:
-            self._secondary_frame = frame
-
-    def _on_secondary_detections(self, msg: Detection2DArray) -> None:
-        dets = array_to_detections(msg)
-        with self._secondary_dets_lock:
-            self._secondary_dets = dets
 
     def _on_state(self, msg: DuburiState) -> None:
         self._state = msg
@@ -567,9 +517,6 @@ def _handle_camera_keys(node: VisionDisplayNode, key: int) -> None:
         node._pending_sub_action = 'downward'
     elif key == ord('D'):
         node._show_depth_map = not node._show_depth_map
-    elif key == ord('b'):
-        node._side_by_side = not node._side_by_side
-        node._pending_sub_action = 'enable_sbs' if node._side_by_side else 'disable_sbs'
 
 
 def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:
@@ -887,40 +834,13 @@ def main(args=None):
                 alpha = 0.80 * _fade
                 cv2.addWeighted(splash, alpha, out, 1.0 - alpha, 0, out)
 
-            # Side-by-side mode: hstack primary + secondary camera frames
-            if node._side_by_side:
-                with node._secondary_lock:
-                    sec_frame = (node._secondary_frame.copy()
-                                 if node._secondary_frame is not None else None)
-                with node._secondary_dets_lock:
-                    sec_dets = list(node._secondary_dets)
-                if sec_frame is not None:
-                    # Match heights then hstack
-                    h_target = out.shape[0]
-                    sec_resized = cv2.resize(
-                        sec_frame, (int(sec_frame.shape[1] * h_target / sec_frame.shape[0]), h_target),
-                        interpolation=cv2.INTER_LINEAR)
-                    # Annotate secondary with detections (no trail -- the primary owns
-                    # the 'main' trail buffer; a second writer would smear it).
-                    if sec_dets:
-                        sec_resized = draw.render_all(sec_resized, sec_dets,
-                                                      draw_trail=False)
-                    # Camera name labels
-                    cv2.putText(out, node._active_camera.upper(),
-                                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 160), 2, cv2.LINE_AA)
-                    sec_name = node._secondary_camera_name() or ''
-                    cv2.putText(sec_resized, sec_name.upper(),
-                                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2, cv2.LINE_AA)
-                    out = np.hstack([out, sec_resized])
-
-            # Mission-status panel (single-camera mode): camera frame + target +
-            # alignment offset + FPS + depth/armed, so an operator can read what the
-            # AUV is doing and how well. Display-only (off the detector/GPU path).
-            if not node._side_by_side:
-                _draw_mission_panel(
-                    out, camera=node._active_camera, fps=node._fps_display,
-                    primary=primary, native_w=native_w, native_h=native_h,
-                    deadband=0.05, state=node._state)
+            # Mission-status panel: camera frame + target + alignment offset + FPS +
+            # depth/armed, so an operator can read what the AUV is doing and how well.
+            # Display-only (off the detector/GPU path). Single camera is always live.
+            _draw_mission_panel(
+                out, camera=node._active_camera, fps=node._fps_display,
+                primary=primary, native_w=native_w, native_h=native_h,
+                deadband=0.05, state=node._state)
 
             if out.shape[0] != _SP_H or out.shape[1] != _SP_W:
                 out = cv2.resize(out, (_SP_W, _SP_H), interpolation=cv2.INTER_LINEAR)

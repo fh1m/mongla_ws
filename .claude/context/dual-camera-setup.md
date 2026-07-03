@@ -21,7 +21,7 @@ sensor datasheet: <https://bluerobotics.com/wp-content/uploads/2026/06/IMX323LQ-
 | Formats | **MJPEG** / H.264 / YUYV | **use MJPEG** for two cams (already forced in code) |
 | Max | 1920×1080 @ 30 fps | we run 640×480@30 for detection latency |
 | FOV | 80° H × 64° V | matters for the downward alignment px→metres ratio |
-| Power | ~220 mA @ 5 V | a powered hub avoids brown-out with two |
+| Power | **~220 mA @ 5 V** (max) | two = 440 mA — trivial; **current is NOT the problem** (see §2b) |
 
 **Both units share the same USB VID:PID and (usually) the same/blank serial.** You therefore
 **cannot** tell them apart by ID — the ONLY stable discriminator is the physical **USB port**
@@ -51,6 +51,42 @@ lsusb             # confirm both Blue Robotics cams enumerate (same ID = expecte
 ```
 If you later add more USB-2 devices, keep total well under 480 Mbps. Split the two cameras onto
 **different physical ports** (ideally different root-hub branches) for headroom + power.
+
+---
+
+## 2b. The "2nd camera won't enumerate / cannot perform power cycle" failure (READ THIS)
+
+**Symptom (pool 2026-07):** plug in the 2nd camera and it never appears as `/dev/videoN`;
+`dmesg` shows *"Cannot enable … cannot perform power cycle"* / reset loops; when it does appear
+you get permission/invalid-device errors opening it. One camera alone is always fine.
+
+**It is NOT a current-budget brown-out.** Each cam draws max **220 mA @ 5 V** (440 mA for two) —
+the dev-kit ports supply that trivially. A powered hub is *not* required. Two real causes:
+
+1. **USB autosuspend (the enumeration failure).** The Orin Nano's internal hub ships with
+   autosuspend ON (`/sys/module/usbcore/parameters/autosuspend = 2`, hub `1-2`
+   `power/control = auto`). A UVC camera that gets autosuspended can fail to resume /
+   re-enumerate — that's the "power cycle" line. **Fix (Jetson-side, no code):** pin the two
+   camera ports to `power/control=on`. Shipped in `~/ESSENTIALS/99-duburi-cameras.rules`
+   (deployed by `install.sh`):
+   ```
+   SUBSYSTEM=="usb", KERNEL=="1-2.1", ATTR{power/control}="on"
+   SUBSYSTEM=="usb", KERNEL=="1-2.3", ATTR{power/control}="on"
+   ```
+   Verify after re-plug: `cat /sys/bus/usb/devices/1-2.1/power/control` → `on`.
+   Global belt-and-suspenders: add `usbcore.autosuspend=-1` to the `APPEND` line in
+   `/boot/extlinux/extlinux.conf` and reboot (the per-port rule usually suffices, no reboot).
+
+2. **Two 1080p MJPEG streams saturating the one 480 Mbps bus (the streaming failure).** Even
+   when both enumerate, opening both at once is bandwidth-heavy and load-heavy.
+
+### Operating rule: ONE camera streaming at a time
+We never run both cameras (or both detectors) simultaneously, so don't. Prefer the **single-camera
+`vision.launch.py`** per task (one MJPEG stream, one detector, one CUDA context — dodges the
+dual-USB *and* the dual-detector OOM). `vision_dual.launch.py` **opens both streams** (the
+`paused` flag only gates detector *inference*, not the stream), so use it only on a bench / with a
+powered hub. The HUD's old `b` **side-by-side view was removed** — it force-streamed both cameras;
+the HUD now shows exactly one camera (`f`/`d` to switch). See §4b for the launch/DSL matrix.
 
 ---
 
@@ -209,10 +245,16 @@ the pool → `NvMap error 12` / NVML assert / hard lock). Rules that prevent it:
 
 ## 5. In the mission stack (already wired — just confirm)
 - `vision_dual.launch.py` brings up both cameras + both detectors (start **paused**) + one HUD.
+  **Caveat:** it OPENS BOTH camera streams (paused gates only detector inference) — see §2b; a
+  single-camera task is safer on `vision.launch.py`.
 - A vision verb / `use_camera('downward')` **auto-switches** the live detector (pauses forward,
   resumes downward, only ONE runs → VRAM/bandwidth) and the HUD auto-follows via the latched
   `/duburi/vision/active_camera` topic. Manual HUD keys still work: `f`=forward `d`=downward
-  `b`=side-by-side `D`=depth-map.
+  `D`=depth-map (the `b` side-by-side key was removed — the HUD streams one camera at a time).
+- **Camera-switch settle:** `use_camera` sleeps `_CAM_SWITCH_SETTLE_S` (**1.5 s**, was 0.6 s) after
+  a switch so the resumed detector's first live frames + the HUD re-latch land before the next verb
+  steers — a switch happens once per task, so the headroom is free. Override per mission with
+  `duburi.cam_switch_settle_s = <seconds>` before the switch.
 - Downward frame remap (in the control engine): image-X→Ch6 lateral, image-Y→Ch5 surge fore/aft,
   `fwd`(fill)→depth descent. The hull can't surface during a downward align because ArduSub
   holds `set_depth` (Ch3) and vision only drives the horizontal channels; the `depth_ceiling`
