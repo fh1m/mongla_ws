@@ -1,18 +1,20 @@
 """Bin drop task — DOWNWARD camera, hover over the bin, drop a marker.
 
 RoboSub Task 3 (Recon/Bins). The AUV flies ABOVE the bin looking straight down,
-so the downward-camera frame rotates the body axes (handled in the align engine,
-gated on ``camera='downward'``):
+so the downward-camera frame rotates the body axes and the align() KWARGS remap
+(gated on ``camera='downward'``; full table: .claude/context/downward-camera.md):
 
-    image-X  -> Ch6 LATERAL strafe   (left/right over the bin)   -- align lat axis
-    image-Y  -> Ch5 SURGE fore/aft   (forward/back over the bin) -- align depth axis
-    bbox fill-> DEPTH descent        (get closer for the drop)   -- align fwd= (optional)
+    image-X  -> Ch6 LATERAL strafe   (left/right over the bin)   -- align ``lat``
+    image-Y  -> Ch5 SURGE fore/aft   (forward/back over the bin) -- align ``fwd``
+    bbox fill-> DEPTH descent        (get closer for the drop)   -- align ``depth`` (+fwd_mode)
     fire     -> DROPPER (3/4)
 
-So the SAME ``align('fire', lat=0, depth=0)`` call now centres the hull over the bin
-in BOTH horizontal axes (lat = left/right, depth-axis = fore/aft SURGE, two-sided +
-braked -- not the old depth-setpoint hack), while ArduSub holds ``BIN_DEPTH_M`` on Ch3.
-The verb auto-switches the live detector to 'downward' (pausing forward -- one detector
+So ``align('fire', lat=0, fwd=0, depth=<fill%>)`` centres the hull over the bin in
+BOTH horizontal axes (``lat`` = left/right Ch6, ``fwd`` = fore/aft Ch5 SURGE, two-
+sided + braked) and DESCENDS to the fill target on ``depth``, while ArduSub holds
+``BIN_DEPTH_M`` on Ch3. (``fwd`` is always the fore/aft joystick, ``depth`` always
+the real depth axis -- the forward-cam ``fwd``/``depth`` meanings swap here.) The
+verb auto-switches the live detector to 'downward' (pausing forward -- one detector
 at a time on the Jetson) and flips the HUD to the downward view.
 
 ★ Before an armed run, VERIFY the surge sign DISARMED:
@@ -55,13 +57,15 @@ def run(duburi, log=None):
     duburi.set_classes('fire,blood', node=_DWN)
 
     # ── Centre the AUV over the bin, then drop ────────────────────────────────
-    # lat = left/right (Ch6), depth axis = fore/aft SURGE (Ch5, two-sided + braked).
-    # ArduSub holds BIN_DEPTH_M. Optional BIN_DESCEND_FILL>0 descends for a closer
-    # drop (bounded by BIN_MAX_DEPTH_M). Creep-search finds the bin on target loss.
+    # DOWNWARD kwargs (see downward-camera.md): lat = left/right (Ch6),
+    # fwd = fore/aft SURGE (Ch5, image-Y, two-sided + braked), depth = DESCENT to a
+    # bbox fill %% (BIN_DESCEND_FILL, measured by fwd_mode='height'). ArduSub holds
+    # BIN_DEPTH_M on Ch3; the descent (bounded by BIN_MAX_DEPTH_M) gets closer for
+    # the drop. Creep-search finds the bin on target loss.
     try:
         aligned = duburi.vision.align(
-            'fire', camera='downward', lat=0, depth=0,
-            fwd=(BIN_DESCEND_FILL or None), fwd_mode='height',
+            'fire', camera='downward', lat=0, fwd=0,          # lat+surge centre over bin
+            depth=(BIN_DESCEND_FILL or None), fwd_mode='height',  # descend to fill%
             err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, duration=25,
             surge_sign=BIN_SURGE_SIGN, max_depth_m=BIN_MAX_DEPTH_M,
             depth_ceiling=BIN_DEPTH_CEILING_M,   # never surface during alignment
