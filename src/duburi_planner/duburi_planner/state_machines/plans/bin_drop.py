@@ -105,7 +105,7 @@ def build_bin_drop_fsm(
                  VisionAlignState(duburi, profile,
                                   target='fire',
                                   camera=p['camera_downward'],
-                                  lat=0, depth=0,
+                                  lat=0, fwd=0,   # downward: lat=Ch6 strafe, fwd=Ch5 surge
                                   err=p['align_err_px'], gain=p['align_gain'],
                                   surge_sign=p['surge_sign'],
                                   duration=p['align_duration']),

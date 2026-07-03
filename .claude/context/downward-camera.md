@@ -1,0 +1,105 @@
+# Downward camera — the axis flip, explained once and for all
+
+> The single most confusing thing in the vision stack: **the same `vision.align`
+> kwargs mean different physical axes on the forward vs the downward camera.** This
+> doc is the canonical reference. Bin task: [`task_bin.py`]; dual-cam hardware:
+> [`dual-camera-setup.md`](dual-camera-setup.md); align internals: `motion_vision.align_loop`.
+
+## Why the axes flip at all
+
+The forward camera looks **ahead** (along the hull's surge axis). The downward camera
+looks **straight down** (along the hull's heave/depth axis). So the *same pixel motion*
+in the two images corresponds to *different hull motions*:
+
+| Image motion | Forward cam → hull axis | Downward cam → hull axis |
+|---|---|---|
+| target moves **left/right** (image-X) | strafe (Ch6 lateral) | strafe (Ch6 lateral) — **same** |
+| target moves **up/down** (image-Y) | rise/sink (depth, Ch3) | **fore/aft (Ch5 surge)** — rotated |
+| target **grows/shrinks** (bbox fill) | nearer/farther in surge | nearer/farther in **depth** (altitude) |
+
+`lat` (image-X → strafe) is the **only** axis that means the same thing on both cameras.
+The other two rotate 90° because the camera's optical axis rotated 90°.
+
+## The kwarg mapping (what you type)
+
+To keep the operator's mental model simple — **`fwd` is always the fore/aft joystick,
+`depth` always drives the real depth setpoint** — the DSL **swaps which kwarg feeds
+which** on the downward camera. You never do the rotation in your head; you just use
+the kwargs by their plain meaning.
+
+```
+                 lat            fwd                     depth
+FORWARD cam:   Ch6 strafe    fwd standoff (fill %)    Ch3 up/down (signed px)
+DOWNWARD cam:  Ch6 strafe    Ch5 surge (signed px)    DESCENT to fill % (fwd_mode)
+                             └─ image-Y offset         └─ "get closer" = go deeper
+```
+
+- **`lat`** — signed pixel offset, image-X → **Ch6 strafe**. Same on both. `0` = centre.
+- **`fwd`** —
+  - forward cam: a **fill %** standoff (drive forward until the bbox fills `fwd`%).
+  - downward cam: a **signed pixel offset**, image-Y → **Ch5 surge** fore/aft. `0` = centre.
+- **`depth`** —
+  - forward cam: a **signed pixel offset**, image-Y → **Ch3 depth** setpoint.
+  - downward cam: a **fill %** DESCENT target (descend until the bbox fills `depth`%,
+    measured by `fwd_mode` = area/width/height). Unset = no descent (hold `set_depth`).
+
+So the *types* of `fwd` and `depth` swap between cameras (pixel ↔ fill%). That is the
+price of "fwd = fore/aft, depth = depth" reading naturally on both. `fwd_mode` measures
+the fill for whichever axis is the fill axis (forward `fwd`; downward `depth`).
+
+## Canonical calls
+
+Forward — torpedo standoff shot (fill on `fwd`, pixel on `depth`):
+```python
+align('hole', camera='forward', lat=0, depth=0, fwd=25, fwd_mode='height',
+      lock_on=True, hold=4, fire=1)          # depth=0 -> centre vertically; fwd=25% standoff
+```
+
+Downward — bin drop (pixel surge on `fwd`, fill descent on `depth`):
+```python
+align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height',
+      surge_sign=BIN_SURGE_SIGN, max_depth_m=BIN_MAX_DEPTH_M,
+      depth_ceiling=BIN_DEPTH_CEILING_M)     # lat+fwd centre over bin; depth=30% -> descend
+```
+
+- Centring axes on downward = **`lat` + `fwd`** (both horizontal thrusters). `depth` is the
+  optional approach. A `depth`-only call (no `lat`/`fwd`) **raises** — there's no centring
+  axis, exactly like a forward `fwd`-only align.
+- `fwd=0` on downward is **active surge-to-centre** (0 ≠ unset). The `None`-vs-`0`
+  distinction is why the swap lives in the DSL (Python), not the ROS goal (where rosidl
+  collapses `0`→unset).
+
+## Bounds & signs (downward descent safety)
+
+- **`surge_sign`** (+1/−1) flips the **Ch5 fore/aft polarity** for the physical bottom-cam
+  mount. A wrong sign is **positive feedback** — the hull drives *away* from the bin. The
+  kwarg swap did **not** change this sign or the Ch5 output — it's byte-identical — so a
+  sign you've already verified stays valid. **Still run the DISARMED check before an armed
+  run** as standard practice (and to confirm you're now driving surge with `fwd=`):
+  `ros2 run duburi_vision vision_thrust_check --camera downward` — a bin AHEAD in the image
+  must drive the hull FORWARD (Ch5>1500).
+- **`max_depth_m`** (negative) — the deepest allowed setpoint (floor). The fill→depth
+  descent **requires `max_depth_m < 0`** or the engine drops the descent and just holds
+  ArduSub depth (fail-safe against an unreachable fill target driving the hull to the
+  bottom).
+- **`depth_ceiling`** (negative, e.g. `−0.4`) — the shallowest allowed setpoint (surface
+  guard). Alignment can **never surface the hull**.
+- The descent is **one-sided** (deeper only) and uses the same `depth_step` stepped/
+  deadband-frozen logic as the forward depth axis (no z-wobble).
+
+## What the engine actually does (unchanged by the kwarg swap)
+
+The swap is **purely a DSL kwarg remap**. `motion_vision.align_loop`, the `Move.action`
+wire fields, and every thruster sign are **identical** to before — on the wire, the
+downward `'depth'` axis has *always* driven Ch5 surge and `fwd_fill` has *always* driven
+the descent. The DSL now just routes your `fwd` kwarg into that surge axis and your
+`depth` kwarg into that descent, so the names read naturally. CLI users working at the
+raw `vision_align` wire level (`--axes depth --offset_depth <px> --fwd_fill <%>`) use the
+wire semantics directly (offset_depth = surge, fwd_fill = descent).
+
+## Migration note (if you have old missions)
+
+Old downward calls used `lat=0, depth=0` (surge on `depth`) and `fwd=<fill>` (descent).
+New form: **`depth=0` → `fwd=0`** (surge), and **`fwd=<fill>` → `depth=<fill>`** (descent).
+All in-repo missions (`task_bin`, `pool_day_practice`, FSM `bin_drop`/`gate_then_bin`) are
+already migrated. `VisionAlignState` gained a `fwd=` param for the FSM path.
