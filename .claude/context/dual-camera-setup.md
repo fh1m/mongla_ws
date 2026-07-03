@@ -88,16 +88,30 @@ rule. Find the port's `KERNELS`/`ID_PATH`:
 ```bash
 udevadm info -q all -n /dev/video0 | grep -E 'ID_PATH=|KERNELS='
 ```
-Then `/etc/udev/rules.d/99-duburi-cams.rules` (match on the port `KERNELS`, NOT serial):
+Then `/etc/udev/rules.d/99-duburi-cameras.rules` (match on the port `KERNELS`, NOT serial —
+**both Blue Robotics cams share one serial `...2020032801`, so serial can't tell them apart**).
+The `KERNELS` value is the **interface** node (`<hub>.<port>:1.0`), e.g. `1-2.2:1.0` — NOT the
+`ID_PATH`/`platform-...` string. `ATTR{index}=="0"` is **required**: each cam exposes 4 video
+nodes and *two* report `:capture:` (index0 = the real MJPEG stream, index2 = a metadata node),
+so `index==0` picks the stream. This is the **live, deployed rule on THIS Jetson** (2026-07-03,
+verified: forward = bottom-LEFT socket = port `1-2.2`; downward = bottom-RIGHT = port `1-2.4`):
 ```
-SUBSYSTEM=="video4linux", KERNELS=="3610000.usb-usb-0:2.1", ATTR{index}=="0", SYMLINK+="duburi_cam_forward"
-SUBSYSTEM=="video4linux", KERNELS=="3610000.usb-usb-0:2.2", ATTR{index}=="0", SYMLINK+="duburi_cam_downward"
+# Whatever plugs into bottom-LEFT (port 1-2.2) = FORWARD; bottom-RIGHT (1-2.4) = DOWNWARD.
+SUBSYSTEM=="video4linux", KERNELS=="1-2.2:1.0", ATTR{index}=="0", SYMLINK+="duburi_cam_forward",  MODE="0666"
+SUBSYSTEM=="video4linux", KERNELS=="1-2.4:1.0", ATTR{index}=="0", SYMLINK+="duburi_cam_downward", MODE="0666"
 ```
 ```bash
-sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=video4linux
+ls -l /dev/duburi_cam_*   # expect duburi_cam_forward -> ../video0, duburi_cam_downward -> ../video4
 ```
-Then launch with `fwd_device_path:=/dev/duburi_cam_forward dwn_device_path:=/dev/duburi_cam_downward`.
-Replace the `KERNELS` values with YOUR ports from 3a.
+Then the competition launch is short and re-cable-proof:
+```bash
+ros2 launch duburi_vision vision_dual.launch.py viewer:=false paused:=true \
+    fwd_device_path:=/dev/duburi_cam_forward dwn_device_path:=/dev/duburi_cam_downward
+```
+Symlinks auto-recreate on every boot/replug. If you re-cable to different sockets, re-run 3a and
+replace the two `KERNELS` values. **NOTE:** ports can shift (seen `2.1/2.3` → `2.2/2.4` across
+re-plugs) — always confirm YOUR live `KERNELS` from 3a before trusting the numbers above.
 
 ---
 
