@@ -13,9 +13,15 @@
    will hang/FATAL. Pre-download = load XFeat **and run one match** (LighterGlue weights
    download lazily on the *first match*, not at load).
 3. `numpy<2` (ROS Humble `cv_bridge`/`cv2` ABI — same pin as the rest of the stack).
-4. Anchor launches with `anchor:=true` and the XFeat log says `loaded XFeat + LighterGlue
+4. **`export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False`** in the launch shell
+   (added to `~/.zshrc` on this Jetson, 2026-07-03). Without it, XFeat/LighterGlue crashes
+   with `NVML_SUCCESS == r INTERNAL ASSERT FAILED` — see §7 + §3.
+5. Anchor launches with `anchor:=true` and the XFeat log says `loaded XFeat + LighterGlue
    on cuda:0`.
-5. XFeat + YOLO-TRT co-resident within the 8 GB budget at usable FPS.
+6. XFeat + YOLO-TRT co-resident within the 8 GB budget at usable FPS **with the desktop
+   trimmed** — a full GNOME session + Chrome will OOM the match (§3). Verified 2026-07-03:
+   lean cam+anchor = solid `LOCKED`; anchor + gate-TRT detector = `anchor_conf`/`anchor_error`
+   ticking at ~5 Hz, zero match errors, ~4 GB free.
 
 If all five hold, `duburi.anchor.snap(...)` / `duburi.anchor.align(...)` work.
 
@@ -63,8 +69,17 @@ PY
 ```
 
 Expected last line: `matched <N> points on cuda:0 -- XFeat + LighterGlue cached OK`.
-After this, `~/.cache/torch/hub/` holds the repo + LighterGlue checkpoint and the pool
-run is offline-safe. **Do not clear `~/.cache/torch` after this.**
+After this, `~/.cache/torch/hub/` holds the repo + weights and the pool run is offline-safe.
+**Do not clear `~/.cache/torch` after this.**
+
+> **Verified on THIS Jetson (2026-07-03):** the verlab hub repo bundles *both* weights in its
+> own `weights/` dir — `~/.cache/torch/hub/verlab_accelerated_features_main/weights/xfeat.pt`
+> **and `.../weights/xfeat-lighterglue.pt`**. So verlab's `match_lighterglue` loads its distilled
+> LighterGlue from that file (the "Loaded LightGlue model" log), **not** a lazy cvg/kornia URL
+> fetch into `checkpoints/` — i.e. it arrived with the repo clone and persists. To confirm
+> offline-ready, check that **`weights/xfeat-lighterglue.pt` exists** (not just `checkpoints/xfeat.pt`).
+> `TORCH_HOME` unset here → default `~/.cache/torch`; if you set `TORCH_HOME`, the pool shell must
+> export the same value.
 
 > `TORCH_HOME` overrides the cache dir if you want it on a specific disk
 > (`export TORCH_HOME=/home/<user>/.cache/torch`). Keep it on persistent storage.
@@ -83,6 +98,13 @@ Same ABI reality as the rest of the vision stack (see CLAUDE.md §8 "Jetson Pyth
 - Do **not** `pip install opencv-python*` — it shadows the GUI-capable system OpenCV
   (breaks `vision_display`).
 - XFeat itself needs no pip install — it's pulled via `torch.hub` (§1).
+- **`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False` is mandatory on Tegra.** PyTorch's
+  "expandable segments" allocator (opt-in upstream, but **enabled in this JetPack torch wheel**
+  — else the assert wouldn't fire) calls CUDA driver/NVML memory
+  APIs Tegra doesn't fully support → `NVML_SUCCESS == r INTERNAL ASSERT FAILED at
+  CUDACachingAllocator.cpp` on the first LighterGlue `match`. Disabling it uses the plain
+  allocator (benign; that was the default pre-2.x). It's exported in `~/.zshrc` so every
+  `ros2 launch` inherits it — if you launch from a non-login shell, export it yourself.
 
 Quick check:
 ```bash
@@ -102,6 +124,15 @@ Want: `numpy 1.26.x`, torch a `+cuXX`/`tegra` build with `cuda True`, cv2 the sy
   **one detector live at a time** (the stack already enforces single-live-detector); XFeat
   + one YOLO-TRT engine co-reside in 8 GB comfortably. Two YOLO engines **and** XFeat at
   once is the thing to avoid.
+- **The desktop shares this same unified pool.** On the Orin Nano "VRAM" *is* system RAM;
+  a full GNOME session (~0.7 GB) + Chrome (~1.3 GB) + any orphaned prior run leaves too
+  little for the LighterGlue match transient → OOM (`error 12` → the NVML assert). **Before
+  an anchor run, trim the desktop** (`pkill chrome`; ideally `sudo systemctl isolate
+  multi-user.target` for headless) and reclaim orphans. Measured 2026-07-03: the crash was a
+  full desktop + detector + XFeat over-committing the pool; with the desktop trimmed (~5 GB
+  free) anchor + one YOLO-TRT co-reside and LOCK cleanly. Orphaned `detector_node`/`anchor_node`
+  hold ~1 GB each and defer `kill -9` until their parent `ros2 launch` dies — kill the launch
+  first, then the leaves. See CLAUDE.md §8 + the Jetson VRAM notes.
 - `sudo nvpmodel -m 0 && sudo jetson_clocks` (MAXN) as for YOLO — `bringup_check` warns if
   not set.
 - If FPS is tight, raise `skip_frames` (match less often — the lock still holds between
@@ -175,6 +206,8 @@ tested fallback.
 
 | Symptom | Cause → fix |
 |---|---|
+| `NVML_SUCCESS == r INTERNAL ASSERT FAILED at CUDACachingAllocator.cpp` (at load OR on first `match`) | Tegra + torch-2.x expandable-segments allocator → `export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False` (in `~/.zshrc` here). §2. |
+| Loads + snaps fine, but `[WARN] match_lighterglue failed: NVML...` every frame, preceded by `NvMapMemAllocInternalTagged: ... error 12`, state stuck `LOST` | **Out of unified memory** (error 12 = ENOMEM; the NVML assert is the OOM-handler symptom). The desktop (GNOME + Chrome) + the YOLO detector left no room for the match transient → **trim the desktop / go headless** (§3). Match is non-fatal-caught, so the node "runs" but never LOCKs — check `anchor_conf`/`anchor_error` are actually publishing (`ros2 topic hz`). **If `error 12` recurs even with RAM free:** JetPack 6.2.x adds a memory-cap security patch + CMA *contiguous*-memory fragmentation, so it's not pure free-RAM exhaustion — `sync && echo 3 \| sudo tee /proc/sys/vm/drop_caches` (defrag CMA) before the run, and **start `anchor_node` before** the big YOLO-TRT consumer grabs contiguous blocks. |
 | `XFeatMatcher init FAILED ... pre-download` (FATAL at startup) | Cold cache / no internet → run §1.1 canary on a network; don't clear `~/.cache/torch`. |
 | Loads but every match is `LOST`, 0 inliers | Reference was low-texture, or camera on wrong `device` → snap a textured target; confirm `on cuda:0` in the load log. |
 | Hang mid-mission on first `anchor.align` | LighterGlue weights never cached (loaded XFeat only) → §1.1 forces a match to cache them. |
