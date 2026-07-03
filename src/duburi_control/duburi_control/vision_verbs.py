@@ -159,6 +159,16 @@ class VisionVerbs:
             # (detection stays PRIMARY; needs a snapped/loaded reference). Falls
             # back to the plain detector run if no anchor is wired.
             if bool(use_feature):
+                # Guard: the anchor-substitute Sample carries NO bbox size
+                # (h_frac=w_frac=0), so a forward range-hold would read fill=0
+                # ("target far") on a detection dropout and drive forward BLIND.
+                # use_feature holds lat/yaw/depth only -- drop the forward axis.
+                if float(fwd_fill) > 0.0:
+                    self.log.warning(
+                        '[CMD  ] vision_align use_feature + fwd= is unsafe (the '
+                        'anchor fallback has no range) -- IGNORING fwd_fill; set '
+                        'the standoff with a prior move()/align() instead')
+                    fwd_fill = 0.0
                 fused_fn = getattr(self, 'feature_state_provider', None)
                 fused = fused_fn(camera) if fused_fn is not None else None
                 if fused is not None:
