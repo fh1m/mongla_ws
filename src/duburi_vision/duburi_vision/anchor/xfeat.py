@@ -39,6 +39,16 @@ _MIN_KP_REF = 16
 _MIN_KP_MATCH = 4
 
 
+def _robust_method(cv2):
+    """cv2.USAC_MAGSAC if this OpenCV build has it, else cv2.RANSAC.
+
+    MAGSAC is a strictly better homography RANSAC variant (residual-weighted,
+    not a hard inlier cut) available in OpenCV >= 4.5; guarded so an older
+    build still estimates a homography.
+    """
+    return getattr(cv2, 'USAC_MAGSAC', cv2.RANSAC)
+
+
 def _kp_count(d) -> int:
     """Number of keypoints in an XFeat describe dict (0 if absent/malformed)."""
     if d is None:
@@ -191,8 +201,15 @@ class XFeatMatcher(AnchorMatcher):
         # sign-identical to (pool-verified) align_loop. NOTE: src/dst order is
         # load-bearing -- swapping it inverts every axis into POSITIVE feedback
         # (the hull drives away from the lock). Do not "simplify" the arg order.
+        #
+        # USAC_MAGSAC (OpenCV >= 4.5) is a strictly more robust homography
+        # estimator than plain RANSAC on the noisy, outlier-heavy correspondences
+        # underwater turbidity produces -- it weights by residual instead of a
+        # hard inlier/outlier cut, so a marginal match yields a stabler H (fewer
+        # spurious locks, tighter inlier sets). Fall back to RANSAC on an OpenCV
+        # too old to expose it, so the anchor still works everywhere.
         H, mask = cv2.findHomography(
-            mkpts_ref, mkpts_cur, cv2.RANSAC, _RANSAC_REPROJ_PX)
+            mkpts_ref, mkpts_cur, _robust_method(cv2), _RANSAC_REPROJ_PX)
         if H is None or mask is None:
             self._last_match = None
             return AnchorError(0.0, 0.0, 0.0, n_match, 0.0)
