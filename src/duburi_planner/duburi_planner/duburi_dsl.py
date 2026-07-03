@@ -698,8 +698,14 @@ class DuburiMission:
 
     # Settle after a live-detector switch so the resumed detector's first frames
     # land (and the paused one's queue drains) before the loop steers on them --
-    # otherwise the first align tick acquires on a cold/empty detector.
-    _CAM_SWITCH_SETTLE_S = 0.6
+    # otherwise the first align tick acquires on a cold/empty detector. Bringing a
+    # camera + its detector + the HUD onto a fresh target takes real time (stream
+    # re-latch + first inference tick + tracker warm-up), so give generous headroom:
+    # a switch happens once per task, not per loop, so an extra second is free
+    # insurance against acquiring on a stale/empty frame. Override per-mission via
+    # ``duburi.cam_switch_settle_s = <seconds>`` before the switch if a run needs
+    # it snappier or slower.
+    _CAM_SWITCH_SETTLE_S = 1.5
 
     def use_camera(self, name: str) -> None:
         """Switch the sticky camera for all subsequent vision verbs AND make it the
@@ -747,12 +753,15 @@ class DuburiMission:
         except Exception as exc:            # noqa: BLE001 -- best-effort (no detector = sim)
             self.log.warning(f'[CAM  ] resume {name!r} detector skipped: {exc}')
         if switched:
-            _time.sleep(self._CAM_SWITCH_SETTLE_S)   # let first live frames land
+            # Per-mission override wins; else the class default headroom.
+            settle = getattr(self, 'cam_switch_settle_s', None)
+            _time.sleep(self._CAM_SWITCH_SETTLE_S if settle is None else float(settle))
+        # let first live frames land before the next verb steers on them
         self._live_camera = name
 
     def _publish_active_camera(self, name: str) -> None:
         """Publish the active camera on a LATCHED topic so the HUD auto-follows the
-        mission (manual f/d/b keys remain an override). Lazily create the publisher."""
+        mission (manual f/d keys remain an override). Lazily create the publisher."""
         try:
             if self._active_cam_pub is None:
                 qos = QoSProfile(
