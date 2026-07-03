@@ -124,3 +124,63 @@ def test_fire_async_gap_aborts_mid_sequence():
     assert _wait_for(lambda: h.fired == [1])     # first fired
     time.sleep(0.7)
     assert h.fired == [1], 'abort during the gap must cancel the 2nd shot'
+
+
+# --------------------------------------------------------------------------- #
+#  use_feature safety guard: fwd= must be dropped when use_feature is on       #
+#  (the anchor fallback Sample has no bbox size -> fill=0 would drive blind)   #
+# --------------------------------------------------------------------------- #
+from contextlib import contextmanager
+from types import SimpleNamespace
+
+import duburi_control.vision_verbs as vv
+
+
+class _AlignHarness(VisionVerbs):
+    """Stubs the facade so vision_align runs and we can capture align_loop kwargs."""
+    def __init__(self):
+        self.log = _Log()
+        self._captured = {}
+        self.pixhawk = None   # passed into align_loop kwargs (call is mocked)
+        # a fused state exists so the use_feature branch takes the wrap path
+        self.feature_state_provider = lambda cam: SimpleNamespace(name='fused')
+
+    # facade helpers vision_align touches -> no-ops / minimal stand-ins
+    @contextmanager
+    def _command_scope(self, _name): yield
+    def _send_neutral_and_settle(self): pass
+    def _resolve_vision_state(self, _cam): return SimpleNamespace(name='vs')
+    def _ensure_alt_hold(self, _who): pass
+    def _writers(self): return None
+    def _abort_fn(self): return False
+    def report_vision(self, *_a, **_k): pass
+    def _retarget_heading_lock(self, _h): pass
+    def _current_heading(self): return 0.0
+    def _set_lock_hold(self, _b): pass
+    @contextmanager
+    def _suspend_heading_lock(self): yield
+    def _make_result(self, *_a, **_k): return SimpleNamespace(**_k)
+
+
+def _run_align(monkeypatch, **kw):
+    h = _AlignHarness()
+    captured = {}
+    def _fake_align_loop(**loop_kw):
+        captured.update(loop_kw)
+        return SimpleNamespace(reason='ALIGNED', code=0, last_err_px=0.0,
+                               end_x_px=0.0, end_y_px=0.0, elapsed_s=0.1)
+    monkeypatch.setattr(vv, 'align_loop', _fake_align_loop)
+    h.vision_align('forward', 'hole', 'lat,depth', **kw)
+    return captured
+
+
+def test_use_feature_drops_forward_axis(monkeypatch):
+    # fwd_fill=30 + use_feature=True -> align_loop must receive fwd_fill 0.0
+    cap = _run_align(monkeypatch, fwd_fill=30.0, use_feature=True)
+    assert cap['fwd_fill'] == 0.0        # forward axis dropped (no blind drive)
+
+
+def test_fwd_axis_preserved_without_use_feature(monkeypatch):
+    # same fwd_fill WITHOUT use_feature -> passes through (30% -> 0.30 fraction)
+    cap = _run_align(monkeypatch, fwd_fill=30.0, use_feature=False)
+    assert cap['fwd_fill'] == 0.30       # unchanged path (regression)

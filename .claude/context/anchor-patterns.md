@@ -104,6 +104,11 @@ Semantics (v1, deliberately conservative): detection **primary** (no blend/avera
 substitute **only** on a locked anchor; `ex`/`ey` from `tx`/`ty` normalized by the real image
 size; `theta` ignored (align drives lat/yaw from horizontal, depth from vertical); range axis
 untouched (holds lat/yaw/depth, not `fwd`). Off by default — existing missions are unchanged.
+
+**Do NOT combine `use_feature=True` with `fwd=`** (a forward range-hold): the anchor fallback
+has no bbox size, so on a dropout the forward axis would read fill≈0 ("far") and drive forward
+blind. The verb **ignores `fwd=` when `use_feature` is on** (logs it) — set the standoff with a
+prior `move()`/`align(fwd=)` *before* the fused hold.
 Use Pattern 1's explicit `anchor.align` when you want the homography to be the *sole* driver
 (the terminal glue lock); use `use_feature` when you want YOLO to lead and XFeat to **cover its
 gaps**.
