@@ -189,3 +189,136 @@ def test_mav_silent_when_log_is_none():
     # default of None to make sure that path stays free.
     px = Pixhawk(_StubMaster(), log=None)
     px._log_mavlink('this should silently no-op')
+
+
+# --------------------------------------------------------------------------- #
+#  MAVLink write-lock: concurrent sends must be SERIALIZED (no torn frames).   #
+#  A fake master.mav records whether any two rc_channels_override_send calls   #
+#  ever overlap; with the _tx_lock they never should.                          #
+# --------------------------------------------------------------------------- #
+import threading
+import time as _time
+from unittest.mock import MagicMock
+
+
+class _OverlapDetectingMav:
+    """Flags if two sends are ever in-flight at once (unserialized writes)."""
+    def __init__(self):
+        self._active = 0
+        self.overlap = False
+        self._probe = threading.Lock()
+
+    def _enter(self):
+        with self._probe:
+            self._active += 1
+            if self._active > 1:
+                self.overlap = True
+
+    def _exit(self):
+        with self._probe:
+            self._active -= 1
+
+    def rc_channels_override_send(self, *a, **k):
+        self._enter()
+        _time.sleep(0.001)          # widen the window a torn frame would use
+        self._exit()
+
+    def __getattr__(self, _name):   # any other *_send -> same overlap probe
+        def _fn(*a, **k):
+            self._enter(); _time.sleep(0.0005); self._exit()
+        return _fn
+
+
+def _pixhawk_with_overlap_mav():
+    from duburi_control.pixhawk import Pixhawk
+    master = MagicMock()
+    master.mav = _OverlapDetectingMav()
+    master.target_system = 1
+    master.target_component = 1
+    return Pixhawk(master), master.mav
+
+
+def test_tx_lock_serializes_concurrent_rc_sends():
+    px, mav = _pixhawk_with_overlap_mav()
+    # 8 threads hammering the RC override path (heading-lock + heartbeat +
+    # action-thread + mocap all writing at once, the real 5-writer race).
+    def hammer():
+        for _ in range(25):
+            px.send_rc_override(1500, 1500, 1500, 1600, 1500, 1500)
+    threads = [threading.Thread(target=hammer) for _ in range(8)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    assert mav.overlap is False, 'two rc_channels_override_send overlapped -> torn frame'
+
+
+def test_tx_lock_serializes_mixed_send_types():
+    px, mav = _pixhawk_with_overlap_mav()
+    # Mixed writers: RC override vs depth setpoint vs mocap vs heartbeat.
+    def rc():   [px.send_rc_yaw_only(1600) for _ in range(20)]
+    def dep():  [px.set_target_depth(-1.0) for _ in range(20)]
+    def moc():  [px.send_att_pos_mocap(30.0) for _ in range(20)]
+    def hb():   [px.send_heartbeat() for _ in range(20)]
+    fns = (rc, dep, moc, hb, rc, dep, moc, hb)   # 8 fresh threads (no reuse)
+    threads = [threading.Thread(target=f) for f in fns]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    assert mav.overlap is False, 'mixed MAVLink writes overlapped -> torn frame'
+
+
+# --------------------------------------------------------------------------- #
+#  Link-loss freshness gate: a stale cached HEARTBEAT must NOT report a live   #
+#  armed/ALT_HOLD (which would let command preconditions pass on a dead link). #
+# --------------------------------------------------------------------------- #
+from duburi_control.pixhawk import _LINK_STALE_S
+from pymavlink import mavutil as _mavutil
+
+
+def _hb(*, armed, custom_mode=0, age_s=0.0):
+    """A fake autopilot HEARTBEAT `age_s` seconds old."""
+    m = MagicMock()
+    m.autopilot = _mavutil.mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA  # not INVALID
+    m.base_mode = (_mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED if armed else 0)
+    m.custom_mode = custom_mode
+    m._timestamp = _time.time() - age_s
+    return m
+
+
+def _pixhawk_with_hb(hb):
+    from duburi_control.pixhawk import Pixhawk
+    master = MagicMock()
+    master.mav = MagicMock()
+    master.messages = {'HEARTBEAT': hb} if hb is not None else {}
+    master.mode_mapping.return_value = {'ALT_HOLD': 2, 'MANUAL': 19}
+    return Pixhawk(master)
+
+
+def test_fresh_heartbeat_reports_armed():
+    px = _pixhawk_with_hb(_hb(armed=True, custom_mode=2, age_s=0.0))
+    assert px.is_armed() is True
+    assert px.get_mode() == 'ALT_HOLD'
+    assert px.link_alive() is True
+
+
+def test_stale_heartbeat_reports_not_armed_and_unknown_mode():
+    # link died: last heartbeat is well past the stale window
+    px = _pixhawk_with_hb(_hb(armed=True, custom_mode=2, age_s=_LINK_STALE_S + 2))
+    assert px.is_armed() is False          # precondition BLOCKS instead of driving
+    assert px.get_mode() == 'UNKNOWN'      # never a stale ALT_HOLD
+    assert px.link_alive() is False
+
+
+def test_missing_timestamp_treated_fresh():
+    # test-style mock with no _timestamp -> treated fresh (get_attitude_age rule)
+    hb = _hb(armed=True, custom_mode=2)
+    del hb._timestamp
+    px = _pixhawk_with_hb(hb)
+    assert px.is_armed() is True
+    assert px.heartbeat_age() == 0.0
+
+
+def test_no_heartbeat_is_link_dead():
+    px = _pixhawk_with_hb(None)
+    assert px.is_armed() is False
+    assert px.get_mode() == 'UNKNOWN'
+    assert px.heartbeat_age() is None
+    assert px.link_alive() is False

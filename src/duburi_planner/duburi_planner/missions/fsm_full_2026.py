@@ -8,7 +8,7 @@ Each task failure skips to the next task — the AUV continues the run.
 Pool-day: fill all headings and TORPEDO_DEPTH_M in competition_config.py.
 Torpedo task is SKIPPED if TORPEDO_DEPTH_M is None (safe default).
 """
-from yasmin import Blackboard
+from ..state_machines import run_fsm  # guaranteed disarm-on-exit
 from yasmin_ros import set_ros_loggers
 
 from ..state_machines import build_full_competition_fsm, VehicleProfile
@@ -51,5 +51,5 @@ def run(duburi, log):
         'style_roll_headroom':  STYLE_ROLL_HEADROOM_M,
         'style_roll_gain':      STYLE_ROLL_GAIN,
     })
-    outcome = sm(Blackboard())
+    outcome = run_fsm(duburi, sm)  # ALWAYS release-heading + disarm on exit
     log(f'[FSM] full_2026 complete: {outcome}')

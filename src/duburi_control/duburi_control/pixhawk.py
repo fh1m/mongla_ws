@@ -38,6 +38,7 @@ calls no-op).
 import os
 import math
 import sys
+import threading
 import time
 
 os.environ['MAVLINK20'] = '1'
@@ -54,6 +55,12 @@ CH_YAW      = 3
 CH_FORWARD  = 4
 CH_LATERAL  = 5
 NO_OVERRIDE = 65535        # MAVLink "ignore this channel" sentinel
+
+# A cached autopilot HEARTBEAT older than this means the link is DEAD -- ArduSub
+# streams HEARTBEAT at ~1 Hz, so 3 s = 3 missed frames (well past normal jitter).
+# is_armed()/get_mode() report "no link" past this instead of a stale
+# "armed/ALT_HOLD" that would let command preconditions pass on a dead link.
+_LINK_STALE_S = 3.0
 
 # Human-readable names for COMMAND_ACK.result values. Anything that isn't
 # ACCEPTED is surfaced straight to the action server's result.message so
@@ -91,6 +98,16 @@ class Pixhawk:
     def __init__(self, master, log=None):
         self.master = master
         self._boot_time = time.time()
+        # MAVLink WRITE serialization. pymavlink's MAVLink object shares a single
+        # sequence counter + encode buffer across threads; five writers hit it
+        # concurrently -- HeadingLock (50 Hz), Heartbeat (5 Hz), the action
+        # thread, and the manager's _mocap_tick (20 Hz) + heartbeat_tick. Over
+        # serial (desk mode) unserialized writes tear frames / duplicate seq
+        # numbers. Every outbound send goes through _tx() under this lock (the
+        # symmetric write rule to the existing "only the reader thread calls
+        # recv_match"). It is a leaf lock -- held only around the pymavlink call,
+        # never around anything that could re-enter -- so it cannot deadlock.
+        self._tx_lock = threading.Lock()
         # Optional logger -- when provided, every outbound MAVLink frame
         # logs one DEBUG line via _log_mavlink() so missions are debuggable
         # frame-by-frame without a wrapper layer. Tests pass log=None
@@ -201,9 +218,10 @@ class Pixhawk:
         cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
         self.clear_ack()
         self._log_mavlink('COMPONENT_ARM_DISARM p1=1')
-        self.master.mav.command_long_send(
-            self.master.target_system, self.master.target_component,
-            cmd, 0, 1, 0, 0, 0, 0, 0, 0)
+        with self._tx_lock:
+            self.master.mav.command_long_send(
+                self.master.target_system, self.master.target_component,
+                cmd, 0, 1, 0, 0, 0, 0, 0, 0)
 
         accepted, reason = self.wait_ack(cmd, timeout=3.0)
         if not accepted:
@@ -227,9 +245,10 @@ class Pixhawk:
         cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
         self.clear_ack()
         self._log_mavlink('COMPONENT_ARM_DISARM p1=0')
-        self.master.mav.command_long_send(
-            self.master.target_system, self.master.target_component,
-            cmd, 0, 0, 0, 0, 0, 0, 0, 0)
+        with self._tx_lock:
+            self.master.mav.command_long_send(
+                self.master.target_system, self.master.target_component,
+                cmd, 0, 0, 0, 0, 0, 0, 0, 0)
 
         accepted, reason = self.wait_ack(cmd, timeout=3.0)
         if not accepted:
@@ -255,10 +274,11 @@ class Pixhawk:
         self._log_mavlink(f'{mode_name} (id={mode_id})')
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            self.master.mav.set_mode_send(
-                self.master.target_system,
-                mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                mode_id)
+            with self._tx_lock:
+                self.master.mav.set_mode_send(
+                    self.master.target_system,
+                    mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                    mode_id)
             time.sleep(0.3)
             if self.get_mode() == mode_name:
                 return True, 'ACCEPTED'
@@ -290,7 +310,8 @@ class Pixhawk:
         before a free-rotation maneuver and restore them after.
         """
         self.master.messages.pop('PARAM_VALUE', None)
-        self.master.param_set_send(name, float(value))
+        with self._tx_lock:
+            self.master.param_set_send(name, float(value))
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             msg = self.master.messages.get('PARAM_VALUE')
@@ -315,8 +336,9 @@ class Pixhawk:
         values[CH_FORWARD]  = int(forward)
         values[CH_LATERAL]  = int(lateral)
         self._log_mavlink(self._summarise_rc(values))
-        self.master.mav.rc_channels_override_send(
-            self.master.target_system, self.master.target_component, *values)
+        with self._tx_lock:
+            self.master.mav.rc_channels_override_send(
+                self.master.target_system, self.master.target_component, *values)
 
     def send_rc_translation(self, throttle=1500, forward=1500, lateral=1500):
         """Override translation channels only (Ch3 throttle, Ch5 forward, Ch6 lateral).
@@ -332,8 +354,9 @@ class Pixhawk:
         values[CH_FORWARD]  = int(forward)
         values[CH_LATERAL]  = int(lateral)
         self._log_mavlink(self._summarise_rc(values))
-        self.master.mav.rc_channels_override_send(
-            self.master.target_system, self.master.target_component, *values)
+        with self._tx_lock:
+            self.master.mav.rc_channels_override_send(
+                self.master.target_system, self.master.target_component, *values)
 
     def send_rc_yaw_only(self, yaw: int) -> None:
         """Override Ch4 (yaw rate) only, leaving all other channels at NO_OVERRIDE.
@@ -348,8 +371,9 @@ class Pixhawk:
         values = [NO_OVERRIDE] * 18
         values[CH_YAW] = int(yaw)
         self._log_mavlink(self._summarise_rc(values))
-        self.master.mav.rc_channels_override_send(
-            self.master.target_system, self.master.target_component, *values)
+        with self._tx_lock:
+            self.master.mav.rc_channels_override_send(
+                self.master.target_system, self.master.target_component, *values)
 
     def send_neutral(self):
         """Active hold: send 1500 PWM to all six driving channels.
@@ -369,18 +393,20 @@ class Pixhawk:
         """
         values = [NO_OVERRIDE] * 18
         self._log_mavlink('all=released')
-        self.master.mav.rc_channels_override_send(
-            self.master.target_system, self.master.target_component, *values)
+        with self._tx_lock:
+            self.master.mav.rc_channels_override_send(
+                self.master.target_system, self.master.target_component, *values)
 
     # ------------------------------------------------------------------ #
     #  Heartbeat (mandatory >= 1 Hz)                                      #
     # ------------------------------------------------------------------ #
 
     def send_heartbeat(self):
-        self.master.mav.heartbeat_send(
-            mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
-            mavutil.mavlink.MAV_AUTOPILOT_INVALID,
-            0, 0, 0)
+        with self._tx_lock:
+            self.master.mav.heartbeat_send(
+                mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+                mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+                0, 0, 0)
 
     # ------------------------------------------------------------------ #
     #  Setpoints                                                           #
@@ -415,16 +441,17 @@ class Pixhawk:
             | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE
         )
         self._log_mavlink(f'depth={float(depth_m):+.2f}m')
-        self.master.mav.set_position_target_global_int_send(
-            int(1e3 * (time.time() - self._boot_time)),
-            self.master.target_system, self.master.target_component,
-            mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
-            mask,
-            0, 0,                       # lat_int, lon_int (ignored)
-            float(depth_m),             # alt = target depth in metres
-            0, 0, 0,                    # vx, vy, vz   (ignored)
-            0, 0, 0,                    # afx, afy, afz (ignored)
-            0, 0)                       # yaw, yaw_rate (ignored)
+        with self._tx_lock:
+            self.master.mav.set_position_target_global_int_send(
+                int(1e3 * (time.time() - self._boot_time)),
+                self.master.target_system, self.master.target_component,
+                mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
+                mask,
+                0, 0,                       # lat_int, lon_int (ignored)
+                float(depth_m),             # alt = target depth in metres
+                0, 0, 0,                    # vx, vy, vz   (ignored)
+                0, 0, 0,                    # afx, afy, afz (ignored)
+                0, 0)                       # yaw, yaw_rate (ignored)
 
     def send_att_pos_mocap(self, yaw_deg: float) -> None:
         """Inject BNO085 yaw into ArduSub EKF3 via ATT_POS_MOCAP (MAVLink 138).
@@ -436,12 +463,13 @@ class Pixhawk:
         """
         q = _euler_to_quat(0.0, 0.0, yaw_deg)
         nan = float('nan')
-        self.master.mav.att_pos_mocap_send(
-            time_usec=int(time.monotonic() * 1e6),
-            q=q,
-            x=0.0, y=0.0, z=0.0,
-            covariance=[nan] * 21,
-        )
+        with self._tx_lock:
+            self.master.mav.att_pos_mocap_send(
+                time_usec=int(time.monotonic() * 1e6),
+                q=q,
+                x=0.0, y=0.0, z=0.0,
+                covariance=[nan] * 21,
+            )
         self._log_mavlink(f'att_pos_mocap  yaw={yaw_deg:.1f}°')
 
     # ------------------------------------------------------------------ #
@@ -459,10 +487,11 @@ class Pixhawk:
         """
         interval_us = int(1_000_000 / hz) if hz > 0 else int(hz)
         self._log_mavlink(f'msg_id={message_id} hz={hz}')
-        self.master.mav.command_long_send(
-            self.master.target_system, self.master.target_component,
-            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-            0, message_id, interval_us, 0, 0, 0, 0, 0)
+        with self._tx_lock:
+            self.master.mav.command_long_send(
+                self.master.target_system, self.master.target_component,
+                mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+                0, message_id, interval_us, 0, 0, 0, 0, 0)
 
     # ------------------------------------------------------------------ #
     #  Telemetry reads — master.messages cache only (non-blocking)        #
@@ -542,15 +571,58 @@ class Pixhawk:
         self._last_autopilot_hb = msg
         return msg
 
-    def get_mode(self):
+    def heartbeat_age(self):
+        """Seconds since the last autopilot HEARTBEAT, or None if none seen.
+
+        Mirrors ``get_attitude_age``: a message without ``_timestamp`` (test
+        mocks) is treated as fresh (0.0). Lets the manager surface link health.
+        """
         msg = self._autopilot_heartbeat()
         if msg is None:
-            return 'UNKNOWN'
+            return None
+        ts = getattr(msg, '_timestamp', None)
+        if ts is None:
+            return 0.0
+        return max(0.0, time.time() - ts)
+
+    def link_alive(self):
+        """True iff an autopilot HEARTBEAT has arrived within ``_LINK_STALE_S``.
+
+        False = the MAVLink link is (probably) dead -- the ArduSub failsafe owns
+        the thrusters, but our side must stop trusting the cached mode/arm state.
+        """
+        age = self.heartbeat_age()
+        return age is not None and age <= _LINK_STALE_S
+
+    def _live_autopilot_heartbeat(self):
+        """The latest autopilot HEARTBEAT, or None if the link is stale/dead.
+
+        Freshness-gates ``_autopilot_heartbeat`` so a heartbeat cached before the
+        link died can never make ``is_armed()``/``get_mode()`` report a stale
+        "armed/ALT_HOLD" (which would let a command precondition pass on a dead
+        link). A msg without ``_timestamp`` (test mocks) is treated as fresh.
+        """
+        msg = self._autopilot_heartbeat()
+        if msg is None:
+            return None
+        ts = getattr(msg, '_timestamp', None)
+        if ts is not None and (time.time() - ts) > _LINK_STALE_S:
+            return None
+        return msg
+
+    def get_mode(self):
+        msg = self._live_autopilot_heartbeat()
+        if msg is None:
+            return 'UNKNOWN'   # no link (or none yet) -> never a stale mode
         mode_map = {v: k for k, v in self.master.mode_mapping().items()}
         return mode_map.get(msg.custom_mode, str(msg.custom_mode))
 
     def is_armed(self):
-        msg = self._autopilot_heartbeat()
+        # Freshness-gated: a dead link -> None -> False, so a motion verb's
+        # "must be armed" precondition BLOCKS on a lost link instead of driving
+        # on a stale "armed". (arm()/disarm() poll this; a link death mid-arm
+        # keeps polling to timeout, which is the correct, safe outcome.)
+        msg = self._live_autopilot_heartbeat()
         if msg is None:
             return False
         return bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
