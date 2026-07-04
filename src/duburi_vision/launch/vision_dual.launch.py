@@ -33,8 +33,15 @@ Usage:
     ros2 launch duburi_vision vision_dual.launch.py \\
         fwd_video:=/path/gate.mp4 dwn_video:=/path/bin.mp4 paused:=false
 
-Viewer keys: f=forward  d=downward  b=side-by-side  D=depth-map
+Viewer keys: f=forward  d=downward  D=depth-map  (the HUD DISPLAYS only one
+camera at a time -- the side-by-side view was removed so it never subscribes both).
 Camera/detector/tracker log at WARN; the viewer logs at INFO.
+
+NOTE: this bringup OPENS BOTH camera streams (paused only gates detector
+inference, not the MJPEG stream). Two 1080p USB-2 cameras on one 480 Mbps bus is
+bandwidth-heavy and can trip USB enumeration; for a single-task run prefer the
+one-camera vision.launch.py (camera:=forward|downward). See
+.claude/context/dual-camera-setup.md "two-cameras-at-once" for the guard rails.
 """
 
 from launch                  import LaunchDescription

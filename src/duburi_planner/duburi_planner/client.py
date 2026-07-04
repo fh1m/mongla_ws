@@ -38,11 +38,75 @@ class MoveFailed(RuntimeError):
     (timeout, mode rejected, exception, ...)."""
 
 
+class MoveTimeout(MoveFailed):
+    """The client's OWN deadline elapsed before the server returned a result
+    (server crashed/wedged, or a goal overran its limit). The goal is
+    cancelled. Subclasses ``MoveFailed`` so every existing
+    ``except (MoveFailed, MoveRejected)`` handler treats a stall as a
+    (non-fatal, bounded) failure -- the mission never hangs forever."""
+
+
+# Client-side backstops so a wedged/crashed action server can never hang a
+# mission (or its disarm) forever. These sit ON TOP of the server's own
+# per-goal time limit -- they only bite when the server stops responding.
+_GOAL_ACCEPT_TIMEOUT_S   = 10.0   # server must ACK the goal within this
+_RESULT_TIMEOUT_MARGIN_S = 15.0   # backstop = the goal's own limit + this
+_RESULT_TIMEOUT_FLOOR_S  = 60.0   # backstop for a goal that carries no time field
+_CANCEL_TIMEOUT_S        = 5.0    # bound the cancel handshake too
+# Safety / quick verbs get a SHORT independent deadline: they must be fast, and
+# the disarm backstop must never wait on a healthy-server assumption.
+_QUICK_DEADLINE_S = 12.0
+_QUICK_CMDS = frozenset({
+    'disarm', 'stop', 'surface', 'mission_reset', 'unlock_heading', 'arm',
+    'set_mode',
+})
+
+
 class DuburiClient:
     def __init__(self, node):
         self.node    = node
         self._client = ActionClient(node, Move, '/duburi/move')
         self._active_goal_handle = None  # set during send(); cleared after
+
+    # ------------------------------------------------------------------ #
+    #  Deadline helpers                                                   #
+    # ------------------------------------------------------------------ #
+
+    def _result_deadline(self, goal) -> float:
+        """Client backstop for a goal's result, in seconds.
+
+        A safety/quick verb gets a short fixed bound. Otherwise the bound is
+        the goal's OWN server-side time limit (``duration``/``timeout`` field)
+        plus a margin for the server's settle/brake cleanup; a goal with no
+        time field falls back to a generous floor. Always finite -> a stalled
+        server can never hang the caller forever.
+        """
+        if getattr(goal, 'cmd', '') in _QUICK_CMDS:
+            return _QUICK_DEADLINE_S
+        limit = max(float(getattr(goal, 'duration', 0.0) or 0.0),
+                    float(getattr(goal, 'timeout',  0.0) or 0.0))
+        return (limit + _RESULT_TIMEOUT_MARGIN_S) if limit > 0.0 \
+            else _RESULT_TIMEOUT_FLOOR_S
+
+    def _cancel(self, goal_handle) -> None:
+        """Best-effort, bounded cancel of an in-flight goal."""
+        try:
+            cancel_future = goal_handle.cancel_goal_async()
+            rclpy.spin_until_future_complete(
+                self.node, cancel_future, timeout_sec=_CANCEL_TIMEOUT_S)
+        except Exception:   # noqa: BLE001 -- cancel is best-effort; never raise from cleanup
+            pass
+
+    def cancel_active(self) -> None:
+        """Bounded best-effort cancel of the goal currently in flight, if any.
+
+        Safe to call from a mission's abort handler (Ctrl-C). Usually a no-op:
+        ``send()``'s own Ctrl-C path cancels and clears the handle first -- this
+        is the belt-and-suspenders backstop for any goal still registered.
+        """
+        goal_handle = self._active_goal_handle
+        if goal_handle is not None:
+            self._cancel(goal_handle)
 
     # ------------------------------------------------------------------ #
     #  Connection                                                         #
@@ -87,8 +151,18 @@ class DuburiClient:
 
         send_future = self._client.send_goal_async(
             goal, feedback_callback=self._on_feedback)
-        rclpy.spin_until_future_complete(self.node, send_future)
+        # Bounded goal-ACCEPT wait: a server that never acknowledges must not
+        # hang the caller (wait_for_connection only proves the server existed
+        # earlier; it can die between then and now).
+        rclpy.spin_until_future_complete(
+            self.node, send_future, timeout_sec=_GOAL_ACCEPT_TIMEOUT_S)
+        if not send_future.done():
+            raise MoveTimeout(
+                f'Goal "{cmd}" not accepted within {_GOAL_ACCEPT_TIMEOUT_S:.0f}s '
+                f'(action server unresponsive)')
         goal_handle = send_future.result()
+        if goal_handle is None:
+            raise MoveFailed(f'Goal "{cmd}" send failed (no goal handle returned)')
 
         if not goal_handle.accepted:
             raise MoveRejected(f'Goal "{cmd}" was REJECTED by action server')
@@ -96,19 +170,34 @@ class DuburiClient:
         self._active_goal_handle = goal_handle
         try:
             result_future = goal_handle.get_result_async()
+            deadline = self._result_deadline(goal)
             try:
-                rclpy.spin_until_future_complete(self.node, result_future)
+                # Bounded RESULT wait: a server that accepts then wedges (or a
+                # goal that overruns) must never hang the mission forever. This
+                # is the single most important safety backstop -- it also bounds
+                # the mission-runner's emergency disarm (which rides this call).
+                rclpy.spin_until_future_complete(
+                    self.node, result_future, timeout_sec=deadline)
             except KeyboardInterrupt:
                 self.node.get_logger().warn(
                     f'Ctrl-C — cancelling goal "{cmd}"...')
-                cancel_future = goal_handle.cancel_goal_async()
-                rclpy.spin_until_future_complete(
-                    self.node, cancel_future, timeout_sec=5.0)
+                self._cancel(goal_handle)
                 rclpy.spin_until_future_complete(
                     self.node, result_future, timeout_sec=15.0)
                 if not result_future.done():
                     raise MoveFailed(
                         f'Goal "{cmd}" did not finish cancelling in time')
+            if not result_future.done():
+                # Client deadline elapsed with no result -> server stalled/dead
+                # or the goal overran. Cancel + fail BOUNDED so the mission (and
+                # its disarm backstop) can never hang on a dead server.
+                self.node.get_logger().error(
+                    f'Goal "{cmd}" exceeded client deadline {deadline:.0f}s — '
+                    f'cancelling (server stalled?)')
+                self._cancel(goal_handle)
+                raise MoveTimeout(
+                    f'Goal "{cmd}" did not complete within {deadline:.0f}s '
+                    f'(server stalled)')
             result = result_future.result().result
         finally:
             self._active_goal_handle = None

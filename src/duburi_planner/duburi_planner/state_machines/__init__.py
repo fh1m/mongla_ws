@@ -23,6 +23,7 @@ from .core.vehicle_profile import VehicleProfile
 from .core.base_state import DuburiState
 from .core.outcomes import SUCCEED, FAILED, TIMEOUT, ABORT
 from .core.blackboard import BK
+from .runner import run_fsm
 from .states.utility import SetDetectorState
 from .plans.gate_flare import build_gate_flare_fsm, GATE_FLARE_DEFAULTS
 from .plans.prequal import build_prequal_fsm, PREQUAL_DEFAULTS
@@ -34,7 +35,7 @@ from .plans.return_gate import build_return_gate_fsm, RETURN_GATE_DEFAULTS
 from .plans.full_competition import build_full_competition_fsm, FULL_COMP_DEFAULTS
 
 __all__ = [
-    'VehicleProfile', 'DuburiState', 'BK', 'SetDetectorState',
+    'VehicleProfile', 'DuburiState', 'BK', 'SetDetectorState', 'run_fsm',
     'SUCCEED', 'FAILED', 'TIMEOUT', 'ABORT',
     'build_gate_flare_fsm', 'GATE_FLARE_DEFAULTS',
     'build_prequal_fsm', 'PREQUAL_DEFAULTS',

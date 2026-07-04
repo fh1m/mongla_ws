@@ -559,11 +559,13 @@ class TestPixhawkParamPolling(unittest.TestCase):
     """Verify get_param / set_param use master.messages cache, not recv_match."""
 
     def _make_pixhawk(self):
+        import threading
         from duburi_control.pixhawk import Pixhawk
-        px = object.__new__(Pixhawk)
+        px = object.__new__(Pixhawk)   # bypass __init__ (no real serial link)
         px.master = MagicMock()
         px.master.messages = {}
         px._log_mavlink = MagicMock()
+        px._tx_lock = threading.Lock()  # __init__ normally creates this (write serialization)
         return px
 
     def test_get_param_returns_value_from_messages_cache(self):

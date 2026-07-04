@@ -4,7 +4,7 @@
 
 Pool-day: edit slalom_heading in params= below (or competition_config.py).
 """
-from yasmin import Blackboard
+from ..state_machines import run_fsm  # guaranteed disarm-on-exit
 from yasmin_ros import set_ros_loggers
 
 from ..state_machines import build_slalom_fsm, VehicleProfile
@@ -23,5 +23,5 @@ def run(duburi, log):
         'slalom_heading':  SLALOM_HEADING_DEG,
         'pipe_offset_px':  SLALOM_PIPE_OFFSET_PX,
     })
-    outcome = sm(Blackboard())
+    outcome = run_fsm(duburi, sm)  # ALWAYS release-heading + disarm on exit
     log(f'[FSM] slalom complete: {outcome}')
