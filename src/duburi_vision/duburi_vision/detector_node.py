@@ -88,6 +88,29 @@ def _parse_models_param(s: str) -> Dict[str, str]:
     return result
 
 
+def _parse_model_conf(s: str) -> Dict[str, float]:
+    """Parse 'torpedo_blood_hole=0.55,gate=0.35' -> {name: conf_float}.
+
+    Skips malformed / non-numeric pairs silently (a live-tuned param must never
+    crash the callback). Bare entries (no '=') are ignored -- a per-model conf
+    needs a model name.
+    """
+    result: Dict[str, float] = {}
+    for part in s.split(','):
+        part = part.strip()
+        if not part or '=' not in part:
+            continue
+        name, _, value = part.partition('=')
+        name, value = name.strip(), value.strip()
+        if not name:
+            continue
+        try:
+            result[name] = float(value)
+        except ValueError:
+            continue
+    return result
+
+
 class DetectorNode(Node):
     def __init__(self):
         super().__init__('duburi_detector')
@@ -100,6 +123,12 @@ class DetectorNode(Node):
         self.declare_parameter('device',              'cuda:0')
         self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
         self.declare_parameter('conf',                0.35)
+        # Per-model confidence overrides: CSV 'name=conf' (e.g.
+        # 'torpedo_blood_hole=0.55,gate_rescue_repair=0.35'). Applies on top of
+        # the uniform `conf` above, targeting individual registry entries, and
+        # PERSISTS across active_model switches (each YoloDetector holds its own
+        # threshold). Empty = every model uses `conf`. Live-tunable.
+        self.declare_parameter('model_conf',          '')
         self.declare_parameter('iou',                 0.5)
         self.declare_parameter('imgsz',               640)
         self.declare_parameter('max_det',             100)   # post-NMS cap (live-tunable)
@@ -219,6 +248,12 @@ class DetectorNode(Node):
         self._device_str = device
         self._deadband   = float(self.get_parameter('alignment_deadband').value)
 
+        # Per-model conf overrides from launch (applied on top of the uniform
+        # `conf`). Single-model mode loads async, so a pending override is stored
+        # and re-applied when the model lands (see _load_single_model_async).
+        self._pending_model_conf = str(self.get_parameter('model_conf').value)
+        self._apply_model_conf(self._pending_model_conf)
+
         self.add_on_set_parameters_callback(self._on_parameter_change)
 
         # Inference runs on a background thread so the ROS executor stays free
@@ -255,6 +290,11 @@ class DetectorNode(Node):
         if pending is not allowlist:
             det.update_allowlist(pending)
         self._det = det  # atomic publish under CPython GIL — _infer_loop sees it next tick
+        # Re-apply a per-model conf override that was set before the model landed
+        # (startup or an early live set_conf): _apply_model_conf ran against a None
+        # detector then, so replay it now the single model exists.
+        if getattr(self, '_pending_model_conf', ''):
+            self._apply_model_conf(self._pending_model_conf)
         self.get_logger().info("[DET  ] model ready — inference active")
 
     def _publish_classes(self, classes_str: str) -> None:
@@ -337,6 +377,31 @@ class DetectorNode(Node):
                     if rclpy.ok():
                         self.get_logger().warning(f"[DET  ] debug image failed: {exc!r}")
 
+    def _apply_model_conf(self, value: str) -> None:
+        """Apply per-model conf overrides (CSV 'name=conf') to the registry.
+
+        Each named entry gets its own threshold, persisting across active_model
+        switches (the override lives on the YoloDetector). In single-model mode a
+        pair naming the loaded model (or its stem) applies to it. Unknown names
+        are warned, not fatal -- a live-tuned param must never crash the node.
+        """
+        overrides = _parse_model_conf(value)
+        if not overrides:
+            return
+        for name, conf in overrides.items():
+            det = None
+            if self._registry:
+                det = self._registry.get(name)
+            elif self._det is not None and name in ('', self._active_name):
+                det = self._det
+            if det is None:
+                self.get_logger().warning(
+                    f"[DET  ] model_conf: {name!r} not in "
+                    f"{sorted(self._registry) if self._registry else 'single-model'}")
+                continue
+            det.update_conf(conf)
+            self.get_logger().info(f"[DET  ] model_conf {name!r} → {conf:.3f}")
+
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
         for p in params:
@@ -382,6 +447,12 @@ class DetectorNode(Node):
                             else ([self._det] if self._det is not None else [])):
                     det.update_conf(new_conf)
                 self.get_logger().info(f"[DET  ] conf → {new_conf:.3f}")
+
+            elif p.name == 'model_conf':
+                # Per-model override (CSV 'name=conf'); targets individual
+                # registry entries and persists across active_model switches.
+                self._pending_model_conf = str(p.value)
+                self._apply_model_conf(self._pending_model_conf)
 
             elif p.name == 'max_det':
                 new_max = int(p.value)
