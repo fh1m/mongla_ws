@@ -56,6 +56,12 @@ CH_FORWARD  = 4
 CH_LATERAL  = 5
 NO_OVERRIDE = 65535        # MAVLink "ignore this channel" sentinel
 
+# A cached autopilot HEARTBEAT older than this means the link is DEAD -- ArduSub
+# streams HEARTBEAT at ~1 Hz, so 3 s = 3 missed frames (well past normal jitter).
+# is_armed()/get_mode() report "no link" past this instead of a stale
+# "armed/ALT_HOLD" that would let command preconditions pass on a dead link.
+_LINK_STALE_S = 3.0
+
 # Human-readable names for COMMAND_ACK.result values. Anything that isn't
 # ACCEPTED is surfaced straight to the action server's result.message so
 # the operator sees *why* a command failed, not just that it did.
@@ -565,15 +571,58 @@ class Pixhawk:
         self._last_autopilot_hb = msg
         return msg
 
-    def get_mode(self):
+    def heartbeat_age(self):
+        """Seconds since the last autopilot HEARTBEAT, or None if none seen.
+
+        Mirrors ``get_attitude_age``: a message without ``_timestamp`` (test
+        mocks) is treated as fresh (0.0). Lets the manager surface link health.
+        """
         msg = self._autopilot_heartbeat()
         if msg is None:
-            return 'UNKNOWN'
+            return None
+        ts = getattr(msg, '_timestamp', None)
+        if ts is None:
+            return 0.0
+        return max(0.0, time.time() - ts)
+
+    def link_alive(self):
+        """True iff an autopilot HEARTBEAT has arrived within ``_LINK_STALE_S``.
+
+        False = the MAVLink link is (probably) dead -- the ArduSub failsafe owns
+        the thrusters, but our side must stop trusting the cached mode/arm state.
+        """
+        age = self.heartbeat_age()
+        return age is not None and age <= _LINK_STALE_S
+
+    def _live_autopilot_heartbeat(self):
+        """The latest autopilot HEARTBEAT, or None if the link is stale/dead.
+
+        Freshness-gates ``_autopilot_heartbeat`` so a heartbeat cached before the
+        link died can never make ``is_armed()``/``get_mode()`` report a stale
+        "armed/ALT_HOLD" (which would let a command precondition pass on a dead
+        link). A msg without ``_timestamp`` (test mocks) is treated as fresh.
+        """
+        msg = self._autopilot_heartbeat()
+        if msg is None:
+            return None
+        ts = getattr(msg, '_timestamp', None)
+        if ts is not None and (time.time() - ts) > _LINK_STALE_S:
+            return None
+        return msg
+
+    def get_mode(self):
+        msg = self._live_autopilot_heartbeat()
+        if msg is None:
+            return 'UNKNOWN'   # no link (or none yet) -> never a stale mode
         mode_map = {v: k for k, v in self.master.mode_mapping().items()}
         return mode_map.get(msg.custom_mode, str(msg.custom_mode))
 
     def is_armed(self):
-        msg = self._autopilot_heartbeat()
+        # Freshness-gated: a dead link -> None -> False, so a motion verb's
+        # "must be armed" precondition BLOCKS on a lost link instead of driving
+        # on a stale "armed". (arm()/disarm() poll this; a link death mid-arm
+        # keeps polling to timeout, which is the correct, safe outcome.)
+        msg = self._live_autopilot_heartbeat()
         if msg is None:
             return False
         return bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
