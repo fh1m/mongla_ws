@@ -240,6 +240,15 @@ the pool → `NvMap error 12` / NVML assert / hard lock). Rules that prevent it:
    heaviest process (a detector) **instead of the kernel hard-locking the whole Jetson** — you lose the
    vision task, not the vehicle. Install: `~/ESSENTIALS/install.sh` (see that README).
 5. `anchor:=true` adds XFeat on top — run it with **one** detector, never two + anchor (`xfeat-setup.md` §3).
+6. **★ Jetson-agent VRAM measurement (open, from the 2026-07-04 audit — VIS-C1).** The current strategy
+   is *operational* (rules 1–4) — both engines stay VRAM-resident regardless of `paused`; nothing unloads
+   them. Before trusting a full dual run, **measure it**: `tegrastats` (or `duburi_max` then watch RAM)
+   with **both** competition engines loaded + depth if a task uses it — does it OOM at steady state? If it
+   comfortably fits (2 nano/small TRT engines are ~1 GB each), no code change is needed. **If and only if it
+   OOMs, the correct fix is LAZY-LOAD-ONCE** — don't load a detector's engine until its first `resume`, then
+   keep it resident (pays the load cost once, at a natural task transition). **Do NOT implement
+   unload-on-pause** — it reloads the engine on every mid-mission camera flip (multi-second stall at exactly
+   the wrong moment). fp16 is now the default (`half:=true`, ~½ the VRAM per engine) which widens the margin.
 
 ---
 

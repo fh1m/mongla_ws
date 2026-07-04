@@ -14,7 +14,7 @@ Examples:
     ros2 run duburi_planner duburi set_depth --target -1.5
     ros2 run duburi_planner duburi move_forward --duration 5 --gain 60
     ros2 run duburi_planner duburi yaw_left --target 90
-    ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
+    ros2 run duburi_planner duburi arc --duration 4 --gain 50 --target_yaw 90
     ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
     ros2 run duburi_planner duburi unlock_heading
     ros2 run duburi_planner duburi pause --duration 3

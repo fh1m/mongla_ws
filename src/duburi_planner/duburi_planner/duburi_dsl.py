@@ -12,7 +12,7 @@ Open-loop motion verbs sit directly on `duburi`:
     duburi.move_left(seconds) / duburi.move_right(seconds)
     duburi.yaw_left(degrees) / duburi.yaw_right(degrees)
     duburi.turn(heading_deg)        -- absolute heading, direction auto-selected
-    duburi.arc(seconds, gain=50, yaw_rate_pct=30)
+    duburi.arc(target_yaw, seconds=4, gain=50)   # curve onto an absolute heading
     duburi.lock_heading(degrees)  / duburi.release_heading()
     duburi.pause(seconds) / duburi.stop()
 
@@ -668,13 +668,19 @@ class DuburiMission:
                           target=float(degrees),
                           timeout=timeout, settle=settle)
 
-    def arc(self, seconds: float, *, gain: float = 50.0,
-            yaw_rate_pct: float = 30.0, settle: float = 0.0,
-            pass_through: bool = False):
+    def arc(self, target_yaw: float, seconds: float = 4.0, *,
+            gain: float = 50.0, settle: float = 0.0):
+        """Curve onto an ABSOLUTE heading while driving forward.
+
+        Drives forward at ``gain`` %% for ``seconds`` while a PID turns the hull
+        to ``target_yaw`` (absolute degrees) and holds it -- the trajectory
+        curves onto the heading then straightens (a sweeping "turn-and-go").
+        Turn direction is auto-computed; ``seconds`` sets how far it travels.
+        E.g. ``duburi.arc(90, 4)`` sweeps onto heading 90° over a 4 s forward run.
+        """
         return self._send('arc',
                           duration=float(seconds), gain=gain,
-                          yaw_rate_pct=yaw_rate_pct, settle=settle,
-                          pass_through=pass_through)
+                          target_yaw=float(target_yaw), settle=settle)
 
     def style_roll(self, *, gain: float = 60.0, timeout: float = 20.0,
                   flips: int = 1, headroom: float = 1.0):
