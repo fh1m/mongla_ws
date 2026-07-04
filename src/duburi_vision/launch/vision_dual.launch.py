@@ -19,11 +19,19 @@ Usage:
     # Headless pool day:
     ros2 launch duburi_vision vision_dual.launch.py viewer:=false
 
-    # Override per-camera models / devices:
+    # Single model per camera:
     ros2 launch duburi_vision vision_dual.launch.py \\
         fwd_model:=gate_flare_medium_100ep fwd_classes:=gate,flare \\
         dwn_model:=bin_fire_blood dwn_classes:=fire,blood \\
         fwd_device:=0 dwn_device:=4
+
+    # MULTI-MODEL (registry) -- forward switches gate->slalom->torpedo at
+    # runtime; a mission's ClassRef / set_model() needs the model pre-loaded
+    # here or it errors "not in registry". Pass the class UNION; per-camera conf:
+    ros2 launch duburi_vision vision_dual.launch.py \\
+        fwd_models:=gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole \\
+        fwd_classes:=gate,rescue,repair,red_pipe,torpedo,blood,hole fwd_conf:=0.60 \\
+        dwn_models:=bin_fire_blood dwn_classes:=fire,blood dwn_conf:=0.70
 
     # Detectors live from the start (no per-task resume):
     ros2 launch duburi_vision vision_dual.launch.py paused:=false
@@ -73,12 +81,26 @@ def generate_launch_description():
                               description='by-path symlink for the downward camera (port-stable)'),
         # Forward camera -- gate / slalom / torpedo tasks
         DeclareLaunchArgument('fwd_model',    default_value='gate_rescue_repair',
-                              description='YOLO model stem for the forward detector'),
+                              description='Single YOLO model stem (used only when '
+                                          'fwd_models is empty)'),
+        # REGISTRY mode: CSV of model stems the forward detector loads AND can
+        # switch between at runtime (missions do this via ClassRef / set_model).
+        # A bare stem registers under its own name, so a mission switches with
+        # set_model("slalom_red_pipe"). Empty -> single-model mode (fwd_model).
+        # The FIRST stem is the startup/active model.
+        DeclareLaunchArgument('fwd_models',   default_value='',
+                              description='CSV of model stems for runtime switching '
+                                          '(e.g. gate_rescue_repair,slalom_red_pipe,'
+                                          'torpedo_blood_hole). Empty = single fwd_model.'),
         DeclareLaunchArgument('fwd_classes',  default_value='gate,rescue,repair',
                               description='Class filter for the forward detector'),
         # Downward camera -- bin / drop tasks
         DeclareLaunchArgument('dwn_model',    default_value='bin_fire_blood',
-                              description='YOLO model stem for the downward detector'),
+                              description='Single YOLO model stem (used only when '
+                                          'dwn_models is empty)'),
+        DeclareLaunchArgument('dwn_models',   default_value='',
+                              description='CSV of model stems for runtime switching '
+                                          'on the downward detector. Empty = single dwn_model.'),
         DeclareLaunchArgument('dwn_classes',  default_value='fire,blood',
                               description='Class filter for the downward detector'),
         DeclareLaunchArgument('fwd_conf',     default_value='0.35'),
@@ -140,13 +162,18 @@ def generate_launch_description():
             }],
         )
 
-    def detector(profile: str, model_arg: str, classes_arg: str, conf_arg: str) -> Node:
+    def detector(profile: str, model_arg: str, models_arg: str,
+                 classes_arg: str, conf_arg: str) -> Node:
         return Node(
             package='duburi_vision', executable='detector_node',
             name=f'duburi_detector_{profile}', output='screen', ros_arguments=_QUIET,
             parameters=[{
                 'camera':              profile,
                 'model_path':          LaunchConfiguration(model_arg),
+                # Registry mode: when non-empty the detector loads ALL these
+                # models and can set_model() between them at runtime; model_path
+                # is then ignored. Empty -> single model_path (back-compat).
+                'models':              LaunchConfiguration(models_arg),
                 'device':              LaunchConfiguration('device_cls'),
                 'classes':             LaunchConfiguration(classes_arg),
                 'conf':                LaunchConfiguration(conf_arg),
@@ -187,8 +214,8 @@ def generate_launch_description():
     return LaunchDescription(args + [
         camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop', 'fwd_device_path'),
         camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop', 'dwn_device_path'),
-        detector('forward',  'fwd_model', 'fwd_classes', 'fwd_conf'),
-        detector('downward', 'dwn_model', 'dwn_classes', 'dwn_conf'),
+        detector('forward',  'fwd_model', 'fwd_models', 'fwd_classes', 'fwd_conf'),
+        detector('downward', 'dwn_model', 'dwn_models', 'dwn_classes', 'dwn_conf'),
         tracker('forward'),
         tracker('downward'),
         viewer,
