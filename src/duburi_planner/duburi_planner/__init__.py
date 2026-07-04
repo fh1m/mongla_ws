@@ -5,6 +5,8 @@ Public surface (re-exported for ergonomic imports):
   DuburiMission   -- human-readable mission DSL wrapping DuburiClient
   MoveRejected    -- raised when the action server REJECTs a goal
   MoveFailed      -- raised when the goal completes with success=False
+  MoveTimeout     -- raised (a MoveFailed) when the client's own deadline
+                     elapses before the server returns -- bounds a wedged server
 
 Submodules:
   client          -- DuburiClient implementation
@@ -23,7 +25,8 @@ keeps imports one-way and lets us swap planners without touching the
 manager.
 """
 
-from .client     import DuburiClient, MoveFailed, MoveRejected
+from .client     import DuburiClient, MoveFailed, MoveRejected, MoveTimeout
 from .duburi_dsl import DuburiMission
 
-__all__ = ['DuburiClient', 'DuburiMission', 'MoveFailed', 'MoveRejected']
+__all__ = ['DuburiClient', 'DuburiMission', 'MoveFailed', 'MoveRejected',
+           'MoveTimeout']

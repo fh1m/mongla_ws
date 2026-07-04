@@ -70,10 +70,11 @@ def _abort_sequence(duburi, log, mission_name: str) -> None:
     """
     print(_ABORT_BANNER, file=sys.stderr)
 
-    # Cancel any goal the action client sent and is still waiting on.
-    _try_step('cancel active goal',
-              lambda: duburi._client._active_goal_handle.cancel_goal()
-              if getattr(duburi._client, '_active_goal_handle', None) else None)
+    # Cancel any goal the action client sent and is still waiting on. (Bounded;
+    # usually already done by client.send()'s own Ctrl-C handler. The prior form
+    # dereferenced `duburi._client` -> the rclpy ActionClient, never the
+    # DuburiClient that holds the goal handle, so it was a silent no-op.)
+    _try_step('cancel active goal', lambda: duburi.client.cancel_active())
 
     # Release the heading lock FIRST and as its own isolated step: disarm() also
     # stops it, but doing it explicitly means a leaked lock is dropped even if
