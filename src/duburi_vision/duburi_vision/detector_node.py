@@ -374,8 +374,13 @@ class DetectorNode(Node):
 
             elif p.name == 'conf':
                 new_conf = float(p.value)
-                if self._det is not None:
-                    self._det.update_conf(new_conf)
+                # Apply across the whole registry (mirror max_det) so a live
+                # set_conf survives a later set_model switch -- otherwise it only
+                # touched the active model and reverted to the launch conf on the
+                # next switch. Single-model mode just updates self._det.
+                for det in (self._registry.values() if self._registry
+                            else ([self._det] if self._det is not None else [])):
+                    det.update_conf(new_conf)
                 self.get_logger().info(f"[DET  ] conf → {new_conf:.3f}")
 
             elif p.name == 'max_det':
