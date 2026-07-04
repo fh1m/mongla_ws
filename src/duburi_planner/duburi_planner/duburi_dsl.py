@@ -716,6 +716,13 @@ class DuburiMission:
     # it snappier or slower.
     _CAM_SWITCH_SETTLE_S = 1.5
 
+    # Known dual-camera detector cameras. On every switch we pause EVERY one of
+    # these except the target (not just the previously-live one), so exclusivity
+    # holds from the FIRST use_camera even if the node was launched paused:=false
+    # (both detectors inferring from t=0 -> the concurrent-inference OOM). Pausing
+    # an absent one is a quiet no-op, so single-camera runs are unaffected.
+    _KNOWN_CAMERAS = ('forward', 'downward')
+
     def use_camera(self, name: str) -> None:
         """Switch the sticky camera for all subsequent vision verbs AND make it the
         single live detector (pause the other, resume this one, point the HUD at it).
@@ -748,13 +755,24 @@ class DuburiMission:
         detectors and must not crash here."""
         if name == self._live_camera:
             return
-        prev = self._live_camera
         self._publish_active_camera(name)   # HUD follows (latched topic; always safe)
-        if prev is not None:
+        # Pause EVERY known detector except the target -- not just the previously
+        # live one. This makes the invariant "exactly one detector infers" hold
+        # from the first switch regardless of the launch `paused` state, so a
+        # stray `paused:=false` (both inferring, the OOM config) is corrected the
+        # moment the mission calls use_camera. Gated on a FAST graph existence
+        # check (get_node_names) so an absent counterpart is skipped instantly --
+        # otherwise pause_detector -> _ensure_detector would eat its 5 s
+        # wait_for_service on every switch of a single-camera run.
+        for other in self._KNOWN_CAMERAS:
+            if other == name:
+                continue
+            if not self._detector_present(other):
+                continue                     # not up -> nothing to pause (no 5 s wait)
             try:
-                self.pause_detector(prev)   # exclusivity: only one detector runs
-            except Exception as exc:        # noqa: BLE001 -- best-effort
-                self.log.warning(f'[CAM  ] pause {prev!r} detector skipped: {exc}')
+                self.pause_detector(other)   # exclusivity: only one detector runs
+            except Exception as exc:         # noqa: BLE001 -- best-effort
+                self.log.debug(f'[CAM  ] pause {other!r} detector skipped: {exc}')
         switched = False
         try:
             self.resume_detector(name)
@@ -825,6 +843,22 @@ class DuburiMission:
         if node:
             return node
         return f'/duburi_detector_{camera or self.camera}'
+
+    def _detector_present(self, camera: str) -> bool:
+        """Fast graph check: is the ``camera`` detector node currently up?
+
+        Reads the discovery graph (``get_node_names``) -- instant, no service
+        wait -- so the exclusivity loop can SKIP an absent counterpart instead of
+        paying ``_ensure_detector``'s 5 s ``wait_for_service`` on every switch of a
+        single-camera run. Best-effort: any error -> treat as absent (skip).
+        """
+        node = self._detector_node(camera)
+        want = node.lstrip('/')
+        try:
+            names = self.client.node.get_node_names()
+        except Exception:   # noqa: BLE001 -- graph read is best-effort
+            return False
+        return want in names or node in names
 
     def _ensure_detector(self, node: str, *, timeout: float = 5.0) -> None:
         """Abort the mission LOUDLY if detector ``node`` is not on the graph.
@@ -939,12 +973,28 @@ class DuburiMission:
         self._set_detector_param(node, 'classes', classes_str)
         self.log.info(f"[DSL  ] {node} classes → {classes_str!r}")
 
-    def set_conf(self, conf: float, *,
+    def set_conf(self, conf: float, *, model: str | None = None,
                  camera: str | None = None, node: str | None = None) -> None:
-        """Set YOLO confidence threshold live. Takes effect on next inference tick."""
+        """Set the YOLO confidence threshold live (next inference tick).
+
+        ``model=None`` (default) sets the threshold for EVERY model on the
+        detector (survives model switches). ``model='<registry name>'`` sets it
+        for that ONE model only -- e.g. run the torpedo model tight and the gate
+        model loose on the same forward detector::
+
+            duburi.set_conf(0.35)                              # all models
+            duburi.set_conf(0.55, model='torpedo_blood_hole')  # torpedo only
+
+        Per-model needs a ``models`` registry (multi-model launch); the override
+        persists across ``set_model`` switches (it lives on the model itself).
+        """
         node = self._detector_node(camera, node)
-        self._set_detector_param(node, 'conf', float(conf))
-        self.log.info(f"[DSL  ] {node} conf → {float(conf):.3f}")
+        if model is None:
+            self._set_detector_param(node, 'conf', float(conf))
+            self.log.info(f"[DSL  ] {node} conf → {float(conf):.3f} (all models)")
+        else:
+            self._set_detector_param(node, 'model_conf', f'{model}={float(conf)}')
+            self.log.info(f"[DSL  ] {node} conf[{model!r}] → {float(conf):.3f}")
 
     def pause_detector(self, camera: str | None = None, *,
                        node: str | None = None) -> None:
