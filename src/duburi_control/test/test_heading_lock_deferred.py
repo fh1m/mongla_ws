@@ -129,7 +129,7 @@ def test_lock_heading_runs_while_disarmed_and_defers():
     assert pixhawk.yaw_only_calls == 0
     # Heartbeat NOT held for a deferred lock (neutral stream keeps running).
     assert hb.hold_count == 0
-    assert duburi._lock_holds_heartbeat is False
+    assert duburi._heartbeat_hold_count == 0
 
     duburi.unlock_heading()
 
@@ -164,7 +164,7 @@ def test_first_armed_actuating_command_activates():
     assert duburi._lock_active() is True
     # Heartbeat now held for the active lock -- exactly one outstanding hold.
     assert hb.hold_count == 1
-    assert duburi._lock_holds_heartbeat is True
+    assert duburi._heartbeat_hold_count == 1
 
     duburi.unlock_heading()
     assert hb.hold_count == 0                        # balanced release
@@ -179,7 +179,7 @@ def test_lock_heading_while_armed_activates_immediately():
     assert duburi._lock_deferred is False
     assert duburi._heading_lock.is_suspended is False
     assert hb.hold_count == 1
-    assert duburi._lock_holds_heartbeat is True
+    assert duburi._heartbeat_hold_count == 1
 
     duburi.unlock_heading()
     assert hb.hold_count == 0
@@ -209,3 +209,35 @@ def test_lock_heading_never_changes_flight_mode():
         "operator's responsibility via set_depth")
 
     duburi.unlock_heading()
+
+
+# ── CTRL-6: heartbeat pause is REF-COUNTED (bool -> counter) ───────────────────
+def test_nested_heartbeat_hold_keeps_pause_until_last_release():
+    # A heading lock holds the pause; a nested holder (e.g. style_roll) must NOT
+    # resume the heartbeat on ITS release while the lock still needs it paused.
+    duburi, _pix, hb = _make()
+
+    duburi._hold_heartbeat_for_lock()          # holder A (lock)
+    assert hb.hold_count == 1                    # paused once
+    assert duburi._heartbeat_hold_count == 1
+
+    duburi._hold_heartbeat_for_lock()          # holder B (style_roll)
+    assert hb.hold_count == 1                    # STILL paused once (no double-pause)
+    assert duburi._heartbeat_hold_count == 2
+
+    duburi._release_heartbeat_for_lock()       # B releases
+    assert hb.hold_count == 1, \
+        'heartbeat must stay paused while the lock still holds it (CTRL-6)'
+    assert duburi._heartbeat_hold_count == 1
+
+    duburi._release_heartbeat_for_lock()       # A releases -> now resume
+    assert hb.hold_count == 0
+    assert duburi._heartbeat_hold_count == 0
+
+
+def test_release_without_hold_is_clamped_no_underflow():
+    # The deferred-lock teardown calls release even when nothing was held.
+    duburi, _pix, hb = _make()
+    duburi._release_heartbeat_for_lock()        # no matching hold
+    assert duburi._heartbeat_hold_count == 0     # clamped, not -1
+    assert hb.hold_count == 0
