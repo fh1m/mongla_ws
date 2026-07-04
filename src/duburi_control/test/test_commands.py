@@ -39,11 +39,12 @@ def test_fields_for_substitutes_default_when_unset():
                       'pass_through': False}
 
 
-def test_arc_command_has_yaw_rate_field():
-    """`arc` is the only command that reads yaw_rate_pct."""
+def test_arc_command_has_target_yaw_field():
+    """`arc` closes on an absolute heading via target_yaw (not a yaw-rate stick)."""
     spec = COMMANDS['arc']
-    assert 'yaw_rate_pct' in spec['fields']
-    assert spec['defaults']['yaw_rate_pct'] == 30.0
+    assert 'target_yaw' in spec['fields']
+    assert spec['defaults']['target_yaw'] == 0.0
+    assert 'yaw_rate_pct' not in spec['fields']   # removed from arc
 
 
 def test_lock_unlock_heading_registered():

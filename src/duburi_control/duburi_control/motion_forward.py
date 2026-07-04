@@ -15,13 +15,15 @@ Three public functions, all using `Writers` from `motion_writers`:
       gain -> smootherstep ease-out. The ease-out IS the brake -- only
       the settle phase runs at exit, no reverse kick.
 
-  arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
+  arc(pixhawk, signed_dir, duration, gain, target_yaw, log,
       yaw_source=None, settle=0.0)
-      Curved car-style motion. Single 20 Hz loop writes Ch5 (forward
-      thrust) AND Ch4 (yaw rate) in the same packet. Ch4 is signed
-      yaw stick (+ = right turn, - = left). Heading-lock is
-      incompatible by design -- the Duburi facade suspends any active
-      lock around `arc` and re-engages at the exit heading.
+      Curved motion to an ABSOLUTE heading. A single YAW_RATE_HZ loop writes
+      Ch5 (forward thrust) AND Ch4 (a _YawPID closing on `target_yaw`) in the
+      same packet, for the full `duration` -- the hull curves onto the target
+      heading then drives straight. Turn direction is auto-computed from the
+      shortest-path error. Heading-lock is incompatible by design -- the Duburi
+      facade suspends any active lock around `arc` and re-engages at the exit
+      heading (the ACTUAL measured heading, not necessarily `target_yaw`).
 
 `signed_dir` is +1 for forward, -1 for back. The per-axis split makes
 the call sites unambiguous: `move_forward` -> `drive_forward_*(+1, ...)`,
@@ -33,10 +35,13 @@ import time
 from .pixhawk         import Pixhawk
 from .motion_easing  import trapezoid_ramp
 from .motion_writers import (
-    THRUST_RATE_HZ, LOG_THROTTLE, EASE_SECONDS, REVERSE_KICK_PCT,
+    LOG_THROTTLE, EASE_SECONDS, REVERSE_KICK_PCT,
     thrust_loop, brake_kick_then_settle, final_settle, read_heading,
     _interruptible_sleep,
 )
+# arc closes Ch4 on an ABSOLUTE heading -- reuse the proven turn controller
+# (same _YawPID + rate as motion_yaw so its I/D terms stay in calibration).
+from .motion_yaw      import _YawPID, YAW_RATE_HZ
 
 _DVL_POLL_HZ   = 20     # position polling rate for distance moves
 _DVL_TIMEOUT_K = 10.0   # generous extra timeout: metres / 0.05 + this
@@ -91,26 +96,33 @@ def drive_forward_eased(pixhawk, signed_dir, duration, gain, log,
 # ---------------------------------------------------------------------- #
 #  arc -- forward thrust + yaw rate in the same packet                    #
 # ---------------------------------------------------------------------- #
-def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
-        yaw_source=None, settle=0.0, abort_fn=None, pass_through=False):
-    """Drive Ch5 + Ch4 simultaneously for a curved car-style trajectory.
+def arc(pixhawk, signed_dir, duration, gain, target_yaw, log,
+        yaw_source=None, settle=0.0, abort_fn=None):
+    """Drive forward while turning to (and holding) an ABSOLUTE heading.
 
-    `signed_dir` controls forward/back ({+1, -1}); `gain` the magnitude
-    of forward thrust [%]. `yaw_rate_pct` is the signed yaw stick
-    [-100..+100], positive = right turn.
+    Ch5 forward at `gain`% (`signed_dir` = +1/-1 for fwd/back) for the full
+    `duration`, while a `_YawPID` closes Ch4 to bring the heading to
+    `target_yaw` (absolute degrees) and hold it -- the trajectory curves onto
+    the heading then straightens. `duration` sets how long / far the hull
+    travels; `target_yaw` the heading it ends on. The turn direction is
+    AUTO-COMPUTED from the shortest-path heading error -- there is no yaw-rate
+    stick to set (that is the whole point of the target-heading arc).
 
-    Heading-lock is incompatible: `arc` intentionally changes heading.
-    The Duburi facade suspends an active lock around the arc and
-    re-engages at the exit heading. `arc` itself always uses
-    `send_rc_override` so Ch4 is sent explicitly.
+    Heading-lock is incompatible (arc changes heading): the Duburi facade
+    suspends an active lock around this and, on exit, retargets the lock to the
+    ACTUAL measured heading (not `target_yaw`, in case the arc didn't fully
+    reach it within `duration`). The loop runs at `YAW_RATE_HZ` so `_YawPID`'s
+    I/D terms stay in the same calibration as a stationary turn. Ch5 + Ch4 go
+    in one `send_rc_override` packet.
     """
     label    = 'ARC'
     fwd_pct  = signed_dir * gain
-    yaw_pct  = yaw_rate_pct
+    pid      = _YawPID()
 
     started_at     = time.monotonic()
-    locked_heading = read_heading(pixhawk, yaw_source) or 0.0
-    last_heading   = locked_heading
+    start_heading  = read_heading(pixhawk, yaw_source) or 0.0
+    last_heading   = start_heading
+    fwd_pwm        = Pixhawk.percent_to_pwm(fwd_pct)   # constant forward thrust
 
     try:
         while True:
@@ -120,28 +132,32 @@ def arc(pixhawk, signed_dir, duration, gain, yaw_rate_pct, log,
             if abort_fn and abort_fn():
                 break
 
-            fwd_pwm = Pixhawk.gain_to_pwm(fwd_pct, pass_through)
-            yaw_pwm = Pixhawk.gain_to_pwm(yaw_pct, pass_through)
-            pixhawk.send_rc_override(forward=fwd_pwm, yaw=yaw_pwm)
-
             heading = read_heading(pixhawk, yaw_source)
             if heading is not None:
                 last_heading = heading
+            # Shortest-path error to the ABSOLUTE target; _YawPID maps it to a
+            # signed Ch4 % (0 inside YAW_TOL_DEG -> Ch4 neutral -> drives straight
+            # once the heading is held). Same controller as a stationary turn.
+            error   = Pixhawk.heading_error(target_yaw, last_heading)
+            yaw_pct = pid.update(error)
+            yaw_pwm = Pixhawk.percent_to_pwm(yaw_pct)
+            pixhawk.send_rc_override(forward=fwd_pwm, yaw=yaw_pwm)
 
             depth = pixhawk.get_attitude()
             depth_str = f'{depth["depth"]:+.2f}m' if depth else 'N/A'
             log.info(
                 f'[{label:<5}] t={elapsed:.1f}s  fwd={fwd_pct:+.0f}%  '
-                f'yaw={yaw_pct:+.0f}%  hdg={last_heading:.1f}  depth={depth_str}',
+                f'->{target_yaw:.0f}deg  hdg={last_heading:.1f}  '
+                f'err={error:+.1f}  yaw={yaw_pct:+.0f}%  depth={depth_str}',
                 throttle_duration_sec=LOG_THROTTLE)
 
-            time.sleep(1.0 / THRUST_RATE_HZ)
+            time.sleep(1.0 / YAW_RATE_HZ)
     finally:
         pixhawk.send_neutral()
 
-    swept = Pixhawk.heading_error(last_heading, locked_heading)
+    swept = Pixhawk.heading_error(last_heading, start_heading)
     log.info(
-        f'[{label:<5}] done  start={locked_heading:.1f}  '
+        f'[{label:<5}] done  start={start_heading:.1f}  target={target_yaw:.1f}  '
         f'end={last_heading:.1f}  swept={swept:+.1f}')
 
     # The `finally` above already left Ch5+Ch4 neutral; just settle. Interruptible

@@ -105,26 +105,29 @@ def test_arc_writes_ch5_and_ch4_in_same_packet(patched_sleep):
     pixhawk = FakePixhawk()
     log     = ThrottleLogger()
 
+    # FakePixhawk reports yaw=0; target_yaw=30 is to the RIGHT -> yaw stick > 1500.
     arc(pixhawk, signed_dir=+1, duration=0.1, gain=50,
-        yaw_rate_pct=30.0, log=log, settle=0.0)
+        target_yaw=30.0, log=log, settle=0.0)
 
     arc_writes = [c for c in pixhawk.calls
                   if c[0] == 'send_rc_override'
                   and 'forward' in c[1] and 'yaw' in c[1]]
     assert arc_writes, (
         'arc must emit RC override packets containing BOTH forward and yaw')
-    # Forward should be positive thrust, yaw should be positive (right turn)
+    # Forward should be positive thrust, yaw should be positive (right turn to +30)
     last = arc_writes[-1][1]
     assert last['forward'] > 1500
     assert last['yaw']     > 1500
 
 
-def test_arc_negative_yaw_rate_turns_left(patched_sleep):
+def test_arc_left_target_turns_left(patched_sleep):
     pixhawk = FakePixhawk()
     log     = ThrottleLogger()
 
+    # target_yaw=330 (== -30) is to the LEFT of 0 -> shortest-path error is
+    # negative -> yaw stick below neutral. Auto-computed direction, no rate arg.
     arc(pixhawk, signed_dir=+1, duration=0.1, gain=50,
-        yaw_rate_pct=-40.0, log=log, settle=0.0)
+        target_yaw=330.0, log=log, settle=0.0)
 
     arc_writes = [c for c in pixhawk.calls
                   if c[0] == 'send_rc_override'

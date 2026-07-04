@@ -5,13 +5,13 @@ Phase A (sharp): forward → pause → yaw → pause → forward
   Each verb settles cleanly before the next one runs. Good for
   precision approaches where you need exact headings.
 
-Phase B (curved): arc(+yaw) → arc(-yaw)
-  forward and yaw run in the same command packet so the vehicle
-  traces a smooth curve -- like a car turning a corner.
+Phase B (curved): arc(heading A) → arc(heading B)
+  forward + a heading-PID run in the same command packet, so the vehicle
+  curves smoothly ONTO each absolute heading -- like a car sweeping a corner.
 
 Use this to verify:
   - yaw_right / yaw_left turn the correct direction.
-  - arc() traces a real curve (if it goes straight, check yaw_rate_pct).
+  - arc(target_yaw) sweeps onto an absolute heading (auto-computed direction).
   - pause() actually stops forward momentum before a turn.
 
 Run: ros2 run duburi_planner mission arc_demo
@@ -22,7 +22,7 @@ LEG_GAIN_PCT   = 60.0
 TURN_DEG       = 90.0
 ARC_DURATION_S = 4.0
 ARC_GAIN_PCT   = 50.0
-ARC_YAW_RATE   = 30.0   # 30% yaw stick during the arc (positive = right turn)
+ARC_TARGETS    = (90.0, 0.0)   # absolute headings to sweep onto in Phase B
 
 
 def run(duburi, log):
@@ -63,17 +63,15 @@ def run(duburi, log):
     # ------------------------------------------------------------------ #
     #  Phase B: curved turns -- forward + yaw in one command              #
     # ------------------------------------------------------------------ #
-    log('--- Phase B: curved turns (arc, no settle between)')
-    for i in range(2):
-        # arc: combines forward thrust (gain=50%) with a continuous yaw
-        # command (yaw_rate_pct=30%) in the same command packet.
-        # Positive yaw_rate_pct = turn right; negative = turn left.
-        # Result: the vehicle sweeps a smooth curve rather than
-        # stopping and pivoting.
-        # Tune: raise yaw_rate_pct for a tighter turn radius.
-        #       raise gain for a faster curve.
-        rate = ARC_YAW_RATE if i % 2 == 0 else -ARC_YAW_RATE
-        duburi.arc(ARC_DURATION_S, gain=ARC_GAIN_PCT, yaw_rate_pct=rate)
+    log('--- Phase B: curved turns (arc to an absolute heading)')
+    for target in ARC_TARGETS:
+        # arc: forward thrust (gain=50%) + a heading PID in the same command
+        # packet. The hull curves ONTO the absolute heading `target` (deg) and
+        # holds it for the rest of the run -- a sweeping turn-and-go, not a
+        # stop-and-pivot. Turn direction is auto-computed (shortest path).
+        # Tune: raise gain for a faster/tighter curve; longer seconds travels
+        #       further after the heading is reached.
+        duburi.arc(target, ARC_DURATION_S, gain=ARC_GAIN_PCT)
 
     # disarm: cut thruster power.
     duburi.disarm()
