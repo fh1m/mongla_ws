@@ -48,12 +48,15 @@ TOL_M         = 0.10    # exit tolerance (m). 10 cm is realistic; tighter values
 PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
 # RAMP_S and BRAKE_ZONE_M are imported from motion_rates -- tune there.
 
-# AHRS2 is pinned at 50 Hz, so a fresh depth sample is < ~0.02 s old. If the sample
-# is older than this the link/stream has stalled -- we must NOT let a frozen reading
-# declare "depth reached" (a false positive that would advance the mission while the
-# hull is not actually at depth). 0.5 s = 25 missed frames: far past any jitter, so
-# it never trips in normal operation.
-_ATTITUDE_STALE_S = 0.5
+# Guard only against a FROZEN link (multi-second), NOT a frame gap. AHRS2 is
+# *pinned* to 50 Hz, but that pin is fire-and-forget (CTRL-8): if it doesn't take
+# in the pool, AHRS2 falls back to ~4 Hz and a transient gap can exceed a tight
+# window. This gate only exists to stop a truly frozen reading declaring "depth
+# reached"; depth doesn't change fast enough for a <2 s-old sample to be wrong, so
+# 2.0 s catches a real freeze with ~8x margin over 4 Hz jitter and never trips on
+# normal telemetry. (Sizing lesson from the CTRL-2 regression: a freshness gate on
+# real telemetry must be sized for a freeze, not for the nominal frame rate.)
+_ATTITUDE_STALE_S = 2.0
 
 
 def _fresh_depth(pixhawk):

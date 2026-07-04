@@ -299,12 +299,16 @@ def test_fresh_heartbeat_reports_armed():
     assert px.link_alive() is True
 
 
-def test_stale_heartbeat_reports_not_armed_and_unknown_mode():
-    # link died: last heartbeat is well past the stale window
+def test_stale_heartbeat_keeps_cached_arm_mode_but_link_advisory_flips():
+    # link stalled past the window: is_armed()/get_mode() are HARD per-command
+    # preconditions, so they must keep reporting the last KNOWN arm state/mode
+    # (cached) -- NOT flip on transient jitter and abort every motion verb ->
+    # disarm. Staleness surfaces ONLY through the advisory link_alive()/age.
     px = _pixhawk_with_hb(_hb(armed=True, custom_mode=2, age_s=_LINK_STALE_S + 2))
-    assert px.is_armed() is False          # precondition BLOCKS instead of driving
-    assert px.get_mode() == 'UNKNOWN'      # never a stale ALT_HOLD
-    assert px.link_alive() is False
+    assert px.is_armed() is True           # cached; only OUR disarm() flips it
+    assert px.get_mode() == 'ALT_HOLD'     # cached; never spuriously UNKNOWN
+    assert px.link_alive() is False        # advisory-only: link is stale
+    assert px.heartbeat_age() > _LINK_STALE_S
 
 
 def test_missing_timestamp_treated_fresh():
