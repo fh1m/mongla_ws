@@ -48,6 +48,30 @@ TOL_M         = 0.10    # exit tolerance (m). 10 cm is realistic; tighter values
 PRIME_SECONDS = 0.5     # drain stale ALT_HOLD I-term before driving anywhere
 # RAMP_S and BRAKE_ZONE_M are imported from motion_rates -- tune there.
 
+# AHRS2 is pinned at 50 Hz, so a fresh depth sample is < ~0.02 s old. If the sample
+# is older than this the link/stream has stalled -- we must NOT let a frozen reading
+# declare "depth reached" (a false positive that would advance the mission while the
+# hull is not actually at depth). 0.5 s = 25 missed frames: far past any jitter, so
+# it never trips in normal operation.
+_ATTITUDE_STALE_S = 0.5
+
+
+def _fresh_depth(pixhawk):
+    """Current depth in metres, or None if the AHRS2 sample is stale/absent.
+
+    Freshness-gates ``get_attitude`` so a frozen stream can't be read as live depth.
+    A fake/pixhawk without ``get_attitude_age`` (unit tests) is treated as fresh, so
+    existing behaviour is unchanged there.
+    """
+    attitude = pixhawk.get_attitude()
+    if attitude is None:
+        return None
+    age_fn = getattr(pixhawk, 'get_attitude_age', None)
+    age = age_fn() if age_fn is not None else 0.0
+    if age is not None and age > _ATTITUDE_STALE_S:
+        return None
+    return attitude['depth']
+
 
 def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None,
                abort_fn=None):
@@ -154,8 +178,11 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None,
         if abort_fn and abort_fn():
             break
         # Read depth BEFORE computing the setpoint so we can track the sub.
-        attitude = pixhawk.get_attitude()
-        current  = attitude['depth'] if attitude is not None else None
+        # FRESHNESS-GATED: a stale/frozen AHRS2 reads as None (unknown), so a frozen
+        # reading can never falsely satisfy the `error < TOL_M` reached-check below
+        # -- the loop holds the setpoint at target and times out with a clear
+        # "stale telemetry" reason instead of declaring a false arrival.
+        current  = _fresh_depth(pixhawk)
 
         elapsed = time.monotonic() - t_start
         if start_d is not None and elapsed < RAMP_S:
