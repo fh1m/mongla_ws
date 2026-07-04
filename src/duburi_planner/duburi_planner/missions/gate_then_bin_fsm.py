@@ -13,7 +13,7 @@ Task 2: downward camera, bin model
 Works on Duburi 4.5 (DVL passes) and Dubomini 2.0 (timed passes).
 Swap pool-day params via the params dict.
 """
-from yasmin import Blackboard
+from ..state_machines import run_fsm  # guaranteed disarm-on-exit
 from yasmin_ros import set_ros_loggers
 
 from ..state_machines import build_gate_then_bin_fsm, VehicleProfile, GATE_THEN_BIN_DEFAULTS
@@ -44,5 +44,5 @@ def run(duburi, log):
 
     set_ros_loggers()
     sm = build_gate_then_bin_fsm(duburi, profile, params=params)
-    outcome = sm(Blackboard())
+    outcome = run_fsm(duburi, sm)  # ALWAYS release-heading + disarm on exit
     log(f'[FSM] result: {outcome}')

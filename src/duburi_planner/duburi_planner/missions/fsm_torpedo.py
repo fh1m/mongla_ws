@@ -5,7 +5,7 @@
 Pool-day: set TORPEDO_HEADING_DEG and TORPEDO_DEPTH_M in competition_config.py.
 The FSM will assert torpedo_depth_m is not None before building.
 """
-from yasmin import Blackboard
+from ..state_machines import run_fsm  # guaranteed disarm-on-exit
 from yasmin_ros import set_ros_loggers
 
 from ..state_machines import build_torpedo_fire_fsm, VehicleProfile
@@ -24,5 +24,5 @@ def run(duburi, log):
         'torpedo_heading': TORPEDO_HEADING_DEG,
         'torpedo_depth_m': TORPEDO_DEPTH_M,
     })
-    outcome = sm(Blackboard())
+    outcome = run_fsm(duburi, sm)  # ALWAYS release-heading + disarm on exit
     log(f'[FSM] torpedo complete: {outcome}')
