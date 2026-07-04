@@ -98,7 +98,7 @@ class DetectorNode(Node):
         self.declare_parameter('models',              '')     # CSV name=stem pairs
         self.declare_parameter('active_model',        '')     # registry key to start with
         self.declare_parameter('device',              'cuda:0')
-        self.declare_parameter('half',                False)
+        self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
         self.declare_parameter('conf',                0.35)
         self.declare_parameter('iou',                 0.5)
         self.declare_parameter('imgsz',               640)

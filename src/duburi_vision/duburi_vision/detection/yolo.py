@@ -159,7 +159,7 @@ class YoloDetector(Detector):
     name = 'yolo'
 
     def __init__(self, *, model_path='yolov11n', device='cuda:0',
-                 conf=0.35, iou=0.5, imgsz=640, half=False, max_det=100,
+                 conf=0.35, iou=0.5, imgsz=640, half=True, max_det=100,
                  class_allowlist: Optional[Iterable[str]] = ('person',),
                  warmup=True, logger=None):
         import torch
