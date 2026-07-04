@@ -474,12 +474,18 @@ class Duburi(VisionVerbs):
     #  arc -- forward thrust + yaw rate at the same time                  #
     # ================================================================== #
 
-    def arc(self, duration, gain=50.0, yaw_rate_pct=30.0, settle=0.0):
-        """Curved car-style motion: Ch5 + Ch4 in the same packet.
+    def arc(self, duration, gain=50.0, target_yaw=0.0, settle=0.0):
+        """Curved motion to an ABSOLUTE heading: Ch5 forward + Ch4 heading-loop.
+
+        Drives forward at `gain`% for `duration` s while a _YawPID closes Ch4 to
+        reach and hold `target_yaw` (absolute degrees) -- the hull curves onto
+        the heading then straightens. The turn direction is auto-computed; there
+        is no yaw-rate stick to set.
 
         Heading-lock is incompatible by design (`arc` changes heading).
-        Auto-suspends the lock during the arc; on exit, retargets the
-        lock to the new heading and resumes.
+        Auto-suspends the lock during the arc; on exit, retargets the lock to
+        the ACTUAL measured heading (not `target_yaw`, so a partial arc doesn't
+        yank the resumed lock toward a heading the hull isn't at) and resumes.
 
         impl: motion_forward.arc -> pixhawk.send_rc_override (Ch5+Ch4 same packet).
         """
@@ -488,11 +494,11 @@ class Duburi(VisionVerbs):
             self._ensure_yaw_capable_mode()
             self.log.info(
                 f'[CMD  ] arc  {duration:.1f}s  gain={gain:.0f}%  '
-                f'yaw_rate={yaw_rate_pct:+.0f}%  settle={settle:.1f}s')
+                f'-> {target_yaw:.0f}deg  settle={settle:.1f}s')
             with self._suspend_heading_lock():
                 signed_dir = +1 if gain >= 0 else -1
                 motion_arc(self.pixhawk, signed_dir, duration, abs(int(gain)),
-                           yaw_rate_pct, self.log,
+                           float(target_yaw), self.log,
                            yaw_source=self.yaw_source, settle=settle,
                            abort_fn=self._abort_fn)
             new_heading = self._current_heading()

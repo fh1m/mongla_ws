@@ -11,7 +11,7 @@ all read from here -- adding a new command is two edits, no more:
 
 Field names map directly to fields on `duburi_interfaces.action.Move`
 (`duration`, `gain`, `target`, `target_name`, `timeout`, `settle`,
-`yaw_rate_pct`). The dispatch just does
+`target_yaw`, ...). The dispatch just does
 `getattr(duburi, cmd)(**kwargs_built_from_fields)`.
 
 `defaults` covers the case where the operator omits a field. Any field
@@ -120,12 +120,13 @@ COMMANDS = {
         'defaults': {'flips': 1, 'deg_per_step': 90.0, 'settle': 1.0},
     },
 
-    # ---- Curved (car-style) motion --------------------------------- #
+    # ---- Curved motion to an absolute heading ---------------------- #
     'arc': {
-        'help':     'Curved motion: forward thrust + yaw rate at the same time. '
-                    'gain is forward thrust pct; yaw_rate_pct is signed yaw stick.',
-        'fields':   ['duration', 'gain', 'yaw_rate_pct', 'settle'],
-        'defaults': {'gain': 50.0, 'yaw_rate_pct': 30.0, 'settle': 0.0},
+        'help':     'Curved motion to an ABSOLUTE heading: drives forward at '
+                    '`gain` pct for `duration` s while a PID turns the hull to '
+                    '`target_yaw` (deg) and holds it. Turn direction auto-computed.',
+        'fields':   ['duration', 'gain', 'target_yaw', 'settle'],
+        'defaults': {'gain': 50.0, 'target_yaw': 0.0, 'settle': 0.0},
     },
 
     # ---- Yaw  (sharp pivots) --------------------------------------- #

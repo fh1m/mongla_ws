@@ -136,7 +136,7 @@ def test_move_forward_short_burst_returns_depth(duburi, monkeypatch):
 
 def test_arc_dispatches_to_motion_forward(duburi, monkeypatch):
     monkeypatch.setattr(time, 'sleep', lambda *_: None)
-    result = duburi.arc(duration=0.05, gain=50.0, yaw_rate_pct=30.0)
+    result = duburi.arc(duration=0.05, gain=50.0, target_yaw=30.0)
     assert isinstance(result, Move.Result)
     assert result.success is True
     # arc emits packets with both forward + yaw -- this is the
