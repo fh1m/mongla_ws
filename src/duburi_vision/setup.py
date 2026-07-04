@@ -35,6 +35,7 @@ setup(
             'tracker_check       = duburi_vision.utils.check_tracker:main',
             'vision_display      = duburi_vision.utils.display_node:main',
             'export_engine       = duburi_vision.utils.export_engine:main',
+            'switch_camera       = duburi_vision.utils.switch_camera:main',
             'depth_estimation_node = duburi_vision.depth.depth_estimation_node:main',
         ],
     },

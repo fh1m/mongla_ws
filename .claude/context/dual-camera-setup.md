@@ -325,6 +325,19 @@ duburi.set_conf(0.55, model='torpedo_blood_hole',  node='/duburi_detector_forwar
 At launch: `fwd_model_conf:=torpedo_blood_hole=0.55` (CSV `name=conf`), alongside the uniform
 `fwd_conf`. Both are live-tunable via `ros2 param set /duburi_detector_forward model_conf "..."`.
 
+**Switching cameras from the CLI** (not in a mission). Use the exclusivity helper, **not** a bare
+`ros2 param set`:
+
+```bash
+ros2 run duburi_vision switch_camera downward   # resumes downward, PAUSES forward (exclusive)
+ros2 run duburi_vision switch_camera forward    # resumes forward,  PAUSES downward
+```
+
+`switch_camera` pauses the others *first*, then resumes the target, so the two-inferring window
+never opens. A bare `ros2 param set /duburi_detector_downward paused false` resumes downward
+**without** pausing forward → both infer → the OOM. Only detectors that are up are touched, so it's
+safe on a single-camera setup. (The mission DSL's `use_camera` does the same thing automatically.)
+
 ## 6. `mavlink-camera-manager` — evaluated, NOT adopted
 <https://github.com/mavlink/mavlink-camera-manager> is a capable multi-camera streamer, but it
 targets MAVLink/GCS video streaming, not our ROS2 `image_raw` + on-Jetson YOLO detection path.

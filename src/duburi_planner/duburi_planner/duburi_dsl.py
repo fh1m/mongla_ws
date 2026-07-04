@@ -759,11 +759,15 @@ class DuburiMission:
         # live one. This makes the invariant "exactly one detector infers" hold
         # from the first switch regardless of the launch `paused` state, so a
         # stray `paused:=false` (both inferring, the OOM config) is corrected the
-        # moment the mission calls use_camera. Pausing an absent/already-paused
-        # detector is a quiet no-op (single-camera runs log at debug, not warn).
+        # moment the mission calls use_camera. Gated on a FAST graph existence
+        # check (get_node_names) so an absent counterpart is skipped instantly --
+        # otherwise pause_detector -> _ensure_detector would eat its 5 s
+        # wait_for_service on every switch of a single-camera run.
         for other in self._KNOWN_CAMERAS:
             if other == name:
                 continue
+            if not self._detector_present(other):
+                continue                     # not up -> nothing to pause (no 5 s wait)
             try:
                 self.pause_detector(other)   # exclusivity: only one detector runs
             except Exception as exc:         # noqa: BLE001 -- best-effort
@@ -838,6 +842,22 @@ class DuburiMission:
         if node:
             return node
         return f'/duburi_detector_{camera or self.camera}'
+
+    def _detector_present(self, camera: str) -> bool:
+        """Fast graph check: is the ``camera`` detector node currently up?
+
+        Reads the discovery graph (``get_node_names``) -- instant, no service
+        wait -- so the exclusivity loop can SKIP an absent counterpart instead of
+        paying ``_ensure_detector``'s 5 s ``wait_for_service`` on every switch of a
+        single-camera run. Best-effort: any error -> treat as absent (skip).
+        """
+        node = self._detector_node(camera)
+        want = node.lstrip('/')
+        try:
+            names = self.client.node.get_node_names()
+        except Exception:   # noqa: BLE001 -- graph read is best-effort
+            return False
+        return want in names or node in names
 
     def _ensure_detector(self, node: str, *, timeout: float = 5.0) -> None:
         """Abort the mission LOUDLY if detector ``node`` is not on the graph.
