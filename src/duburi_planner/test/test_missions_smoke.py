@@ -93,3 +93,28 @@ def test_syntax_error_file_is_skipped_not_fatal(tmp_path, monkeypatch):
     reg = discover()                                   # must NOT raise
     assert 'fine' in reg
     assert 'typo' not in reg
+
+
+# --------------------------------------------------------------------------- #
+#  DSL-M2: the runner disarms on EVERY exit (success + failure), so a          #
+#  standalone task chunk can never finish ARMED.                               #
+# --------------------------------------------------------------------------- #
+from unittest.mock import MagicMock, call
+from duburi_planner.mission import _safe_shutdown
+
+
+def test_safe_shutdown_releases_stops_disarms_in_order():
+    d = MagicMock()
+    _safe_shutdown(d)
+    d.unlock_heading.assert_called_once()
+    d.stop.assert_called_once()
+    d.disarm.assert_called_once()
+
+
+def test_safe_shutdown_continues_after_a_step_fails():
+    # a failure on one step must NOT prevent the disarm (each step isolated)
+    d = MagicMock()
+    d.unlock_heading.side_effect = RuntimeError('lock stuck')
+    d.stop.side_effect = RuntimeError('stop failed')
+    _safe_shutdown(d)                       # must not raise
+    d.disarm.assert_called_once()           # disarm still attempted

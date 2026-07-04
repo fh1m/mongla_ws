@@ -8,6 +8,7 @@ Run:
 """
 import sys
 import os
+import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
@@ -505,3 +506,56 @@ def test_run_fsm_safe_exit_never_raises_from_cleanup():
     sm = MagicMock(return_value='SUCCEED')
     # a failing disarm/release in the finally must not mask the outcome
     assert run_fsm(duburi, sm) == 'SUCCEED'
+
+
+# ── DuburiState safety CEILING (DSL-H3: timed_out() wired into execute) ────────
+class TestStateTimeoutCeiling:
+    """A state that overruns its TIMEOUT_S must stop() + route to ABORT (-> SURFACE
+    in every plan). Previously timed_out() was never called (dead code)."""
+
+    def _slow_state(self, d, run_s, ceiling_s, outcome=SUCCEED):
+        from duburi_planner.state_machines.core.base_state import DuburiState
+
+        class _Slow(DuburiState):
+            TIMEOUT_S = ceiling_s
+
+            def _run(self, bb):
+                time.sleep(run_s)
+                return outcome
+
+        return _Slow(d, VehicleProfile.dubomini(), [SUCCEED, FAILED])
+
+    def test_overrun_returns_abort_and_stops(self):
+        d = _duburi()
+        state = self._slow_state(d, run_s=0.05, ceiling_s=0.01)   # runs past ceiling
+        assert state.execute(Blackboard()) == ABORT
+        d.stop.assert_called_once()
+
+    def test_within_ceiling_keeps_natural_outcome(self):
+        d = _duburi()
+        state = self._slow_state(d, run_s=0.0, ceiling_s=10.0, outcome=SUCCEED)
+        assert state.execute(Blackboard()) == SUCCEED
+        d.stop.assert_not_called()   # no ceiling trip -> no safety stop
+
+    def test_overrun_records_error(self):
+        d = _duburi()
+        bb = Blackboard()
+        state = self._slow_state(d, run_s=0.05, ceiling_s=0.01)
+        state.execute(bb)
+        assert 'TIMEOUT_S' in str(bb[BK.LAST_ERROR])
+
+    def test_exception_still_aborts_even_if_also_overran(self):
+        # an exception path takes precedence and still returns ABORT (not double-handled)
+        from duburi_planner.state_machines.core.base_state import DuburiState
+
+        class _Boom(DuburiState):
+            TIMEOUT_S = 0.01
+
+            def _run(self, bb):
+                time.sleep(0.03)
+                raise RuntimeError('boom')
+
+        d = _duburi()
+        state = _Boom(d, VehicleProfile.dubomini(), [SUCCEED])
+        assert state.execute(Blackboard()) == ABORT
+        d.stop.assert_called_once()

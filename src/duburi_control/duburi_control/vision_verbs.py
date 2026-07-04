@@ -291,6 +291,14 @@ class VisionVerbs:
         """
         abort_fn = self._abort_fn
 
+        # ponytail: CTRL-14 residual -- this thread reads the SHARED _abort_event,
+        # which the NEXT command clears. In the narrow window where an emergency
+        # abort is set during the inter-shot gap and a new command clears it before
+        # this thread's next 0.1 s poll, a queued shot could still leave. A full fix
+        # needs a per-fire cancel token, but the fire is deliberately non-blocking so
+        # a delayed shot OUTLIVES the align scope (payload.fire can sleep ~2 s) -- so
+        # "abort when the scope exits" would wrongly cancel a legit delayed shot.
+        # Deferred rather than risk the fire path pre-competition; the gap is 0.1 s.
         def _run():
             for i, ch in enumerate(channels):
                 if abort_fn is not None and abort_fn():
