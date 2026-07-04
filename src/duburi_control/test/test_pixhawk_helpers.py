@@ -169,3 +169,77 @@ def test_mav_silent_when_log_is_none():
     # default of None to make sure that path stays free.
     px = Pixhawk(_StubMaster(), log=None)
     px._log_mavlink('this should silently no-op')
+
+
+# --------------------------------------------------------------------------- #
+#  MAVLink write-lock: concurrent sends must be SERIALIZED (no torn frames).   #
+#  A fake master.mav records whether any two rc_channels_override_send calls   #
+#  ever overlap; with the _tx_lock they never should.                          #
+# --------------------------------------------------------------------------- #
+import threading
+import time as _time
+from unittest.mock import MagicMock
+
+
+class _OverlapDetectingMav:
+    """Flags if two sends are ever in-flight at once (unserialized writes)."""
+    def __init__(self):
+        self._active = 0
+        self.overlap = False
+        self._probe = threading.Lock()
+
+    def _enter(self):
+        with self._probe:
+            self._active += 1
+            if self._active > 1:
+                self.overlap = True
+
+    def _exit(self):
+        with self._probe:
+            self._active -= 1
+
+    def rc_channels_override_send(self, *a, **k):
+        self._enter()
+        _time.sleep(0.001)          # widen the window a torn frame would use
+        self._exit()
+
+    def __getattr__(self, _name):   # any other *_send -> same overlap probe
+        def _fn(*a, **k):
+            self._enter(); _time.sleep(0.0005); self._exit()
+        return _fn
+
+
+def _pixhawk_with_overlap_mav():
+    from duburi_control.pixhawk import Pixhawk
+    master = MagicMock()
+    master.mav = _OverlapDetectingMav()
+    master.target_system = 1
+    master.target_component = 1
+    return Pixhawk(master), master.mav
+
+
+def test_tx_lock_serializes_concurrent_rc_sends():
+    px, mav = _pixhawk_with_overlap_mav()
+    # 8 threads hammering the RC override path (heading-lock + heartbeat +
+    # action-thread + mocap all writing at once, the real 5-writer race).
+    def hammer():
+        for _ in range(25):
+            px.send_rc_override(1500, 1500, 1500, 1600, 1500, 1500)
+    threads = [threading.Thread(target=hammer) for _ in range(8)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    assert mav.overlap is False, 'two rc_channels_override_send overlapped -> torn frame'
+
+
+def test_tx_lock_serializes_mixed_send_types():
+    px, mav = _pixhawk_with_overlap_mav()
+    # Mixed writers: RC override vs depth setpoint vs mocap vs heartbeat.
+    def rc():   [px.send_rc_yaw_only(1600) for _ in range(20)]
+    def dep():  [px.set_target_depth(-1.0) for _ in range(20)]
+    def moc():  [px.send_att_pos_mocap(30.0) for _ in range(20)]
+    def hb():   [px.send_heartbeat() for _ in range(20)]
+    fns = (rc, dep, moc, hb, rc, dep, moc, hb)   # 8 fresh threads (no reuse)
+    threads = [threading.Thread(target=f) for f in fns]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    assert mav.overlap is False, 'mixed MAVLink writes overlapped -> torn frame'
