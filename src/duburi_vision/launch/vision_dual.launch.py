@@ -103,8 +103,18 @@ def generate_launch_description():
                                           'on the downward detector. Empty = single dwn_model.'),
         DeclareLaunchArgument('dwn_classes',  default_value='fire,blood',
                               description='Class filter for the downward detector'),
-        DeclareLaunchArgument('fwd_conf',     default_value='0.35'),
-        DeclareLaunchArgument('dwn_conf',     default_value='0.35'),
+        DeclareLaunchArgument('fwd_conf',     default_value='0.35',
+                              description='Uniform conf for the forward detector '
+                                          '(every model unless overridden below)'),
+        DeclareLaunchArgument('dwn_conf',     default_value='0.35',
+                              description='Uniform conf for the downward detector'),
+        # Per-model conf overrides (CSV name=conf) -- tighten one model without
+        # touching the others, e.g. fwd_model_conf:=torpedo_blood_hole=0.55.
+        DeclareLaunchArgument('fwd_model_conf', default_value='',
+                              description='Per-model conf overrides on forward, '
+                                          'CSV name=conf (e.g. torpedo_blood_hole=0.55)'),
+        DeclareLaunchArgument('dwn_model_conf', default_value='',
+                              description='Per-model conf overrides on downward, CSV name=conf'),
         DeclareLaunchArgument('device_cls',   default_value='cuda:0',
                               description='Inference device for YOLO (cuda:0 | cpu)'),
         DeclareLaunchArgument('imgsz',        default_value='640',
@@ -163,7 +173,7 @@ def generate_launch_description():
         )
 
     def detector(profile: str, model_arg: str, models_arg: str,
-                 classes_arg: str, conf_arg: str) -> Node:
+                 classes_arg: str, conf_arg: str, model_conf_arg: str) -> Node:
         return Node(
             package='duburi_vision', executable='detector_node',
             name=f'duburi_detector_{profile}', output='screen', ros_arguments=_QUIET,
@@ -177,6 +187,7 @@ def generate_launch_description():
                 'device':              LaunchConfiguration('device_cls'),
                 'classes':             LaunchConfiguration(classes_arg),
                 'conf':                LaunchConfiguration(conf_arg),
+                'model_conf':          LaunchConfiguration(model_conf_arg),
                 'imgsz':               LaunchConfiguration('imgsz'),
                 'max_det':             LaunchConfiguration('max_det'),
                 'half':                True,
@@ -214,8 +225,10 @@ def generate_launch_description():
     return LaunchDescription(args + [
         camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop', 'fwd_device_path'),
         camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop', 'dwn_device_path'),
-        detector('forward',  'fwd_model', 'fwd_models', 'fwd_classes', 'fwd_conf'),
-        detector('downward', 'dwn_model', 'dwn_models', 'dwn_classes', 'dwn_conf'),
+        detector('forward',  'fwd_model', 'fwd_models', 'fwd_classes',
+                 'fwd_conf', 'fwd_model_conf'),
+        detector('downward', 'dwn_model', 'dwn_models', 'dwn_classes',
+                 'dwn_conf', 'dwn_model_conf'),
         tracker('forward'),
         tracker('downward'),
         viewer,
