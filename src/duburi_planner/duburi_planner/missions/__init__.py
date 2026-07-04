@@ -42,8 +42,25 @@ import importlib
 import importlib.util
 import os
 import pkgutil
+import sys
+import traceback
 from pathlib import Path
 from typing import Callable, Dict
+
+
+def _warn_bad_mission(name: str, exc: Exception) -> None:
+    """Loud stderr warning for a mission file that failed to import.
+
+    We SKIP it and keep the rest of the registry runnable -- on competition day
+    one stale/half-edited file (e.g. a scratch `test.py`) must never brick
+    `mission <the-good-one>`. The warning keeps the dev-time "author notices"
+    property without the fatal "whole runner dies".
+    """
+    print(f'\033[33m[missions] SKIPPED {name!r}: {type(exc).__name__}: {exc}\033[0m',
+          file=sys.stderr)
+    # Full traceback at DEBUG-ish verbosity so the author can still fix it.
+    if os.environ.get('DUBURI_MISSIONS_VERBOSE'):
+        traceback.print_exc()
 
 
 def _find_src_missions_dir() -> Path | None:
@@ -80,8 +97,10 @@ def discover() -> Dict[str, Callable]:
     """Walk missions and return {mission_name: run_callable}.
 
     Skips private modules (``_*.py``) and modules that don't expose a
-    callable ``run``. Import errors propagate -- a broken mission file
-    should fail loudly so authors notice immediately.
+    callable ``run``. A module that FAILS to import is SKIPPED with a loud
+    stderr warning (not fatal) so one broken/stale file can't brick the whole
+    registry on competition day -- the other missions stay runnable. Set
+    ``DUBURI_MISSIONS_VERBOSE=1`` for the full traceback.
 
     Loads from the source tree when found (hot-reload); falls back to
     the installed package otherwise.
@@ -94,12 +113,16 @@ def discover() -> Dict[str, Callable]:
             name = py_file.stem
             if name.startswith('_'):
                 continue
-            spec = importlib.util.spec_from_file_location(
-                f'duburi_planner.missions.{name}', py_file)
-            if spec is None or spec.loader is None:
+            try:
+                spec = importlib.util.spec_from_file_location(
+                    f'duburi_planner.missions.{name}', py_file)
+                if spec is None or spec.loader is None:
+                    continue
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)  # type: ignore[union-attr]
+            except Exception as exc:   # noqa: BLE001 -- one bad file must not brick the registry
+                _warn_bad_mission(name, exc)
                 continue
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)  # type: ignore[union-attr]
             run = getattr(module, 'run', None)
             if callable(run):
                 found[name] = run
@@ -111,7 +134,11 @@ def discover() -> Dict[str, Callable]:
         name = module_info.name
         if name.startswith('_'):
             continue
-        module = importlib.import_module(f'{__name__}.{name}')
+        try:
+            module = importlib.import_module(f'{__name__}.{name}')
+        except Exception as exc:   # noqa: BLE001 -- one bad file must not brick the registry
+            _warn_bad_mission(name, exc)
+            continue
         run = getattr(module, 'run', None)
         if callable(run):
             found[name] = run
