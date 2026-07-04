@@ -45,7 +45,7 @@ class DuburiState(State):
     def execute(self, blackboard: Blackboard) -> str:
         self._start = time.monotonic()
         try:
-            return self._run(blackboard)
+            outcome = self._run(blackboard)
         except Exception as exc:
             try:
                 self.duburi.stop()
@@ -53,6 +53,28 @@ class DuburiState(State):
                 pass
             blackboard[BK.LAST_ERROR] = str(exc)
             return ABORT
+
+        # Safety CEILING (this is what makes timed_out() live -- previously nothing
+        # ever called it, so every state's TIMEOUT_S was inert). TIMEOUT_S sits with
+        # margin above each state's own verb timeout (SetDepthState uses
+        # set_depth(timeout=TIMEOUT_S-2); vision states use duration+10), so a normal
+        # SUCCEED always completes well under it -- this only fires on a genuine
+        # RUNAWAY (a verb that blew past its own bound). We route the overrun through
+        # ABORT (stop() + ABORT), NOT a fresh TIMEOUT return: ABORT is wired on EVERY
+        # add_state in every plan (-> SURFACE), whereas TIMEOUT transitions are only
+        # partially present, so returning TIMEOUT from a state whose plan omitted it
+        # would raise in YASMIN. Same safe destination (SURFACE), zero plan churn.
+        # (VisionSearchState still returns TIMEOUT explicitly via its own path.)
+        if outcome not in (TIMEOUT, ABORT) and self.timed_out():
+            try:
+                self.duburi.stop()
+            except Exception:
+                pass
+            blackboard[BK.LAST_ERROR] = (
+                f'{type(self).__name__} exceeded TIMEOUT_S='
+                f'{self.TIMEOUT_S:.0f}s (ran {self.elapsed():.0f}s) -> ABORT')
+            return ABORT
+        return outcome
 
     # ------------------------------------------------------------------
     # Subclass API

@@ -1543,6 +1543,36 @@ def test_depth_setpoint_never_shallower_than_floor():
         'setpoint must never rise above the surface floor'
 
 
+# A shallow floor the descent actually REACHES within the test window, so the
+# clamp genuinely engages (starts ~-0.5, steps deeper ~0.05/update at 5 Hz).
+_FWD_FLOOR = -0.7
+
+
+def test_forward_depth_deep_floor_clamps():
+    # CTRL-11: the FORWARD depth axis is two-sided -- a target persistently BELOW
+    # centre (ey=+1) walks the setpoint deeper. With max_depth_m set (<0) it must
+    # never pass that deep floor (pool-floor guard), symmetric with the downward path.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ey=+1.0, age_s=0.0)), pix=pix, axes={'depth'},
+           depth_step=0.1, duration=2.0, align_stable_frames=99, depth_sign=+1,
+           max_depth_m=_FWD_FLOOR)
+    assert pix.depths, 'expected depth updates'
+    assert all(d >= _FWD_FLOOR - 1e-9 for d in pix.depths), \
+        f'forward depth must never pass max_depth_m ({min(pix.depths)} < {_FWD_FLOOR})'
+    assert min(pix.depths) == pytest.approx(_FWD_FLOOR, abs=0.06), \
+        'the descent must actually REACH the floor (else the clamp is untested)'
+
+
+def test_forward_depth_unbounded_without_max_depth_regression():
+    # max_depth_m unset (>=0) -> forward path byte-unchanged: the setpoint steps
+    # deeper PAST where the floor would have clamped it, proving the fix is opt-in.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ey=+1.0, age_s=0.0)), pix=pix, axes={'depth'},
+           depth_step=0.1, duration=2.0, align_stable_frames=99, depth_sign=+1)
+    assert min(pix.depths) < _FWD_FLOOR - 1e-3, \
+        'without max_depth_m the forward depth axis is unclamped (regression guard)'
+
+
 # --------------------------------------------------------------------------- #
 #  Yaw floor taper (the close-in yaw-jitter fix)                               #
 # --------------------------------------------------------------------------- #
