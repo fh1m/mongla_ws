@@ -243,3 +243,62 @@ def test_tx_lock_serializes_mixed_send_types():
     for t in threads: t.start()
     for t in threads: t.join()
     assert mav.overlap is False, 'mixed MAVLink writes overlapped -> torn frame'
+
+
+# --------------------------------------------------------------------------- #
+#  Link-loss freshness gate: a stale cached HEARTBEAT must NOT report a live   #
+#  armed/ALT_HOLD (which would let command preconditions pass on a dead link). #
+# --------------------------------------------------------------------------- #
+from duburi_control.pixhawk import _LINK_STALE_S
+from pymavlink import mavutil as _mavutil
+
+
+def _hb(*, armed, custom_mode=0, age_s=0.0):
+    """A fake autopilot HEARTBEAT `age_s` seconds old."""
+    m = MagicMock()
+    m.autopilot = _mavutil.mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA  # not INVALID
+    m.base_mode = (_mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED if armed else 0)
+    m.custom_mode = custom_mode
+    m._timestamp = _time.time() - age_s
+    return m
+
+
+def _pixhawk_with_hb(hb):
+    from duburi_control.pixhawk import Pixhawk
+    master = MagicMock()
+    master.mav = MagicMock()
+    master.messages = {'HEARTBEAT': hb} if hb is not None else {}
+    master.mode_mapping.return_value = {'ALT_HOLD': 2, 'MANUAL': 19}
+    return Pixhawk(master)
+
+
+def test_fresh_heartbeat_reports_armed():
+    px = _pixhawk_with_hb(_hb(armed=True, custom_mode=2, age_s=0.0))
+    assert px.is_armed() is True
+    assert px.get_mode() == 'ALT_HOLD'
+    assert px.link_alive() is True
+
+
+def test_stale_heartbeat_reports_not_armed_and_unknown_mode():
+    # link died: last heartbeat is well past the stale window
+    px = _pixhawk_with_hb(_hb(armed=True, custom_mode=2, age_s=_LINK_STALE_S + 2))
+    assert px.is_armed() is False          # precondition BLOCKS instead of driving
+    assert px.get_mode() == 'UNKNOWN'      # never a stale ALT_HOLD
+    assert px.link_alive() is False
+
+
+def test_missing_timestamp_treated_fresh():
+    # test-style mock with no _timestamp -> treated fresh (get_attitude_age rule)
+    hb = _hb(armed=True, custom_mode=2)
+    del hb._timestamp
+    px = _pixhawk_with_hb(hb)
+    assert px.is_armed() is True
+    assert px.heartbeat_age() == 0.0
+
+
+def test_no_heartbeat_is_link_dead():
+    px = _pixhawk_with_hb(None)
+    assert px.is_armed() is False
+    assert px.get_mode() == 'UNKNOWN'
+    assert px.heartbeat_age() is None
+    assert px.link_alive() is False
