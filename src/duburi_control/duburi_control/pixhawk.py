@@ -594,35 +594,27 @@ class Pixhawk:
         age = self.heartbeat_age()
         return age is not None and age <= _LINK_STALE_S
 
-    def _live_autopilot_heartbeat(self):
-        """The latest autopilot HEARTBEAT, or None if the link is stale/dead.
-
-        Freshness-gates ``_autopilot_heartbeat`` so a heartbeat cached before the
-        link died can never make ``is_armed()``/``get_mode()`` report a stale
-        "armed/ALT_HOLD" (which would let a command precondition pass on a dead
-        link). A msg without ``_timestamp`` (test mocks) is treated as fresh.
-        """
+    def get_mode(self):
+        # Uses the CACHED heartbeat, NOT the freshness-gated one: arm/mode are
+        # hard per-command preconditions (duburi.py `_command_scope` /
+        # `_ensure_alt_hold`). Gating them on link freshness (CTRL-2's first cut)
+        # turned normal 1 Hz-heartbeat jitter into spurious 'UNKNOWN' -> mode
+        # re-engage / abort -> disarm. A truly dead link is owned by ArduSub's
+        # own failsafe; RC into the void is harmless. Link health is surfaced
+        # separately, advisory-only, via link_alive()/heartbeat_age().
         msg = self._autopilot_heartbeat()
         if msg is None:
-            return None
-        ts = getattr(msg, '_timestamp', None)
-        if ts is not None and (time.time() - ts) > _LINK_STALE_S:
-            return None
-        return msg
-
-    def get_mode(self):
-        msg = self._live_autopilot_heartbeat()
-        if msg is None:
-            return 'UNKNOWN'   # no link (or none yet) -> never a stale mode
+            return 'UNKNOWN'
         mode_map = {v: k for k, v in self.master.mode_mapping().items()}
         return mode_map.get(msg.custom_mode, str(msg.custom_mode))
 
     def is_armed(self):
-        # Freshness-gated: a dead link -> None -> False, so a motion verb's
-        # "must be armed" precondition BLOCKS on a lost link instead of driving
-        # on a stale "armed". (arm()/disarm() poll this; a link death mid-arm
-        # keeps polling to timeout, which is the correct, safe outcome.)
-        msg = self._live_autopilot_heartbeat()
+        # Cached heartbeat (see get_mode): the arm precondition must reflect the
+        # last KNOWN arm state, which only changes on OUR arm()/disarm() -- never
+        # flip it to False on a transient heartbeat gap, or every motion verb
+        # raises NotArmedError mid-mission and the runner disarms. link_alive()
+        # is the advisory link-health signal for the manager to log.
+        msg = self._autopilot_heartbeat()
         if msg is None:
             return False
         return bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
