@@ -907,11 +907,18 @@ def align_loop(*,
                 # each step before the next: slow, stable, resolution = depth_step.
                 if use_vdepth:
                     # FORWARD: image-Y drives the setpoint; FROZEN inside the deadband
-                    # (no z-wobble). eff_ceiling keeps it never shallower than the floor.
+                    # (no z-wobble). eff_ceiling keeps it never shallower than the
+                    # surface guard; max_depth_m (when set <0) keeps it never DEEPER
+                    # than the floor -- the forward axis is two-sided (a target below
+                    # centre drives it deeper), so without this a persistent low target
+                    # could walk the setpoint into the pool floor. Symmetric with the
+                    # downward clamp below; opt-in (max_depth_m>=0 -> forward unchanged).
                     if depth_epx > eff_err:
                         step = _clamp(depth_ctrl * kp_depth * rgain,
                                       -max_nudge, max_nudge) * depth_sign
                         depth_setpoint = min(depth_setpoint - step, eff_ceiling)
+                        if max_depth_m < 0.0:
+                            depth_setpoint = max(depth_setpoint, max_depth_m)
                 else:
                     # DOWNWARD fill->depth: the "approach" (get closer to the bin for the
                     # drop), driven by the SAME depth_step logic as the forward axis --
