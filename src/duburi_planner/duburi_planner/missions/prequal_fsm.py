@@ -4,7 +4,7 @@
 
 Works on both Duburi 4.5 (DVL passes) and Dubomini 2.0 (timed passes).
 """
-from yasmin import Blackboard
+from ..state_machines import run_fsm  # guaranteed disarm-on-exit
 from yasmin_ros import set_ros_loggers
 
 from ..state_machines import build_prequal_fsm, VehicleProfile
@@ -21,5 +21,5 @@ def run(duburi, log):
 
     set_ros_loggers()
     sm = build_prequal_fsm(duburi, profile)
-    outcome = sm(Blackboard())
+    outcome = run_fsm(duburi, sm)  # ALWAYS release-heading + disarm on exit
     log(f'[FSM] mission complete: {outcome}')

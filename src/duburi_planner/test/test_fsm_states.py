@@ -463,3 +463,45 @@ class TestPlanBuilders:
         assert 'SCAN_BIN' in states
         assert 'LOCK_BIN' in states
         assert 'DROP_BIN' in states
+
+
+# --------------------------------------------------------------------------- #
+#  run_fsm: an FSM launcher must ALWAYS release-heading + disarm on exit --    #
+#  even when a state returns ABORT normally or the machine raises (an FSM      #
+#  could otherwise end ARMED; mission.py's except-only backstop won't fire).   #
+# --------------------------------------------------------------------------- #
+from unittest.mock import MagicMock
+from duburi_planner.state_machines import run_fsm
+
+
+def test_run_fsm_disarms_on_normal_abort():
+    duburi = MagicMock()
+    sm = MagicMock(return_value='ABORT')          # terminates ABORT *normally*
+    out = run_fsm(duburi, sm)
+    assert out == 'ABORT'
+    duburi.release_heading.assert_called_once()   # safe exit still runs
+    duburi.disarm.assert_called_once()
+
+
+def test_run_fsm_disarms_on_success():
+    duburi = MagicMock()
+    sm = MagicMock(return_value='SUCCEED')
+    run_fsm(duburi, sm)
+    duburi.disarm.assert_called_once()
+
+
+def test_run_fsm_disarms_even_when_fsm_raises():
+    duburi = MagicMock()
+    sm = MagicMock(side_effect=RuntimeError('state blew up'))
+    with pytest.raises(RuntimeError):
+        run_fsm(duburi, sm)
+    duburi.disarm.assert_called_once()            # finally still disarmed
+
+
+def test_run_fsm_safe_exit_never_raises_from_cleanup():
+    duburi = MagicMock()
+    duburi.disarm.side_effect = RuntimeError('disarm server error')
+    duburi.release_heading.side_effect = RuntimeError('lock error')
+    sm = MagicMock(return_value='SUCCEED')
+    # a failing disarm/release in the finally must not mask the outcome
+    assert run_fsm(duburi, sm) == 'SUCCEED'

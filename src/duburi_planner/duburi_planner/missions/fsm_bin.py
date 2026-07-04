@@ -4,7 +4,7 @@
 
 Pool-day: edit bin_heading and bin_depth_m in params= below (or competition_config.py).
 """
-from yasmin import Blackboard
+from ..state_machines import run_fsm  # guaranteed disarm-on-exit
 from yasmin_ros import set_ros_loggers
 
 from ..state_machines import build_bin_drop_fsm, VehicleProfile
@@ -23,5 +23,5 @@ def run(duburi, log):
         'bin_heading': BIN_HEADING_DEG,
         'bin_depth_m': BIN_DEPTH_M,
     })
-    outcome = sm(Blackboard())
+    outcome = run_fsm(duburi, sm)  # ALWAYS release-heading + disarm on exit
     log(f'[FSM] bin_drop complete: {outcome}')
