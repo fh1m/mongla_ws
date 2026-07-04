@@ -58,3 +58,38 @@ def test_known_missions_are_present():
     reg = discover()
     for name in ('demo_square', 'demo_arc', 'demo_heading_lock'):
         assert name in reg, f'expected mission {name!r} to be registered'
+
+
+# --------------------------------------------------------------------------- #
+#  Resilient registry: ONE broken mission file must not brick the whole runner #
+#  (a stale/half-edited file on comp day can't stop `mission <the-good-one>`). #
+# --------------------------------------------------------------------------- #
+import os
+import sys
+
+
+def test_one_broken_file_does_not_brick_registry(tmp_path, monkeypatch, capsys):
+    from duburi_planner.missions import discover
+    # A folder with one GOOD mission + one that raises at import time.
+    (tmp_path / 'good_one.py').write_text('def run(duburi, log=None):\n    pass\n')
+    (tmp_path / 'broken_one.py').write_text('raise RuntimeError("boom at import")\n')
+    (tmp_path / 'also_good.py').write_text('def run(duburi, log=None):\n    pass\n')
+    monkeypatch.setenv('DUBURI_MISSIONS_DIR', str(tmp_path))
+
+    reg = discover()
+
+    assert 'good_one' in reg and 'also_good' in reg   # good ones survive
+    assert 'broken_one' not in reg                    # broken one skipped, not fatal
+    assert callable(reg['good_one'])
+    err = capsys.readouterr().err
+    assert 'broken_one' in err and 'SKIPPED' in err   # loud warning, still notices
+
+
+def test_syntax_error_file_is_skipped_not_fatal(tmp_path, monkeypatch):
+    from duburi_planner.missions import discover
+    (tmp_path / 'fine.py').write_text('def run(duburi, log=None):\n    pass\n')
+    (tmp_path / 'typo.py').write_text('def run(duburi log):\n    pass\n')  # SyntaxError
+    monkeypatch.setenv('DUBURI_MISSIONS_DIR', str(tmp_path))
+    reg = discover()                                   # must NOT raise
+    assert 'fine' in reg
+    assert 'typo' not in reg
