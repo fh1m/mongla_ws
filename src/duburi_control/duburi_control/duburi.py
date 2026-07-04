@@ -246,13 +246,15 @@ class Duburi(VisionVerbs):
         # captures the heading immediately but suspends the thread (no Ch4
         # correction) until the first armed actuating command resumes it.
         self._lock_deferred    = False
-        # Heartbeat-pause REF COUNT (was a bool -> CTRL-6 bug: with a heading lock
-        # already holding the pause, style_roll's own hold/release would resume the
-        # heartbeat on its release while the lock still needed it paused, letting the
-        # 5 Hz neutral writer race the lock's 50 Hz Ch4). A counter pauses on the
-        # first holder and resumes only when the LAST holder releases; clamped at 0
-        # so the deferred-lock path (release without a matching hold) can't underflow.
-        self._heartbeat_hold_count = 0
+        # Heartbeat-pause guard. Deliberately a BOOL, not a ref count: a bool is
+        # SELF-CORRECTING (a single release always fully resumes), whereas a count
+        # strands PAUSED on any hold/release imbalance -> the 5 Hz neutral stream
+        # stops -> ArduSub FS_PILOT_INPUT DISARMS mid-run. The bool's only failure
+        # is the opposite (a resume while a lock nests under style_roll -> brief
+        # heartbeat-vs-lock Ch4 jitter), harmless next to a disarm. ponytail: this
+        # reverts CTRL-6's counter -- fail-open (over-stream) beats fail-closed
+        # (disarm) for a safety heartbeat; the nesting jitter is the known ceiling.
+        self._lock_holds_heartbeat = False
         # Tracks which channel set the last in-command write touched, so
         # the pre-flight pause can be skipped when the next command uses
         # the same axes. None = no recent write / lock state changed.
@@ -1191,28 +1193,27 @@ class Duburi(VisionVerbs):
                     self._heartbeat.resume()
 
     def _hold_heartbeat_for_lock(self):
-        """Take a heartbeat-pause hold (ref-counted).
+        """Mark the heartbeat held for the entire heading-lock lifetime.
 
-        Pauses the heartbeat on the FIRST holder (count 0 -> 1); further holders
-        (e.g. style_roll while a heading lock already holds it) just bump the
-        count so the pause spans the union of their lifetimes.
+        Idempotent: a deferred lock holds the heartbeat only when it
+        activates, never at capture, so this must not double-pause. The
+        ``_lock_holds_heartbeat`` guard keeps the ref-count balanced with
+        ``_release_heartbeat_for_lock``.
         """
-        if self._heartbeat is not None:
-            if self._heartbeat_hold_count == 0:
-                self._heartbeat.pause()
-            self._heartbeat_hold_count += 1
+        if self._heartbeat is not None and not self._lock_holds_heartbeat:
+            self._heartbeat.pause()
+            self._lock_holds_heartbeat = True
 
     def _release_heartbeat_for_lock(self):
-        """Drop one heartbeat-pause hold; resume only when the LAST holder leaves.
+        """Release a heartbeat hold taken for the lock -- only if one is held.
 
-        Clamped at 0 so the deferred path (a lock captured but never activated,
-        which still calls release at teardown without a matching hold) is a safe
-        no-op instead of underflowing / prematurely resuming.
+        Safe to call on the deferred path (lock captured but never activated,
+        so the heartbeat was never held): it becomes a no-op instead of
+        underflowing the ref-count.
         """
-        if self._heartbeat is not None and self._heartbeat_hold_count > 0:
-            self._heartbeat_hold_count -= 1
-            if self._heartbeat_hold_count == 0:
-                self._heartbeat.resume()
+        if self._heartbeat is not None and self._lock_holds_heartbeat:
+            self._heartbeat.resume()
+            self._lock_holds_heartbeat = False
 
     def _on_lock_timeout(self, lock):
         """Heading lock auto-released on its own timeout (runs in the lock thread).
