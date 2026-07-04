@@ -256,10 +256,19 @@ the pool → `NvMap error 12` / NVML assert / hard lock). Rules that prevent it:
 - `vision_dual.launch.py` brings up both cameras + both detectors (start **paused**) + one HUD.
   **Caveat:** it OPENS BOTH camera streams (paused gates only detector inference) — see §2b; a
   single-camera task is safer on `vision.launch.py`.
-- A vision verb / `use_camera('downward')` **auto-switches** the live detector (pauses forward,
-  resumes downward, only ONE runs → VRAM/bandwidth) and the HUD auto-follows via the latched
-  `/duburi/vision/active_camera` topic. Manual HUD keys still work: `f`=forward `d`=downward
-  `D`=depth-map (the `b` side-by-side key was removed — the HUD streams one camera at a time).
+- **The invariant: BOTH cameras STREAM, only ONE detector INFERS.** `camera_node` (the stream)
+  and `detector_node` (YOLO) are separate processes; `paused` on a detector skips *inference only*
+  (`detector_node.py` `_infer_loop`), the camera keeps publishing `image_raw` the whole time. So a
+  paused camera is still live on the HUD and for `detected()` on the OTHER camera — it just isn't
+  running YOLO. **This exclusivity is the VRAM fix** — the 8 GB OOM is two detectors *inferring at
+  once*, not two models resident (see §4c). It is NOT fixed by unloading models.
+- A vision verb / `use_camera('downward')` **auto-switches** the live detector and the HUD
+  auto-follows via the latched `/duburi/vision/active_camera` topic. `use_camera` pauses **every
+  other known detector** (`_KNOWN_CAMERAS = forward, downward`), not just the previously-live one —
+  so the "exactly one infers" invariant holds **from the first switch even if the node was launched
+  `paused:=false`** (both inferring from t=0 — the config that OOMs). **Norm: launch `paused:=true`
+  and make `use_camera(<first task's cam>)` the mission's first vision line.** Manual HUD keys still
+  work: `f`=forward `d`=downward `D`=depth-map (`b` side-by-side was removed — one camera at a time).
 - **Camera-switch settle:** `use_camera` sleeps `_CAM_SWITCH_SETTLE_S` (**1.5 s**, was 0.6 s) after
   a switch so the resumed detector's first live frames + the HUD re-latch land before the next verb
   steers — a switch happens once per task, so the headroom is free. Override per mission with
@@ -276,6 +285,58 @@ the pool → `NvMap error 12` / NVML assert / hard lock). Rules that prevent it:
 > FORE/AFT in the image must drive **Ch5** (forward/back) — flip `BIN_SURGE_SIGN` if reversed;
 > (2) target displaced LEFT/RIGHT must drive **Ch6** (strafe). If a fore/aft displacement moves
 > Ch6 (or vice-versa), the camera is rotated — fix the mount or the code, do NOT run armed.
+
+## 5.1 Multi-task dual-camera missions (gate → bin → torpedo)
+
+One mission can drive both cameras across several tasks **without relaunching** the vision stack —
+just `use_camera` at each task boundary. Canonical forward → downward → forward sequence:
+
+```python
+duburi.use_camera('forward')                       # gate: forward detector live, downward paused
+duburi.set_model('gate_rescue_repair', node='/duburi_detector_forward')
+duburi.vision.align('gate', yaw=0, lat=0); duburi.vision.move('gate', fwd=80)
+
+duburi.use_camera('downward')                       # bin: downward live, forward paused (auto)
+duburi.set_classes('fire,blood', node='/duburi_detector_downward')
+if duburi.vision.align('fire', camera='downward', lat=0, fwd=0, depth=35, fwd_mode='height'):
+    duburi.fire(3)
+
+duburi.use_camera('forward')                        # torpedo: forward live again, downward paused
+duburi.set_model('torpedo_blood_hole', node='/duburi_detector_forward')  # switch model, same node
+duburi.vision.align('hole', lat=0, depth=0, fwd=55, hold=4.0, fire=1, fire_t=1.5)
+```
+
+- Only ONE detector infers at any point (each `use_camera` pauses the others) → no OOM.
+- The forward detector carries **two models** (`fwd_models:=gate_rescue_repair,torpedo_blood_hole`);
+  `set_model` hot-switches between them — no reload, both are already resident.
+- **Runnable template + the exact launch command:** [`demo_dual_camera`](../../src/duburi_planner/duburi_planner/missions/demo_dual_camera.py)
+  (`ros2 run duburi_planner mission demo_dual_camera`). The real competition run is `task_full_2026`.
+
+**Per-model confidence** (`fwd_models` registry). `duburi.set_conf(x)` sets the threshold for **every**
+model on a detector; `duburi.set_conf(x, model='<name>')` sets it for **one** model, and the override
+**persists across `set_model` switches** (it lives on the model). So the torpedo model can run tight
+while the gate model stays loose on the *same* forward detector:
+
+```python
+duburi.set_conf(0.35, model='gate_rescue_repair',  node='/duburi_detector_forward')
+duburi.set_conf(0.55, model='torpedo_blood_hole',  node='/duburi_detector_forward')
+```
+
+At launch: `fwd_model_conf:=torpedo_blood_hole=0.55` (CSV `name=conf`), alongside the uniform
+`fwd_conf`. Both are live-tunable via `ros2 param set /duburi_detector_forward model_conf "..."`.
+
+**Switching cameras from the CLI** (not in a mission). Use the exclusivity helper, **not** a bare
+`ros2 param set`:
+
+```bash
+ros2 run duburi_vision switch_camera downward   # resumes downward, PAUSES forward (exclusive)
+ros2 run duburi_vision switch_camera forward    # resumes forward,  PAUSES downward
+```
+
+`switch_camera` pauses the others *first*, then resumes the target, so the two-inferring window
+never opens. A bare `ros2 param set /duburi_detector_downward paused false` resumes downward
+**without** pausing forward → both infer → the OOM. Only detectors that are up are touched, so it's
+safe on a single-camera setup. (The mission DSL's `use_camera` does the same thing automatically.)
 
 ## 6. `mavlink-camera-manager` — evaluated, NOT adopted
 <https://github.com/mavlink/mavlink-camera-manager> is a capable multi-camera streamer, but it
