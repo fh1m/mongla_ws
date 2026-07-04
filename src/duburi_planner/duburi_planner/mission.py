@@ -60,6 +60,17 @@ def _try_step(label: str, fn) -> bool:
         return False
 
 
+def _safe_shutdown(duburi) -> None:
+    """Best-effort release-heading + stop + disarm. The uniform end-of-run safety
+    net -- called on BOTH the success and unhandled-exception paths so a mission
+    can never leave the runner ARMED. Each step is isolated (a failure on one
+    still attempts the next) and idempotent (safe if the mission already disarmed).
+    """
+    _try_step('release heading lock', lambda: duburi.unlock_heading())
+    _try_step('stop thrusters',       lambda: duburi.stop())
+    _try_step('disarm',               lambda: duburi.disarm())
+
+
 def _abort_sequence(duburi, log, mission_name: str) -> None:
     """Best-effort safety stop after KeyboardInterrupt.
 
@@ -134,6 +145,15 @@ def main(args=None):
         log.info(f'=== mission "{parsed.name}" -- start ===')
         missions[parsed.name](duburi, log_fn)
         log.info(f'=== mission "{parsed.name}" -- complete OK ===')
+        # Disarm on the SUCCESS path too (DSL-M2). A directly-runnable chunk
+        # (task_bin / task_gate / task_slalom / task_return) only restores its
+        # camera on exit -- run STANDALONE it would otherwise finish ARMED. Doing
+        # it here makes the runner a UNIFORM safety net for EVERY mission however it
+        # ends: missions that already disarm themselves (task_full_2026, demos) are
+        # unaffected (disarm is idempotent + bounded by the client deadline). End of
+        # run = disarmed, always. Chunks CHAINED inside a full run call each other
+        # directly (not via the runner), so they are not disarmed between chunks.
+        _safe_shutdown(duburi)
     except KeyboardInterrupt:
         _abort_sequence(duburi, log, parsed.name)
         exit_code = 130
@@ -145,9 +165,7 @@ def main(args=None):
         # (the manager's emergency stop is the backstop, not the primary). This
         # runner backstop covers EVERY mission uniformly, so individual missions
         # need not each wrap their body in try/finally for safety.
-        _try_step('release heading lock', lambda: duburi.unlock_heading())
-        _try_step('stop thrusters',       lambda: duburi.stop())
-        _try_step('disarm',               lambda: duburi.disarm())
+        _safe_shutdown(duburi)
         exit_code = 1
     finally:
         duburi.log_scoreboard(json_path='auto')
