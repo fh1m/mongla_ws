@@ -11,12 +11,14 @@ from unittest.mock import MagicMock, patch
 from duburi_planner.duburi_dsl import DuburiMission
 
 
-def _fake(live=None):
+def _fake(live=None, present=True):
     m = MagicMock()
     m._live_camera = live
     m._KNOWN_CAMERAS = DuburiMission._KNOWN_CAMERAS
     m._CAM_SWITCH_SETTLE_S = 0.0
     m.cam_switch_settle_s = 0.0
+    # real _detector_present is a fast graph check; default present in tests.
+    m._detector_present.return_value = present
     return m
 
 
@@ -55,4 +57,13 @@ def test_absent_detector_pause_is_swallowed():
     fake = _fake(live=None)
     fake.pause_detector.side_effect = RuntimeError('no downward node')
     _activate(fake, 'forward')              # must not raise
+    fake.resume_detector.assert_called_once_with('forward')
+
+
+def test_absent_counterpart_is_skipped_without_pause_call():
+    # _detector_present False -> the other is never pause_detector'd, so a
+    # single-camera run never enters _ensure_detector's 5 s wait_for_service.
+    fake = _fake(live=None, present=False)
+    _activate(fake, 'forward')
+    fake.pause_detector.assert_not_called()
     fake.resume_detector.assert_called_once_with('forward')
