@@ -198,6 +198,7 @@ def test_mav_silent_when_log_is_none():
 # --------------------------------------------------------------------------- #
 import threading
 import time as _time
+import types
 from unittest.mock import MagicMock
 
 
@@ -326,3 +327,57 @@ def test_no_heartbeat_is_link_dead():
     assert px.get_mode() == 'UNKNOWN'
     assert px.heartbeat_age() is None
     assert px.link_alive() is False
+
+
+# --------------------------------------------------------------------------- #
+#  Barometer calibration: must send PREFLIGHT_CALIBRATION with param3=1.       #
+#  A wrong param would ACK but calibrate NOTHING (silent no-op safety bug), so #
+#  pin the exact command id + param index/value.                              #
+# --------------------------------------------------------------------------- #
+from pymavlink import mavutil as _mavutil
+
+
+class _CalRecordingMav:
+    """Records command_long_send args and injects an ACK, so calibrate_barometer
+    sees a reply like the real FC. `result` is the MAV_RESULT it returns."""
+    def __init__(self, master, result):
+        self._master = master
+        self._result = result
+        self.long_calls = []
+
+    def command_long_send(self, *args):
+        self.long_calls.append(args)
+        # Simulate the FC replying with a COMMAND_ACK for this command id.
+        ack = types.SimpleNamespace(command=args[2], result=self._result)
+        self._master.messages['COMMAND_ACK'] = ack
+
+
+class _CalMaster:
+    target_system = 1
+    target_component = 1
+
+    def __init__(self, result=0):
+        self.messages = {}
+        self.mav = _CalRecordingMav(self, result)
+
+
+def test_calibrate_barometer_sends_preflight_cal_param3_one():
+    master = _CalMaster(result=0)   # ACCEPTED
+    px = Pixhawk(master, log=None)
+    ok, reason = px.calibrate_barometer(timeout=1.0)
+    assert ok is True and reason == 'ACCEPTED'
+    assert len(master.mav.long_calls) == 1
+    args = master.mav.long_calls[0]
+    # args: sys, comp, command, confirmation, p1, p2, p3, p4, p5, p6, p7
+    assert args[2] == _mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION
+    assert args[6] == 1, 'param3 (ground pressure / baro) must be 1'
+    # every other calibration param must be 0 (don't trigger gyro/accel/mag/etc.)
+    assert args[4] == 0 and args[5] == 0 and args[7] == 0
+    assert args[8] == 0 and args[9] == 0 and args[10] == 0
+
+
+def test_calibrate_barometer_reports_failure_result():
+    master = _CalMaster(result=4)   # MAV_RESULT_FAILED
+    px = Pixhawk(master, log=None)
+    ok, reason = px.calibrate_barometer(timeout=1.0)
+    assert ok is False
