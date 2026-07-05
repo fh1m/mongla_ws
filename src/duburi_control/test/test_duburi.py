@@ -44,15 +44,30 @@ class FakePixhawk:
     Duburi reaches for a method we forgot to implement here.
     """
 
-    def __init__(self, *, depth=-0.5, yaw=10.0, mode='ALT_HOLD', armed=True):
+    def __init__(self, *, depth=-0.5, yaw=10.0, mode='ALT_HOLD', armed=True,
+                 cal_ack=(True, 'ACCEPTED'), cal_result_depth=0.0):
         self._attitude = {'yaw': yaw, 'pitch': 0.0, 'roll': 0.0, 'depth': depth}
         self._mode     = mode
         self._armed    = armed
+        # Baro calibration behaviour (test-controllable): the ack the FC returns,
+        # and the depth AHRS2 reports AFTER the re-zero (None = leave depth as-is,
+        # simulating a cal that ACKed but didn't actually zero).
+        self._cal_ack          = cal_ack
+        self._cal_result_depth = cal_result_depth
         self.calls     = []
         self.lock      = threading.Lock()
 
     def get_attitude(self):
         return dict(self._attitude)
+
+    def get_attitude_age(self):
+        return 0.0   # always fresh in tests (matches the _fresh_depth precedent)
+
+    def calibrate_barometer(self, timeout=6.0):
+        self.calls.append(('calibrate_barometer',))
+        if self._cal_result_depth is not None:
+            self._attitude['depth'] = self._cal_result_depth
+        return self._cal_ack
 
     def get_mode(self):
         return self._mode
@@ -377,3 +392,74 @@ def test_make_result_defaults_nan_for_non_vision(duburi):
     r = duburi._make_result(True, 'arm', final_value=-0.5)
     assert math.isnan(r.end_x_px) and math.isnan(r.end_y_px)
     assert r.fill_frac == 0.0 and r.elapsed_s == 0.0
+
+
+# ── depth calibration (barometer re-zero before a dive) ──────────────────────
+def test_calibrate_depth_success_when_surfaced_and_disarmed(monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    # disarmed, slight drift (-0.07m); the fake zeroes depth on calibrate.
+    pixhawk = FakePixhawk(armed=False, depth=-0.07, cal_result_depth=0.0)
+    duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
+    r = duburi.calibrate_depth(settle_s=0.0)
+    assert r.success is True
+    assert ('calibrate_barometer',) in pixhawk.calls
+    assert abs(r.final_value) < 0.05          # verified post-cal depth ~0
+
+
+def test_calibrate_depth_skips_when_armed():
+    # NEVER calibrate a diving hull -- arm-state is the surface proxy.
+    pixhawk = FakePixhawk(armed=True, depth=-1.5)
+    duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
+    r = duburi.calibrate_depth(settle_s=0.0)
+    assert r.success is False                  # standalone verb: skip -> not-success
+    assert ('calibrate_barometer',) not in pixhawk.calls   # never sent the command
+
+
+def test_calibrate_depth_refuses_when_not_at_surface(monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    # disarmed but 0.5m deep (> 0.30 bound) => not surfaced / baro fault => refuse.
+    pixhawk = FakePixhawk(armed=False, depth=-0.5)
+    duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
+    r = duburi.calibrate_depth(settle_s=0.0)
+    assert r.success is False
+    assert ('calibrate_barometer',) not in pixhawk.calls   # refused before sending
+
+
+def test_calibrate_depth_fails_when_post_not_zero(monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    # cal ACKs but depth stays off zero (e.g. wrong CMD param) => verify FAILS.
+    pixhawk = FakePixhawk(armed=False, depth=-0.08, cal_result_depth=-0.20)
+    duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
+    r = duburi.calibrate_depth(settle_s=0.0)
+    assert r.success is False
+    assert ('calibrate_barometer',) in pixhawk.calls       # it DID try
+
+
+def test_mission_reset_calibrates_when_disarmed(monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    pixhawk = FakePixhawk(armed=False, depth=-0.06, cal_result_depth=0.0)
+    duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
+    r = duburi.mission_reset()
+    assert r.success is True                                # reset always succeeds
+    assert ('calibrate_barometer',) in pixhawk.calls        # auto re-zero fired
+
+
+def test_mission_reset_skips_calibration_when_armed(monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    pixhawk = FakePixhawk(armed=True, depth=-1.0)
+    duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
+    r = duburi.mission_reset()
+    assert r.success is True                                # reset duties still done
+    assert ('calibrate_barometer',) not in pixhawk.calls    # armed => auto-skip
+
+
+def test_mission_reset_survives_calibration_error(monkeypatch):
+    # A raising calibration must NEVER break mission_reset's safety duties.
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    pixhawk = FakePixhawk(armed=False, depth=-0.05)
+    def _boom(*a, **k):
+        raise RuntimeError('cal exploded')
+    pixhawk.calibrate_barometer = _boom
+    duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
+    r = duburi.mission_reset()
+    assert r.success is True                                # reset completed anyway

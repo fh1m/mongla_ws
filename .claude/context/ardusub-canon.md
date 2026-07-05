@@ -365,6 +365,18 @@ ArduSub's `parameters-Sub-stable-V4.5.7.html`.
 | `RC_FEEL_RP`         | 50      | leave default.                                                                  |
 | `BARO_ALT_OFFSET`    | 0       | Calibrate at the surface before each session (`MAV_CMD_PREFLIGHT_CALIBRATION`). |
 
+> **Depth re-zero is now automatic (2026-07).** `depth` = `AHRS2.altitude` (baro-derived),
+> which drifts +0.01..0.1 m between power-on and dive. `duburi.mission_reset()` (always the
+> first pre-arm line of every mission) now auto-runs a barometer ground-pressure re-zero
+> (`Pixhawk.calibrate_barometer` → `MAV_CMD_PREFLIGHT_CALIBRATION` **param3=1** →
+> ArduSub `AP::baro().calibrate()`, exactly QGC's "Calibrate Pressure"). Gated on **disarmed**
+> (the surface proxy: mission_reset is always pre-arm, so this runs at the surface and
+> auto-skips if ever reached armed/mid-mission). It reads a fresh depth **before/after** and
+> logs `[BARO ] depth re-zero: pre=-0.07m -> post=+0.00m OK`; a >0.30 m pre-depth is refused
+> (not surfaced / baro fault). Standalone/bench: `ros2 run duburi_planner duburi calibrate_depth`
+> (disarmed, at the surface). NO reboot — a reboot would drop the MAVLink link the manager
+> can't reconnect. ~2.5 s settle so the ~1.5 s calibrate takes effect before the mission dives.
+
 ---
 
 ## 8. Boot and arm sequence (what really happens)
