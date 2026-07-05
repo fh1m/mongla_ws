@@ -232,6 +232,13 @@ class VisionDisplayNode(Node):
         self._last_det_t   = 0.0
         self._last_track_t = 0.0
         self._last_state_t = 0.0
+        # One-way "have we EVER seen a detection" latch, distinct from _last_det_t.
+        # _last_det_t is reset to 0 on a camera switch (health goes stale until the
+        # new detector publishes) -- but the STARTUP splash must NOT re-appear on a
+        # switch (the camera frames keep streaming), so drive the splash off this
+        # latch, which is set once and never reset. Fixes the "HUD shows INITIALIZING
+        # / freezes on every camera switch" report.
+        self._ever_detected = False
 
         # Depth rate estimation — short window, state-message timestamps
         self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
@@ -393,6 +400,7 @@ class VisionDisplayNode(Node):
         with self._det_lock:
             self._detections = dets
         self._last_det_t = time.monotonic()
+        self._ever_detected = True   # one-way latch; splash never returns on a switch
 
     def _on_tracks(self, msg: Detection2DArray) -> None:
         all_dets = array_to_detections(msg)
@@ -751,14 +759,38 @@ def main(args=None):
         _SPLASH_FADE_DUR   = 0.4
         _prev_initializing = True
 
+        # Stall watchdog: a healthy loop iterates faster than the frame timeout
+        # (0.1 s) + budget. If a single iteration takes far longer, the HUD
+        # "froze" (a blocking imshow/waitKey under X, a starved executor so the
+        # frame queue stopped filling, or memory/VRAM pressure). We can't log
+        # DURING a hard freeze, but a freeze that RECOVERS leaves a breadcrumb on
+        # the next tick -- the evidence the "random/idle freeze" report needs.
+        _STALL_WARN_S = 1.5
+        _last_loop_t  = time.monotonic()
+
         while rclpy.ok():
+            _iter_t = time.monotonic()
+            _gap = _iter_t - _last_loop_t
+            if _gap > _STALL_WARN_S:
+                try:
+                    node.get_logger().warn(
+                        f'[DISP ] main loop STALLED {_gap:.2f}s '
+                        f'(qdepth~{node._frame_q.qsize()} fps={node._fps_display:.1f} '
+                        f'cam={node._active_camera}) -- HUD froze then recovered')
+                except Exception:
+                    pass
+            _last_loop_t = _iter_t
+
             # ── Auto-resume when detector first becomes active ──────────────
             if node._video_mode and node._auto_paused_start and node._last_det_t > 0:
                 node._auto_paused_start = False
                 _send_pause(node, False)
 
-            # Splash shows while detector has never published (all modes).
-            _initializing = node._last_det_t == 0
+            # Splash shows only until the detector has EVER published (all modes).
+            # Uses the one-way _ever_detected latch, NOT _last_det_t (which a camera
+            # switch resets to 0) -- so switching cameras no longer re-shows the
+            # startup splash while the new detector spins up.
+            _initializing = not node._ever_detected
 
             # Trigger fade-out on the first tick after detection fires.
             if _prev_initializing and not _initializing:

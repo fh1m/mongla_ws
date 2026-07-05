@@ -11,8 +11,11 @@ Start it AFTER the control stack (``duburi start`` / bringup), then run
 vision missions.
 
 Usage:
-    # Live forward camera, pool gate model:
+    # Live forward camera, pool gate model. On the Jetson pass the PORT-STABLE
+    # by-path symlink (the int device index 0/2 is wrong there -> camera_node
+    # crashes at startup without it):
     ros2 launch duburi_vision vision.launch.py camera:=forward \\
+        device_path:=/dev/duburi_cam_forward \\
         model:=gate_rescue_repair classes:=gate,rescue,repair conf:=0.4
 
     # Headless (mission mode, no OpenCV window):
@@ -74,6 +77,14 @@ def generate_launch_description():
                                           'Drives node names: duburi_detector_<camera>.'),
         DeclareLaunchArgument('device',        default_value='-1',
                               description='/dev/videoN index; -1 = use profile default'),
+        # PORT-STABLE identity (by-path symlink), same as vision_dual. On the Jetson
+        # the forward/downward USB cameras do NOT enumerate at the profile's default
+        # int index (device 0/2) -- without this a single-cam launch opens the wrong
+        # /dev/videoN or none, and WebcamCamera RAISES -> camera_node crashes at
+        # startup. Pass e.g. device_path:=/dev/duburi_cam_forward. Empty = int device.
+        DeclareLaunchArgument('device_path',   default_value='',
+                              description='by-path symlink for the camera (port-stable); '
+                                          'wins over `device`. Empty = int index.'),
         DeclareLaunchArgument('width',         default_value='640'),
         DeclareLaunchArgument('height',        default_value='480'),
         DeclareLaunchArgument('fps',           default_value='30'),
@@ -163,6 +174,7 @@ def generate_launch_description():
             'name':            cam,
             'topic':           topic,
             'device':          LaunchConfiguration('device'),
+            'device_path':     LaunchConfiguration('device_path'),
             'path':            video_file,
             'loop':            LaunchConfiguration('loop'),
             'width':           LaunchConfiguration('width'),

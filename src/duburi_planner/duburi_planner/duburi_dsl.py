@@ -996,6 +996,49 @@ class DuburiMission:
             self._set_detector_param(node, 'model_conf', f'{model}={float(conf)}')
             self.log.info(f"[DSL  ] {node} conf[{model!r}] → {float(conf):.3f}")
 
+    # Manager node that owns the vision.* tunables (declares/re-snapshots them).
+    _MANAGER_NODE = '/duburi_manager'
+
+    def set_vision_param(self, name: str, value: float) -> None:
+        """Set a manager ``vision.*`` tunable live (applies to the NEXT vision goal).
+
+        For per-MISSION control of a deck tunable without touching every verb call
+        -- e.g. a downward bin run fixes its depth floor/ceiling ONCE at the top of
+        the mission instead of passing ``max_depth_m=`` / ``depth_ceiling=`` on each
+        ``vision.align``::
+
+            duburi.set_vision_param('max_depth_m', -1.6)   # enables+bounds the descent
+            duburi.set_vision_param('depth_ceiling', -0.4) # surface guard
+
+        ``name`` is the stem with or without the ``vision.`` prefix. The manager
+        re-snapshots ``vision.*`` per goal, so the next align picks it up. Raises if
+        the manager is absent or the set is rejected (loud, not silent).
+        """
+        param = name if name.startswith('vision.') else f'vision.{name}'
+        self._set_manager_param(param, float(value))
+        self.log.info(f'[DSL  ] {self._MANAGER_NODE} {param} → {float(value):.3f}')
+
+    def _set_manager_param(self, name: str, value) -> None:
+        """Set one parameter on the manager node via SetParameters (in-process)."""
+        node_name = self._MANAGER_NODE
+        ros_node = self.client.node
+        cli = self._param_clients.get(node_name)
+        if cli is None:
+            cli = ros_node.create_client(SetParameters, f'{node_name}/set_parameters')
+            self._param_clients[node_name] = cli
+        if not cli.wait_for_service(timeout_sec=3.0):
+            raise RuntimeError(f'{node_name}/set_parameters unavailable')
+        req = SetParameters.Request(
+            parameters=[Parameter(name=name, value=_param_value(value))])
+        fut = cli.call_async(req)
+        rclpy.spin_until_future_complete(ros_node, fut, timeout_sec=5.0)
+        resp = fut.result()
+        if resp is None:
+            raise RuntimeError(f'set {node_name}.{name} timed out (no response)')
+        res = resp.results[0]
+        if not res.successful:
+            raise RuntimeError(f'set {node_name}.{name}={value!r} rejected: {res.reason}')
+
     def pause_detector(self, camera: str | None = None, *,
                        node: str | None = None) -> None:
         """Pause inference on a detector node (frame still consumed from queue)."""

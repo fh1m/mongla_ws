@@ -83,9 +83,13 @@ the dev-kit ports supply that trivially. A powered hub is *not* required. Two re
 ### Operating rule: ONE camera streaming at a time
 We never run both cameras (or both detectors) simultaneously, so don't. Prefer the **single-camera
 `vision.launch.py`** per task (one MJPEG stream, one detector, one CUDA context — dodges the
-dual-USB *and* the dual-detector OOM). `vision_dual.launch.py` **opens both streams** (the
-`paused` flag only gates detector *inference*, not the stream), so use it only on a bench / with a
-powered hub. The HUD's old `b` **side-by-side view was removed** — it force-streamed both cameras;
+dual-USB *and* the dual-detector OOM). **On the Jetson the single launch also needs the by-path
+symlink** — `ros2 launch duburi_vision vision.launch.py camera:=forward
+device_path:=/dev/duburi_cam_forward`. Without `device_path` it falls back to the profile's int
+index (`device 0`/`2`), which does **not** match the enumerated USB cams there, so `WebcamCamera`
+raises and **camera_node crashes at startup** (`vision.launch.py` exposes `device_path` for exactly
+this). `vision_dual.launch.py` **opens both streams** (the `paused` flag only gates detector
+*inference*, not the stream), so use it only on a bench / with a powered hub. The HUD's old `b` **side-by-side view was removed** — it force-streamed both cameras;
 the HUD now shows exactly one camera (`f`/`d` to switch). See §4b for the launch/DSL matrix.
 
 ---
