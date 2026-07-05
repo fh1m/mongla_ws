@@ -37,6 +37,7 @@ setup(
             'export_engine       = duburi_vision.utils.export_engine:main',
             'switch_camera       = duburi_vision.utils.switch_camera:main',
             'depth_estimation_node = duburi_vision.depth.depth_estimation_node:main',
+            'distance_estimation_node = duburi_vision.distance.distance_estimation_node:main',
         ],
     },
 )

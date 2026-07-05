@@ -1,0 +1,26 @@
+# duburi_vision -- downward optical-flow distance estimator defaults.
+#
+# DVL-free axis-locked odometry: LK flow on the downward camera, rotation-
+# compensated by Pixhawk gyro rates (/duburi/imu_rates), metric-scaled by
+# Bar30 depth + pool_depth_m. Bounded by calc_distance('start'/'stop').
+#
+# CALIBRATE before trusting numbers (see the P1-P3 bench gates):
+#   camera_focal_px : from camera-intrinsics calibration (checkerboard). The
+#                     WHOLE scale rides on this -- a 10% f_px error = 10% distance
+#                     error. Bench: tape-measure a known move at a fixed height.
+#   rot_sign_x/y    : from the STATIC-TILT test -- rotate in place, the
+#                     compensated translation must read ~0. Flip a sign (or note a
+#                     swap) if a pure rotation leaks into distance.
+#   pool_depth_m    : total water column (surface -> floor) at the run site.
+#
+# Live-tune:  ros2 param set /duburi_distance_estimator pool_depth_m 3.5
+
+duburi_distance_estimator:
+  ros__parameters:
+    camera:            downward
+    pool_depth_m:      4.0      # surface->floor metres; set per pool
+    camera_focal_px:   500.0    # f_px from intrinsics calibration (REQUIRED accurate)
+    rot_sign_x:        1.0      # static-tilt calibrated
+    rot_sign_y:        1.0
+    flow_smooth_alpha: 0.4      # EMA on translational flow (0..1; higher=snappier)
+    distance_lateral:  false    # set by the manager per move axis (axial vs lateral)
