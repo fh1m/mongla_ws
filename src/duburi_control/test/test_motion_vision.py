@@ -1472,6 +1472,24 @@ def test_downward_surge_sign_flips_fore_aft():
     assert fwd and max(fwd) < 1500, 'surge_sign=-1 must reverse fore/aft'
 
 
+def test_downward_surge_freshness_decays_with_sample_age():
+    # Parity audit dim (a): the downward SURGE command (Ch5) must be freshness-
+    # decayed like the forward lat/fwd axes -- a stale bbox drives the hull toward
+    # neutral instead of blind-surging on an old sighting. Fresh sample surges hard;
+    # a near-zero-authority-age sample surges much weaker.
+    fresh = _fwd_pwms(_align(_FakeVision(_sample(ey=1.0, age_s=0.0)),
+                             axes={'lat', 'depth'}, downward=True,
+                             err_px=10.0, duration=0.25)[1])
+    stale = _fwd_pwms(_align(_FakeVision(_sample(ey=1.0, age_s=0.35)),
+                             axes={'lat', 'depth'}, downward=True,
+                             err_px=10.0, duration=0.25)[1])
+    fresh_mag = max((abs(p - 1500) for p in fresh), default=0)
+    stale_mag = max((abs(p - 1500) for p in stale), default=0)
+    assert fresh_mag > 0, 'fresh surge should drive Ch5 off neutral'
+    assert stale_mag < fresh_mag * 0.5, \
+        f'a stale sample must decay the surge (stale {stale_mag} vs fresh {fresh_mag})'
+
+
 def test_downward_lat_still_drives_ch6():
     # image-X still drives Ch6 lateral on a downward camera (unchanged).
     _, pix, _ = _align(_FakeVision(_sample(ex=1.0)), axes={'lat', 'depth'},
