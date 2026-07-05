@@ -494,6 +494,48 @@ class Pixhawk:
                 0, message_id, interval_us, 0, 0, 0, 0, 0)
 
     # ------------------------------------------------------------------ #
+    #  Barometer ground-pressure calibration (depth re-zero)              #
+    # ------------------------------------------------------------------ #
+
+    def calibrate_barometer(self, timeout=6.0):
+        """Re-zero the barometer's ground pressure -- QGC's "Calibrate Pressure".
+
+        Sends MAV_CMD_PREFLIGHT_CALIBRATION with param3=1 (ground pressure). On
+        ArduSub this routes to `_handle_command_preflight_calibration_baro` ->
+        `AP::baro().calibrate(true)`, which averages ~5 samples over ~1.5 s, resets
+        the ground reference + alt offset to 0, and only then ACKs. So the ACK
+        arrives AFTER the ~1.5 s blocking calibrate -- `timeout` must exceed it.
+        Requires the vehicle DISARMED (ArduSub rejects it armed); the caller gates
+        that. Returns `(ok, reason)` like `arm()`.
+
+        Fixes the pre-dive depth drift: `depth` is `AHRS2.altitude` (baro-derived),
+        so a stale ground reference makes the surface read non-zero.
+        """
+        cmd = mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION
+        self.clear_ack()
+        self._log_mavlink('PREFLIGHT_CALIBRATION p3=1 (baro ground pressure)')
+        with self._tx_lock:
+            self.master.mav.command_long_send(
+                self.master.target_system, self.master.target_component,
+                cmd, 0,
+                0, 0, 1, 0, 0, 0, 0)   # param3=1 = ground pressure / baro
+
+        # IN_PROGRESS-tolerant wait: ArduSub ACKs ACCEPTED once the blocking
+        # calibrate() returns, but treat an interim IN_PROGRESS (5) as keep-waiting
+        # rather than a failure (wait_ack would return early on any non-zero result).
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            ack = self.master.messages.get('COMMAND_ACK')
+            if ack is not None and ack.command == cmd:
+                if ack.result == mavutil.mavlink.MAV_RESULT_IN_PROGRESS:
+                    time.sleep(0.1)
+                    continue
+                name = MAV_RESULT.get(ack.result, f'RESULT_{ack.result}')
+                return ack.result == 0, name
+            time.sleep(0.05)
+        return False, 'NO_ACK'
+
+    # ------------------------------------------------------------------ #
     #  Telemetry reads — master.messages cache only (non-blocking)        #
     # ------------------------------------------------------------------ #
 

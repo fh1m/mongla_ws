@@ -83,8 +83,8 @@ from duburi_interfaces.action import Move
 from .vision_verbs import VisionVerbs
 from .errors        import ModeChangeError, NotArmedError
 from .heading_lock  import HeadingLock
-from .motion_writers import make_writers
-from .motion_depth  import hold_depth
+from .motion_writers import make_writers, _interruptible_sleep
+from .motion_depth  import hold_depth, _fresh_depth
 from .motion_forward import (
     arc as motion_arc,
     drive_forward_constant, drive_forward_eased, drive_forward_dist,
@@ -105,7 +105,7 @@ from .tracing       import command_scope
 # arm / disarm / set_mode are NOT listed here because they use the
 # tracing-only `command_scope` directly and never enter _command_scope.
 _UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect',
-                         'mission_reset', 'lock_heading'})
+                         'mission_reset', 'lock_heading', 'calibrate_depth'})
 
 # Verbs that do NOT engage a deferred heading lock. lock_heading called while
 # disarmed captures the heading but holds correction suspended until the first
@@ -115,7 +115,7 @@ _UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect',
 # descent is the operator's first commanded motion.
 _LOCK_PASSIVE_VERBS = frozenset({'lock_heading', 'unlock_heading', 'stop',
                                  'pause', 'surface', 'head', 'mission_reset',
-                                 'dvl_connect', 'fire'})
+                                 'dvl_connect', 'fire', 'calibrate_depth'})
 
 
 # Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
@@ -984,7 +984,91 @@ class Duburi(VisionVerbs):
             self._last_axes = None
             self._writers().neutral()
             self.log.info('[CMD  ] mission_reset — heading lock stopped, abort cleared, RC neutral')
+            # Re-zero the barometer so the mission starts on a true depth (fixes the
+            # pre-dive Bar30 drift). BEST-EFFORT: gated on disarmed (arm-state is the
+            # surface proxy -- mission_reset is always pre-arm, so this runs at the
+            # surface and auto-skips if ever reached mid-mission). A cal failure logs
+            # loudly but must NOT break the reset's safety duties above, so it never
+            # raises here (strict=False; sim baro no-ops -> warn + continue).
+            try:
+                self._run_baro_calibration(settle_s=2.5, strict=False)
+            except Exception as exc:   # noqa: BLE001 -- reset must always complete
+                self.log.warning(f'[BARO ] mission_reset calibration skipped: {exc!r}')
             return self._make_result(True, 'mission_reset: completed')
+
+    def calibrate_depth(self, settle_s=2.5):
+        """Re-zero the barometer at the surface so depth reads 0 before a dive.
+
+        The Bar30 depth is `AHRS2.altitude` (baro-derived), which drifts +0.01..0.1m
+        between power-on and dive (temperature / weather). This re-zeroes the ground
+        reference (QGC's "Calibrate Pressure") and VERIFIES it took, so no mission
+        starts on a stale depth. Called auto by `mission_reset` (disarmed only);
+        also a standalone verb for CLI / bench use.
+
+        Sequence (verifiable): disarmed gate -> fresh pre-depth + surface sanity ->
+        MAV_CMD_PREFLIGHT_CALIBRATION (baro) -> settle -> fresh post-depth verify.
+
+        impl: pixhawk.calibrate_barometer -> settle -> _fresh_depth before/after.
+        """
+        with self._command_scope('calibrate_depth'):
+            return self._run_baro_calibration(settle_s=settle_s, strict=True)
+
+    # Depth calibration bounds (metres). Pre-cal depth beyond the surface bound
+    # means "not surfaced or a real baro fault" -- normal drift is 0.01..0.1 m, so
+    # anything past 0.30 m disarmed is refused rather than zeroed at a bad reference
+    # (that would make set_depth drive to the wrong actual depth). Post-cal must land
+    # within the tolerance or the re-zero silently failed (e.g. wrong CMD param).
+    _BARO_SURFACE_BOUND_M = 0.30
+    _BARO_ZERO_TOL_M      = 0.05
+
+    def _run_baro_calibration(self, *, settle_s, strict):
+        """Shared baro re-zero body. `strict` fails on any problem (standalone
+        verb); non-strict logs loudly and returns without raising (mission_reset
+        hook -- must never break the reset's safety duties)."""
+        # Disarmed gate: arm-state is the surface proxy. NEVER calibrate a diving
+        # hull -- that zeroes depth at the wrong reference and set_depth(-1) then
+        # drives to the wrong actual depth.
+        if self.pixhawk.is_armed():
+            self.log.warning(
+                '[BARO ] skip depth calibration -- vehicle ARMED (calibrate only '
+                'DISARMED at the surface)')
+            return self._make_result(not strict, 'calibrate_depth: skipped (armed)')
+
+        pre = _fresh_depth(self.pixhawk)
+        if pre is None:
+            self.log.warning('[BARO ] skip -- no fresh depth reading (AHRS2 stale?)')
+            return self._make_result(not strict, 'calibrate_depth: no depth telemetry')
+        if abs(pre) > self._BARO_SURFACE_BOUND_M:
+            self.log.warning(
+                f'[BARO ] REFUSE depth calibration -- pre-cal depth {pre:+.2f}m '
+                f'exceeds surface bound {self._BARO_SURFACE_BOUND_M:.2f}m '
+                f'(not surfaced or baro fault). NOT re-zeroing.')
+            return self._make_result(
+                not strict, 'calibrate_depth: not at surface', final_value=pre)
+
+        self.log.info(f'[BARO ] depth re-zero: pre={pre:+.3f}m -- calibrating '
+                      f'(disarmed, surface)...')
+        ok, reason = self.pixhawk.calibrate_barometer()
+        if not ok:
+            self.log.warning(f'[BARO ] calibration command failed: {reason}')
+            return self._make_result(not strict,
+                                     f'calibrate_depth: cmd {reason}', final_value=pre)
+
+        # Settle so the ~1.5 s average + estimate converge before we read/verify --
+        # "only launch after calibration finishes". Interruptible for a cancel.
+        _interruptible_sleep(max(0.0, settle_s), self._abort_fn)
+
+        post = _fresh_depth(self.pixhawk)
+        if post is None:
+            self.log.warning('[BARO ] post-cal depth unavailable -- cannot verify')
+            return self._make_result(not strict,
+                                     'calibrate_depth: unverified', final_value=pre)
+        verified = abs(post) <= self._BARO_ZERO_TOL_M
+        tag = 'OK' if verified else 'FAILED (post not ~0)'
+        (self.log.info if verified else self.log.warning)(
+            f'[BARO ] depth re-zero: pre={pre:+.3f}m -> post={post:+.3f}m  {tag}')
+        return self._make_result(verified or not strict,
+                                 f'calibrate_depth: {tag}', final_value=post)
 
     def unlock_heading(self):
         """Stop the heading-lock streamer and send neutral.

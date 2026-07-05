@@ -62,6 +62,13 @@ COMMANDS = {
         'fields':   [],
         'defaults': {},
     },
+    'calibrate_depth': {
+        'help':     'Re-zero the barometer at the surface (QGC "Calibrate Pressure") '
+                    'so depth reads 0 before a dive. DISARMED + surface only; verifies '
+                    'the re-zero took. Auto-run by mission_reset; also standalone.',
+        'fields':   [],
+        'defaults': {},
+    },
     'surface': {
         'help':     'Emergency surface: set depth to 0 m and hold until reached. '
                     'Bypasses command_active gate so it works during a running mission.',
