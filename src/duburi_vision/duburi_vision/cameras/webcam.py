@@ -37,7 +37,10 @@ class WebcamCamera(Camera):
         if not self._cap.isOpened():
             raise RuntimeError(
                 f"webcam: cv2.VideoCapture({device!r}) failed to open. "
-                f"Try a different index, check /dev/video* perms, or pass device='/dev/video0'.")
+                f"On the Jetson the USB cams do NOT sit at the profile's default int "
+                f"index -- pass the PORT-STABLE by-path symlink instead: "
+                f"device_path:=/dev/duburi_cam_<forward|downward> (or a raw "
+                f"/dev/v4l/by-path/...). Otherwise check /dev/video* perms / index.")
 
         # Force MJPEG before resolution/fps — V4L2 locks format first.
         # Without this most USB webcams deliver YUYV (~1-2 fps on USB 2.0).

@@ -30,7 +30,6 @@ from duburi_planner.missions.competition_config import (
     BIN_HEADING_DEG,
     BIN_DEPTH_M,
     BIN_CENTRE_ERR_PX,
-    BIN_SURGE_SIGN,
     BIN_DESCEND_FILL,
     BIN_MAX_DEPTH_M,
     BIN_DEPTH_CEILING_M,
@@ -53,22 +52,30 @@ def run(duburi, log=None):
     # detector (pauses forward, resumes downward) + flips the HUD; set the model +
     # classes for the bin task on that node.
     duburi.use_camera('downward')
-    duburi.set_model('bin_fire_blood', node=_DWN)
-    duburi.set_classes('fire,blood', node=_DWN)
-
     # ── Centre the AUV over the bin, then drop ────────────────────────────────
     # DOWNWARD kwargs (see downward-camera.md): lat = left/right (Ch6),
     # fwd = fore/aft SURGE (Ch5, image-Y, two-sided + braked), depth = DESCENT to a
     # bbox fill %% (BIN_DESCEND_FILL, measured by fwd_mode='height'). ArduSub holds
-    # BIN_DEPTH_M on Ch3; the descent (bounded by BIN_MAX_DEPTH_M) gets closer for
-    # the drop. Creep-search finds the bin on target loss.
+    # BIN_DEPTH_M on Ch3; the descent (bounded by the floor set below) gets closer
+    # for the drop. Creep-search finds the bin on target loss.
+    #
+    # The downward setup (model/classes + the depth-bound tunables) lives INSIDE the
+    # try so that if any of it raises, the finally still restores the forward camera
+    # + forward-safe depth defaults -- never leave the downward detector live or the
+    # floor/ceiling clamping a later forward task.
     try:
+        duburi.set_model('bin_fire_blood', node=_DWN)
+        duburi.set_classes('fire,blood', node=_DWN)
+        # Depth bounds are PER-MISSION now (vision tunables), not per-align kwargs:
+        # set the descent floor + surface guard ONCE here. `surge_sign` is the
+        # permanent vision.surge_sign default (-1) so the align below omits it.
+        duburi.set_vision_param('max_depth_m', BIN_MAX_DEPTH_M)       # floor + enables descent
+        duburi.set_vision_param('depth_ceiling', BIN_DEPTH_CEILING_M)  # surface guard
+
         aligned = duburi.vision.align(
             'fire', camera='downward', lat=0, fwd=0,          # lat+surge centre over bin
             depth=(BIN_DESCEND_FILL or None), fwd_mode='height',  # descend to fill%
             err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, duration=25,
-            surge_sign=BIN_SURGE_SIGN, max_depth_m=BIN_MAX_DEPTH_M,
-            depth_ceiling=BIN_DEPTH_CEILING_M,   # never surface during alignment
             fallback=creep_forward)
 
         # Drop ONLY when centred -- a blind drop wastes the marker into empty water.
@@ -78,10 +85,16 @@ def run(duburi, log=None):
             duburi.pause(2.0)                   # confirm drop complete
         elif log:
             log('[bin_task] never centred over the bin — marker HELD (no blind drop); '
-                'check the downward detector resumed and BIN_SURGE_SIGN')
+                'check the downward detector resumed and vision.surge_sign')
     finally:
-        # Always restore the forward camera (pauses the downward detector) even if a
-        # fire/pause above raised -- never leave the downward detector live.
+        # Restore the forward camera AND the forward-safe depth-bound defaults, so a
+        # later FORWARD task in the same session (e.g. the torpedo standoff) is never
+        # clamped by this bin run's floor/ceiling. Best-effort: never mask the exit.
+        for _p in ('max_depth_m', 'depth_ceiling'):
+            try:
+                duburi.set_vision_param(_p, 0.0)
+            except Exception:   # noqa: BLE001 -- reset is best-effort
+                pass
         duburi.use_camera('forward')
 
 
