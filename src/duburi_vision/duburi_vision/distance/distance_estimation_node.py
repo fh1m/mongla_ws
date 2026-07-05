@@ -30,9 +30,9 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32, Float32MultiArray
+from std_msgs.msg import Float32, Float32MultiArray, String
 from geometry_msgs.msg import Vector3Stamped
-from std_srvs.srv import SetBool
+from rclpy.qos import QoSDurabilityPolicy
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision.distance.flow_math import (
@@ -60,10 +60,6 @@ class DistanceEstimationNode(Node):
         self.declare_parameter('rot_sign_x',       1.0)
         self.declare_parameter('rot_sign_y',       1.0)
         self.declare_parameter('flow_smooth_alpha', 0.4)     # EMA on per-frame translational flow
-        # Projection axis kind: False=axial (along heading, fore/aft move),
-        # True=lateral (heading+90, left/right move). The manager bridge sets
-        # this (SetParameters) from the current move's axis flag BEFORE start.
-        self.declare_parameter('distance_lateral', False)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._pool_depth = float(self.get_parameter('pool_depth_m').value)
@@ -81,7 +77,13 @@ class DistanceEstimationNode(Node):
 
         self._pub_dist  = self.create_publisher(Float32, f'{ns}/distance_traveled', 10)
         self._pub_debug = self.create_publisher(Float32MultiArray, f'{ns}/distance_debug', 10)
-        self.create_service(SetBool, f'{ns}/distance_control', self._on_control)
+        # Control is a LATCHED topic (not a service): fire-and-forget from the
+        # manager, so no synchronous service round-trip is spun on the already-
+        # spinning manager node. Values: 'start_axial' | 'start_lateral' | 'stop'.
+        ctrl_qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                              durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(String, f'{ns}/distance_control',
+                                 self._on_control, ctrl_qos)
 
         self._bridge = CvBridge()
         self._acc    = DistanceAccumulator()
@@ -105,26 +107,23 @@ class DistanceEstimationNode(Node):
             f'[DIST ] camera={cam!r} pool_depth={self._pool_depth:.2f}m '
             f'f_px={self._f_px:.0f} -- IDLE (calc_distance start to arm)')
 
-    # ── control service ─────────────────────────────────────────────────────
-    def _on_control(self, req, resp):
-        if req.data:
-            # start: latch axis from current yaw. axis kind (axial/lateral) is
-            # carried in the request message field via the manager bridge -- here
-            # SetBool only toggles; the axis-kind default is axial. (The manager
-            # passes lateral by pre-setting a param; see _lateral below.)
+    # ── control topic ('start_axial' | 'start_lateral' | 'stop') ────────────
+    def _on_control(self, msg: String) -> None:
+        cmd = str(msg.data or '').strip().lower()
+        if cmd.startswith('start'):
+            lateral = cmd.endswith('lateral')
             yaw = self._yaw_deg if self._yaw_deg is not None else 0.0
-            lateral = bool(self.get_parameter('distance_lateral').value)
             self._acc.start(np.radians(yaw), lateral)
             self._reset_lk()
-            resp.message = (f'distance ACTIVE axis_yaw={yaw:.1f} '
-                            f'{"lateral" if lateral else "axial"}')
-            self.get_logger().info(f'[DIST ] {resp.message}')
-        else:
+            self.get_logger().info(
+                f'[DIST ] ACTIVE axis_yaw={yaw:.1f} '
+                f'{"lateral" if lateral else "axial"}')
+        elif cmd == 'stop':
             d = self._acc.stop()
-            resp.message = f'distance STOPPED total={d:.3f}m'
-            self.get_logger().info(f'[DIST ] {resp.message}')
-        resp.success = True
-        return resp
+            # Publish the frozen total immediately so a stopper reading the
+            # cached distance_traveled sees the final value without a race.
+            self._publish(d, self._last_height, self._n_tracks)
+            self.get_logger().info(f'[DIST ] STOPPED total={d:.3f}m')
 
     # ── inputs ──────────────────────────────────────────────────────────────
     def _on_rates(self, msg: Vector3Stamped) -> None:
