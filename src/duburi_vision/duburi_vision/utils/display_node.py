@@ -238,6 +238,12 @@ class VisionDisplayNode(Node):
         # latch, which is set once and never reset. Fixes the "HUD shows INITIALIZING
         # / freezes on every camera switch" report.
         self._ever_detected = False
+        # Monotonic time of the last camera switch. Between a switch and the first
+        # frame from the new camera the HUD would otherwise silently show the frozen
+        # last frame of the OLD camera ("stuck on forward"). We overlay a "waiting
+        # for stream" screen during that gap so the operator sees the switch is in
+        # progress, not that nothing happened.
+        self._switch_t = 0.0
 
         # Depth rate estimation — short window, state-message timestamps
         self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
@@ -367,6 +373,7 @@ class VisionDisplayNode(Node):
         self._camera = name
         self._last_frame_t = 0.0
         self._last_det_t   = 0.0
+        self._switch_t     = time.monotonic()   # arm the "waiting for stream" overlay
         qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
         self._cam_subs = self._create_cam_subs(name, qos_be)
 
@@ -634,6 +641,26 @@ def _draw_mission_panel(out, *, camera, fps, primary, native_w, native_h,
         pil_text(out, text, (x0 + pad, yy), fs_line, col)
 
 
+def _render_switching(w: int, h: int, camera: str) -> np.ndarray:
+    """Dark 'switching camera' screen shown between a switch and the first frame
+    of the new camera -- so the HUD never silently shows the frozen OLD frame."""
+    img = np.full((h, w, 3), (35, 20, 8), dtype=np.uint8)   # dark navy (BGR)
+    cx, cy = w // 2, h // 2
+    sf = max(0.6, w / 1280.0)
+    title = f'CAMERA -> {str(camera).upper()}'
+    tw, th = pil_text_size(title, 0.9 * sf)
+    pil_text(img, title, (cx - tw // 2, cy - th), 0.9 * sf, (255, 200, 60))
+    sub = 'waiting for stream...'
+    sw, _ = pil_text_size(sub, 0.5 * sf)
+    pil_text(img, sub, (cx - sw // 2, cy + int(30 * sf)), 0.5 * sf, (170, 170, 170))
+    return img
+
+
+# How long after a switch to keep showing the "waiting for stream" screen while
+# the new camera has produced no frame (past this it's a real stall, not a switch).
+_SWITCH_WAIT_S = 3.0
+
+
 def _render_splash(w: int, h: int, elapsed: float, camera: str,
                    fade: float = 1.0) -> np.ndarray:
     """Blue 'Initializing Vision System' splash. fade=1.0 fully opaque, 0.0 transparent."""
@@ -782,6 +809,13 @@ def main(args=None):
                                _render_splash(_SP_W, _SP_H,
                                               now - splash_start,
                                               node._camera, fade=_fade))
+                # Just switched camera and the NEW stream hasn't produced a frame
+                # yet -> show a "switching" screen instead of the frozen old frame
+                # (the "HUD stuck on forward" symptom during a switch).
+                elif (node._last_frame_t == 0.0
+                      and 0.0 < (now - node._switch_t) < _SWITCH_WAIT_S):
+                    cv2.imshow(_WINDOW_NAME,
+                               _render_switching(_SP_W, _SP_H, node._active_camera))
                 key = cv2.waitKeyEx(1)
                 if key in (ord('q'), ord('Q')):
                     break
