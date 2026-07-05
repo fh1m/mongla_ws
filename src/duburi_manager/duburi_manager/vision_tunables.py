@@ -79,6 +79,23 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # MUST be < lost_grace_s and < the tracker buffer in wall-time. Opt-in,
     # pool-validated before enabling -- see precision-alignment.md / known-issues.
     'vision.coast_s':              0.8,
+    # --- downward-camera / depth-bound tunables (moved off per-align kwargs) ---
+    # surge_sign: polarity of the DOWNWARD Ch5 SURGE axis (image-Y -> fore/aft) for
+    # the bottom-cam mount. This hull needs -1 (a target AHEAD must drive FORWARD);
+    # PERMANENT default so no mission has to pass it. Downward-only (the forward path
+    # never reads surge_sign). A mission passing +1 (non-zero) overrides. VERIFY
+    # DISARMED with `vision_thrust_check --camera downward` if the mount changes.
+    'vision.surge_sign':          -1.0,
+    # max_depth_m / depth_ceiling: deepest / shallowest ALLOWED depth setpoint on a
+    # vision_align depth axis (negative metres). Moved here so a downward bin run
+    # sets its floor/ceiling ONCE per mission instead of on every align() call.
+    # Default 0.0 = OFF: the FORWARD depth axis (torpedo standoff) is unchanged, and
+    # the engine's built-in surface guard (_MIN_DEPTH_M) still applies. A downward
+    # mission sets these at startup (duburi.set_vision_param); a NEGATIVE max_depth_m
+    # also enables the downward fill->depth descent (align_loop disables that descent
+    # when max_depth_m >= 0 as a fail-safe against an unbounded dive).
+    'vision.max_depth_m':          0.0,
+    'vision.depth_ceiling':        0.0,
     # NOTE: settle_px is deliberately NOT a deck param. It is a PER-CALL kwarg on
     # vision.align (settle=) because, unlike the knobs above, it also gates the
     # mid-hold fire (both ride the stable-frame counter) -- a global value would
@@ -106,6 +123,9 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'ki_lat':              'vision.ki_lat',
         'ctrl_conf':           'vision.ctrl_conf',
         'coast_s':             'vision.coast_s',
+        'surge_sign':          'vision.surge_sign',
+        'max_depth_m':         'vision.max_depth_m',
+        'depth_ceiling_m':     'vision.depth_ceiling',
     },
     'vision_move': {
         'kp_forward':      'vision.kp_forward',

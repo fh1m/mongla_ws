@@ -37,10 +37,13 @@ SLALOM_FWD_FILL       = 60      # pipe bbox height % of frame at closest pass
 
 # ── Bin (DOWNWARD camera: image-X→lat Ch6, image-Y→surge Ch5, fill→depth) ────────
 BIN_CENTRE_ERR_PX     = 30      # how tightly to centre over the bin before dropping
-BIN_SURGE_SIGN        = +1      # Ch5 fore/aft polarity for the bottom-cam mount.
-                                # VERIFY DISARMED (vision_thrust_check --camera downward):
-                                # a bin AHEAD in the image must drive the hull FORWARD.
-                                # Flip to -1 if it drives backward. Wrong sign = runaway.
+BIN_SURGE_SIGN        = +1      # NOTE: no longer read by task_bin -- the downward Ch5
+                                # fore/aft polarity is now the PERMANENT `vision.surge_sign`
+                                # deck default (-1) in duburi_manager/vision_tunables.py, so
+                                # missions omit surge_sign entirely. Kept here for reference;
+                                # to change the mount polarity edit vision.surge_sign (or set
+                                # it live: `ros2 param set /duburi_manager vision.surge_sign -1`).
+                                # VERIFY DISARMED: vision_thrust_check --camera downward.
 BIN_DESCEND_FILL      = 0       # optional: descend until the bin fills this % (height) for a
                                 # closer drop. 0 = OFF (hold BIN_DEPTH_M; core path). When >0,
                                 # bounded by BIN_MAX_DEPTH_M so it can't drive into the floor.

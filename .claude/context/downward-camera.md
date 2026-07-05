@@ -55,11 +55,15 @@ align('hole', camera='forward', lat=0, depth=0, fwd=25, fwd_mode='height',
       lock_on=True, hold=4, fire=1)          # depth=0 -> centre vertically; fwd=25% standoff
 ```
 
-Downward — bin drop (pixel surge on `fwd`, fill descent on `depth`):
+Downward — bin drop (pixel surge on `fwd`, fill descent on `depth`). `surge_sign`,
+`max_depth_m`, `depth_ceiling` are **no longer per-`align` kwargs** — they're
+`vision.*` tunables (see "Bounds & signs" below), so the call is now just:
 ```python
-align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height',
-      surge_sign=BIN_SURGE_SIGN, max_depth_m=BIN_MAX_DEPTH_M,
-      depth_ceiling=BIN_DEPTH_CEILING_M)     # lat+fwd centre over bin; depth=30% -> descend
+# once at the top of the mission (per-mission, not per-command):
+duburi.set_vision_param('max_depth_m', BIN_MAX_DEPTH_M)     # <0: floor + enables descent
+duburi.set_vision_param('depth_ceiling', BIN_DEPTH_CEILING_M)  # surface guard
+# ... then every downward align omits all three (surge_sign is the -1 deck default):
+align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height')
 ```
 
 - Centring axes on downward = **`lat` + `fwd`** (both horizontal thrusters). `depth` is the
@@ -69,21 +73,28 @@ align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height',
   distinction is why the swap lives in the DSL (Python), not the ROS goal (where rosidl
   collapses `0`→unset).
 
-## Bounds & signs (downward descent safety)
+## Bounds & signs (downward descent safety) — now `vision.*` tunables
 
-- **`surge_sign`** (+1/−1) flips the **Ch5 fore/aft polarity** for the physical bottom-cam
-  mount. A wrong sign is **positive feedback** — the hull drives *away* from the bin. The
-  kwarg swap did **not** change this sign or the Ch5 output — it's byte-identical — so a
-  sign you've already verified stays valid. **Still run the DISARMED check before an armed
-  run** as standard practice (and to confirm you're now driving surge with `fwd=`):
-  `ros2 run duburi_vision vision_thrust_check --camera downward` — a bin AHEAD in the image
-  must drive the hull FORWARD (Ch5>1500).
-- **`max_depth_m`** (negative) — the deepest allowed setpoint (floor). The fill→depth
-  descent **requires `max_depth_m < 0`** or the engine drops the descent and just holds
-  ArduSub depth (fail-safe against an unreachable fill target driving the hull to the
-  bottom).
-- **`depth_ceiling`** (negative, e.g. `−0.4`) — the shallowest allowed setpoint (surface
-  guard). Alignment can **never surface the hull**.
+These three moved off per-`align` kwargs onto the manager's `vision.*` params
+(`vision_tunables.py`), so a downward run sets them **once per mission** (or the deck
+operator via `ros2 param set /duburi_manager vision.<name> <v>`) instead of on every call.
+A per-call kwarg still overrides (layered default), but missions no longer need to pass them.
+
+- **`vision.surge_sign`** (**PERMANENT default −1**) flips the **Ch5 fore/aft polarity** for
+  the physical bottom-cam mount. A wrong sign is **positive feedback** — the hull drives
+  *away* from the bin. This hull needs −1 (the deck default), so missions **omit `surge_sign`
+  entirely**. Downward-only (the forward path never reads it). **Run the DISARMED check
+  before an armed run** if the mount changes: `ros2 run duburi_vision vision_thrust_check
+  --camera downward` — a bin AHEAD in the image must drive the hull FORWARD (Ch5>1500);
+  flip with `ros2 param set /duburi_manager vision.surge_sign +1` if reversed.
+- **`vision.max_depth_m`** (default **0.0 = off**; set `<0` per mission) — the deepest
+  allowed setpoint (floor). The fill→depth descent **requires a value < 0** or the engine
+  drops the descent and just holds ArduSub depth (fail-safe against an unreachable fill
+  target driving the hull to the bottom). `0.0` default = the FORWARD torpedo align is
+  unchanged; a bin run sets it (`duburi.set_vision_param('max_depth_m', −1.6)`).
+- **`vision.depth_ceiling`** (default **0.0** → engine `_MIN_DEPTH_M` surface guard; set a
+  tighter negative like **−0.4** per mission) — the shallowest allowed setpoint. Alignment
+  can **never surface the hull**.
 - The descent is **one-sided** (deeper only) and uses the same `depth_step` stepped/
   deadband-frozen logic as the forward depth axis (no z-wobble).
 
