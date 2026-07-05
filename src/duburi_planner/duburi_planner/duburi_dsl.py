@@ -377,6 +377,36 @@ class DuburiMission:
     _PUMP_COLD_S = 0.60   # first frame after subscribe: covers DDS discovery
     _PUMP_SLICE_S = 0.02  # spin_once granularity inside the pump
 
+    # Detector warm-up gate (cold-detector-after-switch guard, see
+    # _wait_detector_warm). Right after a camera/model/class switch the detector
+    # needs a moment to produce its first frame under the new config; a vision
+    # verb that starts before then can drop into an autonomous fallback SEARCH
+    # within its lost_grace. WARMUP_S bounds the wait; FRESH_S is how recent a
+    # /detections frame must be to count the detector "producing".
+    _DETECTOR_WARMUP_S = 2.5
+    _DETECTOR_FRESH_S  = 1.0
+
+    def _wait_detector_warm(self, camera: str, timeout: float | None = None) -> bool:
+        """Block until the detector for `camera` is PRODUCING /detections frames.
+
+        Gates on the detector being ALIVE (publishing any frame -- the detector
+        emits a frame every inference tick, empty or not), NOT on the target being
+        visible. So a just-switched / cold detector is given time to warm up before
+        a vision verb's acquire clock starts, while a genuine "target simply absent"
+        search is NOT delayed: a warm detector is already publishing empty frames,
+        so this returns on the first pump. Returns True once producing, False on
+        timeout (detector never came alive -- caller proceeds + likely falls back).
+        """
+        budget = self._DETECTOR_WARMUP_S if timeout is None else float(timeout)
+        self._subscribe_detections(camera)
+        deadline = _time.monotonic() + max(budget, 0.0)
+        while _time.monotonic() < deadline:
+            self._pump_detections(camera)
+            entry = self._det_cache.get(camera)
+            if entry is not None and (_time.monotonic() - entry[0]) <= self._DETECTOR_FRESH_S:
+                return True
+        return False
+
     def _subscribe_detections(self, camera: str) -> None:
         """Subscribe a camera's /detections + /camera_info (idempotent)."""
         if camera in self._det_subs:
