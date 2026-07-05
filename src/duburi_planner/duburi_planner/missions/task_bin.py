@@ -52,21 +52,26 @@ def run(duburi, log=None):
     # detector (pauses forward, resumes downward) + flips the HUD; set the model +
     # classes for the bin task on that node.
     duburi.use_camera('downward')
-    duburi.set_model('bin_fire_blood', node=_DWN)
-    duburi.set_classes('fire,blood', node=_DWN)
-    # Depth bounds are PER-MISSION now (vision tunables), not per-align kwargs: set
-    # the descent floor + surface guard ONCE here. `surge_sign` is the permanent
-    # vision.surge_sign default (-1) so the align below omits it entirely.
-    duburi.set_vision_param('max_depth_m', BIN_MAX_DEPTH_M)      # deep floor + enables descent
-    duburi.set_vision_param('depth_ceiling', BIN_DEPTH_CEILING_M)  # surface guard
-
     # ── Centre the AUV over the bin, then drop ────────────────────────────────
     # DOWNWARD kwargs (see downward-camera.md): lat = left/right (Ch6),
     # fwd = fore/aft SURGE (Ch5, image-Y, two-sided + braked), depth = DESCENT to a
     # bbox fill %% (BIN_DESCEND_FILL, measured by fwd_mode='height'). ArduSub holds
-    # BIN_DEPTH_M on Ch3; the descent (bounded by the floor set above) gets closer
+    # BIN_DEPTH_M on Ch3; the descent (bounded by the floor set below) gets closer
     # for the drop. Creep-search finds the bin on target loss.
+    #
+    # The downward setup (model/classes + the depth-bound tunables) lives INSIDE the
+    # try so that if any of it raises, the finally still restores the forward camera
+    # + forward-safe depth defaults -- never leave the downward detector live or the
+    # floor/ceiling clamping a later forward task.
     try:
+        duburi.set_model('bin_fire_blood', node=_DWN)
+        duburi.set_classes('fire,blood', node=_DWN)
+        # Depth bounds are PER-MISSION now (vision tunables), not per-align kwargs:
+        # set the descent floor + surface guard ONCE here. `surge_sign` is the
+        # permanent vision.surge_sign default (-1) so the align below omits it.
+        duburi.set_vision_param('max_depth_m', BIN_MAX_DEPTH_M)       # floor + enables descent
+        duburi.set_vision_param('depth_ceiling', BIN_DEPTH_CEILING_M)  # surface guard
+
         aligned = duburi.vision.align(
             'fire', camera='downward', lat=0, fwd=0,          # lat+surge centre over bin
             depth=(BIN_DESCEND_FILL or None), fwd_mode='height',  # descend to fill%
