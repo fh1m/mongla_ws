@@ -571,6 +571,30 @@ class Pixhawk:
             return 0.0
         return max(0.0, time.time() - ts)
 
+    def get_angular_rates(self):
+        """Body-frame angular velocity from MAVLink ATTITUDE, or None if stale/absent.
+
+        ATTITUDE (msg 30) carries rollspeed/pitchspeed/yawspeed in rad/s -- the
+        EKF-filtered gyro rate, already on the MAVLink link (no BNO/serial). Used
+        by the downward optical-flow distance estimator for rotation compensation
+        (the trusted gyro *rate*; ArduSub compass *yaw* stays untrusted -> yaw
+        still comes from yaw_source). Returns {'roll_rate','pitch_rate','yaw_rate'}
+        rad/s + 'age_s' (seconds since the sample; 0.0 for a mock without
+        _timestamp). None when no ATTITUDE has arrived. Pin the stream with
+        MESSAGE_RATES[ATTITUDE] or the rates arrive at ArduSub's slow default.
+        """
+        msg = self.master.messages.get('ATTITUDE')
+        if msg is None:
+            return None
+        ts  = getattr(msg, '_timestamp', None)
+        age = 0.0 if ts is None else max(0.0, time.time() - ts)
+        return {
+            'roll_rate':  float(msg.rollspeed),
+            'pitch_rate': float(msg.pitchspeed),
+            'yaw_rate':   float(msg.yawspeed),
+            'age_s':      age,
+        }
+
     def get_battery(self):
         msg = self.master.messages.get('BATTERY_STATUS')
         if msg is None:
