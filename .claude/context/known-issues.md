@@ -413,6 +413,38 @@ before the camera frame loop started.
   annotated `…/image_debug` topic via `web_video_server`/Foxglove (browser over
   VSCode's auto port-forward) — not installed today; future task.
 
+### E5. Payload CH340 has no `/dev/ttyUSB*` after carrier-board/SSD swap — **2026-07-10**
+- **Symptom:** `lsusb` shows `1a86:7523 QinHeng Electronics CH340` (payload ESP32
+  board is on the bus), but `start … -p payload_port:=auto` logs
+  `[PAYLOAD] no port found (auto-detect excluded: set())` and `fire()` becomes a
+  log-stub. `ls /dev/ttyUSB*` → nothing (only `/dev/ttyACM0`, the BNO085).
+- **Root cause (two independent, both introduced by the 2026-07 carrier-board +
+  SSD swap onto a fresh Tegra kernel):**
+  1. **Kernel missing the CH341 driver.** The new `5.15.185-tegra` kernel shipped
+     with `# CONFIG_USB_SERIAL_CH341 is not set` — no `ch341.ko` anywhere in
+     `/lib/modules/$(uname -r)`. The CH340 enumerates on USB but the kernel never
+     creates `/dev/ttyUSB*`, so pyserial `list_ports` (and thus payload
+     auto-detect) sees nothing. `cdc_acm` (the BNO085 ESP32-C3) is unaffected — it
+     needs no vendor driver, which is why the BNO worked and the payload didn't.
+  2. **`brltty` steals the CH340.** Ubuntu's braille-display driver claims any
+     `1a86:7523` via a udev rule and holds it through `usbfs` (interface driver
+     shows `usbfs`), blocking `ch341` even once the module exists — the classic
+     Arduino/ESP-on-Ubuntu trap.
+- **Fix (durable, idempotent):** run **`tools/install_ch341_driver.sh`**. It purges
+  `brltty` + its udev rule, builds `ch341.ko` out-of-tree against the running
+  kernel headers (fetches the 5.15 `ch341.c`), `depmod`s it in (so `modules.alias`
+  auto-loads it for `1a86:7523` on any port at boot/replug), loads it, and rebinds
+  the already-attached board without a physical replug. Re-run after any kernel
+  update / SSD reflash. Requires `/lib/modules/$(uname -r)/build`, gcc, make, curl.
+- **Verified on-device (Orin Nano, 2026-07-10):** after the script, `/dev/ttyUSB0`
+  (`usb-1a86_USB_Serial-if00-port0`, driver `ch341`) appears, `PayloadDriver`
+  auto-detects + connects, and `bringup`/`start` re-connect the payload.
+- **Self-diagnosing now:** `PayloadDriver.connect()` calls
+  `_diagnose_missing_port()` — when the board is on the bus but has no tty node it
+  logs the actual cause (`held by brltty (usbfs)` / `no ch341 driver bound` /
+  `bound but no node yet`) and points at the script, instead of the old blank
+  `no port found`.
+
 ---
 
 ## Forks we evaluated (so we don't revisit)
