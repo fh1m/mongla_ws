@@ -824,3 +824,67 @@ def test_forward_camera_fwd_depth_unchanged():
     assert kw['offset_depth'] == pytest.approx(0.0)   # depth = pixel axis (centre)
     assert kw['fwd_fill'] == pytest.approx(25.0)       # fwd = fill standoff
     assert kw['mode'] == 'height'
+
+
+# --------------------------------------------------------------------------- #
+#  Cold-detector warm-gate: a vision verb with a fallback must WAIT for the    #
+#  detector to be producing frames before starting -- else a camera/model     #
+#  switch drops it straight into an autonomous fallback SEARCH (the bug).      #
+# --------------------------------------------------------------------------- #
+def test_orchestrate_warm_gates_before_first_shot_when_fallback():
+    m = _mission(MagicMock())
+    dsl = _VisionDSL(m)
+    order = []
+    m._wait_detector_warm.side_effect = lambda cam, *a, **k: order.append('warm') or True
+    def _shot(_remaining):
+        order.append('shot'); return _result(ALIGNED)
+    dsl._orchestrate('align', 'gate', 'downward', 5.0, lambda d: None, _shot)
+    assert order and order[0] == 'warm', 'warm-gate must run before the first goal'
+    assert 'shot' in order and order.index('warm') < order.index('shot')
+    m._wait_detector_warm.assert_called_with('downward')
+
+
+def test_orchestrate_no_warm_gate_without_fallback():
+    # No fallback => server holds through loss, never searches => nothing to guard.
+    m = _mission(MagicMock())
+    dsl = _VisionDSL(m)
+    dsl._orchestrate('align', 'gate', 'downward', 5.0, None,
+                     lambda _r: _result(ALIGNED))
+    m._wait_detector_warm.assert_not_called()
+
+
+def test_align_ensures_and_programs_before_activating_camera():
+    # ORDER: _ensure_detector + _resolve_target (model/class) BEFORE _activate_camera
+    # so the switch settle warms the NEW config (not the old model).
+    m = _mission(MagicMock(return_value=_result(ALIGNED)))
+    m._detector_node.return_value = '/duburi_detector_downward'
+    m._wait_detector_warm.return_value = True
+    dsl = _VisionDSL(m)
+    order = []
+    m._ensure_detector.side_effect  = lambda *a, **k: order.append('ensure')
+    m._activate_camera.side_effect  = lambda *a, **k: order.append('activate')
+    dsl.align('fire', lat=0, camera='downward')
+    assert order.index('ensure') < order.index('activate')
+
+
+# --------------------------------------------------------------------------- #
+#  _wait_detector_warm logic (DuburiMission): fresh cache -> warm; stale/empty #
+#  cache -> cold (times out). Pumps mocked; only the freshness gate is tested. #
+# --------------------------------------------------------------------------- #
+def test_wait_detector_warm_true_when_producing():
+    import time as _t
+    from duburi_planner.duburi_dsl import DuburiMission
+    fake = MagicMock()
+    fake._DETECTOR_WARMUP_S = 0.3
+    fake._DETECTOR_FRESH_S  = 1.0
+    fake._det_cache = {'downward': (_t.monotonic(), [])}   # fresh empty frame = producing
+    assert DuburiMission._wait_detector_warm(fake, 'downward') is True
+
+
+def test_wait_detector_warm_false_when_cold():
+    from duburi_planner.duburi_dsl import DuburiMission
+    fake = MagicMock()
+    fake._DETECTOR_WARMUP_S = 0.15
+    fake._DETECTOR_FRESH_S  = 1.0
+    fake._det_cache = {}                                    # never produced -> cold
+    assert DuburiMission._wait_detector_warm(fake, 'downward') is False

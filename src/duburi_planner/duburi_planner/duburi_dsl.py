@@ -135,6 +135,8 @@ Tunable live (between runs, no rebuild):
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import time as _time
 
@@ -153,6 +155,40 @@ from .vision_dsl import _AnchorDSL, _VisionDSL  # noqa: F401 -- used by DuburiMi
 def _format_outcome(cmd: str, result) -> str:
     return (f'  {cmd:<22s} final={result.final_value:+.3f} '
             f'err={result.error_value:+.3f}  ({result.message})')
+
+
+# --------------------------------------------------------------------------- #
+#  Per-run artifact folder (scorecards live here; rosbags land alongside)      #
+# --------------------------------------------------------------------------- #
+# One place to grab everything after a pool session. Override the parent with
+# DUBURI_RUN_DIR (pool_record.sh writes bags into the same tree). Default
+# ~/duburi_runs so a scorecard never litters the CWD the operator launched from.
+
+_RUN_DIR_ENV     = 'DUBURI_RUN_DIR'
+_DEFAULT_RUN_DIR = '~/duburi_runs'
+
+
+def _run_dir() -> str:
+    """Return the per-run artifact folder, creating it if absent."""
+    base = os.path.expanduser(os.environ.get(_RUN_DIR_ENV) or _DEFAULT_RUN_DIR)
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _git_sha() -> str:
+    """Best-effort short git SHA of the workspace (which code ran this run).
+
+    Returns '' if git/the repo is unavailable -- traceability is a nice-to-have,
+    never a reason to raise on pool day.
+    """
+    try:
+        out = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True, text=True, timeout=2.0)
+        return out.stdout.strip() if out.returncode == 0 else ''
+    except Exception:
+        return ''
 
 
 # --------------------------------------------------------------------------- #
@@ -377,6 +413,36 @@ class DuburiMission:
     _PUMP_WARM_S = 0.40   # ~1.5 frame-periods at 3-4 Hz; early-returns when fresh
     _PUMP_COLD_S = 0.60   # first frame after subscribe: covers DDS discovery
     _PUMP_SLICE_S = 0.02  # spin_once granularity inside the pump
+
+    # Detector warm-up gate (cold-detector-after-switch guard, see
+    # _wait_detector_warm). Right after a camera/model/class switch the detector
+    # needs a moment to produce its first frame under the new config; a vision
+    # verb that starts before then can drop into an autonomous fallback SEARCH
+    # within its lost_grace. WARMUP_S bounds the wait; FRESH_S is how recent a
+    # /detections frame must be to count the detector "producing".
+    _DETECTOR_WARMUP_S = 2.5
+    _DETECTOR_FRESH_S  = 1.0
+
+    def _wait_detector_warm(self, camera: str, timeout: float | None = None) -> bool:
+        """Block until the detector for `camera` is PRODUCING /detections frames.
+
+        Gates on the detector being ALIVE (publishing any frame -- the detector
+        emits a frame every inference tick, empty or not), NOT on the target being
+        visible. So a just-switched / cold detector is given time to warm up before
+        a vision verb's acquire clock starts, while a genuine "target simply absent"
+        search is NOT delayed: a warm detector is already publishing empty frames,
+        so this returns on the first pump. Returns True once producing, False on
+        timeout (detector never came alive -- caller proceeds + likely falls back).
+        """
+        budget = self._DETECTOR_WARMUP_S if timeout is None else float(timeout)
+        self._subscribe_detections(camera)
+        deadline = _time.monotonic() + max(budget, 0.0)
+        while _time.monotonic() < deadline:
+            self._pump_detections(camera)
+            entry = self._det_cache.get(camera)
+            if entry is not None and (_time.monotonic() - entry[0]) <= self._DETECTOR_FRESH_S:
+                return True
+        return False
 
     def _subscribe_detections(self, camera: str) -> None:
         """Subscribe a camera's /detections + /camera_info (idempotent)."""
@@ -1113,7 +1179,8 @@ class DuburiMission:
     #  Mission scoreboard                                                  #
     # ================================================================== #
 
-    def log_scoreboard(self, *, json_path: str | None = None) -> None:
+    def log_scoreboard(self, *, json_path: str | None = None,
+                       mission: str | None = None) -> None:
         """Print a structured per-verb mission summary and optionally write JSON.
 
         Called automatically by `mission.py` on exit (normal or exception).
@@ -1123,8 +1190,12 @@ class DuburiMission:
         ----------
         json_path : str | None
             If given, write the scoreboard JSON to this path in addition to
-            printing to stdout.  Pass ``'auto'`` to generate a timestamped
-            filename in the current directory.
+            printing to stdout.  Pass ``'auto'`` to write a timestamped
+            ``<mission>_<ts>.json`` into the dedicated run folder (``_run_dir``,
+            default ``~/duburi_runs``, override with ``DUBURI_RUN_DIR``).
+        mission : str | None
+            Mission name, recorded in the JSON and used in the ``'auto'``
+            filename so a pool session's scorecards are traceable per run.
 
         Example output::
 
@@ -1160,18 +1231,29 @@ class DuburiMission:
         print(f'╚{hb}╝\n')
 
         if json_path:
-            if json_path == 'auto':
-                ts = _time.strftime('%Y%m%d_%H%M%S')
-                json_path = f'mission_scoreboard_{ts}.json'
             payload = {
-                'total_s':    total_s,
-                'phases':     self._scoreboard,
+                'mission':       mission or '',
+                'timestamp':     _time.strftime('%Y-%m-%dT%H:%M:%S'),
+                'git_sha':       _git_sha(),
+                'total_s':       total_s,
                 'success_count': sum(1 for e in self._scoreboard if e['success']),
                 'fail_count':    sum(1 for e in self._scoreboard if not e['success']),
+                'phases':        self._scoreboard,
             }
-            with open(json_path, 'w') as fh:
-                json.dump(payload, fh, indent=2)
-            self.log.info(f'[DSL  ] scoreboard written → {json_path}')
+            # Whole write is best-effort: log_scoreboard runs in mission.py's
+            # finally, so a run-dir mkdir / write failure must never mask the
+            # mission outcome. Resolve the auto path INSIDE the guard too
+            # (_run_dir mkdir can raise on a read-only / full disk).
+            try:
+                if json_path == 'auto':
+                    ts   = _time.strftime('%Y%m%d_%H%M%S')
+                    name = (mission or 'mission').replace('/', '_')
+                    json_path = os.path.join(_run_dir(), f'{name}_{ts}.json')
+                with open(json_path, 'w') as fh:
+                    json.dump(payload, fh, indent=2)
+                self.log.info(f'[DSL  ] scoreboard → {json_path}')
+            except OSError as exc:
+                self.log.warning(f'[DSL  ] scoreboard write failed ({exc})')
 
     # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to raw client           #
