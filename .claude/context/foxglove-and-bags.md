@@ -120,10 +120,12 @@ very useful, near-zero cost.
 
 ### ⚠ Gate B — prove the OFFLINE path this week, not on run day
 
-A team abroad on venue Wi-Fi cannot depend on Foxglove cloud login. **Before run day**,
-on the actual competition laptop: download the Foxglove **desktop** app, then connect to
-`ws://<jetson-ip>:8765` with **internet OFF**. Confirm it connects and the layout loads
-with no account. If it demands a login, you found out in the hotel, not at the pool.
+A team abroad on venue Wi-Fi cannot depend on a cloud login. We resolved this by
+standardizing on **Lichtblick** (the offline-safe fork — see §4), which has no account
+wall at all. **Still prove it before run day**, on the actual competition laptop: connect
+to `ws://<jetson-ip>:8765` with **internet OFF** and confirm it connects and the layout
+loads. (If you instead use the official Foxglove desktop app, this gate is where its
+login prompt would bite you — hence the Lichtblick choice.)
 
 ---
 
@@ -191,6 +193,58 @@ Now `~/duburi_runs/2026-champs/` holds the bag, the scorecard, the rcl logs, and
 console tees for that session. The `tee` is optional (rcl logs already persist); it just
 gives you the exact colored terminal output too. (Manual equivalent, no helper:
 `export DUBURI_RUN_DIR=~/duburi_runs/2026-champs; export ROS_LOG_DIR=$DUBURI_RUN_DIR/logs`.)
+
+---
+
+## 4. Ground station (dev box) — the viewer + offline replay
+
+The Jetson runs the **bridge** (server); the dev box / operator laptop runs the **viewer**
+(client) and **replays bags**. The viewer we standardized on is **Lichtblick** — Bosch's
+MIT open-source fork of Foxglove Studio — chosen over the official Foxglove desktop app
+precisely because it has **no account / no login wall** and is guaranteed to work fully
+offline at the venue (Gate B). It loads the same layout and speaks the same
+Foxglove-WebSocket protocol as the bridge.
+
+**Dev-box install (once):**
+```bash
+# viewer (offline-safe): latest .deb from github.com/lichtblick-suite/lichtblick/releases
+sudo apt install -y /path/to/lichtblick-<ver>-linux-amd64.deb   # provides `lichtblick`
+# bridge (so you can attach the viewer to LOCAL sim for dry practice):
+sudo apt install -y ros-humble-foxglove-bridge
+```
+
+**Connect to the live AUV:** launch `lichtblick` → *Open connection → Foxglove WebSocket*
+→ `ws://192.168.2.69:8765` (the Jetson). Then *Layouts → Import* and pick
+`src/duburi_vision/foxglove/duburi_layout.json`. This is pure WebSocket over the
+tether/switch — it needs **no** matching `ROS_DOMAIN_ID` and **no** DDS discovery on the
+dev box (that's why it's robust across the network).
+
+**Dry practice with NO AUV (local sim on the dev box):** the bridge runs here too, so you
+can rehearse the whole Foxglove workflow against Gazebo SITL before pool day:
+```bash
+ros2 launch duburi_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs \
+    vision:=true foxglove:=true viewer:=false
+# then Lichtblick → ws://localhost:8765
+```
+
+**Pull a run off the Jetson and replay it offline** (the highest-ROI loop — tune detection
+without the pool). Bags live in `~/duburi_runs` on the Jetson; copy the whole run folder
+so the bag, scorecard, and logs come together:
+```bash
+rsync -av jetson@192.168.2.69:~/duburi_runs/  ~/duburi_runs/     # or scp -r
+# replay locally (needs duburi_interfaces built here -- it is):
+scripts/pool_record.sh replay ~/duburi_runs/bag_gate_run_<ts>
+# then Lichtblick → ws://localhost:8765 sees the replayed topics, OR open the bag
+# directly in Lichtblick: Open local file → the bag's .mcap/.db3
+```
+Lichtblick opens a bag **file directly** (no ROS needed) — handy on a laptop without a ROS
+install. `ros2 bag play` + a local bridge is the path when you want to also run
+`vision_display` or live `ros2 param set` against the replayed stream.
+
+> **Note — the dev box is a distrobox** (`auv-ros2`, Ubuntu 22.04, ROS Humble). Lichtblick
+> is a GUI app; it launches fine with the container's `DISPLAY`/Wayland passthrough. If it
+> won't open a window on the host, run it from the host instead — the connection is just a
+> WebSocket, so where the viewer runs doesn't matter as long as it can reach the Jetson IP.
 
 ---
 
