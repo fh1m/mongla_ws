@@ -34,7 +34,8 @@ class ClassRef:
     Returned by `ModelHandle.class_name` attribute access or index access.
     Passed to any vision verb as `target=` to auto-switch the detector.
     """
-    model_name: str   # registry key used when registering with duburi.models()
+    model_name: str   # model STEM (.pt basename) -- the identity set_model() matches
+                      # on the detector (single-model launch or registry key/stem)
     class_name: str   # YOLO class label string
 
     def __str__(self) -> str:
@@ -64,8 +65,12 @@ class ModelHandle:
     def __getattr__(self, item: str) -> ClassRef:
         classes = object.__getattribute__(self, '_classes')
         name    = object.__getattribute__(self, '_name')
+        stem    = object.__getattribute__(self, '_stem')
+        # ClassRef carries the STEM, not the alias -- the stem is the identity the
+        # detector matches (single-model launch OR registry key/stem). The alias is
+        # only the mission-side handle name; sending it to set_model() would miss.
         if not classes or item in classes:
-            return ClassRef(name, item)
+            return ClassRef(stem, item)
         raise AttributeError(
             f"Model {name!r} has no class {item!r}. "
             f"Available: {classes}  "
@@ -74,12 +79,13 @@ class ModelHandle:
     def __getitem__(self, idx: int) -> ClassRef:
         classes = object.__getattribute__(self, '_classes')
         name    = object.__getattribute__(self, '_name')
+        stem    = object.__getattribute__(self, '_stem')
         if not classes:
             raise IndexError(
                 f"Model {name!r} was registered without a classes list; "
                 f"use attribute access: duburi.models.{name}.class_name")
         try:
-            return ClassRef(name, classes[idx])
+            return ClassRef(stem, classes[idx])
         except IndexError:
             raise IndexError(
                 f"Model {name!r} has {len(classes)} classes; "

@@ -983,11 +983,14 @@ class DuburiMission:
 
     def set_model(self, name: str, *,
                   camera: str | None = None, node: str | None = None) -> None:
-        """Switch active detector model by registry name (hot, no restart).
+        """Switch active detector model by stem or registry key (hot, no restart).
 
-        Requires the detector to have been launched with a ``models`` registry.
-        Targets ``/duburi_detector_<camera>`` (camera defaults to the mission's).
-        Raises if the node is absent or the switch is rejected (loud, not silent).
+        ``name`` is the model **stem** (e.g. ``'gate_rescue_repair'``) or a
+        registry key. Works on BOTH launch styles: a single-model launch
+        (``model:=<stem>``) accepts ``set_model('<that stem>')`` as a no-op and
+        rejects any *other* name; a registry launch (``models:=``) accepts the
+        key OR the stem. Targets ``/duburi_detector_<camera>`` (camera defaults to
+        the mission's). Raises if the node is absent or the switch is rejected.
         """
         node = self._detector_node(camera, node)
         try:
