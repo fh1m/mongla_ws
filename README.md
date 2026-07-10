@@ -202,6 +202,16 @@ ros2 run duburi_vision vision_thrust_check --camera forward --duration 4    # de
 **7 · Run** — `ros2 run duburi_planner mission pool_day_practice` (the tether countdown is in
 the mission). Any single verb works too: `ros2 run duburi_planner duburi vision_align --camera forward --target_class gate --axes yaw,lat --duration 15`.
 
+**8 · Record & watch every run** (optional, off the mission path) — add `foxglove:=true` to the
+manager launch to stream telemetry, record the run to an MCAP bag, and get a per-run scorecard,
+all in one folder. Replay bags **offline** to tune detection/gains without pool time; the
+ground-station viewer is **Lichtblick** (offline-safe). Full runbook + dev-box setup:
+[`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md).
+```bash
+source scripts/pool_session.sh gate_am   # pin one folder per run (source in each terminal)
+scripts/pool_record.sh record gate_am    # MCAP bag → ~/duburi_runs/gate_am  ·  list / replay <dir>
+```
+
 > **Models live on the Jetson** in `src/duburi_vision/models/` (`.pt` gitignored; YAML class
 > sidecars committed). Competition stems: `gate_rescue_repair` (ships), `slalom_red_pipe`,
 > `bin_fire_blood`, `torpedo_blood_hole`. A missing `.pt` falls back to `yolo11n`. Status:
@@ -212,7 +222,7 @@ the mission). Any single verb works too: `ros2 run duburi_planner duburi vision_
 
 | Launch | Key args |
 |--------|----------|
-| `bringup.launch.py` | `mode` (pool·sim·desk·laptop·auto) · `yaw_source` (dvl·bno085_dvl·bno085·mavlink_ahrs) · `vision` (adds 1 cam+detector+viewer) · `camera` · `model` · `classes` · `conf` · `dvl_auto_connect` · `viewer` |
+| `bringup.launch.py` | `mode` (pool·sim·desk·laptop·auto) · `yaw_source` (dvl·bno085_dvl·bno085·mavlink_ahrs) · `vision` (adds 1 cam+detector+viewer) · `camera` · `model` · `classes` · `conf` · `dvl_auto_connect` · `viewer` · `foxglove` (+`foxglove_port`) |
 | `vision.launch.py` | `camera` · `model` · `classes` · `conf` · `viewer` · `tracking` · `depth` · `device` · `video_file` |
 | `vision_dual.launch.py` | `fwd_model`/`fwd_classes`/`fwd_device=0`/`fwd_conf` · `dwn_model`/`dwn_classes`/`dwn_device=4`/`dwn_conf` · `paused=true` · `viewer` · `tracking` |
 
@@ -592,6 +602,8 @@ Deep design notes live in [`.claude/context/`](.claude/context/) — start with 
 - **Status:** [`robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md) ·
   [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md) ·
   [`known-issues.md`](.claude/context/known-issues.md)
+- **Operator tooling (off mission path):** [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)
+  — Foxglove/Lichtblick telemetry, rosbag record/replay, per-run scorecards, dev-box setup
 
 Top-level [`CLAUDE.md`](CLAUDE.md) is the agent/context index.
 
