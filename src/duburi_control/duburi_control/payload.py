@@ -111,6 +111,60 @@ class PayloadDriver:
                     return dev
         return None
 
+    @staticmethod
+    def _diagnose_missing_port() -> str | None:
+        """Explain a payload board that is plugged in but has no serial node.
+
+        Root cause seen on the 2026-07 carrier-board/SSD swap: the new Tegra
+        kernel shipped with ``CONFIG_USB_SERIAL_CH341`` unset (no ``ch341.ko``),
+        so the CH340 enumerates on the USB bus (``lsusb`` shows 1a86:7523) but
+        the kernel never creates ``/dev/ttyUSB*``.  A second, classic Ubuntu
+        trap is ``brltty`` grabbing the same 1a86:7523 as a braille display via
+        ``usbfs``.  Both make ``list_ports`` return nothing with no clue why.
+
+        Scans sysfs (dependency-free) for a known payload VID/PID that is
+        present on the bus, and returns an actionable one-line hint, or None
+        when no payload board is physically attached.
+        """
+        try:
+            return PayloadDriver._diagnose_missing_port_unsafe()
+        except Exception:  # diagnostic runs on the failure path — must never raise
+            return None
+
+    @staticmethod
+    def _diagnose_missing_port_unsafe() -> str | None:
+        import glob as _glob
+        known = {(f'{v:04x}', f'{p:04x}') for v, p in _PAYLOAD_VID_PID}
+        for vfile in _glob.glob('/sys/bus/usb/devices/*/idVendor'):
+            dev_dir = os.path.dirname(vfile)
+            try:
+                with open(vfile) as f:
+                    vid = f.read().strip().lower()
+                with open(os.path.join(dev_dir, 'idProduct')) as f:
+                    pid = f.read().strip().lower()
+            except Exception:
+                continue
+            if (vid, pid) not in known:
+                continue
+            # Payload board IS on the bus — why is there no tty node?
+            base = os.path.basename(dev_dir)
+            drivers = set()
+            for intf in _glob.glob(os.path.join(dev_dir, f'{base}:*')):
+                link = os.path.join(intf, 'driver')
+                if os.path.islink(link):
+                    drivers.add(os.path.basename(os.path.realpath(link)))
+            if 'usbfs' in drivers:
+                return (f'payload board {vid}:{pid} is on the USB bus but held by '
+                        "brltty (usbfs) — run tools/install_ch341_driver.sh, or "
+                        "'sudo apt-get purge -y brltty'")
+            if not any(d.startswith('ch34') for d in drivers):
+                return (f'payload board {vid}:{pid} is on the USB bus but no '
+                        'ch341 driver bound (kernel missing CONFIG_USB_SERIAL_CH341) '
+                        '— run tools/install_ch341_driver.sh')
+            return (f'payload board {vid}:{pid} bound to ch341 but no tty node yet '
+                    '— replug or re-run start')
+        return None
+
     def connect(self, port: str | None = None,
                 exclude: set[str] | None = None,
                 baud: int = 115200,
@@ -127,7 +181,12 @@ class PayloadDriver:
 
         resolved = port or self.auto_detect_port(exclude)
         if not resolved:
-            _LOG.warning('[PAYLOAD] no port found (auto-detect excluded: %s)', exclude)
+            hint = self._diagnose_missing_port()
+            if hint:
+                _LOG.warning('[PAYLOAD] no serial node — %s', hint)
+            else:
+                _LOG.warning('[PAYLOAD] no port found (no payload board on USB bus; '
+                             'excluded: %s)', exclude)
             return False
 
         try:
