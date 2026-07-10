@@ -1,0 +1,45 @@
+{
+  "configById": {
+    "Image!forward": {
+      "imageMode": {
+        "imageTopic": "/duburi/vision/forward/image_debug"
+      }
+    },
+    "RawMessages!state": {
+      "topicPath": "/duburi/state"
+    },
+    "Plot!align": {
+      "paths": [
+        {
+          "value": "/duburi/move/_action/feedback.feedback.err_x_px",
+          "enabled": true,
+          "label": "err_x_px"
+        },
+        {
+          "value": "/duburi/move/_action/feedback.feedback.err_y_px",
+          "enabled": true,
+          "label": "err_y_px"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "Image!forward",
+    "second": {
+      "direction": "column",
+      "first": "RawMessages!state",
+      "second": "Plot!align",
+      "splitPercentage": 45
+    },
+    "splitPercentage": 60
+  }
+}
