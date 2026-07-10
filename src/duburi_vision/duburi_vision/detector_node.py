@@ -88,6 +88,19 @@ def _parse_models_param(s: str) -> Dict[str, str]:
     return result
 
 
+def _model_stem(path: str) -> str:
+    """Canonical model identity: basename without extension.
+
+    ``'gate_rescue_repair'`` -> ``'gate_rescue_repair'``;
+    ``'/models/gate_rescue_repair.pt'`` -> ``'gate_rescue_repair'``.
+    Missions name models by this stem (``duburi.models('stem')`` / ClassRef /
+    ``set_model('stem')``), so the node matches ``active_model`` against it
+    regardless of whether the model was launched single (``model:=stem``) or in a
+    registry (``models:=key=stem`` or bare ``models:=stem``).
+    """
+    return os.path.splitext(os.path.basename(str(path).strip()))[0]
+
+
 def _parse_model_conf(s: str) -> Dict[str, float]:
     """Parse 'torpedo_blood_hole=0.55,gate=0.35' -> {name: conf_float}.
 
@@ -160,6 +173,12 @@ class DetectorNode(Node):
         models_str   = str(self.get_parameter('models').value).strip()
         active_model = str(self.get_parameter('active_model').value).strip()
         self._registry: Dict[str, YoloDetector] = {}
+        # stem -> registry-key index so set_model() accepts the STEM as well as the
+        # launch key (missions/ClassRef switch by stem). Empty in single-model mode.
+        self._stem_to_key: Dict[str, str] = {}
+        # Stem of the one model in single-model mode (None in registry mode). Lets
+        # set_model(<that stem>) be a no-op success instead of a hard reject.
+        self._single_model_name: Optional[str] = None
 
         self._pending_allowlist = allowlist  # updated by param callback; used by async loader
 
@@ -187,36 +206,66 @@ class DetectorNode(Node):
                     try:
                         name_out, det = fut.result()
                         self._registry[name_out] = det
+                        stem = _model_stem(model_map[name_out])
+                        # Collision (two keys, same stem) => last wins + warn, so
+                        # a stem lookup stays deterministic.
+                        if (stem in self._stem_to_key
+                                and self._stem_to_key[stem] != name_out):
+                            self.get_logger().warning(
+                                f"[DET  ] stem {stem!r} maps to keys "
+                                f"{self._stem_to_key[stem]!r} and {name_out!r}; "
+                                f"set_model({stem!r}) will use {name_out!r}")
+                        self._stem_to_key[stem] = name_out
                         self.get_logger().info(
-                            f"[DET  ] registry[{name_out!r}] ready")
+                            f"[DET  ] registry[{name_out!r}] ready (stem {stem!r})")
                     except Exception as exc:
-                        self.get_logger().fatal(
-                            f"[DET  ] registry[{n!r}] FAILED: {exc}")
+                        # Resilient: a failed model is SKIPPED, not fatal, so one
+                        # missing .pt (e.g. slalom/torpedo weights not yet on the
+                        # box) can't take the WHOLE pipeline down. set_model() to a
+                        # skipped model fails clearly at the moment it's needed.
+                        self.get_logger().error(
+                            f"[DET  ] registry[{n!r}] FAILED — SKIPPED: {exc}")
                         errors.append(n)
 
             if errors:
-                raise RuntimeError(f"Failed to load models: {errors}")
+                self.get_logger().error(
+                    f"[DET  ] {len(errors)} model(s) FAILED and were SKIPPED: "
+                    f"{errors}  |  loaded: {list(self._registry)}  "
+                    f"(pipeline stays UP; set_model to a skipped model will reject)")
+            if not self._registry:
+                self.get_logger().fatal(
+                    "[DET  ] ALL registry models failed to load — no pipeline")
+                raise RuntimeError(f"empty detector registry (all failed: {errors})")
 
-            if active_model and active_model in self._registry:
-                self._det: YoloDetector = self._registry[active_model]
-                self._active_name: Optional[str] = active_model
-            elif self._registry:
+            # Registry is non-empty from here. active_model may be a KEY or a STEM.
+            active_key = self._resolve_model_key(active_model) if active_model else None
+            if active_key is not None:
+                self._det: YoloDetector = self._registry[active_key]
+                self._active_name: Optional[str] = active_key
+            else:
                 first = next(iter(self._registry))
                 self._det = self._registry[first]
                 self._active_name = first
                 if active_model:
-                    self.get_logger().warning(
-                        f"[DET  ] active_model={active_model!r} not in registry "
-                        f"{list(self._registry)}; using first: {first!r}")
-            else:
-                self.get_logger().fatal("[DET  ] models param parsed but registry is empty")
-                raise RuntimeError("empty detector registry")
+                    # LOUD: the requested startup model failed/absent, so we are
+                    # about to detect with a DIFFERENT model — an operator must see
+                    # this or lose a run to a silently-substituted model.
+                    self.get_logger().error(
+                        f"[DET  ] active_model={active_model!r} NOT loaded "
+                        f"(failed or absent) — falling back to {first!r}. "
+                        f"loaded: {list(self._registry)}")
 
         else:
             # Single-model mode: load async so ROS subscriber starts immediately.
             # Frames received before the model is ready are silently dropped.
             self._active_name = None
             self._det: Optional[YoloDetector] = None
+            # Canonical name of the one loaded model, known synchronously from the
+            # launch arg. set_model(<this stem>) is then a no-op SUCCESS (already
+            # active) instead of a hard "no registry" reject -- so a ClassRef or
+            # duburi.use('<stem>') mission works on a plain single-model launch.
+            self._single_model_name = _model_stem(
+                str(self.get_parameter('model_path').value))
             threading.Thread(
                 target=self._load_single_model_async,
                 kwargs=dict(
@@ -402,6 +451,18 @@ class DetectorNode(Node):
             det.update_conf(conf)
             self.get_logger().info(f"[DET  ] model_conf {name!r} → {conf:.3f}")
 
+    def _resolve_model_key(self, name: str) -> Optional[str]:
+        """Map a set_model()/active_model argument to a registry key.
+
+        Accepts EITHER the launch registry key (``duburi.use('gate')`` with
+        ``models:=gate=...``) OR the model stem (``set_model('gate_rescue_repair')``
+        / a ClassRef). Returns the key, or ``None`` if neither matches. Registry
+        mode only (single-model handled separately).
+        """
+        if name in self._registry:
+            return name
+        return self._stem_to_key.get(_model_stem(name))
+
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
         for p in params:
@@ -421,17 +482,34 @@ class DetectorNode(Node):
             elif p.name == 'active_model':
                 name = str(p.value).strip()
                 if not self._registry:
+                    # Single-model launch: set_model to the loaded model is a no-op
+                    # SUCCESS (so ClassRef/use('<stem>') missions work); any other
+                    # name is a clear, actionable reject (no 'registry' word, so the
+                    # DSL surfaces THIS message instead of a generic wrap).
+                    if (name and self._single_model_name
+                            and _model_stem(name) == self._single_model_name):
+                        self.get_logger().info(
+                            f"[DET  ] active_model {name!r} already loaded "
+                            f"(single-model launch) — no-op")
+                        continue
                     return SetParametersResult(
                         successful=False,
-                        reason="active_model: no registry loaded (use 'models' param at startup)")
-                if name not in self._registry:
+                        reason=(f"single-model launch loaded "
+                                f"{self._single_model_name!r}; cannot switch to "
+                                f"{name!r} live -- relaunch with model:={name} (or "
+                                f"models:=... for hot switching)"))
+                key = self._resolve_model_key(name)
+                if key is None:
                     return SetParametersResult(
                         successful=False,
-                        reason=(f"active_model={name!r} not in registry; "
-                                f"available: {sorted(self._registry)}"))
-                self._det = self._registry[name]
-                self._active_name = name
-                self.get_logger().info(f"[DET  ] active_model → {name!r}")
+                        reason=(f"active_model={name!r} not found -- keys="
+                                f"{sorted(self._registry)} stems="
+                                f"{sorted(self._stem_to_key)}"))
+                self._det = self._registry[key]
+                self._active_name = key
+                self.get_logger().info(
+                    f"[DET  ] active_model → {key!r}"
+                    + (f" (via stem {name!r})" if key != name else ""))
 
             elif p.name == 'paused':
                 state = 'paused' if p.value else 'resumed'
