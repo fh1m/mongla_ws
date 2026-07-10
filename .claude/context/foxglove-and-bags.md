@@ -205,12 +205,16 @@ precisely because it has **no account / no login wall** and is guaranteed to wor
 offline at the venue (Gate B). It loads the same layout and speaks the same
 Foxglove-WebSocket protocol as the bridge.
 
-**Dev-box install (once):**
+**Dev-box install (once)** — all three, verified on the `auv-ros2` distrobox 2026-07-10:
 ```bash
 # viewer (offline-safe): latest .deb from github.com/lichtblick-suite/lichtblick/releases
 sudo apt install -y /path/to/lichtblick-<ver>-linux-amd64.deb   # provides `lichtblick`
-# bridge (so you can attach the viewer to LOCAL sim for dry practice):
+# bridge (attach the viewer to LOCAL sim for dry practice):
 sudo apt install -y ros-humble-foxglove-bridge
+# MCAP storage plugin -- REQUIRED for `pool_record.sh replay` / `ros2 bag play` here.
+# Stock Humble desktop only has sqlite3, so without this an MCAP bag errors
+# "invalid choice: 'mcap'". (The Jetson gets it via package.xml; the dev box needs it too.)
+sudo apt install -y ros-humble-rosbag2-storage-mcap
 ```
 
 **Connect to the live AUV:** launch `lichtblick` → *Open connection → Foxglove WebSocket*
@@ -218,6 +222,16 @@ sudo apt install -y ros-humble-foxglove-bridge
 `src/duburi_vision/foxglove/duburi_layout.json`. This is pure WebSocket over the
 tether/switch — it needs **no** matching `ROS_DOMAIN_ID` and **no** DDS discovery on the
 dev box (that's why it's robust across the network).
+
+> **⚠ Viewer-vs-bridge protocol version (real gotcha).** `foxglove_bridge` 3.4.x is the
+> new Foxglove-SDK server and requires the WebSocket subprotocol **`foxglove.sdk.v1`**; the
+> *classic* `foxglove.websocket.v1` gets a silent **HTTP 400 "handshake failed"**.
+> **Lichtblick 1.27.0 speaks `foxglove.sdk.v1`** (verified — it negotiates and connects), so
+> the standardized pairing is fine. But an **old** Foxglove Studio that only knows the
+> classic token will fail to connect to this bridge — if a teammate's viewer won't connect,
+> update it (or pin the bridge to a 0.7.x/`foxglove.websocket.v1` build). Diagnose from the
+> bridge terminal: a good client logs a channel subscription; a version-mismatched one logs
+> `Dropping client …: handshake failed`.
 
 **Dry practice with NO AUV (local sim on the dev box):** the bridge runs here too, so you
 can rehearse the whole Foxglove workflow against Gazebo SITL before pool day:
@@ -232,14 +246,17 @@ without the pool). Bags live in `~/duburi_runs` on the Jetson; copy the whole ru
 so the bag, scorecard, and logs come together:
 ```bash
 rsync -av jetson@192.168.2.69:~/duburi_runs/  ~/duburi_runs/     # or scp -r
-# replay locally (needs duburi_interfaces built here -- it is):
+# replay locally (needs the MCAP plugin above + duburi_interfaces built here):
 scripts/pool_record.sh replay ~/duburi_runs/bag_gate_run_<ts>
-# then Lichtblick → ws://localhost:8765 sees the replayed topics, OR open the bag
-# directly in Lichtblick: Open local file → the bag's .mcap/.db3
+# then Lichtblick → ws://localhost:8765 sees the replayed topics.
 ```
-Lichtblick opens a bag **file directly** (no ROS needed) — handy on a laptop without a ROS
-install. `ros2 bag play` + a local bridge is the path when you want to also run
-`vision_display` or live `ros2 param set` against the replayed stream.
+**Two distinct replay paths — don't conflate them:**
+- **`pool_record.sh replay` / `ros2 bag play`** re-publishes the bag onto live ROS topics →
+  needs `ros-humble-rosbag2-storage-mcap` **and** `duburi_interfaces` built. Use it when you
+  also want `vision_display` or live `ros2 param set` against the replayed stream.
+- **Open the `.mcap` file directly in Lichtblick** (*Open local file*) → needs **no ROS, no
+  plugin, no `duburi_interfaces`** (MCAP carries the schemas, so `DuburiState` still renders).
+  Best on a bare laptop.
 
 > **Note — the dev box is a distrobox** (`auv-ros2`, Ubuntu 22.04, ROS Humble). Lichtblick
 > is a GUI app; it launches fine with the container's `DISPLAY`/Wayland passthrough. If it
