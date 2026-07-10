@@ -452,6 +452,18 @@ ros2 run duburi_vision vision_thrust_check     # detection → RC echo (disarmed
 ros2 run duburi_vision export_engine --all     # build TensorRT engines (ON THE JETSON)
 ```
 
+**Operator debugging / practice tooling (all OFF the mission path — see [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)):**
+
+```bash
+ros2 launch duburi_manager bringup.launch.py vision:=true foxglove:=true  # + Foxglove telemetry (ws://<ip>:8765)
+scripts/pool_record.sh record gate_run         # rosbag a run → ~/duburi_runs (replay offline to tune)
+scripts/pool_record.sh replay <bag-dir>        # play a recorded run back (Foxglove/vision_display against it)
+scripts/pool_record.sh list                    # list recorded runs + recent scorecards
+```
+
+Scorecards auto-write to `DUBURI_RUN_DIR` (default `~/duburi_runs`) as `<mission>_<ts>.json`
+(mission + ISO timestamp + git SHA + per-verb phases) on every mission exit.
+
 ---
 
 ## 9. ArduSub modes reference
@@ -637,6 +649,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `dvl-reference.md`              | Nortek Nucleus1000 protocol, packet catalog, POSHOLD ArduSub setup  |
 | `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |
 | `pool-day.md`                   | Pool-day checklist and session workflow                             |
+| `foxglove-and-bags.md`          | **★ Operator tooling (off mission path)** — Foxglove telemetry (`foxglove:=true` + FPS/offline gates), `pool_record.sh` rosbag record/replay, mission scorecards → `~/duburi_runs`. Plus the "what we did NOT integrate" scouting decision |
 | `known-issues.md`               | Tracked code bugs from the 2026-04/05 audits (all FIXED). Current cross-cutting state → `robosub-2026-audit.md` |
 
 **Method & design theory:**

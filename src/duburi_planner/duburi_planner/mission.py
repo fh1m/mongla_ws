@@ -168,7 +168,7 @@ def main(args=None):
         _safe_shutdown(duburi)
         exit_code = 1
     finally:
-        duburi.log_scoreboard(json_path='auto')
+        duburi.log_scoreboard(json_path='auto', mission=parsed.name)
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

@@ -322,14 +322,18 @@ class _VisionDSL:
 
         axes_csv = ','.join(name for name, _ in active)
         offsets = {name: float(val) for name, val in active}
-        # Auto-switch the live detector to this camera (pause the other, resume this,
-        # point the HUD at it, settle) so `camera='downward'` "just works" and only
-        # one detector runs at a time. Idempotent -- no-op when already live.
-        self._dsl._activate_camera(cam)
-        # Loud preflight: align needs live detections -- abort if the detector
-        # node for this camera isn't running (rather than idle on err=+inf).
+        # ORDER MATTERS: program the detector (model/class for a ClassRef) + confirm
+        # it's up BEFORE activating the camera, so _activate_camera's settle warms
+        # the NEW config. If we resumed first (old order) the settle would warm the
+        # OLD model -- wasting it and briefly emitting wrong-class boxes -- and the
+        # warm-gate in _orchestrate would then have to wait all over again.
+        #   1. loud preflight: abort if this camera's detector node isn't running.
         self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))
-        tgt     = self._resolve_target(target, cam)
+        #   2. set model + classes for a ClassRef (applies even while paused).
+        tgt = self._resolve_target(target, cam)
+        #   3. pause the other detector, resume THIS one (now programmed), settle +
+        #      point the HUD at it. Idempotent -- no-op when already live.
+        self._dsl._activate_camera(cam)
 
         # fire: int | list | None -> CSV channels for the goal ('' = no fire).
         fire_csv = ''
@@ -410,14 +414,12 @@ class _VisionDSL:
         :class:`VisionResult`; never raises on a miss.
         """
         cam = self._resolve_camera(camera)
-        # Auto-switch the live detector to this camera (idempotent). move() is
-        # rejected on a downward camera by the verb, but a forward move after a
-        # downward align still needs to flip the live detector back.
-        self._dsl._activate_camera(cam)
-        # Loud preflight: move needs live detections -- abort if the detector
-        # node for this camera isn't running (rather than idle on err=+inf).
-        self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))
-        tgt = self._resolve_target(target, cam)
+        # ORDER MATTERS (see align): program the detector BEFORE resuming it so the
+        # settle warms the NEW config. move() is rejected on downward, but a forward
+        # move after a downward align still needs to flip the live detector back.
+        self._dsl._ensure_detector(self._dsl._detector_node(camera=cam))  # loud preflight
+        tgt = self._resolve_target(target, cam)                           # set model/classes
+        self._dsl._activate_camera(cam)                                   # resume + settle
         maintain_on = maintain is not None
         # fwd=None -> pass-through: wire a negative sentinel so it survives
         # the manager's `0.0 == unset` rule (which would otherwise restore
@@ -547,6 +549,21 @@ class _VisionDSL:
         time left, and fallback cycles count against the same deadline so
         a mission step can never overrun its declared ``duration``.
         """
+        # Cold-detector guard (only when a fallback is set -- without one the
+        # server holds through loss and never searches, so there is nothing
+        # dangerous to guard). Right after a camera / model / class switch the
+        # detector is briefly cold; if we send the verb immediately its acquire
+        # clock (lost_grace_s) can expire on a still-warming detector and drop
+        # into an autonomous SEARCH during the switch -- off-track and silent
+        # (LOST->fallback is a normal path). Block until the detector is producing
+        # frames first. A warm detector (incl. a genuine "target absent" search)
+        # returns instantly, so only a cold/just-switched detector pays the wait.
+        if fallback is not None:
+            if not self._dsl._wait_detector_warm(camera):
+                self.log.warning(
+                    f"[VIS  ] {verb} {target!r}: detector on {camera!r} still not "
+                    f"producing frames after warm-up -- proceeding (may fall back)")
+
         deadline = _time.monotonic() + max(float(duration), 0.0)
 
         while True:
