@@ -46,12 +46,17 @@ cmd_record() {
   echo "▸ recording → $out"
   echo "  allowlist: $regex"
   echo "  (Ctrl-C to stop cleanly; bag is finalized on stop)"
+  # -s mcap: write MCAP (not the default sqlite3 .db3). MCAP is Foxglove's
+  # native format — the bag opens as a local file directly in the Foxglove
+  # desktop app WITH embedded schemas (needed for our custom DuburiState msg),
+  # so "record a run, drag it into Foxglove" just works. Needs the
+  # ros-humble-rosbag2-storage-mcap plugin (exec_depend in duburi_manager).
   # --regex matches topic names; -o sets the output bag dir.
   # --include-hidden-topics: /duburi/move/_action/{feedback,status} are HIDDEN
   # (the _action namespace); without this the regex matches them but bag record
   # still skips them. The regex keeps the set filtered, so we only get the
   # matching hidden topics, not the full _action firehose.
-  ros2 bag record --regex "$regex" --include-hidden-topics -o "$out"
+  ros2 bag record -s mcap --regex "$regex" --include-hidden-topics -o "$out"
   echo "▸ saved: $out"
   echo "  replay:  scripts/pool_record.sh replay '$out'"
 }
