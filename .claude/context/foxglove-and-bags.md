@@ -13,6 +13,62 @@ telemetry, the bag, and the per-verb scorecard together.
 
 ---
 
+## 0. The per-run debug workflow (start here) — tested on-device 2026-07-10
+
+Every run becomes fully reviewable: **live** in Foxglove while it happens, and **offline**
+from one folder afterwards (MCAP bag + scorecard + node logs). One helper —
+`scripts/pool_session.sh` — pins that folder so you don't hand-juggle env vars.
+
+**Pin the run folder in EVERY terminal** (same label = same folder):
+```bash
+cd ~/Ros_workspaces/duburi_ws && source install/setup.bash
+source scripts/pool_session.sh gate_am     # exports DUBURI_RUN_DIR + ROS_LOG_DIR
+```
+
+**Terminal 1 — preflight + vehicle + telemetry + live viz** (the launch file is the
+`ros2 run duburi_manager start` equivalent that *also* wires vision + Foxglove; the same
+`-p` params become `arg:=` — `bno085_port`/`payload_port` default to `auto` already):
+```bash
+ros2 run duburi_manager bringup_check         # 12-section preflight; fix any FAIL first
+ros2 launch duburi_manager bringup.launch.py \
+     mode:=pool yaw_source:=bno085 vision:=true foxglove:=true
+```
+> Prefer your existing `ros2 run duburi_manager start …`? It has no Foxglove arg — start
+> the bridge yourself in a spare terminal:
+> `ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765 -p use_compression:=true -p include_hidden:=true`
+
+**Terminal 2 — record the run** (MCAP, into the pinned folder):
+```bash
+scripts/pool_record.sh record gate_am         # Ctrl-C to stop + finalize the bag
+```
+
+**Terminal 3 — drive it** (mission OR CLI — scorecard auto-writes into the folder):
+```bash
+ros2 run duburi_planner mission fsm_full_2026
+#   or hand-fly:  ros2 run duburi_planner duburi arm ; ... ; duburi disarm
+```
+
+**Topside laptop — watch live:** Foxglove desktop → *Open connection → Foxglove WebSocket*
+→ `ws://192.168.2.69:8765`, load `src/duburi_vision/foxglove/duburi_layout.json`.
+
+**After the run — one folder has everything:**
+```bash
+scripts/pool_record.sh list                   # bags + recent scorecards
+ls ~/duburi_runs/gate_am/                      # bag_gate_am_<ts>/  <mission>_<ts>.json  logs/
+```
+
+**Offline replay-to-tune (bench, no pool time):**
+```bash
+source scripts/pool_session.sh gate_am
+scripts/pool_record.sh replay ~/duburi_runs/gate_am/bag_gate_am_<ts>
+# other terminal: ros2 run duburi_vision vision_display   (or drag the .mcap into Foxglove)
+# then: ros2 param set /duburi_detector_forward conf 0.45  and watch the effect
+```
+
+Sections 1–3 below detail each piece.
+
+---
+
 ## 1. Foxglove — live telemetry (`foxglove:=true`)
 
 BumblebeeAS's `controlkitv3` is Foxglove-based; the borrowable idea is **Foxglove
@@ -121,19 +177,20 @@ never raises on pool day.
 rclpy/rcl already writes a per-process log tree; point it at the run folder so the
 **manager** terminal (`[STATE]`/`[ARDUB]`/`[RC ]`/`[ACT]` telemetry) **and** the mission
 terminal both land in one place — more complete than an in-process tee (which would only
-see the mission terminal). Export the same `ROS_LOG_DIR` in each terminal of a session:
+see the mission terminal). `scripts/pool_session.sh` sets both `DUBURI_RUN_DIR` and
+`ROS_LOG_DIR` for you; **source it (same label) in every terminal**:
 
 ```bash
-export DUBURI_RUN_DIR=~/duburi_runs/2026-champs
-export ROS_LOG_DIR=$DUBURI_RUN_DIR/logs        # rcl logs for every node started here
+source scripts/pool_session.sh 2026-champs     # → DUBURI_RUN_DIR=~/duburi_runs/2026-champs, ROS_LOG_DIR=.../logs
 # terminal 1:
 ros2 launch duburi_manager bringup.launch.py vision:=true foxglove:=true 2>&1 | tee $DUBURI_RUN_DIR/manager_console.log
-# terminal 2 (same two exports):
+# terminal 2 (same `source pool_session.sh 2026-champs`):
 ros2 run duburi_planner mission fsm_full_2026  2>&1 | tee $DUBURI_RUN_DIR/mission_console.log
 ```
 Now `~/duburi_runs/2026-champs/` holds the bag, the scorecard, the rcl logs, and both
 console tees for that session. The `tee` is optional (rcl logs already persist); it just
-gives you the exact colored terminal output too.
+gives you the exact colored terminal output too. (Manual equivalent, no helper:
+`export DUBURI_RUN_DIR=~/duburi_runs/2026-champs; export ROS_LOG_DIR=$DUBURI_RUN_DIR/logs`.)
 
 ---
 

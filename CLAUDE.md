@@ -461,11 +461,16 @@ ros2 run duburi_vision export_engine --all     # build TensorRT engines (ON THE 
 **Operator debugging / practice tooling (all OFF the mission path — see [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)):**
 
 ```bash
-ros2 launch duburi_manager bringup.launch.py vision:=true foxglove:=true  # + Foxglove telemetry (ws://<ip>:8765)
-scripts/pool_record.sh record gate_run         # rosbag a run → ~/duburi_runs (replay offline to tune)
+source scripts/pool_session.sh gate_am         # SOURCE in every terminal — pins DUBURI_RUN_DIR + ROS_LOG_DIR (one folder/run)
+ros2 launch duburi_manager bringup.launch.py mode:=pool yaw_source:=bno085 vision:=true foxglove:=true  # vehicle + vision + Foxglove (ws://<ip>:8765)
+scripts/pool_record.sh record gate_am          # rosbag (MCAP) a run → the pinned folder (replay offline to tune)
 scripts/pool_record.sh replay <bag-dir>        # play a recorded run back (Foxglove/vision_display against it)
 scripts/pool_record.sh list                    # list recorded runs + recent scorecards
 ```
+> Full per-run workflow (which terminal runs what, live Foxglove + offline replay-to-tune):
+> [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) §0. `bringup.launch.py` is the
+> `ros2 run duburi_manager start` equivalent that also wires vision + Foxglove; the bare
+> `start` has no `foxglove` arg (launch the bridge yourself if you use it).
 
 Scorecards auto-write to `DUBURI_RUN_DIR` (default `~/duburi_runs`) as `<mission>_<ts>.json`
 (mission + ISO timestamp + git SHA + per-verb phases) on every mission exit.
