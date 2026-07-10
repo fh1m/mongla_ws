@@ -130,9 +130,18 @@ without operator intervention:
 > **no** `HARDWARE` mode.
 
 Run `ros2 run duburi_manager bringup_check` at the start of every
-session — it pings the canonical Pi/Jetson IPs, sniffs UDP 14550 for an
-active MAVLink stream, lists Pixhawk USB devices, and tests BNO085
-auto-detection. Exit code is `0` when nothing failed.
+session — a RoboSub-proof per-subsystem preflight (12 sections, A–L) that
+verifies each subsystem is not just present but **usable**: compute/env
+(ROS sourced, duburi pkgs import, disk), vision deps (numpy<2, system cv2,
+trackers — the JetPack E1–E3 traps), serial drivers (**ch341 present +
+brltty absent** — the payload CH340 trap, E5), network, **MAVLink** (real
+autopilot heartbeat, ARMED state, flight mode, battery V — filters out
+BlueOS/GCS heartbeats), Pixhawk USB (BNO/payload VID excluded), BNO085,
+DVL, **payload** (auto-detect + safe serial-link verify with the `'0'`
+byte), cameras (forward+downward by-path count), vision models (TensorRT
+`.engine` vs slow `.pt`), and Jetson MAXN power. Each line is PASS/WARN/FAIL;
+exit `0` unless a FAIL. `--strict` makes any WARN exit non-zero (hard
+pre-mission gate); `--skip-mavlink` skips the UDP 14550 probe.
 
 SIM startup commands (run before ROS2 nodes):
 
