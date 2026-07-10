@@ -81,6 +81,13 @@ def generate_launch_description():
                                           'is the FPS bottleneck on busy frames).'),
         DeclareLaunchArgument('viewer',     default_value='true',
                               description='Open vision_display (OpenCV viewer) alongside vision pipeline'),
+        DeclareLaunchArgument('foxglove',   default_value='false',
+                              description='Start foxglove_bridge (WebSocket telemetry on foxglove_port). '
+                                          'Off the mission path -- pure viz. Needs '
+                                          'ros-humble-foxglove-bridge installed. Connect the Foxglove '
+                                          'desktop app to ws://<jetson-ip>:<foxglove_port>.'),
+        DeclareLaunchArgument('foxglove_port', default_value='8765',
+                              description='foxglove_bridge WebSocket port'),
     ]
 
     manager_node = Node(
@@ -122,4 +129,27 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('vision')),
     )
 
-    return LaunchDescription(args + [manager_node, vision_launch])
+    # Foxglove telemetry bridge -- opt-in, off the mission path (pure viz). Auto-
+    # exposes every topic over a WebSocket the Foxglove desktop app renders (our
+    # detections/images/state are standard vision_msgs/sensor_msgs). use_compression
+    # cuts tether bandwidth; still confirm detection FPS is unperturbed with it up
+    # and images being viewed (Mongla is FPS-coupled). See foxglove-and-bags.md.
+    foxglove_node = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        output='screen',
+        ros_arguments=['--log-level', 'warn', '--log-level', 'foxglove_bridge:=info'],
+        parameters=[{
+            'port':            LaunchConfiguration('foxglove_port'),
+            'address':         '0.0.0.0',
+            'use_compression': True,
+            # /duburi/move/_action/feedback + /status live under the _action
+            # namespace => ROS 2 HIDDEN topics. Without this the live err_x_px/
+            # err_y_px convergence plot is silently empty (default is false).
+            'include_hidden':  True,
+        }],
+        condition=IfCondition(LaunchConfiguration('foxglove')),
+    )
+
+    return LaunchDescription(args + [manager_node, vision_launch, foxglove_node])

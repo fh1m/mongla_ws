@@ -135,6 +135,8 @@ Tunable live (between runs, no rebuild):
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import time as _time
 
@@ -153,6 +155,40 @@ from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by DuburiM
 def _format_outcome(cmd: str, result) -> str:
     return (f'  {cmd:<22s} final={result.final_value:+.3f} '
             f'err={result.error_value:+.3f}  ({result.message})')
+
+
+# --------------------------------------------------------------------------- #
+#  Per-run artifact folder (scorecards live here; rosbags land alongside)      #
+# --------------------------------------------------------------------------- #
+# One place to grab everything after a pool session. Override the parent with
+# DUBURI_RUN_DIR (pool_record.sh writes bags into the same tree). Default
+# ~/duburi_runs so a scorecard never litters the CWD the operator launched from.
+
+_RUN_DIR_ENV     = 'DUBURI_RUN_DIR'
+_DEFAULT_RUN_DIR = '~/duburi_runs'
+
+
+def _run_dir() -> str:
+    """Return the per-run artifact folder, creating it if absent."""
+    base = os.path.expanduser(os.environ.get(_RUN_DIR_ENV) or _DEFAULT_RUN_DIR)
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _git_sha() -> str:
+    """Best-effort short git SHA of the workspace (which code ran this run).
+
+    Returns '' if git/the repo is unavailable -- traceability is a nice-to-have,
+    never a reason to raise on pool day.
+    """
+    try:
+        out = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True, text=True, timeout=2.0)
+        return out.stdout.strip() if out.returncode == 0 else ''
+    except Exception:
+        return ''
 
 
 # --------------------------------------------------------------------------- #
@@ -1142,7 +1178,8 @@ class DuburiMission:
     #  Mission scoreboard                                                  #
     # ================================================================== #
 
-    def log_scoreboard(self, *, json_path: str | None = None) -> None:
+    def log_scoreboard(self, *, json_path: str | None = None,
+                       mission: str | None = None) -> None:
         """Print a structured per-verb mission summary and optionally write JSON.
 
         Called automatically by `mission.py` on exit (normal or exception).
@@ -1152,8 +1189,12 @@ class DuburiMission:
         ----------
         json_path : str | None
             If given, write the scoreboard JSON to this path in addition to
-            printing to stdout.  Pass ``'auto'`` to generate a timestamped
-            filename in the current directory.
+            printing to stdout.  Pass ``'auto'`` to write a timestamped
+            ``<mission>_<ts>.json`` into the dedicated run folder (``_run_dir``,
+            default ``~/duburi_runs``, override with ``DUBURI_RUN_DIR``).
+        mission : str | None
+            Mission name, recorded in the JSON and used in the ``'auto'``
+            filename so a pool session's scorecards are traceable per run.
 
         Example output::
 
@@ -1189,18 +1230,29 @@ class DuburiMission:
         print(f'╚{hb}╝\n')
 
         if json_path:
-            if json_path == 'auto':
-                ts = _time.strftime('%Y%m%d_%H%M%S')
-                json_path = f'mission_scoreboard_{ts}.json'
             payload = {
-                'total_s':    total_s,
-                'phases':     self._scoreboard,
+                'mission':       mission or '',
+                'timestamp':     _time.strftime('%Y-%m-%dT%H:%M:%S'),
+                'git_sha':       _git_sha(),
+                'total_s':       total_s,
                 'success_count': sum(1 for e in self._scoreboard if e['success']),
                 'fail_count':    sum(1 for e in self._scoreboard if not e['success']),
+                'phases':        self._scoreboard,
             }
-            with open(json_path, 'w') as fh:
-                json.dump(payload, fh, indent=2)
-            self.log.info(f'[DSL  ] scoreboard written → {json_path}')
+            # Whole write is best-effort: log_scoreboard runs in mission.py's
+            # finally, so a run-dir mkdir / write failure must never mask the
+            # mission outcome. Resolve the auto path INSIDE the guard too
+            # (_run_dir mkdir can raise on a read-only / full disk).
+            try:
+                if json_path == 'auto':
+                    ts   = _time.strftime('%Y%m%d_%H%M%S')
+                    name = (mission or 'mission').replace('/', '_')
+                    json_path = os.path.join(_run_dir(), f'{name}_{ts}.json')
+                with open(json_path, 'w') as fh:
+                    json.dump(payload, fh, indent=2)
+                self.log.info(f'[DSL  ] scoreboard → {json_path}')
+            except OSError as exc:
+                self.log.warning(f'[DSL  ] scoreboard write failed ({exc})')
 
     # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to raw client           #
