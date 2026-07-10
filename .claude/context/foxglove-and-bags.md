@@ -24,8 +24,12 @@ Raw-Messages panel; `/duburi/move` action feedback (`err_x_px`/`err_y_px`) plots
 
 **Install (once, on the Jetson):**
 ```bash
-sudo apt install ros-humble-foxglove-bridge
+sudo apt install ros-humble-foxglove-bridge ros-humble-rosbag2-storage-mcap
 ```
+Both are declared as `exec_depend` in `duburi_manager/package.xml`, so on a fresh
+image `rosdep install --from-paths src` restores them — you only run the apt line
+by hand if rosdep isn't set up. (`foxglove_bridge` = live telemetry;
+`rosbag2_storage_mcap` = the MCAP bag format `pool_record.sh` writes, §2.)
 
 **Run (opt-in launch arg, off by default):**
 ```bash
@@ -72,8 +76,11 @@ with no account. If it demands a login, you found out in the hotel, not at the p
 `ros2 bag record` is built into Humble (zero code). The helper wraps it with a **topic
 allowlist** (keeps bags small — off the raw-image firehose) and the shared run tree.
 **Payoff for scarce pool time:** record every run, then replay it **offline, dry** to
-tune detection conf / gains / mission timings without being in the water. Foxglove plays
-bags natively, so a recorded run reviews exactly like a live one.
+tune detection conf / gains / mission timings without being in the water. The helper
+records **MCAP** (`-s mcap`), Foxglove's native format — so you can either drag the
+`.mcap` straight into the Foxglove desktop app (schemas travel with the bag, so the
+custom `DuburiState` renders), or `replay` it into a live `foxglove_bridge`; a recorded
+run reviews exactly like a live one.
 
 ```bash
 scripts/pool_record.sh record gate_run        # debug allowlist → ~/duburi_runs/bag_gate_run_<ts>

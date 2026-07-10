@@ -17,6 +17,13 @@
   <depend>duburi_sensors</depend>
   <depend>duburi_vision</depend>
 
+  <!-- Optional operator-debug tooling (off the mission path, opt-in via
+       `foxglove:=true` / pool_record.sh). exec_depend so a fresh-image
+       `rosdep install` restores them after an SSD reflash instead of the
+       launch failing with "package foxglove_bridge not found". -->
+  <exec_depend>foxglove_bridge</exec_depend>
+  <exec_depend>rosbag2_storage_mcap</exec_depend>
+
   <buildtool_depend>ament_python</buildtool_depend>
 
   <test_depend>ament_pep257</test_depend>
