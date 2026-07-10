@@ -475,6 +475,10 @@ scripts/pool_record.sh list                    # list recorded runs + recent sco
 Scorecards auto-write to `DUBURI_RUN_DIR` (default `~/duburi_runs`) as `<mission>_<ts>.json`
 (mission + ISO timestamp + git SHA + per-verb phases) on every mission exit.
 
+The **ground-station viewer is Lichtblick** (offline-safe Foxglove Studio fork — no login wall
+at the venue), connecting to `ws://<jetson-ip>:8765`; the dev box also runs `foxglove_bridge`
+for local-sim dry practice. Dev-box install + connect steps: `foxglove-and-bags.md` §4.
+
 ---
 
 ## 9. ArduSub modes reference
