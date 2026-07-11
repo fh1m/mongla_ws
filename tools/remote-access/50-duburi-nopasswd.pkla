@@ -1,0 +1,64 @@
+# 50-duburi-nopasswd.pkla — stop the polkit "Authentication required" popups that
+# appear ONLY over a remote desktop (NoMachine / xrdp / VNC) for user `dubomini`.
+#
+# WHY THIS IS NEEDED (root cause):
+#   A remote-desktop session is NOT a "local active" seat, so polkit's default
+#   `ResultActive` authorization does not apply to it — every color-manager /
+#   NetworkManager / update check falls through to `ResultInactive`, which is
+#   `auth_admin` → the password dialog. Granting the same actions `ResultAny=yes`
+#   for this specific user makes them pass without a prompt regardless of whether
+#   the session is local, inactive, or remote. The classic offender is
+#   color-manager (pops on almost every remote login).
+#
+# WHY .pkla AND NOT rules.d/*.rules:
+#   JetPack 6.2 = Ubuntu 22.04 = polkit 0.105, which has NO JavaScript rules
+#   engine (no /etc/polkit-1/rules.d). 0.105 uses this PolicyKit Local Authority
+#   (.pkla) format. Install into /etc/polkit-1/localauthority/50-local.d/.
+#
+# SCOPE: only user `dubomini`, only these desktop-nuisance actions. Nothing here
+# touches the vehicle — arming, thrusters, and serial go over MAVLink/pyserial,
+# not polkit. Installed by tools/setup_remote_access.sh.
+
+[Duburi remote-desktop: color management (the main offender)]
+Identity=unix-user:dubomini
+Action=org.freedesktop.color-manager.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+
+[Duburi remote-desktop: network management]
+Identity=unix-user:dubomini
+Action=org.freedesktop.NetworkManager.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+
+[Duburi remote-desktop: software updates and package operations]
+Identity=unix-user:dubomini
+Action=org.freedesktop.packagekit.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+
+[Duburi remote-desktop: mount and manage removable/USB storage]
+Identity=unix-user:dubomini
+Action=org.freedesktop.udisks2.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+
+[Duburi remote-desktop: power statistics]
+Identity=unix-user:dubomini
+Action=org.freedesktop.upower.*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
+
+# Suspend/hibernate only — deliberately NOT halt/reboot/power-off, so a stray
+# remote session can never shut the vehicle down without a password.
+[Duburi remote-desktop: suspend and hibernate]
+Identity=unix-user:dubomini
+Action=org.freedesktop.login1.suspend*;org.freedesktop.login1.hibernate*
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes

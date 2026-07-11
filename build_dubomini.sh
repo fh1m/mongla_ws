@@ -91,8 +91,12 @@ _prune_missing_paths() {  # echo $1 (a ':'-list) minus empty/nonexistent dirs
 export AMENT_PREFIX_PATH="$(_prune_missing_paths "${AMENT_PREFIX_PATH:-}")"
 export CMAKE_PREFIX_PATH="$(_prune_missing_paths "${CMAKE_PREFIX_PATH:-}")"
 
-# Step 1: build the interface package first so generated types are available
-colcon build --packages-select duburi_interfaces "$@"
+# Step 1: build the interface package first so generated types are available.
+# --cmake-args -Wno-dev silences the CMP0148 "warning for project developers"
+# lines that ROS's own rosidl_generator_py cmake emits (not our code) — the
+# exact lever the warning text names. Our CMakeLists.txt sets a >=3.10 minimum
+# so the cmake_minimum_required deprecation is gone too.
+colcon build --packages-select duburi_interfaces --cmake-args -Wno-dev "$@"
 source install/setup.bash
 
 # Step 2: build the Python packages (control + sensors + manager + planner + vision)

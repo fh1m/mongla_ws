@@ -198,6 +198,10 @@ gives you the exact colored terminal output too. (Manual equivalent, no helper:
 
 ## 4. Ground station (dev box) — the viewer + offline replay
 
+> **How you reach the Jetson at all** (mosh+tmux terminal, NoMachine desktop, killing the
+> polkit password popups, drop-proof recovery) is its own guide:
+> [`remote-access.md`](remote-access.md). This section is just the **viewer**.
+
 The Jetson runs the **bridge** (server); the dev box / operator laptop runs the **viewer**
 (client) and **replays bags**. The viewer we standardized on is **Lichtblick** — Bosch's
 MIT open-source fork of Foxglove Studio — chosen over the official Foxglove desktop app

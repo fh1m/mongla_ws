@@ -48,11 +48,12 @@ companion — wiring, IPs, checklists, recovery.
 Accessing the AUV from the ground station:
 
 ```bash
-# SSH to Jetson (ROS2 host)
-ssh fh1m@192.168.2.69
+# Terminal (mission authoring / CLI / launches) — mosh, not bare ssh: instant echo,
+# survives tether drops; run inside tmux so a dropped link never kills a mission.
+mosh dubomini@192.168.2.69          # then: tmux new -s run
 
-# Remote desktop (Remmina or any VNC client)
-# 192.168.2.69:5900
+# Full desktop — NoMachine (NX), replaces laggy xrdp/VNC: 192.168.2.69:4000
+# Vision — no desktop needed: Lichtblick ws://192.168.2.69:8765 (foxglove:=true)
 
 # BlueOS web UI (telemetry, calibration, video)
 # http://192.168.2.1
@@ -60,6 +61,10 @@ ssh fh1m@192.168.2.69
 # Tap the same MAVLink stream from a third machine (read-only):
 mavproxy.py --master=udpin:0.0.0.0:14551
 ```
+
+> **The smooth, drop-proof ground-station workflow** (mosh+tmux, NoMachine, killing the
+> polkit password popups, and emergency recovery without a reboot) is its own guide:
+> [`remote-access.md`](remote-access.md). One-time install: `tools/setup_remote_access.sh`.
 
 ---
 

@@ -147,7 +147,7 @@ The default profile expects BlueOS to forward the autopilot to UDP
 ```
 Vehicle Setup -> MAVLink Endpoints -> Add
   Type:   UDP Client
-  IP:     <jetson static IP, e.g. 192.168.2.2>
+  IP:     <jetson static IP, e.g. 192.168.2.69>
   Port:   14550
 ```
 
@@ -224,6 +224,12 @@ log line you'll see.
 ---
 
 ## 5b. Watching the vision HUD over VSCode Remote-SSH
+
+> **For pool/competition ops, prefer the layered ground-station workflow** in
+> [`../.claude/context/remote-access.md`](../.claude/context/remote-access.md): view vision in
+> Lichtblick / `web_video_server` on the laptop (no desktop pixels), drive the Jetson over
+> mosh+tmux, and use NoMachine for a full desktop. The `ssh -X` / on-Jetson-display options
+> below are the dev-box fallback and are superseded by layers 1–2 there.
 
 **First, the mental model that trips everyone up:** `ros2 launch duburi_vision
 vision.launch.py …` runs the nodes **on the Jetson** — your VSCode Remote-SSH
