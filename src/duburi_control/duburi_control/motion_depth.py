@@ -77,7 +77,7 @@ def _fresh_depth(pixhawk):
 
 
 def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None,
-               abort_fn=None):
+               abort_fn=None, keepalive=None):
     """Drive the sub to `target_m` (negative = below surface) and hold.
 
     Caller MUST already be in ALT_HOLD; this function does not switch
@@ -87,6 +87,13 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None,
     defaults to `pixhawk.send_neutral` which sends 1500 on all six
     channels. Heading-lock-aware callers pass `writers.neutral` so Ch4
     stays released and the HeadingLock thread's Ch4 rate-override wins.
+
+    `keepalive` is an optional callable streamed every tick of the
+    wait-for-depth loop to keep RC_CHANNELS_OVERRIDE flowing (else a long
+    hold with no heading-lock goes RC-silent and FS_PILOT_INPUT disarms
+    mid-command). Pass `writers.depth_keepalive` -- it releases Ch3 to
+    ALT_HOLD (so the descent still reaches target) while overriding the
+    other channels neutral. None = no keepalive (legacy behaviour).
     """
     if neutral_writer is None:
         neutral_writer = pixhawk.send_neutral
@@ -119,7 +126,7 @@ def hold_depth(pixhawk, target_m, timeout, log, neutral_writer=None,
             start_d = max(start_d - RAMP_ADVANCE_M, target_m)
 
     wait_for_depth(pixhawk, target_m, timeout, log, start_d=start_d,
-                   abort_fn=abort_fn)
+                   abort_fn=abort_fn, keepalive=keepalive)
 
 
 def prime_alt_hold(pixhawk, hold_at, neutral_writer, abort_fn=None):
@@ -140,7 +147,7 @@ def prime_alt_hold(pixhawk, hold_at, neutral_writer, abort_fn=None):
 
 
 def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None,
-                   abort_fn=None):
+                   abort_fn=None, keepalive=None):
     """Phase 2: stream the real target until reached or timeout.
 
     Ramps the setpoint from `start_d` toward `target_m` over RAMP_S
@@ -209,6 +216,14 @@ def wait_for_depth(pixhawk, target_m, timeout, log, start_d=None,
             setpoint = target_m
 
         pixhawk.set_target_depth(setpoint)
+
+        # Keep RC_CHANNELS_OVERRIDE warm so a long hold with no heading-lock
+        # doesn't go RC-silent and trip FS_PILOT_INPUT (mid-command disarm). The
+        # keepalive RELEASES Ch3, so ALT_HOLD's position controller still drives
+        # to `setpoint` above -- depth is reached AND the failsafe stays fed. This
+        # runs at the same 5 Hz as the (now-paused) heartbeat.
+        if keepalive is not None:
+            keepalive()
 
         if current is not None:
             error = abs(target_m - current)
