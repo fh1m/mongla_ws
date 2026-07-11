@@ -396,7 +396,7 @@ STATE_QOS = QoSProfile(
 cd ~/Ros_workspaces/duburi_ws
 
 # Full build (preferred — handles interface generation order)
-./build_duburi.sh
+./build_dubomini.sh
 
 # Faster: rebuild Python-only packages after editing source
 colcon build --symlink-install --packages-select duburi_control duburi_manager duburi_sensors

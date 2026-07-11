@@ -44,7 +44,7 @@ Edit `src/duburi_vision/config/detector.yaml`: set `model` to the new weights an
 ## 4. Verify
 
 ```bash
-./build_duburi.sh
+./build_dubomini.sh
 ros2 launch duburi_vision cameras_.launch.py
 ros2 run duburi_vision vision_check --camera forward --require-class <class>
 ```

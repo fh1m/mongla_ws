@@ -517,10 +517,21 @@ Typical mission sequence: `MANUAL` → `arm` → first `set_depth` engages `ALT_
 ```bash
 # Bring up sim (in docker terminals — see §3)
 cd ~/Ros_workspaces/duburi_ws
-./build_duburi.sh
+./build_dubomini.sh
 source install/setup.bash
 ros2 run duburi_manager start --ros-args -p mode:=sim
 ```
+
+> **`build_dubomini.sh` mirrors device-local models + missions into the tree
+> first, then builds.** The competition YOLO weights and the personal test
+> missions (`rakib_*`) are kept **out of git** (weights by extension; missions via
+> per-clone `.git/info/exclude`) and live in source-of-truth folders **outside**
+> the repo — `~/models` → `src/duburi_vision/models/` and `~/missions` →
+> `src/duburi_planner/duburi_planner/missions/`. So after a fresh `git clone`,
+> one `./build_dubomini.sh` restores them with nothing to copy by hand. The sync
+> is additive (never deletes) and soft-skips a missing source folder (dev box).
+> Override the sources with `DUBOMINI_MODELS_SRC` / `DUBOMINI_MISSIONS_SRC`.
+> (Formerly `build_duburi.sh` — renamed, same two-step interfaces-first build.)
 
 ### Step 2: Verify connectivity
 
