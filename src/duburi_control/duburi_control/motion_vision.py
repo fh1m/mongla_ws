@@ -308,6 +308,30 @@ def _authority(sample, coast_s: float) -> float:
     return _freshness(sample.age_s)
 
 
+# Below this authority, a LIVE bbox is stale enough that freshness-decay is
+# materially cutting the translational command -- the operator should see it as
+# "detector too slow", not a mystery stall (the align/move barely translates yet
+# never declares LOST, so no fallback fires). Diagnostic only; no behaviour change.
+_FRESH_WARN_FLOOR = 0.5
+
+
+def _warn_low_fps(log, fresh: float, sample) -> None:
+    """Throttled heads-up when low detector FPS is eating translational authority.
+
+    Fires only for a LIVE box (a coast has its own decay semantics) whose
+    freshness has fallen below ``_FRESH_WARN_FLOOR``. Pure observability: raising
+    detector FPS (TensorRT ``.engine``) is the fix; at healthy FPS fresh==1.0 and
+    this never fires.
+    """
+    if log is None or getattr(sample, 'coasted', False) or fresh >= _FRESH_WARN_FLOOR:
+        return
+    log.info(
+        f"[VIS  ] low detector FPS: lat/fwd authority {fresh * 100:.0f}% "
+        f"(bbox {sample.age_s * 1000:.0f}ms stale) -- raise FPS (.engine) if "
+        f"the approach stalls",
+        throttle_duration_sec=LOG_THROTTLE_S)
+
+
 def _range_gain(fill: float, floor: float,
                 lo: float = VISION_RANGE_GAIN_FILL_LO,
                 hi: float = VISION_RANGE_GAIN_FILL_HI) -> float:
@@ -886,6 +910,7 @@ def align_loop(*,
             # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
             # coast curve instead (gap decay), not freshness -- see _authority.
             fresh = _authority(sample, coast_s)
+            _warn_low_fps(log, fresh, sample)   # F3: surface FPS-starvation, don't stall silently
             lat_pct *= fresh
             fwd_pct *= fresh   # forward shares the freshness/coast decay (never braked)
             _drive(lat_pct, yaw_pct, fwd_pct)
@@ -1225,6 +1250,7 @@ def move_loop(*,
             fill = _fill(sample, mode)
             last_fill = fill
             fresh = _authority(sample, coast_s)   # FPS staleness (live) or coast decay
+            _warn_low_fps(log, fresh, sample)     # F3: surface FPS-starvation, don't stall silently
 
             x_off = sample.ex * half_w         # signed horizontal offset (operator px)
             # End-position (returned) + live feedback sink.

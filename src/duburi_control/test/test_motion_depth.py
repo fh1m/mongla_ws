@@ -79,3 +79,55 @@ def test_wait_for_depth_does_not_false_reach_on_stale(monkeypatch):
     # A frozen reading at the target must NOT be accepted as reached -> timeout.
     with pytest.raises(MovementTimeout):
         wait_for_depth(pix, -1.5, timeout=1.0, log=_Log())
+
+
+# --------------------------------------------------------------------------- #
+#  F1 (CTRL-C2): the failsafe keepalive is streamed every tick of the hold     #
+# --------------------------------------------------------------------------- #
+# A long depth hold with no heading-lock used to go RC-silent -> FS_PILOT_INPUT
+# disarmed mid-command. wait_for_depth now streams `keepalive` each tick to keep
+# RC_CHANNELS_OVERRIDE warm. The keepalive releases Ch3 so depth is still reached.
+
+def test_keepalive_streamed_each_tick_until_reached(monkeypatch):
+    monkeypatch.setattr('duburi_control.motion_depth.time.sleep', lambda *_: None)
+    # depth arrives at target on the 3rd read: keepalive must have fired per tick.
+    reads = iter([-1.0, -1.3, -1.5, -1.5])
+    pix = _FakePixhawk(-1.5, age=0.02)
+    monkeypatch.setattr(pix, 'get_attitude',
+                        lambda: {'depth': next(reads, -1.5), 'yaw': 0.0})
+    calls = {'n': 0}
+    wait_for_depth(pix, -1.5, timeout=5.0, log=_Log(),
+                   keepalive=lambda: calls.__setitem__('n', calls['n'] + 1))
+    # one keepalive per set_target_depth tick (>=1; loop ran until reached).
+    assert calls['n'] >= 1
+    assert calls['n'] == len(pix.setpoints)   # exactly one per tick, never skipped
+
+
+def test_keepalive_none_is_legacy_noop(monkeypatch):
+    monkeypatch.setattr('duburi_control.motion_depth.time.sleep', lambda *_: None)
+    pix = _FakePixhawk(-1.5, age=0.02)
+    # No keepalive passed -> must behave exactly as before (reaches, no crash).
+    assert wait_for_depth(pix, -1.5, timeout=2.0, log=_Log()) is None
+
+
+def test_make_writers_depth_keepalive_releases_ch3_both_lockstates():
+    from duburi_control.motion_writers import make_writers
+    from duburi_control.pixhawk import NO_OVERRIDE, CH_THROTTLE
+
+    class _Pix:
+        def __init__(self): self.frames = []
+        def send_rc_override(self, pitch=1500, roll=1500, throttle=1500,
+                             yaw=1500, forward=1500, lateral=1500):
+            self.frames.append(('override', throttle, yaw))
+        def send_rc_translation(self, throttle=1500, forward=1500, lateral=1500):
+            self.frames.append(('translation', throttle, None))
+        def send_neutral(self):
+            self.frames.append(('neutral', 1500, 1500))
+
+    # No lock: send_rc_override with Ch3 RELEASED, Ch4 (yaw) neutral -> 5 channels
+    # feed FS_PILOT exactly like the heartbeat, only Ch3 handed to ALT_HOLD.
+    p = _Pix(); make_writers(p, release_yaw=False).depth_keepalive()
+    assert p.frames == [('override', NO_OVERRIDE, 1500)]
+    # Lock active: send_rc_translation with Ch3 released (Ch4 left to the lock).
+    p = _Pix(); make_writers(p, release_yaw=True).depth_keepalive()
+    assert p.frames == [('translation', NO_OVERRIDE, None)]

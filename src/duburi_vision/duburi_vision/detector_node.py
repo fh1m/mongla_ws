@@ -440,8 +440,17 @@ class DetectorNode(Node):
         for name, conf in overrides.items():
             det = None
             if self._registry:
-                det = self._registry.get(name)
-            elif self._det is not None and name in ('', self._active_name):
+                # Resolve by registry KEY or model STEM, mirroring the
+                # active_model handler -- an aliased registry (models:=gate=stem)
+                # must accept set_conf(model='<stem>') too, or the per-model conf
+                # silently no-ops (the b155736 identity-bug class).
+                key = self._resolve_model_key(name)
+                det = self._registry[key] if key is not None else None
+            elif self._det is not None and (
+                    name == '' or _model_stem(name) == self._single_model_name):
+                # Single-model launch: _active_name stays None, so match on the
+                # loaded model's STEM instead (else a valid set_conf(model='<stem>')
+                # silently drops -- the exact torpedo "run this model tight" case).
                 det = self._det
             if det is None:
                 self.get_logger().warning(
