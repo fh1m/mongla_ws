@@ -11,6 +11,11 @@
 
 ## 0. Prerequisites (before you get to the pool)
 
+> **Drive the Jetson the drop-proof way** — run launches/missions in **tmux over mosh**
+> (`mosh dubomini@192.168.2.69`) so a dropped tether never kills a run; watch vision in
+> Lichtblick/`web_video_server`; use NoMachine (not xrdp) for a desktop. One-time setup +
+> emergency recovery: [`remote-access.md`](remote-access.md).
+
 ```bash
 # Sim test passed (gate_flare_prequal runs end-to-end)
 ros2 run duburi_planner mission gate_flare_prequal  # in Gazebo

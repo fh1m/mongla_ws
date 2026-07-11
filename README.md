@@ -594,7 +594,9 @@ Deep design notes live in [`.claude/context/`](.claude/context/) — start with 
   [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md) ·
   [`known-issues.md`](.claude/context/known-issues.md)
 - **Operator tooling (off mission path):** [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)
-  — Foxglove/Lichtblick telemetry, rosbag record/replay, per-run scorecards, dev-box setup
+  — Foxglove/Lichtblick telemetry, rosbag record/replay, per-run scorecards, dev-box setup ·
+  [`remote-access.md`](.claude/context/remote-access.md) — smooth, drop-proof ground-station
+  workflow (mosh+tmux, NoMachine, kill the password popups); `tools/setup_remote_access.sh`
 
 Top-level [`CLAUDE.md`](CLAUDE.md) is the agent/context index.
 

@@ -676,6 +676,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |
 | `pool-day.md`                   | Pool-day checklist and session workflow                             |
 | `foxglove-and-bags.md`          | **★ Operator tooling (off mission path)** — Foxglove telemetry (`foxglove:=true` + FPS/offline gates), `pool_record.sh` rosbag record/replay, mission scorecards → `~/duburi_runs`. Plus the "what we did NOT integrate" scouting decision |
+| `remote-access.md`              | **★ Ground-station remote access (off mission path)** — smooth, drop-proof workflow that replaces laggy xrdp: mosh+tmux (terminal, mission survives GUI death), Foxglove/`web_video_server` (vision, no desktop), NoMachine (full desktop), polkit `.pkla` (kills the password popups), emergency recovery without a reboot. Install: `tools/setup_remote_access.sh` |
 | `known-issues.md`               | Tracked code bugs from the 2026-04/05 audits (all FIXED). Current cross-cutting state → `robosub-2026-audit.md` |
 
 **Method & design theory:**
