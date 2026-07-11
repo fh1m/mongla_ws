@@ -20,7 +20,7 @@
       "Bash(chmod +x *)",
       "Bash(pip install *)",
       "Bash(bash -c ' *)",
-      "Bash(bash build_duburi.sh)",
+      "Bash(bash build_dubomini.sh)",
       "Bash(bash *)",
       "Bash(chmod 755 /home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/duburi_ws/install/duburi_interfaces/lib/*.so)",
       "Bash(colcon build *)",
@@ -44,7 +44,7 @@
       "WebFetch(domain:discuss.bluerobotics.com)",
       "Bash(pdftotext /home/fh1m/Envs/dockers/auv-ros2/Info_Docs/dvl_guide.pdf -)",
       "Bash(pdftotext /home/fh1m/Envs/dockers/auv-ros2/Info_Docs/dvl_guide_2.pdf -)",
-      "Bash(./build_duburi.sh)",
+      "Bash(./build_dubomini.sh)",
       "Bash(xargs cat *)",
       "Bash(gst-inspect-1.0 v4l2src *)",
       "Bash(v4l2-ctl --device /dev/video0 --list-formats-ext)",
@@ -113,7 +113,9 @@
       "WebFetch(domain:faculty.cc.gatech.edu)",
       "WebFetch(domain:www.emergentmind.com)",
       "WebFetch(domain:roboticsknowledgebase.com)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Read(//home/dubomini/missions/**)",
+      "Read(//home/dubomini/models/**)"
     ]
   }
 }

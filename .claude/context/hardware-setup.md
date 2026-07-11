@@ -340,6 +340,6 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 | Can't connect MAVLink          | BlueOS endpoint misconfigured             | Verify `inspector` endpoint matches Jetson IP                |
 | DVL not reading                | Wrong IP / TCP port / driver not yet live | Ping `192.168.2.201`, check port 9000; driver is a stub      |
 | Camera not found               | Device path changed                       | `ls /dev/v4l/by-id/` and update pipeline string              |
-| Node crashed                   | Missing Python dep                        | `pip install pymavlink` on Jetson; or rebuild via `./build_duburi.sh` |
+| Node crashed                   | Missing Python dep                        | `pip install pymavlink` on Jetson; or rebuild via `./build_dubomini.sh` |
 | `BNO085 calibration timed out` | Pixhawk yaw or BNO yaw stayed unavailable | Confirm both work in isolation (sensors_node first)          |
 | Payload silent or wrong actuator fires | Wrong channel number to `duburi.fire(n)` | 1=torpedo1, 2=torpedo2, 3=dropper1, 4=dropper2. Check `payload_ready()` first. |

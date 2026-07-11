@@ -36,7 +36,7 @@ no other file needs editing.
 ## After
 
 ```bash
-./build_duburi.sh
+./build_dubomini.sh
 ros2 run duburi_planner duburi <verb_name> --help   # CLI auto-generated from COMMANDS
 colcon test --packages-select duburi_control --pytest-args -k commands
 ```

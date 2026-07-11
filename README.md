@@ -97,9 +97,14 @@ developed against an ArduSub SITL + Gazebo loop and field-tested on **Duburi**, 
 ## Build
 
 ```bash
-./build_duburi.sh            # builds interfaces first, then all packages; symlinks executables
+./build_dubomini.sh            # syncs ~/models + ~/missions into the tree, then builds interfaces-first
 source /opt/ros/humble/setup.bash && source install/setup.bash
 ```
+
+> Device-local YOLO weights and personal test missions are kept **out of git** and
+> live in `~/models` / `~/missions`; `build_dubomini.sh` mirrors them into
+> `src/duburi_vision/models/` and `src/duburi_planner/duburi_planner/missions/` on
+> every build, so a fresh clone restores them with one build (no manual copy).
 
 **Prerequisites:** Ubuntu 22.04 (native / WSL2 / distrobox) · ROS 2 Humble · Python 3.10 ·
 `pymavlink` (auto-installed by colcon). Sim adds ArduPilot SITL + `sim_vehicle.py` and Gazebo
