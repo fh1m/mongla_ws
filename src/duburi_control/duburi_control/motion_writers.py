@@ -35,7 +35,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
-from .pixhawk import Pixhawk
+from .pixhawk import Pixhawk, NO_OVERRIDE
 
 
 # ---- Shared constants (sourced from motion_rates) ---------------------
@@ -54,29 +54,44 @@ SETTLE_SEC       = 1.2
 
 @dataclass
 class Writers:
-    """Bundle of three RC write functions, lock-state aware.
+    """Bundle of RC write functions, lock-state aware.
 
-    `forward(pwm)`, `lateral(pwm)`, `neutral()` -- callers don't care
-    whether the underlying pymavlink call is `send_rc_override` or
-    `send_rc_translation`.
+    `forward(pwm)`, `lateral(pwm)`, `neutral()`, `depth_keepalive()` --
+    callers don't care whether the underlying pymavlink call is
+    `send_rc_override` or `send_rc_translation`.
     """
     forward: Callable[[int], None]
     lateral: Callable[[int], None]
     neutral: Callable[[], None]
+    # RC keepalive for a depth hold: same neutral frame as the heartbeat but with
+    # Ch3 RELEASED, so ALT_HOLD's position controller owns Z (driven by the
+    # SET_POSITION_TARGET setpoint) uncontested while RC_CHANNELS_OVERRIDE keeps
+    # flowing to feed FS_PILOT_INPUT. Mirrors what vision streams while it owns the
+    # depth axis (motion_vision "Release Ch3 to ALT_HOLD whenever depth is in
+    # play"). Prevents the mid-command failsafe disarm on a long set_depth/surface.
+    depth_keepalive: Callable[[], None]
 
 
 def make_writers(pixhawk, release_yaw=False):
     """Build a `Writers` matching the current heading-lock state."""
     if release_yaw:
+        # Lock active: the lock owns Ch4 (its stream also feeds FS_PILOT). Leave
+        # Ch4 released; keepalive overrides Ch5/Ch6 neutral, Ch3 released.
         return Writers(
             forward=lambda pwm: pixhawk.send_rc_translation(forward=pwm),
             lateral=lambda pwm: pixhawk.send_rc_translation(lateral=pwm),
             neutral=lambda: pixhawk.send_rc_translation(),
+            depth_keepalive=lambda: pixhawk.send_rc_translation(throttle=NO_OVERRIDE),
         )
+    # No lock (the case the depth-hold disarm actually bites): mirror the
+    # heartbeat's all-neutral message but RELEASE Ch3 -- Ch1,2,4,5,6=1500, Ch3
+    # released. Five overridden channels feed FS_PILOT exactly like the proven
+    # heartbeat frame; only Ch3 is handed to ALT_HOLD.
     return Writers(
         forward=lambda pwm: pixhawk.send_rc_override(forward=pwm),
         lateral=lambda pwm: pixhawk.send_rc_override(lateral=pwm),
         neutral=pixhawk.send_neutral,
+        depth_keepalive=lambda: pixhawk.send_rc_override(throttle=NO_OVERRIDE),
     )
 
 

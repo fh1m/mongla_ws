@@ -598,7 +598,8 @@ class Duburi(VisionVerbs):
                                 f' pre-diving to {dive_depth:.2f}m')
                             hold_depth(self.pixhawk, dive_depth, 15.0, self.log,
                                        neutral_writer=self._writers().neutral,
-                                       abort_fn=self._abort_fn)
+                                       abort_fn=self._abort_fn,
+                                       keepalive=self._writers().depth_keepalive)
 
                         accum     = 0.0
                         direction = 0   # +1/-1 once |accum| >= STYLE_ROLL_DIRECTION_LOCK_DEG
@@ -684,7 +685,8 @@ class Duburi(VisionVerbs):
                         if not self._abort_fn():
                             hold_depth(self.pixhawk, origin_depth, 15.0, self.log,
                                        neutral_writer=self._writers().neutral,
-                                       abort_fn=self._abort_fn)
+                                       abort_fn=self._abort_fn,
+                                       keepalive=self._writers().depth_keepalive)
 
                         if surfaced or self._abort_fn():
                             break
@@ -885,9 +887,11 @@ class Duburi(VisionVerbs):
             self._send_neutral_and_settle(axes=frozenset({'depth'}))
             self.log.info(f'[CMD  ] set_depth  {target:.2f}m')
             self._ensure_alt_hold('set_depth')
+            writers = self._writers()
             hold_depth(self.pixhawk, target, timeout, self.log,
-                       neutral_writer=self._writers().neutral,
-                       abort_fn=self._abort_fn)
+                       neutral_writer=writers.neutral,
+                       abort_fn=self._abort_fn,
+                       keepalive=writers.depth_keepalive)
             self._send_neutral_and_settle(settle_time=0.3 + settle)
             depth = self._current_depth()
             return self._make_result(
