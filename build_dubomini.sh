@@ -70,6 +70,27 @@ for pkg in duburi_control duburi_manager duburi_sensors duburi_planner duburi_vi
     rm -rf "install/$pkg" "build/$pkg"
 done
 
+# Drop now-nonexistent entries from the colon-lists colcon validates. When you
+# `rm -rf` / re-`git clone` the workspace and rebuild in a shell that had a prior
+# `source install/setup.bash`, AMENT_PREFIX_PATH / CMAKE_PREFIX_PATH still point
+# at install/ dirs that no longer exist -> colcon prints a wall of
+#   "The path '.../install/<pkg>' ... doesn't exist" WARNINGs
+# (harmless, but noisy enough to hide a real error). Run this AFTER the wipe so
+# the just-removed dirs are pruned too; the ROS underlay (/opt/ros/humble, which
+# exists) and any live prefix survive. `source install/setup.bash` below re-adds
+# each package cleanly as it gets built.
+_prune_missing_paths() {  # echo $1 (a ':'-list) minus empty/nonexistent dirs
+    local out='' e
+    local IFS=':'
+    for e in $1; do
+        [ -n "$e" ] && [ -d "$e" ] || continue
+        out="${out:+$out:}$e"
+    done
+    printf '%s' "$out"
+}
+export AMENT_PREFIX_PATH="$(_prune_missing_paths "${AMENT_PREFIX_PATH:-}")"
+export CMAKE_PREFIX_PATH="$(_prune_missing_paths "${CMAKE_PREFIX_PATH:-}")"
+
 # Step 1: build the interface package first so generated types are available
 colcon build --packages-select duburi_interfaces "$@"
 source install/setup.bash
