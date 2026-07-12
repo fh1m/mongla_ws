@@ -77,14 +77,16 @@ def generate_launch_description():
                                           'Drives node names: duburi_detector_<camera>.'),
         DeclareLaunchArgument('device',        default_value='-1',
                               description='/dev/videoN index; -1 = use profile default'),
-        # PORT-STABLE identity (by-path symlink), same as vision_dual. On the Jetson
-        # the forward/downward USB cameras do NOT enumerate at the profile's default
-        # int index (device 0/2) -- without this a single-cam launch opens the wrong
-        # /dev/videoN or none, and WebcamCamera RAISES -> camera_node crashes at
-        # startup. Pass e.g. device_path:=/dev/duburi_cam_forward. Empty = int device.
+        # PORT-STABLE identity, same as vision_dual. On the Jetson the forward/downward
+        # USB cameras do NOT enumerate at a stable int index (the raw /dev/videoN
+        # renumbers on reboot/re-plug and silently swaps the two identical cameras).
+        # Leave this EMPTY and the node auto-binds /dev/duburi_cam_<camera> WHEN THAT
+        # SYMLINK EXISTS (Jetson) -- so a single-cam launch always opens the right
+        # physical camera. A non-empty value forces a specific device (overrides the
+        # symlink); on a dev box with no symlink it falls back to the int `device`.
         DeclareLaunchArgument('device_path',   default_value='',
-                              description='by-path symlink for the camera (port-stable); '
-                                          'wins over `device`. Empty = int index.'),
+                              description='override device (empty = auto /dev/duburi_cam_<camera> '
+                                          'symlink if present, else int `device`)'),
         DeclareLaunchArgument('width',         default_value='640'),
         DeclareLaunchArgument('height',        default_value='480'),
         DeclareLaunchArgument('fps',           default_value='30'),
@@ -173,7 +175,15 @@ def generate_launch_description():
             'name':            cam,
             'topic':           topic,
             'device':          LaunchConfiguration('device'),
-            'device_path':     LaunchConfiguration('device_path'),
+            # PORT-STABLE identity: an empty device_path falls back to the
+            # /dev/duburi_cam_<camera> udev symlink WHEN IT EXISTS (Jetson), else
+            # '' -> the int device index (dev box). Keeps forward/downward immune
+            # to /dev/videoN renumbering on reboot/re-plug (the raw index is NOT
+            # stable — the enumeration order flips, swapping the two identical cams).
+            'device_path':     PythonExpression([
+                "'", LaunchConfiguration('device_path'), "'",
+                " or (lambda p: p if __import__('os').path.exists(p) else '')"
+                "('/dev/duburi_cam_' + '", cam, "')"]),
             'path':            video_file,
             'loop':            LaunchConfiguration('loop'),
             'width':           LaunchConfiguration('width'),
