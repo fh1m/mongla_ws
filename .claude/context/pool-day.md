@@ -11,17 +11,24 @@
 
 ## 0. Prerequisites (before you get to the pool)
 
+> **Drive the Jetson the drop-proof way** — run launches/missions in **tmux over mosh**
+> (`mosh dubomini@192.168.2.69`) so a dropped tether never kills a run; watch vision in
+> Lichtblick/`web_video_server`; use NoMachine (not xrdp) for a desktop. One-time setup +
+> emergency recovery: [`remote-access.md`](remote-access.md).
+
 ```bash
 # Sim test passed (gate_flare_prequal runs end-to-end)
 ros2 run duburi_planner mission gate_flare_prequal  # in Gazebo
 
-# Weights are on the vehicle (copy to Jetson if needed)
-ls ~/Ros_workspaces/duburi_ws/src/duburi_vision/models/
-# Must see: gate_flare_medium_100ep.pt
+# Weights live in ~/models (source-of-truth, off git); the build syncs them in.
+ls ~/models/                                        # place/update weights here
+# Must see the competition stems: gate_rescue_repair, slalom_red_pipe,
+#   bin_fire_blood, torpedo_blood_hole, octagon  (.pt + .engine each)
 
-# Build is clean
+# Build is clean (mirrors ~/models + ~/missions into the tree first, then builds)
 cd ~/Ros_workspaces/duburi_ws
-./build_duburi.sh && source install/setup.bash
+./build_dubomini.sh && source install/setup.bash
+ls src/duburi_vision/models/                        # confirm the sync landed them
 
 # Jetson FPS prep (ON THE JETSON — raw PyTorch is ~3-4 Hz, TensorRT ~10-30 Hz):
 sudo nvpmodel -m 0 && sudo jetson_clocks          # MAXN power (~2× alone)

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mongla · Mission Control</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▲</span>
+      <div>
+        <div class="brand-title">MONGLA</div>
+        <div class="brand-sub">mission control</div>
+      </div>
+    </div>
+    <div id="vehicle" class="vehicle">
+      <div class="stat" id="stat-armed"><span class="k">STATUS</span><span class="v">--</span></div>
+      <div class="stat"><span class="k">MODE</span><span class="v" id="v-mode">--</span></div>
+      <div class="stat"><span class="k">YAW</span><span class="v" id="v-yaw">--</span></div>
+      <div class="stat"><span class="k">DEPTH</span><span class="v" id="v-depth">--</span></div>
+      <div class="stat"><span class="k">BATT</span><span class="v" id="v-batt">--</span></div>
+    </div>
+    <div class="link"><span id="conn-dot" class="dot"></span><span id="conn-txt">connecting…</span></div>
+  </header>
+
+  <main id="cams" class="cams"><!-- camera columns injected here --></main>
+
+  <div id="toast" class="toast"></div>
+
+  <template id="cam-tpl">
+    <section class="cam">
+      <div class="cam-head">
+        <span class="badge cam-name">CAM</span>
+        <span class="live-badge">● MISSION CAM</span>
+        <span class="spacer"></span>
+        <span class="model" title="active model">model: <b class="model-name">--</b></span>
+        <span class="fps"><b class="fps-val">0</b> fps</span>
+      </div>
+
+      <div class="video-wrap">
+        <img class="video" alt="camera stream">
+        <div class="video-msg"><span class="msg-txt">connecting…</span></div>
+        <div class="offset-hud"><span class="oh oh-x">dx --</span><span class="oh oh-y">dy --</span></div>
+      </div>
+
+      <div class="controls">
+        <button class="ctl act-btn" data-act="active">Make live cam</button>
+        <button class="ctl pause-btn" data-act="pause">Pause</button>
+        <label class="ctl conf-ctl">conf <input type="range" class="conf" min="0.05" max="0.9" step="0.05"><b class="conf-val">--</b></label>
+        <label class="ctl model-ctl">model <select class="model-sel"></select></label>
+      </div>
+
+      <div class="classes">
+        <span class="classes-label">classes</span>
+        <span class="chips class-chips"></span>
+        <button class="mini add-class">＋</button>
+        <button class="mini all-class">all</button>
+      </div>
+
+      <div class="counts-row">
+        <span class="counts-label">seen</span>
+        <span class="chips counts-chips"><span class="muted">—</span></span>
+      </div>
+
+      <table class="det-table">
+        <thead><tr><th>class</th><th>conf</th><th>dx</th><th>dy</th><th>fill%</th><th>vis</th><th>id</th></tr></thead>
+        <tbody class="det-body"><tr class="empty"><td colspan="7">no detections</td></tr></tbody>
+      </table>
+      <div class="hint">click a row → copy a DSL <code>align()</code> snippet</div>
+    </section>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

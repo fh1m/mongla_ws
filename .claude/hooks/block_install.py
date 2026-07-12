@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse hook: block Edit/Write targeting the colcon-generated install/ tree.
 
-Edits under install/ are silently overwritten on the next `./build_duburi.sh`, so they
+Edits under install/ are silently overwritten on the next `./build_dubomini.sh`, so they
 are always a mistake — the real source lives in src/. Reads the hook JSON on stdin and
 exits 2 (block) when the target path contains '/install/'.
 """

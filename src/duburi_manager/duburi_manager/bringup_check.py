@@ -159,7 +159,7 @@ def _check_ros_env() -> list[tuple[str, str, str]]:
         except Exception as exc:  # noqa: BLE001 - report, never raise
             out.append((FAIL, f'import {pkg}',
                         f'{type(exc).__name__}: {str(exc).splitlines()[0]} '
-                        '-- rebuild: ./build_duburi.sh'))
+                        '-- rebuild: ./build_dubomini.sh'))
     return out
 
 

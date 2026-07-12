@@ -1,0 +1,33 @@
+# tmux.conf.sample — sane defaults for driving the Jetson over mosh.
+#
+#   cp tools/remote-access/tmux.conf.sample ~/.tmux.conf
+#
+# Persistence is the point: run every launch/mission inside tmux so a dropped
+# link (or a wedged desktop) never kills a running mission — you `mosh` back and
+# `tmux attach` to find it still going. See .claude/context/remote-access.md.
+
+# Mouse: scroll, select panes/windows, resize by drag.
+set -g mouse on
+
+# Big scrollback so a long mission log survives.
+set -g history-limit 100000
+
+# True/256-color so vision_display text + ROS log colors render right.
+set -g default-terminal "tmux-256color"
+set -ga terminal-overrides ",xterm-256color:Tc"
+
+# Faster key response (no ESC delay when typing missions).
+set -sg escape-time 10
+
+# Keep pane working dirs on split (stay in the workspace).
+bind '"' split-window -v -c "#{pane_current_path}"
+bind %   split-window -h -c "#{pane_current_path}"
+
+# Index from 1 (matches the terminal number keys) and renumber on close.
+set -g base-index 1
+setw -g pane-base-index 1
+set -g renumber-windows on
+
+# Louder status bar so you can tell which vehicle/run you're on.
+set -g status-interval 5
+set -g status-right "#H  %H:%M "

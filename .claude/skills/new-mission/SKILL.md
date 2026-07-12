@@ -70,7 +70,7 @@ def search(duburi, should_stop):
 ## After
 
 ```bash
-./build_duburi.sh
+./build_dubomini.sh
 ros2 run duburi_planner mission --list      # confirm <name> appears
 ros2 run duburi_planner mission <name>      # sim first
 ```
