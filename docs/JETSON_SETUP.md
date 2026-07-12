@@ -322,6 +322,12 @@ a dev-box browser, forward **both** ports (VSCode Ports tab, or NoMachine) and o
 Option C (raw `web_video_server` + a hand-built URL) is the underlying mechanism and
 still works for a quick single-topic glance; Option D is the full operator surface.
 
+> **"STREAM NOT AVAILABLE" means one of two things** — the camera's detector is not on
+> the graph (single-camera run), **or** `web_video_server` isn't up on `:video_port`
+> (data panels for that camera keep working, only the video tile is blank). If the
+> detection table is live but the video is blank, check the video server, not the camera.
+> A **present-but-paused** detector shows "PAUSED — resume to view" instead.
+
 ---
 
 ## 6. Optional: model weights for YOLO

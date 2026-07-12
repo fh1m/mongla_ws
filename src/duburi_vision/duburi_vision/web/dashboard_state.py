@@ -30,6 +30,11 @@ def param_value_for(name: str, value: Any) -> Tuple[str, Any]:
     ``ros_type`` is one of 'double' | 'integer' | 'bool' | 'string'. The node
     maps it to an rcl_interfaces ParameterValue. Coercion is explicit so a JSON
     number/str lands on the right ArduSub-side type.
+
+    Raises ``ValueError`` on a value that cannot be coerced to the target type
+    (e.g. ``conf=null`` or ``conf={...}``) so the caller returns a clean
+    ok:false instead of the handler thread dying -- pool day cannot afford a
+    silent-drop or a wedged request.
     """
     ros_type = _PARAM_TYPES.get(name)
     if ros_type is None:
@@ -44,10 +49,19 @@ def param_value_for(name: str, value: Any) -> Tuple[str, Any]:
         else:
             ros_type = 'string'
 
-    if ros_type == 'double':
-        return ros_type, float(value)
-    if ros_type == 'integer':
-        return ros_type, int(value)
+    # Reject containers/None outright for numeric/bool targets -- float(None),
+    # int({...}) etc. would raise deep in the call; do it here with a clear msg.
+    if ros_type in ('double', 'integer', 'bool') and (
+            value is None or isinstance(value, (list, dict))):
+        raise ValueError(f'{name}: cannot set {ros_type} from {value!r}')
+
+    try:
+        if ros_type == 'double':
+            return ros_type, float(value)
+        if ros_type == 'integer':
+            return ros_type, int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f'{name}: {value!r} is not a valid {ros_type}')
     if ros_type == 'bool':
         # Accept JSON true/false and the strings "true"/"false"/"1"/"0".
         if isinstance(value, str):

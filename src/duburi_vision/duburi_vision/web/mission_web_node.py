@@ -272,38 +272,68 @@ class MissionWebNode(Node):
         return out
 
     # ---- control (mirrors the DSL surface) --------------------------------
+    # Whitelist of live-settable detector params -- refuse anything else so a
+    # bogus/typo'd param name can't reach SetParameters (declared-only params
+    # would be rejected by the node anyway, but this fails fast + clearly).
+    _SETTABLE = ('conf', 'model_conf', 'active_model', 'classes', 'max_det', 'paused')
+
     def set_detector_param(self, cam: str, name: str, value: Any) -> Dict[str, Any]:
-        node = f'/duburi_detector_{cam}'
-        cli = self._client(SetParameters, f'{node}/set_parameters')
-        if cli is None or not cli.wait_for_service(timeout_sec=1.0):
-            return {'ok': False, 'reason': f'{node}/set_parameters unavailable'}
-        ros_type, coerced = param_value_for(name, value)
-        req = SetParameters.Request(parameters=[
-            Parameter(name=name, value=_param_value(ros_type, coerced))])
-        resp = self._call(cli, req)
-        if resp is None or not resp.results:
-            return {'ok': False, 'reason': 'timed out'}
-        res = resp.results[0]
-        self.get_logger().info(
-            f"[WEB  ] {node} {name} → {coerced!r} "
-            f"({'ok' if res.successful else 'REJECT: ' + res.reason})")
-        return {'ok': bool(res.successful), 'reason': res.reason}
+        """Never raises -- returns {ok, reason}. A control write on pool day must
+        fail loud-but-safe, never crash the handler thread or drop silently."""
+        try:
+            if cam not in self.cameras:
+                return {'ok': False, 'reason': f'unknown camera {cam!r}'}
+            if name not in self._SETTABLE:
+                return {'ok': False, 'reason': f'param {name!r} not live-settable '
+                                               f'({", ".join(self._SETTABLE)})'}
+            # Coerce+validate BEFORE the service wait so a bad value fails instantly.
+            try:
+                ros_type, coerced = param_value_for(name, value)
+            except ValueError as exc:
+                return {'ok': False, 'reason': str(exc)}
+
+            node = f'/duburi_detector_{cam}'
+            cli = self._client(SetParameters, f'{node}/set_parameters')
+            if cli is None or not cli.wait_for_service(timeout_sec=1.0):
+                return {'ok': False, 'reason': f'{node}/set_parameters unavailable'}
+            req = SetParameters.Request(parameters=[
+                Parameter(name=name, value=_param_value(ros_type, coerced))])
+            resp = self._call(cli, req)
+            if resp is None or not resp.results:
+                return {'ok': False, 'reason': 'timed out'}
+            res = resp.results[0]
+            self.get_logger().info(
+                f"[WEB  ] {node} {name} → {coerced!r} "
+                f"({'ok' if res.successful else 'REJECT: ' + res.reason})")
+            return {'ok': bool(res.successful), 'reason': res.reason}
+        except Exception as exc:                  # noqa: BLE001 -- last-resort guard
+            self.get_logger().warning(f"[WEB  ] set_detector_param crashed: {exc!r}")
+            return {'ok': False, 'reason': f'internal error: {exc}'}
 
     def switch_active_camera(self, target: str) -> Dict[str, Any]:
-        """Latched publish + pause-others/resume-target -- identical to DSL use_camera."""
-        if target not in self.cameras:
-            return {'ok': False, 'reason': f'unknown camera {target!r}'}
-        self._publish_active_camera(target)
+        """Latched publish + pause-others/resume-target -- identical to DSL use_camera.
+        Never raises; the HUD-follow publish is best-effort (mirrors the DSL)."""
         try:
-            names = set(self.get_node_names())
-        except Exception:                # noqa: BLE001
-            names = set()
-        for other in active_camera_targets(target, _KNOWN_CAMERAS):
-            if f'duburi_detector_{other}' in names:
-                self.set_detector_param(other, 'paused', True)
-        result = self.set_detector_param(target, 'paused', False)
-        self.get_logger().info(f"[WEB  ] active_camera → {target!r}")
-        return result
+            if target not in self.cameras:
+                return {'ok': False, 'reason': f'unknown camera {target!r}'}
+            self._publish_active_camera(target)
+            try:
+                names = set(self.get_node_names())
+            except Exception:                # noqa: BLE001
+                names = set()
+            if f'duburi_detector_{target}' not in names:
+                # Indicator follows (latched), but be honest that nothing resumed.
+                return {'ok': False, 'reason': f'{target} detector not running '
+                                               f'(indicator set; no stream to resume)'}
+            for other in active_camera_targets(target, _KNOWN_CAMERAS):
+                if f'duburi_detector_{other}' in names:
+                    self.set_detector_param(other, 'paused', True)
+            result = self.set_detector_param(target, 'paused', False)
+            self.get_logger().info(f"[WEB  ] active_camera → {target!r}")
+            return result
+        except Exception as exc:                  # noqa: BLE001 -- last-resort guard
+            self.get_logger().warning(f"[WEB  ] switch_active_camera crashed: {exc!r}")
+            return {'ok': False, 'reason': f'internal error: {exc}'}
 
     def _publish_active_camera(self, name: str) -> None:
         if self._active_cam_pub is None:
@@ -389,7 +419,11 @@ def _make_handler(node: MissionWebNode):
             self.end_headers()
             try:
                 while not node._stop.is_set():
-                    payload = json.dumps(node.snapshot()).encode()
+                    try:
+                        payload = json.dumps(node.snapshot()).encode()
+                    except Exception:         # noqa: BLE001 -- skip a bad frame, keep the stream
+                        time.sleep(1.0 / 12.0)
+                        continue
                     self.wfile.write(b'data: ' + payload + b'\n\n')
                     self.wfile.flush()
                     time.sleep(1.0 / 12.0)
@@ -402,8 +436,15 @@ def _make_handler(node: MissionWebNode):
                 body = json.loads(self.rfile.read(length) or b'{}')
             except (ValueError, json.JSONDecodeError):
                 return self._send(400, b'{"ok":false,"reason":"bad json"}', 'application/json')
+            if not isinstance(body, dict):     # JSON 5 / "x" / [..] are not control bodies
+                return self._send(400, b'{"ok":false,"reason":"body must be a JSON object"}',
+                                  'application/json')
             path = self.path.split('?', 1)[0]
-            result = self._dispatch(path, body)
+            try:
+                result = self._dispatch(path, body)
+            except Exception as exc:           # noqa: BLE001 -- no request may wedge the thread
+                node.get_logger().warning(f"[WEB  ] POST {path} crashed: {exc!r}")
+                return self._send(500, b'{"ok":false,"reason":"internal error"}', 'application/json')
             if result is None:
                 return self._send(404, b'{"ok":false,"reason":"no route"}', 'application/json')
             self._send(200, json.dumps(result).encode(), 'application/json')
