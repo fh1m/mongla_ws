@@ -6,6 +6,8 @@ camera-exclusivity target list, the pixel-offset math the DSL author reads,
 and the SSE snapshot assembly.
 """
 
+import pytest
+
 from duburi_vision.web.dashboard_state import (
     param_value_for, active_camera_targets, bbox_metrics, build_snapshot,
     build_camera_view,
@@ -41,6 +43,27 @@ def test_unknown_param_infers_type_bool_before_int():
     assert param_value_for('whatever', True) == ('bool', True)
     assert param_value_for('whatever', 7) == ('integer', 7)
     assert param_value_for('whatever', 'x') == ('string', 'x')
+
+
+def test_bad_numeric_values_raise_valueerror_not_typeerror():
+    # A control write must never let float(None)/int({}) bubble up and kill the
+    # handler thread -- param_value_for raises a clean ValueError the node maps
+    # to ok:false. Covers conf=null, conf={...}, conf=[...], max_det="abc".
+    for bad in (None, {'x': 1}, [1, 2]):
+        with pytest.raises(ValueError):
+            param_value_for('conf', bad)
+        with pytest.raises(ValueError):
+            param_value_for('max_det', bad)
+    with pytest.raises(ValueError):
+        param_value_for('conf', 'not-a-number')
+    with pytest.raises(ValueError):
+        param_value_for('max_det', 'not-an-int')
+
+
+def test_string_param_accepts_anything_coercible():
+    # classes/active_model are strings -> even a number stringifies, never raises.
+    assert param_value_for('classes', 5) == ('string', '5')
+    assert param_value_for('active_model', 'gate') == ('string', 'gate')
 
 
 # ---- active_camera_targets: exclusivity ------------------------------------
