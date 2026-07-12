@@ -26,6 +26,9 @@
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
   <exec_depend>duburi_interfaces</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <!-- MJPEG video pipe for the mission_web console (apt: ros-humble-web-video-server) -->
+  <exec_depend>web_video_server</exec_depend>
 
   <test_depend>ament_pep257</test_depend>
   <test_depend>ament_flake8</test_depend>

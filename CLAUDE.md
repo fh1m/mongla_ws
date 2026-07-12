@@ -459,7 +459,20 @@ ros2 run duburi_manager bringup_check          # network + serial + Jetson power
 ros2 run duburi_vision vision_check            # topic-only health probe
 ros2 run duburi_vision vision_thrust_check     # detection → RC echo (disarmed safe)
 ros2 run duburi_vision export_engine --all     # build TensorRT engines (ON THE JETSON)
+ros2 launch duburi_vision mission_web.launch.py  # ★ mission console: 2-cam streams + detections + live control, auto-opens browser
 ```
+
+> **Mission console (`mission_web`)** — the pool-day browser surface. One command starts both cameras +
+> detectors + `web_video_server` (MJPEG video pipe, `:8080`) + the `mission_web` node (console + SSE data,
+> `:8090`) and auto-opens `http://localhost:8090`. Shows both `image_debug` streams side-by-side (boxes burned
+> in server-side = frame-synced, zero browser overlay), a live detection table (class · conf · dx/dy px ·
+> fill% · vis_range), per-class counts, `/duburi/state`, the latched-`active_camera` **mission-camera
+> indicator**, and live control (active-camera switch, model dropdown, conf slider, class chips, pause/resume).
+> Control writes the **same surface the DSL writes** — `SetParameters` on `/duburi_detector_<cam>` + the
+> latched `active_camera` publish + pause-others/resume-target — so UI and a running DSL mission stay in sync.
+> "STREAM NOT AVAILABLE" (absent) vs "PAUSED" (present, not inferring) vs live is derived from `get_node_names`
+> + the polled `paused` param. Dataset-video dev-box test: `mission_web.launch.py fwd_video:=<clip> dwn_video:=<clip>`.
+> Node: `duburi_vision/web/mission_web_node.py` (+ pure helpers `web/dashboard_state.py`, SPA `web/static/`).
 
 **Operator debugging / practice tooling (all OFF the mission path — see [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)):**
 
@@ -520,10 +533,21 @@ Typical mission sequence: `MANUAL` → `arm` → first `set_depth` engages `ALT_
 ```bash
 # Bring up sim (in docker terminals — see §3)
 cd ~/Ros_workspaces/duburi_ws
-./build_duburi.sh
+./build_dubomini.sh
 source install/setup.bash
 ros2 run duburi_manager start --ros-args -p mode:=sim
 ```
+
+> **`build_dubomini.sh` mirrors device-local models + missions into the tree
+> first, then builds.** The competition YOLO weights and the personal test
+> missions (`rakib_*`) are kept **out of git** (weights by extension; missions via
+> per-clone `.git/info/exclude`) and live in source-of-truth folders **outside**
+> the repo — `~/models` → `src/duburi_vision/models/` and `~/missions` →
+> `src/duburi_planner/duburi_planner/missions/`. So after a fresh `git clone`,
+> one `./build_dubomini.sh` restores them with nothing to copy by hand. The sync
+> is additive (never deletes) and soft-skips a missing source folder (dev box).
+> Override the sources with `DUBOMINI_MODELS_SRC` / `DUBOMINI_MISSIONS_SRC`.
+> (Formerly `build_duburi.sh` — renamed, same two-step interfaces-first build.)
 
 ### Step 2: Verify connectivity
 
@@ -668,6 +692,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |
 | `pool-day.md`                   | Pool-day checklist and session workflow                             |
 | `foxglove-and-bags.md`          | **★ Operator tooling (off mission path)** — Foxglove telemetry (`foxglove:=true` + FPS/offline gates), `pool_record.sh` rosbag record/replay, mission scorecards → `~/duburi_runs`. Plus the "what we did NOT integrate" scouting decision |
+| `remote-access.md`              | **★ Ground-station remote access (off mission path)** — smooth, drop-proof workflow that replaces laggy xrdp: mosh+tmux (terminal, mission survives GUI death), Foxglove/`web_video_server` (vision, no desktop), NoMachine (full desktop), polkit `.pkla` (kills the password popups), emergency recovery without a reboot. Install: `tools/setup_remote_access.sh` |
 | `known-issues.md`               | Tracked code bugs from the 2026-04/05 audits (all FIXED). Current cross-cutting state → `robosub-2026-audit.md` |
 
 **Method & design theory:**

@@ -4,7 +4,7 @@
 # Targeted + fast: editing motion_forward.py runs only test_motion_forward.py (if it
 # exists); editing a test file runs that test. Advisory only (always exits 0) so it never
 # blocks an edit. Prepends src/<pkg> to PYTHONPATH so the EDITED source is imported, not
-# the stale colcon-installed copy (build_duburi.sh copies, it does not symlink-install).
+# the stale colcon-installed copy (build_dubomini.sh copies, it does not symlink-install).
 #
 # Path-independent: resolves the workspace from CLAUDE_PROJECT_DIR (set by the harness for
 # hook subprocesses) or from this script's location, so it works for any teammate's checkout.

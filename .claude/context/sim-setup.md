@@ -120,7 +120,7 @@ If Gazebo and SITL are NOT communicating:
 ```bash
 # Terminal 3
 cd ~/Ros_workspaces/duburi_ws
-./build_duburi.sh
+./build_dubomini.sh
 source install/setup.bash
 
 # Run the manager node (connects to SITL on udpin:0.0.0.0:14550)

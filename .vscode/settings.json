@@ -3,7 +3,7 @@
   // The single biggest source of editor lag on a colcon workspace is the
   // file watcher + search indexing the generated build/ install/ log/ trees
   // (~1k+ churning files). Excluding them makes editing missions/code snappy
-  // over Remote-SSH. Edit src/ only; rebuild with ./build_duburi.sh.
+  // over Remote-SSH. Edit src/ only; rebuild with ./build_dubomini.sh.
 
   // Don't watch generated / heavy dirs (kills "files changed" CPU churn).
   "files.watcherExclude": {
