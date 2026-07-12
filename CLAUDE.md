@@ -459,16 +459,23 @@ ros2 run duburi_vision export_engine --all     # build TensorRT engines (ON THE 
 ros2 launch duburi_vision mission_web.launch.py  # ★ mission console: 2-cam streams + detections + live control, auto-opens browser
 ```
 
-> **Mission console (`mission_web`)** — the pool-day browser surface. One command starts both cameras +
-> detectors + `web_video_server` (MJPEG video pipe, `:8080`) + the `mission_web` node (console + SSE data,
-> `:8090`) and auto-opens `http://localhost:8090`. Shows both `image_debug` streams side-by-side (boxes burned
-> in server-side = frame-synced, zero browser overlay), a live detection table (class · conf · dx/dy px ·
-> fill% · vis_range), per-class counts, `/duburi/state`, the latched-`active_camera` **mission-camera
-> indicator**, and live control (active-camera switch, model dropdown, conf slider, class chips, pause/resume).
-> Control writes the **same surface the DSL writes** — `SetParameters` on `/duburi_detector_<cam>` + the
-> latched `active_camera` publish + pause-others/resume-target — so UI and a running DSL mission stay in sync.
-> "STREAM NOT AVAILABLE" (absent) vs "PAUSED" (present, not inferring) vs live is derived from `get_node_names`
-> + the polled `paused` param. Dataset-video dev-box test: `mission_web.launch.py fwd_video:=<clip> dwn_video:=<clip>`.
+> **Mission console (`mission_web`)** — the pool-day browser surface. One command starts camera(s) +
+> detector(s) + `web_video_server` (MJPEG video pipe, `:8080`) + the `mission_web` node (console + SSE data,
+> `:8090`) and auto-opens `http://localhost:8090`. **`cameras:=both`** (default → vision_dual) shows both
+> `image_debug` streams side-by-side; **`cameras:=forward|downward`** launches the one-camera `vision.launch.py`
+> and the console shows a single panel (a box with only ONE camera never crashes on an absent second device).
+> Boxes are burned in server-side (frame-synced, zero browser overlay); panels show a live detection table
+> (class · conf · dx/dy px · fill% · vis_range), per-class counts, `/duburi/state`, the latched-`active_camera`
+> **mission-camera indicator**, and live control (active-camera switch, model dropdown, conf slider, class chips,
+> pause/resume). Control writes the **same surface the DSL writes** — `SetParameters` on `/duburi_detector_<cam>`
+> + the latched `active_camera` publish + pause-others/resume-target — so UI and a running DSL mission stay in
+> sync. The console **polls** the detector params it reflects (`active_model`/`conf`/`models`/`paused`/`classes`
+> via `get_parameters`, 1 Hz) rather than the `classes_filter` topic — that topic is VOLATILE, so a
+> durability-mismatched/late-join sub gets nothing; polling is join-order-proof. "STREAM NOT AVAILABLE" (absent
+> detector **or** web_video_server down) vs "PAUSED" (present, not inferring) vs live is derived from
+> `get_node_names` + the polled `paused`. **Robust to a missing `web_video_server`** (apt pkg, not a repo dep):
+> the launch degrades to console-only with an `apt install` hint instead of failing. Full command matrix
+> (single/double × single/multi-model × dataset-video): JETSON_SETUP §5 Option D.
 > Node: `duburi_vision/web/mission_web_node.py` (+ pure helpers `web/dashboard_state.py`, SPA `web/static/`).
 
 **Operator debugging / practice tooling (all OFF the mission path — see [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)):**
