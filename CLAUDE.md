@@ -456,7 +456,20 @@ ros2 run duburi_manager bringup_check          # network + serial + Jetson power
 ros2 run duburi_vision vision_check            # topic-only health probe
 ros2 run duburi_vision vision_thrust_check     # detection → RC echo (disarmed safe)
 ros2 run duburi_vision export_engine --all     # build TensorRT engines (ON THE JETSON)
+ros2 launch duburi_vision mission_web.launch.py  # ★ mission console: 2-cam streams + detections + live control, auto-opens browser
 ```
+
+> **Mission console (`mission_web`)** — the pool-day browser surface. One command starts both cameras +
+> detectors + `web_video_server` (MJPEG video pipe, `:8080`) + the `mission_web` node (console + SSE data,
+> `:8090`) and auto-opens `http://localhost:8090`. Shows both `image_debug` streams side-by-side (boxes burned
+> in server-side = frame-synced, zero browser overlay), a live detection table (class · conf · dx/dy px ·
+> fill% · vis_range), per-class counts, `/duburi/state`, the latched-`active_camera` **mission-camera
+> indicator**, and live control (active-camera switch, model dropdown, conf slider, class chips, pause/resume).
+> Control writes the **same surface the DSL writes** — `SetParameters` on `/duburi_detector_<cam>` + the
+> latched `active_camera` publish + pause-others/resume-target — so UI and a running DSL mission stay in sync.
+> "STREAM NOT AVAILABLE" (absent) vs "PAUSED" (present, not inferring) vs live is derived from `get_node_names`
+> + the polled `paused` param. Dataset-video dev-box test: `mission_web.launch.py fwd_video:=<clip> dwn_video:=<clip>`.
+> Node: `duburi_vision/web/mission_web_node.py` (+ pure helpers `web/dashboard_state.py`, SPA `web/static/`).
 
 **Operator debugging / practice tooling (all OFF the mission path — see [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)):**
 

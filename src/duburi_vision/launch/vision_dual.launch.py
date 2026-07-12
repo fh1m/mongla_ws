@@ -127,6 +127,9 @@ def generate_launch_description():
                                           'toward ~10 if NMS is the FPS bottleneck on busy frames).'),
         DeclareLaunchArgument('paused',       default_value='true',
                               description='Start both detectors paused (resume_detector per task)'),
+        DeclareLaunchArgument('debug_image_hz', default_value='10.0',
+                              description='Annotated image_debug publish rate (the browser-stream '
+                                          'smoothness knob; raise toward inference FPS for a web viewer)'),
         DeclareLaunchArgument('viewer',       default_value='true'),
         DeclareLaunchArgument('tracking',     default_value='true'),
         DeclareLaunchArgument('tracker_type', default_value='ocsort',
@@ -193,7 +196,7 @@ def generate_launch_description():
                 'half':                True,
                 'paused':              LaunchConfiguration('paused'),
                 'publish_debug_image': True,
-                'debug_image_hz':      10.0,
+                'debug_image_hz':      LaunchConfiguration('debug_image_hz'),
             }],
         )
 
