@@ -1,18 +1,28 @@
 """mission_web -- the ONE command for pool-day monitoring + mission planning.
 
-Brings up both cameras + both detectors (via vision_dual) + web_video_server
-(MJPEG video) + the mission_web console node, which auto-opens the browser.
-Detectors start LIVE (paused:=false) so both streams show immediately; the
-console's per-camera Pause and "Make live cam" (exclusive) controls let you drop
-to one detector if the Jetson GPU is bound. Video (annotated image_debug) is on
-:video_port; the console + SSE data on :web_port.
+Brings up camera(s) + detector(s) + web_video_server (MJPEG video) + the
+mission_web console node, which auto-opens the browser. Detectors start LIVE
+(paused:=false) so streams show immediately; the console's per-camera Pause and
+"Make live cam" (exclusive) controls let you drop to one detector if the Jetson
+GPU is bound. Video (annotated image_debug) is on :video_port; the console + SSE
+data on :web_port.
 
-    # Live cameras (competition):
+`cameras:=` selects the rig -- both (default), forward, or downward. A single
+camera uses the one-camera vision.launch.py (so a box with only ONE camera never
+crashes trying to open an absent second device), and the console shows just that
+panel; both uses vision_dual.
+
+    # BOTH cameras, competition (default):
     ros2 launch duburi_vision mission_web.launch.py
+
+    # SINGLE camera (only one plugged in / one task):
+    ros2 launch duburi_vision mission_web.launch.py cameras:=forward
+    ros2 launch duburi_vision mission_web.launch.py cameras:=downward dwn_device:=0
 
     # Dataset videos, no hardware (dev-box end-to-end test):
     ros2 launch duburi_vision mission_web.launch.py \\
         fwd_video:=/path/gate.mp4 dwn_video:=/path/bin.mp4
+    ros2 launch duburi_vision mission_web.launch.py cameras:=forward fwd_video:=/path/gate.mp4
 
     # Registry (runtime model switching from the UI dropdown / DSL):
     ros2 launch duburi_vision mission_web.launch.py \\
@@ -27,12 +37,13 @@ import os
 
 from launch                    import LaunchDescription
 from launch.actions            import (DeclareLaunchArgument, IncludeLaunchDescription,
-                                        SetEnvironmentVariable)
-from launch.conditions         import IfCondition
+                                        SetEnvironmentVariable, LogInfo)
+from launch.conditions         import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions      import LaunchConfiguration
+from launch.substitutions      import LaunchConfiguration, PythonExpression
 from launch_ros.actions        import Node
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import (get_package_share_directory,
+                                          PackageNotFoundError)
 
 
 # Pass-through args forwarded to vision_dual (curated subset -- power users can
@@ -44,10 +55,14 @@ _PASSTHRU = ('fwd_device', 'dwn_device', 'fwd_device_path', 'dwn_device_path',
 
 
 def generate_launch_description():
-    vision_dual = os.path.join(
-        get_package_share_directory('duburi_vision'), 'launch', 'vision_dual.launch.py')
+    share = get_package_share_directory('duburi_vision')
+    vision_dual   = os.path.join(share, 'launch', 'vision_dual.launch.py')
+    vision_single = os.path.join(share, 'launch', 'vision.launch.py')
 
     args = [
+        DeclareLaunchArgument('cameras',    default_value='both',
+                              description="rig: both (vision_dual) | forward | downward "
+                                          "(single camera via vision.launch.py)"),
         DeclareLaunchArgument('web_port',   default_value='8090',
                               description='HTTP port for the mission console + SSE'),
         DeclareLaunchArgument('video_port', default_value='8080',
@@ -84,31 +99,78 @@ def generate_launch_description():
         DeclareLaunchArgument('tracking',    default_value='true'),
     ]
 
-    forwarded = {k: LaunchConfiguration(k) for k in _PASSTHRU}
-    forwarded['paused'] = LaunchConfiguration('paused')
-    forwarded['viewer'] = LaunchConfiguration('viewer')
-
-    vision = IncludeLaunchDescription(
+    # --- BOTH: vision_dual (unchanged path) ---
+    dual_args = {k: LaunchConfiguration(k) for k in _PASSTHRU}
+    dual_args['paused'] = LaunchConfiguration('paused')
+    dual_args['viewer'] = LaunchConfiguration('viewer')
+    vision_both = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(vision_dual),
-        launch_arguments=forwarded.items(),
+        launch_arguments=dual_args.items(),
+        condition=LaunchConfigurationEquals('cameras', 'both'),
     )
 
-    video_server = Node(
-        package='web_video_server', executable='web_video_server',
-        name='duburi_web_video', output='screen',
-        parameters=[{'port': LaunchConfiguration('video_port'), 'address': '0.0.0.0'}],
-    )
+    # --- SINGLE: one camera via vision.launch.py. Maps the matching fwd_*/dwn_*
+    # args onto vision's flat arg surface so the same console kwargs work either way.
+    def single(cam, dev, dev_path, model, models, classes, conf, video):
+        return IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(vision_single),
+            condition=LaunchConfigurationEquals('cameras', cam),
+            launch_arguments={
+                'camera':         cam,
+                'device':         LaunchConfiguration(dev),
+                'device_path':    LaunchConfiguration(dev_path),
+                'model':          LaunchConfiguration(model),
+                'models':         LaunchConfiguration(models),
+                'classes':        LaunchConfiguration(classes),
+                'conf':           LaunchConfiguration(conf),
+                'video_file':     LaunchConfiguration(video),
+                'imgsz':          LaunchConfiguration('imgsz'),
+                'max_det':        LaunchConfiguration('max_det'),
+                'tracking':       LaunchConfiguration('tracking'),
+                'paused':         LaunchConfiguration('paused'),
+                'debug_image_hz': LaunchConfiguration('debug_image_hz'),
+                'viewer':         LaunchConfiguration('viewer'),
+            }.items(),
+        )
+    vision_fwd = single('forward', 'fwd_device', 'fwd_device_path', 'fwd_model',
+                        'fwd_models', 'fwd_classes', 'fwd_conf', 'fwd_video')
+    vision_dwn = single('downward', 'dwn_device', 'dwn_device_path', 'dwn_model',
+                        'dwn_models', 'dwn_classes', 'dwn_conf', 'dwn_video')
 
-    # --no-browser is a process arg (not a ROS param); pass it via an env var the
-    # node also honours, gated on the launch arg.
+    # web_video_server is an apt package (ros-humble-web-video-server), not a repo
+    # dep -- resolve it defensively. If it's ABSENT, a Node(package=...) action would
+    # throw at launch-evaluation time and kill the WHOLE launch (camera+detector+
+    # console never start). Instead skip it with a loud hint: the console + data
+    # pipeline still come up; only the video tiles are blank ("stream not available").
+    try:
+        get_package_share_directory('web_video_server')
+        video_actions = [Node(
+            package='web_video_server', executable='web_video_server',
+            name='duburi_web_video', output='screen',
+            parameters=[{'port': LaunchConfiguration('video_port'),
+                         'address': '0.0.0.0'}],
+        )]
+    except PackageNotFoundError:
+        video_actions = [LogInfo(msg=(
+            '[mission_web] web_video_server NOT installed -- console + detections '
+            'run, but video tiles will be blank. Install: '
+            'sudo apt install ros-humble-web-video-server'))]
+
+    # The console subscribes only the selected camera(s) -> no phantom panel for a
+    # camera that isn't launched. 'both' -> forward,downward; single -> just that one.
+    cams_param = PythonExpression(
+        ["'forward,downward' if '", LaunchConfiguration('cameras'),
+         "' == 'both' else '", LaunchConfiguration('cameras'), "'"])
     console = Node(
         package='duburi_vision', executable='mission_web',
         name='duburi_mission_web', output='screen',
         parameters=[{'web_port':   LaunchConfiguration('web_port'),
-                     'video_port': LaunchConfiguration('video_port')}],
+                     'video_port': LaunchConfiguration('video_port'),
+                     'cameras':    cams_param}],
     )
     no_browser_env = SetEnvironmentVariable(
         'MISSION_WEB_NO_BROWSER', '1',
         condition=IfCondition(LaunchConfiguration('no_browser')))
 
-    return LaunchDescription(args + [no_browser_env, vision, video_server, console])
+    return LaunchDescription(args + [no_browser_env, vision_both, vision_fwd,
+                                     vision_dwn] + video_actions + [console])

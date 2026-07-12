@@ -127,9 +127,12 @@ class MissionWebNode(Node):
             self.create_subscription(Detection2DArray, f'{ns}/detections',
                                      self._mk_det_cb(cam), best,
                                      callback_group=self._cbg)
-            self.create_subscription(String, f'{ns}/classes_filter',
-                                     self._mk_classes_cb(cam), latched,
-                                     callback_group=self._cbg)
+            # NOTE: classes is READ via the 1 Hz get_parameters poll, NOT the
+            # /classes_filter topic. The detector publishes classes_filter VOLATILE
+            # (depth 10), so a TRANSIENT_LOCAL sub silently gets nothing (durability
+            # mismatch) and a VOLATILE sub misses the retained startup value on a
+            # late join -> the console showed empty class chips. Polling the `classes`
+            # param is join-order-proof and matches how active_model/conf are read.
             self.create_subscription(Float32MultiArray, f'{ns}/vis_range',
                                      self._mk_vis_cb(cam), best,
                                      callback_group=self._cbg)
@@ -187,13 +190,6 @@ class MissionWebNode(Node):
                 c['dets'] = dets
         return cb
 
-    def _mk_classes_cb(self, cam: str):
-        def cb(msg: String):
-            classes = [s.strip() for s in str(msg.data).split(',') if s.strip()]
-            with self._lock:
-                self._store['cameras'][cam]['classes'] = classes
-        return cb
-
     def _mk_vis_cb(self, cam: str):
         def cb(msg: Float32MultiArray):
             with self._lock:
@@ -239,36 +235,45 @@ class MissionWebNode(Node):
                         c['conf'] = got.get('conf', c['conf'])
                         c['models'] = got.get('models', c['models'])
                         c['paused'] = got.get('paused', c['paused'])
+                        c['classes'] = got.get('classes', c['classes'])
                     else:
                         c['fps'] = 0.0
             self._stop.wait(_POLL_S)
 
+    # Detector params read every poll. classes is here (not the /classes_filter
+    # topic) because that topic is VOLATILE -> a durability-mismatched / late-join
+    # sub gets nothing; the param is always current and join-order-proof.
+    _POLLED = ('active_model', 'conf', 'models', 'paused', 'classes')
+
     def _get_detector_params(self, cam: str) -> Dict[str, Any]:
-        """Read the topic-less detector params (active_model/conf/models/paused)."""
+        """Read the detector params the console reflects (no topic for these / the
+        topic is unreliable): active_model / conf / models / paused / classes."""
         node = f'/duburi_detector_{cam}'
         cli = self._client(GetParameters, f'{node}/get_parameters')
         if cli is None or not cli.wait_for_service(timeout_sec=0.3):
             return {}
-        req = GetParameters.Request(names=['active_model', 'conf', 'models', 'paused'])
+        req = GetParameters.Request(names=list(self._POLLED))
         resp = self._call(cli, req)
-        if resp is None or len(resp.values) < 4:
+        if resp is None or len(resp.values) < len(self._POLLED):
             return {}
-        am, conf, models, paused = resp.values[0], resp.values[1], resp.values[2], resp.values[3]
+        vals = dict(zip(self._POLLED, resp.values))
         out: Dict[str, Any] = {}
+        am, conf, models = vals['active_model'], vals['conf'], vals['models']
+        paused, classes = vals['paused'], vals['classes']
         if am.type == ParameterType.PARAMETER_STRING:
             out['active_model'] = am.string_value
         if conf.type == ParameterType.PARAMETER_DOUBLE:
             out['conf'] = conf.double_value
         if models.type == ParameterType.PARAMETER_STRING:
             # "name=stem,name2=stem2" (or bare stems) -> the switchable keys.
-            keys = []
-            for part in str(models.string_value).split(','):
-                part = part.strip()
-                if part:
-                    keys.append(part.split('=', 1)[0].strip())
-            out['models'] = keys
+            out['models'] = [p.split('=', 1)[0].strip()
+                             for p in str(models.string_value).split(',') if p.strip()]
         if paused.type == ParameterType.PARAMETER_BOOL:
             out['paused'] = paused.bool_value
+        if classes.type == ParameterType.PARAMETER_STRING:
+            # '' = all classes -> empty list (the UI renders "all").
+            out['classes'] = [c.strip() for c in str(classes.string_value).split(',')
+                              if c.strip()]
         return out
 
     # ---- control (mirrors the DSL surface) --------------------------------
