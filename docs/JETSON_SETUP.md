@@ -291,6 +291,37 @@ http://localhost:8080/stream?topic=/duburi/vision/forward/image_debug
 `rqt_image_view` (`sudo apt install ros-humble-rqt-image-view`) is the same idea but
 still needs X (Option A/B). For headless laptop viewing, Option C wins.
 
+### Option D — mission console (recommended for pool day) ★★
+One command brings up **both cameras + both detectors + web_video_server + a
+purpose-built browser console** and auto-opens it. Side-by-side annotated streams,
+a live detection table (class · conf · dx/dy px · fill% · vis_range), per-class
+counts, vehicle state, the **active-mission-camera** indicator, and live control
+(active-camera switch, model dropdown, conf slider, class chips, pause/resume) that
+writes the **same ROS surface the mission DSL writes** — so a switch in the UI and a
+switch from a running DSL mission stay in lock-step. Click a detection row to copy a
+ready `align()` DSL snippet.
+
+```bash
+sudo apt install ros-humble-web-video-server          # one-time (video pipe)
+ros2 launch duburi_vision mission_web.launch.py       # cameras+detectors+video+console
+```
+
+Console on **:8090** (data over SSE), video on **:8080** (web_video_server MJPEG).
+On the Jetson NoMachine desktop it opens `http://localhost:8090` automatically. From
+a dev-box browser, forward **both** ports (VSCode Ports tab, or NoMachine) and open
+`http://localhost:8090`. Add `no_browser:=true` for a headless Jetson.
+
+- **Dataset videos, no hardware** (dev-box end-to-end test):
+  `ros2 launch duburi_vision mission_web.launch.py fwd_video:=<gate.mp4> dwn_video:=<bin.mp4>`
+- **Registry (UI/DSL model switching):** pass `fwd_models:=a,b,c` (a bare stem
+  registers under its own name; the console dropdown lists them).
+- Detectors start **live** (`paused:=false`) so both streams show immediately. If the
+  GPU is bound, use the console's per-camera Pause or "Make live cam" (exclusive) —
+  the same exclusivity the DSL `use_camera` enforces. `paused:=true` starts dark.
+
+Option C (raw `web_video_server` + a hand-built URL) is the underlying mechanism and
+still works for a quick single-topic glance; Option D is the full operator surface.
+
 ---
 
 ## 6. Optional: model weights for YOLO

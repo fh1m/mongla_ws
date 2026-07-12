@@ -36,6 +36,10 @@ src/duburi_vision/duburi_vision/
     bytetrack.py         # supervision.ByteTrack wrapper (legacy_bytetrack fallback)
     kalman.py            # PerTrackKalman + TrackKalmanSmoother (filterpy 4-state CV)
   preflight.py           # assert_vision_ready / wait_vision_state_ready
+  web/
+    mission_web_node.py  # `mission_web` -- browser mission console: SSE data + control
+    dashboard_state.py   # pure (rclpy-free) helpers: snapshot/param-type/exclusivity/offset math
+    static/{index.html,style.css,app.js}  # self-contained SPA (vanilla, no build/CDN)
   utils/
     check_pipeline.py    # `vision_check`        CLI -- topic-only smoke test
     check_thrust.py      # `vision_thrust_check` CLI -- detection -> RC echo
@@ -82,6 +86,25 @@ and re-published on every live `ros2 param set /duburi_detector_<camera> classes
 consumer — `vision_display`, logging nodes, future HUD overlays — can subscribe to get the
 current class filter without polling `ros2 param get`. This means class changes from CLI, DSL
 (`duburi.set_classes()`), or mission code (`duburi.models(...)`) all propagate automatically.
+
+### Mission console (`mission_web`) — HTTP surface, not a ROS topic
+
+`mission_web` (`web/mission_web_node.py`) is a monitoring+control node, not part of the
+mission path. It SUBSCRIBES the read side of the contract above (`detections`,
+`classes_filter`, `vis_range`, `camera_info` per camera) + latched
+`/duburi/vision/active_camera` + `/duburi/state`, and POLLS the topic-less detector
+params (`active_model`/`conf`/`models`/`paused`) at 1 Hz. It WRITES control through the
+**exact DSL surface** — `SetParameters` on `/duburi_detector_<cam>` and the latched
+`active_camera` publish + pause-others/resume-target — so UI and DSL converge. Video is
+served by a co-launched `web_video_server` (MJPEG of `image_debug`, `:8080`); the node
+never touches image bytes. Browser routes (`:8090`): `GET /` + `/static/*` (SPA),
+`GET /events` (SSE ~12 Hz JSON snapshot), `POST /api/detector/<cam>/param {name,value}`,
+`POST /api/active_camera {camera}`. Launch: `mission_web.launch.py` (see JETSON_SETUP §5 Option D).
+Convergence is one-directional-solid: **DSL→UI** always reflects (the UI subscribes the
+latched `active_camera` + `classes_filter` and polls the rest). **UI→running-mission** is
+inherently racy — a UI camera-switch mid-verb can be overridden by the next DSL verb, which
+steers by its own `_live_camera`. Fine for a monitor; drive competition runs from the DSL and
+use the console to watch/plan/tune.
 
 `/tracks` uses the same message type as `/detections`. The difference:
 - `Detection2D.id` is populated with a stable tracker integer ID (stringified; Roboflow OC-SORT by default)

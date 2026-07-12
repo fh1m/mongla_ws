@@ -14,6 +14,9 @@ setup(
         ('share/' + package_name + '/config',  glob('config/*.yaml')),
         ('share/' + package_name + '/launch',  glob('launch/*.launch.py')),
         ('share/' + package_name + '/models',  glob('models/*.yaml') + glob('models/*.pt')),
+        # Web console static assets (served by the mission_web node from its source
+        # tree via __file__; this install keeps them alongside the installed pkg too).
+        ('share/' + package_name + '/web/static', glob('duburi_vision/web/static/*')),
     ],
     install_requires=['setuptools', 'numpy', 'supervision', 'filterpy', 'trackers'],
     zip_safe=True,
@@ -37,6 +40,7 @@ setup(
             'export_engine       = duburi_vision.utils.export_engine:main',
             'switch_camera       = duburi_vision.utils.switch_camera:main',
             'depth_estimation_node = duburi_vision.depth.depth_estimation_node:main',
+            'mission_web         = duburi_vision.web.mission_web_node:main',
         ],
     },
 )
