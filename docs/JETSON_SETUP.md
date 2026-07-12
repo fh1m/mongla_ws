@@ -311,13 +311,55 @@ On the Jetson NoMachine desktop it opens `http://localhost:8090` automatically. 
 a dev-box browser, forward **both** ports (VSCode Ports tab, or NoMachine) and open
 `http://localhost:8090`. Add `no_browser:=true` for a headless Jetson.
 
-- **Dataset videos, no hardware** (dev-box end-to-end test):
-  `ros2 launch duburi_vision mission_web.launch.py fwd_video:=<gate.mp4> dwn_video:=<bin.mp4>`
-- **Registry (UI/DSL model switching):** pass `fwd_models:=a,b,c` (a bare stem
-  registers under its own name; the console dropdown lists them).
-- Detectors start **live** (`paused:=false`) so both streams show immediately. If the
-  GPU is bound, use the console's per-camera Pause or "Make live cam" (exclusive) —
-  the same exclusivity the DSL `use_camera` enforces. `paused:=true` starts dark.
+#### Command matrix — every rig × model combination
+
+```bash
+# ── DOUBLE CAMERA (default: cameras:=both → vision_dual) ──────────────────────
+# competition default (fwd=gate_rescue_repair, dwn=bin_fire_blood, single model each)
+ros2 launch duburi_vision mission_web.launch.py
+
+# double cam, explicit single model + class + device per camera
+ros2 launch duburi_vision mission_web.launch.py \
+    fwd_device:=0 fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair fwd_conf:=0.35 \
+    dwn_device:=4 dwn_model:=bin_fire_blood      dwn_classes:=fire,blood        dwn_conf:=0.40
+
+# double cam, MULTI-MODEL forward (runtime switch from the UI dropdown / DSL set_model)
+ros2 launch duburi_vision mission_web.launch.py \
+    fwd_models:=gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole \
+    fwd_classes:=gate,rescue,repair,red_pipe,torpedo,blood,hole fwd_conf:=0.60 \
+    dwn_models:=bin_fire_blood dwn_classes:=fire,blood
+
+# ── SINGLE CAMERA (cameras:=forward | downward → vision.launch.py) ────────────
+# only forward plugged in — single model (console shows ONE panel, no phantom downward)
+ros2 launch duburi_vision mission_web.launch.py cameras:=forward \
+    fwd_device:=0 fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair
+
+# single downward camera (e.g. bin-only bench), device override
+ros2 launch duburi_vision mission_web.launch.py cameras:=downward \
+    dwn_device:=0 dwn_model:=bin_fire_blood dwn_classes:=fire,blood
+
+# single forward, MULTI-MODEL registry
+ros2 launch duburi_vision mission_web.launch.py cameras:=forward \
+    fwd_models:=gate_rescue_repair,slalom_red_pipe fwd_classes:=gate,rescue,repair,red_pipe
+
+# ── DATASET VIDEO (no hardware — full dev-box end-to-end test) ────────────────
+ros2 launch duburi_vision mission_web.launch.py fwd_video:=<gate.mp4> dwn_video:=<bin.mp4>
+ros2 launch duburi_vision mission_web.launch.py cameras:=forward fwd_video:=<gate.mp4>
+```
+
+- **`cameras:=`** picks the rig: `both` (default, vision_dual) · `forward` · `downward`.
+  A single camera uses the one-camera launch, so a box with only ONE camera never crashes
+  opening an absent second device, and the console shows just that panel.
+- **Model mode** is per camera: `fwd_model:=<stem>` = single; `fwd_models:=a,b,c` = registry
+  (a bare stem registers under its own name; the console dropdown lists them and the UI/DSL
+  can `set_model` between them at runtime). `fwd_models` wins over `fwd_model` when set.
+- **Detectors start live** (`paused:=false`) so streams show immediately. If the GPU is
+  bound, use the console's per-camera Pause or "Make live cam" (exclusive) — the same
+  exclusivity the DSL `use_camera` enforces. `paused:=true` starts dark.
+- **Robust to a missing video server:** if `ros-humble-web-video-server` isn't installed,
+  the launch **does not fail** — the console + detection data still come up (video tiles
+  blank), and the launch log prints the `apt install` hint.
+- Console on **:8090** (`web_port`), video on **:8080** (`video_port`) — both overridable.
 
 Option C (raw `web_video_server` + a hand-built URL) is the underlying mechanism and
 still works for a quick single-topic glance; Option D is the full operator surface.

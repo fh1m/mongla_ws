@@ -119,6 +119,9 @@ def generate_launch_description():
                                           'NMS is the FPS bottleneck on busy frames).'),
         DeclareLaunchArgument('paused',        default_value='false',
                               description='Start the detector paused (resume_detector(camera) per task)'),
+        DeclareLaunchArgument('debug_image_hz', default_value='10.0',
+                              description='Annotated image_debug publish rate (raise toward inference '
+                                          'FPS for a smoother web/mission_web stream)'),
         DeclareLaunchArgument('viewer',        default_value='true',
                               description='Open the OpenCV vision_display HUD (viewer:=false = headless)'),
         DeclareLaunchArgument('tracking',      default_value='true',
@@ -201,7 +204,7 @@ def generate_launch_description():
             'half':                True,
             'paused':              LaunchConfiguration('paused'),
             'publish_debug_image': True,
-            'debug_image_hz':      10.0,
+            'debug_image_hz':      LaunchConfiguration('debug_image_hz'),
         }],
     )
 

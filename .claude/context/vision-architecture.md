@@ -102,21 +102,28 @@ current class filter without polling `ros2 param get`. This means class changes 
 ### Mission console (`mission_web`) — HTTP surface, not a ROS topic
 
 `mission_web` (`web/mission_web_node.py`) is a monitoring+control node, not part of the
-mission path. It SUBSCRIBES the read side of the contract above (`detections`,
-`classes_filter`, `vis_range`, `camera_info` per camera) + latched
-`/duburi/vision/active_camera` + `/duburi/state`, and POLLS the topic-less detector
-params (`active_model`/`conf`/`models`/`paused`) at 1 Hz. It WRITES control through the
-**exact DSL surface** — `SetParameters` on `/duburi_detector_<cam>` and the latched
-`active_camera` publish + pause-others/resume-target — so UI and DSL converge. Video is
-served by a co-launched `web_video_server` (MJPEG of `image_debug`, `:8080`); the node
-never touches image bytes. Browser routes (`:8090`): `GET /` + `/static/*` (SPA),
-`GET /events` (SSE ~12 Hz JSON snapshot), `POST /api/detector/<cam>/param {name,value}`,
-`POST /api/active_camera {camera}`. Launch: `mission_web.launch.py` (see JETSON_SETUP §5 Option D).
-Convergence is one-directional-solid: **DSL→UI** always reflects (the UI subscribes the
-latched `active_camera` + `classes_filter` and polls the rest). **UI→running-mission** is
-inherently racy — a UI camera-switch mid-verb can be overridden by the next DSL verb, which
-steers by its own `_live_camera`. Fine for a monitor; drive competition runs from the DSL and
-use the console to watch/plan/tune.
+mission path. It SUBSCRIBES `detections`, `vis_range`, `camera_info` per camera + latched
+`/duburi/vision/active_camera` + `/duburi/state`, and POLLS the detector params it reflects
+(`active_model`/`conf`/`models`/`paused`/**`classes`**) at 1 Hz via `get_parameters`. NOTE:
+`classes` is polled, **not** read from `/classes_filter` — that topic is published VOLATILE
+(depth 10), so a TRANSIENT_LOCAL sub gets nothing (durability mismatch) and a VOLATILE sub
+misses the retained startup value on a late join → the console showed empty class chips.
+Polling the `classes` param is join-order-proof. It WRITES control through the **exact DSL
+surface** — `SetParameters` on `/duburi_detector_<cam>` and the latched `active_camera`
+publish + pause-others/resume-target — so UI and DSL converge. Video is served by a
+co-launched `web_video_server` (MJPEG of `image_debug`, `:8080`); the node never touches
+image bytes. Browser routes (`:8090`): `GET /` + `/static/*` (SPA), `GET /events` (SSE
+~12 Hz JSON snapshot), `POST /api/detector/<cam>/param {name,value}`,
+`POST /api/active_camera {camera}`. Launch: `mission_web.launch.py` (see JETSON_SETUP §5
+Option D) — `cameras:=both` (vision_dual) | `forward` | `downward` (single via
+vision.launch.py; the node's `cameras` param is set to match so a single-camera console
+shows one panel, no phantom). **Robust to a missing `web_video_server`** (apt pkg, not a
+repo dep): the launch resolves it defensively and degrades to console-only with an
+`apt install` hint rather than aborting the whole launch. Convergence is
+one-directional-solid: **DSL→UI** always reflects. **UI→running-mission** is inherently
+racy — a UI camera-switch mid-verb can be overridden by the next DSL verb, which steers by
+its own `_live_camera`. Fine for a monitor; drive competition runs from the DSL and use the
+console to watch/plan/tune.
 
 `/tracks` uses the same message type as `/detections`. The difference:
 - `Detection2D.id` is populated with a stable tracker integer ID (stringified; Roboflow OC-SORT by default)
