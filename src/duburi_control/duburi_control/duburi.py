@@ -105,7 +105,8 @@ from .tracing       import command_scope
 # arm / disarm / set_mode are NOT listed here because they use the
 # tracing-only `command_scope` directly and never enter _command_scope.
 _UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect',
-                         'mission_reset', 'lock_heading', 'calibrate_depth'})
+                         'mission_reset', 'lock_heading', 'calibrate_depth',
+                         'calc_distance'})
 
 # Verbs that do NOT engage a deferred heading lock. lock_heading called while
 # disarmed captures the heading but holds correction suspended until the first
@@ -115,7 +116,8 @@ _UNARM_SAFE = frozenset({'stop', 'pause', 'unlock_heading', 'dvl_connect',
 # descent is the operator's first commanded motion.
 _LOCK_PASSIVE_VERBS = frozenset({'lock_heading', 'unlock_heading', 'stop',
                                  'pause', 'surface', 'head', 'mission_reset',
-                                 'dvl_connect', 'fire', 'calibrate_depth'})
+                                 'dvl_connect', 'fire', 'calibrate_depth',
+                                 'calc_distance'})
 
 
 # Modes whose ALT_HOLD-style onboard automation honours BOTH our depth
@@ -180,6 +182,7 @@ class Duburi(VisionVerbs):
                  smooth_translate=False,
                  yaw_source=None,
                  vision_state_provider=None,
+                 distance_provider=None,
                  heartbeat=None,
                  quick_settle=False,
                  payload=None):
@@ -228,6 +231,13 @@ class Duburi(VisionVerbs):
         self._heartbeat        = heartbeat
         self.quick_settle      = bool(quick_settle)
         self._payload          = payload
+        self._distance_provider = distance_provider
+        # Projection-axis hint for calc_distance: the LAST move_* verb sets this
+        # ('axial' for fore/aft, 'lateral' for left/right) so calc_distance('start')
+        # projects the downward flow onto the right world axis. Pure hint -- setting
+        # it has NO camera/behaviour side-effect (the camera switch is owned by the
+        # DSL calc_distance wrapper, never by move_*).
+        self._distance_axis    = 'axial'
         self._heading_lock     = None      # HeadingLock thread or None
         # Deferred-activation state: lock_heading called while disarmed
         # captures the heading immediately but suspends the thread (no Ch4
@@ -429,6 +439,7 @@ class Duburi(VisionVerbs):
                    else drive_forward_constant)
             mode = 'EASED' if self.smooth_translate else 'CONSTANT'
             label = 'forward' if signed_dir > 0 else 'back'
+            self._distance_axis = 'axial'   # projection-axis hint only (no side-effect)
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
                 f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
@@ -463,6 +474,7 @@ class Duburi(VisionVerbs):
                    else drive_lateral_constant)
             mode = 'EASED' if self.smooth_translate else 'CONSTANT'
             label = 'right' if signed_dir > 0 else 'left'
+            self._distance_axis = 'lateral'   # projection-axis hint only (no side-effect)
             self.log.info(
                 f'[CMD  ] move_{label}  {duration:.1f}s  '
                 f'gain={gain:.0f}%  ({mode})  settle={settle:.1f}s')
@@ -1073,6 +1085,37 @@ class Duburi(VisionVerbs):
             f'[BARO ] depth re-zero: pre={pre:+.3f}m -> post={post:+.3f}m  {tag}')
         return self._make_result(verified or not strict,
                                  f'calibrate_depth: {tag}', final_value=post)
+
+    def calc_distance(self, phase='start'):
+        """Downward optical-flow distance bracket (DVL-free odometry).
+
+        ``phase='start'`` latches the projection axis (from the last move_* verb's
+        axis hint) + resets the accumulator; ``'stop'`` freezes it and returns the
+        accumulated metres in ``final_value``. Bridges to the distance estimator
+        node via the injected ``distance_provider`` (mirrors vision_state_provider,
+        keeps this package rclpy-free). The camera/detector switch to distance mode
+        is owned by the DSL wrapper, NOT here.
+
+        impl: DistanceState.start(lateral=)/stop() -> distance_control service.
+        """
+        with self._command_scope('calc_distance'):
+            prov = self._distance_provider
+            state = prov() if callable(prov) else prov
+            if state is None:
+                return self._make_result(
+                    False, 'calc_distance: no distance node (launch distance:=true)',
+                    final_value=0.0)
+            p = str(phase or 'start').strip().lower()
+            if p == 'start':
+                lateral = (self._distance_axis == 'lateral')
+                ok, msg = state.start(lateral=lateral)
+                self.log.info(f'[DIST ] calc_distance start ({self._distance_axis}): {msg}')
+                return self._make_result(bool(ok), f'calc_distance: {msg}', final_value=0.0)
+            else:
+                ok, msg, dist = state.stop()
+                self.log.info(f'[DIST ] calc_distance stop: {dist:+.3f}m ({msg})')
+                return self._make_result(bool(ok), f'calc_distance: {msg}',
+                                         final_value=float(dist))
 
     def unlock_heading(self):
         """Stop the heading-lock streamer and send neutral.

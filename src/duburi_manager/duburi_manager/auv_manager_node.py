@@ -75,6 +75,7 @@ FORCE_PRINT_SECONDS = 30.0   # always reprint even if nothing changed
 # loops can be.
 MESSAGE_RATES = {
     mavutil.mavlink.MAVLINK_MSG_ID_AHRS2:          50,   # Hz -- yaw/depth source
+    mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE:       50,   # Hz -- body gyro rates (flow rotation-comp)
     mavutil.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS:  1,
     mavutil.mavlink.MAVLINK_MSG_ID_RC_CHANNELS:     5,
 }
@@ -362,6 +363,10 @@ class AUVManagerNode(Node):
             self.get_logger().info(
                 '[PAYLOAD] not found — fire() calls will log-stub only')
 
+        # Lazy DistanceState bridge for calc_distance (built on first use so
+        # single-camera / no-distance runs never create the service clients).
+        self._distance_state = None
+
         self.duburi = Duburi(
             self.pixhawk,
             log=self.get_logger(),
@@ -369,9 +374,19 @@ class AUVManagerNode(Node):
             smooth_translate=self._smooth_tr,
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
+            distance_provider=self._distance_state_for,
             heartbeat=self.heartbeat,
             payload=self._payload,
         )
+
+    def _distance_state_for(self):
+        """Return (build on first call) the DistanceState bridge to the downward
+        optical-flow estimator. Injected into Duburi as distance_provider."""
+        if self._distance_state is None:
+            from .distance_state import DistanceState
+            self._distance_state = DistanceState(self, camera='downward')
+            self.get_logger().info('[DIST ] DistanceState bridge built (downward)')
+        return self._distance_state
 
     def _setup_action_server(self) -> None:
         """Create callback groups, action server, state publisher, and timers."""
@@ -390,12 +405,25 @@ class AUVManagerNode(Node):
         self.state_publisher = self.create_publisher(
             DuburiState, '/duburi/state', 10)
 
+        # Body-frame angular rates for the downward optical-flow distance
+        # estimator (rotation compensation). Vector3Stamped: x=pitch_rate,
+        # y=roll_rate, z=yaw_rate (rad/s); header.stamp = sample time so the
+        # vision node can interpolate the rate to each flow frame-pair. Sourced
+        # from Pixhawk ATTITUDE (pinned 50 Hz), NOT the BNO -- see get_angular_rates.
+        from geometry_msgs.msg import Vector3Stamped
+        self._Vector3Stamped = Vector3Stamped
+        self.imu_rates_publisher = self.create_publisher(
+            Vector3Stamped, '/duburi/imu_rates', 10)
+
         self.create_timer(0.5,  self.heartbeat_tick,   callback_group=self.timer_group)
         self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
         # Fast tick: 20 Hz HUD compass + depth (AHRS2 pinned to 50 Hz).
         # Separate callback group so it can fire between telemetry ticks.
         self.fast_group = MutuallyExclusiveCallbackGroup()
         self.create_timer(0.05, self._fast_state_tick, callback_group=self.fast_group)
+        # IMU rates at 50 Hz (matches the ATTITUDE stream pin) -- the flow
+        # rotation-comp is ~1:1 with the signal, so publish at full rate.
+        self.create_timer(0.02, self._imu_rates_tick, callback_group=self.fast_group)
 
         if self._bno_mocap_active:
             self.create_timer(0.05, self._mocap_tick, callback_group=self.timer_group)
@@ -659,6 +687,24 @@ class AUVManagerNode(Node):
         msg.depth_m         = float(attitude['depth'])
         msg.battery_voltage = self._fast_batt_v
         self.state_publisher.publish(msg)
+
+    def _imu_rates_tick(self):
+        """Publish body-frame angular rates (Pixhawk ATTITUDE) at 50 Hz.
+
+        x=pitch_rate, y=roll_rate, z=yaw_rate (rad/s). The vision distance node
+        buffers these + interpolates to each flow frame-pair for rotation-comp.
+        Skips when ATTITUDE hasn't arrived (no ATTITUDE stream / pre-connect).
+        """
+        rates = self.pixhawk.get_angular_rates()
+        if rates is None:
+            return
+        m = self._Vector3Stamped()
+        m.header.stamp    = self.get_clock().now().to_msg()
+        m.header.frame_id = 'duburi'
+        m.vector.x = rates['pitch_rate']
+        m.vector.y = rates['roll_rate']
+        m.vector.z = rates['yaw_rate']
+        self.imu_rates_publisher.publish(m)
 
     def _effective_yaw_deg(self, attitude):
         """Return ``(yaw_deg, label)`` -- the SAME yaw the control loops

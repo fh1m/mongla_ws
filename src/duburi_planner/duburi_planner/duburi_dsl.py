@@ -866,6 +866,51 @@ class DuburiMission:
         except Exception as exc:            # noqa: BLE001 -- HUD follow is best-effort
             self.log.warning(f'[CAM  ] active_camera publish skipped: {exc}')
 
+    def calc_distance(self, phase: str):
+        """Downward optical-flow distance bracket (DVL-free). OWNS the camera switch.
+
+        ``calc_distance('start')`` enters distance mode: pause BOTH YOLO detectors
+        (LK flow is CPU -- no detector runs, freeing the GPU + honouring "not
+        simultaneous with YOLO"), point the HUD at the downward camera, then latch
+        the axis + reset the accumulator (facade verb). Run your axis-locked move
+        between start and stop. ``calc_distance('stop')`` freezes + returns the
+        accumulated METRES, then RESTORES the camera/detector that was live before
+        (so forward vision missions resume as usual). move_* verbs are never touched.
+
+            duburi.calc_distance('start')
+            duburi.move_forward(4.0, gain=60)      # blind timed move, measured
+            metres = duburi.calc_distance('stop')
+
+        Returns the accumulated distance (float, metres) on 'stop'; the raw
+        Move.Result on 'start'.
+        """
+        p = str(phase or '').strip().lower()
+        if p == 'start':
+            # Remember what to restore, then enter distance mode (both detectors
+            # paused = no YOLO; HUD -> downward). Best-effort: absent detectors are
+            # quiet no-ops (single-camera / control-only runs unaffected).
+            self._pre_distance_camera = getattr(self, '_live_camera', None) or self.camera
+            for cam in self._KNOWN_CAMERAS:
+                try:
+                    self.pause_detector(cam)
+                except Exception as exc:          # noqa: BLE001
+                    self.log.debug(f'[DIST ] pause {cam!r} skipped: {exc}')
+            self._publish_active_camera('downward')
+            self.camera = 'downward'
+            self.log.info('[MISSION] distance mode ON (downward, detectors paused)')
+            return self._send('calc_distance', phase='start')
+
+        # stop: freeze + read metres, then restore the prior camera/detector.
+        result = self._send('calc_distance', phase='stop')
+        metres = float(getattr(result, 'final_value', 0.0))
+        prior  = getattr(self, '_pre_distance_camera', None) or 'forward'
+        try:
+            self.use_camera(prior)                # resumes the prior detector + HUD
+        except Exception as exc:                  # noqa: BLE001
+            self.log.warning(f'[DIST ] restore camera {prior!r} skipped: {exc}')
+        self.log.info(f'[MISSION] distance mode OFF -> {metres:+.3f}m  (camera -> {prior!r})')
+        return metres
+
     def dvl_connect(self):
         """Connect Nortek Nucleus 1000 DVL over TCP."""
         return self._send('dvl_connect')
