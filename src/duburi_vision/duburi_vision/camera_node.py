@@ -83,7 +83,7 @@ class CameraNode(Node):
             else:
                 self.get_logger().warn('[CAM  ] no USB cameras found via discover')
 
-        self._cam     = self._build_camera()
+        self._cam     = self._build_camera_with_retry()
         self._info    = self._cam.info()
         self._cam_name = str(self._info.get('name') or 'cam')
         self._frame_id = str(self._info.get('frame_id') or self._cam_name)
@@ -118,6 +118,30 @@ class CameraNode(Node):
         self.get_logger().info(
             f"[CAM  ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
             f"{ns}/image_raw  @ {rate:.1f} Hz")
+
+    # A transient USB-enumeration blip at startup shouldn't kill the camera for
+    # the whole session -- retry a few times before giving up. __init__ hasn't
+    # started the ROS timers yet, so a short blocking backoff here is safe.
+    _OPEN_RETRIES   = 5
+    _OPEN_BACKOFF_S = 1.0
+
+    def _build_camera_with_retry(self):
+        last_exc = None
+        for attempt in range(1, self._OPEN_RETRIES + 1):
+            try:
+                return self._build_camera()
+            except Exception as exc:   # noqa: BLE001 -- retry any open failure
+                last_exc = exc
+                if attempt < self._OPEN_RETRIES:
+                    self.get_logger().warn(
+                        f'[CAM  ] camera open failed (attempt {attempt}/'
+                        f'{self._OPEN_RETRIES}): {exc} — retrying in '
+                        f'{self._OPEN_BACKOFF_S:.1f}s')
+                    time.sleep(self._OPEN_BACKOFF_S)
+        # A truly absent device after every retry is a real error -- still raise.
+        self.get_logger().error(
+            f'[CAM  ] camera open FAILED after {self._OPEN_RETRIES} attempts: {last_exc}')
+        raise last_exc
 
     def _build_camera(self):
         # A by-path symlink (port-stable) wins over the int device index everywhere.
