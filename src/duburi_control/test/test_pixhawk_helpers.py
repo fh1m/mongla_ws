@@ -415,27 +415,44 @@ class _ArmMaster:
         self.sent.append(args)
 
 
-def _bare_arm_pixhawk(*, statustext=None):
-    """A Pixhawk with __init__ bypassed, wired with just what arm() touches."""
+def _bare_arm_pixhawk(*, statustext=None, armed=False):
+    """A Pixhawk with __init__ bypassed, wired with just what arm() touches.
+
+    `armed`: bool for a static state, or a callable for a changing one (so a
+    test can model 'never disarms' -> fail-closed).
+    """
     p = Pixhawk.__new__(Pixhawk)
     p.master = _ArmMaster()
     p._tx_lock = threading.Lock()
     p.clear_ack = lambda: None
     p._log_mavlink = lambda *a, **k: None
     p.wait_ack = lambda cmd, timeout=3.0: (True, 'ACCEPTED')
-    p.is_armed = lambda: False           # never actually arms
+    p.is_armed = armed if callable(armed) else (lambda: armed)
     p.get_statustext = lambda: statustext
     return p
 
 
-def test_arm_abort_sends_disarm_and_returns_aborted():
-    p = _bare_arm_pixhawk()
+def test_arm_abort_verifies_disarm_and_returns_aborted():
+    p = _bare_arm_pixhawk(armed=False)        # disarm confirms immediately
     ok, reason = p.arm(timeout=2.0, abort=lambda: True)   # abort on first poll
     assert ok is False
     assert reason == 'ABORTED'
-    # arm (p1=1) then a disarm (p1=0) so an aborted arm can't strand the hull.
+    # arm (p1=1) first, then at least one verified DISARM (p1=0) -- an aborted
+    # arm must actively confirm the hull is disarmed, not fire-and-forget.
     p1_sequence = [args[4] for args in p.master.sent]
-    assert p1_sequence == [1, 0]
+    assert p1_sequence[0] == 1
+    assert 0 in p1_sequence[1:]
+
+
+def test_arm_abort_fail_closed_when_disarm_unconfirmed():
+    # is_armed() never clears -> we must NOT claim a clean 'ABORTED' (fail-open);
+    # a distinct reason keeps the caller from assuming 'safe' on unverified state.
+    p = _bare_arm_pixhawk(armed=lambda: True)
+    ok, reason = p.arm(timeout=2.0, abort=lambda: True)
+    assert ok is False
+    assert reason == 'ABORTED_DISARM_UNCONFIRMED'
+    disarms = [a for a in p.master.sent if a[4] == 0]
+    assert len(disarms) >= 2                    # kept re-sending disarm, didn't give up after one
 
 
 def test_arm_timeout_appends_prearm_statustext():
