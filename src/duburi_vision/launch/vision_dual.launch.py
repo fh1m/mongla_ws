@@ -66,19 +66,24 @@ _QUIET = ['--log-level', 'warn']
 def generate_launch_description():
     args = [
         DeclareLaunchArgument('fwd_device',   default_value='0',
-                              description='/dev/videoN index for the forward camera (fallback '
-                                          'when fwd_device_path is empty)'),
+                              description='/dev/videoN index for the forward camera — LAST-RESORT '
+                                          'fallback, only used on a box with no /dev/duburi_cam_* '
+                                          'symlink (dev box). On the Jetson the port-stable symlink '
+                                          'wins automatically (see device_path below).'),
         DeclareLaunchArgument('dwn_device',   default_value='4',
-                              description='/dev/videoN index for the downward camera (fallback '
-                                          'when dwn_device_path is empty)'),
-        # PORT-STABLE identity for two IDENTICAL cameras (same VID/PID). Set these to the
-        # /dev/v4l/by-path/…-video-index0 symlinks so forward/downward never swap on
-        # reboot/re-plug. Empty => fall back to the int index above. Non-empty wins.
-        # See .claude/context/dual-camera-setup.md for how to find the by-path values.
+                              description='/dev/videoN index for the downward camera (dev-box fallback; '
+                                          'the Jetson symlink wins automatically)'),
+        # PORT-STABLE identity for two IDENTICAL cameras (same VID/PID). Leave EMPTY and
+        # the node auto-binds /dev/duburi_cam_<forward|downward> WHEN THAT SYMLINK EXISTS
+        # (Jetson) — so forward/downward NEVER swap on reboot/re-plug. The raw int index
+        # 0/4 above is NOT stable: /dev/videoN renumbers on the Orin and silently swaps the
+        # two identical cameras (this is the exact "forward/downward reversed" bug). Set a
+        # value here ONLY to force a specific device; a non-empty value overrides the symlink.
+        # See .claude/context/dual-camera-setup.md.
         DeclareLaunchArgument('fwd_device_path', default_value='',
-                              description='by-path symlink for the forward camera (port-stable)'),
+                              description='override device for forward (empty = auto /dev/duburi_cam_forward)'),
         DeclareLaunchArgument('dwn_device_path', default_value='',
-                              description='by-path symlink for the downward camera (port-stable)'),
+                              description='override device for downward (empty = auto /dev/duburi_cam_downward)'),
         # Forward camera -- gate / slalom / torpedo tasks
         DeclareLaunchArgument('fwd_model',    default_value='gate_rescue_repair',
                               description='Single YOLO model stem (used only when '
@@ -186,7 +191,16 @@ def generate_launch_description():
                 'source':  src,
                 'name':    profile,
                 'device':  LaunchConfiguration(device_arg),
-                'device_path': LaunchConfiguration(device_path_arg),
+                # PORT-STABLE identity: an empty device_path falls back to the
+                # /dev/duburi_cam_<profile> udev symlink WHEN IT EXISTS (Jetson),
+                # else '' -> the int device index (dev box). This makes
+                # forward/downward immune to /dev/videoN renumbering on
+                # reboot/re-plug (the raw index 0/4 is NOT stable — the enumeration
+                # order flips, silently swapping the two identical cameras).
+                'device_path': PythonExpression([
+                    "'", LaunchConfiguration(device_path_arg), "'",
+                    " or (lambda p: p if __import__('os').path.exists(p) else '')"
+                    "('/dev/duburi_cam_", profile, "')"]),
                 'path':    video,
                 'loop':    LaunchConfiguration(loop_arg),
             }],
