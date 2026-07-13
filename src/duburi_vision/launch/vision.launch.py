@@ -139,6 +139,16 @@ def generate_launch_description():
                               description='Start depth_estimation_node (monocular vis_range)'),
         DeclareLaunchArgument('depth_model',   default_value='',
                               description='DA V2-Small ONNX path; empty = bbox-area fallback'),
+        # Downward optical-flow distance estimator (DVL-free). distance:=true starts
+        # it so calc_distance('start'/'stop') works (use with camera:=downward).
+        DeclareLaunchArgument('distance',        default_value='false',
+                              description='Start the optical-flow distance node (calc_distance).'),
+        DeclareLaunchArgument('pool_depth_m',    default_value='4.0',
+                              description='Water column surface->floor (m); metric scale for flow.'),
+        DeclareLaunchArgument('camera_focal_px', default_value='500.0',
+                              description='Camera f_px (intrinsics calibration; distance scale rides on it).'),
+        DeclareLaunchArgument('hud_distance',    default_value='true',
+                              description='HUD pre-arms the distance panel.'),
     ]
 
     cam        = LaunchConfiguration('camera')
@@ -230,12 +240,25 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('depth')),
     )
 
+    distance_node = Node(
+        package='duburi_vision', executable='distance_estimation_node',
+        name='duburi_distance_estimator', output='screen', ros_arguments=_QUIET,
+        additional_env=_QUIET_ENV,
+        parameters=[{
+            'camera':          cam,
+            'pool_depth_m':    LaunchConfiguration('pool_depth_m'),
+            'camera_focal_px': LaunchConfiguration('camera_focal_px'),
+        }],
+        condition=IfCondition(LaunchConfiguration('distance')),
+    )
+
     image_viewer = Node(
         package='duburi_vision', executable='vision_display',
         name='duburi_image_view', output='screen', additional_env=_QUIET_ENV,
         parameters=[{
             'camera':          cam,
             'video_file_mode': video_file_mode,
+            'hud_distance':    LaunchConfiguration('hud_distance'),
         }],
         condition=IfCondition(LaunchConfiguration('viewer')),
     )
@@ -248,5 +271,5 @@ def generate_launch_description():
 
     return LaunchDescription(
         args + [camera_node, detector_node, tracker_node, depth_node,
-                image_viewer, shutdown_on_viewer_exit]
+                distance_node, image_viewer, shutdown_on_viewer_exit]
     )

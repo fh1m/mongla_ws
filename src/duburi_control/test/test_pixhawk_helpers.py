@@ -361,3 +361,32 @@ def test_calibrate_barometer_reports_failure_result():
     px = Pixhawk(master, log=None)
     ok, reason = px.calibrate_barometer(timeout=1.0)
     assert ok is False
+
+
+# --------------------------------------------------------------------------- #
+#  get_angular_rates: body-frame gyro rates from MAVLink ATTITUDE (flow comp)  #
+# --------------------------------------------------------------------------- #
+class _AttMaster:
+    target_system = 1
+    target_component = 1
+
+    def __init__(self, att=None):
+        self.messages = {}
+        if att is not None:
+            self.messages['ATTITUDE'] = att
+
+
+def test_get_angular_rates_reads_attitude_speeds():
+    att = types.SimpleNamespace(rollspeed=0.10, pitchspeed=-0.20, yawspeed=0.05)
+    px = Pixhawk(_AttMaster(att), log=None)
+    r = px.get_angular_rates()
+    assert r is not None
+    assert r['roll_rate']  == 0.10
+    assert r['pitch_rate'] == -0.20
+    assert r['yaw_rate']   == 0.05
+    assert r['age_s'] == 0.0   # mock without _timestamp -> treated fresh
+
+
+def test_get_angular_rates_none_when_no_attitude():
+    px = Pixhawk(_AttMaster(None), log=None)
+    assert px.get_angular_rates() is None

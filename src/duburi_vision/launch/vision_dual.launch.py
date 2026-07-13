@@ -148,6 +148,23 @@ def generate_launch_description():
                               description='Loop the forward video at EOF (video source only).'),
         DeclareLaunchArgument('dwn_loop',     default_value='true',
                               description='Loop the downward video at EOF (video source only).'),
+        # Downward optical-flow distance estimator (DVL-free odometry). Off by
+        # default; distance:=true starts the node so calc_distance('start'/'stop')
+        # works. LK flow is CPU (does not fight the detector for GPU); it runs on
+        # the downward camera stream with the detectors paused (calc_distance owns
+        # that switch, then auto-restores the prior camera for vision missions).
+        DeclareLaunchArgument('distance',        default_value='false',
+                              description='Start the downward optical-flow distance node '
+                                          '(enables calc_distance start/stop).'),
+        DeclareLaunchArgument('pool_depth_m',    default_value='4.0',
+                              description='Water column surface->floor (m); metric scale for flow.'),
+        DeclareLaunchArgument('camera_focal_px', default_value='500.0',
+                              description='Downward camera f_px (intrinsics calibration; scale rides on it).'),
+        # HUD readiness: pre-subscribe the distance topics so the panel is live the
+        # instant calc_distance('start') fires (no first-switch lag), then the HUD
+        # auto-follows back to the last active camera on stop.
+        DeclareLaunchArgument('hud_distance',    default_value='true',
+                              description='HUD pre-arms the distance panel (shows on calc_distance).'),
     ]
 
     def camera(profile: str, device_arg: str, video_arg: str, loop_arg: str,
@@ -217,8 +234,20 @@ def generate_launch_description():
     viewer = Node(
         package='duburi_vision', executable='vision_display',
         name='duburi_display', output='screen',
-        parameters=[{'camera': 'forward', 'video_file_mode': any_video}],
+        parameters=[{'camera': 'forward', 'video_file_mode': any_video,
+                     'hud_distance': LaunchConfiguration('hud_distance')}],
         condition=IfCondition(LaunchConfiguration('viewer')),
+    )
+
+    distance_node = Node(
+        package='duburi_vision', executable='distance_estimation_node',
+        name='duburi_distance_estimator', output='screen', ros_arguments=_QUIET,
+        parameters=[{
+            'camera':          'downward',
+            'pool_depth_m':    LaunchConfiguration('pool_depth_m'),
+            'camera_focal_px': LaunchConfiguration('camera_focal_px'),
+        }],
+        condition=IfCondition(LaunchConfiguration('distance')),
     )
 
     shutdown_on_exit = RegisterEventHandler(
@@ -234,6 +263,7 @@ def generate_launch_description():
                  'dwn_conf', 'dwn_model_conf'),
         tracker('forward'),
         tracker('downward'),
+        distance_node,
         viewer,
         shutdown_on_exit,
     ])

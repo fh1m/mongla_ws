@@ -168,6 +168,7 @@ class VisionDisplayNode(Node):
         self.declare_parameter('conf',            0.35)
         self.declare_parameter('max_display_hz',  30.0)
         self.declare_parameter('yaw_source', 'mavlink_ahrs')
+        self.declare_parameter('hud_distance', False)   # pre-arm distance panel
 
         camera          = self.get_parameter('camera').get_parameter_value().string_value
         video_file_mode = self.get_parameter('video_file_mode').get_parameter_value().bool_value
@@ -244,6 +245,15 @@ class VisionDisplayNode(Node):
         # for stream" screen during that gap so the operator sees the switch is in
         # progress, not that nothing happened.
         self._switch_t = 0.0
+
+        # Distance-mode HUD (downward optical-flow odometry). Pre-armed when
+        # hud_distance=true so the panel is live the instant calc_distance starts.
+        # [dist_m, height_m, n_tracks, active] from /duburi/vision/downward/distance_debug.
+        self._distance_dbg = None
+        if self.get_parameter('hud_distance').get_parameter_value().bool_value:
+            self.create_subscription(
+                Float32MultiArray, '/duburi/vision/downward/distance_debug',
+                self._on_distance_dbg, 10)
 
         # Depth rate estimation — short window, state-message timestamps
         self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
@@ -420,6 +430,10 @@ class VisionDisplayNode(Node):
         with self._vis_range_lock:
             self._vis_range_values = list(msg.data)
             self._last_vis_range_t = time.monotonic()
+
+    def _on_distance_dbg(self, msg: Float32MultiArray) -> None:
+        # [dist_m, height_m, n_tracks, active]; cache latest for the panel.
+        self._distance_dbg = list(msg.data)
 
     def _on_depth_map(self, msg: Image) -> None:
         try:
@@ -659,6 +673,41 @@ def _render_switching(w: int, h: int, camera: str) -> np.ndarray:
 # How long after a switch to keep showing the "waiting for stream" screen while
 # the new camera has produced no frame (past this it's a real stall, not a switch).
 _SWITCH_WAIT_S = 3.0
+
+
+def _draw_distance_panel(out, dbg) -> None:
+    """Top-right ODOMETRY panel while the distance estimator is ACTIVE.
+
+    `dbg` = [dist_m, height_m, n_tracks, active] from distance_debug, or None.
+    Drawn only when active>0.5 so it never clutters normal vision missions.
+    """
+    if not dbg or len(dbg) < 4 or dbg[3] < 0.5:
+        return
+    dist, height, tracks = dbg[0], dbg[1], int(dbg[2])
+    h, w = out.shape[:2]
+    sf = max(0.9, w / 1920.0)
+    lines = [
+        ('ODOMETRY', (40, 210, 255)),
+        (f'dist  {dist:+.3f} m', (235, 235, 235)),
+        (f'height {height:.2f} m', (200, 200, 200)),
+        (f'tracks {tracks}', (60, 230, 120) if tracks >= 6 else (60, 60, 235)),
+    ]
+    fs = 0.62 * sf
+    line_h = int(pil_text_size('Ag', fs)[1] * 1.5)
+    pad = int(12 * sf)
+    box_w = max(pil_text_size(t, fs)[0] for t, _ in lines) + pad * 2
+    box_h = pad * 2 + line_h * len(lines)
+    x1, y0 = w - 4, 4
+    x0, y1 = max(0, x1 - box_w), min(h - 1, y0 + box_h)
+    roi = out[y0:y1, x0:x1]
+    if roi.size:
+        dark = np.full_like(roi, 15)
+        cv2.addWeighted(dark, 0.62, roi, 0.38, 0, roi)
+        cv2.rectangle(out, (x0, y0), (x1, y1), (40, 210, 255), max(1, int(2 * sf)), cv2.LINE_AA)
+    yy = y0 + pad
+    for text, col in lines:
+        yy += line_h
+        pil_text(out, text, (x0 + pad, yy), fs, col)
 
 
 def _render_splash(w: int, h: int, elapsed: float, camera: str,
@@ -907,6 +956,9 @@ def main(args=None):
                 out, camera=node._active_camera, fps=node._fps_display,
                 primary=primary, native_w=native_w, native_h=native_h,
                 deadband=0.05, state=node._state)
+
+            # Distance-mode panel (only while the estimator is ACTIVE).
+            _draw_distance_panel(out, node._distance_dbg)
 
             if out.shape[0] != _SP_H or out.shape[1] != _SP_W:
                 out = cv2.resize(out, (_SP_W, _SP_H), interpolation=cv2.INTER_LINEAR)

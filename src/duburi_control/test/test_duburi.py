@@ -463,3 +463,57 @@ def test_mission_reset_survives_calibration_error(monkeypatch):
     duburi  = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.baro')))
     r = duburi.mission_reset()
     assert r.success is True                                # reset completed anyway
+
+
+# ── calc_distance (downward optical-flow odometry bracket) ───────────────────
+class _FakeDistanceState:
+    def __init__(self, dist=1.23):
+        self.dist = dist
+        self.started_lateral = None
+        self.stopped = False
+    def start(self, *, lateral):
+        self.started_lateral = lateral
+        return True, 'ACTIVE'
+    def stop(self):
+        self.stopped = True
+        return True, 'STOPPED', self.dist
+
+
+def _duburi_with_distance(ds, armed=True):
+    pixhawk = FakePixhawk(armed=armed)
+    d = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.dist')),
+               distance_provider=lambda: ds)
+    return d
+
+
+def test_calc_distance_start_latches_axial_by_default():
+    ds = _FakeDistanceState()
+    d  = _duburi_with_distance(ds)
+    r  = d.calc_distance('start')
+    assert r.success is True
+    assert ds.started_lateral is False        # default axis = axial
+
+
+def test_calc_distance_start_uses_lateral_after_move_left(monkeypatch):
+    monkeypatch.setattr(time, 'sleep', lambda *_: None)
+    ds = _FakeDistanceState()
+    d  = _duburi_with_distance(ds)
+    d.move_left(duration=0.02, gain=50.0)     # sets _distance_axis='lateral'
+    d.calc_distance('start')
+    assert ds.started_lateral is True
+
+
+def test_calc_distance_stop_returns_metres_in_final_value():
+    ds = _FakeDistanceState(dist=2.5)
+    d  = _duburi_with_distance(ds)
+    r  = d.calc_distance('stop')
+    assert r.success is True
+    assert r.final_value == 2.5
+    assert ds.stopped is True
+
+
+def test_calc_distance_no_provider_is_graceful():
+    pixhawk = FakePixhawk()
+    d = Duburi(pixhawk, ThrottleLogger(logging.getLogger('test.dist')))  # no provider
+    r = d.calc_distance('start')
+    assert r.success is False                  # never raises; reports absence

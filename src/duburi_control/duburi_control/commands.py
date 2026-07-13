@@ -69,6 +69,13 @@ COMMANDS = {
         'fields':   [],
         'defaults': {},
     },
+    'calc_distance': {
+        'help':     "Downward optical-flow distance bracket: phase='start' latches "
+                    "the axis + resets, 'stop' returns accumulated metres in "
+                    "final_value. DVL-free; runs with detectors paused.",
+        'fields':   ['phase'],
+        'defaults': {'phase': 'start'},
+    },
     'surface': {
         'help':     'Emergency surface: set depth to 0 m and hold until reached. '
                     'Bypasses command_active gate so it works during a running mission.',
@@ -338,7 +345,7 @@ COMMANDS = {
 
 # Field names that carry a string instead of a float (everything else is float).
 STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
-                 'fire_channels')
+                 'fire_channels', 'phase')
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'lock_target',
