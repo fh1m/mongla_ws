@@ -79,8 +79,11 @@ COMMANDS = {
     'surface': {
         'help':     'Emergency surface: set depth to 0 m and hold until reached. '
                     'Bypasses command_active gate so it works during a running mission.',
-        'fields':   [],
-        'defaults': {},
+        # timeout is the ascent budget. It MUST be registered (not just hardcoded in
+        # surface()) so the client result-backstop covers the full ascent -- else the
+        # 12 s safety floor truncates a deep emergency surface mid-water (a safety bug).
+        'fields':   ['timeout'],
+        'defaults': {'timeout': 60.0},
     },
     'pause': {
         'help':     'Release RC override for N seconds (autopilot takes over).',

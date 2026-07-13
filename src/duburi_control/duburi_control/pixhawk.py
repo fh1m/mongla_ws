@@ -208,6 +208,11 @@ class Pixhawk:
     #  Arm / Disarm — ACK for rejection, heartbeat poll for completion    #
     # ------------------------------------------------------------------ #
 
+    # Max heartbeat age (s) for a post-abort disarm confirmation to be trusted.
+    # Beyond this the link is stale and is_armed() is a cached value -> never
+    # confirm 'disarmed' on it (fail-closed under link loss).
+    _DISARM_CONFIRM_MAX_HB_AGE_S = 2.0
+
     def arm(self, timeout=15.0, abort=None):
         """Returns `(success, reason)`. Reason is a MAV_RESULT name,
         'NO_ACK', 'ABORTED', or 'NOT_ARMED_AFTER_ACK[: <pre-arm reason>]'.
@@ -224,6 +229,10 @@ class Pixhawk:
         """
         cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
         self.clear_ack()
+        # Snapshot the current STATUSTEXT so a timeout only reports a pre-arm
+        # reason that actually arrived DURING this arm -- not a stale, unrelated
+        # line left in the cache from an earlier mode change / EKF / battery event.
+        prev_status = self.master.messages.get('STATUSTEXT')
         self._log_mavlink('COMPONENT_ARM_DISARM p1=1')
         with self._tx_lock:
             self.master.mav.command_long_send(
@@ -241,8 +250,17 @@ class Pixhawk:
             if self.is_armed():
                 return True, 'ACCEPTED'
             time.sleep(0.1)
-        why = self.get_statustext()
+        why = self._fresh_statustext(prev_status)
         return False, 'NOT_ARMED_AFTER_ACK' + (f': {why}' if why else '')
+
+    def _fresh_statustext(self, prev):
+        """The STATUSTEXT only if a NEW one landed since `prev` was snapshotted --
+        so an arm timeout never misattributes a stale/unrelated cached line as the
+        pre-arm reason. Returns the fresh text, or None if nothing new arrived."""
+        msg = self.master.messages.get('STATUSTEXT')
+        if msg is None or msg is prev:
+            return None
+        return (msg.text or '').strip() or None
 
     def _disarm_after_abort(self, tries=6, settle=0.5):
         """Verified disarm after an abort mid-arm.
@@ -265,11 +283,16 @@ class Pixhawk:
                     self.master.target_system, self.master.target_component,
                     cmd, 0, 0, 0, 0, 0, 0, 0, 0)   # p1=0 -> disarm
             time.sleep(settle)
-            if self.is_armed():
-                stable = 0                 # armed (possibly late) -> keep disarming
+            age = self.heartbeat_age()
+            fresh = age is not None and age <= self._DISARM_CONFIRM_MAX_HB_AGE_S
+            if self.is_armed() or not fresh:
+                # armed (possibly late), OR the link is stale so is_armed() is a
+                # cached value we can't trust -> keep disarming, never confirm on
+                # stale telemetry (that would be a fail-OPEN under link loss).
+                stable = 0
             else:
                 stable += 1
-                if stable >= 2:            # two consecutive disarmed reads -> settled
+                if stable >= 2:            # two consecutive FRESH disarmed reads -> settled
                     return False, 'ABORTED'
         return False, 'ABORTED_DISARM_UNCONFIRMED'
 

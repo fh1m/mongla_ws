@@ -404,22 +404,25 @@ import threading
 
 
 class _ArmMaster:
-    """Records command_long_send calls; p1 (arg index 4) is 1=arm / 0=disarm."""
+    """Records command_long_send calls; p1 (arg index 4) is 1=arm / 0=disarm.
+    `messages` mirrors pymavlink's cache so arm() can read STATUSTEXT."""
     def __init__(self):
         self.target_system = 1
         self.target_component = 1
         self.mav = self
         self.sent = []
+        self.messages = {}
 
     def command_long_send(self, *args):
         self.sent.append(args)
 
 
-def _bare_arm_pixhawk(*, statustext=None, armed=False):
+def _bare_arm_pixhawk(*, armed=False, hb_age=0.0):
     """A Pixhawk with __init__ bypassed, wired with just what arm() touches.
 
-    `armed`: bool for a static state, or a callable for a changing one (so a
-    test can model 'never disarms' -> fail-closed).
+    `armed`: bool for a static state, or a callable for a changing one.
+    `hb_age`: heartbeat age (s) the disarm-confirm freshness gate reads; a large
+    value (or None) models a stale link so a disarm can't be confirmed.
     """
     p = Pixhawk.__new__(Pixhawk)
     p.master = _ArmMaster()
@@ -428,12 +431,12 @@ def _bare_arm_pixhawk(*, statustext=None, armed=False):
     p._log_mavlink = lambda *a, **k: None
     p.wait_ack = lambda cmd, timeout=3.0: (True, 'ACCEPTED')
     p.is_armed = armed if callable(armed) else (lambda: armed)
-    p.get_statustext = lambda: statustext
+    p.heartbeat_age = lambda: hb_age
     return p
 
 
 def test_arm_abort_verifies_disarm_and_returns_aborted():
-    p = _bare_arm_pixhawk(armed=False)        # disarm confirms immediately
+    p = _bare_arm_pixhawk(armed=False)        # disarmed + fresh link -> confirms
     ok, reason = p.arm(timeout=2.0, abort=lambda: True)   # abort on first poll
     assert ok is False
     assert reason == 'ABORTED'
@@ -444,7 +447,7 @@ def test_arm_abort_verifies_disarm_and_returns_aborted():
     assert 0 in p1_sequence[1:]
 
 
-def test_arm_abort_fail_closed_when_disarm_unconfirmed():
+def test_arm_abort_fail_closed_when_still_armed():
     # is_armed() never clears -> we must NOT claim a clean 'ABORTED' (fail-open);
     # a distinct reason keeps the caller from assuming 'safe' on unverified state.
     p = _bare_arm_pixhawk(armed=lambda: True)
@@ -455,15 +458,38 @@ def test_arm_abort_fail_closed_when_disarm_unconfirmed():
     assert len(disarms) >= 2                    # kept re-sending disarm, didn't give up after one
 
 
-def test_arm_timeout_appends_prearm_statustext():
-    p = _bare_arm_pixhawk(statustext='PreArm: Battery below minimum')
-    ok, reason = p.arm(timeout=0.2, abort=None)           # ACK ok, never arms
+def test_arm_abort_fail_closed_on_stale_link():
+    # is_armed() reads False BUT the link is stale -> that False is a cached value
+    # we can't trust, so the disarm must NOT be confirmed (fail-closed under link loss).
+    p = _bare_arm_pixhawk(armed=False, hb_age=99.0)
+    ok, reason = p.arm(timeout=2.0, abort=lambda: True)
     assert ok is False
-    assert reason == 'NOT_ARMED_AFTER_ACK: PreArm: Battery below minimum'
+    assert reason == 'ABORTED_DISARM_UNCONFIRMED'
+
+
+def test_arm_timeout_reports_only_a_FRESH_prearm_statustext():
+    p = _bare_arm_pixhawk()                    # no statustext at arm start
+    # a pre-arm complaint lands DURING the arm attempt (after the prev snapshot)
+    def inject_then_false():
+        p.master.messages['STATUSTEXT'] = types.SimpleNamespace(text='PreArm: Battery low')
+        return False
+    p.is_armed = inject_then_false
+    ok, reason = p.arm(timeout=0.3, abort=None)
+    assert ok is False
+    assert reason == 'NOT_ARMED_AFTER_ACK: PreArm: Battery low'
+
+
+def test_arm_timeout_ignores_a_STALE_statustext():
+    # a pre-existing, unrelated cached line must NOT be misattributed as the reason.
+    p = _bare_arm_pixhawk()
+    p.master.messages['STATUSTEXT'] = types.SimpleNamespace(text='EKF3 IMU0 is using GPS')
+    ok, reason = p.arm(timeout=0.3, abort=None)   # never re-set during the arm
+    assert ok is False
+    assert reason == 'NOT_ARMED_AFTER_ACK'
 
 
 def test_arm_timeout_without_statustext_is_plain():
-    p = _bare_arm_pixhawk(statustext=None)
-    ok, reason = p.arm(timeout=0.2, abort=None)
+    p = _bare_arm_pixhawk()
+    ok, reason = p.arm(timeout=0.3, abort=None)
     assert ok is False
     assert reason == 'NOT_ARMED_AFTER_ACK'
