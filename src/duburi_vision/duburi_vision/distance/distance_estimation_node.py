@@ -4,16 +4,15 @@
 Accumulates metric distance travelled along ONE latched axis from sparse
 Lucas-Kanade optical flow on the downward camera, rotation-compensated by Pixhawk
 gyro rates and metric-scaled by Bar30 depth + a configured pool_depth_m. Bounded
-by calc_distance('start'/'stop') via the distance_control service.
+by calc_distance('start'/'stop') via the latched distance_control topic.
 
 Topics
   in    /duburi/vision/<cam>/image_raw     sensor_msgs/Image       (downward stream)
   in    /duburi/imu_rates                  geometry_msgs/Vector3Stamped (x=pitch,y=roll,z=yaw rad/s)
   in    /duburi/state                      duburi_interfaces/DuburiState (depth_m + yaw_deg)
+  in    /duburi/vision/<cam>/distance_control    std_msgs/String  (LATCHED: 'start_axial'|'start_lateral'|'stop')
   out   /duburi/vision/<cam>/distance_traveled  std_msgs/Float32   (running metres; continuous)
   out   /duburi/vision/<cam>/distance_debug     std_msgs/Float32MultiArray [dist,height,n_tracks,active]
-Service
-  /duburi/vision/<cam>/distance_control    std_srvs/SetBool  (true=start/latch/reset, false=stop)
 
 Mirrors depth_estimation_node: light subscriber, sparse LK on CPU (does NOT fight
 the YOLO detector for GPU -- distance mode runs with the detectors paused).

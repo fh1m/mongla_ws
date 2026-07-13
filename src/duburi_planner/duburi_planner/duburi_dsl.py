@@ -977,7 +977,7 @@ class DuburiMission:
         single guard that turns "someone forgot to start the vision stack" from
         a silent warning + a mission that idles on err=+inf (the pool-test
         failure) into an immediate, actionable abort. Called from every detector
-        param op AND from the vision verbs (align/move/anchor) so a mission that
+        param op AND from the vision verbs (align/move) so a mission that
         skips set_model still can't run blind.
         """
         if node in self._detector_ok:

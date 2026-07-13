@@ -37,6 +37,12 @@ class DistanceState:
 
         self._lock = threading.Lock()
         self._distance_m = 0.0
+        # Liveness: when the estimator node isn't running, distance_traveled never
+        # arrives and _distance_m stays 0.0 -- a silent success that would make a
+        # distance-gated move think it travelled 0 m. Track sample arrival so stop()
+        # can report the absence as a failure instead of a clean 0.0 m.
+        self._start_t = 0.0
+        self._last_rx = 0.0
 
         node.create_subscription(
             Float32, f'{ns}/distance_traveled', self._on_distance, 10)
@@ -48,6 +54,7 @@ class DistanceState:
     def _on_distance(self, msg: Float32) -> None:
         with self._lock:
             self._distance_m = float(msg.data)
+            self._last_rx = time.monotonic()
 
     @property
     def distance_m(self) -> float:
@@ -57,6 +64,7 @@ class DistanceState:
     def start(self, *, lateral: bool) -> tuple[bool, str]:
         with self._lock:
             self._distance_m = 0.0
+            self._start_t = time.monotonic()
         cmd = 'start_lateral' if lateral else 'start_axial'
         self._ctrl_pub.publish(String(data=cmd))
         return True, cmd
@@ -65,4 +73,13 @@ class DistanceState:
         self._ctrl_pub.publish(String(data='stop'))
         # Let the node's frozen total land in the cache (no service ack needed).
         time.sleep(_STOP_SETTLE_S)
-        return True, 'stop', self.distance_m
+        with self._lock:
+            dist = self._distance_m
+            # Alive only if a distance sample arrived AFTER this bracket started.
+            # None since start => the estimator node isn't running (or crashed):
+            # report failure so the caller never trusts a phantom 0.0 m.
+            alive = self._last_rx >= self._start_t and self._last_rx > 0.0
+        if not alive:
+            return False, ('distance estimator not publishing '
+                           '(is distance_estimation_node running? launch distance:=true)'), dist
+        return True, 'stop', dist

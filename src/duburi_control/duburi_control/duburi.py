@@ -308,7 +308,7 @@ class Duburi(VisionVerbs):
     def arm(self, timeout=15.0):
         """impl: pixhawk.py:arm (COMMAND_LONG MAV_CMD_COMPONENT_ARM_DISARM, p1=1)."""
         with command_scope('arm'):
-            accepted, reason = self.pixhawk.arm(timeout)
+            accepted, reason = self.pixhawk.arm(timeout, abort=self._abort_fn())
         return self._make_result(accepted, f'arm: {reason}')
 
     def disarm(self, timeout=20.0):
@@ -1096,7 +1096,9 @@ class Duburi(VisionVerbs):
         keeps this package rclpy-free). The camera/detector switch to distance mode
         is owned by the DSL wrapper, NOT here.
 
-        impl: DistanceState.start(lateral=)/stop() -> distance_control service.
+        impl: DistanceState.start(lateral=)/stop() -> latched distance_control
+        String topic ('start_axial'|'start_lateral'|'stop'). stop() reports a
+        liveness failure if the estimator node isn't publishing (no phantom 0 m).
         """
         with self._command_scope('calc_distance'):
             prov = self._distance_provider

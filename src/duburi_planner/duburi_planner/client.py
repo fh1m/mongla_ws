@@ -75,18 +75,31 @@ class DuburiClient:
     def _result_deadline(self, goal) -> float:
         """Client backstop for a goal's result, in seconds.
 
-        A safety/quick verb gets a short fixed bound. Otherwise the bound is
-        the goal's OWN server-side time limit (``duration``/``timeout`` field)
-        plus a margin for the server's settle/brake cleanup; a goal with no
-        time field falls back to a generous floor. Always finite -> a stalled
-        server can never hang the caller forever.
+        The bound is the goal's OWN server-side time limit
+        (``duration``/``timeout``) plus a margin for the server's settle/brake
+        cleanup; a goal with no time field falls back to a generous floor.
+        Always finite -> a stalled server can never hang the caller forever.
+
+        A safety/quick verb keeps a SHORT fixed floor (the disarm backstop must
+        never wait on a healthy-server assumption) -- but the floor is a floor,
+        NOT a ceiling: it must still cover the verb's own server budget, or a
+        slow-but-legitimate arm/disarm (ACK + is_armed poll) trips MoveTimeout
+        before it can finish. That is the "doesn't arm, 12 s crossed" bug: arm's
+        real budget is ~18 s (3 s ACK + 15 s poll), disarm's ~26 s, but the old
+        fixed 12 s cut them off. `send()` does not apply the COMMANDS defaults,
+        so `goal.timeout` is 0.0 on the wire and the effective limit must be read
+        from the same registry the server enforces.
         """
+        spec_defaults = COMMANDS.get(getattr(goal, 'cmd', ''), {}).get('defaults', {})
+        timeout = (float(getattr(goal, 'timeout', 0.0) or 0.0)
+                   or float(spec_defaults.get('timeout', 0.0) or 0.0))
+        duration = (float(getattr(goal, 'duration', 0.0) or 0.0)
+                    or float(spec_defaults.get('duration', 0.0) or 0.0))
+        limit = max(timeout, duration)
+        backstop = (limit + _RESULT_TIMEOUT_MARGIN_S) if limit > 0.0 else 0.0
         if getattr(goal, 'cmd', '') in _QUICK_CMDS:
-            return _QUICK_DEADLINE_S
-        limit = max(float(getattr(goal, 'duration', 0.0) or 0.0),
-                    float(getattr(goal, 'timeout',  0.0) or 0.0))
-        return (limit + _RESULT_TIMEOUT_MARGIN_S) if limit > 0.0 \
-            else _RESULT_TIMEOUT_FLOOR_S
+            return max(_QUICK_DEADLINE_S, backstop)
+        return backstop if backstop > 0.0 else _RESULT_TIMEOUT_FLOOR_S
 
     def _cancel(self, goal_handle) -> None:
         """Best-effort, bounded cancel of an in-flight goal."""
