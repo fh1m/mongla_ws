@@ -579,10 +579,19 @@ def _check_jetson_power() -> tuple[str, str]:
         return PASS, 'not a Jetson (nvpmodel absent) -- skipped'
     text = out.replace('\n', ' ').strip()
     low = text.lower()
-    if 'maxn' in low or 'nv power mode: 0' in low or ': 0' in low:
-        return PASS, f'MAXN ({text[:48]})'
-    return WARN, (f'NOT MaxN ({text[:48]}) -- run: '
-                  'sudo nvpmodel -m 0 && sudo jetson_clocks')
+    # Mode 0 is the HIGHEST-performance nvpmodel mode on Orin. On a "Super" board
+    # that is MAXN (~25W); on an older/backup board it's the top 15W mode -- both
+    # are the correct max for THAT board, so mode 0 = PASS either way (do NOT nag
+    # for "MAXN" by name -- a non-Super board has no MAXN and its 15W max is fine).
+    # jetson_clocks pins clocks to that mode's ceiling and does NOT survive a
+    # reboot, so PASS still reminds to (re-)run it -- an un-pinned board silently
+    # runs the detector at half FPS.
+    if 'nv power mode: 0' in low or ': 0' in low or 'maxn' in low:
+        return PASS, (f'max-perf mode ({text[:48]}) -- also run '
+                      '`sudo jetson_clocks` (does NOT survive reboot)')
+    return WARN, (f'NOT max-perf mode ({text[:48]}) -- run: sudo nvpmodel -m 0 '
+                  '&& sudo jetson_clocks  (mode 0 = this board\'s max; on a '
+                  'non-Super board that is its top 15W mode -- expected, not MAXN)')
 
 
 # --------------------------------------------------------------------------- #

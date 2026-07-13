@@ -6,6 +6,12 @@ one assumes the previous one finished cleanly. Skip any section
 whose check command already passes -- **the goal is a working build,
 not a re-install**.
 
+> **Prepping the 15 W backup board for competition (no WiFi, one-shot)?** Use the
+> sequenced, two-agent runbook **[`JETSON_ONESHOT_15W.md`](JETSON_ONESHOT_15W.md)** —
+> it orders this doc + remote-access + camera-udev into a single verified pass and adds
+> the 15 W-specific parts (TensorRT engines mandatory, `nvpmodel -m 0` = the board's max
+> not MAXN, measure-then-pick imgsz, clocks-survive-reboot service).
+
 ---
 
 ## 0. Prereqs (apt)

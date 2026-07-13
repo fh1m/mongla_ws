@@ -687,6 +687,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 
 | File                            | Contents                                                            |
 |---------------------------------|---------------------------------------------------------------------|
+| `../docs/JETSON_ONESHOT_15W.md` | **★ Backup-Jetson one-shot prep (15W Orin Nano 8GB, no WiFi)** — ordered, idempotent, two-agent runbook (network/remote/cameras/deps/build/**TensorRT engines**/power+clocks/verify). The engine is mandatory at 15W (`.pt`=3-4 Hz); `nvpmodel -m 0` is this board's max (NOT MAXN); measure sustained FPS on the desk to pick imgsz (640 default, 512 fallback) |
 | `vehicle-spec.md`               | **Canonical** Duburi 4.2 spec + TDR-vs-implementation delta         |
 | `hardware-setup.md`             | Pool setup, BlueOS, network topology                                |
 | `dual-camera-setup.md`          | **★ Jetson agent** — 2× identical Blue Robotics USB cams: by-path port-stable identity, USB-2 480 Mbps/MJPEG bandwidth, udev aliases, `vision_dual` `device_path` |
