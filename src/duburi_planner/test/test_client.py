@@ -68,6 +68,15 @@ def test_disarm_floor_covers_its_server_budget(monkeypatch):
     assert c._result_deadline(_goal('disarm')) == 20.0 + _RESULT_TIMEOUT_MARGIN_S
 
 
+def test_surface_floor_covers_the_full_ascent(monkeypatch):
+    # EMERGENCY surface: server budget is 60 s (registered) -- the 12 s quick floor
+    # would truncate a deep ascent mid-water (a safety bug). The floor must cover 60 s.
+    c = _client(monkeypatch)
+    d = c._result_deadline(_goal('surface'))
+    assert d == 60.0 + _RESULT_TIMEOUT_MARGIN_S
+    assert d > _QUICK_DEADLINE_S
+
+
 def test_timed_cmd_deadline_is_limit_plus_margin(monkeypatch):
     c = _client(monkeypatch)
     assert c._result_deadline(_goal('move_forward', duration=5.0)) \
