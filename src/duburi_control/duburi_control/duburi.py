@@ -308,6 +308,12 @@ class Duburi(VisionVerbs):
     def arm(self, timeout=15.0):
         """impl: pixhawk.py:arm (COMMAND_LONG MAV_CMD_COMPONENT_ARM_DISARM, p1=1)."""
         with command_scope('arm'):
+            # Start from a clean abort slate (every `_command_scope` verb does the
+            # same at entry). arm() uses the light `command_scope`, so without this
+            # a STALE abort left set by a prior cancelled command would make the
+            # arm-poll insta-abort + disarm this fresh arm. Only an abort raised
+            # DURING this arm should trigger the abort-disarm.
+            self._abort_event.clear()
             accepted, reason = self.pixhawk.arm(timeout, abort=self._abort_fn())
         return self._make_result(accepted, f'arm: {reason}')
 

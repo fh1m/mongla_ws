@@ -237,16 +237,41 @@ class Pixhawk:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if abort is not None and abort():
-                with self._tx_lock:
-                    self.master.mav.command_long_send(
-                        self.master.target_system, self.master.target_component,
-                        cmd, 0, 0, 0, 0, 0, 0, 0, 0)   # p1=0 -> disarm
-                return False, 'ABORTED'
+                return self._disarm_after_abort()
             if self.is_armed():
                 return True, 'ACCEPTED'
             time.sleep(0.1)
         why = self.get_statustext()
         return False, 'NOT_ARMED_AFTER_ACK' + (f': {why}' if why else '')
+
+    def _disarm_after_abort(self, tries=6, settle=0.5):
+        """Verified disarm after an abort mid-arm.
+
+        The arm command is already in flight and ArduSub runs its pre-arm checks
+        AFTER the ACK, so `is_armed()` can read False simply because the arm
+        hasn't completed yet -- a single fire-and-forget disarm (or a lone
+        is_armed()==False) would let the hull arm a beat later while the caller
+        believes it aborted (fail-OPEN state drift). So we re-send DISARM across a
+        short window and require the disarmed state to HOLD before reporting
+        'ABORTED'. Fail-CLOSED: if we can't confirm disarmed, return a DISTINCT
+        reason so no caller assumes 'safe' on an unverified state (the manager's
+        cancel path + mission-runner _safe_shutdown then disarm again).
+        """
+        cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
+        stable = 0
+        for _ in range(tries):
+            with self._tx_lock:
+                self.master.mav.command_long_send(
+                    self.master.target_system, self.master.target_component,
+                    cmd, 0, 0, 0, 0, 0, 0, 0, 0)   # p1=0 -> disarm
+            time.sleep(settle)
+            if self.is_armed():
+                stable = 0                 # armed (possibly late) -> keep disarming
+            else:
+                stable += 1
+                if stable >= 2:            # two consecutive disarmed reads -> settled
+                    return False, 'ABORTED'
+        return False, 'ABORTED_DISARM_UNCONFIRMED'
 
     def disarm(self, timeout=15.0):
         """Swap to MANUAL and neutralise thrusters before disarming —
