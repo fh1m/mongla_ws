@@ -408,8 +408,10 @@ def _make_handler(node: MissionWebNode):
 
         def _serve_static(self, rel: str, ctype: Optional[str]):
             # Path-traversal guard: resolve and confirm it stays under _STATIC_DIR.
+            # is_relative_to (not str prefix) so a sibling dir sharing the prefix
+            # (static2/) can't leak.
             target = (_STATIC_DIR / rel).resolve()
-            if not str(target).startswith(str(_STATIC_DIR.resolve())) or not target.is_file():
+            if not target.is_relative_to(_STATIC_DIR.resolve()) or not target.is_file():
                 return self._send(404, b'not found', 'text/plain')
             if ctype is None:
                 ctype = {'.js': 'text/javascript', '.css': 'text/css',

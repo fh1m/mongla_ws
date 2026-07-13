@@ -224,12 +224,23 @@ function renderTable(cam, c, isLive) {
 }
 
 // ---- DSL author helper ---------------------------------------------------
+// Clicking a detection row copies a tuned mission block for that class/camera:
+// switch camera, set conf, centre it (align), then the two most common next
+// steps as commented options -- drive to a standoff fill (move) and a
+// distance bracket. All verbs exist in the DSL; the operator uncomments+tunes.
 function copySnippet(cam, d) {
-  const snippet =
-    `duburi.use_camera('${cam}')\n` +
-    `duburi.vision.align('${d.cls}', lat=0, yaw=0, err=30)` +
-    `   # now off-centre dx=${d.dx ?? '?'} dy=${d.dy ?? '?'} px, fill=${d.fill ?? '?'}%`;
-  const done = () => toast(`copied align('${d.cls}') snippet`);
+  const conf = (typeof d.conf === 'number') ? d.conf.toFixed(2) : '0.50';
+  const lines = [
+    `duburi.use_camera('${cam}')`,
+    `duburi.set_conf(${conf})                       # per-target detection threshold`,
+    `duburi.vision.align('${d.cls}', lat=0, yaw=0, err=30)   # centre it (live dx=${d.dx ?? '?'} dy=${d.dy ?? '?'} px, fill=${d.fill ?? '?'}%)`,
+  ];
+  if (typeof d.fill === 'number') {
+    lines.push(`# duburi.vision.move('${d.cls}', fwd=${Math.min(90, d.fill + 20)}, mode='area')   # drive to standoff (now ${d.fill}%)`);
+  }
+  lines.push(`# duburi.calc_distance('start'); duburi.move_forward(duration=2, gain=40); m = duburi.calc_distance('stop')`);
+  const snippet = lines.join('\n');
+  const done = () => toast(`copied ${d.cls} mission block`);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(snippet).then(done, () => fallbackCopy(snippet, done));
   } else { fallbackCopy(snippet, done); }
