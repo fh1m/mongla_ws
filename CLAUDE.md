@@ -288,7 +288,7 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 
 | Call | What it does |
 |---|---|
-| `pixhawk.arm()` / `pixhawk.disarm()` | Returns `(ok, reason)`; reason is MAV_RESULT name or NO_ACK |
+| `pixhawk.arm()` / `pixhawk.disarm()` | Returns `(ok, reason)`; reason is MAV_RESULT name, NO_ACK, or `NOT_ARMED_AFTER_ACK: <pre-arm STATUSTEXT>`. **Client deadline covers the real budget** — the DuburiClient result-backstop is a floor not a ceiling (arm→30 s, disarm→35 s), so a slow-but-legit arm no longer trips a false 12 s "doesn't arm" timeout ([`known-issues.md`](.claude/context/known-issues.md) P1). arm honours a mid-arm abort with a **verified, fail-closed** disarm (P2). |
 | `pixhawk.set_mode("ALT_HOLD")` | Polls heartbeat for ACK (SET_MODE gives no direct ACK) |
 | `pixhawk.send_rc_override(forward, lateral, throttle, yaw)` | PWM 1100–1900; 1500=neutral; 65535=release |
 | `pixhawk.send_rc_override(yaw=pwm)` | Ch4 yaw-rate; ArduSub treats Ch4≠1500 as a pilot yaw-rate command (bypasses its compass-driven heading hold). `send_rc_yaw_only(pwm)` writes only Ch4 (heading-lock path). |
@@ -663,6 +663,7 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 
 | File                            | Contents                                                            |
 |---------------------------------|---------------------------------------------------------------------|
+| `launch-combinations.md`        | **★ "so we never fail" master reference** — EVERY launch/run command with all args + combinations: control node (modes/yaw_source), `vision`/`vision_dual` (single/dual, single/multi-model, by-path device, dataset video), `mission_web` console, CLI verbs, mission runner, TensorRT engines. Scoped to the tested competition path |
 | `command-reference.md`          | **Every verb** on `/duburi/move`: CLI, Python facade, DSL, MAVLink, lock modes, distance metrics |
 | `client-and-dsl-api.md`         | `DuburiClient`, `DuburiMission` DSL, `vision.*` verbs, `duburi.detected()` |
 | `vision-results.md`             | **★ Read before a vision mission** — `VisionResult` finish-state (`x_px`/`y_px`/`saw_target`/`fill`/`elapsed`), hybrid vision+control recovery patterns, mid-hold fire (`fire`/`fire_t`), live `err_x_px` feedback, do's & don'ts |

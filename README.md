@@ -230,6 +230,10 @@ scripts/pool_record.sh record gate_am    # MCAP bag → ~/duburi_runs/gate_am  �
 | `bringup.launch.py` | `mode` (pool·sim·desk·laptop·auto) · `yaw_source` (dvl·bno085_dvl·bno085·mavlink_ahrs) · `vision` (adds 1 cam+detector+viewer) · `camera` · `model` · `classes` · `conf` · `dvl_auto_connect` · `viewer` · `foxglove` (+`foxglove_port`) |
 | `vision.launch.py` | `camera` · `model` · `classes` · `conf` · `viewer` · `tracking` · `depth` · `device` · `video_file` |
 | `vision_dual.launch.py` | `fwd_model`/`fwd_classes`/`fwd_device=0`/`fwd_conf` · `dwn_model`/`dwn_classes`/`dwn_device=4`/`dwn_conf` · `paused=true` · `viewer` · `tracking` |
+| `mission_web.launch.py` ★ | `cameras` (both·forward·downward) · `fwd_*`/`dwn_*` (device/model/classes/conf) · `web_port=8090` · `video_port=8080` · `no_browser` — one command: camera(s)+detector(s)+MJPEG+browser console |
+
+> **Every launch/run command with all args + combinations** (single/dual cam, single/multi-model,
+> by-path device, dataset video, CLI, missions): [`launch-combinations.md`](.claude/context/launch-combinations.md) — the "so we never fail" master reference.
 
 **Any model · any classes · any number of cameras.** `model:=<stem>` picks any weights in
 `models/` (or a `yolov11n`/`yolo26n` pretrained alias); `classes:=a,b,c` (empty = all) is a live

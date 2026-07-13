@@ -477,6 +477,38 @@ before the camera frame loop started.
 
 ---
 
+## Pool-day 1 audit (2026-07) — FIXED
+
+### P1. Arm intermittently reports "doesn't arm, 12 s crossed" — **FIXED 2026-07**
+`DuburiClient._result_deadline` gave `arm`/`disarm`/`mission_reset` a **fixed 12 s** result
+backstop (`_QUICK_CMDS`), but their real server budgets are larger — **arm ~18 s** (3 s ACK +
+15 s `is_armed()` poll), **disarm ~26 s**. `send()` never applies the `COMMANDS` defaults, so
+`goal.timeout` is `0.0` on the wire; the client raised `MoveTimeout` and cancelled the goal
+**before arming completed** (worst on a slow post-baro-rezero EKF arm-readiness — the "sometimes").
+**Fix:** the quick deadline is now a **floor, not a ceiling** — it reads the effective budget from
+the same registry the server enforces: `stop/surface/unlock` keep 12 s; **arm → 30 s, disarm → 35 s**.
+The disarm emergency-bail floor is preserved (bounded, just covers its real budget). `client.py`,
+`test_client.py`.
+
+### P2. Aborting an arm could strand the hull ARMED (fail-open) — **FIXED 2026-07**
+`pixhawk.arm()` gained an abort hook (a goal cancel mid-arm must not leave a hull that arms a beat
+later — ArduSub runs pre-arm checks **after** the ACK, so `is_armed()` reads False while the arm is
+still pending). Two review findings hardened it: (a) arm now **clears the abort slate at entry** so a
+STALE abort from a prior cancelled command can't insta-abort + disarm a fresh arm; (b) the abort
+branch does a **verified** disarm (`_disarm_after_abort` re-sends DISARM across a window and requires
+the disarmed state to HOLD) — **fail-closed** with a distinct `ABORTED_DISARM_UNCONFIRMED` reason if
+it can't confirm, so no caller assumes "safe" on an unverified state. `NOT_ARMED_AFTER_ACK` also now
+appends ArduSub's STATUSTEXT pre-arm reason. `pixhawk.py`, `duburi.py`, `test_pixhawk_helpers.py`.
+
+### P3. Distance estimator absent → `calc_distance('stop')` returned a phantom 0.0 m — **FIXED 2026-07**
+After the latched-topic refactor, `DistanceState.start()/stop()` always returned success even when
+`distance_estimation_node` wasn't running (fire-and-forget, no ack), so a distance-gated move would
+trust a clean 0.0 m. `stop()` now verifies a `distance_traveled` sample arrived **after** the bracket
+started; absent → `success=False` with a clear reason. Latent today (no shipped mission gates on it).
+`distance_state.py`, `test_distance_state.py`. *(distance/optical-flow is experimental, off by default.)*
+
+---
+
 ## Forks we evaluated (so we don't revisit)
 
 ### `BumblebeeAS/ardupilot_fix` — STALE DUD (evaluated 2026-04)
