@@ -314,7 +314,10 @@ class Duburi(VisionVerbs):
             # arm-poll insta-abort + disarm this fresh arm. Only an abort raised
             # DURING this arm should trigger the abort-disarm.
             self._abort_event.clear()
-            accepted, reason = self.pixhawk.arm(timeout, abort=self._abort_fn())
+            # NOTE: self._abort_fn (no parens) -- it is a @property returning the
+            # is_set CALLABLE. self._abort_fn() would pass a bool, and pixhawk.arm
+            # then does abort() -> bool() -> TypeError. Matches every other call site.
+            accepted, reason = self.pixhawk.arm(timeout, abort=self._abort_fn)
         return self._make_result(accepted, f'arm: {reason}')
 
     def disarm(self, timeout=20.0):

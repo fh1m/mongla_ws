@@ -82,6 +82,8 @@ class FakePixhawk:
         self._attitude['depth'] = d
 
     def arm(self, timeout=15.0, abort=None):
+        if abort is not None:
+            abort()                 # mirror real contract; guards facade wiring
         self._armed = True
         return True, 'ACCEPTED'
 

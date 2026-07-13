@@ -92,6 +92,10 @@ class FakePixhawk:
         self._attitude['depth'] = depth
 
     def arm(self, timeout=15.0, abort=None):
+        # Mirror the real contract: abort must be a CALLABLE. Exercising it here
+        # guards the facade wiring -- self._abort_fn() (bool) would raise here.
+        if abort is not None:
+            abort()
         self._armed = True
         return True, 'ACCEPTED'
 
