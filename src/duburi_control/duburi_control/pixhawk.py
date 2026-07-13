@@ -208,12 +208,19 @@ class Pixhawk:
     #  Arm / Disarm — ACK for rejection, heartbeat poll for completion    #
     # ------------------------------------------------------------------ #
 
-    def arm(self, timeout=15.0):
-        """Returns `(success, reason)`. Reason is a MAV_RESULT name or
-        'NO_ACK' / 'NOT_ARMED_AFTER_ACK'.
+    def arm(self, timeout=15.0, abort=None):
+        """Returns `(success, reason)`. Reason is a MAV_RESULT name,
+        'NO_ACK', 'ABORTED', or 'NOT_ARMED_AFTER_ACK[: <pre-arm reason>]'.
 
         ArduSub ACKs the command before the arm actually completes
         (pre-arm checks run in parallel), so we still poll `is_armed()`.
+
+        `abort` is an optional ``() -> bool`` cancel hook. The arm command is
+        already in flight once sent, so on abort mid-poll we DISARM before
+        returning -- a bare return could leave a hull that arms ~1 s after the
+        caller already gave up (armed-hardware / believed-failed divergence).
+        On timeout we attach ArduSub's latest STATUSTEXT (the pre-arm reason),
+        so a rejected arm is a diagnosis instead of an opaque 'NOT_ARMED'.
         """
         cmd = mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM
         self.clear_ack()
@@ -229,10 +236,17 @@ class Pixhawk:
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            if abort is not None and abort():
+                with self._tx_lock:
+                    self.master.mav.command_long_send(
+                        self.master.target_system, self.master.target_component,
+                        cmd, 0, 0, 0, 0, 0, 0, 0, 0)   # p1=0 -> disarm
+                return False, 'ABORTED'
             if self.is_armed():
                 return True, 'ACCEPTED'
             time.sleep(0.1)
-        return False, 'NOT_ARMED_AFTER_ACK'
+        why = self.get_statustext()
+        return False, 'NOT_ARMED_AFTER_ACK' + (f': {why}' if why else '')
 
     def disarm(self, timeout=15.0):
         """Swap to MANUAL and neutralise thrusters before disarming —

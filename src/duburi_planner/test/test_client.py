@@ -5,12 +5,20 @@ rclpy spin + the ActionClient are mocked, so no ROS/MAVLink is needed.
 """
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from duburi_planner.client import (
     DuburiClient, MoveFailed, MoveRejected, MoveTimeout,
     _QUICK_DEADLINE_S, _RESULT_TIMEOUT_FLOOR_S, _RESULT_TIMEOUT_MARGIN_S,
 )
+
+
+def _goal(cmd, *, duration=0.0, timeout=0.0):
+    """A Move.Goal-shaped stub with REAL float time fields (rosidl defaults 0.0);
+    `send()` does not apply COMMANDS defaults, so the on-the-wire timeout is 0.0
+    and _result_deadline must read the effective budget from the registry."""
+    return SimpleNamespace(cmd=cmd, duration=duration, timeout=timeout)
 
 
 class _Future:
@@ -37,22 +45,38 @@ def _client(monkeypatch):
 # --------------------------------------------------------------------------- #
 #  Deadline policy                                                             #
 # --------------------------------------------------------------------------- #
-def test_quick_cmd_gets_short_deadline(monkeypatch):
+def test_pure_safety_verb_gets_short_floor(monkeypatch):
+    # stop/surface/unlock carry no timeout default -> the 12 s safety floor, so the
+    # disarm backstop never waits on a healthy-server assumption.
     c = _client(monkeypatch)
-    g = MagicMock(); g.cmd = 'disarm'
-    assert c._result_deadline(g) == _QUICK_DEADLINE_S
+    assert c._result_deadline(_goal('stop')) == _QUICK_DEADLINE_S
+
+
+def test_arm_floor_covers_its_server_budget(monkeypatch):
+    # The "doesn't arm, 12 s crossed" fix: arm's real budget is 3 s ACK + 15 s
+    # poll; the goal wire-timeout is 0.0, so the registry default (15) drives the
+    # deadline to 15+15=30 -- well past the old fixed 12 s that cut it off.
+    c = _client(monkeypatch)
+    assert c._result_deadline(_goal('arm')) == 15.0 + _RESULT_TIMEOUT_MARGIN_S
+    assert c._result_deadline(_goal('arm')) > _QUICK_DEADLINE_S
+
+
+def test_disarm_floor_covers_its_server_budget(monkeypatch):
+    # disarm is still a quick/safety verb but its real budget (MANUAL + neutral +
+    # 20 s poll) needs a floor that covers it, not the old fixed 12 s ceiling.
+    c = _client(monkeypatch)
+    assert c._result_deadline(_goal('disarm')) == 20.0 + _RESULT_TIMEOUT_MARGIN_S
 
 
 def test_timed_cmd_deadline_is_limit_plus_margin(monkeypatch):
     c = _client(monkeypatch)
-    g = MagicMock(); g.cmd = 'move_forward'; g.duration = 5.0; g.timeout = 0.0
-    assert c._result_deadline(g) == 5.0 + _RESULT_TIMEOUT_MARGIN_S
+    assert c._result_deadline(_goal('move_forward', duration=5.0)) \
+        == 5.0 + _RESULT_TIMEOUT_MARGIN_S
 
 
 def test_no_time_field_falls_back_to_floor(monkeypatch):
     c = _client(monkeypatch)
-    g = MagicMock(); g.cmd = 'some_verb'; g.duration = 0.0; g.timeout = 0.0
-    assert c._result_deadline(g) == _RESULT_TIMEOUT_FLOOR_S
+    assert c._result_deadline(_goal('some_verb')) == _RESULT_TIMEOUT_FLOOR_S
 
 
 def test_move_timeout_is_a_move_failed():

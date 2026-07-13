@@ -390,3 +390,63 @@ def test_get_angular_rates_reads_attitude_speeds():
 def test_get_angular_rates_none_when_no_attitude():
     px = Pixhawk(_AttMaster(None), log=None)
     assert px.get_angular_rates() is None
+
+
+# ---------------------------------------------------------------------- #
+#  arm() safety: abort-with-disarm + STATUSTEXT pre-arm reason            #
+# ---------------------------------------------------------------------- #
+#
+# The "doesn't arm, 12 s crossed" fix lives in the client deadline, but arm()
+# also gained an abort hook (never strand an armed hull the caller gave up on)
+# and a pre-arm reason on timeout. These pin both without a real autopilot.
+
+import threading
+
+
+class _ArmMaster:
+    """Records command_long_send calls; p1 (arg index 4) is 1=arm / 0=disarm."""
+    def __init__(self):
+        self.target_system = 1
+        self.target_component = 1
+        self.mav = self
+        self.sent = []
+
+    def command_long_send(self, *args):
+        self.sent.append(args)
+
+
+def _bare_arm_pixhawk(*, statustext=None):
+    """A Pixhawk with __init__ bypassed, wired with just what arm() touches."""
+    p = Pixhawk.__new__(Pixhawk)
+    p.master = _ArmMaster()
+    p._tx_lock = threading.Lock()
+    p.clear_ack = lambda: None
+    p._log_mavlink = lambda *a, **k: None
+    p.wait_ack = lambda cmd, timeout=3.0: (True, 'ACCEPTED')
+    p.is_armed = lambda: False           # never actually arms
+    p.get_statustext = lambda: statustext
+    return p
+
+
+def test_arm_abort_sends_disarm_and_returns_aborted():
+    p = _bare_arm_pixhawk()
+    ok, reason = p.arm(timeout=2.0, abort=lambda: True)   # abort on first poll
+    assert ok is False
+    assert reason == 'ABORTED'
+    # arm (p1=1) then a disarm (p1=0) so an aborted arm can't strand the hull.
+    p1_sequence = [args[4] for args in p.master.sent]
+    assert p1_sequence == [1, 0]
+
+
+def test_arm_timeout_appends_prearm_statustext():
+    p = _bare_arm_pixhawk(statustext='PreArm: Battery below minimum')
+    ok, reason = p.arm(timeout=0.2, abort=None)           # ACK ok, never arms
+    assert ok is False
+    assert reason == 'NOT_ARMED_AFTER_ACK: PreArm: Battery below minimum'
+
+
+def test_arm_timeout_without_statustext_is_plain():
+    p = _bare_arm_pixhawk(statustext=None)
+    ok, reason = p.arm(timeout=0.2, abort=None)
+    assert ok is False
+    assert reason == 'NOT_ARMED_AFTER_ACK'

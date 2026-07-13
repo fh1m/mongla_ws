@@ -84,7 +84,7 @@ class FakePixhawk:
     def set_target_depth(self, depth):
         self._attitude['depth'] = depth
 
-    def arm(self, timeout=15.0):
+    def arm(self, timeout=15.0, abort=None):
         self._armed = True
         return True, 'ACCEPTED'
 
