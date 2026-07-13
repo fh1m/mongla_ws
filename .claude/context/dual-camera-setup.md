@@ -119,8 +119,18 @@ ros2 launch duburi_vision vision_dual.launch.py \
   dwn_device_path:=/dev/v4l/by-path/platform-3610000.usb-usb-0:2.2:1.0-video-index0
 ```
 `device_path` (non-empty) overrides the `fwd_device`/`dwn_device` int indices. camera_node logs
-`[CAM ] device_path (port-stable) → …` so you can confirm the right node was used. Leave the
-paths empty to fall back to `fwd_device:=0 dwn_device:=4` (bench default).
+`[CAM ] device_path (port-stable) → …` so you can confirm the right node was used.
+
+> **⭐ 2026-07-12 — the launches now AUTO-BIND the udev symlinks by default (§3c).** If
+> `/dev/duburi_cam_forward` / `_downward` exist (they do on the Jetson), leaving
+> `fwd_device_path`/`dwn_device_path` **empty** makes each camera node auto-resolve to its
+> port-stable symlink — you no longer pass anything. `vision.launch.py` does the same with
+> `/dev/duburi_cam_<camera>`. The raw `fwd_device:=0 dwn_device:=4` int indices are now a
+> **last-resort dev-box fallback only** (no symlink present). This closes the "forward/downward
+> reversed" class of bug for good: the old default keyed on `/dev/videoN`, which renumbers on
+> the Orin (seen this session: `duburi_cam_forward` went `video0→video4` while its port stayed
+> `1-2.1`), silently swapping the two identical cameras. Verified on-device: `forward` binds
+> port `1-2.1` (horizontal view), `downward` binds `1-2.3` (down view), regardless of numbering.
 
 ### 3c. (Optional, nicest) udev aliases → fixed friendly names
 So the launch line never changes even if you re-cable, mint stable symlinks by port with a udev
@@ -148,8 +158,11 @@ SUBSYSTEM=="video4linux", KERNELS=="1-2.3:1.0", ATTR{index}=="0", SYMLINK+="dubu
 sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=video4linux
 ls -l /dev/duburi_cam_*   # expect duburi_cam_forward -> ../video0, duburi_cam_downward -> ../video4
 ```
-Then the competition launch is short and re-cable-proof:
+Then the competition launch is short and re-cable-proof — and as of 2026-07-12 the
+`*_device_path` args **default to these symlinks automatically**, so you don't even pass them:
 ```bash
+ros2 launch duburi_vision vision_dual.launch.py viewer:=false paused:=true   # auto-binds the symlinks
+# (equivalent explicit form, still valid:)
 ros2 launch duburi_vision vision_dual.launch.py viewer:=false paused:=true \
     fwd_device_path:=/dev/duburi_cam_forward dwn_device_path:=/dev/duburi_cam_downward
 ```
