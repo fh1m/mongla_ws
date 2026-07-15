@@ -507,6 +507,31 @@ trust a clean 0.0 m. `stop()` now verifies a `distance_traveled` sample arrived 
 started; absent → `success=False` with a clear reason. Latent today (no shipped mission gates on it).
 `distance_state.py`, `test_distance_state.py`. *(distance/optical-flow is experimental, off by default.)*
 
+### P4. Bin task (downward camera) dives to the pool floor, ignoring `set_depth` — **FIXED 2026-07-15 (pool feedback)**
+A **downward SURGE-only** `vision.align` (the bin task: `lat` + `fwd`→Ch5 surge, **no** fill→depth
+descent) **released Ch3 throttle (65535) while streaming NO depth setpoint**. With nothing asserting
+depth-hold, ArduSub had no Ch3 authority to hold on, and the negatively-buoyant hull **sank to the
+floor** — armed + ALT_HOLD, `set_depth` effectively ignored. `align_loop` streamed the depth setpoint
+only on a downward *descent* (`stream_depth = use_vdepth or (downward and use_fwd)`); a surge-only align
+had `use_fwd=False` → no stream, bare Ch3 release. The shipped `task_bin.py` hit this too.
+**Fix (`motion_vision.py`):** stream the depth setpoint on **any** downward align
+(`stream_depth = use_vdepth or downward`); with no descent, `fill_deficit` stays 0 so the 5 Hz block
+re-streams the **constant** captured depth (holds `set_depth` via ArduSub's position controller — the
+**same proven mechanism** the forward torpedo-standoff depth axis uses), and Ch3 is released
+(`65535 if stream_depth else 1500`) so ArduSub's depth PID is the sole Ch3 consumer. The loss branch
+re-asserts the hold (`if stream_depth`). Forward paths byte-unchanged; mavlink-reviewer clean.
+`motion_vision.py`, `test_motion_vision.py` (4 new tests).
+
+**Related trap — the depth-bound knobs are not tunable the way it looks.** `vision.max_depth_m` /
+`vision.depth_ceiling` are (a) **overridden by per-call `align(max_depth_m=…, depth_ceiling=…)` kwargs**
+(a per-call value beats any `ros2 param set`), and (b) re-set every run by a mission's
+`set_vision_param(...)`. They are also **NEGATIVE metres** — a POSITIVE value (e.g. `0.6`) is a sign
+error that silently reads as OFF (now warned loudly). They only bound the optional fill→depth **descent**;
+they are **not needed to hold depth** — plain `set_depth` holds after this fix. **Build note:**
+`build_dubomini.sh` is a plain `colcon build` (no `--symlink-install`), so editing
+`competition_config.py`/`vision_tunables.py`/missions requires **`./build_dubomini.sh` then restart** —
+a node restart alone does nothing.
+
 ---
 
 ## Forks we evaluated (so we don't revisit)

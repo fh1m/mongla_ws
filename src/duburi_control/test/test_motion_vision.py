@@ -557,6 +557,59 @@ def test_align_depth_step_scales_nudge():
         'depth_step must scale the depth nudge (0.08 deepens more than 0.02)')
 
 
+# --------------------------------------------------------------------------- #
+#  Downward depth-hold (the "bin dives to the pool floor" fix)                 #
+# --------------------------------------------------------------------------- #
+def test_align_downward_surge_only_holds_depth_constant():
+    # THE BUG: a downward SURGE-only align (lat + Ch5 surge, no descent -- the bin
+    # task) released Ch3 while streaming NO depth setpoint, so nothing asserted
+    # depth-hold and the hull sank to the floor ignoring set_depth. The fix streams
+    # the CONSTANT captured depth (get_attitude=-0.5) every tick -- proving depth is
+    # actively held. Pre-fix pix.depths would be EMPTY (the sink).
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)), pix=pix,
+           axes={'lat', 'depth'}, downward=True, release_yaw=True, surge_sign=-1,
+           err_px=10.0, duration=0.4, align_stable_frames=99)
+    assert pix.depths, 'downward surge-only align must STREAM depth (hold), not sink'
+    assert all(d == pytest.approx(-0.5) for d in pix.depths), (
+        'no descent -> the held setpoint must stay CONSTANT at the captured depth')
+
+
+def test_align_downward_releases_ch3_while_streaming():
+    # Consistent with the proven forward depth-axis path: when we stream the depth
+    # setpoint we release Ch3 (65535) so ArduSub's depth PID is the sole Ch3 consumer.
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)), pix=pix,
+           axes={'lat', 'depth'}, downward=True, release_yaw=True, surge_sign=-1,
+           err_px=10.0, duration=0.4, align_stable_frames=99)
+    assert pix.translations, 'release_yaw downward align drives via send_rc_translation'
+    assert all(t.get('throttle') == 65535 for t in pix.translations), (
+        'Ch3 released (65535) on the streamed downward path')
+
+
+def test_align_forward_lat_yaw_does_not_stream_depth():
+    # REGRESSION GUARD: a FORWARD lat/yaw-only align must be byte-unchanged -- no
+    # spurious depth streaming, Ch3 held neutral 1500 (ArduSub latches depth-hold).
+    pix = _FakePixhawk()
+    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)), pix=pix,
+           axes={'lat', 'yaw'}, err_px=10.0, duration=0.4, align_stable_frames=99)
+    assert pix.depths == [], 'forward lat/yaw-only must NOT stream a depth setpoint'
+    assert pix.rc and all(r.get('throttle') == 1500 for r in pix.rc), (
+        'forward non-depth align holds Ch3 neutral 1500')
+
+
+def test_align_positive_depth_bound_warns():
+    # SIGN GUARD: depths are negative metres; a POSITIVE max_depth_m / depth_ceiling is
+    # a sign error that silently reads as OFF -- warn loudly instead of misleading.
+    log = _CapLog()
+    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)),
+           axes={'lat', 'depth'}, downward=True, release_yaw=True, surge_sign=-1,
+           max_depth_m=0.6, depth_ceiling_m=0.2,
+           err_px=10.0, duration=0.2, align_stable_frames=99, log=log)
+    assert any('POSITIVE' in w for w in log.warnings), (
+        'a positive depth bound must emit a loud sign-error warning')
+
+
 def test_align_yaw_and_lat_share_one_override_packet():
     # "Wired" when multiple axes are active: yaw + lat must land in the SAME
     # send_rc_override frame (not split / not clobbering each other).
