@@ -825,6 +825,16 @@ within `duration`:
 | Re-search at plan level | no `fallback`; route `FAILED` → search state | Production missions — explicit re-search on loss |
 | Recover in-state | pass `fallback=creep_forward` (or a yaw sweep) | Brief dropouts; keep the same state active |
 
+**The `fallback` stops the instant the target is back.** As of 2026-07-15 the search
+is *interrupted mid-verb*: the moment the target is re-detected, the in-flight control
+verb is **cancelled** and every remaining verb in the search **short-circuits**, so the
+vision loop re-enters while the target is still in frame. Previously the search ran to
+completion every time, which could carry the just-reacquired target back **out of frame**
+(a torpedo/bin miss). You no longer need the 2-arg `should_stop` for this — a plain
+`def creep(duburi): duburi.move_forward(2)` is auto-interrupted. **Keep `fallback` bodies
+to motion verbs only** (no `fire`/`disarm` inside a fallback — a post-trip safety verb is
+short-circuited; the mission's own emergency disarm runs outside the fallback and is safe).
+
 ### 7.4 `kp_*` gain tuning guide
 
 Gains are live-tunable via `ros2 param set /duburi_manager vision.kp_yaw 80.0`

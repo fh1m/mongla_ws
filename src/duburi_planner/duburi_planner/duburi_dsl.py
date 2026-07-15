@@ -516,6 +516,17 @@ class DuburiMission:
         last = self._det_seen.get(camera, {}).get(n)
         return last is not None and (_time.monotonic() - last) <= within
 
+    def _seen_since(self, camera: str, needle: str, t: float) -> bool:
+        """True iff `needle` was seen on `camera` in a frame that arrived at/after `t`.
+
+        PURE cache read (no pump) -- the caller's own spin refreshes `_det_seen`.
+        Used by the vision-verb fallback interrupt: keying on "seen AFTER the search
+        began" makes a stale pre-loss sighting unable to trip it, so the interrupt
+        fires only on a genuine reacquisition mid-search.
+        """
+        last = self._det_seen.get(camera, {}).get(str(needle).strip().lower())
+        return last is not None and last >= t
+
     def detected(self, target_class, *,
                  camera: str | None = None,
                  stale_after: float = 1.0) -> bool:

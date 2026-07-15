@@ -27,6 +27,15 @@ on a real target loss, runs the mission-authored ``fallback`` search
 function for one cycle before re-entering the vision loop -- all inside
 the original ``duration`` budget.
 
+The ``fallback`` is INTERRUPTED the instant the target reappears: the
+in-flight control verb is cancelled and every remaining verb in the search
+short-circuits, so the loop re-enters the vision verb while the target is
+still in frame (a search that ran to completion would carry the just-seen
+target back out of view -- the miss this prevents). Keep ``fallback`` bodies
+to motion verbs only (no ``fire``/``disarm`` -- a post-trip safety verb would
+be short-circuited; the mission's own emergency-disarm path runs OUTSIDE the
+fallback and is unaffected).
+
 Model / class switching (``ClassRef`` -> ``set_model`` + ``set_classes``)
 is unchanged from the old DSL.
 """
@@ -546,14 +555,33 @@ class _VisionDSL:
 
     def _run_fallback(self, fallback: Callable, target: str,
                       camera: str) -> None:
-        """Run one fallback search cycle.
+        """Run one fallback search cycle -- interrupted the instant the target is back.
 
         ``fallback(duburi)`` runs one short manoeuvre and returns.
         ``fallback(duburi, should_stop)`` may self-poll a longer sweep and
         is asked to bail the moment the target reappears.
+
+        REGARDLESS of the signature, an interrupt is armed on the client for the
+        whole cycle: the in-flight control verb is CANCELLED the instant the target
+        is re-detected and every remaining verb short-circuits, so the search stops
+        immediately and the vision loop re-enters while the target is still in frame
+        (the failure this fixes: a long ``move_forward`` inside a 1-arg fallback ran
+        to completion and carried the just-seen target back out of view). The 2-arg
+        ``should_stop`` path is kept for back-compat and is now largely redundant.
         """
+        # Ensure the camera's /detections is connected BEFORE the search so the very
+        # first control verb can already see a reacquisition (DDS discovery latency).
+        self._dsl._subscribe_detections(camera)
+        start = _time.monotonic()
         should_stop = lambda: self._dsl.detected(target, camera=camera)  # noqa: E731
         try:
+            # Arm INSIDE the try so the finally-disarm is structurally paired with it
+            # (no edit can slip an interrupt-arm past the guaranteed disarm). Trip only
+            # on a sighting stamped AFTER the search began (a stale pre-loss sighting
+            # can't trip it). Pure cache read; the client's sliced goal-wait spin is
+            # what refreshes the cache during a verb.
+            self._dsl.client.begin_search_interrupt(
+                lambda: self._dsl._seen_since(camera, target, start))  # noqa: E731
             params = inspect.signature(fallback).parameters
             if len(params) >= 2:
                 fallback(self._dsl, should_stop)
@@ -563,6 +591,11 @@ class _VisionDSL:
             self.log.error(
                 f"[VIS  ] fallback {getattr(fallback, '__name__', 'fn')} "
                 f"raised {exc!r}; continuing")
+        finally:
+            if self._dsl.client.end_search_interrupt():
+                self.log.info(
+                    f"[VIS  ] fallback interrupted -- {target!r} reacquired; "
+                    f"re-entering the vision verb")
 
     # ---- convenience -------------------------------------------------- #
     @property
