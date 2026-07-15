@@ -599,6 +599,17 @@ def align_loop(*,
     g_fwd   = gain                       # forward range-hold capped by the global gain
     use_fwd = float(fwd_fill) > 0.0      # optional forward standoff / downward-descent axis
 
+    # SIGN GUARD: depths are NEGATIVE metres below the surface, so max_depth_m (floor) and
+    # depth_ceiling_m (surface guard) must be < 0. A POSITIVE value is a sign error -- it
+    # silently reads as OFF (eff_ceiling below falls back to _MIN_DEPTH_M; the descent
+    # fail-safe requires max_depth_m < 0), which mis-leads the operator into thinking they
+    # set a floor. Warn loudly instead of failing silently; the values still read as OFF.
+    if float(max_depth_m) > 0.0 or float(depth_ceiling_m) > 0.0:
+        log.warning(
+            f"[VIS  ] depth bound is POSITIVE (max_depth_m={float(max_depth_m):+.2f} "
+            f"depth_ceiling={float(depth_ceiling_m):+.2f}) -- depths are NEGATIVE metres; "
+            f"treating positive as OFF. Pass NEGATIVE metres to bound the descent.")
+
     # FAIL-SAFE: on a downward camera the fwd_fill axis DESCENDS (one-sided, deeper)
     # toward the fill target. Without a deep floor (`max_depth_m` < 0) an unreachable
     # fill would drive the hull into the pool floor. Require the floor to enable the
@@ -615,11 +626,17 @@ def align_loop(*,
     # descends that setpoint. FORWARD: the 'depth' axis drives the depth setpoint.
     use_surge   = use_depth and downward          # image-Y -> Ch5 fore/aft
     use_vdepth  = use_depth and not downward      # image-Y -> depth setpoint (forward)
-    # Stream depth setpoint when a vision axis owns depth: forward 'depth' axis, OR
-    # downward fill->depth descent. Release Ch3 to ALT_HOLD whenever depth is in play
-    # (incl. downward, where ArduSub holds the mission depth while we surge).
-    stream_depth = use_vdepth or (downward and use_fwd)
-    throttle_ch = 65535 if (use_depth or (downward and use_fwd)) else 1500
+    # Stream the depth setpoint whenever a vision axis owns depth (forward 'depth' axis)
+    # OR we are on the DOWNWARD camera. THE DOWNWARD BUG: previously this streamed only on
+    # a downward *descent* (use_fwd), so a downward SURGE-only align (lat + Ch5 surge, no
+    # descent -- the bin task) released Ch3 (65535) while streaming NOTHING. Nothing then
+    # asserted depth-hold and the negatively-buoyant hull sank to the floor, ignoring
+    # set_depth. Streaming the (constant, when there is no descent deficit) setpoint here
+    # holds depth via ArduSub's position controller -- the SAME proven mechanism the
+    # forward torpedo-standoff depth axis already uses. Release Ch3 exactly when we stream
+    # (so ArduSub's depth PID is the sole Ch3 consumer); otherwise hold neutral 1500.
+    stream_depth = use_vdepth or downward
+    throttle_ch = 65535 if stream_depth else 1500
     # depth_step is the per-UPDATE setpoint resolution (m): the depth axis moves the
     # ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update, so max slew =
     # depth_step * DEPTH_HZ (0.1 m/s at the 0.02 default). It is the operator's depth-
@@ -760,7 +777,12 @@ def align_loop(*,
                 stable = 0
                 lat_i = 0.0   # bleed integral windup while blind
                 _drive(0.0, 0.0)
-                if use_depth:
+                # Keep asserting depth-hold while blind on ANY streaming path (forward
+                # depth axis OR any downward align) -- _drive released Ch3 (65535), so
+                # without this the hull would sink during a target dropout. Gated on
+                # stream_depth (not use_depth) so a downward surge-only/lat-only align
+                # keeps holding through the loss too.
+                if stream_depth:
                     pixhawk.set_target_depth(depth_setpoint)
                 if lost_since is None:
                     lost_since = now
@@ -945,13 +967,16 @@ def align_loop(*,
                         if max_depth_m < 0.0:
                             depth_setpoint = max(depth_setpoint, max_depth_m)
                 else:
-                    # DOWNWARD fill->depth: the "approach" (get closer to the bin for the
-                    # drop), driven by the SAME depth_step logic as the forward axis --
-                    # PROPORTIONAL to the fill deficit, capped at depth_step/update, and
-                    # FROZEN inside the fill deadband (FWD_BAND) so it settles instead of
-                    # chasing bbox jitter. ONE-SIDED (descends deeper only, never ascends
-                    # -> can't surface). Bounded both ways: never shallower than
+                    # DOWNWARD. With a descent (use_fwd) this is the "approach" (get closer
+                    # to the bin for the drop), driven by the SAME depth_step logic as the
+                    # forward axis -- PROPORTIONAL to the fill deficit, capped at
+                    # depth_step/update, and FROZEN inside the fill deadband (FWD_BAND) so it
+                    # settles instead of chasing bbox jitter. ONE-SIDED (descends deeper only,
+                    # never ascends -> can't surface). Bounded both ways: never shallower than
                     # eff_ceiling (surface guard), never deeper than max_depth_m (floor).
+                    # WITHOUT a descent (surge-only / lat-only bin align) fill_deficit stays
+                    # 0, so this branch does NOT step -- it re-streams the CONSTANT captured
+                    # depth_setpoint below, holding set_depth (the downward depth-hold fix).
                     if fill_deficit > FWD_BAND:
                         step = min(fill_deficit, 1.0) * max_nudge   # decelerates as it nears
                         depth_setpoint = min(depth_setpoint - step, eff_ceiling)
