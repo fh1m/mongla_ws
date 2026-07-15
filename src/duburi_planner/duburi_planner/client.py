@@ -61,12 +61,23 @@ _QUICK_CMDS = frozenset({
     'set_mode',
 })
 
+# Detection-interrupt for vision-verb fallbacks (see begin_search_interrupt). When
+# armed, send()'s result-wait spins in SLICES so a mission-authored search pattern's
+# in-flight control verb is cancelled the instant the target reappears -- and every
+# subsequent verb short-circuits -- so the search stops immediately instead of
+# carrying the reacquired target back out of frame.
+_INTERRUPT_SLICE_S = 0.05   # goal-wait spin granularity while a search interrupt is armed
+_CANCEL_RESOLVE_S  = 2.0    # let the cancel + server-side motion-neutral resolve after a trip
+
 
 class DuburiClient:
     def __init__(self, node):
         self.node    = node
         self._client = ActionClient(node, Move, '/duburi/move')
         self._active_goal_handle = None  # set during send(); cleared after
+        # Search-interrupt state (armed only around a vision-verb fallback):
+        self._interrupt_check   = None   # callable() -> bool; polled each spin slice
+        self._interrupt_tripped = False  # set once the predicate fires -> short-circuit
 
     # ------------------------------------------------------------------ #
     #  Deadline helpers                                                   #
@@ -151,6 +162,13 @@ class DuburiClient:
             raise ValueError(
                 f"Unknown command '{cmd}'. Known: {sorted(COMMANDS)}")
 
+        # Search-interrupt already tripped this fallback -> the target is back;
+        # short-circuit every remaining verb (send NOTHING) so the search stops
+        # immediately instead of carrying the target out of frame. Bounded by the
+        # tripped flag, which end_search_interrupt() clears before the verb re-enters.
+        if self._interrupt_tripped:
+            return self._search_interrupted_result(cmd)
+
         goal = Move.Goal()
         goal.cmd = cmd
         for name, value in fields.items():
@@ -184,6 +202,19 @@ class DuburiClient:
         try:
             result_future = goal_handle.get_result_async()
             deadline = self._result_deadline(goal)
+            # Fallback-search mode: a detection interrupt is armed, so wait in
+            # SLICES and cancel the instant the target reappears. The SAME spin
+            # services `_on_detections`, so the interrupt predicate (a pure cache
+            # read) sees the fresh sighting without a second thread. On a trip we
+            # return a synthesized result DIRECTLY -- bypassing the success-raise
+            # below, since a cancelled goal reports success=False.
+            if self._interrupt_check is not None:
+                if self._spin_with_interrupt(result_future, goal_handle, deadline):
+                    return self._search_interrupted_result(cmd)
+                result = result_future.result().result
+                if not result.success:
+                    raise MoveFailed(f'Goal "{cmd}" FAILED: {result.message}')
+                return result
             try:
                 # Bounded RESULT wait: a server that accepts then wedges (or a
                 # goal that overruns) must never hang the mission forever. This
@@ -217,6 +248,81 @@ class DuburiClient:
 
         if not result.success:
             raise MoveFailed(f'Goal "{cmd}" FAILED: {result.message}')
+        return result
+
+    # ------------------------------------------------------------------ #
+    #  Search-interrupt: cancel a fallback verb the instant the target is back
+    # ------------------------------------------------------------------ #
+
+    def begin_search_interrupt(self, predicate) -> None:
+        """Arm a detection interrupt for the current vision-verb fallback.
+
+        While armed, ``send()``'s result-wait polls ``predicate()`` (a pure,
+        side-effect-free cache read -- the spin itself refreshes the cache) each
+        ~50 ms slice. The FIRST True cancels the in-flight goal and trips; every
+        subsequent ``send()`` then short-circuits (dispatches no goal) so the rest
+        of the search stops immediately rather than driving the reacquired target
+        out of frame. Idempotent-safe; pair with ``end_search_interrupt``.
+        """
+        self._interrupt_check   = predicate
+        self._interrupt_tripped = False
+
+    def end_search_interrupt(self) -> bool:
+        """Disarm the interrupt; return True iff it tripped (target reacquired)."""
+        tripped = self._interrupt_tripped
+        self._interrupt_check   = None
+        self._interrupt_tripped = False
+        return tripped
+
+    def _spin_with_interrupt(self, result_future, goal_handle,
+                             deadline: float) -> bool:
+        """Sliced goal-wait. Returns True if the interrupt tripped (goal cancelled),
+        False if the goal completed on its own. Raises ``MoveTimeout`` on the same
+        bounded-stall condition as the normal path so a wedged server can't hang."""
+        import time
+        end = time.monotonic() + max(deadline, 0.0)
+        while not result_future.done():
+            try:
+                rclpy.spin_until_future_complete(
+                    self.node, result_future, timeout_sec=_INTERRUPT_SLICE_S)
+            except KeyboardInterrupt:
+                # Ctrl-C during a fallback search must cancel the in-flight goal (not
+                # leave a thruster override running), then RE-RAISE so the mission's
+                # emergency-disarm handler runs. (The normal wait instead swallows
+                # Ctrl-C into a bounded MoveFailed; here re-raising is correct because
+                # a fallback verb has no result worth returning.)
+                self.node.get_logger().warn('Ctrl-C — cancelling fallback goal...')
+                self._cancel(goal_handle)
+                raise
+            if result_future.done():
+                return False
+            # Predicate reads _det_seen, refreshed by the spin above (single-thread,
+            # no nested pump). First True -> cancel + trip.
+            if self._interrupt_check is not None and self._interrupt_check():
+                self._interrupt_tripped = True
+                self._cancel(goal_handle)
+                # Let the cancel land + the server-side motion loop neutralise RC.
+                rclpy.spin_until_future_complete(
+                    self.node, result_future, timeout_sec=_CANCEL_RESOLVE_S)
+                return True
+            if time.monotonic() >= end:
+                self.node.get_logger().error(
+                    f'Goal exceeded client deadline {deadline:.0f}s — cancelling '
+                    f'(server stalled?)')
+                self._cancel(goal_handle)
+                raise MoveTimeout(
+                    f'Goal did not complete within {deadline:.0f}s (server stalled)')
+        return False
+
+    def _search_interrupted_result(self, cmd: str):
+        """Synthesized result for a verb cut short by a search interrupt.
+
+        success=True because the interrupt is the DESIRED outcome (the target is
+        back); the honest message records why the motion was cut short so the
+        scoreboard reads faithfully."""
+        result = Move.Result()
+        result.success = True
+        result.message = f'{cmd}: search interrupted -- target reacquired'
         return result
 
     # ------------------------------------------------------------------ #

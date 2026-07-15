@@ -159,6 +159,25 @@ def test_align_fallback_exception_does_not_propagate():
     assert res.ok is True           # bad fallback swallowed, loop re-entered
 
 
+def test_fallback_arms_and_disarms_search_interrupt():
+    # The fix wiring: every fallback cycle ARMS a detection interrupt on the client
+    # (so an in-flight control verb is cancelled the instant the target reappears)
+    # and DISARMS it in finally, and subscribes the camera first (DDS discovery).
+    m = _mission(MagicMock(side_effect=[_result(LOST), _result(ALIGNED)]))
+    m.client.end_search_interrupt.return_value = False   # avoid truthy-mock log path
+    dsl = _VisionDSL(m)
+
+    def creep(_duburi):
+        pass
+
+    dsl.align('gate', yaw=0, lat=0, fallback=creep, duration=10)
+    m._subscribe_detections.assert_called_with('forward')
+    m.client.begin_search_interrupt.assert_called_once()
+    # The armed predicate is callable (the _seen_since closure).
+    assert callable(m.client.begin_search_interrupt.call_args.args[0])
+    m.client.end_search_interrupt.assert_called_once()   # disarmed in finally
+
+
 # --------------------------------------------------------------------------- #
 #  move                                                                        #
 # --------------------------------------------------------------------------- #

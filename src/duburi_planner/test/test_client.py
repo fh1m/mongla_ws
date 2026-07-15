@@ -150,3 +150,65 @@ def test_cancel_active_is_bounded_and_none_safe(monkeypatch):
     c._active_goal_handle = gh
     c.cancel_active()
     gh.cancel_goal_async.assert_called()
+
+
+# --------------------------------------------------------------------------- #
+#  Search-interrupt (cancel a fallback verb the instant the target is back)   #
+# --------------------------------------------------------------------------- #
+def _accepted_gh(done):
+    gh = MagicMock(); gh.accepted = True
+    gh.get_result_async.return_value = done
+    gh.cancel_goal_async.return_value = _Future(done=True)
+    return gh
+
+
+def test_interrupt_trips_cancels_and_returns_success(monkeypatch):
+    # A predicate that is True the instant we look -> the in-flight goal is
+    # CANCELLED and send() returns a synthesized SUCCESS (not a MoveFailed raise,
+    # which a cancelled success=False goal would otherwise trigger).
+    c = _client(monkeypatch)
+    gh = _accepted_gh(_Future(done=False))         # goal never finishes on its own
+    c._client.send_goal_async.return_value = _Future(done=True, result=gh)
+    c.begin_search_interrupt(lambda: True)         # target already back
+    out = c.send('move_forward', duration=5)
+    assert out.success is True
+    assert 'interrupted' in out.message
+    gh.cancel_goal_async.assert_called()           # goal was cancelled
+    assert c._interrupt_tripped is True
+    assert c.end_search_interrupt() is True         # reports the trip, then disarms
+    assert c._interrupt_check is None and c._interrupt_tripped is False
+
+
+def test_interrupt_tripped_short_circuits_next_verb(monkeypatch):
+    # Once tripped, every remaining fallback verb dispatches NOTHING -> the search
+    # stops immediately instead of carrying the reacquired target out of frame.
+    c = _client(monkeypatch)
+    c._interrupt_check   = lambda: True
+    c._interrupt_tripped = True
+    out = c.send('move_forward', duration=5)
+    assert out.success is True and 'interrupted' in out.message
+    c._client.send_goal_async.assert_not_called()   # no goal sent
+
+
+def test_interrupt_not_tripped_lets_goal_complete_normally(monkeypatch):
+    # Predicate stays False (target still gone) -> the goal completes on its own and
+    # its real result is returned; the interrupt path is transparent.
+    c = _client(monkeypatch)
+    res_msg = MagicMock(); res_msg.result.success = True
+    gh = _accepted_gh(_Future(done=True, result=res_msg))
+    c._client.send_goal_async.return_value = _Future(done=True, result=gh)
+    c.begin_search_interrupt(lambda: False)
+    out = c.send('move_forward', duration=5)
+    assert out is res_msg.result
+    gh.cancel_goal_async.assert_not_called()        # never cancelled
+    assert c.end_search_interrupt() is False          # did not trip
+
+
+def test_no_interrupt_armed_uses_normal_wait(monkeypatch):
+    # With no interrupt armed, send() is byte-unchanged: normal full-deadline wait.
+    c = _client(monkeypatch)
+    res_msg = MagicMock(); res_msg.result.success = True
+    gh = _accepted_gh(_Future(done=True, result=res_msg))
+    c._client.send_goal_async.return_value = _Future(done=True, result=gh)
+    out = c.send('move_forward', duration=5)
+    assert out is res_msg.result
