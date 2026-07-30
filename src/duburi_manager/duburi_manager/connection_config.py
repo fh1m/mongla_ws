@@ -189,12 +189,17 @@ def resolve_srot_profile(mav_device: str = '', *, logger=None) -> dict:
         return {'conn': mav_device, 'baud': baud}
     path = find_srot_serial()
     if path is None:
-        if logger:
-            logger.warning(
-                '[NET  ] SROT: no USB-serial device found -- defaulting to '
-                '/dev/ttyUSB0. Plug the board in, or pass '
-                '-p mav_device:=/dev/serial/by-id/<yours>')
+        # Nothing plugged in. Return the conventional node so a board attached a
+        # moment later still connects, but log LOUDLY (ERROR) and say the node
+        # will block at wait_heartbeat -- otherwise a board-less run just hangs
+        # after a banner that names a device which isn't there.
         path = '/dev/ttyUSB0'
+        if logger:
+            logger.error(
+                '[NET  ] SROT: no USB-serial device found. Falling back to '
+                f'{path} -- if the board is not plugged in, the node will BLOCK '
+                'at wait_heartbeat until it is. Plug in the SROT Type-C cable, or '
+                'pass -p mav_device:=/dev/serial/by-id/<yours>.')
     elif logger:
         logger.info(f'[NET  ] SROT: auto-picked serial {path} @ {SROT_BAUD}')
     return {'conn': path, 'baud': SROT_BAUD}

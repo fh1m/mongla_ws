@@ -65,9 +65,13 @@ roll-only); `move_forward_dist`/`move_lateral_dist` (DVL loop **stays in Python*
 - **Mode strings change** (ArduSub names → SROT 0/1/2/9/19/23). Audit missions/FSM for
   hardcoded `'ALT_HOLD'` checks — `set_depth` engages ALT_HOLD on Pixhawk, a DIVE-in-AUTO
   on SROT.
-- **Transport:** ESP32 UART0 → BlueOS → UDP router. pymavlink `udpout:192.168.2.2:14550`,
-  vehicle sysid/compid 1/1, source 255/190. Direct serial (`/dev/ttyUSB0` @115200) bypasses
-  BlueOS.
+- **Transport (current, Bondor-era):** the SROT board plugs **straight into the dev-box /
+  Jetson over USB Type-C @115200** — **no BlueOS / no UDP router**. `connection_config.
+  resolve_srot_profile()` autodetects the USB-serial port (CP210x / CH340 / CH9102 / ESP32
+  by-id, `ttyUSB*/ttyACM*` fallback); `-p mav_device:=/dev/serial/by-id/<yours>` overrides (a
+  device path or any pymavlink conn string, so a future `udpout:192.168.2.2:14550` still
+  works). Vehicle sysid/compid 1/1, source 255/190. **`flight_controller` defaults to `srot`
+  on this branch** (`:=pixhawk` for the ArduSub/BlueOS path).
 
 ## ⚠ Bench bring-up runbook (board benchable now; each step gates the next)
 Prereqs (operator, via **Bondor** — no duburi_ws code): ESCs on **Bluejay** (`DSHOT_BIDIR=1`,
@@ -90,12 +94,27 @@ Prereqs (operator, via **Bondor** — no duburi_ws code): ESCs on **Bluejay** (`
    a preempting second move resolves the first as PREEMPTED (not a hang).
 6. **Vision:** `motion_vision` port (Phase 8) — lat/yaw/fwd via `manual()`, depth via mode.
 
+## What works on the SROT backend today (verb support matrix)
+**WORKS (wired + unit-tested; bench-verify on the board):** `arm` / `disarm` / `set_mode`;
+the collapse moves `move_forward` / `move_left` / `move_right` / `yaw_left` / `yaw_right` /
+`turn` / `set_depth`(dive) / `stop` / `pause`(hold) / `style_roll`; `fire` (PayloadDriver);
+telemetry → `/duburi/state` (yaw/depth/batt/mode/armed) + the GCS heartbeat.
+**NOT YET on SROT (fall through to the facade → fail cleanly as `success=False`, they do
+NOT crash the node):** `vision_align` / `vision_move`, `move_forward_dist` /
+`move_lateral_dist` (DVL), `lock_heading` / `unlock_heading`, `calc_distance`, `arc`. These
+need the `manual()`-streamed facade port (vision/DVL) or a host-side mapping (arc heading→rate,
+heading-lock) — the next phase. Do not treat "wired + all green" as "every verb works on srot."
+
 ## Status (branch `srot`)
-- **DONE (commit 14eb27a):** the HAL foundation — `fc/` package (protocol, ABC, both
-  backends, factory), the verb table, 38 unit tests (FakeSrotMaster, no board), full
-  `duburi_control` suite 321 green. Purely additive; zero runtime change yet.
-- **NEXT (buildable now):** wire `make_flight_controller` + the `flight_controller` param
-  into `auv_manager_node` (skip MESSAGE_RATES on srot; publish `/duburi/esc_rpm`);
-  `connection_config` SROT endpoint; route the facade `move`-verbs through `fc.move()`.
-- **BENCH-GATED:** the runbook above (needs the board; first real validation — there is no
-  SROT SITL). Depth stays unproven until step 4 passes.
+- **DONE:** the HAL foundation (`14eb27a`) + integration doc (`6f3aea5`) + **the manager
+  wiring** (`7f3d6e8` + review fixes): `flight_controller:=srot` is the **default**, connects
+  over **direct USB serial**, banner shows `SROT board · firmware Hengla · USB serial`, the
+  collapse verbs route through `fc.move()` + the 4-terminal ACK relay, telemetry populates
+  `/duburi/state`. Build clean; ~670 tests green. mavlink-reviewer + advisor signed off (arc
+  dropped, `manual()` NaN-safe, verified fail-closed arm-abort, HEARTBEAT source-filtered).
+- **NEXT:** the `motion_vision` port (lat/yaw/fwd→`manual()`, depth→mode) + the DVL-distance
+  streamed path + `lock_heading` semantics; publish `/duburi/esc_rpm`; commit the Bondor
+  `.params` export.
+- **BENCH-GATED:** the runbook above (needs the board; first real validation — no SROT SITL).
+  Plug in USB, `ros2 run duburi_manager start`, watch the banner + `/duburi/state`. Depth stays
+  unproven until the hand-verification (step 4) passes.
