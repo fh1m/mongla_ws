@@ -146,6 +146,20 @@ Full detail, verb table, workarounds and bench runbook:
 [`.claude/context/srot-integration.md`](.claude/context/srot-integration.md).
 Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEEDBACK.md`.
 
+**Cross-repo rules (start here before touching anything shared):**
+[`.claude/context/cross-repo-contract.md`](.claude/context/cross-repo-contract.md) — the
+co-owned wire invariants, mirrored verbatim as `AGENTS.md` in each sibling repo. The one
+non-negotiable: **`srot_protocol.py` is our single copy of the wire constants, and
+`test_srot_protocol_drift.py` reads the firmware headers directly to prove it hasn't drifted.**
+
+**The vision↔control split (designed, NOT built):**
+[`.claude/context/vision-control-split.md`](.claude/context/vision-control-split.md) +
+the firmware spec `Mongla_others/srot-control-board/VISION_API.md`. Target architecture is
+**Jetson = perception only, SROT = every control loop**: we stream one `LANDING_TARGET` (149)
+per frame as a **bearing in radians** (not pixels — so the board's gains have units and survive
+a lens change) and the board closes the loop at 500 Hz. Until the firmware implements it,
+`vision_align`/`vision_move` stay **refused** on srot and the 20 Hz host loop is unchanged.
+
 ---
 
 ## 3. Operating Modes

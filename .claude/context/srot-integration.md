@@ -155,9 +155,17 @@ mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_dista
   result, `surface` revived, `UNSUPPORTED_VERBS` guard, depth sign, collapse verbs now take
   `duburi.lock` + the disarmed gate, fail-loud payload map, protocol drift test.
   **Verdict: ready for tethered bench work; the two depth checks below still gate any dive.**
-- **NEXT:** the `motion_vision` port (lat/yaw/fwd→`manual()`, depth→mode) + the DVL-distance
-  streamed path + `lock_heading` semantics; publish `/duburi/esc_rpm` (blocked on the
-  firmware emitting 11030/11031); commit the Bondor `.params` export.
+- **VISION IS NOW SPEC'D, NOT PORTED.** The `motion_vision` port is **superseded**: rather than
+  re-expressing the 20 Hz host loop as `manual()` streaming, the loop **moves to the board**.
+  We stream one `LANDING_TARGET` (149) per frame as a **bearing in radians** and the board
+  closes every axis at 500 Hz. Spec: `Mongla_others/srot-control-board/VISION_API.md`; our
+  side: [`vision-control-split.md`](vision-control-split.md). Until the firmware implements it,
+  `vision_align`/`vision_move` stay in `UNSUPPORTED_VERBS` and the host loop is unchanged.
+- **NEXT:** the DVL-distance streamed path + `lock_heading` semantics; publish `/duburi/esc_rpm`
+  (blocked on the firmware emitting 11030/11031); commit the Bondor `.params` export. Once the
+  board serves vision: FOV config → angle conversion → uplink → re-point the two verbs.
+- **Cross-repo rules:** [`cross-repo-contract.md`](cross-repo-contract.md) (mirrored as
+  `AGENTS.md` in each sibling repo).
 - **BENCH-GATED:** the runbook above (needs the board; first real validation — no SROT SITL).
   Plug in USB, `ros2 run duburi_manager start`, watch the banner + `/duburi/state`. Depth stays
   unproven until the hand-verification (step 4) passes.
