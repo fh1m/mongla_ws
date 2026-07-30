@@ -93,7 +93,12 @@ class Heartbeat:
 
     def stop(self):
         self._stop_event.set()
-        self._thread.join(timeout=1.0)
+        # is_alive() is False (and does NOT raise) for a never-started thread, so
+        # stop() is a clean no-op when start() was skipped -- e.g. the SROT backend
+        # never streams the neutral-RC heartbeat. Joining unconditionally raised
+        # "cannot join thread before it is started" on every srot shutdown.
+        if self._thread.is_alive():
+            self._thread.join(timeout=1.0)
         self._log.info('[HBEAT] stopped')
 
     # ------------------------------------------------------------------ #

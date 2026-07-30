@@ -234,6 +234,20 @@ class SrotFC(FlightController):
         """Brake to a halt (SROT_MOVE type 6). Used for cooperative abort/cancel."""
         self._command_long(sp.CMD_SROT_MOVE, p1=float(sp.MOVE_STOP))
 
+    # -- payload (PCA9685 on the board -- integrated, no separate USB ESP32) --- #
+    def set_servo(self, channel_1based: int, us: int) -> None:
+        """DO_SET_SERVO (183): drive PCA9685 servo `channel_1based` (1-based, so PCA
+        ch 0 -> channel_1based=1) to `us` µs. Raw firmware match -- the exact command
+        the SROT board dispatches to its servo expander."""
+        self._command_long(sp.CMD_DO_SET_SERVO, p1=float(int(channel_1based)),
+                            p2=float(int(us)))
+
+    def set_relay(self, instance_0based: int, on: bool) -> None:
+        """DO_SET_RELAY (181): switch PCA9685 MOSFET `instance_0based` (0-based ->
+        PCA ch PCA_RELAY_BASE_CH + instance) on/off. Raw firmware match."""
+        self._command_long(sp.CMD_DO_SET_RELAY, p1=float(int(instance_0based)),
+                            p2=(1.0 if on else 0.0))
+
     # ------------------------------------------------------------------ #
     #  move() -- the duburi-verb -> SROT_MOVE mapping + ACK state machine #
     # ------------------------------------------------------------------ #
@@ -372,8 +386,17 @@ class SrotFC(FlightController):
         return sp.mode_name(hb.custom_mode) if hb is not None else 'UNKNOWN'
 
     def get_battery(self):
-        t = self.telemetry()
-        return None if math.isnan(t.battery_voltage) else t.battery_voltage
+        """{'voltage','current'} (V/A) from BATTERY_STATUS id 0, or None -- matches
+        Pixhawk's dict contract (the manager reads battery['voltage'])."""
+        msg = self._cache('BATTERY_STATUS')
+        if msg is None:
+            return None
+        volts = getattr(msg, 'voltages', [0xFFFF])
+        raw_mv = volts[0] if volts else 0xFFFF
+        voltage = math.nan if raw_mv in (0, 0xFFFF) else raw_mv / 1000.0
+        cur = getattr(msg, 'current_battery', -1)
+        current = math.nan if cur == -1 else cur / 100.0
+        return {'voltage': voltage, 'current': current}
 
     def get_rc_channels(self):
         return None            # SROT has no RC-channel readback (MANUAL_CONTROL only)
@@ -383,13 +406,17 @@ class SrotFC(FlightController):
         return st or None
 
     def get_angular_rates(self):
-        """{'roll','pitch','yaw'} body rates (rad/s) from ATTITUDE, or None."""
+        """Body-frame angular rates (rad/s) from ATTITUDE, matching Pixhawk's contract:
+        {'roll_rate','pitch_rate','yaw_rate','age_s'} or None. The manager's
+        _imu_rates_tick reads the *_rate keys, so they MUST match exactly."""
         att = self._cache('ATTITUDE')
         if att is None:
             return None
-        return {'roll': float(getattr(att, 'rollspeed', 0.0)),
-                'pitch': float(getattr(att, 'pitchspeed', 0.0)),
-                'yaw': float(getattr(att, 'yawspeed', 0.0))}
+        age = time.time() - getattr(att, '_timestamp', 0.0) if getattr(att, '_timestamp', 0.0) else 0.0
+        return {'roll_rate': float(getattr(att, 'rollspeed', 0.0)),
+                'pitch_rate': float(getattr(att, 'pitchspeed', 0.0)),
+                'yaw_rate': float(getattr(att, 'yawspeed', 0.0)),
+                'age_s': age}
 
     def heartbeat_age(self):
         hb = self._vehicle_hb()
@@ -551,3 +578,85 @@ MOVE_VERBS = frozenset({
     'move_forward', 'move_left', 'move_right',
     'yaw_left', 'yaw_right', 'turn', 'set_depth', 'stop', 'pause', 'style_roll',
 })   # 'arc' excluded: heading-hold vs SROT's rate-arc mismatch (see _build_params)
+
+
+# ---------------------------------------------------------------------- #
+#  SrotPayload -- payload over MAVLink (replaces the obsolete USB ESP32)  #
+# ---------------------------------------------------------------------- #
+# Duburi channels 1/2 = torpedo, 3/4 = dropper. On SROT each maps to a PCA9685
+# action: a SERVO (pulse to a release µs, then back to rest) or a MOSFET/RELAY
+# (energise for a pulse, then off). The exact per-channel wiring is a hardware
+# fact -- set _FIRE_MAP from the operator's answer. Each entry is one of:
+#   ('servo', pca_channel_1based, fire_us, rest_us)
+#   ('relay', instance_0based)
+# fire() runs a BOUNDED pulse in try/finally so a payload is never left energised
+# (a MOSFET held on burns the solenoid coil; a servo held at end-stop stalls).
+_FIRE_PULSE_S = 0.6   # > any PCA service tick; long enough for a servo to travel
+
+# Default = the config.h payload servo on PCA ch 0 for channel 1, then the next
+# three servo channels. VERIFY against the real wiring before trusting it.
+_FIRE_MAP = {
+    1: ('servo', 1, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # torpedo_1 -> PCA servo ch 0
+    2: ('servo', 2, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # torpedo_2 -> PCA servo ch 1
+    3: ('servo', 3, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # dropper_1 -> PCA servo ch 2
+    4: ('servo', 4, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # dropper_2 -> PCA servo ch 3
+}
+
+
+class SrotPayload:
+    """Payload driver for the SROT backend: the board's PCA9685 expander over
+    MAVLink. Duck-types the USB `PayloadDriver` surface (`is_ready`, `fire`,
+    `port_path`) so the Duburi facade is unchanged; there is NO separate USB
+    ESP32 anymore, so the old CH340 auto-detect must not run on srot."""
+
+    def __init__(self, fc, log=None, fire_map=None):
+        self._fc = fc
+        self._log = log
+        self._map = dict(fire_map if fire_map is not None else _FIRE_MAP)
+
+    @property
+    def is_ready(self) -> bool:
+        # The payload rides the same MAVLink link as everything else.
+        return bool(getattr(self._fc, 'link_alive', lambda: True)())
+
+    @property
+    def port_path(self) -> str:
+        return 'SROT MAVLink (PCA9685 DO_SET_SERVO/RELAY)'
+
+    def fire(self, channel: int) -> bool:
+        """Actuate the payload for `channel` (1/2 torpedo, 3/4 dropper) as a bounded
+        pulse. Returns True on a mapped, actuated channel; False (no-op) if unmapped."""
+        spec = self._map.get(int(channel))
+        if spec is None:
+            if self._log:
+                self._log.warning(
+                    f'[PAYLOAD] SROT: channel {channel} not mapped -- set _FIRE_MAP '
+                    f'from the real PCA9685 wiring; no actuation')
+            return False
+        kind = spec[0]
+        try:
+            if kind == 'servo':
+                _, ch1, fire_us, rest_us = spec
+                self._fc.set_servo(ch1, fire_us)
+                time.sleep(_FIRE_PULSE_S)
+                return True
+            if kind == 'relay':
+                _, inst = spec
+                self._fc.set_relay(inst, True)
+                time.sleep(_FIRE_PULSE_S)
+                return True
+            return False
+        finally:
+            # Always return to rest / de-energise -- never leave a solenoid on or a
+            # servo stalled, even if the sleep is interrupted.
+            try:
+                if kind == 'servo':
+                    self._fc.set_servo(spec[1], spec[3])
+                elif kind == 'relay':
+                    self._fc.set_relay(spec[1], False)
+            except Exception as exc:   # noqa: BLE001 -- best-effort de-energise
+                if self._log:
+                    self._log.error(f'[PAYLOAD] SROT: reset raised {exc!r}')
+
+    def disconnect(self) -> None:
+        pass

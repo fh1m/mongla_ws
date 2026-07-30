@@ -293,7 +293,7 @@ def test_get_mode_and_battery():
         base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time())
     fc.master.messages['BATTERY_STATUS'] = SimpleNamespace(voltages=[15200])
     assert fc.get_mode() == 'STABILIZE'
-    assert fc.get_battery() == pytest.approx(15.2)
+    assert fc.get_battery()['voltage'] == pytest.approx(15.2)   # dict, matches Pixhawk
 
 
 def test_noop_writes_do_not_raise_and_send_nothing():
@@ -308,6 +308,70 @@ def test_send_heartbeat_emits_gcs_heartbeat():
     fc = _fc()
     fc.send_heartbeat()
     assert any(s[0] == 'heartbeat' for s in fc.master.mav.sent)
+
+
+def test_get_angular_rates_uses_rate_suffixed_keys():
+    # The manager's _imu_rates_tick reads rates['pitch_rate'] etc. -- a key mismatch
+    # crashes the 50 Hz timer (it did, on the first live connect).
+    fc = _fc()
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(
+        yaw=0.0, roll=0.0, pitch=0.0, rollspeed=0.1, pitchspeed=0.2, yawspeed=0.3)
+    r = fc.get_angular_rates()
+    assert r['pitch_rate'] == pytest.approx(0.2)
+    assert r['roll_rate'] == pytest.approx(0.1) and r['yaw_rate'] == pytest.approx(0.3)
+    assert 'age_s' in r
+
+
+def test_get_battery_is_a_dict_like_pixhawk():
+    fc = _fc()
+    fc.master.messages['BATTERY_STATUS'] = SimpleNamespace(
+        voltages=[15200], current_battery=350)
+    b = fc.get_battery()
+    assert b['voltage'] == pytest.approx(15.2) and b['current'] == pytest.approx(3.5)
+    assert _fc().get_battery() is None            # None when no BATTERY_STATUS
+
+
+# --------------------------------------------------------------------------- #
+#  Payload over MAVLink (DO_SET_SERVO / DO_SET_RELAY) + SrotPayload             #
+# --------------------------------------------------------------------------- #
+def test_set_servo_sends_do_set_servo():
+    fc = _fc()
+    fc.set_servo(1, 2000)                          # PCA ch 0 (1-based) -> 2000 µs
+    cmd = [s for s in fc.master.mav.sent if s[0] == 'cmd'][-1]
+    assert cmd[1] == sp.CMD_DO_SET_SERVO and cmd[2][0] == 1.0 and cmd[2][1] == 2000.0
+
+
+def test_set_relay_sends_do_set_relay():
+    fc = _fc()
+    fc.set_relay(0, True)
+    cmd = [s for s in fc.master.mav.sent if s[0] == 'cmd'][-1]
+    assert cmd[1] == sp.CMD_DO_SET_RELAY and cmd[2][0] == 0.0 and cmd[2][1] == 1.0
+
+
+def test_srot_payload_fire_servo_is_a_bounded_pulse():
+    from duburi_control.fc.srot_fc import SrotPayload
+    import duburi_control.fc.srot_fc as m
+    orig = m._FIRE_PULSE_S
+    m._FIRE_PULSE_S = 0.0                          # keep the test fast
+    try:
+        fc = _fc()
+        pay = SrotPayload(fc, fire_map={1: ('servo', 1, 2000, 1000)})
+        assert pay.fire(1) is True
+        servo_cmds = [s for s in fc.master.mav.sent
+                      if s[0] == 'cmd' and s[1] == sp.CMD_DO_SET_SERVO]
+        # A pulse = fire µs then a return-to-rest µs (never left at the end-stop).
+        assert servo_cmds[0][2][1] == 2000.0 and servo_cmds[-1][2][1] == 1000.0
+        assert pay.fire(9) is False               # unmapped channel -> no-op
+    finally:
+        m._FIRE_PULSE_S = orig
+
+
+def test_srot_payload_is_ready_tracks_link():
+    from duburi_control.fc.srot_fc import SrotPayload
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, custom_mode=0, autopilot=0, _timestamp=time.time())
+    assert SrotPayload(fc).is_ready is True        # link alive -> payload ready
 
 
 def test_heartbeat_from_gcs_is_ignored_for_mode_and_armed():

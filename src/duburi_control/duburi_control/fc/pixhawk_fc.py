@@ -38,8 +38,8 @@ class PixhawkFC(Pixhawk, FlightController):
             t.depth_m = float(att.get('depth', math.nan))
         t.armed = bool(self.is_armed())
         t.mode = self.get_mode()
-        volts = self.get_battery()
-        t.battery_voltage = float(volts) if volts is not None else math.nan
+        batt = self.get_battery()            # {'voltage','current'} or None
+        t.battery_voltage = float(batt['voltage']) if batt else math.nan
         t.link_alive = bool(self.link_alive())
         # rpm stays empty -- ArduSub over this stack never exposed per-thruster RPM.
         return t

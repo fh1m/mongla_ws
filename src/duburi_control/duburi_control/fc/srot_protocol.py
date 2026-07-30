@@ -46,6 +46,8 @@ ACK_CANCELLED   = 6
 TERMINAL_ACKS   = frozenset({ACK_ACCEPTED, ACK_DENIED, ACK_FAILED, ACK_CANCELLED})
 
 CMD_SROT_MOVE = 31000      # the one custom verb; rides inside a COMMAND_LONG
+CMD_DO_SET_SERVO = 183     # PCA9685 servo channel -> µs (payload release servo)
+CMD_DO_SET_RELAY = 181     # PCA9685 MOSFET/switch channel on/off (payload solenoid)
 CMD_USER_1    = 31010      # yaw spin (stunt)   -- style_yaw has no STYLE equivalent
 CMD_USER_2    = 31011      # pitch spin (stunt)
 CMD_USER_3    = 31012      # roll spin (stunt)
@@ -194,3 +196,19 @@ GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.
 def sanitize_speed(speed: float) -> float:
     """Clamp a 0..1 move speed to [0, MOVE_CRUISE_MAX] (the board clamps too)."""
     return _clamp(float(speed), 0.0, MOVE_CRUISE_MAX)
+
+
+# ---------------------------------------------------------------------- #
+#  Payload -- PCA9685 aux expander on the SROT board (config.h SECTION 5) #
+# ---------------------------------------------------------------------- #
+# The payload is integrated into SROT now (NO separate USB ESP32): a 16-channel
+# PCA9685 servo/MOSFET expander on the board's I2C bus, driven over MAVLink.
+#   * channels 0..7  = PCA_SERVO  (PWM µs, SERVO_MIN_US..SERVO_MAX_US) via DO_SET_SERVO
+#     (DO_SET_SERVO p1 is 1-BASED, so PCA ch c -> p1 = c+1)
+#   * channels 8..15 = PCA_SWITCH (MOSFET on/off) via DO_SET_RELAY
+#     (DO_SET_RELAY p1 is a 0-based INSTANCE -> PCA ch = PCA_RELAY_BASE_CH + instance)
+PCA9685_NUM_CH      = 16
+SERVO_MIN_US        = 1000
+SERVO_MAX_US        = 2000
+PCA_PAYLOAD_SERVO_CH = 0    # config.h default payload-release servo (0-based)
+PCA_RELAY_BASE_CH   = 8     # first MOSFET/switch channel (0-based)
