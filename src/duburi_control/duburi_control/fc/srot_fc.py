@@ -53,6 +53,13 @@ def _finite(*vals) -> bool:
     return all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals)
 
 
+def _param_id(pv) -> str:
+    """PARAM_VALUE.param_id as a clean str (mavlink sends a padded bytes field)."""
+    pid = getattr(pv, 'param_id', '')
+    pid = pid.decode() if isinstance(pid, bytes) else str(pid)
+    return pid.strip('\x00')
+
+
 class SrotFC(FlightController):
     """SROT backend. Constructed with a pre-opened mavutil master + optional logger,
     exactly like `Pixhawk` (connection lives in the manager / connection_config)."""
@@ -294,6 +301,127 @@ class SrotFC(FlightController):
         return t
 
     # ------------------------------------------------------------------ #
+    #  Pixhawk-compatible surface                                         #
+    # ------------------------------------------------------------------ #
+    # auv_manager_node reads the vehicle through the historical Pixhawk method
+    # names (get_attitude/get_mode/is_armed/...). Exposing the same names here
+    # -- reading SROT telemetry, no-op'ing the ArduSub-only writes -- lets the
+    # manager treat `self.fc` as a drop-in on the srot backend with only a few
+    # guarded changes (skip the neutral-RC heartbeat + the BNO->EKF mocap tick).
+
+    def get_attitude(self):
+        """{'yaw'(deg 0..360),'roll'(deg),'pitch'(deg),'depth'(m)} or None.
+
+        Same shape as Pixhawk.get_attitude so the manager's telemetry/state path
+        is unchanged. yaw in degrees (ATTITUDE is radians); depth from VFR_HUD
+        (alt = -depth)."""
+        att = self._cache('ATTITUDE')
+        if att is None:
+            return None
+        depth = math.nan
+        vhud = self._cache('VFR_HUD')
+        if vhud is not None:
+            depth = -float(vhud.alt)
+        return {
+            'yaw':   math.degrees(att.yaw) % 360.0,
+            'roll':  math.degrees(att.roll),
+            'pitch': math.degrees(att.pitch),
+            'depth': depth,
+        }
+
+    def get_attitude_age(self):
+        att = self._cache('ATTITUDE')
+        return None if att is None else (time.time() - getattr(att, '_timestamp', 0.0))
+
+    def get_mode(self):
+        hb = self._cache('HEARTBEAT')
+        return sp.mode_name(hb.custom_mode) if hb is not None else 'UNKNOWN'
+
+    def get_battery(self):
+        t = self.telemetry()
+        return None if math.isnan(t.battery_voltage) else t.battery_voltage
+
+    def get_rc_channels(self):
+        return None            # SROT has no RC-channel readback (MANUAL_CONTROL only)
+
+    def get_statustext(self):
+        st = self._statustext()
+        return st or None
+
+    def get_angular_rates(self):
+        """{'roll','pitch','yaw'} body rates (rad/s) from ATTITUDE, or None."""
+        att = self._cache('ATTITUDE')
+        if att is None:
+            return None
+        return {'roll': float(getattr(att, 'rollspeed', 0.0)),
+                'pitch': float(getattr(att, 'pitchspeed', 0.0)),
+                'yaw': float(getattr(att, 'yawspeed', 0.0))}
+
+    def heartbeat_age(self):
+        hb = self._cache('HEARTBEAT')
+        return None if hb is None else (time.time() - getattr(hb, '_timestamp', 0.0))
+
+    def send_heartbeat(self):
+        """Alias: the manager's heartbeat_tick calls this -- on SROT it IS the
+        mandatory >=1 Hz GCS HEARTBEAT (2 Hz tick > the 1 Hz failsafe floor)."""
+        self.send_gcs_heartbeat()
+
+    def send_neutral(self):
+        """Safe idle: zero MANUAL_CONTROL with heave neutral (STABILIZE holds).
+        Only a defensive fallback on SROT -- stop/pause route through move()."""
+        self.manual(0.0, 0.0, 0.0, 0.0)
+
+    def send_att_pos_mocap(self, yaw_deg):
+        """No-op: SROT fuses the BNO on-board; there is no external EKF to feed."""
+        return None
+
+    def set_message_rate(self, message_id, hz):
+        """No-op: SROT telemetry rates are fixed on-board (no SET_MESSAGE_INTERVAL)."""
+        return None
+
+    def calibrate_barometer(self, timeout: float = 6.0):
+        """Re-zero the depth reference: PREFLIGHT_CALIBRATION (241) p3=1 (baro)."""
+        self._clear_ack()
+        self._command_long(mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION,
+                            p1=0.0, p2=0.0, p3=1.0)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            ack = self._cache('COMMAND_ACK')
+            if ack is not None and ack.command == mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION:
+                return ack.result == sp.ACK_ACCEPTED, 'baro'
+            time.sleep(_POLL_S)
+        return False, 'NO_ACK'
+
+    def get_param(self, name, timeout: float = 2.0):
+        self.master.messages.pop('PARAM_VALUE', None)
+        with self._tx_lock:
+            self.master.mav.param_request_read_send(
+                sp.VEHICLE_SYSID, sp.VEHICLE_COMPID,
+                name.encode() if isinstance(name, str) else name, -1)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            pv = self._cache('PARAM_VALUE')
+            if pv is not None and _param_id(pv) == str(name):
+                return float(pv.param_value)
+            time.sleep(_POLL_S)
+        return None
+
+    def set_param(self, name, value, timeout: float = 3.0):
+        self.master.messages.pop('PARAM_VALUE', None)
+        with self._tx_lock:
+            self.master.mav.param_set_send(
+                sp.VEHICLE_SYSID, sp.VEHICLE_COMPID,
+                name.encode() if isinstance(name, str) else name,
+                float(value), mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            pv = self._cache('PARAM_VALUE')
+            if pv is not None and _param_id(pv) == str(name):
+                return abs(float(pv.param_value) - float(value)) < 1e-3
+            time.sleep(_POLL_S)
+        return False
+
+    # ------------------------------------------------------------------ #
     #  Pilot gain -- MANUAL_CONTROL is halved until GAIN=1.0              #
     # ------------------------------------------------------------------ #
     def read_gain(self):
@@ -356,7 +484,7 @@ def _build_params(verb: str, kw: dict):
     if verb == 'move_right':
         return (sp.MOVE_STRAFE_R, dur, speed, 0.0, tmo)
     if verb == 'arc':
-        yaw_rate = float(kw.get('yaw_rate_pct', 0.0) or 0.0)   # signed deg/s (reused field)
+        yaw_rate = float(kw.get('target_yaw', 0.0) or 0.0)   # signed deg/s (arc field)
         return (sp.MOVE_ARC, dur, speed, yaw_rate, tmo)
     if verb == 'yaw_left':
         return (sp.MOVE_TURN, -abs(float(kw.get('target', 0.0) or 0.0)), 0.0,
@@ -376,7 +504,7 @@ def _build_params(verb: str, kw: dict):
         # No channel-release on SROT -> station-keep hold (type 7) until timeout.
         return (sp.MOVE_HOLD, dur, 0.0, 0.0, tmo)
     if verb == 'style_roll':
-        return (sp.MOVE_STYLE, float(kw.get('target', 1.0) or 1.0), 0.0, 0.0, tmo)
+        return (sp.MOVE_STYLE, float(kw.get('flips', 1.0) or 1.0), 0.0, 0.0, tmo)
     raise KeyError(f"verb '{verb}' has no SROT_MOVE mapping")
 
 

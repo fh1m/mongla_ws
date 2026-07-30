@@ -252,3 +252,50 @@ def test_build_params_yaw_left_is_relative_negative():
 def test_move_verbs_membership():
     assert 'move_forward' in MOVE_VERBS and 'set_depth' in MOVE_VERBS
     assert 'arm' not in MOVE_VERBS and 'vision_align' not in MOVE_VERBS
+
+
+def test_build_params_arc_uses_target_yaw_and_style_uses_flips():
+    p1, p2, p3, p4, p5 = _build_params('arc', {'duration': 4.0, 'gain': 40.0,
+                                               'target_yaw': 20.0})
+    assert p1 == sp.MOVE_ARC and p4 == 20.0            # signed yaw rate from target_yaw
+    s1, s2, *_ = _build_params('style_roll', {'flips': 2.0})
+    assert s1 == sp.MOVE_STYLE and s2 == 2.0           # count from flips
+
+
+# --------------------------------------------------------------------------- #
+#  Pixhawk-compatible surface (lets the manager treat SrotFC as a drop-in)      #
+# --------------------------------------------------------------------------- #
+def test_get_attitude_returns_degrees_dict():
+    fc = _fc()
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(
+        yaw=math.radians(45.0), roll=0.0, pitch=0.0)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.2)
+    att = fc.get_attitude()
+    assert att['yaw'] == pytest.approx(45.0) and att['depth'] == pytest.approx(1.2)
+
+
+def test_get_attitude_none_without_attitude_msg():
+    assert _fc().get_attitude() is None
+
+
+def test_get_mode_and_battery():
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time())
+    fc.master.messages['BATTERY_STATUS'] = SimpleNamespace(voltages=[15200])
+    assert fc.get_mode() == 'STABILIZE'
+    assert fc.get_battery() == pytest.approx(15.2)
+
+
+def test_noop_writes_do_not_raise_and_send_nothing():
+    fc = _fc()
+    fc.set_message_rate(30, 50)          # no-op on SROT (fixed rates)
+    fc.send_att_pos_mocap(90.0)          # no-op (board fuses BNO on-board)
+    assert fc.get_rc_channels() is None
+    assert not fc.master.mav.sent        # neither reached the wire
+
+
+def test_send_heartbeat_emits_gcs_heartbeat():
+    fc = _fc()
+    fc.send_heartbeat()
+    assert any(s[0] == 'heartbeat' for s in fc.master.mav.sent)

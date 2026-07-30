@@ -139,6 +139,68 @@ def _pixhawk_serial_present() -> bool:
 
 
 # ---------------------------------------------------------------------- #
+#  SROT board serial (direct USB Type-C -- no BlueOS)                     #
+# ---------------------------------------------------------------------- #
+# The SROT board (ESP32 DevKit V1) plugs straight into the dev-box / Jetson
+# over USB Type-C at 115200 -- there is no BlueOS/UDP router in the loop.
+# ESP32 DevKit boards enumerate via a CP210x (Silicon Labs), CH340/CH9102
+# (WCH), or a native ESP32 USB-CDC bridge, so we glob all three by stable
+# by-id name first, then fall back to raw ttyUSB/ttyACM nodes.
+_SROT_BY_ID_GLOBS = (
+    '/dev/serial/by-id/*CP2102*',
+    '/dev/serial/by-id/*CP210*',
+    '/dev/serial/by-id/*Silicon_Labs*',
+    '/dev/serial/by-id/*CH340*',
+    '/dev/serial/by-id/*CH910*',
+    '/dev/serial/by-id/*USB_Single_Serial*',
+    '/dev/serial/by-id/*Espressif*',
+    '/dev/serial/by-id/*ESP32*',
+    '/dev/serial/by-id/*SROT*',
+)
+_SROT_RAW_FALLBACK = (
+    '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0', '/dev/ttyACM1',
+)
+SROT_BAUD = 115200
+
+
+def find_srot_serial() -> str | None:
+    """First SROT-like USB-serial device path (stable by-id preferred), or None."""
+    for pattern in _SROT_BY_ID_GLOBS:
+        hits = sorted(glob(pattern))
+        if hits:
+            return hits[0]
+    for path in _SROT_RAW_FALLBACK:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def resolve_srot_profile(mav_device: str = '', *, logger=None) -> dict:
+    """{'conn','baud'} for the SROT board over direct USB serial.
+
+    ``mav_device`` overrides everything (a device path or any pymavlink conn
+    string -- e.g. ``/dev/ttyUSB0`` or ``udpout:192.168.2.2:14550`` if a BlueOS
+    router is reintroduced later). Otherwise auto-detect the USB-serial port.
+    """
+    if mav_device:
+        baud = SROT_BAUD if mav_device.startswith('/dev/') else None
+        if logger:
+            logger.info(f'[NET  ] SROT mav_device override -> {mav_device}')
+        return {'conn': mav_device, 'baud': baud}
+    path = find_srot_serial()
+    if path is None:
+        if logger:
+            logger.warning(
+                '[NET  ] SROT: no USB-serial device found -- defaulting to '
+                '/dev/ttyUSB0. Plug the board in, or pass '
+                '-p mav_device:=/dev/serial/by-id/<yours>')
+        path = '/dev/ttyUSB0'
+    elif logger:
+        logger.info(f'[NET  ] SROT: auto-picked serial {path} @ {SROT_BAUD}')
+    return {'conn': path, 'baud': SROT_BAUD}
+
+
+# ---------------------------------------------------------------------- #
 #  UDP probe                                                              #
 # ---------------------------------------------------------------------- #
 
