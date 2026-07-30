@@ -103,6 +103,51 @@ Connection strings live in `src/duburi_manager/duburi_manager/connection_config.
 
 ---
 
+## 2b. ⚠ Flight-controller backends — READ BEFORE §2, §3, §5, §6
+
+**Everything else in this file describes the Pixhawk/ArduSub/BlueOS path.** Since the 2027
+season there is a second backend, and on the **`srot` branch it is the DEFAULT**.
+
+| `flight_controller:=` | Autopilot | Transport | Where it's default |
+|---|---|---|---|
+| `pixhawk` | Pixhawk 2.4.8 + ArduSub 4.x | BlueOS → UDP 14550 | `main` |
+| **`srot`** | **SROT board, firmware Hengla** | **direct USB Type-C @115200** (no Pi, no BlueOS, no UDP) | **`srot` branch** |
+
+Both sit behind the `FlightController` HAL in `src/duburi_control/duburi_control/fc/`
+(`base.py` ABC, `pixhawk_fc.py`, `srot_fc.py`, `srot_protocol.py` = the one copy of the wire
+constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identical to history.
+
+**Claims below that are Pixhawk-only and WRONG on srot:**
+- §2 network topology, BlueOS, UDP 14550, gateway `192.168.2.2` — srot is one USB cable.
+- §3 the `mode`/profile table — `resolve_srot_profile()` bypasses `PROFILES` entirely.
+- §4.2 "telemetry rates pinned via `MAV_CMD_SET_MESSAGE_INTERVAL`" — **SROT has no 511**;
+  its rates are fixed on-board (`ATTITUDE` 10 Hz, `VFR_HUD` 5 Hz, `HEARTBEAT` 1 Hz).
+- §5 `set_mode("ALT_HOLD")`, `send_rc_override`, `send_rc_yaw_only`, `set_target_depth` —
+  **none exist on SROT.** Modes are STABILIZE/ACRO/DEPTH_HOLD/SURFACE/MANUAL/AUTO;
+  actuation is one `MANUAL_CONTROL` frame (all 4 axes, no per-channel release) or an
+  on-board `MAV_CMD_SROT_MOVE`(31000) primitive.
+- §5 depth via `AHRS2.altitude` — srot reads `VFR_HUD.alt` (same sign: **negative below
+  surface**).
+- §6 "ArduSub's onboard 400 Hz stabilizer owns the inner loop" + the BNO→EKF3 mocap feed —
+  SROT runs its own 500 Hz loop and fuses the BNO on-board; the mocap timer is skipped.
+- §6 the whole per-axis `RC_CHANNELS_OVERRIDE` Ch4/Ch5/Ch6 table.
+- §13.7 payload "NOT through the Pixhawk" — on srot the payload **is** MAVLink
+  `DO_SET_SERVO`/`DO_SET_RELAY` to the board's PCA9685; there is no separate USB ESP32.
+
+**Verb support on srot is partial.** `vision_align`/`vision_move`, `move_*_dist` (DVL),
+`lock_heading`, `move_back`, `arc`, `style_yaw` are **refused** with a clear message
+(`srot_fc.UNSUPPORTED_VERBS`) — they are not ported yet.
+
+**⛔ The board's depth loop has never run closed** (fw `AUDIT.md` R1: the sign was inverted
+until 2026-07-30 and the Bar30 wasn't fitted). Two bench checks gate every dive-dependent
+verb — see `.claude/context/srot-integration.md`.
+
+Full detail, verb table, workarounds and bench runbook:
+[`.claude/context/srot-integration.md`](.claude/context/srot-integration.md).
+Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEEDBACK.md`.
+
+---
+
 ## 3. Operating Modes
 
 `auv_manager_node` ships with `mode:=auto` as the default. The

@@ -64,6 +64,23 @@ def _ack(result, command=sp.CMD_SROT_MOVE, progress=100):
                            _timestamp=time.time())
 
 
+@pytest.fixture(autouse=True)
+def _fast_deadlines(monkeypatch):
+    """Shrink the ACK deadline floor and the brake pulse for the whole module.
+
+    Both are real production values (an 8 s floor so a slow first ACK is not called
+    a stall; a brake long enough to actually null momentum) -- but a test that
+    deliberately drives the stall path should not sit through them. Patched here
+    rather than lowered in the source, so the shipped numbers stay honest.
+    """
+    import duburi_control.fc.srot_fc as mod
+    monkeypatch.setattr(mod, '_ACK_MIN_BUDGET_S', 0.3)
+    monkeypatch.setattr(mod, '_ACK_MARGIN_S', 0.2)
+    monkeypatch.setattr(sp, 'BRAKE_MAX_S', 0.05)
+    monkeypatch.setattr(sp, 'BRAKE_K', 0.02)
+    monkeypatch.setattr(mod, '_FIRE_PULSE_S', 0.01)
+
+
 # --------------------------------------------------------------------------- #
 #  MANUAL_CONTROL mapping                                                       #
 # --------------------------------------------------------------------------- #
@@ -207,7 +224,10 @@ def test_telemetry_decodes_attitude_depth_and_mode():
     t = fc.telemetry()
     assert t.armed is True and t.mode == 'AUTO'
     assert t.yaw_deg == pytest.approx(90.0)
-    assert t.depth_m == pytest.approx(2.5)        # negated from alt
+    # NEGATIVE below the surface -- the stack-wide convention (DuburiState.msg,
+    # set_depth's input, the surface guards). alt already carries that sign, so
+    # it passes straight through; this used to be negated a second time.
+    assert t.depth_m == pytest.approx(-2.5)
     assert t.battery_voltage == pytest.approx(16.0)
     assert t.link_alive is True
 
@@ -280,7 +300,24 @@ def test_get_attitude_returns_degrees_dict():
         yaw=math.radians(45.0), roll=0.0, pitch=0.0)
     fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.2)
     att = fc.get_attitude()
-    assert att['yaw'] == pytest.approx(45.0) and att['depth'] == pytest.approx(1.2)
+    assert att['yaw'] == pytest.approx(45.0)
+    assert att['depth'] == pytest.approx(-1.2)   # negative below surface
+
+
+def test_depth_sign_matches_pixhawk_convention():
+    """Submerged reads NEGATIVE on the SROT backend, exactly as AHRS2 does on
+    Pixhawk. This is the regression guard for the double-negation bug: every
+    depth guard in the stack (STYLE_ROLL_SURFACE_GUARD_M, motion_vision's
+    _MIN_DEPTH_M / max_depth_m / depth_ceiling_m, calibrate_depth's refusal)
+    compares against a NEGATIVE constant, so a positive-down reading did not
+    error -- it silently stopped every one of them from ever firing."""
+    fc = _fc()
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(yaw=0.0, roll=0.0, pitch=0.0)
+    for board_depth_m in (0.5, 2.0, 8.0):
+        # The board sends alt = -depth (fw mav_stream.cpp:210-218).
+        fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-board_depth_m)
+        assert fc.get_attitude()['depth'] < 0.0
+        assert fc.telemetry().depth_m < 0.0
 
 
 def test_get_attitude_none_without_attitude_msg():
@@ -386,3 +423,199 @@ def test_heartbeat_from_gcs_is_ignored_for_mode_and_armed():
         base_mode=0, custom_mode=sp.MODE_MANUAL,
         autopilot=mavutil.mavlink.MAV_AUTOPILOT_INVALID, _timestamp=time.time())
     assert fc.get_mode() == 'AUTO' and fc.is_armed() is True   # vehicle state held
+
+
+# --------------------------------------------------------------------------- #
+#  Tier-1 safety: the abort brake, the ACK deadline, the 5th ACK result         #
+# --------------------------------------------------------------------------- #
+def _moves(fc):
+    """Every SROT_MOVE the fake saw, as (move_type, p2, p3, p5) tuples."""
+    return [(int(p[0]), p[1], p[2], p[4])
+            for kind, cmd, p in fc.master.mav.sent
+            if kind == 'cmd' and cmd == sp.CMD_SROT_MOVE]
+
+
+def test_abort_brakes_with_a_reverse_leg_not_a_bare_stop():
+    """MOVE_STOP alone is a COAST: the firmware zeroes s_uf/s_ul/s_speed before
+    the STOP case, so PH_BRAKE computes -0*gain*0 == 0 (fw movement.cpp:56,90,152).
+    An abort must therefore reverse the axis itself, or a 20 kg hull keeps going
+    on a board that has no position estimate."""
+    fc = _fc()
+    fc.master.auto_ack = None                     # never terminates -> abort path
+    res = fc.move('move_forward', duration=3.0, gain=50.0,
+                  abort_fn=lambda: True)
+    assert res.code == ABORTED
+    sent = _moves(fc)
+    assert sent[0][0] == sp.MOVE_FORWARD          # the leg
+    assert sent[1][0] == sp.MOVE_BACK             # the brake -- reversed axis
+    assert sent[1][2] > 0.0                       # ...with real thrust
+    assert 0.0 < sent[1][1] <= sp.BRAKE_MAX_S     # ...and bounded duration
+    assert sent[1][3] == pytest.approx(sent[1][1])  # p5 caps it board-side too
+    assert sent[-1][0] == sp.MOVE_STOP            # then settle/cancel the seq
+
+
+def test_brake_reverses_the_correct_lateral_axis():
+    fc = _fc()
+    fc.master.auto_ack = None
+    fc.move('move_left', duration=2.0, gain=40.0, abort_fn=lambda: True)
+    assert [m[0] for m in _moves(fc)][:2] == [sp.MOVE_STRAFE_L, sp.MOVE_STRAFE_R]
+
+
+def test_yaw_and_depth_legs_are_not_braked():
+    """Yaw is a rate the board bleeds; depth is a hold. Reversing either fights
+    the controller -- same rule as motion_vision's inertial brake."""
+    for verb, kw in (('yaw_right', {'target': 90.0}), ('set_depth', {'target': -1.5})):
+        fc = _fc()
+        fc.master.auto_ack = None
+        fc.move(verb, abort_fn=lambda: True, **kw)
+        types = [m[0] for m in _moves(fc)]
+        assert types[-1] == sp.MOVE_STOP
+        assert sp.MOVE_BACK not in types and sp.MOVE_FORWARD not in types
+
+
+def test_slow_leg_is_not_braked():
+    """No momentum worth nulling below BRAKE_MIN_SPEED -- don't kick the hull."""
+    fc = _fc()
+    fc.master.auto_ack = None
+    fc.move('move_forward', duration=1.0, gain=1.0, abort_fn=lambda: True)
+    assert [m[0] for m in _moves(fc)] == [sp.MOVE_FORWARD, sp.MOVE_STOP]
+
+
+def test_temporarily_rejected_is_terminal_and_says_it_is_retryable():
+    """The board returns TEMPORARILY_REJECTED on a state-mutex miss at dispatch
+    (fw mav_commands.cpp:287/376/422). It is NOT in JETSON_COMMS.md's four-result
+    table, so it used to fall through as non-terminal and burn the whole deadline
+    before reporting a bogus TIMEOUT."""
+    fc = _fc()
+    fc.master.auto_ack = _ack(sp.ACK_TEMPORARILY_REJECTED, progress=0)
+    res = fc.move('move_forward', duration=3.0, gain=50.0)
+    assert res.code == FAILED
+    assert 'retry' in res.reason.lower()
+
+
+def test_ack_deadline_tracks_the_leg_not_the_60s_board_default():
+    """p5 is 0 for every verb whose commands.py row has no `timeout` field, so a
+    3 s move used to hold the action thread 65 s on a stall. That matters because
+    the host deadline is the ONLY terminator: a failsafe mid-leg takes the board
+    out of AUTO and it streams IN_PROGRESS forever (fw task_control_loop.cpp:731)."""
+    import duburi_control.fc.srot_fc as mod
+    from duburi_control.fc.srot_fc import _ack_budget_s
+    floor = mod._ACK_MIN_BUDGET_S          # the autouse fixture shrinks this
+    short = _ack_budget_s('move_forward', sp.MOVE_FORWARD, 3.0, 0.0)
+    assert short < 20.0
+    # A long legitimate leg still gets room, and an explicit p5 is honoured.
+    assert _ack_budget_s('move_forward', sp.MOVE_FORWARD, 60.0, 0.0) > 60.0
+    assert _ack_budget_s('move_forward', sp.MOVE_FORWARD, 1.0, 45.0) > 45.0
+    # Turn/dive budget from their own rates, not from a duration.
+    assert _ack_budget_s('turn', sp.MOVE_TURN, 180.0, 0.0) > 180.0 / sp.MOVE_YAW_RATE
+    assert _ack_budget_s('set_depth', sp.MOVE_DIVE, 2.0, 0.0) > 2.0 / sp.MOVE_DEPTH_RATE
+    # Never below the floor, so a tiny leg still tolerates a slow first ACK.
+    assert _ack_budget_s('stop', sp.MOVE_STOP, 0.0, 0.0) >= floor
+
+
+def test_shipped_ack_floor_is_generous_enough_for_a_slow_board():
+    """The shipped floor (not the shrunk test one) must tolerate a slow first ACK.
+
+    Guards the fixture from hiding a regression: if someone drops the real floor to
+    something like 0.5 s, a healthy-but-busy board would be reported as a stall and
+    the vehicle braked mid-leg for no reason."""
+    import duburi_control.fc.srot_fc as mod
+    import importlib
+    fresh = importlib.reload(mod)          # fixture patches are not applied here
+    try:
+        assert fresh._ACK_MIN_BUDGET_S >= 5.0
+        assert fresh._ACK_MARGIN_S >= 2.0
+    finally:
+        importlib.reload(mod)
+
+
+def test_stop_verb_brakes_the_previous_leg():
+    """`duburi stop` must actually stop, not coast.
+
+    A *completed* leg still leaves the hull coasting, because the board's own
+    end-of-leg PH_BRAKE is the zero-thrust one -- so the following `stop` is
+    exactly where the momentum has to be nulled.
+    """
+    fc = _fc()
+    fc.master.auto_ack = _ack(sp.ACK_ACCEPTED)
+    fc.move('move_forward', duration=5.0, gain=60.0)      # completes; leg recorded
+    fc.master.mav.sent.clear()
+    fc.move('stop')
+    assert [m[0] for m in _moves(fc)] == [sp.MOVE_BACK, sp.MOVE_STOP]
+
+
+def test_stop_does_not_double_brake():
+    """Once stop_motion() has braked, the leg is consumed -- a second stop (or an
+    abort right after a timeout that already braked) must not kick the hull again."""
+    fc = _fc()
+    fc.master.auto_ack = _ack(sp.ACK_ACCEPTED)
+    fc.move('move_forward', duration=5.0, gain=60.0)
+    fc.move('stop')
+    fc.master.mav.sent.clear()
+    fc.move('stop')
+    assert [m[0] for m in _moves(fc)] == [sp.MOVE_STOP]
+
+
+# --------------------------------------------------------------------------- #
+#  Payload: refuse rather than guess                                            #
+# --------------------------------------------------------------------------- #
+def test_fire_refuses_when_the_map_is_not_configured():
+    """Which PCA channel each payload is on, and servo-vs-MOSFET, are hardware
+    facts. Guessing them fires the wrong actuator on a live vehicle."""
+    from duburi_control.fc.srot_fc import SrotPayload, _FIRE_MAP
+    assert _FIRE_MAP == {}, 'the shipped fire map must stay empty'
+    fc = _fc()
+    payload = SrotPayload(fc)
+    assert payload.fire(1) is False
+    assert not _moves(fc) and not fc.master.mav.sent   # nothing actuated at all
+
+
+def test_fire_uses_a_configured_map():
+    from duburi_control.fc.srot_fc import SrotPayload
+    fc = _fc()
+    payload = SrotPayload(fc, fire_map={2: ('relay', 1)})
+    assert payload.fire(2) is True
+    relays = [(p[0], p[1]) for k, c, p in fc.master.mav.sent
+              if k == 'cmd' and c == sp.CMD_DO_SET_RELAY]
+    assert relays == [(1.0, 1.0), (1.0, 0.0)]   # energise then de-energise
+
+
+# --------------------------------------------------------------------------- #
+#  The unsupported-verb contract                                                #
+# --------------------------------------------------------------------------- #
+def test_unsupported_verbs_are_disjoint_from_move_verbs():
+    from duburi_control.fc.srot_fc import UNSUPPORTED_VERBS
+    assert not (UNSUPPORTED_VERBS & MOVE_VERBS)
+    # The ones that used to lie or crash rather than refuse.
+    for verb in ('lock_heading', 'move_back', 'arc', 'vision_align'):
+        assert verb in UNSUPPORTED_VERBS
+
+
+def test_no_facade_mode_gate_is_reachable_on_srot():
+    """INVARIANT: every facade verb that engages an ArduSub-only mode gate must be
+    either collapsed to the board (MOVE_VERBS) or refused (UNSUPPORTED_VERBS).
+
+    This is what makes the ALT_HOLD->DEPTH_HOLD alias safe. The alias exists so a
+    literal `set_mode('ALT_HOLD')` in a mission works, but it also means
+    `_ensure_alt_hold` / `_ensure_yaw_capable_mode` would now SUCCEED on srot --
+    and the code right after each of them calls `set_target_depth` or
+    `send_rc_override`, which SrotFC does not implement. Today none of those verbs
+    can reach the facade, so the gates are dead code on this backend.
+
+    If someone later removes a verb from UNSUPPORTED_VERBS without porting its
+    body, this test fails instead of the vehicle finding out.
+    """
+    from duburi_control.fc.srot_fc import UNSUPPORTED_VERBS
+    gated = {
+        'set_depth', 'surface',                       # _ensure_alt_hold
+        'vision_align', 'vision_move',                # _ensure_alt_hold
+        'arc', 'style_roll', 'style_yaw',             # _ensure_yaw_capable_mode
+        'turn', 'yaw_left', 'yaw_right',              # _ensure_yaw_capable_mode
+    }
+    # 'surface' is intercepted in the manager (_run_srot_surface) rather than
+    # collapsed or refused -- it is the one deliberate exception.
+    handled = MOVE_VERBS | UNSUPPORTED_VERBS | {'surface'}
+    unreachable = gated - handled
+    assert not unreachable, (
+        f'{sorted(unreachable)} would reach a facade mode gate on srot, then call '
+        f'a Pixhawk-only primitive. Port them or add them to UNSUPPORTED_VERBS.')

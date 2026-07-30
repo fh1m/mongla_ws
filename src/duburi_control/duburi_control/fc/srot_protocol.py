@@ -35,15 +35,23 @@ BAUD            = 115200   # ESP32 UART0; used on the direct-serial path
 #  Command ids (JETSON_COMMS.md §5, §10)                                  #
 # ---------------------------------------------------------------------- #
 # COMMAND_ACK.result values (MAVLink MAV_RESULT). Pinned here because older
-# pymavlink dialects ship without CANCELLED=6, and these four terminals are the
-# SROT move contract (JETSON_COMMS.md §5). ACCEPTED/CANCELLED/FAILED/DENIED are
-# terminal; IN_PROGRESS is not.
+# pymavlink dialects ship without CANCELLED=6, and these are the SROT move
+# contract (JETSON_COMMS.md §5). IN_PROGRESS is the only non-terminal one.
 ACK_ACCEPTED    = 0
 ACK_DENIED      = 2
 ACK_FAILED      = 4
 ACK_IN_PROGRESS = 5
 ACK_CANCELLED   = 6
-TERMINAL_ACKS   = frozenset({ACK_ACCEPTED, ACK_DENIED, ACK_FAILED, ACK_CANCELLED})
+# TEMPORARILY_REJECTED is the FIFTH dispatch outcome and is NOT in the four-result
+# table JETSON_COMMS.md §5 documents -- but the firmware returns it whenever it
+# misses a state mutex at dispatch: SROT_MOVE (mav_commands.cpp:287), accel-cal
+# (:376) and, since Round 3, DO_SET_SERVO (:422) on the payload path. The command
+# never ran, so it is terminal for us: treating it as non-terminal means waiting
+# out the whole deadline and reporting a bogus TIMEOUT for a move that was simply
+# refused. Retrying is the caller's call, not this layer's.
+ACK_TEMPORARILY_REJECTED = 3
+TERMINAL_ACKS   = frozenset({ACK_ACCEPTED, ACK_DENIED, ACK_FAILED, ACK_CANCELLED,
+                             ACK_TEMPORARILY_REJECTED})
 
 CMD_SROT_MOVE = 31000      # the one custom verb; rides inside a COMMAND_LONG
 CMD_DO_SET_SERVO = 183     # PCA9685 servo channel -> µs (payload release servo)
@@ -107,6 +115,17 @@ MODE_NAMES = {
 }
 MODE_INTS = {name: num for num, name in MODE_NAMES.items()}
 
+# ArduSub mode names accepted as aliases, so a mission written for the Pixhawk
+# backend does not have to branch. ALT_HOLD *is* DEPTH_HOLD -- the firmware's own
+# header says so verbatim: `DEPTH_HOLD = 2, // ArduSub ALT_HOLD` (state_types.h).
+# Without this, every mission with a literal set_mode('ALT_HOLD') -- there are
+# seven -- dies on srot with "unknown SROT mode".
+#
+# Deliberately NOT aliased: POSHOLD and GUIDED. The board has no position
+# estimate at all, so silently accepting them would promise station-keeping it
+# cannot deliver. Those still fail loudly, which is correct.
+MODE_ALIASES = {'ALT_HOLD': MODE_DEPTH_HOLD}
+
 
 def mode_name(custom_mode) -> str:
     """custom_mode int -> mode name, or 'UNKNOWN(<n>)' for an unmapped value."""
@@ -117,8 +136,14 @@ def mode_name(custom_mode) -> str:
 
 
 def mode_int(name) -> int | None:
-    """Mode name -> custom_mode int, or None if unknown (fail-loud upstream)."""
-    return MODE_INTS.get(str(name).strip().upper())
+    """Mode name -> custom_mode int, or None if unknown (fail-loud upstream).
+
+    Accepts the ArduSub aliases in MODE_ALIASES (currently just ALT_HOLD, which
+    is the same mode as DEPTH_HOLD) so Pixhawk-era missions run unmodified."""
+    key = str(name).strip().upper()
+    if key in MODE_INTS:
+        return MODE_INTS[key]
+    return MODE_ALIASES.get(key)
 
 
 # ---------------------------------------------------------------------- #
@@ -191,6 +216,36 @@ MOVE_CRUISE_MAX = 0.80    # clamps a move's p3 speed
 MOVE_YAW_RATE   = 45.0    # deg/s default turn rate when p3=0
 MOVE_DEPTH_RATE = 0.20    # m/s dive/ascend ramp
 GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.5)
+
+# ---------------------------------------------------------------------- #
+#  Host-side brake (see SrotFC._brake_last_leg)                          #
+# ---------------------------------------------------------------------- #
+# The wire-reachable MOVE_STOP does NOT apply reverse thrust: movement::start()
+# zeroes s_uf/s_ul/s_speed before the STOP case, so PH_BRAKE computes
+# `-0 * gain * 0` == 0 (fw movement.cpp:56,58,90,152). The brake *duration* is
+# right, the thrust is nil -- so an abort coasts. The firmware's own
+# movement::abort() brakes correctly but is not reachable from MAVLink.
+#
+# So we brake ourselves: a short REVERSE move leg on the same axis. That stays in
+# AUTO (depth hold is preserved -- MANUAL_CONTROL cannot brake here at all, since
+# AUTO overwrites fwd/lat with the movement demand, fw task_control_loop.cpp:209),
+# uses only documented wire verbs, and the reverse leg ends with its own brake.
+# Mirrors the firmware's MOVE_BRAKE_GAIN / MOVE_BRAKE_K shape; tune here, not there.
+BRAKE_GAIN     = 0.60   # reverse speed as a fraction of the aborted leg's speed
+BRAKE_K        = 0.80   # brake seconds per unit of leg speed
+BRAKE_MAX_S    = 1.20   # hard cap -- an abort must never become a long new leg
+BRAKE_MIN_SPEED = 0.05  # below this the leg carries no momentum worth nulling
+
+# Reverse of each translation move type. Yaw and depth are deliberately absent:
+# Ch4 yaw is a RATE the board's own loop bleeds, and depth is an ArduSub-style
+# hold -- reversing either fights the controller instead of helping (same rule as
+# motion_vision's inertial brake, which also brakes translation only).
+BRAKE_REVERSE = {
+    MOVE_FORWARD:  MOVE_BACK,
+    MOVE_BACK:     MOVE_FORWARD,
+    MOVE_STRAFE_L: MOVE_STRAFE_R,
+    MOVE_STRAFE_R: MOVE_STRAFE_L,
+}
 
 
 def sanitize_speed(speed: float) -> float:

@@ -47,6 +47,10 @@ from duburi_control import (                                            # noqa: 
 )
 from duburi_control.fc import make_flight_controller                     # noqa: E402
 from duburi_control.fc.srot_fc import MOVE_VERBS as SROT_MOVE_VERBS       # noqa: E402
+from duburi_control.fc.srot_fc import (                                   # noqa: E402
+    UNSUPPORTED_VERBS as SROT_UNSUPPORTED_VERBS)
+from duburi_control.duburi import _UNARM_SAFE as DUBURI_UNARM_SAFE        # noqa: E402
+from duburi_control.tracing import command_scope                          # noqa: E402
 from duburi_control.payload import PayloadDriver                         # noqa: E402
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
@@ -634,10 +638,24 @@ class AUVManagerNode(Node):
                 runtime = runtime_defaults_for_command(
                     cmd, snapshot_from_node(self))
                 kwargs = fields_for(cmd, request, runtime_defaults=runtime)
-                if self._is_srot and cmd in SROT_MOVE_VERBS:
+                if self._is_srot and cmd in SROT_UNSUPPORTED_VERBS:
+                    # Refuse BEFORE dispatch. Left to fall through, these reach
+                    # Pixhawk-only primitives and fail in ways worse than a clean
+                    # refusal -- lock_heading in particular would report success
+                    # while holding nothing. See srot_fc.UNSUPPORTED_VERBS.
+                    result = Move.Result()
+                    result.success = False
+                    result.message = (
+                        f'{cmd}: not supported on the SROT backend yet '
+                        f'(needs the MANUAL_CONTROL-streamed port)')
+                    result.final_value = 0.0
+                    result.error_value = 0.0
+                elif self._is_srot and cmd in SROT_MOVE_VERBS:
                     # Collapse verb on the SROT backend: one on-board SROT_MOVE +
                     # its four-terminal ACK relay, instead of the host motion loop.
                     result = self._run_srot_move(cmd, kwargs, goal_handle)
+                elif self._is_srot and cmd == 'surface':
+                    result = self._run_srot_surface(kwargs)
                 else:
                     method = getattr(self.duburi, cmd)
                     result = method(**kwargs)
@@ -682,31 +700,81 @@ class AUVManagerNode(Node):
         finally:
             self.command_active = False
 
-    def _run_srot_move(self, cmd, kwargs, goal_handle):
-        """Dispatch a collapse verb to the SROT board as one SROT_MOVE.
+    def _run_srot_surface(self, kwargs):
+        """Emergency surface on the SROT backend: engage the board's SURFACE mode.
 
-        Builds a Move.Result from the backend's MoveResult (never raises). Clears
-        the abort slate first (parity with the facade's _command_scope), streams
-        ~3 Hz progress as action feedback, and passes the cooperative abort hook so
-        a goal cancel brakes the board (SROT_MOVE stop)."""
+        The facade's `surface` is `set_depth(0)`, which goes through
+        `_ensure_alt_hold` -> ALT_HOLD, an ArduSub mode the board does not have.
+        So on srot the verb raised ModeChangeError and did NOTHING -- a safety verb
+        that bypasses the busy gate specifically so it can always run, then didn't.
+
+        SURFACE (mode 9) is the board's own ascend-and-hold failsafe state: it
+        drives depth::setTarget(0) through the depth PID, or an open-loop ascent
+        (DEPTH_LOST_ASCENT) when there is no depth sensor -- which is exactly the
+        behaviour wanted when things have gone wrong. It is also the ONE mode the
+        board never blocks for a missing Bar30.
+
+        Braked first: the board keeps running the active movement primitive until
+        something displaces it, and SURFACE alone does not abort a move.
+        """
+        timeout = float(kwargs.get('timeout', 60.0) or 60.0)
         self.duburi._abort_event.clear()
+        self.fc.stop_motion()                     # brake + cancel any running leg
+        ok, reason = self.fc.set_mode('SURFACE')
 
-        def _on_progress(frac):
-            fb = Move.Feedback()
-            fb.phase         = cmd
-            fb.current_value = float(frac)
-            fb.status_line   = f'{cmd} {frac * 100:.0f}%'
-            goal_handle.publish_feedback(fb)
-
-        res = self.fc.move(cmd, on_progress=_on_progress,
-                           abort_fn=self.duburi._abort_fn, **kwargs)
         out = Move.Result()
-        out.success = res.ok
-        out.message = res.reason
+        out.success = bool(ok)
+        out.message = (f'surface: SURFACE engaged (ascending, <= {timeout:.0f}s)'
+                       if ok else f'surface: could not engage SURFACE -- {reason}')
         att = self.fc.get_attitude()
         out.final_value = float(att['depth']) if att else 0.0
         out.error_value = 0.0
+        if not ok:
+            self.get_logger().error(f'[ACT  ] surface FAILED: {reason}')
         return out
+
+    def _run_srot_move(self, cmd, kwargs, goal_handle):
+        """Dispatch a collapse verb to the SROT board as one SROT_MOVE.
+
+        Builds a Move.Result from the backend's MoveResult (never raises), streams
+        ~3 Hz progress as action feedback, and passes the cooperative abort hook so
+        a goal cancel brakes the board.
+
+        Takes `duburi.lock` and applies the same disarmed gate as the facade's
+        `_command_scope`. This path bypasses the facade entirely, so without these
+        it was the ONLY dispatch route with no host-side arm check and no
+        serialisation -- and the board's own pre-arm checks just IMU-healthy plus
+        not-calibrating (fw arming.cpp:11-31), not depth, ESCs, leak or battery.
+        The other two things `_command_scope` does are moot here: the neutral-RC
+        heartbeat is never started on srot, and a deferred heading lock cannot
+        exist because lock_heading is refused on this backend.
+        """
+        with self.duburi.lock, command_scope(cmd):
+            self.duburi._abort_event.clear()
+            if cmd not in DUBURI_UNARM_SAFE and not self.fc.is_armed():
+                out = Move.Result()
+                out.success = False
+                out.message = f'{cmd}: AUV is disarmed -- call arm() first'
+                out.final_value = 0.0
+                out.error_value = 0.0
+                return out
+
+            def _on_progress(frac):
+                fb = Move.Feedback()
+                fb.phase         = cmd
+                fb.current_value = float(frac)
+                fb.status_line   = f'{cmd} {frac * 100:.0f}%'
+                goal_handle.publish_feedback(fb)
+
+            res = self.fc.move(cmd, on_progress=_on_progress,
+                               abort_fn=self.duburi._abort_fn, **kwargs)
+            out = Move.Result()
+            out.success = res.ok
+            out.message = res.reason
+            att = self.fc.get_attitude()
+            out.final_value = float(att['depth']) if att else 0.0
+            out.error_value = 0.0
+            return out
 
     # ================================================================== #
     #  Timers                                                             #
