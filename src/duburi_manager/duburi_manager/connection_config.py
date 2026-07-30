@@ -153,6 +153,13 @@ _SROT_BY_ID_GLOBS = (
     '/dev/serial/by-id/*CH340*',
     '/dev/serial/by-id/*CH910*',
     '/dev/serial/by-id/*USB_Single_Serial*',
+    # The board's ESP32 DevKit uses a plain CH340 whose by-id name is the generic
+    # `usb-1a86_USB_Serial-if00-port0` (no "CH340" literal). Match it by the WCH VID
+    # (1a86) and the generic "USB_Serial" string -- these are STABLE across re-enum,
+    # unlike the raw ttyUSB<n> node. Safe now that the payload is integrated into
+    # SROT (no separate payload CH340 board to collide with).
+    '/dev/serial/by-id/*1a86*',
+    '/dev/serial/by-id/*USB_Serial*',
     '/dev/serial/by-id/*Espressif*',
     '/dev/serial/by-id/*ESP32*',
     '/dev/serial/by-id/*SROT*',

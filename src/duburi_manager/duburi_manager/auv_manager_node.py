@@ -365,13 +365,25 @@ class AUVManagerNode(Node):
                 daemon=True, name='dvl_auto_connect').start()
 
     def _preflight_payload(self) -> None:
-        """Start payload board connect in a background thread.
+        """Prepare the payload driver.
 
-        Runs concurrently with the BNO085 probe in _setup_yaw_source().
-        VID/PID discovery (1a86:7523) means no port overlap is possible
-        with the BNO (303a:1001), so exclusion is not needed.
-        Join happens at the top of _setup_heartbeat_and_payload().
+        SROT: the payload is INTEGRATED into the board (PCA9685 over MAVLink,
+        DO_SET_SERVO/DO_SET_RELAY) -- there is NO separate USB ESP32. Critically,
+        that old board was a CH340 (1a86:7523), the SAME chip as the SROT board, so
+        running the USB auto-detect here would grab the SROT serial port. Build the
+        MAVLink-backed SrotPayload instead; no USB scan, no thread.
+
+        Pixhawk: the historical USB PayloadDriver, connected in a background thread
+        (concurrent with the BNO085 probe; joined in _setup_heartbeat_and_payload).
         """
+        if self._is_srot:
+            from duburi_control.fc.srot_fc import SrotPayload
+            self._payload = SrotPayload(self.fc, log=self.get_logger())
+            self._payload_thread = None
+            self.get_logger().info(
+                '[PAYLOAD] SROT: via MAVLink PCA9685 (DO_SET_SERVO/RELAY) -- '
+                'no separate USB board')
+            return
         self._payload = PayloadDriver()
         _pl_port = None if self._payload_port in ('auto', '') else self._payload_port
         self._payload_thread = threading.Thread(
@@ -393,18 +405,20 @@ class AUVManagerNode(Node):
         if not self._is_srot:
             self.heartbeat.start()
 
-        # Payload connect ran in parallel with BNO probe — join now.
-        self._payload_thread.join(timeout=5.0)
-        if self._payload_thread.is_alive():
-            # Thread still running after timeout — treat as not connected.
-            self.get_logger().warning(
-                '[PAYLOAD] connect timed out — fire() calls will log-stub only')
-        elif self._payload.is_ready:
-            self.get_logger().info(
-                f'[PAYLOAD] verified + connected on {self._payload.port_path}')
-        else:
-            self.get_logger().info(
-                '[PAYLOAD] not found — fire() calls will log-stub only')
+        # Payload connect ran in parallel with BNO probe — join now (USB path only;
+        # SROT's MAVLink payload has no thread).
+        if self._payload_thread is not None:
+            self._payload_thread.join(timeout=5.0)
+            if self._payload_thread.is_alive():
+                # Thread still running after timeout — treat as not connected.
+                self.get_logger().warning(
+                    '[PAYLOAD] connect timed out — fire() calls will log-stub only')
+            elif self._payload.is_ready:
+                self.get_logger().info(
+                    f'[PAYLOAD] verified + connected on {self._payload.port_path}')
+            else:
+                self.get_logger().info(
+                    '[PAYLOAD] not found — fire() calls will log-stub only')
 
         # Lazy DistanceState bridge for calc_distance (built on first use so
         # single-camera / no-distance runs never create the service clients).
