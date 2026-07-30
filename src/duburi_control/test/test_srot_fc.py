@@ -252,14 +252,23 @@ def test_build_params_yaw_left_is_relative_negative():
 def test_move_verbs_membership():
     assert 'move_forward' in MOVE_VERBS and 'set_depth' in MOVE_VERBS
     assert 'arm' not in MOVE_VERBS and 'vision_align' not in MOVE_VERBS
+    # arc is excluded on SROT (heading-hold vs rate-arc mismatch).
+    assert 'arc' not in MOVE_VERBS
 
 
-def test_build_params_arc_uses_target_yaw_and_style_uses_flips():
-    p1, p2, p3, p4, p5 = _build_params('arc', {'duration': 4.0, 'gain': 40.0,
-                                               'target_yaw': 20.0})
-    assert p1 == sp.MOVE_ARC and p4 == 20.0            # signed yaw rate from target_yaw
+def test_style_uses_flips_and_arc_has_no_mapping():
     s1, s2, *_ = _build_params('style_roll', {'flips': 2.0})
     assert s1 == sp.MOVE_STYLE and s2 == 2.0           # count from flips
+    with pytest.raises(KeyError):                       # arc must not map on SROT
+        _build_params('arc', {'duration': 4.0, 'gain': 40.0, 'target_yaw': 20.0})
+
+
+def test_manual_coerces_nonfinite_axis_to_neutral():
+    # A NaN from a vision loop must degrade to hold, not crash the 20 Hz stream.
+    fc = _fc()
+    fc.manual(fwd=float('nan'), lat=0.0, up=float('inf'), yaw=0.0)
+    kind, x, y, z, r, btn = fc.master.mav.sent[-1]
+    assert x == 0 and z == 500                          # nan->0, inf-up->neutral 500
 
 
 # --------------------------------------------------------------------------- #
@@ -299,3 +308,17 @@ def test_send_heartbeat_emits_gcs_heartbeat():
     fc = _fc()
     fc.send_heartbeat()
     assert any(s[0] == 'heartbeat' for s in fc.master.mav.sent)
+
+
+def test_heartbeat_from_gcs_is_ignored_for_mode_and_armed():
+    # A GCS / loopback heartbeat (autopilot INVALID) on a shared link must NOT be
+    # read as the vehicle. First a real vehicle HB (autopilot GENERIC=0), then a
+    # GCS HB overwrites the cache -> mode/armed must still reflect the vehicle.
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=_ARMED, custom_mode=sp.MODE_AUTO, autopilot=0, _timestamp=time.time())
+    assert fc.get_mode() == 'AUTO' and fc.is_armed() is True
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(   # a GCS on the link
+        base_mode=0, custom_mode=sp.MODE_MANUAL,
+        autopilot=mavutil.mavlink.MAV_AUTOPILOT_INVALID, _timestamp=time.time())
+    assert fc.get_mode() == 'AUTO' and fc.is_armed() is True   # vehicle state held

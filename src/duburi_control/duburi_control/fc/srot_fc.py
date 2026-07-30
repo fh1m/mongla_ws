@@ -71,6 +71,26 @@ class SrotFC(FlightController):
         self._log = log
         self._tx_lock = threading.Lock()
         self._boot_time = time.time()
+        # Last HEARTBEAT from the VEHICLE (autopilot != INVALID). Our own GCS
+        # heartbeat and any other GCS on the link (e.g. Bondor) send
+        # MAV_AUTOPILOT_INVALID; the reader thread caches the latest HEARTBEAT
+        # regardless of source, so mode/armed must prefer the vehicle's -- same
+        # guard Pixhawk uses via _last_autopilot_hb.
+        self._last_vehicle_hb = None
+
+    def _vehicle_hb(self):
+        """Latest HEARTBEAT from the vehicle, ignoring GCS/loopback frames.
+
+        The board reports MAV_AUTOPILOT_GENERIC; a GCS/companion reports
+        MAV_AUTOPILOT_INVALID. Test doubles omit the field -> default 0 (GENERIC)
+        so a scripted vehicle heartbeat is accepted."""
+        msg = self._cache('HEARTBEAT')
+        if msg is None:
+            return self._last_vehicle_hb
+        if getattr(msg, 'autopilot', 0) == mavutil.mavlink.MAV_AUTOPILOT_INVALID:
+            return self._last_vehicle_hb        # GCS / our own loopback -- skip
+        self._last_vehicle_hb = msg
+        return msg
 
     # ------------------------------------------------------------------ #
     #  Low-level send / read helpers                                      #
@@ -120,14 +140,14 @@ class SrotFC(FlightController):
                 mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
 
     def link_alive(self) -> bool:
-        hb = self._cache('HEARTBEAT')
+        hb = self._vehicle_hb()
         if hb is None:
             return False
         age = time.time() - getattr(hb, '_timestamp', 0.0)
         return age <= _LINK_STALE_S
 
     def is_armed(self) -> bool:
-        hb = self._cache('HEARTBEAT')
+        hb = self._vehicle_hb()
         return bool(hb and (hb.base_mode & _ARMED_FLAG))
 
     # ------------------------------------------------------------------ #
@@ -149,9 +169,16 @@ class SrotFC(FlightController):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if abort is not None and abort():
-                # Cancelled mid-arm: command a disarm so we never strand armed.
-                self._command_long(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, p1=0.0)
-                return False, 'ABORTED'
+                # Cancelled mid-arm: disarm and VERIFY it took (a dropped frame must
+                # not strand the hull armed while the caller believes it aborted).
+                # Fail-closed: re-send a few times, require is_armed()==False to hold.
+                for _ in range(6):
+                    self._command_long(
+                        mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, p1=0.0)
+                    time.sleep(_POLL_S)
+                    if not self.is_armed():
+                        return False, 'ABORTED'
+                return False, 'ABORTED_DISARM_UNCONFIRMED'
             ack = self._cache('COMMAND_ACK')
             if ack is not None and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
                 if ack.result == sp.ACK_FAILED:
@@ -176,11 +203,11 @@ class SrotFC(FlightController):
             p2=float(target))
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            hb = self._cache('HEARTBEAT')
+            hb = self._vehicle_hb()
             if hb is not None and int(hb.custom_mode) == target:
                 return True, mode
             time.sleep(_POLL_S)
-        cur = sp.mode_name(getattr(self._cache('HEARTBEAT'), 'custom_mode', -1))
+        cur = sp.mode_name(getattr(self._vehicle_hb(), 'custom_mode', -1))
         st = self._statustext()
         return False, f'mode stayed {cur}' + (f' ({st})' if st else '')
 
@@ -189,11 +216,17 @@ class SrotFC(FlightController):
     # ------------------------------------------------------------------ #
     def manual(self, fwd: float, lat: float, up: float, yaw: float) -> None:
         """One MANUAL_CONTROL frame. x=fwd, y=lat(+starboard), z=heave(+up), r=yaw;
-        all axes -1..1 (the board clamps; we clamp in srot_protocol). Buttons=0."""
-        x = sp.unit_to_mc(fwd)
-        y = sp.unit_to_mc(lat)
-        r = sp.unit_to_mc(yaw)
-        z = sp.unit_to_mc_z(up)
+        all axes -1..1 (the board clamps; we clamp in srot_protocol). Buttons=0.
+
+        A non-finite axis is coerced to neutral (0) rather than raising: this is the
+        streamed 20 Hz servo primitive, so a single NaN from a vision loop must not
+        crash the send -- it degrades to 'hold' for that tick."""
+        def _safe(v):
+            return v if isinstance(v, (int, float)) and math.isfinite(v) else 0.0
+        x = sp.unit_to_mc(_safe(fwd))
+        y = sp.unit_to_mc(_safe(lat))
+        r = sp.unit_to_mc(_safe(yaw))
+        z = sp.unit_to_mc_z(_safe(up))
         with self._tx_lock:
             self.master.mav.manual_control_send(sp.VEHICLE_SYSID, x, y, z, r, 0)
 
@@ -270,7 +303,7 @@ class SrotFC(FlightController):
 
     def telemetry(self) -> Telemetry:
         t = Telemetry()
-        hb = self._cache('HEARTBEAT')
+        hb = self._vehicle_hb()
         if hb is not None:
             t.armed = bool(hb.base_mode & _ARMED_FLAG)
             t.mode = sp.mode_name(hb.custom_mode)
@@ -280,7 +313,8 @@ class SrotFC(FlightController):
             t.yaw_deg = math.degrees(att.yaw) % 360.0
             t.roll_deg = math.degrees(att.roll)
             t.pitch_deg = math.degrees(att.pitch)
-        # Depth: VFR_HUD.alt = -depth (negative underwater). Fall back to SCALED_PRESSURE2.
+        # Depth: VFR_HUD.alt = -depth (negative underwater) -> positive-down depth_m.
+        # Stays NaN until VFR_HUD arrives (5 Hz).
         vhud = self._cache('VFR_HUD')
         if vhud is not None:
             t.depth_m = -float(vhud.alt)
@@ -334,7 +368,7 @@ class SrotFC(FlightController):
         return None if att is None else (time.time() - getattr(att, '_timestamp', 0.0))
 
     def get_mode(self):
-        hb = self._cache('HEARTBEAT')
+        hb = self._vehicle_hb()
         return sp.mode_name(hb.custom_mode) if hb is not None else 'UNKNOWN'
 
     def get_battery(self):
@@ -358,7 +392,7 @@ class SrotFC(FlightController):
                 'yaw': float(getattr(att, 'yawspeed', 0.0))}
 
     def heartbeat_age(self):
-        hb = self._cache('HEARTBEAT')
+        hb = self._vehicle_hb()
         return None if hb is None else (time.time() - getattr(hb, '_timestamp', 0.0))
 
     def send_heartbeat(self):
@@ -483,9 +517,11 @@ def _build_params(verb: str, kw: dict):
         return (sp.MOVE_STRAFE_L, dur, speed, 0.0, tmo)
     if verb == 'move_right':
         return (sp.MOVE_STRAFE_R, dur, speed, 0.0, tmo)
-    if verb == 'arc':
-        yaw_rate = float(kw.get('target_yaw', 0.0) or 0.0)   # signed deg/s (arc field)
-        return (sp.MOVE_ARC, dur, speed, yaw_rate, tmo)
+    # NOTE: 'arc' is deliberately NOT mapped. duburi's arc holds an ABSOLUTE target
+    # heading (target_yaw, deg) while curving forward; SROT MOVE_ARC p4 is a signed
+    # yaw RATE (deg/s) with no heading lock -- different primitives. Passing the
+    # heading as a rate would spin the hull. Deferred until a host-side heading->rate
+    # arc lands; arc is excluded from MOVE_VERBS so it never routes here on SROT.
     if verb == 'yaw_left':
         return (sp.MOVE_TURN, -abs(float(kw.get('target', 0.0) or 0.0)), 0.0,
                 float(sp.TURN_RELATIVE), tmo)
@@ -512,6 +548,6 @@ def _build_params(verb: str, kw: dict):
 # through move(); everything else -- arm/disarm/set_mode, manual-streamed
 # move_*_dist / vision, fire, dvl -- goes through the other methods or stays host-side).
 MOVE_VERBS = frozenset({
-    'move_forward', 'move_left', 'move_right', 'arc',
+    'move_forward', 'move_left', 'move_right',
     'yaw_left', 'yaw_right', 'turn', 'set_depth', 'stop', 'pause', 'style_roll',
-})
+})   # 'arc' excluded: heading-hold vs SROT's rate-arc mismatch (see _build_params)
