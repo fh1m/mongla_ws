@@ -104,3 +104,29 @@ def test_desk_with_serial_uses_found_path(monkeypatch):
                         lambda *a, **k: '/dev/serial/by-id/usb-ArduPilot')
     prof = resolve_profile('desk')
     assert prof['conn'] == '/dev/serial/by-id/usb-ArduPilot'
+
+
+# --- resolve_srot_profile: direct USB serial (no BlueOS) ----------------------
+
+def test_srot_mav_device_override_serial():
+    p = cc.resolve_srot_profile('/dev/ttyUSB0')
+    assert p['conn'] == '/dev/ttyUSB0' and p['baud'] == cc.SROT_BAUD
+
+
+def test_srot_mav_device_override_udp_no_baud():
+    # A conn string (e.g. re-introduced BlueOS router) keeps baud=None.
+    p = cc.resolve_srot_profile('udpout:192.168.2.2:14550')
+    assert p['conn'] == 'udpout:192.168.2.2:14550' and p['baud'] is None
+
+
+def test_srot_autodetect_uses_found_serial(monkeypatch):
+    monkeypatch.setattr(cc, 'find_srot_serial',
+                        lambda: '/dev/serial/by-id/usb-Silicon_Labs_CP2102')
+    p = cc.resolve_srot_profile('')
+    assert 'CP2102' in p['conn'] and p['baud'] == cc.SROT_BAUD
+
+
+def test_srot_autodetect_falls_back_to_ttyusb0(monkeypatch):
+    monkeypatch.setattr(cc, 'find_srot_serial', lambda: None)
+    p = cc.resolve_srot_profile('')
+    assert p['conn'] == '/dev/ttyUSB0' and p['baud'] == cc.SROT_BAUD

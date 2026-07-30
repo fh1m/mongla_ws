@@ -45,12 +45,15 @@ from duburi_interfaces.msg import DuburiState                            # noqa:
 from duburi_control import (                                            # noqa: E402
     COMMANDS, Duburi, Heartbeat, Pixhawk, fields_for, tracing,
 )
+from duburi_control.fc import make_flight_controller                     # noqa: E402
+from duburi_control.fc.srot_fc import MOVE_VERBS as SROT_MOVE_VERBS       # noqa: E402
 from duburi_control.payload import PayloadDriver                         # noqa: E402
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
 
 from .connection_config import (                                             # noqa: E402
     DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
+    resolve_srot_profile,
 )
 from .dispatch_policy   import goal_acceptance                           # noqa: E402
 from .vision_state     import VisionState                                # noqa: E402
@@ -179,6 +182,11 @@ class AUVManagerNode(Node):
         self.declare_parameter('dvl_retry_s',       5.0)
         # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
         self.declare_parameter('debug',            False)
+        # flight_controller: which autopilot backend the HAL builds.
+        #   'srot' (default on this branch) -- the custom SROT board over direct
+        #        USB Type-C serial (no BlueOS). Set flight_controller:=pixhawk to
+        #        fall back to the ArduSub/BlueOS path (byte-identical to before).
+        self.declare_parameter('flight_controller', 'srot')
         declare_vision_params(self)
 
         requested_mode      = str(self.get_parameter('mode').value)
@@ -195,6 +203,8 @@ class AUVManagerNode(Node):
         self._dvl_auto      = bool(self.get_parameter('dvl_auto_connect').value)
         self._dvl_retry_s   = float(self.get_parameter('dvl_retry_s').value)
         self._debug         = bool(self.get_parameter('debug').value)
+        self._fc_kind       = str(self.get_parameter('flight_controller').value).strip().lower()
+        self._is_srot       = (self._fc_kind == 'srot')
 
         # Wire MAVLink tracing on as early as possible — mutates contextvar in
         # main thread; daemons spawned later still see the default (False).
@@ -209,8 +219,14 @@ class AUVManagerNode(Node):
                     f'tag will still apply but [MAV ] lines may not print')
 
         self._mode_name = resolve_mode(requested_mode, logger=self.get_logger())
-        self._profile   = resolve_profile(
-            self._mode_name, mav_device=mav_device, logger=self.get_logger())
+        if self._is_srot:
+            # SROT connects over direct USB Type-C serial -- bypass the BlueOS/UDP
+            # profile machinery entirely (mode still labels the yaw-source hints).
+            self._profile = resolve_srot_profile(
+                mav_device, logger=self.get_logger())
+        else:
+            self._profile = resolve_profile(
+                self._mode_name, mav_device=mav_device, logger=self.get_logger())
 
     def _setup_mavlink(self) -> None:
         """Open MAVLink connection, wait for heartbeat, pin telemetry rates."""
@@ -219,10 +235,24 @@ class AUVManagerNode(Node):
         baud_kw = {'baud': self._profile['baud']} if self._profile['baud'] else {}
         self.master  = mavutil.mavlink_connection(self._profile['conn'], **baud_kw)
         self.master.wait_heartbeat()
-        self.pixhawk = Pixhawk(self.master, log=self.get_logger())
-        # Pin rates so ArduSub streams at the rates we need (default ~4 Hz).
-        for msg_id, hz in MESSAGE_RATES.items():
-            self.pixhawk.set_message_rate(msg_id, hz)
+        # Build the backend behind the FlightController HAL. PixhawkFC is-a Pixhawk,
+        # so `self.pixhawk` stays a valid alias for every existing direct call; SrotFC
+        # exposes the same read surface. `flight_controller=pixhawk` is unchanged.
+        self.fc = make_flight_controller(
+            self._fc_kind, master=self.master, log=self.get_logger())
+        self.pixhawk = self.fc
+        self.get_logger().info(f'[NET  ] flight_controller = {self.fc.name}')
+        if self._is_srot:
+            # SROT rates are fixed on-board (no SET_MESSAGE_INTERVAL); skip pinning.
+            # Set the pilot gain to full so autonomous MANUAL_CONTROL isn't halved.
+            if not self.fc.set_default_gain():
+                self.get_logger().warning(
+                    '[NET  ] could not confirm JS_GAIN_DEFAULT=1.0 -- MANUAL_CONTROL '
+                    'may be scaled; check the board is reachable + not mid param-download')
+        else:
+            # Pin rates so ArduSub streams at the rates we need (default ~4 Hz).
+            for msg_id, hz in MESSAGE_RATES.items():
+                self.pixhawk.set_message_rate(msg_id, hz)
 
     def _setup_reader_and_warmup(self) -> None:
         """Start the MAVLink reader thread, then wait for AHRS2 + autopilot HB.
@@ -295,6 +325,15 @@ class AUVManagerNode(Node):
         self.get_logger().info(SEPARATOR)
         self.get_logger().info(
             f' MONGLA · DUBURI AUV MANAGER  |  mode: {self._mode_name}')
+        if self._is_srot:
+            self.get_logger().info(
+                ' Autopilot: SROT board  ·  firmware: Hengla  ·  link: USB serial')
+        else:
+            self.get_logger().info(
+                ' Autopilot: Pixhawk / ArduSub  ·  link: BlueOS/UDP')
+        self.get_logger().info(
+            f' Connection: {self._profile["conn"]}'
+            + (f' @ {self._profile["baud"]}' if self._profile.get('baud') else ''))
         if self._debug:
             self.get_logger().info(
                 ' DEBUG TRACE: ON  -- per-command [MAV <fn> cmd=<verb>] '
@@ -348,7 +387,11 @@ class AUVManagerNode(Node):
     def _setup_heartbeat_and_payload(self) -> None:
         """Start heartbeat, join payload connect thread, build Duburi facade."""
         self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
-        self.heartbeat.start()
+        # The Heartbeat streams NEUTRAL RC at 5 Hz (ArduSub FS_PILOT_INPUT guard).
+        # On SROT that fights an on-board AUTO move, and the mandatory >=1 Hz MAVLink
+        # HEARTBEAT is already sent by heartbeat_tick (2 Hz) -> do NOT stream it.
+        if not self._is_srot:
+            self.heartbeat.start()
 
         # Payload connect ran in parallel with BNO probe — join now.
         self._payload_thread.join(timeout=5.0)
@@ -425,7 +468,9 @@ class AUVManagerNode(Node):
         # rotation-comp is ~1:1 with the signal, so publish at full rate.
         self.create_timer(0.02, self._imu_rates_tick, callback_group=self.fast_group)
 
-        if self._bno_mocap_active:
+        # BNO->EKF3 mocap injection is an ArduSub/BlueOS feature; SROT fuses the
+        # BNO on-board, so there is no external EKF to feed (skip on the srot path).
+        if self._bno_mocap_active and not self._is_srot:
             self.create_timer(0.05, self._mocap_tick, callback_group=self.timer_group)
             self.get_logger().info('[SENS ] ATT_POS_MOCAP yaw injection active (20 Hz).')
             self._verify_extnav_params()
@@ -570,13 +615,18 @@ class AUVManagerNode(Node):
             with FeedbackPump(self.pixhawk, goal_handle,
                               yaw_provider=self._effective_yaw_deg,
                               vision_provider=self.duburi.vision_telemetry):
-                method = getattr(self.duburi, cmd)
                 # Re-snapshot params for every goal so freshly-set
                 # `vision.*` values land on the very next command.
                 runtime = runtime_defaults_for_command(
                     cmd, snapshot_from_node(self))
                 kwargs = fields_for(cmd, request, runtime_defaults=runtime)
-                result = method(**kwargs)
+                if self._is_srot and cmd in SROT_MOVE_VERBS:
+                    # Collapse verb on the SROT backend: one on-board SROT_MOVE +
+                    # its four-terminal ACK relay, instead of the host motion loop.
+                    result = self._run_srot_move(cmd, kwargs, goal_handle)
+                else:
+                    method = getattr(self.duburi, cmd)
+                    result = method(**kwargs)
 
             if result.success:
                 goal_handle.succeed()
@@ -617,6 +667,32 @@ class AUVManagerNode(Node):
 
         finally:
             self.command_active = False
+
+    def _run_srot_move(self, cmd, kwargs, goal_handle):
+        """Dispatch a collapse verb to the SROT board as one SROT_MOVE.
+
+        Builds a Move.Result from the backend's MoveResult (never raises). Clears
+        the abort slate first (parity with the facade's _command_scope), streams
+        ~3 Hz progress as action feedback, and passes the cooperative abort hook so
+        a goal cancel brakes the board (SROT_MOVE stop)."""
+        self.duburi._abort_event.clear()
+
+        def _on_progress(frac):
+            fb = Move.Feedback()
+            fb.phase         = cmd
+            fb.current_value = float(frac)
+            fb.status_line   = f'{cmd} {frac * 100:.0f}%'
+            goal_handle.publish_feedback(fb)
+
+        res = self.fc.move(cmd, on_progress=_on_progress,
+                           abort_fn=self.duburi._abort_fn, **kwargs)
+        out = Move.Result()
+        out.success = res.ok
+        out.message = res.reason
+        att = self.fc.get_attitude()
+        out.final_value = float(att['depth']) if att else 0.0
+        out.error_value = 0.0
+        return out
 
     # ================================================================== #
     #  Timers                                                             #
