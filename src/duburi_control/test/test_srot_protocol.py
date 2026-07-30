@@ -92,3 +92,20 @@ def test_sanitize_speed_clamps_to_cruise_max():
     assert sp.sanitize_speed(0.5) == 0.5
     assert sp.sanitize_speed(0.99) == sp.MOVE_CRUISE_MAX     # over cruise max -> capped
     assert sp.sanitize_speed(-0.2) == 0.0                    # negative -> 0
+
+
+def test_alt_hold_is_accepted_as_an_alias_for_depth_hold():
+    """Seven shipped missions call set_mode('ALT_HOLD') literally. The firmware's
+    own header documents the equivalence (`DEPTH_HOLD = 2, // ArduSub ALT_HOLD`),
+    so accepting the alias is correct, not a fudge."""
+    assert sp.mode_int('ALT_HOLD') == sp.MODE_DEPTH_HOLD
+    assert sp.mode_int('alt_hold') == sp.MODE_DEPTH_HOLD
+    # But it must still report its own name back, not the alias.
+    assert sp.mode_name(sp.MODE_DEPTH_HOLD) == 'DEPTH_HOLD'
+
+
+def test_position_modes_are_not_aliased():
+    """POSHOLD/GUIDED must keep failing loudly: the board has NO position estimate,
+    so silently accepting them would promise station-keeping it cannot deliver."""
+    assert sp.mode_int('POSHOLD') is None
+    assert sp.mode_int('GUIDED') is None

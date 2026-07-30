@@ -33,7 +33,6 @@ send_gcs_heartbeat`. `manual()` is the streamed servo primitive (vision + DVL lo
 |---|---|---|
 | `move_forward` | 0 forward | p2=duration, p3=speed(gain/100) |
 | `move_left`/`move_right` | 2/3 strafe | p2=duration, p3=speed |
-| `arc` | 9 | p2=duration, p3=speed, p4=signed yaw rate (`yaw_rate_pct`) |
 | `yaw_left`/`yaw_right` | 4 turn (**relative**) | p2=∓degrees, p4=0 |
 | `turn` | 4 turn (**absolute**) | p2=heading, p4=1 — **needs `MAG_YAW_REF=1`** |
 | `set_depth` | 5 dive | p2=**−target** (duburi neg → SROT pos depth); refuses target>0 |
@@ -41,13 +40,29 @@ send_gcs_heartbeat`. `manual()` is the streamed servo primitive (vision + DVL lo
 | `pause` | 7 hold | station-keep (no channel-release exists on SROT) |
 | `style_roll` | 8 style | p2=count (roll only, 90°/s) |
 
-**Not through `move()`:** `arm`/`disarm`/`set_mode` (COMPONENT_ARM_DISARM 400 / DO_SET_MODE
-176); `surface` → `set_mode('SURFACE')` (mode 9); `style_yaw` → `USER_1` 31010 (STYLE is
-roll-only); `move_forward_dist`/`move_lateral_dist` (DVL loop **stays in Python**, streams
-`manual()`); `vision_align`/`vision_move` (perception loop stays, streams `manual()`);
-`fire` (PayloadDriver USB, unchanged); `dvl_connect`, `calc_distance` (host-side).
-`lock_heading`/`unlock_heading` — board holds heading on-board; an explicit lock to a
-*commanded* heading is a `turn` absolute (needs `MAG_YAW_REF`), else no-op.
+> **`arc` is NOT mapped** and is excluded from `MOVE_VERBS`. duburi's `arc` holds an
+> ABSOLUTE target heading while curving; SROT's `MOVE_ARC` p4 is a signed yaw **rate** with
+> no heading lock. Passing the heading as a rate would spin the hull, so `arc` is refused
+> (see `UNSUPPORTED_VERBS`) until a host-side heading→rate arc lands.
+
+**Not through `move()` — implemented:** `arm`/`disarm`/`set_mode` (COMPONENT_ARM_DISARM 400 /
+DO_SET_MODE 176); **`surface` → `stop_motion()` + `set_mode('SURFACE')`** (mode 9), handled
+in `auv_manager_node._run_srot_surface` because the facade's `surface` is `set_depth(0)` and
+would die on the ArduSub-only ALT_HOLD gate; `fire` → **`SrotPayload`** (the board's PCA9685
+over `DO_SET_SERVO`/`DO_SET_RELAY` — there is NO separate USB ESP32 any more), which
+**refuses until `payload_fire_map` is configured** rather than guessing the wiring;
+`dvl_connect`, `calc_distance`, `head`, `mission_reset`, `calibrate_depth` (host-side, work
+unchanged).
+
+**REFUSED on srot (`srot_fc.UNSUPPORTED_VERBS`, checked in `execute_callback` BEFORE
+dispatch → clean `success=False`):** `lock_heading`, `move_back`, `move_forward_dist` /
+`move_back_dist` / `move_lateral_dist`, `vision_align` / `vision_move`, `arc`, `style_yaw`.
+Each reaches a Pixhawk-only primitive (`send_rc_*` / `set_target_depth`) or the ALT_HOLD
+gate. **They are refused rather than left to fall through because falling through was worse
+than failing:** `lock_heading` returned `success=True` while holding nothing (and flooded 50
+swallowed `AttributeError`/s for the lock's 300 s life), and `move_back` raised an
+`AttributeError` even though `MOVE_BACK=1` exists on the wire. Removing a verb from that set
+is how the port lands. `unlock_heading` still works (it only stops a lock + sends neutral).
 
 ## Backend gotchas (why the SROT path differs)
 - **No `SET_MESSAGE_INTERVAL`** — SROT rates are fixed on-board; the manager must **skip**
@@ -97,13 +112,37 @@ Prereqs (operator, via **Bondor** — no duburi_ws code): ESCs on **Bluejay** (`
 ## What works on the SROT backend today (verb support matrix)
 **WORKS (wired + unit-tested; bench-verify on the board):** `arm` / `disarm` / `set_mode`;
 the collapse moves `move_forward` / `move_left` / `move_right` / `yaw_left` / `yaw_right` /
-`turn` / `set_depth`(dive) / `stop` / `pause`(hold) / `style_roll`; `fire` (PayloadDriver);
-telemetry → `/duburi/state` (yaw/depth/batt/mode/armed) + the GCS heartbeat.
-**NOT YET on SROT (fall through to the facade → fail cleanly as `success=False`, they do
-NOT crash the node):** `vision_align` / `vision_move`, `move_forward_dist` /
-`move_lateral_dist` (DVL), `lock_heading` / `unlock_heading`, `calc_distance`, `arc`. These
-need the `manual()`-streamed facade port (vision/DVL) or a host-side mapping (arc heading→rate,
-heading-lock) — the next phase. Do not treat "wired + all green" as "every verb works on srot."
+`turn` / `set_depth`(dive) / `stop` / `pause`(hold) / `style_roll`; **`surface`** (SURFACE
+mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_distance`,
+`dvl_connect` (host-side); `fire` **once `payload_fire_map` is set**; telemetry →
+`/duburi/state` (yaw/**depth**/batt/mode/armed) + the GCS heartbeat.
+
+**REFUSED with a clear message (`UNSUPPORTED_VERBS`, see the verb table above):**
+`vision_align` / `vision_move`, `move_*_dist` (DVL), `lock_heading`, `move_back`, `arc`,
+`style_yaw`. Do not treat "wired + all green" as "every verb works on srot."
+
+### Host-side workarounds for firmware defects (see `srot-control-board/JETSON_FEEDBACK.md`)
+- **`MOVE_STOP` does not brake** — the firmware zeroes the axis/speed before the STOP case,
+  so `PH_BRAKE` computes `-0*g*0` = 0 and an abort **coasts**. `SrotFC._brake_last_leg`
+  sends an explicit short **reverse leg** before every `MOVE_STOP`.
+  `test_srot_protocol_drift.py` fails when the firmware fixes this, so we remove our brake
+  instead of double-kicking the hull.
+- **A failsafe mid-move never sends a terminal ACK** — the board freezes `mv_active=true`
+  and streams `IN_PROGRESS` forever, so our deadline is the ONLY terminator. It is now
+  derived from the leg's expected duration (`_ack_budget_s`), not from `p5` (which is 0 for
+  five of the ten collapse verbs → a 3 s move used to wedge the action thread for 65 s).
+- **A FIFTH ACK result exists** — `TEMPORARILY_REJECTED` (3) on a state-mutex miss, not in
+  `JETSON_COMMS.md`'s four-result table. Treated as terminal + reported as retryable.
+- **Depth sign** — `VFR_HUD.alt` already arrives NEGATIVE-below-surface (our convention, same
+  as Pixhawk AHRS2). We were negating it a second time, which made `/duburi/state.depth_m`
+  positive when submerged and silently disabled every depth guard in the stack (they all
+  compare against a negative constant, so none of them errored — they just stopped firing).
+- **`ESC_STATUS` (291) is in NO pymavlink dialect** (upstream removed 290/291 from `common`),
+  and pymavlink drops unknown msgids **silently**. `/duburi/esc_rpm` cannot be built on it;
+  we read `ESC_TELEMETRY_1_TO_4`/`5_TO_8` (11030/11031) instead, pending a firmware change.
+- **⚠ params may not have persisted before firmware `8cb4203`** (fw R14: the NVS partition
+  was too small, writes silently failed). Assume `set_default_gain()`'s `JS_GAIN_DEFAULT=1.0`
+  never stuck → `MANUAL_CONTROL` at half authority. **Reflash + read back `GAIN`.**
 
 ## Status (branch `srot`)
 - **DONE:** the HAL foundation (`14eb27a`) + integration doc (`6f3aea5`) + **the manager
@@ -112,9 +151,13 @@ heading-lock) — the next phase. Do not treat "wired + all green" as "every ver
   collapse verbs route through `fc.move()` + the 4-terminal ACK relay, telemetry populates
   `/duburi/state`. Build clean; ~670 tests green. mavlink-reviewer + advisor signed off (arc
   dropped, `manual()` NaN-safe, verified fail-closed arm-abort, HEARTBEAT source-filtered).
+- **READINESS FIXES (this pass):** real abort brake, leg-derived ACK deadline, the 5th ACK
+  result, `surface` revived, `UNSUPPORTED_VERBS` guard, depth sign, collapse verbs now take
+  `duburi.lock` + the disarmed gate, fail-loud payload map, protocol drift test.
+  **Verdict: ready for tethered bench work; the two depth checks below still gate any dive.**
 - **NEXT:** the `motion_vision` port (lat/yaw/fwd→`manual()`, depth→mode) + the DVL-distance
-  streamed path + `lock_heading` semantics; publish `/duburi/esc_rpm`; commit the Bondor
-  `.params` export.
+  streamed path + `lock_heading` semantics; publish `/duburi/esc_rpm` (blocked on the
+  firmware emitting 11030/11031); commit the Bondor `.params` export.
 - **BENCH-GATED:** the runbook above (needs the board; first real validation — no SROT SITL).
   Plug in USB, `ros2 run duburi_manager start`, watch the banner + `/duburi/state`. Depth stays
   unproven until the hand-verification (step 4) passes.

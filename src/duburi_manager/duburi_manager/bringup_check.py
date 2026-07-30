@@ -22,9 +22,17 @@ Each check prints PASS / WARN / FAIL.  Exit code is 0 when no FAIL (WARNs
 are advisory).  Pass ``--strict`` to make any WARN also exit non-zero (a
 hard pre-mission gate).  ``--skip-mavlink`` skips the UDP 14550 probe.
 
+``--srot`` switches sections D/E/F/I to the **SROT control board** (direct USB
+serial, firmware Hengla): it probes the serial port, the vehicle HEARTBEAT,
+armed state, depth telemetry and GAIN, and skips BlueOS / UDP 14550 / Pixhawk
+USB / the payload CH340 entirely -- on a SROT vehicle none of those exist, so
+they would pass or fail for the wrong reasons, and the payload scan would grab
+the board's own port (same CH340 VID/PID).
+
 Usage:
     ros2 run duburi_manager bringup_check
     ros2 run duburi_manager bringup_check --strict
+    ros2 run duburi_manager bringup_check --srot        # SROT-based vehicle
 """
 
 from __future__ import annotations
@@ -34,6 +42,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 from glob import glob
 
 from .connection_config import NETWORK, resolve_mode
@@ -597,10 +606,112 @@ def _check_jetson_power() -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
+def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
+    """SROT board over direct USB serial: port, vehicle heartbeat, GAIN, depth sign.
+
+    Replaces the BlueOS/UDP-14550/Pixhawk-USB probes, which on a SROT vehicle pass or
+    fail for entirely the wrong reasons -- there is no Pi, no router and no UDP at all.
+    """
+    out: list[tuple[str, str, str]] = []
+    try:
+        from .connection_config import find_srot_serial, SROT_BAUD
+    except Exception as exc:                       # noqa: BLE001
+        return [(FAIL, 'connection_config import', str(exc))]
+
+    port = find_srot_serial()
+    if port is None:
+        return [(FAIL, 'no SROT USB-serial device',
+                 'plug the board in; the node would block at wait_heartbeat')]
+    out.append((PASS, 'SROT serial port', f'{port} @ {SROT_BAUD}'))
+
+    if skip_mav:
+        out.append((WARN, 'SROT MAVLink probe skipped', '--skip-mavlink'))
+        return out
+
+    try:
+        from pymavlink import mavutil
+        from duburi_control.fc import srot_protocol as sp
+    except Exception as exc:                       # noqa: BLE001
+        out.append((FAIL, 'pymavlink/srot_protocol import', str(exc)))
+        return out
+
+    conn = None
+    try:
+        conn = mavutil.mavlink_connection(port, baud=SROT_BAUD)
+        deadline = time.time() + 6.0
+        hb = None
+        while time.time() < deadline:
+            msg = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
+            if msg is None:
+                break
+            # Ignore our own / any GCS heartbeat -- only the vehicle counts.
+            if getattr(msg, 'autopilot', 0) != mavutil.mavlink.MAV_AUTOPILOT_INVALID:
+                hb = msg
+                break
+        if hb is None:
+            out.append((FAIL, 'no vehicle HEARTBEAT', f'{port}: board powered? correct port?'))
+            return out
+        mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
+        armed = bool(getattr(hb, 'base_mode', 0)
+                     & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
+        out.append((PASS, 'SROT heartbeat', f'mode={mode}'))
+        # Pre-mission gate: nothing should be armed before the operator says so.
+        out.append((FAIL if armed else PASS, 'armed state',
+                    'ARMED -- disarm before bench/pool work' if armed else 'disarmed'))
+
+        # Collect a couple of seconds of telemetry for the value checks.
+        end = time.time() + 2.5
+        while time.time() < end:
+            conn.recv_match(blocking=True, timeout=0.5)
+
+        vhud = conn.messages.get('VFR_HUD')
+        if vhud is None:
+            out.append((WARN, 'no VFR_HUD', 'depth unavailable (Bar30 fitted?)'))
+        else:
+            depth = float(vhud.alt)
+            # NEGATIVE below the surface is the stack-wide convention. A positive
+            # reading out of water is normal (~0); a positive one submerged means the
+            # sign regressed and every depth guard is silently disabled.
+            out.append((PASS, 'depth telemetry', f'{depth:+.2f} m (negative = submerged)'))
+
+        # GAIN halves MANUAL_CONTROL until it is 1.0, and fw R14 means a PARAM_SET may
+        # never have persisted on a board flashed before 8cb4203.
+        gain = None
+        for _ in range(40):
+            msg = conn.recv_match(type='NAMED_VALUE_FLOAT', blocking=True, timeout=0.3)
+            if msg is None:
+                break
+            name = getattr(msg, 'name', b'')
+            name = name.decode() if isinstance(name, bytes) else str(name)
+            if name.strip('\x00') == 'GAIN':
+                gain = float(msg.value)
+                break
+        if gain is None:
+            out.append((WARN, 'GAIN not seen', 'could not confirm MANUAL_CONTROL authority'))
+        elif gain < 0.99:
+            out.append((WARN, 'GAIN below 1.0',
+                        f'{gain:.2f} -- MANUAL_CONTROL is scaled by this; '
+                        f'params may not have persisted (fw R14)'))
+        else:
+            out.append((PASS, 'GAIN', f'{gain:.2f}'))
+    except Exception as exc:                       # noqa: BLE001
+        out.append((FAIL, 'SROT MAVLink probe raised', str(exc)))
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:                      # noqa: BLE001
+                pass
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     strict = '--strict' in argv
     skip_mav = '--skip-mavlink' in argv
+    # The SROT vehicle has no Pi, no BlueOS, no UDP and no Pixhawk: sections D/E/F
+    # would report on infrastructure that is not supposed to exist.
+    srot = '--srot' in argv
 
     failures = 0
     warnings = 0
@@ -638,34 +749,40 @@ def main(argv: list[str] | None = None) -> int:
     for st, lbl, det in _check_serial_drivers():
         emit(st, lbl, det)
 
-    # ---- D. network ------------------------------------------------- #
-    section('D. Network reachability')
-    if _ping(NETWORK['blueos_ip']):
-        emit(PASS, 'BlueOS', NETWORK['blueos_ip'])
-    else:
-        emit(WARN, 'BlueOS unreachable',
-             f"{NETWORK['blueos_ip']}  (expected in pool/desk mode)")
-    if _ping(NETWORK['jetson_ip']):
-        emit(PASS, 'Jetson', NETWORK['jetson_ip'])
-    else:
-        emit(WARN, 'Jetson unreachable',
-             f"{NETWORK['jetson_ip']}  (skip if you ARE the Jetson)")
-
-    # ---- E. MAVLink / autopilot ------------------------------------ #
-    section('E. MAVLink / autopilot')
-    if skip_mav:
-        emit(WARN, 'MAVLink probe skipped', '--skip-mavlink')
-    else:
-        for st, lbl, det in _check_mavlink():
+    if srot:
+        # ---- D-F (SROT): one USB cable replaces the whole network stack ---- #
+        section('D-F. SROT control board (direct USB serial)')
+        for st, lbl, det in _check_srot(skip_mav):
             emit(st, lbl, det)
-
-    # ---- F. Pixhawk USB -------------------------------------------- #
-    section('F. Pixhawk USB (desk mode)')
-    pix = _pixhawk_devices()
-    if pix:
-        emit(PASS, 'Pixhawk USB CDC', pix[0])
     else:
-        emit(PASS, 'no Pixhawk USB device', 'ok for UDP/BlueOS pool mode')
+        # ---- D. network ------------------------------------------------- #
+        section('D. Network reachability')
+        if _ping(NETWORK['blueos_ip']):
+            emit(PASS, 'BlueOS', NETWORK['blueos_ip'])
+        else:
+            emit(WARN, 'BlueOS unreachable',
+                 f"{NETWORK['blueos_ip']}  (expected in pool/desk mode)")
+        if _ping(NETWORK['jetson_ip']):
+            emit(PASS, 'Jetson', NETWORK['jetson_ip'])
+        else:
+            emit(WARN, 'Jetson unreachable',
+                 f"{NETWORK['jetson_ip']}  (skip if you ARE the Jetson)")
+
+        # ---- E. MAVLink / autopilot ------------------------------------ #
+        section('E. MAVLink / autopilot')
+        if skip_mav:
+            emit(WARN, 'MAVLink probe skipped', '--skip-mavlink')
+        else:
+            for st, lbl, det in _check_mavlink():
+                emit(st, lbl, det)
+
+        # ---- F. Pixhawk USB -------------------------------------------- #
+        section('F. Pixhawk USB (desk mode)')
+        pix = _pixhawk_devices()
+        if pix:
+            emit(PASS, 'Pixhawk USB CDC', pix[0])
+        else:
+            emit(PASS, 'no Pixhawk USB device', 'ok for UDP/BlueOS pool mode')
 
     # ---- G. BNO085 -------------------------------------------------- #
     section('G. Yaw source (BNO085)')
@@ -681,9 +798,20 @@ def main(argv: list[str] | None = None) -> int:
     emit(st, 'Nucleus 1000', det)
 
     # ---- I. payload ------------------------------------------------- #
-    section('I. Payload board (CH340)')
-    st, det = _check_payload()
-    emit(st, 'payload serial link', det)
+    if srot:
+        # The payload is the board's own PCA9685 over MAVLink -- there is no separate
+        # USB board to probe, and probing would be actively harmful: the old payload
+        # ESP32 is the SAME CH340 VID/PID as the SROT board, so the scan opens the
+        # board's own port and fights the MAVLink link.
+        section('I. Payload (SROT PCA9685 over MAVLink)')
+        emit(PASS, 'payload rides the MAVLink link', 'no separate USB board on srot')
+        _line('NOTE', 'payload_fire_map',
+              'fire() refuses until this ROS param maps each channel to its '
+              'PCA channel + servo/relay type')
+    else:
+        section('I. Payload board (CH340)')
+        st, det = _check_payload()
+        emit(st, 'payload serial link', det)
 
     # ---- J. cameras ------------------------------------------------- #
     section('J. Cameras (forward + downward)')

@@ -33,6 +33,17 @@ file mirrors only the parts that affect the software stack.
 | Grabber  | Aluminum, in-house machined                | **Current sensor** detects successful grasp + safety trip.      |
 | Dropper  | Solenoid-based                             | Plastic-coated aluminum marker, deviation-free descent.         |
 
+> **⚠ Backend-dependent — the paragraph below is the PIXHAWK path only.**
+> On the **SROT** backend (`flight_controller:=srot`, the default on branch `srot`) the
+> payload is **integrated into the control board**: a PCA9685 I²C expander driven over
+> MAVLink with `DO_SET_SERVO` (183, 1-based channel → µs) and `DO_SET_RELAY` (181, 0-based
+> instance → PCA ch `PCA_RELAY_BASE_CH + n`). There is **no separate USB ESP32** — and it
+> must not be scanned for, since it was the same CH340 VID/PID as the board itself and
+> would steal the serial port. Driver: `SrotPayload` in `fc/srot_fc.py`, which fires a
+> **bounded pulse in try/finally** (never leaves a solenoid energised) and **refuses until
+> the `payload_fire_map` ROS param is set** rather than guessing the wiring.
+> So the "no `MAV_CMD_DO_SET_SERVO` path" claim below is TRUE for Pixhawk and FALSE for SROT.
+
 Torpedo and dropper are actuated **NOT** through the Pixhawk — there is no
 `MAV_CMD_DO_SET_SERVO` / AUX path and no `Pixhawk.set_servo_pwm` method.
 They are driven from an **ESP32-C3 over USB serial** (separate from the

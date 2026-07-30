@@ -39,18 +39,58 @@ from . import srot_protocol as sp
 
 # COMMAND_ACK.result -> MoveResult code. Terminal set + values live in
 # srot_protocol (pinned, since older pymavlink dialects lack CANCELLED=6).
+# TEMPORARILY_REJECTED means the board missed a state mutex at dispatch, so the
+# move never started -- same outcome as FAILED for a caller, different reason text.
 _ACK_TO_CODE = {sp.ACK_ACCEPTED: SUCCEEDED, sp.ACK_CANCELLED: PREEMPTED,
-                sp.ACK_FAILED: FAILED, sp.ACK_DENIED: DENIED}
+                sp.ACK_FAILED: FAILED, sp.ACK_DENIED: DENIED,
+                sp.ACK_TEMPORARILY_REJECTED: FAILED}
 
 _ARMED_FLAG = mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
 
 _POLL_S = 0.05    # cache-poll granularity for ack/arm/mode loops
 _LINK_STALE_S = 3.0
 
+_ACK_MARGIN_S     = 5.0    # slack over the expected leg time before calling it a stall
+_ACK_MIN_BUDGET_S = 8.0    # floor, so a 0.5 s leg still tolerates a slow first ACK
+_STYLE_ROLL_S     = 360.0 / 90.0   # MOVE_STYLE is always a roll at 90 deg/s
+
 
 def _finite(*vals) -> bool:
     """True iff every value is a finite float (goal validation before send)."""
     return all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals)
+
+
+def _ack_budget_s(verb: str, p1: float, p2: float, p5: float) -> float:
+    """How long to wait for a terminal ACK before declaring a stall.
+
+    Why this is not just `p5 + margin`: p5 is the board's own *safety* timeout and
+    is 0 (-> the board's 60 s default) for every verb whose `commands.py` row has no
+    `timeout` field -- move_forward/left/right, stop, pause. A 3 s move would then
+    hold the action thread for 65 s before giving up.
+
+    That matters because the host deadline is the ONLY terminator, not a backstop:
+    if a failsafe or an operator mode change takes the board out of AUTO mid-leg,
+    `mv_active` freezes true and the board streams IN_PROGRESS forever -- neither
+    the done-condition nor the un-startable escape hatch can fire again
+    (fw task_control_loop.cpp:542-544,731-741 + mav_stream.cpp:507,514).
+
+    So budget from what the leg should actually take, and use p5 only as a floor.
+    """
+    move_type = int(p1)
+    if move_type in (sp.MOVE_FORWARD, sp.MOVE_BACK, sp.MOVE_STRAFE_L,
+                     sp.MOVE_STRAFE_R, sp.MOVE_ARC, sp.MOVE_HOLD):
+        expected = abs(float(p2))                       # p2 is duration_s
+    elif move_type == sp.MOVE_TURN:
+        expected = abs(float(p2)) / sp.MOVE_YAW_RATE    # degrees at the default rate
+    elif move_type == sp.MOVE_DIVE:
+        expected = abs(float(p2)) / sp.MOVE_DEPTH_RATE  # metres at the ramp rate
+    elif move_type == sp.MOVE_STYLE:
+        expected = abs(float(p2)) * _STYLE_ROLL_S       # 360 deg at 90 deg/s
+    else:                                               # MOVE_STOP and anything new
+        expected = 0.0
+    # x2 covers ramp + brake + a slow board; the floor keeps a tiny leg's deadline
+    # sane, and p5 (when the caller set one) is honoured as a lower bound.
+    return max(expected * 2.0 + _ACK_MARGIN_S, _ACK_MIN_BUDGET_S, float(p5 or 0.0) + _ACK_MARGIN_S)
 
 
 def _param_id(pv) -> str:
@@ -77,6 +117,8 @@ class SrotFC(FlightController):
         # regardless of source, so mode/armed must prefer the vehicle's -- same
         # guard Pixhawk uses via _last_autopilot_hb.
         self._last_vehicle_hb = None
+        # (move_type, speed) of the last translation leg sent, for the abort brake.
+        self._last_leg = None
 
     def _vehicle_hb(self):
         """Latest HEARTBEAT from the vehicle, ignoring GCS/loopback frames.
@@ -230,8 +272,43 @@ class SrotFC(FlightController):
         with self._tx_lock:
             self.master.mav.manual_control_send(sp.VEHICLE_SYSID, x, y, z, r, 0)
 
+    def _brake_last_leg(self) -> bool:
+        """Null the momentum of the last translation leg with a short REVERSE move.
+
+        MOVE_STOP alone is a COAST, not a brake (see sp.BRAKE_* for the firmware
+        reason), so on a board with no position estimate an abort would otherwise
+        let a 20 kg hull keep travelling. Returns True if a brake leg was sent.
+
+        Only translations are braked -- yaw is a rate the board bleeds itself and
+        depth is a hold; reversing either fights the controller.
+        """
+        leg = self._last_leg
+        if leg is None:
+            return False
+        move_type, speed = leg
+        reverse = sp.BRAKE_REVERSE.get(move_type)
+        if reverse is None or speed < sp.BRAKE_MIN_SPEED:
+            return False
+        brake_s = min(sp.BRAKE_K * speed, sp.BRAKE_MAX_S)
+        # p5 (board timeout) is set to the same span so a lost ACK can never leave
+        # the brake leg running longer than the brake itself.
+        self._command_long(sp.CMD_SROT_MOVE, p1=float(reverse), p2=float(brake_s),
+                           p3=float(sp.sanitize_speed(speed * sp.BRAKE_GAIN)),
+                           p5=float(brake_s))
+        if self._log is not None:
+            self._log.info(f'[SROT ] brake: reverse {brake_s:.2f}s @ '
+                           f'{speed * sp.BRAKE_GAIN:.2f} (leg speed {speed:.2f})')
+        time.sleep(brake_s)
+        return True
+
     def stop_motion(self) -> None:
-        """Brake to a halt (SROT_MOVE type 6). Used for cooperative abort/cancel."""
+        """Bring the vehicle to an actual halt: brake the last leg, then MOVE_STOP.
+
+        The MOVE_STOP is still sent even when a brake ran -- it is what makes the
+        board resolve the displaced sequence as CANCELLED and settle at zero.
+        """
+        self._brake_last_leg()
+        self._last_leg = None
         self._command_long(sp.CMD_SROT_MOVE, p1=float(sp.MOVE_STOP))
 
     # -- payload (PCA9685 on the board -- integrated, no separate USB ESP32) --- #
@@ -265,26 +342,32 @@ class SrotFC(FlightController):
         if not _finite(p1, p2, p3, p4, p5):
             return MoveResult(DENIED, f'{verb}: non-finite parameter -- refused host-side')
 
+        # 'stop' means stop: brake the previous leg instead of coasting into MOVE_STOP.
+        if verb == 'stop':
+            self._brake_last_leg()
+
         self._clear_ack()
         self._command_long(sp.CMD_SROT_MOVE, p1=p1, p2=p2, p3=p3, p4=p4, p5=p5)
-        return self._relay_move_ack(verb, on_progress, abort_fn, p5)
+        # Remember the leg so a later abort/stop knows which axis to reverse.
+        self._last_leg = (int(p1), float(p3)) if int(p1) in sp.BRAKE_REVERSE else None
+        return self._relay_move_ack(verb, on_progress, abort_fn,
+                                    _ack_budget_s(verb, p1, p2, p5))
 
-    def _relay_move_ack(self, verb, on_progress, abort_fn, timeout_s) -> MoveResult:
-        # Deadline: the board's own timeout (p5) plus margin; 60 s default when 0.
-        budget = (float(timeout_s) if timeout_s and timeout_s > 0 else 60.0) + 5.0
+    def _relay_move_ack(self, verb, on_progress, abort_fn, budget) -> MoveResult:
         deadline = time.monotonic() + budget
         last_prog = -1.0
         while time.monotonic() < deadline:
             if abort_fn is not None and abort_fn():
-                self.stop_motion()               # brake; board resolves CANCELLED
-                return MoveResult(ABORTED, f'{verb}: aborted (stop sent)')
+                self.stop_motion()       # real brake, then STOP -> board CANCELs the seq
+                return MoveResult(ABORTED, f'{verb}: aborted (braked to a stop)')
             ack = self._cache('COMMAND_ACK')
             if ack is not None and ack.command == sp.CMD_SROT_MOVE:
                 if ack.result in sp.TERMINAL_ACKS:
                     code = _ACK_TO_CODE[ack.result]
                     if on_progress is not None and code == SUCCEEDED:
                         on_progress(1.0)
-                    return MoveResult(code, self._terminal_reason(verb, code))
+                    return MoveResult(
+                        code, self._terminal_reason(verb, code, ack.result))
                 if ack.result == sp.ACK_IN_PROGRESS and on_progress is not None:
                     prog = float(getattr(ack, 'progress', 0)) / 100.0
                     if prog != last_prog:
@@ -295,12 +378,16 @@ class SrotFC(FlightController):
         self.stop_motion()
         return MoveResult(TIMEOUT, f'{verb}: no terminal ACK within {budget:.0f}s (stall)')
 
-    def _terminal_reason(self, verb, code) -> str:
+    def _terminal_reason(self, verb, code, result=None) -> str:
         if code == SUCCEEDED:
             return f'{verb}: completed'
         if code == PREEMPTED:
             return f'{verb}: preempted by a newer move'
         st = self._statustext()
+        if result == sp.ACK_TEMPORARILY_REJECTED:
+            # Distinct from a plain FAILED: the board was busy, not unable. Say so,
+            # because "retry" is the right response here and not for the others.
+            return f'{verb}: board busy (state lock) -- not started, safe to retry'
         if code == FAILED:
             return f'{verb}: could not start' + (f' ({st})' if st else '')
         return f'{verb}: denied' + (f' ({st})' if st else '')
@@ -327,19 +414,39 @@ class SrotFC(FlightController):
             t.yaw_deg = math.degrees(att.yaw) % 360.0
             t.roll_deg = math.degrees(att.roll)
             t.pitch_deg = math.degrees(att.pitch)
-        # Depth: VFR_HUD.alt = -depth (negative underwater) -> positive-down depth_m.
+        # Depth: NEGATIVE below the surface, same as Pixhawk/AHRS2 and as
+        # DuburiState.msg documents. VFR_HUD.alt is already in that convention
+        # (fw sends alt = -depth), so pass it through -- see get_attitude().
         # Stays NaN until VFR_HUD arrives (5 Hz).
         vhud = self._cache('VFR_HUD')
         if vhud is not None:
-            t.depth_m = -float(vhud.alt)
+            t.depth_m = float(vhud.alt)
         batt = self._cache('BATTERY_STATUS')     # id 0 = electronics pack
         if batt is not None:
             volts = getattr(batt, 'voltages', [65535])
             mv = volts[0] if volts else 65535
             t.battery_voltage = (mv / 1000.0) if mv not in (0, 65535) else math.nan
-        esc = self._cache('ESC_STATUS')           # per-thruster RPM (Bluejay bidir DShot)
+        # Per-thruster RPM (Bluejay bidirectional DShot).
+        #
+        # ⚠ THIS IS ALWAYS EMPTY on pymavlink 2.4.49: upstream MAVLink removed the
+        # WIP messages 290/291 from `common`, so ESC_STATUS (291) is in NO dialect we
+        # ship (checked common / ardupilotmega / all / development). pymavlink drops
+        # any msgid missing from its CRC-extra table SILENTLY -- no error, no callback
+        # -- so the board can be reporting RPM perfectly while we read nothing. Bondor
+        # lost every RPM packet to exactly this and it looked like an ESC fault.
+        #
+        # Do NOT build /duburi/esc_rpm on this until it is resolved. The clean fix is
+        # board-side: ESC_TELEMETRY_1_TO_4 (11030) + ESC_TELEMETRY_5_TO_8 (11031) ARE
+        # in the ardupilotmega dialect and carry 4 ESCs each -- an exact fit for our 8
+        # thrusters. Raised as item 10 in JETSON_FEEDBACK.md.
+        esc = self._cache('ESC_STATUS')
         if esc is not None:
             t.rpm = tuple(int(r) for r in getattr(esc, 'rpm', ()) or ())
+        elif t.rpm == ():
+            for name in ('ESC_TELEMETRY_1_TO_4', 'ESC_TELEMETRY_5_TO_8'):
+                block = self._cache(name)
+                if block is not None:
+                    t.rpm = t.rpm + tuple(int(r) for r in getattr(block, 'rpm', ()) or ())
         leak = self._named_value('LEAK')
         if leak is not None:
             t.leak = leak >= 0.5
@@ -361,15 +468,24 @@ class SrotFC(FlightController):
         """{'yaw'(deg 0..360),'roll'(deg),'pitch'(deg),'depth'(m)} or None.
 
         Same shape as Pixhawk.get_attitude so the manager's telemetry/state path
-        is unchanged. yaw in degrees (ATTITUDE is radians); depth from VFR_HUD
-        (alt = -depth)."""
+        is unchanged. yaw in degrees (ATTITUDE is radians).
+
+        DEPTH SIGN: this stack's convention -- DuburiState.msg, set_depth's input,
+        STYLE_ROLL_SURFACE_GUARD_M, motion_vision's _MIN_DEPTH_M / max_depth_m /
+        depth_ceiling_m -- is NEGATIVE below the surface, matching Pixhawk's
+        AHRS2.altitude. The board is positive-DOWN internally but already negates
+        on the wire (`VFR_HUD.alt = -depth`, fw mav_stream.cpp:210-218), so alt is
+        ALREADY in our convention. Pass it straight through: negating here too
+        made /duburi/state.depth_m positive when submerged, which silently
+        inverted every one of those guards (they all compare against a negative
+        constant, so each just stopped firing)."""
         att = self._cache('ATTITUDE')
         if att is None:
             return None
         depth = math.nan
         vhud = self._cache('VFR_HUD')
         if vhud is not None:
-            depth = -float(vhud.alt)
+            depth = float(vhud.alt)
         return {
             'yaw':   math.degrees(att.yaw) % 360.0,
             'roll':  math.degrees(att.roll),
@@ -580,6 +696,38 @@ MOVE_VERBS = frozenset({
 })   # 'arc' excluded: heading-hold vs SROT's rate-arc mismatch (see _build_params)
 
 
+# Verbs that must be REFUSED on this backend rather than dispatched.
+#
+# Everything here reaches Pixhawk-only primitives that SrotFC does not implement
+# (`send_rc_override` / `send_rc_translation` / `send_rc_yaw_only` /
+# `set_target_depth`) or gates on the ArduSub-only ALT_HOLD mode. Left to fall
+# through, each fails in a way that is WORSE than an honest refusal:
+#
+#   lock_heading  returns success=True and holds nothing, while HeadingLock's
+#                 daemon swallows an AttributeError 50x/second for the lock's
+#                 300 s lifetime. A mission that believes its heading is held
+#                 will dead-reckon straight off course -- the single most
+#                 dangerous of these.
+#   move_back     MOVE_BACK=1 exists on the wire but has no _build_params branch,
+#                 so it takes the Pixhawk path and raises AttributeError. The
+#                 asymmetry with move_forward (which collapses to the board) is
+#                 exactly the kind of thing that is found in the water.
+#   *_dist        DVL-driven distance moves; the streamed path is not ported.
+#   vision_*      the 20 Hz vision loop writes RC channels directly.
+#   arc/style_yaw die at the ALT_HOLD mode gate with a confusing ModeChangeError.
+#
+# The manager checks this BEFORE dispatch and returns a clean success=False, which
+# is what `srot-integration.md` always claimed the behaviour was. Removing a verb
+# from this set is how the port lands: implement it, then delete the line.
+UNSUPPORTED_VERBS = frozenset({
+    'lock_heading',
+    'move_back',
+    'move_forward_dist', 'move_back_dist', 'move_lateral_dist',
+    'vision_align', 'vision_move',
+    'arc', 'style_yaw',
+})
+
+
 # ---------------------------------------------------------------------- #
 #  SrotPayload -- payload over MAVLink (replaces the obsolete USB ESP32)  #
 # ---------------------------------------------------------------------- #
@@ -593,14 +741,23 @@ MOVE_VERBS = frozenset({
 # (a MOSFET held on burns the solenoid coil; a servo held at end-stop stalls).
 _FIRE_PULSE_S = 0.6   # > any PCA service tick; long enough for a servo to travel
 
-# Default = the config.h payload servo on PCA ch 0 for channel 1, then the next
-# three servo channels. VERIFY against the real wiring before trusting it.
-_FIRE_MAP = {
-    1: ('servo', 1, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # torpedo_1 -> PCA servo ch 0
-    2: ('servo', 2, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # torpedo_2 -> PCA servo ch 1
-    3: ('servo', 3, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # dropper_1 -> PCA servo ch 2
-    4: ('servo', 4, sp.SERVO_MAX_US, sp.SERVO_MIN_US),   # dropper_2 -> PCA servo ch 3
-}
+# EMPTY BY DESIGN -- fire() refuses until the real wiring is configured.
+#
+# There is no safe default here. Which PCA channel each of torpedo_1/2 and
+# dropper_1/2 is on, and whether each is a servo or a MOSFET, are hardware facts
+# this code cannot infer, and guessing them means firing the wrong actuator on a
+# live vehicle. A loud "not configured" beats a silent mis-actuation.
+#
+# Set it from the operator's wiring via `SrotFC`'s `fire_map` argument (the
+# manager plumbs the `payload_fire_map` ROS param through), e.g.:
+#     {1: ('relay', 0), 2: ('relay', 1), 3: ('servo', 3, 2000, 1000)}
+#
+# Round 3 (fw R15) made every channel reachable by its own number whatever its
+# role: on a role-2 (MOSFET/switch) channel DO_SET_SERVO now treats the pulse
+# width as a level, >=1500 us = ON. So a ('servo', ch, 2000, 1000) entry does
+# drive a MOSFET correctly -- but only once SERVOn_ROLE is actually set to 2.
+# Prefer ('relay', n) for channels 9-16, which map as PCA_RELAY_BASE_CH + n.
+_FIRE_MAP: dict = {}
 
 
 class SrotPayload:
@@ -629,9 +786,12 @@ class SrotPayload:
         spec = self._map.get(int(channel))
         if spec is None:
             if self._log:
-                self._log.warning(
-                    f'[PAYLOAD] SROT: channel {channel} not mapped -- set _FIRE_MAP '
-                    f'from the real PCA9685 wiring; no actuation')
+                what = ('the payload fire map is EMPTY' if not self._map
+                        else f'channel {channel} is not in the fire map')
+                self._log.error(
+                    f'[PAYLOAD] SROT: NOT FIRED -- {what}. Set the `payload_fire_map` '
+                    f'ROS param from the real PCA9685 wiring, e.g. '
+                    f'"1:relay:0, 2:relay:1, 3:servo:3". Refusing to guess.')
             return False
         kind = spec[0]
         try:
