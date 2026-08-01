@@ -167,6 +167,15 @@ Full detail, verb table, workarounds and bench runbook:
 Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEEDBACK.md`
 (the Round 6 reply at the end answers their three open decisions). Their reply to us:
 `Mongla_others/srot-control-board/FIRMWARE_CHANGELOG_FOR_DUBURI.md`.
+What we sent the three sibling agents on 2026-08-01 (what we changed, what we need back, and
+the bench measurements we owe them): `DUBURI_WS_HANDOFF_2026-08-01.md` in **each** of
+`srot-control-board` / `srot-ground-station` / `srot-esc-flasher`.
+
+**⛔ The depth gate is wider than "dive verbs".** `SROT_MOVE` auto-enters `AUTO`, and the `AUTO`
+branch closes the depth loop under **every** primitive (fw `task_control_loop.cpp:236-237`) —
+there is no depth-free path through it. So a plain `move_forward` runs the loop that has never
+run closed. Both bench checks gate **every AUTO move**, not just `set_depth`/vision-depth, and
+an **in-air** `move_forward` is not partial validation (at ~0 m target and measurement agree).
 
 **Cross-repo rules (start here before touching anything shared):**
 [`.claude/context/cross-repo-contract.md`](.claude/context/cross-repo-contract.md) — the
