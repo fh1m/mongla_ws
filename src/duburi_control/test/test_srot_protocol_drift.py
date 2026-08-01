@@ -166,10 +166,28 @@ def test_esc_status_291_is_absent_from_our_dialect():
 
     If this test starts FAILING, pymavlink gained the message: delete the
     ESC_TELEMETRY fallback in SrotFC.telemetry() and read 291 directly.
+
+    ASSERTED AGAINST THE RUNTIME DIALECT, not against `dialects.v20.ardupilotmega`.
+    This test used to import the v20 module directly and check ITS map -- which is a
+    different object from the one the vehicle decodes with. pymavlink binds ONE dialect
+    at import time from the environment, and the DEFAULT is `dialects.v10.ardupilotmega`
+    (MAVLink 1), where 11030/11031 do not exist. So the old assertion passed while a
+    default-configured connection decoded nothing: green test, zero RPM.
+
+    Measured on the board in-vehicle: with the default dialect the ESC frames arrive and
+    are reported as UNKNOWN_291 / UNKNOWN_11030 / UNKNOWN_11031. Importing `srot_fc`
+    (which sets MAVLINK20 before importing pymavlink, as pixhawk.py does) is what makes
+    the map below the real one. Test what runs.
     """
-    from pymavlink.dialects.v20 import ardupilotmega as dialect
-    assert 291 not in dialect.mavlink_map, (
+    from duburi_control.fc import srot_fc            # noqa: F401  -- sets MAVLINK20
+    from pymavlink import mavutil
+    runtime_map = mavutil.mavlink.mavlink_map
+
+    assert mavutil.mavlink.__name__.startswith('pymavlink.dialects.v20'), (
+        f'runtime dialect is {mavutil.mavlink.__name__}, not v20 -- MAVLINK20 was not '
+        f'set before pymavlink was imported, and the ESC telemetry will silently vanish')
+    assert 291 not in runtime_map, (
         'ESC_STATUS (291) is now in the dialect -- simplify SrotFC.telemetry()')
     # The fallback we rely on instead must exist, or there is no RPM path at all.
-    assert 11030 in dialect.mavlink_map and 11031 in dialect.mavlink_map, \
+    assert 11030 in runtime_map and 11031 in runtime_map, \
         'ESC_TELEMETRY_1_TO_4 / 5_TO_8 missing -- no usable RPM message remains'

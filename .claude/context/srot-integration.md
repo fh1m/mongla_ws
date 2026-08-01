@@ -182,6 +182,16 @@ mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_dista
   as Pixhawk AHRS2). We were negating it a second time, which made `/duburi/state.depth_m`
   positive when submerged and silently disabled every depth guard in the stack (they all
   compare against a negative constant, so none of them errored — they just stopped firing).
+- **⚠ pymavlink's DEFAULT dialect is MAVLink *1* (`dialects.v10.ardupilotmega`), where
+  `ESC_TELEMETRY_1_TO_4`/`_5_TO_8` (11030/11031) DO NOT EXIST.** Measured in-vehicle: the
+  board's ESC frames arrive and are reported as `UNKNOWN_291` / `UNKNOWN_11030` /
+  `UNKNOWN_11031` — zero RPM that looks exactly like an ESC or wiring fault. `MAVLINK20=1`
+  must be set **before** pymavlink is imported. `pixhawk.py` has always done this, which is
+  the only reason it worked; `fc/srot_fc.py` now does it too, so importing the srot backend
+  on its own (`bringup_check`, a test, a script) no longer silently loses ESC telemetry.
+  The drift test now asserts against `mavutil.mavlink.mavlink_map` — **the map the vehicle
+  actually decodes with** — not against the `dialects.v20` module, which is a different
+  object and was passing while the runtime path decoded nothing.
 - **`ESC_STATUS` (291) is in NO pymavlink dialect** (upstream removed 290/291 from `common`),
   and pymavlink drops unknown msgids **silently**. This finding was correct and still stands —
   but the firmware now **also** emits `ESC_TELEMETRY_1_TO_4`/`5_TO_8` (11030/11031), which
