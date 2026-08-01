@@ -27,10 +27,28 @@ bench-unverified. The facade gates dive-dependent verbs; this layer just sends t
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 
-from pymavlink import mavutil
+# MUST precede the pymavlink import, exactly as `duburi_control.pixhawk` does.
+#
+# pymavlink binds ONE dialect module at import time, chosen from the environment, and
+# the default is `dialects.v10.ardupilotmega` -- MAVLink *1*. ESC_TELEMETRY_1_TO_4
+# (11030) and _5_TO_8 (11031) do not exist there, so `decode()` returns
+# `UNKNOWN_11030` and `/duburi/esc_rpm` reads nothing. Silently: no error, no
+# callback, just zero RPM that looks exactly like an ESC or wiring fault. This is the
+# same trap that cost Bondor every RPM packet via ESC_STATUS.
+#
+# It happened to work only because `duburi_control/__init__` reaches `pixhawk.py`
+# first and pixhawk.py sets this. Anything importing `fc.srot_fc` on its own --
+# bringup_check, a test, a script -- got MAVLink 1 and lost the ESC telemetry. Setting
+# it here too is idempotent and removes the import-order dependency.
+#
+# MEASURED on the board (COM19, in-vehicle): with the default dialect the board's own
+# ESC frames arrive and are reported as UNKNOWN_291 / UNKNOWN_11030 / UNKNOWN_11031.
+os.environ['MAVLINK20'] = '1'
+from pymavlink import mavutil                      # noqa: E402
 
 from .base import (FlightController, Telemetry, MoveResult,
                    SUCCEEDED, PREEMPTED, FAILED, DENIED, TIMEOUT, ABORTED)
