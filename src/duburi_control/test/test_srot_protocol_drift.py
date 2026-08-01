@@ -144,6 +144,16 @@ def test_movement_phase_codes_match_the_firmware_enum():
     # `enum { PH_IDLE = 0, PH_CRUISE, PH_BRAKE, ... }` -- implicit increment after
     # the first, so position IS the value.
     names = [p.strip().split('=')[0].strip() for p in m.group(1).split(',') if p.strip()]
+    # Guard the PARSE before trusting it. Position-as-value only holds while the
+    # firmware assigns PH_IDLE = 0 and lets the rest increment implicitly; an
+    # explicit value or a gap would shift everything silently. And a regex that
+    # matched only the first two entries would sail through the loop below having
+    # checked almost nothing -- which is the same "green test, changed behaviour"
+    # failure this whole file exists to prevent.
+    assert len(names) == 8, f'expected 8 movement phases, parsed {len(names)}: {names}'
+    assert '=' not in m.group(1).split(',', 1)[1], (
+        'a later phase now carries an explicit value -- position is no longer the '
+        'value, so this test must parse name=value pairs instead')
     expected = {
         'PH_IDLE': sp.MV_IDLE,   'PH_CRUISE': sp.MV_CRUISE, 'PH_BRAKE': sp.MV_BRAKE,
         'PH_TURN': sp.MV_TURN,   'PH_DIVE': sp.MV_DIVE,     'PH_STYLE': sp.MV_STYLE,
