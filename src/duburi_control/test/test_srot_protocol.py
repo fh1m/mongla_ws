@@ -53,10 +53,27 @@ def test_mode_name_known_and_unknown():
 
 
 def test_mode_int_round_trip_and_case_insensitive():
+    """Every SETTABLE mode round-trips. STUNT/PATTERN deliberately do not."""
     for num, name in sp.MODE_NAMES.items():
+        if num in sp.MODE_NOT_SETTABLE:
+            continue
         assert sp.mode_int(name) == num
     assert sp.mode_int('auto') == sp.MODE_AUTO       # case-insensitive
     assert sp.mode_int('nonsense') is None
+
+
+def test_command_only_modes_are_named_but_not_settable():
+    """STUNT/PATTERN are asymmetric on purpose, and the asymmetry is the point.
+
+    `mode_name` MUST know them -- HEARTBEAT.custom_mode carries them, and a
+    supervisor that renders 'UNKNOWN(100)' cannot tell a real mode from a comms
+    fault. `mode_int` MUST refuse them -- DO_SET_MODE cannot enter these, so
+    letting one through buys an 8 s poll that ends in a misleading
+    "mode stayed STABILIZE" instead of an immediate, true answer.
+    """
+    for num, name in ((sp.MODE_STUNT, 'STUNT'), (sp.MODE_PATTERN, 'PATTERN')):
+        assert sp.mode_name(num) == name
+        assert sp.mode_int(name) is None
 
 
 # --------------------------------------------------------------------------- #
