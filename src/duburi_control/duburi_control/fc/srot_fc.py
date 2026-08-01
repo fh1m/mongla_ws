@@ -68,13 +68,19 @@ def _ack_budget_s(verb: str, p1: float, p2: float, p5: float) -> float:
     `timeout` field -- move_forward/left/right, stop, pause. A 3 s move would then
     hold the action thread for 65 s before giving up.
 
-    That matters because the host deadline is the ONLY terminator, not a backstop:
-    if a failsafe or an operator mode change takes the board out of AUTO mid-leg,
-    `mv_active` freezes true and the board streams IN_PROGRESS forever -- neither
-    the done-condition nor the un-startable escape hatch can fire again
-    (fw task_control_loop.cpp:542-544,731-741 + mav_stream.cpp:507,514).
+    This used to be the ONLY terminator: a failsafe or operator mode change mid-leg
+    froze `mv_active` true and the board streamed IN_PROGRESS forever, so nothing
+    but this deadline could end the action.
 
-    So budget from what the leg should actually take, and use p5 only as a floor.
+    Firmware behaviour rev 2 (fw AUDIT.md R35) fixed that at the source -- the board
+    now ends the move when AUTO is displaced and publishes `mv_*` unconditionally,
+    so the falling edge that latches the terminal ACK is observable from outside
+    AUTO. This is therefore a BACKSTOP now, for a dead link or a wedged board, not
+    the primary path.
+
+    Kept, and kept generous, for exactly that reason: the failure it still covers is
+    "no ACKs at all", where a too-tight deadline would report a bogus stall on a
+    slow-but-alive board. Budget from the expected leg time; p5 is only a floor.
     """
     move_type = int(p1)
     if move_type in (sp.MOVE_FORWARD, sp.MOVE_BACK, sp.MOVE_STRAFE_L,
@@ -119,6 +125,82 @@ class SrotFC(FlightController):
         self._last_vehicle_hb = None
         # (move_type, speed) of the last translation leg sent, for the abort brake.
         self._last_leg = None
+        # Board's SROT_FW_BEHAVIOUR_REV once read: int, or None while unknown.
+        self._behaviour_rev = None
+        self._behaviour_rev_logged = False
+        # Operator escape hatch (ROS param `allow_fw_behaviour_mismatch`). Off by
+        # default: the failure this guards is silent, so opting into it must not be.
+        self.allow_fw_behaviour_mismatch = False
+
+    # ------------------------------------------------------------------ #
+    #  Firmware behaviour revision -- the runtime interlock               #
+    # ------------------------------------------------------------------ #
+    def read_behaviour_rev(self, timeout: float = 2.0, retries: int = 3):
+        """Board's `SROT_FW_BEHAVIOUR_REV`, or None if it never answered.
+
+        Carried in `AUTOPILOT_VERSION.middleware_sw_version` (the board has no
+        middleware, so the field was free), requested with MAV_CMD_REQUEST_MESSAGE.
+
+        WHY THIS EXISTS AT RUNTIME. `test_firmware_behaviour_rev_is_new_enough`
+        checks the same number, but it reads the firmware repo off disk and skips
+        when that repo is not checked out beside the workspace -- which is exactly
+        the situation on the vehicle. As a vehicle-side guarantee it is worth zero.
+        The hazard it is supposed to guard is silent in both directions: pre-rev-2
+        firmware COASTS on MOVE_STOP and we no longer carry a host brake, so a
+        `stop` or an abort simply does not decelerate 20 kg of hull, with nothing
+        in any log to say why. That has to be caught on the wire, before arming.
+
+        A rev of 0 is NOT "unknown" -- it is what firmware older than 2026-08-01
+        reports, because that build never populated the field. Fail closed on it.
+        """
+        if self._behaviour_rev is not None:
+            return self._behaviour_rev
+        for _ in range(max(1, retries)):
+            self._command_long(mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE,
+                               p1=float(sp.MSG_ID_AUTOPILOT_VERSION))
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                msg = self._cache('AUTOPILOT_VERSION')
+                if msg is not None:
+                    self._behaviour_rev = int(getattr(msg, 'middleware_sw_version', 0))
+                    return self._behaviour_rev
+                time.sleep(_POLL_S)
+        return None
+
+    def check_behaviour_rev(self):
+        """(ok, reason). Fail-closed on a KNOWN-too-old board; loud but permissive
+        when the board did not answer at all.
+
+        The asymmetry is deliberate. "Board says rev 1" is a definite statement that
+        `stop` will coast, and refusing is right. "Board said nothing" is far more
+        likely a dropped frame or a firmware without REQUEST_MESSAGE than a genuine
+        rev-1 board, and bricking a vehicle on a comms hiccup is its own hazard --
+        so that case warns hard on every attempt and lets the operator proceed.
+        """
+        rev = self.read_behaviour_rev()
+        need = sp.FW_BEHAVIOUR_REV_REQUIRED
+        if rev is None:
+            self._log_warn(
+                f'[SROT ] !! could not read SROT_FW_BEHAVIOUR_REV from the board '
+                f'(AUTOPILOT_VERSION unanswered). Host expects >= {need}. If this '
+                f'firmware predates 2026-08-01, MOVE_STOP COASTS and there is no '
+                f'host-side brake -- stop/abort will NOT decelerate. Proceeding.')
+            return True, 'FW_BEHAVIOUR_REV_UNKNOWN'
+        if rev >= need:
+            if not self._behaviour_rev_logged:
+                self._log_info(f'[SROT ] firmware behaviour rev {rev} (>= {need} required)')
+                self._behaviour_rev_logged = True
+            return True, f'FW_BEHAVIOUR_REV={rev}'
+        detail = (f'board reports SROT_FW_BEHAVIOUR_REV={rev}, host requires >= {need}. '
+                  f'Rev < 2 COASTS on MOVE_STOP and this host no longer carries the '
+                  f'reverse-leg brake, so stop/abort would not decelerate the hull. '
+                  f'Flash rev >= {need}, or set allow_fw_behaviour_mismatch:=true if '
+                  f'you accept an un-braked stop.')
+        if self.allow_fw_behaviour_mismatch:
+            self._log_warn(f'[SROT ] !! OVERRIDDEN: {detail}')
+            return True, f'FW_BEHAVIOUR_REV_OVERRIDDEN={rev}'
+        self._log_warn(f'[SROT ] !! REFUSING TO ARM: {detail}')
+        return False, f'FW_BEHAVIOUR_REV_TOO_OLD: {detail}'
 
     def _vehicle_hb(self):
         """Latest HEARTBEAT from the vehicle, ignoring GCS/loopback frames.
@@ -197,7 +279,15 @@ class SrotFC(FlightController):
     # ------------------------------------------------------------------ #
     def arm(self, timeout: float = 15.0, abort=None):
         """COMPONENT_ARM_DISARM p1=1. ACK carries a rejection (pre-arm), then poll
-        HEARTBEAT for the armed bit. Honours ``abort`` (()->bool) mid-poll."""
+        HEARTBEAT for the armed bit. Honours ``abort`` (()->bool) mid-poll.
+
+        Gated on the board's firmware behaviour revision: arming is the last point
+        before anything can move, and every path to motion goes through it, so it is
+        where a known-too-old board has to be turned away. See `check_behaviour_rev`.
+        """
+        ok, reason = self.check_behaviour_rev()
+        if not ok:
+            return False, reason
         return self._arm_disarm(True, timeout, abort)
 
     def disarm(self, timeout: float = 15.0):
@@ -272,42 +362,25 @@ class SrotFC(FlightController):
         with self._tx_lock:
             self.master.mav.manual_control_send(sp.VEHICLE_SYSID, x, y, z, r, 0)
 
-    def _brake_last_leg(self) -> bool:
-        """Null the momentum of the last translation leg with a short REVERSE move.
-
-        MOVE_STOP alone is a COAST, not a brake (see sp.BRAKE_* for the firmware
-        reason), so on a board with no position estimate an abort would otherwise
-        let a 20 kg hull keep travelling. Returns True if a brake leg was sent.
-
-        Only translations are braked -- yaw is a rate the board bleeds itself and
-        depth is a hold; reversing either fights the controller.
-        """
-        leg = self._last_leg
-        if leg is None:
-            return False
-        move_type, speed = leg
-        reverse = sp.BRAKE_REVERSE.get(move_type)
-        if reverse is None or speed < sp.BRAKE_MIN_SPEED:
-            return False
-        brake_s = min(sp.BRAKE_K * speed, sp.BRAKE_MAX_S)
-        # p5 (board timeout) is set to the same span so a lost ACK can never leave
-        # the brake leg running longer than the brake itself.
-        self._command_long(sp.CMD_SROT_MOVE, p1=float(reverse), p2=float(brake_s),
-                           p3=float(sp.sanitize_speed(speed * sp.BRAKE_GAIN)),
-                           p5=float(brake_s))
-        if self._log is not None:
-            self._log.info(f'[SROT ] brake: reverse {brake_s:.2f}s @ '
-                           f'{speed * sp.BRAKE_GAIN:.2f} (leg speed {speed:.2f})')
-        time.sleep(brake_s)
-        return True
-
     def stop_motion(self) -> None:
-        """Bring the vehicle to an actual halt: brake the last leg, then MOVE_STOP.
+        """Bring the vehicle to an actual halt.
 
-        The MOVE_STOP is still sent even when a brake ran -- it is what makes the
-        board resolve the displaced sequence as CANCELLED and settle at zero.
+        Just MOVE_STOP now. Firmware behaviour rev 2 (fw AUDIT.md R36) made the
+        wire-reachable MOVE_STOP brake along the outgoing leg's axis, so the
+        host-side reverse-leg brake this used to run is gone -- keeping it would
+        kick the hull twice.
+
+        Worth recording why our tripwire did not catch that: we asserted on the
+        SHAPE of their C++ (`abort()` appearing in the `Type::STOP` case). They
+        fixed it by restoring the axis and speed `start()` had zeroed before the
+        switch, so the string never appeared and the test stayed green while the
+        behaviour changed. Their own suggested fix would not have worked either,
+        for the same reason -- `abort()` does not restore those fields. We now
+        assert on `sp.FW_BEHAVIOUR_REV` instead.
+
+        The board still resolves the displaced sequence as CANCELLED and settles
+        at zero, which is what makes this usable as the ROS-cancel action.
         """
-        self._brake_last_leg()
         self._last_leg = None
         self._command_long(sp.CMD_SROT_MOVE, p1=float(sp.MOVE_STOP))
 
@@ -342,14 +415,10 @@ class SrotFC(FlightController):
         if not _finite(p1, p2, p3, p4, p5):
             return MoveResult(DENIED, f'{verb}: non-finite parameter -- refused host-side')
 
-        # 'stop' means stop: brake the previous leg instead of coasting into MOVE_STOP.
-        if verb == 'stop':
-            self._brake_last_leg()
-
+        # No host-side brake before a 'stop' any more: fw rev 2 brakes on-board.
         self._clear_ack()
         self._command_long(sp.CMD_SROT_MOVE, p1=p1, p2=p2, p3=p3, p4=p4, p5=p5)
-        # Remember the leg so a later abort/stop knows which axis to reverse.
-        self._last_leg = (int(p1), float(p3)) if int(p1) in sp.BRAKE_REVERSE else None
+        self._last_leg = None
         return self._relay_move_ack(verb, on_progress, abort_fn,
                                     _ack_budget_s(verb, p1, p2, p5))
 
@@ -435,10 +504,12 @@ class SrotFC(FlightController):
         # -- so the board can be reporting RPM perfectly while we read nothing. Bondor
         # lost every RPM packet to exactly this and it looked like an ESC fault.
         #
-        # Do NOT build /duburi/esc_rpm on this until it is resolved. The clean fix is
-        # board-side: ESC_TELEMETRY_1_TO_4 (11030) + ESC_TELEMETRY_5_TO_8 (11031) ARE
-        # in the ardupilotmega dialect and carry 4 ESCs each -- an exact fit for our 8
-        # thrusters. Raised as item 10 in JETSON_FEEDBACK.md.
+        # RESOLVED as of fw behaviour rev 2, exactly as this comment proposed: the board
+        # now ALSO emits ESC_TELEMETRY_1_TO_4 (11030) + ESC_TELEMETRY_5_TO_8 (11031),
+        # which ARE in the ardupilotmega dialect and carry 4 ESCs each -- an exact fit
+        # for our 8 thrusters. `/duburi/esc_rpm` is built on that fallback below (see
+        # `_publish_srot_telemetry`), NOT on the ESC_STATUS branch, which stays only so
+        # the read is free if pymavlink ever regains 291.
         esc = self._cache('ESC_STATUS')
         if esc is not None:
             t.rpm = tuple(int(r) for r in getattr(esc, 'rpm', ()) or ())
@@ -553,7 +624,24 @@ class SrotFC(FlightController):
         return None
 
     def set_message_rate(self, message_id, hz):
-        """No-op: SROT telemetry rates are fixed on-board (no SET_MESSAGE_INTERVAL)."""
+        """MAV_CMD_SET_MESSAGE_INTERVAL (511). Fire-and-forget, like Pixhawk's.
+
+        This was a no-op -- "SROT telemetry rates are fixed on-board" -- which made
+        the board's 10 Hz ATTITUDE the hard ceiling on every host loop, un-raisable
+        for a control loop and un-lowerable for a slow link. Firmware behaviour rev 2
+        implements 511 (and 510), so it is a real call now.
+
+        Board-side rules worth knowing: any interval is clamped to a 20 ms floor
+        (50 Hz) so a companion cannot starve the PARAM_VALUE / COMMAND_ACK traffic
+        missions depend on, and a request to DISABLE HEARTBEAT is refused with
+        DENIED rather than accepted-and-ignored. `hz <= 0` restores the board's
+        compiled default for that stream.
+        """
+        if hz is None:
+            return None
+        interval_us = 0.0 if hz <= 0 else float(1e6 / float(hz))
+        self._command_long(mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+                           p1=float(message_id), p2=interval_us)
         return None
 
     def calibrate_barometer(self, timeout: float = 6.0):
@@ -656,6 +744,12 @@ def _build_params(verb: str, kw: dict):
     speed = _speed_from_gain(kw)
     if verb == 'move_forward':
         return (sp.MOVE_FORWARD, dur, speed, 0.0, tmo)
+    if verb == 'move_back':
+        # MOVE_BACK=1 has always existed on the wire, and the old host brake already
+        # commanded it on every forward abort -- the verb was refused only because
+        # this branch was missing, so it fell through to the Pixhawk path and raised
+        # AttributeError. Pure host-side gap, no firmware change involved.
+        return (sp.MOVE_BACK, dur, speed, 0.0, tmo)
     if verb == 'move_left':
         return (sp.MOVE_STRAFE_L, dur, speed, 0.0, tmo)
     if verb == 'move_right':
@@ -691,7 +785,7 @@ def _build_params(verb: str, kw: dict):
 # through move(); everything else -- arm/disarm/set_mode, manual-streamed
 # move_*_dist / vision, fire, dvl -- goes through the other methods or stays host-side).
 MOVE_VERBS = frozenset({
-    'move_forward', 'move_left', 'move_right',
+    'move_forward', 'move_back', 'move_left', 'move_right',
     'yaw_left', 'yaw_right', 'turn', 'set_depth', 'stop', 'pause', 'style_roll',
 })   # 'arc' excluded: heading-hold vs SROT's rate-arc mismatch (see _build_params)
 
@@ -708,10 +802,6 @@ MOVE_VERBS = frozenset({
 #                 300 s lifetime. A mission that believes its heading is held
 #                 will dead-reckon straight off course -- the single most
 #                 dangerous of these.
-#   move_back     MOVE_BACK=1 exists on the wire but has no _build_params branch,
-#                 so it takes the Pixhawk path and raises AttributeError. The
-#                 asymmetry with move_forward (which collapses to the board) is
-#                 exactly the kind of thing that is found in the water.
 #   *_dist        DVL-driven distance moves; the streamed path is not ported.
 #   vision_*      the 20 Hz vision loop writes RC channels directly.
 #   arc/style_yaw die at the ALT_HOLD mode gate with a confusing ModeChangeError.
@@ -721,7 +811,6 @@ MOVE_VERBS = frozenset({
 # from this set is how the port lands: implement it, then delete the line.
 UNSUPPORTED_VERBS = frozenset({
     'lock_heading',
-    'move_back',
     'move_forward_dist', 'move_back_dist', 'move_lateral_dist',
     'vision_align', 'vision_move',
     'arc', 'style_yaw',
@@ -758,6 +847,81 @@ _FIRE_PULSE_S = 0.6   # > any PCA service tick; long enough for a servo to trave
 # drive a MOSFET correctly -- but only once SERVOn_ROLE is actually set to 2.
 # Prefer ('relay', n) for channels 9-16, which map as PCA_RELAY_BASE_CH + n.
 _FIRE_MAP: dict = {}
+
+
+def parse_fire_map(spec, log=None) -> dict:
+    """Parse the `payload_fire_map` ROS param string into the `_FIRE_MAP` shape.
+
+    Grammar (comma-separated entries, whitespace ignored) -- the format the
+    refusal message in `fire()` already tells the operator to use:
+
+        <channel>:relay:<instance>
+        <channel>:servo:<pca_ch>[:<fire_us>:<rest_us>]
+
+    e.g. ``"1:relay:0, 2:relay:1, 3:servo:3, 4:servo:5:1900:1100"``
+
+    `channel` is the duburi payload channel `fire()` is called with (1/2 torpedo,
+    3/4 dropper). `instance` is the 0-based DO_SET_RELAY instance, which the board
+    maps to PCA channel ``PCA_RELAY_BASE_CH + instance``. `pca_ch` is the 1-based
+    DO_SET_SERVO channel. Servo µs default to SERVO_MAX_US / SERVO_MIN_US.
+
+    A blank spec returns {} and `fire()` keeps refusing loudly -- correct when
+    nobody has stated the wiring. A MALFORMED entry is skipped with an error
+    rather than aborting the whole map: a typo in one channel must not silently
+    disarm the other three.
+    """
+    out: dict = {}
+    if not spec:
+        return out
+
+    def _bad(entry, why):
+        if log:
+            log.error(f'[PAYLOAD] payload_fire_map: ignoring {entry!r} -- {why}')
+
+    for raw in str(spec).split(','):
+        entry = raw.strip()
+        if not entry:
+            continue
+        parts = [p.strip() for p in entry.split(':')]
+        if len(parts) < 3:
+            _bad(entry, 'expected <channel>:relay:<instance> or '
+                        '<channel>:servo:<ch>[:fire_us:rest_us]')
+            continue
+        try:
+            channel = int(parts[0])
+            kind = parts[1].lower()
+            target = int(parts[2])
+        except ValueError:
+            _bad(entry, 'channel / instance / pca_ch must be integers')
+            continue
+        if channel <= 0:
+            _bad(entry, 'payload channel must be >= 1')
+            continue
+
+        if kind == 'relay':
+            n_relay = sp.PCA9685_NUM_CH - sp.PCA_RELAY_BASE_CH
+            if not 0 <= target < n_relay:
+                _bad(entry, f'relay instance {target} out of range (0..{n_relay - 1})')
+                continue
+            out[channel] = ('relay', target)
+        elif kind == 'servo':
+            if not 1 <= target <= sp.PCA9685_NUM_CH:
+                _bad(entry, f'servo channel {target} out of range (1..{sp.PCA9685_NUM_CH})')
+                continue
+            fire_us, rest_us = sp.SERVO_MAX_US, sp.SERVO_MIN_US
+            if len(parts) >= 5:
+                try:
+                    fire_us, rest_us = int(parts[3]), int(parts[4])
+                except ValueError:
+                    _bad(entry, 'fire_us / rest_us must be integers')
+                    continue
+            if not all(sp.SERVO_MIN_US <= v <= sp.SERVO_MAX_US for v in (fire_us, rest_us)):
+                _bad(entry, f'us values must be {sp.SERVO_MIN_US}..{sp.SERVO_MAX_US}')
+                continue
+            out[channel] = ('servo', target, fire_us, rest_us)
+        else:
+            _bad(entry, f"unknown kind {kind!r} -- expected 'relay' or 'servo'")
+    return out
 
 
 class SrotPayload:

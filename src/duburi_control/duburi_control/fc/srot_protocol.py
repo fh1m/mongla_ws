@@ -218,34 +218,54 @@ MOVE_DEPTH_RATE = 0.20    # m/s dive/ascend ramp
 GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.5)
 
 # ---------------------------------------------------------------------- #
-#  Host-side brake (see SrotFC._brake_last_leg)                          #
+#  Firmware behaviour revision -- the cross-repo coordination signal      #
 # ---------------------------------------------------------------------- #
-# The wire-reachable MOVE_STOP does NOT apply reverse thrust: movement::start()
-# zeroes s_uf/s_ul/s_speed before the STOP case, so PH_BRAKE computes
-# `-0 * gain * 0` == 0 (fw movement.cpp:56,58,90,152). The brake *duration* is
-# right, the thrust is nil -- so an abort coasts. The firmware's own
-# movement::abort() brakes correctly but is not reachable from MAVLink.
+# The board bumps SROT_FW_BEHAVIOUR_REV (fw include/config.h) whenever it changes
+# OBSERVABLE behaviour that we have written a workaround for. Assert on THIS, never
+# on the shape of their C++.
 #
-# So we brake ourselves: a short REVERSE move leg on the same axis. That stays in
-# AUTO (depth hold is preserved -- MANUAL_CONTROL cannot brake here at all, since
-# AUTO overwrites fwd/lat with the movement demand, fw task_control_loop.cpp:209),
-# uses only documented wire verbs, and the reverse leg ends with its own brake.
-# Mirrors the firmware's MOVE_BRAKE_GAIN / MOVE_BRAKE_K shape; tune here, not there.
-BRAKE_GAIN     = 0.60   # reverse speed as a fraction of the aborted leg's speed
-BRAKE_K        = 0.80   # brake seconds per unit of leg speed
-BRAKE_MAX_S    = 1.20   # hard cap -- an abort must never become a long new leg
-BRAKE_MIN_SPEED = 0.05  # below this the leg carries no momentum worth nulling
+# We learned that the hard way. `test_stop_still_does_not_apply_reverse_thrust`
+# detected the MOVE_STOP fix by grepping their `Type::STOP` case for `abort()`.
+# They fixed it a different way -- restoring the outgoing leg's axis and speed,
+# which `start()` had zeroed before the switch -- so our tripwire stayed GREEN
+# while the behaviour changed underneath it. Had we trusted it we would have kept
+# the host brake and kicked the hull twice.
+#
+#   1  MOVE_STOP coasts. A move can be stranded on IN_PROGRESS for ever when a
+#      failsafe or mode change displaces AUTO. No SET_MESSAGE_INTERVAL. ESC_STATUS
+#      only (undecodable). DIVE target not clamped. TURN/DIVE progress constant.
+#   2  fw 2026-08-01 (AUDIT.md R35-R44): MOVE_STOP brakes -- HOST BRAKE REMOVED.
+#      Every move reaches exactly one terminal ACK, sent once. 511/510 implemented.
+#      ESC_TELEMETRY_1_TO_4 / _5_TO_8 emitted. DIVE clamped >= 0. Real TURN/DIVE
+#      progress. SURFACE zeroes pilot translation/yaw; MANUAL_CONTROL ages out.
+FW_BEHAVIOUR_REV = 2
 
-# Reverse of each translation move type. Yaw and depth are deliberately absent:
-# Ch4 yaw is a RATE the board's own loop bleeds, and depth is an ArduSub-style
-# hold -- reversing either fights the controller instead of helping (same rule as
-# motion_vision's inertial brake, which also brakes translation only).
-BRAKE_REVERSE = {
-    MOVE_FORWARD:  MOVE_BACK,
-    MOVE_BACK:     MOVE_FORWARD,
-    MOVE_STRAFE_L: MOVE_STRAFE_R,
-    MOVE_STRAFE_R: MOVE_STRAFE_L,
-}
+# The minimum revision this host code assumes. Flashing older firmware than this
+# re-opens the coasting MOVE_STOP with no host brake left to cover it.
+FW_BEHAVIOUR_REV_REQUIRED = 2
+
+# WHERE THE BOARD REPORTS IT: `AUTOPILOT_VERSION.middleware_sw_version`. The board has
+# no middleware, so that field was zero and free; request the message with
+# MAV_CMD_REQUEST_MESSAGE(148). `SrotFC.check_behaviour_rev()` reads it and REFUSES TO
+# ARM below the requirement. Verified on hardware: the board answers 2.
+#
+# The drift test that checks this same number is NOT a substitute. It reads the firmware
+# repo off disk and skips when that repo is not checked out beside the workspace -- i.e.
+# it skips on the vehicle, the one place the answer matters. Grepping a sibling repo is a
+# developer-workstation convenience; the wire is the contract.
+#
+# 0 means "firmware older than 2026-08-01" (that build never populated the field), NOT
+# "unknown". Fail closed on 0.
+MSG_ID_AUTOPILOT_VERSION = 148
+
+# ESC_STATUS msgid, as an INTEGER LITERAL on purpose.
+#
+# `mavutil.mavlink.MAVLINK_MSG_ID_ESC_STATUS` does not exist: upstream removed the
+# WIP messages 290/291 from `common`, so pymavlink has no symbol for it and naming
+# it raises AttributeError at import. We still need the number, because it is the
+# stream key the board rates its RPM output by -- one SET_MESSAGE_INTERVAL on 291
+# paces ESC_STATUS *and* the ESC_TELEMETRY_1_TO_4/5_TO_8 pair we actually decode.
+MSG_ID_ESC_STATUS = 291
 
 
 def sanitize_speed(speed: float) -> float:
