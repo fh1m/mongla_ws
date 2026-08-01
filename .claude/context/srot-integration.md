@@ -120,7 +120,18 @@ Prereqs (operator, via **Bondor** — no duburi_ws code): ESCs on **Bluejay** (`
    - Enter `DEPTH_HOLD`, raise & lower the sub by hand: verticals must push **back toward**
      the latched depth, not away.
    - Force SURFACE (trip the leak input) at depth: the demand must be **ascend**.
-   Do **not** trust any DIVE / `set_depth` / vision-depth behaviour until both pass.
+
+   > ⚠ **This gates EVERY AUTO move, not just the dive-dependent verbs.** `SROT_MOVE`
+   > auto-enters `AUTO`, and the `AUTO` branch calls `depth::setTarget(md.depth_target)` +
+   > `depth::update(...)` underneath **every** primitive (fw `task_control_loop.cpp:236-237`)
+   > — there is **no depth-free path through AUTO**. So a plain `move_forward` with no
+   > `set_depth` anywhere still runs the unverified loop, and a vertical runaway mid-leg is
+   > indistinguishable from a buoyancy problem in the water. Earlier revisions of this line
+   > scoped the gate to `DIVE` / `set_depth` / vision-depth, which reads as "skip these if
+   > you are only driving forward". That is backwards.
+   >
+   > A successful **in-air** `move_forward` is not partial validation: at ~0 m the latched
+   > target and the measurement agree, so the loop is never actually exercised.
 5. **`move()` collapse verbs:** each runs + reports ~3 Hz progress; ROS-cancel brakes (type 6);
    a preempting second move resolves the first as PREEMPTED (not a hang).
 6. **Vision:** `motion_vision` port (Phase 8) — lat/yaw/fwd via `manual()`, depth via mode.

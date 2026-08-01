@@ -34,7 +34,8 @@ COMMANDS = {
         'defaults': {'timeout': 20.0},
     },
     'set_mode': {
-        'help':     'Switch ArduSub flight mode (MANUAL, ALT_HOLD, STABILIZE, ...).',
+        'help':     'Switch flight mode. srot: STABILIZE|DEPTH_HOLD|SURFACE|MANUAL|ACRO '
+                    '(ALT_HOLD aliases to DEPTH_HOLD). pixhawk: MANUAL|ALT_HOLD|STABILIZE|...',
         'fields':   ['target_name', 'timeout'],
         'defaults': {'timeout': 8.0},
     },
