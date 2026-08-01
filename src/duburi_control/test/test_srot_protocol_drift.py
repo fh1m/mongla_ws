@@ -106,6 +106,55 @@ def test_flight_mode_ints_match():
             f'FlightMode::{name} is {fw.get(name)} on the board, {value} here')
 
 
+def test_every_firmware_flight_mode_has_a_name():
+    """The other direction: we must not be MISSING a mode the board can report.
+
+    The check above compares the modes we already declare -- so it stays green when
+    the firmware ADDS one, which is exactly how STUNT (100) and PATTERN (101) sat
+    unmapped. An unmapped custom_mode surfaces on /duburi/state as 'UNKNOWN(100)',
+    which reads like a comms fault rather than a real mode the hull is flying.
+
+    Asserting on the firmware enum as a SET, not on the entries we happened to
+    write down, is what makes this catch an addition instead of only a change.
+    """
+    hdr = _read('include', 'state_types.h')
+    m = re.search(r'enum\s+class\s+FlightMode\s*[^{]*\{([^}]*)\}', hdr, re.S)
+    assert m, 'FlightMode enum not found'
+    fw = {name: int(value)
+          for name, value in re.findall(r'(\w+)\s*=\s*(\d+)', m.group(1))}
+    missing = {name: value for name, value in fw.items()
+               if value not in sp.MODE_NAMES}
+    assert not missing, (
+        f'firmware FlightMode values with no MODE_NAMES entry: {missing}. '
+        f'Add them to srot_protocol.MODE_NAMES -- and to MODE_NOT_SETTABLE too if '
+        f'DO_SET_MODE cannot select them.')
+
+
+def test_movement_phase_codes_match_the_firmware_enum():
+    """MV_STATE: 6 is HOLD and 7 is DONE, not 6 = done.
+
+    Both this repo and JETSON_COMMS.md stopped at `6: done` for a while, so a
+    station-keeping HOLD leg was reported as finished while the vehicle was still
+    holding. Harmless for completion (the terminal ACK is the authority) which is
+    precisely why it survived unnoticed -- it only ever showed up in a log line.
+    """
+    src = _read('src', 'control', 'movement.cpp')
+    m = re.search(r'enum\s*\{\s*(PH_IDLE[^}]*)\}', src)
+    assert m, 'movement phase enum not found in movement.cpp'
+    # `enum { PH_IDLE = 0, PH_CRUISE, PH_BRAKE, ... }` -- implicit increment after
+    # the first, so position IS the value.
+    names = [p.strip().split('=')[0].strip() for p in m.group(1).split(',') if p.strip()]
+    expected = {
+        'PH_IDLE': sp.MV_IDLE,   'PH_CRUISE': sp.MV_CRUISE, 'PH_BRAKE': sp.MV_BRAKE,
+        'PH_TURN': sp.MV_TURN,   'PH_DIVE': sp.MV_DIVE,     'PH_STYLE': sp.MV_STYLE,
+        'PH_HOLD': sp.MV_HOLD,   'PH_DONE': sp.MV_DONE,
+    }
+    for index, fw_name in enumerate(names):
+        assert expected.get(fw_name) == index, (
+            f'firmware {fw_name} == {index}, srot_protocol has {expected.get(fw_name)}')
+    assert sp.mv_state_name(6) == 'hold' and sp.mv_state_name(7) == 'done'
+
+
 def test_payload_and_link_constants_match():
     cfg = _read('include', 'config.h')
     # Relay instance n -> PCA channel PCA_RELAY_BASE_CH + n. Off by one = wrong payload.

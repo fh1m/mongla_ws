@@ -97,11 +97,22 @@ MODE_MOTOR_DETECT = 20
 MODE_AUTOTUNE    = 21
 MODE_MOTOR_TUNE  = 22
 MODE_AUTO        = 23   # the mode SROT_MOVE runs in (auto-entered on a move)
+# Command-only modes: DO_SET_MODE cannot select these, but HEARTBEAT.custom_mode
+# CAN carry them, so they must still map. A mission never commands them; seeing one
+# mid-run means something else put the board there (see MODE_NAMES).
+MODE_STUNT       = 100  # N x 360 spin on one axis (CMD_USER_1/2/3)
+MODE_PATTERN     = 101  # multi-step pattern (CMD_USER_4)
 
 # custom_mode int -> name. DuburiState.mode carries the name; note DEPTH_HOLD is
 # the SROT analogue of ArduSub ALT_HOLD but the NAMES differ -- any mission/FSM
 # that branches on a mode string must be audited (set_depth engages ALT_HOLD on
 # Pixhawk but a DIVE-in-AUTO on SROT).
+#
+# This is the COMPLETE FlightMode enum (fw state_types.h:33-45), not a selection of
+# the ones we drive. `custom_mode` can carry any of them, and an unmapped value
+# surfaces on /duburi/state as 'UNKNOWN(100)' -- which reads like a comms fault when
+# it is actually a real, nameable mode. 20/22 spin motors and 100/101 move the hull,
+# so a supervisor that cannot name them cannot react to them either.
 MODE_NAMES = {
     MODE_STABILIZE:    'STABILIZE',
     MODE_ACRO:         'ACRO',
@@ -112,6 +123,8 @@ MODE_NAMES = {
     MODE_AUTOTUNE:     'AUTOTUNE',
     MODE_MOTOR_TUNE:   'MOTOR_TUNE',
     MODE_AUTO:         'AUTO',
+    MODE_STUNT:        'STUNT',
+    MODE_PATTERN:      'PATTERN',
 }
 MODE_INTS = {name: num for num, name in MODE_NAMES.items()}
 
@@ -126,6 +139,16 @@ MODE_INTS = {name: num for num, name in MODE_NAMES.items()}
 # cannot deliver. Those still fail loudly, which is correct.
 MODE_ALIASES = {'ALT_HOLD': MODE_DEPTH_HOLD}
 
+# Modes the board reports but DO_SET_MODE cannot select -- they are entered by
+# command only (DUBURI_WS_INTEGRATION.md §4.2 "Settable by DO_SET_MODE?").
+#
+# They are in MODE_NAMES because custom_mode carries them and telemetry must name
+# them; they are excluded from mode_int() because a DO_SET_MODE to one would be
+# accepted-and-ignored by the board, leaving set_mode() to burn its whole 8 s
+# deadline and report the generic "mode stayed STABILIZE". Refusing up front says
+# the true thing: the mode exists, this is not how you enter it.
+MODE_NOT_SETTABLE = frozenset({MODE_STUNT, MODE_PATTERN})
+
 
 def mode_name(custom_mode) -> str:
     """custom_mode int -> mode name, or 'UNKNOWN(<n>)' for an unmapped value."""
@@ -136,29 +159,46 @@ def mode_name(custom_mode) -> str:
 
 
 def mode_int(name) -> int | None:
-    """Mode name -> custom_mode int, or None if unknown (fail-loud upstream).
+    """Mode name -> custom_mode int for a SETTABLE mode, else None (fail-loud upstream).
 
     Accepts the ArduSub aliases in MODE_ALIASES (currently just ALT_HOLD, which
-    is the same mode as DEPTH_HOLD) so Pixhawk-era missions run unmodified."""
+    is the same mode as DEPTH_HOLD) so Pixhawk-era missions run unmodified.
+
+    Returns None for MODE_NOT_SETTABLE (STUNT/PATTERN): those are real modes that
+    `mode_name` must still name, but DO_SET_MODE cannot enter them -- use the
+    CMD_USER_* commands."""
     key = str(name).strip().upper()
-    if key in MODE_INTS:
-        return MODE_INTS[key]
-    return MODE_ALIASES.get(key)
+    num = MODE_INTS.get(key, MODE_ALIASES.get(key))
+    if num is None or num in MODE_NOT_SETTABLE:
+        return None
+    return num
 
 
 # ---------------------------------------------------------------------- #
 #  MV_STATE -- movement phase (JETSON_COMMS.md §6 NAMED_VALUE_FLOAT)      #
 # ---------------------------------------------------------------------- #
+# Mirrors the firmware's phase enum EXACTLY:
+#   enum { PH_IDLE = 0, PH_CRUISE, PH_BRAKE, PH_TURN, PH_DIVE, PH_STYLE,
+#          PH_HOLD, PH_DONE };                       (fw movement.cpp:12)
+#
+# ⚠ 6 is HOLD and 7 is DONE. Both this file and JETSON_COMMS.md previously stopped
+# at `6: done`, so a station-keeping HOLD leg was named 'done' while the vehicle was
+# still holding -- and DONE itself fell through to the 'mv7' fallback. Corrected
+# 2026-08-01 against the firmware source (fw changelog §6/§10).
+#
+# MV_STATE is a progress HINT either way: the terminal COMMAND_ACK is the only
+# authority on completion, which is why this never surfaced as a stuck mission.
 MV_IDLE   = 0
 MV_CRUISE = 1
 MV_BRAKE  = 2
 MV_TURN   = 3
 MV_DIVE   = 4
 MV_STYLE  = 5
-MV_DONE   = 6
+MV_HOLD   = 6
+MV_DONE   = 7
 MV_STATE_NAMES = {
     MV_IDLE: 'idle', MV_CRUISE: 'cruise', MV_BRAKE: 'brake', MV_TURN: 'turn',
-    MV_DIVE: 'dive', MV_STYLE: 'style', MV_DONE: 'done',
+    MV_DIVE: 'dive', MV_STYLE: 'style', MV_HOLD: 'hold', MV_DONE: 'done',
 }
 
 
