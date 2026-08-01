@@ -114,11 +114,80 @@ source /opt/ros/humble/setup.bash && source install/setup.bash
 
 > Every session, source ROS + the workspace, then run the preflight first:
 > ```bash
-> ros2 run duburi_manager bringup_check     # network · UDP 14550 · Pixhawk USB · DVL · BNO085 · mode hint
+> ros2 run duburi_manager bringup_check --srot   # SROT vehicle: USB serial · heartbeat · FW rev · GAIN · depth sign
+> ros2 run duburi_manager bringup_check          # Pixhawk vehicle: network · UDP 14550 · Pixhawk USB · DVL · BNO085
 > ```
-> Exit 0 = nothing failed (WARNs are OK in sim/desk).
+> Exit 0 = nothing failed (WARNs are OK in sim/desk). **`--srot` is the flag for this
+> branch's default vehicle** — without it you get probes for a Pi, a UDP router and a
+> Pixhawk that a SROT vehicle does not have.
+
+## ⚠ Which vehicle are you on?
+
+This branch runs **two** flight-controller backends, and `srot` is the **default**. Almost
+every command below changes shape between them, so start here.
+
+| | `flight_controller:=srot` *(default)* | `flight_controller:=pixhawk` |
+|---|---|---|
+| Autopilot | **SROT board**, firmware **Hengla v0.2.0** | Pixhawk 2.4.8 + ArduSub 4.x |
+| Link | **one USB-C cable @115200** | BlueOS → UDP 14550 |
+| In between | *nothing* | Raspberry Pi + BlueOS + MAVLink router |
+| Sensors | **all on the board** (BNO085, Bar30) | on the Pixhawk + a USB IMU |
+| Control loops | **on the board, 500 Hz** | ArduSub 400 Hz + Python outer loops |
+
+`PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identical to history — pass
+`flight_controller:=pixhawk` and everything in the old docs still applies.
+
+### Vocabulary transition — what changed from the Pixhawk era
+
+Every one of these is a command that still *runs* but now means something different, or
+nothing at all. This is the table to read before reusing anything from your shell history.
+
+| Pixhawk-era | SROT-era | Why |
+|---|---|---|
+| `mode:=pool` (UDP 14550 profiles) | *(omit it)* — the USB device autodetects | no Pi, no BlueOS, no UDP router |
+| `yaw_source:=dvl` / `:=bno085` | **`yaw_source:=mavlink_ahrs`** | the BNO085 is **on the board**; the USB IMU is off the hull |
+| `ALT_HOLD` | **`DEPTH_HOLD`** (`ALT_HOLD` still aliases to it) | different name, same capability |
+| `RC_CHANNELS_OVERRIDE` Ch4/5/6 | `MAV_CMD_SROT_MOVE` (31000), or one `MANUAL_CONTROL` | no per-channel release on srot |
+| `lock_heading` | *(automatic)* — the board holds the heading each leg starts with | refused on srot; the board does it in `attitude::holdYaw` |
+| `move_forward_dist` &c. | *(unavailable)* | DVL not fitted / never validated — [`vehicle-spec.md`](.claude/context/vehicle-spec.md) "DVL status" |
+| `set_depth` | `set_depth` → an on-board DIVE — **behind the depth gate below** | the board's depth loop has never run closed |
+| `arc`, `style_yaw`, `vision_align`, `vision_move` | *(refused, clearly)* | genuine gaps — see `srot_fc.UNSUPPORTED_VERBS` |
 
 ## Quick start (three flows)
+
+**⚡ Drive the SROT vehicle (control only)** — one USB-C cable, no Pi, no BlueOS:
+
+```bash
+ros2 run duburi_manager bringup_check --srot          # must report FW behaviour rev >= 2
+ros2 launch duburi_manager bringup.launch.py          # srot + mavlink_ahrs are the defaults
+# ...then in another terminal:
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi move_forward --duration 5 --gain 40
+ros2 run duburi_planner duburi stop
+ros2 run duburi_planner duburi disarm
+```
+
+> ### ⛔ Before the vehicle goes in water — the depth gate
+>
+> **The board's depth loop has never run closed.** The sign was inverted until 2026-07-30
+> (SURFACE drove the vehicle *down*) and the Bar30 was not fitted while that code was written.
+>
+> **This gates `move_forward` too, not just diving.** `SROT_MOVE` auto-enters `AUTO`, and
+> `AUTO` holds depth underneath **every** primitive (`task_control_loop.cpp:236`) — there is
+> no depth-free path through it. A horizontal-only mission still runs that loop, and a
+> vertical runaway mid-leg looks exactly like a buoyancy problem.
+>
+> Two checks, **props off, on the bench**:
+> ```bash
+> ros2 run duburi_planner duburi set_mode --target_name DEPTH_HOLD
+> ```
+> 1. Raise and lower the sub by hand — the verticals must push **back toward** the latched
+>    depth. Pushing *away* means the sign is still inverted: **stop**.
+> 2. Trip the leak input at depth — the demand must be **ascend**.
+>
+> A successful in-air `move_forward` is **not** partial validation of this.
+
+**Drive in sim** — Gazebo + ArduSub SITL, no real AUV (this is the **pixhawk** backend):
 
 **Drive in sim** — Gazebo + ArduSub SITL, no real AUV:
 
@@ -126,11 +195,12 @@ source /opt/ros/humble/setup.bash && source install/setup.bash
 # T1 — ArduSub SITL
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
     --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
-# T2 — manager (auto-detects sim via UDP 14550)
-ros2 run duburi_manager start
+# T2 — manager. SITL is ArduSub, so ask for the pixhawk backend explicitly
+#      (this branch defaults to srot, which would look for a USB board)
+ros2 run duburi_manager start --ros-args -p flight_controller:=pixhawk
 # T3 — drive
 ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_depth --target -0.5
+ros2 run duburi_planner duburi set_depth --target -0.5   # ⛔ srot: behind the depth gate
 ros2 run duburi_planner duburi move_forward --duration 3 --gain 60
 ros2 run duburi_planner duburi disarm
 ```
@@ -157,6 +227,24 @@ ros2 run duburi_planner mission pool_day_practice     # ★ Gate→Slalom→Torp
 
 End-to-end in-water session. Everything runs on the Jetson unless noted.
 
+**SROT vehicle (default).** One cable replaces the entire network stack:
+
+```mermaid
+flowchart LR
+  subgraph BOARD[SROT board · Hengla v0.2.0 · 500 Hz]
+    IMU[BNO085 · I2C0] --- ESP[ESP32 flight core]
+    BAR[Bar30 depth · I2C0] --- ESP
+    PCA[PCA9685 payload · I2C1] --- ESP
+    ESP -->|1 Mbaud UART| PICO[RP2350 · 8x ESC + RPM]
+  end
+  BOARD -->|USB-C · MAVLink · 115200| JET[Jetson Orin · GPU/vision only]
+  FCAM[Forward cam] -->|USB| JET
+  DCAM[Downward cam] -->|USB| JET
+  BOARD -.->|LoRa| BON[Bondor GCS · parallel, NOT in the control path]
+```
+
+<details><summary>Pixhawk vehicle (<code>flight_controller:=pixhawk</code>) — the previous topology</summary>
+
 ```mermaid
 flowchart LR
   PIX[Pixhawk + ArduSub] -->|USB| RPI[Raspberry Pi · BlueOS · 192.168.2.1]
@@ -168,25 +256,35 @@ flowchart LR
   DVL[Nucleus DVL · .201] -->|TCP 9000| JET
   JET -->|auv_manager + vision + mission| PIX
 ```
+</details>
 
-**1 · Power & network** — power the AUV; BlueOS (`192.168.2.1`) routes Pixhawk MAVLink to the
-Jetson (`192.168.2.69:14550`) as a UDP client (`inspector` endpoint).
+**1 · Power & connect** — power the AUV and plug the board's USB-C into the Jetson. That is
+the whole link: no BlueOS, no UDP, no `192.168.2.x`. The port autodetects; override with
+`mav_device:=/dev/serial/by-id/<yours>`.
+*(Pixhawk backend: BlueOS at `192.168.2.1` routes MAVLink to `192.168.2.69:14550`.)*
 
-**2 · Plug payload sensors** — BNO085 (VID/PID `303a:1001`) and ESP32 payload (CH340,
-`1a86:7523`) auto-detect by VID/PID; the forward + downward cameras are USB.
+**2 · Plug the cameras** — forward + downward, USB. **No BNO085 or payload board to plug in**
+on srot: both are on the control board.
 
 **3 · Preflight**
 ```bash
-ros2 run duburi_manager bringup_check          # network · UDP · Pixhawk · DVL · BNO085
+ros2 run duburi_manager bringup_check --srot   # USB serial · heartbeat · FW rev · GAIN · depth sign
 ls /dev/video*                                 # confirm camera device indices
 ```
+> **The line that matters is `FW behaviour rev`.** Below **2**, the board's `MOVE_STOP`
+> applies zero braking thrust and this host no longer carries a brake — `stop` and every
+> abort would silently fail to decelerate the hull. It FAILs here and `arm()` refuses.
+> Fixing it means a reflash that **wipes the tune and `CAL_*`**: export from Bondor first,
+> then `pio run -t erase && pio run -t upload`, re-import, and re-write `JS_GAIN_DEFAULT=1.0`.
 
-**4 · Manager + sensors** — DVL + BNO085 heading is the most stable pool combo:
+**4 · Manager** — `srot` + `mavlink_ahrs` are already the defaults:
 ```bash
-ros2 launch duburi_manager bringup.launch.py mode:=pool yaw_source:=bno085_dvl
-# expect the MONGLA · DUBURI AUV MANAGER banner, a [STATE] line within ~2 s,
-# and [DVL] connected (dvl_auto_connect:=true)
+ros2 launch duburi_manager bringup.launch.py
+# expect: MONGLA · DUBURI AUV MANAGER banner, [NET] flight_controller = srot,
+#         a [STATE] line within ~2 s, and [SROT] firmware behaviour rev 2
+# payload: add  payload_fire_map:="1:relay:0, 2:relay:1, 3:servo:3"  (empty = cannot fire)
 ```
+*(Pixhawk backend: `bringup.launch.py flight_controller:=pixhawk mode:=pool yaw_source:=bno085_dvl`.)*
 
 **5 · Vision** — both cameras (detectors start paused; missions resume per task):
 ```bash

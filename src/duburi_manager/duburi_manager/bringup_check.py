@@ -750,6 +750,21 @@ def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    # `--help` used to fall through and run the FULL hardware probe -- an operator
+    # asking what the flags are instead got a 12-section scan of the vehicle.
+    if '-h' in argv or '--help' in argv:
+        print('usage: bringup_check [--srot] [--strict] [--skip-mavlink]\n'
+              '\n'
+              '  --srot           SROT control board over direct USB serial (this\n'
+              '                   branch\'s default vehicle). Replaces the network /\n'
+              '                   UDP-14550 / Pixhawk-USB probes, which on a SROT\n'
+              '                   vehicle pass or fail for entirely the wrong reasons.\n'
+              '  --strict         any WARN exits non-zero (hard pre-mission gate)\n'
+              '  --skip-mavlink   skip the autopilot probe (no board/link attached)\n'
+              '\n'
+              'Exit 0 = nothing FAILed. On --srot the line that gates the water is\n'
+              '"FW behaviour rev": below 2 the board coasts on stop and arm() refuses.')
+        return 0
     strict = '--strict' in argv
     skip_mav = '--skip-mavlink' in argv
     # The SROT vehicle has no Pi, no BlueOS, no UDP and no Pixhawk: sections D/E/F
