@@ -606,6 +606,34 @@ def _check_jetson_power() -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
+def _behaviour_rev_verdict(rev: int | None, required: int) -> tuple[str, str, str]:
+    """Grade the board's SROT_FW_BEHAVIOUR_REV. Pure, so it is testable without a board.
+
+    Deliberately ASYMMETRIC, and the asymmetry is the design:
+
+      * a board that ANSWERS with a too-old rev is making a definite statement --
+        `stop` will coast -- so this is a FAIL and the preflight should stop.
+      * a board that answers NOTHING is far more likely a dropped frame or a
+        firmware without REQUEST_MESSAGE than a genuine old board, and failing a
+        whole preflight on a comms hiccup is its own hazard. WARN loudly instead.
+
+    `0` is not "unknown": it is what firmware older than 2026-08-01 reports,
+    because that build never populated the field. It fails closed like any other
+    too-old revision.
+    """
+    if rev is None:
+        return (WARN, 'FW behaviour rev unknown',
+                f'board did not answer AUTOPILOT_VERSION; host needs >= {required}. '
+                f'If this firmware predates 2026-08-01, MOVE_STOP COASTS and there is '
+                f'no host brake -- stop/abort will NOT decelerate')
+    if rev < required:
+        return (FAIL, 'FW behaviour rev too old',
+                f'board reports {rev}, host requires >= {required}. MOVE_STOP coasts '
+                f'and the host brake was removed -- stop/abort would not decelerate '
+                f'the hull. Flash rev >= {required} (erase+upload; export params first)')
+    return (PASS, 'FW behaviour rev', f'{rev} (>= {required} required)')
+
+
 def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
     """SROT board over direct USB serial: port, vehicle heartbeat, GAIN, depth sign.
 
@@ -658,6 +686,21 @@ def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
         # Pre-mission gate: nothing should be armed before the operator says so.
         out.append((FAIL if armed else PASS, 'armed state',
                     'ARMED -- disarm before bench/pool work' if armed else 'disarmed'))
+
+        # ---- firmware behaviour revision -- the hull-safety gate ------------ #
+        # THE most consequential line in this section, and the reason it is here
+        # rather than only inside arm(): below rev 2 the board's MOVE_STOP applies
+        # zero braking thrust, and this host no longer carries the reverse-leg
+        # brake that used to cover it. `stop` and every abort would simply not
+        # decelerate the hull, silently. Finding that out on the bench is the
+        # whole point -- SrotFC.arm() also refuses, but that is the pool deck.
+        conn.mav.command_long_send(
+            sp.VEHICLE_SYSID, sp.VEHICLE_COMPID,
+            mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE, 0,
+            float(sp.MSG_ID_AUTOPILOT_VERSION), 0, 0, 0, 0, 0, 0)
+        av = conn.recv_match(type='AUTOPILOT_VERSION', blocking=True, timeout=3.0)
+        rev = None if av is None else int(getattr(av, 'middleware_sw_version', 0))
+        out.append(_behaviour_rev_verdict(rev, sp.FW_BEHAVIOUR_REV_REQUIRED))
 
         # Collect a couple of seconds of telemetry for the value checks.
         end = time.time() + 2.5
@@ -784,18 +827,36 @@ def main(argv: list[str] | None = None) -> int:
         else:
             emit(PASS, 'no Pixhawk USB device', 'ok for UDP/BlueOS pool mode')
 
-    # ---- G. BNO085 -------------------------------------------------- #
-    section('G. Yaw source (BNO085)')
-    st, det = _check_bno085_auto()
-    emit(st, 'BNO085 auto-detect', det)
-    if st == PASS:
-        _line('NOTE', 'EKF ext-nav yaw needs', 'VISO_TYPE=1, EK3_SRC1_YAW=6 '
-              '(2 MB fmuv3); manager re-checks at startup')
+    # ---- G. yaw source ---------------------------------------------- #
+    # Both G and H probe hardware that is NOT FITTED on a srot vehicle. Left
+    # ungated they emit two WARNs the operator can do nothing about -- and one of
+    # them ("Plug the ESP32-C3 in") instructs them to reinstall a board that was
+    # deliberately removed. Unactionable WARNs are not free: they train an operator
+    # to skim the WARN column, which is where the firmware-rev gate lives.
+    if srot:
+        section('G. Yaw source (BNO085 on the control board)')
+        emit(PASS, 'BNO085 rides the MAVLink link',
+             'on the board (I2C0), fused at 500 Hz -> ATTITUDE; '
+             'use yaw_source:=mavlink_ahrs')
+        _line('NOTE', 'USB ESP32-C3 + BNO085', 'REMOVED from the hull -- '
+              'yaw_source:=bno085 would open a device that is not there')
+    else:
+        section('G. Yaw source (BNO085)')
+        st, det = _check_bno085_auto()
+        emit(st, 'BNO085 auto-detect', det)
+        if st == PASS:
+            _line('NOTE', 'EKF ext-nav yaw needs', 'VISO_TYPE=1, EK3_SRC1_YAW=6 '
+                  '(2 MB fmuv3); manager re-checks at startup')
 
     # ---- H. DVL ----------------------------------------------------- #
-    section('H. DVL (Nortek Nucleus 1000)')
-    st, det = _check_dvl(NETWORK['dvl_ip'], NETWORK['dvl_port'])
-    emit(st, 'Nucleus 1000', det)
+    if srot:
+        section('H. DVL (Nortek Nucleus 1000)')
+        _line('NOTE', 'DVL not fitted', 'never validated in water and not on the '
+              'SROT wire; move_*_dist stay refused (vehicle-spec.md "DVL status")')
+    else:
+        section('H. DVL (Nortek Nucleus 1000)')
+        st, det = _check_dvl(NETWORK['dvl_ip'], NETWORK['dvl_port'])
+        emit(st, 'Nucleus 1000', det)
 
     # ---- I. payload ------------------------------------------------- #
     if srot:
@@ -804,10 +865,16 @@ def main(argv: list[str] | None = None) -> int:
         # ESP32 is the SAME CH340 VID/PID as the SROT board, so the scan opens the
         # board's own port and fights the MAVLink link.
         section('I. Payload (SROT PCA9685 over MAVLink)')
-        emit(PASS, 'payload rides the MAVLink link', 'no separate USB board on srot')
-        _line('NOTE', 'payload_fire_map',
-              'fire() refuses until this ROS param maps each channel to its '
-              'PCA channel + servo/relay type')
+        emit(PASS, 'payload transport', 'PCA9685 over MAVLink; no separate USB board')
+        # The transport being up is NOT the payload working. `payload_fire_map` is a
+        # ROS param on the running node, which this preflight cannot read -- so the
+        # honest report is WARN ("cannot confirm"), never PASS. Reporting PASS here
+        # is exactly what hid the dead fire() path: the link was up, this line said
+        # PASS, and every fire() returned False because the map was empty.
+        emit(WARN, 'payload_fire_map not verifiable here',
+             'preflight cannot read a running node\'s param. EMPTY = torpedo and '
+             'dropper CANNOT actuate. Confirm the manager logs '
+             '"[PAYLOAD] SROT: ... channel(s) mapped" and NOT "NO FIRE MAP"')
     else:
         section('I. Payload board (CH340)')
         st, det = _check_payload()

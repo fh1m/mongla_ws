@@ -42,6 +42,7 @@ from launch.conditions          import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions       import LaunchConfiguration
 from launch_ros.actions         import Node
+from launch_ros.parameter_descriptions import ParameterValue
 import os
 from ament_index_python.packages import get_package_share_directory
 
@@ -64,6 +65,28 @@ def generate_launch_description():
         # Nucleus is actually fitted and validated on the vehicle you are running.
         DeclareLaunchArgument('yaw_source', default_value='mavlink_ahrs',
                               description='Yaw source: mavlink_ahrs|dvl|bno085|bno085_dvl'),
+        # ---- SROT backend -------------------------------------------------- #
+        # These four were declared on the NODE but not here, so the documented
+        # pool-day command could not configure a SROT vehicle at all: the operator
+        # had to drop to `ros2 run duburi_manager start --ros-args -p ...`, which
+        # is a different command from the one every doc gives.
+        DeclareLaunchArgument('flight_controller', default_value='srot',
+                              description='Autopilot backend: srot|pixhawk '
+                                          '(pixhawk = the ArduSub/BlueOS path)'),
+        DeclareLaunchArgument('mav_device', default_value='',
+                              description="SROT serial device, '' = autodetect. A path "
+                                          '(/dev/serial/by-id/...) or any pymavlink '
+                                          'connection string'),
+        DeclareLaunchArgument('payload_fire_map', default_value='',
+                              description='SROT PCA9685 wiring, e.g. '
+                                          '"1:relay:0, 2:relay:1, 3:servo:3". '
+                                          'EMPTY = fire() refuses (nothing can actuate)'),
+        # Deliberately verbose: below firmware behaviour rev 2 MOVE_STOP coasts and
+        # this host carries no brake, so `stop` would not decelerate the hull.
+        DeclareLaunchArgument('allow_fw_behaviour_mismatch', default_value='false',
+                              description='Arm against firmware older than '
+                                          'FW_BEHAVIOUR_REV_REQUIRED. Accepts an '
+                                          'un-braked stop -- leave false'),
         DeclareLaunchArgument('dvl_host',        default_value='192.168.2.201'),
         DeclareLaunchArgument('dvl_port',        default_value='9000'),
         DeclareLaunchArgument('dvl_auto_connect', default_value='true',
@@ -118,6 +141,19 @@ def generate_launch_description():
             'nucleus_dvl_port':     LaunchConfiguration('dvl_port'),
             'nucleus_dvl_password': 'nortek',
             'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
+            'flight_controller':    LaunchConfiguration('flight_controller'),
+            'mav_device':           LaunchConfiguration('mav_device'),
+            'payload_fire_map':     LaunchConfiguration('payload_fire_map'),
+            # value_type=bool so a malformed value fails HERE, at launch, with a clear
+            # ValueError -- rather than reaching the node as a str/int and dying in
+            # declare_parameter with a type error that names no argument. launch_ros
+            # coerces the normal spellings either way (false/False/no/off -> False),
+            # so there is no silent-True path; this just moves the error somewhere the
+            # operator can read it. It matters more here than on the other flags:
+            # below firmware behaviour rev 2, MOVE_STOP coasts and this host carries
+            # no brake, so a wrongly-true value means `stop` does not decelerate.
+            'allow_fw_behaviour_mismatch': ParameterValue(
+                LaunchConfiguration('allow_fw_behaviour_mismatch'), value_type=bool),
         }],
     )
 
