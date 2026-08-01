@@ -21,8 +21,10 @@ fc/srot_fc.py      SROT backend (MANUAL_CONTROL, SROT_MOVE + ACK relay, telemetr
 fc/pixhawk_fc.py   ArduSub backend (IS-A Pixhawk + intent methods) — unchanged behaviour
 fc/factory.py      make_flight_controller('pixhawk'|'srot', master, log)
 ```
-ROS param **`flight_controller`** (`pixhawk`|`srot`), default `pixhawk` until SROT is
-pool-proven. Both backends coexist on the same vehicle for A/B. The ABC exposes intent:
+ROS param **`flight_controller`** (`pixhawk`|`srot`). **On this branch the launch default is
+`srot`** — this paragraph used to say `pixhawk` while the transport section below said `srot`;
+the launch files are the tiebreaker and they say `srot`. Both backends coexist on the same
+vehicle for A/B (`:=pixhawk` for the ArduSub/BlueOS path). The ABC exposes intent:
 `arm/disarm/set_mode/manual(fwd,lat,up,yaw)/move(verb,*,on_progress,abort_fn)/telemetry/
 send_gcs_heartbeat`. `manual()` is the streamed servo primitive (vision + DVL loops);
 `move()` is one on-board SROT_MOVE + its four-terminal ACK relay.
@@ -54,8 +56,13 @@ over `DO_SET_SERVO`/`DO_SET_RELAY` — there is NO separate USB ESP32 any more),
 `dvl_connect`, `calc_distance`, `head`, `mission_reset`, `calibrate_depth` (host-side, work
 unchanged).
 
+**`move_back` is NO LONGER REFUSED.** `MOVE_BACK = 1` was always valid on the wire and your own
+brake path was already commanding it; it was refused purely for a missing two-line
+`_build_params` branch. That branch now exists, so `move_back` is a normal collapse verb
+(p1=1, p2=duration, p3=speed) — the same shape as `move_forward`.
+
 **REFUSED on srot (`srot_fc.UNSUPPORTED_VERBS`, checked in `execute_callback` BEFORE
-dispatch → clean `success=False`):** `lock_heading`, `move_back`, `move_forward_dist` /
+dispatch → clean `success=False`):** `lock_heading`, `move_forward_dist` /
 `move_back_dist` / `move_lateral_dist`, `vision_align` / `vision_move`, `arc`, `style_yaw`.
 Each reaches a Pixhawk-only primitive (`send_rc_*` / `set_target_depth`) or the ALT_HOLD
 gate. **They are refused rather than left to fall through because falling through was worse
@@ -65,8 +72,17 @@ swallowed `AttributeError`/s for the lock's 300 s life), and `move_back` raised 
 is how the port lands. `unlock_heading` still works (it only stops a lock + sends neutral).
 
 ## Backend gotchas (why the SROT path differs)
-- **No `SET_MESSAGE_INTERVAL`** — SROT rates are fixed on-board; the manager must **skip**
-  `MESSAGE_RATES` pinning on the srot backend.
+- ~~**No `SET_MESSAGE_INTERVAL`**~~ — **NO LONGER TRUE as of fw `SROT_FW_BEHAVIOUR_REV 2`.**
+  `MAV_CMD_SET_MESSAGE_INTERVAL` (511) **and** `GET_MESSAGE_INTERVAL` (510) are implemented and
+  bench-measured on COM19 (2026-08-01, USB serial, props off — an observed rate over a short
+  window, not a guaranteed spec): ATTITUDE pinned from 10.8 Hz to **55.2 Hz**, VFR_HUD
+  5.4 → 11.0 Hz. Treat 50 Hz as the number to design against. Rate
+  pinning is now **enabled** on srot (`SROT_MESSAGE_RATES` in the manager). This matters
+  concretely: `_imu_rates_tick` publishes at 50 Hz and was oversampling a 10 Hz stream 5×,
+  feeding the optical-flow rotation compensation stale attitude between real samples.
+  Two refusals remain, both deliberate: HEARTBEAT cannot be disabled (`interval < 0` on
+  HEARTBEAT is answered **DENIED**, not silently ignored), and an unknown msgid is DENIED
+  rather than accepted-and-dropped.
 - **No RC-channel release / `NO_OVERRIDE`** — `MANUAL_CONTROL` always carries all 4 axes.
   `release_yaw` (vision) → send `r=0` and rely on the board's centred-stick heading hold.
 - **No depth-setpoint stream** — `SET_POSITION_TARGET_*` is UNSUPPORTED. Depth = a mode
@@ -118,28 +134,78 @@ mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_dista
 `/duburi/state` (yaw/**depth**/batt/mode/armed) + the GCS heartbeat.
 
 **REFUSED with a clear message (`UNSUPPORTED_VERBS`, see the verb table above):**
-`vision_align` / `vision_move`, `move_*_dist` (DVL), `lock_heading`, `move_back`, `arc`,
+`vision_align` / `vision_move`, `move_*_dist` (DVL), `lock_heading`, `arc`,
 `style_yaw`. Do not treat "wired + all green" as "every verb works on srot."
 
+> **`move_back` moved out of this list** (see above). `arc` and `style_yaw` remain genuine
+> firmware gaps, not host gaps: `arc` needs an absolute-heading arc on the board, `style_yaw`
+> needs a selectable STYLE axis + rate. Both are buildable on request — they are simply not
+> built, and refusing is the honest state.
+
 ### Host-side workarounds for firmware defects (see `srot-control-board/JETSON_FEEDBACK.md`)
-- **`MOVE_STOP` does not brake** — the firmware zeroes the axis/speed before the STOP case,
-  so `PH_BRAKE` computes `-0*g*0` = 0 and an abort **coasts**. `SrotFC._brake_last_leg`
-  sends an explicit short **reverse leg** before every `MOVE_STOP`.
-  `test_srot_protocol_drift.py` fails when the firmware fixes this, so we remove our brake
-  instead of double-kicking the hull.
-- **A failsafe mid-move never sends a terminal ACK** — the board freezes `mv_active=true`
-  and streams `IN_PROGRESS` forever, so our deadline is the ONLY terminator. It is now
-  derived from the leg's expected duration (`_ack_budget_s`), not from `p5` (which is 0 for
-  five of the ten collapse verbs → a 3 s move used to wedge the action thread for 65 s).
+
+> **Read `auv-architecture-2026.md` first.** Most of this section is now history. The firmware
+> answered nine of the eleven `JETSON_FEEDBACK` items in its Round 6 (`AUDIT.md` R35–R44), and
+> the workarounds below have been **removed from the code**, not just annotated. The version
+> gate is `srot_protocol.FW_BEHAVIOUR_REV_REQUIRED`; the board reports its own via
+> `SROT_FW_BEHAVIOUR_REV` in `include/config.h`.
+
+- ~~**`MOVE_STOP` does not brake**~~ — **FIXED in fw REV 2, and our brake is GONE.**
+  The firmware now captures the outgoing leg's axis and speed *before* zeroing them and
+  restores both into `PH_BRAKE`, so `MOVE_STOP` decelerates on its own.
+  `SrotFC._brake_last_leg` **has been deleted**; `stop_motion()` is a bare `MOVE_STOP`.
+  ⚠ **This is the one change with a hull-relevant failure mode in BOTH directions:** run this
+  host code against pre-REV-2 firmware and `stop` coasts again; run the old host code against
+  REV-2 firmware and the hull is braked **twice** — a reverse leg on top of the board's own
+  deceleration. Do not mix.
+  **The interlock is `SrotFC.check_behaviour_rev()`**, which runs at connect and again inside
+  `arm()`, and **refuses to arm** below `FW_BEHAVIOUR_REV_REQUIRED`. The board reports its
+  revision in `AUTOPILOT_VERSION.middleware_sw_version` (request msgid 148); `0` means
+  pre-2026-08-01 firmware and fails closed. Override: `allow_fw_behaviour_mismatch:=true`.
+  `test_firmware_behaviour_rev_is_new_enough` checks the same number, but it **skips when the
+  firmware repo is not checked out beside the workspace — i.e. it skips on the vehicle**.
+  That is precisely why the runtime check exists.
+  (The previous drift test could not catch this: it grepped the firmware's `Type::STOP` case
+  for `abort()` and stayed **green** through the entire fix. Source-text greps across repos
+  are not a version contract; a declared revision number is.)
+- ~~**A failsafe mid-move never sends a terminal ACK**~~ — **FIXED in fw R35.** A failsafe now
+  resolves the in-flight move with a terminal ACK instead of freezing `mv_active=true` and
+  streaming `IN_PROGRESS` forever. `_ack_budget_s` is retained but **reframed as a backstop**:
+  it is no longer the only terminator, so it does not have to be tight enough to be the
+  liveness guarantee. (Separately fixed in fw R44, found on hardware: a resolved move could
+  emit a terminal ACK *repeatedly* — ~100 ACCEPTEDs for one DIVE — because the completion path
+  used `s_seq = 0` as its "already answered" sentinel and sequence 0 is a legal sequence. It
+  now latches an explicit `s_resolved` flag. This bug predates the srot branch.)
 - **A FIFTH ACK result exists** — `TEMPORARILY_REJECTED` (3) on a state-mutex miss, not in
   `JETSON_COMMS.md`'s four-result table. Treated as terminal + reported as retryable.
 - **Depth sign** — `VFR_HUD.alt` already arrives NEGATIVE-below-surface (our convention, same
   as Pixhawk AHRS2). We were negating it a second time, which made `/duburi/state.depth_m`
   positive when submerged and silently disabled every depth guard in the stack (they all
   compare against a negative constant, so none of them errored — they just stopped firing).
+- **⚠ pymavlink's DEFAULT dialect is MAVLink *1* (`dialects.v10.ardupilotmega`), where
+  `ESC_TELEMETRY_1_TO_4`/`_5_TO_8` (11030/11031) DO NOT EXIST.** Measured in-vehicle: the
+  board's ESC frames arrive and are reported as `UNKNOWN_291` / `UNKNOWN_11030` /
+  `UNKNOWN_11031` — zero RPM that looks exactly like an ESC or wiring fault. `MAVLINK20=1`
+  must be set **before** pymavlink is imported. `pixhawk.py` has always done this, which is
+  the only reason it worked; `fc/srot_fc.py` now does it too, so importing the srot backend
+  on its own (`bringup_check`, a test, a script) no longer silently loses ESC telemetry.
+  The drift test now asserts against `mavutil.mavlink.mavlink_map` — **the map the vehicle
+  actually decodes with** — not against the `dialects.v20` module, which is a different
+  object and was passing while the runtime path decoded nothing.
 - **`ESC_STATUS` (291) is in NO pymavlink dialect** (upstream removed 290/291 from `common`),
-  and pymavlink drops unknown msgids **silently**. `/duburi/esc_rpm` cannot be built on it;
-  we read `ESC_TELEMETRY_1_TO_4`/`5_TO_8` (11030/11031) instead, pending a firmware change.
+  and pymavlink drops unknown msgids **silently**. This finding was correct and still stands —
+  but the firmware now **also** emits `ESC_TELEMETRY_1_TO_4`/`5_TO_8` (11030/11031), which
+  decode fine, so the fallback you already wrote is live. **`/duburi/esc_rpm` is now
+  published** (`_publish_srot_telemetry`), and LEAK is surfaced on an edge latch rather than
+  per-tick spam. Note `MAV_CMD_SET_MESSAGE_INTERVAL` needs msgid 291 as a *number*:
+  `mavutil.mavlink.MAVLINK_MSG_ID_ESC_STATUS` **does not exist** and referencing it is an
+  `AttributeError` at import, so `srot_protocol.MSG_ID_ESC_STATUS = 291` is a literal.
+- **`NAMED_VALUE_FLOAT` multiplexing is a real hazard** (your finding, and a good one):
+  pymavlink caches exactly one message per msgid, so with MV_STATE / LEAK / WTEMP / GAIN all
+  riding NAMED_VALUE_FLOAT, whichever arrived last wins and **LEAK detection is
+  probabilistic**. Not yet fixed either side. Firmware proposal: move LEAK onto `SYS_STATUS`
+  sensor-health bits, where it is a dedicated bit that cannot be overwritten by a temperature
+  reading. Say the word and it lands.
 - **⚠ params may not have persisted before firmware `8cb4203`** (fw R14: the NVS partition
   was too small, writes silently failed). Assume `set_default_gain()`'s `JS_GAIN_DEFAULT=1.0`
   never stuck → `MANUAL_CONTROL` at half authority. **Reflash + read back `GAIN`.**
@@ -161,9 +227,12 @@ mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_dista
   closes every axis at 500 Hz. Spec: `Mongla_others/srot-control-board/VISION_API.md`; our
   side: [`vision-control-split.md`](vision-control-split.md). Until the firmware implements it,
   `vision_align`/`vision_move` stay in `UNSUPPORTED_VERBS` and the host loop is unchanged.
-- **NEXT:** the DVL-distance streamed path + `lock_heading` semantics; publish `/duburi/esc_rpm`
-  (blocked on the firmware emitting 11030/11031); commit the Bondor `.params` export. Once the
-  board serves vision: FOV config → angle conversion → uplink → re-point the two verbs.
+- **NEXT:** the DVL-distance streamed path + `lock_heading` semantics; commit the Bondor
+  `.params` export. `/duburi/esc_rpm` is **done** (was blocked on the firmware emitting
+  11030/11031 — it now does). Once the board serves vision: **measure the two cameras' FOV at
+  640×480** → angle conversion → uplink → re-point the two verbs. That measurement is the
+  critical path and it is a bench task, not a code task — see `auv-architecture-2026.md` §"The
+  one thing blocking vision".
 - **Cross-repo rules:** [`cross-repo-contract.md`](cross-repo-contract.md) (mirrored as
   `AGENTS.md` in each sibling repo).
 - **BENCH-GATED:** the runbook above (needs the board; first real validation — no SROT SITL).

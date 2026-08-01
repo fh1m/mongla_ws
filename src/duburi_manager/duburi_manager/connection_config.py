@@ -147,6 +147,9 @@ def _pixhawk_serial_present() -> bool:
 # (WCH), or a native ESP32 USB-CDC bridge, so we glob all three by stable
 # by-id name first, then fall back to raw ttyUSB/ttyACM nodes.
 _SROT_BY_ID_GLOBS = (
+    # Most specific first -- `_first_existing` takes the first match, so anything
+    # that can only be the SROT board must be probed before a generic pattern.
+    '/dev/serial/by-id/*SROT*',
     '/dev/serial/by-id/*CP2102*',
     '/dev/serial/by-id/*CP210*',
     '/dev/serial/by-id/*Silicon_Labs*',
@@ -156,13 +159,20 @@ _SROT_BY_ID_GLOBS = (
     # The board's ESP32 DevKit uses a plain CH340 whose by-id name is the generic
     # `usb-1a86_USB_Serial-if00-port0` (no "CH340" literal). Match it by the WCH VID
     # (1a86) and the generic "USB_Serial" string -- these are STABLE across re-enum,
-    # unlike the raw ttyUSB<n> node. Safe now that the payload is integrated into
-    # SROT (no separate payload CH340 board to collide with).
+    # unlike the raw ttyUSB<n> node.
     '/dev/serial/by-id/*1a86*',
     '/dev/serial/by-id/*USB_Serial*',
-    '/dev/serial/by-id/*Espressif*',
-    '/dev/serial/by-id/*ESP32*',
-    '/dev/serial/by-id/*SROT*',
+    # `*Espressif*` and `*ESP32*` are DELIBERATELY ABSENT.
+    #
+    # The Pixhawk globs above go out of their way to avoid matching an Espressif
+    # board ("we deliberately use the Pixhawk/PX4 product strings so the probe
+    # never false-positives on the BNO ESP32"), and this list reintroduced exactly
+    # that hazard by globbing the vendor name. The SROT board is a CH340, so those
+    # two patterns never matched it in the first place -- all they could ever do is
+    # grab a DIFFERENT Espressif device and then block at wait_heartbeat on it.
+    #
+    # The right long-term fix is a `SROT`-branded USB product descriptor in the
+    # firmware, which is why `*SROT*` is probed first and for free.
 )
 _SROT_RAW_FALLBACK = (
     '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0', '/dev/ttyACM1',

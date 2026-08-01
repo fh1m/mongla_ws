@@ -66,18 +66,19 @@ def _ack(result, command=sp.CMD_SROT_MOVE, progress=100):
 
 @pytest.fixture(autouse=True)
 def _fast_deadlines(monkeypatch):
-    """Shrink the ACK deadline floor and the brake pulse for the whole module.
+    """Shrink the ACK deadline floor and the fire pulse for the whole module.
 
     Both are real production values (an 8 s floor so a slow first ACK is not called
-    a stall; a brake long enough to actually null momentum) -- but a test that
+    a stall; a pulse long enough for a servo to travel) -- but a test that
     deliberately drives the stall path should not sit through them. Patched here
     rather than lowered in the source, so the shipped numbers stay honest.
+
+    (The BRAKE_* patches are gone with the host-side brake -- fw behaviour rev 2
+    brakes on-board.)
     """
     import duburi_control.fc.srot_fc as mod
     monkeypatch.setattr(mod, '_ACK_MIN_BUDGET_S', 0.3)
     monkeypatch.setattr(mod, '_ACK_MARGIN_S', 0.2)
-    monkeypatch.setattr(sp, 'BRAKE_MAX_S', 0.05)
-    monkeypatch.setattr(sp, 'BRAKE_K', 0.02)
     monkeypatch.setattr(mod, '_FIRE_PULSE_S', 0.01)
 
 
@@ -249,6 +250,13 @@ def test_build_params_forward_speed_from_gain():
     assert p1 == sp.MOVE_FORWARD and p2 == 3.0 and p3 == pytest.approx(0.6)
 
 
+def test_build_params_move_back_is_the_reverse_axis():
+    """move_back was refused for a missing branch, not a missing wire verb --
+    MOVE_BACK=1 has always existed and the old host brake already commanded it."""
+    p1, p2, p3, *_ = _build_params('move_back', {'duration': 2.0, 'gain': 40.0})
+    assert p1 == sp.MOVE_BACK and p2 == 2.0 and p3 == pytest.approx(0.4)
+
+
 def test_build_params_set_depth_negates_to_positive_dive():
     p1, p2, *_ = _build_params('set_depth', {'target': -1.6})
     assert p1 == sp.MOVE_DIVE and p2 == pytest.approx(1.6)
@@ -335,10 +343,29 @@ def test_get_mode_and_battery():
 
 def test_noop_writes_do_not_raise_and_send_nothing():
     fc = _fc()
-    fc.set_message_rate(30, 50)          # no-op on SROT (fixed rates)
-    fc.send_att_pos_mocap(90.0)          # no-op (board fuses BNO on-board)
-    assert fc.get_rc_channels() is None
+    fc.send_att_pos_mocap(90.0)          # no-op (board fuses the IMU on-board)
+    assert fc.get_rc_channels() is None  # no RC input path -- no radio on the vehicle
     assert not fc.master.mav.sent        # neither reached the wire
+
+
+def test_set_message_rate_sends_511():
+    """No longer a no-op: fw behaviour rev 2 implements SET_MESSAGE_INTERVAL, so the
+    board's 10 Hz ATTITUDE is no longer the ceiling on every host loop."""
+    fc = _fc()
+    fc.set_message_rate(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 50)
+    sent = [(c, p) for k, c, p in fc.master.mav.sent if k == 'cmd']
+    assert len(sent) == 1
+    cmd, p = sent[0]
+    assert cmd == mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL
+    assert p[0] == float(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE)
+    assert p[1] == pytest.approx(20000.0)      # 50 Hz -> 20 000 us
+
+
+def test_set_message_rate_zero_restores_the_board_default():
+    fc = _fc()
+    fc.set_message_rate(mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD, 0)
+    _, _, p = [s for s in fc.master.mav.sent if s[0] == 'cmd'][0]
+    assert p[1] == 0.0
 
 
 def test_send_heartbeat_emits_gcs_heartbeat():
@@ -435,11 +462,15 @@ def _moves(fc):
             if kind == 'cmd' and cmd == sp.CMD_SROT_MOVE]
 
 
-def test_abort_brakes_with_a_reverse_leg_not_a_bare_stop():
-    """MOVE_STOP alone is a COAST: the firmware zeroes s_uf/s_ul/s_speed before
-    the STOP case, so PH_BRAKE computes -0*gain*0 == 0 (fw movement.cpp:56,90,152).
-    An abort must therefore reverse the axis itself, or a 20 kg hull keeps going
-    on a board that has no position estimate."""
+def test_abort_sends_a_bare_stop_and_the_board_brakes():
+    """The host-side reverse-leg brake is GONE as of fw behaviour rev 2.
+
+    It existed because the wire-reachable MOVE_STOP coasted: the firmware zeroed
+    s_uf/s_ul/s_speed before the STOP case, so PH_BRAKE computed -0*gain*0 == 0.
+    Rev 2 (fw AUDIT.md R36) restores the outgoing leg's axis and speed, so STOP
+    brakes on-board -- and a host brake on top would kick the hull twice.
+
+    This pins the ABSENCE of the reverse leg, so re-adding one fails here."""
     fc = _fc()
     fc.master.auto_ack = None                     # never terminates -> abort path
     res = fc.move('move_forward', duration=3.0, gain=50.0,
@@ -447,38 +478,35 @@ def test_abort_brakes_with_a_reverse_leg_not_a_bare_stop():
     assert res.code == ABORTED
     sent = _moves(fc)
     assert sent[0][0] == sp.MOVE_FORWARD          # the leg
-    assert sent[1][0] == sp.MOVE_BACK             # the brake -- reversed axis
-    assert sent[1][2] > 0.0                       # ...with real thrust
-    assert 0.0 < sent[1][1] <= sp.BRAKE_MAX_S     # ...and bounded duration
-    assert sent[1][3] == pytest.approx(sent[1][1])  # p5 caps it board-side too
-    assert sent[-1][0] == sp.MOVE_STOP            # then settle/cancel the seq
+    assert sent[-1][0] == sp.MOVE_STOP            # straight to STOP
+    assert sp.MOVE_BACK not in [m[0] for m in sent], (
+        'a reverse brake leg reappeared -- the board already brakes on MOVE_STOP '
+        '(fw rev 2), so this would double-kick the hull')
 
 
-def test_brake_reverses_the_correct_lateral_axis():
-    fc = _fc()
-    fc.master.auto_ack = None
-    fc.move('move_left', duration=2.0, gain=40.0, abort_fn=lambda: True)
-    assert [m[0] for m in _moves(fc)][:2] == [sp.MOVE_STRAFE_L, sp.MOVE_STRAFE_R]
-
-
-def test_yaw_and_depth_legs_are_not_braked():
-    """Yaw is a rate the board bleeds; depth is a hold. Reversing either fights
-    the controller -- same rule as motion_vision's inertial brake."""
-    for verb, kw in (('yaw_right', {'target': 90.0}), ('set_depth', {'target': -1.5})):
+def test_no_verb_emits_a_reverse_brake_leg():
+    """Same invariant across the axes that used to be braked host-side."""
+    for verb, kw, opposite in (
+            ('move_left', {'duration': 2.0, 'gain': 40.0}, sp.MOVE_STRAFE_R),
+            ('move_forward', {'duration': 2.0, 'gain': 40.0}, sp.MOVE_BACK)):
         fc = _fc()
         fc.master.auto_ack = None
         fc.move(verb, abort_fn=lambda: True, **kw)
         types = [m[0] for m in _moves(fc)]
         assert types[-1] == sp.MOVE_STOP
-        assert sp.MOVE_BACK not in types and sp.MOVE_FORWARD not in types
+        assert opposite not in types
 
 
-def test_slow_leg_is_not_braked():
-    """No momentum worth nulling below BRAKE_MIN_SPEED -- don't kick the hull."""
+def test_stop_motion_does_not_block():
+    """The old brake slept its full duration inside stop_motion -- and the safety
+    `surface` verb calls it, so an emergency ascent waited up to BRAKE_MAX_S
+    before the mode change was even sent. Nothing sleeps here now."""
+    import time as _t
     fc = _fc()
     fc.master.auto_ack = None
-    fc.move('move_forward', duration=1.0, gain=1.0, abort_fn=lambda: True)
-    assert [m[0] for m in _moves(fc)] == [sp.MOVE_FORWARD, sp.MOVE_STOP]
+    t0 = _t.monotonic()
+    fc.stop_motion()
+    assert _t.monotonic() - t0 < 0.05
 
 
 def test_temporarily_rejected_is_terminal_and_says_it_is_retryable():
@@ -529,24 +557,23 @@ def test_shipped_ack_floor_is_generous_enough_for_a_slow_board():
         importlib.reload(mod)
 
 
-def test_stop_verb_brakes_the_previous_leg():
-    """`duburi stop` must actually stop, not coast.
+def test_stop_verb_is_a_single_bare_stop():
+    """`duburi stop` is now ONE MOVE_STOP -- the board brakes it (fw rev 2).
 
-    A *completed* leg still leaves the hull coasting, because the board's own
-    end-of-leg PH_BRAKE is the zero-thrust one -- so the following `stop` is
-    exactly where the momentum has to be nulled.
+    It used to emit a reverse leg first, because the board's end-of-leg PH_BRAKE
+    computed zero thrust and a completed leg left the hull coasting. Rev 2 fixed
+    that at the source, so the extra leg would now be a second kick.
     """
     fc = _fc()
     fc.master.auto_ack = _ack(sp.ACK_ACCEPTED)
-    fc.move('move_forward', duration=5.0, gain=60.0)      # completes; leg recorded
+    fc.move('move_forward', duration=5.0, gain=60.0)      # completes
     fc.master.mav.sent.clear()
     fc.move('stop')
-    assert [m[0] for m in _moves(fc)] == [sp.MOVE_BACK, sp.MOVE_STOP]
+    assert [m[0] for m in _moves(fc)] == [sp.MOVE_STOP]
 
 
-def test_stop_does_not_double_brake():
-    """Once stop_motion() has braked, the leg is consumed -- a second stop (or an
-    abort right after a timeout that already braked) must not kick the hull again."""
+def test_repeated_stop_stays_a_single_stop():
+    """A second stop (or an abort right after one) must not add anything."""
     fc = _fc()
     fc.master.auto_ack = _ack(sp.ACK_ACCEPTED)
     fc.move('move_forward', duration=5.0, gain=60.0)
@@ -581,14 +608,54 @@ def test_fire_uses_a_configured_map():
 
 
 # --------------------------------------------------------------------------- #
+#  payload_fire_map parsing -- the param that makes fire() possible at all      #
+# --------------------------------------------------------------------------- #
+def test_parse_fire_map_relay_and_servo():
+    from duburi_control.fc.srot_fc import parse_fire_map
+    m = parse_fire_map('1:relay:0, 2:relay:1, 3:servo:3, 4:servo:5:1900:1100')
+    assert m[1] == ('relay', 0)
+    assert m[2] == ('relay', 1)
+    assert m[3] == ('servo', 3, sp.SERVO_MAX_US, sp.SERVO_MIN_US)   # us default
+    assert m[4] == ('servo', 5, 1900, 1100)                          # us explicit
+
+
+def test_parse_fire_map_empty_is_empty_not_a_guess():
+    """Blank must stay empty so fire() keeps refusing. A default here would mean
+    firing an unknown actuator on a live vehicle."""
+    from duburi_control.fc.srot_fc import parse_fire_map
+    assert parse_fire_map('') == {}
+    assert parse_fire_map(None) == {}
+
+
+def test_parse_fire_map_skips_bad_entries_without_losing_good_ones():
+    """A typo in one channel must not silently disarm the other three."""
+    from duburi_control.fc.srot_fc import parse_fire_map
+    m = parse_fire_map('1:relay:0, 2:banana:1, oops, 3:relay:99, 4:servo:3')
+    assert set(m) == {1, 4}          # the two well-formed, in-range entries
+    assert m[1] == ('relay', 0)
+
+
+def test_parse_fire_map_output_drives_fire():
+    """End-to-end: the parsed shape is what SrotPayload.fire() consumes."""
+    from duburi_control.fc.srot_fc import SrotPayload, parse_fire_map
+    fc = _fc()
+    payload = SrotPayload(fc, fire_map=parse_fire_map('2:relay:1'))
+    assert payload.fire(2) is True
+    assert payload.fire(1) is False   # unmapped channel still refuses
+
+
+# --------------------------------------------------------------------------- #
 #  The unsupported-verb contract                                                #
 # --------------------------------------------------------------------------- #
 def test_unsupported_verbs_are_disjoint_from_move_verbs():
     from duburi_control.fc.srot_fc import UNSUPPORTED_VERBS
     assert not (UNSUPPORTED_VERBS & MOVE_VERBS)
-    # The ones that used to lie or crash rather than refuse.
-    for verb in ('lock_heading', 'move_back', 'arc', 'vision_align'):
+    # The ones that still lie or crash rather than refuse.
+    for verb in ('lock_heading', 'arc', 'vision_align'):
         assert verb in UNSUPPORTED_VERBS
+    # move_back came OFF the list: MOVE_BACK=1 was always on the wire and the verb
+    # was refused only for a missing _build_params branch. It is a board verb now.
+    assert 'move_back' in MOVE_VERBS and 'move_back' not in UNSUPPORTED_VERBS
 
 
 def test_no_facade_mode_gate_is_reachable_on_srot():
@@ -619,3 +686,92 @@ def test_no_facade_mode_gate_is_reachable_on_srot():
     assert not unreachable, (
         f'{sorted(unreachable)} would reach a facade mode gate on srot, then call '
         f'a Pixhawk-only primitive. Port them or add them to UNSUPPORTED_VERBS.')
+
+
+# --------------------------------------------------------------------------- #
+#  Firmware behaviour revision -- the RUNTIME interlock for the removed brake   #
+# --------------------------------------------------------------------------- #
+# The drift test that checks this same number reads the firmware repo off disk and
+# SKIPS when that repo is not checked out beside the workspace -- i.e. it skips on
+# the vehicle, the one place the answer matters. These tests pin the check that
+# actually runs there.
+
+def _fc_reporting_rev(rev):
+    """SrotFC whose fake board answers AUTOPILOT_VERSION with `rev`, or None for a
+    board that never answers at all."""
+    fc = _fc()
+    if rev is not None:
+        fc.master.messages['AUTOPILOT_VERSION'] = SimpleNamespace(
+            middleware_sw_version=rev, flight_sw_version=131072)
+    return fc
+
+
+def test_behaviour_rev_is_read_from_autopilot_version():
+    fc = _fc_reporting_rev(2)
+    assert fc.read_behaviour_rev() == 2
+    # and it requested the message rather than waiting for an unsolicited one
+    assert any(kind == 'cmd' and cmd == mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE
+               and p[0] == sp.MSG_ID_AUTOPILOT_VERSION
+               for kind, cmd, p in fc.master.mav.sent)
+
+
+def test_arm_is_refused_on_firmware_older_than_required():
+    """THE regression this whole interlock exists for.
+
+    Rev 1 COASTS on MOVE_STOP and we deleted `_brake_last_leg`, so `stop` and every
+    abort would apply zero braking thrust to 20 kg of hull with nothing in the log.
+    Arming is the last gate before anything can move, so it is where a known-bad
+    board has to be turned away.
+    """
+    fc = _fc_reporting_rev(1)
+    ok, reason = fc.arm(timeout=0.2)
+    assert ok is False
+    assert 'FW_BEHAVIOUR_REV_TOO_OLD' in reason
+    # It must not have even attempted to arm.
+    assert not any(kind == 'cmd' and cmd == _ARM_CMD
+                   for kind, cmd, _p in fc.master.mav.sent)
+
+
+def test_rev_zero_is_treated_as_too_old_not_as_unknown():
+    """0 is what pre-2026-08-01 firmware reports -- that build never populated the
+    field. Reading it as 'unknown, proceed' would let exactly the bad case through."""
+    fc = _fc_reporting_rev(0)
+    ok, reason = fc.arm(timeout=0.2)
+    assert ok is False and 'FW_BEHAVIOUR_REV_TOO_OLD' in reason
+
+
+def test_current_firmware_rev_arms_normally():
+    fc = _fc_reporting_rev(sp.FW_BEHAVIOUR_REV_REQUIRED)
+    fc.master.auto_ack = SimpleNamespace(
+        command=_ARM_CMD, result=sp.ACK_ACCEPTED, progress=0)
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=_ARMED, autopilot=0, custom_mode=0, _timestamp=time.time())
+    ok, _reason = fc.arm(timeout=1.0)
+    assert ok is True
+
+
+def test_a_silent_board_warns_but_does_not_brick_the_vehicle():
+    """Asymmetry on purpose: 'board says rev 1' is a definite statement that stop
+    will coast, and refusing is right. 'board said nothing' is far more likely a
+    dropped frame, and refusing to arm on a comms hiccup is its own hazard."""
+    fc = _fc_reporting_rev(None)
+    warnings = []
+    fc._log = SimpleNamespace(info=lambda m: None, warning=warnings.append)
+    fc.master.auto_ack = SimpleNamespace(
+        command=_ARM_CMD, result=sp.ACK_ACCEPTED, progress=0)
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=_ARMED, autopilot=0, custom_mode=0, _timestamp=time.time())
+    ok, _reason = fc.arm(timeout=1.0)
+    assert ok is True
+    assert any('BEHAVIOUR_REV' in w for w in warnings), \
+        'a silent board must still say so loudly'
+
+
+def test_the_override_is_opt_in_and_still_shouts():
+    fc = _fc_reporting_rev(1)
+    warnings = []
+    fc._log = SimpleNamespace(info=lambda m: None, warning=warnings.append)
+    fc.allow_fw_behaviour_mismatch = True
+    ok, reason = fc.check_behaviour_rev()
+    assert ok is True and 'OVERRIDDEN' in reason
+    assert any('OVERRIDDEN' in w for w in warnings)
