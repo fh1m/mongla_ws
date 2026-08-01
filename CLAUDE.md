@@ -169,7 +169,15 @@ Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEE
 `Mongla_others/srot-control-board/FIRMWARE_CHANGELOG_FOR_DUBURI.md`.
 What we sent the three sibling agents on 2026-08-01 (what we changed, what we need back, and
 the bench measurements we owe them): `DUBURI_WS_HANDOFF_2026-08-01.md` in **each** of
-`srot-control-board` / `srot-ground-station` / `srot-esc-flasher`.
+`srot-control-board` / `srot-ground-station` / `srot-esc-flasher`. The firmware agent's
+**executable run sheet** is `srot-control-board/TASKS_FROM_DUBURI_WS.md` — their work lands as
+a PR back into this branch, and **that PR merging is the last gate before water**.
+
+**We are on MAVLink compid 191** (`MAV_COMP_ID_ONBOARD_COMPUTER`), srot path only, so the
+firmware can key `FS_GCS_SYSID`/`FS_GCS_COMPID` on the companion specifically. Until it does, a
+dead Jetson with Bondor connected holds the GCS failsafe open and the vehicle station-keeps
+instead of surfacing. Safe in both directions — the board counts any heartbeat whose id is not
+its own (fw `mav_commands.cpp:687`).
 
 **⛔ The depth gate is wider than "dive verbs".** `SROT_MOVE` auto-enters `AUTO`, and the `AUTO`
 branch closes the depth loop under **every** primitive (fw `task_control_loop.cpp:236-237`) —
