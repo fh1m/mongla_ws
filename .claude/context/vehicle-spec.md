@@ -75,9 +75,38 @@ Actuation-Board step/dir interface — phase-2, not yet wired.)
 |--------------------|------------------------------------------------|--------------------------------------------------------|
 | Depth (Bar30)      | Stock ArduSub Bar30                            | Read via `AHRS2.altitude` through `Pixhawk`            |
 | Compass / mag      | Pixhawk internal magnetometer                  | Used **once at boot** for BNO085 Earth-reference       |
-| External heading   | **ESP32-C3 + BNO085**, USB CDC (gyro+accel)    | `BNO085Source` in `duburi_sensors`, opt-in via param   |
-| DVL                | **Nortek Nucleus1000** at `192.168.2.201`      | **Working driver** — `NucleusDVLSource` (`nucleus_dvl.py` + `nucleus_parser.py`): TCP auth, AHRS heading, bottom-track position integration, backoff reconnect. Lazy-connect via `dvl_connect` / auto-connect. POSHOLD/EKF3 fusion still TODO. |
+| External heading   | **ESP32-C3 + BNO085**, USB CDC (gyro+accel)    | ⚠️ **REMOVED FROM THE HULL (2026-08-01).** The BNO085 is on the SROT board (I2C0), fused at 500 Hz; read it via `mavlink_ahrs`. `BNO085Source` stays in `duburi_sensors` as a fallback but nothing selects it — the USB device is not fitted. |
+| DVL                | **Nortek Nucleus1000** at `192.168.2.201`      | ⚠️ **Driver code exists; NEVER VALIDATED IN WATER, and NOT FITTED to the competition body.** See the DVL status note below — this row previously said "Working driver" and contradicted three other documents. |
 | Hydrophones        | None                                           | Out of scope                                           |
+
+### DVL status — the authoritative statement (reconciled 2026-08-01)
+
+Six documents disagreed about the DVL, including two rows of *this table*. The SROT firmware
+team named that a planning blocker on their side, and they were right. One statement, and
+everything else defers to it:
+
+> **The Nucleus1000 driver code exists and is unit-tested** — `nucleus_dvl.py` +
+> `nucleus_parser.py`: TCP auth, AHRS heading, bottom-track position integration, backoff
+> reconnect. **It has never been validated in water. It is not fitted to the competition
+> body. It does not reach the SROT firmware at all** (the board has no position estimate and
+> no DVL ingest). **`Dubomini 2.0` has no DVL.**
+>
+> **Treat DVL-derived distance as UNAVAILABLE for 2026 planning.**
+
+Consequences that follow, so nobody re-derives them:
+
+- `move_forward_dist` / `move_back_dist` / `move_lateral_dist` are in
+  `srot_fc.UNSUPPORTED_VERBS` and stay there. This is correct, not a gap to close.
+- The 2026 competition path does not depend on this: the `task_*.py` chunks and the five
+  2026 FSM plans call **zero** distance verbs — they were rewritten onto bbox-fill precisely
+  because distance is unavailable.
+- The legacy `gate_prequal` / `gate_flare_prequal` / `gate_flare_autonomous` missions and the
+  `gate_flare` / `prequal` / `gate_then_bin` FSM plans **do** call them, and now fail loudly
+  on srot (`has_distance_moves`) instead of silently commanding nothing.
+- If distance is wanted back, the path is a **hardware flow sensor on the board's UART1**
+  feeding `OPTICAL_FLOW_RAD` (106), not more host code: that message carries the gyro
+  integral over the same window as the flow, which is the concurrency a 10 Hz `ATTITUDE`
+  stream over USB destroys.
 
 ### Why BNO085 instead of the TDR's VectorNav VN200
 
@@ -105,7 +134,7 @@ for the firmware contract.
 |-------------------------|------------------------|--------------------------------------------------|
 | Jetson Orin Nano        | `192.168.2.69` static  | UDP listener for MAVLink, ROS2 host              |
 | BlueOS (Raspberry Pi)   | `192.168.2.1`          | MAVLink router, web UI, gateway `192.168.2.2`    |
-| DVL Nucleus1000         | `192.168.2.201`        | Reserved; not yet integrated                     |
+| DVL Nucleus1000         | `192.168.2.201`        | Reserved; not fitted — see "DVL status" above    |
 | MAVLink endpoint name   | `inspector`            | UDP **Client** in BlueOS, IP=Jetson, Port=14550  |
 
 The Jetson opens `udpin:0.0.0.0:14550` and BlueOS pushes packets to it

@@ -14,8 +14,8 @@ companion — wiring, IPs, checklists, recovery.
 | Flight controller | Pixhawk 2.4.8 (ArduSub 4.x)        | USB → BlueOS           | via MAVLink endpoint 14550    |
 | Companion         | Raspberry Pi running BlueOS        | Ethernet switch        | `192.168.2.1`                 |
 | Main SBC          | Nvidia Jetson Orin Nano            | Ethernet switch        | `192.168.2.69` static         |
-| External IMU      | ESP32-C3 + BNO085                  | USB CDC to Jetson      | `/dev/ttyACM0` (typical)      |
-| DVL               | Nortek Nucleus1000                 | Ethernet switch        | `192.168.2.201` (driver TODO) |
+| External IMU      | ESP32-C3 + BNO085                  | USB CDC to Jetson      | ⚠️ **REMOVED 2026-08-01** — BNO085 is on the SROT board |
+| DVL               | Nortek Nucleus1000                 | Ethernet switch        | `192.168.2.201` — **not fitted / never validated**, see `vehicle-spec.md` "DVL status" |
 | Cameras           | 2× Blue Robotics Low-Light HD USB  | USB to Jetson          | `/dev/v4l/by-id/...`          |
 | ESCs              | 8× Blue Robotics Basic ESC         | Pixhawk MAIN PWM       | —                             |
 | Thrusters         | 8× Blue Robotics T200              | via ESCs               | —                             |

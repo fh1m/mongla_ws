@@ -68,8 +68,8 @@
 | Companion             | Raspberry Pi running BlueOS                                  |
 | Main SBC              | Nvidia Jetson Orin Nano (all ROS2 nodes live here)           |
 | Depth sensor          | Bar30 (read via ArduSub `AHRS2.altitude`)                    |
-| External IMU          | **ESP32-C3 + BNO085** over USB CDC, opt-in via `yaw_source`  |
-| DVL                   | Nortek Nucleus1000 @ `192.168.2.201` — **stub only**         |
+| External IMU          | ⚠️ **REMOVED 2026-08-01** — the BNO085 is on the SROT board (I2C0, fused at 500 Hz); read it via `yaw_source:=mavlink_ahrs`. The ESP32-C3 USB board is no longer fitted. |
+| DVL                   | Nortek Nucleus1000 @ `192.168.2.201` — **not fitted, never validated in water**; treat distance as unavailable (`vehicle-spec.md` "DVL status") |
 | Cameras               | Blue Robotics Low-Light HD USB (forward + downward)          |
 | Tether                | FathomX power-over-Ethernet                                  |
 | Power                 | Dual LiPo (propulsion + compute on isolated rails)           |
@@ -120,8 +120,11 @@ constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identica
 **Claims below that are Pixhawk-only and WRONG on srot:**
 - §2 network topology, BlueOS, UDP 14550, gateway `192.168.2.2` — srot is one USB cable.
 - §3 the `mode`/profile table — `resolve_srot_profile()` bypasses `PROFILES` entirely.
-- §4.2 "telemetry rates pinned via `MAV_CMD_SET_MESSAGE_INTERVAL`" — **SROT has no 511**;
-  its rates are fixed on-board (`ATTITUDE` 10 Hz, `VFR_HUD` 5 Hz, `HEARTBEAT` 1 Hz).
+- §4.2 telemetry rates — the pinning **does** apply on srot, via its own
+  `SROT_MESSAGE_RATES` table (no AHRS2, no RC_CHANNELS). *(Corrected 2026-08-01: this used
+  to say "SROT has no 511". Firmware behaviour rev 2 implements 511 and 510, and
+  `ATTITUDE` measures ~11 → ~55 Hz. The board clamps any request to a 20 ms floor and
+  refuses a HEARTBEAT disable with `DENIED`.)*
 - §5 `set_mode("ALT_HOLD")`, `send_rc_override`, `send_rc_yaw_only`, `set_target_depth` —
   **none exist on SROT.** Modes are STABILIZE/ACRO/DEPTH_HOLD/SURFACE/MANUAL/AUTO;
   actuation is one `MANUAL_CONTROL` frame (all 4 axes, no per-channel release) or an
@@ -134,17 +137,36 @@ constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identica
 - §13.7 payload "NOT through the Pixhawk" — on srot the payload **is** MAVLink
   `DO_SET_SERVO`/`DO_SET_RELAY` to the board's PCA9685; there is no separate USB ESP32.
 
-**Verb support on srot is partial.** `vision_align`/`vision_move`, `move_*_dist` (DVL),
-`lock_heading`, `move_back`, `arc`, `style_yaw` are **refused** with a clear message
-(`srot_fc.UNSUPPORTED_VERBS`) — they are not ported yet.
+**Verb support on srot is partial.** `vision_align`/`vision_move`, `move_*_dist`,
+`lock_heading`, `arc`, `style_yaw` are **refused** with a clear message
+(`srot_fc.UNSUPPORTED_VERBS`) — they are not ported yet. *(`move_back` was un-refused
+2026-08-01: `MOVE_BACK = 1` was always valid on the wire and the refusal was only a missing
+`_build_params` branch. `move_*_dist` stay refused permanently — DVL distance is
+unavailable, see `vehicle-spec.md` "DVL status".)*
 
 **⛔ The board's depth loop has never run closed** (fw `AUDIT.md` R1: the sign was inverted
 until 2026-07-30 and the Bar30 wasn't fitted). Two bench checks gate every dive-dependent
 verb — see `.claude/context/srot-integration.md`.
 
+**⚠ There is now a firmware-version interlock, and it is a hull-safety one.** The board
+reports `SROT_FW_BEHAVIOUR_REV` in `AUTOPILOT_VERSION.middleware_sw_version` (request msgid
+148); `SrotFC.check_behaviour_rev()` runs at connect **and inside `arm()`** and **refuses to
+arm below rev 2**. Reason: rev 2 made `MOVE_STOP` brake on-board, so the host-side
+reverse-leg brake was removed — on pre-rev-2 firmware `stop` and every abort would simply
+not decelerate 20 kg of hull, with nothing in any log. `0` means "older than 2026-08-01",
+not "unknown", and fails closed; a board that answers *nothing* warns hard but is allowed
+through. Override: `allow_fw_behaviour_mismatch:=true`.
+
+**★ The architecture change itself — read this first:**
+[`.claude/context/auv-architecture-2026.md`](.claude/context/auv-architecture-2026.md).
+Written by the board side: no Pixhawk, no Pi, no BlueOS, no UDP, no separate IMU board;
+every sensor on the control board, one USB-C cable to the Jetson, Jetson = GPU/vision only.
+
 Full detail, verb table, workarounds and bench runbook:
 [`.claude/context/srot-integration.md`](.claude/context/srot-integration.md).
-Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEEDBACK.md`.
+Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEEDBACK.md`
+(the Round 6 reply at the end answers their three open decisions). Their reply to us:
+`Mongla_others/srot-control-board/FIRMWARE_CHANGELOG_FOR_DUBURI.md`.
 
 **Cross-repo rules (start here before touching anything shared):**
 [`.claude/context/cross-repo-contract.md`](.claude/context/cross-repo-contract.md) — the
