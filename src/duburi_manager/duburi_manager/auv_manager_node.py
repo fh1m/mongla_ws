@@ -48,6 +48,8 @@ from duburi_control import (                                            # noqa: 
 from duburi_control.fc import make_flight_controller                     # noqa: E402
 from duburi_control.fc.srot_protocol import (                            # noqa: E402
     MSG_ID_ESC_STATUS as SROT_MSG_ID_ESC_STATUS,
+    SOURCE_SYSID as SROT_SOURCE_SYSID,
+    SOURCE_COMPID as SROT_SOURCE_COMPID,
 )
 from duburi_control.fc.srot_fc import MOVE_VERBS as SROT_MOVE_VERBS       # noqa: E402
 from duburi_control.fc.srot_fc import (                                   # noqa: E402
@@ -279,6 +281,24 @@ class AUVManagerNode(Node):
         self.get_logger().info(
             f'Connecting ({self._mode_name}) -> {self._profile["conn"]} ...')
         baud_kw = {'baud': self._profile['baud']} if self._profile['baud'] else {}
+        # Identify as an ONBOARD COMPUTER (191) on srot, not as "some GCS" (pymavlink's
+        # default 190). The board's LoRa bridge synthesises its filler heartbeat as
+        # 255/190 -- the same identity we were using -- so the firmware could not tell
+        # the companion from the ground station. Consequence: a DEAD JETSON with Bondor
+        # still connected holds the GCS failsafe open, and the vehicle station-keeps
+        # when it should surface. A distinct compid is what lets the firmware key
+        # FS_GCS_SYSID/FS_GCS_COMPID on us specifically (their JETSON_FEEDBACK §4).
+        #
+        # Safe to ship before that firmware lands: the board counts ANY heartbeat whose
+        # id is not its own (`msg.compid != MAV_COMPONENT_ID || msg.sysid !=
+        # MAV_SYSTEM_ID`, fw mav_commands.cpp:687), so 191 keeps the failsafe fed
+        # exactly as 190 did.
+        #
+        # srot ONLY -- the pixhawk path keeps pymavlink's defaults so it stays
+        # byte-identical to history, which is the whole promise of that backend.
+        if self._is_srot:
+            baud_kw['source_system'] = SROT_SOURCE_SYSID
+            baud_kw['source_component'] = SROT_SOURCE_COMPID
         self.master  = mavutil.mavlink_connection(self._profile['conn'], **baud_kw)
         self.master.wait_heartbeat()
         # Build the backend behind the FlightController HAL. PixhawkFC is-a Pixhawk,
