@@ -351,6 +351,17 @@ class AUVManagerNode(Node):
     def _setup_yaw_source(self) -> None:
         """Instantiate yaw source, print startup banner, start DVL auto-connect."""
         _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
+        # The BNO085 moved onto the SROT board (I2C0) and the separate ESP32-C3 +
+        # BNO085 USB board was removed from the hull. Selecting a source that reads
+        # it will fail in make_yaw_source with a bare SerialException about a missing
+        # port, which reads like a loose cable rather than "that board is gone". Say
+        # the true thing first; the raise below still stops startup.
+        if self._is_srot and self._yaw_src_name in ('bno085', 'bno085_dvl', 'dvl_bno'):
+            self.get_logger().error(
+                f'[SENS ] yaw_source={self._yaw_src_name!r} reads the USB ESP32-C3 + '
+                f'BNO085 board, which is NOT FITTED on the srot vehicle -- the BNO085 '
+                f'is on the control board now. Use yaw_source:=mavlink_ahrs (the '
+                f'board\'s own fused ATTITUDE, same sensor, 500 Hz).')
         try:
             self.yaw_source = make_yaw_source(
                 self._yaw_src_name,
