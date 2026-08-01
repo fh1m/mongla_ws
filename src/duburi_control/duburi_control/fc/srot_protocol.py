@@ -27,7 +27,26 @@ from __future__ import annotations
 VEHICLE_SYSID   = 1
 VEHICLE_COMPID  = 1        # MAV_COMP_ID_AUTOPILOT1
 SOURCE_SYSID    = 255
-SOURCE_COMPID   = 190
+# 191 = MAV_COMP_ID_ONBOARD_COMPUTER. NOT pymavlink's default 190
+# (MAV_COMP_ID_MISSIONPLANNER), and the difference is a failsafe, not cosmetics.
+#
+# The board's LoRa bridge synthesises its filler heartbeat as 255/190 -- byte-identical
+# to what we used to send -- so the firmware could not distinguish the companion from
+# the ground station. That makes a source-specific GCS failsafe impossible to write:
+# a parameter naming "the Jetson" as 255/190 also matches the bridge, so a DEAD JETSON
+# with Bondor still connected holds the failsafe open and the vehicle station-keeps
+# when it should surface. The firmware team declined to ship a fake fix for this
+# (their JETSON_FEEDBACK §4) and asked us to take a distinct id. This is that.
+#
+# Ordering is safe in both directions -- deliberately, so neither repo has to wait:
+# the board counts ANY heartbeat whose id is not its own
+# (`msg.compid != MAV_COMPONENT_ID || msg.sysid != MAV_SYSTEM_ID`,
+# fw mav_commands.cpp:687), so 191 feeds the current failsafe exactly as 190 did,
+# and it keeps working once FS_GCS_SYSID/FS_GCS_COMPID land.
+#
+# Applied on the SROT path only (auv_manager_node._setup_mavlink); the pixhawk
+# backend keeps pymavlink's defaults so it stays byte-identical to history.
+SOURCE_COMPID   = 191
 GCS_FAILSAFE_MS = 5000     # board surfaces after this much HEARTBEAT silence
 BAUD            = 115200   # ESP32 UART0; used on the direct-serial path
 

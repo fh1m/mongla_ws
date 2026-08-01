@@ -126,3 +126,22 @@ def test_position_modes_are_not_aliased():
     so silently accepting them would promise station-keeping it cannot deliver."""
     assert sp.mode_int('POSHOLD') is None
     assert sp.mode_int('GUIDED') is None
+
+
+def test_companion_is_an_onboard_computer_not_a_generic_gcs():
+    """191 (MAV_COMP_ID_ONBOARD_COMPUTER), NOT pymavlink's default 190.
+
+    This is a failsafe, not cosmetics. The board's LoRa bridge synthesises its
+    filler heartbeat as 255/190 -- byte-identical to what we used to send -- so
+    the firmware cannot tell the companion from the ground station, and a
+    source-specific GCS failsafe is impossible to write. The failure that buys:
+    a DEAD JETSON with Bondor still connected holds the failsafe open, and the
+    vehicle station-keeps at depth when it should be surfacing.
+
+    Reverting this to 190 would silently re-close that door, so pin it.
+    """
+    assert sp.SOURCE_COMPID == 191
+    assert sp.SOURCE_SYSID == 255
+    # Must never collide with the vehicle's own id, or the board would count our
+    # heartbeat as its own and stop feeding the failsafe timer at all.
+    assert (sp.SOURCE_SYSID, sp.SOURCE_COMPID) != (sp.VEHICLE_SYSID, sp.VEHICLE_COMPID)
