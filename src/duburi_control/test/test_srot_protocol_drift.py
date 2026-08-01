@@ -123,22 +123,37 @@ def test_vehicle_ids_match():
     assert _define(cfg, 'MAV_COMPONENT_ID') in (None, sp.VEHICLE_COMPID)
 
 
-def test_stop_still_does_not_apply_reverse_thrust():
-    """Guards our host-side brake against becoming a DOUBLE brake.
+def test_firmware_behaviour_rev_is_new_enough():
+    """The board must be at or above the behaviour revision this host assumes.
 
-    `SrotFC._brake_last_leg` exists purely because the wire-reachable MOVE_STOP
-    coasts: movement::start() zeroes s_uf/s_ul/s_speed before the STOP case, so
-    PH_BRAKE computes `-0 * gain * 0`. If the firmware ever fixes that (it is item
-    2 on our JETSON_FEEDBACK list), this test fails and tells us to drop the host
-    brake instead of kicking the hull twice.
+    Replaces `test_stop_still_does_not_apply_reverse_thrust`, which asserted on the
+    SHAPE of the firmware's C++ -- it grepped the `Type::STOP` case for `abort()`
+    to decide whether MOVE_STOP still coasted.
+
+    That failed silently in the way that matters. The firmware fixed MOVE_STOP by
+    restoring the outgoing leg's axis and speed (which `start()` had zeroed before
+    the switch), so the string never appeared, the test stayed GREEN, and the
+    behaviour changed underneath it. Had we trusted it we would have kept
+    `_brake_last_leg` and braked the hull twice. Their own suggested fix -- routing
+    STOP through `abort()` -- would not have worked either, for the same reason:
+    `abort()` does not restore those fields.
+
+    Source text is a brittle proxy for behaviour. `SROT_FW_BEHAVIOUR_REV` is a
+    number the board bumps deliberately, with each revision's meaning documented
+    beside it in `include/config.h`.
     """
-    src = _read('src', 'control', 'movement.cpp')
-    m = re.search(r'case\s+Type::STOP\s*:(.*?)(?=case\s+Type::|\n\s*\})', src, re.S)
-    assert m, 'Type::STOP case not found in movement::start()'
-    body = m.group(1)
-    assert 'abort()' not in body, (
-        'MOVE_STOP now routes through movement::abort(), which brakes correctly '
-        'on-board -- remove SrotFC._brake_last_leg or it will brake twice.')
+    src = _read('include', 'config.h')
+    m = re.search(r'#define\s+SROT_FW_BEHAVIOUR_REV\s+(\d+)', src)
+    assert m, (
+        'SROT_FW_BEHAVIOUR_REV not found in include/config.h -- firmware predates '
+        'the behaviour-revision signal (added 2026-08-01). Anything older than '
+        'rev 2 COASTS on MOVE_STOP and we no longer carry a host brake.')
+    rev = int(m.group(1))
+    assert rev >= sp.FW_BEHAVIOUR_REV_REQUIRED, (
+        f'firmware behaviour rev {rev} < required {sp.FW_BEHAVIOUR_REV_REQUIRED}. '
+        f'Rev 1 coasts on MOVE_STOP and strands a move on IN_PROGRESS when a '
+        f'failsafe displaces AUTO. Either flash rev >= '
+        f'{sp.FW_BEHAVIOUR_REV_REQUIRED} or restore the host-side workarounds.')
 
 
 def test_esc_status_291_is_absent_from_our_dialect():

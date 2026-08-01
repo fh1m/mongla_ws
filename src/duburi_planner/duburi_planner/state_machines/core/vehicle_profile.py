@@ -28,6 +28,35 @@ class VehicleProfile:
     has_dvl: bool
     has_manipulators: bool
     mission_depth_m: float  # negative = submerged
+    # Which flight controller is driving. This used to be invisible here, and the
+    # profile inferred vehicle identity from the YAW-SOURCE STRING alone -- so on
+    # the srot backend `yaw_source:=dvl` (the launch default) set has_dvl=True and
+    # every MoveForwardState with a distance_m dispatched `move_forward_dist`,
+    # which srot_fc hard-refuses. Worse, those call sites are `if dist: ... elif
+    # duration: ...`, so the refusal did NOT fall back to the timed leg -- the
+    # state just failed.
+    flight_controller: str = 'pixhawk'
+
+    @property
+    def has_distance_moves(self) -> bool:
+        """True when `move_*_dist` will actually run.
+
+        Needs a DVL *and* a backend that implements the streamed distance path.
+        srot does not (`srot_fc.UNSUPPORTED_VERBS`) -- the DVL is host-side only
+        and never reaches the board. Branch on THIS, not on `has_dvl`, wherever a
+        distance verb is about to be issued.
+        """
+        return self.has_dvl and self.flight_controller != 'srot'
+
+    @property
+    def has_heading_lock(self) -> bool:
+        """True when `lock_heading` holds anything.
+
+        Refused on srot: the board locks the heading each translate leg starts
+        with, on-board, which is what HeadingLock was invented to fake against an
+        untrusted ArduSub compass. A plan that needs an explicit lock must branch.
+        """
+        return self.flight_controller != 'srot'
 
     # ------------------------------------------------------------------
     # Named constructors
@@ -75,7 +104,7 @@ class VehicleProfile:
                 return cls.dubomini()
 
             req = GetParameters.Request()
-            req.names = ['yaw_source', 'dvl_auto_connect']
+            req.names = ['yaw_source', 'dvl_auto_connect', 'flight_controller']
             future = client.call_async(req)
 
             deadline = time.monotonic() + _PROBE_TIMEOUT_S
@@ -88,6 +117,10 @@ class VehicleProfile:
             resp = future.result()
             yaw_src   = resp.values[0].string_value if resp.values[0].type == 4 else 'mavlink_ahrs'
             dvl_auto  = resp.values[1].bool_value   if len(resp.values) > 1 else True
+            fc_kind   = (resp.values[2].string_value
+                         if len(resp.values) > 2 and resp.values[2].type == 4
+                         else 'pixhawk')
+            fc_kind   = (fc_kind or 'pixhawk').strip().lower()
             has_dvl   = yaw_src in _DVL_SOURCES and dvl_auto
 
             profile = cls(
@@ -97,6 +130,7 @@ class VehicleProfile:
                                          # payload fire works via PayloadDriver regardless.
                                          # Use VehicleProfile.duburi45() to enable manipulator states.
                 mission_depth_m=-0.8 if has_dvl else -0.6,
+                flight_controller=fc_kind,
             )
             node.get_logger().info(
                 f'[VehicleProfile.auto] detected: {profile.name} '
