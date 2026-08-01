@@ -881,15 +881,20 @@ def main(argv: list[str] | None = None) -> int:
         # board's own port and fights the MAVLink link.
         section('I. Payload (SROT PCA9685 over MAVLink)')
         emit(PASS, 'payload transport', 'PCA9685 over MAVLink; no separate USB board')
-        # The transport being up is NOT the payload working. `payload_fire_map` is a
-        # ROS param on the running node, which this preflight cannot read -- so the
-        # honest report is WARN ("cannot confirm"), never PASS. Reporting PASS here
-        # is exactly what hid the dead fire() path: the link was up, this line said
-        # PASS, and every fire() returned False because the map was empty.
-        emit(WARN, 'payload_fire_map not verifiable here',
-             'preflight cannot read a running node\'s param. EMPTY = torpedo and '
-             'dropper CANNOT actuate. Confirm the manager logs '
-             '"[PAYLOAD] SROT: ... channel(s) mapped" and NOT "NO FIRE MAP"')
+        # The transport being up is NOT the payload working, and the old PASS on this
+        # line is what hid the dead fire() path: link up, line green, every fire()
+        # returning False because the map was empty.
+        #
+        # But this is a NOTE, not a WARN, and the distinction is load-bearing:
+        # `payload_fire_map` is a ROS param on the RUNNING node, which a standalone
+        # preflight cannot read. An unconditional WARN would make `--strict` -- the
+        # hard pre-mission gate -- exit non-zero on EVERY srot run, for a condition
+        # nobody can clear from here. A gate that always fails is a gate people stop
+        # running. Say the true thing and point at where the answer actually is.
+        _line('NOTE', 'payload_fire_map',
+              'not readable from a preflight (it is a param on the running node). '
+              'EMPTY = torpedo/dropper CANNOT actuate -- confirm the manager logs '
+              '"[PAYLOAD] SROT: N channel(s) mapped", not "NO FIRE MAP"')
     else:
         section('I. Payload board (CH340)')
         st, det = _check_payload()
@@ -912,9 +917,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---- resolved mode + launch hint ------------------------------- #
     section('Manager startup hint')
-    chosen = resolve_mode('auto', logger=None)
-    emit(PASS, f'auto-detected mode={chosen!r}',
-         'picked by mode=auto (the default)')
+    if srot:
+        # `mode` selects among the UDP-14550 PROFILES, which resolve_srot_profile()
+        # bypasses entirely -- there is no BlueOS to listen to. Printing
+        # "auto-detected mode='sim'" on a real SROT vehicle is worse than printing
+        # nothing: it looks like the preflight thinks this is a simulation.
+        emit(PASS, 'connection', 'direct USB serial -- `mode` does not apply on srot')
+    else:
+        chosen = resolve_mode('auto', logger=None)
+        emit(PASS, f'auto-detected mode={chosen!r}',
+             'picked by mode=auto (the default)')
 
     # ---- summary --------------------------------------------------- #
     print()
@@ -927,16 +939,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f'  0 FAIL, {warnings} WARN -- review above before pool day.')
         rc = 1 if strict else 0
         print('  Launch with:')
-        _print_launch_hint()
+        _print_launch_hint(srot)
     else:
         print('  All checks PASS. Launch with:')
-        _print_launch_hint()
+        _print_launch_hint(srot)
         rc = 0
     print('=' * 72)
     return rc
 
 
-def _print_launch_hint() -> None:
+def _print_launch_hint(srot: bool = False) -> None:
+    if srot:
+        # Deliberately NOT the pixhawk hint: it recommends move_forward_dist, which is
+        # permanently refused on srot (no DVL fitted, never validated), and a bare
+        # `start` whose defaults are right but whose profile talk is meaningless here.
+        print('    ros2 launch duburi_manager bringup.launch.py   '
+              '# srot + mavlink_ahrs are the defaults')
+        print('      add  payload_fire_map:="1:relay:0, 2:relay:1"  '
+              '# else fire() refuses')
+        print('    ros2 run duburi_planner duburi arm')
+        print('    ros2 run duburi_planner duburi move_forward --duration 5 --gain 40')
+        print('    ros2 run duburi_planner duburi stop')
+        print()
+        print('  ⛔ BEFORE WATER -- the depth loop has never run closed, and it runs')
+        print('     under EVERY AUTO move (move_forward included), not just set_depth:')
+        print('    ros2 run duburi_planner duburi set_mode --target_name DEPTH_HOLD')
+        print('      1. hand-raise/lower the sub -> verticals must push BACK toward depth')
+        print('      2. trip the leak input at depth -> the demand must be ASCEND')
+        return
     print('    ros2 run duburi_manager start              '
           '# mode=auto picks the right profile')
     print('    ros2 launch duburi_vision vision.launch.py camera:=forward  '
