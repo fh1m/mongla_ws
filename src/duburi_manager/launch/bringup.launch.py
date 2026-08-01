@@ -50,8 +50,20 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument('mode',       default_value='pool',
                               description='Connection mode: pool|sim|auto|desk|laptop'),
-        DeclareLaunchArgument('yaw_source', default_value='dvl',
-                              description='Yaw source: dvl|mavlink_ahrs|bno085'),
+        # Default is mavlink_ahrs since the SROT board became the flight controller.
+        #
+        # It used to be 'dvl', which is now wrong twice over. The BNO085 moved ONTO
+        # the control board (I2C0) and the separate ESP32-C3 + BNO085 USB board was
+        # removed from the hull, so 'bno085' opens a device that is not fitted; and
+        # 'dvl' made VehicleProfile report has_dvl=True on srot, which routed the FSM
+        # into move_forward_dist -- a verb srot_fc hard-refuses.
+        #
+        # mavlink_ahrs reads the board's own fused ATTITUDE through fc.get_attitude():
+        # the same BNO085 part, one layer closer to the thrusters, fused at 500 Hz and
+        # now pinnable to ~50 Hz on the wire. Pass yaw_source:=dvl explicitly if a
+        # Nucleus is actually fitted and validated on the vehicle you are running.
+        DeclareLaunchArgument('yaw_source', default_value='mavlink_ahrs',
+                              description='Yaw source: mavlink_ahrs|dvl|bno085|bno085_dvl'),
         DeclareLaunchArgument('dvl_host',        default_value='192.168.2.201'),
         DeclareLaunchArgument('dvl_port',        default_value='9000'),
         DeclareLaunchArgument('dvl_auto_connect', default_value='true',

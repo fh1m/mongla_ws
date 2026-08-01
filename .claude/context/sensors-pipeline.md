@@ -5,6 +5,33 @@ This file is the design rationale + future-extension guide for the
 fusion strategy, or "improving" the architecture — the constraints
 below were chosen deliberately.
 
+> ## ⚠️ Hardware status as of 2026-08-01 — read before trusting anything below
+>
+> **Two of the four `YawSource` implementations now describe hardware that is not on the
+> vehicle.** The package is correct and still builds; what changed is the hull.
+>
+> | Source | Status on the SROT vehicle |
+> |---|---|
+> | `mavlink_ahrs` | ✅ **The default, and the one to use.** Reads the SROT board's own fused attitude via `fc.get_attitude()`. |
+> | `bno085` | ⛔ **Hardware removed.** The ESP32-C3 + BNO085 USB board is no longer fitted. |
+> | `bno085_dvl` | ⛔ Needs both removed/unfitted devices. |
+> | `dvl` | ⛔ Never validated in water, not fitted — see `vehicle-spec.md` "DVL status". |
+>
+> **The BNO085 did not go away — it moved.** It is on the SROT control board's I2C0 bus,
+> fused into the 500 Hz control loop, and published as MAVLink `ATTITUDE` (pinnable to
+> ~50 Hz since firmware behaviour rev 2). It is the *same sensor part*, one layer closer to
+> the thrusters and sampled 10× faster, reached through `mavlink_ahrs` instead of a second
+> USB link.
+>
+> **Nothing here is deleted, deliberately.** `yaw_source` is a runtime switch, so keeping
+> these costs nothing but disk — and they are the fallback if the board's attitude turns out
+> to be wrong in the water. What changed is that nothing *selects* them, so the 50 Hz reader
+> thread and the 5 s boot calibration no longer run on a 15 W Orin whose every spare Hz
+> belongs to the detector.
+>
+> The calibration model below is still the right reference for the part; read it as
+> **how this chip behaves**, not as **what is running today**.
+
 ---
 
 ## Why a separate package

@@ -132,7 +132,19 @@ _LOCK_PASSIVE_VERBS = frozenset({'lock_heading', 'unlock_heading', 'stop',
 # ALT_HOLD is the smallest mode that does both: holds depth at whatever
 # the sub is at when the mode is engaged, and accepts the lock thread's
 # Ch4 rate-override as the heading-hold rate target.
-YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED')
+#
+# DEPTH_HOLD is the SROT board's name for the same capability. `SrotFC.set_mode`
+# aliases ALT_HOLD -> DEPTH_HOLD, but `get_mode()` reports the board's own name,
+# so without this entry the gates never recognise the mode they just engaged and
+# re-command it on every single yaw/depth verb. Including it here is safe for
+# ArduSub too: DEPTH_HOLD is not an ArduSub mode string, so it can never match a
+# Pixhawk `get_mode()` and cannot mask a genuinely wrong mode there.
+#
+# NOTE for the srot backend: today every verb that reaches these gates is either
+# collapsed onto the board or in UNSUPPORTED_VERBS, so the gates are dead code
+# (pinned by `test_no_facade_mode_gate_is_reachable_on_srot`). This entry is what
+# stops them misfiring the moment a vision or distance verb is un-refused.
+YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED', 'DEPTH_HOLD')
 
 
 # style_roll tuning. RoboSub rule: surfacing during a run ends the run, so
