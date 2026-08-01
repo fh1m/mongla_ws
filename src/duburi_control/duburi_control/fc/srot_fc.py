@@ -275,10 +275,22 @@ class SrotFC(FlightController):
     # ------------------------------------------------------------------ #
     def send_gcs_heartbeat(self) -> None:
         """>=1 Hz companion HEARTBEAT -- MANDATORY: 5 s of silence trips the board's
-        GCS failsafe and SURFACEs the vehicle mid-mission."""
+        GCS failsafe and SURFACEs the vehicle mid-mission.
+
+        ONBOARD_CONTROLLER, not GCS: we are a companion computer, and now that we
+        also identify as compid 191 (MAV_COMP_ID_ONBOARD_COMPUTER) declaring
+        MAV_TYPE_GCS would contradict that on the same frame -- exactly the
+        ambiguity the compid change exists to remove. `pixhawk.py` has always sent
+        ONBOARD_CONTROLLER; this backend was the inconsistent one.
+
+        Safe: nothing reads the field. The firmware's heartbeat handler branches on
+        sysid/compid only (fw mav_commands.cpp:687), and our own `_vehicle_hb`
+        filter keys on `autopilot == MAV_AUTOPILOT_INVALID`, which is unchanged --
+        so our loopback frames are still correctly ignored.
+        """
         with self._tx_lock:
             self.master.mav.heartbeat_send(
-                mavutil.mavlink.MAV_TYPE_GCS,
+                mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
                 mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
 
     def link_alive(self) -> bool:
