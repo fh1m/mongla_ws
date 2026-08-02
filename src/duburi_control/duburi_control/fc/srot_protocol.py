@@ -276,6 +276,12 @@ MOVE_YAW_RATE   = 45.0    # deg/s default turn rate when p3=0
 MOVE_DEPTH_RATE = 0.20    # m/s dive/ascend ramp
 GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.5)
 
+# |DEPTH_OUT| at or above this while DISARMED means the depth controller is already
+# demanding (near-)full heave, and arming would hand that straight to the thrusters.
+# 0.9 rather than 1.0: the failure is saturation, and a loop pinned at 0.95 is in the
+# same state as one pinned at 1.00. A settled bench loop sits near 0.
+DEPTH_OUT_ARM_LIMIT = 0.90
+
 # ---------------------------------------------------------------------- #
 #  Firmware behaviour revision -- the cross-repo coordination signal      #
 # ---------------------------------------------------------------------- #
@@ -339,6 +345,21 @@ MSG_ID_AUTOPILOT_VERSION = 148
 # stream key the board rates its RPM output by -- one SET_MESSAGE_INTERVAL on 291
 # paces ESC_STATUS *and* the ESC_TELEMETRY_1_TO_4/5_TO_8 pair we actually decode.
 MSG_ID_ESC_STATUS = 291
+
+# ---------------------------------------------------------------------- #
+#  Two batteries -- the board sends BATTERY_STATUS twice, with different  #
+#  instance ids, and they mean physically different things.               #
+# ---------------------------------------------------------------------- #
+# MEASURED on the vehicle 2026-08-02: both stream at 2 Hz. PM1 is the electronics
+# pack read by the ESP32's own ADC; PM2 is the THRUSTER pack, which the flight
+# controller cannot read directly -- it arrives over ESP-NOW from the 2nd board, so
+# it is absent whenever that link is down or `PM2_SRC`/`ESPNOW_EN` are misconfigured.
+#
+# Mixing them up is not cosmetic: on this hull PM1 read 1.35 V (nothing is wired to
+# GPIO36) while PM2 read 14.74 V. A consumer that samples pymavlink's single
+# per-msgid slot alternates between the two.
+BATTERY_ID_MAIN     = 0   # PM1, electronics rail -> DuburiState.battery_voltage
+BATTERY_ID_THRUSTER = 1   # PM2, thruster pack, via ESP-NOW
 
 # ---------------------------------------------------------------------- #
 #  LEAK: why we still read NAMED_VALUE_FLOAT and not SYS_STATUS           #

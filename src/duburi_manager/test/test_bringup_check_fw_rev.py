@@ -98,3 +98,61 @@ def test_absent_sys_status_warns_rather_than_failing():
 
 def test_baro_not_present_warns():
     assert _baro_health_verdict(_OTHER, _OTHER)[0] == WARN
+
+
+# --------------------------------------------------------------------------- #
+#  Barometer NOISE + a saturated depth loop -- both measured on the vehicle    #
+# --------------------------------------------------------------------------- #
+
+from duburi_manager.bringup_check import (                            # noqa: E402
+    _baro_noise_verdict, _depth_loop_verdict)
+
+
+def test_a_noisy_baro_fails_even_though_every_sample_is_plausible():
+    """THE finding, 2026-08-02. On the bench, still, the Bar30 produced samples
+    spanning 321..740 mbar. Each one sits inside the firmware's wide per-sample
+    plausibility band, so the board reports the barometer HEALTHY and keeps streaming
+    SCALED_PRESSURE2 -- while depth wanders metres. Only variance sees this."""
+    real = [321.4, 740.2, 519.3, 413.8, 623.5, 896.1]
+    status, label, detail = _baro_noise_verdict(real)
+    assert status == FAIL
+    assert 'NOISE' in label or 'NOISE' in detail
+    assert 'HEALTHY' in detail, 'must warn that the board disagrees'
+
+
+def test_a_still_baro_passes():
+    assert _baro_noise_verdict([1013.1, 1013.2, 1013.0, 1013.15])[0] == PASS
+
+
+def test_a_stable_but_wrong_baro_still_fails():
+    """A rock-steady 465 mbar is not noise, but depth derived from it is still
+    wrong by metres -- the variance check alone would wave it through."""
+    assert _baro_noise_verdict([465.0, 465.1, 465.0, 465.05])[0] == FAIL
+
+
+def test_absent_pressure_warns_and_says_depth_is_untrustworthy():
+    """Since rev 3 absence means the board WITHHELD it (unhealthy/stale baro), which
+    is information, not a comms hiccup -- but a dropped frame looks identical, so
+    WARN rather than FAIL and say what it implies."""
+    status, _, detail = _baro_noise_verdict([])
+    assert status == WARN and 'trustworthy' in detail
+
+
+def test_a_saturated_depth_loop_fails_and_names_the_vertical_thrusters():
+    """Observed disarmed: DEPTH_OUT=-1.00, DEPTH_ERR=-3.11 m. The mixer throttle
+    column is -1 on all four verticals and 0 on all four horizontals, so arming turns
+    that into full vertical thrust -- the reported arming blocker, exactly."""
+    status, label, detail = _depth_loop_verdict(-1.0, -3.11)
+    assert status == FAIL
+    assert 'SATURATED' in label and 'vertical' in detail
+    assert '-3.11' in detail, 'a refusal must quote what it refused on'
+
+
+def test_a_settled_depth_loop_passes():
+    assert _depth_loop_verdict(-0.01, 0.0)[0] == PASS
+
+
+def test_a_board_that_never_reports_depth_out_only_warns():
+    """Firmware older than rev 3 has no DEPTH_OUT. Silence must not become a hard
+    preflight failure for a value the board cannot produce."""
+    assert _depth_loop_verdict(None, None)[0] == WARN

@@ -171,6 +171,35 @@ read from `NAMED_VALUE_FLOAT` — via a per-name table fed by the manager's read
 because all seven names burst inside one 500 ms tick and pymavlink's single slot keeps only the
 last (`GAIN`). Details: [`srot-integration.md`](.claude/context/srot-integration.md).
 
+**⛔ BENCH-MEASURED 2026-08-02, board in the AUV — the water test is BLOCKED.** The Bar30 is
+producing **noise**: 317..874 mbar on a still bench (sea level ~1013), water temp 6..30 °C,
+depth reading +0.9..+6.8 m **in air**. It is not an offset or a drift but per-sample garbage —
+a connector/I2C fault. **The board reports the barometer HEALTHY throughout**, because the
+firmware's plausibility band is applied per sample and every reading is individually inside it;
+a per-sample band cannot see variance. That phantom depth **saturates the depth controller**
+(`DEPTH_OUT` pinned at −1.00, `DEPTH_ERR` −3..−7 m while disarmed), and since `mixer.cpp` is
+block-diagonal with a −1 throttle column on all four verticals and 0 on all four horizontals,
+arming turns that into **full vertical thrust with the horizontals idle** — which is exactly
+the firmware team's unexplained arming spin-up. A level-cal/attitude explanation was
+**refuted** on the same probe (roll −0.81°, pitch +1.77°). Guards added: `bringup_check --srot`
+grades barometer variance and the disarmed depth loop; `SrotFC.check_depth_loop_settled`
+refuses to arm while `|DEPTH_OUT| ≥ 0.90`. Detail:
+[`srot-integration.md`](.claude/context/srot-integration.md) and
+`Mongla_others/srot-control-board/BENCH_FINDINGS_FROM_DUBURI_WS_2026-08-02.md`.
+
+**★ Reading the board: `ros2 run duburi_manager connect`** — opens the SROT serial link and
+prints everything it sends (both batteries — PM1 electronics + PM2 thruster pack over ESP-NOW;
+per-ESC RPM/temp; `DEPTH_CMD/ERR/OUT`, `MIX_VERT/VSGN`; `MAGACC`, `LEAK`, `KILL`, `WTEMP`;
+heap and per-task stacks). `--watch` for live, `--json` for machine-readable. Needs no ROS
+graph and not even a fully-built workspace. **`connect` reports and always exits 0;
+`bringup_check --srot` grades and gates** — use the first to look, the second to decide.
+**Absence renders `--`, never `0.0`**: from rev 3 the board suppresses values it cannot stand
+behind, and rendering that as zero recreates the bug the suppression fixed. The manager logs
+the same block periodically (`srot_telemetry_period_s`, default 2 s, `0` disables).
+⚠ **`BATTERY_STATUS` is instanced and pymavlink caches per msgid** — sampling that slot
+alternates between PM1 (~1.35 V) and PM2 (~14.7 V). De-multiplex by `id`, as
+`SrotFC.note_battery` does.
+
 **★ The architecture change itself — read this first:**
 [`.claude/context/auv-architecture-2026.md`](.claude/context/auv-architecture-2026.md).
 Written by the board side: no Pixhawk, no Pi, no BlueOS, no UDP, no separate IMU board;

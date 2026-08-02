@@ -883,3 +883,81 @@ def test_the_burst_is_why_the_reader_hook_is_not_optional():
         fc.note_named_value(_nvf(name, 1.0))
     fc.master.messages['NAMED_VALUE_FLOAT'] = _nvf('GAIN', 1.0)   # what the slot keeps
     assert fc._named_value('LEAK') == 1.0, 'leak is unobservable without the reader hook'
+
+
+# --------------------------------------------------------------------------- #
+#  Two batteries -- BATTERY_STATUS is instanced, pymavlink's cache is not      #
+# --------------------------------------------------------------------------- #
+
+def _batt(bid, millivolts, centiamps=-1):
+    return SimpleNamespace(id=bid, voltages=[millivolts, 65535, 65535, 65535],
+                           current_battery=centiamps)
+
+
+def test_get_battery_is_pinned_to_the_main_pack_not_whatever_arrived_last():
+    """MEASURED ON THE VEHICLE: the board streams id 0 (PM1 electronics, 1.35 V) and
+    id 1 (PM2 thruster pack, 14.74 V) at 2 Hz EACH, and pymavlink caches per MSGID.
+    Sampling that slot alternates between two voltages an order of magnitude apart --
+    so /duburi/state's battery reading was a coin flip on which battery it meant."""
+    fc = _fc()
+    fc.note_battery(_batt(0, 1350))
+    fc.note_battery(_batt(1, 14740))     # arrives last; must NOT become "the" battery
+    assert fc.get_battery()['voltage'] == pytest.approx(1.35)
+    both = fc.get_batteries()
+    assert both[sp.BATTERY_ID_MAIN]['voltage'] == pytest.approx(1.35)
+    assert both[sp.BATTERY_ID_THRUSTER]['voltage'] == pytest.approx(14.74)
+
+
+def test_an_unheard_battery_is_absent_not_zero():
+    """The thruster pack reaches the board over ESP-NOW and is simply gone when that
+    link drops. Reporting 0.0 V would read as a flat pack and trip a low-battery
+    reaction; absence must stay absence."""
+    fc = _fc()
+    fc.note_battery(_batt(0, 1350))
+    assert sp.BATTERY_ID_THRUSTER not in fc.get_batteries()
+
+
+def test_a_stale_battery_ages_out_rather_than_being_restamped():
+    fc = _fc()
+    fc.master.messages['BATTERY_STATUS'] = _batt(1, 14740)
+    assert sp.BATTERY_ID_THRUSTER in fc.get_batteries()
+    fc._battery_cache[sp.BATTERY_ID_THRUSTER] = (14.74, math.nan, time.time() - 60.0)
+    assert fc.get_batteries(max_age_s=5.0) == {}, 'dead link re-stamped as fresh'
+
+
+# --------------------------------------------------------------------------- #
+#  Arm guard -- a saturated depth loop is full vertical thrust on arm          #
+# --------------------------------------------------------------------------- #
+
+def test_arm_is_refused_while_the_depth_loop_is_saturated():
+    """THE blocker, reproduced. Observed disarmed on the bench: DEPTH_OUT=-1.00 with
+    DEPTH_ERR=-3.1 m from a phantom barometer reading. The mixer throttle column is
+    -1 on all four verticals and 0 on all four horizontals, so arming turns that into
+    full vertical thrust with the horizontals idling -- exactly the reported symptom."""
+    fc = _fc()
+    fc.note_named_value(_nvf('DEPTH_OUT', -1.0))
+    fc.note_named_value(_nvf('DEPTH_ERR', -3.1))
+    ok, reason = fc.check_depth_loop_settled()
+    assert ok is False
+    assert 'SATURATED' in reason and '-3.1' in reason, \
+        'a refusal must quote the numbers it refused on'
+
+
+def test_a_settled_depth_loop_arms_normally():
+    fc = _fc()
+    fc.note_named_value(_nvf('DEPTH_OUT', -0.02))
+    assert fc.check_depth_loop_settled()[0] is True
+
+
+def test_a_board_that_never_reports_the_depth_loop_is_not_blocked():
+    """rev < 3 has no DEPTH_OUT. Silence must not become a permanent arm refusal --
+    that would strand every older board for a check it cannot answer."""
+    assert _fc().check_depth_loop_settled()[0] is True
+
+
+def test_the_depth_guard_is_overridable_but_shouts():
+    fc = _fc()
+    fc.note_named_value(_nvf('DEPTH_OUT', 1.0))
+    fc.allow_fw_behaviour_mismatch = True
+    ok, reason = fc.check_depth_loop_settled()
+    assert ok is True and 'OVERRIDDEN' in reason

@@ -78,6 +78,8 @@ SEPARATOR = '=' * 52
 # How much a value must change before the [STATE] log line reprints.
 YAW_CHANGE_THRESH   = 5.0    # degrees
 DEPTH_CHANGE_THRESH = 0.08   # metres
+# |DEPTH_OUT| at/above this while disarmed => arming would command full heave.
+_SROT_DEPTH_OUT_WARN = 0.90
 BAT_CHANGE_THRESH   = 0.2    # volts
 FORCE_PRINT_SECONDS = 30.0   # always reprint even if nothing changed
 
@@ -234,6 +236,10 @@ class AUVManagerNode(Node):
         # removed, so `stop` and every abort would simply not decelerate 20 kg of hull,
         # with nothing in any log to say why. Setting this true is accepting that.
         self.declare_parameter('allow_fw_behaviour_mismatch', False)
+        # Verbose SROT telemetry block period (s); 0 disables. Default 2.0 --
+        # the first water test wants a continuous trace to correlate against
+        # what the vehicle physically did.
+        self.declare_parameter('srot_telemetry_period_s', 2.0)
         declare_vision_params(self)
 
         requested_mode      = str(self.get_parameter('mode').value)
@@ -593,6 +599,9 @@ class AUVManagerNode(Node):
         # consumer must not read these as signed velocity.
         self.esc_rpm_publisher = None
         self._leak_latched = False
+        self._srot_block_last = 0.0
+        self._srot_block_period = float(
+            self.get_parameter('srot_telemetry_period_s').value)
         if self._is_srot:
             from std_msgs.msg import Int32MultiArray
             self._Int32MultiArray = Int32MultiArray
@@ -705,14 +714,22 @@ class AUVManagerNode(Node):
         # Sampling the slot therefore does not miss LEAK occasionally; it misses it always.
         # This loop is the only place that sees the names in between, so it is the only place
         # the de-multiplexing can happen. Pixhawk has no such hook and is untouched.
+        #
+        # BATTERY_STATUS has the identical problem one layer down: the board sends
+        # instance 0 (PM1 electronics) and instance 1 (PM2 thruster pack) at 2 Hz each,
+        # and pymavlink keys its cache by MSGID, not instance -- so the slot alternates
+        # between two voltages an order of magnitude apart (measured: 1.35 V / 14.74 V).
         note = getattr(self.fc, 'note_named_value', None)
+        note_batt = getattr(self.fc, 'note_battery', None)
+        _DEMUX = {'NAMED_VALUE_FLOAT': note, 'BATTERY_STATUS': note_batt}
         while True:
             while True:
                 msg = self.master.recv_match(blocking=False)
                 if msg is None:
                     break
-                if note is not None and msg.get_type() == 'NAMED_VALUE_FLOAT':
-                    note(msg)
+                fn = _DEMUX.get(msg.get_type())
+                if fn is not None:
+                    fn(msg)
             text = self.pixhawk.get_statustext()
             if text and text != self.last_statustext:
                 self.last_statustext = text
@@ -1073,6 +1090,8 @@ class AUVManagerNode(Node):
         # own leak failsafe surfaces the vehicle regardless; this is for the
         # operator. (Raised upstream: LEAK wants its own message or a SYS_STATUS
         # sensor-health bit.)
+        self._maybe_print_srot_block(tel)
+
         if tel.leak and not self._leak_latched:
             self._leak_latched = True
             self.get_logger().error(
@@ -1080,6 +1099,59 @@ class AUVManagerNode(Node):
                 'failsafe; abort the mission and recover the vehicle')
         elif not tel.leak:
             self._leak_latched = False
+
+    @staticmethod
+    def _tel(value, fmt='{:.2f}', suffix=''):
+        """Render a telemetry numeric, or `--` when absent. NEVER renders absence as 0.
+
+        Since fw behaviour rev 3 the board SUPPRESSES values it cannot stand behind
+        rather than publishing them. A log that prints `0.0` for a suppressed water
+        temperature re-creates the exact failure that suppression was added to fix.
+        """
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            return '--'
+        return fmt.format(value) + suffix
+
+    def _maybe_print_srot_block(self, tel):
+        """The verbose SROT telemetry block -- everything Pixhawk never had.
+
+        Rate-limited by `srot_telemetry_period_s` (0 disables). This is deliberately
+        periodic rather than on-change: for the first water test the operator wants a
+        continuous trace they can correlate against what the vehicle physically did,
+        and an on-change filter hides "nothing is changing", which for a depth loop is
+        itself the interesting observation.
+        """
+        if self._srot_block_period <= 0:
+            return
+        now = time.time()
+        if now - self._srot_block_last < self._srot_block_period:
+            return
+        self._srot_block_last = now
+
+        rpm = ' '.join(f'{r:>5d}' for r in tel.rpm) if tel.rpm else '--'
+        etemp = ' '.join(f'{t:>5d}' for t in tel.esc_temp_c) if tel.esc_temp_c else '--'
+        self.get_logger().info(
+            f'[SROT ] BAT main {self._tel(tel.battery_voltage, "{:5.2f}", "V")} | '
+            f'thruster {self._tel(tel.thruster_voltage, "{:5.2f}", "V")} | '
+            f'DEPTH {self._tel(tel.depth_m, "{:+.2f}", "m")} '
+            f'err {self._tel(tel.depth_err_m, "{:+.2f}", "m")} '
+            f'out {self._tel(tel.depth_out, "{:+.2f}")} | '
+            f'WTEMP {self._tel(tel.water_temp_c, "{:.1f}", "C")} | '
+            f'MAGACC {self._tel(tel.mag_accuracy, "{:.0f}")} | '
+            f'LEAK {"WET" if tel.leak else "dry"} | '
+            f'KILL {"ENGAGED" if tel.kill_switch else "clear"}')
+        self.get_logger().info(f'[SROT ] RPM  {rpm}')
+        if tel.esc_temp_c:
+            self.get_logger().info(f'[SROT ] ESC°C{etemp}')
+
+        # A depth loop saturated while DISARMED is the pre-arm tell that arming would
+        # command full vertical thrust (mixer throttle column = -1 on all 4 verticals).
+        if (not tel.armed and not math.isnan(tel.depth_out)
+                and abs(tel.depth_out) >= _SROT_DEPTH_OUT_WARN):
+            self.get_logger().error(
+                f'[SROT ] DEPTH LOOP SATURATED while disarmed (out='
+                f'{tel.depth_out:+.2f}, err={self._tel(tel.depth_err_m, "{:+.2f}", "m")}) '
+                f'-- arming would command FULL vertical thrust. Check the barometer.')
 
     def _maybe_print_state(self, attitude, battery, mode, armed, yaw_deg, yaw_label):
         now  = time.time()
