@@ -156,3 +156,16 @@ def test_a_board_that_never_reports_depth_out_only_warns():
     """Firmware older than rev 3 has no DEPTH_OUT. Silence must not become a hard
     preflight failure for a value the board cannot produce."""
     assert _depth_loop_verdict(None, None)[0] == WARN
+
+
+def test_the_reader_thread_starts_before_the_payload_role_read():
+    """preflight_roles() reads params out of the pymavlink cache and never calls
+    recv_match() itself. With no reader running, every role comes back None and the
+    payload reports UNREADABLE -- indistinguishable from a mis-roled board. Pin the
+    ordering so a future refactor cannot silently disable the payload."""
+    import inspect
+    from duburi_manager import auv_manager_node as amn
+    src = inspect.getsource(amn.AUVManagerNode.__init__)
+    assert (src.index('_setup_reader_and_warmup')
+            < src.index('_preflight_payload')), \
+        'the reader thread must start before the payload roles are read'

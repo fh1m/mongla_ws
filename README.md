@@ -258,6 +258,44 @@ since accepting an unknown firmware and accepting uncommanded heave are differen
 [SROT ] RPM      0     0     0     0     0     0     0     0
 ```
 
+### Payload — `duburi_ws` drives switch channels only
+
+The SROT board's PCA9685 has 16 channels, and **each channel's role is a firmware
+parameter set in Bondor** (`SERVO{n}_ROLE`, where `n` = PCA channel + 1):
+
+| Role | Meaning | Who drives it |
+|---|---|---|
+| `1` — **SERVO (PWM)** | the on-board **manipulator arm** | the board. **`duburi_ws` must not touch these** |
+| `2` — **SWITCH (MOSFET/relay)** | torpedo / dropper solenoids | `duburi_ws`, via `fire()` |
+
+**Measured on the vehicle:** channels **1–8 are SERVO**, **9–16 are SWITCH**.
+
+So the fire map is just numbers — `<duburi_channel>:<pca_channel>`:
+
+```bash
+ros2 launch duburi_manager bringup.launch.py payload_fire_map:="1:9, 2:10, 3:11, 4:12"
+#                                              torpedo 1/2 ^^^^  ^^^^^  dropper 3/4
+```
+
+**`fire()` reads the role off the board and refuses anything that is not a switch**, naming
+the channel and the role it actually has. It **fails closed on an unreadable role** — a param
+read that timed out is not evidence a channel is safe to drive, and payload actuation is never
+urgent enough to justify guessing.
+
+> **Why the host does not store the role.** The old map encoded `relay:`/`servo:` host-side,
+> which duplicates board state and goes stale **silently** the moment someone re-roles a
+> channel in Bondor. The failure mode of a stale copy is driving the manipulator arm during a
+> drop. The channel *number* is the only thing that needs to cross repos. (The legacy
+> `1:relay:0` / `2:servo:3` forms still parse, so existing launch files keep working.)
+
+`connect` prints the live role map, and the manager logs it at bring-up:
+
+```
+== payload (PCA9685) ==   role is a FIRMWARE param, set in Bondor
+  SWITCH (duburi_ws may fire)   [9, 10, 11, 12, 13, 14, 15, 16]
+  SERVO  (on-board arm, ignored)  [1, 2, 3, 4, 5, 6, 7, 8]
+```
+
 **Drive in sim** — Gazebo + ArduSub SITL, no real AUV (this is the **pixhawk** backend):
 
 ```bash

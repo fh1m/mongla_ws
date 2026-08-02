@@ -407,3 +407,29 @@ SERVO_MIN_US        = 1000
 SERVO_MAX_US        = 2000
 PCA_PAYLOAD_SERVO_CH = 0    # config.h default payload-release servo (0-based)
 PCA_RELAY_BASE_CH   = 8     # first MOSFET/switch channel (0-based)
+
+# ---------------------------------------------------------------------- #
+#  Channel ROLE -- the board owns it, we only read it                     #
+# ---------------------------------------------------------------------- #
+# Each PCA9685 channel's role is a FIRMWARE parameter, set in Bondor, exposed as
+# `SERVO{n}_ROLE` where n = PCA channel + 1 (so SERVO9_ROLE is PCA channel 8).
+#
+# duburi_ws drives SWITCH channels ONLY. The PWM/servo channels belong to the
+# on-board manipulator arm, and firing one from a mission would move the arm during
+# a drop. We therefore READ the role and refuse anything that is not a switch --
+# rather than keeping a host-side copy of the wiring, which goes stale SILENTLY the
+# moment a channel is re-roled on the board.
+#
+# MEASURED on the vehicle 2026-08-02: channels 1-8 = SERVO, 9-16 = SWITCH.
+PCA_ROLE_PARAM_FMT  = 'SERVO{}_ROLE'
+PCA_ROLE_DISABLED   = 0
+PCA_ROLE_SERVO      = 1     # PWM -- the arm. duburi_ws MUST NOT drive these.
+PCA_ROLE_SWITCH     = 2     # MOSFET/relay HIGH-LOW -- the payload. Ours.
+PCA_ROLE_NAMES      = {PCA_ROLE_DISABLED: 'DISABLED',
+                       PCA_ROLE_SERVO:    'SERVO (PWM, on-board arm)',
+                       PCA_ROLE_SWITCH:   'SWITCH (MOSFET/relay)'}
+# A role-2 channel has no pulse width: the firmware reads DO_SET_SERVO's µs as a
+# LEVEL for it (>= 1500 = ON), which makes every channel addressable by its own
+# number whatever its role (fw mav_commands.cpp:471-479).
+PCA_SWITCH_ON_US    = 2000
+PCA_SWITCH_OFF_US   = 1000

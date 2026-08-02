@@ -89,6 +89,12 @@ MSG_AUTOPILOT_VERSION = 148
 BARO_JITTER_MBAR = 15.0     # a still bench baro is stable to well under 1 mbar
 BARO_SANE_LO, BARO_SANE_HI = 800.0, 1100.0
 
+# Modes in which the depth controller is not closed, so DEPTH_OUT is idle by
+# construction rather than by health (fw task_control_loop: the depth branch runs in
+# DEPTH_HOLD / AUTO / PATTERN).
+_DEPTH_LOOP_IDLE_MODES = frozenset({'MANUAL', 'STABILIZE', 'ACRO', 'MOTOR_DETECT',
+                                    'MOTOR_TUNE', 'AUTOTUNE'})
+
 _NAMED_GROUPS = (
     ('depth loop', ('DEPTH_CMD', 'DEPTH_ERR', 'DEPTH_OUT', 'MIX_VERT', 'MIX_VSGN')),
     ('move',       ('MV_STATE', 'MV_TYPE', 'MV_PROG', 'STUNT_PRG')),
@@ -117,6 +123,7 @@ class Snapshot:
         self.wtemp_samples: list[float] = []
         self.msgs: dict = {}
         self.statustexts: list[str] = []
+        self.roles: dict[int, int] = {}      # PCA channel (1-based) -> SERVOn_ROLE
         self.window_s = 0.0
 
     def get(self, msgtype):
@@ -199,7 +206,7 @@ def baro_verdict(press: list[float]) -> tuple[str, str]:
     return ('OK', f'{mean:.1f} mbar, spread {spread:.2f} mbar over {len(press)} samples')
 
 
-def depth_loop_verdict(named: dict) -> tuple[str, str]:
+def depth_loop_verdict(named: dict, mode: str | None = None) -> tuple[str, str]:
     """(level, message) for the depth controller, read DISARMED and read-only.
 
     `DEPTH_OUT` is the real controller's last output. Saturated while disarmed and
@@ -212,6 +219,16 @@ def depth_loop_verdict(named: dict) -> tuple[str, str]:
     err = named.get('DEPTH_ERR')
     if out is None:
         return ('WARN', 'DEPTH_OUT absent -- cannot tell what the loop would do on arm')
+    # A settled reading in a mode that does not RUN the loop proves nothing. Observed
+    # live: in MANUAL the board reports DEPTH_OUT=+0.00 with a barometer that is
+    # visibly noise, and the saturation returns the moment SROT_MOVE enters AUTO.
+    # Reporting a bare OK there is false reassurance about the exact failure this
+    # check exists to catch.
+    if mode in _DEPTH_LOOP_IDLE_MODES and abs(out) < 0.25:
+        return ('WARN',
+                f'DEPTH_OUT={out:+.2f}, but the board is in {mode} -- the depth loop '
+                f'is NOT running, so this is not evidence it is healthy. Re-check in '
+                f'DEPTH_HOLD (every SROT_MOVE enters AUTO, which closes the loop)')
     if abs(out) >= 0.99:
         return ('FAIL',
                 f'SATURATED: DEPTH_OUT={out:+.2f}, DEPTH_ERR={_f(err, "{:+.2f}", " m")}. '
@@ -220,6 +237,34 @@ def depth_loop_verdict(named: dict) -> tuple[str, str]:
     if abs(out) > 0.25:
         return ('WARN', f'DEPTH_OUT={out:+.2f} while disarmed -- a standing demand')
     return ('OK', f'DEPTH_OUT={out:+.2f}, DEPTH_ERR={_f(err, "{:+.2f}", " m")}')
+
+
+def read_roles(conn, timeout: float = 0.6) -> dict:
+    """PCA channel (1-based) -> SERVOn_ROLE, read from the board.
+
+    These are PARAMETERS, not telemetry, so they have to be asked for one at a time.
+    Worth the ~16 round-trips: the role decides whether a channel is payload (switch)
+    or the on-board manipulator arm (PWM), and driving the arm during a drop is the
+    failure this whole read exists to prevent.
+    """
+    if sp is None:
+        return {}
+    roles = {}
+    for ch in range(1, sp.PCA9685_NUM_CH + 1):
+        name = sp.PCA_ROLE_PARAM_FMT.format(ch)
+        conn.mav.param_request_read_send(conn.target_system, conn.target_component,
+                                         name.encode(), -1)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            pv = conn.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.3)
+            if pv is None:
+                continue
+            pid = pv.param_id
+            pid = pid.decode() if isinstance(pid, bytes) else str(pid)
+            if pid.strip('\x00') == name:
+                roles[ch] = int(pv.param_value)
+                break
+    return roles
 
 
 def render(snap: Snapshot, conn) -> list[str]:
@@ -301,7 +346,7 @@ def render(snap: Snapshot, conn) -> list[str]:
                  + (f'   {YEL}<- but see the barometer line above{RESET}'
                     if healthy and lvl == 'FAIL' else ''))
 
-    lvl, msg = depth_loop_verdict(n)
+    lvl, msg = depth_loop_verdict(n, mode)
     col = {'OK': GRN, 'WARN': YEL, 'FAIL': RED}[lvl]
     L.append(f'  depth loop      {col}{lvl}{RESET}  {msg}')
 
@@ -323,6 +368,24 @@ def render(snap: Snapshot, conn) -> list[str]:
             L.append(f'  {DIM}all zero -- expected while disarmed / thruster power off{RESET}')
     else:
         L.append('  --   (no ESC telemetry; needs Bluejay for bidirectional DShot)')
+
+    # ---- payload: which channels duburi_ws may drive ---------------------- #
+    if snap.roles:
+        L.append(f'\n{BOLD}== payload (PCA9685) =={RESET}   '
+                 f'{DIM}role is a FIRMWARE param, set in Bondor{RESET}')
+        switch = [c for c, r in sorted(snap.roles.items())
+                  if sp and r == sp.PCA_ROLE_SWITCH]
+        servo = [c for c, r in sorted(snap.roles.items())
+                 if sp and r == sp.PCA_ROLE_SERVO]
+        other = [c for c, r in sorted(snap.roles.items())
+                 if not sp or r not in (sp.PCA_ROLE_SWITCH, sp.PCA_ROLE_SERVO)]
+        L.append(f'  {GRN}SWITCH{RESET} (duburi_ws may fire)   {switch or "--"}')
+        L.append(f'  {DIM}SERVO  (on-board arm, ignored){RESET}  {servo or "--"}')
+        if other:
+            L.append(f'  {YEL}other/unreadable{RESET}              {other}')
+        L.append(f'  {DIM}payload_fire_map uses these numbers, e.g. '
+                 f'"1:{switch[0] if switch else 9}, 2:{switch[1] if len(switch) > 1 else 10}"'
+                 f'{RESET}')
 
     # ---- firmware health -------------------------------------------------- #
     L.append(f'\n{BOLD}== firmware health =={RESET}')
@@ -366,7 +429,8 @@ def as_dict(snap: Snapshot) -> dict:
     hb, av, att, hud = (snap.get(k) for k in ('HEARTBEAT', 'AUTOPILOT_VERSION',
                                               'ATTITUDE', 'VFR_HUD'))
     baro_lvl, baro_msg = baro_verdict(snap.press_samples)
-    depth_lvl, depth_msg = depth_loop_verdict(snap.named)
+    depth_lvl, depth_msg = depth_loop_verdict(
+        snap.named, sp.mode_name(getattr(hb, 'custom_mode', -1)) if (hb and sp) else None)
     return {
         'behaviour_rev': int(getattr(av, 'middleware_sw_version', 0)) if av else None,
         'armed': bool(getattr(hb, 'base_mode', 0)
@@ -383,6 +447,7 @@ def as_dict(snap: Snapshot) -> dict:
         'baro': {'verdict': baro_lvl, 'detail': baro_msg,
                  'samples': snap.press_samples},
         'depth_loop': {'verdict': depth_lvl, 'detail': depth_msg},
+        'pca_roles': snap.roles,
     }
 
 
@@ -398,6 +463,8 @@ def main(argv=None) -> int:
     ap.add_argument('--watch', action='store_true',
                     help='refresh continuously until Ctrl-C')
     ap.add_argument('--json', action='store_true', help='machine-readable output')
+    ap.add_argument('--no-roles', action='store_true',
+                    help='skip the PCA9685 role read (16 param round-trips)')
     args = ap.parse_args(argv)
 
     path = args.path or find_srot_serial()
@@ -433,6 +500,8 @@ def main(argv=None) -> int:
     try:
         while True:
             snap = collect(conn, args.duration)
+            if not args.no_roles:
+                snap.roles = read_roles(conn)
             if args.json:
                 print(json.dumps(as_dict(snap), indent=2, default=str))
             else:
