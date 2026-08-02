@@ -1,0 +1,455 @@
+#!/usr/bin/env python3
+"""``ros2 run duburi_manager connect`` -- point at the SROT board, see the vehicle.
+
+The Pixhawk + Pi stack had a dozen ways to look at the vehicle (BlueOS web UI, QGC,
+MAVProxy, the ArduSub console). The SROT board has one USB cable and no web UI, so
+this is that surface: open the serial link, and print everything the board says.
+
+WHY THIS IS NOT `bringup_check --srot`. That is a pass/fail GATE -- it grades, it
+exits non-zero, and `--strict` makes any WARN fatal. Those are the right semantics
+for "may I dive", and the wrong ones for "show me the vehicle": a monitor that exits
+non-zero because something is merely unusual cannot be left running while you watch a
+number change. `connect` never grades and always exits 0 (barring a link failure).
+They share the wire knowledge below; they do not share a verdict.
+
+READING RULE, and it is the whole reason this file is careful: **absence is data.**
+Since fw behaviour rev 3 the board SUPPRESSES `WTEMP` / `SCALED_PRESSURE2` rather
+than publishing a value it cannot stand behind, and sends `0` in
+`SCALED_IMU2.temperature` as MAVLink's "not provided" sentinel. A consumer that
+renders a missing value as `0.0` re-creates exactly the failure the firmware fixed --
+a Bar30 read during a PROM reset race once published `-51 C` and `+2.87 m` in air
+with nothing marking them wrong. Everything here renders absence as `--`.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import statistics
+import sys
+import time
+
+# MAVLink 2 must be selected BEFORE pymavlink is imported: the default dialect
+# binding is v1.0 ardupilotmega, which has no ESC_TELEMETRY_1_TO_4 (11030) at all.
+os.environ.setdefault('MAVLINK20', '1')
+
+from pymavlink import mavutil                                        # noqa: E402
+
+try:
+    from .connection_config import find_srot_serial, SROT_BAUD
+except ImportError:                                                  # direct execution
+    from duburi_manager.connection_config import find_srot_serial, SROT_BAUD
+
+def _load_srot_protocol():
+    """Import the wire constants WITHOUT dragging in the ROS package chain.
+
+    `duburi_control/__init__.py` imports `Duburi`, which imports `duburi_interfaces`
+    -- a generated ROS message package. So the obvious
+    `from duburi_control.fc import srot_protocol` only works on a fully-built, fully
+    sourced workspace, and this tool is frequently the FIRST thing anyone runs on a
+    fresh box or a half-built tree.
+
+    `srot_protocol` is pure constants with no ROS dependency, so when the package
+    import fails we load the file directly. Degrading silently to "mode unknown"
+    would be the same sin this whole tool exists to prevent: rendering absent
+    knowledge as a plausible-looking value.
+    """
+    try:
+        from duburi_control.fc import srot_protocol as mod
+        return mod
+    except Exception:                                            # noqa: BLE001
+        pass
+    import importlib.util
+    here = os.path.dirname(os.path.abspath(__file__))
+    for rel in ('../../duburi_control/duburi_control/fc/srot_protocol.py',
+                '../../../duburi_control/duburi_control/fc/srot_protocol.py'):
+        cand = os.path.normpath(os.path.join(here, rel))
+        if os.path.exists(cand):
+            spec = importlib.util.spec_from_file_location('_srot_protocol', cand)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+    return None
+
+
+sp = _load_srot_protocol()
+
+BOLD, DIM, RESET = '\033[1m', '\033[2m', '\033[0m'
+RED, YEL, GRN, CYA = '\033[31m', '\033[33m', '\033[32m', '\033[36m'
+
+# The board answers MAV_CMD_REQUEST_MESSAGE for this; it carries SROT_FW_BEHAVIOUR_REV
+# in middleware_sw_version, which is the one number that decides whether `stop` brakes.
+MSG_AUTOPILOT_VERSION = 148
+
+# Sea-level pressure is ~1013 mbar. The firmware's own plausibility band is a wide
+# [300, 40000] mbar, chosen deliberately loose so it cannot ground the vehicle by
+# accident -- but that band is applied PER SAMPLE, so it cannot see a sensor whose
+# every reading is individually plausible and collectively noise. This is that check.
+BARO_JITTER_MBAR = 15.0     # a still bench baro is stable to well under 1 mbar
+BARO_SANE_LO, BARO_SANE_HI = 800.0, 1100.0
+
+_NAMED_GROUPS = (
+    ('depth loop', ('DEPTH_CMD', 'DEPTH_ERR', 'DEPTH_OUT', 'MIX_VERT', 'MIX_VSGN')),
+    ('move',       ('MV_STATE', 'MV_TYPE', 'MV_PROG', 'STUNT_PRG')),
+    ('vehicle',    ('GAIN', 'KILL', 'LEAK', 'WTEMP', 'CURR', 'MAGACC', 'ATUNE')),
+    ('firmware',   ('HEAP', 'STK_MAV', 'STK_SEN', 'STK_CTL', 'STK_UI',
+                    'STK_LORA', 'STK_DSH')),
+)
+
+
+def _f(value, fmt='{:.2f}', suffix=''):
+    """Render a numeric, or `--` when it is absent. Absence is never zero."""
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return '--'
+    return fmt.format(value) + suffix
+
+
+class Snapshot:
+    """Everything the board said during one listening window."""
+
+    def __init__(self):
+        self.named: dict[str, float] = {}
+        self.named_hz: dict[str, int] = {}
+        self.batteries: dict[int, tuple] = {}
+        self.msg_counts: dict[str, int] = {}
+        self.press_samples: list[float] = []
+        self.wtemp_samples: list[float] = []
+        self.msgs: dict = {}
+        self.statustexts: list[str] = []
+        self.window_s = 0.0
+
+    def get(self, msgtype):
+        return self.msgs.get(msgtype)
+
+
+def collect(conn, seconds: float) -> Snapshot:
+    """Listen (read-only) for `seconds` and fold everything into a Snapshot."""
+    snap = Snapshot()
+    t0 = time.time()
+    while time.time() - t0 < seconds:
+        msg = conn.recv_match(blocking=True, timeout=0.5)
+        if msg is None:
+            continue
+        mtype = msg.get_type()
+        if mtype == 'BAD_DATA':
+            snap.msg_counts['BAD_DATA'] = snap.msg_counts.get('BAD_DATA', 0) + 1
+            continue
+        snap.msg_counts[mtype] = snap.msg_counts.get(mtype, 0) + 1
+        snap.msgs[mtype] = msg
+
+        if mtype == 'NAMED_VALUE_FLOAT':
+            # The board rides 20+ scalars on this ONE msgid and bursts them together,
+            # while pymavlink keeps a single message per msgid. Reading its cache would
+            # return whichever name landed last -- see SrotFC._named_value. Fold every
+            # message as it arrives instead; this loop is the only place that sees them.
+            name = msg.name
+            name = name.decode() if isinstance(name, bytes) else str(name)
+            name = name.strip('\x00').strip()
+            if name:
+                snap.named[name] = float(msg.value)
+                snap.named_hz[name] = snap.named_hz.get(name, 0) + 1
+                if name == 'WTEMP':
+                    snap.wtemp_samples.append(float(msg.value))
+        elif mtype == 'BATTERY_STATUS':
+            # TWO instances: id 0 = PM1 (electronics), id 1 = PM2 (thruster pack, over
+            # ESP-NOW). Same single-slot trap as NAMED_VALUE_FLOAT -- key by id.
+            bid = int(getattr(msg, 'id', 0))
+            volts = list(getattr(msg, 'voltages', []) or [])
+            raw = volts[0] if volts else 0xFFFF
+            v = None if raw in (0, 0xFFFF) else raw / 1000.0
+            cur = getattr(msg, 'current_battery', -1)
+            snap.batteries[bid] = (v, None if cur == -1 else cur / 100.0)
+        elif mtype == 'SCALED_PRESSURE2':
+            snap.press_samples.append(float(msg.press_abs))
+        elif mtype == 'STATUSTEXT':
+            txt = msg.text
+            txt = txt.decode() if isinstance(txt, bytes) else str(txt)
+            txt = txt.strip('\x00').strip()
+            if txt and txt not in snap.statustexts:
+                snap.statustexts.append(txt)
+
+    snap.window_s = time.time() - t0
+    return snap
+
+
+def baro_verdict(press: list[float]) -> tuple[str, str]:
+    """(level, message) for the barometer, judged on VARIANCE as well as value.
+
+    The firmware validates each sample against a deliberately wide plausibility band.
+    That catches a dead sensor and a wildly corrupt one, but it is blind to the
+    failure actually seen on this hardware: a loose Bar30 connector, where every
+    individual reading falls inside the band and the SEQUENCE is noise. The board
+    then reports the barometer healthy, `SCALED_PRESSURE2` keeps streaming, and the
+    depth controller closes on it. Peak-to-peak over a window is what sees that.
+    """
+    if not press:
+        return ('WARN', 'no SCALED_PRESSURE2 -- suppressed (baro unhealthy/stale) or absent')
+    spread = max(press) - min(press)
+    mean = statistics.fmean(press)
+    if spread > BARO_JITTER_MBAR:
+        return ('FAIL',
+                f'NOISE: {len(press)} samples span {spread:.1f} mbar '
+                f'({min(press):.1f}..{max(press):.1f}). A still bench baro is stable to '
+                f'<1 mbar. Every sample is inside the firmware plausibility band, so the '
+                f'board reports it HEALTHY -- check the Bar30 connector/I2C wiring')
+    if not (BARO_SANE_LO <= mean <= BARO_SANE_HI):
+        return ('FAIL', f'{mean:.1f} mbar -- outside {BARO_SANE_LO:.0f}..{BARO_SANE_HI:.0f} '
+                        f'(sea level ~1013); depth derived from this is fiction')
+    return ('OK', f'{mean:.1f} mbar, spread {spread:.2f} mbar over {len(press)} samples')
+
+
+def depth_loop_verdict(named: dict) -> tuple[str, str]:
+    """(level, message) for the depth controller, read DISARMED and read-only.
+
+    `DEPTH_OUT` is the real controller's last output. Saturated while disarmed and
+    stationary means the loop is holding a demand it cannot satisfy -- and because the
+    mixer's throttle column is -1 for all four verticals and 0 for all four
+    horizontals, that demand lands as FULL vertical thrust with the horizontals idle
+    the instant you arm. This is the cheapest possible read of that condition.
+    """
+    out = named.get('DEPTH_OUT')
+    err = named.get('DEPTH_ERR')
+    if out is None:
+        return ('WARN', 'DEPTH_OUT absent -- cannot tell what the loop would do on arm')
+    if abs(out) >= 0.99:
+        return ('FAIL',
+                f'SATURATED: DEPTH_OUT={out:+.2f}, DEPTH_ERR={_f(err, "{:+.2f}", " m")}. '
+                f'The mixer throttle column is -1 on all four verticals, so on ARM this '
+                f'becomes FULL vertical thrust with the horizontals idle. DO NOT ARM')
+    if abs(out) > 0.25:
+        return ('WARN', f'DEPTH_OUT={out:+.2f} while disarmed -- a standing demand')
+    return ('OK', f'DEPTH_OUT={out:+.2f}, DEPTH_ERR={_f(err, "{:+.2f}", " m")}')
+
+
+def render(snap: Snapshot, conn) -> list[str]:
+    """The report. Every absent value renders `--`, never 0."""
+    L: list[str] = []
+    n = snap.named
+    hb = snap.get('HEARTBEAT')
+    av = snap.get('AUTOPILOT_VERSION')
+    att = snap.get('ATTITUDE')
+    hud = snap.get('VFR_HUD')
+    sysst = snap.get('SYS_STATUS')
+    pwr = snap.get('POWER_STATUS')
+
+    armed = bool(getattr(hb, 'base_mode', 0)
+                 & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) if hb else False
+    if sp is None:
+        mode = '?? (srot_protocol unavailable -- mode NOT decoded)'
+    elif hb is None:
+        mode = '--'
+    else:
+        mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
+    rev = int(getattr(av, 'middleware_sw_version', 0)) if av else None
+    fsw = getattr(av, 'flight_sw_version', 0) if av else 0
+
+    L.append(f'{BOLD}== SROT board =={RESET}')
+    L.append(f'  firmware        Hengla v{(fsw >> 24) & 0xff}.{(fsw >> 16) & 0xff}.'
+             f'{(fsw >> 8) & 0xff}   behaviour rev {_f(rev, "{:.0f}")}')
+    L.append(f'  state           {RED + "ARMED" + RESET if armed else "disarmed"}   '
+             f'mode {mode}')
+    if rev is not None and sp is not None and rev < sp.FW_BEHAVIOUR_REV_REQUIRED:
+        L.append(f'  {RED}!! behaviour rev {rev} < {sp.FW_BEHAVIOUR_REV_REQUIRED} required '
+                 f'-- MOVE_STOP COASTS, the host brake is gone{RESET}')
+
+    # ---- power: TWO batteries, which Pixhawk never had -------------------- #
+    L.append(f'\n{BOLD}== power =={RESET}')
+    labels = {0: 'PM1 electronics', 1: 'PM2 thruster pack'}
+    for bid in sorted(snap.batteries) or []:
+        v, cur = snap.batteries[bid]
+        L.append(f'  battery {bid}       {_f(v, "{:6.3f}", " V"):>10}   '
+                 f'{_f(cur, "{:.2f}", " A"):>8}   {DIM}{labels.get(bid, "")}{RESET}')
+    if not snap.batteries:
+        L.append('  battery         --   (no BATTERY_STATUS)')
+    if pwr is not None:
+        L.append(f'  rail            Vcc {_f(pwr.Vcc / 1000.0, "{:.2f}", " V")}   '
+                 f'Vservo {_f(pwr.Vservo / 1000.0, "{:.2f}", " V")}')
+    L.append(f'  current (CURR)  {_f(n.get("CURR"), "{:.2f}", " A")}       '
+             f'pilot GAIN {_f(n.get("GAIN"), "{:.2f}")}'
+             + (f'  {YEL}<- halves MANUAL_CONTROL until 1.0{RESET}'
+                if (n.get('GAIN') or 1.0) < 0.99 else ''))
+
+    # ---- attitude --------------------------------------------------------- #
+    L.append(f'\n{BOLD}== attitude =={RESET}   {DIM}(yaw is ABSOLUTE magnetic from rev 4){RESET}')
+    if att is not None:
+        L.append(f'  roll {att.roll * 57.2958:+7.2f}°   pitch {att.pitch * 57.2958:+7.2f}°   '
+                 f'yaw {att.yaw * 57.2958:+7.2f}°')
+    else:
+        L.append('  --   (no ATTITUDE)')
+    L.append(f'  heading         {_f(getattr(hud, "heading", None), "{:.0f}", "°")}'
+             f'      mag accuracy (MAGACC) {_f(n.get("MAGACC"), "{:.0f}")}')
+
+    # ---- depth + environment ---------------------------------------------- #
+    L.append(f'\n{BOLD}== depth / environment =={RESET}')
+    lvl, msg = baro_verdict(snap.press_samples)
+    col = {'OK': GRN, 'WARN': YEL, 'FAIL': RED}[lvl]
+    L.append(f'  barometer       {col}{lvl}{RESET}  {msg}')
+    L.append(f'  depth (VFR_HUD) {_f(getattr(hud, "alt", None), "{:+.3f}", " m")}'
+             f'   {DIM}negative = submerged{RESET}')
+    wt = statistics.fmean(snap.wtemp_samples) if snap.wtemp_samples else None
+    wspread = (max(snap.wtemp_samples) - min(snap.wtemp_samples)) if len(snap.wtemp_samples) > 1 else None
+    L.append(f'  water temp      {_f(wt, "{:.2f}", " °C")}'
+             + (f'   {RED}spread {wspread:.1f} °C -- noise{RESET}'
+                if wspread and wspread > 2.0 else ''))
+    L.append(f'  leak            {RED + "WET" + RESET if n.get("LEAK", 0) >= 0.5 else "dry"}'
+             f'          kill switch {"ENGAGED" if n.get("KILL", 0) >= 0.5 else "clear"}')
+    if sysst is not None:
+        bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+        healthy = bool(sysst.onboard_control_sensors_health & bit)
+        L.append(f'  board says baro {"healthy" if healthy else "UNHEALTHY"}'
+                 + (f'   {YEL}<- but see the barometer line above{RESET}'
+                    if healthy and lvl == 'FAIL' else ''))
+
+    lvl, msg = depth_loop_verdict(n)
+    col = {'OK': GRN, 'WARN': YEL, 'FAIL': RED}[lvl]
+    L.append(f'  depth loop      {col}{lvl}{RESET}  {msg}')
+
+    # ---- thrusters -------------------------------------------------------- #
+    L.append(f'\n{BOLD}== thrusters =={RESET}')
+    rpm, temp = [], []
+    for blk in ('ESC_TELEMETRY_1_TO_4', 'ESC_TELEMETRY_5_TO_8'):
+        m = snap.get(blk)
+        if m is not None:
+            rpm += [int(r) for r in getattr(m, 'rpm', ())]
+            temp += [int(t) for t in getattr(m, 'temperature', ())]
+    if rpm:
+        L.append('  rpm             ' + ' '.join(f'{r:>5d}' for r in rpm))
+        L.append('  temp °C         ' + ' '.join(f'{t:>5d}' for t in temp))
+        if not any(rpm) and armed:
+            L.append(f'  {YEL}all RPM zero while ARMED -- ESCs not reporting, or thruster '
+                     f'power off. NOT a healthy idle.{RESET}')
+        elif not any(rpm):
+            L.append(f'  {DIM}all zero -- expected while disarmed / thruster power off{RESET}')
+    else:
+        L.append('  --   (no ESC telemetry; needs Bluejay for bidirectional DShot)')
+
+    # ---- firmware health -------------------------------------------------- #
+    L.append(f'\n{BOLD}== firmware health =={RESET}')
+    L.append(f'  free heap       {_f(n.get("HEAP"), "{:.0f}", " B")}')
+    stacks = {k: v for k, v in n.items() if k.startswith('STK_')}
+    if stacks:
+        worst = min(stacks.items(), key=lambda kv: kv[1])
+        L.append('  task stacks     ' + '  '.join(f'{k[4:]}:{int(v)}' for k, v in sorted(stacks.items())))
+        if worst[1] < 512:
+            L.append(f'  {RED}{worst[0]} high-water {int(worst[1])} words -- near overflow{RESET}')
+    if sysst is not None:
+        L.append(f'  load            {sysst.load / 10.0:.1f}%     '
+                 f'drop rate {sysst.drop_rate_comm / 100.0:.2f}%')
+
+    # ---- link ------------------------------------------------------------- #
+    L.append(f'\n{BOLD}== link =={RESET}  {DIM}{snap.window_s:.1f}s window{RESET}')
+    for mt, c in sorted(snap.msg_counts.items(), key=lambda kv: -kv[1]):
+        note = ''
+        if mt == 'UNKNOWN_291':
+            note = f'  {DIM}<- ESC_STATUS; not in any pymavlink dialect (we use ESC_TELEMETRY){RESET}'
+        elif mt == 'BAD_DATA':
+            note = f'  {YEL}<- framing errors{RESET}'
+        L.append(f'  {mt:<24} {c:5d}   {c / max(snap.window_s, 0.1):6.2f} Hz{note}')
+    L.append(f'  {DIM}NAMED_VALUE_FLOAT carries {len(snap.named)} distinct names, '
+             f'burst on one msgid{RESET}')
+
+    for grp, keys in _NAMED_GROUPS:
+        present = [(k, n[k]) for k in keys if k in n]
+        if present:
+            L.append(f'  {DIM}{grp:<11}{RESET} ' +
+                     '  '.join(f'{k}={v:g}' for k, v in present))
+
+    if snap.statustexts:
+        L.append(f'\n{BOLD}== STATUSTEXT =={RESET}')
+        for t in snap.statustexts[-8:]:
+            L.append(f'  {t}')
+    return L
+
+
+def as_dict(snap: Snapshot) -> dict:
+    hb, av, att, hud = (snap.get(k) for k in ('HEARTBEAT', 'AUTOPILOT_VERSION',
+                                              'ATTITUDE', 'VFR_HUD'))
+    baro_lvl, baro_msg = baro_verdict(snap.press_samples)
+    depth_lvl, depth_msg = depth_loop_verdict(snap.named)
+    return {
+        'behaviour_rev': int(getattr(av, 'middleware_sw_version', 0)) if av else None,
+        'armed': bool(getattr(hb, 'base_mode', 0)
+                      & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) if hb else None,
+        'mode': sp.mode_name(getattr(hb, 'custom_mode', -1)) if (hb and sp) else None,
+        'batteries': {str(k): {'voltage': v[0], 'current': v[1]}
+                      for k, v in snap.batteries.items()},
+        'attitude_deg': ({'roll': att.roll * 57.2958, 'pitch': att.pitch * 57.2958,
+                          'yaw': att.yaw * 57.2958} if att else None),
+        'depth_m': getattr(hud, 'alt', None),
+        'named': snap.named,
+        'msg_rates_hz': {k: round(v / max(snap.window_s, 0.1), 2)
+                         for k, v in snap.msg_counts.items()},
+        'baro': {'verdict': baro_lvl, 'detail': baro_msg,
+                 'samples': snap.press_samples},
+        'depth_loop': {'verdict': depth_lvl, 'detail': depth_msg},
+    }
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        prog='connect',
+        description='Connect to the SROT board over serial and show everything it sends.')
+    ap.add_argument('--path', default=None,
+                    help='serial device (default: autodetect, same as the manager)')
+    ap.add_argument('--baud', type=int, default=SROT_BAUD)
+    ap.add_argument('--duration', type=float, default=6.0,
+                    help='listening window in seconds (default 6)')
+    ap.add_argument('--watch', action='store_true',
+                    help='refresh continuously until Ctrl-C')
+    ap.add_argument('--json', action='store_true', help='machine-readable output')
+    args = ap.parse_args(argv)
+
+    path = args.path or find_srot_serial()
+    if path is None:
+        print('no SROT USB-serial device found. Plug the Type-C cable in, or pass --path.',
+              file=sys.stderr)
+        return 2
+
+    if not args.json:
+        print(f'{DIM}connecting to {path} @ {args.baud} ...{RESET}')
+    try:
+        conn = mavutil.mavlink_connection(
+            path, baud=args.baud,
+            source_system=(sp.SOURCE_SYSID if sp else 255),
+            source_component=(sp.SOURCE_COMPID if sp else 191))
+    except Exception as exc:                                  # noqa: BLE001
+        print(f'could not open {path}: {exc}', file=sys.stderr)
+        print('  if this is EIO the CH340 is wedged -- unplug and replug the cable.',
+              file=sys.stderr)
+        return 2
+
+    if conn.wait_heartbeat(timeout=10) is None:
+        print(f'no HEARTBEAT on {path}. Board powered? Correct port?', file=sys.stderr)
+        return 2
+
+    # Read-only: AUTOPILOT_VERSION is not streamed, it must be asked for. Nothing
+    # else in this tool ever writes to the vehicle.
+    conn.mav.command_long_send(
+        conn.target_system, conn.target_component,
+        mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE, 0,
+        float(MSG_AUTOPILOT_VERSION), 0, 0, 0, 0, 0, 0)
+
+    try:
+        while True:
+            snap = collect(conn, args.duration)
+            if args.json:
+                print(json.dumps(as_dict(snap), indent=2, default=str))
+            else:
+                if args.watch:
+                    print('\033[2J\033[H', end='')
+                print('\n'.join(render(snap, conn)))
+            if not args.watch:
+                return 0
+            # AUTOPILOT_VERSION is one-shot; re-ask so a --watch session keeps showing it.
+            conn.mav.command_long_send(
+                conn.target_system, conn.target_component,
+                mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE, 0,
+                float(MSG_AUTOPILOT_VERSION), 0, 0, 0, 0, 0, 0)
+    except KeyboardInterrupt:
+        print()
+        return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

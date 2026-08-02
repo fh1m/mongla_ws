@@ -606,6 +606,14 @@ def _check_jetson_power() -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
+# A still bench barometer is stable to well under 1 mbar; this is deliberately loose
+# so ordinary weather/HVAC drift over a few seconds cannot trip it.
+_BARO_JITTER_MBAR = 15.0
+_BARO_SANE_LO, _BARO_SANE_HI = 800.0, 1100.0
+# |DEPTH_OUT| at/above this while disarmed = the loop is already demanding full heave.
+_DEPTH_OUT_LIMIT = 0.90
+
+
 def _behaviour_rev_verdict(rev: int | None, required: int) -> tuple[str, str, str]:
     """Grade the board's SROT_FW_BEHAVIOUR_REV. Pure, so it is testable without a board.
 
@@ -668,6 +676,72 @@ def _baro_health_verdict(health: int | None, present: int | None) -> tuple[str, 
     return (PASS, 'Bar30 health', 'healthy (AUTO/DEPTH_HOLD available)')
 
 
+def _baro_noise_verdict(press: list[float]) -> tuple[str, str, str]:
+    """Grade the barometer on VARIANCE, not just plausibility. Pure and testable.
+
+    The firmware validates every Bar30 sample against a deliberately wide band
+    (~[300, 40000] mbar) so a judgement call cannot ground the vehicle by accident.
+    That catches a dead or wildly corrupt sensor. It is structurally blind to the
+    failure this hull actually has:
+
+        MEASURED 2026-08-02, bench, still: 30 samples spanning 321..740 mbar, with
+        water temperature swinging 6..30 C over the same window.
+
+    Every one of those readings is inside the band, so `SCALED_PRESSURE2` keeps
+    streaming and `SYS_STATUS` reports the barometer HEALTHY -- while the depth
+    derived from it wanders metres and the depth controller saturates against it.
+    A per-sample band cannot see that; peak-to-peak over a window can.
+
+    This is why the check lives here and not only in the firmware: it needs several
+    samples, and a pre-arm check on the board sees one.
+    """
+    if not press:
+        return (WARN, 'no SCALED_PRESSURE2',
+                'suppressed (fw rev 3+ withholds it when the baro is unhealthy/stale) '
+                'or the Bar30 is not fitted -- depth is NOT trustworthy either way')
+    spread = max(press) - min(press)
+    mean = sum(press) / len(press)
+    if spread > _BARO_JITTER_MBAR:
+        return (FAIL, 'barometer NOISE',
+                f'{len(press)} samples span {spread:.1f} mbar ({min(press):.0f}..'
+                f'{max(press):.0f}); a still bench baro is stable to <1 mbar. Each '
+                f'sample is inside the firmware plausibility band, so the board still '
+                f'reports it HEALTHY -- reseat the Bar30 connector / check I2C. Depth '
+                f'and the depth loop are fiction until this is fixed')
+    if not (_BARO_SANE_LO <= mean <= _BARO_SANE_HI):
+        return (FAIL, 'barometer out of range',
+                f'{mean:.0f} mbar, expected {_BARO_SANE_LO:.0f}..{_BARO_SANE_HI:.0f} '
+                f'(sea level ~1013). Depth derived from this is wrong by metres')
+    return (PASS, 'barometer', f'{mean:.1f} mbar, spread {spread:.2f} mbar')
+
+
+def _depth_loop_verdict(depth_out: float | None,
+                        depth_err: float | None) -> tuple[str, str, str]:
+    """Grade the DISARMED depth controller. Pure and testable.
+
+    `DEPTH_OUT` is the real controller's last output, published since fw rev 3. If it
+    is saturated while the vehicle is disarmed and stationary, arming hands that
+    demand straight to the thrusters -- and the mixer's throttle column is -1 on all
+    four VERTICALS and 0 on all four horizontals (fw `mixer.cpp`), so it lands as
+    full vertical thrust with the horizontals idling. That is precisely the
+    unexplained arming spin-up the firmware team reported.
+    """
+    if depth_out is None:
+        return (WARN, 'depth loop not reported',
+                'no DEPTH_OUT -- firmware older than rev 3, or the value was missed')
+    if abs(depth_out) >= _DEPTH_OUT_LIMIT:
+        return (FAIL, 'depth loop SATURATED',
+                f'DEPTH_OUT={depth_out:+.2f}'
+                + (f', DEPTH_ERR={depth_err:+.2f} m' if depth_err is not None else '')
+                + ' while DISARMED. Arming would command FULL vertical thrust '
+                  '(mixer throttle column is -1 on all four verticals) with the '
+                  'horizontals idle. DO NOT ARM -- fix the barometer first')
+    if abs(depth_out) > 0.25:
+        return (WARN, 'depth loop has a standing demand',
+                f'DEPTH_OUT={depth_out:+.2f} while disarmed')
+    return (PASS, 'depth loop', f'settled (DEPTH_OUT={depth_out:+.2f})')
+
+
 def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
     """SROT board over direct USB serial: port, vehicle heartbeat, GAIN, depth sign.
 
@@ -692,7 +766,18 @@ def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
 
     try:
         from pymavlink import mavutil
-        from duburi_control.fc import srot_protocol as sp
+        # NOT `from duburi_control.fc import srot_protocol`: that runs
+        # duburi_control/__init__.py, which imports Duburi -> duburi_interfaces, so it
+        # needs a fully-built, fully-sourced workspace. This whole tool exists to
+        # diagnose a workspace that ISN'T, and section A already reports a missing
+        # duburi_interfaces properly -- having the board section die of the same cause
+        # would add a second, misleading FAIL and hide the actual board readings.
+        from .srot_connect import _load_srot_protocol
+        sp = _load_srot_protocol()
+        if sp is None:
+            out.append((FAIL, 'srot_protocol unavailable',
+                        'cannot decode modes/ACKs -- rebuild: ./build_dubomini.sh'))
+            return out
     except Exception as exc:                       # noqa: BLE001
         out.append((FAIL, 'pymavlink/srot_protocol import', str(exc)))
         return out
@@ -758,18 +843,30 @@ def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
             None if sysst is None else int(getattr(sysst, 'onboard_control_sensors_health', 0)),
             None if sysst is None else int(getattr(sysst, 'onboard_control_sensors_present', 0))))
 
+        # Barometer + depth loop. Both need SEVERAL samples (the failure mode is
+        # variance, not a bad single reading), so gather a window before judging.
+        press, named = [], {}
+        end = time.time() + 6.0
+        while time.time() < end:
+            msg = conn.recv_match(blocking=True, timeout=0.5)
+            if msg is None:
+                continue
+            mt = msg.get_type()
+            if mt == 'SCALED_PRESSURE2':
+                press.append(float(msg.press_abs))
+            elif mt == 'NAMED_VALUE_FLOAT':
+                # 20+ scalars share this msgid and burst together, so the cache holds
+                # only whichever landed last -- read them as they arrive.
+                nm = msg.name
+                nm = nm.decode() if isinstance(nm, bytes) else str(nm)
+                nm = nm.strip('\x00').strip()
+                named[nm] = float(msg.value)
+        out.append(_baro_noise_verdict(press))
+        out.append(_depth_loop_verdict(named.get('DEPTH_OUT'), named.get('DEPTH_ERR')))
+
         # GAIN halves MANUAL_CONTROL until it is 1.0, and fw R14 means a PARAM_SET may
         # never have persisted on a board flashed before 8cb4203.
-        gain = None
-        for _ in range(40):
-            msg = conn.recv_match(type='NAMED_VALUE_FLOAT', blocking=True, timeout=0.3)
-            if msg is None:
-                break
-            name = getattr(msg, 'name', b'')
-            name = name.decode() if isinstance(name, bytes) else str(name)
-            if name.strip('\x00') == 'GAIN':
-                gain = float(msg.value)
-                break
+        gain = named.get('GAIN')
         if gain is None:
             out.append((WARN, 'GAIN not seen', 'could not confirm MANUAL_CONTROL authority'))
         elif gain < 0.99:

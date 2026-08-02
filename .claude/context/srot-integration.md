@@ -223,6 +223,64 @@ The uniform-lottery framing is wrong: the burst has a fixed order, and `LEAK` is
 check is load-bearing, because pymavlink never clears its slot and re-folding would re-stamp
 a dead value as fresh forever, defeating the `max_age_s` the table exists to enforce.
 
+### ⛔ Bench findings, 2026-08-02 — measured on the vehicle, not inferred
+
+The board was on the dev box inside the AUV, disarmed, thrusters off. Read-only.
+**Two faults block the water test and one host bug was fixed as a result.**
+
+**1. The Bar30 is producing NOISE, and the board reports it HEALTHY.**
+
+```
+30 samples over 6 s, still on a bench:   press_abs 317 .. 874 mbar   (sea level ~1013)
+                                         WTEMP       6 .. 30 C
+                                         VFR_HUD.alt +0.9 .. +6.8 m  (in air)
+SYS_STATUS ABSOLUTE_PRESSURE health bit: SET  ("healthy")
+```
+
+This is **not** an offset and **not** a drift — it is per-sample garbage, the signature of a
+bad I2C read / loose connector, and it matches the firmware team's own last-session note that
+"the Bar30 stopped responding... I believe this is the sensor connector, not firmware."
+
+The important part is **why rev 3's protection does not catch it.** The firmware validates
+each sample against a deliberately wide plausibility band (~`[300, 40000]` mbar, chosen loose
+so a judgement call cannot ground the vehicle). Every one of those readings is individually
+inside the band, so `SCALED_PRESSURE2` keeps streaming, `WTEMP` keeps streaming, and the health
+bit stays set. **A per-sample band is structurally blind to variance.** `bringup_check`'s
+`_baro_noise_verdict` checks peak-to-peak over a window, which is the thing a board-side
+pre-arm check (one sample) cannot do.
+
+**2. That phantom depth SATURATES the depth controller — and it is the arming blocker.**
+
+```
+disarmed, stationary:   DEPTH_ERR -3.0 .. -6.7 m     DEPTH_OUT -1.00 (full scale)
+                        MIX_VERT  -1.00              MIX_VSGN  4
+```
+
+The firmware team reported "on arming, props off, nothing commanded, the four VERTICAL
+thrusters spun to ~3000 RPM while the horizontals idled correctly" and could not explain it.
+This is the explanation, and it is fully determined by their own source:
+
+`mixer.cpp`'s matrix is **block-diagonal** — motors 5-8 (vertical) are non-zero only in
+**roll, pitch, throttle**; motors 1-4 (horizontal) only in yaw/forward/lateral. The throttle
+column is `-1` for all four verticals. So a heave demand of `-1.0` becomes `+1.0` on every
+vertical and `0` on every horizontal the instant the outputs go live. **Verticals at full,
+horizontals idle** — the reported symptom exactly, with no residual mystery.
+
+> A hypothesis worth recording as **refuted**: this was first attributed to the wiped `CAL_*`
+> level calibration feeding a phantom tilt into the attitude loop (which also drives only the
+> verticals). The live board says otherwise — roll `-0.81°`, pitch `+1.77°`, both small. The
+> attitude loop is fine; the depth loop is not. Reading the board settled in one probe what
+> source-reading had got wrong.
+
+**3. Host bug found by the same probe: `get_battery()` was a coin flip.**
+
+The board streams `BATTERY_STATUS` **twice** — id 0 (PM1 electronics) and id 1 (PM2 thruster
+pack) — at 2 Hz each, and pymavlink caches one message per **msgid**, not per instance. A live
+sample showed the slot alternating between **1.35 V and 14.74 V**. `/duburi/state`'s battery
+voltage was therefore whichever arrived last. Same failure as `NAMED_VALUE_FLOAT`, one layer
+down; fixed the same way (`SrotFC.note_battery`, fed from the manager's reader thread).
+`get_battery()` is now pinned to id 0 and `get_batteries()` returns both.
+
 ### Host-side workarounds for firmware defects (see `srot-control-board/JETSON_FEEDBACK.md`)
 
 > **Read `auv-architecture-2026.md` first.** Most of this section is now history. The firmware

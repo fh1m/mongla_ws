@@ -114,7 +114,8 @@ source /opt/ros/humble/setup.bash && source install/setup.bash
 
 > Every session, source ROS + the workspace, then run the preflight first:
 > ```bash
-> ros2 run duburi_manager bringup_check --srot   # SROT vehicle: USB serial · heartbeat · FW rev · GAIN · depth sign · Bar30 health
+> ros2 run duburi_manager connect                # ★ SROT: open the serial link, show the WHOLE vehicle
+> ros2 run duburi_manager bringup_check --srot   # SROT gate: FW rev · barometer sanity · depth loop · GAIN
 > ros2 run duburi_manager bringup_check          # Pixhawk vehicle: network · UDP 14550 · Pixhawk USB · DVL · BNO085
 > ```
 > Exit 0 = nothing failed (WARNs are OK in sim/desk). **`--srot` is the flag for this
@@ -158,7 +159,8 @@ nothing at all. This is the table to read before reusing anything from your shel
 **⚡ Drive the SROT vehicle (control only)** — one USB-C cable, no Pi, no BlueOS:
 
 ```bash
-ros2 run duburi_manager bringup_check --srot          # FW behaviour rev >= 2, and Bar30 health PASS
+ros2 run duburi_manager connect                       # 2 batteries · depth loop · ESC rpm/temp · health
+ros2 run duburi_manager bringup_check --srot          # FW rev >= 2, barometer sane, depth loop settled
 ros2 launch duburi_manager bringup.launch.py          # srot + mavlink_ahrs are the defaults
 # ...then in another terminal:
 ros2 run duburi_planner duburi arm
@@ -203,6 +205,54 @@ ros2 run duburi_planner duburi disarm
 > so an absent reading is now information. `VFR_HUD.alt` is the one exception: it keeps
 > streaming a number regardless, which is exactly why the `Bar30 health` line reads the
 > `SYS_STATUS` health bit instead of trusting the depth value.
+
+### Reading the board — `ros2 run duburi_manager connect`
+
+The Pixhawk + Pi stack had a dozen windows onto the vehicle (BlueOS web UI, QGC, MAVProxy).
+The SROT board has **one USB cable and no web UI**, so this is that surface: point it at the
+serial path and it prints everything the board says.
+
+```bash
+ros2 run duburi_manager connect                     # autodetect the port, one 6 s snapshot
+ros2 run duburi_manager connect --path /dev/ttyUSB0 # explicit device, like the Pixhawk days
+ros2 run duburi_manager connect --watch             # live, refreshing, until Ctrl-C
+ros2 run duburi_manager connect --json              # machine-readable, for logs and CI
+```
+
+It needs **no ROS graph, no manager, and not even a fully-built workspace** — it is usually
+the first thing you run. `connect` never grades and always exits 0; `bringup_check --srot` is
+the pass/fail gate. Use `connect` to look, `bringup_check` to decide.
+
+**What the SROT board sends that the Pixhawk never did:**
+
+| Group | Values | Why it is new |
+|---|---|---|
+| **Two batteries** | `BATTERY_STATUS` id 0 = **PM1 electronics**, id 1 = **PM2 thruster pack** | the thruster pack is invisible to the flight controller and arrives over **ESP-NOW** from the 2nd board — it is absent, not zero, when that link drops |
+| **Per-thruster telemetry** | RPM, temperature, voltage, current ×8 | bidirectional DShot via the RP2350 Pico co-processor — needs **Bluejay** on the ESCs |
+| **Depth-loop internals** | `DEPTH_CMD`, `DEPTH_ERR`, `DEPTH_OUT`, `MIX_VERT`, `MIX_VSGN` | lets you read the depth controller **disarmed**, before it can move anything |
+| **Move state** | `MV_STATE`, `MV_TYPE`, `MV_PROG` | on-board motion primitives report their own phase and progress |
+| **Sensor honesty** | `MAGACC`, `LEAK`, `KILL`, `WTEMP`, `SYS_STATUS` health bits | since rev 3 the board **withholds** values it cannot stand behind |
+| **Firmware health** | free heap, per-task stack high-water ×6, load, drop rate | an ESP32 running FreeRTOS can run out of stack; you want to see it coming |
+
+> **A missing value is `--`, never `0.0`.** From rev 4 the board *suppresses* `WTEMP` and
+> `SCALED_PRESSURE2` when the barometer is unhealthy, and sends `0` in
+> `SCALED_IMU2.temperature` as MAVLink's "not provided". Rendering absence as zero recreates
+> the exact bug that suppression was added to fix — a Bar30 read during a PROM reset race once
+> published `−51 °C` and `+2.87 m` in air with nothing marking them wrong.
+
+> **20+ scalars share one `NAMED_VALUE_FLOAT` msgid** and are sent as a burst, while pymavlink
+> caches one message *per msgid*. Anything that samples that cache sees only the last name in
+> the burst. Both `connect` and the manager's reader thread de-multiplex by name — and
+> `BATTERY_STATUS` needs the identical treatment by instance id, or the reading alternates
+> between two packs an order of magnitude apart.
+
+The manager logs the same data periodically once running — `srot_telemetry_period_s:=2.0`
+(set `0` to silence it):
+
+```
+[SROT ] BAT main  1.35V | thruster 14.74V | DEPTH +2.96m err -3.03m out -1.00 | WTEMP 21.6C | MAGACC 1 | LEAK dry | KILL clear
+[SROT ] RPM      0     0     0     0     0     0     0     0
+```
 
 **Drive in sim** — Gazebo + ArduSub SITL, no real AUV (this is the **pixhawk** backend):
 
@@ -283,7 +333,8 @@ on srot: both are on the control board.
 
 **3 · Preflight**
 ```bash
-ros2 run duburi_manager bringup_check --srot   # USB serial · heartbeat · FW rev · GAIN · depth sign · Bar30 health
+ros2 run duburi_manager connect                # everything the board sends (see "Reading the board")
+ros2 run duburi_manager bringup_check --srot   # serial · FW rev · barometer · depth loop · GAIN
 ls /dev/video*                                 # confirm camera device indices
 ```
 > **The line that matters is `FW behaviour rev`.** Below **2**, the board's `MOVE_STOP`

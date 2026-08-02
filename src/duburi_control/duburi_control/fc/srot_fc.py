@@ -153,6 +153,12 @@ class SrotFC(FlightController):
         # because pymavlink keeps one message per msgid and SROT rides ~15 names on this one.
         self._named_cache = {}
         self._last_nvf = None
+        # battery id -> (voltage_v, current_a, stamp). SAME single-slot trap as
+        # NAMED_VALUE_FLOAT, one layer down: the board sends TWO BATTERY_STATUS
+        # instances (0 = PM1 electronics, 1 = PM2 thruster pack over ESP-NOW) and
+        # pymavlink caches one message per MSGID, not per instance.
+        self._battery_cache = {}
+        self._last_batt = None
 
     # ------------------------------------------------------------------ #
     #  Firmware behaviour revision -- the runtime interlock               #
@@ -371,7 +377,47 @@ class SrotFC(FlightController):
         ok, reason = self.check_behaviour_rev()
         if not ok:
             return False, reason
+        ok, reason = self.check_depth_loop_settled()
+        if not ok:
+            return False, reason
         return self._arm_disarm(True, timeout, abort)
+
+    def check_depth_loop_settled(self):
+        """(ok, reason). Refuse to arm while the depth controller is already saturated.
+
+        OBSERVED ON THE VEHICLE, 2026-08-02, disarmed and stationary on a bench:
+        `DEPTH_OUT = -1.00` (full scale) with `DEPTH_ERR = -3.1 m`, because the Bar30
+        was reporting a phantom depth. Arming into that state is not a subtle risk --
+        the mixer's throttle column is **-1 on all four vertical thrusters and 0 on all
+        four horizontals** (fw `mixer.cpp`), so a -1.0 heave demand becomes +1.0 on
+        every vertical the instant the outputs go live. That is exactly the reported
+        blocker: verticals at ~3000 RPM, horizontals idling, nothing commanded.
+
+        In water it is a vehicle that dives or surfaces the moment it arms.
+
+        This reads the REAL controller's last output, not a model of it, so it is
+        agnostic to WHY the loop is unhappy (bad baro, stale target, wound-up
+        integrator). It fails closed and quotes the numbers, because a refusal that
+        does not say what it saw cannot be told apart from "not configured" --
+        the lesson the firmware team paid for four times over on the mag reference.
+
+        Bypass with `allow_fw_behaviour_mismatch` (the same operator escape hatch).
+        """
+        out = self._named_value('DEPTH_OUT')
+        if out is None:
+            return True, 'depth loop not reported'      # rev < 3: nothing to check.
+        if abs(out) < sp.DEPTH_OUT_ARM_LIMIT:
+            return True, f'depth loop settled (DEPTH_OUT={out:+.2f})'
+        err = self._named_value('DEPTH_ERR')
+        msg = (f'DEPTH LOOP SATURATED: DEPTH_OUT={out:+.2f}'
+               + (f', DEPTH_ERR={err:+.2f} m' if err is not None else '')
+               + '. Arming would command FULL vertical thrust (the mixer throttle '
+                 'column is -1 on all four verticals). Check the barometer -- run '
+                 '`ros2 run duburi_manager connect`')
+        if self.allow_fw_behaviour_mismatch:
+            self._log_warn(f'[SROT ] {msg} -- OVERRIDDEN, arming anyway')
+            return True, f'OVERRIDDEN: {msg}'
+        return False, msg
 
     def disarm(self, timeout: float = 15.0):
         return self._arm_disarm(False, timeout, abort=None)
@@ -607,6 +653,26 @@ class SrotFC(FlightController):
         wtemp = self._named_value('WTEMP')
         if wtemp is not None:
             t.water_temp_c = wtemp
+            for name in ('ESC_TELEMETRY_1_TO_4', 'ESC_TELEMETRY_5_TO_8'):
+                block = self._cache(name)
+                if block is not None:
+                    t.esc_temp_c = t.esc_temp_c + tuple(
+                        int(x) for x in getattr(block, 'temperature', ()) or ())
+
+        # Everything below is SROT-only and has no Pixhawk equivalent. Each stays NaN
+        # (not 0.0) when the board has not said it -- the board SUPPRESSES values it
+        # cannot stand behind, so absence is a distinct, meaningful state.
+        thr = self.get_batteries().get(sp.BATTERY_ID_THRUSTER)
+        if thr is not None:
+            t.thruster_voltage = thr['voltage']
+        for attr, name in (('depth_err_m', 'DEPTH_ERR'), ('depth_out', 'DEPTH_OUT'),
+                           ('mag_accuracy', 'MAGACC')):
+            val = self._named_value(name)
+            if val is not None:
+                setattr(t, attr, val)
+        kill = self._named_value('KILL')
+        if kill is not None:
+            t.kill_switch = kill >= 0.5
         return t
 
     # ------------------------------------------------------------------ #
@@ -655,17 +721,64 @@ class SrotFC(FlightController):
         hb = self._vehicle_hb()
         return sp.mode_name(hb.custom_mode) if hb is not None else 'UNKNOWN'
 
-    def get_battery(self):
-        """{'voltage','current'} (V/A) from BATTERY_STATUS id 0, or None -- matches
-        Pixhawk's dict contract (the manager reads battery['voltage'])."""
-        msg = self._cache('BATTERY_STATUS')
-        if msg is None:
-            return None
-        volts = getattr(msg, 'voltages', [0xFFFF])
+    def note_battery(self, msg):
+        """Hook for the manager's MAVLink reader thread -- de-multiplex by instance id.
+
+        MEASURED ON THE VEHICLE (2026-08-02): the board streams BATTERY_STATUS id 0
+        (PM1, electronics) and id 1 (PM2, thruster pack) at 2 Hz EACH. pymavlink keys
+        its cache by msgid, so `master.messages['BATTERY_STATUS']` alternates between
+        them -- a live sample showed the slot flipping between **1.35 V and 14.74 V**.
+        Reading that slot is therefore a coin flip on WHICH BATTERY you are reporting,
+        and the two differ by an order of magnitude, so it cannot even be averaged away.
+
+        Same failure as NAMED_VALUE_FLOAT, one layer down, and the same fix: key by the
+        field that distinguishes them and feed it from the only loop that sees them all.
+        """
+        bid = int(getattr(msg, 'id', 0))
+        volts = list(getattr(msg, 'voltages', []) or [])
         raw_mv = volts[0] if volts else 0xFFFF
         voltage = math.nan if raw_mv in (0, 0xFFFF) else raw_mv / 1000.0
         cur = getattr(msg, 'current_battery', -1)
         current = math.nan if cur == -1 else cur / 100.0
+        self._battery_cache[bid] = (voltage, current, time.time())
+
+    def _drain_battery(self):
+        """Fold the currently-cached BATTERY_STATUS in, once per message object.
+
+        The identity guard is load-bearing for the same reason as `_drain_named`'s:
+        pymavlink never clears its slot, so re-folding would re-stamp a dead link's
+        last reading as fresh forever.
+        """
+        msg = self._cache('BATTERY_STATUS')
+        if msg is not None and msg is not self._last_batt:
+            self._last_batt = msg
+            self.note_battery(msg)
+
+    def get_batteries(self, max_age_s: float = 5.0):
+        """{id: {'voltage','current'}} for every battery seen recently.
+
+        id 0 = PM1 (electronics rail), id 1 = PM2 (thruster pack, via ESP-NOW from the
+        2nd board). An id absent here means it has not been heard -- NOT that it reads
+        zero. On this vehicle PM1 reads ~1.3 V because nothing is wired to GPIO36.
+        """
+        self._drain_battery()
+        now = time.time()
+        return {bid: {'voltage': v, 'current': c}
+                for bid, (v, c, stamp) in self._battery_cache.items()
+                if (now - stamp) <= max_age_s}
+
+    def get_battery(self):
+        """{'voltage','current'} (V/A) for the MAIN battery (id 0), or None.
+
+        Matches Pixhawk's dict contract (the manager reads battery['voltage']), so
+        /duburi/state is unchanged. Pinned to id 0 rather than 'whatever arrived
+        last' -- see note_battery for why that distinction is not cosmetic.
+        """
+        self._drain_battery()
+        hit = self._battery_cache.get(sp.BATTERY_ID_MAIN)
+        if hit is None:
+            return None
+        voltage, current, _ = hit
         return {'voltage': voltage, 'current': current}
 
     def get_rc_channels(self):

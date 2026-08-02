@@ -28,6 +28,7 @@ setup(
             'auv_manager      = duburi_manager.auv_manager_node:main',  # kept for compat
             'auv_manager_node = duburi_manager.auv_manager_node:main',  # kept for compat
             'bringup_check    = duburi_manager.bringup_check:main',
+            'connect          = duburi_manager.srot_connect:main',
         ],
     },
 )

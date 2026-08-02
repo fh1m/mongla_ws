@@ -83,6 +83,17 @@ class Telemetry:
     leak:            bool  = False
     water_temp_c:    float = math.nan
     link_alive:      bool  = False
+    # SROT only. `battery_voltage` above stays the MAIN (PM1) pack so DuburiState is
+    # unchanged; the thruster pack is a second, physically separate battery that
+    # reaches the board over ESP-NOW and is NaN whenever that link is down.
+    thruster_voltage: float = math.nan
+    # Depth-controller internals (NAMED_VALUE_FLOAT). `depth_out` saturated while
+    # disarmed is the pre-arm tell that arming would command full vertical thrust.
+    depth_err_m:      float = math.nan
+    depth_out:        float = math.nan
+    esc_temp_c:       tuple = field(default_factory=tuple)
+    mag_accuracy:     float = math.nan
+    kill_switch:      bool  = False
 
 
 class FlightController:
