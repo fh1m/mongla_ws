@@ -153,6 +153,60 @@ mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_dista
 > needs a selectable STYLE axis + rate. Both are buildable on request — they are simply not
 > built, and refusing is the honest state.
 
+### Firmware behaviour rev 3 (2026-08-02) — absence became a signal
+
+Rev 3 landed with the board **in the vehicle**, and its theme is that the firmware now
+**refuses to report data it cannot stand behind**. Three consequences reach us:
+
+1. **The Bar30's calibration PROM is validated (CRC-4) and no longer read in a race.**
+   The vendored MS5837 driver's `reset()` compared `micros()` against a `millis()` baseline,
+   so the mandatory ~2.8 ms post-RESET reload delay was **zero** and `initConstants()` read
+   the PROM while the sensor was still reloading it. The coefficients were boot-time luck.
+   That is not a display bug: `dT` feeds `offset` and `sens`, so a bad PROM corrupted
+   **pressure and depth** silently, by an amount whose sign you cannot predict. On a vehicle
+   whose depth loop has never run closed, that is what the first dive would have flown on.
+2. **An unhealthy or stale baro now refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`.** `SROT_MOVE`
+   enters `AUTO`, so this means **every move verb is denied** — `move_forward` included.
+   `bringup_check --srot` reads it via `_baro_health_verdict` off `SYS_STATUS`, because on
+   the deck the symptom is "it arms and then does nothing".
+3. **`WTEMP` and `SCALED_PRESSURE2` are suppressed when the baro is unhealthy**, and
+   `SCALED_IMU2.temperature` sends MAVLink's `0` "not provided". Absence is the signal.
+   ⚠ **`VFR_HUD` is NOT gated on `depth_ok`** — and `VFR_HUD.alt` is where we read depth. So
+   our depth number keeps arriving on a board that has declared its baro dead. That is safe
+   only because the same `depth_ok` flag *also* refuses AUTO (`task_control_loop.cpp:107`
+   and `:348` use the identical condition), so no closed-loop move ever runs on it. Read
+   health from `SYS_STATUS`, never infer it from the presence of a depth value.
+
+**`FW_BEHAVIOUR_REV_REQUIRED` stays at 2, deliberately.** Rev 3's changes are additive for
+this host, so a rev-2 board still runs it correctly; raising the floor would strand a
+working vehicle for no safety gain.
+
+**LEAK moved to `SYS_STATUS` extended health — and we cannot read it.** pymavlink 2.4.49's
+`SYS_STATUS` has thirteen fields and no extensions, so the board's 40 bytes are parsed
+against a 31-byte schema and the rest discarded; `onboard_control_sensors_health_extended`
+is always `None`. Exactly the `ESC_STATUS(291)` trap in a new hat. The firmware therefore
+keeps `NAMED_VALUE_FLOAT("LEAK")` as a deprecated duplicate and **the real fix is host-side**
+(next section). `srot_protocol.SYS_STATUS_HAS_EXTENDED_HEALTH` records why, and a test fails
+loudly when pymavlink catches up.
+
+### Reading multiplexed `NAMED_VALUE_FLOAT` — why the reader hook is mandatory
+
+The board rides `LEAK`, `WTEMP`, `STUNT_PRG`, `ATUNE`, `KILL`, `CURR` and `GAIN` on one
+msgid, **all seven back-to-back inside a single 500 ms tick** (`mav_stream.cpp`, `iv_nvf`).
+pymavlink keeps exactly one message per msgid. So by the time anything samples
+`master.messages['NAMED_VALUE_FLOAT']`, the whole burst has already drained through the slot
+and only the **last** name — `GAIN` — is left, and it stays there for the ~475 ms until the
+next burst.
+
+That means sampling the slot does not lose `LEAK` *occasionally*. **It loses it always.**
+The uniform-lottery framing is wrong: the burst has a fixed order, and `LEAK` is first.
+
+`SrotFC` therefore keeps its own per-name table with a freshness stamp, fed from
+`auv_manager_node.reader_loop` — the only code that sees the names in between — via
+`note_named_value()`. `_drain_named()` folds each message object **once**; that identity
+check is load-bearing, because pymavlink never clears its slot and re-folding would re-stamp
+a dead value as fresh forever, defeating the `max_age_s` the table exists to enforce.
+
 ### Host-side workarounds for firmware defects (see `srot-control-board/JETSON_FEEDBACK.md`)
 
 > **Read `auv-architecture-2026.md` first.** Most of this section is now history. The firmware

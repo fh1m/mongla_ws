@@ -145,8 +145,9 @@ constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identica
 unavailable, see `vehicle-spec.md` "DVL status".)*
 
 **⛔ The board's depth loop has never run closed** (fw `AUDIT.md` R1: the sign was inverted
-until 2026-07-30 and the Bar30 wasn't fitted). Two bench checks gate every dive-dependent
-verb — see `.claude/context/srot-integration.md`.
+until 2026-07-30 and the Bar30 wasn't fitted). Two bench checks gate **every AUTO move, `move_forward`
+included** (not just dive verbs — see the depth-gate note below) —
+`.claude/context/srot-integration.md`.
 
 **⚠ There is now a firmware-version interlock, and it is a hull-safety one.** The board
 reports `SROT_FW_BEHAVIOUR_REV` in `AUTOPILOT_VERSION.middleware_sw_version` (request msgid
@@ -156,6 +157,19 @@ reverse-leg brake was removed — on pre-rev-2 firmware `stop` and every abort w
 not decelerate 20 kg of hull, with nothing in any log. `0` means "older than 2026-08-01",
 not "unknown", and fails closed; a board that answers *nothing* warns hard but is allowed
 through. Override: `allow_fw_behaviour_mismatch:=true`.
+
+**Firmware is at behaviour rev 3 (2026-08-02); the host floor stays at 2 deliberately** (rev 3
+is additive for us, and raising it would strand a working rev-2 board). Rev 3's theme is that
+the board **refuses to report data it cannot stand behind**, which creates one brand-new deck
+symptom: an unhealthy/stale Bar30 now refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and since
+`SROT_MOVE` enters `AUTO`, **every move verb is denied** — it arms and then simply will not
+move. `bringup_check --srot` reads that off `SYS_STATUS` (`_baro_health_verdict`). ⚠ `VFR_HUD`
+is *not* gated on baro health and is where we read depth, so **never infer sensor health from
+the presence of a depth value**. LEAK moved to `SYS_STATUS` extended health, which **pymavlink
+cannot decode** (13 fields, no extensions — the `ESC_STATUS(291)` trap again), so LEAK is still
+read from `NAMED_VALUE_FLOAT` — via a per-name table fed by the manager's reader thread,
+because all seven names burst inside one 500 ms tick and pymavlink's single slot keeps only the
+last (`GAIN`). Details: [`srot-integration.md`](.claude/context/srot-integration.md).
 
 **★ The architecture change itself — read this first:**
 [`.claude/context/auv-architecture-2026.md`](.claude/context/auv-architecture-2026.md).

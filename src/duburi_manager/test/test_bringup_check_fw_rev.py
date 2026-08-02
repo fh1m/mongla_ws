@@ -63,3 +63,38 @@ def test_grades_against_the_shipped_requirement():
 def test_no_too_old_revision_is_ever_a_mere_warning(rev):
     """The whole point of the gate: a known-old board must not be waved through."""
     assert _behaviour_rev_verdict(rev, 2)[0] == FAIL
+
+
+# --------------------------------------------------------------------------- #
+#  Bar30 health -- since fw rev 3 this decides whether ANY move verb runs      #
+# --------------------------------------------------------------------------- #
+
+from duburi_manager.bringup_check import _baro_health_verdict          # noqa: E402
+from pymavlink import mavutil                                          # noqa: E402
+
+_BARO = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+_OTHER = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_GYRO
+
+
+def test_healthy_baro_passes():
+    status, label, _ = _baro_health_verdict(_BARO | _OTHER, _BARO | _OTHER)
+    assert status == PASS and 'Bar30' in label
+
+
+def test_unhealthy_baro_fails_because_every_move_verb_is_denied():
+    """Present but unhealthy is a definite statement: the board refuses AUTO, and
+    SROT_MOVE enters AUTO, so move_forward is denied too. FAIL, not WARN -- finding
+    this on the bench is the entire point of the line."""
+    status, _, detail = _baro_health_verdict(_OTHER, _BARO | _OTHER)
+    assert status == FAIL
+    assert 'DENIED' in detail or 'denied' in detail
+
+
+def test_absent_sys_status_warns_rather_than_failing():
+    """Same asymmetry as the behaviour-rev check: silence is far more likely a dropped
+    frame than a dead sensor, and failing a preflight on a comms hiccup is its own hazard."""
+    assert _baro_health_verdict(None, None)[0] == WARN
+
+
+def test_baro_not_present_warns():
+    assert _baro_health_verdict(_OTHER, _OTHER)[0] == WARN

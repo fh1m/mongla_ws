@@ -634,6 +634,40 @@ def _behaviour_rev_verdict(rev: int | None, required: int) -> tuple[str, str, st
     return (PASS, 'FW behaviour rev', f'{rev} (>= {required} required)')
 
 
+def _baro_health_verdict(health: int | None, present: int | None) -> tuple[str, str, str]:
+    """Grade the Bar30 from SYS_STATUS's health bitfield. Pure, testable without a board.
+
+    WHY THIS IS A PREFLIGHT LINE AND NOT A CURIOSITY. Since fw behaviour rev 3 the board
+    validates the Bar30's calibration PROM (CRC-4) and refuses DEPTH_HOLD / AUTO / PATTERN
+    when the baro is unhealthy or its sample is stale. `SROT_MOVE` auto-enters AUTO. So an
+    unhealthy Bar30 means EVERY move verb is refused -- `move_forward` included -- and on
+    the deck that presents as "arm succeeded, the vehicle just will not move", with the
+    reason arriving only as a STATUSTEXT nobody was watching.
+
+    Read it here, where the answer is cheap, rather than at the water's edge.
+
+    Unlike depth/WTEMP -- which the board SUPPRESSES when unhealthy, and which ride
+    messages pymavlink truncates or multiplexes -- these two bits are in SYS_STATUS's
+    BASE fields, so they are the one part of rev 3's health reporting we can actually read
+    (contrast srot_protocol.SYS_STATUS_HAS_EXTENDED_HEALTH, which is where LEAK went).
+    """
+    from pymavlink import mavutil
+    bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+    if health is None or present is None:
+        return (WARN, 'baro health unknown',
+                'no SYS_STATUS; if the Bar30 is unhealthy the board refuses AUTO and '
+                'EVERY move verb is denied, move_forward included')
+    if not present & bit:
+        return (WARN, 'baro not present', 'board reports no absolute-pressure sensor -- '
+                                          'DEPTH_HOLD/AUTO refused, so no move verb runs')
+    if not health & bit:
+        return (FAIL, 'Bar30 unhealthy',
+                'PROM CRC failed or the sample is stale. The board refuses DEPTH_HOLD/AUTO/'
+                'PATTERN, and SROT_MOVE enters AUTO -- so every move verb is DENIED. '
+                'Check the Bar30 wiring/I2C and power-cycle; the PROM is read at boot')
+    return (PASS, 'Bar30 health', 'healthy (AUTO/DEPTH_HOLD available)')
+
+
 def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
     """SROT board over direct USB serial: port, vehicle heartbeat, GAIN, depth sign.
 
@@ -716,6 +750,13 @@ def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
             # reading out of water is normal (~0); a positive one submerged means the
             # sign regressed and every depth guard is silently disabled.
             out.append((PASS, 'depth telemetry', f'{depth:+.2f} m (negative = submerged)'))
+
+        # VFR_HUD.alt keeps streaming even when the board has declared the baro dead, so
+        # the line above cannot tell you the reading is trustworthy. This one can.
+        sysst = conn.messages.get('SYS_STATUS')
+        out.append(_baro_health_verdict(
+            None if sysst is None else int(getattr(sysst, 'onboard_control_sensors_health', 0)),
+            None if sysst is None else int(getattr(sysst, 'onboard_control_sensors_present', 0))))
 
         # GAIN halves MANUAL_CONTROL until it is 1.0, and fw R14 means a PARAM_SET may
         # never have persisted on a board flashed before 8cb4203.

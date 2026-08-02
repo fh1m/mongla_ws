@@ -114,7 +114,7 @@ source /opt/ros/humble/setup.bash && source install/setup.bash
 
 > Every session, source ROS + the workspace, then run the preflight first:
 > ```bash
-> ros2 run duburi_manager bringup_check --srot   # SROT vehicle: USB serial · heartbeat · FW rev · GAIN · depth sign
+> ros2 run duburi_manager bringup_check --srot   # SROT vehicle: USB serial · heartbeat · FW rev · GAIN · depth sign · Bar30 health
 > ros2 run duburi_manager bringup_check          # Pixhawk vehicle: network · UDP 14550 · Pixhawk USB · DVL · BNO085
 > ```
 > Exit 0 = nothing failed (WARNs are OK in sim/desk). **`--srot` is the flag for this
@@ -158,7 +158,7 @@ nothing at all. This is the table to read before reusing anything from your shel
 **⚡ Drive the SROT vehicle (control only)** — one USB-C cable, no Pi, no BlueOS:
 
 ```bash
-ros2 run duburi_manager bringup_check --srot          # must report FW behaviour rev >= 2
+ros2 run duburi_manager bringup_check --srot          # FW behaviour rev >= 2, and Bar30 health PASS
 ros2 launch duburi_manager bringup.launch.py          # srot + mavlink_ahrs are the defaults
 # ...then in another terminal:
 ros2 run duburi_planner duburi arm
@@ -187,9 +187,24 @@ ros2 run duburi_planner duburi disarm
 >
 > A successful in-air `move_forward` is **not** partial validation of this.
 
-**Drive in sim** — Gazebo + ArduSub SITL, no real AUV (this is the **pixhawk** backend):
+> ### First power-on with firmware rev 3 — three ways the vehicle refuses to move
+>
+> Rev 3 (2026-08-02) made the board **fail loudly instead of flying on bad data**. That is
+> the right trade, but it means a healthy-looking vehicle can now decline to move for
+> reasons that never existed before. All three are visible from the bench:
+>
+> | Symptom on the deck | Cause | Check before you get wet |
+> |---|---|---|
+> | Arms fine, **every move verb DENIED**, nothing obviously wrong | Bar30 PROM failed CRC, or its sample is stale → the board refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and `SROT_MOVE` enters `AUTO` | `bringup_check --srot` → **`Bar30 health`** must read PASS |
+> | Disarms itself, or refuses to arm, on a good pack | The thruster-pack voltage was reading **0 V** until `PM2_SRC=2` — the low-battery failsafe was **inert and is now live**, and its threshold has never been exercised | Compare `FS_BAT_VOLTAGE` (13.2) against your real pack in Bondor |
+> | Manual piloting feels half-powered | `GAIN` boots from `JS_GAIN_DEFAULT`, which reads **0.5** on this board — `MANUAL_CONTROL` has been at half authority all along | `bringup_check --srot` reports GAIN; the manager also re-writes it at startup |
+>
+> Depth and water temperature are **suppressed**, not faked, when the baro is unhealthy —
+> so an absent reading is now information. `VFR_HUD.alt` is the one exception: it keeps
+> streaming a number regardless, which is exactly why the `Bar30 health` line reads the
+> `SYS_STATUS` health bit instead of trusting the depth value.
 
-**Drive in sim** — Gazebo + ArduSub SITL, no real AUV:
+**Drive in sim** — Gazebo + ArduSub SITL, no real AUV (this is the **pixhawk** backend):
 
 ```bash
 # T1 — ArduSub SITL
@@ -268,7 +283,7 @@ on srot: both are on the control board.
 
 **3 · Preflight**
 ```bash
-ros2 run duburi_manager bringup_check --srot   # USB serial · heartbeat · FW rev · GAIN · depth sign
+ros2 run duburi_manager bringup_check --srot   # USB serial · heartbeat · FW rev · GAIN · depth sign · Bar30 health
 ls /dev/video*                                 # confirm camera device indices
 ```
 > **The line that matters is `FW behaviour rev`.** Below **2**, the board's `MOVE_STOP`
@@ -281,7 +296,7 @@ ls /dev/video*                                 # confirm camera device indices
 ```bash
 ros2 launch duburi_manager bringup.launch.py
 # expect: MONGLA · DUBURI AUV MANAGER banner, [NET] flight_controller = srot,
-#         a [STATE] line within ~2 s, and [SROT] firmware behaviour rev 2
+#         a [STATE] line within ~2 s, and [SROT] firmware behaviour rev 3
 # payload: add  payload_fire_map:="1:relay:0, 2:relay:1, 3:servo:3"  (empty = cannot fire)
 ```
 *(Pixhawk backend: `bringup.launch.py flight_controller:=pixhawk mode:=pool yaw_source:=bno085_dvl`.)*

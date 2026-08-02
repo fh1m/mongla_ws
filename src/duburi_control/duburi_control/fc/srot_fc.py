@@ -152,6 +152,7 @@ class SrotFC(FlightController):
         # name -> (value, wall-clock stamp). Our own de-multiplexing of NAMED_VALUE_FLOAT,
         # because pymavlink keeps one message per msgid and SROT rides ~15 names on this one.
         self._named_cache = {}
+        self._last_nvf = None
 
     # ------------------------------------------------------------------ #
     #  Firmware behaviour revision -- the runtime interlock               #
@@ -289,9 +290,15 @@ class SrotFC(FlightController):
         reader-thread hook can (see `note_named_value`) -- but it means each name survives in
         our table for `max_age_s` instead of only until the next NAMED_VALUE_FLOAT of ANY
         name lands.
+
+        EACH MESSAGE IS FOLDED ONCE, and that identity check is load-bearing: pymavlink
+        never clears its slot, so re-folding the same object would re-stamp it as fresh on
+        every call and `max_age_s` could never fire -- a value from a dead link would read
+        as current forever, which is the exact failure the freshness stamp exists to catch.
         """
         msg = self._cache('NAMED_VALUE_FLOAT')
-        if msg is not None:
+        if msg is not None and msg is not self._last_nvf:
+            self._last_nvf = msg
             self.note_named_value(msg)
 
     def note_named_value(self, msg):

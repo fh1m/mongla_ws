@@ -698,9 +698,21 @@ class AUVManagerNode(Node):
     # ================================================================== #
 
     def reader_loop(self):
+        # SROT multiplexes LEAK/WTEMP/STUNT_PRG/ATUNE/KILL/CURR/GAIN onto NAMED_VALUE_FLOAT
+        # and sends all seven back-to-back in one 500 ms tick, while pymavlink keeps exactly
+        # ONE message per msgid. So by the time anything reads the slot the burst has already
+        # drained through it and only the last name -- GAIN -- is left, until the next burst.
+        # Sampling the slot therefore does not miss LEAK occasionally; it misses it always.
+        # This loop is the only place that sees the names in between, so it is the only place
+        # the de-multiplexing can happen. Pixhawk has no such hook and is untouched.
+        note = getattr(self.fc, 'note_named_value', None)
         while True:
-            while self.master.recv_match(blocking=False) is not None:
-                pass
+            while True:
+                msg = self.master.recv_match(blocking=False)
+                if msg is None:
+                    break
+                if note is not None and msg.get_type() == 'NAMED_VALUE_FLOAT':
+                    note(msg)
             text = self.pixhawk.get_statustext()
             if text and text != self.last_statustext:
                 self.last_statustext = text
