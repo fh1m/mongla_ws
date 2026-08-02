@@ -775,3 +775,78 @@ def test_the_override_is_opt_in_and_still_shouts():
     ok, reason = fc.check_behaviour_rev()
     assert ok is True and 'OVERRIDDEN' in reason
     assert any('OVERRIDDEN' in w for w in warnings)
+
+
+# --------------------------------------------------------------------------- #
+#  NAMED_VALUE_FLOAT de-multiplexing -- LEAK must not be a lottery             #
+# --------------------------------------------------------------------------- #
+
+def _nvf(name, value):
+    return SimpleNamespace(name=name, value=value)
+
+
+def test_named_value_survives_other_names_landing_after_it():
+    """THE regression. SROT rides ~15 names on NAMED_VALUE_FLOAT and pymavlink keeps one
+    message per msgid, so the old `read the slot, compare .name` returned None unless the
+    value you wanted happened to be the most recent to arrive. Against LEAK that is a
+    lottery on whether a flooding hull is ever observed."""
+    fc = _fc()
+    fc.master.messages['NAMED_VALUE_FLOAT'] = _nvf('LEAK', 1.0)
+    assert fc._named_value('LEAK') == 1.0
+    # ...now fourteen other names arrive and overwrite the single slot.
+    for other in ('WTEMP', 'GAIN', 'CURR', 'KILL', 'HEAP', 'STK_CTL'):
+        fc.master.messages['NAMED_VALUE_FLOAT'] = _nvf(other, 1.0)
+        fc._drain_named()
+    assert fc._named_value('LEAK') == 1.0, \
+        'LEAK was lost the moment any other NAMED_VALUE_FLOAT arrived'
+    assert fc._named_value('WTEMP') == 1.0
+
+
+def test_named_value_ages_out():
+    """A value that stopped arriving must read None, not its value from minutes ago --
+    the same freshness rule every other external input in this stack follows."""
+    fc = _fc()
+    fc.note_named_value(_nvf('LEAK', 1.0))
+    assert fc._named_value('LEAK', max_age_s=100.0) == 1.0
+    fc._named_cache['LEAK'] = (1.0, time.time() - 60.0)
+    assert fc._named_value('LEAK', max_age_s=3.0) is None
+
+
+def test_reader_hook_is_lossless():
+    """note_named_value() is the hook for the manager's reader thread, which sees EVERY
+    NAMED_VALUE_FLOAT rather than only whichever last landed in pymavlink's slot."""
+    fc = _fc()
+    for name, val in (('LEAK', 1.0), ('WTEMP', 21.5), ('GAIN', 0.5)):
+        fc.note_named_value(_nvf(name, val))
+    assert fc._named_value('LEAK') == 1.0
+    assert fc._named_value('WTEMP') == 21.5
+    assert fc._named_value('GAIN') == 0.5
+
+
+def test_sys_status_extended_health_is_not_readable_on_this_pymavlink():
+    """Pins WHY we still read LEAK from NAMED_VALUE_FLOAT even though the board now also
+    publishes it on the SYS_STATUS extended health bits (verified on the wire:
+    present_extended = health_extended = 0x02).
+
+    pymavlink 2.4.49's SYS_STATUS has 13 fields and no extensions, so the board's 40 bytes
+    are parsed against a 31-byte schema and the rest is discarded. Same class of trap as
+    ESC_STATUS(291): the data is on the wire and the library cannot see it.
+
+    When this test FAILS, pymavlink gained the fields -- flip
+    srot_protocol.SYS_STATUS_HAS_EXTENDED_HEALTH and read the bit directly.
+    """
+    from pymavlink import mavutil
+    fields = mavutil.mavlink.MAVLink_sys_status_message.fieldnames
+    has_ext = 'onboard_control_sensors_health_extended' in fields
+    assert has_ext == sp.SYS_STATUS_HAS_EXTENDED_HEALTH, (
+        f'pymavlink SYS_STATUS extended-health support changed (now {has_ext}); '
+        f'update srot_protocol.SYS_STATUS_HAS_EXTENDED_HEALTH and read LEAK from the bit')
+
+
+def test_behaviour_rev_required_still_matches_what_we_assume():
+    """FW_BEHAVIOUR_REV tracks the board; FW_BEHAVIOUR_REV_REQUIRED is what THIS code
+    needs. Rev 3 changes are additive for us (WTEMP/SCALED_PRESSURE2 can be absent, which
+    we already treat as absent), so the requirement stays at 2 -- a rev-2 board still runs
+    this host correctly. Raising it would strand a working vehicle."""
+    assert sp.FW_BEHAVIOUR_REV == 3
+    assert sp.FW_BEHAVIOUR_REV_REQUIRED == 2
