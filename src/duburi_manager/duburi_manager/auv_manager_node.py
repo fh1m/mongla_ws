@@ -493,6 +493,15 @@ class AUVManagerNode(Node):
                     f'[PAYLOAD] SROT: via MAVLink PCA9685 (DO_SET_SERVO/RELAY) -- '
                     f'no separate USB board; {len(fire_map)} channel(s) mapped: '
                     f'{sorted(fire_map)}')
+                # Read each mapped channel's ROLE off the board now, so a channel
+                # pointed at the on-board manipulator arm is caught at bring-up
+                # rather than at the moment a mission tries to drop a marker.
+                try:
+                    self._payload.preflight_roles()
+                except Exception as exc:            # noqa: BLE001 -- advisory only
+                    self.get_logger().warn(
+                        f'[PAYLOAD] could not read channel roles: {exc!r} -- fire() '
+                        f'still refuses anything the board does not call a switch')
             else:
                 # Loud, because everything downstream looks healthy: the link is up,
                 # bringup_check passes, and every fire() silently returns False.

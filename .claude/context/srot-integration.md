@@ -281,6 +281,32 @@ voltage was therefore whichever arrived last. Same failure as `NAMED_VALUE_FLOAT
 down; fixed the same way (`SrotFC.note_battery`, fed from the manager's reader thread).
 `get_battery()` is now pinned to id 0 and `get_batteries()` returns both.
 
+### Payload: the board owns the channel role, we only read it
+
+Each PCA9685 channel's role is a **firmware parameter** — `SERVO{n}_ROLE`, n = PCA channel + 1
+(`0` disabled, `1` PWM servo, `2` MOSFET/switch). **Measured on the vehicle 2026-08-02:
+1-8 = SERVO, 9-16 = SWITCH.**
+
+`duburi_ws` drives **switch channels only**. The PWM channels are the on-board manipulator
+arm, and firing one from a mission would move the arm mid-drop. `SrotPayload.fire()` therefore
+reads the role from the board and refuses anything that is not `2`, **failing closed on an
+unreadable role**.
+
+`payload_fire_map` is now plain numbers — `"1:9, 2:10"` (duburi channel : 1-based PCA channel).
+The old `1:relay:0` / `2:servo:3` forms still parse, but encoding the role host-side duplicates
+board state and goes stale **silently** on a re-role, which is exactly the failure that would
+drive the arm.
+
+`DO_SET_SERVO` addresses a channel by its own number whatever its role, because the firmware
+reads the µs as a LEVEL for a role-2 channel (`mav_commands.cpp:471-479`) — so one code path
+covers both, and the role check is the only thing distinguishing them.
+
+⚠ **`preflight_roles()` needs the reader thread running.** `get_param` reads the pymavlink
+cache and never calls `recv_match()` itself, so with no reader every role reads `None` and the
+payload reports UNREADABLE — indistinguishable from a mis-roled board. The manager starts the
+reader before `_preflight_payload`; `test_the_reader_thread_starts_before_the_payload_role_read`
+pins that ordering.
+
 ### Host-side workarounds for firmware defects (see `srot-control-board/JETSON_FEEDBACK.md`)
 
 > **Read `auv-architecture-2026.md` first.** Most of this section is now history. The firmware

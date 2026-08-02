@@ -1061,13 +1061,22 @@ _FIRE_MAP: dict = {}
 def parse_fire_map(spec, log=None) -> dict:
     """Parse the `payload_fire_map` ROS param string into the `_FIRE_MAP` shape.
 
-    Grammar (comma-separated entries, whitespace ignored) -- the format the
-    refusal message in `fire()` already tells the operator to use:
+    PREFERRED grammar (comma-separated, whitespace ignored):
+
+        <duburi_channel>:<pca_channel>        e.g. "1:9, 2:10, 3:11, 4:12"
+
+    `duburi_channel` is what `fire()` is called with (1/2 torpedo, 3/4 dropper);
+    `pca_channel` is the 1-based PCA9685 channel (so PCA ch 8 is `9`).
+
+    THAT IS ALL THE HOST NEEDS. Whether a channel is a PWM servo or a MOSFET switch
+    is a FIRMWARE parameter (`SERVO{n}_ROLE`, set in Bondor), and `fire()` reads it
+    from the board and refuses anything that is not a switch. Encoding the role here
+    too would duplicate board state and go stale silently on a re-role.
+
+    LEGACY forms, still parsed so existing launch files keep working:
 
         <channel>:relay:<instance>
         <channel>:servo:<pca_ch>[:<fire_us>:<rest_us>]
-
-    e.g. ``"1:relay:0, 2:relay:1, 3:servo:3, 4:servo:5:1900:1100"``
 
     `channel` is the duburi payload channel `fire()` is called with (1/2 torpedo,
     3/4 dropper). `instance` is the 0-based DO_SET_RELAY instance, which the board
@@ -1092,9 +1101,35 @@ def parse_fire_map(spec, log=None) -> dict:
         if not entry:
             continue
         parts = [p.strip() for p in entry.split(':')]
+
+        # PREFERRED FORM: "<duburi_channel>:<pca_channel>" -- plain numbers.
+        #
+        # The old forms made the HOST state whether a channel is a relay or a servo,
+        # which duplicates firmware state (`SERVO{n}_ROLE`, set in Bondor) and goes
+        # stale silently the moment a channel is re-roled. The board already routes by
+        # configured role, and a role-2 channel treats DO_SET_SERVO's µs as a level, so
+        # the channel NUMBER is the only thing that needs to cross repos.
+        if len(parts) == 2:
+            try:
+                channel, pca = int(parts[0]), int(parts[1])
+            except ValueError:
+                _bad(entry, 'expected <duburi_channel>:<pca_channel>, both integers')
+                continue
+            if channel <= 0:
+                _bad(entry, 'payload channel must be >= 1')
+                continue
+            if not 1 <= pca <= sp.PCA9685_NUM_CH:
+                _bad(entry, f'PCA channel {pca} out of range (1..{sp.PCA9685_NUM_CH})')
+                continue
+            # Stored in the 'servo' shape because that is what addresses a channel by
+            # its own number; the board turns µs into a level for a switch channel.
+            # fire() still refuses unless the BOARD says the role is SWITCH.
+            out[channel] = ('servo', pca, sp.PCA_SWITCH_ON_US, sp.PCA_SWITCH_OFF_US)
+            continue
+
         if len(parts) < 3:
-            _bad(entry, 'expected <channel>:relay:<instance> or '
-                        '<channel>:servo:<ch>[:fire_us:rest_us]')
+            _bad(entry, 'expected <channel>:<pca_channel>, or the legacy '
+                        '<channel>:relay:<instance> / <channel>:servo:<ch>[:us:us]')
             continue
         try:
             channel = int(parts[0])
@@ -1143,6 +1178,57 @@ class SrotPayload:
         self._fc = fc
         self._log = log
         self._map = dict(fire_map if fire_map is not None else _FIRE_MAP)
+        # PCA channel (1-based) -> role int, read from the board and cached.
+        self._roles: dict = {}
+
+    def channel_role(self, pca_ch_1based: int, refresh: bool = False):
+        """The board's configured role for a PCA channel, or None if unreadable.
+
+        The role is FIRMWARE state (`SERVO{n}_ROLE`, set in Bondor), not ours. We read
+        it rather than keeping a host-side wiring table because a host copy goes stale
+        SILENTLY the moment someone re-roles a channel on the board -- and the failure
+        mode of a stale copy is driving the manipulator arm during a payload drop.
+
+        Cached, because a param round-trip costs ~50 ms and `fire()` is called at a
+        moment when latency matters. `refresh=True` re-reads.
+        """
+        ch = int(pca_ch_1based)
+        if refresh or ch not in self._roles:
+            val = self._fc.get_param(sp.PCA_ROLE_PARAM_FMT.format(ch))
+            if val is None:
+                return None
+            self._roles[ch] = int(val)
+        return self._roles.get(ch)
+
+    def preflight_roles(self):
+        """Read + log the role of every MAPPED channel. Called once at bring-up.
+
+        This is where a mis-mapped payload should be caught -- on the deck, at startup,
+        not at the moment a mission tries to drop a marker.
+
+        ⚠ REQUIRES THE READER THREAD TO BE RUNNING. `get_param` reads the pymavlink
+        message cache and never calls `recv_match()` itself (the stack's threading
+        rule), so with no reader every role comes back None and every channel reads
+        UNREADABLE -- indistinguishable from a mis-roled board. `auv_manager_node`
+        starts the reader BEFORE `_preflight_payload` for exactly this reason; if that
+        order is ever changed, this reports a payload that does not exist.
+        """
+        report = {}
+        for duburi_ch, spec in sorted(self._map.items()):
+            pca = spec[1] if spec[0] == 'servo' else sp.PCA_RELAY_BASE_CH + spec[1] + 1
+            role = self.channel_role(pca, refresh=True)
+            report[duburi_ch] = (pca, role)
+            if self._log is None:
+                continue
+            name = sp.PCA_ROLE_NAMES.get(role, f'UNREADABLE ({role})')
+            if role == sp.PCA_ROLE_SWITCH:
+                self._log.info(f'[PAYLOAD] channel {duburi_ch} -> PCA {pca}: {name}')
+            else:
+                self._log.error(
+                    f'[PAYLOAD] channel {duburi_ch} -> PCA {pca}: {name} -- fire() will '
+                    f'REFUSE. duburi_ws drives SWITCH channels only; PWM channels are '
+                    f'the on-board arm. Re-role it in Bondor or fix payload_fire_map.')
+        return report
 
     @property
     def is_ready(self) -> bool:
@@ -1166,6 +1252,28 @@ class SrotPayload:
                     f'ROS param from the real PCA9685 wiring, e.g. '
                     f'"1:relay:0, 2:relay:1, 3:servo:3". Refusing to guess.')
             return False
+        # ---- ROLE GATE ------------------------------------------------- #
+        # duburi_ws drives HIGH/LOW switch channels only. PWM/servo channels are the
+        # on-board manipulator arm: firing one from a mission would move the arm
+        # mid-drop. The role lives on the board, so ask the board.
+        #
+        # Fails CLOSED on an unreadable role. A payload actuation is not urgent enough
+        # to justify guessing, and "the param read timed out" is not evidence that the
+        # channel is safe to drive.
+        pca = spec[1] if spec[0] == 'servo' else sp.PCA_RELAY_BASE_CH + spec[1] + 1
+        role = self.channel_role(pca)
+        if role != sp.PCA_ROLE_SWITCH:
+            if self._log:
+                name = (sp.PCA_ROLE_NAMES.get(role) if role is not None
+                        else 'UNREADABLE (no PARAM_VALUE)')
+                self._log.error(
+                    f'[PAYLOAD] SROT: NOT FIRED -- channel {channel} maps to PCA {pca}, '
+                    f'whose board role is {name}. duburi_ws drives SWITCH '
+                    f'(MOSFET/relay) channels only; PWM channels belong to the on-board '
+                    f'arm. Set SERVO{pca}_ROLE=2 in Bondor, or point payload_fire_map at '
+                    f'a switch channel.')
+            return False
+
         kind = spec[0]
         try:
             if kind == 'servo':

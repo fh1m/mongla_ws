@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 from pymavlink import mavutil
 
-from duburi_control.fc.srot_fc import SrotFC, _build_params, MOVE_VERBS
+from duburi_control.fc.srot_fc import SrotFC, _build_params, MOVE_VERBS, parse_fire_map
 from duburi_control.fc import srot_protocol as sp
 from duburi_control.fc.base import (SUCCEEDED, PREEMPTED, FAILED, DENIED,
                                     TIMEOUT, ABORTED)
@@ -47,11 +47,22 @@ class _FakeMav:
         self._m.messages['PARAM_VALUE'] = SimpleNamespace(
             param_id=b'JS_GAIN_DEFAULT', param_value=value)
 
+    def param_request_read_send(self, sysid, comp, pid, index):
+        # The payload role gate reads SERVOn_ROLE off the board. `roles` defaults to
+        # "every channel is a SWITCH" so the actuation tests below exercise the PULSE
+        # mechanics rather than the gate; the gate has its own tests, which set roles
+        # explicitly. On the real vehicle 1-8 are SERVO and 9-16 are SWITCH.
+        name = pid.decode() if isinstance(pid, bytes) else str(pid)
+        self.sent.append(('param_read', name, None))   # 3-tuple: callers unpack k,c,p
+        self._m.messages['PARAM_VALUE'] = SimpleNamespace(
+            param_id=name.encode(), param_value=float(self._m.roles.get(name, 2)))
+
 
 class _FakeMaster:
     def __init__(self):
         self.messages = {}
         self.auto_ack = None       # SimpleNamespace(command=, result=, progress=)
+        self.roles = {}            # 'SERVOn_ROLE' -> int; default 2 (SWITCH)
         self.mav = _FakeMav(self)
 
 
@@ -988,3 +999,90 @@ def test_esc_temperatures_survive_a_suppressed_water_temperature():
     tel = fc.telemetry()                       # no WTEMP ever noted
     assert math.isnan(tel.water_temp_c)
     assert tel.esc_temp_c == (31, 32, 33, 34)
+
+
+# --------------------------------------------------------------------------- #
+#  Payload role gate -- duburi_ws drives SWITCH channels, never the arm        #
+# --------------------------------------------------------------------------- #
+
+class _RoleFC:
+    """Minimal SrotFC stand-in that answers get_param for SERVOn_ROLE."""
+    def __init__(self, roles):
+        self.roles = roles
+        self.servo_calls = []
+        self.relay_calls = []
+        self.param_reads = 0
+
+    def get_param(self, name, timeout=2.0):
+        self.param_reads += 1
+        for ch, role in self.roles.items():
+            if name == f'SERVO{ch}_ROLE':
+                return float(role)
+        return None
+
+    def set_servo(self, ch, us):  self.servo_calls.append((ch, us))
+    def set_relay(self, i, on):   self.relay_calls.append((i, on))
+    def link_alive(self):         return True
+
+
+def _payload(roles, fire_map):
+    from duburi_control.fc.srot_fc import SrotPayload
+    return SrotPayload(_RoleFC(roles), fire_map=fire_map)
+
+
+def test_firing_a_pwm_channel_is_refused_because_it_is_the_arm():
+    """MEASURED on the vehicle: PCA channels 1-8 are role 1 (PWM) and drive the
+    on-board manipulator arm; 9-16 are role 2 (MOSFET switch) and are the payload.
+    Firing a PWM channel from a mission would move the arm mid-drop."""
+    pl = _payload({3: sp.PCA_ROLE_SERVO}, {1: ('servo', 3, 2000, 1000)})
+    assert pl.fire(1) is False
+    assert pl._fc.servo_calls == [], 'a PWM channel was actuated'
+
+
+def test_firing_a_switch_channel_works():
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, {1: ('servo', 9, 2000, 1000)})
+    assert pl.fire(1) is True
+    # Energise then de-energise -- never leave a solenoid latched on.
+    assert pl._fc.servo_calls == [(9, 2000), (9, 1000)]
+
+
+def test_an_unreadable_role_fails_closed():
+    """A param read that times out is not evidence the channel is safe to drive.
+    Payload actuation is never urgent enough to justify guessing."""
+    pl = _payload({}, {1: ('servo', 9, 2000, 1000)})
+    assert pl.fire(1) is False
+    assert pl._fc.servo_calls == []
+
+
+def test_the_role_is_cached_so_fire_does_not_pay_a_param_roundtrip():
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, {1: ('servo', 9, 2000, 1000)})
+    pl.fire(1); pl.fire(1)
+    assert pl._fc.param_reads == 1, 'role re-read on every fire'
+
+
+def test_a_relay_entry_maps_to_the_right_pca_channel_for_the_role_check():
+    """DO_SET_RELAY instance n is PCA channel PCA_RELAY_BASE_CH + n (0-based), so
+    instance 0 is PCA 8 = SERVO9_ROLE. An off-by-one here checks the wrong channel's
+    role and would wave through a PWM channel."""
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, {1: ('relay', 0)})
+    assert pl.fire(1) is True
+    assert pl._fc.relay_calls == [(0, True), (0, False)]
+
+
+def test_plain_channel_fire_map_is_the_preferred_form():
+    """"1:9, 2:10" -- just numbers. The servo/relay ROLE is firmware state; encoding
+    it host-side duplicates the board and goes stale silently on a re-role."""
+    m = parse_fire_map('1:9, 2:10')
+    assert m == {1: ('servo', 9, sp.PCA_SWITCH_ON_US, sp.PCA_SWITCH_OFF_US),
+                 2: ('servo', 10, sp.PCA_SWITCH_ON_US, sp.PCA_SWITCH_OFF_US)}
+
+
+def test_legacy_fire_map_forms_still_parse():
+    """Existing launch files must keep working across this change."""
+    m = parse_fire_map('1:relay:0, 2:servo:3:1900:1100')
+    assert m[1] == ('relay', 0) and m[2] == ('servo', 3, 1900, 1100)
+
+
+def test_a_plain_entry_with_an_out_of_range_pca_channel_is_skipped_not_fatal():
+    m = parse_fire_map('1:9, 2:99')
+    assert 1 in m and 2 not in m, 'one bad entry must not disarm the others'
