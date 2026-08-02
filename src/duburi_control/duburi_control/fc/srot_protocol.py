@@ -297,7 +297,14 @@ GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.
 #      Every move reaches exactly one terminal ACK, sent once. 511/510 implemented.
 #      ESC_TELEMETRY_1_TO_4 / _5_TO_8 emitted. DIVE clamped >= 0. Real TURN/DIVE
 #      progress. SURFACE zeroes pilot translation/yaw; MANUAL_CONTROL ages out.
-FW_BEHAVIOUR_REV = 2
+#   3  fw 2026-08-02 (AUDIT.md R46-R50): the Bar30's calibration PROM is validated (CRC-4)
+#      and no longer read in a race, so DEPTH and TEMPERATURE can now be ABSENT rather than
+#      silently wrong. WTEMP and SCALED_PRESSURE2 are SUPPRESSED when the baro is unhealthy
+#      or stale; SCALED_IMU2.temperature sends 0 (MAVLink's "not provided"); a board whose
+#      PROM fails CRC REFUSES DEPTH_HOLD/AUTO/PATTERN. SYS_STATUS gains the extended health
+#      bitfield with LEAK on MAV_SYS_STATUS_SENSOR_LEAK. FS_GCS_SYSID/COMPID (255/191) scope
+#      the GCS failsafe to a named companion. ESPNOW_EN is tri-state, so Battery 2 populates.
+FW_BEHAVIOUR_REV = 3
 
 # The minimum revision this host code assumes. Flashing older firmware than this
 # re-opens the coasting MOVE_STOP with no host brake left to cover it.
@@ -325,6 +332,32 @@ MSG_ID_AUTOPILOT_VERSION = 148
 # stream key the board rates its RPM output by -- one SET_MESSAGE_INTERVAL on 291
 # paces ESC_STATUS *and* the ESC_TELEMETRY_1_TO_4/5_TO_8 pair we actually decode.
 MSG_ID_ESC_STATUS = 291
+
+# ---------------------------------------------------------------------- #
+#  LEAK: why we still read NAMED_VALUE_FLOAT and not SYS_STATUS           #
+# ---------------------------------------------------------------------- #
+# We asked the board to move LEAK onto the SYS_STATUS extended health bits, because
+# NAMED_VALUE_FLOAT multiplexes MV_STATE/LEAK/WTEMP/GAIN onto one msgid and pymavlink caches
+# exactly one message per msgid -- so whichever arrived last wins and leak REPORTING was
+# probabilistic. The board did it (fw rev 3), and it is verified on the wire:
+# present_extended = health_extended = 0x02.
+#
+# WE STILL CANNOT READ IT, and this is the trap:
+#
+#   pymavlink 2.4.49's SYS_STATUS message has THIRTEEN fields and no extensions.
+#   `MAVLink_sys_status_message.fieldnames` ends at `errors_count4`. The board sends 40
+#   bytes; pymavlink parses the first 31 against its own schema and DISCARDS the rest.
+#   `getattr(msg, 'onboard_control_sensors_health_extended', None)` is None. Always.
+#
+# Exactly the ESC_STATUS(291) failure wearing a different hat: the data is on the wire and
+# our library cannot see it. So the firmware keeps sending NAMED_VALUE_FLOAT("LEAK") as a
+# deprecated duplicate, and the real fix on OUR side is to stop reading LEAK out of
+# pymavlink's single-slot cache -- see SrotFC._drain_named / telemetry().
+#
+# Flip this to True only after confirming `'onboard_control_sensors_health_extended' in
+# mavutil.mavlink.MAVLink_sys_status_message.fieldnames` on the pymavlink you deploy.
+SYS_STATUS_HAS_EXTENDED_HEALTH = False
+MAV_SYS_STATUS_SENSOR_LEAK     = 0x02
 
 
 def sanitize_speed(speed: float) -> float:

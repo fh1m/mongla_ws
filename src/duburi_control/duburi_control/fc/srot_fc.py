@@ -149,6 +149,9 @@ class SrotFC(FlightController):
         # Operator escape hatch (ROS param `allow_fw_behaviour_mismatch`). Off by
         # default: the failure this guards is silent, so opting into it must not be.
         self.allow_fw_behaviour_mismatch = False
+        # name -> (value, wall-clock stamp). Our own de-multiplexing of NAMED_VALUE_FLOAT,
+        # because pymavlink keeps one message per msgid and SROT rides ~15 names on this one.
+        self._named_cache = {}
 
     # ------------------------------------------------------------------ #
     #  Firmware behaviour revision -- the runtime interlock               #
@@ -251,16 +254,59 @@ class SrotFC(FlightController):
     def _clear_ack(self):
         self.master.messages.pop('COMMAND_ACK', None)
 
-    def _named_value(self, name):
-        """Latest NAMED_VALUE_FLOAT for `name`, or None. SROT multiplexes several
-        scalars (MV_STATE, LEAK, WTEMP, GAIN...) on this one message type, so the
-        cache holds only the most-recent regardless of name -- match on .name."""
-        msg = self._cache('NAMED_VALUE_FLOAT')
-        if msg is None:
+    def _named_value(self, name, max_age_s: float = 3.0):
+        """Latest NAMED_VALUE_FLOAT for `name`, or None if it has not arrived recently.
+
+        WHY THIS IS NOT A ONE-LINE CACHE READ. SROT multiplexes MV_STATE / LEAK / WTEMP /
+        GAIN / CURR / KILL and a dozen stack counters onto NAMED_VALUE_FLOAT, and pymavlink
+        keeps exactly ONE message per msgid. Reading `master.messages['NAMED_VALUE_FLOAT']`
+        and comparing `.name` therefore succeeds only when the value you want happened to be
+        the most recent to arrive -- roughly 1 call in 15. Against LEAK that is not a latency
+        problem, it is a LOTTERY on whether we ever observe a flooding hull.
+
+        The reader-side fix is to keep our OWN per-name table rather than sampling a slot
+        fifteen other names are overwriting.
+
+        (The board also publishes LEAK on the SYS_STATUS extended health bits now -- the
+        structurally correct home for it, and verified on the wire. We cannot read it:
+        pymavlink 2.4.49's SYS_STATUS schema has 13 fields and no extensions, so those bytes
+        are parsed away before we see them. See srot_protocol.SYS_STATUS_HAS_EXTENDED_HEALTH.)
+
+        `max_age_s` matters for the same reason absence matters everywhere else here: a value
+        that stopped arriving must read None, not its value from four minutes ago.
+        """
+        self._drain_named()
+        hit = self._named_cache.get(name)
+        if hit is None:
             return None
+        value, stamp = hit
+        return value if (time.time() - stamp) <= max_age_s else None
+
+    def _drain_named(self):
+        """Fold the currently-cached NAMED_VALUE_FLOAT into our per-name table.
+
+        Cheap and idempotent. It cannot recover names overwritten between calls -- only a
+        reader-thread hook can (see `note_named_value`) -- but it means each name survives in
+        our table for `max_age_s` instead of only until the next NAMED_VALUE_FLOAT of ANY
+        name lands.
+        """
+        msg = self._cache('NAMED_VALUE_FLOAT')
+        if msg is not None:
+            self.note_named_value(msg)
+
+    def note_named_value(self, msg):
+        """Hook for the manager's MAVLink reader thread.
+
+        The reader sees EVERY NAMED_VALUE_FLOAT; this object only ever sees whichever one
+        last landed in pymavlink's single slot. Calling this from the reader makes the
+        multiplexed telemetry lossless -- it is what turns LEAK from probable into
+        deterministic. Optional: without it `_drain_named()` degrades to sampling.
+        """
         mname = getattr(msg, 'name', '')
         mname = mname.decode() if isinstance(mname, bytes) else str(mname)
-        return float(msg.value) if mname.strip('\x00').strip() == name else None
+        mname = mname.strip('\x00').strip()
+        if mname:
+            self._named_cache[mname] = (float(msg.value), time.time())
 
     def _log_info(self, msg):
         if self._log is not None:
