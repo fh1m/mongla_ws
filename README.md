@@ -247,7 +247,11 @@ the pass/fail gate. Use `connect` to look, `bringup_check` to decide.
 > between two packs an order of magnitude apart.
 
 The manager logs the same data periodically once running — `srot_telemetry_period_s:=2.0`
-(set `0` to silence it):
+(set `0` to silence it). It also **refuses to arm while the depth controller is saturated**
+(`|DEPTH_OUT| ≥ 0.90`), because the mixer's throttle column is `-1` on all four verticals, so
+that state becomes full vertical thrust the instant the outputs go live. Override with
+`allow_saturated_depth_arm:=true` — deliberately its own flag, not the firmware-revision one,
+since accepting an unknown firmware and accepting uncommanded heave are different decisions:
 
 ```
 [SROT ] BAT main  1.35V | thruster 14.74V | DEPTH +2.96m err -3.03m out -1.00 | WTEMP 21.6C | MAGACC 1 | LEAK dry | KILL clear
