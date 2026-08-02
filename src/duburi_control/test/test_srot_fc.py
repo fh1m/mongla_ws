@@ -850,3 +850,36 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
     this host correctly. Raising it would strand a working vehicle."""
     assert sp.FW_BEHAVIOUR_REV == 3
     assert sp.FW_BEHAVIOUR_REV_REQUIRED == 2
+
+
+def test_a_dead_link_ages_out_instead_of_being_restamped_forever():
+    """`_drain_named()` re-folds whatever is in pymavlink's single slot -- and pymavlink
+    NEVER clears that slot. So folding it unconditionally re-stamps a dead value as fresh
+    on every call, and `max_age_s` can never fire: the one thing it exists to do.
+
+    Fold each message object once. (`test_named_value_ages_out` misses this because it
+    injects via note_named_value() and hand-backdates the table, going AROUND _drain_named.)
+    """
+    fc = _fc()
+    fc.master.messages['NAMED_VALUE_FLOAT'] = _nvf('GAIN', 0.5)
+    assert fc._named_value('GAIN') == 0.5
+    # Link dies here. The slot still holds that same message object.
+    fc._named_cache['GAIN'] = (0.5, time.time() - 60.0)
+    assert fc._named_value('GAIN', max_age_s=3.0) is None, \
+        'a value from a minute ago read as current -- the slot was re-stamped'
+
+
+def test_the_burst_is_why_the_reader_hook_is_not_optional():
+    """The board sends LEAK, WTEMP, STUNT_PRG, ATUNE, KILL, CURR, GAIN back-to-back in ONE
+    500 ms tick (fw mav_stream.cpp `iv_nvf`). The reader drains the whole burst, so the slot
+    settles on the LAST name -- GAIN -- and holds it until the next burst.
+
+    Sampling therefore does not degrade to "1 call in 15" evenly; it degrades to GAIN almost
+    always and LEAK almost NEVER. Only the reader hook sees the names in between.
+    """
+    fc = _fc()
+    burst = ('LEAK', 'WTEMP', 'STUNT_PRG', 'ATUNE', 'KILL', 'CURR', 'GAIN')
+    for name in burst:                       # what the reader thread sees
+        fc.note_named_value(_nvf(name, 1.0))
+    fc.master.messages['NAMED_VALUE_FLOAT'] = _nvf('GAIN', 1.0)   # what the slot keeps
+    assert fc._named_value('LEAK') == 1.0, 'leak is unobservable without the reader hook'
