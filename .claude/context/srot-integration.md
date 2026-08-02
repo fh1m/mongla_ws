@@ -1,5 +1,21 @@
 # SROT control-board integration (branch `srot`)
 
+> **Firmware baseline for this branch: `srot-control-board` @ `22afc95`, `SROT_FW_BEHAVIOUR_REV 4`.**
+> Read [`auv-architecture-2026.md`](auv-architecture-2026.md) first if you have not.
+>
+> **⚠ YAW IS ABSOLUTE FROM REV 4.** `ATTITUDE.yaw` and `VFR_HUD.heading` are a magnetic compass
+> heading, not a value relative to wherever the board booted. A heading recorded against rev <= 3,
+> or compared across a vehicle reset, is **not the same number**. Absolute `MOVE_TURN` (p4=1) now
+> actually turns to the heading it is given — it needs `MAG_YAW_REF=1`, which is the new default.
+>
+> **⚠ DEPTH AND TEMPERATURE CAN NOW BE ABSENT.** `NAMED_VALUE_FLOAT("WTEMP")` and
+> `SCALED_PRESSURE2` are **suppressed** when the barometer is unhealthy or stale, and
+> `SCALED_IMU2.temperature` sends MAVLink's `0` "not provided" sentinel. Treat absence as "no
+> data", never as zero. This is deliberate: before rev 3 a Bar30 whose calibration PROM was read
+> during a reset race published fabricated pressure, depth AND temperature — `-51 C` and `+2.87 m`
+> in air were both observed — and nothing marked them as wrong. A board whose PROM fails CRC now
+> also **refuses `DEPTH_HOLD` / `AUTO` / `PATTERN`** rather than flying on invented depth.
+
 > Migrating `duburi_ws` off Pixhawk/ArduSub onto the custom **SROT** board (firmware
 > "Hengla": ESP32 flight core + RP2350 Pico RPM co-processor). A transport-and-verbs
 > swap, not a rewrite — the board owns the primitives, the Jetson sends intent.

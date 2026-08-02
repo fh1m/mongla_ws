@@ -848,7 +848,7 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
     needs. Rev 3 changes are additive for us (WTEMP/SCALED_PRESSURE2 can be absent, which
     we already treat as absent), so the requirement stays at 2 -- a rev-2 board still runs
     this host correctly. Raising it would strand a working vehicle."""
-    assert sp.FW_BEHAVIOUR_REV == 3
+    assert sp.FW_BEHAVIOUR_REV == 4
     assert sp.FW_BEHAVIOUR_REV_REQUIRED == 2
 
 
