@@ -159,6 +159,11 @@ class SrotFC(FlightController):
         # pymavlink caches one message per MSGID, not per instance.
         self._battery_cache = {}
         self._last_batt = None
+        # Separate from allow_fw_behaviour_mismatch ON PURPOSE. That flag means "I
+        # accept an unknown firmware revision"; this one means "I accept that the
+        # depth loop is currently demanding full heave". They are different risks and
+        # an operator who needs one must not be forced to silence the other.
+        self.allow_saturated_depth_arm = False
 
     # ------------------------------------------------------------------ #
     #  Firmware behaviour revision -- the runtime interlock               #
@@ -401,7 +406,8 @@ class SrotFC(FlightController):
         does not say what it saw cannot be told apart from "not configured" --
         the lesson the firmware team paid for four times over on the mag reference.
 
-        Bypass with `allow_fw_behaviour_mismatch` (the same operator escape hatch).
+        Bypass with the ROS param `allow_saturated_depth_arm` (deliberately its own
+        flag, not the firmware-revision one -- they are different risks).
         """
         out = self._named_value('DEPTH_OUT')
         if out is None:
@@ -414,7 +420,7 @@ class SrotFC(FlightController):
                + '. Arming would command FULL vertical thrust (the mixer throttle '
                  'column is -1 on all four verticals). Check the barometer -- run '
                  '`ros2 run duburi_manager connect`')
-        if self.allow_fw_behaviour_mismatch:
+        if self.allow_saturated_depth_arm:
             self._log_warn(f'[SROT ] {msg} -- OVERRIDDEN, arming anyway')
             return True, f'OVERRIDDEN: {msg}'
         return False, msg
@@ -619,11 +625,15 @@ class SrotFC(FlightController):
         vhud = self._cache('VFR_HUD')
         if vhud is not None:
             t.depth_m = float(vhud.alt)
-        batt = self._cache('BATTERY_STATUS')     # id 0 = electronics pack
-        if batt is not None:
-            volts = getattr(batt, 'voltages', [65535])
-            mv = volts[0] if volts else 65535
-            t.battery_voltage = (mv / 1000.0) if mv not in (0, 65535) else math.nan
+        # Read through the per-instance table, NOT `_cache('BATTERY_STATUS')`. The raw
+        # slot holds whichever instance landed last, so this line used to claim
+        # "id 0 = electronics pack" while actually reporting the THRUSTER pack about
+        # half the time -- caught by a live smoke test showing battery_voltage and
+        # thruster_voltage identical at 14.63 V when PM1 reads ~1.35 V.
+        batteries = self.get_batteries()
+        main = batteries.get(sp.BATTERY_ID_MAIN)
+        if main is not None:
+            t.battery_voltage = main['voltage']
         # Per-thruster RPM (Bluejay bidirectional DShot).
         #
         # ⚠ THIS IS ALWAYS EMPTY on pymavlink 2.4.49: upstream MAVLink removed the
@@ -653,11 +663,14 @@ class SrotFC(FlightController):
         wtemp = self._named_value('WTEMP')
         if wtemp is not None:
             t.water_temp_c = wtemp
-            for name in ('ESC_TELEMETRY_1_TO_4', 'ESC_TELEMETRY_5_TO_8'):
-                block = self._cache(name)
-                if block is not None:
-                    t.esc_temp_c = t.esc_temp_c + tuple(
-                        int(x) for x in getattr(block, 'temperature', ()) or ())
+        # NOT nested under WTEMP. The board SUPPRESSES WTEMP when the barometer is
+        # unhealthy, so gating ESC temperatures on it would make thruster temps vanish
+        # in exactly the situation where you most want them -- a sick vehicle.
+        for name in ('ESC_TELEMETRY_1_TO_4', 'ESC_TELEMETRY_5_TO_8'):
+            block = self._cache(name)
+            if block is not None:
+                t.esc_temp_c = t.esc_temp_c + tuple(
+                    int(x) for x in getattr(block, 'temperature', ()) or ())
 
         # Everything below is SROT-only and has no Pixhawk equivalent. Each stays NaN
         # (not 0.0) when the board has not said it -- the board SUPPRESSES values it

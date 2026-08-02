@@ -958,6 +958,33 @@ def test_a_board_that_never_reports_the_depth_loop_is_not_blocked():
 def test_the_depth_guard_is_overridable_but_shouts():
     fc = _fc()
     fc.note_named_value(_nvf('DEPTH_OUT', 1.0))
-    fc.allow_fw_behaviour_mismatch = True
+    fc.allow_saturated_depth_arm = True
     ok, reason = fc.check_depth_loop_settled()
     assert ok is True and 'OVERRIDDEN' in reason
+
+
+def test_telemetry_battery_voltage_is_the_main_pack_not_the_last_instance_seen():
+    """REGRESSION, caught by a live smoke test against the board. telemetry() read the
+    raw `_cache('BATTERY_STATUS')` slot behind a comment claiming "id 0 = electronics
+    pack" -- so it reported the THRUSTER pack whenever that instance happened to land
+    last. On the vehicle it showed battery_voltage == thruster_voltage == 14.63 V while
+    PM1 actually reads ~1.35 V. Fixing get_battery() alone was not enough; this was a
+    second call site."""
+    fc = _fc()
+    fc.note_battery(_batt(0, 1350))
+    fc.note_battery(_batt(1, 14630))     # thruster pack lands last
+    tel = fc.telemetry()
+    assert tel.battery_voltage == pytest.approx(1.35), 'reported the wrong battery'
+    assert tel.thruster_voltage == pytest.approx(14.63)
+
+
+def test_esc_temperatures_survive_a_suppressed_water_temperature():
+    """ESC temps must NOT be gated on WTEMP. The board suppresses WTEMP exactly when
+    the barometer is unhealthy, so nesting them would drop thruster temperatures in
+    the one situation where you most want them -- a vehicle that is already sick."""
+    fc = _fc()
+    fc.master.messages['ESC_TELEMETRY_1_TO_4'] = SimpleNamespace(
+        rpm=[10, 20, 30, 40], temperature=[31, 32, 33, 34])
+    tel = fc.telemetry()                       # no WTEMP ever noted
+    assert math.isnan(tel.water_temp_c)
+    assert tel.esc_temp_c == (31, 32, 33, 34)

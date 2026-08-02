@@ -240,6 +240,10 @@ class AUVManagerNode(Node):
         # the first water test wants a continuous trace to correlate against
         # what the vehicle physically did.
         self.declare_parameter('srot_telemetry_period_s', 2.0)
+        # Arm anyway when the depth controller is saturated. Its OWN flag rather
+        # than reusing allow_fw_behaviour_mismatch: accepting an unknown firmware
+        # revision and accepting full uncommanded heave are different decisions.
+        self.declare_parameter('allow_saturated_depth_arm', False)
         declare_vision_params(self)
 
         requested_mode      = str(self.get_parameter('mode').value)
@@ -321,6 +325,8 @@ class AUVManagerNode(Node):
             # any more, so a `stop` or an abort silently fails to decelerate the hull.
             # `SrotFC.arm()` refuses on a known-too-old board; doing the read here as
             # well means the operator finds out at bring-up rather than at the ramp.
+            self.fc.allow_saturated_depth_arm = bool(
+                self.get_parameter('allow_saturated_depth_arm').value)
             self.fc.allow_fw_behaviour_mismatch = bool(
                 self.get_parameter('allow_fw_behaviour_mismatch').value)
             fw_ok, fw_reason = self.fc.check_behaviour_rev()
@@ -1066,7 +1072,10 @@ class AUVManagerNode(Node):
         (get_attitude/get_battery/...), which has no RPM or leak. So the decode
         work, including the ESC_TELEMETRY fallback, went nowhere.
         """
-        if not self._is_srot or self.esc_rpm_publisher is None:
+        # Gate on the BACKEND, not on the RPM publisher: the [SROT ] block and the
+        # leak latch below have nothing to do with /duburi/esc_rpm, and tying them to
+        # it meant a manager without that publisher silently lost all of them.
+        if not self._is_srot:
             return
         try:
             tel = self.fc.telemetry()
@@ -1074,7 +1083,7 @@ class AUVManagerNode(Node):
             self.get_logger().debug(f'[TELEM] srot telemetry read failed: {exc!r}')
             return
 
-        if tel.rpm:
+        if tel.rpm and self.esc_rpm_publisher is not None:
             msg = self._Int32MultiArray()
             msg.data = [int(r) for r in tel.rpm]
             self.esc_rpm_publisher.publish(msg)
