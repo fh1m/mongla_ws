@@ -304,7 +304,14 @@ GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.
 #      PROM fails CRC REFUSES DEPTH_HOLD/AUTO/PATTERN. SYS_STATUS gains the extended health
 #      bitfield with LEAK on MAV_SYS_STATUS_SENSOR_LEAK. FS_GCS_SYSID/COMPID (255/191) scope
 #      the GCS failsafe to a named companion. ESPNOW_EN is tri-state, so Battery 2 populates.
-FW_BEHAVIOUR_REV = 3
+#   4  fw 2026-08-02 (AUDIT.md R51-R54): YAW IS NOW ABSOLUTE. MAG_YAW_REF defaults on and
+#      is migrated on for boards storing the old 0, so ATTITUDE.yaw / VFR_HUD.heading are a
+#      magnetic compass heading instead of relative to wherever the BNO booted. A heading
+#      compared across a vehicle RESET will differ from rev <= 3 -- that is the fix, not a
+#      regression, and absolute MOVE_TURN (p4=1) finally turns to the heading it is given.
+#      The BNO's own calibration is persisted to sensor flash (mag accuracy survives a power
+#      cycle), and the mag report stops once the one-shot reference locks.
+FW_BEHAVIOUR_REV = 4
 
 # The minimum revision this host code assumes. Flashing older firmware than this
 # re-opens the coasting MOVE_STOP with no host brake left to cover it.
