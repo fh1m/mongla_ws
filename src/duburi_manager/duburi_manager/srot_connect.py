@@ -481,9 +481,8 @@ def render(snap: Snapshot, conn) -> list[str]:
         L.append(f'  {DIM}SERVO  (on-board arm, ignored){RESET}  {servo or "--"}')
         if other:
             L.append(f'  {YEL}other/unreadable{RESET}              {other}')
-        L.append(f'  {DIM}payload_fire_map uses these numbers, e.g. '
-                 f'"1:{switch[0] if switch else 9}, 2:{switch[1] if len(switch) > 1 else 10}"'
-                 f'{RESET}')
+        L.append(f'  {DIM}fire(N) uses these numbers directly, e.g. '
+                 f'`duburi fire --fire_channel {switch[0] if switch else 9}`{RESET}')
 
     # ---- firmware health -------------------------------------------------- #
     L.append(f'\n{BOLD}== firmware health =={RESET}')

@@ -77,10 +77,12 @@ def generate_launch_description():
                               description="SROT serial device, '' = autodetect. A path "
                                           '(/dev/serial/by-id/...) or any pymavlink '
                                           'connection string'),
-        DeclareLaunchArgument('payload_fire_map', default_value='',
-                              description='SROT PCA9685 wiring, e.g. '
-                                          '"1:relay:0, 2:relay:1, 3:servo:3". '
-                                          'EMPTY = fire() refuses (nothing can actuate)'),
+        DeclareLaunchArgument('payload_channels', default_value='',
+                              description='OPTIONAL labels for the log, '
+                                          '"<board_channel>:<name>", e.g. '
+                                          '"9:torpedo_1, 11:dropper_1". Labels ONLY '
+                                          '-- fire(N) always addresses board channel '
+                                          'N; nothing here routes a shot'),
         # Deliberately verbose: below firmware behaviour rev 2 MOVE_STOP coasts and
         # this host carries no brake, so `stop` would not decelerate the hull.
         DeclareLaunchArgument('allow_fw_behaviour_mismatch', default_value='false',
@@ -143,7 +145,7 @@ def generate_launch_description():
             'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
             'flight_controller':    LaunchConfiguration('flight_controller'),
             'mav_device':           LaunchConfiguration('mav_device'),
-            'payload_fire_map':     LaunchConfiguration('payload_fire_map'),
+            'payload_channels':     LaunchConfiguration('payload_channels'),
             # value_type=bool so a malformed value fails HERE, at launch, with a clear
             # ValueError -- rather than reaching the node as a str/int and dying in
             # declare_parameter with a type error that names no argument. launch_ros

@@ -21,6 +21,8 @@ import threading
 import time
 from contextlib import nullcontext
 
+from .fc import srot_protocol as sp
+
 from .motion_vision import (
     align_loop, move_loop,
     KP_LAT_DEFAULT, KP_YAW_DEFAULT, KP_DEPTH_DEFAULT, KP_FORWARD_DEFAULT,
@@ -39,11 +41,17 @@ def _parse_axes(csv: str):
 
 
 def _parse_channels(csv: str):
-    """``'1,2'`` -> ``[1, 2]``. Whitespace tolerant; ignores junk; clamps 1-4.
+    """``'9,10'`` -> ``[9, 10]``. Whitespace tolerant; ignores junk.
 
-    Payload channels are 1=torpedo_1, 2=torpedo_2, 3=dropper_1, 4=dropper_2;
-    anything out of 1-4 (or non-numeric) is dropped. Preserves order so a
-    mission fires them one-by-one in the order given.
+    These are BOARD channels (1..16) -- `DO_SET_SERVO param1`, the same n as
+    `SERVO{n}_ROLE` -- not host-side indices. Preserves order so a mission fires
+    them one-by-one in the order given.
+
+    ⚠ The range was 1-4 while a host-side fire map existed. Left at 1-4 after the
+    map was removed it would silently DROP every real payload channel on the
+    default role layout (switches are 9-16 there), i.e. `fire=[9,10]` would parse
+    to `[]` and the mission would sail past the target having fired nothing, with
+    no error anywhere.
     """
     out = []
     for token in (csv or '').split(','):
@@ -54,7 +62,7 @@ def _parse_channels(csv: str):
             ch = int(float(token))
         except ValueError:
             continue
-        if 1 <= ch <= 4:
+        if 1 <= ch <= sp.PCA9685_NUM_CH:
             out.append(ch)
     return out
 
@@ -278,7 +286,16 @@ class VisionVerbs:
                         time.sleep(min(0.1, gap_s - waited))
                         waited += 0.1
                 try:
-                    self._fire_payload(ch)
+                    res = self._fire_payload(ch)
+                    # The shot is the whole point of the hold, so a refusal must be
+                    # loud. This used to be discarded: a channel the board calls the
+                    # ARM was refused deep in the driver and the mission sailed on
+                    # believing it had fired.
+                    if getattr(res, 'ok', bool(res)):
+                        self.log.info(f'[FIRE ] ch={ch} {res.code_name}: {res.reason}')
+                    else:
+                        self.log.error(f'[FIRE ] ch={ch} NOT FIRED -- '
+                                       f'{res.code_name}: {res.reason}')
                 except Exception as exc:   # noqa: BLE001 -- thread must not crash silently
                     self.log.error(f'[FIRE ] ch={ch} raised {exc!r}')
 

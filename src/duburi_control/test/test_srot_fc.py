@@ -13,7 +13,10 @@ from types import SimpleNamespace
 import pytest
 from pymavlink import mavutil
 
-from duburi_control.fc.srot_fc import SrotFC, _build_params, MOVE_VERBS, parse_fire_map
+from duburi_control.fc.srot_fc import SrotFC, _build_params, MOVE_VERBS
+from duburi_control.fc.base import (FIRE_FIRED, FIRE_REJECTED_ARM, FIRE_DISABLED,
+                                    FIRE_DENIED, FIRE_NO_ACK, FIRE_NOT_READY,
+                                    FIRE_BUSY)
 from duburi_control.fc import srot_protocol as sp
 from duburi_control.fc.base import (SUCCEEDED, PREEMPTED, FAILED, DENIED,
                                     TIMEOUT, ABORTED)
@@ -91,6 +94,7 @@ def _fast_deadlines(monkeypatch):
     monkeypatch.setattr(mod, '_ACK_MIN_BUDGET_S', 0.3)
     monkeypatch.setattr(mod, '_ACK_MARGIN_S', 0.2)
     monkeypatch.setattr(mod, '_FIRE_PULSE_S', 0.01)
+    monkeypatch.setattr(mod, '_FIRE_ACK_S', 0.01)
 
 
 # --------------------------------------------------------------------------- #
@@ -423,22 +427,40 @@ def test_set_relay_sends_do_set_relay():
     assert cmd[1] == sp.CMD_DO_SET_RELAY and cmd[2][0] == 0.0 and cmd[2][1] == 1.0
 
 
-def test_srot_payload_fire_servo_is_a_bounded_pulse():
+def test_srot_payload_fire_is_a_bounded_pulse_on_the_board_channel():
+    """fire(N) drives BOARD channel N -- no map, no translation -- and always
+    returns it to rest. The de-energise is in a `finally`, so it happens even when
+    the board never ACKs (this fake never does), which is the case that would
+    otherwise leave a solenoid coil latched on with no board-side failsafe."""
     from duburi_control.fc.srot_fc import SrotPayload
-    import duburi_control.fc.srot_fc as m
-    orig = m._FIRE_PULSE_S
-    m._FIRE_PULSE_S = 0.0                          # keep the test fast
-    try:
-        fc = _fc()
-        pay = SrotPayload(fc, fire_map={1: ('servo', 1, 2000, 1000)})
-        assert pay.fire(1) is True
-        servo_cmds = [s for s in fc.master.mav.sent
-                      if s[0] == 'cmd' and s[1] == sp.CMD_DO_SET_SERVO]
-        # A pulse = fire µs then a return-to-rest µs (never left at the end-stop).
-        assert servo_cmds[0][2][1] == 2000.0 and servo_cmds[-1][2][1] == 1000.0
-        assert pay.fire(9) is False               # unmapped channel -> no-op
-    finally:
-        m._FIRE_PULSE_S = orig
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, custom_mode=sp.MODE_MANUAL, _timestamp=time.time())
+    pay = SrotPayload(fc)
+    # Seed the role cache: this test is about the WIRE pulse, not the role read
+    # (which has its own tests above). Going through get_param here would just buy
+    # a 2 s timeout against a fake board that answers no PARAM_VALUE.
+    pay._roles[9] = sp.PCA_ROLE_SWITCH
+    res = pay.fire(9)
+    servo_cmds = [c for c in fc.master.mav.sent
+                  if c[0] == 'cmd' and c[1] == sp.CMD_DO_SET_SERVO]
+    # channel is passed straight through, and it is a pulse: ON then OFF.
+    assert [(p[0], p[1]) for _, _, p in servo_cmds] == [
+        (9.0, float(sp.PCA_SWITCH_ON_US)), (9.0, float(sp.PCA_SWITCH_OFF_US))]
+    # This fake board never sends COMMAND_ACK -> the outcome is UNKNOWN, not FIRED.
+    assert res.code == FIRE_NO_ACK and not res.ok
+
+
+def test_fire_rejects_a_channel_outside_the_boards_range():
+    from duburi_control.fc.srot_fc import SrotPayload
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, custom_mode=sp.MODE_MANUAL, _timestamp=time.time())
+    pay = SrotPayload(fc)
+    for bad in (0, -1, sp.PCA9685_NUM_CH + 1):
+        res = pay.fire(bad)
+        assert res.code == FIRE_DENIED, bad
+    assert not fc.master.mav.sent, 'an out-of-range channel reached the wire'
 
 
 def test_srot_payload_is_ready_tracks_link():
@@ -592,67 +614,6 @@ def test_repeated_stop_stays_a_single_stop():
     fc.master.mav.sent.clear()
     fc.move('stop')
     assert [m[0] for m in _moves(fc)] == [sp.MOVE_STOP]
-
-
-# --------------------------------------------------------------------------- #
-#  Payload: refuse rather than guess                                            #
-# --------------------------------------------------------------------------- #
-def test_fire_refuses_when_the_map_is_not_configured():
-    """Which PCA channel each payload is on, and servo-vs-MOSFET, are hardware
-    facts. Guessing them fires the wrong actuator on a live vehicle."""
-    from duburi_control.fc.srot_fc import SrotPayload, _FIRE_MAP
-    assert _FIRE_MAP == {}, 'the shipped fire map must stay empty'
-    fc = _fc()
-    payload = SrotPayload(fc)
-    assert payload.fire(1) is False
-    assert not _moves(fc) and not fc.master.mav.sent   # nothing actuated at all
-
-
-def test_fire_uses_a_configured_map():
-    from duburi_control.fc.srot_fc import SrotPayload
-    fc = _fc()
-    payload = SrotPayload(fc, fire_map={2: ('relay', 1)})
-    assert payload.fire(2) is True
-    relays = [(p[0], p[1]) for k, c, p in fc.master.mav.sent
-              if k == 'cmd' and c == sp.CMD_DO_SET_RELAY]
-    assert relays == [(1.0, 1.0), (1.0, 0.0)]   # energise then de-energise
-
-
-# --------------------------------------------------------------------------- #
-#  payload_fire_map parsing -- the param that makes fire() possible at all      #
-# --------------------------------------------------------------------------- #
-def test_parse_fire_map_relay_and_servo():
-    from duburi_control.fc.srot_fc import parse_fire_map
-    m = parse_fire_map('1:relay:0, 2:relay:1, 3:servo:3, 4:servo:5:1900:1100')
-    assert m[1] == ('relay', 0)
-    assert m[2] == ('relay', 1)
-    assert m[3] == ('servo', 3, sp.SERVO_MAX_US, sp.SERVO_MIN_US)   # us default
-    assert m[4] == ('servo', 5, 1900, 1100)                          # us explicit
-
-
-def test_parse_fire_map_empty_is_empty_not_a_guess():
-    """Blank must stay empty so fire() keeps refusing. A default here would mean
-    firing an unknown actuator on a live vehicle."""
-    from duburi_control.fc.srot_fc import parse_fire_map
-    assert parse_fire_map('') == {}
-    assert parse_fire_map(None) == {}
-
-
-def test_parse_fire_map_skips_bad_entries_without_losing_good_ones():
-    """A typo in one channel must not silently disarm the other three."""
-    from duburi_control.fc.srot_fc import parse_fire_map
-    m = parse_fire_map('1:relay:0, 2:banana:1, oops, 3:relay:99, 4:servo:3')
-    assert set(m) == {1, 4}          # the two well-formed, in-range entries
-    assert m[1] == ('relay', 0)
-
-
-def test_parse_fire_map_output_drives_fire():
-    """End-to-end: the parsed shape is what SrotPayload.fire() consumes."""
-    from duburi_control.fc.srot_fc import SrotPayload, parse_fire_map
-    fc = _fc()
-    payload = SrotPayload(fc, fire_map=parse_fire_map('2:relay:1'))
-    assert payload.fire(2) is True
-    assert payload.fire(1) is False   # unmapped channel still refuses
 
 
 # --------------------------------------------------------------------------- #
@@ -1002,16 +963,16 @@ def test_esc_temperatures_survive_a_suppressed_water_temperature():
 
 
 # --------------------------------------------------------------------------- #
-#  Payload role gate -- duburi_ws drives SWITCH channels, never the arm        #
+#  Payload: fire(N) is the BOARD channel, and the board's role decides           #
 # --------------------------------------------------------------------------- #
 
 class _RoleFC:
-    """Minimal SrotFC stand-in that answers get_param for SERVOn_ROLE."""
-    def __init__(self, roles):
+    """SrotFC stand-in that answers get_param for SERVOn_ROLE and ACKs commands."""
+    def __init__(self, roles, ack=sp.ACK_ACCEPTED):
         self.roles = roles
         self.servo_calls = []
-        self.relay_calls = []
         self.param_reads = 0
+        self._ack = ack
 
     def get_param(self, name, timeout=2.0):
         self.param_reads += 1
@@ -1020,72 +981,150 @@ class _RoleFC:
                 return float(role)
         return None
 
-    def set_servo(self, ch, us):  self.servo_calls.append((ch, us))
-    def set_relay(self, i, on):   self.relay_calls.append((i, on))
-    def link_alive(self):         return True
+    def set_servo(self, ch, us):
+        self.servo_calls.append((ch, us))
+
+    def set_servo_acked(self, ch, us, timeout):
+        self.servo_calls.append((ch, us))
+        return self._ack(us) if callable(self._ack) else self._ack
+
+    def link_alive(self):
+        return True
 
 
-def _payload(roles, fire_map):
+def _payload(roles, ack=sp.ACK_ACCEPTED, names=None):
     from duburi_control.fc.srot_fc import SrotPayload
-    return SrotPayload(_RoleFC(roles), fire_map=fire_map)
+    return SrotPayload(_RoleFC(roles, ack), names=names)
+
+
+def test_fire_addresses_the_board_channel_with_no_translation():
+    """The whole point of the redesign: the number a mission writes is the number
+    that goes on the wire, and the same n as SERVO{n}_ROLE. Nothing is looked up
+    to decide WHERE the shot goes -- only whether it may go at all."""
+    pl = _payload({11: sp.PCA_ROLE_SWITCH})
+    res = pl.fire(11)
+    assert res.ok and res.code == FIRE_FIRED and res.channel == 11
+    assert pl._fc.servo_calls == [(11, sp.PCA_SWITCH_ON_US),
+                                  (11, sp.PCA_SWITCH_OFF_US)]
 
 
 def test_firing_a_pwm_channel_is_refused_because_it_is_the_arm():
-    """MEASURED on the vehicle: PCA channels 1-8 are role 1 (PWM) and drive the
-    on-board manipulator arm; 9-16 are role 2 (MOSFET switch) and are the payload.
-    Firing a PWM channel from a mission would move the arm mid-drop."""
-    pl = _payload({3: sp.PCA_ROLE_SERVO}, {1: ('servo', 3, 2000, 1000)})
-    assert pl.fire(1) is False
-    assert pl._fc.servo_calls == [], 'a PWM channel was actuated'
+    """The firmware does NOT protect us here: DO_SET_SERVO on a role-1 channel
+    writes servo_us and returns ACCEPTED (fw mav_commands.cpp:475-481), i.e. it
+    moves the manipulator arm and reports success. Until the board gains a
+    role-enforcing payload command this refusal is the only thing in the way."""
+    pl = _payload({3: sp.PCA_ROLE_SERVO})
+    res = pl.fire(3)
+    assert res.code == FIRE_REJECTED_ARM and not res.ok
+    assert pl._fc.servo_calls == [], 'a PWM/arm channel was actuated'
 
 
-def test_firing_a_switch_channel_works():
-    pl = _payload({9: sp.PCA_ROLE_SWITCH}, {1: ('servo', 9, 2000, 1000)})
-    assert pl.fire(1) is True
-    # Energise then de-energise -- never leave a solenoid latched on.
-    assert pl._fc.servo_calls == [(9, 2000), (9, 1000)]
+def test_firing_a_disabled_channel_is_refused_not_silently_dropped():
+    """Role 0 would be a silent no-op on the board -- ACCEPTED, nothing actuated.
+    Reporting that as a fire is the failure this whole result type exists for."""
+    pl = _payload({5: sp.PCA_ROLE_DISABLED})
+    res = pl.fire(5)
+    assert res.code == FIRE_DISABLED and pl._fc.servo_calls == []
 
 
 def test_an_unreadable_role_fails_closed():
-    """A param read that times out is not evidence the channel is safe to drive.
-    Payload actuation is never urgent enough to justify guessing."""
-    pl = _payload({}, {1: ('servo', 9, 2000, 1000)})
-    assert pl.fire(1) is False
-    assert pl._fc.servo_calls == []
+    """A param read that times out is not evidence the channel is safe to drive."""
+    pl = _payload({})
+    res = pl.fire(9)
+    assert res.code == FIRE_NOT_READY and pl._fc.servo_calls == []
 
 
 def test_the_role_is_cached_so_fire_does_not_pay_a_param_roundtrip():
-    pl = _payload({9: sp.PCA_ROLE_SWITCH}, {1: ('servo', 9, 2000, 1000)})
-    pl.fire(1); pl.fire(1)
+    """One read per channel, not one per fire: fire() is called at the moment a
+    mission is glued to a target, and a 2 s param read there is not affordable."""
+    pl = _payload({9: sp.PCA_ROLE_SWITCH})
+    pl.fire(9); pl.fire(9)
     assert pl._fc.param_reads == 1, 'role re-read on every fire'
 
 
-def test_a_relay_entry_maps_to_the_right_pca_channel_for_the_role_check():
-    """DO_SET_RELAY instance n is PCA channel PCA_RELAY_BASE_CH + n (0-based), so
-    instance 0 is PCA 8 = SERVO9_ROLE. An off-by-one here checks the wrong channel's
-    role and would wave through a PWM channel."""
-    pl = _payload({9: sp.PCA_ROLE_SWITCH}, {1: ('relay', 0)})
-    assert pl.fire(1) is True
-    assert pl._fc.relay_calls == [(0, True), (0, False)]
+# ---- the ACK is the only feedback the wire offers ------------------------- #
+
+def test_a_denied_ack_is_reported_as_denied():
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, ack=sp.ACK_DENIED)
+    res = pl.fire(9)
+    assert res.code == FIRE_DENIED and not res.ok
 
 
-def test_plain_channel_fire_map_is_the_preferred_form():
-    """"1:9, 2:10" -- just numbers. The servo/relay ROLE is firmware state; encoding
-    it host-side duplicates the board and goes stale silently on a re-role."""
-    m = parse_fire_map('1:9, 2:10')
-    assert m == {1: ('servo', 9, sp.PCA_SWITCH_ON_US, sp.PCA_SWITCH_OFF_US),
-                 2: ('servo', 10, sp.PCA_SWITCH_ON_US, sp.PCA_SWITCH_OFF_US)}
+def test_a_temporarily_rejected_ack_is_busy_and_says_it_is_retryable():
+    """The board missed its state mutex (fw :464). Distinct from DENIED because
+    'retry' is the right response here and wrong for every other failure."""
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, ack=sp.ACK_TEMPORARILY_REJECTED)
+    res = pl.fire(9)
+    assert res.code == FIRE_BUSY and 'retry' in res.reason
 
 
-def test_legacy_fire_map_forms_still_parse():
-    """Existing launch files must keep working across this change."""
-    m = parse_fire_map('1:relay:0, 2:servo:3:1900:1100')
-    assert m[1] == ('relay', 0) and m[2] == ('servo', 3, 1900, 1100)
+def test_no_ack_is_unknown_not_success():
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, ack=None)
+    res = pl.fire(9)
+    assert res.code == FIRE_NO_ACK and not res.ok
 
 
-def test_a_plain_entry_with_an_out_of_range_pca_channel_is_skipped_not_fatal():
-    m = parse_fire_map('1:9, 2:99')
-    assert 1 in m and 2 not in m, 'one bad entry must not disarm the others'
+def test_the_channel_is_de_energised_on_every_outcome():
+    """A MOSFET held on burns the solenoid coil, and NO board-side failsafe clears
+    it -- leak, disarm and GCS-loss all leave an energised channel energised."""
+    for ack in (sp.ACK_ACCEPTED, sp.ACK_DENIED, sp.ACK_TEMPORARILY_REJECTED, None):
+        pl = _payload({9: sp.PCA_ROLE_SWITCH}, ack=ack)
+        pl.fire(9)
+        assert pl._fc.servo_calls[-1] == (9, sp.PCA_SWITCH_OFF_US), ack
+
+
+def test_a_second_concurrent_fire_is_refused_rather_than_queued():
+    """Overlapping fires would let B's ON land inside A's pulse and A's finally
+    de-energise while B still believed it was firing -- a truncated shot, from a
+    race, with both callers reporting success. A queued shot is worse than a
+    refused one: it fires after the hull has moved off target."""
+    import threading
+    from duburi_control.fc.srot_fc import SrotPayload
+    import duburi_control.fc.srot_fc as mod
+    pl = SrotPayload(_RoleFC({9: sp.PCA_ROLE_SWITCH}))
+    mod_pulse = mod._FIRE_PULSE_S
+    mod._FIRE_PULSE_S = 0.25
+    try:
+        out = []
+        t = threading.Thread(target=lambda: out.append(pl.fire(9)))
+        t.start()
+        time.sleep(0.05)                      # land inside the first pulse
+        second = pl.fire(9)
+        t.join()
+        assert second.code == FIRE_BUSY, 'a concurrent fire was allowed through'
+        assert out[0].ok, 'the first fire was disturbed by the second'
+    finally:
+        mod._FIRE_PULSE_S = mod_pulse
+
+
+def test_names_are_labels_only_and_never_route():
+    """A stale label can mislabel a log line; it must not be able to send a shot
+    anywhere. fire(N) is N whatever the name table says."""
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, names={9: 'torpedo_1', 11: 'dropper_1'})
+    pl.fire(9)
+    assert pl._fc.servo_calls[0][0] == 9
+    assert pl.label(9) == 'torpedo_1' and pl.label(12) == ''
+
+
+def test_preflight_reads_every_channel_and_reports_what_the_board_actually_has():
+    """Defaults happen to be 1-8 arm / 9-16 switch, but that is a DEFAULT, not a
+    rule -- any channel is re-rolable from Bondor. Preflight prints measured truth
+    so nobody has to trust the folklore."""
+    roles = {1: sp.PCA_ROLE_SERVO, 9: sp.PCA_ROLE_SWITCH, 10: sp.PCA_ROLE_SWITCH}
+    pl = _payload(roles)
+    report = pl.preflight_roles()
+    assert report[1] == sp.PCA_ROLE_SERVO
+    assert report[9] == sp.PCA_ROLE_SWITCH
+    assert report[7] is None                     # unreadable, reported as such
+    assert len(report) == sp.PCA9685_NUM_CH      # all 16, no assumed grouping
+
+
+def test_a_rerolled_channel_is_honoured_in_both_directions():
+    """The anti-folklore test: a board with channel 2 as a SWITCH and channel 10 as
+    the ARM must fire 2 and refuse 10 -- the exact inverse of the defaults."""
+    pl = _payload({2: sp.PCA_ROLE_SWITCH, 10: sp.PCA_ROLE_SERVO})
+    assert pl.fire(2).ok
+    assert pl.fire(10).code == FIRE_REJECTED_ARM
 
 
 # --------------------------------------------------------------------------- #

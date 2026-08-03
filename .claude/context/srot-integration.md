@@ -186,7 +186,8 @@ DO_SET_MODE 176); **`surface` → `stop_motion()` + `set_mode('SURFACE')`** (mod
 in `auv_manager_node._run_srot_surface` because the facade's `surface` is `set_depth(0)` and
 would die on the ArduSub-only ALT_HOLD gate; `fire` → **`SrotPayload`** (the board's PCA9685
 over `DO_SET_SERVO`/`DO_SET_RELAY` — there is NO separate USB ESP32 any more), which
-**refuses until `payload_fire_map` is configured** rather than guessing the wiring;
+takes the **board channel directly** (`fire(9)` = `DO_SET_SERVO param1 = 9` = `SERVO9_ROLE`)
+and refuses any channel the board does not call a SWITCH;
 `dvl_connect`, `calc_distance`, `head`, `mission_reset`, `calibrate_depth` (host-side, work
 unchanged).
 
@@ -275,7 +276,7 @@ Prereqs (operator, via **Bondor** — no duburi_ws code): ESCs on **Bluejay** (`
 the collapse moves `move_forward` / `move_left` / `move_right` / `yaw_left` / `yaw_right` /
 `turn` / `set_depth`(dive) / `stop` / `pause`(hold) / `style_roll`; **`surface`** (SURFACE
 mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_distance`,
-`dvl_connect` (host-side); `fire` **once `payload_fire_map` is set**; telemetry →
+`dvl_connect` (host-side); `fire` **on any board channel the board calls a SWITCH**; telemetry →
 `/duburi/state` (yaw/**depth**/batt/mode/armed) + the GCS heartbeat.
 
 **REFUSED with a clear message (`UNSUPPORTED_VERBS`, see the verb table above):**
@@ -410,10 +411,37 @@ arm, and firing one from a mission would move the arm mid-drop. `SrotPayload.fir
 reads the role from the board and refuses anything that is not `2`, **failing closed on an
 unreadable role**.
 
-`payload_fire_map` is now plain numbers — `"1:9, 2:10"` (duburi channel : 1-based PCA channel).
-The old `1:relay:0` / `2:servo:3` forms still parse, but encoding the role host-side duplicates
-board state and goes stale **silently** on a re-role, which is exactly the failure that would
-drive the arm.
+**There is no host-side channel map at all any more (2026-08-03).** `fire(N)` addresses
+BOARD channel N — the same N as `DO_SET_SERVO param1` and as `SERVO{N}_ROLE`. The old
+`payload_fire_map` routed a "duburi channel" 1..4 onto a PCA channel; it bought nothing and
+cost a second numbering to keep in sync by hand, whose failure mode is driving the arm.
+`payload_fire_map` is now a **hard startup error** — silently ignoring it would be worse,
+because its old numbers (1..4) are now valid board channels that on the default role layout
+ARE the arm. `payload_channels:="9:torpedo_1"` supplies labels for the log and nothing else;
+a stale label can mislabel a line but cannot misdirect a shot.
+
+**⚠ The "1-8 arm / 9-16 switch" split is a DEFAULT, not a rule.** It is only the initial value
+of `SERVO{n}_ROLE` (fw `params.cpp:368-371`: `(c < 8) ? 1.0f : 2.0f`), and every channel is
+independently re-rolable from Bondor. Any host table encoding that split is wrong the moment
+someone uses the feature — which is why we read all 16 roles at bring-up and print them.
+
+**`fire()` returns a typed outcome**, not a bool: `FIRED` / `REJECTED_ARM_CHANNEL` /
+`DISABLED_CHANNEL` / `DENIED` / `NO_ACK` / `BUSY` / `NOT_READY`, carried to a mission in
+`Move.Result.final_value`. `FireState` now returns `FAILED` (not an unconditional `SUCCEED`)
+when the shot did not go out, and the vision mid-hold fire logs a refusal at ERROR instead of
+discarding it.
+
+⚠ **`FIRED` means the board ACCEPTED the command, not that a solenoid moved.** The firmware
+streams no actuator readback of any kind and its PCA9685 driver sets its health flag with no
+I2C probe, so a physically disconnected expander ACKs exactly like a working one. This is the
+strongest claim the wire supports.
+
+⛔ **The board does NOT yet enforce the role contract — we do.** `DO_SET_SERVO` on a role-1
+channel writes `servo_us` and returns `ACCEPTED` (fw `mav_commands.cpp:475-481`): it moves the
+arm and reports success. Until `MAV_CMD_SROT_PAYLOAD_FIRE` lands (spec:
+`TASKS_FROM_DUBURI_WS.md` §7), the host-side role read is the only interlock. Also unfixed
+board-side: **no failsafe de-energises a latched payload channel** — leak, disarm and GCS-loss
+all leave it energised, so the host's `finally` OFF is the only thing that clears it.
 
 `DO_SET_SERVO` addresses a channel by its own number whatever its role, because the firmware
 reads the µs as a LEVEL for a role-2 channel (`mav_commands.cpp:471-479`) — so one code path

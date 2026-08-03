@@ -135,7 +135,8 @@ def build_torpedo_fire_fsm(
     sm.add_state('FIRE',
                  FireState(duburi, profile,
                            channel=p['fire_channel'], confirm_pause_s=2.0),
-                 transitions={SUCCEED: 'PAUSE', ABORT: 'SURFACE'})
+                 transitions={SUCCEED: 'PAUSE', FAILED: 'PAUSE',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('PAUSE',
                  PauseState(duburi, profile, seconds=2.0),

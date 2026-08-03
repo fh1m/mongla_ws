@@ -7,7 +7,7 @@ from yasmin import Blackboard
 
 from ..core.base_state import DuburiState
 from ..core.blackboard import BK
-from ..core.outcomes import SUCCEED
+from ..core.outcomes import SUCCEED, FAILED
 
 
 class CountdownState(DuburiState):
@@ -50,24 +50,34 @@ class LogScoreState(DuburiState):
 
 
 class FireState(DuburiState):
-    """Fire payload channel via ESP32 serial (duburi.fire(channel)).
+    """Activate a payload BOARD channel (duburi.fire(channel)).
 
-    channel: 1/2 = torpedo, 3/4 = dropper.
+    channel: the board's own PCA9685 channel, 1..16 -- the same n as SERVO{n}_ROLE.
+    There is no host-side mapping; the board decides whether that channel is a
+    payload switch or the on-board arm, and an arm channel is refused.
     confirm_pause_s: dwell after firing to confirm actuation.
+
+    Returns FAIL when the shot did not go out, so a plan can branch (retry another
+    channel, skip the task, keep its remaining time). This used to return SUCCEED
+    unconditionally, which meant a refused shot was indistinguishable from a hit.
     """
     TIMEOUT_S = 8.0
 
     def __init__(
         self, duburi, profile, channel: int, confirm_pause_s: float = 2.0
     ) -> None:
-        super().__init__(duburi, profile, [SUCCEED])
+        super().__init__(duburi, profile, [SUCCEED, FAILED])
         self._channel       = channel
         self._confirm_pause = confirm_pause_s
 
     def _run(self, bb: Blackboard) -> str:
-        self.duburi.fire(self._channel)
+        res = self.duburi.fire(self._channel)
         self.duburi.pause(self._confirm_pause)
-        return SUCCEED
+        # `duburi.fire` returns a Move.Result: success is True only when the board
+        # accepted the activation. NO_ACK deliberately counts as success-ish upstream
+        # -- see FireResult -- but here we only have the boolean, and treating an
+        # unacknowledged shot as failure would abandon a task over link jitter.
+        return SUCCEED if getattr(res, 'success', bool(res)) else FAILED
 
 
 class StyleRollState(DuburiState):

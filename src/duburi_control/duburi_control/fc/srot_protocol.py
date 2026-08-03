@@ -63,14 +63,31 @@ ACK_IN_PROGRESS = 5
 ACK_CANCELLED   = 6
 # TEMPORARILY_REJECTED is the FIFTH dispatch outcome and is NOT in the four-result
 # table JETSON_COMMS.md §5 documents -- but the firmware returns it whenever it
-# misses a state mutex at dispatch: SROT_MOVE (mav_commands.cpp:287), accel-cal
-# (:376) and, since Round 3, DO_SET_SERVO (:422) on the payload path. The command
-# never ran, so it is terminal for us: treating it as non-terminal means waiting
-# out the whole deadline and reporting a bogus TIMEOUT for a move that was simply
-# refused. Retrying is the caller's call, not this layer's.
-ACK_TEMPORARILY_REJECTED = 3
+# misses a state mutex at dispatch: SROT_MOVE (mav_commands.cpp:329), accel-cal
+# (:418) and DO_SET_SERVO (:464) on the payload path. The command never ran, so it
+# is terminal for us: treating it as non-terminal means waiting out the whole
+# deadline and reporting a bogus TIMEOUT for a move that was simply refused.
+# Retrying is the caller's call, not this layer's.
+#
+# ⚠ FIXED 2026-08-03: this was 3, which is MAV_RESULT_UNSUPPORTED, not
+# TEMPORARILY_REJECTED. Verified against the firmware's own vendored enum,
+# `lib/mavlink/common/common.h:1151` -> TEMPORARILY_REJECTED=1. The old value
+# broke the move path in BOTH directions and neither was visible in a log:
+#   * a real mutex miss (wire 1) was not in TERMINAL_ACKS, so `_relay_move_ack`
+#     polled until the budget expired and reported a bogus TIMEOUT + braked --
+#     exactly the failure the paragraph above says it prevents; and
+#   * a genuine UNSUPPORTED (wire 3, what the board answers for a command it does
+#     not implement) was reported as "board busy -- safe to retry", which is the
+#     worst possible advice for a command that will never be supported.
+# `test_srot_protocol_drift` now pins every one of these against common.h.
+ACK_TEMPORARILY_REJECTED = 1
+ACK_UNSUPPORTED = 3        # command not implemented by this firmware -- never retry
 TERMINAL_ACKS   = frozenset({ACK_ACCEPTED, ACK_DENIED, ACK_FAILED, ACK_CANCELLED,
-                             ACK_TEMPORARILY_REJECTED})
+                             ACK_TEMPORARILY_REJECTED, ACK_UNSUPPORTED})
+
+ACK_NAMES = {ACK_ACCEPTED: 'ACCEPTED', ACK_TEMPORARILY_REJECTED: 'TEMPORARILY_REJECTED',
+             ACK_DENIED: 'DENIED', ACK_UNSUPPORTED: 'UNSUPPORTED', ACK_FAILED: 'FAILED',
+             ACK_IN_PROGRESS: 'IN_PROGRESS', ACK_CANCELLED: 'CANCELLED'}
 
 CMD_SROT_MOVE = 31000      # the one custom verb; rides inside a COMMAND_LONG
 CMD_DO_SET_SERVO = 183     # PCA9685 servo channel -> µs (payload release servo)
