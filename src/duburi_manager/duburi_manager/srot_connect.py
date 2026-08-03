@@ -269,23 +269,34 @@ def read_roles(conn, timeout: float = 0.6) -> dict:
     Worth the ~16 round-trips: the role decides whether a channel is payload (switch)
     or the on-board manipulator arm (PWM), and driving the arm during a drop is the
     failure this whole read exists to prevent.
+
+    ⚠ RETRIED, because a single dropped reply is indistinguishable from a channel
+    that is not a switch. OBSERVED on the bridged link: channel 9 disappeared from
+    BOTH the SWITCH and SERVO lists between two runs a minute apart -- one lost
+    PARAM_VALUE out of 16 -- which reads to an operator as "9 is not fireable" when
+    it is. On a transport measured at ~8-9% frame loss, one-shot reads over 16
+    round-trips will drop one most of the time.
     """
     if sp is None:
         return {}
     roles = {}
     for ch in range(1, sp.PCA9685_NUM_CH + 1):
         name = sp.PCA_ROLE_PARAM_FMT.format(ch)
-        conn.mav.param_request_read_send(conn.target_system, conn.target_component,
-                                         name.encode(), -1)
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            pv = conn.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.3)
-            if pv is None:
-                continue
-            pid = pv.param_id
-            pid = pid.decode() if isinstance(pid, bytes) else str(pid)
-            if pid.strip('\x00') == name:
-                roles[ch] = int(pv.param_value)
+        for _attempt in range(3):
+            conn.mav.param_request_read_send(conn.target_system,
+                                             conn.target_component,
+                                             name.encode(), -1)
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                pv = conn.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.3)
+                if pv is None:
+                    continue
+                pid = pv.param_id
+                pid = pid.decode() if isinstance(pid, bytes) else str(pid)
+                if pid.strip('\x00') == name:
+                    roles[ch] = int(pv.param_value)
+                    break
+            if ch in roles:
                 break
     return roles
 
