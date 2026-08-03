@@ -622,8 +622,19 @@ class SrotFC(FlightController):
         # DuburiState.msg documents. VFR_HUD.alt is already in that convention
         # (fw sends alt = -depth), so pass it through -- see get_attitude().
         # Stays NaN until VFR_HUD arrives (5 Hz).
+        #
+        # ⚠ GATED ON BARO HEALTH, and that gate is not optional. Unlike
+        # SCALED_PRESSURE2 and WTEMP -- which the firmware SUPPRESSES when the
+        # barometer is unhealthy or stale -- VFR_HUD is sent unconditionally
+        # (fw mav_stream.cpp:258). So a board with NO Bar30 fitted at all still
+        # streams `alt = -0.000` forever, and passing that through publishes a
+        # confident 0.00 m on /duburi/state, in [STATE], and into every depth guard
+        # that compares against a negative constant. Read the health bit instead;
+        # the board already refuses DEPTH_HOLD/AUTO on the same condition
+        # (fw task_control_loop.cpp:107 and :348), so this stays consistent with
+        # what the vehicle will actually let you do.
         vhud = self._cache('VFR_HUD')
-        if vhud is not None:
+        if vhud is not None and self._baro_healthy() is not False:
             t.depth_m = float(vhud.alt)
         # Read through the per-instance table, NOT `_cache('BATTERY_STATUS')`. The raw
         # slot holds whichever instance landed last, so this line used to claim
@@ -715,9 +726,13 @@ class SrotFC(FlightController):
         att = self._cache('ATTITUDE')
         if att is None:
             return None
+        # Same baro-health gate as telemetry() -- see the long note there. VFR_HUD is
+        # NOT suppressed when the barometer is unhealthy, so an ungated read publishes a
+        # confident 0.00 m off a board with no Bar30 fitted, and every depth guard here
+        # compares against a negative constant (they would simply stop firing).
         depth = math.nan
         vhud = self._cache('VFR_HUD')
-        if vhud is not None:
+        if vhud is not None and self._baro_healthy() is not False:
             depth = float(vhud.alt)
         return {
             'yaw':   math.degrees(att.yaw) % 360.0,
@@ -754,6 +769,20 @@ class SrotFC(FlightController):
         cur = getattr(msg, 'current_battery', -1)
         current = math.nan if cur == -1 else cur / 100.0
         self._battery_cache[bid] = (voltage, current, time.time())
+
+    def _baro_healthy(self):
+        """True / False / None (never reported) from SYS_STATUS's health bitfield.
+
+        Tri-state on purpose: "the board says the barometer is bad" and "we have not
+        heard a SYS_STATUS yet" are different, and only the first should suppress a
+        depth reading. Treating the second as unhealthy would blank depth for the first
+        half-second of every connection.
+        """
+        msg = self._cache('SYS_STATUS')
+        if msg is None:
+            return None
+        bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+        return bool(int(getattr(msg, 'onboard_control_sensors_health', 0)) & bit)
 
     def _drain_battery(self):
         """Fold the currently-cached BATTERY_STATUS in, once per message object.

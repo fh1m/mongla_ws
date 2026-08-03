@@ -213,11 +213,23 @@ The SROT board has **one USB cable and no web UI**, so this is that surface: poi
 serial path and it prints everything the board says.
 
 ```bash
-ros2 run duburi_manager connect                     # autodetect the port, one 6 s snapshot
+ros2 run duburi_manager connect                     # autodetect the port, one snapshot
 ros2 run duburi_manager connect --path /dev/ttyUSB0 # explicit device, like the Pixhawk days
-ros2 run duburi_manager connect --watch             # live, refreshing, until Ctrl-C
+ros2 run duburi_manager connect --watch             # ★ live DASHBOARD + change log
 ros2 run duburi_manager connect --json              # machine-readable, for logs and CI
+ros2 run duburi_manager connect --no-roles          # skip the 16 PCA9685 param reads
 ```
+
+**`--watch` is a fixed-position dashboard, not a scrolling dump**, with a **change log**
+underneath it: one line whenever a value crosses a threshold, a mode flips, a failsafe fires,
+or a field goes **absent ↔ present**. The panel answers *"what is the board doing now"*; the
+log answers *"what changed while I wasn't looking"*. That last category matters because the
+board **suppresses** values it cannot stand behind — a barometer that stops being reported is
+the board telling you something, and a log that only watches numbers move would never mention
+it.
+
+The same change log runs inside `duburi_manager start` as `[SROT ] ~ …` lines, so a mission
+recording carries it too.
 
 It needs **no ROS graph, no manager, and not even a fully-built workspace** — it is usually
 the first thing you run. `connect` never grades and always exits 0; `bringup_check --srot` is
@@ -234,6 +246,15 @@ the pass/fail gate. Use `connect` to look, `bringup_check` to decide.
 | **Sensor honesty** | `MAGACC`, `LEAK`, `KILL`, `WTEMP`, `SYS_STATUS` health bits | since rev 3 the board **withholds** values it cannot stand behind |
 | **Firmware health** | free heap, per-task stack high-water ×6, load, drop rate | an ESP32 running FreeRTOS can run out of stack; you want to see it coming |
 
+> ### Heading is **0..360**, everywhere
+>
+> The board's OLED, `VFR_HUD.heading`, `/duburi/state` and every tool here show the **same
+> number** — a compass heading in `0..360`. `ATTITUDE.yaw` is on the wire as signed radians
+> (`±π`), and rendering that raw once printed `yaw -162.23°` beside the board's `heading 197°`:
+> the same angle, disagreeing by exactly 360, on adjacent lines. **Roll and pitch stay signed** —
+> a 3° list to port is not a 357° list. `connect` prints its own heading next to the board's
+> `VFR_HUD` copy precisely so a future drift is visible in one glance.
+
 > **A missing value is `--`, never `0.0`.** From rev 4 the board *suppresses* `WTEMP` and
 > `SCALED_PRESSURE2` when the barometer is unhealthy, and sends `0` in
 > `SCALED_IMU2.temperature` as MAVLink's "not provided". Rendering absence as zero recreates
@@ -245,6 +266,23 @@ the pass/fail gate. Use `connect` to look, `bringup_check` to decide.
 > the burst. Both `connect` and the manager's reader thread de-multiplex by name — and
 > `BATTERY_STATUS` needs the identical treatment by instance id, or the reading alternates
 > between two packs an order of magnitude apart.
+
+> ### Bare-board bench — what *should* read `--`
+>
+> With the board alone (no thrusters, no Bar30, no 2nd board), most of the vehicle is
+> legitimately **absent**, and the tools say so rather than inventing zeros:
+>
+> | Reads `--` | Because |
+> |---|---|
+> | `depth`, `water temp`, barometer | no Bar30. ⚠ `VFR_HUD.alt` keeps streaming `-0.000` regardless — it is **not** gated on baro health (`mav_stream.cpp:258`), so `connect` cross-checks the `SYS_STATUS` health bit instead of trusting the value's presence |
+> | `Vservo`, `battery 1` | `Vservo` **is** PM2 — the thruster pack, which reaches the board over ESP-NOW from the 2nd board |
+> | ESC temps, `rpm` | no Pico co-processor and no ESCs. An ESC reporting 0 °C is implausible, so an all-zero temp row means nothing is attached |
+> | `DEPTH_OUT`, `DEPTH_ERR` | the depth loop does not run without a barometer |
+>
+> `Vcc` shows `5.00 V (nominal, not measured)` — the firmware packs a **hardcoded `5000`**
+> (`mav_stream.cpp:328`), so nobody debugs a 5 V rail off a constant. And `battery 0` on an
+> unwired PM1 pin floats: the change log caught it oscillating **1.20 ↔ 5.96 V**, which is what
+> a floating ADC looks like, not a pack.
 
 The manager logs the same data periodically once running — `srot_telemetry_period_s:=2.0`
 (set `0` to silence it). It also **refuses to arm while the depth controller is saturated**
