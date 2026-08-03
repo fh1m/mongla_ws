@@ -37,9 +37,22 @@ os.environ.setdefault('MAVLINK20', '1')
 from pymavlink import mavutil                                        # noqa: E402
 
 try:
-    from .connection_config import find_srot_serial, SROT_BAUD
+    from .connection_config import find_srot_serial, SROT_BAUD, resolve_srot_profile
 except ImportError:                                                  # direct execution
-    from duburi_manager.connection_config import find_srot_serial, SROT_BAUD
+    from duburi_manager.connection_config import (find_srot_serial, SROT_BAUD,
+                                                  resolve_srot_profile)
+
+
+class _StderrLogger:
+    """resolve_srot_profile() logs through a ROS-style logger; this tool has none.
+
+    Everything it says goes to STDERR, never stdout, so `--json` stays a clean
+    machine-readable document even when auto-detect is chatty.
+    """
+    def info(self, msg):  print(msg, file=sys.stderr)
+    def warn(self, msg):  print(msg, file=sys.stderr)
+    def warning(self, msg): print(msg, file=sys.stderr)
+    def error(self, msg): print(msg, file=sys.stderr)
 
 def _load_srot_protocol():
     """Import the wire constants WITHOUT dragging in the ROS package chain.
@@ -571,12 +584,14 @@ def main(argv=None) -> int:
                     help='skip the PCA9685 role read (16 param round-trips)')
     args = ap.parse_args(argv)
 
-    path = args.path or find_srot_serial()
-    if path is None:
-        print('no SROT USB-serial device found. Plug the Type-C cable in, or pass --path '
-              '(a device, or udpin:0.0.0.0:14550 if the board is on a BlueOS bridge).',
-              file=sys.stderr)
-        return 2
+    # Same resolver the manager uses, so `connect`, `bringup_check --srot` and
+    # `start` can never disagree about WHERE the board is -- a tool that looks in a
+    # different place than the node it is meant to diagnose is worse than no tool.
+    if args.path:
+        path = args.path
+    else:
+        prof = resolve_srot_profile(logger=_StderrLogger() if not args.json else None)
+        path = prof['conn']
 
     # `baud` is meaningful only for a real serial device. Passing it alongside a
     # udpin:/tcp: string is harmless to pymavlink (it ignores it off the serial

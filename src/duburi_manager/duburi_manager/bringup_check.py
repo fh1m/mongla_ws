@@ -757,15 +757,22 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     """
     out: list[tuple[str, str, str]] = []
     try:
-        from .connection_config import find_srot_serial, SROT_BAUD
+        from .connection_config import (find_srot_serial, SROT_BAUD,
+                                        resolve_srot_profile, SROT_UDP_CONN)
     except Exception as exc:                       # noqa: BLE001
         return [(FAIL, 'connection_config import', str(exc))]
 
-    port = device or find_srot_serial()
-    if port is None:
-        return [(FAIL, 'no SROT USB-serial device',
-                 'plug the board in, or pass --srot-device=<conn> if it is bridged; '
-                 'the node would block at wait_heartbeat')]
+    # Same resolver the manager uses, so this preflight can never grade a different
+    # transport than the node it is clearing for flight.
+    port = device or resolve_srot_profile()['conn']
+    if port == SROT_UDP_CONN and not device and find_srot_serial() is None:
+        # Auto-detect fell through to the UDP default without seeing traffic. Say so
+        # here rather than letting the heartbeat probe below report a bare "no
+        # HEARTBEAT", which reads like a dead board rather than "nothing is attached".
+        out.append((WARN, 'SROT auto-detect',
+                    'no USB serial and no MAVLink on UDP -- falling back to '
+                    f'{SROT_UDP_CONN}. Plug in the Type-C cable, bring up the BlueOS '
+                    'bridge, or pass --srot-device=<conn>'))
     is_serial = port.startswith('/dev/')
     baud_kw = {'baud': SROT_BAUD} if is_serial else {}
     if is_serial:
