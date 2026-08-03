@@ -22,6 +22,84 @@
 > Board-side source of truth: `Mongla_others/srot-control-board/{DUBURI_WS_INTEGRATION,
 > JETSON_COMMS,ALGORITHMS,AUDIT,PARAMETERS}.md`.
 
+## Transitional rig — SROT through BlueOS over UDP (verified on hardware 2026-08-03)
+
+The SROT board has no Ethernet, so while the hull is still wired Pi-first the board hangs
+off the **Raspberry Pi's USB** and reaches us as **UDP**, instead of the designed direct
+USB-C-to-Jetson cable. This works and is fully verified — but read the link-quality
+caveat at the end before planning a mission around it.
+
+**Measured topology** (`.1`/`.2` were swapped in CLAUDE.md until 2026-08-03):
+
+| Host | Address | Note |
+|---|---|---|
+| BlueOS Pi | **192.168.2.2** | Pi MAC OUI, BlueOS **1.4.2**, also the gateway |
+| Topside / dev box | **192.168.2.1** | Blue Robotics' standard topside address |
+| SROT board | `/dev/ttyUSB0` **on the Pi** | CH340 `1a86:7523` |
+
+### Why Bridget, and not the Autopilot Manager
+
+BlueOS's ArduPilot Manager will **never** adopt this board — it lists only known ArduPilot
+boards (`/v1.0/available_boards` returns SITL alone) and the SROT reports
+`MAV_AUTOPILOT_GENERIC` on a CH340. **Bridget** (port 27353) is the right service: a *raw
+byte* serial↔UDP bridge with no MAVLink awareness. That matters twice — it needs no board
+recognition, and it **injects no heartbeats of its own**, which a router like
+mavlink-router would. The firmware feeds its GCS failsafe off *any* foreign heartbeat, so
+an injecting router would hold that failsafe open on our behalf.
+
+### Setup — one call, idempotent, safe to re-run
+
+```bash
+# create (HTTP 201). udp_listen_port is ALSO the source port Bridget sends from.
+curl -s -X POST http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: application/json' \
+  -d '{"serial_path":"/dev/ttyUSB0","baud":115200,"ip":"192.168.2.1",
+       "udp_target_port":14550,"udp_listen_port":14551}'
+
+curl -s http://192.168.2.2:27353/v1.0/bridges          # verify
+curl -s http://192.168.2.2:27353/v1.0/serial_ports     # is the board even on the Pi?
+# DELETE takes the SAME body; delete->recreate->reconnect verified working.
+```
+
+`ip` is where Bridget **sends**; `udp_listen_port` is what it **binds and sends from**.
+Because it transmits from its listen port, a pymavlink `udpin:` — which replies to the
+source of the last datagram — lands back exactly where Bridget listens, so the link is
+**bidirectional with no extra config**. That is the one property to re-verify if these
+numbers are ever changed: telemetry flowing proves nothing about the uplink.
+
+### Host side — no code change needed
+
+`resolve_srot_profile()` already takes any pymavlink connection string and only attaches
+a baud when the target starts with `/dev/`, and `SrotFC` is transport-agnostic.
+
+```bash
+ros2 run duburi_manager bringup_check --srot --srot-device=udpin:0.0.0.0:14550
+ros2 run duburi_manager connect --path udpin:0.0.0.0:14550 --watch
+ros2 run duburi_manager start --ros-args -p mav_device:=udpin:0.0.0.0:14550 \
+                                         -p yaw_source:=mavlink_ahrs
+```
+
+Pass the **same endpoint to all three** — `mode` still does not apply on srot.
+
+### ⚠ Link quality: measurably worse than direct serial — bench use, not water
+
+| | direct USB-C serial | via BlueOS/Bridget |
+|---|---|---|
+| `BAD_DATA` | **zero in 15 s** (bench 2026-08-02) | **~10–23 %** of frames |
+| command round-trip | — | **11/12** (`AUTOPILOT_VERSION`) |
+
+**Mechanism, measured:** Bridget chunks the serial stream at arbitrary byte offsets —
+only **77 % of datagrams begin on a message boundary** (`0xFD`), so ~23 % start
+mid-message, which matches the loss almost exactly. Reassembling the datagrams into one
+continuous stream and re-parsing recovers most of it (20 % → 7.8 %, and most of that
+residue is the known-undecodable `ESC_STATUS(291)`), which says the **bytes are largely
+intact and it is a framing problem, not a wire problem**. It is *not* saturation: dropping
+the telemetry rates did not reduce it (the link runs at ~73 % of 115200 either way).
+
+**So: use this rig for bring-up, telemetry and bench verification. For an autonomous
+in-water run, put the board back on the Jetson's USB-C cable** — the designed
+architecture, and the one with zero observed frame loss. MAVLink has no retransmission,
+so a lost `COMMAND_LONG` is a lost arm or a lost move with nothing in any log.
+
 ## The offload boundary
 **The board owns:** attitude + depth hold, thrust allocation (vectored 6DOF), timed
 motion primitives **with on-board braking**, heading hold between/within legs, arming +

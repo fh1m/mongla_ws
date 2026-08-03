@@ -556,9 +556,12 @@ def as_dict(snap: Snapshot) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog='connect',
-        description='Connect to the SROT board over serial and show everything it sends.')
+        description='Connect to the SROT board and show everything it sends.')
     ap.add_argument('--path', default=None,
-                    help='serial device (default: autodetect, same as the manager)')
+                    help='serial device, OR any pymavlink connection string when the '
+                         'board is not on this host -- e.g. udpin:0.0.0.0:14550 for a '
+                         'SROT reached through a BlueOS/Bridget serial->UDP bridge. '
+                         'Default: autodetect local USB serial, same as the manager.')
     ap.add_argument('--baud', type=int, default=SROT_BAUD)
     ap.add_argument('--duration', type=float, default=6.0,
                     help='listening window in seconds (default 6)')
@@ -571,25 +574,43 @@ def main(argv=None) -> int:
 
     path = args.path or find_srot_serial()
     if path is None:
-        print('no SROT USB-serial device found. Plug the Type-C cable in, or pass --path.',
+        print('no SROT USB-serial device found. Plug the Type-C cable in, or pass --path '
+              '(a device, or udpin:0.0.0.0:14550 if the board is on a BlueOS bridge).',
               file=sys.stderr)
         return 2
 
+    # `baud` is meaningful only for a real serial device. Passing it alongside a
+    # udpin:/tcp: string is harmless to pymavlink (it ignores it off the serial
+    # path) but printing "@ 115200" next to a UDP endpoint states a baud rate for
+    # a link that has none -- and this tool exists to stop exactly that kind of
+    # confident-but-wrong number. Same /dev/ test resolve_srot_profile() uses.
+    is_serial = path.startswith('/dev/')
+    baud_kw = {'baud': args.baud} if is_serial else {}
     if not args.json:
-        print(f'{DIM}connecting to {path} @ {args.baud} ...{RESET}')
+        where = f'{path} @ {args.baud}' if is_serial else path
+        print(f'{DIM}connecting to {where} ...{RESET}')
     try:
         conn = mavutil.mavlink_connection(
-            path, baud=args.baud,
+            path, **baud_kw,
             source_system=(sp.SOURCE_SYSID if sp else 255),
             source_component=(sp.SOURCE_COMPID if sp else 191))
     except Exception as exc:                                  # noqa: BLE001
         print(f'could not open {path}: {exc}', file=sys.stderr)
-        print('  if this is EIO the CH340 is wedged -- unplug and replug the cable.',
-              file=sys.stderr)
+        if is_serial:
+            print('  if this is EIO the CH340 is wedged -- unplug and replug the cable.',
+                  file=sys.stderr)
         return 2
 
     if conn.wait_heartbeat(timeout=10) is None:
-        print(f'no HEARTBEAT on {path}. Board powered? Correct port?', file=sys.stderr)
+        print(f'no HEARTBEAT on {path}.', file=sys.stderr)
+        if is_serial:
+            print('  Board powered? Correct port?', file=sys.stderr)
+        else:
+            # On a bridged link "silent" has one more failure mode than on serial:
+            # the board can be perfectly healthy with the bridge simply not running.
+            print('  The link is bridged, so this is either the board or the bridge. '
+                  'Check the bridge exists and points at THIS host:', file=sys.stderr)
+            print('    curl -s http://192.168.2.2:27353/v1.0/bridges', file=sys.stderr)
         return 2
 
     # Read-only: AUTOPILOT_VERSION is not streamed, it must be asked for. Nothing

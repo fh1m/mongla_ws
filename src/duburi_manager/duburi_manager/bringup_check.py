@@ -742,11 +742,18 @@ def _depth_loop_verdict(depth_out: float | None,
     return (PASS, 'depth loop', f'settled (DEPTH_OUT={depth_out:+.2f})')
 
 
-def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
-    """SROT board over direct USB serial: port, vehicle heartbeat, GAIN, depth sign.
+def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
+    """SROT board: port/endpoint, vehicle heartbeat, GAIN, depth sign.
 
-    Replaces the BlueOS/UDP-14550/Pixhawk-USB probes, which on a SROT vehicle pass or
-    fail for entirely the wrong reasons -- there is no Pi, no router and no UDP at all.
+    Replaces the BlueOS/UDP-14550/Pixhawk-USB probes, which on a direct-USB SROT
+    vehicle pass or fail for entirely the wrong reasons.
+
+    `device` accepts any pymavlink connection string for the transitional setup where
+    the board hangs off a Pi and reaches us as UDP through a BlueOS/Bridget bridge.
+    Without it this section can only ever FAIL on such a rig -- `find_srot_serial()`
+    looks for a local CH340 that is, correctly, plugged into the Pi instead. That is
+    the tool that decides whether to go in the water reporting "no board" about a
+    board that is streaming fine.
     """
     out: list[tuple[str, str, str]] = []
     try:
@@ -754,11 +761,17 @@ def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
     except Exception as exc:                       # noqa: BLE001
         return [(FAIL, 'connection_config import', str(exc))]
 
-    port = find_srot_serial()
+    port = device or find_srot_serial()
     if port is None:
         return [(FAIL, 'no SROT USB-serial device',
-                 'plug the board in; the node would block at wait_heartbeat')]
-    out.append((PASS, 'SROT serial port', f'{port} @ {SROT_BAUD}'))
+                 'plug the board in, or pass --srot-device=<conn> if it is bridged; '
+                 'the node would block at wait_heartbeat')]
+    is_serial = port.startswith('/dev/')
+    baud_kw = {'baud': SROT_BAUD} if is_serial else {}
+    if is_serial:
+        out.append((PASS, 'SROT serial port', f'{port} @ {SROT_BAUD}'))
+    else:
+        out.append((PASS, 'SROT endpoint (bridged)', port))
 
     if skip_mav:
         out.append((WARN, 'SROT MAVLink probe skipped', '--skip-mavlink'))
@@ -784,7 +797,7 @@ def _check_srot(skip_mav: bool) -> list[tuple[str, str, str]]:
 
     conn = None
     try:
-        conn = mavutil.mavlink_connection(port, baud=SROT_BAUD)
+        conn = mavutil.mavlink_connection(port, **baud_kw)
         deadline = time.time() + 6.0
         hb = None
         while time.time() < deadline:
@@ -891,12 +904,18 @@ def main(argv: list[str] | None = None) -> int:
     # `--help` used to fall through and run the FULL hardware probe -- an operator
     # asking what the flags are instead got a 12-section scan of the vehicle.
     if '-h' in argv or '--help' in argv:
-        print('usage: bringup_check [--srot] [--strict] [--skip-mavlink]\n'
+        print('usage: bringup_check [--srot] [--srot-device=<conn>] [--strict]\n'
+              '                     [--skip-mavlink]\n'
               '\n'
               '  --srot           SROT control board over direct USB serial (this\n'
               '                   branch\'s default vehicle). Replaces the network /\n'
               '                   UDP-14550 / Pixhawk-USB probes, which on a SROT\n'
               '                   vehicle pass or fail for entirely the wrong reasons.\n'
+              '  --srot-device=   board is not on THIS host: any pymavlink conn\n'
+              '                   string, e.g. udpin:0.0.0.0:14550 when the SROT is\n'
+              '                   on the Pi behind a BlueOS/Bridget serial->UDP\n'
+              '                   bridge. Without it this section FAILs "no board"\n'
+              '                   on a rig whose board is streaming fine.\n'
               '  --strict         any WARN exits non-zero (hard pre-mission gate)\n'
               '  --skip-mavlink   skip the autopilot probe (no board/link attached)\n'
               '\n'
@@ -908,6 +927,9 @@ def main(argv: list[str] | None = None) -> int:
     # The SROT vehicle has no Pi, no BlueOS, no UDP and no Pixhawk: sections D/E/F
     # would report on infrastructure that is not supposed to exist.
     srot = '--srot' in argv
+    # Transitional rig: board on the Pi, reaching us as UDP via a BlueOS bridge.
+    srot_device = next((a.split('=', 1)[1] for a in argv
+                        if a.startswith('--srot-device=')), '')
 
     failures = 0
     warnings = 0
@@ -947,8 +969,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if srot:
         # ---- D-F (SROT): one USB cable replaces the whole network stack ---- #
-        section('D-F. SROT control board (direct USB serial)')
-        for st, lbl, det in _check_srot(skip_mav):
+        section('D-F. SROT control board'
+                + (' (bridged)' if srot_device else ' (direct USB serial)'))
+        for st, lbl, det in _check_srot(skip_mav, srot_device):
             emit(st, lbl, det)
     else:
         # ---- D. network ------------------------------------------------- #
@@ -1060,7 +1083,17 @@ def main(argv: list[str] | None = None) -> int:
         # bypasses entirely -- there is no BlueOS to listen to. Printing
         # "auto-detected mode='sim'" on a real SROT vehicle is worse than printing
         # nothing: it looks like the preflight thinks this is a simulation.
-        emit(PASS, 'connection', 'direct USB serial -- `mode` does not apply on srot')
+        # Still true when bridged: `mode` picks among the UDP PROFILES, and
+        # resolve_srot_profile() bypasses those whether the transport is a device
+        # or an endpoint. But the operator must pass the SAME endpoint to the
+        # manager, so print the command rather than the word "serial".
+        if srot_device:
+            emit(PASS, 'connection',
+                 f'bridged -- start the manager with the SAME endpoint: '
+                 f'-p mav_device:={srot_device}  (`mode` does not apply on srot)')
+        else:
+            emit(PASS, 'connection',
+                 'direct USB serial -- `mode` does not apply on srot')
     else:
         chosen = resolve_mode('auto', logger=None)
         emit(PASS, f'auto-detected mode={chosen!r}',
