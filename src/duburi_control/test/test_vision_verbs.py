@@ -51,11 +51,18 @@ def test_parse_channels_basic_and_order():
 
 
 def test_parse_channels_tolerant_and_clamped():
+    """Channels are BOARD channels 1..16, not host-side indices.
+
+    The range was 1-4 while a host-side fire map existed. Left at 1-4 after the map
+    was removed, `fire=[9,10]` would parse to `[]` -- the mission would sail past
+    the target having fired nothing, with no error anywhere.
+    """
     assert _parse_channels('') == []
     assert _parse_channels(None) == []
-    assert _parse_channels(' 1 , 2 ') == [1, 2]  # whitespace
-    assert _parse_channels('1,junk,2') == [1, 2]  # junk dropped
-    assert _parse_channels('0,5,1') == [1]        # out-of-range 0/5 dropped
+    assert _parse_channels(' 1 , 2 ') == [1, 2]    # whitespace
+    assert _parse_channels('1,junk,2') == [1, 2]   # junk dropped
+    assert _parse_channels('9,10') == [9, 10]      # real switch channels survive
+    assert _parse_channels('0,16,17') == [16]      # only 1..16 are addressable
 
 
 # --------------------------------------------------------------------------- #

@@ -250,3 +250,59 @@ def test_esc_status_291_is_absent_from_our_dialect():
     # The fallback we rely on instead must exist, or there is no RPM path at all.
     assert 11030 in runtime_map and 11031 in runtime_map, \
         'ESC_TELEMETRY_1_TO_4 / 5_TO_8 missing -- no usable RPM message remains'
+
+
+# --------------------------------------------------------------------------- #
+#  MAV_RESULT values -- pinned against the firmware's OWN vendored enum         #
+# --------------------------------------------------------------------------- #
+# Added 2026-08-03 after `ACK_TEMPORARILY_REJECTED` was found to be 3, which is
+# MAV_RESULT_UNSUPPORTED. Nothing caught it because this file pinned command ids
+# and channel constants but never the RESULT codes -- and a wrong result code is
+# the quietest possible bug: the board answers correctly, we misread the answer.
+#
+# The two directions it broke, neither visible in a log:
+#   * a real mutex miss (wire 1) was not in TERMINAL_ACKS, so the move ACK loop
+#     polled to the end of its budget and reported a bogus TIMEOUT + braked; and
+#   * a genuine UNSUPPORTED (wire 3) was reported as "board busy, safe to retry",
+#     advice that can never come true.
+
+def test_mav_result_values_match_the_firmware_enum():
+    """Parse `MAV_RESULT_*=<n>` out of the firmware's vendored common.h."""
+    common = _FW / 'lib' / 'mavlink' / 'common' / 'common.h'
+    if not common.is_file():
+        pytest.skip('vendored common.h not present in the firmware checkout')
+    text = common.read_text(errors='ignore')
+    fw = {m.group(1): int(m.group(2))
+          for m in re.finditer(r'MAV_RESULT_([A-Z_]+)\s*=\s*(\d+)', text)}
+    assert fw, 'could not parse any MAV_RESULT_* from common.h'
+
+    ours = {
+        'ACCEPTED':             sp.ACK_ACCEPTED,
+        'TEMPORARILY_REJECTED': sp.ACK_TEMPORARILY_REJECTED,
+        'DENIED':               sp.ACK_DENIED,
+        'UNSUPPORTED':          sp.ACK_UNSUPPORTED,
+        'FAILED':               sp.ACK_FAILED,
+        'IN_PROGRESS':          sp.ACK_IN_PROGRESS,
+    }
+    for name, mine in ours.items():
+        if name in fw:
+            assert mine == fw[name], (
+                f'ACK_{name} is {mine} here but MAV_RESULT_{name}={fw[name]} in the '
+                f'firmware. A wrong result code misreads a correct answer.')
+
+
+def test_the_ack_codes_are_distinct():
+    """The bug was two names sharing value 3. Their CALLER ADVICE is opposite --
+    TEMPORARILY_REJECTED means retry, UNSUPPORTED means never retry -- so a
+    collision here is not cosmetic."""
+    codes = [sp.ACK_ACCEPTED, sp.ACK_TEMPORARILY_REJECTED, sp.ACK_DENIED,
+             sp.ACK_UNSUPPORTED, sp.ACK_FAILED, sp.ACK_IN_PROGRESS,
+             sp.ACK_CANCELLED]
+    assert len(set(codes)) == len(codes), f'duplicate ACK code: {codes}'
+
+
+def test_in_progress_is_the_only_non_terminal_ack():
+    assert sp.ACK_IN_PROGRESS not in sp.TERMINAL_ACKS
+    for code in (sp.ACK_ACCEPTED, sp.ACK_DENIED, sp.ACK_FAILED, sp.ACK_CANCELLED,
+                 sp.ACK_TEMPORARILY_REJECTED, sp.ACK_UNSUPPORTED):
+        assert code in sp.TERMINAL_ACKS

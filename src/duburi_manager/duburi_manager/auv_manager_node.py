@@ -117,6 +117,32 @@ SROT_MESSAGE_RATES = {
 }
 
 
+def _parse_payload_channels(spec: str, log=None) -> dict:
+    """"9:torpedo_1, 11:dropper_1" -> {9: 'torpedo_1', 11: 'dropper_1'}.
+
+    Labels only. These never decide WHERE a fire goes -- `fire(N)` is always board
+    channel N -- so a malformed or stale entry is a cosmetic problem, and the right
+    response is to drop it with a warning rather than refuse to start. That is the
+    opposite of how the routing map this replaces had to be treated, and it is the
+    point of the redesign: nothing here can misdirect an actuation.
+    """
+    out: dict = {}
+    for entry in (spec or '').split(','):
+        entry = entry.strip()
+        if not entry:
+            continue
+        ch, sep, name = entry.partition(':')
+        try:
+            if not sep or not name.strip():
+                raise ValueError('expected <board_channel>:<name>')
+            out[int(ch)] = name.strip()
+        except ValueError as exc:
+            if log is not None:
+                log.warn(f'[PAYLOAD] payload_channels: ignoring {entry!r} ({exc}). '
+                         f'Labels only -- fire() is unaffected.')
+    return out
+
+
 class FeedbackPump:
     """Stream Move.Feedback at ~2.5 Hz while a goal is executing.
 
@@ -207,16 +233,20 @@ class AUVManagerNode(Node):
         self.declare_parameter('bno085_port',          'auto')
         self.declare_parameter('bno085_baud',          115200)
         self.declare_parameter('payload_port',         'auto')
-        # payload_fire_map: the SROT PCA9685 wiring, comma-separated as
-        #   "<channel>:relay:<instance>" / "<channel>:servo:<ch>[:fire_us:rest_us]"
-        # e.g. "1:relay:0, 2:relay:1, 3:servo:3".
+        # payload_channels: OPTIONAL cosmetic labels, "<board_channel>:<name>",
+        # e.g. "9:torpedo_1, 10:torpedo_2, 11:dropper_1".
         #
-        # REQUIRED on srot, and there is no safe default: which PCA channel each of
-        # torpedo_1/2 and dropper_1/2 sits on, and whether each is a servo or a
-        # MOSFET, are hardware facts this code cannot infer. Empty means fire()
-        # refuses loudly rather than guessing -- so until this is set the vehicle
-        # CANNOT fire anything, which is what was happening before this param
-        # existed (three docs promised it; nothing declared it).
+        # It does NOT route anything. `fire(N)` always addresses board channel N
+        # (= DO_SET_SERVO param1 = the n in SERVO{n}_ROLE); these names only make
+        # logs and the preflight readable. A stale label can mislabel a log line;
+        # it cannot send a shot to the wrong channel, which is exactly why the
+        # routing map it replaces is gone.
+        self.declare_parameter('payload_channels',     '')
+        # payload_fire_map: REMOVED. Kept declared ONLY so a launch file still
+        # setting it fails loudly -- see _preflight_payload. Silently ignoring it
+        # would be the dangerous option, because its channel numbers (1..4, a
+        # host-side index) now mean something completely different (1..16, the
+        # board channel), and on the default role layout channel 1 is the ARM.
         self.declare_parameter('payload_fire_map',     '')
         self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
         self.declare_parameter('nucleus_dvl_port',     9000)
@@ -257,6 +287,7 @@ class AUVManagerNode(Node):
         self._bno_baud      = int(self.get_parameter('bno085_baud').value)
         self._payload_port  = str(self.get_parameter('payload_port').value)
         self._payload_fire_map = str(self.get_parameter('payload_fire_map').value)
+        self._payload_channels = str(self.get_parameter('payload_channels').value)
         self._dvl_host      = str(self.get_parameter('nucleus_dvl_host').value)
         self._dvl_port      = int(self.get_parameter('nucleus_dvl_port').value)
         self._dvl_passwd    = str(self.get_parameter('nucleus_dvl_password').value)
@@ -513,32 +544,40 @@ class AUVManagerNode(Node):
         (concurrent with the BNO085 probe; joined in _setup_heartbeat_and_payload).
         """
         if self._is_srot:
-            from duburi_control.fc.srot_fc import SrotPayload, parse_fire_map
-            fire_map = parse_fire_map(self._payload_fire_map, log=self.get_logger())
-            self._payload = SrotPayload(self.fc, log=self.get_logger(),
-                                        fire_map=fire_map)
-            self._payload_thread = None
-            if fire_map:
-                self.get_logger().info(
-                    f'[PAYLOAD] SROT: via MAVLink PCA9685 (DO_SET_SERVO/RELAY) -- '
-                    f'no separate USB board; {len(fire_map)} channel(s) mapped: '
-                    f'{sorted(fire_map)}')
-                # Read each mapped channel's ROLE off the board now, so a channel
-                # pointed at the on-board manipulator arm is caught at bring-up
-                # rather than at the moment a mission tries to drop a marker.
-                try:
-                    self._payload.preflight_roles()
-                except Exception as exc:            # noqa: BLE001 -- advisory only
-                    self.get_logger().warn(
-                        f'[PAYLOAD] could not read channel roles: {exc!r} -- fire() '
-                        f'still refuses anything the board does not call a switch')
-            else:
-                # Loud, because everything downstream looks healthy: the link is up,
-                # bringup_check passes, and every fire() silently returns False.
+            from duburi_control.fc.srot_fc import SrotPayload
+            # A launch file still passing the removed routing param must STOP, not be
+            # quietly ignored: its numbers were host-side indices 1..4, and the same
+            # numbers now address board channels 1..4 -- which on the default role
+            # layout are the on-board ARM. Failing closed here is the whole migration.
+            if self._payload_fire_map.strip():
+                self._payload = None
+                self._payload_thread = None
                 self.get_logger().error(
-                    '[PAYLOAD] SROT: NO FIRE MAP -- torpedo and dropper CANNOT '
-                    'actuate. Set payload_fire_map from the real PCA9685 wiring, '
-                    'e.g. -p payload_fire_map:="1:relay:0, 2:relay:1, 3:servo:3"')
+                    '[PAYLOAD] REFUSING TO ARM THE PAYLOAD: `payload_fire_map` is set '
+                    f'({self._payload_fire_map!r}) but that parameter was REMOVED. '
+                    'fire(N) now addresses BOARD channel N directly (N = DO_SET_SERVO '
+                    'param1 = the n in SERVO{n}_ROLE), so the old 1..4 channel numbers '
+                    'now point at completely different hardware -- on the default role '
+                    'layout, at the manipulator arm. Delete payload_fire_map and pass '
+                    'the real board channels to fire(); use payload_channels:="9:torpedo_1, '
+                    '11:dropper_1" if you want names in the logs. Payload DISABLED.')
+                return
+            names = _parse_payload_channels(self._payload_channels, self.get_logger())
+            self._payload = SrotPayload(self.fc, log=self.get_logger(), names=names)
+            self._payload_thread = None
+            self.get_logger().info(
+                '[PAYLOAD] SROT: PCA9685 over MAVLink (DO_SET_SERVO), no separate USB '
+                'board. fire(N) addresses BOARD channel N; which channels are fireable '
+                'is read from the board (SERVO{n}_ROLE), never assumed.')
+            # Read every channel role off the board NOW, so a mission aimed at the
+            # arm is caught on the deck rather than mid-drop. This is also what
+            # tells the operator which channels are actually fireable today.
+            try:
+                self._payload.preflight_roles()
+            except Exception as exc:                # noqa: BLE001 -- advisory only
+                self.get_logger().warn(
+                    f'[PAYLOAD] could not read channel roles: {exc!r} -- fire() '
+                    f'FAILS CLOSED on any channel whose role it cannot read')
             return
         self._payload = PayloadDriver()
         _pl_port = None if self._payload_port in ('auto', '') else self._payload_port

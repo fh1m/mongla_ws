@@ -1043,19 +1043,20 @@ def main(argv: list[str] | None = None) -> int:
         section('I. Payload (SROT PCA9685 over MAVLink)')
         emit(PASS, 'payload transport', 'PCA9685 over MAVLink; no separate USB board')
         # The transport being up is NOT the payload working, and the old PASS on this
-        # line is what hid the dead fire() path: link up, line green, every fire()
-        # returning False because the map was empty.
+        # line is what hid the dead fire() path: link up, line green, nothing able
+        # to actuate.
         #
-        # But this is a NOTE, not a WARN, and the distinction is load-bearing:
-        # `payload_fire_map` is a ROS param on the RUNNING node, which a standalone
-        # preflight cannot read. An unconditional WARN would make `--strict` -- the
-        # hard pre-mission gate -- exit non-zero on EVERY srot run, for a condition
-        # nobody can clear from here. A gate that always fails is a gate people stop
-        # running. Say the true thing and point at where the answer actually is.
-        _line('NOTE', 'payload_fire_map',
-              'not readable from a preflight (it is a param on the running node). '
-              'EMPTY = torpedo/dropper CANNOT actuate -- confirm the manager logs '
-              '"[PAYLOAD] SROT: N channel(s) mapped", not "NO FIRE MAP"')
+        # NOTE, not WARN, and the distinction is load-bearing: whether a channel is
+        # fireable is a board ROLE read over a live MAVLink link by the running node,
+        # which a standalone preflight has no session for. An unconditional WARN would
+        # make `--strict` -- the hard pre-mission gate -- exit non-zero on EVERY srot
+        # run for a condition nobody can clear from here. A gate that always fails is
+        # a gate people stop running. Say the true thing and point at the answer.
+        _line('NOTE', 'payload channels',
+              'fire(N) addresses BOARD channel N directly (no map). Which channels '
+              'are fireable is read from the board at bring-up -- confirm the '
+              'manager logs "[PAYLOAD] board roles: FIREABLE (switch) [...]" and '
+              'that your intended channel is in that list')
     else:
         section('I. Payload board (CH340)')
         st, det = _check_payload()
@@ -1126,7 +1127,7 @@ def _print_launch_hint(srot: bool = False) -> None:
         # `start` whose defaults are right but whose profile talk is meaningless here.
         print('    ros2 launch duburi_manager bringup.launch.py   '
               '# srot + mavlink_ahrs are the defaults')
-        print('      add  payload_fire_map:="1:relay:0, 2:relay:1"  '
+        print('      fire(N) = BOARD channel N; see the [PAYLOAD] roles line'
               '# else fire() refuses')
         print('    ros2 run duburi_planner duburi arm')
         print('    ros2 run duburi_planner duburi move_forward --duration 5 --gain 40')

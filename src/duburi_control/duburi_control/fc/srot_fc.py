@@ -50,8 +50,10 @@ import time
 os.environ['MAVLINK20'] = '1'
 from pymavlink import mavutil                      # noqa: E402
 
-from .base import (FlightController, Telemetry, MoveResult,
-                   SUCCEEDED, PREEMPTED, FAILED, DENIED, TIMEOUT, ABORTED)
+from .base import (FlightController, Telemetry, MoveResult, FireResult,
+                   SUCCEEDED, PREEMPTED, FAILED, DENIED, TIMEOUT, ABORTED,
+                   FIRE_FIRED, FIRE_REJECTED_ARM, FIRE_DISABLED, FIRE_DENIED,
+                   FIRE_NO_ACK, FIRE_NOT_READY, FIRE_BUSY)
 from . import srot_protocol as sp
 
 
@@ -61,7 +63,11 @@ from . import srot_protocol as sp
 # move never started -- same outcome as FAILED for a caller, different reason text.
 _ACK_TO_CODE = {sp.ACK_ACCEPTED: SUCCEEDED, sp.ACK_CANCELLED: PREEMPTED,
                 sp.ACK_FAILED: FAILED, sp.ACK_DENIED: DENIED,
-                sp.ACK_TEMPORARILY_REJECTED: FAILED}
+                sp.ACK_TEMPORARILY_REJECTED: FAILED,
+                # UNSUPPORTED is a DENIED, not a FAILED: the board will never run
+                # this command, so "could not start" invites a retry that cannot
+                # ever succeed. It is how an older board answers a newer verb.
+                sp.ACK_UNSUPPORTED: DENIED}
 
 _ARMED_FLAG = mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
 
@@ -529,9 +535,51 @@ class SrotFC(FlightController):
 
     def set_relay(self, instance_0based: int, on: bool) -> None:
         """DO_SET_RELAY (181): switch PCA9685 MOSFET `instance_0based` (0-based ->
-        PCA ch PCA_RELAY_BASE_CH + instance) on/off. Raw firmware match."""
+        PCA ch PCA_RELAY_BASE_CH + instance) on/off. Raw firmware match.
+
+        NOT used by the payload path: this is instance-addressed rather than
+        channel-addressed, it shares its mapping with the joystick relay buttons,
+        and its `PCA_RELAY_BASE_CH + param1` arithmetic is only bounds-checked on
+        the RESULT, so a negative instance silently reaches channels 1-8 (fw
+        `mav_commands.cpp:487-488`). `DO_SET_SERVO` addresses every channel by its
+        own number whatever its role, which is the honest primitive. Kept because
+        it is a truthful wrapper of a real command.
+        """
         self._command_long(sp.CMD_DO_SET_RELAY, p1=float(int(instance_0based)),
                             p2=(1.0 if on else 0.0))
+
+    def set_servo_acked(self, channel_1based: int, us: int, timeout: float):
+        """`set_servo` + the board's COMMAND_ACK result, or None if it never answered.
+
+        The payload path needs to know what the board DID with the command, and the
+        only feedback the firmware offers is this ACK -- there is no actuator readback
+        of any kind. Separate from `set_servo` because the plain form is a raw
+        fire-and-forget wire wrapper and several callers want it that way.
+
+        ⚠ ON and OFF are the SAME command id (183) and pymavlink keeps one message
+        per msgid, so the ACK slot MUST be cleared immediately before each send or
+        this reads the previous pulse's answer. That is the same single-slot hazard
+        documented at length in `_named_value`.
+
+        ⚠ Clearing the cache is NOT sufficient on its own, and this was MEASURED:
+        probing the live board with back-to-back DO_SET_SERVO commands read the
+        PREVIOUS command's DENIED as the next command's answer, because clearing
+        pymavlink's cache does nothing about an ACK still sitting in the socket
+        buffer -- the reader parses it in a moment later and it lands in the slot
+        looking fresh. Filtering on the command id cannot separate them either:
+        ON and OFF are both 183. So also require the ACK to be NEWER than our send.
+        """
+        self._clear_ack()
+        t_send = time.time()          # wall clock: pymavlink stamps _timestamp with time.time()
+        self.set_servo(channel_1based, us)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            ack = self._cache('COMMAND_ACK')
+            if (ack is not None and ack.command == sp.CMD_DO_SET_SERVO
+                    and getattr(ack, '_timestamp', t_send) >= t_send):
+                return int(ack.result)
+            time.sleep(_POLL_S)
+        return None
 
     # ------------------------------------------------------------------ #
     #  move() -- the duburi-verb -> SROT_MOVE mapping + ACK state machine #
@@ -592,6 +640,12 @@ class SrotFC(FlightController):
             # Distinct from a plain FAILED: the board was busy, not unable. Say so,
             # because "retry" is the right response here and not for the others.
             return f'{verb}: board busy (state lock) -- not started, safe to retry'
+        if result == sp.ACK_UNSUPPORTED:
+            # The opposite advice to the line above, which is why they must not share
+            # a value: this firmware does not implement the verb and never will
+            # without a flash. Retrying is pointless.
+            return (f'{verb}: NOT SUPPORTED by this firmware -- do not retry; '
+                    f'flash a build that implements it')
         if code == FAILED:
             return f'{verb}: could not start' + (f' ({st})' if st else '')
         return f'{verb}: denied' + (f' ({st})' if st else '')
@@ -1058,170 +1112,70 @@ UNSUPPORTED_VERBS = frozenset({
 # ---------------------------------------------------------------------- #
 #  SrotPayload -- payload over MAVLink (replaces the obsolete USB ESP32)  #
 # ---------------------------------------------------------------------- #
-# Duburi channels 1/2 = torpedo, 3/4 = dropper. On SROT each maps to a PCA9685
-# action: a SERVO (pulse to a release µs, then back to rest) or a MOSFET/RELAY
-# (energise for a pulse, then off). The exact per-channel wiring is a hardware
-# fact -- set _FIRE_MAP from the operator's answer. Each entry is one of:
-#   ('servo', pca_channel_1based, fire_us, rest_us)
-#   ('relay', instance_0based)
-# fire() runs a BOUNDED pulse in try/finally so a payload is never left energised
-# (a MOSFET held on burns the solenoid coil; a servo held at end-stop stalls).
+# THERE IS NO HOST-SIDE CHANNEL MAP, DELIBERATELY.
+#
+# `fire(N)` addresses BOARD channel N -- literally `DO_SET_SERVO param1`, 1..16,
+# the same N that names `SERVO{N}_ROLE` and the same N printed by
+# `ros2 run duburi_manager connect`. The previous design routed a "duburi channel"
+# 1..4 through a `payload_fire_map` onto a PCA channel. That indirection bought
+# nothing and cost the two things that actually go wrong:
+#
+#   * a second numbering to keep in sync with the harness by hand, silently wrong
+#     the moment it drifts -- and "silently wrong" here means driving the
+#     manipulator arm during a torpedo shot; and
+#   * it invited a fixed "1-8 servo / 9-16 switch" folklore that is NOT a firmware
+#     rule. That split is only the DEFAULT of `SERVO{n}_ROLE`
+#     (fw `params.cpp:368-371`: `(c < 8) ? 1.0f : 2.0f`). Every channel is
+#     independently re-rolable from Bondor, so any host table encoding the split
+#     is wrong as soon as anyone uses the feature.
+#
+# Which channels are fireable is FIRMWARE state. So we ask the firmware
+# (`SERVO{n}_ROLE`) instead of holding an opinion about it.
 _FIRE_PULSE_S = 0.6   # > any PCA service tick; long enough for a servo to travel
-
-# EMPTY BY DESIGN -- fire() refuses until the real wiring is configured.
-#
-# There is no safe default here. Which PCA channel each of torpedo_1/2 and
-# dropper_1/2 is on, and whether each is a servo or a MOSFET, are hardware facts
-# this code cannot infer, and guessing them means firing the wrong actuator on a
-# live vehicle. A loud "not configured" beats a silent mis-actuation.
-#
-# Set it from the operator's wiring via `SrotFC`'s `fire_map` argument (the
-# manager plumbs the `payload_fire_map` ROS param through), e.g.:
-#     {1: ('relay', 0), 2: ('relay', 1), 3: ('servo', 3, 2000, 1000)}
-#
-# Round 3 (fw R15) made every channel reachable by its own number whatever its
-# role: on a role-2 (MOSFET/switch) channel DO_SET_SERVO now treats the pulse
-# width as a level, >=1500 us = ON. So a ('servo', ch, 2000, 1000) entry does
-# drive a MOSFET correctly -- but only once SERVOn_ROLE is actually set to 2.
-# Prefer ('relay', n) for channels 9-16, which map as PCA_RELAY_BASE_CH + n.
-_FIRE_MAP: dict = {}
-
-
-def parse_fire_map(spec, log=None) -> dict:
-    """Parse the `payload_fire_map` ROS param string into the `_FIRE_MAP` shape.
-
-    PREFERRED grammar (comma-separated, whitespace ignored):
-
-        <duburi_channel>:<pca_channel>        e.g. "1:9, 2:10, 3:11, 4:12"
-
-    `duburi_channel` is what `fire()` is called with (1/2 torpedo, 3/4 dropper);
-    `pca_channel` is the 1-based PCA9685 channel (so PCA ch 8 is `9`).
-
-    THAT IS ALL THE HOST NEEDS. Whether a channel is a PWM servo or a MOSFET switch
-    is a FIRMWARE parameter (`SERVO{n}_ROLE`, set in Bondor), and `fire()` reads it
-    from the board and refuses anything that is not a switch. Encoding the role here
-    too would duplicate board state and go stale silently on a re-role.
-
-    LEGACY forms, still parsed so existing launch files keep working:
-
-        <channel>:relay:<instance>
-        <channel>:servo:<pca_ch>[:<fire_us>:<rest_us>]
-
-    `channel` is the duburi payload channel `fire()` is called with (1/2 torpedo,
-    3/4 dropper). `instance` is the 0-based DO_SET_RELAY instance, which the board
-    maps to PCA channel ``PCA_RELAY_BASE_CH + instance``. `pca_ch` is the 1-based
-    DO_SET_SERVO channel. Servo µs default to SERVO_MAX_US / SERVO_MIN_US.
-
-    A blank spec returns {} and `fire()` keeps refusing loudly -- correct when
-    nobody has stated the wiring. A MALFORMED entry is skipped with an error
-    rather than aborting the whole map: a typo in one channel must not silently
-    disarm the other three.
-    """
-    out: dict = {}
-    if not spec:
-        return out
-
-    def _bad(entry, why):
-        if log:
-            log.error(f'[PAYLOAD] payload_fire_map: ignoring {entry!r} -- {why}')
-
-    for raw in str(spec).split(','):
-        entry = raw.strip()
-        if not entry:
-            continue
-        parts = [p.strip() for p in entry.split(':')]
-
-        # PREFERRED FORM: "<duburi_channel>:<pca_channel>" -- plain numbers.
-        #
-        # The old forms made the HOST state whether a channel is a relay or a servo,
-        # which duplicates firmware state (`SERVO{n}_ROLE`, set in Bondor) and goes
-        # stale silently the moment a channel is re-roled. The board already routes by
-        # configured role, and a role-2 channel treats DO_SET_SERVO's µs as a level, so
-        # the channel NUMBER is the only thing that needs to cross repos.
-        if len(parts) == 2:
-            try:
-                channel, pca = int(parts[0]), int(parts[1])
-            except ValueError:
-                _bad(entry, 'expected <duburi_channel>:<pca_channel>, both integers')
-                continue
-            if channel <= 0:
-                _bad(entry, 'payload channel must be >= 1')
-                continue
-            if not 1 <= pca <= sp.PCA9685_NUM_CH:
-                _bad(entry, f'PCA channel {pca} out of range (1..{sp.PCA9685_NUM_CH})')
-                continue
-            # Stored in the 'servo' shape because that is what addresses a channel by
-            # its own number; the board turns µs into a level for a switch channel.
-            # fire() still refuses unless the BOARD says the role is SWITCH.
-            out[channel] = ('servo', pca, sp.PCA_SWITCH_ON_US, sp.PCA_SWITCH_OFF_US)
-            continue
-
-        if len(parts) < 3:
-            _bad(entry, 'expected <channel>:<pca_channel>, or the legacy '
-                        '<channel>:relay:<instance> / <channel>:servo:<ch>[:us:us]')
-            continue
-        try:
-            channel = int(parts[0])
-            kind = parts[1].lower()
-            target = int(parts[2])
-        except ValueError:
-            _bad(entry, 'channel / instance / pca_ch must be integers')
-            continue
-        if channel <= 0:
-            _bad(entry, 'payload channel must be >= 1')
-            continue
-
-        if kind == 'relay':
-            n_relay = sp.PCA9685_NUM_CH - sp.PCA_RELAY_BASE_CH
-            if not 0 <= target < n_relay:
-                _bad(entry, f'relay instance {target} out of range (0..{n_relay - 1})')
-                continue
-            out[channel] = ('relay', target)
-        elif kind == 'servo':
-            if not 1 <= target <= sp.PCA9685_NUM_CH:
-                _bad(entry, f'servo channel {target} out of range (1..{sp.PCA9685_NUM_CH})')
-                continue
-            fire_us, rest_us = sp.SERVO_MAX_US, sp.SERVO_MIN_US
-            if len(parts) >= 5:
-                try:
-                    fire_us, rest_us = int(parts[3]), int(parts[4])
-                except ValueError:
-                    _bad(entry, 'fire_us / rest_us must be integers')
-                    continue
-            if not all(sp.SERVO_MIN_US <= v <= sp.SERVO_MAX_US for v in (fire_us, rest_us)):
-                _bad(entry, f'us values must be {sp.SERVO_MIN_US}..{sp.SERVO_MAX_US}')
-                continue
-            out[channel] = ('servo', target, fire_us, rest_us)
-        else:
-            _bad(entry, f"unknown kind {kind!r} -- expected 'relay' or 'servo'")
-    return out
+_FIRE_ACK_S   = 0.35  # ACK budget. MUST stay < _FIRE_PULSE_S -- see fire().
 
 
 class SrotPayload:
     """Payload driver for the SROT backend: the board's PCA9685 expander over
     MAVLink. Duck-types the USB `PayloadDriver` surface (`is_ready`, `fire`,
     `port_path`) so the Duburi facade is unchanged; there is NO separate USB
-    ESP32 anymore, so the old CH340 auto-detect must not run on srot."""
+    ESP32 anymore, so the old CH340 auto-detect must not run on srot.
 
-    def __init__(self, fc, log=None, fire_map=None):
+    `names` is cosmetic only -- {board_channel: label} used in logs and preflight.
+    It NEVER routes: `fire(N)` always addresses board channel N, so a stale label
+    can mislabel a log line but can never send a shot to the wrong channel.
+    """
+
+    def __init__(self, fc, log=None, names=None):
         self._fc = fc
         self._log = log
-        self._map = dict(fire_map if fire_map is not None else _FIRE_MAP)
-        # PCA channel (1-based) -> role int, read from the board and cached.
+        self._names = dict(names or {})
+        # Board channel (1-based) -> role int, read from the board and cached.
         self._roles: dict = {}
+        # fire() holds a channel energised for _FIRE_PULSE_S and de-energises in a
+        # finally. Two overlapping fires would let B's ON land inside A's pulse and
+        # A's finally then de-energise while B still believes it is firing -- a
+        # truncated shot, from a race, with both callers reporting success. The
+        # vision path already ASSUMED this lock existed (vision_verbs.py) when only
+        # the legacy USB driver had one.
+        self._fire_lock = threading.Lock()
 
-    def channel_role(self, pca_ch_1based: int, refresh: bool = False):
-        """The board's configured role for a PCA channel, or None if unreadable.
+    def label(self, channel: int) -> str:
+        return self._names.get(int(channel), '')
+
+    def channel_role(self, channel: int, refresh: bool = False):
+        """The board's configured role for a channel, or None if unreadable.
 
         The role is FIRMWARE state (`SERVO{n}_ROLE`, set in Bondor), not ours. We read
         it rather than keeping a host-side wiring table because a host copy goes stale
         SILENTLY the moment someone re-roles a channel on the board -- and the failure
         mode of a stale copy is driving the manipulator arm during a payload drop.
 
-        Cached, because a param round-trip costs ~50 ms and `fire()` is called at a
-        moment when latency matters. `refresh=True` re-reads.
+        Cached, because a param round-trip costs ~50 ms and `fire()` is called at the
+        moment a mission is glued to a target. `refresh=True` re-reads; `preflight_roles`
+        does that once at bring-up.
         """
-        ch = int(pca_ch_1based)
+        ch = int(channel)
         if refresh or ch not in self._roles:
             val = self._fc.get_param(sp.PCA_ROLE_PARAM_FMT.format(ch))
             if val is None:
@@ -1229,34 +1183,58 @@ class SrotPayload:
             self._roles[ch] = int(val)
         return self._roles.get(ch)
 
-    def preflight_roles(self):
-        """Read + log the role of every MAPPED channel. Called once at bring-up.
+    def preflight_roles(self, channels=None):
+        """Read + log every channel role at bring-up, so a mis-roled payload is found
+        on the deck rather than at the moment a mission tries to drop a marker.
 
-        This is where a mis-mapped payload should be caught -- on the deck, at startup,
-        not at the moment a mission tries to drop a marker.
+        Defaults to ALL 16 channels: with no host-side map there is no smaller set to
+        consult, and the full read is the thing that retires the "1-8 servo / 9-16
+        switch" folklore by printing what the board ACTUALLY has.
 
         ⚠ REQUIRES THE READER THREAD TO BE RUNNING. `get_param` reads the pymavlink
         message cache and never calls `recv_match()` itself (the stack's threading
         rule), so with no reader every role comes back None and every channel reads
         UNREADABLE -- indistinguishable from a mis-roled board. `auv_manager_node`
-        starts the reader BEFORE `_preflight_payload` for exactly this reason; if that
-        order is ever changed, this reports a payload that does not exist.
+        starts the reader BEFORE `_preflight_payload` for exactly this reason.
         """
+        if channels is None:
+            channels = range(1, sp.PCA9685_NUM_CH + 1)
         report = {}
-        for duburi_ch, spec in sorted(self._map.items()):
-            pca = spec[1] if spec[0] == 'servo' else sp.PCA_RELAY_BASE_CH + spec[1] + 1
-            role = self.channel_role(pca, refresh=True)
-            report[duburi_ch] = (pca, role)
-            if self._log is None:
-                continue
-            name = sp.PCA_ROLE_NAMES.get(role, f'UNREADABLE ({role})')
-            if role == sp.PCA_ROLE_SWITCH:
-                self._log.info(f'[PAYLOAD] channel {duburi_ch} -> PCA {pca}: {name}')
-            else:
+        for ch in channels:
+            # Retry once. This is 16 sequential param round-trips, and on a lossy
+            # link a single dropped PARAM_VALUE reports a perfectly healthy channel
+            # as UNREADABLE -- which reads exactly like a mis-roled board. MEASURED
+            # over the BlueOS/Bridget bridge (~8% frame loss): one channel of the 16
+            # came back unreadable on the first pass and fine on a retry. Only here:
+            # `fire()` must not spend a second round-trip at the moment a mission is
+            # glued to a target.
+            role = self.channel_role(ch, refresh=True)
+            if role is None:
+                role = self.channel_role(ch, refresh=True)
+            report[int(ch)] = role
+        if self._log is not None:
+            fireable = sorted(c for c, r in report.items() if r == sp.PCA_ROLE_SWITCH)
+            arm = sorted(c for c, r in report.items() if r == sp.PCA_ROLE_SERVO)
+            unread = sorted(c for c, r in report.items() if r is None)
+            self._log.info(
+                f'[PAYLOAD] board roles: FIREABLE (switch) {fireable or "none"} | '
+                f'arm/PWM {arm or "none"} | unreadable {unread or "none"}')
+            for ch in fireable:
+                lbl = self._names.get(ch)
+                self._log.info(f'[PAYLOAD]   ch {ch}: SWITCH -- fire({ch}) will actuate'
+                               + (f" ({lbl})" if lbl else ''))
+            for ch, lbl in sorted(self._names.items()):
+                if report.get(ch) != sp.PCA_ROLE_SWITCH:
+                    role = report.get(ch)
+                    name = sp.PCA_ROLE_NAMES.get(role, 'UNREADABLE')
+                    self._log.error(
+                        f'[PAYLOAD]   ch {ch} ({lbl}) is named in payload_channels but '
+                        f'its board role is {name} -- fire({ch}) will REFUSE. '
+                        f'Set SERVO{ch}_ROLE=2 in Bondor, or fix the name list.')
+            if unread:
                 self._log.error(
-                    f'[PAYLOAD] channel {duburi_ch} -> PCA {pca}: {name} -- fire() will '
-                    f'REFUSE. duburi_ws drives SWITCH channels only; PWM channels are '
-                    f'the on-board arm. Re-role it in Bondor or fix payload_fire_map.')
+                    f'[PAYLOAD] roles unreadable on {unread} -- fire() FAILS CLOSED on '
+                    f'those. Is the reader thread up and the link healthy?')
         return report
 
     @property
@@ -1266,67 +1244,99 @@ class SrotPayload:
 
     @property
     def port_path(self) -> str:
-        return 'SROT MAVLink (PCA9685 DO_SET_SERVO/RELAY)'
+        return 'SROT MAVLink (PCA9685 DO_SET_SERVO)'
 
-    def fire(self, channel: int) -> bool:
-        """Actuate the payload for `channel` (1/2 torpedo, 3/4 dropper) as a bounded
-        pulse. Returns True on a mapped, actuated channel; False (no-op) if unmapped."""
-        spec = self._map.get(int(channel))
-        if spec is None:
-            if self._log:
-                what = ('the payload fire map is EMPTY' if not self._map
-                        else f'channel {channel} is not in the fire map')
-                self._log.error(
-                    f'[PAYLOAD] SROT: NOT FIRED -- {what}. Set the `payload_fire_map` '
-                    f'ROS param from the real PCA9685 wiring, e.g. '
-                    f'"1:relay:0, 2:relay:1, 3:servo:3". Refusing to guess.')
-            return False
-        # ---- ROLE GATE ------------------------------------------------- #
-        # duburi_ws drives HIGH/LOW switch channels only. PWM/servo channels are the
-        # on-board manipulator arm: firing one from a mission would move the arm
-        # mid-drop. The role lives on the board, so ask the board.
+    def fire(self, channel: int) -> FireResult:
+        """Activate BOARD channel `channel` (1..16) as a bounded pulse.
+
+        `channel` is `DO_SET_SERVO param1` -- the same number as `SERVO{n}_ROLE`.
+        There is no mapping step and nothing is looked up to decide WHERE to send.
+
+        The only decision made here is WHETHER to send, and it is made from the
+        board's own role config, not from a host opinion.
+        """
+        ch = int(channel)
+        if ch < 1 or ch > sp.PCA9685_NUM_CH:
+            return FireResult(FIRE_DENIED, ch,
+                              f'channel {ch} out of range 1..{sp.PCA9685_NUM_CH}')
+        if not self.is_ready:
+            return FireResult(FIRE_NOT_READY, ch, 'MAVLink link is down')
+
+        # ---- ROLE GATE -- why the host still decides -------------------- #
+        # The user-facing contract is "the board decides and tells us". The firmware
+        # does NOT do that yet: DO_SET_SERVO on a role-1 channel WRITES servo_us and
+        # returns ACCEPTED (fw `mav_commands.cpp:475-481`) -- i.e. it silently moves
+        # the manipulator arm and reports success. Until the board gains a
+        # role-enforcing payload command, refusing here is the only thing standing
+        # between a mission `fire()` and the arm.
         #
-        # Fails CLOSED on an unreadable role. A payload actuation is not urgent enough
-        # to justify guessing, and "the param read timed out" is not evidence that the
-        # channel is safe to drive.
-        pca = spec[1] if spec[0] == 'servo' else sp.PCA_RELAY_BASE_CH + spec[1] + 1
-        role = self.channel_role(pca)
+        # Fails CLOSED on an unreadable role: "the param read timed out" is not
+        # evidence that a channel is safe to drive.
+        role = self.channel_role(ch)
+        if role is None:
+            return FireResult(FIRE_NOT_READY, ch,
+                              f'SERVO{ch}_ROLE unreadable -- refusing to guess')
+        if role == sp.PCA_ROLE_SERVO:
+            return FireResult(
+                FIRE_REJECTED_ARM, ch,
+                f'channel {ch} is a PWM/SERVO channel (the on-board arm). '
+                f'duburi_ws drives SWITCH channels only. Set SERVO{ch}_ROLE=2 in '
+                f'Bondor if this really is a payload channel.')
         if role != sp.PCA_ROLE_SWITCH:
-            if self._log:
-                name = (sp.PCA_ROLE_NAMES.get(role) if role is not None
-                        else 'UNREADABLE (no PARAM_VALUE)')
-                self._log.error(
-                    f'[PAYLOAD] SROT: NOT FIRED -- channel {channel} maps to PCA {pca}, '
-                    f'whose board role is {name}. duburi_ws drives SWITCH '
-                    f'(MOSFET/relay) channels only; PWM channels belong to the on-board '
-                    f'arm. Set SERVO{pca}_ROLE=2 in Bondor, or point payload_fire_map at '
-                    f'a switch channel.')
-            return False
+            return FireResult(
+                FIRE_DISABLED, ch,
+                f'channel {ch} role is {role} (disabled) -- driving it would be a '
+                f'silent no-op on the board.')
 
-        kind = spec[0]
+        # ---- ACTUATE ---------------------------------------------------- #
+        # Non-blocking: a queued shot that outlives its align scope is worse than a
+        # refused one, because it fires after the hull has moved off target.
+        if not self._fire_lock.acquire(blocking=False):
+            return FireResult(FIRE_BUSY, ch, 'another fire is mid-pulse')
         try:
-            if kind == 'servo':
-                _, ch1, fire_us, rest_us = spec
-                self._fc.set_servo(ch1, fire_us)
-                time.sleep(_FIRE_PULSE_S)
-                return True
-            if kind == 'relay':
-                _, inst = spec
-                self._fc.set_relay(inst, True)
-                time.sleep(_FIRE_PULSE_S)
-                return True
-            return False
+            t0 = time.monotonic()
+            ack = self._fc.set_servo_acked(ch, sp.PCA_SWITCH_ON_US, _FIRE_ACK_S)
+            # The pulse is timed from the SEND, not from the ACK -- otherwise the ACK
+            # wait is added to the time the solenoid coil is energised.
+            remain = _FIRE_PULSE_S - (time.monotonic() - t0)
+            if remain > 0:
+                time.sleep(remain)
+            return self._ack_to_result(ch, ack)
         finally:
-            # Always return to rest / de-energise -- never leave a solenoid on or a
-            # servo stalled, even if the sleep is interrupted.
+            # Always de-energise. A MOSFET held on burns the solenoid coil, and NO
+            # board-side failsafe clears it: leak, disarm and GCS-loss all leave an
+            # energised channel energised (only a reboot clears AuxState).
             try:
-                if kind == 'servo':
-                    self._fc.set_servo(spec[1], spec[3])
-                elif kind == 'relay':
-                    self._fc.set_relay(spec[1], False)
+                off = self._fc.set_servo_acked(ch, sp.PCA_SWITCH_OFF_US, _FIRE_ACK_S)
+                if off is None and self._log:
+                    self._log.error(
+                        f'[PAYLOAD] ch {ch}: NO ACK for the OFF command. The board '
+                        f'latches switch outputs and no failsafe clears them -- '
+                        f'assume the channel may still be ENERGISED.')
             except Exception as exc:   # noqa: BLE001 -- best-effort de-energise
                 if self._log:
-                    self._log.error(f'[PAYLOAD] SROT: reset raised {exc!r}')
+                    self._log.error(f'[PAYLOAD] ch {ch}: de-energise raised {exc!r}')
+            self._fire_lock.release()
+
+    def _ack_to_result(self, ch: int, ack) -> FireResult:
+        """Map the board's COMMAND_ACK for the ON command onto a FireResult."""
+        lbl = self._names.get(ch)
+        who = f'channel {ch}' + (f' ({lbl})' if lbl else '')
+        if ack is None:
+            return FireResult(FIRE_NO_ACK, ch,
+                              f'{who}: no COMMAND_ACK within {_FIRE_ACK_S:.2f}s -- '
+                              f'outcome UNKNOWN, assume it did not fire')
+        if ack == sp.ACK_ACCEPTED:
+            return FireResult(FIRE_FIRED, ch, f'{who}: board accepted the activation')
+        if ack == sp.ACK_TEMPORARILY_REJECTED:
+            # Board state lock was busy (fw `mav_commands.cpp:464`) -- not started,
+            # and unlike the other failures this one is safe to retry immediately.
+            return FireResult(FIRE_BUSY, ch,
+                              f'{who}: board busy (state lock) -- not fired, safe to retry')
+        name = sp.ACK_NAMES.get(ack, str(ack))
+        st = self._fc._statustext() if hasattr(self._fc, '_statustext') else ''
+        return FireResult(FIRE_DENIED, ch,
+                          f'{who}: board answered {name}' + (f' ({st})' if st else ''))
 
     def disconnect(self) -> None:
         pass

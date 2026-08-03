@@ -81,6 +81,7 @@ from contextlib import contextmanager
 from duburi_interfaces.action import Move
 
 from .vision_verbs import VisionVerbs
+from .fc.base      import FireResult, FIRE_FIRED, FIRE_DENIED, FIRE_NOT_READY
 from .errors        import ModeChangeError, NotArmedError
 from .heading_lock  import HeadingLock
 from .motion_writers import make_writers, _interruptible_sleep
@@ -361,10 +362,17 @@ class Duburi(VisionVerbs):
     # ================================================================== #
 
     def fire(self, fire_channel: float):
-        """Fire ESP32 payload channel (1/2 = torpedo, 3/4 = dropper).
+        """Activate payload BOARD channel `fire_channel`.
+
+        On the SROT backend the number is the board's own channel (1..16) --
+        `DO_SET_SERVO param1`, the same n as `SERVO{n}_ROLE`. There is no host-side
+        mapping table: whether that channel is a payload switch or the on-board arm
+        is read from the board, and a channel the board calls PWM/arm is refused.
 
         ``fire_channel`` is float from Move.Goal (0.0 = unset/stub).
-        Returns a command result so the generic COMMANDS dispatcher works.
+        Returns a command result so the generic COMMANDS dispatcher works; the
+        outcome code lands in ``final_value`` so a mission can tell "fired" from
+        "that channel is the arm" from "the link is down".
 
         Also callable internally as ``self._fire_payload(channel)`` for a
         mission's "align then fire" pattern (no command scope needed since
@@ -372,16 +380,32 @@ class Duburi(VisionVerbs):
         """
         ch = int(fire_channel)
         with self._command_scope('fire'):
-            ok = self._fire_payload(ch)
-        _name = {1: 'torpedo_1', 2: 'torpedo_2', 3: 'dropper_1', 4: 'dropper_2'}.get(ch, '?')
-        return self._make_result(ok, f'fire: ch={ch} ({_name}) {"FIRED" if ok else "stub/fail"}')
+            res = self._fire_payload(ch)
+        label = ''
+        if self._payload is not None and hasattr(self._payload, 'label'):
+            label = self._payload.label(ch)
+        who = f'ch={ch}' + (f' ({label})' if label else '')
+        return self._make_result(res.ok, f'fire: {who} {res.code_name}: {res.reason}',
+                                 final_value=float(res.code))
 
-    def _fire_payload(self, channel: int) -> bool:
-        """Raw payload fire — no command scope. Use inside vision verbs."""
+    def _fire_payload(self, channel: int):
+        """Raw payload fire -> FireResult. No command scope; use inside vision verbs.
+
+        Always returns a FireResult, never a bool, so every caller can say WHY a shot
+        did not happen. `FireResult.__bool__` is `.ok`, so pre-existing truthiness
+        checks keep working.
+        """
         if self._payload is None or not self._payload.is_ready:
             self.log.warning(f'[FIRE ] payload not ready ch={channel} -- stub only')
-            return False
-        return self._payload.fire(channel)
+            return FireResult(FIRE_NOT_READY, int(channel),
+                              'payload driver absent or link down')
+        res = self._payload.fire(channel)
+        # The legacy USB PayloadDriver still returns a bare bool; normalise so the
+        # two backends present one type to everything above this line.
+        if isinstance(res, bool):
+            return FireResult(FIRE_FIRED if res else FIRE_DENIED, int(channel),
+                              'legacy USB payload driver')
+        return res
 
     @property
     def payload_ready(self) -> bool:

@@ -82,7 +82,7 @@ developed against an ArduSub SITL + Gazebo loop and field-tested on **Duburi**, 
   pixel-native, `gain` = max-speed cap, misses non-fatal, search/recovery via a `fallback`.
 - **✅ YASMIN FSM layer:** `state_machines/` with `VehicleProfile` dual-vehicle auto-detect —
   one plan builder, DVL-distance for Duburi 4.5 and timed for Dubomini 2.0.
-- **✅ ESP32-serial payload:** `PayloadDriver` + `fire` verb (1/2=torpedo, 3/4=dropper).
+- **✅ Payload:** `fire` verb. On srot it is the board's PCA9685 over MAVLink and the argument is the **board channel** (1..16); the board's `SERVO{n}_ROLE` decides whether it fires. Legacy Pixhawk path keeps `PayloadDriver` (ESP32 serial).
 - **✅ Competition missions:** 5 task chunks + combinator + FSM launchers. Gate model
   (`gate_rescue_repair`) ships today; slalom / bin / torpedo `.pt` pending (YAMLs committed).
 - **🟦 Phase 2:** Dubomini control path · inter-vehicle comms (IVC) · stepper grabber ·
@@ -311,7 +311,8 @@ parameter set in Bondor** (`SERVO{n}_ROLE`, where `n` = PCA channel + 1):
 So the fire map is just numbers — `<duburi_channel>:<pca_channel>`:
 
 ```bash
-ros2 launch duburi_manager bringup.launch.py payload_fire_map:="1:9, 2:10, 3:11, 4:12"
+ros2 launch duburi_manager bringup.launch.py payload_channels:="9:torpedo_1, 11:dropper_1"
+#   ^ labels for the log ONLY -- fire(N) always addresses BOARD channel N
 #                                              torpedo 1/2 ^^^^  ^^^^^  dropper 3/4
 ```
 
@@ -428,7 +429,8 @@ ls /dev/video*                                 # confirm camera device indices
 ros2 launch duburi_manager bringup.launch.py
 # expect: MONGLA · DUBURI AUV MANAGER banner, [NET] flight_controller = srot,
 #         a [STATE] line within ~2 s, and [SROT] firmware behaviour rev 3
-# payload: add  payload_fire_map:="1:relay:0, 2:relay:1, 3:servo:3"  (empty = cannot fire)
+# payload: fire(N) = BOARD channel N. Which channels are fireable is read from the
+#   board at bring-up -- see the "[PAYLOAD] board roles: FIREABLE (switch) [...]" line.
 ```
 *(Pixhawk backend: `bringup.launch.py flight_controller:=pixhawk mode:=pool yaw_source:=bno085_dvl`.)*
 
@@ -513,7 +515,7 @@ Full flags: `ros2 run duburi_planner duburi <cmd> --help`.
 | `move_lateral_dist` | DVL closed-loop lateral (+ right, − left) | `duburi move_lateral_dist --distance_m 1.0 --gain 36` |
 | `vision_align` | Centre target on lat/yaw/depth at signed px offsets | `duburi vision_align --target_class gate --axes yaw,lat --duration 15` |
 | `vision_move` | Drive forward until bbox fills `fwd_fill`% | `duburi vision_move --target_class gate --fwd_fill 80 --mode area` |
-| `fire` | Fire ESP32 payload channel (1/2=torpedo, 3/4=dropper) | `duburi fire --fire_channel 3` |
+| `fire` | Activate payload BOARD channel 1..16 (board refuses PWM/arm channels) | `duburi fire --fire_channel 9` |
 | `stop` / `pause` | Active RC-neutral hold / release override N s | `duburi pause --duration 2` |
 | `mission_reset` | Stop heading lock + clear abort + RC neutral | `duburi mission_reset` |
 | `surface` | Emergency ascend to 0 m (bypasses the busy gate) | `duburi surface` |
@@ -583,7 +585,7 @@ Each blocks until complete. `gain` is % thrust (0–100); `settle` adds a post-m
 | `duburi.lock_heading(degrees=0, timeout=300)` / `duburi.release_heading()` | Background Ch4 yaw-hold (0 = current heading) |
 | `duburi.move_forward_dist(metres, gain=60, tolerance=0.1)` | **DVL** closed-loop (also `move_back_dist` / `move_lateral_dist`, lock stays active) |
 | `duburi.style_roll(gain=60, flips=1, headroom=1.0)` / `duburi.style_yaw(flips=1, deg_per_step=90)` | Style 360° manoeuvres |
-| `duburi.fire(channel)` | ESP32 payload (1/2=torpedo, 3/4=dropper); `duburi.payload_ready` to check |
+| `duburi.fire(channel)` | Payload BOARD channel 1..16 (no host map; board role decides); `duburi.payload_ready` to check |
 | `duburi.pause(seconds)` / `duburi.stop()` / `duburi.surface()` | Release override / active hold / emergency ascend |
 | `duburi.head()` | Live heading (float) at call time |
 | `duburi.countdown(seconds=10)` | Tether-removal countdown banner |

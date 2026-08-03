@@ -63,6 +63,59 @@ class MoveResult:
         return _CODE_NAME.get(self.code, str(self.code))
 
 
+# ---- fire() outcomes -------------------------------------------------- #
+# A payload fire has more interesting failure modes than a bool can carry, and the
+# one that matters most is not "it didn't work" but WHICH kind of no: a channel the
+# board has configured as the on-board ARM must read differently from a dead link,
+# because the first is a mission-authoring mistake and the second is a comms fault.
+FIRE_FIRED       = 0   # board accepted the activation -- see FireResult docstring
+FIRE_REJECTED_ARM = 1  # channel role is PWM/servo: it drives the arm, not a payload
+FIRE_DISABLED    = 2   # channel role is 0 -- driving it would be a silent no-op
+FIRE_DENIED      = 3   # board answered DENIED/FAILED (channel out of range, non-finite)
+FIRE_NO_ACK      = 4   # no COMMAND_ACK inside the budget -- outcome UNKNOWN
+FIRE_NOT_READY   = 5   # link down, no payload driver, or the role could not be read
+FIRE_BUSY        = 6   # another fire is mid-pulse, or the board's state lock was busy
+
+_FIRE_CODE_NAME = {FIRE_FIRED: 'FIRED', FIRE_REJECTED_ARM: 'REJECTED_ARM_CHANNEL',
+                   FIRE_DISABLED: 'DISABLED_CHANNEL', FIRE_DENIED: 'DENIED',
+                   FIRE_NO_ACK: 'NO_ACK', FIRE_NOT_READY: 'NOT_READY',
+                   FIRE_BUSY: 'BUSY'}
+
+
+@dataclass
+class FireResult:
+    """Outcome of a payload `fire(channel)`.
+
+    ``channel`` is the BOARD channel that was addressed (MAVLink `DO_SET_SERVO`
+    param1, 1-based) -- not an index into any host-side table. There is no table.
+
+    ⚠ ``FIRED`` MEANS THE BOARD ACCEPTED THE COMMAND, NOT THAT A SOLENOID MOVED.
+    The firmware streams no actuator readback at all (no `SERVO_OUTPUT_RAW`, no
+    `ACTUATOR_OUTPUT_STATUS`; `g_state.aux` is never telemetered) and its PCA9685
+    driver sets its health flag unconditionally with no I2C probe, so a physically
+    disconnected expander ACKs exactly like a working one. This is the strongest
+    statement the wire supports; anything more confident would be a lie a mission
+    could branch on.
+
+    ``ok`` is True only on FIRED, so the pre-existing ``if payload.fire(...)``
+    call sites keep their meaning.
+    """
+    code:    int
+    channel: int = 0
+    reason:  str = ''
+
+    @property
+    def ok(self) -> bool:
+        return self.code == FIRE_FIRED
+
+    @property
+    def code_name(self) -> str:
+        return _FIRE_CODE_NAME.get(self.code, str(self.code))
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+
 @dataclass
 class Telemetry:
     """A backend-agnostic vehicle snapshot -> `/duburi/state` (`DuburiState`).

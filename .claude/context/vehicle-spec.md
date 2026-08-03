@@ -41,7 +41,7 @@ file mirrors only the parts that affect the software stack.
 > must not be scanned for, since it was the same CH340 VID/PID as the board itself and
 > would steal the serial port. Driver: `SrotPayload` in `fc/srot_fc.py`, which fires a
 > **bounded pulse in try/finally** (never leaves a solenoid energised) and **refuses until
-> the `payload_fire_map` ROS param is set** rather than guessing the wiring.
+> the board reports that channel's `SERVO{n}_ROLE` as SWITCH** rather than guessing the wiring.
 > So the "no `MAV_CMD_DO_SET_SERVO` path" claim below is TRUE for Pixhawk and FALSE for SROT.
 
 Torpedo and dropper are actuated **NOT** through the Pixhawk — there is no
@@ -50,7 +50,8 @@ They are driven from an **ESP32-C3 over USB serial** (separate from the
 BNO085 board): the Python surface is `duburi.fire(n)` →
 `duburi_control/payload.py` `PayloadDriver`, which writes a single ASCII
 digit (`b'1'`..`b'4'`) over USB CDC; the ESP32 firmware pulls the matching
-GPIO to fire the relay/solenoid. Channels: 1/2 = torpedo, 3/4 = dropper.
+GPIO to fire the relay/solenoid. On **srot** there is no ESP32: `fire(N)` is the
+board's own PCA9685 channel N (1..16), and the board's `SERVO{n}_ROLE` decides.
 The board is auto-detected at manager startup by USB VID/PID (CH340), and
 `duburi.payload_ready` reports connection state. See `known-issues.md` #4
 and the `project_payload_actuation` memory. (Stepper grabber needs an
