@@ -84,21 +84,61 @@ Pass the **same endpoint to all three** — `mode` still does not apply on srot.
 
 | | direct USB-C serial | via BlueOS/Bridget |
 |---|---|---|
-| `BAD_DATA` | **zero in 15 s** (bench 2026-08-02) | **~10–23 %** of frames |
-| command round-trip | — | **11/12** (`AUTOPILOT_VERSION`) |
+| `BAD_DATA` | **zero in 15 s** (bench 2026-08-02) | **8.0 / 8.7 / 9.1 %** — three fixed-rate 12 s runs |
+| command round-trip | — | **11/12** (`AUTOPILOT_VERSION`), 8 ms avg |
 
-**Mechanism, measured:** Bridget chunks the serial stream at arbitrary byte offsets —
-only **77 % of datagrams begin on a message boundary** (`0xFD`), so ~23 % start
-mid-message, which matches the loss almost exactly. Reassembling the datagrams into one
-continuous stream and re-parsing recovers most of it (20 % → 7.8 %, and most of that
-residue is the known-undecodable `ESC_STATUS(291)`), which says the **bytes are largely
-intact and it is a framing problem, not a wire problem**. It is *not* saturation: dropping
-the telemetry rates did not reduce it (the link runs at ~73 % of 115200 either way).
+**What is being lost is real telemetry, not the known-undecodable message.** Decode the
+`BAD_DATA` payloads and their msgids are **251 `NAMED_VALUE_FLOAT`, 74 `VFR_HUD`, 30
+`ATTITUDE`, 147 `BATTERY_STATUS`, 1 `SYS_STATUS`**. `ESC_STATUS(291)` is *not* in there —
+pymavlink surfaces it separately as `UNKNOWN_291` (~225/run) and it never enters the
+`BAD_DATA` count. Worth stating explicitly because "it's just the 291 we already know
+about" is the obvious wrong reading of this number, and it is wrong.
+
+> ⚠ Measure `BAD_DATA` at **fixed** message rates. An earlier pass that changed the ESC
+> rate mid-measurement produced a meaningless 9.6→17.1→23.2 % spread on an unchanged link.
+
+**Mechanism:** Bridget chunks the serial stream at arbitrary byte offsets — only **77 % of
+datagrams begin on a message boundary** (`0xFD`), and only 84 of 296 `BAD_DATA` events
+start with `0xFD`; the rest begin mid-message. Reassembling the datagrams into one
+continuous stream and re-parsing recovers most of it, so the **bytes are largely intact
+and this is framing, not the wire**. It is *not* saturation either: dropping the telemetry
+rates did not reduce it (the link sits at ~73 % of 115200 regardless). (Straddling alone
+would be harmless — pymavlink buffers across `parse_char` — so the loss implies datagrams
+are also being dropped or reordered, not merely split.)
 
 **So: use this rig for bring-up, telemetry and bench verification. For an autonomous
 in-water run, put the board back on the Jetson's USB-C cable** — the designed
 architecture, and the one with zero observed frame loss. MAVLink has no retransmission,
 so a lost `COMMAND_LONG` is a lost arm or a lost move with nothing in any log.
+
+**Known gap — Bondor cannot share this link.** A Bridget bridge targets exactly one
+`ip:port`, so the companion and the ground station cannot both receive from it. Two
+consumers need a fan-out router; there is none today. Don't discover this at the pool.
+
+### ✅ Bar30 fixed — and why that is NOT "depth verified"
+
+The connector fault is **resolved**, measured on the vehicle 2026-08-03 against the
+2026-08-02 failure:
+
+| | 2026-08-02 (faulty) | 2026-08-03 (fixed) |
+|---|---|---|
+| `press_abs` | 317–874 mbar | 978.8–987.7, **sd 1.97** |
+| water temp | 6–30 °C | 31.68–31.71 (**0.03** spread) |
+| depth in air | +0.9 … +6.8 m | −0.05 … +0.07 m |
+| `DEPTH_OUT` | pinned **−1.00** | **0.000** |
+
+`bringup_check --srot` now grades `barometer 983.7 mbar, spread 5.92` and `depth loop
+settled` as PASS. The arming hazard from the phantom-depth saturation is gone.
+
+**⛔ That is the barometer, not the loop.** `DEPTH_CMD` reads `-0.329202` while
+`DEPTH_OUT` and `DEPTH_ERR` read **exactly 0.000 across 90+ samples**. A live controller
+with a −0.33 m command against a +0.01 m measurement cannot produce zero error — so the
+depth loop **is not running while disarmed** on rev 4. `check_depth_loop_settled` passing
+proves only `|DEPTH_OUT| < 0.90`, which a stopped loop satisfies trivially.
+
+**The depth loop has still never run closed**, it gates *every* AUTO move (`move_forward`
+included — there is no depth-free path through AUTO), and the two **armed** bench checks
+in the runbook below remain the gate. "Bar30 fixed" must never be read as "depth verified".
 
 ## The offload boundary
 **The board owns:** attitude + depth hold, thrust allocation (vectored 6DOF), timed

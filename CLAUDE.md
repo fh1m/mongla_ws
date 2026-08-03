@@ -128,8 +128,11 @@ constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identica
 > BlueOS, no UDP" is the *designed* case, not the only one. No code change was needed
 > (`resolve_srot_profile()` takes any conn string; `SrotFC` is transport-agnostic):
 > `-p mav_device:=udpin:0.0.0.0:14550`, and `--srot-device=` on `bringup_check`.
-> **Link quality is measurably worse than direct serial (~10–23 % `BAD_DATA` vs zero), so
-> this is a bench/bring-up rig — put the board back on the Jetson's USB-C for water.**
+> **Link quality is measurably worse than direct serial (~8–9 % `BAD_DATA` across three
+> fixed-rate runs, vs zero on USB-C — and the lost frames are `NAMED_VALUE_FLOAT` /
+> `VFR_HUD` / `ATTITUDE` / `BATTERY_STATUS`, not the already-undecodable `ESC_STATUS(291)`).
+> So this is a bench/bring-up rig — put the board back on the Jetson's USB-C for water.**
+> Bridget also targets one `ip:port`, so **Bondor cannot share the link** without a router.
 > Full setup + the measurement: [`srot-integration.md`](.claude/context/srot-integration.md)
 > "Transitional rig".
 
@@ -187,10 +190,23 @@ read from `NAMED_VALUE_FLOAT` — via a per-name table fed by the manager's read
 because all seven names burst inside one 500 ms tick and pymavlink's single slot keeps only the
 last (`GAIN`). Details: [`srot-integration.md`](.claude/context/srot-integration.md).
 
-**⛔ BENCH-MEASURED 2026-08-02, board in the AUV — the water test is BLOCKED.** The Bar30 is
+**✅ RESOLVED 2026-08-03 — the Bar30 connector was refitted and the fault is gone.** Re-measured
+on the vehicle: `press_abs` 978.8..987.7 mbar (**sd 1.97**, was a 557 mbar spread), water temp
+31.68..31.71 °C (**0.03**, was 6..30), depth **−0.05..+0.07 m in air** (was +0.9..+6.8), and
+`DEPTH_OUT` **0.000** (was pinned −1.00). `bringup_check --srot` grades barometer variance and
+the disarmed depth loop PASS. The arming-spin-up hazard described below is therefore **cleared**.
+**⛔ But that is the barometer, not the loop:** `DEPTH_CMD` reads −0.329 while `DEPTH_OUT`/`DEPTH_ERR`
+read *exactly* 0.000 across 90+ samples — a live controller cannot produce zero error against a
+−0.33 m command, so the loop **is not running while disarmed** on rev 4, and
+`check_depth_loop_settled` only ever proved `|DEPTH_OUT| < 0.90` (which a stopped loop passes
+trivially). **The depth loop has still never run closed**, it gates every AUTO move including
+`move_forward`, and the two armed bench checks remain the gate. Do not read "Bar30 fixed" as
+"depth verified". The original finding is kept below for the diagnostic pattern:
+
+**⛔ BENCH-MEASURED 2026-08-02 (superseded — see above).** The Bar30 was
 producing **noise**: 317..874 mbar on a still bench (sea level ~1013), water temp 6..30 °C,
-depth reading +0.9..+6.8 m **in air**. It is not an offset or a drift but per-sample garbage —
-a connector/I2C fault. **The board reports the barometer HEALTHY throughout**, because the
+depth reading +0.9..+6.8 m **in air**. It was not an offset or a drift but per-sample garbage —
+a connector/I2C fault. **The board reported the barometer HEALTHY throughout**, because the
 firmware's plausibility band is applied per sample and every reading is individually inside it;
 a per-sample band cannot see variance. That phantom depth **saturates the depth controller**
 (`DEPTH_OUT` pinned at −1.00, `DEPTH_ERR` −3..−7 m while disarmed), and since `mixer.cpp` is
