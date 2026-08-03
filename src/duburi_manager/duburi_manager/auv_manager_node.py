@@ -321,24 +321,29 @@ class AUVManagerNode(Node):
         self.pixhawk = self.fc
         self.get_logger().info(f'[NET  ] flight_controller = {self.fc.name}')
         if self._is_srot:
-            # Read the board's firmware behaviour revision FIRST, before anything that
-            # could move. This is the runtime interlock for the removed host brake: on
-            # pre-rev-2 firmware MOVE_STOP coasts and nothing on this side compensates
-            # any more, so a `stop` or an abort silently fails to decelerate the hull.
-            # `SrotFC.arm()` refuses on a known-too-old board; doing the read here as
-            # well means the operator finds out at bring-up rather than at the ramp.
             self.fc.allow_saturated_depth_arm = bool(
                 self.get_parameter('allow_saturated_depth_arm').value)
             self.fc.allow_fw_behaviour_mismatch = bool(
                 self.get_parameter('allow_fw_behaviour_mismatch').value)
-            fw_ok, fw_reason = self.fc.check_behaviour_rev()
-            if not fw_ok:
-                self.get_logger().error(f'[NET  ] {fw_reason}')
-            # Set the pilot gain to full so autonomous MANUAL_CONTROL isn't halved.
-            if not self.fc.set_default_gain():
-                self.get_logger().warning(
-                    '[NET  ] could not confirm JS_GAIN_DEFAULT=1.0 -- MANUAL_CONTROL '
-                    'may be scaled; check the board is reachable + not mid param-download')
+            # The two round-trip READS -- behaviour rev and JS_GAIN_DEFAULT -- used to
+            # run here and could never succeed. Both land their reply in
+            # `master.messages`, which only fills while SOMETHING DRAINS THE LINK, and
+            # the reader thread does not start until `_setup_reader_and_warmup()`.
+            # Nothing between `wait_heartbeat()` and that point calls recv_*, so the
+            # replies were parsed by no one: `check_behaviour_rev` burned its 3x2 s of
+            # retries and reported FW_BEHAVIOUR_REV_UNKNOWN on every single startup.
+            #
+            # That is worse than a missing read. Its warning says the firmware may be
+            # pre-rev-2, i.e. that MOVE_STOP COASTS with no host brake -- so the one
+            # bring-up check meant to catch an un-brakeable hull cried wolf every time,
+            # and an operator who believed it would ground a perfectly good board.
+            # (The ARM-time call in `SrotFC.arm()` was always fine: by then the reader
+            # is running. Only the bring-up copy was broken -- on serial too, this is
+            # not a UDP/BlueOS artefact.)
+            #
+            # They now run from `_srot_preflight_reads()`, straight after the reader
+            # starts. Rate pinning stays here: `set_message_rate` is fire-and-forget
+            # and reads no reply, so it works with nobody draining.
             # Pin rates. This used to be skipped: "SROT rates are fixed on-board (no
             # SET_MESSAGE_INTERVAL)". Firmware behaviour rev 2 implements 511 and 510,
             # so ATTITUDE is no longer stuck at the board's 10 Hz default -- which was
@@ -368,6 +373,9 @@ class AUVManagerNode(Node):
         self.reader_thread = threading.Thread(
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
+        # Only NOW can a round-trip read see its reply -- see _setup_mavlink.
+        if self._is_srot:
+            self._srot_preflight_reads()
 
         # Warmup: wait for both AHRS2 and a valid autopilot heartbeat.
         _deadline = time.monotonic() + 4.0
@@ -381,6 +389,26 @@ class AUVManagerNode(Node):
                 '[NET  ] AHRS2 or autopilot heartbeat not received within 4s. '
                 'BNO085 calibration may still fail. '
                 'Check MAVLink link and ArduSub telemetry rate config.')
+
+    def _srot_preflight_reads(self) -> None:
+        """SROT bring-up reads that need a reply. Call AFTER the reader thread starts.
+
+        Both of these poll `master.messages`, which only fills while the reader is
+        draining the link -- running them any earlier reports a failure that says
+        more about our own startup order than about the board. See _setup_mavlink.
+
+        Still before anything that could move: arming is an operator action and
+        `SrotFC.arm()` re-checks the rev itself, so this is the early warning, not
+        the gate.
+        """
+        fw_ok, fw_reason = self.fc.check_behaviour_rev()
+        if not fw_ok:
+            self.get_logger().error(f'[NET  ] {fw_reason}')
+        # Set the pilot gain to full so autonomous MANUAL_CONTROL isn't halved.
+        if not self.fc.set_default_gain():
+            self.get_logger().warning(
+                '[NET  ] could not confirm JS_GAIN_DEFAULT=1.0 -- MANUAL_CONTROL '
+                'may be scaled; check the board is reachable + not mid param-download')
 
     def _setup_yaw_source(self) -> None:
         """Instantiate yaw source, print startup banner, start DVL auto-connect."""

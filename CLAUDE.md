@@ -86,8 +86,8 @@
 ```
 [Onboard Ethernet Switch]
        ├── Jetson Orin Nano  → 192.168.2.69   (static, ROS2 host, UDP 14550 listener)
-       ├── Raspberry Pi 4B   → 192.168.2.1    (BlueOS — MAVLink router, web UI)
-       │      Gateway         → 192.168.2.2
+       ├── Raspberry Pi 4B   → 192.168.2.2    (BlueOS — MAVLink router, web UI; also the gateway)
+       ├── Topside / dev box → 192.168.2.1    (ground station on the internal switch)
        ├── DVL Nucleus1000   → 192.168.2.201  (driver TODO)
        └── Pixhawk 2.4.8     → via BlueOS over USB
 
@@ -96,8 +96,13 @@ MAVLink endpoint (configured in BlueOS web UI):
   IP: 192.168.2.69 (Jetson)  |  Port: 14550
 
 Ground Station → Remote Desktop / SSH to Jetson (192.168.2.69)
-              → BlueOS UI via http://192.168.2.1
+              → BlueOS UI via http://192.168.2.2
 ```
+
+> ⚠ **`.1` and `.2` were swapped in this table until 2026-08-03.** Measured on the
+> vehicle: the Pi answers on **192.168.2.2** (Raspberry Pi MAC OUI, full BlueOS 1.4.2
+> service set) and **192.168.2.1 is the topside box** — which is Blue Robotics' own
+> convention. `NETWORK` in `connection_config.py` is corrected to match.
 
 Connection strings live in `src/duburi_manager/duburi_manager/connection_config.py` under `PROFILES`. Default for every profile is `udpin:0.0.0.0:14550` (Jetson is the listener; BlueOS pushes to it).
 
@@ -116,6 +121,17 @@ season there is a second backend, and on the **`srot` branch it is the DEFAULT**
 Both sit behind the `FlightController` HAL in `src/duburi_control/duburi_control/fc/`
 (`base.py` ABC, `pixhawk_fc.py`, `srot_fc.py`, `srot_protocol.py` = the one copy of the wire
 constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identical to history.
+
+> **⚠ Transitional third case (verified on hardware 2026-08-03): SROT *through* BlueOS over
+> UDP.** While the hull is still wired Pi-first, the board hangs off the **Pi's USB** and
+> reaches us as UDP via a BlueOS **Bridget** raw serial↔UDP bridge — so "srot = no Pi, no
+> BlueOS, no UDP" is the *designed* case, not the only one. No code change was needed
+> (`resolve_srot_profile()` takes any conn string; `SrotFC` is transport-agnostic):
+> `-p mav_device:=udpin:0.0.0.0:14550`, and `--srot-device=` on `bringup_check`.
+> **Link quality is measurably worse than direct serial (~10–23 % `BAD_DATA` vs zero), so
+> this is a bench/bring-up rig — put the board back on the Jetson's USB-C for water.**
+> Full setup + the measurement: [`srot-integration.md`](.claude/context/srot-integration.md)
+> "Transitional rig".
 
 **Claims below that are Pixhawk-only and WRONG on srot:**
 - §2 network topology, BlueOS, UDP 14550, gateway `192.168.2.2` — srot is one USB cable.

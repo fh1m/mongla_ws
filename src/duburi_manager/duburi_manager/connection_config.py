@@ -61,10 +61,19 @@ import socket
 from glob import glob
 
 
+# MEASURED on the vehicle 2026-08-03, not copied from a doc: the Pi answers on
+# .2 (MAC e4:5f:01:*, Raspberry Pi OUI) serving the full BlueOS 1.4.2 service set,
+# and .1 is the TOPSIDE box. These two were swapped here, which is the Blue
+# Robotics convention inverted -- topside .1 / BlueOS .2 is their standard, and it
+# is what the hull is actually wired to. Only bringup_check's non-srot network
+# section reads these, so the old values cost a false "BlueOS unreachable" rather
+# than a broken link -- but that is precisely the line an operator trusts.
+# ('blueos_gw' is unused anywhere in the tree; left in place, corrected.)
 NETWORK = {
     'jetson_ip': '192.168.2.69',    # static IP on switch
-    'blueos_ip': '192.168.2.1',     # Raspberry Pi hosting BlueOS
-    'blueos_gw': '192.168.2.2',     # BlueOS gateway
+    'topside_ip': '192.168.2.1',    # ground-station / dev box on the internal switch
+    'blueos_ip': '192.168.2.2',     # Raspberry Pi hosting BlueOS (verified 2026-08-03)
+    'blueos_gw': '192.168.2.2',     # the Pi is also the gateway
     'mav_port':  14550,             # MAVLink inspector endpoint port
     'endpoint':  'inspector',       # BlueOS endpoint name (UDP Client)
     'dvl_ip':    '192.168.2.201',   # Nortek Nucleus 1000 DVL
