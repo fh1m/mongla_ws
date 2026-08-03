@@ -307,6 +307,28 @@ payload reports UNREADABLE — indistinguishable from a mis-roled board. The man
 reader before `_preflight_payload`; `test_the_reader_thread_starts_before_the_payload_role_read`
 pins that ordering.
 
+### ⚠ A timed move is NOT voltage-independent (firmware, confirmed 2026-08-03)
+
+`move_forward --duration N --gain G` is **purely timed** — no distance sensor, no estimate — and
+at the firmware's shipped defaults **nothing compensates for battery voltage**. All three
+mechanisms that would are off:
+
+| Mechanism | Param | Default |
+|---|---|---|
+| slow per-thruster RPM trim | `THR_TRIM_EN` | **0** (recommended route; not water-validated) |
+| mixer battery feedforward | `MOT_BAT_V_MAX` | **0** = off (also needs `ESPNOW_EN=1` + the 2nd board) |
+| Pico closed-loop RPM | `RPM_LOOP` | **0** — ⚠ deliberately, it oscillates in the stabilisation path |
+
+Throttle commands **volts, not thrust** (`RPM ~ duty·V_batt/Kv`, `thrust ~ RPM²`): a T200 at the
+same PWM makes 3.71 kgf at 12 V and 6.7 kgf at 20 V. **So the same `move_forward` travels
+further on a full pack than a flat one**, and a mission tuned at the start of a session drifts
+as the battery drains.
+
+The firmware's `ALGORITHMS.md §11.1` used to promise the opposite ("the same distance every
+run, full or low battery") on the strength of an RPM loop that is disabled. Corrected in
+`srot-control-board` `fd563cd`. **Plan timed legs at a roughly constant state of charge, or
+enable `THR_TRIM_EN` and tune it**, until we have a distance source.
+
 ### Display conventions — one rule: match the board
 
 **Heading is `0..360` on every surface.** The board wraps it explicitly for both its OLED and
