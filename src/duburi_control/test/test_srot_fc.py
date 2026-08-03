@@ -1086,3 +1086,54 @@ def test_legacy_fire_map_forms_still_parse():
 def test_a_plain_entry_with_an_out_of_range_pca_channel_is_skipped_not_fatal():
     m = parse_fire_map('1:9, 2:99')
     assert 1 in m and 2 not in m, 'one bad entry must not disarm the others'
+
+
+# --------------------------------------------------------------------------- #
+#  Depth is gated on baro health -- VFR_HUD is NOT suppressed by the firmware  #
+# --------------------------------------------------------------------------- #
+
+def _sys_status(baro_healthy: bool):
+    bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+    return SimpleNamespace(onboard_control_sensors_health=(bit if baro_healthy else 0),
+                           onboard_control_sensors_present=bit)
+
+
+def test_depth_is_suppressed_when_the_board_calls_the_barometer_unhealthy():
+    """MEASURED on a bare board, 2026-08-03: with NO Bar30 fitted the firmware still
+    streams VFR_HUD.alt = -0.000 forever -- VFR_HUD is sent unconditionally, unlike
+    SCALED_PRESSURE2/WTEMP which ARE suppressed (fw mav_stream.cpp:258). Passing that
+    through published a confident 0.00 m depth on /duburi/state and into every depth
+    guard, all of which compare against negative constants and would just stop firing."""
+    fc = _fc()
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(roll=0.0, pitch=0.0, yaw=0.0)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-0.0, heading=160)
+    fc.master.messages['SYS_STATUS'] = _sys_status(False)
+    assert math.isnan(fc.get_attitude()['depth'])
+    assert math.isnan(fc.telemetry().depth_m)
+
+
+def test_depth_passes_through_when_the_barometer_is_healthy():
+    fc = _fc()
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(roll=0.0, pitch=0.0, yaw=0.0)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.5, heading=160)
+    fc.master.messages['SYS_STATUS'] = _sys_status(True)
+    assert fc.get_attitude()['depth'] == pytest.approx(-1.5)
+
+
+def test_depth_is_not_blanked_before_the_first_sys_status_arrives():
+    """Tri-state on purpose: "the board says the baro is bad" and "we have not heard a
+    SYS_STATUS yet" are different. Treating the second as unhealthy would blank depth
+    for the first half-second of every connection."""
+    fc = _fc()
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(roll=0.0, pitch=0.0, yaw=0.0)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-2.0, heading=160)
+    assert fc.get_attitude()['depth'] == pytest.approx(-2.0)
+
+
+def test_the_heading_matches_the_boards_own_0_360_convention():
+    """The board's OLED and VFR_HUD.heading both wrap to 0..360, and so must we --
+    a signed -162 beside the board's 197 is the same angle read two ways."""
+    fc = _fc()
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(
+        roll=0.0, pitch=0.0, yaw=math.radians(-162.23))
+    assert fc.get_attitude()['yaw'] == pytest.approx(197.77, abs=0.01)

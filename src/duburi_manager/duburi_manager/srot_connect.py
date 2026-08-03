@@ -75,12 +75,23 @@ def _load_srot_protocol():
 
 sp = _load_srot_protocol()
 
-BOLD, DIM, RESET = '\033[1m', '\033[2m', '\033[0m'
-RED, YEL, GRN, CYA = '\033[31m', '\033[33m', '\033[32m', '\033[36m'
+try:
+    from . import srot_format as sfmt
+    from . import srot_changes
+except ImportError:                                                  # direct execution
+    from duburi_manager import srot_format as sfmt
+    from duburi_manager import srot_changes
+
+BOLD, DIM, RESET = sfmt.BOLD, sfmt.DIM, sfmt.RESET
+RED, YEL, GRN, CYA = sfmt.RED, sfmt.YEL, sfmt.GRN, sfmt.CYA
 
 # The board answers MAV_CMD_REQUEST_MESSAGE for this; it carries SROT_FW_BEHAVIOUR_REV
 # in middleware_sw_version, which is the one number that decides whether `stop` brakes.
 MSG_AUTOPILOT_VERSION = 148
+
+# How many change lines the dashboard keeps on screen. The full history stays in the
+# list; this only bounds what a fixed-height panel shows.
+_CHANGE_LOG_LINES = 12
 
 # Sea-level pressure is ~1013 mbar. The firmware's own plausibility band is a wide
 # [300, 40000] mbar, chosen deliberately loose so it cannot ground the vehicle by
@@ -105,10 +116,9 @@ _NAMED_GROUPS = (
 
 
 def _f(value, fmt='{:.2f}', suffix=''):
-    """Render a numeric, or `--` when it is absent. Absence is never zero."""
-    if value is None or (isinstance(value, float) and math.isnan(value)):
-        return '--'
-    return fmt.format(value) + suffix
+    """Render a numeric, or `--` when absent. Delegates to srot_format so this tool,
+    the dashboard, --json and the manager's [SROT ] block cannot drift apart."""
+    return sfmt.fmt(value, fmt, suffix)
 
 
 class Snapshot:
@@ -267,6 +277,56 @@ def read_roles(conn, timeout: float = 0.6) -> dict:
     return roles
 
 
+def watch_fields(snap: Snapshot) -> dict:
+    """The subset of a Snapshot the change log watches, in display units.
+
+    Deliberately small and FLAT. The change detector compares scalars; giving it the raw
+    Snapshot would mean re-deciding units (radians vs degrees, mV vs V) in two places,
+    which is how the yaw bug happened in the first place.
+    """
+    hb = snap.get('HEARTBEAT')
+    att = snap.get('ATTITUDE')
+    hud = snap.get('VFR_HUD')
+    sysst = snap.get('SYS_STATUS')
+    n = snap.named
+
+    baro_ok = None
+    if sysst is not None:
+        bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+        baro_ok = bool(sysst.onboard_control_sensors_health & bit)
+
+    batt = snap.batteries
+    main = batt.get(sp.BATTERY_ID_MAIN if sp else 0)
+    thr = batt.get(sp.BATTERY_ID_THRUSTER if sp else 1)
+
+    return {
+        'armed': (bool(getattr(hb, 'base_mode', 0)
+                       & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) if hb else None),
+        'mode': (sp.mode_name(getattr(hb, 'custom_mode', -1)) if (hb and sp) else None),
+        'heading_deg': sfmt.heading_deg(getattr(att, 'yaw', None)) if att else None,
+        'roll_deg': sfmt.signed_deg(getattr(att, 'roll', None)) if att else None,
+        'pitch_deg': sfmt.signed_deg(getattr(att, 'pitch', None)) if att else None,
+        # Depth is only meaningful when the board vouches for the barometer -- VFR_HUD.alt
+        # keeps streaming regardless (mav_stream.cpp:258), so an ungated value would look
+        # like a rock-steady 0 m rather than a missing sensor.
+        'depth_m': (getattr(hud, 'alt', None) if baro_ok else None),
+        'baro_healthy': baro_ok,
+        # Snapshot.batteries holds (voltage, current) TUPLES -- unlike SrotFC's
+        # per-id dicts. Two shapes for the same fact is exactly the drift this file is
+        # trying to end, but changing Snapshot's shape here would touch the render path
+        # mid-fix; unpack explicitly and leave one TODO rather than two conventions.
+        'battery_v': main[0] if main else None,
+        'thruster_v': thr[0] if thr else None,
+        'water_temp_c': n.get('WTEMP'),
+        'depth_out': n.get('DEPTH_OUT'),
+        'depth_err_m': n.get('DEPTH_ERR'),
+        'gain': n.get('GAIN'),
+        'mag_accuracy': n.get('MAGACC'),
+        'leak': None if n.get('LEAK') is None else n['LEAK'] >= 0.5,
+        'kill': None if n.get('KILL') is None else n['KILL'] >= 0.5,
+    }
+
+
 def render(snap: Snapshot, conn) -> list[str]:
     """The report. Every absent value renders `--`, never 0."""
     L: list[str] = []
@@ -308,40 +368,74 @@ def render(snap: Snapshot, conn) -> list[str]:
     if not snap.batteries:
         L.append('  battery         --   (no BATTERY_STATUS)')
     if pwr is not None:
-        L.append(f'  rail            Vcc {_f(pwr.Vcc / 1000.0, "{:.2f}", " V")}   '
-                 f'Vservo {_f(pwr.Vservo / 1000.0, "{:.2f}", " V")}')
+        # Vcc is a HARDCODED 5000 in the firmware (mav_stream.cpp:328), not a
+        # measurement -- labelled so nobody debugs a 5 V rail off a constant.
+        # Vservo carries PM2 (the thruster pack, via ESP-NOW from the 2nd board), so
+        # it is ABSENT rather than 0 V when that board is not fitted.
+        L.append(f'  rail            Vcc {_f(pwr.Vcc / 1000.0, "{:.2f}", " V")} '
+                 f'{DIM}(nominal, not measured){RESET}   '
+                 f'Vservo {_f(sfmt.mv_to_volts(pwr.Vservo), "{:.2f}", " V")} '
+                 f'{DIM}(= PM2 thruster pack){RESET}')
     L.append(f'  current (CURR)  {_f(n.get("CURR"), "{:.2f}", " A")}       '
              f'pilot GAIN {_f(n.get("GAIN"), "{:.2f}")}'
              + (f'  {YEL}<- halves MANUAL_CONTROL until 1.0{RESET}'
                 if (n.get('GAIN') or 1.0) < 0.99 else ''))
 
     # ---- attitude --------------------------------------------------------- #
-    L.append(f'\n{BOLD}== attitude =={RESET}   {DIM}(yaw is ABSOLUTE magnetic from rev 4){RESET}')
+    L.append(f'\n{BOLD}== attitude =={RESET}   {DIM}(heading is ABSOLUTE magnetic from rev 4){RESET}')
     if att is not None:
-        L.append(f'  roll {att.roll * 57.2958:+7.2f}°   pitch {att.pitch * 57.2958:+7.2f}°   '
-                 f'yaw {att.yaw * 57.2958:+7.2f}°')
+        # HEADING IS 0..360, matching the board's OLED, VFR_HUD.heading and
+        # /duburi/state. Rendering the raw signed ATTITUDE.yaw here printed -162 next
+        # to the board's 197 -- the same angle, disagreeing by exactly 360.
+        # Roll and pitch stay SIGNED: a +3 deg list is not a 357 deg list.
+        L.append(f'  roll {_f(sfmt.signed_deg(att.roll), "{:+7.2f}", "°")}   '
+                 f'pitch {_f(sfmt.signed_deg(att.pitch), "{:+7.2f}", "°")}   '
+                 f'heading {_f(sfmt.heading_deg(att.yaw), "{:7.2f}", "°")}')
     else:
         L.append('  --   (no ATTITUDE)')
-    L.append(f'  heading         {_f(getattr(hud, "heading", None), "{:.0f}", "°")}'
-             f'      mag accuracy (MAGACC) {_f(n.get("MAGACC"), "{:.0f}")}')
+    # VFR_HUD.heading is the board's own integer copy of the same angle. Shown beside
+    # ours as a cross-check: these two must AGREE. If they ever differ by more than
+    # rounding, one side's convention has drifted and that is worth seeing immediately.
+    L.append(f'  board heading   {_f(getattr(hud, "heading", None), "{:.0f}", "°")}'
+             f'   {DIM}(VFR_HUD -- must match above){RESET}'
+             f'      MAGACC {_f(n.get("MAGACC"), "{:.0f}")}')
 
     # ---- depth + environment ---------------------------------------------- #
     L.append(f'\n{BOLD}== depth / environment =={RESET}')
     lvl, msg = baro_verdict(snap.press_samples)
     col = {'OK': GRN, 'WARN': YEL, 'FAIL': RED}[lvl]
     L.append(f'  barometer       {col}{lvl}{RESET}  {msg}')
-    L.append(f'  depth (VFR_HUD) {_f(getattr(hud, "alt", None), "{:+.3f}", " m")}'
-             f'   {DIM}negative = submerged{RESET}')
+    # ⚠ VFR_HUD.alt is NOT gated on baro health in the firmware (mav_stream.cpp:258),
+    # unlike SCALED_PRESSURE2/WTEMP which ARE suppressed. So the board keeps streaming a
+    # depth -- `-0.000` -- with no Bar30 fitted at all, and that number is meaningless.
+    # Cross-check against the health bit rather than trusting the value's presence.
+    _baro_ok = None
+    if sysst is not None:
+        _bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+        _baro_ok = bool(sysst.onboard_control_sensors_health & _bit)
+    _depth_raw = getattr(hud, 'alt', None)
+    if _baro_ok is False or (_baro_ok is None and not snap.press_samples):
+        L.append(f'  depth           {sfmt.ABSENT}   {DIM}(VFR_HUD streams a value even '
+                 f'with no barometer -- it is not gated on health){RESET}')
+    else:
+        L.append(f'  depth (VFR_HUD) {_f(_depth_raw, "{:+.3f}", " m")}'
+                 f'   {DIM}negative = submerged{RESET}')
     wt = statistics.fmean(snap.wtemp_samples) if snap.wtemp_samples else None
     wspread = (max(snap.wtemp_samples) - min(snap.wtemp_samples)) if len(snap.wtemp_samples) > 1 else None
     L.append(f'  water temp      {_f(wt, "{:.2f}", " °C")}'
              + (f'   {RED}spread {wspread:.1f} °C -- noise{RESET}'
                 if wspread and wspread > 2.0 else ''))
-    L.append(f'  leak            {RED + "WET" + RESET if n.get("LEAK", 0) >= 0.5 else "dry"}'
-             f'          kill switch {"ENGAGED" if n.get("KILL", 0) >= 0.5 else "clear"}')
+    # Tri-state, deliberately: "no leak reported" and "we never heard from the leak
+    # sensor" are different facts and only one of them means the hull is dry.
+    _leak = n.get('LEAK')
+    _kill = n.get('KILL')
+    _leak_s = sfmt.bool_word(None if _leak is None else _leak >= 0.5,
+                             RED + 'WET' + RESET, 'dry')
+    L.append(f'  leak            {_leak_s}'
+             f'          kill switch '
+             f'{sfmt.bool_word(None if _kill is None else _kill >= 0.5, "ENGAGED", "clear")}')
     if sysst is not None:
-        bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
-        healthy = bool(sysst.onboard_control_sensors_health & bit)
+        healthy = bool(_baro_ok)
         L.append(f'  board says baro {"healthy" if healthy else "UNHEALTHY"}'
                  + (f'   {YEL}<- but see the barometer line above{RESET}'
                     if healthy and lvl == 'FAIL' else ''))
@@ -359,15 +453,19 @@ def render(snap: Snapshot, conn) -> list[str]:
             rpm += [int(r) for r in getattr(m, 'rpm', ())]
             temp += [int(t) for t in getattr(m, 'temperature', ())]
     if rpm:
-        L.append('  rpm             ' + ' '.join(f'{r:>5d}' for r in rpm))
-        L.append('  temp °C         ' + ' '.join(f'{t:>5d}' for t in temp))
+        L.append('  rpm             ' + sfmt.rpm_row(rpm))
+        L.append('  temp °C         ' + sfmt.esc_temp_row(temp))
+        # An all-zero ESC row is ambiguous on the wire: it is what an attached-but-idle
+        # ESC sends AND what arrives when no Pico/ESC exists at all. Say which.
         if not any(rpm) and armed:
             L.append(f'  {YEL}all RPM zero while ARMED -- ESCs not reporting, or thruster '
                      f'power off. NOT a healthy idle.{RESET}')
         elif not any(rpm):
-            L.append(f'  {DIM}all zero -- expected while disarmed / thruster power off{RESET}')
+            L.append(f'  {DIM}all zero -- disarmed, or no Pico/ESCs attached '
+                     f'(bare-board bench){RESET}')
     else:
-        L.append('  --   (no ESC telemetry; needs Bluejay for bidirectional DShot)')
+        L.append(f'  rpm             {sfmt.ABSENT}   {DIM}(no ESC telemetry -- no Pico '
+                 f'co-processor, or ESCs not running Bluejay){RESET}')
 
     # ---- payload: which channels duburi_ws may drive ---------------------- #
     if snap.roles:
@@ -438,8 +536,12 @@ def as_dict(snap: Snapshot) -> dict:
         'mode': sp.mode_name(getattr(hb, 'custom_mode', -1)) if (hb and sp) else None,
         'batteries': {str(k): {'voltage': v[0], 'current': v[1]}
                       for k, v in snap.batteries.items()},
-        'attitude_deg': ({'roll': att.roll * 57.2958, 'pitch': att.pitch * 57.2958,
-                          'yaw': att.yaw * 57.2958} if att else None),
+        # Same 0..360 heading convention as the display and /duburi/state. `yaw` is
+        # kept as an alias so existing consumers do not break, but both are wrapped.
+        'attitude_deg': ({'roll': sfmt.signed_deg(att.roll),
+                          'pitch': sfmt.signed_deg(att.pitch),
+                          'heading': sfmt.heading_deg(att.yaw),
+                          'yaw': sfmt.heading_deg(att.yaw)} if att else None),
         'depth_m': getattr(hud, 'alt', None),
         'named': snap.named,
         'msg_rates_hz': {k: round(v / max(snap.window_s, 0.1), 2)
@@ -497,16 +599,36 @@ def main(argv=None) -> int:
         mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE, 0,
         float(MSG_AUTOPILOT_VERSION), 0, 0, 0, 0, 0, 0)
 
+    prev_fields = None
+    change_log: list[str] = []
     try:
         while True:
             snap = collect(conn, args.duration)
             if not args.no_roles:
                 snap.roles = read_roles(conn)
+
+            fields = watch_fields(snap)
+            for lvl, _field, msg in srot_changes.diff(prev_fields, fields):
+                col = {'CRIT': RED, 'WARN': YEL}.get(lvl, DIM)
+                change_log.append(f'  {DIM}{time.strftime("%H:%M:%S")}{RESET} '
+                                  f'{col}{lvl:<4}{RESET} {msg}')
+            prev_fields = fields
+
             if args.json:
                 print(json.dumps(as_dict(snap), indent=2, default=str))
+            elif args.watch:
+                # Home + erase-to-end-of-screen rather than a full clear: a full \033[2J
+                # blanks the terminal every tick, so the panel visibly flickers and any
+                # text you scrolled back to read is destroyed.
+                lines = render(snap, conn)
+                if change_log:
+                    lines.append(f'\n{BOLD}== changes =={RESET}   '
+                                 f'{DIM}(newest last){RESET}')
+                    lines.extend(change_log[-_CHANGE_LOG_LINES:])
+                lines.append(f'\n{DIM}Ctrl-C to stop{RESET}')
+                out = '\n'.join(ln + '\033[K' for ln in lines)
+                print(f'\033[H{out}\033[J', end='', flush=True)
             else:
-                if args.watch:
-                    print('\033[2J\033[H', end='')
                 print('\n'.join(render(snap, conn)))
             if not args.watch:
                 return 0

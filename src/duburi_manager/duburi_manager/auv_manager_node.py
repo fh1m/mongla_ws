@@ -60,6 +60,8 @@ from duburi_control.payload import PayloadDriver                         # noqa:
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
 
+from . import srot_format as _sfmt                                          # noqa: E402
+from . import srot_changes as _schg                                        # noqa: E402
 from .connection_config import (                                             # noqa: E402
     DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
     resolve_srot_profile,
@@ -615,6 +617,7 @@ class AUVManagerNode(Node):
         self.esc_rpm_publisher = None
         self._leak_latched = False
         self._srot_block_last = 0.0
+        self._srot_prev_fields = None
         self._srot_block_period = float(
             self.get_parameter('srot_telemetry_period_s').value)
         if self._is_srot:
@@ -1122,13 +1125,48 @@ class AUVManagerNode(Node):
     def _tel(value, fmt='{:.2f}', suffix=''):
         """Render a telemetry numeric, or `--` when absent. NEVER renders absence as 0.
 
-        Since fw behaviour rev 3 the board SUPPRESSES values it cannot stand behind
-        rather than publishing them. A log that prints `0.0` for a suppressed water
-        temperature re-creates the exact failure that suppression was added to fix.
+        Delegates to `srot_format` so this log block, `connect`, its dashboard and
+        `--json` all format identically. They drifted once already -- the board shows a
+        0..360 heading and one path was printing the raw signed value.
         """
-        if value is None or (isinstance(value, float) and math.isnan(value)):
-            return '--'
-        return fmt.format(value) + suffix
+        return _sfmt.fmt(value, fmt, suffix)
+
+    def _log_srot_changes(self, tel):
+        """One line per meaningful CHANGE, alongside the periodic block.
+
+        The periodic block is a continuous trace you correlate against what the vehicle
+        did; this is the opposite view -- what changed while nobody was watching. A mode
+        flip or a sensor going absent is a single line here instead of something you have
+        to spot by diffing two identical-looking blocks a minute apart.
+
+        Absent <-> present transitions are included on purpose: the board SUPPRESSES
+        values it cannot stand behind, so a barometer that stops being reported is the
+        board telling you something, and a change log that only watches numbers move
+        would never mention it.
+        """
+        fields = {
+            'armed': tel.armed,
+            'mode': tel.mode or None,
+            'heading_deg': tel.yaw_deg if not math.isnan(tel.yaw_deg) else None,
+            'depth_m': tel.depth_m if not math.isnan(tel.depth_m) else None,
+            'battery_v': tel.battery_voltage,
+            'thruster_v': tel.thruster_voltage,
+            'water_temp_c': tel.water_temp_c,
+            'depth_out': tel.depth_out,
+            'depth_err_m': tel.depth_err_m,
+            'mag_accuracy': tel.mag_accuracy,
+            'leak': tel.leak,
+            'kill': tel.kill_switch,
+        }
+        for lvl, _field, msg in _schg.diff(self._srot_prev_fields, fields):
+            line = f'[SROT ] ~ {msg}'
+            if lvl == 'CRIT':
+                self.get_logger().error(line)
+            elif lvl == 'WARN':
+                self.get_logger().warn(line)
+            else:
+                self.get_logger().info(line)
+        self._srot_prev_fields = fields
 
     def _maybe_print_srot_block(self, tel):
         """The verbose SROT telemetry block -- everything Pixhawk never had.
@@ -1146,8 +1184,10 @@ class AUVManagerNode(Node):
             return
         self._srot_block_last = now
 
-        rpm = ' '.join(f'{r:>5d}' for r in tel.rpm) if tel.rpm else '--'
-        etemp = ' '.join(f'{t:>5d}' for t in tel.esc_temp_c) if tel.esc_temp_c else '--'
+        self._log_srot_changes(tel)
+
+        rpm = _sfmt.rpm_row(tel.rpm)
+        etemp = _sfmt.esc_temp_row(tel.esc_temp_c)
         self.get_logger().info(
             f'[SROT ] BAT main {self._tel(tel.battery_voltage, "{:5.2f}", "V")} | '
             f'thruster {self._tel(tel.thruster_voltage, "{:5.2f}", "V")} | '
@@ -1195,8 +1235,13 @@ class AUVManagerNode(Node):
             yaw_str = f'{yaw_deg:6.1f} ({yaw_label})'
         else:
             yaw_str = '   N/A'
-        depth_str = f'{attitude["depth"]:+6.2f}m' if attitude else '   N/A'
-        bat_str   = f'{battery["voltage"]:5.1f}V'  if battery else '  N/A'
+        # Through the shared formatter: a NaN depth is ABSENT (the board suppresses
+        # what it cannot stand behind), and `+nanm` on an operator's screen is neither
+        # a reading nor a legible way to say "no barometer".
+        depth_str = (_sfmt.fmt(attitude['depth'], '{:+6.2f}', 'm') if attitude
+                     else '   N/A')
+        bat_str   = (_sfmt.fmt(battery['voltage'], '{:5.1f}', 'V') if battery
+                     else '  N/A')
         self.get_logger().info(
             f'[STATE] {arm_str} | {mode:<10} | '
             f'YAW:{yaw_str} | DEPTH:{depth_str} | BAT:{bat_str}')

@@ -307,6 +307,56 @@ payload reports UNREADABLE — indistinguishable from a mis-roled board. The man
 reader before `_preflight_payload`; `test_the_reader_thread_starts_before_the_payload_role_read`
 pins that ordering.
 
+### Display conventions — one rule: match the board
+
+**Heading is `0..360` on every surface.** The board wraps it explicitly for both its OLED and
+`VFR_HUD.heading` (`mav_stream.cpp:254-256`), and `SrotFC.get_attitude` / `Telemetry.yaw_deg`
+already do the same (`% 360.0`). `ATTITUDE.yaw` is signed radians on the wire, and rendering
+that raw printed `yaw -162.23°` next to the board's `heading 197°` — the same angle,
+disagreeing by exactly 360, on adjacent lines. **Roll and pitch stay signed** (`CAL_LVL_R/P`
+are signed radians; a 3° list to port is not a 357° list).
+
+`srot_format.py` is the single definition of every conversion — `connect`, its dashboard,
+`--json` and the manager's `[SROT ]` block all call it, so they cannot drift again. That
+module and `srot_changes.py` are pure and unit-tested without hardware.
+
+`connect` prints our heading beside the board's `VFR_HUD` copy on purpose: two numbers that
+must agree, side by side, so a future drift is visible in one glance rather than after a dive.
+
+### Absence, on a bare board
+
+With the board alone — no thrusters, no Bar30, no 2nd board — most of the vehicle is
+legitimately absent, and every one of these is a place a `0` would have lied:
+
+| Field | Absent because | Trap |
+|---|---|---|
+| depth / pressure / `WTEMP` | no Bar30 | ⚠ **`VFR_HUD.alt` is NOT gated on baro health** (`mav_stream.cpp:258`), unlike `SCALED_PRESSURE2`/`WTEMP` which *are* suppressed. The board streams `-0.000 m` with no barometer fitted at all, so read the `SYS_STATUS` health bit — never infer health from the presence of a depth value |
+| `Vservo` / battery id 1 | `Vservo` **is** PM2, the thruster pack, which arrives over ESP-NOW from the 2nd board | absent ≠ 0 V |
+| ESC temps | no Pico, no ESCs | an ESC reporting 0 °C is implausible → an all-zero temp row means nothing is attached. **RPM is different**: 0 RPM is legitimate for a stopped ESC, so only a *missing frame* is `--` |
+| `DEPTH_OUT` / `DEPTH_ERR` | the depth loop does not run without a barometer | — |
+
+`Vcc` is a **hardcoded `5000`** in the firmware (`mav_stream.cpp:328`), not a measurement — it
+is labelled `(nominal, not measured)` so nobody debugs a 5 V rail off a constant.
+
+An unwired PM1 pin **floats**: the change log caught it oscillating **1.20 ↔ 5.96 V** on the
+bare-board bench. That is a floating ADC, not a pack, and it is exactly the kind of thing a
+periodic snapshot shows as a plausible-looking single number.
+
+### PlatformIO — we build the firmware now
+
+`pio` 6.1.19 is installed in an isolated venv (`~/.platformio-venv`) so it cannot disturb the
+ROS/`pymavlink` site-packages this workspace depends on:
+
+```bash
+~/.platformio-venv/bin/pio run -e esp32doit-devkit-v1   # verified: RAM 24.3%, Flash 29.6%
+```
+
+⛔ **Build only. Do not flash without an explicit decision.** `app0` must stay at `0x10000`
+(PlatformIO hardcodes the app offset and does *not* read it from the CSV — moving it makes
+every upload land where the bootloader will not look), and the 20 KB → 128 KB NVS change means
+`pio run -t erase` first, which **wipes the `CAL_*` block** — accel, mag and level calibration
+plus detected motor directions, recoverable only from a Bondor parameter export.
+
 ### Host-side workarounds for firmware defects (see `srot-control-board/JETSON_FEEDBACK.md`)
 
 > **Read `auv-architecture-2026.md` first.** Most of this section is now history. The firmware
