@@ -348,8 +348,17 @@ periodic snapshot shows as a plausible-looking single number.
 ROS/`pymavlink` site-packages this workspace depends on:
 
 ```bash
-~/.platformio-venv/bin/pio run -e esp32doit-devkit-v1   # verified: RAM 24.3%, Flash 29.6%
+~/.platformio-venv/bin/pio run -e esp32doit-devkit-v1   # the flight controller
+~/.platformio-venv/bin/pio run -e pico                  # RP2350 thruster co-processor
+~/.platformio-venv/bin/pio run -e second-board          # thruster-pack voltage TX
 ```
+
+| env | built 2026-08-03 |
+|---|---|
+| `esp32doit-devkit-v1` | ✅ RAM 24.3%, Flash 29.6% |
+| `pico` | ✅ (14m42s — RP2350 toolchain fetch) |
+| `second-board` | ✅ (12s) |
+| `groundstation-esp32`, `esp32_4way`, `esp32_4way_diag` | ❌ *"Nothing to build"* — **stale env definitions**, their `build_src_filter` points at `src/groundstation/` and `src/esp32_4way/`, which have never existed in that repo. Those sources live in `srot-ground-station/` and `srot-esc-flasher/src/esp32_4way/` |
 
 ⛔ **Build only. Do not flash without an explicit decision.** `app0` must stay at `0x10000`
 (PlatformIO hardcodes the app offset and does *not* read it from the CSV — moving it makes
