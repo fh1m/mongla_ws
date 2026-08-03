@@ -201,34 +201,106 @@ def find_srot_serial() -> str | None:
     return None
 
 
-def resolve_srot_profile(mav_device: str = '', *, logger=None) -> dict:
-    """{'conn','baud'} for the SROT board over direct USB serial.
+SROT_UDP_CONN = f'udpin:0.0.0.0:{NETWORK["mav_port"]}'
 
-    ``mav_device`` overrides everything (a device path or any pymavlink conn
-    string -- e.g. ``/dev/ttyUSB0`` or ``udpout:192.168.2.2:14550`` if a BlueOS
-    router is reintroduced later). Otherwise auto-detect the USB-serial port.
+
+def probe_udp_mavlink(port: int, timeout: float = 2.0) -> str:
+    """Tri-state: ``'mavlink'`` | ``'busy'`` | ``'silent'``.
+
+    Deliberately stronger than "is the port in use". A bound port only says some
+    process on THIS host holds the socket; it says nothing about a board on the
+    other end. So bind, wait for a real datagram, and check the MAVLink magic
+    (0xFD v2 / 0xFE v1) before claiming the board is there.
+
+    ``'busy'`` is a THIRD answer and not a failure, which matters: MEASURED here
+    2026-08-03, a leftover `duburi_manager start` from a previous run still held
+    14550 (a `timeout` had killed the `ros2 run` wrapper but not its child). The
+    probe could not bind, reported "no board", and then pymavlink bound the very
+    same port a second later and streamed fine -- a flatly self-contradicting
+    startup. Collapsing "I could not look" into "nothing is there" is how a
+    diagnostic ends up lying, so it gets its own value.
+    """
+    sample = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sample.settimeout(timeout)
+    try:
+        sample.bind(('0.0.0.0', int(port)))
+    except OSError:
+        sample.close()
+        return 'busy'
+    try:
+        data, _addr = sample.recvfrom(4096)
+        return 'mavlink' if (data and data[0] in (0xFD, 0xFE)) else 'silent'
+    except OSError:
+        return 'silent'
+    finally:
+        try:
+            sample.close()
+        except OSError:
+            pass
+
+
+def resolve_srot_profile(mav_device: str = '', *, logger=None,
+                         udp_probe_s: float = 2.0) -> dict:
+    """{'conn','baud'} for the SROT board -- auto-detects serial OR UDP.
+
+    ``mav_device`` overrides everything and takes EITHER form:
+      * a device path      -- ``/dev/ttyUSB0``, ``/dev/serial/by-id/...`` (baud added)
+      * any pymavlink conn -- ``udpin:0.0.0.0:14550``, ``udpout:192.168.2.2:14550``,
+                              ``tcp:...`` (no baud)
+
+    Auto order, and the order is the point:
+
+      1. **local USB serial** -- the designed transport (`auv-architecture-2026.md`):
+         one Type-C cable, no Pi, and MEASURED at zero BAD_DATA against ~8-9% over
+         the bridge. If the cable is there, it always wins.
+      2. **UDP 14550** -- the transitional rig, board on the Pi behind a BlueOS
+         Bridget serial->UDP bridge. Probed by waiting for an actual MAVLink
+         datagram, not by checking whether the port is bound.
+      3. neither -- return the UDP listener and say so LOUDLY. A board plugged in a
+         moment later over USB will not be picked up by this call, so the message
+         has to name the override rather than imply patience will fix it.
     """
     if mav_device:
         baud = SROT_BAUD if mav_device.startswith('/dev/') else None
         if logger:
-            logger.info(f'[NET  ] SROT mav_device override -> {mav_device}')
+            how = f'serial @ {SROT_BAUD}' if baud else 'network endpoint'
+            logger.info(f'[NET  ] SROT mav_device override -> {mav_device} ({how})')
         return {'conn': mav_device, 'baud': baud}
+
     path = find_srot_serial()
-    if path is None:
-        # Nothing plugged in. Return the conventional node so a board attached a
-        # moment later still connects, but log LOUDLY (ERROR) and say the node
-        # will block at wait_heartbeat -- otherwise a board-less run just hangs
-        # after a banner that names a device which isn't there.
-        path = '/dev/ttyUSB0'
+    if path is not None:
         if logger:
-            logger.error(
-                '[NET  ] SROT: no USB-serial device found. Falling back to '
-                f'{path} -- if the board is not plugged in, the node will BLOCK '
-                'at wait_heartbeat until it is. Plug in the SROT Type-C cable, or '
-                'pass -p mav_device:=/dev/serial/by-id/<yours>.')
+            logger.info(f'[NET  ] SROT: auto-detected USB serial {path} @ {SROT_BAUD}')
+        return {'conn': path, 'baud': SROT_BAUD}
+
+    state = probe_udp_mavlink(NETWORK['mav_port'], udp_probe_s) if udp_probe_s > 0 \
+        else 'silent'
+
+    if state == 'mavlink' and logger:
+        logger.info(
+            f'[NET  ] SROT: no local USB serial, but MAVLink IS arriving on UDP '
+            f'{NETWORK["mav_port"]} -- using {SROT_UDP_CONN} (board on the Pi behind '
+            f'a BlueOS bridge). Link quality is measurably worse than direct USB; '
+            f'prefer the Type-C cable for a water run.')
+    elif state == 'busy' and logger:
+        # Almost always a leftover manager from a previous run. Naming that first
+        # is the difference between a 10-second fix and a hardware hunt.
+        logger.warn(
+            f'[NET  ] SROT: UDP {NETWORK["mav_port"]} is already held by another '
+            f'process, so the board could not be probed. Using {SROT_UDP_CONN} '
+            f'anyway -- if a previous `duburi_manager start` is still running, this '
+            f'node will get NOTHING and block at wait_heartbeat. Check with: '
+            f'ss -lunp | grep {NETWORK["mav_port"]}')
     elif logger:
-        logger.info(f'[NET  ] SROT: auto-picked serial {path} @ {SROT_BAUD}')
-    return {'conn': path, 'baud': SROT_BAUD}
+        logger.error(
+            f'[NET  ] SROT: NO BOARD FOUND -- no USB-serial device, and no MAVLink on '
+            f'UDP {NETWORK["mav_port"]} in {udp_probe_s:.0f}s. Falling back to '
+            f'{SROT_UDP_CONN}; the node will BLOCK at wait_heartbeat until something '
+            f'arrives. Fix one of: plug in the SROT Type-C cable; or bring up the '
+            f'BlueOS bridge (curl http://{NETWORK["blueos_ip"]}:27353/v1.0/bridges); '
+            f'or name it explicitly with '
+            f'-p mav_device:=/dev/serial/by-id/<yours>  |  -p mav_device:={SROT_UDP_CONN}')
+    return {'conn': SROT_UDP_CONN, 'baud': None}
 
 
 # ---------------------------------------------------------------------- #
