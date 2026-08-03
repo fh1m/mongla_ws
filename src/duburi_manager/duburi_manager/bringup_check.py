@@ -742,6 +742,29 @@ def _depth_loop_verdict(depth_out: float | None,
     return (PASS, 'depth loop', f'settled (DEPTH_OUT={depth_out:+.2f})')
 
 
+def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
+    """(conn, probe_state) for the SROT board. `probe_state` is '', 'mavlink',
+    'busy' or 'silent' -- '' when the operator named the endpoint explicitly.
+
+    Split out so the section header, the checks and the closing startup hint all
+    describe the SAME transport from ONE resolution. Calling the resolver in each
+    place re-probes UDP (2 s each) and lets them disagree, which is how this tool
+    ended up printing "no MAVLink on UDP" three lines above a healthy heartbeat
+    read over exactly that link.
+    """
+    if device:
+        return device, ''
+    try:
+        from .connection_config import (find_srot_serial, probe_udp_mavlink,
+                                        SROT_UDP_CONN, NETWORK)
+    except Exception:                              # noqa: BLE001
+        return device or '/dev/ttyUSB0', ''
+    path = find_srot_serial()
+    if path is not None:
+        return path, ''
+    return SROT_UDP_CONN, probe_udp_mavlink(NETWORK['mav_port'], 2.0)
+
+
 def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     """SROT board: port/endpoint, vehicle heartbeat, GAIN, depth sign.
 
@@ -757,22 +780,13 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     """
     out: list[tuple[str, str, str]] = []
     try:
-        from .connection_config import (find_srot_serial, SROT_BAUD,
-                                        resolve_srot_profile, SROT_UDP_CONN)
+        from .connection_config import find_srot_serial, SROT_BAUD, resolve_srot_profile
     except Exception as exc:                       # noqa: BLE001
         return [(FAIL, 'connection_config import', str(exc))]
 
-    # Same resolver the manager uses, so this preflight can never grade a different
-    # transport than the node it is clearing for flight.
+    # `device` is normally supplied by _resolve_srot_for_check so the whole section
+    # agrees on one transport; the fallback keeps this callable on its own.
     port = device or resolve_srot_profile()['conn']
-    if port == SROT_UDP_CONN and not device and find_srot_serial() is None:
-        # Auto-detect fell through to the UDP default without seeing traffic. Say so
-        # here rather than letting the heartbeat probe below report a bare "no
-        # HEARTBEAT", which reads like a dead board rather than "nothing is attached".
-        out.append((WARN, 'SROT auto-detect',
-                    'no USB serial and no MAVLink on UDP -- falling back to '
-                    f'{SROT_UDP_CONN}. Plug in the Type-C cable, bring up the BlueOS '
-                    'bridge, or pass --srot-device=<conn>'))
     is_serial = port.startswith('/dev/')
     baud_kw = {'baud': SROT_BAUD} if is_serial else {}
     if is_serial:
@@ -975,10 +989,25 @@ def main(argv: list[str] | None = None) -> int:
         emit(st, lbl, det)
 
     if srot:
-        # ---- D-F (SROT): one USB cable replaces the whole network stack ---- #
+        # ---- D-F (SROT): the board, however it is attached ---------------- #
+        # Resolve ONCE here so the section header, the checks and the closing
+        # startup hint all describe the SAME transport. Resolving in more than one
+        # place re-probes UDP (2 s each) and lets them disagree.
+        srot_conn, srot_state = _resolve_srot_for_check(srot_device)
         section('D-F. SROT control board'
-                + (' (bridged)' if srot_device else ' (direct USB serial)'))
-        for st, lbl, det in _check_srot(skip_mav, srot_device):
+                + (' (bridged over UDP)' if not srot_conn.startswith('/dev/')
+                   else ' (direct USB serial)'))
+        if srot_state == 'silent':
+            emit(WARN, 'SROT auto-detect',
+                 'no USB serial and no MAVLink on UDP -- falling back to '
+                 f'{srot_conn}. Plug in the Type-C cable, bring up the BlueOS '
+                 'bridge, or pass --srot-device=<conn>')
+        elif srot_state == 'busy':
+            emit(WARN, 'SROT auto-detect',
+                 f'UDP port already held by another process -- could not probe. '
+                 f'Using {srot_conn}. A leftover `duburi_manager start` is the '
+                 f'usual cause: ss -lunp | grep 14550')
+        for st, lbl, det in _check_srot(skip_mav, srot_conn):
             emit(st, lbl, det)
     else:
         # ---- D. network ------------------------------------------------- #
@@ -1095,13 +1124,14 @@ def main(argv: list[str] | None = None) -> int:
         # resolve_srot_profile() bypasses those whether the transport is a device
         # or an endpoint. But the operator must pass the SAME endpoint to the
         # manager, so print the command rather than the word "serial".
-        if srot_device:
+        if srot_conn.startswith('/dev/'):
             emit(PASS, 'connection',
-                 f'bridged -- start the manager with the SAME endpoint: '
-                 f'-p mav_device:={srot_device}  (`mode` does not apply on srot)')
+                 f'direct USB serial ({srot_conn}) -- auto-detected; `mode` does '
+                 f'not apply on srot')
         else:
             emit(PASS, 'connection',
-                 'direct USB serial -- `mode` does not apply on srot')
+                 f'bridged over UDP ({srot_conn}) -- the manager auto-detects the '
+                 f'same endpoint; `mode` does not apply on srot')
     else:
         chosen = resolve_mode('auto', logger=None)
         emit(PASS, f'auto-detected mode={chosen!r}',
@@ -1134,8 +1164,8 @@ def _print_launch_hint(srot: bool = False) -> None:
         # `start` whose defaults are right but whose profile talk is meaningless here.
         print('    ros2 launch duburi_manager bringup.launch.py   '
               '# srot + mavlink_ahrs are the defaults')
-        print('      fire(N) = BOARD channel N; see the [PAYLOAD] roles line'
-              '# else fire() refuses')
+        print('      # fire(N) = BOARD channel N -- see the [PAYLOAD] roles line;'
+              ' nothing else needs setting')
         print('    ros2 run duburi_planner duburi arm')
         print('    ros2 run duburi_planner duburi move_forward --duration 5 --gain 40')
         print('    ros2 run duburi_planner duburi stop')
