@@ -143,6 +143,29 @@ collision does not fail the way you would expect.
 
 ### Bondor (the GCS) over the same UDP link — take turns, and mind the port
 
+**⛔ DO NOT ARM FROM BONDOR WHILE duburi_ws IS DISCONNECTED.** This is the one sharp edge
+in the take-turns workflow and it bit us on 2026-08-06: arming produced
+`CRIT Failsafe: surfacing (companion lost)` followed by thrusters 5-8 spinning, which
+reads as "arming ran the motors on its own in MANUAL". It is neither a Bondor bug nor a
+firmware bug.
+
+`FS_GCS_SYSID`/`FS_GCS_COMPID` (255/191 on this board) scope the companion-lost failsafe
+to **one named source — duburi_ws**. Bondor is **255/190**, so its 1 Hz heartbeat never
+feeds that timer no matter how healthy the link looks. The board only latches
+"companion seen" once the named source has appeared, so a Bondor-only session on a
+*freshly booted* board is fine — which is exactly why this never reproduces on a bench
+where duburi_ws is never run. But once duburi_ws has connected **in that power cycle**,
+arming with only Bondor connected trips the failsafe ~5 s later, which switches out of
+MANUAL into **SURFACE** and drives the four vertical thrusters (5-8) up. `rpm=0` then
+raises `STALLED` on each of them.
+
+Config, calibration, param save/export and payload roles need **no arming at all** — do
+all of that freely. If you genuinely must arm with Bondor alone, pick one: power-cycle
+the board first, keep duburi_ws running, or set `FS_GCS_COMPID = 0` (the firmware's
+documented wildcard) for bench work and put it back before flight. Bondor now shows this
+warning above its own Arm button whenever the board's failsafe identity does not match
+its own.
+
 **Bondor already had Direct UDP**; it had simply never been used. Connect settings:
 
 | field | value |
