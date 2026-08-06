@@ -348,7 +348,16 @@ DEPTH_OUT_ARM_LIMIT = 0.90
 #      SCALED_PRESSURE2 and refusing DEPTH_HOLD/AUTO), and the measure itself is published
 #      as NAMED_VALUE_FLOAT "BARO_P2P" -- ungated, deliberately, so it can explain WHY depth
 #      withdrew. Observed live at 5.90 mbar, matching our own independently-computed spread.
-FW_BEHAVIOUR_REV = 5
+#   6  fw 2026-08-06: MOTOR_DETECT converges, and can no longer wipe a good calibration.
+#      Its pulse is driven THROUGH the direction flag, so it measures an AGREEMENT rather
+#      than an absolute direction; storing that as the new absolute cal made the routine
+#      converge only when CAL_MDIRn was already +1, so an inverted thruster stayed inverted
+#      through any number of runs. It now composes. Separately, an inconclusive detect used
+#      to default to +1 and store it, so a run in air silently reset all eight thrusters and
+#      reported SUCCESS; it now leaves the value alone and finishes FAIL (which also keeps
+#      it out of flash). Nothing for this host to adapt to -- duburi_ws never runs
+#      MOTOR_DETECT -- but it changes what an operator should expect from Bondor.
+FW_BEHAVIOUR_REV = 6
 
 # The minimum revision this host code assumes. Flashing older firmware than this
 # re-opens the coasting MOVE_STOP with no host brake left to cover it.
