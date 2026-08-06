@@ -334,11 +334,64 @@ def resolve_srot_profile(mav_device: str = '', *, logger=None,
             f'[NET  ] SROT: NO BOARD FOUND -- no USB-serial device, and no MAVLink on '
             f'UDP {NETWORK["mav_port"]} in {udp_probe_s:.0f}s. Falling back to '
             f'{SROT_UDP_CONN}; the node will BLOCK at wait_heartbeat until something '
-            f'arrives. Fix one of: plug in the SROT Type-C cable; or bring up the '
-            f'BlueOS bridge (curl http://{NETWORK["blueos_ip"]}:27353/v1.0/bridges); '
-            f'or name it explicitly with '
-            f'-p mav_device:=/dev/serial/by-id/<yours>  |  -p mav_device:={SROT_UDP_CONN}')
+            f'arrives. Plug in the SROT Type-C cable, or name the link explicitly with '
+            f'-p mav_device:=/dev/serial/by-id/<yours>  |  '
+            f'-p mav_device:={SROT_UDP_CONN}')
+        for line in diagnose_bridge():
+            logger.error(f'[NET  ] {line}')
     return {'conn': SROT_UDP_CONN, 'baud': None}
+
+
+def diagnose_bridge(timeout: float = 3.0) -> list:
+    """Ask BlueOS why nothing is arriving, and return actionable lines.
+
+    WHY THIS EXISTS, and it will happen again on every single reflash: a Bridget
+    bridge holds an OPEN FILE DESCRIPTOR on /dev/ttyUSB0. Flashing the board makes
+    the USB device re-enumerate, so that descriptor goes dead -- but the bridge is
+    still listed, BlueOS still reports the serial port present, and the API answers
+    exactly as it does when everything is fine. Nothing is wrong ANYWHERE that a
+    human can see, and no data flows.
+
+    OBSERVED 2026-08-06: after the rev-5 flash, neither duburi_ws nor Bondor could
+    connect. Bridge listed, /dev/ttyUSB0 listed, Pi pingable, zero datagrams. Delete
+    + re-POST the identical bridge and it came straight back. That is a five-second
+    fix that reads like a dead board, which is why the recovery command belongs in
+    the error text rather than in someone's memory.
+
+    Best-effort and short-timeout: this runs on an error path, so it must never be
+    the reason a diagnostic hangs.
+    """
+    import json
+    import urllib.request
+
+    base = f'http://{NETWORK["blueos_ip"]}:27353/v1.0'
+    body = ('{"serial_path":"/dev/ttyUSB0","baud":115200,'
+            f'"ip":"{NETWORK["topside_ip"]}",'
+            '"udp_target_port":14550,"udp_listen_port":14551}')
+    # Two entries, not one embedded newline: every line the caller prints gets its own
+    # log prefix, and a half-prefixed command is exactly the sort of thing that gets
+    # copied wrong at 2am on a pool deck.
+    recreate = [
+        f"  curl -s -X DELETE {base}/bridges -H 'Content-Type: application/json' -d '{body}'",
+        f"  curl -s -X POST   {base}/bridges -H 'Content-Type: application/json' -d '{body}'",
+    ]
+    try:
+        with urllib.request.urlopen(f'{base}/bridges', timeout=timeout) as resp:
+            bridges = json.loads(resp.read().decode())
+    except Exception:                                        # noqa: BLE001
+        return [f'BlueOS Bridget is not answering on {base} -- is the Pi up, and is '
+                f'this host on the AUV switch? (ping {NETWORK["blueos_ip"]})',
+                'If the board is on THIS host instead, plug in the Type-C cable.']
+    if not bridges:
+        return ['BlueOS has NO bridge configured -- that is why nothing is arriving. '
+                'Create it:'] + recreate
+    return [
+        f'BlueOS DOES have a bridge configured ({bridges}) and it is still silent.',
+        'That is the reflash signature: a bridge holds an open fd on /dev/ttyUSB0, and '
+        'flashing the board re-enumerates the device, so the fd is dead while the '
+        'bridge still LISTS as healthy. Delete and re-create it -- same body, and it '
+        'comes straight back:',
+    ] + recreate
 
 
 # ---------------------------------------------------------------------- #

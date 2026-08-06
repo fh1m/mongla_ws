@@ -1,6 +1,6 @@
 # SROT control-board integration (branch `srot`)
 
-> **Firmware baseline for this branch: `srot-control-board` @ `22afc95`, `SROT_FW_BEHAVIOUR_REV 4`.**
+> **Firmware baseline for this branch: `srot-control-board` @ `4feeda0`, `SROT_FW_BEHAVIOUR_REV 5`.**
 > Read [`auv-architecture-2026.md`](auv-architecture-2026.md) first if you have not.
 >
 > **⚠ YAW IS ABSOLUTE FROM REV 4.** `ATTITUDE.yaw` and `VFR_HUD.heading` are a magnetic compass
@@ -79,6 +79,30 @@ ros2 run duburi_manager start --ros-args -p mav_device:=udpin:0.0.0.0:14550 \
 ```
 
 Pass the **same endpoint to all three** — `mode` still does not apply on srot.
+
+### ⛔ AFTER EVERY FLASH: the bridge is dead but still looks alive
+
+**This is the single most likely reason "we cannot connect any more".** OBSERVED
+2026-08-06, after the rev-5 flash: neither duburi_ws nor Bondor could connect. The bridge
+was listed, `/dev/ttyUSB0` was listed, the Pi pinged — and **zero datagrams arrived**.
+
+A Bridget bridge holds an **open file descriptor** on `/dev/ttyUSB0`. Flashing the board
+re-enumerates the USB device, so that fd dies — but Bridget keeps the bridge in its list
+and the API answers exactly as it does when everything is healthy. Nothing is visibly
+wrong anywhere, and nothing works.
+
+**Fix: delete and re-POST the identical bridge.** It comes straight back.
+
+```bash
+B='{"serial_path":"/dev/ttyUSB0","baud":115200,"ip":"192.168.2.1","udp_target_port":14550,"udp_listen_port":14551}'
+curl -s -X DELETE http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: application/json' -d "$B"
+curl -s -X POST   http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: application/json' -d "$B"
+```
+
+`connect`, `bringup_check --srot` and `duburi_manager start` now **print those two lines
+for you** when nothing arrives (`connection_config.diagnose_bridge`), and distinguish
+"BlueOS has no bridge" from "bridge configured and still silent" — the second being the
+reflash signature.
 
 ### ⚠ Link quality: measurably worse than direct serial — bench use, not water
 

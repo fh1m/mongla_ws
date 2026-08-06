@@ -37,10 +37,11 @@ os.environ.setdefault('MAVLINK20', '1')
 from pymavlink import mavutil                                        # noqa: E402
 
 try:
-    from .connection_config import find_srot_serial, SROT_BAUD, resolve_srot_profile
+    from .connection_config import (find_srot_serial, SROT_BAUD,
+                                resolve_srot_profile, diagnose_bridge)
 except ImportError:                                                  # direct execution
     from duburi_manager.connection_config import (find_srot_serial, SROT_BAUD,
-                                                  resolve_srot_profile)
+                                                  resolve_srot_profile, diagnose_bridge)
 
 
 class _StderrLogger:
@@ -120,7 +121,8 @@ _DEPTH_LOOP_IDLE_MODES = frozenset({'MANUAL', 'STABILIZE', 'ACRO', 'MOTOR_DETECT
                                     'MOTOR_TUNE', 'AUTOTUNE'})
 
 _NAMED_GROUPS = (
-    ('depth loop', ('DEPTH_CMD', 'DEPTH_ERR', 'DEPTH_OUT', 'MIX_VERT', 'MIX_VSGN')),
+    ('depth loop', ('DEPTH_CMD', 'DEPTH_ERR', 'DEPTH_OUT', 'MIX_VERT', 'MIX_VSGN',
+                    'BARO_P2P')),
     ('move',       ('MV_STATE', 'MV_TYPE', 'MV_PROG', 'STUNT_PRG')),
     ('vehicle',    ('GAIN', 'KILL', 'LEAK', 'WTEMP', 'CURR', 'MAGACC', 'ATUNE')),
     ('firmware',   ('HEAP', 'STK_MAV', 'STK_SEN', 'STK_CTL', 'STK_UI',
@@ -640,10 +642,10 @@ def main(argv=None) -> int:
             print('  Board powered? Correct port?', file=sys.stderr)
         else:
             # On a bridged link "silent" has one more failure mode than on serial:
-            # the board can be perfectly healthy with the bridge simply not running.
-            print('  The link is bridged, so this is either the board or the bridge. '
-                  'Check the bridge exists and points at THIS host:', file=sys.stderr)
-            print('    curl -s http://192.168.2.2:27353/v1.0/bridges', file=sys.stderr)
+            # the board can be perfectly healthy with the bridge simply not running --
+            # or, after a reflash, LISTED but holding a dead file descriptor.
+            for line in diagnose_bridge():
+                print(f'  {line}', file=sys.stderr)
         return 2
 
     # Read-only: AUTOPILOT_VERSION is not streamed, it must be asked for. Nothing
