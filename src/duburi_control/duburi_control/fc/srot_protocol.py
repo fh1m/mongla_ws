@@ -339,7 +339,16 @@ DEPTH_OUT_ARM_LIMIT = 0.90
 #      regression, and absolute MOVE_TURN (p4=1) finally turns to the heading it is given.
 #      The BNO's own calibration is persisted to sensor flash (mag accuracy survives a power
 #      cycle), and the mag report stops once the one-shot reference locks.
-FW_BEHAVIOUR_REV = 4
+#   5  fw 2026-08-03: BARO JITTER GATE -- the barometer is judged on the VARIANCE of the
+#      stream, not only per-sample plausibility. This is the fix for the bench finding we
+#      reported: a failing Bar30 produced 317-874 mbar sample-to-sample while EVERY reading
+#      sat inside the wide plausibility band, so depth stayed "healthy" and its phantom value
+#      saturated the depth PID into full vertical thrust on arming. Peak-to-peak > 15 mbar
+#      over an 8-sample window now marks the baro unhealthy (suppressing WTEMP /
+#      SCALED_PRESSURE2 and refusing DEPTH_HOLD/AUTO), and the measure itself is published
+#      as NAMED_VALUE_FLOAT "BARO_P2P" -- ungated, deliberately, so it can explain WHY depth
+#      withdrew. Observed live at 5.90 mbar, matching our own independently-computed spread.
+FW_BEHAVIOUR_REV = 5
 
 # The minimum revision this host code assumes. Flashing older firmware than this
 # re-opens the coasting MOVE_STOP with no host brake left to cover it.
