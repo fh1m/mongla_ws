@@ -80,6 +80,63 @@ ros2 run duburi_manager start --ros-args -p mav_device:=udpin:0.0.0.0:14550 \
 
 Pass the **same endpoint to all three** — `mode` still does not apply on srot.
 
+### ⛔ IN-WATER 2026-08-06: every axis reversed + flips in STABILIZE
+
+Symptoms: in MANUAL on the joystick, forward/back, yaw and depth all drove the **opposite**
+way; in STABILIZE the vehicle **flipped** after arming. Thruster directions had been
+verified against the documentation, and level calibration had been done.
+
+**One cause explains all five symptoms: the effective motor direction is globally
+inverted.** Every axis reverses because every thruster pushes the wrong way, and the
+attitude loop's corrective torque becomes *anti*-corrective — positive feedback — which is
+a flip, not a drift. That is why STABILIZE flips while MANUAL "merely" reverses: MANUAL is
+**direct passthrough with no attitude feedback at all** (`task_control_loop.cpp`:
+`case FlightMode::MANUAL: roll = in.sp_roll; ...`), so the manual reversal *cannot* be an
+IMU/orientation problem and there is no point calibrating level again.
+
+**Why "we verified the thruster directions" did not catch it.** `DO_MOTOR_TEST` writes a
+**direct per-motor override** (`thrusters.test_override` / `test_motor` / `test_throttle`)
+that **bypasses `mix()` entirely**. So motor test proves the ESC, prop and wiring of each
+thruster individually; it proves nothing about the sign `mix()` sends that thruster in
+flight. Those are two different claims and only the first was tested.
+
+**The mixer matrix is NOT at fault, and the board says so itself.** It publishes a disarmed
+self-check: `mix(throttle=+1)` and then counts how many verticals got the correct negative
+sign. Read live on this vehicle:
+
+| | read | expected | meaning |
+|---|---|---|---|
+| `MIX_VERT` | **−1.00** | −1 | thruster 5 correct for full ASCEND |
+| `MIX_VSGN` | **4** | 4 | all four verticals correct |
+
+The firmware's own comment: *"Anything less is a mixer matrix error, not a wiring one."*
+It is 4 — so **not** a matrix error, which leaves the wiring/direction side.
+
+**The fix is a PARAMETER, not a reflash.** Effective direction is
+`CAL_MDIR<n>` (what MOTOR_DETECT found) **×** `MOT_<n>_DIRECTION` (the operator toggle),
+combined in `task_control_loop.cpp`. As found on the vehicle:
+
+```
+MOT_n_DIRECTION = +1 for all 8
+CAL_MDIRn       = [-1, +1, +1, +1, +1, +1, +1, -1]
+```
+
+⚠ That `CAL_MDIR` pattern is itself suspect — MOTOR_DETECT run on a vehicle whose
+thrust is globally inverted will mis-detect. Do not trust it as a baseline.
+
+**Procedure — OUT OF THE WATER, props clear, one step at a time:**
+
+1. Set **all eight** `MOT_n_DIRECTION = -1` in Bondor (Setup → Motors → Thruster direction).
+   This flips the global sense without touching firmware.
+2. Re-verify in **MANUAL only**, at low `JS_GAIN`, one axis at a time. MANUAL has no
+   attitude feedback, so it cannot flip — it is the safe mode to establish sign in.
+3. Only once every MANUAL axis is correct, re-run **MOTOR_DETECT** so `CAL_MDIR` is
+   re-derived against correct thrust, then Save.
+4. **STABILIZE last**, and briefly — it is the mode that flips if any sign is still wrong.
+
+Do not skip to STABILIZE to "see if it is fixed": with an inverted sign it is a
+divergent loop, and the vehicle reaches full deflection before an operator can react.
+
 ### ⛔ AFTER EVERY FLASH: the bridge is dead but still looks alive
 
 **This is the single most likely reason "we cannot connect any more".** OBSERVED
