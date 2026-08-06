@@ -41,8 +41,13 @@ SOURCE_SYSID    = 255
 # Ordering is safe in both directions -- deliberately, so neither repo has to wait:
 # the board counts ANY heartbeat whose id is not its own
 # (`msg.compid != MAV_COMPONENT_ID || msg.sysid != MAV_SYSTEM_ID`,
-# fw mav_commands.cpp:687), so 191 feeds the current failsafe exactly as 190 did,
-# and it keeps working once FS_GCS_SYSID/FS_GCS_COMPID land.
+# fw mav_commands.cpp:687), so 191 feeds the current failsafe exactly as 190 did.
+#
+# FS_GCS_SYSID / FS_GCS_COMPID HAVE LANDED (fw params.cpp:148-149) with defaults
+# 255 / 191 -- exactly SOURCE_SYSID / SOURCE_COMPID below. That is now a LIVE
+# COUPLING, not a future plan: if either side moves, the board's source-scoped GCS
+# failsafe stops recognising us and it SURFACES mid-mission, looking for all the
+# world like a link fault. test_srot_protocol_drift pins both against params.cpp.
 #
 # Applied on the SROT path only (auv_manager_node._setup_mavlink); the pixhawk
 # backend keeps pymavlink's defaults so it stays byte-identical to history.
@@ -437,7 +442,11 @@ PCA_RELAY_BASE_CH   = 8     # first MOSFET/switch channel (0-based)
 # rather than keeping a host-side copy of the wiring, which goes stale SILENTLY the
 # moment a channel is re-roled on the board.
 #
-# MEASURED on the vehicle 2026-08-02: channels 1-8 = SERVO, 9-16 = SWITCH.
+# ⚠ THE 1-8 / 9-16 SPLIT IS A DEFAULT, NOT THE WIRING. It is only the initial value
+# of the per-channel param (`(c < 8) ? 1.0f : 2.0f`, fw params.cpp), freely re-rolled
+# from Bondor. Nothing in this file or above it may assume it -- read the role. It is
+# recorded here only because it is what this hull happened to read on 2026-08-02, and
+# because stating it as folklore is how it got believed in the first place.
 PCA_ROLE_PARAM_FMT  = 'SERVO{}_ROLE'
 PCA_ROLE_DISABLED   = 0
 PCA_ROLE_SERVO      = 1     # PWM -- the arm. duburi_ws MUST NOT drive these.
@@ -450,3 +459,35 @@ PCA_ROLE_NAMES      = {PCA_ROLE_DISABLED: 'DISABLED',
 # number whatever its role (fw mav_commands.cpp:471-479).
 PCA_SWITCH_ON_US    = 2000
 PCA_SWITCH_OFF_US   = 1000
+
+# ---- SERVOn_FUNCTION -- WHAT is wired there, as opposed to HOW it is driven ---- #
+#
+# ROLE (above) is the AUTHORITY: it decides whether a channel may be actuated at all,
+# and the firmware enforces it. FUNCTION is the IDENTITY: it decides what we CALL the
+# channel. The two are orthogonal, and conflating them is the bug to avoid -- setting
+# a FUNCTION never makes a channel fireable.
+#
+# The firmware deliberately does not read `servo_func` (grep over its src/ + include/
+# returns only the declaration and the param-table row). It is storage, served by the
+# ordinary param protocol, so the payload map lives ON THE BOARD and travels with the
+# hull -- instead of in a host-side table that goes stale the moment someone re-wires
+# a channel, whose failure mode is firing the manipulator arm during a drop.
+#
+# ⚠ APPEND-ONLY. Canonical numbers are `SROT_SERVO_FUNC_*` in the firmware's
+# include/config.h; Bondor mirrors them in src/shared/protocol.ts. Inserting a value
+# silently renames every payload after it. test_srot_protocol_drift pins all three.
+PCA_FUNC_PARAM_FMT  = 'SERVO{}_FUNCTION'
+PCA_FUNC_NONE       = 0     # param default -- an unconfigured board reads "unassigned"
+PCA_FUNC_TORPEDO    = 1
+PCA_FUNC_DROPPER    = 2
+PCA_FUNC_GRIPPER    = 3
+PCA_FUNC_LIGHT      = 4
+PCA_FUNC_CAMERA     = 5
+PCA_FUNC_AUX        = 6
+PCA_FUNC_NAMES      = {PCA_FUNC_NONE:    'unassigned',
+                       PCA_FUNC_TORPEDO: 'torpedo',
+                       PCA_FUNC_DROPPER: 'dropper',
+                       PCA_FUNC_GRIPPER: 'gripper',
+                       PCA_FUNC_LIGHT:   'light',
+                       PCA_FUNC_CAMERA:  'camera',
+                       PCA_FUNC_AUX:     'aux'}
