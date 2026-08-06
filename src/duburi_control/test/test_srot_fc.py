@@ -822,12 +822,13 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
     Every rev so far has been ADDITIVE for this host: rev 3 made WTEMP/SCALED_PRESSURE2
     absentable (we already treat absence as absence), rev 4 made yaw absolute (we read
     whatever the board reports), rev 5 added the baro jitter gate and a BARO_P2P value we
-    simply display. None of them break a rev-2 board, so the requirement stays at 2 --
-    raising it would strand a working vehicle for no safety gain.
+    simply display, rev 6 fixed MOTOR_DETECT (which this host never runs). None of them
+    break a rev-2 board, so the requirement stays at 2 -- raising it would strand a
+    working vehicle for no safety gain.
 
     The two numbers are asserted separately on purpose: bumping the tracker is routine
     bookkeeping, raising the requirement is a decision to refuse hardware."""
-    assert sp.FW_BEHAVIOUR_REV == 5
+    assert sp.FW_BEHAVIOUR_REV == 6
     assert sp.FW_BEHAVIOUR_REV_REQUIRED == 2
 
 
