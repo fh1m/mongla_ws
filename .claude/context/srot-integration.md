@@ -159,12 +159,34 @@ arming with only Bondor connected trips the failsafe ~5 s later, which switches 
 MANUAL into **SURFACE** and drives the four vertical thrusters (5-8) up. `rpm=0` then
 raises `STALLED` on each of them.
 
-Config, calibration, param save/export and payload roles need **no arming at all** — do
-all of that freely. If you genuinely must arm with Bondor alone, pick one: power-cycle
-the board first, keep duburi_ws running, or set `FS_GCS_COMPID = 0` (the firmware's
-documented wildcard) for bench work and put it back before flight. Bondor now shows this
-warning above its own Arm button whenever the board's failsafe identity does not match
-its own.
+Config, tuning, calibration, param save/export and payload roles need **no arming at
+all** — do all of that with Bondor alone, freely.
+
+**The one exception is motor direction.** Verifying it needs `DO_MOTOR_TEST`, which the
+firmware hard-gates on armed (`mav_commands.cpp`: *"Arm motors before testing motors"*),
+so that task genuinely cannot be done from Bondor without arming.
+
+**Bondor now has a BENCH MODE for exactly this**, one click from the banner that reports
+the problem. It sets `FS_GCS_COMPID = 0`, the firmware's own documented wildcard: the
+failsafe still runs, it just accepts any component on the configured sysid, so Bondor's
+heartbeat satisfies it and arming is safe on the bench.
+
+Three properties make that safe, and they are load-bearing:
+
+- It is a **`PARAM_SET` only, never `PREFLIGHT_STORAGE`** — a power cycle restores the
+  flight value by itself, so the safe state is the default and forgetting is harmless.
+- ⚠ **Do not press Save on the Parameters tab while bench mode is active**, or it becomes
+  permanent. This matters because the runbook below tells you to Save for payload roles —
+  so do the payload/param save *before* enabling bench mode, or restore first.
+- A **Restore flight config** button appears whenever the wildcard is active, so the state
+  is never invisible.
+
+**Never take the wildcard into the water:** with it set, a dead Jetson cannot be told
+apart from a live GCS, so the vehicle would station-keep instead of surfacing — which is
+the entire reason the two ids differ. Verify `FS_GCS_COMPID = 191` before any autonomous
+run (`bringup_check --srot` reads it, and a confirmed read needs several samples: over the
+bridge, `PARAM_SET` echoes and `PARAM_REQUEST_READ` replies share pymavlink's single
+slot, so one sample can lag by a write).
 
 **Bondor already had Direct UDP**; it had simply never been used. Connect settings:
 
