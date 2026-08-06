@@ -6,6 +6,7 @@ The two environment probes (`_udp_port_in_use`, `_pixhawk_serial_present`) touch
 sockets / `/dev`, so they are monkeypatched here; the decision logic is pure.
 """
 
+import time
 import pytest
 
 from duburi_manager import connection_config as cc
@@ -207,3 +208,50 @@ def test_probe_returns_busy_when_the_port_is_already_bound():
 
 def test_probe_returns_silent_on_a_free_quiet_port():
     assert cc.probe_udp_mavlink(0, timeout=0.2) in ('silent', 'busy')
+
+
+# --- the probe must not judge on one datagram's first byte --------------------
+
+def test_probe_finds_mavlink_when_the_datagram_starts_MID_MESSAGE():
+    """The BlueOS bridge chunks the serial stream at arbitrary offsets -- MEASURED,
+    only ~77% of its datagrams begin on a message boundary.
+
+    Judging on `data[0]` alone therefore returned 'silent' on roughly a quarter of
+    attempts against a board streaming ~90 datagrams/s, in 0.02 s. bringup_check
+    printed "no MAVLink on UDP" three lines above a healthy heartbeat read over that
+    same link, and back-to-back runs flip-flopped -- the shape of intermittent that
+    gets mistaken for a hardware fault.
+    """
+    import socket as _s
+    import threading
+
+    sender = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
+    # A frame that STARTS mid-message: tail of one packet, then the 0xFD magic.
+    payload = bytes([0x11, 0x22, 0x33, 0x44]) + bytes([0xFD, 0x09, 0x00, 0x00])
+    stop = threading.Event()
+
+    def blast(port):
+        while not stop.is_set():
+            try:
+                sender.sendto(payload, ('127.0.0.1', port))
+            except OSError:
+                pass
+            time.sleep(0.01)
+
+    probe_port = 14993
+    t = threading.Thread(target=blast, args=(probe_port,), daemon=True)
+    t.start()
+    try:
+        assert cc.probe_udp_mavlink(probe_port, 1.5) == 'mavlink'
+    finally:
+        stop.set()
+        t.join(timeout=1)
+        sender.close()
+
+
+def test_probe_reports_silent_only_after_waiting_the_whole_timeout():
+    """A fast 'silent' is the bug signature: it means we bailed on a transient
+    instead of waiting. Must consume the budget before concluding nothing is there."""
+    t0 = time.monotonic()
+    assert cc.probe_udp_mavlink(14994, 0.6) == 'silent'
+    assert time.monotonic() - t0 >= 0.5, 'returned "silent" without waiting'

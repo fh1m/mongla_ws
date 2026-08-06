@@ -488,9 +488,14 @@ def test_bondor_mirrors_the_same_payload_function_enum():
     text = gs.read_text(errors='ignore')
     if 'SERVO_FUNC' not in text:
         pytest.skip('Bondor has not adopted the payload-function enum yet')
+    # Match the whole `{ ... }` entry containing the name, then pull `value` out of
+    # it -- so reordering the keys (prettier, a hand-edit) cannot make a present enum
+    # look missing. An order-dependent regex here would fail as "Bondor is missing
+    # TORPEDO", sending someone to look for a deleted constant that is right there.
     for fw_suffix, host_attr in _FUNCS:
-        # Bondor writes `{ value: N, name: 'SUFFIX', label: '...' }`.
-        m = re.search(rf"value:\s*(\d+)\s*,\s*name:\s*'{fw_suffix}'", text)
-        assert m, f'Bondor is missing payload function {fw_suffix}'
+        entry = re.search(rf"\{{[^{{}}]*name:\s*'{fw_suffix}'[^{{}}]*\}}", text)
+        assert entry, f'Bondor is missing payload function {fw_suffix}'
+        m = re.search(r'value:\s*(\d+)', entry.group(0))
+        assert m, f"Bondor's {fw_suffix} entry has no value: {entry.group(0)}"
         assert int(m.group(1)) == getattr(sp, host_attr), (
             f'Bondor has {fw_suffix}={m.group(1)}, we have {getattr(sp, host_attr)}')

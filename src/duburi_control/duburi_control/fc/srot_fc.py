@@ -1287,6 +1287,14 @@ class SrotPayload:
                         f'[PAYLOAD]   ch {ch} ({lbl}) is named in payload_channels but '
                         f'its board role is {name} -- fire({ch}) will REFUSE. '
                         f'Set SERVO{ch}_ROLE=2 in Bondor, or fix the name list.')
+            if self._roles and not self._functions:
+                # Roles came back but not one function. Without this line the
+                # [PAYLOAD] block simply loses every name, which looks like an
+                # unconfigured board rather than a read that failed.
+                self._log.warn(
+                    '[PAYLOAD] no SERVOn_FUNCTION could be read -- channel names '
+                    'will be blank. The board may predate the payload-identity enum, '
+                    'or the reads dropped; roles (which gate firing) are unaffected.')
             if unread:
                 self._log.error(
                     f'[PAYLOAD] roles unreadable on {unread} -- fire() FAILS CLOSED on '

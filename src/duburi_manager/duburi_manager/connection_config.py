@@ -58,6 +58,7 @@ When ``mav_device`` is set, the profile's default conn string is ignored.
 
 import os
 import socket
+import time
 from glob import glob
 
 
@@ -221,17 +222,54 @@ def probe_udp_mavlink(port: int, timeout: float = 2.0) -> str:
     diagnostic ends up lying, so it gets its own value.
     """
     sample = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sample.settimeout(timeout)
     try:
         sample.bind(('0.0.0.0', int(port)))
     except OSError:
         sample.close()
         return 'busy'
+    deadline = time.monotonic() + timeout
     try:
-        data, _addr = sample.recvfrom(4096)
-        return 'mavlink' if (data and data[0] in (0xFD, 0xFE)) else 'silent'
-    except OSError:
-        return 'silent'
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return 'silent'
+            sample.settimeout(remaining)
+            try:
+                data, _addr = sample.recvfrom(4096)
+            except socket.timeout:
+                return 'silent'
+            except ConnectionRefusedError:
+                # ECONNREFUSED on a *receiving* UDP socket, which reads as nonsense
+                # until you know the mechanism: when the previous probe socket closed,
+                # the sender (Bridget) kept transmitting, the kernel answered ICMP
+                # port-unreachable, and that queued error is delivered to the NEXT
+                # socket bound to the same port -- on its first recv, immediately.
+                #
+                # MEASURED: swallowing it as "silent" made this probe flaky in a way
+                # that mattered -- 3 of 6 back-to-back attempts returned 'silent' in
+                # 0.02 s while the board was streaming ~90 datagrams/s, so
+                # bringup_check printed "no MAVLink on UDP" three lines above a
+                # healthy heartbeat read over that very link. A gate that
+                # contradicts itself is a gate people stop believing.
+                #
+                # It is a stale notification about a socket that no longer exists,
+                # so the only correct response is to keep waiting.
+                continue
+            except OSError:
+                return 'silent'
+            # Look for the MAVLink magic ANYWHERE in the datagram, and keep waiting
+            # if this one has none -- do not judge on the first byte of the first
+            # datagram.
+            #
+            # MEASURED, and it is the same fact that bit the BAD_DATA analysis: the
+            # BlueOS bridge chunks the serial stream at arbitrary offsets, so only
+            # ~77% of datagrams begin on a message boundary. Testing `data[0]` alone
+            # therefore returned 'silent' on roughly a quarter of attempts -- in
+            # 0.02 s, against a board streaming ~90 datagrams/s. Back-to-back runs
+            # gave mavlink/silent/mavlink/silent at random, which is exactly the kind
+            # of intermittent that gets diagnosed as a hardware fault.
+            if data and (0xFD in data or 0xFE in data):
+                return 'mavlink'
     finally:
         try:
             sample.close()
