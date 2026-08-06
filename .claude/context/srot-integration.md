@@ -1,6 +1,9 @@
 # SROT control-board integration (branch `srot`)
 
-> **Firmware baseline for this branch: `srot-control-board` @ `4feeda0`, `SROT_FW_BEHAVIOUR_REV 5`.**
+> **Firmware baseline for this branch: `srot-control-board` @ `ae1bc2f`, `SROT_FW_BEHAVIOUR_REV 6`.**
+> **FLASHED to the vehicle 2026-08-06** (erase + upload over direct USB, params restored
+> and verified across two power cycles). MOTOR_DETECT now converges in one pass — see
+> the motor-direction section below; nobody should hand-set `MOT_n_DIRECTION` again.
 > Read [`auv-architecture-2026.md`](auv-architecture-2026.md) first if you have not.
 >
 > **⚠ YAW IS ABSOLUTE FROM REV 4.** `ATTITUDE.yaw` and `VFR_HUD.heading` are a magnetic compass
@@ -143,6 +146,48 @@ thrust is globally inverted will mis-detect. Do not trust it as a baseline.
 
 Do not skip to STABILIZE to "see if it is fixed": with an inverted sign it is a
 divergent loop, and the vehicle reaches full deflection before an operator can react.
+
+### ✅ FLASHED rev 6 — 2026-08-06, and what state the vehicle is in
+
+Board moved to the dev box on USB (`1a86:7523` → `/dev/ttyUSB0`), erased, flashed, restored.
+**Flashing is impossible over the BlueOS bridge** and this is structural, not a policy: an
+ESP32 enters its bootloader only when `esptool` toggles **DTR→EN** and **RTS→GPIO0**, and
+Bridget's entire API is `serial_path / baud / ip / udp_target_port / udp_listen_port` — no
+line control, so the sequence cannot be conveyed. Any flash needs the board on a USB host.
+
+Measured on the way past, confirming the earlier bridge finding from the other direction:
+**0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s) against ~8–9 % over the bridge.
+
+| step | result |
+|---|---|
+| backup before erase | **231/231** params (3 needed index gap-fill — the bridge drops ~8-9 %) |
+| erase | chip erase ok, NVS confirmed wiped (`CAL_LVL_R` 0.0, `JS_GAIN_DEFAULT` 0.5) |
+| flash | 938 464 B, **hash verified**, boots MANUAL/disarmed, reports **rev 6** |
+| restore | **228/228 confirmed**, 0 unconfirmed, saved to flash |
+| power cycle ×2 | every spot-checked value persisted |
+
+**Two corrections were made to the backup before restoring it, deliberately:**
+
+- **`FS_GCS_COMPID` 0 → 191.** The backup captured **bench mode, saved to flash**. Restoring
+  that verbatim would have put a bench escape hatch into a flight vehicle, where a dead
+  Jetson can no longer be told from a live GCS and the hull station-keeps instead of
+  surfacing. ⚠ **Check this value before every water session** — Bondor's bench mode is
+  runtime-only *until someone presses Save*, and someone did.
+- **`MOT_n_DIRECTION` → −1 (all eight).** The factory default is +1, which is the state that
+  produced the reversed axes in the first place, so restoring defaults would have handed
+  back a known-wrong vehicle. All eight at −1 is the globally-uniform state verified in
+  water. Effective direction is now `[-1] × 8`.
+
+**Final state:** rev 6 · MANUAL · disarmed · motor dirs uniform · `CAL_LVL_R/P` restored ·
+`FS_GCS_COMPID` 191 · `JS_GAIN_DEFAULT` 1.0 · payload roles restored (1-4 + 9-16 SWITCH,
+5-8 SERVO) · **`DEPTH_OUT` 0.000 — the wound-up integrator is gone**, cleared by the erase.
+`bringup_check --srot` → **0 FAIL**.
+
+**Still owed, and it is the whole point of rev 6: run MOTOR_DETECT in water, armed.** The
+current directions are a *global* correction that happens to work; detect will derive each
+thruster's true sign and store it in `CAL_MDIR`, which is the readable, per-thruster truth.
+On rev 6 it converges in one pass from any starting state, and an inconclusive run now
+reports FAIL and changes nothing instead of silently resetting all eight.
 
 ### ⛔ FOLLOW-UP: a global flip cannot fix a RELATIVE asymmetry
 
