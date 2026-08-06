@@ -233,7 +233,7 @@ class AUVManagerNode(Node):
         self.declare_parameter('bno085_port',          'auto')
         self.declare_parameter('bno085_baud',          115200)
         self.declare_parameter('payload_port',         'auto')
-        # payload_channels: OPTIONAL cosmetic labels, "<board_channel>:<name>",
+        # payload_channels: OPTIONAL per-instance labels, "<board_channel>:<name>",
         # e.g. "9:torpedo_1, 10:torpedo_2, 11:dropper_1".
         #
         # It does NOT route anything. `fire(N)` always addresses board channel N
@@ -241,6 +241,14 @@ class AUVManagerNode(Node):
         # logs and the preflight readable. A stale label can mislabel a log line;
         # it cannot send a shot to the wrong channel, which is exactly why the
         # routing map it replaces is gone.
+        #
+        # ⚠ MOSTLY SUPERSEDED by SERVO{n}_FUNCTION on the board, which duburi_ws now
+        # reads at bring-up (SrotPayload.preflight_roles). Prefer setting Function in
+        # Bondor: it is stored in the board's NVS, so the payload map travels with the
+        # hull instead of living in a launch file that goes stale on a re-wire.
+        # This param survives only for names the board's fixed enum cannot express --
+        # "torpedo_1" vs "torpedo_2", which share one FUNCTION. When both are present
+        # and disagree, the override is used AND a warning names both.
         self.declare_parameter('payload_channels',     '')
         # payload_fire_map: REMOVED. Kept declared ONLY so a launch file still
         # setting it fails loudly -- see _preflight_payload. Silently ignoring it

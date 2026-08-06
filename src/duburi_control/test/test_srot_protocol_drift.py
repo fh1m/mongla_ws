@@ -489,7 +489,8 @@ def test_bondor_mirrors_the_same_payload_function_enum():
     if 'SERVO_FUNC' not in text:
         pytest.skip('Bondor has not adopted the payload-function enum yet')
     for fw_suffix, host_attr in _FUNCS:
-        m = re.search(rf'{fw_suffix}\s*[:=]\s*(\d+)', text)
+        # Bondor writes `{ value: N, name: 'SUFFIX', label: '...' }`.
+        m = re.search(rf"value:\s*(\d+)\s*,\s*name:\s*'{fw_suffix}'", text)
         assert m, f'Bondor is missing payload function {fw_suffix}'
         assert int(m.group(1)) == getattr(sp, host_attr), (
             f'Bondor has {fw_suffix}={m.group(1)}, we have {getattr(sp, host_attr)}')
