@@ -96,9 +96,16 @@ IMU/orientation problem and there is no point calibrating level again.
 
 **Why "we verified the thruster directions" did not catch it.** `DO_MOTOR_TEST` writes a
 **direct per-motor override** (`thrusters.test_override` / `test_motor` / `test_throttle`)
-that **bypasses `mix()` entirely**. So motor test proves the ESC, prop and wiring of each
-thruster individually; it proves nothing about the sign `mix()` sends that thruster in
-flight. Those are two different claims and only the first was tested.
+that bypasses the **mixer matrix**. It does *not* bypass the direction flag —
+`task_control_loop.cpp:789` is
+`dshot[test_motor] = mixer::oneToDshot(test_throttle, in.dir[test_motor])`, so motor test
+**does** apply `dir[]`. (An earlier version of this note said it "bypasses `mix()`
+entirely" and proves nothing about sign; that was wrong in a way that matters, because it
+talks you out of the single most useful test you have — see the vertical-group check below.)
+
+What motor test genuinely cannot see is the **matrix**: which axes a thruster contributes
+to and with what sign. So it validates each thruster in isolation and says nothing about
+whether the eight agree with each other.
 
 **The mixer matrix is NOT at fault, and the board says so itself.** It publishes a disarmed
 self-check: `mix(throttle=+1)` and then counts how many verticals got the correct negative
@@ -136,6 +143,54 @@ thrust is globally inverted will mis-detect. Do not trust it as a baseline.
 
 Do not skip to STABILIZE to "see if it is fixed": with an inverted sign it is a
 divergent loop, and the vehicle reaches full deflection before an operator can react.
+
+### ⛔ FOLLOW-UP: a global flip cannot fix a RELATIVE asymmetry
+
+Reversing all eight `MOT_n_DIRECTION` fixed the manual axes, then STABILIZE span the
+vehicle about **yaw**, and autotune reported `RollRate ... CLAMP`, `PitchRate FAIL: period
+unstable`, `Autotune ABORTED: rate loop untuned`.
+
+**Effective direction is `CAL_MDIR<n>` × `MOT_<n>_DIRECTION`.** Multiplying every element
+by −1 changes the global sense but **cannot change which elements differ from each other**.
+The asymmetry left by the earlier MOTOR_DETECT run (motors **1** and **8** opposite to
+their groups) therefore rode straight through the flip:
+
+```
+before flip   eff = [-1,+1,+1,+1,+1,+1,+1,-1]     1 and 8 out of step
+after  flip   eff = [+1,-1,-1,-1,-1,-1,-1,+1]     1 and 8 STILL out of step
+```
+
+(`CAL_MDIR` read back as all `+1` afterwards because "Calibration saved" folds the detected
+sign into `MOT_n_DIRECTION` and normalises — the asymmetry moved, it did not go away.)
+
+**Both symptoms map exactly onto those two motors**, using the mixer matrix:
+
+| motor | group | rows it drives | consequence of being inverted |
+|---|---|---|---|
+| **1** FR horiz | yaw / fwd / lat | `yaw +1, fwd −1, lat +1` | yaw couple broken → **STABILIZE spins in yaw**; forward injects yaw torque |
+| **8** RL vert | roll / pitch / thr | `roll −1, pitch +1, thr −1` | roll & pitch authority ≈ **halved**; heave injects roll+pitch torque |
+
+That is precisely the autotune output. Halved roll authority makes the tune ask for a gain
+the envelope refuses → `CLAMP`. Halved pitch authority *plus* heave cross-coupling makes
+the limit-cycle period wander past `PERIOD_SPREAD_MAX = 3.0`
+(`autotune.cpp`: `s_half_max > s_half_min * 3.0` → `"period unstable"`). **The autotune
+failure is a symptom, not a separate fault — do not chase gains.**
+
+**Fix applied 2026-08-06** (live, disarmed, confirmed by readback): `MOT_1_DIRECTION = -1`
+and `MOT_8_DIRECTION = -1`, giving `eff = [-1] * 8` — uniform.
+
+**The decisive physical check, and it needs no reasoning about mount geometry:** the
+throttle column is `−1` for **all four** verticals, so under motor test at the same
+positive throttle, thrusters **5, 6, 7 and 8 must all push the same way**. If one opposes
+the other three, its direction flag is wrong. Do this before arming.
+
+Then, in order: **MANUAL first** (no attitude feedback, so it cannot flip) — pure forward
+must not yaw, pure throttle must not roll or pitch. **STABILIZE only after that.**
+**Autotune last.**
+
+⚠ **Do not re-run MOTOR_DETECT to "fix" this** — it is what introduced the asymmetry, by
+detecting against thrust that was already globally inverted. And these two writes are
+runtime-only: **Save on the Parameters tab only after in-water verification.**
 
 ### ⛔ AFTER EVERY FLASH: the bridge is dead but still looks alive
 
