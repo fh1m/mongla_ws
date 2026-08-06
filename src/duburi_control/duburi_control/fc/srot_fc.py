@@ -1152,6 +1152,8 @@ class SrotPayload:
         self._names = dict(names or {})
         # Board channel (1-based) -> role int, read from the board and cached.
         self._roles: dict = {}
+        # Board channel -> SERVOn_FUNCTION int. Identity only; never gates fire().
+        self._functions: dict = {}
         # fire() holds a channel energised for _FIRE_PULSE_S and de-energises in a
         # finally. Two overlapping fires would let B's ON land inside A's pulse and
         # A's finally then de-energise while B still believes it is firing -- a
@@ -1159,9 +1161,6 @@ class SrotPayload:
         # vision path already ASSUMED this lock existed (vision_verbs.py) when only
         # the legacy USB driver had one.
         self._fire_lock = threading.Lock()
-
-    def label(self, channel: int) -> str:
-        return self._names.get(int(channel), '')
 
     def channel_role(self, channel: int, refresh: bool = False):
         """The board's configured role for a channel, or None if unreadable.
@@ -1182,6 +1181,37 @@ class SrotPayload:
                 return None
             self._roles[ch] = int(val)
         return self._roles.get(ch)
+
+    def channel_function(self, channel: int, refresh: bool = False):
+        """The board's configured FUNCTION for a channel, or None if unreadable.
+
+        Identity, not authority -- see `srot_protocol.PCA_FUNC_*`. `fire()` never
+        consults this: a channel is fireable because its ROLE is SWITCH, full stop.
+        Mixing the two would let a mislabelled channel become an actuation decision,
+        which is the whole thing this design avoids.
+        """
+        ch = int(channel)
+        if refresh or ch not in self._functions:
+            val = self._fc.get_param(sp.PCA_FUNC_PARAM_FMT.format(ch))
+            if val is None:
+                return None
+            self._functions[ch] = int(val)
+        return self._functions.get(ch)
+
+    def label(self, channel: int) -> str:
+        """Display name for a channel: the operator override if set, else whatever
+        the BOARD says is wired there, else nothing.
+
+        The override wins because the board's enum is a small fixed vocabulary and
+        cannot express "torpedo_1 vs torpedo_2" -- two tubes share one function.
+        """
+        ch = int(channel)
+        if ch in self._names:
+            return self._names[ch]
+        func = self._functions.get(ch)
+        if func:                                  # 0 (NONE) is "unassigned", not a name
+            return sp.PCA_FUNC_NAMES.get(func, f'function {func}')
+        return ''
 
     def preflight_roles(self, channels=None):
         """Read + log every channel role at bring-up, so a mis-roled payload is found
@@ -1211,6 +1241,17 @@ class SrotPayload:
             role = self.channel_role(ch, refresh=True)
             if role is None:
                 role = self.channel_role(ch, refresh=True)
+            # FUNCTION rides the SAME loop and the same retry -- one traversal, one
+            # policy. Measured over the bridge: 16 reads take ~0.7 s, so 32 is ~1.4 s
+            # at bring-up only.
+            #
+            # ⚠ Do NOT pipeline these two requests. `get_param` pops the single
+            # PARAM_VALUE slot and polls it; two replies in flight means the second
+            # overwrites the first, and the first then times out indistinguishably
+            # from a dropped frame -- permanently, on a lossy link.
+            func = self.channel_function(ch, refresh=True)
+            if func is None:
+                func = self.channel_function(ch, refresh=True)
             report[int(ch)] = role
         if self._log is not None:
             fireable = sorted(c for c, r in report.items() if r == sp.PCA_ROLE_SWITCH)
@@ -1220,9 +1261,24 @@ class SrotPayload:
                 f'[PAYLOAD] board roles: FIREABLE (switch) {fireable or "none"} | '
                 f'arm/PWM {arm or "none"} | unreadable {unread or "none"}')
             for ch in fireable:
-                lbl = self._names.get(ch)
+                lbl = self.label(ch)
                 self._log.info(f'[PAYLOAD]   ch {ch}: SWITCH -- fire({ch}) will actuate'
                                + (f" ({lbl})" if lbl else ''))
+            # A host label AND a board function that disagree is the stale-host-copy
+            # detector: someone re-wired the harness and told the board but not the
+            # launch file (or the reverse). Neither value is trustworthy then, so say
+            # both and say which one is being displayed.
+            for ch, lbl in sorted(self._names.items()):
+                func = self._functions.get(ch)
+                if not func:
+                    continue
+                board = sp.PCA_FUNC_NAMES.get(func, f'function {func}')
+                if board.lower() not in lbl.lower():
+                    self._log.warn(
+                        f'[PAYLOAD]   ch {ch}: payload_channels says {lbl!r} but the '
+                        f'BOARD says {board!r}. Displaying {lbl!r} (the override wins). '
+                        f'One of the two is stale -- and if it is the launch file, a '
+                        f'mission may be aiming at the wrong device.')
             for ch, lbl in sorted(self._names.items()):
                 if report.get(ch) != sp.PCA_ROLE_SWITCH:
                     role = report.get(ch)

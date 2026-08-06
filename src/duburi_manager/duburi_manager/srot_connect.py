@@ -265,6 +265,14 @@ def depth_loop_verdict(named: dict, mode: str | None = None) -> tuple[str, str]:
 def read_roles(conn, timeout: float = 0.6) -> dict:
     """PCA channel (1-based) -> SERVOn_ROLE, read from the board.
 
+    SCOPE: roles only, deliberately. This is the link/bring-up diagnostic and it runs
+    BEFORE any reader thread exists, hence its own recv_match loop rather than
+    `SrotFC.get_param`. Payload IDENTITY (`SERVOn_FUNCTION`) is reported by
+    `SrotPayload.preflight_roles` on the running node, which already reads it in the
+    same traversal. Duplicating that here would make a THIRD place that believes
+    something about the payload map -- which is the exact failure the board-side
+    FUNCTION param exists to end.
+
     These are PARAMETERS, not telemetry, so they have to be asked for one at a time.
     Worth the ~16 round-trips: the role decides whether a channel is payload (switch)
     or the on-board manipulator arm (PWM), and driving the arm during a drop is the

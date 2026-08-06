@@ -113,7 +113,65 @@ so a lost `COMMAND_LONG` is a lost arm or a lost move with nothing in any log.
 
 **Known gap — Bondor cannot share this link.** A Bridget bridge targets exactly one
 `ip:port`, so the companion and the ground station cannot both receive from it. Two
-consumers need a fan-out router; there is none today. Don't discover this at the pool.
+consumers would need a fan-out router; there is none, and we deliberately did not build
+one — the water-test discipline is **take turns**. See the next section, because the
+collision does not fail the way you would expect.
+
+### Bondor (the GCS) over the same UDP link — take turns, and mind the port
+
+**Bondor already had Direct UDP**; it had simply never been used. Connect settings:
+
+| field | value |
+|---|---|
+| Transport | **Direct UDP** |
+| Listen port | **14550** |
+| Vehicle host / port | **LEAVE BLANK** |
+
+Blank host is load-bearing: it makes `udpLink.ts` set `fixedRemote = false` so the peer is
+auto-learned from the incoming datagram (`192.168.2.2:14551`). Typing an address pins
+replies to one Bridget may not send from.
+
+**⛔ ONE PROCESS AT A TIME, and the failure is not the one you would guess.** MEASURED:
+two processes both binding 14550 with `SO_REUSEADDR` — which Bondor does and pymavlink
+does — **both binds succeed, and the newcomer takes the stream** (544 datagrams vs a
+trickle over 6 s). So opening Bondor during a mission does *not* fail visibly: Bondor works
+fine and **silently starves duburi_ws** of telemetry and command ACKs. Bondor now probes the
+port before binding and shows a red **PORT CONFLICT** chip that incoming data does not
+clear. Check `ss -ulnp | grep 14550` is empty before connecting either one.
+
+### Payload identity comes from the board (`SERVOn_FUNCTION`)
+
+Two orthogonal per-channel params, and keeping them apart is the safety property:
+
+| | what it is | who enforces it |
+|---|---|---|
+| `SERVOn_ROLE` | **authority** — 0 off / 1 PWM (arm) / 2 switch (payload) | the board; `fire()` refuses anything that is not 2 |
+| `SERVOn_FUNCTION` | **identity** — torpedo / dropper / gripper / light / camera / aux | nobody. It is a label. |
+
+Setting a FUNCTION never makes a channel fireable. The firmware deliberately does not read
+`servo_func`; it is NVS storage so the payload map **travels with the hull** instead of
+living in a launch file that goes stale on a re-wire — and the failure mode of a stale
+payload map is firing the manipulator arm during a drop.
+
+Set it in **Bondor → Payload → Function**, then **Save** on the Parameters tab (it is
+NVS-backed and does not persist without the save). duburi_ws reads all 16 roles *and*
+functions in one traversal at bring-up (~4 s over the bridge) and prints them:
+
+```
+[PAYLOAD] board roles: FIREABLE (switch) [9..16] | arm/PWM [1..8] | unreadable none
+[PAYLOAD]   ch 9: SWITCH -- fire(9) will actuate (torpedo)
+```
+
+`payload_channels` survives only for per-instance names the board's fixed enum cannot
+express (`torpedo_1` vs `torpedo_2`, which share one FUNCTION). When both are set and
+disagree, the override is used **and a warning names both** — that warning is the
+stale-copy detector.
+
+Canonical numbers: `SROT_SERVO_FUNC_*` in the firmware's `include/config.h`, mirrored in
+`fc/srot_protocol.py` and Bondor's `shared/protocol.ts`. **Append-only** — inserting a
+value silently renames every payload after it. `test_srot_protocol_drift` referees all
+three copies, including Bondor's, because Bondor's only gate is `npm run typecheck` and
+that cannot see the firmware.
 
 ### ✅ Bar30 fixed — and why that is NOT "depth verified"
 

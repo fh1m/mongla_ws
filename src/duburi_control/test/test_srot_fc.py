@@ -968,8 +968,9 @@ def test_esc_temperatures_survive_a_suppressed_water_temperature():
 
 class _RoleFC:
     """SrotFC stand-in that answers get_param for SERVOn_ROLE and ACKs commands."""
-    def __init__(self, roles, ack=sp.ACK_ACCEPTED):
+    def __init__(self, roles, ack=sp.ACK_ACCEPTED, funcs=None):
         self.roles = roles
+        self.funcs = funcs or {}
         self.servo_calls = []
         self.param_reads = 0
         self._ack = ack
@@ -979,6 +980,9 @@ class _RoleFC:
         for ch, role in self.roles.items():
             if name == f'SERVO{ch}_ROLE':
                 return float(role)
+        for ch, fn in self.funcs.items():
+            if name == f'SERVO{ch}_FUNCTION':
+                return float(fn)
         return None
 
     def set_servo(self, ch, us):
@@ -992,9 +996,9 @@ class _RoleFC:
         return True
 
 
-def _payload(roles, ack=sp.ACK_ACCEPTED, names=None):
+def _payload(roles, ack=sp.ACK_ACCEPTED, names=None, funcs=None):
     from duburi_control.fc.srot_fc import SrotPayload
-    return SrotPayload(_RoleFC(roles, ack), names=names)
+    return SrotPayload(_RoleFC(roles, ack, funcs), names=names)
 
 
 def test_fire_addresses_the_board_channel_with_no_translation():
@@ -1176,3 +1180,69 @@ def test_the_heading_matches_the_boards_own_0_360_convention():
     fc.master.messages['ATTITUDE'] = SimpleNamespace(
         roll=0.0, pitch=0.0, yaw=math.radians(-162.23))
     assert fc.get_attitude()['yaw'] == pytest.approx(197.77, abs=0.01)
+
+
+# --------------------------------------------------------------------------- #
+#  SERVOn_FUNCTION -- payload IDENTITY, read from the board                     #
+# --------------------------------------------------------------------------- #
+# The point of putting identity on the board is that it travels with the hull. A
+# host-side table is wrong the moment someone re-wires a channel, and the failure
+# mode of a wrong payload map is firing the manipulator arm during a drop.
+
+def test_the_board_supplies_the_payload_name():
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, funcs={9: sp.PCA_FUNC_TORPEDO})
+    pl.preflight_roles(channels=[9])
+    assert pl.label(9) == 'torpedo'
+
+
+def test_an_unassigned_function_is_not_a_name():
+    """0 is the param default, so it means "nobody has said" -- rendering it as a
+    device would invent a payload out of a factory default."""
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, funcs={9: sp.PCA_FUNC_NONE})
+    pl.preflight_roles(channels=[9])
+    assert pl.label(9) == ''
+
+
+def test_the_host_override_wins_over_the_board():
+    """The board's enum cannot express "torpedo_1 vs torpedo_2" -- two tubes share
+    one function -- so payload_channels stays available for per-instance names."""
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, names={9: 'torpedo_2'},
+                  funcs={9: sp.PCA_FUNC_TORPEDO})
+    pl.preflight_roles(channels=[9])
+    assert pl.label(9) == 'torpedo_2'
+
+
+def test_function_never_makes_a_channel_fireable():
+    """The whole safety argument: identity must not become an actuation decision.
+    A PWM/arm channel labelled 'torpedo' is still the arm."""
+    pl = _payload({3: sp.PCA_ROLE_SERVO}, funcs={3: sp.PCA_FUNC_TORPEDO})
+    res = pl.fire(3)
+    assert res.code == FIRE_REJECTED_ARM
+    assert pl._fc.servo_calls == [], 'a labelled arm channel was actuated'
+
+
+def test_a_disagreement_between_host_and_board_is_reported():
+    """The stale-copy detector. Someone re-wired the harness and told one side only;
+    neither value is trustworthy, so both get named."""
+    class _Log:
+        def __init__(self): self.warns = []
+        def info(self, m): pass
+        def warn(self, m): self.warns.append(m)
+        def warning(self, m): self.warns.append(m)
+        def error(self, m): pass
+    log = _Log()
+    from duburi_control.fc.srot_fc import SrotPayload
+    pl = SrotPayload(_RoleFC({9: sp.PCA_ROLE_SWITCH}, funcs={9: sp.PCA_FUNC_DROPPER}),
+                     log=log, names={9: 'torpedo_1'})
+    pl.preflight_roles(channels=[9])
+    assert any('torpedo_1' in w and 'dropper' in w for w in log.warns), log.warns
+
+
+def test_an_unreadable_function_is_not_fatal():
+    """A dropped PARAM_VALUE must cost a name, not the preflight -- and never the
+    role, which is what actually gates firing."""
+    pl = _payload({9: sp.PCA_ROLE_SWITCH}, funcs={})
+    report = pl.preflight_roles(channels=[9])
+    assert report[9] == sp.PCA_ROLE_SWITCH
+    assert pl.label(9) == ''
+    assert pl.fire(9).ok
