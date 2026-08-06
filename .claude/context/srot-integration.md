@@ -257,11 +257,25 @@ The connector fault is **resolved**, measured on the vehicle 2026-08-03 against 
 `bringup_check --srot` now grades `barometer 983.7 mbar, spread 5.92` and `depth loop
 settled` as PASS. The arming hazard from the phantom-depth saturation is gone.
 
-**⛔ That is the barometer, not the loop.** `DEPTH_CMD` reads `-0.329202` while
-`DEPTH_OUT` and `DEPTH_ERR` read **exactly 0.000 across 90+ samples**. A live controller
-with a −0.33 m command against a +0.01 m measurement cannot produce zero error — so the
-depth loop **is not running while disarmed** on rev 4. `check_depth_loop_settled` passing
-proves only `|DEPTH_OUT| < 0.90`, which a stopped loop satisfies trivially.
+**⛔ That is the barometer, not the loop.** On rev 4, `DEPTH_CMD` read `-0.329202` while
+`DEPTH_OUT` and `DEPTH_ERR` read **exactly 0.000 across 90+ samples** — a live controller
+with a −0.33 m command against a +0.01 m measurement cannot produce zero error, so the loop
+was not running while disarmed. `check_depth_loop_settled` passing proves only
+`|DEPTH_OUT| < 0.90`, which a stopped loop satisfies trivially.
+
+**Re-measured on rev 5 (2026-08-06) the numbers are different, and the reading changed with
+them.** Disarmed, 74 samples over 20 s: `DEPTH_OUT` **−0.115** and `DEPTH_ERR` **−0.029**,
+both with **zero variance**, while `DEPTH_CMD` moved (−0.479..−0.297). So the loop is no
+longer publishing a flat zero — it evaluated something and then froze. Frozen non-zero
+outputs are *not* evidence of a healthy loop either: a live controller tracking a moving
+command cannot hold a constant error to three decimals. Both readings support the same
+conclusion for opposite reasons, which is why the conclusion has not moved:
+
+**The depth loop has still never run closed**, it gates *every* AUTO move (`move_forward`
+included — there is no depth-free path through AUTO), and the two **armed** bench checks
+in the runbook below remain the gate. "Bar30 fixed" must never be read as "depth verified".
+⚠ Note `|−0.115| < 0.90`, so `check_depth_loop_settled` still passes — it is an
+anti-saturation guard, never a proof the loop works.
 
 **The depth loop has still never run closed**, it gates *every* AUTO move (`move_forward`
 included — there is no depth-free path through AUTO), and the two **armed** bench checks

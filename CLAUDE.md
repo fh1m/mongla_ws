@@ -195,11 +195,15 @@ on the vehicle: `press_abs` 978.8..987.7 mbar (**sd 1.97**, was a 557 mbar sprea
 31.68..31.71 °C (**0.03**, was 6..30), depth **−0.05..+0.07 m in air** (was +0.9..+6.8), and
 `DEPTH_OUT` **0.000** (was pinned −1.00). `bringup_check --srot` grades barometer variance and
 the disarmed depth loop PASS. The arming-spin-up hazard described below is therefore **cleared**.
-**⛔ But that is the barometer, not the loop:** `DEPTH_CMD` reads −0.329 while `DEPTH_OUT`/`DEPTH_ERR`
-read *exactly* 0.000 across 90+ samples — a live controller cannot produce zero error against a
-−0.33 m command, so the loop **is not running while disarmed** on rev 4, and
-`check_depth_loop_settled` only ever proved `|DEPTH_OUT| < 0.90` (which a stopped loop passes
-trivially). **The depth loop has still never run closed**, it gates every AUTO move including
+**⛔ But that is the barometer, not the loop.** On rev 4, `DEPTH_CMD` read −0.329 while
+`DEPTH_OUT`/`DEPTH_ERR` read *exactly* 0.000 across 90+ samples — a live controller cannot
+produce zero error against a −0.33 m command, so the loop was not running while disarmed.
+**Re-measured on rev 5 (2026-08-06) they are FROZEN NON-ZERO instead** — `DEPTH_OUT` −0.115
+and `DEPTH_ERR` −0.029, zero variance over 74 samples, while `DEPTH_CMD` moved. A loop
+tracking a moving command cannot hold a constant error to three decimals, so both readings
+say the same thing for opposite reasons. `check_depth_loop_settled` only ever proved
+`|DEPTH_OUT| < 0.90` — which −0.115 also passes; it is an anti-saturation guard, not a proof
+the loop works. **The depth loop has still never run closed**, it gates every AUTO move including
 `move_forward`, and the two armed bench checks remain the gate. Do not read "Bar30 fixed" as
 "depth verified". The original finding is kept below for the diagnostic pattern:
 
