@@ -374,7 +374,10 @@ DEPTH_OUT_ARM_LIMIT = 0.90
 #        * 502eb23 MOT_1/MOT_8_DIRECTION now DEFAULT to -1 (as-flown), the rest +1. Our
 #          documented restore was a uniform [-1] x 8, which is no longer the intended
 #          configuration and interacts with FRAME_REVERSE. See srot-integration.md.
-#      Neither is a host-code change -- the wire is identical, and the drift suite is green
+#      The other three are not ours: 4aaa755 adds a COMP_SEEN NAMED_VALUE_FLOAT (a Bondor
+#      signal -- inert here, our reader table is per-name), b447fe5 unswaps the PM1
+#      volt/curr pins (a battery reading we only display), 2213c9a is their AGENTS.md.
+#      Neither of the two that ARE ours is a host-code change -- the wire is identical, and the drift suite is green
 #      against d6f1da5 -- but do not read "rev 7" as "one small additive change".
 FW_BEHAVIOUR_REV = 7
 
