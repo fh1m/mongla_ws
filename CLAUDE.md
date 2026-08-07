@@ -177,8 +177,15 @@ not decelerate 20 kg of hull, with nothing in any log. `0` means "older than 202
 not "unknown", and fails closed; a board that answers *nothing* warns hard but is allowed
 through. Override: `allow_fw_behaviour_mismatch:=true`.
 
-**Firmware is at behaviour rev 3 (2026-08-02); the host floor stays at 2 deliberately** (rev 3
-is additive for us, and raising it would strand a working rev-2 board). Rev 3's theme is that
+**Firmware is at behaviour rev 7 (`d6f1da5`, flashed 2026-08-07); the host floor stays at 2
+deliberately** (every rev since has been additive *for the host*, and raising it would strand a
+working rev-2 board). ⚠ **Rev 7 ships `FRAME_REVERSE`** — a param, default 0 but **set to 1 on
+our hull**, that negates all six axis demands before the mixer. It fixes "every axis is
+backwards" at the axis layer instead of via `MOT_n_DIRECTION`, which means the `[-1] × 8` motor
+directions we restored on 2026-08-06 are **no longer the intended configuration** and would
+cancel it. **Read the params before arming** — the check is in
+[`srot-integration.md`](.claude/context/srot-integration.md) "Rev 7: FRAME_REVERSE changes what
+MOT_n_DIRECTION should be". Rev 3's theme (still live) is that
 the board **refuses to report data it cannot stand behind**, which creates one brand-new deck
 symptom: an unhealthy/stale Bar30 now refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and since
 `SROT_MOVE` enters `AUTO`, **every move verb is denied** — it arms and then simply will not

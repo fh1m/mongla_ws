@@ -94,6 +94,32 @@ enforces that nothing reaches an ArduSub-only mode gate.
 
 ---
 
+## ⚖ Ownership, settled 2026-08-07 after the water test
+
+**We develop `duburi_ws` only.** No agent working in this repo writes code in
+`srot-control-board`, `srot-ground-station` or `srot-esc-flasher` any more — the firmware and
+GCS teams own those, with their own agents. Our obligation to them is exactly one thing:
+**stay in harmony**, and prove it mechanically.
+
+| direction | mechanism |
+|---|---|
+| **them → us** | a **pull request on `duburi_ws`** ([#5](https://github.com/fh1m/duburi_ws/pull/5) is the template). They never commit here directly. |
+| **us → them** | a note in their repo's `JETSON_FEEDBACK.md` / `TASKS_FROM_DUBURI_WS.md`. We do not push fixes. |
+| **proof of harmony** | `Mongla_others/srot-control-board` is our **read-only mirror** of the firmware. Fast-forward it to the flashed baseline, then run `test_srot_protocol_drift.py` — it reads their headers directly and fails on any divergence. |
+
+So the routine when a firmware revision lands is fixed and short:
+
+```bash
+git -C Mongla_others/srot-control-board fetch origin && git -C Mongla_others/srot-control-board merge --ff-only origin/main
+SROT_FW_DIR=$PWD/Mongla_others/srot-control-board python -m pytest src/duburi_control/test/test_srot_protocol_drift.py -q
+# then bump FW_BEHAVIOUR_REV in srot_protocol.py to the new rev and document what it means
+```
+
+⚠ **A green drift suite proves the wire matches, not that the vehicle behaves the same.**
+Rev 7 passed clean while shipping `FRAME_REVERSE`, which inverts every axis on our hull —
+a *param*, invisible to a header-reading test. Read the release's commits, not only its rev
+number, and record any behaviour delta in the `FW_BEHAVIOUR_REV` comment block.
+
 ## When your change crosses a repo boundary
 
 1. Say so explicitly in the commit message, naming the other repo.

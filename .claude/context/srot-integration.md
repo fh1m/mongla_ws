@@ -2,7 +2,17 @@
 
 > **Firmware baseline for this branch: `srot-control-board` @ `d6f1da5`, `SROT_FW_BEHAVIOUR_REV 7`.**
 > **FLASHED to the vehicle 2026-08-07**, all 232 params re-read afterwards with **zero
-> drift** and `CAL_*` intact. Rev 7 is additive — nothing that worked on rev 6 changes.
+> drift** and `CAL_*` intact.
+>
+> ⚠ **"Rev 7 is additive — nothing that worked on rev 6 changes" is true of the FIRMWARE
+> DEFAULTS and false of THIS HULL** (corrected on merge of PR #5, 2026-08-07). Five other
+> commits shipped inside the single 6→7 bump, and two of them change how this vehicle
+> moves: **`FRAME_REVERSE`** (new param, default 0, **set to 1 here**) negates all six axis
+> demands, and **`MOT_1`/`MOT_8_DIRECTION` now default to −1**. Do not arm on the strength
+> of "additive" — read
+> [the motor-direction section](#rev-7-frame_reverse-changes-what-mot_n_direction-should-be)
+> first. The rev number itself is honest (a stock rev-7 board really is a rev-6 board plus
+> one statustext); what it does not carry is that a param on our board is now load-bearing.
 >
 > **What rev 7 adds:** `PREFLIGHT_STORAGE` now reports success as well as failure. The
 > command has always been ACKed `ACCEPTED` the instant it is parsed, but the NVS write is
@@ -125,6 +135,38 @@ nothing about the uplink.
 >                               b'FRAME_REVERSE', -1)
 > print(m.recv_match(type='PARAM_VALUE', blocking=True, timeout=5))   # None => uplink dead
 > ```
+
+> **⚖ RECONCILIATION (duburi_ws, on merge of PR #5).** Keep the probe — it is a good gate and
+> the finding is honest. But **do not read it as "the UDP uplink does not work"**: it worked
+> here, over this same Bridget configuration, the day before. On **2026-08-06** we ran, all
+> from `udpin:0.0.0.0:14550`:
+>
+> - `[SROT ] firmware behaviour rev 4 (>= 2 required)` and the `bringup_check --srot`
+>   `[PASS] FW behaviour rev` line. That value comes from `check_behaviour_rev()`, which
+>   requests msgid 148 with **`MAV_CMD_REQUEST_MESSAGE` — the exact probe reported as
+>   silent.** A number came back.
+> - `[PAYLOAD] board roles: FIREABLE (switch) [9..16] | arm/PWM [1..8] | unreadable none` —
+>   sixteen sequential `PARAM_REQUEST_READ`s, sixteen `PARAM_VALUE` replies, **zero
+>   unreadable**. That is the second probe, sixteen times over.
+> - `fire(9) -> FIRED`, i.e. a `DO_SET_SERVO` that returned `COMMAND_ACK`.
+>
+> So the uplink is not structurally dead, and the Bridget path is not retired. **What
+> changed in between is physical, and both suspects are already documented here:**
+>
+> 1. **The board was unplugged, flashed on the dev box, and re-seated** for rev 6, then
+>    again for rev 7. That is precisely the trap in
+>    [AFTER EVERY FLASH](#-after-every-flash-the-bridge-is-dead-but-still-looks-alive) —
+>    Bridget keeps a dead `/dev/ttyUSB0` fd and still lists the bridge as healthy. **Delete
+>    and recreate the bridge** before concluding anything about the link.
+> 2. **A re-seated USB connector with a one-way leg** — which is candidate #2 above, and
+>    matches the reported signature (perfect downlink, zero uplink) exactly. Note the Bar30
+>    fault on this hull was also a connector.
+>
+> ⚠ **We could not reproduce it: the vehicle was unreachable from this box when PR #5 was
+> merged** (no route to `192.168.2.2`, no bridges listed). So this reconciles two honest
+> measurements; it does not adjudicate them. **Whoever next has hardware: recreate the
+> bridge first, then run the probe.** If it passes, the cause was the stale fd; if it still
+> fails on a freshly-created bridge, it is the serial leg and it is a wiring job.
 
 ### Host side — no code change needed
 
@@ -293,6 +335,83 @@ must not yaw, pure throttle must not roll or pitch. **STABILIZE only after that.
 ⚠ **Do not re-run MOTOR_DETECT to "fix" this** — it is what introduced the asymmetry, by
 detecting against thrust that was already globally inverted. And these two writes are
 runtime-only: **Save on the Parameters tab only after in-water verification.**
+
+### Rev 7: FRAME_REVERSE changes what MOT_n_DIRECTION should be
+
+**Everything above this heading describes the rev ≤ 6 world and is now superseded on the
+motor-direction question.** Read this before acting on the `[-1] × 8` advice above.
+
+Rev 7 ships `FRAME_REVERSE` (`83ef62e`), and it solves the "every axis is backwards"
+problem at the layer where it belongs. `task_control_loop.cpp` negates all six demands —
+roll, pitch, yaw, throttle, forward, lateral — **after the controllers and before the
+mixer**:
+
+```cpp
+if (g_params.frame_reverse > 0.5f) {
+    roll = -roll; pitch = -pitch; yaw = -yaw;
+    thr  = -thr;  fwd   = -fwd;   lat = -lat;
+}
+mixer::mix(roll, pitch, yaw, thr, fwd, lat, norm);
+```
+
+Placement is the whole point. The attitude PIDs keep operating in the sensor's frame, so
+their signs, integrators and the autotune relay stay self-consistent and only the actuator
+side flips. Negating at the *setpoints* instead would invert the pilot's stick but not the
+stabilisation loops — the half-fix that leaves a hull flyable in MANUAL and divergent in
+STABILIZE, which is exactly where this vehicle sat on 2026-08-06.
+
+`DEF_FRAME_REVERSE = 0.0f`, so no other frame is affected. **It is set to 1 on this hull.**
+
+**The two params now have genuinely separate jobs, and this is the bit to internalise:**
+
+| param | job | correct value here |
+|---|---|---|
+| `FRAME_REVERSE` | whole-frame axis flip, applied once to the demands | `1` |
+| `MOT_n_DIRECTION` | compensate an **individual** thruster wired backwards | `-1` on **M1 and M8 only**, `+1` on M2–M7 |
+
+`502eb23` folds that second row into the firmware defaults, so a freshly-erased rev-7 board
+comes up as-flown. Note this makes the **factory default correct** for the first time — the
+"factory default is +1, which is the known-wrong state" reasoning above no longer applies.
+
+#### ⛔ The double-inversion hazard — check this before you arm
+
+**`MOT_n_DIRECTION = [-1] × 8`, which the 2026-08-06 restore above deliberately wrote and
+which this document told you to verify, is no longer the intended configuration.** A
+*uniform* flip of all eight is algebraically a second whole-frame negation, so stacked on
+`FRAME_REVERSE = 1` the two cancel and the axes are backwards again. Worse, the residual
+relative to correct wiring falls on **M2–M7** — six thrusters inverted against the mixer's
+patterns, which is precisely the non-uniform breakage FRAME_REVERSE exists to prevent
+(83ef62e: *"three thrusters pushing the same way is not a torque at all"*).
+
+**We do not know which state the board is in, and we could not check** — the vehicle was
+unreachable when this was written. The evidence points both ways and neither side is ours:
+
+- We restored `[-1] × 8` on 2026-08-06 and it was saved to flash. **NVS beats defaults**, so
+  `502eb23` changing the defaults does *not* correct a board already in service, and the
+  rev-7 flash notes report "232 params re-read, zero drift" — i.e. whatever was stored
+  stayed stored.
+- But `502eb23`'s own message says all 232 params were read off a board over COM8 and only
+  M1/M8 were negative. If that was this vehicle, someone had already corrected it.
+
+**One param read settles it. Do it before arming, not after:**
+
+```bash
+ros2 run duburi_manager connect          # or Bondor -> Setup -> Motors
+# expect: FRAME_REVERSE = 1
+#         MOT_1_DIRECTION = -1, MOT_8_DIRECTION = -1, MOT_2..7_DIRECTION = +1
+# if all eight read -1, the axis fix is CANCELLED and M2-M7 are inverted -- fix before arming
+```
+
+Then the physical check from the previous section still stands and still needs no reasoning
+about mount geometry: the throttle column is `−1` for **all four** verticals, so under motor
+test at the same positive throttle, **5, 6, 7 and 8 must all push the same way**.
+`DO_MOTOR_TEST` bypasses the mixer *matrix* but **does** apply `in.dir[]`
+(`task_control_loop.cpp:789`), so it is a real test of the direction flags — it just cannot
+see `FRAME_REVERSE`, which is applied inside the mixed path only.
+
+⚠ **`FRAME_REVERSE` is unverified under thrust** — the firmware team flagged this in PR #5
+and props were off. MANUAL axes first (no attitude feedback, so it cannot flip), STABILIZE
+only after that, autotune last.
 
 ### ⛔ AFTER EVERY FLASH: the bridge is dead but still looks alive
 

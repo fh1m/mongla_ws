@@ -357,10 +357,35 @@ DEPTH_OUT_ARM_LIMIT = 0.90
 #      reported SUCCESS; it now leaves the value alone and finishes FAIL (which also keeps
 #      it out of flash). Nothing for this host to adapt to -- duburi_ws never runs
 #      MOTOR_DETECT -- but it changes what an operator should expect from Bondor.
-FW_BEHAVIOUR_REV = 6
+#   7  fw 2026-08-07 (PR #5): PREFLIGHT_STORAGE reports SUCCESS, not only failure. The
+#      command has always been ACKed ACCEPTED the instant it parses, but the NVS write is
+#      deferred to the Core-0 update() -- so the ACK has never meant "written", only
+#      "request received", and the only signal was a CRITICAL statustext on FAILURE with
+#      silence on success. Silence is indistinguishable from a dropped request or a wedged
+#      board. Rev 7 emits STATUSTEXT "Params saved to flash" (MAV_SEVERITY_INFO) on the
+#      success path: if you ever automate a save, wait for the statustext, NOT the ACK.
+#
+#      ⚠ THE REV NUMBER UNDER-COUNTS THIS RELEASE. Five other commits shipped inside rev 7
+#      without a bump of their own, and two change behaviour we care about:
+#        * 83ef62e FRAME_REVERSE -- a new param that negates all six axis demands after the
+#          controllers and before the mixer. DEFAULT 0, so a stock board is unchanged and
+#          the gate is honest; but it is SET TO 1 on our hull, where it inverts the meaning
+#          of every MANUAL_CONTROL axis and every SROT_MOVE primitive relative to rev <= 6.
+#        * 502eb23 MOT_1/MOT_8_DIRECTION now DEFAULT to -1 (as-flown), the rest +1. Our
+#          documented restore was a uniform [-1] x 8, which is no longer the intended
+#          configuration and interacts with FRAME_REVERSE. See srot-integration.md.
+#      Neither is a host-code change -- the wire is identical, and the drift suite is green
+#      against d6f1da5 -- but do not read "rev 7" as "one small additive change".
+FW_BEHAVIOUR_REV = 7
 
 # The minimum revision this host code assumes. Flashing older firmware than this
 # re-opens the coasting MOVE_STOP with no host brake left to cover it.
+#
+# NOT raised to 7 despite FRAME_REVERSE, deliberately: its default is 0, so a stock rev-7
+# board and a rev-6 board command identical axes and there is no host workaround to gate.
+# The axis flip is a PARAM this hull sets, not a revision property -- gating it here would
+# strand a working rev-2 board while still not catching a rev-7 board with FRAME_REVERSE
+# left at 0. The check that would actually catch it is a param read, not a rev compare.
 FW_BEHAVIOUR_REV_REQUIRED = 2
 
 # WHERE THE BOARD REPORTS IT: `AUTOPILOT_VERSION.middleware_sw_version`. The board has

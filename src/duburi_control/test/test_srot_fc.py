@@ -822,13 +822,20 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
     Every rev so far has been ADDITIVE for this host: rev 3 made WTEMP/SCALED_PRESSURE2
     absentable (we already treat absence as absence), rev 4 made yaw absolute (we read
     whatever the board reports), rev 5 added the baro jitter gate and a BARO_P2P value we
-    simply display, rev 6 fixed MOTOR_DETECT (which this host never runs). None of them
+    simply display, rev 6 fixed MOTOR_DETECT (which this host never runs), rev 7 added a
+    success statustext to PREFLIGHT_STORAGE (we do not automate saves). None of them
     break a rev-2 board, so the requirement stays at 2 -- raising it would strand a
     working vehicle for no safety gain.
 
+    Rev 7 is the one to be careful about, and the care belongs HERE rather than in the
+    requirement: it also shipped FRAME_REVERSE, which inverts every axis. That is a PARAM
+    (default 0, set to 1 on our hull), not a revision property -- so raising the floor
+    would neither catch a rev-7 board with it left at 0 nor help a board that has it set.
+    A rev compare cannot express "check a stored value"; a param read can.
+
     The two numbers are asserted separately on purpose: bumping the tracker is routine
     bookkeeping, raising the requirement is a decision to refuse hardware."""
-    assert sp.FW_BEHAVIOUR_REV == 6
+    assert sp.FW_BEHAVIOUR_REV == 7
     assert sp.FW_BEHAVIOUR_REV_REQUIRED == 2
 
 
