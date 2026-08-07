@@ -162,11 +162,30 @@ nothing about the uplink.
 >    matches the reported signature (perfect downlink, zero uplink) exactly. Note the Bar30
 >    fault on this hull was also a connector.
 >
-> ⚠ **We could not reproduce it: the vehicle was unreachable from this box when PR #5 was
-> merged** (no route to `192.168.2.2`, no bridges listed). So this reconciles two honest
-> measurements; it does not adjudicate them. **Whoever next has hardware: recreate the
-> bridge first, then run the probe.** If it passes, the cause was the stale fd; if it still
-> fails on a freshly-created bridge, it is the serial leg and it is a wiring job.
+> **✅ ADJUDICATED 2026-08-07, same day: cause #1. The uplink is fine.** Measured from this
+> dev box on `192.168.2.1`:
+>
+> ```
+> FRAME_REVERSE -> 1.0   (0.0s)            first PARAM_REQUEST_READ, first try
+> 12/12 params read       FS_GCS_*, MOT_1..8_DIRECTION, CAL_LVL_*, MAG_YAW_REF, JS_GAIN_DEFAULT
+> bringup_check --srot -> [PASS] FW behaviour rev  7      via MAV_CMD_REQUEST_MESSAGE(148)
+> ```
+>
+> That last line is **their exact silent probe**, answering. The decisive detail is what the
+> link was: **a Bridget bridge created from nothing** — the pre-emptive `DELETE` returned
+> `{"detail":"Bridge doesn't exist."}` — on a `/dev/ttyUSB0` that had been absent from
+> BlueOS's own `serial_ports` enumeration minutes earlier. So this is not "it works for us
+> and not for them"; it is the reflash trap, reproduced and then cleared by the documented
+> fix. **PR #5's finding #1 is the stale fd, not a property of the UDP path.**
+>
+> Their downlink came from `192.168.2.2:14551`, so a bridge *did* exist when they measured —
+> that is consistent, not contradictory: a bridge whose serial fd has died still forwards
+> nothing toward the board while continuing to list as healthy. Perfect downlink with a dead
+> uplink is exactly what a half-dead bridge looks like.
+>
+> **Keep the probe.** It correctly caught a real broken link, and the standing rule is
+> unchanged: after any flash, unplug or re-seat, **delete and recreate the bridge before
+> trusting the session**, then probe.
 
 ### Host side — no code change needed
 
@@ -272,6 +291,17 @@ Measured on the way past, confirming the earlier bridge finding from the other d
   Jetson can no longer be told from a live GCS and the hull station-keeps instead of
   surfacing. ⚠ **Check this value before every water session** — Bondor's bench mode is
   runtime-only *until someone presses Save*, and someone did.
+  **⛔ AND IT REGRESSED. Measured 2026-08-07: `FS_GCS_ENABLE=1`, `FS_GCS_COMPID=0` — bench
+  mode is back in flash**, one day after being corrected to 191. This is not a one-off; it
+  is what this param does when Bondor is used on the bench and someone saves. Prose in a doc
+  did not hold it, so it is now a **graded preflight line** (`_gcs_failsafe_verdict`,
+  section D) that FAILs — `bringup_check --srot` had been reporting **0 FAIL on a vehicle in
+  bench mode**. Fix and persist:
+  ```bash
+  # Bondor -> Parameters -> FS_GCS_COMPID = 191 -> Save
+  # on fw rev >= 7 wait for STATUSTEXT "Params saved to flash", NOT the COMMAND_ACK --
+  # the ACK means "request received"; the NVS write is deferred to the Core-0 update()
+  ```
 - **`MOT_n_DIRECTION` → −1 (all eight).** The factory default is +1, which is the state that
   produced the reversed axes in the first place, so restoring defaults would have handed
   back a known-wrong vehicle. All eight at −1 is the globally-uniform state verified in
@@ -373,6 +403,26 @@ STABILIZE, which is exactly where this vehicle sat on 2026-08-06.
 comes up as-flown. Note this makes the **factory default correct** for the first time — the
 "factory default is +1, which is the known-wrong state" reasoning above no longer applies.
 
+#### ✅ RESOLVED 2026-08-07 — the board is in the intended configuration
+
+Read over the bridge, disarmed, MANUAL:
+
+```
+FRAME_REVERSE   = 1
+MOT_n_DIRECTION = [-1, +1, +1, +1, +1, +1, +1, -1]     M1, M8 only -- as-flown
+```
+
+That is the rev-7 intent exactly: whole-frame flip on, per-thruster wiring compensated,
+net sign `s = -(w · dir) = [-1] × 8` uniform. **The `[-1] × 8` we restored on 2026-08-06 is
+NOT what is on the board** — someone corrected it (consistent with `502eb23`, which reports
+reading M1/M8-only off a board on 08-07). Also confirmed: `CAL_LVL_R` 0.0396 / `CAL_LVL_P`
+0.0131 intact, `MAG_YAW_REF` 1, `JS_GAIN_DEFAULT` 1.0, fw behaviour rev **7**.
+
+**The hazard below did not occur. Keep the section** — it is the reason the check exists,
+and the configuration can regress the moment anyone hand-edits motor directions again.
+⚠ `FRAME_REVERSE` is still **unverified under thrust**: MANUAL axes first, STABILIZE second,
+autotune last.
+
 #### ⛔ The double-inversion hazard — check this before you arm
 
 **`MOT_n_DIRECTION = [-1] × 8`, which the 2026-08-06 restore above deliberately wrote and
@@ -405,8 +455,9 @@ all"* — and is why the vehicle span about yaw in STABILIZE. The vertical group
 same way on roll (`M[5..8][roll] = [+1,-1,+1,-1]` → `[+1,-1,+1,+1]`), which is the halved
 roll/pitch authority behind `CLAMP` / `period unstable`.
 
-**We do not know which state the board is in, and we could not check** — the vehicle was
-unreachable when this was written. The evidence points both ways and neither side is ours:
+*(Historical, kept for the reasoning. Measured 2026-08-07: the board is in the correct
+configuration — see the RESOLVED block above. The two readings below are why it was in
+doubt.)* The evidence pointed both ways and neither side was ours:
 
 - We restored `[-1] × 8` on 2026-08-06 and it was saved to flash. **NVS beats defaults**, so
   `502eb23` changing the defaults does *not* correct a board already in service, and the
