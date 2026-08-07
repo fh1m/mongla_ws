@@ -302,6 +302,18 @@ Measured on the way past, confirming the earlier bridge finding from the other d
   # on fw rev >= 7 wait for STATUSTEXT "Params saved to flash", NOT the COMMAND_ACK --
   # the ACK means "request received"; the NVS write is deferred to the Core-0 update()
   ```
+  **✅ FIXED + VERIFIED over direct USB 2026-08-07** — written, re-read, `PREFLIGHT_STORAGE`,
+  and confirmed by the rev-7 statustext:
+  ```
+  COMMAND_ACK = 0 (ACCEPTED -- request received, NOT written)
+  STATUSTEXT: Calibration saved + verified on flash
+  STATUSTEXT: Params saved to flash          <- the one that means the NVS write happened
+  ```
+  ⚠ **Match `"Params saved"`, not just `"saved"`.** The board emits **two** lines and the
+  *calibration* one comes first — our first attempt matched it, returned early, and reported
+  a params write it had not seen. That recreates rev 7's own silence-means-success bug on the
+  client side. `bringup_check --srot` now grades this param (`_gcs_failsafe_verdict`) and
+  reads `FS_GCS_COMPID=191 (scoped to us)`.
 - **`MOT_n_DIRECTION` → −1 (all eight).** The factory default is +1, which is the state that
   produced the reversed axes in the first place, so restoring defaults would have handed
   back a known-wrong vehicle. All eight at −1 is the globally-uniform state verified in
@@ -485,6 +497,36 @@ see `FRAME_REVERSE`, which is applied inside the mixed path only.
 ⚠ **`FRAME_REVERSE` is unverified under thrust** — the firmware team flagged this in PR #5
 and props were off. MANUAL axes first (no attitude feedback, so it cannot flip), STABILIZE
 only after that, autotune last.
+
+### ✅ Full-stack verification over direct USB — 2026-08-07
+
+Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (CH340
+`1a86:7523`). Everything below measured, not inferred.
+
+| check | result |
+|---|---|
+| `bringup_check --srot` | **0 FAIL, exit 0** — every SROT line PASS |
+| fw behaviour rev | **7** (via `MAV_CMD_REQUEST_MESSAGE(148)`) |
+| `FS_GCS_COMPID` | **191**, written and confirmed in flash (above) |
+| barometer spread | **2.94 mbar** on USB vs **5.87** over the bridge — visibly cleaner |
+| Bar30 health | healthy; `AUTO`/`DEPTH_HOLD` available |
+| manager startup | connects, banner correct, `/duburi/state` populating |
+| payload roles | FIREABLE (switch) `[1,2,3,4, 9..16]` · arm/PWM `[5,6,7,8]` · **unreadable none** |
+| telemetry | BAT 13.3–13.6 V · WTEMP 27.9 °C · `MAGACC 2` · LEAK dry · KILL clear · RPM all 0 |
+
+**`duburi_ws` is compatible with the current firmware and needs no code change to fly it.**
+
+⚠ Two things this does **not** prove, both still open:
+- **The depth loop.** `DEPTH_OUT +0.00` disarmed is a *stale register*, not a settled loop
+  (that is the §8.1 ask in the firmware PR). The two armed checks still gate every AUTO move.
+- **`MAGACC 2` does not close the mag gate.** The firmware needs `>= 2`
+  (`yaw_ref.cpp:185`, `need_acc = have_our_cal ? 0 : 2`) so the *accuracy* gate is satisfied —
+  but nothing publishes `yaw_ref::State`, so **we cannot tell `LOCKED` from `REFUSED_CAL`**.
+  If it never locked, `ATTITUDE.yaw` is relative to the BNO's boot orientation and absolute
+  `MOVE_TURN` turns to a meaningless number. Accuracy is not a proxy: the firmware's own
+  comment says the alignment is protected by the `|B|` band and the sample-agreement test,
+  neither of which depends on the sensor's self-assessment. **Prefer relative turns until
+  the state is observable** (§8.8 in the firmware PR).
 
 ### ⛔ AFTER EVERY FLASH: the bridge is dead but still looks alive
 
