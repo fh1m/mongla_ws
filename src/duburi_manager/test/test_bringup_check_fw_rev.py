@@ -146,7 +146,7 @@ def test_an_implausible_barometer_fails_and_names_the_vertical_thrusters():
     status, label, detail = _depth_loop_verdict(-1.0)
     assert status == FAIL
     assert 'IMPLAUSIBLE' in label and 'vertical' in detail
-    assert '-0.33' in detail, 'a refusal must quote what it refused on'
+    assert 'SATURATED' in detail, 'a clamped reading must be named as clamped'
 
 
 def test_the_preflight_reads_depth_cmd_because_depth_out_is_gone_at_rev_8():
@@ -154,15 +154,15 @@ def test_the_preflight_reads_depth_cmd_because_depth_out_is_gone_at_rev_8():
     this probe only ever runs disarmed -- so reading DEPTH_OUT hit the 'not reported'
     WARN branch on a perfectly healthy board and the check silently stopped working.
     A healthy surface reading must PASS, and it must do so from DEPTH_CMD alone."""
-    status, _, _ = _depth_loop_verdict(-0.22)      # ~0.03 m at DEPTH_P=3.0
+    status, _, _ = _depth_loop_verdict(-0.30)      # exactly 0.00 m at DEPTH_P=3.0
     assert status == PASS
 
 
 def test_the_preflight_threshold_follows_depth_p():
     """DEPTH_CMD is a clamped OUTPUT, so a fixed limit means a different physical
     depth once the gain is retuned. Same reading, two gains, opposite verdicts."""
-    assert _depth_loop_verdict(0.5, 1.0)[0] == FAIL     # 0.50 m of error
-    assert _depth_loop_verdict(0.5, 10.0)[0] == PASS    # 0.05 m of error
+    assert _depth_loop_verdict(0.5, 1.0)[0] == FAIL     # 0.50 + 0.10 = 0.60 m
+    assert _depth_loop_verdict(0.5, 10.0)[0] == PASS    # 0.05 + 0.10 = 0.15 m
 
 
 def test_absent_depth_cmd_warns_that_the_board_will_refuse_auto():
@@ -243,3 +243,39 @@ def test_unreadable_params_warn_rather_than_pass():
     from duburi_manager.bringup_check import _gcs_failsafe_verdict
     assert _gcs_failsafe_verdict(None, None)[0] == WARN
     assert _gcs_failsafe_verdict(1.0, None)[0] == WARN
+
+
+def test_a_healthy_in_air_board_does_not_cry_wolf():
+    """MEASURED 2026-08-07: a healthy board with ~0.15 m of baro offset read
+    DEPTH_CMD = -0.74. Judged as raw error that is -0.25 m, five centimetres from a
+    FAIL it does not deserve -- because the preview's fixed 0.10 m target is baked in
+    and spends a third of the budget before the barometer says anything.
+
+    Subtracting the target recovers the board's actual depth (-0.15 m), which is a
+    WARN worth a calibrate_depth and nothing more. A guard that fires on a healthy
+    vehicle is a guard that gets overridden by habit."""
+    status, _, detail = _depth_loop_verdict(-0.74)
+    assert status == PASS, 'a 0.15 m offset in air is normal, not a warning'
+    assert '-0.15' in detail
+
+
+def test_a_real_offset_warns_and_names_the_fix():
+    """Between the healthy band and the refusal there is a real offset worth acting
+    on. It must name calibrate_depth -- a WARN nobody knows how to clear is noise."""
+    status, _, detail = _depth_loop_verdict(0.45)     # +0.25 m at DEPTH_P = 3.0
+    assert status == WARN and 'calibrate_depth' in detail
+
+
+def test_saturation_points_at_the_offset_before_the_sensor():
+    """Saturation is refused whatever its cause -- saturation IS the hazard. But a
+    large zero offset is far more common than a dead Bar30, and the deck fix differs,
+    so the refusal must name calibrate_depth rather than sending someone hunting a
+    hardware fault."""
+    _, _, detail = _depth_loop_verdict(-1.0)
+    assert 'calibrate_depth' in detail and 'VARIANCE' in detail
+
+
+def test_a_perfectly_zeroed_board_passes_cleanly():
+    """DEPTH_CMD = -0.30 at DEPTH_P = 3.0 is exactly 0.00 m. If this ever WARNs, the
+    target-offset correction has been lost again."""
+    assert _depth_loop_verdict(-0.30)[0] == PASS

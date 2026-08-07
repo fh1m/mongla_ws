@@ -929,8 +929,10 @@ def test_arm_is_refused_while_the_barometer_is_implausible():
     fc.note_named_value(_nvf('DEPTH_CMD', -1.0))
     ok, reason = fc.check_depth_loop_settled()
     assert ok is False
-    assert 'IMPLAUSIBLE' in reason and '-0.33' in reason, \
-        'a refusal must quote the numbers it refused on'
+    assert 'IMPLAUSIBLE' in reason and 'SATURATED' in reason, \
+        'a refusal must quote what it refused on, and name the clamp as a clamp'
+    assert 'calibrate_depth' in reason, \
+        'a large zero offset is commoner than a dead Bar30 -- name the cheap fix'
 
 
 def test_the_guard_reads_depth_cmd_because_depth_out_is_absent_while_disarmed():
@@ -1341,3 +1343,20 @@ def test_an_older_board_reports_unknown_rather_than_assuming_either_way():
     guessing 'refused' would strand a board whose heading is in fact fine."""
     ok, reason = _fc().check_yaw_reference()
     assert ok is False and 'UNKNOWN' in reason and 'relative' in reason
+
+
+def test_the_guard_subtracts_the_previews_own_target():
+    """DEPTH_CMD is preview(depth, 0.10), so the 0.10 m target is baked into it and a
+    perfectly-zeroed barometer in air still reads -0.10 m of raw "error". Judging the
+    raw number spends a third of the 0.30 m budget before the sensor says anything --
+    measured on the vehicle, a healthy board at 0.15 m of offset sat 0.05 m from a
+    refusal it did not deserve. Subtracting the target recovers the board's own depth,
+    which is the quantity actually being judged."""
+    fc = _fc()
+    fc.note_named_value(_nvf('DEPTH_CMD', -0.30))     # exactly 0.00 m at DEPTH_P=3.0
+    ok, reason = fc.check_depth_loop_settled()
+    assert ok is True and '+0.00 m' in reason
+
+    healthy = _fc()
+    healthy.note_named_value(_nvf('DEPTH_CMD', -0.74))   # the real -0.15 m reading
+    assert healthy.check_depth_loop_settled()[0] is True
