@@ -104,8 +104,20 @@ GCS teams own those, with their own agents. Our obligation to them is exactly on
 | direction | mechanism |
 |---|---|
 | **them → us** | a **pull request on `duburi_ws`** ([#5](https://github.com/fh1m/duburi_ws/pull/5) is the template). They never commit here directly. |
-| **us → them** | a note in their repo's `JETSON_FEEDBACK.md` / `TASKS_FROM_DUBURI_WS.md`. We do not push fixes. |
+| **us → them** | a **pull request on their repo**, appending a numbered Round to `TASKS_FROM_DUBURI_WS.md` ([srot-control-board#1](https://github.com/RakibulIslam1/srot-control-board/pull/1) is the template). Symmetric with the above: a PR is a *request*, and they merge it. |
 | **proof of harmony** | `Mongla_others/srot-control-board` is our **read-only mirror** of the firmware. Fast-forward it to the flashed baseline, then run `test_srot_protocol_drift.py` — it reads their headers directly and fails on any divergence. |
+
+**We hold WRITE on their repo, so the discipline is ours to keep, not GitHub's.** Never push
+to their `main`, never edit their C/C++, and never "helpfully" fix a firmware defect in their
+tree — describe it, cite `file:line` against a named commit, and suggest a fix they can reject.
+The reason is not politeness: their agent reasons about code it wrote, and a silent edit from
+us breaks that. Work on a `duburi-ws/<topic>` branch, then **return the mirror to their `main`
+and re-run the drift suite** — a checked-out feature branch would make the mirror lie about
+what is flashed, which is the one thing it exists to tell the truth about.
+
+⚠ **Cite line numbers against a commit, and re-verify them at write time.** Round 8 inherited
+`task_control_loop.cpp:236-237` from an earlier round; the depth call had moved to `:240-241`.
+A stale citation in a cross-repo PR sends someone to the wrong function in their own code.
 
 So the routine when a firmware revision lands is fixed and short:
 
