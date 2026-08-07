@@ -167,6 +167,16 @@ nothing about the uplink.
 > measurements; it does not adjudicate them. **Whoever next has hardware: recreate the
 > bridge first, then run the probe.** If it passes, the cause was the stale fd; if it still
 > fails on a freshly-created bridge, it is the serial leg and it is a wiring job.
+>
+> **NARROWED 2026-08-07 — the board is exonerated.** Later the same day, the same board over
+> **direct USB (COM8)** took uplink perfectly: full 232-param `PARAM_REQUEST_LIST`, multiple
+> `PARAM_SET` round-trips confirmed by `PARAM_VALUE` echo, and `PREFLIGHT_STORAGE` returning
+> `COMMAND_ACK` **plus** the new rev-7 `"Params saved to flash"` statustext.
+>
+> So the board's serial RX and its MAVLink command handling are **fully functional** — the
+> dead uplink is somewhere in the Pi-side path (stale Bridget fd, the BlueOS endpoint, or the
+> Pi↔board cable), and **not** in the firmware or the board's receiver. That removes the
+> scariest branch. Both remaining candidates stay live; this only says which end to look at.
 
 ### Host side — no code change needed
 
@@ -288,6 +298,46 @@ thruster's true sign and store it in `CAL_MDIR`, which is the readable, per-thru
 On rev 6 it converges in one pass from any starting state, and an inconclusive run now
 reports FAIL and changes nothing instead of silently resetting all eight.
 
+> ### ⛔ BEFORE YOU RUN IT: `MOTOR_DETECT` and `FRAME_REVERSE` are redundant, and stack
+>
+> **A successful MOTOR_DETECT makes `FRAME_REVERSE = 1` wrong.** They are two different
+> fixes for the same symptom, and after detect converges only one of them is still needed.
+> Measured against `calibration.cpp` and `task_control_loop.cpp` on `d6f1da5`.
+>
+> **The detect run itself is safe.** `MOTOR_DETECT` drives thrusters through
+> `driveTestMotor()` → the test-override branch's `oneToDshot(test_throttle, in.dir[motor])`.
+> That path uses `in.dir[]` but **never reaches `mixer::mix()`**, and `FRAME_REVERSE` is
+> applied inside the normal control branch immediately before the mixer
+> (`task_control_loop.cpp:863`). So `FRAME_REVERSE` cannot contaminate what detect measures.
+> Leave it as-is for the run.
+>
+> **The problem is what detect converges to.** Its compose form is
+> `c' = c · agree` with `agree = c·p·s`, so `c' = p·s` and the effective direction
+> `c'·p = s` — every thruster ends up **agreeing with the mixer's expected angular
+> response**, i.e. `s = +1` uniformly. That is the point: after a clean detect the mixer's
+> intent is what the hull actually does.
+>
+> But `FRAME_REVERSE = 1` then negates all six demands *after* the controllers, turning that
+> corrected frame into a uniform `[-1]×8` flip — **every axis inverted again**, which is the
+> original rev-6 complaint.
+>
+> ```
+> after successful MOTOR_DETECT:   s = [+1]×8   mixer intent achieved
+>   with FRAME_REVERSE = 0     ->  correct
+>   with FRAME_REVERSE = 1     ->  s = [-1]×8   every axis backwards
+> ```
+>
+> **Sequence for the water test:**
+> 1. Read and record `MOT_1..8_DIRECTION`, `CAL_MDIR1..8`, `FRAME_REVERSE` **before arming**.
+> 2. Run MOTOR_DETECT in water, armed, hull free to rotate. Require **SUCCESS** — a `FAIL`
+>    is inconclusive and writes nothing, so a re-run is the correct response, not a param edit.
+> 3. **Then set `FRAME_REVERSE = 0`** and save.
+> 4. Re-verify MANUAL axes and only then STABILIZE.
+>
+> If the axes are still inverted with `FRAME_REVERSE = 0` after a SUCCESS detect, the
+> inversion is **not** in the motor directions — look at the attitude/gyro convention next,
+> and do not simply put `FRAME_REVERSE` back, because that hides which of the two is wrong.
+
 ### ⛔ FOLLOW-UP: a global flip cannot fix a RELATIVE asymmetry
 
 Reversing all eight `MOT_n_DIRECTION` fixed the manual axes, then STABILIZE span the
@@ -405,7 +455,30 @@ all"* — and is why the vehicle span about yaw in STABILIZE. The vertical group
 same way on roll (`M[5..8][roll] = [+1,-1,+1,-1]` → `[+1,-1,+1,+1]`), which is the halved
 roll/pitch authority behind `CLAMP` / `period unstable`.
 
-**We do not know which state the board is in, and we could not check** — the vehicle was
+> ### ✅ SETTLED 2026-08-07 — the board is in the GOOD state
+>
+> Read off the vehicle over COM8, **twice**: once as a pre-flash backup and again after
+> flashing `d6f1da5`, with a full 232-param diff between them showing **zero drift**.
+>
+> ```
+> MOT_1..8_DIRECTION : [-1, +1, +1, +1, +1, +1, +1, -1]
+> CAL_MDIR1..8       : [ 1,  1,  1,  1,  1,  1,  1,  1]
+> FRAME_REVERSE      : 1
+> ```
+>
+> That is the **first** row of the derivation above — `dir = correct` → `s = [-1]×8`, the
+> clean uniform frame flip, intact. **The feared `[-1]×8` double-inversion is NOT present**,
+> so the residual-on-M2–M7 failure mode does not apply to this hull right now.
+>
+> Note `CAL_MDIR` is all `+1`, i.e. MOTOR_DETECT has never successfully written to this
+> board — effective direction is `MOT_n_DIRECTION × CAL_MDIR = MOT_n_DIRECTION`. That is
+> also why the ⛔ box in the MOTOR_DETECT section above matters: the first successful detect
+> will change this, and `FRAME_REVERSE` has to come off in the same session.
+>
+> The reasoning below is kept because it is correct and is the thing to re-run if the
+> directions are ever touched again; only the "we could not check" is now resolved.
+
+**~~We do not know which state the board is in, and we could not check~~** — the vehicle was
 unreachable when this was written. The evidence points both ways and neither side is ours:
 
 - We restored `[-1] × 8` on 2026-08-06 and it was saved to flash. **NVS beats defaults**, so
