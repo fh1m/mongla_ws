@@ -130,6 +130,19 @@ def _param_id(pv) -> str:
     return pid.strip('\x00')
 
 
+# Saturation is refused whatever its cause, because SATURATION ITSELF is the hazard:
+# a pinned heave demand becomes full vertical thrust the instant the outputs go live
+# (mixer throttle column is -1 on all four verticals, 0 on all four horizontals). But
+# the cause changes what the operator should DO, and a large zero offset is far more
+# common than a dead sensor -- so name the cheap fix first instead of sending someone
+# to look for a hardware fault.
+_DEPTH_ARM_TAIL = (
+    'Arming would command FULL vertical thrust (the mixer throttle column is -1 on all '
+    'four verticals) with the horizontals idle. If the barometer VARIANCE is healthy '
+    'this is a large zero offset, not a dead sensor -- run `duburi calibrate_depth`, '
+    'then re-check with `ros2 run duburi_manager connect`')
+
+
 class SrotFC(FlightController):
     """SROT backend. Constructed with a pre-opened mavutil master + optional logger,
     exactly like `Pixhawk` (connection lives in the manager / connection_config)."""
@@ -451,18 +464,27 @@ class SrotFC(FlightController):
             # every move verb is denied, so this fails closed downstream without us
             # blocking the arm. Say which it is; do not report it as "settled".
             return True, 'depth preview absent (barometer unhealthy -- AUTO will refuse)'
-        # Convert the clamped output back to the depth error that produced it.
         depth_p = self.depth_p or sp.DEPTH_P_DEFAULT
-        implied_err_m = cmd / depth_p
-        if abs(implied_err_m) < sp.DEPTH_ERR_ARM_LIMIT_M:
-            return True, (f'depth preview sane (DEPTH_CMD={cmd:+.2f}'
-                          f' = {implied_err_m:+.2f} m err)')
-        msg = (f'BAROMETER IMPLAUSIBLE: DEPTH_CMD={cmd:+.2f} implies '
-               f'{implied_err_m:+.2f} m of depth error at the surface (limit '
-               f'{sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, DEPTH_P={depth_p:g}). '
-               'Arming would command FULL vertical thrust (the mixer throttle '
-               'column is -1 on all four verticals). Check the barometer -- run '
-               '`ros2 run duburi_manager connect`')
+        # SATURATION FIRST. While clamped the true depth is beyond the clamp, so the
+        # recovery below would report a harmless-looking value for the very case this
+        # guard exists to catch -- the 2026-08-02 phantom baro pinned DEPTH_CMD at
+        # -1.00, which back-converts to a benign-looking -0.23 m.
+        if abs(cmd) >= sp.DEPTH_CMD_SATURATED:
+            msg = (f'BAROMETER IMPLAUSIBLE: DEPTH_CMD={cmd:+.2f} is SATURATED, so the '
+                   f'board is seeing a depth it cannot even express. '
+                   + _DEPTH_ARM_TAIL)
+        else:
+            # Unsaturated: recover the board's own depth exactly. The preview's 0.10 m
+            # target is baked into DEPTH_CMD, so subtracting it is what turns "error
+            # against a target" into "how far the barometer is from zero" -- the thing
+            # actually being judged.
+            depth_m = cmd / depth_p + sp.DEPTH_PREVIEW_TARGET_M
+            if abs(depth_m) < sp.DEPTH_ERR_ARM_LIMIT_M:
+                return True, (f'barometer sane ({depth_m:+.2f} m at the surface, '
+                              f'DEPTH_CMD={cmd:+.2f})')
+            msg = (f'BAROMETER IMPLAUSIBLE: the board reads {depth_m:+.2f} m of depth '
+                   f'at the surface (limit {sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, '
+                   f'DEPTH_CMD={cmd:+.2f}, DEPTH_P={depth_p:g}). ' + _DEPTH_ARM_TAIL)
         if self.allow_saturated_depth_arm:
             self._log_warn(f'[SROT ] {msg} -- OVERRIDDEN, arming anyway')
             return True, f'OVERRIDDEN: {msg}'

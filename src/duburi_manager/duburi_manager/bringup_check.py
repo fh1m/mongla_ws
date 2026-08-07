@@ -810,17 +810,31 @@ def _depth_loop_verdict(depth_cmd: float | None,
                 'no DEPTH_CMD -- the board has declared the barometer unhealthy/stale, '
                 'so it will refuse DEPTH_HOLD/AUTO and every move verb with it')
     gain = depth_p or sp.DEPTH_P_DEFAULT
-    err_m = depth_cmd / gain
-    if abs(err_m) >= sp.DEPTH_ERR_ARM_LIMIT_M:
+    # Saturation first -- while clamped the true depth is beyond the clamp, so the
+    # recovery below would report a benign value for exactly the case this exists to
+    # catch (the 2026-08-02 phantom baro pinned DEPTH_CMD at -1.00).
+    if abs(depth_cmd) >= sp.DEPTH_CMD_SATURATED:
         return (FAIL, 'barometer IMPLAUSIBLE',
-                f'DEPTH_CMD={depth_cmd:+.2f} = {err_m:+.2f} m of depth error at the '
-                f'surface (limit {sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, DEPTH_P={gain:g}). '
-                'Arming would command FULL vertical thrust (mixer throttle column is '
-                '-1 on all four verticals) with the horizontals idle. DO NOT ARM')
-    if abs(err_m) > sp.DEPTH_ERR_ARM_LIMIT_M / 3.0:
-        return (WARN, 'barometer reads high at the surface',
-                f'DEPTH_CMD={depth_cmd:+.2f} = {err_m:+.2f} m while disarmed')
-    return (PASS, 'depth preview', f'sane (DEPTH_CMD={depth_cmd:+.2f} = {err_m:+.2f} m)')
+                f'DEPTH_CMD={depth_cmd:+.2f} is SATURATED -- the board is seeing a '
+                'depth it cannot express. ' + 'Arming would command FULL vertical thrust (mixer throttle column is -1 on all four verticals) with the horizontals idle. DO NOT ARM. If the barometer VARIANCE line above is PASS this is a large zero offset, not a dead sensor -- run `ros2 run duburi_planner duburi calibrate_depth` and re-check')
+    # Unsaturated: recover the board's own depth. The preview's fixed 0.10 m target is
+    # baked into DEPTH_CMD, so subtracting it turns "error against a target" into "how
+    # far is the barometer from zero" -- which is the question, and which stops a
+    # healthy in-air board from spending a third of the budget on a constant.
+    depth_m = depth_cmd / gain + sp.DEPTH_PREVIEW_TARGET_M
+    if abs(depth_m) >= sp.DEPTH_ERR_ARM_LIMIT_M:
+        return (FAIL, 'barometer IMPLAUSIBLE',
+                f'board reads {depth_m:+.2f} m of depth at the surface (limit '
+                f'{sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, DEPTH_CMD={depth_cmd:+.2f}, '
+                f'DEPTH_P={gain:g}). Arming would command FULL vertical thrust '
+                '(mixer throttle column is -1 on all four verticals) with the '
+                'horizontals idle. DO NOT ARM')
+    if abs(depth_m) > sp.DEPTH_OFFSET_WARN_M:
+        return (WARN, 'barometer offset at the surface',
+                f'{depth_m:+.2f} m while disarmed in air -- run '
+                '`ros2 run duburi_planner duburi calibrate_depth` before diving')
+    return (PASS, 'barometer at surface',
+            f'{depth_m:+.2f} m (DEPTH_CMD={depth_cmd:+.2f})')
 
 
 def _yaw_ref_verdict(raw: float | None) -> tuple[str, str, str]:

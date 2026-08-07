@@ -319,6 +319,31 @@ DEPTH_OUT_ARM_LIMIT = 0.90
 # read -3..-6.7 m, i.e. 10x over.
 DEPTH_ERR_ARM_LIMIT_M = 0.30
 
+# fw `mav_stream.cpp`: DEPTH_CMD = depth::preview(s.depth, 0.10f), and preview() is
+# `clamp(DEPTH_P * (meas - tgt))`. So the 0.10 m target is BAKED INTO the number and a
+# perfectly-zeroed barometer sitting in air still reads -0.10 m of "error".
+#
+# That matters because the quantity this guard actually wants is HOW FAR THE BAROMETER
+# IS FROM ZERO at the surface, not how far it is from the preview's target. Comparing
+# the raw error against 0.30 m spends a third of the budget on a constant offset --
+# measured on the vehicle 2026-08-07, a healthy board at +0.15 m of baro offset read
+# -0.25 m and sat 0.05 m from a FAIL it did not deserve.
+#
+# Recovering the board's own depth is exact while unsaturated:
+#     depth = DEPTH_CMD / DEPTH_P + DEPTH_PREVIEW_TARGET_M
+DEPTH_PREVIEW_TARGET_M = 0.10
+
+# ...but NOT while clamped, which is the case that matters most: at |DEPTH_CMD| = 1.0
+# the true depth is somewhere beyond the clamp and the formula above would report a
+# harmless -0.23 m. So saturation is its own refusal, checked FIRST. The 2026-08-02
+# phantom baro pinned here.
+DEPTH_CMD_SATURATED = 0.99
+
+# Baro offset that earns a WARN rather than a refusal: real, worth a `calibrate_depth`,
+# not dangerous. Below the FAIL limit by enough that a normal offset does not cry wolf --
+# a guard that fires on a healthy vehicle is a guard that gets overridden by habit.
+DEPTH_OFFSET_WARN_M = 0.20
+
 # fw `DEF_DEPTH_P` (include/config.h). Fallback when the board never answered the
 # param read -- pinned by the drift test so it cannot rot.
 DEPTH_P_DEFAULT = 3.0
