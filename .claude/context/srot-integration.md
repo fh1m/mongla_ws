@@ -1,9 +1,25 @@
 # SROT control-board integration (branch `srot`)
 
-> **Firmware baseline for this branch: `srot-control-board` @ `ae1bc2f`, `SROT_FW_BEHAVIOUR_REV 6`.**
-> **FLASHED to the vehicle 2026-08-06** (erase + upload over direct USB, params restored
-> and verified across two power cycles). MOTOR_DETECT now converges in one pass — see
-> the motor-direction section below; nobody should hand-set `MOT_n_DIRECTION` again.
+> **Firmware baseline for this branch: `srot-control-board` @ `d6f1da5`, `SROT_FW_BEHAVIOUR_REV 7`.**
+> **FLASHED to the vehicle 2026-08-07**, all 232 params re-read afterwards with **zero
+> drift** and `CAL_*` intact. Rev 7 is additive — nothing that worked on rev 6 changes.
+>
+> **What rev 7 adds:** `PREFLIGHT_STORAGE` now reports success as well as failure. The
+> command has always been ACKed `ACCEPTED` the instant it is parsed, but the NVS write is
+> **deferred to the Core-0 `update()`** — so the ACK has never meant "written", only
+> "request received". Until rev 7 the *only* signal was a `CRITICAL` statustext on failure,
+> with **silence on success**, which is indistinguishable from a dropped request or a wedged
+> board. Rev 7 emits `"Params saved to flash"` (`MAV_SEVERITY_INFO`) on the success path.
+>
+> If you automate a save, wait for that statustext — not the ACK. Confirmed on hardware:
+> ```
+> COMMAND_ACK result = 0 (ACCEPTED)
+> STATUSTEXT[6]: Calibration saved + verified on flash
+> STATUSTEXT[6]: Params saved to flash        <- new in rev 7
+> ```
+>
+> Rev 6 baseline was `ae1bc2f`, flashed 2026-08-06. MOTOR_DETECT still converges in one
+> pass — see the motor-direction section below; nobody should hand-set `MOT_n_DIRECTION` again.
 > Read [`auv-architecture-2026.md`](auv-architecture-2026.md) first if you have not.
 >
 > **⚠ YAW IS ABSOLUTE FROM REV 4.** `ATTITUDE.yaw` and `VFR_HUD.heading` are a magnetic compass
@@ -65,9 +81,50 @@ curl -s http://192.168.2.2:27353/v1.0/serial_ports     # is the board even on th
 
 `ip` is where Bridget **sends**; `udp_listen_port` is what it **binds and sends from**.
 Because it transmits from its listen port, a pymavlink `udpin:` — which replies to the
-source of the last datagram — lands back exactly where Bridget listens, so the link is
-**bidirectional with no extra config**. That is the one property to re-verify if these
-numbers are ever changed: telemetry flowing proves nothing about the uplink.
+source of the last datagram — *should* land back exactly where Bridget listens. That is the
+one property to re-verify if these numbers are ever changed: telemetry flowing proves
+nothing about the uplink.
+
+> **⛔ MEASURED 2026-08-07 — that bidirectionality did NOT hold.** Downlink was perfect and
+> **the uplink was completely dead**. This is precisely the trap the sentence above warns
+> about, so it is worth recording that it actually fired on the real vehicle.
+>
+> Downlink, from `udpin:0.0.0.0:14550`, source tuple **`192.168.2.2:14551`** exactly as
+> documented: `HEARTBEAT` (sys 1 comp 1, `MAV_TYPE_SUBMARINE`), `ATTITUDE`,
+> `BATTERY_STATUS`, `ESC_TELEMETRY_1_TO_4` / `_5_TO_8`, ~21 `NAMED_VALUE_FLOAT`s.
+>
+> Uplink: **nothing came back at all.** Tested with `MAV_CMD_REQUEST_MESSAGE` (148), then
+> with `PARAM_REQUEST_READ` on three separate params, three retries each — zero
+> `COMMAND_ACK`, zero `PARAM_VALUE`, while telemetry streamed throughout. Replies went to
+> the true source tuple (pymavlink `udpin:` replies to sender), so this was not a
+> client-side addressing mistake.
+>
+> `PARAM_REQUEST_READ` was the deliberate second probe: "custom SROT firmware does not
+> implement `REQUEST_MESSAGE`" would look identical to a dead uplink, and params rule that
+> out — the firmware certainly implements those.
+>
+> **Cause not isolated.** Two candidates we could not separate remotely:
+> 1. **BlueOS routing.** `ardupilot-manager`'s bidirectional *"GCS Server Link"*
+>    (`udpin 0.0.0.0:14550`) was `enabled: false`. A `PUT` to
+>    `/ardupilot-manager/v1.0/endpoints/` flipped the stored flag to `true` but returned
+>    **HTTP 500**, and `udpout:192.168.2.2:14550` still gave no heartbeat — the router
+>    evidently never reloaded. A BlueOS / mavlink-router restart is the untried next step.
+> 2. **A one-way serial leg** — BlueOS reading the board's TX while its own TX never
+>    reaches the board. A wiring question, not a software one.
+>
+> `mavlink2rest` is not a useful view here: it only ever showed component **194** sending
+> `COMMAND_LONG`, and never saw comp 1 at all.
+>
+> **Run this before trusting any UDP session** — telemetry is not evidence:
+> ```python
+> import os; os.environ['MAVLINK20'] = '1'      # BEFORE importing pymavlink
+> from pymavlink import mavutil
+> m  = mavutil.mavlink_connection('udpin:0.0.0.0:14550')
+> hb = m.wait_heartbeat(timeout=15)
+> m.mav.param_request_read_send(m.target_system, hb.get_srcComponent() or 1,
+>                               b'FRAME_REVERSE', -1)
+> print(m.recv_match(type='PARAM_VALUE', blocking=True, timeout=5))   # None => uplink dead
+> ```
 
 ### Host side — no code change needed
 
@@ -364,6 +421,46 @@ trickle over 6 s). So opening Bondor during a mission does *not* fail visibly: B
 fine and **silently starves duburi_ws** of telemetry and command ACKs. Bondor now probes the
 port before binding and shows a red **PORT CONFLICT** chip that incoming data does not
 clear. Check `ss -ulnp | grep 14550` is empty before connecting either one.
+
+### Better: stop sharing the port — give each consumer its own endpoint
+
+"One process at a time" is a workaround for a socket collision, not a real constraint of
+the vehicle. **BlueOS will fan the same MAVLink stream out to as many UDP destinations as
+you ask it to**, so Bondor and duburi_ws never have to contend for one socket.
+
+Observed live on this vehicle — `ardupilot-manager` was already doing exactly this:
+
+```
+GCS Client Link   udpout  192.168.2.1:14550     enabled   <- topside / Bondor
+dubomini          udpout  192.168.2.69:14550    enabled   <- duburi_ws dev box
+```
+
+Two independent `udpout` endpoints, two different hosts, one board. Neither can starve the
+other, because they are not sharing a socket — the `SO_REUSEADDR` steal only happens when
+two processes bind *the same* port on *the same* host.
+
+Add one per consumer:
+
+```bash
+curl -s -X POST http://192.168.2.2/ardupilot-manager/v1.0/endpoints/ \
+  -H 'Content-Type: application/json' \
+  -d '[{"name":"duburi-jetson","owner":"User","connection_type":"udpout",
+        "place":"192.168.2.69","argument":14550,"persistent":true,
+        "protected":false,"enabled":true}]'
+
+curl -s http://192.168.2.2/ardupilot-manager/v1.0/endpoints/   # note the TRAILING SLASH
+```
+
+⚠ The trailing slash matters — without it the API 307-redirects and returns an empty body,
+which reads as "no endpoints configured" and is misleading.
+
+Each consumer then binds `udpin:0.0.0.0:14550` **on its own machine** and auto-learns the
+peer as usual. Nothing about the per-process connection string changes; what changes is
+that they are no longer on the same host fighting for the same port.
+
+**This does not fix the dead uplink documented above** — it removes the contention problem
+only. Verify uplink per endpoint with the `PARAM_REQUEST_READ` probe; a fanned-out `udpout`
+endpoint carries telemetry outward regardless of whether the return path works.
 
 ### Payload identity comes from the board (`SERVOn_FUNCTION`)
 
