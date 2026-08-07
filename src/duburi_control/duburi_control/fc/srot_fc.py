@@ -155,6 +155,10 @@ class SrotFC(FlightController):
         # Operator escape hatch (ROS param `allow_fw_behaviour_mismatch`). Off by
         # default: the failure this guards is silent, so opting into it must not be.
         self.allow_fw_behaviour_mismatch = False
+        # Board's DEPTH_P, read once at preflight. `check_depth_loop_settled` converts
+        # DEPTH_CMD back into metres of depth error through it, so a retune of the gain
+        # cannot silently move the physical threshold. None -> the firmware default.
+        self.depth_p = None
         # name -> (value, wall-clock stamp). Our own de-multiplexing of NAMED_VALUE_FLOAT,
         # because pymavlink keeps one message per msgid and SROT rides ~15 names on this one.
         self._named_cache = {}
@@ -406,26 +410,59 @@ class SrotFC(FlightController):
 
         In water it is a vehicle that dives or surfaces the moment it arms.
 
-        This reads the REAL controller's last output, not a model of it, so it is
-        agnostic to WHY the loop is unhappy (bad baro, stale target, wound-up
-        integrator). It fails closed and quotes the numbers, because a refusal that
-        does not say what it saw cannot be told apart from "not configured" --
-        the lesson the firmware team paid for four times over on the mag reference.
+        ⚠ THIS READS `DEPTH_CMD`, NOT `DEPTH_OUT`, AND THAT CHANGE IS LOAD-BEARING.
+        It used to read `DEPTH_OUT` (the real controller's last output). From fw rev 8
+        that field is SUPPRESSED while the controller is not running -- which is the
+        honest-absence fix we asked for, and it made this guard STRUCTURALLY DEAD:
+        `arm()` is the only caller, `arm()` only runs while disarmed, and disarmed the
+        loop never runs, so `DEPTH_OUT` is now ALWAYS absent here and the old code took
+        the `None` -> "not reported" -> PASS branch every single time. A guard that
+        cannot fail is worse than no guard, because the preflight still prints a line
+        that reads like a check.
+
+        `DEPTH_CMD` is the replacement the firmware team pointed at, and it is a better
+        signal for this specific question, not merely an available one:
+          * It is `depth::preview(depth, 0.10)` -- computed ON DEMAND against a fixed
+            0.10 m target, so it is live while disarmed by construction.
+          * Same +/-1.0 clamp, so the 2026-08-02 phantom-baro case (depth -3..-6.7 m,
+            `3.0 * -3.1` = -9.3) still pins at -1.00 exactly as `DEPTH_OUT` did.
+          * PROPORTIONAL-ONLY, no integrator -- it reflects the CURRENT baro sample
+            rather than accumulated windup. For "is the barometer lying right now",
+            which is what this guard actually asks, that is the property we want.
+
+        The threshold is expressed in METRES OF DEPTH ERROR and converted through
+        `DEPTH_P`, because `DEPTH_CMD = clamp(DEPTH_P * (depth - 0.10))` -- a hardcoded
+        0.90 silently means a different physical depth the moment anyone retunes the
+        gain. At the default `DEPTH_P = 3.0`, `|DEPTH_CMD| >= 0.90` <=> 0.30 m of error;
+        a healthy surface reading (~0.03 m) gives ~-0.22 and is comfortably clear.
+
+        It fails closed and quotes the numbers, because a refusal that does not say what
+        it saw cannot be told apart from "not configured" -- the lesson the firmware team
+        paid for four times over on the mag reference.
 
         Bypass with the ROS param `allow_saturated_depth_arm` (deliberately its own
         flag, not the firmware-revision one -- they are different risks).
         """
-        out = self._named_value('DEPTH_OUT')
-        if out is None:
-            return True, 'depth loop not reported'      # rev < 3: nothing to check.
-        if abs(out) < sp.DEPTH_OUT_ARM_LIMIT:
-            return True, f'depth loop settled (DEPTH_OUT={out:+.2f})'
-        err = self._named_value('DEPTH_ERR')
-        msg = (f'DEPTH LOOP SATURATED: DEPTH_OUT={out:+.2f}'
-               + (f', DEPTH_ERR={err:+.2f} m' if err is not None else '')
-               + '. Arming would command FULL vertical thrust (the mixer throttle '
-                 'column is -1 on all four verticals). Check the barometer -- run '
-                 '`ros2 run duburi_manager connect`')
+        cmd = self._named_value('DEPTH_CMD')
+        if cmd is None:
+            # DEPTH_CMD is gated on `depth_ok`, so absence means the board has declared
+            # the barometer unhealthy/stale -- NOT that the check is unavailable. The
+            # board then refuses DEPTH_HOLD/AUTO itself, and since SROT_MOVE enters AUTO
+            # every move verb is denied, so this fails closed downstream without us
+            # blocking the arm. Say which it is; do not report it as "settled".
+            return True, 'depth preview absent (barometer unhealthy -- AUTO will refuse)'
+        # Convert the clamped output back to the depth error that produced it.
+        depth_p = self.depth_p or sp.DEPTH_P_DEFAULT
+        implied_err_m = cmd / depth_p
+        if abs(implied_err_m) < sp.DEPTH_ERR_ARM_LIMIT_M:
+            return True, (f'depth preview sane (DEPTH_CMD={cmd:+.2f}'
+                          f' = {implied_err_m:+.2f} m err)')
+        msg = (f'BAROMETER IMPLAUSIBLE: DEPTH_CMD={cmd:+.2f} implies '
+               f'{implied_err_m:+.2f} m of depth error at the surface (limit '
+               f'{sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, DEPTH_P={depth_p:g}). '
+               'Arming would command FULL vertical thrust (the mixer throttle '
+               'column is -1 on all four verticals). Check the barometer -- run '
+               '`ros2 run duburi_manager connect`')
         if self.allow_saturated_depth_arm:
             self._log_warn(f'[SROT ] {msg} -- OVERRIDDEN, arming anyway')
             return True, f'OVERRIDDEN: {msg}'
@@ -984,6 +1021,48 @@ class SrotFC(FlightController):
     def read_gain(self):
         """Live pilot gain (NAMED_VALUE_FLOAT 'GAIN', 0.1..1.0), or None if unseen."""
         return self._named_value('GAIN')
+
+    def read_depth_p(self, timeout: float = 3.0):
+        """Cache the board's DEPTH_P for `check_depth_loop_settled`. None if unread.
+
+        Best-effort by design: the guard falls back to the firmware default and names
+        the gain it used, so a missed read degrades the message rather than the check.
+        """
+        val = self.get_param('DEPTH_P', timeout=timeout)
+        if val is not None:
+            self.depth_p = float(val)
+        return self.depth_p
+
+    def check_yaw_reference(self):
+        """(is_absolute, reason) from YAW_REF (fw rev 9).
+
+        Only `LOCKED` means `ATTITUDE.yaw` is a magnetic heading. Anything else and it
+        is relative to wherever the BNO booted -- so an ABSOLUTE `turn` (MOVE_TURN p4=1)
+        is aiming at a number that means nothing, and silently: the move completes
+        normally, on the wrong heading.
+
+        ⚠ Do NOT substitute MAGACC. The board's alignment is protected by the |B| band
+        and a sample-agreement test, neither of which depends on the sensor's opinion of
+        itself, and with a stored calibration the accuracy requirement drops to 0 -- so
+        accuracy stops correlating with the outcome entirely. We read MAGACC 2 on a hull
+        whose lock state we could not determine at all, which is what prompted the
+        firmware to publish this (Round 8 §8.8).
+
+        Absent on fw < 9. Reported as unknown rather than assumed either way.
+        """
+        raw = self._named_value('YAW_REF')
+        if raw is None:
+            return False, ('yaw reference UNKNOWN (no YAW_REF -- fw < 9). Absolute '
+                           '`turn` may be aiming at a boot-relative heading; prefer '
+                           'relative turns')
+        state = int(raw)
+        if state == sp.YAW_REF_LOCKED:
+            return True, 'yaw reference LOCKED -- heading is absolute, `turn` is safe'
+        return False, (f'yaw reference NOT LOCKED: {state} = '
+                       f'{sp.YAW_REF_NAMES.get(state, "unrecognised")}. ATTITUDE.yaw is '
+                       f'relative to boot, so an ABSOLUTE `turn` will aim at a '
+                       f'meaningless heading -- prefer relative turns until this reads '
+                       f'{sp.YAW_REF_LOCKED}')
 
     def set_default_gain(self, value: float = sp.GAIN_FOR_AUTONOMY,
                          timeout: float = 3.0) -> bool:

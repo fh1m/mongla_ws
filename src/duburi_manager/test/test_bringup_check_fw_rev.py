@@ -138,21 +138,58 @@ def test_absent_pressure_warns_and_says_depth_is_untrustworthy():
     assert status == WARN and 'trustworthy' in detail
 
 
-def test_a_saturated_depth_loop_fails_and_names_the_vertical_thrusters():
-    """Observed disarmed: DEPTH_OUT=-1.00, DEPTH_ERR=-3.11 m. The mixer throttle
-    column is -1 on all four verticals and 0 on all four horizontals, so arming turns
-    that into full vertical thrust -- the reported arming blocker, exactly."""
-    status, label, detail = _depth_loop_verdict(-1.0, -3.11)
+def test_an_implausible_barometer_fails_and_names_the_vertical_thrusters():
+    """Observed disarmed 2026-08-02: a phantom baro reading -3.1 m at the surface.
+    DEPTH_CMD is clamp(DEPTH_P * (depth - 0.10)) so that pins at -1.00. The mixer
+    throttle column is -1 on all four verticals and 0 on all four horizontals, so
+    arming turns it into full vertical thrust -- the reported arming blocker."""
+    status, label, detail = _depth_loop_verdict(-1.0)
     assert status == FAIL
-    assert 'SATURATED' in label and 'vertical' in detail
-    assert '-3.11' in detail, 'a refusal must quote what it refused on'
+    assert 'IMPLAUSIBLE' in label and 'vertical' in detail
+    assert '-0.33' in detail, 'a refusal must quote what it refused on'
 
 
-def test_a_settled_depth_loop_passes():
-    assert _depth_loop_verdict(-0.01, 0.0)[0] == PASS
+def test_the_preflight_reads_depth_cmd_because_depth_out_is_gone_at_rev_8():
+    """REGRESSION. fw rev 8 suppresses DEPTH_OUT while the loop is not running, and
+    this probe only ever runs disarmed -- so reading DEPTH_OUT hit the 'not reported'
+    WARN branch on a perfectly healthy board and the check silently stopped working.
+    A healthy surface reading must PASS, and it must do so from DEPTH_CMD alone."""
+    status, _, _ = _depth_loop_verdict(-0.22)      # ~0.03 m at DEPTH_P=3.0
+    assert status == PASS
 
 
-def test_a_board_that_never_reports_depth_out_only_warns():
+def test_the_preflight_threshold_follows_depth_p():
+    """DEPTH_CMD is a clamped OUTPUT, so a fixed limit means a different physical
+    depth once the gain is retuned. Same reading, two gains, opposite verdicts."""
+    assert _depth_loop_verdict(0.5, 1.0)[0] == FAIL     # 0.50 m of error
+    assert _depth_loop_verdict(0.5, 10.0)[0] == PASS    # 0.05 m of error
+
+
+def test_absent_depth_cmd_warns_that_the_board_will_refuse_auto():
+    """DEPTH_CMD is gated on depth_ok, so absence is the board declaring the baro
+    unhealthy -- which makes it refuse DEPTH_HOLD/AUTO, and since SROT_MOVE enters
+    AUTO, every move verb with it. Say that, rather than 'check unavailable'."""
+    status, _, detail = _depth_loop_verdict(None)
+    assert status == WARN and 'AUTO' in detail
+
+
+def test_only_a_locked_yaw_reference_passes():
+    """Only LOCKED means ATTITUDE.yaw is a magnetic heading. Anything else and an
+    absolute turn aims at a boot-relative number -- silently, since the move
+    completes normally on the wrong bearing."""
+    from duburi_manager.bringup_check import _yaw_ref_verdict
+    import duburi_control.fc.srot_protocol as sp
+    assert _yaw_ref_verdict(float(sp.YAW_REF_LOCKED))[0] == PASS
+    for bad in (sp.YAW_REF_IDLE, sp.YAW_REF_SAMPLING, sp.YAW_REF_REFUSED_CAL,
+                sp.YAW_REF_REFUSED_FIELD, sp.YAW_REF_REFUSED_NOISE):
+        status, _, detail = _yaw_ref_verdict(float(bad))
+        assert status == WARN, f'state {bad} must not pass'
+        assert 'relative' in detail
+    # fw < 9 has no YAW_REF: unknown, not assumed either way.
+    assert _yaw_ref_verdict(None)[0] == WARN
+
+
+def test_a_board_that_never_reports_depth_cmd_only_warns():
     """Firmware older than rev 3 has no DEPTH_OUT. Silence must not become a hard
     preflight failure for a value the board cannot produce."""
     assert _depth_loop_verdict(None, None)[0] == WARN

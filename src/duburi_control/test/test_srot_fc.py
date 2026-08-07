@@ -823,7 +823,10 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
     absentable (we already treat absence as absence), rev 4 made yaw absolute (we read
     whatever the board reports), rev 5 added the baro jitter gate and a BARO_P2P value we
     simply display, rev 6 fixed MOTOR_DETECT (which this host never runs), rev 7 added a
-    success statustext to PREFLIGHT_STORAGE (we do not automate saves). None of them
+    success statustext to PREFLIGHT_STORAGE, rev 8 SUPPRESSED DEPTH_ERR/DEPTH_OUT while
+    the loop is not running (we moved check_depth_loop_settled onto DEPTH_CMD for it,
+    which is a host change but not a REQUIREMENT change -- a rev-2 board still streams
+    DEPTH_CMD), rev 9 published YAW_REF (new capability, nothing breaks without it). None of them
     break a rev-2 board, so the requirement stays at 2 -- raising it would strand a
     working vehicle for no safety gain.
 
@@ -835,7 +838,7 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
 
     The two numbers are asserted separately on purpose: bumping the tracker is routine
     bookkeeping, raising the requirement is a decision to refuse hardware."""
-    assert sp.FW_BEHAVIOUR_REV == 7
+    assert sp.FW_BEHAVIOUR_REV == 9
     assert sp.FW_BEHAVIOUR_REV_REQUIRED == 2
 
 
@@ -916,23 +919,56 @@ def test_a_stale_battery_ages_out_rather_than_being_restamped():
 #  Arm guard -- a saturated depth loop is full vertical thrust on arm          #
 # --------------------------------------------------------------------------- #
 
-def test_arm_is_refused_while_the_depth_loop_is_saturated():
-    """THE blocker, reproduced. Observed disarmed on the bench: DEPTH_OUT=-1.00 with
-    DEPTH_ERR=-3.1 m from a phantom barometer reading. The mixer throttle column is
+def test_arm_is_refused_while_the_barometer_is_implausible():
+    """THE blocker, reproduced against the CURRENT signal. Observed disarmed on the
+    bench 2026-08-02: a phantom baro reading -3.1 m at the surface. DEPTH_CMD is
+    clamp(DEPTH_P * (depth - 0.10)) so that pins at -1.00. The mixer throttle column is
     -1 on all four verticals and 0 on all four horizontals, so arming turns that into
     full vertical thrust with the horizontals idling -- exactly the reported symptom."""
     fc = _fc()
-    fc.note_named_value(_nvf('DEPTH_OUT', -1.0))
-    fc.note_named_value(_nvf('DEPTH_ERR', -3.1))
+    fc.note_named_value(_nvf('DEPTH_CMD', -1.0))
     ok, reason = fc.check_depth_loop_settled()
     assert ok is False
-    assert 'SATURATED' in reason and '-3.1' in reason, \
+    assert 'IMPLAUSIBLE' in reason and '-0.33' in reason, \
         'a refusal must quote the numbers it refused on'
 
 
-def test_a_settled_depth_loop_arms_normally():
+def test_the_guard_reads_depth_cmd_because_depth_out_is_absent_while_disarmed():
+    """REGRESSION, and the reason this guard moved signals.
+
+    fw rev 8 SUPPRESSES DEPTH_OUT while the controller is not running -- the honest-
+    absence fix we asked for. But arm() is the only caller and only runs while
+    disarmed, when the loop never runs, so DEPTH_OUT is ALWAYS absent here: the old
+    code took its None -> "not reported" -> PASS branch every single time and the
+    guard was structurally dead while still printing a reassuring line.
+
+    A saturated DEPTH_CMD must refuse even with DEPTH_OUT absent, which is the only
+    state a rev >= 8 board is ever in at this point."""
     fc = _fc()
-    fc.note_named_value(_nvf('DEPTH_OUT', -0.02))
+    fc.note_named_value(_nvf('DEPTH_CMD', -1.0))      # no DEPTH_OUT at all
+    assert fc.check_depth_loop_settled()[0] is False
+
+
+def test_the_threshold_follows_depth_p_instead_of_a_hardcoded_output():
+    """DEPTH_CMD is a CLAMPED OUTPUT, not an error, so a fixed 0.90 silently means a
+    different physical depth the moment anyone retunes the gain. The guard divides
+    DEPTH_P back out and compares metres.
+
+    Same DEPTH_CMD, two gains, opposite verdicts -- that is the whole point."""
+    lo = _fc(); lo.depth_p = 1.0     # 0.5 / 1.0 = 0.50 m  -> implausible
+    lo.note_named_value(_nvf('DEPTH_CMD', 0.5))
+    assert lo.check_depth_loop_settled()[0] is False
+
+    hi = _fc(); hi.depth_p = 10.0    # 0.5 / 10.0 = 0.05 m -> fine
+    hi.note_named_value(_nvf('DEPTH_CMD', 0.5))
+    assert hi.check_depth_loop_settled()[0] is True
+
+
+def test_a_healthy_surface_reading_arms_normally():
+    """~0.03 m at the surface -> DEPTH_CMD ~ -0.22 at DEPTH_P=3.0. Comfortably clear;
+    if this ever fails the guard has become a nuisance that gets overridden by habit."""
+    fc = _fc()
+    fc.note_named_value(_nvf('DEPTH_CMD', -0.22))
     assert fc.check_depth_loop_settled()[0] is True
 
 
@@ -944,7 +980,7 @@ def test_a_board_that_never_reports_the_depth_loop_is_not_blocked():
 
 def test_the_depth_guard_is_overridable_but_shouts():
     fc = _fc()
-    fc.note_named_value(_nvf('DEPTH_OUT', 1.0))
+    fc.note_named_value(_nvf('DEPTH_CMD', 1.0))
     fc.allow_saturated_depth_arm = True
     ok, reason = fc.check_depth_loop_settled()
     assert ok is True and 'OVERRIDDEN' in reason
@@ -1261,3 +1297,47 @@ def test_an_unreadable_function_is_not_fatal():
     assert report[9] == sp.PCA_ROLE_SWITCH
     assert pl.label(9) == ''
     assert pl.fire(9).ok
+
+
+# --------------------------------------------------------------------------- #
+# YAW_REF -- absolute vs boot-relative heading (fw rev 9, Round 8 §8.8)
+# --------------------------------------------------------------------------- #
+def test_only_locked_means_the_heading_is_absolute():
+    fc = _fc()
+    fc.note_named_value(_nvf('YAW_REF', float(sp.YAW_REF_LOCKED)))
+    ok, reason = fc.check_yaw_reference()
+    assert ok is True and 'LOCKED' in reason
+
+
+def test_a_refused_yaw_reference_is_reported_with_its_cause():
+    """Each refusal has a different fix -- REFUSED_FIELD is hard iron near the board,
+    REFUSED_NOISE is the vehicle moving during alignment, REFUSED_CAL is calibration.
+    Collapsing them to "not locked" sends the operator looking in the wrong place."""
+    for state in (sp.YAW_REF_REFUSED_CAL, sp.YAW_REF_REFUSED_FIELD,
+                  sp.YAW_REF_REFUSED_NOISE, sp.YAW_REF_IDLE, sp.YAW_REF_SAMPLING):
+        fc = _fc()
+        fc.note_named_value(_nvf('YAW_REF', float(state)))
+        ok, reason = fc.check_yaw_reference()
+        assert ok is False
+        assert sp.YAW_REF_NAMES[state].split()[0] in reason, \
+            f'state {state} must name its own cause, got: {reason}'
+
+
+def test_magacc_is_never_treated_as_a_yaw_reference_proxy():
+    """The trap this whole check exists to close. We read MAGACC 2 on 2026-08-07 and
+    concluded nothing about the lock, correctly: the board's alignment is protected by
+    the |B| band and a sample-agreement test, neither of which depends on the sensor's
+    self-assessment, and with a stored calibration need_acc drops to 0 so accuracy
+    stops correlating with the outcome entirely. A perfect MAGACC with no YAW_REF must
+    still report UNKNOWN."""
+    fc = _fc()
+    fc.note_named_value(_nvf('MAGACC', 3.0))
+    ok, reason = fc.check_yaw_reference()
+    assert ok is False and 'UNKNOWN' in reason
+
+
+def test_an_older_board_reports_unknown_rather_than_assuming_either_way():
+    """fw < 9 has no YAW_REF. Guessing 'locked' risks a meaningless absolute turn;
+    guessing 'refused' would strand a board whose heading is in fact fine."""
+    ok, reason = _fc().check_yaw_reference()
+    assert ok is False and 'UNKNOWN' in reason and 'relative' in reason
