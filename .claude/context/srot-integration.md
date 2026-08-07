@@ -376,12 +376,34 @@ comes up as-flown. Note this makes the **factory default correct** for the first
 #### ⛔ The double-inversion hazard — check this before you arm
 
 **`MOT_n_DIRECTION = [-1] × 8`, which the 2026-08-06 restore above deliberately wrote and
-which this document told you to verify, is no longer the intended configuration.** A
-*uniform* flip of all eight is algebraically a second whole-frame negation, so stacked on
-`FRAME_REVERSE = 1` the two cancel and the axes are backwards again. Worse, the residual
-relative to correct wiring falls on **M2–M7** — six thrusters inverted against the mixer's
-patterns, which is precisely the non-uniform breakage FRAME_REVERSE exists to prevent
-(83ef62e: *"three thrusters pushing the same way is not a torque at all"*).
+which this document told you to verify, is no longer the intended configuration** — and it
+does not merely cancel the axis fix, it **reproduces the exact rev-6 fault**. Derived from
+`mixer.cpp`, not asserted:
+
+Write `w[m] = -1` for a thruster wired backwards (M1 and M8 here, `+1` elsewhere). Physical
+thrust is `w[m] · MOT_m_DIRECTION · (M[m] · demand)`, and `FRAME_REVERSE = 1` negates
+`demand`. So the net sign each motor contributes, relative to the mixer's intent, is
+`s[m] = -(w[m] · dir[m])`:
+
+```
+w              = [-1, +1, +1, +1, +1, +1, +1, -1]    M1, M8 wired backwards
+dir = correct  = [-1, +1, +1, +1, +1, +1, +1, -1]  -> s = [-1]*8   uniform: the frame flip, intact
+dir = [-1]*8   = [-1, -1, -1, -1, -1, -1, -1, -1]  -> s = [-1, +1, +1, +1, +1, +1, +1, -1]
+                                                          ^^ M1 and M8 out of step with M2-M7
+```
+
+That second row is the 2026-08-06 fault verbatim. Push it through the yaw column
+`M[1..4][yaw] = [+1, -1, -1, +1]`:
+
+```
+intended (s uniform)   -[+1,-1,-1,+1] = [-1,+1,+1,-1]    a real yaw couple
+actual   (s mixed)      [-1,-1,-1,+1]                    three thrusters pushing the same way
+```
+
+Which is 83ef62e's own sentence — *"three thrusters pushing the same way is not a torque at
+all"* — and is why the vehicle span about yaw in STABILIZE. The vertical group breaks the
+same way on roll (`M[5..8][roll] = [+1,-1,+1,-1]` → `[+1,-1,+1,+1]`), which is the halved
+roll/pitch authority behind `CLAMP` / `period unstable`.
 
 **We do not know which state the board is in, and we could not check** — the vehicle was
 unreachable when this was written. The evidence points both ways and neither side is ours:
