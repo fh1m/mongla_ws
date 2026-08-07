@@ -525,3 +525,44 @@ def test_frame_reverse_still_defaults_off():
         f'DEF_FRAME_REVERSE is now {m.group(1)} -- the firmware defaults to INVERTED axes. '
         f'A fresh board no longer matches rev <= 6 behaviour, so FW_BEHAVIOUR_REV_REQUIRED '
         f'must be raised to the rev that made the change, and every axis re-verified.')
+
+
+def test_yaw_ref_state_enum_matches_the_firmware():
+    """YAW_REF carries `yaw_ref::State` as a float. The VALUES are the contract -- a
+    reordered enum would silently turn REFUSED_FIELD into LOCKED and let us send an
+    absolute turn against a boot-relative heading, which completes normally on the
+    wrong bearing. Nothing raises; the vehicle just goes the wrong way."""
+    src = _read('src', 'control', 'yaw_ref.h')
+    body = re.search(r'enum class State\s*:\s*uint8_t\s*\{(.*?)\}', src, re.S)
+    assert body, 'yaw_ref::State not found -- firmware predates YAW_REF (rev 9)'
+    # Implicit C enum numbering: IDLE = 0 then +1 each.
+    names = re.findall(r'^\s*([A-Z_]+)\s*(?:=\s*(\d+))?\s*,', body.group(1), re.M)
+    fw = {}
+    nxt = 0
+    for name, explicit in names:
+        nxt = int(explicit) if explicit else nxt
+        fw[name] = nxt
+        nxt += 1
+    for name, ours in (('IDLE', sp.YAW_REF_IDLE), ('SAMPLING', sp.YAW_REF_SAMPLING),
+                       ('LOCKED', sp.YAW_REF_LOCKED),
+                       ('REFUSED_CAL', sp.YAW_REF_REFUSED_CAL),
+                       ('REFUSED_FIELD', sp.YAW_REF_REFUSED_FIELD),
+                       ('REFUSED_NOISE', sp.YAW_REF_REFUSED_NOISE)):
+        assert fw.get(name) == ours, \
+            f'yaw_ref::State::{name} is {fw.get(name)} in firmware, we have {ours}'
+    # Every firmware state must have a human-readable name, or an unrecognised value
+    # reaches the operator as a bare integer at exactly the wrong moment.
+    for name, val in fw.items():
+        assert val in sp.YAW_REF_NAMES, f'no YAW_REF_NAMES entry for {name}={val}'
+
+
+def test_depth_p_default_matches_the_firmware():
+    """The arming guard converts DEPTH_CMD back to metres through DEPTH_P, falling
+    back to this when the board never answered the param read. If the firmware default
+    moves and ours does not, the fallback silently applies the wrong threshold to the
+    one check standing between a phantom baro and full vertical thrust."""
+    cfg = _read('include', 'config.h')
+    m = re.search(r'#define\s+DEF_DEPTH_P\s+([\d.]+)f?', cfg)
+    assert m, 'DEF_DEPTH_P not found in include/config.h'
+    assert float(m.group(1)) == sp.DEPTH_P_DEFAULT, (
+        f'firmware DEF_DEPTH_P is {m.group(1)}, we assume {sp.DEPTH_P_DEFAULT}')

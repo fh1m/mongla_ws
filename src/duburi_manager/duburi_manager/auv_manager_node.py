@@ -448,6 +448,16 @@ class AUVManagerNode(Node):
             self.get_logger().warning(
                 '[NET  ] could not confirm JS_GAIN_DEFAULT=1.0 -- MANUAL_CONTROL '
                 'may be scaled; check the board is reachable + not mid param-download')
+        # DEPTH_P, so the arming guard can convert DEPTH_CMD back into metres of depth
+        # error. Read once here rather than inside arm(): a param round-trip on the
+        # arming path adds a failure mode to the one call that must not acquire new
+        # ones. Absent -> the guard uses the firmware default and says so.
+        self.fc.read_depth_p()
+        # YAW_REF (fw rev 9). Only LOCKED means ATTITUDE.yaw is a magnetic heading;
+        # anything else and an absolute `turn` is aiming at a boot-relative number.
+        yr_ok, yr_reason = self.fc.check_yaw_reference()
+        (self.get_logger().info if yr_ok else self.get_logger().warning)(
+            f'[SROT ] {yr_reason}')
 
     def _setup_yaw_source(self) -> None:
         """Instantiate yaw source, print startup banner, start DVL auto-connect."""

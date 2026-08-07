@@ -304,6 +304,48 @@ GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.
 # same state as one pinned at 1.00. A settled bench loop sits near 0.
 DEPTH_OUT_ARM_LIMIT = 0.90
 
+# The arming guard's real threshold, in METRES of depth error at the surface.
+#
+# It used to be the 0.90 above, applied to DEPTH_OUT. Two things changed that:
+# fw rev 8 suppresses DEPTH_OUT while the controller is not running (so the guard
+# had nothing to read while disarmed, which is the only time it runs), and the
+# replacement signal DEPTH_CMD is `clamp(DEPTH_P * (depth - 0.10))` -- a clamped
+# OUTPUT, not an error. Comparing a clamped output against a fixed number silently
+# means a different physical depth the moment anyone retunes DEPTH_P.
+#
+# So the guard divides back out: implied_err_m = DEPTH_CMD / DEPTH_P, compared
+# against this. 0.30 m reproduces the old behaviour exactly at DEPTH_P = 3.0
+# (3.0 * 0.30 = 0.90) and now survives a gain change. The 2026-08-02 phantom baro
+# read -3..-6.7 m, i.e. 10x over.
+DEPTH_ERR_ARM_LIMIT_M = 0.30
+
+# fw `DEF_DEPTH_P` (include/config.h). Fallback when the board never answered the
+# param read -- pinned by the drift test so it cannot rot.
+DEPTH_P_DEFAULT = 3.0
+
+# YAW_REF (NAMED_VALUE_FLOAT, fw rev 9) -- `yaw_ref::State`. ONLY 2 means the heading
+# is absolute; anything else and ATTITUDE.yaw is relative to wherever the BNO booted,
+# which makes an absolute MOVE_TURN (p4=1) turn to a meaningless number.
+#
+# MAGACC IS NOT A PROXY FOR THIS and must not be used as one: the alignment is
+# protected by the |B| band and the sample-agreement test, neither of which depends
+# on the sensor's self-assessment, and with a stored calibration `need_acc` drops to
+# 0 so accuracy stops correlating with the outcome entirely.
+YAW_REF_IDLE          = 0
+YAW_REF_SAMPLING      = 1
+YAW_REF_LOCKED        = 2
+YAW_REF_REFUSED_CAL   = 3
+YAW_REF_REFUSED_FIELD = 4
+YAW_REF_REFUSED_NOISE = 5
+YAW_REF_NAMES = {
+    0: 'IDLE (MAG_YAW_REF off, or nothing attempted)',
+    1: 'SAMPLING (still collecting)',
+    2: 'LOCKED (heading is absolute)',
+    3: 'REFUSED_CAL (mag accuracy too low)',
+    4: 'REFUSED_FIELD (field magnitude implausible -- hard iron nearby)',
+    5: 'REFUSED_NOISE (samples disagreed -- vehicle moving, or interference)',
+}
+
 # ---------------------------------------------------------------------- #
 #  Firmware behaviour revision -- the cross-repo coordination signal      #
 # ---------------------------------------------------------------------- #
@@ -379,7 +421,7 @@ DEPTH_OUT_ARM_LIMIT = 0.90
 #      volt/curr pins (a battery reading we only display), 2213c9a is their AGENTS.md.
 #      Neither of the two that ARE ours is a host-code change -- the wire is identical, and the drift suite is green
 #      against d6f1da5 -- but do not read "rev 7" as "one small additive change".
-FW_BEHAVIOUR_REV = 7
+FW_BEHAVIOUR_REV = 9
 
 # The minimum revision this host code assumes. Flashing older firmware than this
 # re-opens the coasting MOVE_STOP with no host brake left to cover it.

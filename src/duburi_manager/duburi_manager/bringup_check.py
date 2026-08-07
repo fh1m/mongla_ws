@@ -784,31 +784,63 @@ def _baro_noise_verdict(press: list[float]) -> tuple[str, str, str]:
     return (PASS, 'barometer', f'{mean:.1f} mbar, spread {spread:.2f} mbar')
 
 
-def _depth_loop_verdict(depth_out: float | None,
-                        depth_err: float | None) -> tuple[str, str, str]:
-    """Grade the DISARMED depth controller. Pure and testable.
+def _depth_loop_verdict(depth_cmd: float | None,
+                        depth_p: float | None = None) -> tuple[str, str, str]:
+    """Grade the DISARMED depth chain from DEPTH_CMD. Pure and testable.
 
-    `DEPTH_OUT` is the real controller's last output, published since fw rev 3. If it
-    is saturated while the vehicle is disarmed and stationary, arming hands that
-    demand straight to the thrusters -- and the mixer's throttle column is -1 on all
-    four VERTICALS and 0 on all four horizontals (fw `mixer.cpp`), so it lands as
-    full vertical thrust with the horizontals idling. That is precisely the
-    unexplained arming spin-up the firmware team reported.
+    ⚠ THIS USED TO READ `DEPTH_OUT` AND THAT STOPPED WORKING AT fw REV 8, silently.
+    Rev 8 suppresses DEPTH_OUT while the controller is not running -- the honest-absence
+    fix we asked for -- and this probe only ever runs disarmed, when it never runs. So
+    the old code hit its `None` -> WARN branch every time on a perfectly healthy board,
+    and the one line standing between a phantom barometer and full vertical thrust
+    became advisory noise.
+
+    `DEPTH_CMD` is `depth::preview(depth, 0.10)`: computed on demand, so live while
+    disarmed, same +/-1.0 clamp, and proportional-only -- it reflects the CURRENT baro
+    sample rather than accumulated windup, which is exactly the question here.
+
+    The 2026-08-02 phantom depth (-3..-6.7 m at the surface) pins it at -1.00. A healthy
+    surface reading (~0.03 m) gives ~-0.22. The threshold is carried in METRES and
+    converted through DEPTH_P, because comparing a clamped output against a fixed number
+    silently means a different physical depth once anyone retunes the gain.
     """
-    if depth_out is None:
-        return (WARN, 'depth loop not reported',
-                'no DEPTH_OUT -- firmware older than rev 3, or the value was missed')
-    if abs(depth_out) >= _DEPTH_OUT_LIMIT:
-        return (FAIL, 'depth loop SATURATED',
-                f'DEPTH_OUT={depth_out:+.2f}'
-                + (f', DEPTH_ERR={depth_err:+.2f} m' if depth_err is not None else '')
-                + ' while DISARMED. Arming would command FULL vertical thrust '
-                  '(mixer throttle column is -1 on all four verticals) with the '
-                  'horizontals idle. DO NOT ARM -- fix the barometer first')
-    if abs(depth_out) > 0.25:
-        return (WARN, 'depth loop has a standing demand',
-                f'DEPTH_OUT={depth_out:+.2f} while disarmed')
-    return (PASS, 'depth loop', f'settled (DEPTH_OUT={depth_out:+.2f})')
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    if depth_cmd is None:
+        return (WARN, 'depth preview absent',
+                'no DEPTH_CMD -- the board has declared the barometer unhealthy/stale, '
+                'so it will refuse DEPTH_HOLD/AUTO and every move verb with it')
+    gain = depth_p or sp.DEPTH_P_DEFAULT
+    err_m = depth_cmd / gain
+    if abs(err_m) >= sp.DEPTH_ERR_ARM_LIMIT_M:
+        return (FAIL, 'barometer IMPLAUSIBLE',
+                f'DEPTH_CMD={depth_cmd:+.2f} = {err_m:+.2f} m of depth error at the '
+                f'surface (limit {sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, DEPTH_P={gain:g}). '
+                'Arming would command FULL vertical thrust (mixer throttle column is '
+                '-1 on all four verticals) with the horizontals idle. DO NOT ARM')
+    if abs(err_m) > sp.DEPTH_ERR_ARM_LIMIT_M / 3.0:
+        return (WARN, 'barometer reads high at the surface',
+                f'DEPTH_CMD={depth_cmd:+.2f} = {err_m:+.2f} m while disarmed')
+    return (PASS, 'depth preview', f'sane (DEPTH_CMD={depth_cmd:+.2f} = {err_m:+.2f} m)')
+
+
+def _yaw_ref_verdict(raw: float | None) -> tuple[str, str, str]:
+    """Is ATTITUDE.yaw a magnetic heading, or relative to wherever the BNO booted?
+
+    Only LOCKED means absolute. Anything else and an absolute `turn` aims at a number
+    that means nothing -- and does it silently: the move completes normally, on the
+    wrong bearing. MAGACC is NOT a proxy (see SrotFC.check_yaw_reference).
+    """
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    if raw is None:
+        return (WARN, 'yaw reference unknown',
+                'no YAW_REF -- firmware older than rev 9. Prefer relative turns')
+    state = int(raw)
+    if state == sp.YAW_REF_LOCKED:
+        return (PASS, 'yaw reference', 'LOCKED -- heading is absolute, `turn` is safe')
+    return (WARN, 'yaw reference NOT locked',
+            f'{state} = {sp.YAW_REF_NAMES.get(state, "unrecognised")}. ATTITUDE.yaw is '
+            'boot-relative, so an absolute `turn` will aim at a meaningless heading -- '
+            'prefer relative turns')
 
 
 def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
@@ -965,7 +997,9 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
                 nm = nm.strip('\x00').strip()
                 named[nm] = float(msg.value)
         out.append(_baro_noise_verdict(press))
-        out.append(_depth_loop_verdict(named.get('DEPTH_OUT'), named.get('DEPTH_ERR')))
+        out.append(_depth_loop_verdict(named.get('DEPTH_CMD'),
+                                       _read_param(conn, 'DEPTH_P')))
+        out.append(_yaw_ref_verdict(named.get('YAW_REF')))
 
         # GAIN halves MANUAL_CONTROL until it is 1.0, and fw R14 means a PARAM_SET may
         # never have persisted on a board flashed before 8cb4203.
