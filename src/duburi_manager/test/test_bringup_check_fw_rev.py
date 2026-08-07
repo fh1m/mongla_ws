@@ -169,3 +169,40 @@ def test_the_reader_thread_starts_before_the_payload_role_read():
     assert (src.index('_setup_reader_and_warmup')
             < src.index('_preflight_payload')), \
         'the reader thread must start before the payload roles are read'
+
+
+# --------------------------------------------------------------------------- #
+# GCS-failsafe scope (bench mode saved to flash)
+# --------------------------------------------------------------------------- #
+def test_wildcarded_gcs_failsafe_is_a_hard_fail():
+    """MEASURED on the vehicle 2026-08-07: FS_GCS_ENABLE=1, FS_GCS_COMPID=0, and
+    `bringup_check --srot` reported 0 FAIL. Bench mode had been saved to flash.
+
+    0 is the wildcard, so any station -- Bondor on the bench -- keeps the failsafe fed.
+    In water a dead Jetson then looks like a live GCS and the hull station-keeps
+    instead of surfacing. That is the failure this line exists to catch."""
+    from duburi_manager.bringup_check import _gcs_failsafe_verdict
+    status, label, detail = _gcs_failsafe_verdict(1.0, 0.0)
+    assert status == FAIL
+    assert 'bench' in label.lower() or 'wildcard' in label.lower()
+    assert '191' in detail, 'the fix (set it to our compid) must be in the message'
+
+
+def test_failsafe_scoped_to_our_compid_passes():
+    from duburi_manager.bringup_check import _gcs_failsafe_verdict
+    import duburi_control.fc.srot_protocol as sp
+    assert _gcs_failsafe_verdict(1.0, float(sp.SOURCE_COMPID))[0] == PASS
+
+
+def test_a_disabled_failsafe_is_not_silently_a_pass():
+    """FS_GCS_ENABLE=0 makes the compid moot, so the scope check would pass
+    vacuously -- but nothing surfaces the vehicle either. Report it separately."""
+    from duburi_manager.bringup_check import _gcs_failsafe_verdict
+    assert _gcs_failsafe_verdict(0.0, 191.0)[0] == WARN
+
+
+def test_unreadable_params_warn_rather_than_pass():
+    """A bridge that drops the reply must never read as 'scoped correctly'."""
+    from duburi_manager.bringup_check import _gcs_failsafe_verdict
+    assert _gcs_failsafe_verdict(None, None)[0] == WARN
+    assert _gcs_failsafe_verdict(1.0, None)[0] == WARN

@@ -642,6 +642,75 @@ def _behaviour_rev_verdict(rev: int | None, required: int) -> tuple[str, str, st
     return (PASS, 'FW behaviour rev', f'{rev} (>= {required} required)')
 
 
+def _read_param(conn, name: str, tries: int = 3, timeout_s: float = 1.2):
+    """One PARAM_REQUEST_READ by name, with retries. None if it never answers.
+
+    SEQUENTIAL ONLY -- never pipeline two of these. pymavlink keeps a single slot per
+    msgid, so a second request in flight overwrites the first and the first then times
+    out looking exactly like a dropped frame. Retries are for the bridge, which loses
+    ~8-9% of frames; on direct USB one pass is enough.
+
+    The name match strips trailing NULs: a 16-char param_id arrives unterminated.
+    """
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    for _ in range(tries):
+        conn.mav.param_request_read_send(
+            sp.VEHICLE_SYSID, sp.VEHICLE_COMPID, name.encode(), -1)
+        end = time.time() + timeout_s
+        while time.time() < end:
+            msg = conn.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.4)
+            if msg is None:
+                continue
+            pid = msg.param_id
+            if isinstance(pid, bytes):
+                pid = pid.decode(errors='ignore')
+            if pid.strip('\x00').strip() == name:
+                return float(msg.param_value)
+    return None
+
+
+def _gcs_failsafe_verdict(enable: float | None,
+                          compid: float | None) -> tuple[str, str, str]:
+    """Is the GCS-loss failsafe scoped to US, or wildcarded into bench mode?
+
+    MEASURED 2026-08-07: the vehicle read FS_GCS_ENABLE=1, FS_GCS_COMPID=0 and this
+    preflight returned 0 FAIL. That is the reason this function exists.
+
+    `0` is the wildcard -- the board then counts ANY heartbeat that is not its own, so
+    Bondor on the bench keeps the failsafe satisfied. In the water that means a dead
+    Jetson is indistinguishable from a live GCS: the failsafe never fires, and a hull
+    with nobody driving it station-keeps instead of surfacing. `191`
+    (MAV_COMP_ID_ONBOARD_COMPUTER) is our compid and scopes it to the companion.
+
+    It regresses silently and repeatedly. Bondor's bench mode wildcards it at runtime,
+    which is fine -- until someone presses Save, and then a bench escape hatch is in the
+    flight vehicle's NVS with nothing in any log. It was corrected to 191 on 2026-08-06
+    and read back 0 the next day.
+
+    srot-integration.md has said "check this value before every water session" since
+    then. A prose instruction is not a gate; this is. Same class of blind spot as
+    FRAME_REVERSE: state that lives in NVS, invisible to the tool meant to catch it.
+    """
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    if enable is None or compid is None:
+        return (WARN, 'GCS failsafe scope unknown',
+                'could not read FS_GCS_ENABLE/FS_GCS_COMPID -- check bench mode by hand')
+    if enable < 0.5:
+        return (WARN, 'GCS failsafe DISABLED',
+                'FS_GCS_ENABLE=0 -- losing the companion will not surface the vehicle')
+    ours = sp.SOURCE_COMPID
+    if int(compid) == ours:
+        return (PASS, 'GCS failsafe scope', f'FS_GCS_COMPID={ours} (scoped to us)')
+    if int(compid) == 0:
+        return (FAIL, 'GCS failsafe WILDCARDED (bench mode)',
+                f'FS_GCS_COMPID=0 saved to flash -- any station satisfies the failsafe, '
+                f'so a dead Jetson will NOT surface the hull. Set it to {ours} and save '
+                f'(on fw rev >= 7 wait for the "Params saved to flash" statustext, not '
+                f'the ACK -- the NVS write is deferred)')
+    return (WARN, 'GCS failsafe scoped elsewhere',
+            f'FS_GCS_COMPID={int(compid)}, we are {ours} -- our heartbeat does not feed it')
+
+
 def _baro_health_verdict(health: int | None, present: int | None) -> tuple[str, str, str]:
     """Grade the Bar30 from SYS_STATUS's health bitfield. Pure, testable without a board.
 
@@ -909,6 +978,11 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
                         f'params may not have persisted (fw R14)'))
         else:
             out.append((PASS, 'GAIN', f'{gain:.2f}'))
+
+        # Bench mode, saved to flash. See _gcs_failsafe_verdict for why this is graded
+        # rather than left to the "check it before every session" line in the docs.
+        out.append(_gcs_failsafe_verdict(_read_param(conn, 'FS_GCS_ENABLE'),
+                                         _read_param(conn, 'FS_GCS_COMPID')))
     except Exception as exc:                       # noqa: BLE001
         out.append((FAIL, 'SROT MAVLink probe raised', str(exc)))
     finally:
