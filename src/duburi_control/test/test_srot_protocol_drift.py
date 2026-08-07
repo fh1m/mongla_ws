@@ -499,3 +499,29 @@ def test_bondor_mirrors_the_same_payload_function_enum():
         assert m, f"Bondor's {fw_suffix} entry has no value: {entry.group(0)}"
         assert int(m.group(1)) == getattr(sp, host_attr), (
             f'Bondor has {fw_suffix}={m.group(1)}, we have {getattr(sp, host_attr)}')
+
+
+def test_frame_reverse_still_defaults_off():
+    """The one class of firmware change this whole file is blind to: a PARAM DEFAULT.
+
+    Rev 7 shipped `FRAME_REVERSE`, which negates all six axis demands immediately before
+    the mixer -- every MANUAL_CONTROL axis and every SROT_MOVE primitive inverted. The
+    drift suite passed clean through that release, correctly: no wire constant moved.
+
+    It is safe only because `DEF_FRAME_REVERSE` is 0, so a stock board behaves exactly
+    like rev <= 6 and the `FW_BEHAVIOUR_REV` gate stays honest. If the firmware ever ships
+    it defaulting ON, that reasoning collapses silently -- a freshly-erased board would
+    drive backwards with nothing in any log and a green test suite.
+
+    (Our own hull sets it to 1 in NVS. That is a stored value this test cannot see and is
+    not trying to: the check for it is a param read before arming, documented in
+    srot-integration.md "Rev 7: FRAME_REVERSE changes what MOT_n_DIRECTION should be".)
+    """
+    cfg = _read('include', 'config.h')
+    m = re.search(r'^\s*#define\s+DEF_FRAME_REVERSE\s+([\d.]+)f?', cfg, re.M)
+    if not m:
+        pytest.skip('firmware predates FRAME_REVERSE (added rev 7, 83ef62e)')
+    assert float(m.group(1)) == 0.0, (
+        f'DEF_FRAME_REVERSE is now {m.group(1)} -- the firmware defaults to INVERTED axes. '
+        f'A fresh board no longer matches rev <= 6 behaviour, so FW_BEHAVIOUR_REV_REQUIRED '
+        f'must be raised to the rev that made the change, and every axis re-verified.')
