@@ -1,6 +1,10 @@
 # SROT control-board integration (branch `srot`)
 
-> **Firmware baseline for this branch: `srot-control-board` @ `d6f1da5`, `SROT_FW_BEHAVIOUR_REV 7`.**
+> ⛔ **PRE-DIVE: read [`srot-pre-dive-gates.md`](srot-pre-dive-gates.md) FIRST.** The axis
+> configuration is currently **UNKNOWN** — `CAL_MDIR` is not `[+1]×8` as §8.2 assumed, and it
+> multiplies with `MOT_n_DIRECTION`. §8.2's "config is correct" conclusion is superseded.
+>
+> **Firmware baseline for this branch: `srot-control-board` @ `3bd247b`, `SROT_FW_BEHAVIOUR_REV 9`.**
 > **FLASHED to the vehicle 2026-08-07**, all 232 params re-read afterwards with **zero
 > drift** and `CAL_*` intact.
 >
