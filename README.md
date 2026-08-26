@@ -116,6 +116,13 @@ pip install -r sim/requirements.txt
 cd sim && ./build_sim.sh          # NOT a bare `colcon build` — see below
 ```
 
+> Installing the sim deps pulls FastAPI's `anyio`, whose pytest plugin autoloads
+> and needs pytest ≥ 7 while ROS Humble ships 6.2.5 — so it would break *autonomy's*
+> test runs with a `_pytest.scope` import error that looks like a broken workspace.
+> The root [`pytest.ini`](pytest.ini) disables that autoload, so nothing is needed
+> from you; run tests per package (`cd src/duburi_control && python -m pytest test -q`)
+> or via `colcon test`.
+
 > `sim/COLCON_IGNORE` keeps the root `colcon build` at exactly **six** autonomy
 > packages, so adding the simulator does not change how `duburi_ws` builds or
 > tests. colcon checks that marker against the base path too, which means

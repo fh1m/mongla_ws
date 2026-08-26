@@ -274,8 +274,18 @@ PY
       _course="$(tr -d '[:space:]' <"$_RT/lab_active_course.txt")"
       [[ -n "$_course" ]] || _course="${DUBURI_SIM_COURSE:-sauvc26_qualification}"
     fi
-    echo "[duburi-sim] starting operator lab on http://0.0.0.0:${_lab_port} ..."
-    echo "[duburi-sim] open http://localhost:${_lab_port} (port-forward if remote)."
+    # The server binds 127.0.0.1 unless DUBURI_LAB_HOST says otherwise -- print
+    # what it will ACTUALLY bind, or a remote operator tries 0.0.0.0, gets
+    # nothing, and concludes the lab is broken rather than loopback-bound.
+    _lab_host="${DUBURI_LAB_HOST:-127.0.0.1}"
+    echo "[duburi-sim] starting operator lab on http://${_lab_host}:${_lab_port} ..."
+    if [[ "$_lab_host" == "127.0.0.1" ]]; then
+      echo "[duburi-sim] open http://localhost:${_lab_port} — LOOPBACK ONLY."
+      echo "[duburi-sim] remote? ssh -L ${_lab_port}:localhost:${_lab_port} <this-host>"
+      echo "[duburi-sim] (DUBURI_LAB_HOST=0.0.0.0 exposes it — unauthenticated, arms thrusters)"
+    else
+      echo "[duburi-sim] open http://<this-host>:${_lab_port} — EXPOSED on ${_lab_host}."
+    fi
     # Prop manager for the World props page — pin world:= to active course.
     if ! ros2 node list 2>/dev/null | grep -q prop_manager; then
       ros2 run duburi_sim_scenarios prop_manager --ros-args -p "world:=${_course}" \
