@@ -107,8 +107,9 @@ source /opt/ros/humble/setup.bash && source install/setup.bash
 > every build, so a fresh clone restores them with one build (no manual copy).
 
 **Prerequisites:** Ubuntu 22.04 (native / WSL2 / distrobox) · ROS 2 Humble · Python 3.10 ·
-`pymavlink` (auto-installed by colcon). Sim adds ArduPilot SITL + `sim_vehicle.py` and Gazebo
-([`sim-setup.md`](.claude/context/sim-setup.md)); vision adds a CUDA torch wheel + `ultralytics`,
+`pymavlink` (auto-installed by colcon). **Mongla Gazebo lab** (preferred): sibling
+[`duburi-sim_ws`](../duburi-sim_ws) — see [`duburi-sim.md`](.claude/context/duburi-sim.md).
+Legacy BlueROV Gazebo notes: [`sim-setup.md`](.claude/context/sim-setup.md). Vision adds a CUDA torch wheel + `ultralytics`,
 `supervision`, `filterpy`, `onnxruntime` (`requirements.txt`). Fresh box:
 [`docs/JETSON_SETUP.md`](docs/JETSON_SETUP.md).
 
@@ -335,7 +336,26 @@ urgent enough to justify guessing.
   SERVO  (on-board arm, ignored)  [1, 2, 3, 4, 5, 6, 7, 8]
 ```
 
-**Drive in sim** — Gazebo + ArduSub SITL, no real AUV (this is the **pixhawk** backend):
+**Drive in sim (Mongla Gazebo lab)** — sibling `duburi-sim_ws`, ArduSub SITL, **pixhawk** backend:
+
+```bash
+# See .claude/context/duburi-sim.md for the full contract.
+source /opt/ros/humble/setup.bash
+source ~/Ros_workspaces/duburi-sim_ws/install/setup.bash
+export GZ_IP=127.0.0.1
+ros2 run duburi_sim_bringup duburi_sim stop
+ros2 run duburi_sim_bringup duburi_sim sim          # T1
+# T2 — autonomy (on srot, stack forces flight_controller:=pixhawk for SITL)
+source ~/Ros_workspaces/duburi_ws/install/setup.bash
+source ~/Ros_workspaces/duburi-sim_ws/install/setup.bash
+ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+ros2 run duburi_sim_bringup duburi_sim smoke
+# optional operator UI + timeseries
+ros2 run duburi_sim_bringup duburi_sim lab           # :28765
+ros2 run duburi_sim_bringup duburi_sim plotjuggler   # apt: ros-humble-plotjuggler-ros
+```
+
+<details><summary>Legacy one-liner SITL (no Mongla lab)</summary>
 
 ```bash
 # T1 — ArduSub SITL
@@ -350,6 +370,8 @@ ros2 run duburi_planner duburi set_depth --target -0.5   # ⛔ srot: behind the 
 ros2 run duburi_planner duburi move_forward --duration 3 --gain 60
 ros2 run duburi_planner duburi disarm
 ```
+
+</details>
 
 **Vision pipeline** — webcam, no AUV (camera + detector + tracker + HUD in one command):
 

@@ -1,5 +1,9 @@
 # Simulation Setup Guide — Duburi AUV
 
+> **⚠ Legacy path.** For the current Mongla Gazebo + operator lab, read
+> [`duburi-sim.md`](./duburi-sim.md) → sibling `duburi-sim_ws/.context/INDEX.md`.
+> This document remains for the older BlueROV / `colcon_ws`-era bring-up.
+
 Complete step-by-step guide to bring up the SITL + Gazebo simulation stack.
 All commands run inside the auv-ros2 distrobox docker.
 
