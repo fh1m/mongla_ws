@@ -75,7 +75,10 @@
 | Power                 | Dual LiPo (propulsion + compute on isolated rails)           |
 | Payload               | Slingshot torpedo, aluminum grabber (current-sensed), solenoid dropper |
 
-> **Sim proxy:** Gazebo runs the BlueROV2 Heavy model because it shares the `vectored_6dof` frame. Hull shape and exact mass differ; control behavior matches.
+> **Sim proxy:** Prefer the sibling Mongla Gazebo lab
+> ([`duburi-sim.md`](.claude/context/duburi-sim.md) → `../duburi-sim_ws/.context/INDEX.md`).
+> Gazebo still uses a BlueROV2 Heavy–class `vectored_6dof` model as the physics proxy;
+> hull/mass differ from the real sub. Legacy steps in [`sim-setup.md`](.claude/context/sim-setup.md).
 
 > **Why no VectorNav**: TDR Appendix A lists VN200; we use BNO085 instead — see `vehicle-spec.md` §"Why BNO085 instead of the TDR's VectorNav VN200".
 
@@ -876,7 +879,8 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `hardware-setup.md`             | Pool setup, BlueOS, network topology                                |
 | `dual-camera-setup.md`          | **★ Jetson agent** — 2× identical Blue Robotics USB cams: by-path port-stable identity, USB-2 480 Mbps/MJPEG bandwidth, udev aliases, `vision_dual` `device_path` |
 | `downward-camera.md`            | **★ the axis flip** — why/how `vision.align` kwargs remap on `camera='downward'` (`lat`=Ch6, `fwd`=Ch5 surge, `depth`=fill→descent); canonical calls, surge-sign DISARMED check, depth bounds, migration note |
-| `sim-setup.md`                  | Detailed simulation bring-up                                        |
+| `duburi-sim.md`                 | **★ Current Mongla Gazebo lab** — sibling `duburi-sim_ws` bring-up, pixhawk+SITL, contract, lab, PlotJuggler |
+| `sim-setup.md`                  | Legacy BlueROV / older Gazebo path — prefer `duburi-sim.md` |
 | `sensors-pipeline.md`           | `duburi_sensors` design rules + BNO085 calibration model            |
 | `dvl-reference.md`              | Nortek Nucleus1000 protocol, packet catalog, POSHOLD ArduSub setup  |
 | `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |
