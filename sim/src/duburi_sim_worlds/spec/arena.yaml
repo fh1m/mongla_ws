@@ -1,0 +1,95 @@
+# Single source of truth for SAUVC arena geometry.
+#
+# Read by scripts/gen_pool_texture.py, scripts/gen_props.py and
+# scripts/gen_world.py. Change a dimension here and re-run
+# `scripts/gen_world.py --all` to regenerate textures, prop models and worlds
+# together. Nothing downstream hardcodes these numbers.
+#
+# Dimensions are from the SAUVC 2026 rulebook, https://sauvc.org/rulebook/
+# Props carry a stated tolerance of +/- 5 percent.
+
+pool:
+  # "The challenge will be held in an indoor swimming pool (25m x 16m)."
+  length: 25.0
+  width: 16.0
+  # The rulebook does not state a depth. 1.6 m follows the auv-amarine
+  # sauvc26-world reference implementation and is consistent with the prop
+  # proportions the rulebook does give (a 1.0 m gate and 0.8 m flares standing on
+  # the bottom). Both depth-spanning props are generated against this number, so
+  # if you change it you must regenerate them.
+  depth: 1.6
+  wall_thickness: 0.2
+  # Water surface sits at z = 0. The floor is therefore at z = -depth.
+
+# Structural pole radius shared by the gates. The rulebook does not specify it.
+pole_radius: 0.02
+
+props:
+  qualification_gate:
+    # "150cm wide spanning from bottom of the pool to the top, hanging from the
+    #  water surface with orange markings on both port and starboard sides."
+    width: 1.50
+    marking_colour: [1.0, 0.35, 0.02]
+    # Length of the coloured section on each post, measured down from the surface.
+    marking_length: 0.60
+
+  final_gate:
+    # "150cm wide and 100cm tall gate with striped red and green markings on
+    #  port and starboard sides respectively."
+    width: 1.50
+    height: 1.00
+    port_colour: [0.85, 0.08, 0.08]        # red, port
+    starboard_colour: [0.05, 0.70, 0.20]   # green, starboard
+    stripe_count: 5
+
+  orange_flare:
+    # "~15cm diameter flare with height spanning from bottom to top of the pool,
+    #  and orange in color."
+    diameter: 0.15
+    colour: [1.0, 0.32, 0.02]
+
+  # "80cm tall, ~1.6cm in diameter" - the bump-task flares, each carrying a golf
+  # ball on top that the AUV knocks off.
+  bump_flare:
+    height: 0.80
+    diameter: 0.016
+    colours:
+      red: [0.88, 0.08, 0.08]
+      yellow: [0.95, 0.85, 0.05]
+      blue: [0.06, 0.25, 0.85]
+
+  drum:
+    # "60cm in diameter and 30cm in depth."
+    diameter: 0.60
+    depth: 0.30
+    wall_thickness: 0.02
+    # Number of box segments approximating the ring wall. The wall must be a
+    # ring rather than a solid cylinder so a dropped ball can actually land
+    # inside it.
+    segments: 20
+    exterior_colour: [0.06, 0.06, 0.07]
+    colours:
+      red: [0.80, 0.10, 0.10]
+      blue: [0.08, 0.25, 0.80]
+
+  starting_zone:
+    # "The starting zone is a 140x140cm area marked on the surface of water."
+    size: 1.40
+    colour: [0.95, 0.85, 0.10]
+    border: 0.05
+
+  ball:
+    # "3.5-4.5cm in diameter and weighs no more than 200g in air. Provided by
+    #  teams." Modelled at the midpoint, at a mass that sinks in fresh water.
+    diameter: 0.040
+    mass: 0.060
+
+  golf_ball:
+    # Regulation golf ball, as balanced on top of the bump flares.
+    diameter: 0.0427
+    mass: 0.0459
+    colour: [0.95, 0.95, 0.95]
+
+# Texture resolution, pixels per metre. ~64 keeps mosaic detail readable on
+# camera without multi-megabyte PNG walls.
+texture_px_per_m: 64

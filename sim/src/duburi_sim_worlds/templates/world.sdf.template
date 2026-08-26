@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<!--
+  GENERATED FILE - do not edit.
+
+  Produced by duburi_sim_worlds/scripts/gen_world.py from
+  courses/{course_file} and spec/arena.yaml. Edit those and re-run:
+
+      scripts/gen_world.py --all
+
+  {description}
+-->
+<sdf version="1.9">
+  <world name="{world_name}">
+
+    <!-- ===================== SYSTEMS ===================== -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+
+    <!-- Required by the vehicle's IMU, which feeds ArduSub over the JSON link. -->
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+
+    <!-- Required by the front and bottom cameras. Without this the sensors load
+         but never publish, and the failure is silent. -->
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- Graded buoyancy: water below the surface, air above it. This is what
+         lets the vehicle float at z = 0 rather than being pushed out of the pool.
+         <enable> is a whitelist, so every model that needs buoyancy has to be
+         named here; the pool shell is static and deliberately left out. -->
+    <plugin filename="gz-sim-buoyancy-system"
+            name="gz::sim::systems::Buoyancy">
+      <graded_buoyancy>
+        <default_density>{water_density}</default_density>
+        <density_change>
+          <above_depth>0</above_depth>
+          <density>1</density>
+        </density_change>
+      </graded_buoyancy>
+{buoyancy_enables}
+    </plugin>
+
+    <!-- ===================== ENVIRONMENT ===================== -->
+    <physics name="default" type="dart">
+      <max_step_size>{max_step_size}</max_step_size>
+      <real_time_factor>{real_time_factor}</real_time_factor>
+      <real_time_update_rate>{real_time_update_rate}</real_time_update_rate>
+    </physics>
+
+    <gravity>0 0 -9.81</gravity>
+    <magnetic_field>{magnetic_field}</magnetic_field>
+    <atmosphere type="adiabatic"/>
+
+    <scene>
+      <ambient>{ambient} 1</ambient>
+      <background>{background} 1</background>
+      <shadows>{shadows}</shadows>
+      <!-- Linear fog stands in for water turbidity. It is the single biggest
+           lever on how hard the perception task is, so it is course-tunable. -->
+      <fog>
+        <color>{fog_colour} 1</color>
+        <type>linear</type>
+        <start>{fog_start}</start>
+        <end>{fog_end}</end>
+        <density>{fog_density}</density>
+      </fog>
+    </scene>
+
+    <!-- Lights stay deliberately dim. Underwater scenes clip to white easily:
+         the floor fills most of the frame and reflects most of what reaches it.
+         A third soft cool fill stands in for caustic bounce without washing tiles. -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.48 0.52 0.56 1</diffuse>
+      <specular>0.10 0.10 0.11 1</specular>
+      <direction>-0.4 0.15 -0.9</direction>
+    </light>
+
+    <light type="directional" name="fill">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 5 0 0 0</pose>
+      <diffuse>0.22 0.28 0.34 1</diffuse>
+      <specular>0.04 0.05 0.06 1</specular>
+      <direction>0.3 -0.2 -1</direction>
+    </light>
+
+    <light type="directional" name="caustic_fill">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 3 0 0 0</pose>
+      <diffuse>0.12 0.22 0.26 1</diffuse>
+      <specular>0.02 0.03 0.04 1</specular>
+      <direction>0.1 0.35 -0.85</direction>
+    </light>
+
+    <!-- ===================== POOL ===================== -->
+    <!-- Water surface at z = 0, floor at z = {floor_z}. -->
+{pool}
+
+    <!-- ===================== PROPS ===================== -->
+{props}
+
+    <!-- ===================== VEHICLE ===================== -->
+{vehicle}
+
+  </world>
+</sdf>

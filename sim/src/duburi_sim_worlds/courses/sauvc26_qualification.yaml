@@ -1,0 +1,41 @@
+name: sauvc26_qualification
+description: >
+  SAUVC 2026 qualification run. The AUV starts against the -x wall, swims
+  through the qualification gate about 10 m out, performs a U-turn and passes
+  back through the same gate.
+
+  Pool coordinates: origin at the pool centre, water surface at z = 0, so the
+  -x wall is at x = -12.5 and the floor at z = -1.6.
+
+pool: sauvc
+
+scene:
+  lighting: competition
+  # Qualification is a clean run with nothing to identify, so visibility is set
+  # generously. Still murkier than an empty pool so cameras see colour in fog.
+  fog_start: 1.5
+  fog_end: 26.0
+  fog_density: 0.022
+  ambient: [0.30, 0.42, 0.50]
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  # Mid-water in the starting zone, facing +x toward the qualification gate.
+  # Deep enough that the mesh is clearly under the surface in the Gazebo GUI.
+  pose: [-11.8, 0.0, -0.8]
+  yaw: 0.0
+
+props:
+  # "The qualification starting line is a marked 1m wide section of the pool
+  #  wall from where the AUV should be deployed from."
+  - model: sauvc_starting_zone
+    name: start_zone
+    xy: [-11.8, 0.0]
+
+  # "At approximately 10m from the starting line the qualification gate is
+  #  hanging from the surface of the water."
+  - model: sauvc_qual_gate
+    name: qual_gate
+    xy: [-2.5, 0.0]
+    yaw: 0.0

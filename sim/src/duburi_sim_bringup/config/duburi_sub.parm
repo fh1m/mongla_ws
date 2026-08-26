@@ -1,0 +1,51 @@
+# ArduSub parameter overlay for the Duburi simulator.
+#
+# Applied on top of ArduPilot's Tools/autotest/default_params/sub-6dof.parm
+# (FRAME_CONFIG 2 = vectored_6dof). Loaded by sim.launch.py.
+
+# --- Thruster PWM range -----------------------------------------------------
+# Must match <servo_min>/<servo_max> on the vehicle ArduPilotPlugin.
+MOT_PWM_MIN      1100
+MOT_PWM_MAX      1900
+
+# --- Attitude / EKF ---------------------------------------------------------
+EK3_ENABLE       1
+AHRS_EKF_TYPE    3
+# Compass yaw. Use duburi_sub_extnav.parm instead when testing ATT_POS_MOCAP.
+EK3_SRC1_YAW     1
+VISO_TYPE        0
+
+# --- No GPS underwater ------------------------------------------------------
+# SITL still spins up a fake u-blox by default and spams "GPS 1: probing /
+# detected" forever. An AUV does not have GPS; disable every instance.
+GPS_TYPE         0
+GPS_TYPE2        0
+GPS_TYPE3        0
+SIM_GPS_TYPE     0
+# Don't make arming wait on a fix that will never come.
+ARMING_CHECK     0
+
+# --- Failsafes --------------------------------------------------------------
+# Autonomy heartbeats at a few Hz with neutral RC_CHANNELS_OVERRIDE. ArduSub's
+# default FS_PILOT_INPUT=DISARM still trips "Lost manual control" the moment
+# that stream hiccups (duplicate managers on 14550, brief pause during arm,
+# etc.) and immediately disarms. Disable it in sim; the real vehicle keeps the
+# stock setting.
+FS_PILOT_INPUT   0
+FS_GCS_ENABLE    0
+FS_LEAK_ENABLE   0
+FS_PRESS_ENABLE  0
+FS_BATT_ENABLE   0
+BRD_SAFETY_DEFLT 0
+
+# --- Simulated sensor noise -------------------------------------------------
+SIM_BARO_RND     0.02
+
+# --- Telemetry --------------------------------------------------------------
+SR1_EXTRA1       10
+SR1_EXTRA2       10
+SR1_EXTRA3       10
+SR1_POSITION     10
+SR1_EXT_STAT     5
+SR1_RAW_SENS     5
+SR1_RC_CHAN      5

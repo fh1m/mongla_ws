@@ -1,0 +1,10 @@
+/**:
+  ros__parameters:
+    turbidity: 0.45
+    backscatter: 0.55
+    blur_sigma: 0.8
+    noise: 0.012
+    vignette: 0.25
+    atten_scale: 1.0
+    randomize_on_start: false
+    enabled: true

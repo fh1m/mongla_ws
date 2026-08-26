@@ -1,0 +1,13 @@
+name: Bottom look
+description: Hold depth and surge slowly so the bottom camera sees lane markings.
+course: sauvc26_qualification
+cameras: [bottom, front]
+record_duration: 35
+steps:
+  - cmd: arm
+  - cmd: set_depth
+    target: -1.2
+  - cmd: move_forward
+    duration: 12
+    gain: 40
+  - cmd: disarm

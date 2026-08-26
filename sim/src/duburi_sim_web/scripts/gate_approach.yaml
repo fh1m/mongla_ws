@@ -1,0 +1,17 @@
+name: Gate approach
+description: Arm, dive to -1 m, surge toward the qualification gate while recording.
+course: sauvc26_qualification
+cameras: [front, bottom]
+record_duration: 35
+steps:
+  - cmd: arm
+    timeout: 30
+  - cmd: set_depth
+    target: -1.0
+    timeout: 60
+  - cmd: move_forward
+    duration: 10
+    gain: 55
+    timeout: 60
+  - cmd: disarm
+    timeout: 30

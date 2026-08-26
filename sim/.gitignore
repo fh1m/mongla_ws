@@ -1,0 +1,34 @@
+# colcon
+build/
+install/
+log/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# generated pool textures are large; regenerate with
+#   ros2 run duburi_sim_worlds gen_pool_texture.py
+src/duburi_sim_worlds/models/*/materials/textures/*_generated.png
+
+# camera dataset dumps from record_cameras
+datasets/
+
+# SITL / runtime noise
+eeprom.bin
+logs/
+*.bag
+*.mcap
+
+# web UI build artifacts / deps
+src/duburi_sim_web/frontend/node_modules/
+src/duburi_sim_web/frontend/dist/
+
+# editor / tooling
+.vscode/
+.idea/
+*.swp
+.remember/
+.cursor/

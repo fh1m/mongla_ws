@@ -1,0 +1,155 @@
+# Duburi 4.5 simulator proxy, built on the BlueROV2 Heavy hull.
+#
+# Edit this file and re-run scripts/generate_model.py; never hand-edit model.sdf.
+# In particular the buoyancy collision box is derived from mass, bounding_box,
+# buoyancy_adjustment and fluid_density, so changing any of those without
+# regenerating leaves the model silently mis-weighted.
+
+model_name: "duburi_heavy"
+
+# BlueROV2 Heavy in its stock configuration, per the identified model in
+# HYDRODYNAMICS.md. Note this is 13.5, not the 13.0 bluerov2_gz uses.
+mass: 13.5
+
+# MUST match the world's gz-sim-buoyancy-system <default_density>. The upstream
+# bluerov2 model gets this wrong (998 here vs 1000 in the world) and ends up
+# with a displacement it did not intend.
+fluid_density: 1000.0
+
+control_method: 0  # 0 = thrust (cmd_thrust), 1 = angular velocity (cmd_vel)
+
+# Note the width exceeds the length; that is the eight-thruster Heavy frame,
+# not a transposition. Only x and y feed the buoyancy collision box - z is used
+# solely for the fallback drag and inertia estimates, which we override below.
+bounding_box:
+  x: 0.457
+  y: 0.575
+  z: 0.378
+
+center_of_mass:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+
+# 1 cm above the centre of mass. This separation is the vehicle's entire passive
+# righting moment in roll and pitch, and it comes from the same identified model
+# as the hydrodynamic coefficients. bluerov2_gz uses 4.9 cm, which is much
+# stiffer than the real vehicle.
+center_of_volume:
+  x: 0.0
+  y: 0.0
+  z: 0.01
+
+# The identified model is exactly neutral (13.5 kg displacing 0.0135 m^3). Add a
+# little so the vehicle surfaces on loss of control, matching how the real
+# Duburi is ballasted.
+buoyancy_adjustment: 0.1
+
+inertia:
+  ixx: 0.26
+  iyy: 0.23
+  izz: 0.37
+
+# Order matters: it must match the thrusterN link declarations in model.sdf.in.
+# 1-4 are the vectored horizontals, 5-8 the verticals.
+thrusters:
+  - x: 0.14    # Thruster 1, front starboard vectored
+    y: -0.092
+    z: 0.0
+  - x: 0.14    # Thruster 2, front port vectored
+    y: 0.092
+    z: 0.0
+  - x: -0.14   # Thruster 3, aft starboard vectored
+    y: -0.092
+    z: 0.0
+  - x: -0.14   # Thruster 4, aft port vectored
+    y: 0.092
+    z: 0.0
+  - x: 0.118   # Thruster 5, front starboard vertical
+    y: -0.215
+    z: 0.064
+  - x: 0.118   # Thruster 6, front port vertical
+    y: 0.215
+    z: 0.064
+  - x: -0.118  # Thruster 7, aft starboard vertical
+    y: -0.215
+    z: 0.064
+  - x: -0.118  # Thruster 8, aft port vertical
+    y: 0.215
+    z: 0.064
+
+# --- Fossen hydrodynamic coefficients ---------------------------------------
+#
+# From the ROV-Simulator benchmark's identified BlueROV2 Heavy model. Full
+# provenance, units and the sign derivation are in HYDRODYNAMICS.md; read that
+# before touching any number here.
+# THE TWO BLOCKS BELOW HAVE OPPOSITE SIGN CONVENTIONS. This is not a typo.
+#
+# `drag` feeds the Hydrodynamics plugin, which negates twice, so the force it
+# applies is +xU*u. Damping coefficients must therefore be negative to oppose
+# motion; a positive one gives a vehicle that accelerates itself.
+#
+# `added_mass` does NOT feed that plugin. It is emitted as the link's
+# <fluid_added_mass> matrix, which is a real inertia and so is positive.
+# generate_model.py rejects negative values here. The reason for the split is
+# stability, and it is covered in HYDRODYNAMICS.md; the short version is that
+# heave adds 18.7 kg to a 13.5 kg vehicle, and the plugin's explicit treatment
+# of that diverges within a second of sim time.
+
+added_mass:
+  xDotU: 6.356674      # kg
+  yDotV: 7.120600      # kg
+  zDotW: 18.686327     # kg
+  # The rotational added-mass terms carry 30-100% estimation error in the source
+  # (the empirical method it uses assumes length exceeds width, and the Heavy is
+  # 20% wider than it is long). Treat these three as soft.
+  kDotP: 0.185766      # kg*m^2
+  mDotQ: 0.134823      # kg*m^2
+  nDotR: 0.221510      # kg*m^2
+
+drag:
+  # First-order damping. Sway, roll and yaw really are zero in the source: those
+  # axes are modelled as purely quadratically damped. This is not missing data.
+  linear:
+    xU: -13.7          # N*s/m
+    yV: 0.0
+    zW: -33.0          # N*s/m
+    kP: 0.0
+    mQ: -0.8           # N*m*s/rad
+    nR: 0.0
+
+  # Second-order damping. These replace the flat-plate estimates the generator
+  # would otherwise derive from the bounding box, which understate drag badly:
+  # they predict a 1.56 m/s top speed against Blue Robotics' published ~1.0 m/s.
+  # These values give 0.95 m/s.
+  quadratic:
+    xUabsU: -141.0     # N*s^2/m^2
+    yVabsV: -217.0     # N*s^2/m^2
+    zWabsW: -190.0     # N*s^2/m^2
+    kPabsP: -1.192     # N*m*s^2/rad^2
+    mQabsQ: -0.47      # N*m*s^2/rad^2
+    nRabsR: -1.5       # N*m*s^2/rad^2
+
+# 640x480 is fixed by the sim_front / sim_bottom profiles in
+# duburi_vision/config/cameras.yaml. far_clip stands in for water turbidity.
+cameras:
+  width: 640
+  height: 480
+  update_rate: 30.0
+  hfov: 1.396          # ~80 deg
+  far_clip: 30.0
+  noise_stddev: 0.007
+  front:
+    x: 0.2
+    y: 0.0
+    z: 0.0
+  bottom:
+    x: 0.0
+    y: 0.0
+    z: -0.1
+
+ardupilot:
+  fdm_addr: "127.0.0.1"
+  fdm_port_in: 9002
+
+odom_publish_frequency: 50.0

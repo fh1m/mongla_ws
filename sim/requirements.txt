@@ -1,0 +1,11 @@
+# Python dependencies for the Duburi simulator asset generators.
+#
+# These are only needed to *regenerate* models, worlds and textures. Running the
+# simulator from the committed assets needs none of them beyond what ROS 2 Humble
+# already provides.
+
+PyYAML~=6.0
+numpy>=1.24,<2.0
+
+# Pillow is used by scripts/gen_pool_texture.py to write the tile PNG.
+Pillow>=9.0

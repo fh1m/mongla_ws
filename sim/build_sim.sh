@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Build the Mongla simulator workspace (duburi_ws/sim).
+#
+# Why --base-paths src, and not a bare `colcon build`:
+#   sim/COLCON_IGNORE exists so that `colcon build` / `colcon test` run from the
+#   duburi_ws root skip this subtree entirely -- the autonomy workspace must stay
+#   exactly six packages with no Gazebo dependency. But colcon checks the ignore
+#   marker against the BASE PATH too (colcon_core/package_identification/ignore.py),
+#   so `cd sim && colcon build` would ignore itself. Pointing the base path at
+#   src/ steps past the marker. Removing COLCON_IGNORE to "simplify" this
+#   re-contaminates the root build -- don't.
+#
+# The autonomy workspace must be built and sourced first: stack.launch.py
+# includes duburi_manager's and duburi_vision's launch files by share directory.
+set -e
+cd "$(dirname "$0")"
+
+DUBURI_WS="${DUBURI_WS:-$(cd .. && pwd)}"
+if [ ! -d "$DUBURI_WS/src/duburi_manager" ]; then
+    echo "error: no autonomy workspace at $DUBURI_WS (expected src/duburi_manager)" >&2
+    echo "       set DUBURI_WS=<path to duburi_ws>" >&2
+    exit 1
+fi
+if [ ! -f "$DUBURI_WS/install/setup.bash" ]; then
+    echo "error: $DUBURI_WS is not built yet -- run ./build_dubomini.sh there first." >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1090,SC1091
+. /opt/ros/humble/setup.bash
+# shellcheck disable=SC1090,SC1091
+. "$DUBURI_WS/install/setup.bash"
+
+colcon build --base-paths src --symlink-install "$@"
+
+echo ""
+echo "Sim build done. Source both workspaces, autonomy first:"
+echo "  source $DUBURI_WS/install/setup.bash"
+echo "  source $(pwd)/install/setup.bash"
+echo "Then:"
+echo "  ros2 run duburi_sim_bringup duburi_sim stop"
+echo "  ros2 run duburi_sim_bringup duburi_sim sim"
+echo "  ros2 run duburi_sim_bringup duburi_sim stack --no-vision"
+echo "  ros2 run duburi_sim_bridge contract_check"

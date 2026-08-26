@@ -1,0 +1,1043 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="sauvc_drum_red_pinger">
+    <static>true</static>
+    <link name="base">
+      <pose>0 0 0.01 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>3</mass>
+        <inertia>
+          <ixx>0.0676</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0676</iyy><iyz>0</iyz>
+          <izz>0.135</izz>
+        </inertia>
+      </inertial>
+      <visual name="base_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.3</radius><length>0.02</length></cylinder></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+      <collision name="base_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.3</radius><length>0.02</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="rim">
+      <pose>0 0 0.288 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.3</mass>
+        <inertia>
+          <ixx>0.0069925</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0069925</iyy><iyz>0</iyz>
+          <izz>0.0139537</izz>
+        </inertia>
+      </inertial>
+      <visual name="rim_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.305</radius><length>0.025</length></cylinder></geometry>
+        <material>
+          <ambient>0.7 0.7 0.7 1</ambient>
+          <diffuse>0.7 0.7 0.7 1</diffuse>
+          <specular>0.35 0.35 0.35 1</specular>
+          <emissive>0.08 0.08 0.08 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_rim.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.4</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_0">
+      <pose>0.29 0 0.15 0 0 0.000000</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_0_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_0_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_0">
+      <pose>0.268 0 0.15 0 0 0.000000</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_0_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_1">
+      <pose>0.275806 0.0896149 0.15 0 0 0.314159</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_1_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_1_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_1">
+      <pose>0.254883 0.0828166 0.15 0 0 0.314159</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_1_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_2">
+      <pose>0.234615 0.170458 0.15 0 0 0.628319</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_2_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_2_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_2">
+      <pose>0.216817 0.157526 0.15 0 0 0.628319</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_2_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_3">
+      <pose>0.170458 0.234615 0.15 0 0 0.942478</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_3_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_3_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_3">
+      <pose>0.157526 0.216817 0.15 0 0 0.942478</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_3_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_4">
+      <pose>0.0896149 0.275806 0.15 0 0 1.256637</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_4_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_4_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_4">
+      <pose>0.0828166 0.254883 0.15 0 0 1.256637</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_4_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_5">
+      <pose>1.77574e-17 0.29 0.15 0 0 1.570796</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_5_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_5_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_5">
+      <pose>1.64103e-17 0.268 0.15 0 0 1.570796</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_5_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_6">
+      <pose>-0.0896149 0.275806 0.15 0 0 1.884956</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_6_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_6_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_6">
+      <pose>-0.0828166 0.254883 0.15 0 0 1.884956</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_6_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_7">
+      <pose>-0.170458 0.234615 0.15 0 0 2.199115</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_7_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_7_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_7">
+      <pose>-0.157526 0.216817 0.15 0 0 2.199115</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_7_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_8">
+      <pose>-0.234615 0.170458 0.15 0 0 2.513274</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_8_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_8_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_8">
+      <pose>-0.216817 0.157526 0.15 0 0 2.513274</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_8_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_9">
+      <pose>-0.275806 0.0896149 0.15 0 0 2.827433</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_9_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_9_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_9">
+      <pose>-0.254883 0.0828166 0.15 0 0 2.827433</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_9_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_10">
+      <pose>-0.29 3.55148e-17 0.15 0 0 3.141593</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_10_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_10_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_10">
+      <pose>-0.268 3.28205e-17 0.15 0 0 3.141593</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_10_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_11">
+      <pose>-0.275806 -0.0896149 0.15 0 0 3.455752</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_11_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_11_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_11">
+      <pose>-0.254883 -0.0828166 0.15 0 0 3.455752</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_11_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_12">
+      <pose>-0.234615 -0.170458 0.15 0 0 3.769911</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_12_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_12_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_12">
+      <pose>-0.216817 -0.157526 0.15 0 0 3.769911</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_12_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_13">
+      <pose>-0.170458 -0.234615 0.15 0 0 4.084070</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_13_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_13_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_13">
+      <pose>-0.157526 -0.216817 0.15 0 0 4.084070</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_13_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_14">
+      <pose>-0.0896149 -0.275806 0.15 0 0 4.398230</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_14_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_14_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_14">
+      <pose>-0.0828166 -0.254883 0.15 0 0 4.398230</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_14_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_15">
+      <pose>-5.32721e-17 -0.29 0.15 0 0 4.712389</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_15_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_15_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_15">
+      <pose>-4.92308e-17 -0.268 0.15 0 0 4.712389</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_15_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_16">
+      <pose>0.0896149 -0.275806 0.15 0 0 5.026548</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_16_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_16_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_16">
+      <pose>0.0828166 -0.254883 0.15 0 0 5.026548</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_16_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_17">
+      <pose>0.170458 -0.234615 0.15 0 0 5.340708</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_17_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_17_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_17">
+      <pose>0.157526 -0.216817 0.15 0 0 5.340708</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_17_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_18">
+      <pose>0.234615 -0.170458 0.15 0 0 5.654867</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_18_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_18_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_18">
+      <pose>0.216817 -0.157526 0.15 0 0 5.654867</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_18_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="wall_19">
+      <pose>0.275806 -0.0896149 0.15 0 0 5.969026</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.00166188</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00150667</iyy><iyz>0</iyz>
+          <izz>0.000168547</izz>
+        </inertia>
+      </inertial>
+      <visual name="wall_19_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.06 0.06 0.07 1</ambient>
+          <diffuse>0.06 0.06 0.07 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.015 0.015 0.0175 1</emissive>
+        </material>
+      </visual>
+      <collision name="wall_19_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="liner_19">
+      <pose>0.254883 -0.0828166 0.15 0 0 5.969026</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.01</mass>
+        <inertia>
+          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>7.50133e-05</iyy><iyz>0</iyz>
+          <izz>8.10736e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="liner_19_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <material>
+          <ambient>0.8 0.1 0.1 1</ambient>
+          <diffuse>0.8 0.1 0.1 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.2 0.025 0.025 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="pinger_band">
+      <pose>0 0 0.165 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.00244693</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00244693</iyy><iyz>0</iyz>
+          <izz>0.0048672</izz>
+        </inertia>
+      </inertial>
+      <visual name="pinger_band_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.312</radius><length>0.04</length></cylinder></geometry>
+        <material>
+          <ambient>0.95 0.85 0.08 1</ambient>
+          <diffuse>0.95 0.85 0.08 1</diffuse>
+          <specular>0.4 0.4 0.4 1</specular>
+          <emissive>0.4275 0.3825 0.036 1</emissive>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
