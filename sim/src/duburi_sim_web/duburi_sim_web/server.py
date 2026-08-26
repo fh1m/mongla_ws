@@ -225,9 +225,17 @@ def _ensure_prop_manager(course: str) -> None:
     """Restart prop_manager pinned to the active Gazebo world name."""
     global _prop_manager_proc
     # Kill prior prop_manager processes started by the lab.
+    #
+    # NOT `bash -lc`. A LOGIN shell sources the system profile, and on a container
+    # whose profile prompts interactively (this one runs a first-time `passwd`
+    # setup) that prompt blocks on stdin forever. This call runs inside the lab's
+    # startup handler, so the whole API hung with the port bound and connections
+    # piling up in the accept queue -- it looked like a wedged event loop, not a
+    # shell waiting for a password. Nothing here needs a login shell; there is no
+    # shell syntax left to justify one either.
     subprocess.run(
-        ['bash', '-lc', "pkill -f 'lib/duburi_sim_scenarios/prop_manager' || true"],
-        check=False,
+        ['pkill', '-f', 'lib/duburi_sim_scenarios/prop_manager'],
+        check=False, stdin=subprocess.DEVNULL,
     )
     time.sleep(0.5)
     log = open(_rt('prop_manager.log'), 'a')
@@ -502,7 +510,11 @@ def vehicle_cmd(body: MoveBody):
     if body.timeout is not None:
         extra += ['--timeout', str(body.timeout)]
     args = _duburi_cmd(body.cmd, *extra)
-    proc = subprocess.run(args, capture_output=True, text=True, timeout=180)
+    # stdin=DEVNULL: this runs in the request path with a 180 s timeout. Anything
+    # downstream that decides to prompt would otherwise hold a worker for the
+    # full timeout instead of failing immediately.
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=180,
+                          stdin=subprocess.DEVNULL)
     if proc.returncode != 0:
         raise HTTPException(400, proc.stderr or proc.stdout or 'command failed')
     return {'ok': True, 'stdout': proc.stdout}
