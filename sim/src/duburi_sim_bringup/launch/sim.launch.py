@@ -17,6 +17,7 @@ Then run the autonomy stack against it:
 """
 
 import os
+from functools import lru_cache
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -39,10 +40,13 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 def _find_root(env_var, marker, candidates, what):
     """Locate an out-of-workspace dependency by looking for a known file.
 
-    Checked in order: the environment variable, then each candidate. Guessing
-    from $HOME is not safe here - the dev container sets HOME to the project
-    root rather than to /home/<user> - so candidates are spelled out and each is
-    confirmed by the marker file actually being present.
+    Checked in order: the environment variable, then each candidate, and a
+    candidate only counts if the marker file is actually there.
+
+    $HOME is the right base even though the dev container points HOME at the
+    project root rather than /home/<user>: that is exactly where `stuff/` lives,
+    so `$HOME/stuff/ardupilot` expands to the same path the old hardcoded
+    absolute fallback spelled out. It was never extra coverage.
     """
     roots = []
     if env_var in os.environ:
@@ -60,35 +64,39 @@ def _find_root(env_var, marker, candidates, what):
     )
 
 
-_AP_CANDIDATES = [
-    os.path.join(os.environ.get('HOME', '/'), 'stuff', 'ardupilot'),
-    '/home/fh1m/Envs/dockers/auv-ros2/stuff/ardupilot',
-]
-_AP_GZ_CANDIDATES = [
-    os.path.join(os.environ.get('HOME', '/'), 'stuff', 'ardupilot_gazebo'),
-    '/home/fh1m/Envs/dockers/auv-ros2/stuff/ardupilot_gazebo',
-]
+# $HOME only. The absolute /home/fh1m/... fallbacks that used to sit here were
+# one developer's box baked into a launch file: on anyone else's machine they
+# just padded the error message with a path that could never exist.
+_AP_CANDIDATES = [os.path.join('~', 'stuff', 'ardupilot')]
+_AP_GZ_CANDIDATES = [os.path.join('~', 'stuff', 'ardupilot_gazebo')]
 
-ARDUPILOT_ROOT = _find_root(
-    'ARDUPILOT_ROOT',
-    os.path.join('build', 'sitl', 'bin', 'ardusub'),
-    _AP_CANDIDATES,
-    'the ArduSub SITL build',
-)
-ARDUPILOT_GAZEBO_ROOT = _find_root(
-    'ARDUPILOT_GAZEBO_ROOT',
-    os.path.join('build', 'libArduPilotPlugin.so'),
-    _AP_GZ_CANDIDATES,
-    'the ArduPilot Gazebo plugin build',
-)
 
-ARDUSUB_BIN = os.path.join(ARDUPILOT_ROOT, 'build', 'sitl', 'bin', 'ardusub')
-# Sets FRAME_CONFIG 2 (vectored_6dof). Our overlay is applied on top.
-ARDUPILOT_SUB_DEFAULTS = os.path.join(
-    ARDUPILOT_ROOT, 'Tools', 'autotest', 'default_params', 'sub-6dof.parm'
-)
+@lru_cache(maxsize=None)
+def _ardupilot_root():
+    return _find_root(
+        'ARDUPILOT_ROOT',
+        os.path.join('build', 'sitl', 'bin', 'ardusub'),
+        _AP_CANDIDATES,
+        'the ArduSub SITL build',
+    )
 
-# duburi_ws connects with udpin:0.0.0.0:14550, so ArduSub has to push to it.
+
+@lru_cache(maxsize=None)
+def _ardupilot_gazebo_root():
+    return _find_root(
+        'ARDUPILOT_GAZEBO_ROOT',
+        os.path.join('build', 'libArduPilotPlugin.so'),
+        _AP_GZ_CANDIDATES,
+        'the ArduPilot Gazebo plugin build',
+    )
+
+
+# Resolved lazily, INSIDE generate_launch_description(). As module-level
+# constants these raised at import time, so `ros2 launch ... --show-args` -- the
+# one command whose entire job is to print arguments without launching anything
+# -- died on a box without ArduPilot, and so did every launch file that merely
+# included this one. Nothing here needs the paths until a process is spawned.
+
 MAVLINK_PRIMARY_PORT = 14550
 # Second link, for MAVProxy or QGroundControl, so attaching a GCS never
 # competes with the autonomy stack for the primary one.
@@ -97,6 +105,13 @@ MAVLINK_GCS_PORT = 14551
 # Somewhere in the Bay of Bengal off Mongla. Only the simulated compass and the
 # GPS-denied EKF origin care.
 DEFAULT_HOME = '22.4820,89.5860,0.0,0'
+
+
+def _ardusub_defaults():
+    """sub-6dof.parm — sets FRAME_CONFIG 2 (vectored_6dof). Our overlay goes on top."""
+    return os.path.join(
+        _ardupilot_root(), 'Tools', 'autotest', 'default_params', 'sub-6dof.parm'
+    )
 
 
 def generate_launch_description():
@@ -158,7 +173,7 @@ def generate_launch_description():
     env = [
         SetEnvironmentVariable(
             'GZ_SIM_SYSTEM_PLUGIN_PATH',
-            os.path.join(ARDUPILOT_GAZEBO_ROOT, 'build')
+            os.path.join(_ardupilot_gazebo_root(), 'build')
             + os.pathsep
             + os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', ''),
         ),
@@ -194,7 +209,7 @@ def generate_launch_description():
 
     ardusub = ExecuteProcess(
         cmd=[
-            ARDUSUB_BIN,
+            os.path.join(_ardupilot_root(), 'build', 'sitl', 'bin', 'ardusub'),
             '-w',                       # wipe EEPROM; see the note below
             '-M', 'JSON',               # JSON FDM backend, connects to port 9002
             # Lock-step is negotiated over the JSON link, not on the command
@@ -203,7 +218,7 @@ def generate_launch_description():
             # is gone, and current ArduSub prints "Ignoring stale command-line
             # parameter" rather than failing, so passing it looks harmless and
             # quietly does nothing.
-            '--defaults', [ARDUPILOT_SUB_DEFAULTS, ',', params_file],
+            '--defaults', [_ardusub_defaults(), ',', params_file],
             '-I0',
             '--home', LaunchConfiguration('home'),
             # Primary MAVLink link out to duburi_ws.

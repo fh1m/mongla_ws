@@ -149,6 +149,12 @@ EOF
 cmd="${1:-}"
 shift || true
 
+# Mirrors duburi_sim_bridge.paths.runtime_dir(). This script runs before the
+# overlay is sourced so it cannot import that module -- change both together or
+# the CLI and the lab stop agreeing on the active course.
+_RT="${TMPDIR:-/tmp}/duburi-${USER:-$(id -u)}"
+mkdir -p -m 700 "$_RT"
+
 case "$cmd" in
   stop)
     _stop_all
@@ -264,8 +270,8 @@ PY
     export DUBURI_WS="${DUBURI_WS:-$(_find_duburi_ws || true)}"
     _course="${DUBURI_SIM_COURSE:-sauvc26_qualification}"
     # Prefer last lab course if present.
-    if [[ -f /tmp/duburi_lab_active_course.txt ]]; then
-      _course="$(tr -d '[:space:]' </tmp/duburi_lab_active_course.txt)"
+    if [[ -f "$_RT/lab_active_course.txt" ]]; then
+      _course="$(tr -d '[:space:]' <"$_RT/lab_active_course.txt")"
       [[ -n "$_course" ]] || _course="${DUBURI_SIM_COURSE:-sauvc26_qualification}"
     fi
     echo "[duburi-sim] starting operator lab on http://0.0.0.0:${_lab_port} ..."
@@ -273,8 +279,8 @@ PY
     # Prop manager for the World props page — pin world:= to active course.
     if ! ros2 node list 2>/dev/null | grep -q prop_manager; then
       ros2 run duburi_sim_scenarios prop_manager --ros-args -p "world:=${_course}" \
-        >/tmp/duburi_prop_manager.log 2>&1 &
-      echo "[duburi-sim] started prop_manager world:=${_course} (log /tmp/duburi_prop_manager.log)"
+        >"$_RT/prop_manager.log" 2>&1 &
+      echo "[duburi-sim] started prop_manager world:=${_course} (log $_RT/prop_manager.log)"
     fi
     exec ros2 launch duburi_sim_web lab.launch.py
     ;;

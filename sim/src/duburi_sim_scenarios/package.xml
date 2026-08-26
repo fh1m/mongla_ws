@@ -16,6 +16,7 @@
   <depend>ros_gz_interfaces</depend>
 
   <exec_depend>duburi_sim_worlds</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

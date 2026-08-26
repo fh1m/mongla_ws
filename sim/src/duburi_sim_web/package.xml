@@ -15,6 +15,11 @@
   <exec_depend>duburi_sim_bridge</exec_depend>
   <exec_depend>duburi_sim_bringup</exec_depend>
   <exec_depend>duburi_sim_scenarios</exec_depend>
+  <exec_depend>duburi_sim_worlds</exec_depend>
+  <exec_depend>python3-pymavlink</exec_depend>
+  <!-- Cross-workspace: /api/vehicle/cmd invokes the duburi_planner CLI. -->
+  <exec_depend>duburi_planner</exec_depend>
+  <exec_depend>duburi_interfaces</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
