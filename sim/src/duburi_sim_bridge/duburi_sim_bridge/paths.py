@@ -20,6 +20,7 @@ delete: **every function here raises rather than guessing.**
 (it cannot import Python before the overlay is sourced) and points back here.
 """
 import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -108,6 +109,25 @@ def duburi_ws_root() -> Path:
     )
 
 
+def runtime_dir() -> Path:
+    """Per-user scratch dir for the lab's side-channel files.
+
+    The lab and the ``duburi_sim`` shell CLI agree on the active course, the lab
+    port and three logs through files in ``/tmp``. They were unprefixed and
+    world-writable: on a shared box any user could pre-create
+    ``/tmp/duburi_lab_active_course.txt`` and the lab would either fail to write
+    it or read someone else's course and restart Gazebo into the wrong world.
+
+    ``/tmp/duburi-$USER/`` at mode 0700 fixes both. ``scripts/duburi_sim``
+    hardcodes the same expression — change one, change both, or the CLI and the
+    lab stop agreeing on the active course.
+    """
+    user = os.environ.get('USER') or os.environ.get('LOGNAME') or str(os.getuid())
+    d = Path(tempfile.gettempdir()) / f'duburi-{user}'
+    d.mkdir(mode=0o700, exist_ok=True)
+    return d
+
+
 def _self_check() -> None:
     sim = sim_ws_root()
     ws = duburi_ws_root()
@@ -115,7 +135,9 @@ def _self_check() -> None:
     assert (ws / AUTONOMY_MARKER).is_dir(), ws
     # The whole point of the absorption: the sim sits inside the autonomy repo.
     assert sim.parent == ws, f'expected {sim} directly under {ws}'
-    print(f'ok  sim_ws_root()={sim}\nok  duburi_ws_root()={ws}')
+    rt = runtime_dir()
+    assert rt.is_dir(), rt
+    print(f'ok  sim_ws_root()={sim}\nok  duburi_ws_root()={ws}\nok  runtime_dir()={rt}')
 
 
 if __name__ == '__main__':

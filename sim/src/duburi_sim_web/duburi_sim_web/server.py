@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -18,7 +20,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -38,6 +40,13 @@ def _workspace_root() -> Path:
     from duburi_sim_bridge.paths import sim_ws_root
 
     return sim_ws_root()
+
+
+def _rt(name: str) -> Path:
+    """A side-channel file under /tmp/duburi-$USER/ (see paths.runtime_dir)."""
+    from duburi_sim_bridge.paths import runtime_dir
+
+    return runtime_dir() / name
 
 
 def _scripts_dir() -> Path:
@@ -193,7 +202,7 @@ def _set_job(**kwargs) -> None:
         course = _sim_job.get('active_course') or _sim_job.get('course')
     if course:
         try:
-            Path('/tmp/duburi_lab_active_course.txt').write_text(str(course) + '\n', encoding='utf-8')
+            _rt('lab_active_course.txt').write_text(str(course) + '\n', encoding='utf-8')
         except OSError:
             pass
 
@@ -221,7 +230,7 @@ def _ensure_prop_manager(course: str) -> None:
         check=False,
     )
     time.sleep(0.5)
-    log = open('/tmp/duburi_prop_manager.log', 'a')
+    log = open(_rt('prop_manager.log'), 'a')
     _prop_manager_proc = subprocess.Popen(
         [
             'ros2',
@@ -273,7 +282,7 @@ def _run_sim_bringup(course: str, gui: bool, with_stack: bool, do_stop: bool) ->
         sim_args = ['ros2', 'run', 'duburi_sim_bringup', 'duburi_sim', 'sim', f'course:={course}']
         if not gui:
             sim_args.append('--headless')
-        log_path = Path('/tmp/duburi_lab_sim_restart.log')
+        log_path = _rt('lab_sim_restart.log')
         log_f = open(log_path, 'w')
         subprocess.Popen(
             sim_args,
@@ -285,7 +294,7 @@ def _run_sim_bringup(course: str, gui: bool, with_stack: bool, do_stop: bool) ->
 
         _set_job(phase='waiting_ready', log='\n'.join(chunks))
         if not _wait_sim_ready(90.0):
-            raise RuntimeError('sim not ready (gz/ardusub) within 90s — see /tmp/duburi_lab_sim_restart.log')
+            raise RuntimeError(f'sim not ready (gz/ardusub) within 90s — see {log_path}')
 
         _set_job(phase='prop_manager')
         try:
@@ -298,7 +307,7 @@ def _run_sim_bringup(course: str, gui: bool, with_stack: bool, do_stop: bool) ->
             _set_job(phase='starting_stack', log='\n'.join(chunks))
             # Brief settle after ardusub heartbeat appears.
             time.sleep(3.0)
-            stack_log = Path('/tmp/duburi_lab_stack_restart.log')
+            stack_log = _rt('lab_stack_restart.log')
             stack_f = open(stack_log, 'w')
             subprocess.Popen(
                 ['ros2', 'run', 'duburi_sim_bringup', 'duburi_sim', 'stack', '--no-vision'],
@@ -450,17 +459,35 @@ def vehicle_state():
     return snap
 
 
+_VERB_RE = re.compile(r'^[a-z][a-z0-9_]*$')
+
+
 def _duburi_cmd(verb: str, *extra: str) -> list[str]:
-    """Build a shell invocation that sources duburi_ws then runs the planner CLI."""
+    """Build a shell invocation that sources duburi_ws then runs the planner CLI.
+
+    The lab binds a socket and takes `cmd` straight off the wire, so the verb is
+    attacker-controlled. It is passed to bash as a POSITIONAL ARGUMENT and expanded
+    with "$@" -- never concatenated into the script text. bash parses the script
+    once, before $1.. are substituted, so `arm; rm -rf ~` arrives at the CLI as one
+    argv entry and dies in argparse instead of running.
+
+    Deliberately NOT validated against duburi_control.commands.COMMANDS: that import
+    is only available when duburi_ws happens to be on PYTHONPATH, so the check would
+    silently evaporate in exactly the deployments that need it most, while the argv
+    boundary above cannot fail. The regex is a fast 400 for junk, not the defence.
+    """
     from duburi_sim_bridge.paths import duburi_ws_root
 
+    if not _VERB_RE.match(verb):
+        raise HTTPException(400, f'invalid verb {verb!r}')
+
     duburi_ws = str(duburi_ws_root())
-    parts = [
-        'source /opt/ros/humble/setup.bash',
-        f'test -f "{duburi_ws}/install/setup.bash" && source "{duburi_ws}/install/setup.bash"',
-        'ros2 run duburi_planner duburi ' + ' '.join([verb, *extra]),
-    ]
-    return ['bash', '-lc', ' && '.join(parts)]
+    script = (
+        'source /opt/ros/humble/setup.bash && '
+        'test -f "$0/install/setup.bash" && source "$0/install/setup.bash"; '
+        'exec ros2 run duburi_planner duburi "$@"'
+    )
+    return ['bash', '-c', script, duburi_ws, verb, *extra]
 
 
 @app.post('/api/vehicle/cmd')
@@ -533,14 +560,25 @@ def set_fx(body: FxBody):
 
 
 @app.get('/api/cameras/{cam}/mjpeg')
-def mjpeg(cam: str):
+async def mjpeg(cam: str, request: Request):
+    """Camera stream.
+
+    MUST stay `async`. Starlette runs a plain `def` route in a 40-slot thread pool,
+    and this handler is an unbounded `while True`, so every open stream used to pin
+    one thread for the life of the process -- with no disconnect check, closing the
+    tab did not give it back. The UI opens two streams; ~20 page reloads wedged the
+    whole API, including `disarm`. As a coroutine it costs no thread at all, and
+    `is_disconnected()` ends it when the browser goes away.
+    """
     if cam not in ('front', 'bottom'):
         raise HTTPException(404, 'cam must be front or bottom')
 
-    def gen():
+    async def gen():
         last_seq = -1
         idle = 0
         while True:
+            if await request.is_disconnected():
+                return
             jpeg = None
             seq = -1
             if worker.node is not None:
@@ -555,7 +593,7 @@ def mjpeg(cam: str):
                 )
             else:
                 idle += 1
-            time.sleep(0.033 if idle < 5 else 0.05)
+            await asyncio.sleep(0.033 if idle < 5 else 0.05)
 
     return StreamingResponse(gen(), media_type='multipart/x-mixed-replace; boundary=frame')
 
@@ -890,7 +928,9 @@ async def assets_upload(file: UploadFile = File(...)):
         if prefix and not member.startswith(prefix):
             continue
         rel = member[len(prefix):] if prefix else member
-        if not rel or '..' in Path(rel).parts:
+        # `..` alone is not enough: pathlib DISCARDS the left operand when the
+        # right side is absolute, so `target / '/etc/cron.d/x'` escapes silently.
+        if not rel or '..' in Path(rel).parts or Path(rel).is_absolute():
             continue
         out = target / rel
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -997,8 +1037,8 @@ if _static is not None:
     def spa_fallback(spa_path: str):
         if spa_path.startswith('api/'):
             raise HTTPException(404)
-        candidate = _static_real / spa_path
-        if spa_path and candidate.is_file():
+        candidate = (_static_real / spa_path).resolve()
+        if spa_path and candidate.is_file() and candidate.is_relative_to(_static_real):
             return FileResponse(candidate)
         return FileResponse(_static_real / 'index.html')
 else:
@@ -1045,7 +1085,9 @@ def _claim_lab_port(host: str, preferred: int):
 def main(argv=None) -> int:
     import uvicorn
 
-    host = os.environ.get('DUBURI_LAB_HOST', '0.0.0.0')
+    # Loopback by default -- the lab is unauthenticated and arms thrusters.
+    # DUBURI_LAB_HOST=0.0.0.0 is the explicit opt-in for a topside laptop.
+    host = os.environ.get('DUBURI_LAB_HOST', '127.0.0.1')
     preferred = int(os.environ.get('DUBURI_LAB_PORT', '28765'))
     sock, port = _claim_lab_port(host, preferred)
     if port != preferred:
@@ -1053,7 +1095,7 @@ def main(argv=None) -> int:
     print(f'[lab_server] listening on http://{host}:{port}', flush=True)
     os.environ['DUBURI_LAB_PORT'] = str(port)
     try:
-        Path('/tmp/duburi_lab_port.txt').write_text(str(port) + '\n', encoding='utf-8')
+        _rt('lab_port.txt').write_text(str(port) + '\n', encoding='utf-8')
     except OSError:
         pass
     # Pass the already-bound listening socket so Cursor/Electron cannot steal it.
