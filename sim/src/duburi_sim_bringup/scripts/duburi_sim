@@ -1,0 +1,307 @@
+#!/usr/bin/env bash
+# Helpers for the Duburi simulator.
+#
+#   ros2 run duburi_sim_bringup duburi_sim stop
+#   ros2 run duburi_sim_bringup duburi_sim sim          # Gazebo GUI + ArduSub + bridge
+#   ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+#   ros2 run duburi_sim_bringup duburi_sim smoke
+
+set -eo pipefail
+
+_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_HERE/../../../setup.bash" ]]; then
+  INSTALL="$(cd "$_HERE/../../.." && pwd)"
+  ROOT="$(cd "$INSTALL/.." && pwd)"
+elif [[ -f "$_HERE/../../../install/setup.bash" ]]; then
+  ROOT="$(cd "$_HERE/../../.." && pwd)"
+  INSTALL="$ROOT/install"
+else
+  echo "cannot find the sim workspace install/ next to this script" >&2
+  exit 1
+fi
+
+# Mongla is one repo, two workspaces: duburi_ws/ (autonomy) and duburi_ws/sim/
+# (this one). Resolve the autonomy root the same way duburi_sim_bridge/paths.py
+# does -- env, then walk up for src/duburi_manager -- because this script runs
+# BEFORE the overlay is sourced and so cannot import that module. Keep the two
+# in step: a change here needs the same change there.
+_find_duburi_ws() {
+  if [[ -n "${DUBURI_WS:-}" ]]; then
+    if [[ -d "$DUBURI_WS/src/duburi_manager" ]]; then printf '%s' "$DUBURI_WS"; return 0; fi
+    echo "[duburi-sim] WARNING: DUBURI_WS=$DUBURI_WS has no src/duburi_manager" >&2
+    return 1
+  fi
+  local d="$ROOT"
+  while [[ "$d" != "/" ]]; do
+    if [[ -d "$d/src/duburi_manager" ]]; then printf '%s' "$d"; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+DUBURI_WS="$(_find_duburi_ws || true)"
+
+_source_ros() {
+  set +u
+  # shellcheck disable=SC1091
+  source /opt/ros/humble/setup.bash
+  # shellcheck disable=SC1091
+  source "$INSTALL/setup.bash"
+  if [[ -n "${DUBURI_WS}" && -f "$DUBURI_WS/install/setup.bash" ]]; then
+    # shellcheck disable=SC1091
+    source "$DUBURI_WS/install/setup.bash"
+  fi
+  set -u
+  export GZ_IP="${GZ_IP:-127.0.0.1}"
+  # Gazebo GUI needs the host Xwayland cookie when running as root in the
+  # container. Prefer an explicit XAUTHORITY, else the mutter cookie.
+  if [[ -z "${XAUTHORITY:-}" ]]; then
+    auth=$(ls -1 /run/user/"${HOST_UID:-1000}"/.mutter-Xwaylandauth.* 2>/dev/null | head -1 || true)
+    if [[ -z "$auth" ]]; then
+      auth=$(ls -1 /run/user/1000/.mutter-Xwaylandauth.* 2>/dev/null | head -1 || true)
+    fi
+    if [[ -n "$auth" && -r "$auth" ]]; then
+      export XAUTHORITY="$auth"
+    fi
+  fi
+  export DISPLAY="${DISPLAY:-:0}"
+}
+
+# Kill every leftover sim / stack process. Matching is done via /proc so this
+# script's own argv cannot match and self-kill.
+_stop_all() {
+  python3 - <<'PY'
+import os, signal, time
+me, parent = os.getpid(), os.getppid()
+patterns = (
+    'ros2 launch duburi_sim_bringup',
+    'ros2 launch duburi_sim_web',
+    'ros2 launch duburi_manager',
+    'ros2 launch duburi_vision',
+    'lib/duburi_manager/start',
+    'lib/duburi_vision/',
+    'lib/duburi_sim_web/lab_server',
+    'duburi_sim_web/lab_server',
+    'lib/duburi_sim_bridge/record_cameras',
+    'lib/duburi_sim_bridge/underwater_fx',
+    'lib/duburi_sim_scenarios/prop_manager',
+    'duburi_sim_worlds/worlds',
+    'ros_gz_image/image_bridge',
+    'ros_gz_bridge/parameter_bridge',
+    'gz sim ',
+    'bin/ardusub',
+)
+killed = []
+for name in os.listdir('/proc'):
+    if not name.isdigit():
+        continue
+    pid = int(name)
+    if pid in (me, parent):
+        continue
+    try:
+        cmd = open(f'/proc/{pid}/cmdline', 'rb').read().replace(b'\0', b' ').decode()
+    except Exception:
+        continue
+    if 'duburi_sim stop' in cmd or 'cursor-sandbox' in cmd:
+        continue
+    if any(p in cmd for p in patterns):
+        try:
+            os.kill(pid, signal.SIGKILL)
+            killed.append(pid)
+        except ProcessLookupError:
+            pass
+time.sleep(2)
+print(f"[duburi-sim] stopped {len(killed)} leftover process(es)")
+PY
+}
+
+_usage() {
+  cat <<EOF
+Usage: $(basename "$0") <command> [args]
+
+Commands:
+  stop                         Kill every leftover sim / stack process
+  sim [--headless] [args...]   Gazebo + ArduSub + bridge (GUI on by default)
+  stack [--no-vision]          duburi_ws manager against a running simulator
+  smoke                        arm → set_depth -1 → move_forward 8s
+  lab                          Operator web UI on :28765 (DUBURI_LAB_PORT; needs sim+stack)
+  plotjuggler                  Launch PlotJuggler with sim layout (needs ros-humble-plotjuggler-ros)
+
+Typical session:
+
+  # terminal 1 — pool + AUV visible in Gazebo
+  source /opt/ros/humble/setup.zsh
+  source $ROOT/install/setup.zsh
+  ros2 run duburi_sim_bringup duburi_sim stop
+  ros2 run duburi_sim_bringup duburi_sim sim
+
+  # terminal 2 — autonomy stack
+  source /opt/ros/humble/setup.zsh
+  source $DUBURI_WS/install/setup.zsh
+  source $ROOT/install/setup.zsh
+  ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+
+  # terminal 3 — smoke test or web lab
+  ros2 run duburi_sim_bringup duburi_sim smoke
+  # or:  ros2 run duburi_sim_bringup duburi_sim lab
+EOF
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  stop)
+    _stop_all
+    ;;
+  sim)
+    _source_ros
+    _stop_all
+    gui=true
+    extra=()
+    for a in "$@"; do
+      case "$a" in
+        --headless) gui=false ;;
+        --gui) gui=true ;;
+        *) extra+=("$a") ;;
+      esac
+    done
+    echo "[duburi-sim] launching simulator (gui:=$gui) ..."
+    echo "[duburi-sim] AUV starts at the -x wall (x≈-11.8). Look there in the GUI."
+    exec ros2 launch duburi_sim_bringup sim.launch.py "gui:=$gui" "${extra[@]}"
+    ;;
+  stack)
+    _source_ros
+    if [[ -z "${DUBURI_WS}" || ! -d "$DUBURI_WS/install" ]]; then
+      echo "duburi_ws install not found. Set DUBURI_WS=/path/to/duburi_ws" >&2
+      exit 1
+    fi
+    # Only one manager may bind udpin:14550. Kill prior stacks, keep the sim.
+    python3 - <<'PY'
+import os, signal, time
+me, parent = os.getpid(), os.getppid()
+patterns = (
+    'ros2 launch duburi_sim_bringup stack',
+    'ros2 launch duburi_manager',
+    'ros2 launch duburi_vision',
+    'lib/duburi_manager/start',
+    'lib/duburi_vision/',
+)
+for name in os.listdir('/proc'):
+    if not name.isdigit():
+        continue
+    pid = int(name)
+    if pid in (me, parent):
+        continue
+    try:
+        cmd = open(f'/proc/{pid}/cmdline', 'rb').read().replace(b'\0', b' ').decode()
+    except Exception:
+        continue
+    if any(p in cmd for p in patterns):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+time.sleep(1)
+print('[duburi-sim] cleared prior stack processes')
+PY
+    vision=true
+    for a in "$@"; do
+      case "$a" in
+        --no-vision) vision=false ;;
+        *) echo "unknown arg: $a" >&2; exit 1 ;;
+      esac
+    done
+    if ! pgrep -x ardusub >/dev/null; then
+      echo "WARN: ardusub is not running. Start the simulator first:" >&2
+      echo "  ros2 run duburi_sim_bringup duburi_sim sim" >&2
+    fi
+    echo "[duburi-sim] launching duburi_ws stack (vision:=$vision) ..."
+    exec ros2 launch duburi_sim_bringup stack.launch.py "vision:=$vision"
+    ;;
+  smoke)
+    _source_ros
+    if [[ -z "${DUBURI_WS}" || ! -d "$DUBURI_WS/install" ]]; then
+      echo "duburi_ws install not found; set DUBURI_WS." >&2
+      exit 1
+    fi
+    n_mgr=$(ros2 node list 2>/dev/null | grep -c '/duburi_manager' || true)
+    if [[ "${n_mgr}" -gt 1 ]]; then
+      echo "FAIL: ${n_mgr} /duburi_manager nodes — kill extras and relaunch stack." >&2
+      echo "  ros2 run duburi_sim_bringup duburi_sim stop" >&2
+      echo "  ros2 run duburi_sim_bringup duburi_sim sim" >&2
+      echo "  ros2 run duburi_sim_bringup duburi_sim stack --no-vision" >&2
+      exit 1
+    fi
+    echo "[duburi-sim] waiting for /duburi/state ..."
+    for _ in $(seq 1 30); do
+      if ros2 topic list 2>/dev/null | grep -qx /duburi/state; then
+        break
+      fi
+      sleep 1
+    done
+    if ! ros2 topic list 2>/dev/null | grep -qx /duburi/state; then
+      echo "FAIL: /duburi/state not published. Is stack running?" >&2
+      exit 1
+    fi
+    echo "--- state ---"
+    timeout 5 ros2 topic echo /duburi/state --once
+    echo "--- arm ---"
+    ros2 run duburi_planner duburi arm
+    echo "--- set_depth -1.0 ---"
+    ros2 run duburi_planner duburi set_depth --target -1.0
+    echo "--- move_forward 8s ---"
+    ros2 run duburi_planner duburi move_forward --duration 8 --gain 60
+    echo "--- ground truth ---"
+    timeout 5 ros2 topic echo /duburi/sim/ground_truth --once | sed -n '/position:/,/orientation:/p' | head -8
+    echo "--- state ---"
+    timeout 5 ros2 topic echo /duburi/state --once
+    echo "[duburi-sim] smoke OK"
+    ;;
+  lab)
+    _source_ros
+    _lab_port="${DUBURI_LAB_PORT:-28765}"
+    export DUBURI_LAB_PORT="$_lab_port"
+    export DUBURI_WS="${DUBURI_WS:-$(_find_duburi_ws || true)}"
+    _course="${DUBURI_SIM_COURSE:-sauvc26_qualification}"
+    # Prefer last lab course if present.
+    if [[ -f /tmp/duburi_lab_active_course.txt ]]; then
+      _course="$(tr -d '[:space:]' </tmp/duburi_lab_active_course.txt)"
+      [[ -n "$_course" ]] || _course="${DUBURI_SIM_COURSE:-sauvc26_qualification}"
+    fi
+    echo "[duburi-sim] starting operator lab on http://0.0.0.0:${_lab_port} ..."
+    echo "[duburi-sim] open http://localhost:${_lab_port} (port-forward if remote)."
+    # Prop manager for the World props page — pin world:= to active course.
+    if ! ros2 node list 2>/dev/null | grep -q prop_manager; then
+      ros2 run duburi_sim_scenarios prop_manager --ros-args -p "world:=${_course}" \
+        >/tmp/duburi_prop_manager.log 2>&1 &
+      echo "[duburi-sim] started prop_manager world:=${_course} (log /tmp/duburi_prop_manager.log)"
+    fi
+    exec ros2 launch duburi_sim_web lab.launch.py
+    ;;
+  plotjuggler|pj)
+    _source_ros
+    layout="$INSTALL/duburi_sim_bringup/share/duburi_sim_bringup/config/plotjuggler_sim.xml"
+    if [[ ! -f "$layout" ]]; then
+      layout="$_HERE/../config/plotjuggler_sim.xml"
+    fi
+    if ! command -v plotjuggler >/dev/null 2>&1 && ! ros2 pkg prefix plotjuggler >/dev/null 2>&1; then
+      echo "PlotJuggler not found. Install:" >&2
+      echo "  sudo apt install ros-humble-plotjuggler-ros" >&2
+      exit 1
+    fi
+    echo "[duburi-sim] launching PlotJuggler (layout: $layout)"
+    if [[ -f "$layout" ]]; then
+      exec ros2 run plotjuggler plotjuggler --layout "$layout"
+    else
+      exec ros2 run plotjuggler plotjuggler
+    fi
+    ;;
+  -h|--help|help|"")
+    _usage
+    ;;
+  *)
+    echo "unknown command: $cmd" >&2
+    _usage >&2
+    exit 1
+    ;;
+esac

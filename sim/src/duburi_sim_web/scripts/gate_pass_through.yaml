@@ -1,0 +1,13 @@
+name: Gate pass-through
+description: Longer surge intended to pass the qualification gate.
+course: sauvc26_qualification
+cameras: [front, bottom]
+record_duration: 50
+steps:
+  - cmd: arm
+  - cmd: set_depth
+    target: -1.0
+  - cmd: move_forward
+    duration: 18
+    gain: 60
+  - cmd: disarm

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>duburi_sim_description</name>
+  <version>0.1.0</version>
+  <description>
+    Gazebo models for the Duburi AUV simulator. V0.1 ships duburi_heavy, a
+    BlueROV2 Heavy vectored_6dof proxy carrying front and bottom cameras and
+    tuned Fossen hydrodynamic coefficients.
+  </description>
+
+  <maintainer email="fh1m@users.noreply.github.com">fh1m</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>python3-yaml</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

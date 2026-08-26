@@ -1,0 +1,43 @@
+# ArduSub parameter overlay matching the real Duburi pool configuration, where
+# heading comes from the BNO085 over ATT_POS_MOCAP rather than from the compass.
+#
+# Use this only when you are specifically exercising the external-navigation
+# yaw path:
+#
+#   ros2 launch duburi_sim_bringup sim.launch.py \
+#       ardusub_params:=duburi_sub_extnav.parm
+#
+# and run duburi_ws with a yaw source that actually injects ATT_POS_MOCAP.
+# Selecting EK3_SRC1_YAW 6 without something publishing external yaw leaves
+# EKF3 with no yaw source, and the symptom - heading slowly wandering, then the
+# EKF refusing to arm - looks nothing like a configuration mistake. For everyday
+# use take duburi_sub.parm instead.
+#
+# These are the values duburi_ws's auv_manager_node._verify_extnav_params()
+# checks for.
+
+MOT_PWM_MIN      1100
+MOT_PWM_MAX      1900
+
+EK3_ENABLE       1
+AHRS_EKF_TYPE    3
+# 6 = ExternalNav. Requires ATT_POS_MOCAP at a steady rate.
+EK3_SRC1_YAW     6
+# 1 = MAVLink vision position estimate.
+VISO_TYPE        1
+
+FS_GCS_ENABLE    0
+FS_LEAK_ENABLE   0
+FS_PRESS_ENABLE  0
+FS_BATT_ENABLE   0
+BRD_SAFETY_DEFLT 0
+
+SIM_BARO_RND     0.02
+
+SR1_EXTRA1       10
+SR1_EXTRA2       10
+SR1_EXTRA3       10
+SR1_POSITION     10
+SR1_EXT_STAT     5
+SR1_RAW_SENS     5
+SR1_RC_CHAN      5

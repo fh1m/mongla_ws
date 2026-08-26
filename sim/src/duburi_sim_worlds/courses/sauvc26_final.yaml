@@ -1,0 +1,73 @@
+name: sauvc26_final
+description: >
+  SAUVC 2026 final arena: navigation gate, orange flare to avoid, the four-drum
+  target zone, and the three coloured bump flares.
+
+  Prop placement follows the rulebook's stated distances. Where the rulebook
+  gives a zone rather than a point - the orange flare, the bump flares, the drum
+  ordering - one legal arrangement is chosen here. Vary them with the runtime
+  prop service or by copying this file.
+
+  Pool coordinates: origin at the pool centre, water surface at z = 0, so the
+  -x wall is at x = -12.5 and the floor at z = -1.6.
+
+pool: sauvc
+
+scene:
+  lighting: murky
+  # Competition water is not clear. This is the main lever on perception
+  # difficulty, so turn it down when debugging and back up before a pool test.
+  fog_start: 1.0
+  fog_end: 18.0
+  fog_density: 0.03
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-11.8, 0.0, -0.3]
+  yaw: 0.0
+
+props:
+  - model: sauvc_starting_zone
+    name: start_zone
+    xy: [-11.8, 0.0]
+
+  # "The gate may be located anywhere on a horizontal line, parallel to the side
+  #  of the swimming pool, approximately 16m away from the starting zone."
+  - model: sauvc_final_gate
+    name: gate
+    xy: [3.5, 0.0]
+    yaw: 0.0
+
+  # "A orange flare may be located anywhere in a rectangular zone 4m-8m from
+  #  side of the arena, before the gate." Touching it aborts the attempt.
+  - model: sauvc_orange_flare
+    name: orange_flare
+    xy: [0.5, -2.5]
+
+  # Target Acquisition: four drums, one blue and three red, one of the red ones
+  # carrying the 45 kHz pinger. Order is randomised between attempts.
+  - model: sauvc_drum_blue
+    name: drum_blue
+    xy: [8.0, 1.6]
+  - model: sauvc_drum_red_pinger
+    name: drum_pinger
+    xy: [8.0, 0.0]
+  - model: sauvc_drum_red
+    name: drum_red_a
+    xy: [8.0, -1.6]
+  - model: sauvc_drum_red
+    name: drum_red_b
+    xy: [9.6, 0.8]
+
+  # Communication task: "These flares could be located anywhere within the main
+  # arena." Each carries a golf ball, added automatically by the generator.
+  - model: sauvc_flare_red
+    name: flare_red
+    xy: [6.0, 5.0]
+  - model: sauvc_flare_yellow
+    name: flare_yellow
+    xy: [10.5, 3.0]
+  - model: sauvc_flare_blue
+    name: flare_blue
+    xy: [7.5, -5.5]

@@ -1,0 +1,23 @@
+name: Drum orbit
+description: Slow forward + yaw around the final-course drum zone (use final course).
+course: sauvc26_final
+cameras: [front, bottom]
+record_duration: 55
+steps:
+  - cmd: arm
+  - cmd: set_depth
+    target: -0.9
+  - cmd: move_forward
+    duration: 8
+    gain: 45
+  - cmd: yaw_left
+    target: 90
+  - cmd: move_forward
+    duration: 8
+    gain: 45
+  - cmd: yaw_left
+    target: 90
+  - cmd: move_forward
+    duration: 8
+    gain: 45
+  - cmd: disarm

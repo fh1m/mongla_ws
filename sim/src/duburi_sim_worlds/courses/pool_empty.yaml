@@ -1,0 +1,24 @@
+name: pool_empty
+description: >
+  Bare pool with no props. This is the course to use for hydrodynamic tuning and
+  step-response tests, where props would only add contacts and confuse the
+  result. Fog is effectively disabled so the vehicle stays visible from any
+  camera angle.
+
+pool: sauvc
+
+scene:
+  fog_start: 5.0
+  fog_end: 60.0
+  fog_density: 0.005
+  ambient: [0.5, 0.55, 0.6]
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  # Mid-pool at mid-depth, well clear of the walls and floor so a step response
+  # is not contaminated by ground effect or contacts.
+  pose: [0.0, 0.0, -0.8]
+  yaw: 0.0
+
+props: []

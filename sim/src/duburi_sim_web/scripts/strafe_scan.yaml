@@ -1,0 +1,19 @@
+name: Strafe scan
+description: Lateral sweep at fixed depth for side views of props.
+course: sauvc26_qualification
+cameras: [front, bottom]
+record_duration: 40
+steps:
+  - cmd: arm
+  - cmd: set_depth
+    target: -1.0
+  - cmd: move_left
+    duration: 6
+    gain: 50
+  - cmd: move_right
+    duration: 12
+    gain: 50
+  - cmd: move_left
+    duration: 6
+    gain: 50
+  - cmd: disarm
