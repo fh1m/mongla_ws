@@ -1,5 +1,10 @@
 # Drop-in contract (sim ↔ `duburi_ws`)
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 This workspace must look like the real vehicle to `duburi_ws`. If you change
 any row below, update `contract_check` / `mavlink_check` and this file.
 
@@ -73,7 +78,7 @@ Autonomy can ignore these; dataset collection uses them.
 ## Source order for a full session
 
 ```text
-humble → duburi_ws/install → duburi-sim_ws/install
+humble → duburi_ws/install → duburi_ws/sim/install
 ```
 
 `stack.launch.py` includes `duburi_manager` / `duburi_vision` from `duburi_ws`.
@@ -88,4 +93,4 @@ humble → duburi_ws/install → duburi-sim_ws/install
 ## Legacy doc warning
 
 `duburi_ws/.claude/context/sim-setup.md` describes an older BlueROV / `colcon_ws`
-path. Prefer **this** `.context/` + sibling `duburi-sim_ws` for all new work.
+path. Prefer **this** `.context/` (now `duburi_ws/sim/.context/`) for all new work.

@@ -1,5 +1,10 @@
 # Operator guide
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 Full bring-up for Mongla sim lab. Companion: [QUICKSTART.md](QUICKSTART.md),
 [TROUBLESHOOTING.md](TROUBLESHOOTING.md), [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md).
 
@@ -26,7 +31,7 @@ flowchart TB
 ## Prerequisites checklist
 
 - [ ] Humble + Gazebo Harmonic installed
-- [ ] `colcon build --symlink-install` succeeded in `duburi-sim_ws`
+- [ ] `colcon build --symlink-install` succeeded in `duburi_ws/sim`
 - [ ] `duburi_ws` built; set `DUBURI_WS` if not sibling `../duburi_ws`
 - [ ] ArduPilot SITL binary found (see launch errors for `ARDUPILOT_ROOT`)
 - [ ] For GUI: X11/`DISPLAY` works in this environment

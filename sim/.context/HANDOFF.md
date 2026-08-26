@@ -1,6 +1,11 @@
 # Handoff — Cursor agent → next Claude / duburi_ws agent
 
-**Authoring agent:** Cursor (Composer) in `duburi-sim_ws`, session ending 2026-08-26.  
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
+**Origin:** built 2026-08-26; absorbed into the `duburi_ws` repo 2026-08-27.  
 **Audience:** next Claude Code / Cursor agent continuing sim work, and the
 `duburi_ws` agent integrating autonomy against this sibling.
 
@@ -19,10 +24,10 @@ asks — recipe only in [FUTURE_MERGE.md](FUTURE_MERGE.md).
 
 ## Git status (important)
 
-`duburi-sim_ws` has **no `.git`**. That is deliberate.
+`duburi_ws/sim` is **under git**, inside the `duburi_ws` repo (2026-08-27). It previously had none; see [FUTURE_MERGE.md](FUTURE_MERGE.md) for the decision.
 
 - The `duburi_ws` agent will initialize / submodule / subtree when integrating.  
-- Do **not** `git init` here unless the user explicitly requests it.  
+- Land changes **here**; `fh1m/duburi-sim_ws` is a published mirror, not the source.  
 - Tracked-by-docs ignore list: root [`.gitignore`](../.gitignore) (`build/`,
   `install/`, `datasets/`, `node_modules/`, …).
 
@@ -37,7 +42,7 @@ https://github.com/fh1m/duburi_ws/pull/8 — branch `docs/duburi-sim-sibling-poi
 
 | Layer | Owner | Why |
 |-------|-------|-----|
-| Physics + SITL + cams | `duburi-sim_ws` | Gazebo/ArduPilot deps stay off every autonomy checkout |
+| Physics + SITL + cams | `duburi_ws/sim` | Gazebo/ArduPilot deps stay off every autonomy checkout |
 | Manager / planner / vision / missions | `duburi_ws` | Same binaries as the pool vehicle |
 | Operator lab | `duburi_sim_web` | FastAPI+React local tool, not embedded PlotJuggler/Qt |
 
@@ -73,7 +78,7 @@ https://github.com/fh1m/duburi_ws/pull/8 — branch `docs/duburi-sim-sibling-poi
 ## Codebase structure (health)
 
 ```text
-duburi-sim_ws/
+duburi_ws/sim/
   README.md              # operator cold-start → mission
   AGENTS.md CLAUDE.md    # agent entry
   .context/              # canonical docs (INDEX first)
@@ -102,13 +107,13 @@ For **sim Claude agent**:
 3. Gate transit score overlay in Operate.  
 4. Turbidity schedule presets / domain randomization.  
 5. Pytest smoke for lab APIs (AUDIT D3).  
-6. When user asks: `git init` + remote **or** merge per FUTURE_MERGE.
+6. Done 2026-08-27: absorbed into `duburi_ws` as `sim/` (see FUTURE_MERGE).
 
 For **`duburi_ws` Claude agent**:
 
 1. Merge/review [PR #8](https://github.com/fh1m/duburi_ws/pull/8).  
 2. Run missions against sibling sim; keep vision remap on `forward`.  
-3. Later: execute FUTURE_MERGE (subtree/submodule) and **then** `git init` this tree
+3. Done: FUTURE_MERGE executed as a nested workspace; this tree is versioned
    or absorb it — do not invent a third packaging story.  
 4. Train/handoff from `datasets/` clips stays in vision docs here.
 
@@ -118,8 +123,8 @@ For **`duburi_ws` Claude agent**:
 
 ```zsh
 # read
-less ~/Ros_workspaces/duburi-sim_ws/.context/INDEX.md
-less ~/Ros_workspaces/duburi-sim_ws/.context/AUDIT.md
+less ~/Ros_workspaces/duburi_ws/sim/.context/INDEX.md
+less ~/Ros_workspaces/duburi_ws/sim/.context/AUDIT.md
 
 # bring up
 ros2 run duburi_sim_bringup duburi_sim stop
@@ -133,7 +138,7 @@ colcon build --packages-select duburi_sim_web --symlink-install
 ```
 
 Hard rules: one sim; prefer this `.context/` over `duburi_ws` `sim-setup.md`;
-never put teleop on 14550; never `git init` without an ask; never edit
+never put teleop on 14550; never `git add -A` (the repo has protected paths); never edit
 `.cursor/plans/*.plan.md` unless asked.
 
 ## Voice for the next agent

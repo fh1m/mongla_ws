@@ -1,7 +1,12 @@
 # What the `duburi_ws` integration PR contains
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 The autonomy-side PR is **docs + pointers only**. Sim packages stay in sibling
-`duburi-sim_ws` (see [FUTURE_MERGE.md](FUTURE_MERGE.md)).
+`duburi_ws/sim` (see [FUTURE_MERGE.md](FUTURE_MERGE.md)).
 
 **Live PR:** https://github.com/fh1m/duburi_ws/pull/8  
 **Branch:** `docs/duburi-sim-sibling-pointer`
@@ -20,8 +25,8 @@ Full narrative: [HANDOFF.md](HANDOFF.md).
 
 ## Content the PR must document
 
-1. Sibling layout: `Ros_workspaces/duburi-sim_ws` next to `duburi_ws`
-2. **`duburi-sim_ws` has no `.git`** — autonomy agent initializes when merging
+1. Sibling layout: `Ros_workspaces/duburi_ws/sim` next to `duburi_ws`
+2. ~~`duburi_ws/sim` has no `.git`~~ — **done 2026-08-27**: absorbed as a nested workspace, under git
 3. On branch **`srot`**, stack uses `flight_controller:=pixhawk` (SITL is ArduSub)
 4. Helper: `ros2 run duburi_sim_bringup duburi_sim {stop,sim,stack,smoke,lab,plotjuggler}`
 5. Contract: MAVLink UDP **14550**, cams `/duburi/sim/{front,bottom}_camera/image_raw` 640×480

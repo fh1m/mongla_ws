@@ -1,4 +1,11 @@
-# Simulation Setup Guide — Duburi AUV
+# Simulation Setup Guide — Duburi AUV (legacy)
+
+> ⚠ **SUPERSEDED (2026-08-27).** This guide describes bringing up Gazebo from the
+> sibling `~/Ros_workspaces/colcon_ws` tree. The simulator now lives **in this
+> repo** at [`sim/`](../../sim/) with its own world, courses, props, cameras,
+> ground truth and operator lab — see [`duburi-sim.md`](./duburi-sim.md) and
+> [`../../sim/README.md`](../../sim/README.md). Kept for history; the ArduSub SITL
+> and MAVLink notes below are still accurate.
 
 Complete step-by-step guide to bring up the SITL + Gazebo simulation stack.
 All commands run inside the auv-ros2 distrobox docker.

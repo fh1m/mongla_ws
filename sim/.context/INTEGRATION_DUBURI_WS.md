@@ -1,11 +1,16 @@
 # Integrating with `duburi_ws`
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 Sibling layout (v0.1, **do not move packages yet**):
 
 ```text
 Ros_workspaces/
   duburi_ws/          # autonomy
-  duburi-sim_ws/      # this simulator
+  duburi_ws/sim/      # this simulator
 ```
 
 ## What autonomy expects
@@ -19,9 +24,9 @@ See [CONTRACT.md](CONTRACT.md). Short form:
 ## Source overlay
 
 ```zsh
-source /opt/ros/humble/setup.zsh
-source "$DUBURI_WS/install/setup.zsh"
-source ~/Ros_workspaces/duburi-sim_ws/install/setup.zsh
+source /opt/ros/humble/setup.bash
+source "$DUBURI_WS/install/setup.bash"
+source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
 export DUBURI_WS  # absolute path
 export GZ_IP=127.0.0.1
 ```
@@ -87,8 +92,8 @@ with `DUBURI_WS` on `PATH`/overlay. Set explicitly if sibling discovery fails.
 
 ## Suggested one-liner for `duburi_ws` docs (optional paste)
 
-> **Simulator:** use sibling workspace `duburi-sim_ws` (Gazebo Harmonic + ArduSub).
-> Docs: `duburi-sim_ws/.context/INDEX.md`. On branch `srot`, always
+> **Simulator:** use sibling workspace `duburi_ws/sim` (Gazebo Harmonic + ArduSub).
+> Docs: `duburi_ws/sim/.context/INDEX.md`. On branch `srot`, always
 > `flight_controller:=pixhawk` (or `duburi_sim stack`). Prefer that over
 > `.claude/context/sim-setup.md` (legacy).
 

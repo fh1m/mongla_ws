@@ -1,6 +1,11 @@
 # Testing and verification
 
-Assume workspaces sourced (humble + `duburi_ws` + `duburi-sim_ws`), `GZ_IP=127.0.0.1`,
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
+Assume workspaces sourced (humble + `duburi_ws` + `duburi_ws/sim`), `GZ_IP=127.0.0.1`,
 sim + stack already up unless noted.
 
 ## Automated / CLI checks
