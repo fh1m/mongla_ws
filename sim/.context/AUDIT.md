@@ -1,6 +1,11 @@
 # Audit — bugs, design debt, wrong decisions (v0.1)
 
-Date: 2026-08-26. Scope: `duburi-sim_ws` bringup, bridge, scenarios, web lab,
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
+Date: 2026-08-26. Scope: `duburi_ws/sim` bringup, bridge, scenarios, web lab,
 docs vs code. Severity: **P0** blocker / lie, **P1** wrong behavior operators hit,
 **P2** design debt, **P3** polish.
 

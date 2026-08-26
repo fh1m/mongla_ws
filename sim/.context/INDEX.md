@@ -1,4 +1,9 @@
-# duburi-sim_ws — agent / operator index
+# `duburi_ws/sim` — agent / operator index
+
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
 
 **Read this first.** Gazebo Harmonic + ArduSub SITL for Mongla AUV (Duburi 4.5).
 Sibling of [`../duburi_ws`](../../duburi_ws). Drop-in MAVLink/camera surface so autonomy
@@ -8,7 +13,7 @@ does not need sim-specific forks.
 
 | Fact | Detail |
 |------|--------|
-| Workspace root | `Ros_workspaces/duburi-sim_ws` |
+| Workspace root | `Ros_workspaces/duburi_ws/sim` |
 | Autonomy sibling | `Ros_workspaces/duburi_ws` (`DUBURI_WS`) |
 | Helper CLI | `ros2 run duburi_sim_bringup duburi_sim <cmd>` |
 | Default course | `sauvc26_qualification` (AUV at x ≈ −11.8) |
@@ -57,7 +62,7 @@ duburi_sim stop → duburi_sim sim → duburi_sim stack --no-vision → duburi_s
 4. Lab “course switch” = stop → start (not Gazebo hot-reload).
 5. Verify claims with commands in [TESTING.md](TESTING.md) before asserting green.
 6. Do not edit Cursor `.cursor/plans/*.plan.md` unless the user asks.
-7. This tree has **no git** by design — do not `git init` unless the user asks
+7. This tree is **under git** inside `duburi_ws` (2026-08-27). Land changes here; `fh1m/duburi-sim_ws` mirrors it. Stage by path — never `git add -A`
    (see [FUTURE_MERGE.md](FUTURE_MERGE.md), [HANDOFF.md](HANDOFF.md)).
 
 ## Packages (one line)

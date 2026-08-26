@@ -1,6 +1,11 @@
 # Code map — path → responsibility
 
-Workspace root: `duburi-sim_ws/`. Paths relative to that root unless noted.
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
+Workspace root: `duburi_ws/sim/`. Paths relative to that root unless noted.
 
 ## Bring-up / CLI
 

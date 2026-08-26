@@ -1,8 +1,13 @@
 # Datasets and recording
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 ## Output layout
 
-Root: `<duburi-sim_ws>/datasets/` (override with `record_cameras --outdir`).
+Root: `<duburi_ws/sim>/datasets/` (override with `record_cameras --outdir`).
 
 Each run:
 

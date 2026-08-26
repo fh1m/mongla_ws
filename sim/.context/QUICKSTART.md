@@ -1,11 +1,16 @@
 # Quick start
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 Minimal copy-paste path. Details: [OPERATOR.md](OPERATOR.md), [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md).
 
 ## Prerequisites
 
 - ROS 2 Humble + Gazebo Harmonic
-- Built `duburi-sim_ws` (`colcon build --symlink-install`)
+- Built `duburi_ws/sim` (`colcon build --symlink-install`)
 - Built sibling `duburi_ws` (for stack/smoke)
 - ArduSub SITL + ArduPilot Gazebo plugin discoverable (`ARDUPILOT_ROOT` / `ARDUPILOT_GAZEBO_ROOT` if not in default paths)
 - Display for GUI: `DISPLAY` + readable `XAUTHORITY` (helper auto-picks mutter cookie)
@@ -13,9 +18,9 @@ Minimal copy-paste path. Details: [OPERATOR.md](OPERATOR.md), [COMMAND_REFERENCE
 ## Terminal 1 — simulator
 
 ```zsh
-cd ~/Ros_workspaces/duburi-sim_ws
-source /opt/ros/humble/setup.zsh
-source install/setup.zsh
+cd ~/Ros_workspaces/duburi_ws/sim
+source /opt/ros/humble/setup.bash
+source install/setup.bash
 export GZ_IP=127.0.0.1
 
 ros2 run duburi_sim_bringup duburi_sim stop
@@ -29,9 +34,9 @@ Headless: `duburi_sim sim --headless`.
 ## Terminal 2 — autonomy stack
 
 ```zsh
-source /opt/ros/humble/setup.zsh
-source ~/Ros_workspaces/duburi_ws/install/setup.zsh
-source ~/Ros_workspaces/duburi-sim_ws/install/setup.zsh
+source /opt/ros/humble/setup.bash
+source ~/Ros_workspaces/duburi_ws/install/setup.bash
+source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
 export DUBURI_WS=~/Ros_workspaces/duburi_ws
 export GZ_IP=127.0.0.1
 

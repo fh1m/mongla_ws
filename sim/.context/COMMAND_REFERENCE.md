@@ -1,15 +1,20 @@
 # Command reference
 
-Every operator/dev command, env var, port, and launch arg for `duburi-sim_ws`.
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
+Every operator/dev command, env var, port, and launch arg for `duburi_ws/sim`.
 Source truth: `src/duburi_sim_bringup/scripts/duburi_sim`, launch files, `setup.py`
 entry points, `server.py`.
 
 ## Source / overlay order
 
 ```zsh
-source /opt/ros/humble/setup.zsh
-source "$DUBURI_WS/install/setup.zsh"          # autonomy (when using stack/smoke/lab arm)
-source ~/Ros_workspaces/duburi-sim_ws/install/setup.zsh
+source /opt/ros/humble/setup.bash
+source "$DUBURI_WS/install/setup.bash"          # autonomy (when using stack/smoke/lab arm)
+source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
 export GZ_IP=127.0.0.1
 export DUBURI_WS="${DUBURI_WS:-$HOME/Ros_workspaces/duburi_ws}"
 ```

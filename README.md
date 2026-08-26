@@ -21,6 +21,7 @@
 
 <p align="center">
   <a href="#-get-started">Get started</a> ·
+  <a href="#-simulator--gazebo--ardusub-sitl">Simulator</a> ·
   <a href="#-pool-day">Pool day</a> ·
   <a href="#-operating-the-auv">Operating</a> ·
   <a href="#-mission-design">Mission design</a> ·
@@ -33,7 +34,9 @@ Mongla is a ROS 2 Humble colcon workspace that exposes **one clean action surfac
 (`/duburi/move`)** over ArduSub. A single node owns the MAVLink connection, receives goals,
 and dispatches them to per-axis motion modules behind one dispatch table (`COMMANDS`). It's
 developed against an ArduSub SITL + Gazebo loop and field-tested on **Duburi**, a
-`vectored_6dof` 8-thruster AUV, for **RoboSub 2026**.
+`vectored_6dof` 8-thruster AUV, for **RoboSub 2026**. That sim loop is **in this
+repo** — [`sim/`](sim/) is a full Gazebo Harmonic pool with courses, props and an
+operator web lab, so the whole stack can be exercised without water.
 
 > The workspace name `duburi_ws` and the `/duburi/*` namespace are kept for the test vehicle;
 > the codebase itself is **Mongla**.
@@ -106,9 +109,24 @@ source /opt/ros/humble/setup.bash && source install/setup.bash
 > `src/duburi_vision/models/` and `src/duburi_planner/duburi_planner/missions/` on
 > every build, so a fresh clone restores them with one build (no manual copy).
 
+**Simulator** (optional, [`sim/`](sim/)) — a second colcon workspace, built after autonomy:
+
+```bash
+pip install -r sim/requirements.txt
+cd sim && ./build_sim.sh          # NOT a bare `colcon build` — see below
+```
+
+> `sim/COLCON_IGNORE` keeps the root `colcon build` at exactly **six** autonomy
+> packages, so adding the simulator does not change how `duburi_ws` builds or
+> tests. colcon checks that marker against the base path too, which means
+> `cd sim && colcon build` ignores *itself* and builds nothing; `build_sim.sh`
+> passes `--base-paths src` to step past it. Deleting the marker to "fix" that
+> re-contaminates the root build.
+
 **Prerequisites:** Ubuntu 22.04 (native / WSL2 / distrobox) · ROS 2 Humble · Python 3.10 ·
-`pymavlink` (auto-installed by colcon). Sim adds ArduPilot SITL + `sim_vehicle.py` and Gazebo
-([`sim-setup.md`](.claude/context/sim-setup.md)); vision adds a CUDA torch wheel + `ultralytics`,
+`pymavlink` (auto-installed by colcon). The simulator adds Gazebo Harmonic, an ArduSub SITL
+build and the ArduPilot Gazebo plugin ([`sim/README.md`](sim/README.md)); vision adds a CUDA
+torch wheel + `ultralytics`,
 `supervision`, `filterpy`, `onnxruntime` (`requirements.txt`). Fresh box:
 [`docs/JETSON_SETUP.md`](docs/JETSON_SETUP.md).
 
@@ -120,7 +138,8 @@ source /opt/ros/humble/setup.bash && source install/setup.bash
 
 ## Quick start (three flows)
 
-**Drive in sim** — Gazebo + ArduSub SITL, no real AUV:
+**Drive in sim** — bare ArduSub SITL, no Gazebo, no pool geometry. Enough to
+exercise arming, depth and the motion verbs:
 
 ```bash
 # T1 — ArduSub SITL
@@ -134,6 +153,10 @@ ros2 run duburi_planner duburi set_depth --target -0.5
 ros2 run duburi_planner duburi move_forward --duration 3 --gain 60
 ros2 run duburi_planner duburi disarm
 ```
+
+> For the **full simulator** — a Gazebo pool with courses, props, two cameras and
+> ground truth, which is what you want for vision and mission work — see
+> [Simulator](#-simulator--gazebo--ardusub-sitl) below.
 
 **Vision pipeline** — webcam, no AUV (camera + detector + tracker + HUD in one command):
 
@@ -245,7 +268,223 @@ mid-mission.
 
 <br/>
 
+---
+
+# 🌊 Simulator — Gazebo + ArduSub SITL
+
+The simulator is **in this repo**, at [`sim/`](sim/): Gazebo Harmonic, an ArduSub
+SITL vehicle, the SAUVC pool with courses and props, front + bottom cameras, ground
+truth, and a browser operator lab. Underwater robotics is testing-limited — this is
+how control, vision and planner get exercised without a pool.
+
+**One repo, two colcon workspaces.**
+
+```text
+duburi_ws/
+  src/     autonomy   — six packages, unchanged, still the same tests
+  sim/     simulator  — six duburi_sim_* packages, built separately
+    COLCON_IGNORE     — keeps the root build at exactly six packages
+    build_sim.sh
+```
+
+They are not merged and not a submodule: `sim/` is committed as plain files, so
+there is no pin and no second push target to keep in sync. They referee each other
+through [`test_sim_contract_drift.py`](src/duburi_manager/test/test_sim_contract_drift.py),
+which reads the sim's launch files, model SDF and ArduSub params and fails if they
+stop agreeing with autonomy. It skips cleanly when `sim/` is absent, so the
+sparse-checkout recipe for the 15 W Jetson still passes.
+
+The simulator is also published standalone as
+[`fh1m/duburi-sim_ws`](https://github.com/fh1m/duburi-sim_ws) for sim-only work.
+**`duburi_ws/sim/` is canonical**; that repo mirrors it.
+
+## Cold start, terminal by terminal
+
+Every terminal starts from the same three lines, **autonomy sourced before the sim**
+(the sim's `stack.launch.py` includes autonomy launch files by share directory):
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/Ros_workspaces/duburi_ws/install/setup.bash
+source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
+export GZ_IP=127.0.0.1
+```
+
+<details open>
+<summary><b>Terminal 0 — build, once</b></summary>
+
+```bash
+cd ~/Ros_workspaces/duburi_ws
+pip install -r sim/requirements.txt        # PyYAML, numpy, Pillow (world generators)
+
+./build_dubomini.sh                        # autonomy FIRST
+cd sim && ./build_sim.sh                   # then the simulator
+```
+
+Needs an ArduSub SITL build and the ArduPilot Gazebo plugin. Found via
+`$HOME/stuff/ardupilot` and `$HOME/stuff/ardupilot_gazebo`, or point
+`ARDUPILOT_ROOT` / `ARDUPILOT_GAZEBO_ROOT` at them. Check without launching:
+
+```bash
+ros2 launch duburi_sim_bringup sim.launch.py --show-args
+```
+</details>
+
+<details open>
+<summary><b>Terminal 1 — Gazebo world + ArduSub SITL</b></summary>
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim stop        # ALWAYS first — one sim only
+ros2 run duburi_sim_bringup duburi_sim sim         # GUI
+#   headless:        duburi_sim sim --headless
+#   another course:  duburi_sim sim course:=sauvc26_final
+```
+
+Brings up the pool world with its props, spawns the vehicle, starts ArduSub SITL
+and the `ros_gz` camera + ground-truth bridges.
+
+**Wait for `JSON received`** — that is SITL and Gazebo agreeing on the physics
+handshake. The vehicle sits at **x ≈ −11.8**, the start zone.
+
+Courses live in [`sim/src/duburi_sim_worlds/worlds/`](sim/src/duburi_sim_worlds/worlds/)
+(`sauvc26_qualification` is the default, plus `sauvc26_final` and `pool_empty`);
+`gen_world.py --list` enumerates them and prop layouts come from
+[`spec/arena.yaml`](sim/src/duburi_sim_worlds/spec/arena.yaml).
+
+> `stop` before every `sim` is not politeness. A second Gazebo or ArduSub on the
+> same ports produces a stack that connects, reports healthy, and drives the wrong
+> vehicle.
+</details>
+
+<details open>
+<summary><b>Terminal 2 — the autonomy stack (this codebase)</b></summary>
+
+```bash
+export DUBURI_WS=~/Ros_workspaces/duburi_ws
+ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+#   with vision (needs YOLO weights):  duburi_sim stack
+```
+
+This is the connection point: it starts `auv_manager_node` against SITL's MAVLink
+on **UDP 14550** and, with vision, the detector on the sim's front camera. From
+here the vehicle is driven by exactly the same verbs as the real one.
+
+> **`flight_controller:=pixhawk`** is passed through by `stack.launch.py`. It is
+> **required on the `srot` branch** and **inert on `main`**, which declares no such
+> argument — inert, not an error. `IncludeLaunchDescription.execute()` raises only
+> for *missing required* arguments; extra keys become launch configurations nobody
+> reads, with no log line anywhere. A renamed or branch-only launch argument
+> therefore fails silently in both directions, which is why the drift test asserts
+> on it rather than trusting the launch to complain.
+</details>
+
+<details open>
+<summary><b>Terminal 3 — prove the loop before trusting it</b></summary>
+
+```bash
+ros2 run duburi_sim_bridge contract_check      # 4 topics ≥5 msgs, 640×480, + ground truth
+ros2 run duburi_sim_bringup duburi_sim smoke   # arm → set_depth −1 → move_forward 8 s
+```
+
+`contract_check` is the gate that says the sim is presenting the surface autonomy
+expects. Run it before concluding anything from a mission.
+
+> **`mavlink_check` must run with the stack DOWN.** It binds UDP 14550 itself, so
+> against a live manager it either fails or silently steals the autonomy link —
+> and a stolen link looks like a sim fault, not a tooling one.
+> ```bash
+> ros2 run duburi_sim_bringup duburi_sim stop
+> ros2 run duburi_sim_bridge mavlink_check
+> ```
+</details>
+
+<details>
+<summary><b>Terminal 4 — operator lab (optional)</b></summary>
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim lab
+# http://localhost:28765     port: cat /tmp/duburi-$USER/lab_port.txt
+```
+
+| Tab | Use |
+|-----|-----|
+| **Operate** | Both cameras, D-pad teleop, arm/disarm, turbidity, record → zip |
+| **World** | Start/restart/stop a course, spawn and move props, upload a model zip |
+| **Datasets** | Recorded clips with wall duration and `fps_actual`, download zip |
+
+> The lab binds **`127.0.0.1`** by default: it is unauthenticated and its API can
+> arm thrusters. Reach it from a topside laptop with an SSH port-forward;
+> `DUBURI_LAB_HOST=0.0.0.0` is the explicit opt-in.
+</details>
+
+<details>
+<summary><b>Terminal 5 — run missions against the sim</b></summary>
+
+```bash
+ros2 run duburi_planner mission --list
+ros2 run duburi_planner mission gate_flare_prequal
+
+# or drive by hand — identical verbs to the real vehicle
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi set_depth --target -1.0
+ros2 run duburi_planner duburi move_forward --duration 5 --gain 60
+ros2 run duburi_planner duburi disarm
+```
+
+**Verifying the vision path needs an explicit pass criterion — both failure modes
+are silent.** `duburi_sim stack` defaults to `model:=gate_rescue_repair`, whose
+`.pt` weight is **not in git** (`*.pt` is gitignored; `build_dubomini.sh` mirrors
+it from `~/models`) and whose `gate_rescue_repair.yaml` class sidecar may also be
+missing. A missing weight is loud. **A missing sidecar is not** — the class
+allowlist comes up empty and the detector publishes `[]` every frame, forever, with
+a clean launch. So require all three in the detector log:
+
+1. the expected model stem, `[YOLO ] … gate_rescue_repair`
+2. a **non-empty** class allowlist
+3. the always-on `[ align lat=… depth=… ]` line, with a gate in frame
+
+The contract gate in Terminal 3 runs `--no-vision` on purpose, so it stays
+meaningful on a box without weights.
+</details>
+
+<details>
+<summary><b>Shutdown, datasets, timeseries</b></summary>
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim stop     # sim + stack + lab + bridges + prop_manager
+
+# vision datasets
+ros2 run duburi_sim_bridge record_cameras --duration 20 --fx --frames --labels \
+    --label gate_approach
+
+# timeseries
+ros2 run duburi_sim_bringup duburi_sim plotjuggler
+```
+</details>
+
+## Sim ⇄ hardware: what does and does not transfer
+
+| | Simulator | Pool / vehicle |
+|---|---|---|
+| Vehicle | BlueROV2 Heavy proxy — same `vectored_6dof` frame, different hull and mass | Duburi 4.5 / Dubomini 2.0 |
+| Autopilot | ArduSub SITL | ArduSub 4.x on Pixhawk 2.4.8 |
+| MAVLink | UDP 14550 from SITL | UDP 14550 from BlueOS |
+| Heading | `mavlink_ahrs` | `bno085` / `dvl` — the hull's compass is untrusted |
+| Cameras | Gazebo, 640×480, perfect optics | Blue Robotics low-light USB, turbidity, real backscatter |
+| Ground truth | `/duburi/sim/ground_truth` | none |
+
+Control behaviour and every `/duburi/move` verb transfer. **Detection thresholds
+and vision gains do not** — sim imagery is too clean, so treat sim-tuned
+confidence and gain values as a starting point, never as pool-verified.
+
+Full operator guide, prop editing, dataset recording and the lab API:
+[`sim/README.md`](sim/README.md) and [`sim/.context/`](sim/.context/).
+
+<br/>
+
 # 🎮 Operating the AUV
+
+---
 
 ## CLI command cookbook (`duburi`)
 
@@ -597,6 +836,10 @@ Deep design notes live in [`.claude/context/`](.claude/context/) — start with 
 - **Status:** [`robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md) ·
   [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md) ·
   [`known-issues.md`](.claude/context/known-issues.md)
+- **Simulator:** [`sim/README.md`](sim/README.md) — operator cold start ·
+  [`sim/.context/CONTRACT.md`](sim/.context/CONTRACT.md) — the surface autonomy relies on ·
+  [`sim/.context/WORLD_EDITING.md`](sim/.context/WORLD_EDITING.md) — courses and props ·
+  [`sim/.context/AUDIT.md`](sim/.context/AUDIT.md) — known sim issues
 - **Operator tooling (off mission path):** [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)
   — Foxglove/Lichtblick telemetry, rosbag record/replay, per-run scorecards, dev-box setup ·
   [`remote-access.md`](.claude/context/remote-access.md) — smooth, drop-proof ground-station

@@ -1,5 +1,10 @@
 # PlotJuggler (timeseries monitoring)
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 Desktop timeseries tool for AUV state / GT while the sim runs.
 Product: [plotjuggler.io](https://plotjuggler.io/) · ROS plugins:
 [plotjuggler-ros-plugins](https://github.com/PlotJuggler/plotjuggler-ros-plugins).
@@ -14,8 +19,8 @@ sudo apt install ros-humble-plotjuggler-ros
 ## Launch with sim layout
 
 ```zsh
-source /opt/ros/humble/setup.zsh
-source ~/Ros_workspaces/duburi-sim_ws/install/setup.zsh
+source /opt/ros/humble/setup.bash
+source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
 # sim + stack already running
 ros2 run duburi_sim_bringup duburi_sim plotjuggler
 # alias: duburi_sim pj

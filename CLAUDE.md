@@ -75,7 +75,7 @@
 | Power                 | Dual LiPo (propulsion + compute on isolated rails)           |
 | Payload               | Slingshot torpedo, aluminum grabber (current-sensed), solenoid dropper |
 
-> **Sim proxy:** Gazebo runs the BlueROV2 Heavy model because it shares the `vectored_6dof` frame. Hull shape and exact mass differ; control behavior matches.
+> **Sim proxy:** Gazebo runs a BlueROV2 Heavy-derived model because it shares the `vectored_6dof` frame. Hull shape and exact mass differ; control behavior matches. The simulator is **in this repo** at [`sim/`](sim/) — see §3a.
 
 > **Why no VectorNav**: TDR Appendix A lists VN200; we use BNO085 instead — see `vehicle-spec.md` §"Why BNO085 instead of the TDR's VectorNav VN200".
 
@@ -143,17 +143,75 @@ byte), cameras (forward+downward by-path count), vision models (TensorRT
 exit `0` unless a FAIL. `--strict` makes any WARN exit non-zero (hard
 pre-mission gate); `--skip-mavlink` skips the UDP 14550 probe.
 
-SIM startup commands (run before ROS2 nodes):
+### 3a. Simulator (`sim/`) — in-repo Gazebo + ArduSub SITL
+
+The simulator lives at [`sim/`](sim/): a **second colcon workspace inside this
+repo** — Gazebo Harmonic, ArduSub SITL, the SAUVC pool with courses and props,
+front + bottom cameras, ground truth, and a FastAPI/React operator lab.
+
+```text
+duburi_ws/
+  src/   autonomy  — six packages; UNCHANGED, same test set
+  sim/   simulator — six duburi_sim_* packages
+    COLCON_IGNORE  — keeps the root colcon build at exactly six packages
+    build_sim.sh   — colcon build --base-paths src (the marker self-ignores otherwise)
+```
+
+Build autonomy first, then the sim; source in the same order (the sim's
+`stack.launch.py` includes autonomy launch files by share directory):
 
 ```bash
-# Terminal 1: ArduSub SITL
+./build_dubomini.sh
+cd sim && ./build_sim.sh
+
+source /opt/ros/humble/setup.bash
+source ~/Ros_workspaces/duburi_ws/install/setup.bash
+source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
+export GZ_IP=127.0.0.1
+```
+
+Terminal by terminal (full walkthrough: [README](README.md#-simulator--gazebo--ardusub-sitl),
+operator detail: [`sim/README.md`](sim/README.md)):
+
+```bash
+# T1 — world + SITL. `stop` FIRST, always: one sim only.
+ros2 run duburi_sim_bringup duburi_sim stop
+ros2 run duburi_sim_bringup duburi_sim sim          # --headless / course:=sauvc26_final
+
+# T2 — this codebase against the sim (MAVLink UDP 14550)
+export DUBURI_WS=~/Ros_workspaces/duburi_ws
+ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+
+# T3 — prove the loop before trusting a mission
+ros2 run duburi_sim_bridge contract_check
+ros2 run duburi_sim_bringup duburi_sim smoke
+
+# T4 — operator lab (binds 127.0.0.1; port in /tmp/duburi-$USER/lab_port.txt)
+ros2 run duburi_sim_bringup duburi_sim lab
+```
+
+> **`mavlink_check` runs with the stack DOWN** — it binds 14550 too, so against a
+> live manager it silently steals the autonomy link and looks like a sim fault.
+>
+> **`flight_controller:=pixhawk`** is required on `srot` and **inert on `main`**:
+> `IncludeLaunchDescription.execute()` raises only for *missing required* args, so
+> extra keys are dropped with no log line. [`test_sim_contract_drift.py`](src/duburi_manager/test/test_sim_contract_drift.py)
+> asserts on it for exactly that reason — the launch itself will never complain.
+>
+> **Vision in sim has two silent failure modes.** `duburi_sim stack` defaults to
+> `model:=gate_rescue_repair`; the `.pt` is gitignored (mirrored from `~/models`)
+> and a missing `.yaml` sidecar yields an empty allowlist and a silent `[]` every
+> frame. Require the model stem, a non-empty allowlist, AND the `[ align … ]` line.
+
+**Bare SITL without Gazebo** still works for arming/depth/motion-verb checks:
+
+```bash
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
   --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
-
-# Terminal 2: Gazebo (BlueROV2 Heavy world — sim proxy for Duburi 4.2)
-cd ~/Ros_workspaces/colcon_ws
-gz sim -v 3 -r src/bluerov2_gz/worlds/bluerov2_underwater.world
 ```
+
+Sim-tuned **detection thresholds and vision gains do not transfer** — sim imagery
+is too clean. Control behaviour and every `/duburi/move` verb do.
 
 ---
 
@@ -622,14 +680,15 @@ ros2 param set /duburi_detector_forward classes "gate,flare"   # live class swit
 ```bash
 # Docker env
 ROS_DOMAIN_ID=42
-GZ_SIM_RESOURCE_PATH=~/Ros_workspaces/colcon_ws/src/bluerov2_gz/models:...
 GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
+GZ_IP=127.0.0.1
 
 # Workspaces
-~/Ros_workspaces/colcon_ws   # bluerov2_gz sim (DO NOT MODIFY)
-~/Ros_workspaces/duburi_ws   # OUR codebase (this workspace)
+~/Ros_workspaces/duburi_ws        # OUR codebase (this workspace)
+~/Ros_workspaces/duburi_ws/sim    # the simulator — nested colcon workspace, same repo
+~/Ros_workspaces/colcon_ws        # legacy bluerov2_gz sim (superseded by sim/; DO NOT MODIFY)
 
-# Tools
+# Tools (out of workspace; override with ARDUPILOT_ROOT / ARDUPILOT_GAZEBO_ROOT)
 ~/stuff/ardupilot/            # ArduSub SITL
 ~/stuff/ardupilot_gazebo/     # Gazebo-ArduPilot bridge plugin
 ```
@@ -692,7 +751,9 @@ GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
 | `hardware-setup.md`             | Pool setup, BlueOS, network topology                                |
 | `dual-camera-setup.md`          | **★ Jetson agent** — 2× identical Blue Robotics USB cams: by-path port-stable identity, USB-2 480 Mbps/MJPEG bandwidth, udev aliases, `vision_dual` `device_path` |
 | `downward-camera.md`            | **★ the axis flip** — why/how `vision.align` kwargs remap on `camera='downward'` (`lat`=Ch6, `fwd`=Ch5 surge, `depth`=fill→descent); canonical calls, surge-sign DISARMED check, depth bounds, migration note |
-| `sim-setup.md`                  | Detailed simulation bring-up                                        |
+| `sim-setup.md`                  | **Legacy** sibling-`colcon_ws` bring-up — superseded by `sim/`       |
+| [`../sim/README.md`](sim/README.md) | **★ Simulator** — operator cold start, terminal by terminal      |
+| [`../sim/.context/INDEX.md`](sim/.context/INDEX.md) | Simulator doc index (CONTRACT / OPERATOR / AUDIT / WORLD_EDITING / DATASETS) |
 | `sensors-pipeline.md`           | `duburi_sensors` design rules + BNO085 calibration model            |
 | `dvl-reference.md`              | Nortek Nucleus1000 protocol, packet catalog, POSHOLD ArduSub setup  |
 | `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |

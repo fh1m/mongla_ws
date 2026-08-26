@@ -1,5 +1,10 @@
 # Development guide (humans and agents)
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 ## Agent bootstrap
 
 1. Read [INDEX.md](INDEX.md) then [CODEMAP.md](CODEMAP.md).
@@ -11,11 +16,11 @@
 ## Build
 
 ```zsh
-cd ~/Ros_workspaces/duburi-sim_ws
-source /opt/ros/humble/setup.zsh
+cd ~/Ros_workspaces/duburi_ws/sim
+source /opt/ros/humble/setup.bash
 # optional first: source sibling autonomy if linking against it at build time
 colcon build --symlink-install
-source install/setup.zsh
+source install/setup.bash
 ```
 
 Package-selective:

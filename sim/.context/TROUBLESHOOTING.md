@@ -1,5 +1,10 @@
 # Troubleshooting
 
+> ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
+> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
+> `duburi_ws/sim/` and is under version control. Paths below have been
+> updated; any remaining "sibling" phrasing is historical.
+
 ## Lost manual control / arm NO_ACK
 
 **Cause:** Two managers (or anything else) competing on UDP **14550**, or ArduSub
@@ -84,7 +89,7 @@ noise paths — keep one sim only.
 
 ```zsh
 export DUBURI_WS=/path/to/duburi_ws
-# must contain install/setup.zsh
+# must contain install/setup.bash
 ```
 
 ## srot branch hunts USB board
