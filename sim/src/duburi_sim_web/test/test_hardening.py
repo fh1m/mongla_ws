@@ -102,19 +102,55 @@ def test_a_normal_member_is_still_allowed():
 # 3. SPA fallback -- path containment
 # --------------------------------------------------------------------------
 
+def _spa_serves(static, spa_path):
+    """The exact containment expression the SPA fallback uses."""
+    import os
+    candidate = Path(os.path.normpath(static / spa_path))
+    return candidate.is_relative_to(static) and candidate.is_file()
+
+
 def test_spa_paths_outside_static_root_are_not_served(tmp_path):
     static = tmp_path / 'static'
     (static / 'assets').mkdir(parents=True)
     (static / 'index.html').write_text('ok')
     (tmp_path / 'secret.txt').write_text('nope')
 
-    def serves(spa_path: str) -> bool:
-        candidate = (static / spa_path).resolve()
-        return candidate.is_file() and candidate.is_relative_to(static.resolve())
+    assert not _spa_serves(static, '../secret.txt')
+    assert not _spa_serves(static, '../../etc/passwd')
+    assert not _spa_serves(static, 'a/../../secret.txt')
+    assert _spa_serves(static, 'index.html')
 
-    assert not serves('../secret.txt')
-    assert not serves('/etc/passwd')
-    assert serves('index.html')
+
+def test_spa_still_serves_a_symlinked_static_file(tmp_path):
+    """Regression: `colcon build --symlink-install` makes every file under
+    static/ a symlink into build/ -> src/. A containment check written with
+    resolve() follows the link OUT of the install tree and rejects it, so
+    /ue-logo.png returned index.html and the header logo and favicon were broken
+    images. Only /assets/* survived, because a StaticFiles mount serves those.
+    Containment must be lexical."""
+    real = tmp_path / 'src'
+    real.mkdir()
+    (real / 'ue-logo.png').write_bytes(b'\x89PNG\r\n\x1a\n')
+
+    static = tmp_path / 'install' / 'static'
+    static.mkdir(parents=True)
+    (static / 'index.html').write_text('ok')
+    (static / 'ue-logo.png').symlink_to(real / 'ue-logo.png')
+
+    assert (static / 'ue-logo.png').is_symlink()
+    assert _spa_serves(static, 'ue-logo.png'), \
+        'a symlinked static file must still be served (symlink-install layout)'
+    # and traversal is still refused in the same layout
+    assert not _spa_serves(static, '../../etc/passwd')
+
+
+def test_the_spa_handler_does_not_use_resolve_for_containment():
+    src = Path(server.__file__).read_text()
+    spa = src[src.index('def spa_fallback'):]
+    spa = spa[:spa.index('\n\nelse') if '\n\nelse' in spa else len(spa)][:2000]
+    assert '.resolve()' not in spa, \
+        'resolve() in the SPA fallback breaks symlink-install static files'
+    assert 'normpath' in spa
 
 
 # --------------------------------------------------------------------------

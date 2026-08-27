@@ -80,6 +80,45 @@ export GZ_IP=127.0.0.1
 
 Required on hosts with many NICs; launch also sets this.
 
+## `surface()` times out / `calibrate_depth` refuses / depth reads deeper than it is
+
+**One cause, three symptoms.** Measured 2026-08-27 against ground truth.
+
+Depth telemetry is read from MAVLink **`AHRS2.altitude`** — ArduSub's *secondary*
+DCM estimate. ArduSub closes its own depth loop on **EKF3**. In the simulator the
+two disagree:
+
+| true `z` (ground truth) | `AHRS2.altitude` (what we read) | `GLOBAL_POSITION_INT.relative_alt` (EKF3) | error in ours |
+|---|---|---|---|
+| −0.036 m (floating, at rest) | **−0.370** | −0.028 | **0.334 m** |
+| −0.522 m | **−0.680** | — | 0.158 m |
+| −1.025 m | **−1.180** | — | 0.155 m |
+
+**The offset is not constant — it is largest near the surface** (~0.33 m there,
+~0.16 m at depth). Do not memorise one number; the surface case is precisely the
+one that breaks things.
+
+What follows from it:
+
+- **`surface()` never confirms.** It targets 0.00 m and waits on the number *we*
+  can see. AHRS2 plateaus near −0.4, so it burns its full ascent budget and
+  raises, *after* the hull has physically surfaced (ground truth `z` returns to
+  −0.036). The vehicle is fine; the confirmation is not.
+- **`mission_reset()`'s baro re-zero is refused.** `calibrate_depth` is gated on
+  `|depth| <= 0.30 m` as a surface proxy, and AHRS2 reads −0.36 while floating.
+  You will see `[BARO ] REFUSE depth calibration -- pre-cal depth -0.36m exceeds
+  surface bound 0.30m`. The two interlock: the re-zero that would fix the offset
+  is blocked *by* the offset.
+- **`set_depth` reports a deeper `final=` than you commanded** — e.g. `final=-1.370`
+  for a −1.20 m command. **The hull is at the right depth**; measured true `z` was
+  within 2.5 cm of the command at both −0.5 and −1.0 m. Only the readback is off.
+
+**Not a bug to "fix" by changing the depth source.** `AHRS2.altitude` is the
+pool-verified path on the real vehicle, where a surface `calibrate_depth` zeroes
+the Bar30 properly. Missions that must survive both should treat a `surface()`
+timeout as non-fatal in sim and real on hardware — see
+`missions/sim_shakedown.py` for the pattern.
+
 ## Depth bouncing / GPS spam
 
 Historical: duplicate sims; fake GPS. Current `duburi_sub.parm` disables GPS
