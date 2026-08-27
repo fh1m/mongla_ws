@@ -46,6 +46,7 @@ duburi_sim stop → duburi_sim sim → duburi_sim stack --no-vision → duburi_s
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Devs / agents | Build, frontend, regen, agent rules |
 | [TESTING.md](TESTING.md) | QA | contract/mavlink/smoke/lab checklists |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Operators | Lost control, black cams, orphans |
+| [DVL_AND_SONAR.md](DVL_AND_SONAR.md) | Native Gazebo DVL: how it is wired, the four traps, and why sonar is not available |
 | [WORLD_EDITING.md](WORLD_EDITING.md) | Operators | Prop spawn/move, custom assets, limits |
 | [PLOTJUGGLER.md](PLOTJUGGLER.md) | Operators | Desktop timeseries vs Foxglove |
 | [TESTING_SUITE.md](TESTING_SUITE.md) | Maintainers | Lab amenity roadmap |

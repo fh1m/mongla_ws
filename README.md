@@ -376,6 +376,14 @@ This is the connection point: it starts `auv_manager_node` against SITL's MAVLin
 on **UDP 14550** and, with vision, the detector on the sim's front camera. From
 here the vehicle is driven by exactly the same verbs as the real one.
 
+The sim vehicle carries Gazebo's **native DVL**, so `move_forward_dist` and the
+other `*_dist` verbs close a real position loop here instead of dead reckoning.
+`yaw_source=sim_dvl` is the default (heading still from MAVLink AHRS, position
+from the DVL); pass `yaw_source:=mavlink_ahrs` to run without one, in which case
+those verbs **refuse** rather than guess. Details and the four traps that make a
+sim DVL look like it works when it does not:
+[`sim/.context/DVL_AND_SONAR.md`](sim/.context/DVL_AND_SONAR.md).
+
 > **`flight_controller:=pixhawk`** is passed through by `stack.launch.py`. It is
 > **required on the `srot` branch** and **inert on `main`**, which declares no such
 > argument — inert, not an error. `IncludeLaunchDescription.execute()` raises only

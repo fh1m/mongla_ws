@@ -75,6 +75,7 @@ Wait for **`JSON received`**. AUV sits at **x ≈ −11.8** (start zone).
 ```bash
 export DUBURI_WS=~/Ros_workspaces/duburi_ws
 ros2 run duburi_sim_bringup duburi_sim stack --no-vision   # first bring-up
+#   heading-only, no DVL:  duburi_sim stack yaw_source:=mavlink_ahrs
 # later, with YOLO weights present:  duburi_sim stack
 ```
 
@@ -237,6 +238,7 @@ Full flags: [`.context/COMMAND_REFERENCE.md`](.context/COMMAND_REFERENCE.md).
 | Surface | Value |
 |---------|-------|
 | Autonomy MAVLink | UDP **14550** |
+| DVL (native gz sensor) | `/duburi/sim/dvl/{velocity,altitude}`, `yaw_source=sim_dvl` |
 | Lab teleop RC | TCP **5763** |
 | Cams | `/duburi/sim/{front,bottom}_camera/image_raw` **640×480** |
 | GT | `/duburi/sim/ground_truth` |
@@ -271,3 +273,25 @@ Full flags: [`.context/COMMAND_REFERENCE.md`](.context/COMMAND_REFERENCE.md).
 Vehicle: [bluerov2_gz](https://github.com/clydemcqueen/bluerov2_gz) (MIT).
 Props: [sauvc26-world](https://github.com/auv-amarine/sauvc26-world) (MIT).
 Meshes: [Blue Robotics](https://bluerobotics.com/).
+
+---
+
+## DVL
+
+The vehicle carries Gazebo's **native** DVL (`gz-sim 8` ships one), so
+`move_forward_dist` and friends close a real position loop in sim instead of
+dead reckoning. `yaw_source=sim_dvl` is the default for `duburi_sim stack`:
+heading still comes from MAVLink AHRS, position from the DVL.
+
+```bash
+ros2 topic echo /duburi/sim/dvl/velocity --once     # body-frame m/s
+ros2 topic echo /duburi/sim/dvl/altitude --once     # bottom-track range
+```
+
+Four things about it are counter-intuitive enough that each one produced a
+plausible-looking sensor that was quietly wrong — the sensor must sit on
+`base_link`, the DVL frame is rotated −90° from body, the integrator must use
+sim time rather than wall clock, and `ros_gz_bridge` cannot carry the message at
+all. All four are written up in
+[`.context/DVL_AND_SONAR.md`](.context/DVL_AND_SONAR.md), which also explains
+why **sonar is not available** in Gazebo Harmonic and what to use instead.
