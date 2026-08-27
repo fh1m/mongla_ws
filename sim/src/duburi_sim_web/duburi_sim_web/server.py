@@ -1083,7 +1083,8 @@ def _claim_lab_port(host: str, preferred: int):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind((host if host not in ('', '0.0.0.0') else '0.0.0.0', p))
+            # host is normalised by the caller; '0.0.0.0' is the ONLY wildcard.
+            sock.bind((host, p))
             sock.listen(2048)
             return sock, p
         except OSError:
@@ -1099,7 +1100,16 @@ def main(argv=None) -> int:
 
     # Loopback by default -- the lab is unauthenticated and arms thrusters.
     # DUBURI_LAB_HOST=0.0.0.0 is the explicit opt-in for a topside laptop.
-    host = os.environ.get('DUBURI_LAB_HOST', '127.0.0.1')
+    #
+    # `or`, NOT os.environ.get(k, default): a SET-BUT-EMPTY var is a real case
+    # (`DUBURI_LAB_HOST= duburi_sim lab`, an unset key in docker --env-file, a
+    # bare `DUBURI_LAB_HOST=` in .env or systemd Environment=). get() returns ''
+    # there because the key exists, and '' used to fall through to the 0.0.0.0
+    # wildcard below -- while the shell wrapper's ${VAR:-default} DOES substitute
+    # on empty and printed "LOOPBACK ONLY". Same variable, two parsers, opposite
+    # answers, and the reassuring one was wrong: the lab bound every interface
+    # while saying it had not.
+    host = (os.environ.get('DUBURI_LAB_HOST') or '127.0.0.1').strip() or '127.0.0.1'
     preferred = int(os.environ.get('DUBURI_LAB_PORT', '28765'))
     sock, port = _claim_lab_port(host, preferred)
     if port != preferred:

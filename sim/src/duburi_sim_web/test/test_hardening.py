@@ -150,3 +150,91 @@ def test_mjpeg_is_async():
 
 if __name__ == '__main__':
     sys.exit(pytest.main([__file__, '-q']))
+
+
+# --------------------------------------------------------------------------
+# 6. DUBURI_LAB_HOST: the shell message and the Python bind must agree
+# --------------------------------------------------------------------------
+#
+# Found by a commit security review, 2026-08-27. The lab's bind host was read by
+# two different parsers with different empty-string semantics:
+#
+#   shell   ${DUBURI_LAB_HOST:-127.0.0.1}          substitutes on unset OR EMPTY
+#   python  os.environ.get(k, '127.0.0.1')         returns '' when the key EXISTS
+#
+# and '' then hit a `host if host not in ('', '0.0.0.0') else '0.0.0.0'` branch.
+# So `DUBURI_LAB_HOST= duburi_sim lab` printed "LOOPBACK ONLY" while the server
+# bound every interface -- on an unauthenticated API that can arm thrusters. The
+# reassuring half was the wrong one.
+#
+# Set-but-empty is not exotic: an unset key in `docker run --env-file`, a bare
+# `DUBURI_LAB_HOST=` line in .env, systemd `Environment=DUBURI_LAB_HOST=`.
+
+def _lab_script():
+    """Find scripts/duburi_sim by walking up, not by a parents[] index.
+
+    server.__file__ lands in src/ under symlink-install but in build/ or
+    install/ otherwise, so a fixed index silently points at the wrong tree.
+    Skip when it is genuinely absent (installed-only checkout) rather than fail.
+    """
+    rel = Path('src') / 'duburi_sim_bringup' / 'scripts' / 'duburi_sim'
+    here = Path(server.__file__).resolve()
+    for base in here.parents:
+        if (base / rel).is_file():
+            return base / rel
+    pytest.skip('source tree not available (installed-only checkout)')
+
+
+def _python_host(value):
+    """Exactly the expression server.py uses to pick its bind address."""
+    env = {} if value is None else {'DUBURI_LAB_HOST': value}
+    return (env.get('DUBURI_LAB_HOST') or '127.0.0.1').strip() or '127.0.0.1'
+
+
+def _shell_host(value):
+    """Exactly the normalisation `duburi_sim lab` exports."""
+    script = (
+        '_lab_host="${DUBURI_LAB_HOST:-127.0.0.1}"; '
+        '_lab_host="${_lab_host//[[:space:]]/}"; '
+        '[[ -n "$_lab_host" ]] || _lab_host="127.0.0.1"; '
+        'printf "%s" "$_lab_host"'
+    )
+    import os
+    env = dict(os.environ)
+    env.pop('DUBURI_LAB_HOST', None)
+    if value is not None:
+        env['DUBURI_LAB_HOST'] = value
+    return subprocess.run(['bash', '-c', script], capture_output=True,
+                          text=True, env=env, timeout=30).stdout
+
+
+@pytest.mark.parametrize('value', [None, '', '   ', '127.0.0.1', '0.0.0.0',
+                                   'localhost', '192.168.2.69', ' 0.0.0.0 '])
+def test_shell_and_python_agree_on_the_bind_host(value):
+    assert _shell_host(value) == _python_host(value), (
+        f'DUBURI_LAB_HOST={value!r}: the CLI announces one host and the server '
+        f'binds another'
+    )
+
+
+@pytest.mark.parametrize('value', [None, '', '   '])
+def test_absent_or_empty_never_means_wildcard(value):
+    """The regression itself: nothing that reads as "unset" may expose the lab."""
+    assert _python_host(value) == '127.0.0.1'
+    assert _shell_host(value) == '127.0.0.1'
+
+
+def test_only_an_explicit_wildcard_exposes_the_lab():
+    assert _python_host('0.0.0.0') == '0.0.0.0'
+    src = Path(server.__file__).read_text()
+    assert "host if host not in ('', '0.0.0.0')" not in src, \
+        'the empty-string-to-wildcard branch is back'
+
+
+def test_the_cli_over_warns_rather_than_under_warns():
+    """A host the CLI cannot prove is loopback must be announced as EXPOSED."""
+    s = _lab_script().read_text()
+    assert 'export DUBURI_LAB_HOST="$_lab_host"' in s, \
+        'the CLI must hand the server the exact host it just described'
+    assert '127.*' in s and 'localhost' in s and '::1' in s, \
+        'loopback classification must cover 127.*, localhost and ::1'
