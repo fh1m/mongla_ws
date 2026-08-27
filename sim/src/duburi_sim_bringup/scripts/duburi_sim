@@ -274,12 +274,24 @@ PY
       _course="$(tr -d '[:space:]' <"$_RT/lab_active_course.txt")"
       [[ -n "$_course" ]] || _course="${DUBURI_SIM_COURSE:-sauvc26_qualification}"
     fi
-    # The server binds 127.0.0.1 unless DUBURI_LAB_HOST says otherwise -- print
-    # what it will ACTUALLY bind, or a remote operator tries 0.0.0.0, gets
-    # nothing, and concludes the lab is broken rather than loopback-bound.
+    # Print what the server will ACTUALLY bind -- otherwise a remote operator
+    # tries the wrong URL and concludes the lab is broken rather than
+    # loopback-bound.
+    #
+    # EXPORT the normalised value rather than only echoing it. The message and
+    # the bind must not be two independent readings of the same variable: shell
+    # ${VAR:-d} substitutes on empty, Python os.environ.get(k, d) does not, so a
+    # set-but-empty DUBURI_LAB_HOST once printed "LOOPBACK ONLY" while the
+    # server bound 0.0.0.0. Exporting means the server is handed the exact
+    # string described below, so the two cannot disagree again.
     _lab_host="${DUBURI_LAB_HOST:-127.0.0.1}"
+    _lab_host="${_lab_host//[[:space:]]/}"
+    [[ -n "$_lab_host" ]] || _lab_host="127.0.0.1"
+    export DUBURI_LAB_HOST="$_lab_host"
     echo "[duburi-sim] starting operator lab on http://${_lab_host}:${_lab_port} ..."
-    if [[ "$_lab_host" == "127.0.0.1" ]]; then
+    # Loopback forms only. Anything else is announced as EXPOSED -- when in
+    # doubt this must over-warn, never under-warn.
+    if [[ "$_lab_host" == 127.* || "$_lab_host" == "localhost" || "$_lab_host" == "::1" ]]; then
       echo "[duburi-sim] open http://localhost:${_lab_port} — LOOPBACK ONLY."
       echo "[duburi-sim] remote? ssh -L ${_lab_port}:localhost:${_lab_port} <this-host>"
       echo "[duburi-sim] (DUBURI_LAB_HOST=0.0.0.0 exposes it — unauthenticated, arms thrusters)"
