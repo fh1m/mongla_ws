@@ -82,6 +82,68 @@
         <always_on>1</always_on>
         <update_rate>1000.0</update_rate>
       </sensor>
+
+      <!-- Doppler Velocity Log, downward-looking 4-beam janus array. Stands in
+           for the Nortek Nucleus1000 on the real hull, so `yaw_source=sim_dvl`
+           gives duburi_ws real bottom-track position feedback and the DVL
+           distance verbs close their loop in sim instead of dead-reckoning.
+
+           ON base_link ON PURPOSE, not on a child link of its own.
+           gz-sim only populates a link's velocity components when something
+           enables them, and the OdometryPublisher below does that for the
+           canonical link only. Mounted on its own child link the sensor still
+           reported bottom lock and a plausible range but a velocity of ~0.009
+           m/s while Gazebo's own odometry read 0.698 m/s: measured, not
+           guessed. The reference world at
+           /usr/share/gz/gz-sim8/worlds/dvl_world.sdf says the same thing with
+           its element_id="base_link": that attribute is placement, not just
+           include-override syntax. Move this to a child link and it silently
+           reads zero again.
+
+           Needs gz::sim::systems::DopplerVelocityLogSystem in the world, which
+           duburi_sim_worlds/templates/world.sdf.template loads. Without it the
+           sensor loads and never publishes, the same silent trap as the
+           cameras and gz-sim-sensors-system. -->
+      <sensor name="dvl" type="custom" gz:type="dvl">
+        <!-- Offset to the hull underside; 180 deg roll points the array down. -->
+        <pose degrees="true">@dvl_x @dvl_y @dvl_z 0 0 180</pose>
+        <always_on>1</always_on>
+        <update_rate>@dvl_update_rate</update_rate>
+        <topic>dvl/velocity</topic>
+        <gz:dvl>
+          <type>phased_array</type>
+          <arrangement degrees="true">
+            <beam id="1">
+              <aperture>2</aperture><rotation>45</rotation><tilt>30</tilt>
+            </beam>
+            <beam>
+              <aperture>2</aperture><rotation>135</rotation><tilt>30</tilt>
+            </beam>
+            <beam>
+              <aperture>2</aperture><rotation>-45</rotation><tilt>30</tilt>
+            </beam>
+            <beam>
+              <aperture>2</aperture><rotation>-135</rotation><tilt>30</tilt>
+            </beam>
+          </arrangement>
+          <tracking>
+            <bottom_mode>
+              <when>best</when>
+              <noise type="gaussian">
+                <stddev>@dvl_noise_stddev</stddev>
+              </noise>
+              <visualize>false</visualize>
+            </bottom_mode>
+          </tracking>
+          <resolution>@dvl_resolution</resolution>
+          <!-- The SAUVC pool is 1.6 m deep, so the useful altitude band is well
+               under a metre: minimum_range matters far more than maximum. -->
+          <maximum_range>@dvl_maximum_range</maximum_range>
+          <minimum_range>@dvl_minimum_range</minimum_range>
+          <!-- ENU to SFM -->
+          <reference_frame>0 0 0 0 0 -1.570796</reference_frame>
+        </gz:dvl>
+      </sensor>
     </link>
 
     <!-- ======================= CAMERAS =======================

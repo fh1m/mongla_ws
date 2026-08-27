@@ -1164,8 +1164,14 @@ class Duburi(VisionVerbs):
                 src.connect()  # type: ignore[union-attr]
                 self.log.info('[DVL  ] dvl_connect: connected')
                 return self._make_result(True, 'dvl_connect: streaming')
-            self.log.info('[DVL  ] dvl_connect: yaw_source has no connect() -- no-op')
-            return self._make_result(True, 'dvl_connect: no-op (source has no connect)')
+            src = getattr(src, 'name', type(src).__name__) if src else None
+            self.log.warning(
+                f'[DVL  ] dvl_connect: yaw_source={src!r} has no connect() -- '
+                f'there is no DVL in this configuration')
+            return self._make_result(
+                False,
+                f'dvl_connect: yaw_source={src!r} has no DVL (use dvl / bno085_dvl '
+                f'on the vehicle, sim_dvl in Gazebo)')
 
     # ================================================================== #
     #  DVL distance-based motion                                          #
@@ -1201,22 +1207,26 @@ class Duburi(VisionVerbs):
             # Heading lock stays ACTIVE during DVL distance moves.
             # The lock owns Ch4 (yaw rate); DVL drives Ch5 (forward) only.
             # _writers() already releases Ch4 when lock is live.
-            drive_forward_dist(
+            # Returns the MEASURED distance, and raises rather than falling back
+            # to a timed guess. `final_value` therefore carries real odometry --
+            # it used to carry depth with error_value hardcoded to 0.0, so a
+            # command that overshot by 136% still reported a perfect result.
+            travelled = drive_forward_dist(
                 self.pixhawk, signed_dir, distance_m, int(gain),
                 dvl_tolerance, self.log, self._writers(),
                 yaw_source=self.yaw_source, settle=settle,
                 abort_fn=self._abort_fn)
-            depth = self._current_depth()
+            target = abs(distance_m)
             return self._make_result(
-                True, f'{verb}: completed',
-                final_value=depth, error_value=0.0)
+                True, f'{verb}: completed {travelled:.2f}m of {target:.2f}m (DVL)',
+                final_value=travelled, error_value=target - travelled)
 
     def move_lateral_dist(self, distance_m, gain=36.0, dvl_tolerance=0.1,
                           settle=0.0):
         """Strafe `distance_m` metres (positive=right, negative=left) using DVL.
 
-        impl: motion_lateral.drive_lateral_dist -> NucleusDVLSource position loop.
-        Falls back to open-loop timed estimate if DVL not available.
+        impl: motion_lateral.drive_lateral_dist -> DVL position loop.
+        RAISES if no DVL position source is available (no timed fallback).
         """
         signed_dir = +1 if distance_m >= 0 else -1
         with self._command_scope('move_lateral_dist'):
@@ -1225,15 +1235,16 @@ class Duburi(VisionVerbs):
                 f'[CMD  ] move_lateral_dist  {distance_m:.2f}m  '
                 f'gain={gain:.0f}%  tol={dvl_tolerance:.3f}m  settle={settle:.1f}s')
             # Heading lock stays ACTIVE during DVL lateral moves (owns Ch4 only).
-            drive_lateral_dist(
+            travelled = drive_lateral_dist(
                 self.pixhawk, signed_dir, distance_m, int(gain),
                 dvl_tolerance, self.log, self._writers(),
                 yaw_source=self.yaw_source, settle=settle,
                 abort_fn=self._abort_fn)
-            depth = self._current_depth()
+            target = abs(distance_m)
             return self._make_result(
-                True, 'move_lateral_dist: completed',
-                final_value=depth, error_value=0.0)
+                True,
+                f'move_lateral_dist: completed {travelled:.2f}m of {target:.2f}m (DVL)',
+                final_value=travelled, error_value=target - travelled)
 
     # ================================================================== #
     #  Vision verbs                                                       #

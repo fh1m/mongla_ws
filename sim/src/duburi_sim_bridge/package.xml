@@ -15,6 +15,10 @@
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <!-- gz-transport / gz-msgs python bindings, used by dvl_bridge because
+       ros_gz_bridge has no DVLVelocityTracking conversion. Not a rosdep key;
+       ships with the Gazebo Harmonic install. -->
   <depend>rcl_interfaces</depend>
   <depend>ament_index_python</depend>
   <exec_depend>python3-pymavlink</exec_depend>

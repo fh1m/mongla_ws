@@ -107,6 +107,25 @@ CAMERA_DEFAULTS = {
     "bottom": {"x": 0.0, "y": 0.0, "z": -0.1},
 }
 
+# Doppler Velocity Log. Modelled on the Nortek Nucleus1000 carried by the real
+# hull: 4-beam janus array, ~8 Hz. The reference world ships 1 Hz, which is too
+# slow to close a distance loop on -- the control layer samples position per
+# tick, so a 1 Hz DVL would quantise every move into ~0.5 m steps.
+DVL_DEFAULTS = {
+    "x": 0.0,
+    "y": 0.0,
+    # Just below the hull, alongside the bottom camera.
+    "z": -0.10,
+    "update_rate": 8.0,
+    # +/- 0.4 cm/s within 2 stddevs, the reference figure.
+    "noise_stddev": 0.002,
+    "resolution": 0.01,
+    # The SAUVC pool floor is 1.6 m down, so max range is never the binding
+    # constraint; minimum_range is, because the hull flies close to the bottom.
+    "maximum_range": 50.0,
+    "minimum_range": 0.1,
+}
+
 
 class ModelParams:
     """Wrapper for the parameters needed to generate an SDF for use by Gazebo."""
@@ -127,6 +146,7 @@ class ModelParams:
         thrusters: list,
         use_angvel_cmd: int,
         cameras: dict,
+        dvl: dict = None,
         fdm_addr: str = "127.0.0.1",
         fdm_port_in: int = 9002,
         odom_publish_frequency: float = 50.0,
@@ -206,6 +226,16 @@ class ModelParams:
         self.bottom_camera_y = cameras["bottom"]["y"]
         self.bottom_camera_z = cameras["bottom"]["z"]
 
+        dvl = dict(DVL_DEFAULTS) if dvl is None else dvl
+        self.dvl_x = dvl["x"]
+        self.dvl_y = dvl["y"]
+        self.dvl_z = dvl["z"]
+        self.dvl_update_rate = dvl["update_rate"]
+        self.dvl_noise_stddev = dvl["noise_stddev"]
+        self.dvl_resolution = dvl["resolution"]
+        self.dvl_maximum_range = dvl["maximum_range"]
+        self.dvl_minimum_range = dvl["minimum_range"]
+
         # ArduPilotPlugin endpoint
         self.fdm_addr = fdm_addr
         self.fdm_port_in = fdm_port_in
@@ -267,6 +297,13 @@ def _merge_cameras(config: dict) -> dict:
         else:
             cameras[key] = value
     return cameras
+
+
+def _merge_dvl(config: dict) -> dict:
+    """Overlay the config's optional `dvl` block onto DVL_DEFAULTS."""
+    dvl = dict(DVL_DEFAULTS)
+    dvl.update(config.get("dvl") or {})
+    return dvl
 
 
 def get_model_params_from_config(config_path: str) -> ModelParams:
@@ -387,6 +424,7 @@ def get_model_params_from_config(config_path: str) -> ModelParams:
         ],
         config["control_method"],
         cameras=_merge_cameras(config),
+        dvl=_merge_dvl(config),
         fdm_addr=ardupilot.get("fdm_addr", "127.0.0.1"),
         fdm_port_in=ardupilot.get("fdm_port_in", 9002),
         odom_publish_frequency=config.get("odom_publish_frequency", 50.0),

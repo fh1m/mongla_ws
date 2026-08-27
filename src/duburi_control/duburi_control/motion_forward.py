@@ -42,9 +42,17 @@ from .motion_writers import (
 # arc closes Ch4 on an ABSOLUTE heading -- reuse the proven turn controller
 # (same _YawPID + rate as motion_yaw so its I/D terms stay in calibration).
 from .motion_yaw      import _YawPID, YAW_RATE_HZ
+from .errors        import MovementError, MovementTimeout
 
 _DVL_POLL_HZ   = 20     # position polling rate for distance moves
 _DVL_TIMEOUT_K = 10.0   # generous extra timeout: metres / 0.05 + this
+# Runaway guards for the DVL distance loop. Both exist because the deadline
+# bounds TIME, not distance, so a DVL reading zero used to mean full thrust for
+# the entire budget (measured: 11.3 m of travel on a 1.0 m command).
+_OVERSHOOT_K = 1.5     # stop past this multiple of the target
+_OVERSHOOT_PAD = 0.5   # ...plus this, so short commands are not hair-triggered
+_STALL_S = 6.0         # give it this long to show ANY movement
+_STALL_M = 0.05        # ...and this much counts as movement
 
 
 # ---------------------------------------------------------------------- #
@@ -168,9 +176,18 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                        abort_fn=None):
     """Drive forward (or back) a fixed distance using DVL position feedback.
 
-    Requires `yaw_source` to implement `get_position()` and
-    `reset_position()` (i.e. NucleusDVLSource). Falls back to an
-    open-loop timed estimate when DVL position is not available.
+    Requires `yaw_source` to implement `get_position()` and `reset_position()`
+    (NucleusDVLSource on the vehicle, SimDvlSource in Gazebo).
+
+    RAISES without one. There used to be an open-loop timed fallback at a
+    hardcoded 0.3 m/s; measured against Gazebo ground truth it drove 2.361 m for
+    a 1.0 m command and 5.287 m for 3.0 m, and reported "completed" both times,
+    because this function returned None on that path exactly as it does on
+    success. A distance verb with no way to measure distance cannot report
+    distance -- so it now refuses instead of guessing.
+
+    Returns the measured |x| travelled, so the caller has something real to
+    report rather than a hardcoded True.
 
     signed_dir: +1 = forward, -1 = back
     distance_m: absolute distance in metres (always positive; direction from signed_dir)
@@ -186,16 +203,12 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                and hasattr(yaw_source, 'reset_position'))
 
     if not has_dvl:
-        # Open-loop TIME estimate at a HARDCODED 0.3 m/s -- only valid for the
-        # current thruster tune. WARN (not info) so a silently-wrong distance
-        # after a retune / DVL dropout is visible on the console.
-        log.warning(f'[{label}] no DVL position source -- OPEN-LOOP fallback at '
-                    f'~0.3 m/s (distance is a rough time estimate, not measured)')
-        rough_s = max(1.0, target_m / 0.3)
-        drive_forward_constant(pixhawk, signed_dir, rough_s, gain, log,
-                               writers, yaw_source=yaw_source, settle=settle,
-                               abort_fn=abort_fn)
-        return
+        src = getattr(yaw_source, 'name', type(yaw_source).__name__)
+        raise MovementError(
+            f'{label}: no DVL position source (yaw_source={src!r} provides no '
+            f'get_position/reset_position), so {target_m:.2f} m cannot be '
+            f'measured. Use yaw_source=dvl or bno085_dvl on the vehicle, or '
+            f'sim_dvl in Gazebo. For an explicitly timed move use move_forward.')
 
     yaw_source.reset_position()
     pwm       = Pixhawk.percent_to_pwm(signed_gain)
@@ -205,11 +218,33 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
     log.info(f'[{label}] DVL dist {target_m:.2f}m  gain={gain:.0f}%  '
              f'tol={tolerance:.3f}m')
 
+    # RUNAWAY GUARD. The deadline is a TIME bound, not a distance bound: with a
+    # DVL that reads zero the loop drives at full gain for the whole budget. A
+    # 1.00 m command measured 11.3 m of real travel that way before this existed
+    # -- worse than the open-loop fallback it replaced. Stop as soon as the hull
+    # has plainly overshot, whether or not the DVL agrees it moved.
+    overshoot_limit = target_m * _OVERSHOOT_K + _OVERSHOOT_PAD
+    started = time.monotonic()
+    stall_deadline = started + _STALL_S
+
     while time.monotonic() < deadline:
         if abort_fn and abort_fn():
             break
         x_m, _ = yaw_source.get_position()
         error   = target_m - abs(x_m)
+
+        if abs(x_m) > overshoot_limit:
+            writers.neutral()
+            raise MovementError(
+                f'{label}: overshoot guard -- DVL measured {abs(x_m):.2f}m for a '
+                f'{target_m:.2f}m command. Stopping rather than driving on.')
+        if time.monotonic() > stall_deadline and abs(x_m) < _STALL_M:
+            writers.neutral()
+            raise MovementError(
+                f'{label}: no progress -- DVL still reads {abs(x_m):.3f}m after '
+                f'{_STALL_S:.0f}s at {gain:.0f}% thrust. The vehicle is either '
+                f'stuck or the DVL is not measuring. Refusing to keep driving '
+                f'blind for the full {deadline - started:.0f}s budget.')
 
         if abs(error) <= tolerance:
             log.info(f'[{label}] reached  x={x_m:.3f}m  err={error:+.3f}m')
@@ -220,8 +255,25 @@ def drive_forward_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                  throttle_duration_sec=LOG_THROTTLE)
         time.sleep(interval)
     else:
-        log.info(f'[{label}] timeout  target={target_m:.2f}m')
+        # A connected-but-frozen DVL reads a constant (0,0) and lands here after
+        # burning the whole deadline. That used to log at info and still report
+        # completed, which is the same silent-success this function just stopped
+        # doing for the missing-DVL case. Fail.
+        writers.neutral()
+        x_m, _ = yaw_source.get_position()
+        raise MovementTimeout(
+            f'{label}: timeout after {target_m / 0.05 + _DVL_TIMEOUT_K:.0f}s -- '
+            f'target={target_m:.2f}m, DVL measured only {abs(x_m):.3f}m. '
+            f'Check the DVL has bottom lock.')
 
-    writers.neutral()
-    if settle > 0.0:
-        _interruptible_sleep(settle, abort_fn)
+    # Brake before reading the final position. The loop exits the moment the DVL
+    # says the target is reached, but the hull is still at full speed and coasts
+    # on water inertia: measured 1.31 m of real travel for a 1.00 m command that
+    # the DVL correctly called at 1.00. The timed verbs already reverse-kick for
+    # exactly this reason (motion_writers.brake_kick_then_settle); the DVL path
+    # simply never did.
+    brake_kick_then_settle(
+        writers.forward, writers, -signed_dir * REVERSE_KICK_PCT, log, label,
+        extra_settle=settle, abort_fn=abort_fn)
+    x_m, _ = yaw_source.get_position()
+    return abs(x_m)
