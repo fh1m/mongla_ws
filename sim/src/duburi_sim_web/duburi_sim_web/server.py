@@ -1049,8 +1049,24 @@ if _static is not None:
     def spa_fallback(spa_path: str):
         if spa_path.startswith('api/'):
             raise HTTPException(404)
-        candidate = (_static_real / spa_path).resolve()
-        if spa_path and candidate.is_file() and candidate.is_relative_to(_static_real):
+        # Containment is checked LEXICALLY (normpath), not with resolve().
+        #
+        # resolve() follows symlinks, and `colcon build --symlink-install` makes
+        # every file under static/ a symlink into build/ -> src/. So resolve()
+        # walked the target OUT of the install tree, is_relative_to() said "not
+        # contained", and every static file except /assets/* (served by the
+        # StaticFiles mount, not this handler) silently fell through to
+        # index.html -- /ue-logo.png returned HTML and the header logo and
+        # favicon were broken images.
+        #
+        # normpath collapses `..` textually, which is what actually defeats
+        # traversal, and leaves symlinks alone. A symlink inside static/ that
+        # points outside would still be served -- acceptable, because static/ is
+        # our own build output and colcon deliberately fills it with exactly
+        # such symlinks. Attacker-controlled uploads are a different handler and
+        # have their own check.
+        candidate = Path(os.path.normpath(_static_real / spa_path))
+        if spa_path and candidate.is_relative_to(_static_real) and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(_static_real / 'index.html')
 else:

@@ -198,6 +198,22 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > extra keys are dropped with no log line. [`test_sim_contract_drift.py`](src/duburi_manager/test/test_sim_contract_drift.py)
 > asserts on it for exactly that reason — the launch itself will never complain.
 >
+> **End-to-end check:** `ros2 run duburi_planner mission sim_shakedown` — arm,
+> hold depth, out, back, surface, disarm. Symmetric legs *are* the return-to-origin
+> mechanism; measure the residual against `/duburi/sim/ground_truth`. Measured
+> 0.266 m and 0.200 m horizontal, along-track only 0.037/0.011 m — cross-track
+> heading drift dominates.
+>
+> **Sim depth readback is offset; the hull is not.** Depth comes from
+> `AHRS2.altitude` (secondary DCM) while ArduSub controls on EKF3. Measured error
+> **0.33 m at the surface, ~0.16 m at depth** — not constant. Consequences:
+> `surface()` never confirms (targets 0.00, AHRS2 plateaus ~−0.4) and
+> `mission_reset`'s baro re-zero is REFUSED (`|−0.36| > 0.30` surface bound), the
+> two interlocking. `set_depth` is fine in substance — true depth measured within
+> 2.5 cm of command. Pool floor is **1.6 m**; deeper targets bottom out. Do NOT
+> "fix" by changing the depth source: AHRS2 is the pool-verified hardware path.
+> Full table: [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
+>
 > **Vision in sim has two silent failure modes.** `duburi_sim stack` defaults to
 > `model:=gate_rescue_repair`; the `.pt` is gitignored (mirrored from `~/models`)
 > and a missing `.yaml` sidecar yields an empty allowlist and a silent `[]` every

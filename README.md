@@ -454,19 +454,89 @@ The contract gate in Terminal 3 runs `--no-vision` on purpose, so it stays
 meaningful on a box without weights.
 </details>
 
+<details open>
+<summary><b>Terminal 6 — the end-to-end check: <code>sim_shakedown</code></b></summary>
+
+One mission that exercises the whole loop — arm, hold depth, drive out, drive
+back, surface, disarm — and gives you a **number** to compare against, not a
+feeling:
+
+```bash
+ros2 run duburi_planner mission sim_shakedown
+#   depth/leg/gain overridable without editing the file:
+#   DUBURI_SHAKEDOWN_DEPTH=-0.8 DUBURI_SHAKEDOWN_LEG_S=8 ros2 run duburi_planner mission sim_shakedown
+```
+
+The two legs are **symmetric** — equal duration, equal thrust, opposite sign —
+and that is the entire return-to-origin mechanism. There is no position feedback
+in the mission by design, because the same file has to run unchanged on the real
+vehicle. So measure the residual against ground truth:
+
+```bash
+ros2 topic echo /duburi/sim/ground_truth --once   # before, and again after
+```
+
+Two measured runs (5 s legs @ 55 %, −1.2 m):
+
+| run | along-track (x) | cross-track (y) | horizontal residual |
+|---|---|---|---|
+| 1 | 0.037 m | 0.263 m | 0.266 m |
+| 2 | **0.011 m** | 0.200 m | 0.200 m |
+
+**Read the structure, not the total.** Symmetric timed legs retrace along-track
+to within 1–4 cm; the 20–26 cm error is almost entirely **cross-track**, i.e.
+heading drift during the legs. If your along-track number grows, suspect thrust
+or timing; if cross-track grows, suspect yaw hold.
+
+> **The pool is 1.6 m deep** (`sim/src/duburi_sim_worlds/spec/arena.yaml`, floor
+> at z = −1.6 in all three worlds). A deeper target is unreachable — the hull
+> bottoms out and `set_depth` burns its whole timeout. The mission warns and
+> continues rather than refusing, since the real vehicle is not in this pool.
+
+> **`surface()` will not confirm in sim, and that is expected.** Depth telemetry
+> comes from `AHRS2.altitude`, which is offset from truth (0.33 m at the surface,
+> ~0.16 m at depth) while ArduSub controls on EKF3. The hull surfaces; the
+> readback never reaches 0.00. The same offset makes `mission_reset`'s baro
+> re-zero refuse. Full measurements:
+> [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
+> `set_depth` is unaffected in substance — measured true depth was within 2.5 cm
+> of the command.
+</details>
+
 <details>
 <summary><b>Shutdown, datasets, timeseries</b></summary>
 
 ```bash
 ros2 run duburi_sim_bringup duburi_sim stop     # sim + stack + lab + bridges + prop_manager
 
-# vision datasets
-ros2 run duburi_sim_bridge record_cameras --duration 20 --fx --frames --labels \
-    --label gate_approach
+# vision datasets -- start the recorder BEFORE the mission, it cannot capture
+# retroactively. Writes to sim/datasets/<label>_<ts>/ (gitignored; ~850 MB/min
+# with --frames on two cameras).
+ros2 run duburi_sim_bridge record_cameras --duration 60 --frames --labels \
+    --label shakedown --cameras front,bottom
 
 # timeseries
 ros2 run duburi_sim_bringup duburi_sim plotjuggler
 ```
+
+**Check a recording before you train on it.** `record_cameras` buffers frames in
+RAM and drops PNG/label writes on a full queue, which desyncs the indices without
+erroring — so "the directory exists" proves nothing. Frame count on disk must
+equal `meta.json`'s `counts`:
+
+```bash
+cd sim/datasets/<run> && python3 -c "
+import json,os; m=json.load(open('meta.json'))
+for c,n in m['counts'].items():
+    f=len(os.listdir(f'frames/{c}')); l=len(os.listdir(f'labels/{c}'))
+    print(c, n, f, l, 'OK' if f==n==l else 'MISMATCH')"
+ffprobe -v error -show_entries format=duration -of csv=p=0 front.mp4   # ~= duration_s
+```
+
+Verified on two runs: 2044 and 1805 frames per camera, frames == labels ==
+`counts`, `ffprobe` within 1 ms of `duration_s`. The lab's **Datasets** tab lists
+the same runs and `/api/datasets/<run>/zip` downloads one (829 MB for a 60 s
+two-camera run).
 </details>
 
 ## Sim ⇄ hardware: what does and does not transfer

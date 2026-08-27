@@ -125,6 +125,7 @@ With sim + stack up:
 
 ```bash
 ros2 run duburi_planner mission --list
+ros2 run duburi_planner mission sim_shakedown         # end-to-end loop check
 ros2 run duburi_planner mission gate_flare_prequal    # or your mission id
 
 # or drive manually
@@ -150,6 +151,27 @@ ros2 run duburi_planner duburi disarm
 > The contract gate in step 3 deliberately runs `--no-vision` so it stays
 > meaningful without weights.
 
+**`sim_shakedown`** is the one-command proof the loop works: arm, hold depth,
+drive out, drive back, surface, disarm. The two legs are symmetric, which *is*
+the return-to-origin mechanism (no position feedback — the same file runs on the
+real vehicle). Measure the residual against ground truth:
+
+```bash
+ros2 topic echo /duburi/sim/ground_truth --once     # before, and again after
+```
+
+Two measured runs, 5 s legs @ 55 % at −1.2 m: **0.266 m** and **0.200 m**
+horizontal, of which along-track was only 0.037 m and 0.011 m. The structure is
+the point — symmetric timed legs retrace along-track almost exactly, and
+cross-track heading drift dominates.
+
+> The pool is **1.6 m deep** (`spec/arena.yaml`, floor at z = −1.6 in all three
+> worlds); a deeper target bottoms out. And `surface()` will not confirm in sim —
+> `AHRS2.altitude` is offset from truth (0.33 m at the surface, ~0.16 m at depth)
+> while ArduSub controls on EKF3, so the hull surfaces but the readback never
+> reaches 0.00. Same offset makes `mission_reset`'s baro re-zero refuse. Numbers:
+> [`.context/TROUBLESHOOTING.md`](.context/TROUBLESHOOTING.md).
+
 Mission design and YOLO models live in **`../src`** — this workspace only supplies
 physics, cameras and the lab.
 
@@ -161,7 +183,20 @@ ros2 run duburi_sim_bridge record_cameras --duration 20 --fx --frames --labels \
   --label gate_approach
 
 # or Operate → ● record → ■ stop (zip downloads)
-# verify: ffprobe duration ≈ meta.duration_s
+```
+
+**Verify a clip before training on it.** `record_cameras` buffers frames in RAM
+and drops PNG/label writes on a full queue, desyncing indices without erroring —
+so an existing directory proves nothing. Frames on disk must equal `meta.json`'s
+`counts`, and `ffprobe` duration must match `duration_s`:
+
+```bash
+cd datasets/<run> && python3 -c "
+import json,os; m=json.load(open('meta.json'))
+for c,n in m['counts'].items():
+    f=len(os.listdir(f'frames/{c}')); l=len(os.listdir(f'labels/{c}'))
+    print(c, n, f, l, 'OK' if f==n==l else 'MISMATCH')"
+ffprobe -v error -show_entries format=duration -of csv=p=0 front.mp4
 ```
 
 ### 7. Timeseries / 3D tools
