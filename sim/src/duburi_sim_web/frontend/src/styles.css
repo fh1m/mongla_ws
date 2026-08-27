@@ -1,4 +1,12 @@
 :root {
+  /* One spacing scale. Card padding, gaps and rhythm all come from these so the
+     three pages stay consistent instead of each growing ad-hoc rem values. */
+  --sp-1: 0.25rem;
+  --sp-2: 0.45rem;
+  --sp-3: 0.7rem;
+  --sp-4: 1rem;
+  --sp-5: 1.4rem;
+
   --bg: #f2f2f0;
   --ink: #111111;
   --muted: #666660;
@@ -331,9 +339,12 @@ footer {
 
 .panel {
   border: 1px solid var(--ink);
-  padding: 0.7rem 0.85rem;
+  padding: var(--sp-3) var(--sp-4);
   background: var(--bg);
-  overflow: auto;
+  /* y, not both. The sidebar is a fixed-width column, so anything needing a
+     HORIZONTAL scrollbar here is a layout bug to fix at source, not to scroll. */
+  overflow-x: hidden;
+  overflow-y: auto;
   max-height: calc(100vh - 110px);
 }
 
@@ -370,17 +381,25 @@ footer {
 
 .stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.3rem 0.6rem;
+  /* minmax(0,1fr), NOT 1fr. `1fr` is minmax(auto,1fr): a track cannot shrink
+     below its min-content, so one long unbreakable value (course =
+     "sauvc26_qualification", 21 chars) pushed the grid past the 320px sidebar,
+     `.panel { overflow:auto }` turned that into a horizontal scrollbar, and the
+     other column was crushed to ~88px -- which is what wrapped "mav link" into
+     "mav / wait link". Fixing the track fixes all three symptoms. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-3);
   margin: 0;
 }
 
 .stats.dense div {
   display: flex;
   justify-content: space-between;
-  gap: 0.4rem;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;                 /* let the flex row shrink inside its track */
   border-bottom: 1px dotted rgba(17, 17, 17, 0.25);
-  padding-bottom: 0.12rem;
+  padding-bottom: var(--sp-1);
 }
 
 .stats .full {
@@ -389,13 +408,23 @@ footer {
   align-items: flex-start;
 }
 
+.stats .full dd {
+  text-align: left;
+}
+
 .stats dt {
   color: var(--muted);
   margin: 0;
+  white-space: nowrap;          /* labels are short; never break "mav link" */
 }
 
 .stats dd {
   margin: 0;
+  min-width: 0;
+  text-align: right;
+  /* Values are the unpredictable half: without this one long token sets the
+     whole column's min-content width. */
+  overflow-wrap: anywhere;
 }
 
 .stats dd.on {
@@ -590,4 +619,62 @@ a {
 .instance-list li {
   border-bottom: 1px solid var(--line, #111);
   padding: 0.25rem 0;
+}
+
+/* --- vehicle card / link diagnosis / mode selector ------------------------ */
+
+.link-why {
+  color: var(--ink);
+  border-bottom: 1px solid var(--ink);
+  margin-left: var(--sp-2);
+  white-space: nowrap;
+}
+
+.stats dd.warn-val {
+  font-weight: 500;
+  border-bottom: 1px solid var(--ink);
+}
+
+.mode-row {
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+
+.mode-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Uniform vertical rhythm for the sidebar sections. Each h2 opens a block, so
+   the spacing above it is what makes the panel read as a stack of cards rather
+   than a run-on list. */
+.panel h2 {
+  margin: var(--sp-4) 0 var(--sp-2);
+}
+
+.panel h2:first-child {
+  margin-top: 0;
+}
+
+.dpad-wrap,
+.panel .row {
+  margin-bottom: var(--sp-2);
+}
+
+.badge {
+  border: 1px solid var(--ink);
+  padding: 0 var(--sp-1);
+  white-space: nowrap;
+}
+
+.badge.mismatch {
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 500;
+}
+
+.badge.unknown {
+  color: var(--muted);
+  border-color: var(--muted);
 }

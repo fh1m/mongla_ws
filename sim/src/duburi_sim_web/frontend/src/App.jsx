@@ -118,7 +118,10 @@ function Dpad({ armed, onArmToggle, gain, setGain, busy }) {
       fwd: (h.has('fwd') ? 1 : 0) + (h.has('bk') ? -1 : 0),
       lat: (h.has('rt') ? 1 : 0) + (h.has('lt') ? -1 : 0),
       up: (h.has('up') ? 1 : 0) + (h.has('dn') ? -1 : 0),
-      yaw: 0,
+      // yaw was hardcoded 0 here while TeleopBody.yaw, teleop.set_axes(yaw=)
+      // and CH_YAW were all already wired end to end -- the axis existed, the
+      // UI just never sent it.
+      yaw: (h.has('yr') ? 1 : 0) + (h.has('yl') ? -1 : 0),
     }
     push()
   }, [push])
@@ -150,6 +153,8 @@ function Dpad({ armed, onArmToggle, gain, setGain, busy }) {
         d: 'rt', D: 'rt', ArrowRight: 'rt',
         r: 'up', R: 'up',
         f: 'dn', F: 'dn',
+        q: 'yl', Q: 'yl',
+        e: 'yr', E: 'yr',
       }
       if (e.code === 'Space') {
         e.preventDefault()
@@ -170,6 +175,8 @@ function Dpad({ armed, onArmToggle, gain, setGain, busy }) {
         d: 'rt', D: 'rt', ArrowRight: 'rt',
         r: 'up', R: 'up',
         f: 'dn', F: 'dn',
+        q: 'yl', Q: 'yl',
+        e: 'yr', E: 'yr',
       }
       const k = map[e.key]
       if (k) {
@@ -231,6 +238,10 @@ function Dpad({ armed, onArmToggle, gain, setGain, busy }) {
         <span className="pad ghost" />
       </div>
       <div className="heave">
+        {btn('yl', '↺ yaw', 'heave-btn')}
+        {btn('yr', 'yaw ↻', 'heave-btn')}
+      </div>
+      <div className="heave">
         {btn('up', '⬆ up', 'heave-btn')}
         {btn('dn', '⬇ dn', 'heave-btn')}
       </div>
@@ -246,9 +257,22 @@ function Dpad({ armed, onArmToggle, gain, setGain, busy }) {
         />
         <span>{gain.toFixed(2)}</span>
       </label>
-      <p className="hint">wasd · r/f depth · space arm</p>
+      <p className="hint">wasd move · q/e yaw · r/f depth · space arm</p>
     </div>
   )
+}
+
+// What is actually wrong, in words. Five unlabelled dots told you something was
+// off but not which layer, and the layers fail in a fixed order -- no Gazebo
+// means no SITL means no MAVLink -- so the FIRST broken one is the only one
+// worth acting on. Everything downstream of it is a symptom.
+function linkDiagnosis(link = {}, teleop) {
+  if (!link.gz) return ['gazebo is not running', 'duburi_sim sim']
+  if (!link.sitl) return ['ArduSub SITL is not up', 'restart: duburi_sim sim']
+  if (!link.mav) return ['no MAVLink from the manager', 'duburi_sim stack']
+  if (!link.cams) return ['camera bridge has no frames', 'check duburi_sim sim log']
+  if (!(teleop?.connected ?? link.teleop)) return ['teleop link idle', 'arm or nudge the d-pad']
+  return [null, null]
 }
 
 function LinkDots({ link = {}, teleop }) {
@@ -259,6 +283,7 @@ function LinkDots({ link = {}, teleop }) {
     ['cams', link.cams],
     ['teleop', teleop?.connected ?? link.teleop],
   ]
+  const [what, how] = linkDiagnosis(link, teleop)
   return (
     <span className="dot-row">
       {items.map(([k, on]) => (
@@ -267,14 +292,25 @@ function LinkDots({ link = {}, teleop }) {
           {k}
         </span>
       ))}
+      {what && <span className="link-why" title={how}>{what}</span>}
     </span>
   )
 }
+
+// Pool floor from duburi_sim_worlds/spec/arena.yaml (surface z=0, depth 1.6).
+const POOL_FLOOR_M = -1.6
+// Mirrors ALLOWED_MODES in server.py. Kept short on purpose: SURFACE has its
+// own verb and POSHOLD needs DVL/EKF params the sim does not set.
+const MODES = ['MANUAL', 'STABILIZE', 'ALT_HOLD', 'ACRO', 'DEPTH_HOLD']
 
 function Operate({ status, refresh }) {
   const st = status?.state || {}
   const gt = status?.ground_truth || {}
   const link = status?.link || {}
+  const depthDelta =
+    gt?.have && st.depth_m != null && !Number.isNaN(Number(st.depth_m))
+      ? Number(st.depth_m) - Number(gt.z)
+      : null
   const course = status?.active_course || status?.sim?.active_course || 'sauvc26_qualification'
   const [camMode, setCamMode] = useState('both')
   const [gain, setGain] = useState(0.55)
@@ -310,6 +346,27 @@ function Operate({ status, refresh }) {
       if (armedRef.current) await api('/api/vehicle/disarm', { method: 'POST' })
       else await api('/api/vehicle/arm', { method: 'POST' })
       await refresh()
+    } catch (e) {
+      setMsg(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }, [refresh])
+
+  const onSetMode = useCallback(async (mode) => {
+    setBusy(true)
+    setMsg(`mode -> ${mode} ...`)
+    try {
+      await api('/api/vehicle/mode', {
+        method: 'POST',
+        body: JSON.stringify({ cmd: 'set_mode', target_name: mode }),
+      })
+      // Read it back rather than trusting the POST: ArduSub can refuse a mode
+      // (ALT_HOLD needs a healthy depth source), and the refusal is the thing
+      // worth showing.
+      const after = await refresh()
+      const now = after?.state?.mode
+      setMsg(now === mode ? `mode ${mode}` : `asked for ${mode}, vehicle reports ${now || 'unknown'}`)
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -409,14 +466,43 @@ function Operate({ status, refresh }) {
         <h2>vehicle</h2>
         <dl className="stats dense">
           <div><dt>armed</dt><dd className={st.armed ? 'on' : ''}>{st.armed ? 'yes' : 'no'}</dd></div>
-          <div><dt>mode</dt><dd>{st.mode || '—'}</dd></div>
+          <div><dt>mav</dt><dd>{link.mav ? 'live' : 'waiting'}</dd></div>
           <div><dt>depth</dt><dd>{fmtM(st.depth_m)}</dd></div>
           <div><dt>yaw</dt><dd>{fmtDeg(st.yaw_deg)}</dd></div>
           <div><dt>battery</dt><dd>{st.battery_voltage != null ? `${Number(st.battery_voltage).toFixed(1)} V` : '—'}</dd></div>
-          <div className="full"><dt>position</dt><dd className="pos">{fmtPos(gt)}</dd></div>
-          <div><dt>course</dt><dd>{course}</dd></div>
-          <div><dt>mav link</dt><dd>{link.mav ? 'live' : 'waiting'}</dd></div>
+          <div><dt>alt</dt><dd>{fmtM(gt?.have ? Math.abs(POOL_FLOOR_M - gt.z) : null)}</dd></div>
+          {/* course is a single 21-char unbreakable token; in a half-width
+              track it set the grid's min-content and forced the whole sidebar
+              to overflow. Full width is the honest place for it. */}
+          <div className="full"><dt>course</dt><dd>{course}</dd></div>
+          <div className="full"><dt>ground truth</dt><dd className="pos">{fmtPos(gt)}</dd></div>
+          {/* Sim ground truth vs what the stack believes. This is the exact
+              bug class the audit is about: depth is read from AHRS2, which is
+              offset from truth by ~0.33 m at the surface, and that offset is
+              why surface() never confirms and calibrate_depth refuses. Showing
+              the delta makes it visible instead of folklore. */}
+          <div className="full">
+            <dt>depth vs truth</dt>
+            <dd className={`pos ${depthDelta != null && Math.abs(depthDelta) > 0.25 ? 'warn-val' : ''}`}>
+              {depthDelta == null
+                ? '—'
+                : `stack ${Number(st.depth_m).toFixed(2)} · truth ${Number(gt.z).toFixed(2)} · Δ ${depthDelta >= 0 ? '+' : ''}${depthDelta.toFixed(2)} m`}
+            </dd>
+          </div>
         </dl>
+
+        <h2>mode</h2>
+        <div className="row mode-row">
+          <select
+            value={st.mode && MODES.includes(st.mode) ? st.mode : ''}
+            disabled={busy || !link.mav}
+            onChange={(e) => e.target.value && onSetMode(e.target.value)}
+          >
+            <option value="" disabled>{st.mode || 'unknown'}</option>
+            {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <span className="muted">{st.mode || 'unknown'}</span>
+        </div>
 
         <h2>teleop</h2>
         <Dpad
@@ -808,6 +894,7 @@ function Datasets() {
               <th>position start</th>
               <th>position end</th>
               <th>size</th>
+              <th>integrity</th>
               <th />
             </tr>
           </thead>
@@ -827,6 +914,19 @@ function Datasets() {
                   <td className="mono tiny">{fmtPos(m.gt_start ? { ...m.gt_start, have: true } : null)}</td>
                   <td className="mono tiny">{fmtPos(m.gt_end ? { ...m.gt_end, have: true } : null)}</td>
                   <td>{r.size_mb} MB</td>
+                  {/* record_cameras drops png/label writes on a full queue
+                      without erroring, so a finished-looking directory can have
+                      desynced indices. Surfacing it here catches a bad clip
+                      before it is trained on. */}
+                  <td>
+                    <span
+                      className={`badge ${r.integrity?.state || 'unknown'}`}
+                      title={r.integrity?.detail || ''}
+                    >
+                      {r.integrity?.state === 'ok' ? 'ok'
+                        : r.integrity?.state === 'mismatch' ? 'MISMATCH' : '?'}
+                    </span>
+                  </td>
                   <td>
                     <a href={`/api/datasets/${encodeURIComponent(r.id)}/zip`}>zip ↓</a>
                   </td>
@@ -847,9 +947,15 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await api('/api/sim/status'))
+      const next = await api('/api/sim/status')
+      setStatus(next)
+      // Returned so callers can read the vehicle's ANSWER instead of assuming
+      // their command took (setStatus is async, so reading state after await
+      // refresh() would still see the old value).
+      return next
     } catch {
       /* offline */
+      return null
     }
   }, [])
 

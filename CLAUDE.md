@@ -198,6 +198,15 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > extra keys are dropped with no log line. [`test_sim_contract_drift.py`](src/duburi_manager/test/test_sim_contract_drift.py)
 > asserts on it for exactly that reason — the launch itself will never complain.
 >
+> **The sim has a DVL** (Gazebo ships one natively). `duburi_sim stack` defaults
+> to `yaw_source=sim_dvl` — MAVLink AHRS heading + DVL position — so the `*_dist`
+> verbs close a real loop in sim. Without a DVL they now **RAISE** rather than
+> falling back to a timed guess: that fallback drove 2.361 m for a 1.0 m command
+> and reported success. See [`sim/.context/DVL_AND_SONAR.md`](sim/.context/DVL_AND_SONAR.md)
+> — especially the axis mapping and the sim-time-vs-wall-clock trap, both of
+> which produce a sensor that looks fine and reads wrong. **Sonar does not exist
+> in Gazebo Harmonic**; use `gpu_lidar` or the DVL's altitude.
+>
 > **End-to-end check:** `ros2 run duburi_planner mission sim_shakedown` — arm,
 > hold depth, out, back, surface, disarm. Symmetric legs *are* the return-to-origin
 > mechanism; measure the residual against `/duburi/sim/ground_truth`. Measured

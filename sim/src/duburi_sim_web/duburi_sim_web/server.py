@@ -119,12 +119,24 @@ class FxBody(BaseModel):
     use_fx_feed: Optional[bool] = None
 
 
+# ArduSub modes this lab may select. An allowlist, not a passthrough:
+# `target_name` lands in argv. SURFACE is deliberately absent (it is an
+# emergency action with its own verb) and so is POSHOLD (it needs DVL/EKF
+# params the sim does not set).
+ALLOWED_MODES = ('MANUAL', 'STABILIZE', 'ALT_HOLD', 'ACRO', 'DEPTH_HOLD')
+
+
 class MoveBody(BaseModel):
     cmd: str
     duration: Optional[float] = None
     gain: Optional[float] = None
     target: Optional[float] = None
     timeout: Optional[float] = None
+    # The only STRING argument the lab passes through. `set_mode` needs
+    # --target_name, and every other field here is numeric -- which is exactly
+    # why mode changes were unreachable from the browser: the request reached
+    # argparse with a required argument missing and died with exit 2.
+    target_name: Optional[str] = None
 
 
 class TeleopBody(BaseModel):
@@ -509,6 +521,13 @@ def vehicle_cmd(body: MoveBody):
         extra += ['--target', str(body.target)]
     if body.timeout is not None:
         extra += ['--timeout', str(body.timeout)]
+    if body.target_name is not None:
+        name = body.target_name.strip().upper()
+        if name not in ALLOWED_MODES:
+            raise HTTPException(
+                400, f'mode {body.target_name!r} not allowed; '
+                     f'choose one of {", ".join(ALLOWED_MODES)}')
+        extra += ['--target_name', name]
     args = _duburi_cmd(body.cmd, *extra)
     # stdin=DEVNULL: this runs in the request path with a 180 s timeout. Anything
     # downstream that decides to prompt would otherwise hold a worker for the
@@ -518,6 +537,19 @@ def vehicle_cmd(body: MoveBody):
     if proc.returncode != 0:
         raise HTTPException(400, proc.stderr or proc.stdout or 'command failed')
     return {'ok': True, 'stdout': proc.stdout}
+
+
+@app.get('/api/vehicle/modes')
+def vehicle_modes():
+    return {'modes': list(ALLOWED_MODES)}
+
+
+@app.post('/api/vehicle/mode')
+def vehicle_mode(body: MoveBody):
+    """Set the ArduSub flight mode. `target_name` is the mode; `cmd` is ignored."""
+    if not body.target_name:
+        raise HTTPException(400, 'target_name is required')
+    return vehicle_cmd(MoveBody(cmd='set_mode', target_name=body.target_name))
 
 
 @app.post('/api/vehicle/arm')
@@ -964,6 +996,42 @@ async def assets_upload(file: UploadFile = File(...)):
     }
 
 
+def _dataset_integrity(path, meta):
+    """Do the frames on disk match what meta.json claims?
+
+    record_cameras buffers frames in RAM and DROPS png/label writes when the
+    queue fills, without erroring -- so the indices desync silently and the
+    directory still looks finished. "It exists" proves nothing; the counts have
+    to agree. This is the same check the README documents, run per-clip so a bad
+    recording is caught in the UI instead of after training on it.
+    """
+    counts = (meta or {}).get('counts') or {}
+    if not counts:
+        return {'state': 'unknown', 'detail': 'no counts in meta.json'}
+    if not (meta or {}).get('frames_dumped'):
+        return {'state': 'ok', 'detail': 'video only (no frames dumped)'}
+    bad = []
+    for cam, n in counts.items():
+        try:
+            frames = sum(1 for _ in (path / 'frames' / cam).iterdir())
+        except OSError:
+            bad.append(f'{cam}: frames/ missing')
+            continue
+        if frames != n:
+            bad.append(f'{cam}: {frames} frames vs meta {n}')
+        if (meta or {}).get('labels'):
+            try:
+                labels = sum(1 for _ in (path / 'labels' / cam).iterdir())
+            except OSError:
+                bad.append(f'{cam}: labels/ missing')
+                continue
+            if labels != n:
+                bad.append(f'{cam}: {labels} labels vs meta {n}')
+    if bad:
+        return {'state': 'mismatch', 'detail': '; '.join(bad)}
+    return {'state': 'ok', 'detail': 'frames == labels == meta.counts'}
+
+
 @app.get('/api/datasets')
 def list_datasets():
     import json
@@ -988,6 +1056,7 @@ def list_datasets():
                 'path': str(path),
                 'size_mb': round(sum(f.stat().st_size for f in path.rglob('*') if f.is_file()) / 1e6, 2),
                 'meta': meta,
+                'integrity': _dataset_integrity(path, meta),
                 'mtime': path.stat().st_mtime,
             }
         )
