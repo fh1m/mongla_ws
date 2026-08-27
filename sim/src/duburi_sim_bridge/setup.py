@@ -30,6 +30,7 @@ setup(
             'record_cameras = duburi_sim_bridge.record_cameras:main',
             'underwater_fx = duburi_sim_bridge.underwater_fx:main',
             'dvl_bridge = duburi_sim_bridge.dvl_bridge:main',
+            'verb_audit = duburi_sim_bridge.verb_audit:main',
         ],
     },
 )
