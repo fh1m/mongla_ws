@@ -80,6 +80,73 @@ export GZ_IP=127.0.0.1
 
 Required on hosts with many NICs; launch also sets this.
 
+## Verb audit — what each verb PHYSICALLY does
+
+Measured against `/duburi/sim/ground_truth`, 2026-08-28. Rerun with:
+
+```bash
+ros2 run duburi_sim_bridge verb_audit            # all cases
+ros2 run duburi_sim_bridge verb_audit --only turn,arc
+```
+
+The stack's telemetry cannot referee itself — that is how the AHRS2 depth offset
+and the `move_forward_dist` dead-reckoning both survived. Two failure shapes:
+**Type A** (verb fails, physics succeeded — `surface()`) and **Type B** (verb
+succeeds, physics did something else — `move_forward_dist`). Type B is the
+dangerous one.
+
+| verb | measured | verdict |
+|---|---|---|
+| `move_forward` | +2.80 m body-x, 0.01 m cross | ok |
+| `move_back` | −2.82 m body-x | ok |
+| `move_right` | starboard; Ch6 = 1720 (>1500) | ok |
+| `move_left` | port | ok |
+| `yaw_right` 45° | GT −44.09° (CW) | ok, 0.9° error |
+| `yaw_left` 45° | GT +43.87° (CCW) | ok |
+| `turn` 60/120/0 | stack 58.6 / 118.8 / 0.9 | ok, ≤1.4° error |
+| `arc` | +20.6° over a 5 s curve | ok |
+| `head` | reports heading | ok |
+| `style_yaw` | −356.5° (one flip) | ok |
+| `style_roll` | +362° reported | ok |
+| `set_depth` −0.5 / −1.0 | true z −0.522 / −1.025 | ok, ≤2.5 cm |
+| `set_mode ALT_HOLD` | MAVLink HEARTBEAT confirms | ok |
+| `lock_heading` / `unlock_heading` | locks, releases | **inconclusive — see below** |
+| `move_forward_dist` 1 m | 1.26 m (was 2.361 m) | ok since the DVL landed |
+| `move_back_dist` 1 m | −1.11 m body-x, DVL said 1.04 | ok |
+| `move_lateral_dist` 1 m | 1.15 m starboard, DVL said 1.03 | ok |
+| `fire` | fails loudly | ok — no payload hardware in sim |
+| `dvl_connect` | fails without a DVL | ok since it stopped claiming success |
+
+### `lock_heading` cannot be validated in sim
+
+The disturbance test (lock, then strafe, then measure heading) is **inconclusive
+here**: the hull drifts only 1.4° over a 6 s strafe *without* the lock, so there
+is nothing for the lock to resist and locked-vs-unlocked cannot be separated.
+
+The simulator under-represents the lateral-to-yaw coupling of the real hull —
+the coupling that `CLAUDE.md` documents as causing align-yaw jitter, and that
+`heading_lock`'s tapered floor exists to handle. **Heading-lock tuning must be
+validated in the pool, not here.**
+
+### Two traps for anyone extending the audit
+
+1. **Never measure rotation from a before/after pair.** The hull carries angular
+   momentum through the settle and wraps past ±180°, so the same teleop input
+   measured −27.7° once and +169.7° the next time. Sample continuously and
+   accumulate unwrapped, which `verb_audit.py` does. To settle a direction
+   question, the RC PWM is unambiguous where ground truth is not.
+2. **The two yaw frames differ by a negation AND an offset.** Measured, with
+   residuals of −0.0 / −0.2 / +0.2° over targets 60 / 120 / 0:
+
+   ```
+   gt_yaw = 90 - stack_yaw
+   ```
+
+   The stack is a compass heading (CW-positive, zero at north); ground truth is
+   ENU (CCW-positive, zero at +x/east). Using the negation alone reports an ~88°
+   error on a turn that is accurate to 1.4° — a correct verb flagged Type B by a
+   wrong harness.
+
 ## `surface()` times out / `calibrate_depth` refuses / depth reads deeper than it is
 
 **One cause, three symptoms.** Measured 2026-08-27 against ground truth.
