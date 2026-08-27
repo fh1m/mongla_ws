@@ -1,4 +1,10 @@
-"""CompositeBnoDvlSource -- BNO085 heading + Nucleus DVL position.
+"""CompositeBnoDvlSource -- heading from one source, position from another.
+
+Named for its first user (BNO085 + Nucleus) but the split is generic: the two
+arguments are only ever used as "the thing that knows heading" and "the thing
+that knows position". `sim_dvl` reuses it unchanged with MAVLink AHRS heading
+and the Gazebo DVL, which is why `name` is a constructor argument -- the log
+line has to say which pairing is actually running.
 
 Use this when you want the BNO085's gyro-fused heading (robust against
 magnetic interference) for yaw turns AND the Nucleus 1000's DVL bottom-
@@ -29,15 +35,18 @@ class CompositeBnoDvlSource(YawSource):
 
     name: str = 'bno085_dvl'
 
-    def __init__(self, bno_source, dvl_source, logger=None):
+    def __init__(self, bno_source, dvl_source, logger=None, name=None):
         """
-        bno_source: BNO085Source (provides read_yaw, is_healthy, close)
-        dvl_source: NucleusDVLSource (provides connect, get_position,
+        bno_source: heading source (provides read_yaw, is_healthy, close)
+        dvl_source: position source (provides connect, get_position,
                     reset_position, is_healthy, close)
+        name:       overrides the class-level name so logs identify the pairing
         """
         self._bno = bno_source
         self._dvl = dvl_source
         self._log = logger
+        if name:
+            self.name = name
 
     # ------------------------------------------------------------------
     #  YawSource ABC (heading from BNO085)

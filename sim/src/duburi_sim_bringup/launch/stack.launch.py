@@ -24,6 +24,15 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
+    # sim_dvl = MAVLink AHRS heading + the Gazebo DVL's bottom-track position.
+    # Position is what the *_dist verbs need; before the sim had a DVL they fell
+    # back to a timed guess and reported success anyway (1.0 m commanded ->
+    # 2.361 m travelled). Set mavlink_ahrs to reproduce the old heading-only
+    # setup; the *_dist verbs then refuse rather than guessing.
+    yaw_source_arg = DeclareLaunchArgument(
+        'yaw_source', default_value='sim_dvl',
+        description='sim_dvl (AHRS heading + Gazebo DVL position) | mavlink_ahrs')
+
     args = [
         DeclareLaunchArgument(
             'vision', default_value='true',
@@ -59,7 +68,7 @@ def generate_launch_description():
         launch_arguments={
             'mode': 'sim',
             'flight_controller': 'pixhawk',
-            'yaw_source': 'mavlink_ahrs',
+            'yaw_source': LaunchConfiguration('yaw_source'),
             'vision': 'false',
             'dvl_auto_connect': 'false',
             'viewer': 'false',
@@ -85,4 +94,4 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('vision')),
     )
 
-    return LaunchDescription(args + [manager, vision])
+    return LaunchDescription([yaw_source_arg] + args + [manager, vision])

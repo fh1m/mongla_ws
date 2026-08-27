@@ -102,6 +102,30 @@ def _build_bno085_dvl(*, port, baud, logger=None, pixhawk=None,
     return CompositeBnoDvlSource(bno, dvl, logger=logger)
 
 
+def _build_sim_dvl(*, pixhawk, logger=None, sim_dvl_topic='/dvl/velocity', **_):
+    """Gazebo DVL position + MAVLink AHRS heading, for the simulator.
+
+    The DVL is position-only, so it must be paired with a heading source or
+    every yaw verb breaks. `stack.launch.py` otherwise pins the sim to
+    `mavlink_ahrs`; this keeps that heading and only adds bottom-track position,
+    which is what turns the `*_dist` verbs from dead reckoning into a real
+    closed loop in sim.
+
+    Connects eagerly: unlike the Nucleus (a TCP link that may not be plugged
+    in), the gz subscription is local and cheap, and a mission that forgets
+    `dvl_connect` would otherwise silently have no position.
+    """
+    if pixhawk is None:
+        raise ValueError("yaw_source='sim_dvl' requires pixhawk=<Pixhawk> for heading")
+    from .sources.sim_dvl import SimDvlSource
+    from .sources.composite_bno_dvl import CompositeBnoDvlSource
+
+    ahrs = MavlinkAhrsSource(pixhawk)
+    dvl = SimDvlSource(topic=sim_dvl_topic, logger=logger)
+    dvl.connect()
+    return CompositeBnoDvlSource(ahrs, dvl, logger=logger, name='sim_dvl')
+
+
 # Registered sources. witmotion is wired up as a fail-loud stub so users
 # hitting `yaw_source='witmotion'` get a clear "not implemented" message
 # instead of a generic "unknown source" error from make_yaw_source.
@@ -112,6 +136,7 @@ BUILDERS = {
     'nucleus_dvl':  _build_nucleus_dvl,
     'bno085_dvl':   _build_bno085_dvl,   # BNO heading + DVL position
     'dvl_bno':      _build_bno085_dvl,   # alias
+    'sim_dvl':      _build_sim_dvl,     # Gazebo DVL position + AHRS heading
     'witmotion':    _build_witmotion_stub,
 }
 

@@ -89,4 +89,18 @@ def generate_launch_description():
             output='screen',
             condition=IfCondition(fx),
         ),
+        # DVL. NOT a parameter_bridge entry: ros_gz_bridge has no
+        # gz.msgs.DVLVelocityTracking conversion and ros_gz_interfaces has no
+        # matching .msg, so this speaks gz-transport directly.
+        #
+        # Observability only. The control path (duburi_sensors' SimDvlSource)
+        # subscribes to the gz topic itself, so the *_dist verbs keep working
+        # even if this node is down -- deliberately, so a debugging tool can
+        # never be load-bearing for vehicle control.
+        Node(
+            package='duburi_sim_bridge',
+            executable='dvl_bridge',
+            name='duburi_sim_dvl_bridge',
+            output='screen',
+        ),
     ])

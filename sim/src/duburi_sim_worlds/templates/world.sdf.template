@@ -31,6 +31,12 @@
       <render_engine>ogre2</render_engine>
     </plugin>
 
+    <!-- Required by the vehicle's DVL. Same silent-failure trap as the sensors
+         system above: without this the <sensor gz:type="dvl"> loads and never
+         publishes, and nothing logs a complaint. -->
+    <plugin filename="gz-sim-dvl-system"
+            name="gz::sim::systems::DopplerVelocityLogSystem"/>
+
     <!-- Graded buoyancy: water below the surface, air above it. This is what
          lets the vehicle float at z = 0 rather than being pushed out of the pool.
          <enable> is a whitelist, so every model that needs buoyancy has to be

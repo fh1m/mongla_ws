@@ -29,6 +29,7 @@ setup(
             'mavlink_check = duburi_sim_bridge.mavlink_check:main',
             'record_cameras = duburi_sim_bridge.record_cameras:main',
             'underwater_fx = duburi_sim_bridge.underwater_fx:main',
+            'dvl_bridge = duburi_sim_bridge.dvl_bridge:main',
         ],
     },
 )
