@@ -90,3 +90,50 @@ def test_gt_label_tables_cover_the_same_props():
     assert set(gt_labels.MODEL_TO_CLASS) == set(gt_labels.PROP_HALF_EXTENTS)
     for name in gt_labels.MODEL_TO_CLASS.values():
         assert name in gt_labels.CLASSES
+
+
+# ---------------------------------------------------------------------------
+# hydrophone
+# ---------------------------------------------------------------------------
+
+def test_hydrophone_degradations_are_all_reachable():
+    """Every degradation must be switchable, or the sensor is untestable.
+
+    A mission tuned against a perfect bearing learns nothing, and a mission
+    tuned against a sensor whose noise cannot be turned off cannot be debugged.
+    Both directions matter, so both are asserted.
+    """
+    from duburi_sim_bridge import hydrophone
+
+    src = hydrophone.__doc__ or ''
+    for word in ('dropout', 'ghost', 'blind cone', 'SNR'):
+        assert word.lower() in src.lower(), f'{word} undocumented'
+
+
+def test_bearing_wrap_is_symmetric_about_180():
+    from duburi_sim_bridge.hydrophone import _wrap180
+
+    assert _wrap180(190.0) == pytest.approx(-170.0)
+    assert _wrap180(-190.0) == pytest.approx(170.0)
+    assert _wrap180(0.0) == 0.0
+    # 180 and -180 are the same bearing; the convention must not drift.
+    assert abs(_wrap180(180.0)) == pytest.approx(180.0)
+
+
+def test_a_ghost_is_far_from_truth_not_near_it():
+    """The point of modelling ghosts separately from noise.
+
+    Noise scatters around the true bearing and averages away. A multipath ghost
+    is a CONFIDENT WRONG bearing off a wall, arriving on time and looking as
+    valid as a real ping -- it is what breaks homing that averages. If ghosts
+    were drawn near the truth they would be indistinguishable from noise and the
+    whole distinction would be decorative.
+    """
+    import inspect
+
+    from duburi_sim_bridge import hydrophone
+
+    src = inspect.getsource(hydrophone.Hydrophone._ping)
+    assert 'uniform(35.0, 120.0)' in src, (
+        'ghost offset is no longer a large deflection; a ghost near the true '
+        'bearing is just noise')

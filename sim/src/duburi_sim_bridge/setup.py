@@ -34,6 +34,7 @@ setup(
             'tf_broadcaster = duburi_sim_bridge.tf_broadcaster:main',
             'verb_audit = duburi_sim_bridge.verb_audit:main',
             'rviz_check = duburi_sim_bridge.rviz_check:main',
+            'hydrophone = duburi_sim_bridge.hydrophone:main',
         ],
     },
 )

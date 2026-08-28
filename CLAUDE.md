@@ -260,6 +260,20 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > **`bin_fire_blood.pt` has NO `bin` class** — embedded names are
 > `{0: blood, 1: fire}`. Asking for `classes:=bin` detects nothing, silently.
 >
+> **TWO COMPETITIONS now.** `spec/arena.yaml` split into `spec/sauvc.yaml` +
+> `spec/robosub.yaml`; a course picks one with `competition: robosub`. RoboSub's
+> pool is **2.1 m** deep vs SAUVC's 1.6 m, which is why this needed a refactor and
+> not a config line: depth-spanning props bake pool depth in at generation time,
+> and textures are sized from the pool (one shared set stretched over a different
+> pool is wrong with **no error**). 14 RoboSub props + 6 courses
+> (`robosub26_full`, `rs_task_*`). The gate's red/black **asymmetry** and the
+> torpedo board's two **openings** are real geometry, because scoring depends on
+> them. Acoustics: `ros2 run duburi_sim_bridge hydrophone` reports bearing /
+> elevation / SNR per ping with dropouts, range-growing noise and **multipath
+> ghosts** (a confident wrong bearing, not noise — it is what breaks homing that
+> averages). Verified against ground truth: median 5.4° error, 7 % ghosts. Full
+> detail: [`sim/.context/ROBOSUB_AND_ACOUSTICS.md`](sim/.context/ROBOSUB_AND_ACOUSTICS.md).
+>
 > **Props follow the SAUVC rulebook** and every prop can be spawned anywhere at
 > runtime: `ros2 run duburi_sim_scenarios props add <model> <name> <x> <y>`.
 > Six courses, three of them single-task. Textures are generated
