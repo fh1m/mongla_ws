@@ -58,7 +58,31 @@ SCENE_DEFAULTS = {
     "fog_end": 22.0,
     "fog_density": 0.028,
     "shadows": True,
+    # plane | gerstner | none  -- see WATER_SURFACES below.
+    "water_surface": "plane",
 }
+
+# How the water surface at z = 0 is drawn.
+#
+#   plane     a translucent generated texture. Static, cheap, always available.
+#   gerstner  Gazebo's own animated Gerstner-wave surface, pulled from Fuel.
+#             VERIFIED 2026-08-29 to render in CAMERA SENSOR frames, not just
+#             the GUI -- a controlled A/B on one scene changed 48.7 % of pixels
+#             (see TROUBLESHOOTING.md). That mattered because gz-sim renders two
+#             separate scenes and the world's <fog> famously reaches only one of
+#             them, so "it looks right in the GUI" proves nothing about datasets.
+#   none      no surface at all; the sky shows raw.
+#
+# The Fuel URI is referenced rather than vendored: Gazebo downloads and caches
+# it on first use, so nothing of unclear provenance lands in this repo. The
+# trade is that the FIRST run of a gerstner course needs network. Courses using
+# it should say so.
+WATER_SURFACES = ("plane", "gerstner", "none")
+
+# openrobotics/waves -- the first-party Gazebo asset. Its shaders carry the
+# Apache-2.0 UUV Simulator header; other teams' copies of this model are copies
+# of exactly this, and theirs are git-lfs pointers rather than usable meshes.
+GERSTNER_URI = "https://fuel.gazebosim.org/1.0/openrobotics/models/waves"
 
 # Named lighting / fog presets courses can pick with scene.lighting: clear|competition|murky
 #
@@ -274,7 +298,22 @@ def generate(course_path: str, spec: dict, outdir: str = WORLDS_DIR) -> str:
     physics = dict(PHYSICS_DEFAULTS)
     physics.update(course.get("physics") or {})
 
+    water_surface = scene.get("water_surface", "plane")
+    if water_surface not in WATER_SURFACES:
+        raise ValueError(
+            f"unknown water_surface {water_surface!r}; "
+            f"known: {', '.join(WATER_SURFACES)}")
+
     props_xml, dynamic = build_props(course, spec, pool_cfg)
+    if water_surface == "gerstner":
+        # Sits at z=0 like the plane it replaces. No collision (the model is
+        # visual-only), so `surface()` still works -- the vehicle is not pushing
+        # against a lid.
+        props_xml += (
+            f'\n\n<include>\n  <uri>{GERSTNER_URI}</uri>\n'
+            f'  <name>water_surface</name>\n'
+            f'  <pose>0 0 0 0 0 0</pose>\n</include>'
+        )
     vehicle_xml, vehicle_name = build_vehicle(course, pool_cfg)
 
     enabled = ([vehicle_name] if vehicle_name else []) + dynamic
@@ -301,7 +340,7 @@ def generate(course_path: str, spec: dict, outdir: str = WORLDS_DIR) -> str:
         fog_end=scene["fog_end"],
         fog_density=scene["fog_density"],
         floor_z=f"{-pool_cfg['depth']:.6g}",
-        pool=_indent(pl.pool(spec, pool_cfg), 2),
+        pool=_indent(pl.pool(spec, pool_cfg, water_surface), 2),
         props=_indent(props_xml, 2),
         vehicle=_indent(vehicle_xml, 2),
     )

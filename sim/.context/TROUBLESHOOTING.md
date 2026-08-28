@@ -268,6 +268,56 @@ Shut the sim and vision down before `colcon test`. A test that passes alone and
 fails in the suite is usually ordering; a test that passes alone and fails with
 the suite *while a stack is up* is the ROS graph, not the test.
 
+### `ShaderParam` DOES reach camera sensors (unlike `<fog>`) — verified
+
+Worth stating because the obvious prior is wrong. gz-sim renders **two separate
+scenes**: a server-side one created by the `Sensors` system, which is what
+cameras see, and a client-side one created by `MinimalScene`, which is what the
+GUI shows. The world's `<scene><fog>` reaches only the second — that is the whole
+turbidity bug above. So "custom shaders work" needed proving, not assuming.
+
+**They work.** Controlled A/B on one scene, headless, only the plugin differing:
+
+| | result |
+|---|---|
+| Gerstner shader on | rippled, shaded water surface with a horizon |
+| shader stripped, same mesh, same pose | flat untextured plane |
+
+48.7 % of pixels changed, mean absolute difference 61/255.
+
+**Two traps cost most of the time it took to establish that**, both worth knowing:
+
+1. **A shader that fails renders NOTHING, and logs nothing.** A hand-written
+   marker shader made the visual disappear entirely from the camera — no error,
+   no warning, at `-v 4`. An absent object looks exactly like "the plugin does
+   not apply here", which is the wrong conclusion.
+2. **Check framing with a control before concluding anything.** Two intermediate
+   readings here were nonsense because the 1000 m wave plane was simply outside
+   the camera frustum. The control that settled it was the *same mesh at the same
+   pose with the plugin stripped* — if the control is also invisible, the finding
+   is about framing, not about the feature.
+
+### Animated water surface: `water_surface: gerstner`
+
+```yaml
+scene:
+  lighting: competition
+  water_surface: gerstner    # plane (default) | gerstner | none
+```
+
+Uses **Gazebo's own first-party `openrobotics/waves` model**, referenced by Fuel
+URI rather than vendored, so Gazebo downloads and caches it and nothing of
+unclear provenance enters this repo. **The first run of a gerstner course needs
+network.** Its shaders carry the Apache-2.0 UUV Simulator header; other teams'
+copies of this model are copies of exactly this one, and theirs ship the meshes
+as git-lfs pointer files rather than usable geometry.
+
+The static generated plane is still the default and is skipped when gerstner is
+selected — two surfaces at z=0 z-fight.
+
+Only visible looking up or near the surface: at 0.82 m depth on a level camera
+it is out of frame entirely, which is correct.
+
 ### Turbidity: the world's `<fog>` is INERT, `underwater_fx` is the lever
 
 **Measured 2026-08-28 on gz-sim 8 (Harmonic): `<scene><fog>` has no effect on

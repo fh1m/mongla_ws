@@ -774,7 +774,7 @@ def standalone_sdf(name: str, spec: dict) -> str:
 FLOOR_DECAL_Z = 0.02
 
 
-def pool(spec: dict, pool_cfg: dict = None) -> str:
+def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str:
     """The pool shell: a textured floor and four walls, water surface at z = 0.
 
     Visuals are textured planes; collisions are primitive boxes. Keeping the two
@@ -845,7 +845,10 @@ def pool(spec: dict, pool_cfg: dict = None) -> str:
     # cast_shadows off as well -- a 25x16 m shadow caster directly above the
     # whole arena darkens every prop and is the one thing that would undo the
     # emissive lift the props rely on to stay visible through fog.
-    parts.append(
+    # SKIPPED for `water_surface: gerstner`, which uses Gazebo's own animated
+    # Gerstner surface instead; two surfaces at z=0 would z-fight.
+    if water_surface == "plane":
+        parts.append(
         link(
             "water_surface",
             "\n".join([
@@ -862,6 +865,6 @@ def pool(spec: dict, pool_cfg: dict = None) -> str:
                 ),
             ]),
         )
-    )
+        )
 
     return model("sauvc_pool", "\n".join(parts))
