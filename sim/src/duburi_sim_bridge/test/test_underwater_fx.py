@@ -74,3 +74,19 @@ def test_turbidity_actually_reduces_contrast(frame):
     clear = apply_underwater_fx(frame, -1.0, 0.15, 0.30, 0.0, 0.0, 0.0, 0.6)
     murky = apply_underwater_fx(frame, -1.0, 0.80, 0.75, 0.0, 0.0, 0.0, 1.8)
     assert murky.std() < clear.std()
+
+
+def test_gt_label_tables_cover_the_same_props():
+    """A prop in one table but not the other is silently unlabelled.
+
+    sauvc_target_mat was added to MODEL_TO_CLASS without half-extents; the
+    projector skipped it at a `half is None` guard, classes.txt still listed
+    target_mat, and 1469 recorded frames carried zero mat instances. The dataset
+    looked complete and the class was never learnable. gt_labels now raises at
+    import; this test states the invariant so it is not "fixed" back out.
+    """
+    from duburi_sim_bridge import gt_labels
+
+    assert set(gt_labels.MODEL_TO_CLASS) == set(gt_labels.PROP_HALF_EXTENTS)
+    for name in gt_labels.MODEL_TO_CLASS.values():
+        assert name in gt_labels.CLASSES
