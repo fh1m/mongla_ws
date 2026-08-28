@@ -83,6 +83,12 @@ patterns = (
     'duburi_sim_web/lab_server',
     'lib/duburi_sim_bridge/record_cameras',
     'lib/duburi_sim_bridge/underwater_fx',
+    # These two were MISSING and leaked. Measured 2026-08-28: eleven orphaned
+    # dvl_bridge processes, the oldest alive 20 h, 6-12 %% CPU each -- together
+    # a whole core stolen from Gazebo's render loop on every subsequent run.
+    # A leak here does not look like a leak; it looks like "the sim got slow".
+    'lib/duburi_sim_bridge/dvl_bridge',
+    'lib/duburi_sim_bridge/tf_broadcaster',
     'lib/duburi_sim_scenarios/prop_manager',
     'duburi_sim_worlds/worlds',
     'ros_gz_image/image_bridge',

@@ -124,6 +124,25 @@ DVL_DEFAULTS = {
     # constraint; minimum_range is, because the hull flies close to the bottom.
     "maximum_range": 50.0,
     "minimum_range": 0.1,
+    # OFF, and this is the single most expensive flag in the model.
+    #
+    # It draws the four beams as Gazebo debug visuals, which run on the SAME
+    # Ogre2 render thread the cameras use. Measured 2026-08-28, SAUVC final
+    # course, headless, identical hardware:
+    #
+    #     visualize true  :  2.83 Hz,  jitter (stdev) 435 ms,  max gap 1126 ms
+    #     visualize false : 12.75 Hz,  jitter (stdev)   6 ms,  max gap  104 ms
+    #
+    # 4.5x the frame rate and 76x less jitter. The jitter is the part that
+    # matters: it is what the operator sees as laggy teleop video in the web
+    # lab and as juddery recorded dataset video. Headless it is pure waste --
+    # it cannot draw, so it only logs "Failed to render beam markers".
+    #
+    # Nothing is lost by default: duburi_sim_bridge/dvl_bridge.py publishes an
+    # equivalent MarkerArray, so RViz shows the beams either way. Set
+    # dvl.visualize_beams: true in configs.yaml and rebuild only if you
+    # specifically want them in the Gazebo GUI, and expect the frame rate above.
+    "visualize_beams": False,
 }
 
 
@@ -235,6 +254,9 @@ class ModelParams:
         self.dvl_resolution = dvl["resolution"]
         self.dvl_maximum_range = dvl["maximum_range"]
         self.dvl_minimum_range = dvl["minimum_range"]
+        self.dvl_visualize_beams = str(
+            dvl.get("visualize_beams", DVL_DEFAULTS["visualize_beams"])
+        ).lower()
 
         # ArduPilotPlugin endpoint
         self.fdm_addr = fdm_addr

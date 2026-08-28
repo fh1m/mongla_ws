@@ -132,12 +132,14 @@
               <noise type="gaussian">
                 <stddev>0.002</stddev>
               </noise>
-              <!-- Draws the four beams in the GAZEBO GUI (headless sees nothing,
-                   and RViz cannot see Gazebo debug visuals either -- for RViz
-                   duburi_sim_bridge/dvl_bridge.py publishes an equivalent
-                   MarkerArray). Cheap, and it is the only way to confirm at a
-                   glance that the array is pointed at the floor and locked. -->
-              <visualize>true</visualize>
+              <!-- Draws the four beams in the GAZEBO GUI. NOT cheap, despite
+                   what this comment used to claim: these are debug visuals on
+                   the shared Ogre2 render thread, and enabling them takes the
+                   cameras from 12.75 Hz to 2.83 Hz and multiplies frame jitter
+                   by 76x (see DVL_DEFAULTS in generate_model.py for the
+                   measurement). dvl_bridge.py publishes the same beams as an
+                   RViz MarkerArray, which costs nothing. Default off. -->
+              <visualize>false</visualize>
             </bottom_mode>
           </tracking>
           <resolution>0.01</resolution>
