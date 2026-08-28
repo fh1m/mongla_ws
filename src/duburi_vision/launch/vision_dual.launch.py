@@ -143,6 +143,14 @@ def generate_launch_description():
         # dataset clip instead of the live webcam (forward = gate clip, downward
         # = bin clip) -- lets a full dual-camera mission be exercised against real
         # detections with no hardware. Empty = live webcam (back-compat default).
+        DeclareLaunchArgument(
+            'fwd_topic', default_value='',
+            description='Subscribe this ROS image topic instead of a webcam. '
+                        'Set by the simulator to /duburi/sim/front_camera/image_raw.'),
+        DeclareLaunchArgument(
+            'dwn_topic', default_value='',
+            description='Subscribe this ROS image topic instead of a webcam. '
+                        'Set by the simulator to /duburi/sim/bottom_camera/image_raw.'),
         DeclareLaunchArgument('fwd_video',    default_value='',
                               description='Video file for the FORWARD camera (e.g. a gate clip). '
                                           'Set => forward runs off the file; empty => live webcam.'),
@@ -173,16 +181,29 @@ def generate_launch_description():
     ]
 
     def camera(profile: str, device_arg: str, video_arg: str, loop_arg: str,
-               device_path_arg: str) -> Node:
+               device_path_arg: str, topic_arg: str) -> Node:
         # Source-aware: a non-empty video path runs this camera off a file
         # (source=video_file, profile cleared so camera_node takes the path);
         # empty falls back to the live webcam profile. The node NAME stays the
         # profile ('forward'/'downward') either way, so the detector namespace
         # /duburi/vision/<name>/* and the manager's _vision_state_for(<name>)
         # resolve identically to live -- vision verbs need no change.
+        # Source precedence: video file > ROS topic > live webcam profile.
+        #
+        # The topic branch is what makes the SIMULATOR usable here. Without it
+        # this launch could only ever drive webcams or files, so the sim's bottom
+        # camera had no path into the pipeline at all and operators were told to
+        # run --no-vision. The node NAME still stays the profile
+        # ('forward'/'downward') whichever source wins, so
+        # /duburi/vision/<name>/* and the manager's _vision_state_for(<name>)
+        # resolve identically to live and the vision verbs need no change.
         video = LaunchConfiguration(video_arg)
-        src   = PythonExpression(["'video_file' if '", video, "' else ''"])
-        prof  = PythonExpression(["'' if '", video, "' else '", profile, "'"])
+        topic = LaunchConfiguration(topic_arg)
+        src   = PythonExpression([
+            "'video_file' if '", video, "' else ('ros_topic' if '", topic,
+            "' else '')"])
+        prof  = PythonExpression([
+            "'' if ('", video, "' or '", topic, "') else '", profile, "'"])
         return Node(
             package='duburi_vision', executable='camera_node',
             name=f'duburi_camera_{profile}', output='screen', ros_arguments=_QUIET,
@@ -202,6 +223,7 @@ def generate_launch_description():
                     " or (lambda p: p if __import__('os').path.exists(p) else '')"
                     "('/dev/duburi_cam_", profile, "')"]),
                 'path':    video,
+                'topic':   topic,
                 'loop':    LaunchConfiguration(loop_arg),
             }],
         )
@@ -269,8 +291,10 @@ def generate_launch_description():
     )
 
     return LaunchDescription(args + [
-        camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop', 'fwd_device_path'),
-        camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop', 'dwn_device_path'),
+        camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop', 'fwd_device_path',
+               'fwd_topic'),
+        camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop', 'dwn_device_path',
+               'dwn_topic'),
         detector('forward',  'fwd_model', 'fwd_models', 'fwd_classes',
                  'fwd_conf', 'fwd_model_conf'),
         detector('downward', 'dwn_model', 'dwn_models', 'dwn_classes',

@@ -1,0 +1,39 @@
+name: task_target_acquisition
+description: >
+  Target Acquisition in isolation: the four-drum target zone only.
+
+  One blue drum and three red, one red carrying the pinger, per the rulebook.
+  Their left-to-right order is randomised at competition -- this is one legal
+  arrangement. Re-roll it live with:
+    ros2 run duburi_sim_scenarios props move drum_a <x> <y>
+
+  Deliberately clearer water than the final course: this task is flown looking
+  DOWN at short range, so the fog matters far less than it does for the gate.
+
+pool: sauvc
+
+scene:
+  lighting: competition
+  fog_start: 2.0
+  fog_end: 20.0
+  fog_density: 0.02
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [4.0, 0.0, -0.6]
+  yaw: 0.0
+
+props:
+  - model: sauvc_drum_red
+    name: drum_a
+    xy: [8.0, 1.2]
+  - model: sauvc_drum_blue
+    name: drum_b
+    xy: [8.6, 0.4]
+  - model: sauvc_drum_red_pinger
+    name: drum_c
+    xy: [9.2, -0.4]
+  - model: sauvc_drum_red
+    name: drum_d
+    xy: [9.8, -1.2]

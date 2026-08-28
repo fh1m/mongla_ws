@@ -72,10 +72,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_0_collision">
@@ -120,10 +127,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_1_collision">
@@ -168,10 +182,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_2_collision">
@@ -216,10 +237,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_3_collision">
@@ -264,10 +292,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_4_collision">
@@ -312,10 +347,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_5_collision">
@@ -360,10 +402,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_6_collision">
@@ -408,10 +457,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_7_collision">
@@ -456,10 +512,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_8_collision">
@@ -504,10 +567,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_9_collision">
@@ -552,10 +622,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_10_collision">
@@ -600,10 +677,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_11_collision">
@@ -648,10 +732,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_12_collision">
@@ -696,10 +787,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_13_collision">
@@ -744,10 +842,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_14_collision">
@@ -792,10 +897,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_15_collision">
@@ -840,10 +952,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_16_collision">
@@ -888,10 +1007,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_17_collision">
@@ -936,10 +1062,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_18_collision">
@@ -984,10 +1117,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
         <material>
-          <ambient>0.06 0.06 0.07 1</ambient>
-          <diffuse>0.06 0.06 0.07 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.015 0.015 0.0175 1</emissive>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/drum_wall_red.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="wall_19_collision">

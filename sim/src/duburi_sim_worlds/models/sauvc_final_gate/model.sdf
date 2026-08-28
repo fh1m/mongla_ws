@@ -51,7 +51,7 @@
             <metal>
               <albedo_map>model://sauvc_textures/gate_stripe_red.png</albedo_map>
               <metalness>0.0</metalness>
-              <roughness>0.55</roughness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
             </metal>
           </pbr>
         </material>
@@ -84,7 +84,7 @@
             <metal>
               <albedo_map>model://sauvc_textures/gate_stripe_green.png</albedo_map>
               <metalness>0.0</metalness>
-              <roughness>0.55</roughness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
             </metal>
           </pbr>
         </material>
@@ -92,6 +92,110 @@
       <collision name="post_starboard_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.02</radius><length>1</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="base_front">
+      <pose>0.8 0 0.02 1.570796 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.240933</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.240933</iyy><iyz>0</iyz>
+          <izz>0.0002</izz>
+        </inertia>
+      </inertial>
+      <visual name="base_front_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.7</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.23 0.23 0.23 1</emissive>
+        </material>
+      </visual>
+      <collision name="base_front_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.7</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="base_back">
+      <pose>-0.8 0 0.02 1.570796 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.240933</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.240933</iyy><iyz>0</iyz>
+          <izz>0.0002</izz>
+        </inertia>
+      </inertial>
+      <visual name="base_back_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.7</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.23 0.23 0.23 1</emissive>
+        </material>
+      </visual>
+      <collision name="base_back_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.7</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="base_left">
+      <pose>0 0.85 0.02 0 1.570796 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.213433</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.213433</iyy><iyz>0</iyz>
+          <izz>0.0002</izz>
+        </inertia>
+      </inertial>
+      <visual name="base_left_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.6</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.23 0.23 0.23 1</emissive>
+        </material>
+      </visual>
+      <collision name="base_left_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.6</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="base_right">
+      <pose>0 -0.85 0.02 0 1.570796 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.213433</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.213433</iyy><iyz>0</iyz>
+          <izz>0.0002</izz>
+        </inertia>
+      </inertial>
+      <visual name="base_right_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.6</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.23 0.23 0.23 1</emissive>
+        </material>
+      </visual>
+      <collision name="base_right_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>1.6</length></cylinder></geometry>
       </collision>
     </link>
   </model>

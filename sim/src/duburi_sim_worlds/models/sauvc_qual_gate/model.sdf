@@ -51,7 +51,7 @@
             <metal>
               <albedo_map>model://sauvc_textures/gate_stripe_orange.png</albedo_map>
               <metalness>0.0</metalness>
-              <roughness>0.55</roughness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
             </metal>
           </pbr>
         </material>
@@ -110,7 +110,7 @@
             <metal>
               <albedo_map>model://sauvc_textures/gate_stripe_orange.png</albedo_map>
               <metalness>0.0</metalness>
-              <roughness>0.55</roughness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
             </metal>
           </pbr>
         </material>

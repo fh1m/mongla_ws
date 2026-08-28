@@ -1,0 +1,37 @@
+name: task_localization
+description: >
+  Communication & Localization in isolation: the three coloured bump flares,
+  each carrying a golf ball to knock off.
+
+  Rulebook says they "could be located anywhere within the main arena", so this
+  spread is one choice of many -- the point of drilling it in sim is to vary the
+  layout cheaply. Move them live rather than editing this file:
+    ros2 run duburi_sim_scenarios props move flare_red <x> <y>
+
+  The flares are 80 cm tall and only 1.6 cm across, which makes this the hardest
+  DETECTION task in the competition and the one most worth practising in fog.
+
+pool: sauvc
+
+scene:
+  lighting: murky
+  fog_start: 1.2
+  fog_end: 16.0
+  fog_density: 0.028
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-6.0, 0.0, -0.6]
+  yaw: 0.0
+
+props:
+  - model: sauvc_flare_red
+    name: flare_red
+    xy: [-1.0, 3.0]
+  - model: sauvc_flare_yellow
+    name: flare_yellow
+    xy: [2.5, -1.5]
+  - model: sauvc_flare_blue
+    name: flare_blue
+    xy: [6.0, 2.0]

@@ -82,6 +82,7 @@ def textured_material(
     specular: float = 0.08,
     roughness: float = 0.85,
     emissive: float = 0.0,
+    roughness_map: str = "",
 ) -> str:
     """A PBR material driven by a texture in the sauvc_textures model.
 
@@ -101,7 +102,12 @@ def textured_material(
         "    <metal>\n"
         f"      <albedo_map>{uri}</albedo_map>\n"
         "      <metalness>0.0</metalness>\n"
-        f"      <roughness>{roughness:.3g}</roughness>\n"
+        + (
+            f"      <roughness_map>model://{TEXTURE_MODEL}/{roughness_map}</roughness_map>\n"
+            if roughness_map
+            else f"      <roughness>{roughness:.3g}</roughness>\n"
+        )
+        +
         "    </metal>\n"
         "  </pbr>\n"
         "</material>"
@@ -109,9 +115,30 @@ def textured_material(
 
 
 def stripe_material(texture: str) -> str:
-    """Gate stripe albedo with enough self-light to read through fog."""
+    """Gate stripe albedo with enough self-light to read through fog.
+
+    The emissive lift is NOT decoration -- see material() above. Without it the
+    post reads near-black at fog range and the detector never sees the gate.
+    """
     return textured_material(
-        texture, tint=0.75, specular=0.25, roughness=0.55, emissive=0.12
+        texture, tint=0.75, specular=0.25, emissive=0.12,
+        roughness_map="rough_pvc.png",
+    )
+
+
+def fabric_material(texture: str, emissive: float = 0.14) -> str:
+    """Inflated-fabric flares: matte, no specular hotspot."""
+    return textured_material(
+        texture, tint=0.80, specular=0.06, emissive=emissive,
+        roughness_map="rough_fabric.png",
+    )
+
+
+def plastic_material(texture: str, emissive: float = 0.10) -> str:
+    """Moulded plastic drum walls."""
+    return textured_material(
+        texture, tint=0.72, specular=0.14, emissive=emissive,
+        roughness_map="rough_plastic.png",
     )
 
 
@@ -332,6 +359,23 @@ def final_gate(spec: dict) -> str:
             )
         )
 
+    # The gate stands in a white PVC rectangular base frame. It is in every
+    # competition photo, it is most of what the BOTTOM camera sees when the
+    # vehicle is over the gate, and we did not model it at all.
+    bf = cfg.get("base_frame")
+    if bf:
+        br = bf["pipe_radius"]
+        hl, hw = bf["length"] / 2.0, bf["width"] / 2.0
+        for tag, pose, length in (
+            ("front", f"{hl:.6g} 0 {br:.6g} {math.pi / 2:.6f} 0 0", bf["width"]),
+            ("back", f"{-hl:.6g} 0 {br:.6g} {math.pi / 2:.6f} 0 0", bf["width"]),
+            ("left", f"0 {hw:.6g} {br:.6g} 0 {math.pi / 2:.6f} 0", bf["length"]),
+            ("right", f"0 {-hw:.6g} {br:.6g} 0 {math.pi / 2:.6f} 0", bf["length"]),
+        ):
+            parts.append(
+                _cylinder_link(f"base_{tag}", br, length, WHITE, 1.0, pose)
+            )
+
     return model("sauvc_final_gate", "\n".join(parts))
 
 
@@ -349,7 +393,7 @@ def orange_flare(spec: dict) -> str:
             cfg["colour"],
             2.0,
             f"0 0 {depth / 2.0:.6g} 0 0 0",
-            mat=pvc_material(cfg["colour"]),
+            mat=fabric_material("flare_orange.png"),
         ),
     )
 
@@ -432,7 +476,12 @@ def drum(spec: dict, colour_name: str, model_name: str = None, pinger: bool = Fa
         pose = f"{x:.6g} {y:.6g} {height / 2.0:.6g} 0 0 {angle:.6f}"
         parts.append(
             _box_link(
-                f"wall_{i}", thickness, seg_w, height, exterior, 0.2, pose
+                f"wall_{i}", thickness, seg_w, height, exterior, 0.2, pose,
+                # Moulded-plastic wall rather than flat dark grey. The drum is
+                # 60 cm across and fills the bottom camera during Target
+                # Acquisition, so this is the single most valuable surface to
+                # texture in the whole arena.
+                mat=plastic_material(f"drum_wall_{colour_name}.png"),
             )
         )
         # A thin coloured liner just inside the black wall, so the interior reads
@@ -534,7 +583,9 @@ def ball(spec: dict) -> str:
         _solid(
             "ball",
             _geometry_sphere(radius),
-            material([0.95, 0.35, 0.05]),
+            # From the spec, not a literal. It was the one prop colour that
+            # could not be changed without editing code.
+            material(cfg.get("colour", [0.95, 0.35, 0.05])),
             mass,
             sphere_inertia(mass, radius),
         ),

@@ -32,6 +32,7 @@ setup(
             'dvl_bridge = duburi_sim_bridge.dvl_bridge:main',
             'tf_broadcaster = duburi_sim_bridge.tf_broadcaster:main',
             'verb_audit = duburi_sim_bridge.verb_audit:main',
+            'rviz_check = duburi_sim_bridge.rviz_check:main',
         ],
     },
 )
