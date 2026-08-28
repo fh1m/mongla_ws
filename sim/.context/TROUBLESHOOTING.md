@@ -178,6 +178,31 @@ Two failure shapes are worth naming, because unit tests cannot see either:
 | `surface` | never confirms in sim | Type A, documented above |
 | `vision_align` / `vision_move` | never-fail contract holds | see "class allowlist" below |
 
+### `Failed to render beam markers` in a headless run
+
+Harmless. `<visualize>true</visualize>` on the DVL draws the four beams in the
+**Gazebo GUI**, and headless has no renderer for GUI markers, so gz warns once
+per attempt. The beams are still published as an RViz `MarkerArray` on
+`/duburi/sim/dvl/beams`, which is the path that works headless.
+
+### Verifying RViz displays: count subscribers BY NAME
+
+`ros2 run duburi_sim_bridge rviz_check` asserts every topic the config
+references is subscribed **by RViz specifically**, not merely subscribed.
+
+The first version counted subscribers and gave a **false pass**: `underwater_fx`
+also subscribes to both camera `image_raw` topics, so the count was >=1 whether
+or not the display was switched on -- and the camera displays were in fact
+saved with `Enabled: false`. `ros2 topic info -v` names the subscribing nodes;
+ask for RViz by name.
+
+Two related traps:
+- RViz **rewrites the config on exit**. If it was opened without the sim running
+  it will have reset `Fixed Frame` (no `odom` frame exists) and left displays
+  off, and then saved that. A `*` in the title bar means the file on disk is
+  about to change.
+- A display that is off looks identical to a display whose topic is wrong.
+
 ### The vehicle shadows the drum it is about to drop into
 
 Measured from the bottom camera hovering over a drum, i.e. the exact instant of

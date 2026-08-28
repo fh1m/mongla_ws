@@ -17,6 +17,7 @@ has at least one subscriber while RViz is running.
 Exit 0 only when every referenced topic is subscribed.
 """
 import argparse
+import re
 import subprocess
 import sys
 
@@ -44,19 +45,38 @@ def topics_in(cfg: dict):
     return out
 
 
-def subscriber_count(topic: str) -> int:
+def rviz_subscribes(topic: str):
+    """(rviz_is_subscribed, total_subs, other_subscriber_names).
+
+    Counting subscribers is NOT enough, and this function exists because the
+    first version of it gave a FALSE PASS: `underwater_fx` also subscribes to
+    both camera image_raw topics, so the count was >=1 whether or not RViz had
+    the display switched on. The camera displays were in fact disabled and this
+    tool said they were fine.
+
+    `ros2 topic info -v` names the subscribing nodes, so ask for RViz by name.
+    """
     try:
-        out = subprocess.run(['ros2', 'topic', 'info', topic],
-                             capture_output=True, text=True, timeout=20).stdout
+        out = subprocess.run(['ros2', 'topic', 'info', '-v', topic],
+                             capture_output=True, text=True, timeout=25).stdout
     except Exception:
-        return -1
+        return False, -1, []
+
+    total = -1
     for line in out.splitlines():
         if 'Subscription count' in line:
             try:
-                return int(line.split(':')[1])
+                total = int(line.split(':')[1])
             except ValueError:
-                return -1
-    return -1
+                pass
+
+    # The subscriber block lists "Node name: <name>" entries.
+    names = re.findall(r'Node name:\s*(\S+)', out)
+    # Publishers are listed first; without parsing sections precisely, matching
+    # on the rviz node name is what actually answers the question.
+    rviz = any('rviz' in n.lower() for n in names)
+    others = sorted({n for n in names if 'rviz' not in n.lower()})
+    return rviz, total, others
 
 
 def main(argv=None):
@@ -82,23 +102,23 @@ def main(argv=None):
     print(f'checking {len(pairs)} topics from {path}\n')
     dead = []
     for name, topic in pairs:
-        n = subscriber_count(topic)
-        # >1 is normal and fine: the lab, the HUD and a bag recorder all
-        # subscribe too. Only zero means RViz did not take the topic.
-        ok = n > 0
-        print(f'  {"OK  " if ok else "DEAD"} {name:26s} {topic:44s} subs={n}')
-        if not ok:
+        rviz, n, others = rviz_subscribes(topic)
+        tag = 'OK  ' if rviz else 'DEAD'
+        extra = f'  (other subs: {", ".join(others)})' if others and not rviz else ''
+        print(f'  {tag}{name:26s} {topic:44s} rviz={rviz} total={n}{extra}')
+        if not rviz:
             dead.append((name, topic))
 
     print()
     if dead:
-        print(f'{len(dead)} display(s) reference a topic nobody subscribes to.')
-        print('If the publisher exists, RViz did not accept the Topic entry --')
-        print('check the `Topic` form for that display class (string vs mapping).')
+        print(f'{len(dead)} display(s) that RViz is NOT subscribed to.')
+        print('Either the display is switched off in the saved config (check')
+        print('`Enabled:`), or RViz did not accept the Topic entry -- check the')
+        print('`Topic` form for that display class (string vs mapping).')
         for name, topic in dead:
             print(f'  {name}: {topic}')
         return 2
-    print(f'all {len(pairs)} displays are subscribed.')
+    print(f'all {len(pairs)} displays are subscribed BY RVIZ.')
     return 0
 
 
