@@ -1,0 +1,38 @@
+name: task_navigation
+description: >
+  Navigation task in isolation: the gate at ~16 m from the starting zone with the
+  orange flare as the obstacle, and nothing else in the water.
+
+  Drill the gate approach without the drums and bump flares in frame to confuse
+  the detector. Clear-ish water so a failure here is a control or alignment
+  failure, not a perception one -- move to sauvc26_final for the murky version.
+
+pool: sauvc
+
+scene:
+  lighting: competition
+  fog_start: 2.0
+  fog_end: 22.0
+  fog_density: 0.018
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-11.8, 0.0, -0.3]
+  yaw: 0.0
+
+props:
+  - model: sauvc_starting_zone
+    name: start
+    xy: [-11.8, 0.0]
+
+  # Rulebook: "approximately 16m away from the starting zone".
+  - model: sauvc_final_gate
+    name: gate
+    xy: [4.2, 0.0]
+
+  # Rulebook: "4m-8m from side of the arena, before the gate". Placed at 6 m
+  # from the -y side, i.e. y = -8.0 + 6.0.
+  - model: sauvc_orange_flare
+    name: flare_obstacle
+    xy: [0.0, -2.0]

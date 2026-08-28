@@ -40,7 +40,20 @@ props:
     height: 1.00
     port_colour: [0.85, 0.08, 0.08]        # red, port
     starboard_colour: [0.05, 0.70, 0.20]   # green, starboard
-    stripe_count: 5
+    # Rulebook Figure 12: ~20cm of colour alternating with ~10cm of BLACK up the
+    # post, with a white foot. Expressed in METRES, not as a band count, so the
+    # physical pitch stays right whatever the post length. The colour used to
+    # alternate with WHITE at a fixed 8 bands, which is the wrong colour AND the
+    # wrong pitch -- a detector trained on that learns the wrong target.
+    stripe_band_m: 0.20
+    stripe_gap_m: 0.10
+    stripe_foot_m: 0.05
+    # The gate stands in a white PVC rectangular base frame, visible in every
+    # competition photo and load-bearing for how it looks from the bottom camera.
+    base_frame:
+      length: 1.60      # along x, front to back
+      width: 1.70       # along y, slightly wider than the 1.50 opening
+      pipe_radius: 0.02
 
   orange_flare:
     # "~15cm diameter flare with height spanning from bottom to top of the pool,
@@ -79,6 +92,7 @@ props:
     border: 0.05
 
   ball:
+    colour: [0.95, 0.35, 0.05]   # was hardcoded in prop_library.ball()
     # "3.5-4.5cm in diameter and weighs no more than 200g in air. Provided by
     #  teams." Modelled at the midpoint, at a mass that sinks in fresh water.
     diameter: 0.040

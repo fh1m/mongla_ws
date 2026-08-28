@@ -146,22 +146,102 @@ def make_wall(
 def make_stripe(
     path: str,
     colour,
-    bands: int = 8,
+    *,
+    post_m: float = 1.00,
+    band_m: float = 0.20,
+    gap_m: float = 0.10,
+    foot_m: float = 0.05,
+    dark=(0.05, 0.05, 0.06),
+    foot=(0.93, 0.93, 0.93),
     width: int = 128,
-    height: int = 512,
-    white=(0.92, 0.92, 0.92),
+    px_per_m: int = 512,
+    rng=None,
 ) -> None:
-    """Vertical-axis stripe map for a cylinder (V along height)."""
+    """Gate-post stripe map, driven by METRES rather than a band count.
+
+    The rulebook figure is explicit: ~20 cm of colour alternating with ~10 cm of
+    BLACK up a 100 cm post, with a white foot. The previous version alternated
+    the colour with WHITE at a fixed 8 bands, which is neither the right colour
+    nor the right pitch -- a detector trained on it learns the wrong target.
+
+    V runs along the post, so row 0 is the TOP of the cylinder and the foot is
+    drawn last. Sized from px_per_m so a 1 m post and a 1.6 m post get the same
+    physical stripe pitch instead of the same number of stripes.
+    """
+    rng = rng or np.random.default_rng(0)
+    height = max(8, int(round(post_m * px_per_m)))
     img = np.zeros((height, width, 3), dtype=np.float64)
-    band_h = height / bands
-    for i in range(bands):
-        y0 = int(i * band_h)
-        y1 = int((i + 1) * band_h)
-        c = colour if i % 2 == 0 else white
-        img[y0:y1, :] = c
+    img[:, :] = dark
+
+    # Lay bands from the BOTTOM up, above the foot, so the foot is always a
+    # whole band and the truncation (if any) lands at the top where the gate
+    # corner is anyway.
+    y = height - int(round(foot_m * px_per_m))
+    img[y:, :] = foot
+    band_px = int(round(band_m * px_per_m))
+    gap_px = int(round(gap_m * px_per_m))
+    while y > 0:
+        y0 = max(0, y - band_px)
+        img[y0:y, :] = colour
+        y = y0 - gap_px          # the gap stays `dark`, already filled
+
+    # PVC is not flat plastic underwater: a little vertical shading stops the
+    # post reading as a paper cut-out and gives the detector some gradient.
+    shade = 1.0 - 0.10 * np.linspace(0.0, 1.0, width)[None, :, None]
+    img *= shade
+    img += rng.normal(0.0, 0.012, img.shape)
+
     Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).save(
         path, optimize=True
     )
+    print(f"wrote {path}  ({width}x{height})")
+
+
+def make_roughness(path: str, base: float, width: int = 128, height: int = 512,
+                   variation: float = 0.08, rng=None) -> None:
+    """Greyscale roughness map. Uniform gloss is what makes a prop look CG."""
+    rng = rng or np.random.default_rng(0)
+    v = np.clip(base + rng.normal(0.0, variation, (height, width)), 0.0, 1.0)
+    img = np.repeat((v * 255).astype(np.uint8)[:, :, None], 3, axis=2)
+    Image.fromarray(img).save(path, optimize=True)
+    print(f"wrote {path}  ({width}x{height})")
+
+
+def make_flare_fabric(path: str, colour, width: int = 128, height: int = 640,
+                      rng=None) -> None:
+    """The orange flare is an inflated fabric tube, not a painted pipe.
+
+    Vertical weave plus a soft cylindrical shading ramp, so the silhouette reads
+    round under the flat pool lighting.
+    """
+    rng = rng or np.random.default_rng(0)
+    img = np.zeros((height, width, 3), dtype=np.float64)
+    img[:, :] = colour
+    weave = 1.0 + 0.05 * np.sin(np.arange(width) * np.pi / 3.0)[None, :, None]
+    img *= weave
+    # cylinder shading: bright down the middle, falling to both edges
+    u = np.linspace(-1.0, 1.0, width)
+    img *= (1.0 - 0.35 * (u ** 2))[None, :, None]
+    img += rng.normal(0.0, 0.015, img.shape)
+    Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).save(
+        path, optimize=True)
+    print(f"wrote {path}  ({width}x{height})")
+
+
+def make_drum_wall(path: str, colour, width: int = 512, height: int = 256,
+                   rng=None) -> None:
+    """Moulded plastic drum wall: vertical ribs, scuffs, a darker rim band."""
+    rng = rng or np.random.default_rng(0)
+    img = np.zeros((height, width, 3), dtype=np.float64)
+    img[:, :] = colour
+    ribs = 1.0 + 0.06 * np.sin(np.arange(width) * 2.0 * np.pi / 26.0)[None, :, None]
+    img *= ribs
+    img *= (1.0 - 0.22 * np.linspace(0.0, 1.0, height) ** 2)[:, None, None]
+    scuff = rng.random((height, width)) > 0.994
+    img[scuff] *= 1.25
+    img += rng.normal(0.0, 0.014, img.shape)
+    Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).save(
+        path, optimize=True)
     print(f"wrote {path}  ({width}x{height})")
 
 
@@ -217,23 +297,47 @@ def main() -> None:
         rng,
     )
 
-    # Gate / drum textures used by prop_library.
+    # ---- prop textures -------------------------------------------------
+    # Driven by the rulebook segment sizes in spec/arena.yaml, NOT by a band
+    # count, so the physical stripe pitch is right on every post length.
+    props = spec["props"]
+    fg = props["final_gate"]
+    band = float(fg.get("stripe_band_m", 0.20))
+    gap = float(fg.get("stripe_gap_m", 0.10))
+    foot = float(fg.get("stripe_foot_m", 0.05))
+
+    qg = props["qualification_gate"]
     make_stripe(
         os.path.join(args.outdir, "gate_stripe_orange.png"),
-        spec["props"]["qualification_gate"]["marking_colour"],
-        bands=6,
+        qg["marking_colour"],
+        post_m=float(qg.get("marking_length", 0.60)),
+        band_m=band, gap_m=gap, foot_m=0.0, rng=rng,
     )
-    make_stripe(
-        os.path.join(args.outdir, "gate_stripe_red.png"),
-        spec["props"]["final_gate"]["port_colour"],
-        bands=int(spec["props"]["final_gate"].get("stripe_count", 5)) * 2,
-    )
-    make_stripe(
-        os.path.join(args.outdir, "gate_stripe_green.png"),
-        spec["props"]["final_gate"]["starboard_colour"],
-        bands=int(spec["props"]["final_gate"].get("stripe_count", 5)) * 2,
-    )
+    for name, key in (("gate_stripe_red.png", "port_colour"),
+                      ("gate_stripe_green.png", "starboard_colour")):
+        make_stripe(
+            os.path.join(args.outdir, name), fg[key],
+            post_m=float(fg["height"]), band_m=band, gap_m=gap, foot_m=foot,
+            rng=rng,
+        )
+
     make_drum_rim(os.path.join(args.outdir, "drum_rim.png"))
+    for name, key in (("drum_wall_red.png", "red"), ("drum_wall_blue.png", "blue")):
+        make_drum_wall(os.path.join(args.outdir, name),
+                       props["drum"]["colours"][key], rng=rng)
+
+    make_flare_fabric(os.path.join(args.outdir, "flare_orange.png"),
+                      props["orange_flare"]["colour"], rng=rng)
+    for colour_name, rgb in props["bump_flare"]["colours"].items():
+        make_flare_fabric(
+            os.path.join(args.outdir, f"flare_{colour_name}.png"), rgb,
+            height=320, rng=rng)
+
+    # Roughness maps. Uniform gloss is a large part of why untextured props read
+    # as CG; PVC and moulded plastic are matte and unevenly so.
+    make_roughness(os.path.join(args.outdir, "rough_pvc.png"), 0.62, rng=rng)
+    make_roughness(os.path.join(args.outdir, "rough_plastic.png"), 0.78, rng=rng)
+    make_roughness(os.path.join(args.outdir, "rough_fabric.png"), 0.88, rng=rng)
 
 
 if __name__ == "__main__":

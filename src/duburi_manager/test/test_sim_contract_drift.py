@@ -44,6 +44,7 @@ VEHICLE_SDF = SIM / 'src/duburi_sim_description/models/duburi_heavy/model.sdf'
 
 MANAGER_LAUNCH = REPO / 'src/duburi_manager/launch/bringup.launch.py'
 VISION_LAUNCH = REPO / 'src/duburi_vision/launch/vision.launch.py'
+VISION_DUAL_LAUNCH = REPO / 'src/duburi_vision/launch/vision_dual.launch.py'
 
 # Launch arguments the sim passes that a given autonomy branch may not declare.
 # An UNDECLARED argument is NOT an error at runtime -- launch's
@@ -126,31 +127,77 @@ def test_every_manager_arg_the_sim_passes_is_real():
 
 
 def test_every_vision_arg_the_sim_passes_is_real():
-    declared = _declared_args(VISION_LAUNCH)
+    """The sim now drives BOTH cameras, so it includes vision_dual, not vision.
+
+    Same trap as the manager args above: an argument vision_dual does not
+    declare is silently dropped and the detector comes up on its default model
+    with no error anywhere.
+    """
+    declared = _declared_args(VISION_DUAL_LAUNCH)
     passed = set()
     for d in _launch_argument_dicts(STACK_LAUNCH):
-        if 'camera' in d and 'topic' in d:
+        if 'fwd_topic' in d and 'dwn_topic' in d:
             passed |= set(d)
-    assert passed, 'stack.launch.py no longer includes the vision launch'
+    assert passed, 'stack.launch.py no longer includes the dual-camera vision launch'
     unknown = passed - declared
     assert not unknown, (
-        f'stack.launch.py passes {sorted(unknown)} to duburi_vision/vision.launch.py, '
-        f'which does not declare them -- they would be silently ignored, and the '
-        f'detector would come up on its default model with no error.'
+        f'stack.launch.py passes {sorted(unknown)} to '
+        f'duburi_vision/vision_dual.launch.py, which does not declare them -- '
+        f'they would be silently ignored, and the detector would come up on its '
+        f'default model with no error.'
     )
 
 
-def test_sim_vision_uses_the_camera_name_missions_expect():
-    """Missions look for `/duburi_detector_forward`; `camera:=` names the node."""
+def test_sim_vision_drives_both_cameras_from_the_sim_topics():
+    """Front -> forward, bottom -> downward.
+
+    The camera NAME is what missions and the DSL resolve
+    (`/duburi_detector_forward`, `_vision_state_for('downward')`), and the sim
+    publishes `front_camera`/`bottom_camera`. Getting that mapping backwards
+    would point the bin detector at the gate camera and detect nothing, without
+    an error.
+    """
+    # The include passes LaunchConfiguration references, so the mapping lives in
+    # the DEFAULTS of the arguments it forwards, not in the include itself.
+    src = STACK_LAUNCH.read_text()
+    found = False
     for d in _launch_argument_dicts(STACK_LAUNCH):
-        if 'camera' in d and 'topic' in d:
-            assert d['camera'] == 'forward', (
-                f"stack.launch.py launches vision as camera:={d['camera']!r}. "
-                f"That names the node /duburi_detector_{d['camera']} while every "
-                f"mission and the DSL look for /duburi_detector_forward."
-            )
-            return
-    pytest.fail('no vision include found in stack.launch.py')
+        if 'fwd_topic' in d and 'dwn_topic' in d:
+            # The VALUES are LaunchConfiguration references, which the source
+            # parser cannot evaluate and reports as None. Key presence is the
+            # only thing checkable here; the actual mapping is asserted from
+            # the declared defaults below.
+            found = True
+    assert found, 'no dual-camera vision include found in stack.launch.py'
+
+    fwd_default = re.search(
+        r"'image_topic',\s*\n\s*default_value='([^']+)'", src)
+    dwn_default = re.search(
+        r"'bottom_image_topic',\s*\n\s*default_value='([^']+)'", src)
+    assert fwd_default and 'front_camera' in fwd_default.group(1), (
+        'the forward detector must default to the sim FRONT camera')
+    assert dwn_default and 'bottom_camera' in dwn_default.group(1), (
+        'the downward detector must default to the sim BOTTOM camera')
+
+
+def test_the_manager_include_is_scoped():
+    """`vision:=true` silently did nothing for the life of this file.
+
+    IncludeLaunchDescription does NOT scope its launch_arguments. The manager
+    include passes `vision: 'false'` (correctly -- the manager must not start its
+    own vision), and that leaked into the outer scope and overwrote this file's
+    own `vision` argument. The vision include then evaluated
+    IfCondition(LaunchConfiguration('vision')) as false and skipped itself, with
+    no error, for ANY value of vision:=.
+
+    A GroupAction(scoped=True) is what confines it. Without the scope the bug
+    returns and the only symptom is that no vision node starts.
+    """
+    src = STACK_LAUNCH.read_text()
+    assert 'GroupAction(' in src and 'scoped=True' in src, (
+        'the manager include is no longer scoped -- vision:=true will silently '
+        'start nothing again'
+    )
 
 
 # -------------------------------------------------------------------- MAVLink

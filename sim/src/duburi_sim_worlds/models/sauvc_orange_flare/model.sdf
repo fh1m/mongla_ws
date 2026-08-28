@@ -17,10 +17,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.075</radius><length>1.6</length></cylinder></geometry>
         <material>
-          <ambient>1 0.32 0.02 1</ambient>
-          <diffuse>1 0.32 0.02 1</diffuse>
-          <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.28 0.0896 0.0056 1</emissive>
+          <ambient>0.8 0.8 0.8 1</ambient>
+          <diffuse>0.8 0.8 0.8 1</diffuse>
+          <specular>0.06 0.06 0.06 1</specular>
+          <emissive>0.14 0.14 0.14 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/flare_orange.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_fabric.png</roughness_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="flare_collision">
