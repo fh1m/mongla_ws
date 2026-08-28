@@ -16,6 +16,8 @@
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
   <!-- gz-transport / gz-msgs python bindings, used by dvl_bridge because
        ros_gz_bridge has no DVLVelocityTracking conversion. Not a rosdep key;
        ships with the Gazebo Harmonic install. -->

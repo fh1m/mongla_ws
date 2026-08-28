@@ -1,0 +1,109 @@
+Panels:
+- Class: rviz_common/Displays
+  Name: Displays
+  Property Tree Widget:
+    Expanded:
+    - /Global Options1
+  Width: 340
+- Class: rviz_common/Views
+  Name: Views
+Visualization Manager:
+  Class: ''
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: odom
+    Frame Rate: 30
+  Displays:
+  - Class: rviz_default_plugins/Grid
+    Name: Grid
+    Enabled: true
+    Cell Size: 1
+    Plane Cell Count: 26
+    Color: 110; 110; 110
+    Reference Frame: odom
+  - Class: rviz_default_plugins/RobotModel
+    Name: Duburi
+    Enabled: true
+    Description Topic:
+      Value: /robot_description
+    Description Source: Topic
+    Alpha: 1
+  - Class: rviz_default_plugins/TF
+    Name: TF
+    Enabled: true
+    Show Names: true
+    Show Axes: true
+    Marker Scale: 0.4
+  - Class: rviz_default_plugins/Pose
+    Name: pose TRUTH (Gazebo)
+    Enabled: true
+    Topic:
+      Value: /duburi/sim/pose_truth
+    Shape: Axes
+    Axes Length: 0.6
+    Axes Radius: 0.05
+  - Class: rviz_default_plugins/Pose
+    Name: pose BELIEVED (stack)
+    Enabled: true
+    Topic:
+      Value: /duburi/sim/pose_believed
+    Shape: Arrow
+    Color: 255; 85; 0
+    Alpha: 0.9
+    Shaft Length: 0.4
+    Head Length: 0.15
+  - Class: rviz_default_plugins/MarkerArray
+    Name: DVL beams
+    Enabled: true
+    Topic:
+      Value: /duburi/sim/dvl/beams
+  - Class: rviz_default_plugins/Range
+    Name: DVL altitude
+    Enabled: true
+    Topic:
+      Value: /duburi/sim/dvl/altitude
+    Color: 0; 200; 255
+    Alpha: 0.35
+  - Class: rviz_default_plugins/Image
+    Name: front camera
+    Enabled: true
+    Topic:
+      Value: /duburi/sim/front_camera/image_raw
+  - Class: rviz_default_plugins/Image
+    Name: bottom camera
+    Enabled: true
+    Topic:
+      Value: /duburi/sim/bottom_camera/image_raw
+  - Class: rviz_default_plugins/Odometry
+    Name: ground truth track
+    Enabled: true
+    Topic:
+      Value: /duburi/sim/ground_truth
+    Keep: 300
+    Shape:
+      Value: Arrow
+      Alpha: 0.4
+      Shaft Length: 0.15
+      Head Length: 0.06
+  Tools:
+  - Class: rviz_default_plugins/MoveCamera
+  - Class: rviz_default_plugins/FocusCamera
+  - Class: rviz_default_plugins/Measure
+    Line color: 128; 128; 0
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 12
+      Pitch: 0.42
+      Yaw: 2.4
+      Focal Point:
+        X: -8.0
+        Y: 0.0
+        Z: -0.8
+      Target Frame: odom
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Width: 1500

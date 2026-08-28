@@ -306,6 +306,15 @@ PY
     fi
     exec ros2 launch duburi_sim_web lab.launch.py
     ;;
+  rviz)
+    _source_ros
+    # RViz shows what the vehicle BELIEVES and can SEE; Gazebo shows what is
+    # true. Both poses are drawn at once, so the AHRS2 depth offset and DVL
+    # drift are visible rather than being numbers in a table.
+    echo "[duburi-sim] rviz + robot_state_publisher + odom->base_link TF"
+    echo "[duburi-sim] needs the sim running for ground truth and cameras."
+    exec ros2 launch duburi_sim_bringup rviz.launch.py "$@"
+    ;;
   plotjuggler|pj)
     _source_ros
     layout="$INSTALL/duburi_sim_bringup/share/duburi_sim_bringup/config/plotjuggler_sim.xml"
