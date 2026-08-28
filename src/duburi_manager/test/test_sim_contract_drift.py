@@ -321,3 +321,23 @@ def test_the_murky_preset_is_actually_murkier_than_the_clear_one():
 
     # sauvc26_final is `murky`, task_navigation is `competition`.
     assert turbidity('sauvc26_final') > turbidity('task_navigation')
+
+
+def test_dvl_beam_visuals_are_off_in_the_generated_model():
+    """The most expensive flag in the model, and it looks harmless.
+
+    <visualize> on the DVL draws debug beams on the SAME Ogre2 render thread
+    the cameras use. Measured 2026-08-28 on the SAUVC final course, headless:
+    12.75 Hz / 6 ms frame jitter with it off, 2.83 Hz / 435 ms with it on. The
+    jitter is what an operator sees as laggy teleop video and juddery recorded
+    datasets, so a well-meaning flip of this flag is a real regression that no
+    other test would catch. dvl_bridge.py publishes the same beams to RViz.
+    """
+    sdf = (SIM / 'src/duburi_sim_description/models/duburi_heavy/'
+                 'model.sdf').read_text()
+    dvl = sdf[sdf.index('<sensor name="dvl"'):sdf.index('</sensor>',
+                                                       sdf.index('<sensor name="dvl"'))]
+    assert '<visualize>false</visualize>' in dvl, (
+        'DVL beam visuals are ON in the generated model. Set '
+        'dvl.visualize_beams: false and regenerate, or accept 4.5x fewer frames.'
+    )
