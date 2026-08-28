@@ -1,0 +1,28 @@
+name: rs_task_torpedo
+description: >
+  RoboSub Task 4 in isolation: the board, its two openings, and its pinger.
+
+  Both openings are real gaps a torpedo passes through, not painted circles.
+  Maximum points need the LARGE opening first then the small one, fired from
+  the scored standoffs -- far 0.3 m, farther 0.46 m -- so this is the drill for
+  the standoff hold, not just for alignment.
+
+competition: robosub
+
+scene:
+  lighting: competition
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-3.5, 0.0, -0.9]
+  yaw: 0.0
+
+props:
+  - model: robosub_torpedo_survey_repair
+    name: torpedo_board
+    xy: [0.0, 0.0]
+    yaw: 3.1416
+  - model: robosub_pinger
+    name: pinger_deploy
+    xy: [0.6, 0.0]
