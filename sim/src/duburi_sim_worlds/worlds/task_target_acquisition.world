@@ -339,25 +339,25 @@ Deliberately clearer water than the final course: this task is flown looking DOW
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_a</name>
-      <pose>9 1.8 -1.6 0 0 0</pose>
+      <pose>9 2.4 -1.6 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_blue</uri>
       <name>drum_b</name>
-      <pose>9 0.6 -1.6 0 0 0</pose>
+      <pose>9 0.8 -1.6 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red_pinger</uri>
       <name>drum_c</name>
-      <pose>9 -0.6 -1.6 0 0 0</pose>
+      <pose>9 -0.8 -1.6 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_d</name>
-      <pose>9 -1.8 -1.6 0 0 0</pose>
+      <pose>9 -2.4 -1.6 0 0 0</pose>
     </include>
 
     <!-- ===================== VEHICLE ===================== -->

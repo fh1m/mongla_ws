@@ -3,7 +3,7 @@
   <model name="sauvc_target_mat">
     <static>true</static>
     <link name="mat">
-      <pose>0 0 0.004 0 0 0</pose>
+      <pose>0 0 0.02 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.001</mass>

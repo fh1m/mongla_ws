@@ -40,13 +40,13 @@ props:
 
   - model: sauvc_drum_red
     name: drum_a
-    xy: [9.0, 1.8]
+    xy: [9.0, 2.4]
   - model: sauvc_drum_blue
     name: drum_b
-    xy: [9.0, 0.6]
+    xy: [9.0, 0.8]
   - model: sauvc_drum_red_pinger
     name: drum_c
-    xy: [9.0, -0.6]
+    xy: [9.0, -0.8]
   - model: sauvc_drum_red
     name: drum_d
-    xy: [9.0, -1.8]
+    xy: [9.0, -2.4]

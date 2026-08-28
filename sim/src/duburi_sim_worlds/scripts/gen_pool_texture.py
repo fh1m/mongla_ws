@@ -33,12 +33,21 @@ from PIL import Image
 # Palette, linear 0-1. Competition pool: pale blue mosaic tiles, white grout,
 # navy lane lines, black cross markers.
 FIELD = np.array([0.58, 0.80, 0.90])
-GROUT = np.array([0.90, 0.93, 0.95])
+# Grout was near-white against a mid-blue field -- the single highest-contrast
+# edge in the scene, repeated every few pixels. Real grout is a shade of the
+# tile, not a highlight.
+GROUT = np.array([0.72, 0.84, 0.90])
 LANE = np.array([0.04, 0.10, 0.40])
 CROSS = np.array([0.02, 0.02, 0.03])
 
-TILE_M = 0.10  # tile pitch in metres
-GROUT_PX = 2  # thicker grout reads better at camera distance
+# 0.25 m, not 0.10. At the spec's 64 px/m a 0.10 m tile is SIX pixels, and a
+# six-pixel tile carrying per-tile random colour is a high-frequency field: seen
+# from a few metres away it minifies into the chaotic dash pattern that made the
+# pool floor read as static rather than tiles. Real competition pools use large
+# floor mosaic anyway. The aliasing fix is fewer, bigger tiles plus much less
+# per-tile variance -- not a bigger texture, which only moves the beat frequency.
+TILE_M = 0.25  # tile pitch in metres
+GROUT_PX = 2  # ~3 cm at 64 px/m with the 0.25 m tile: a believable joint
 
 # Competition pools mark lanes every 2.5 m across the width.
 LANE_SPACING_M = 2.5
@@ -48,7 +57,9 @@ CROSS_LENGTH_M = 1.1
 CROSS_INSET_M = 2.0
 
 # Per-tile mosaic variation (std of additive RGB noise).
-TILE_NOISE = 0.035
+# Subtle. At 0.035 the field read as confetti once tiles were small; the point
+# of per-tile noise is to break up a flat plane, not to be seen.
+TILE_NOISE = 0.014
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG = os.path.dirname(HERE)
@@ -96,6 +107,62 @@ def _save(img: np.ndarray, tile_px: int, path: str) -> None:
     print(f"wrote {path}  ({img.shape[1]}x{img.shape[0]})")
 
 
+
+def _caustics(height: int, width: int, px_per_m: float, rng, strength: float = 0.16):
+    """A baked caustic light field, returned as a multiplicative [1-s, 1+s] map.
+
+    The bright wobbling net cast on a pool floor by the rippling surface is the
+    single strongest "this is underwater" cue a still frame has -- stronger than
+    fog, stronger than colour. Gazebo will not compute it: real caustics need
+    photon transport from an animated surface, and the wave shader other teams
+    use only deforms the surface, it does not light the floor through it.
+
+    Baking it into the albedo costs nothing at render time and is honest for a
+    fixed-camera dataset: the pattern does not animate, but a detector trained
+    on frames from this pool sees floor texture with the right spatial
+    statistics instead of a flat plane.
+
+    Built the way caustics actually form: the surface is a sum of a few
+    travelling waves, and light focuses where that surface is CONCAVE. So take
+    the Laplacian of the wave field and keep the positive part -- sharp bright
+    filaments over a dim background, which is what the eye recognises. A sum of
+    smooth blobs would give soft mush and read as dirt.
+    """
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    xm, ym = xx / px_per_m, yy / px_per_m
+
+    # Nine directions, not five, and short wavelengths. With a handful of long
+    # waves the Laplacian's ridges stay parallel and the floor gets diagonal
+    # BANDS -- which is wrong twice over: it does not look like a pool, and a
+    # detector trained on it learns a directional texture prior. Caustics are a
+    # CELLULAR net, and a net is what you get when enough directions interfere
+    # at a wavelength near the tile scale.
+    surface = np.zeros((height, width), dtype=np.float32)
+    for _ in range(9):
+        ang = rng.uniform(0, 2 * np.pi)
+        k = 2 * np.pi / rng.uniform(0.22, 0.65)         # 22-65 cm wavelengths
+        # Amplitude 1/k^2, NOT 1/k. The Laplacian scales a wave by k^2, so
+        # with 1/k the shortest wave survives at k times the others and its
+        # single direction becomes the whole pattern -- that is what produced
+        # diagonal streaks instead of a net. 1/k^2 makes every direction
+        # contribute equally AFTER the Laplacian, which is what lets nine of
+        # them interfere into cells.
+        surface += np.sin(k * (np.cos(ang) * xm + np.sin(ang) * ym)
+                          + rng.uniform(0, 2 * np.pi)) / (k * k)
+
+    lap = (np.roll(surface, 1, 0) + np.roll(surface, -1, 0)
+           + np.roll(surface, 1, 1) + np.roll(surface, -1, 1) - 4.0 * surface)
+    lap = np.maximum(lap, 0.0)
+    peak = np.percentile(lap, 99.5)
+    if peak <= 0:
+        return np.ones((height, width, 1), dtype=np.float32)
+    net = np.clip(lap / peak, 0.0, 1.0) ** 0.7
+
+    # Bright filaments pull up hard, the shadowed background dips slightly --
+    # net light is conserved, so the floor does not simply get brighter.
+    return (1.0 + strength * (2.2 * net - 0.45))[:, :, None].astype(np.float32)
+
+
 def make_floor(
     length_m: float, width_m: float, px_per_m: int, path: str, rng: np.random.Generator
 ) -> None:
@@ -120,6 +187,10 @@ def make_floor(
         band = np.abs(y - centre) <= cross_half_l
         for cx in (CROSS_INSET_M * px_per_m, width - CROSS_INSET_M * px_per_m):
             img[np.ix_(band, np.abs(x - cx) <= cross_half_w)] = CROSS
+
+    # AFTER the lane lines and crosses, so the light plays over the markings
+    # too. Caustics that stop at a painted line look like a decal, not light.
+    img = np.clip(img * _caustics(height, width, px_per_m, rng), 0.0, 1.0)
 
     _save(img, tile_px, path)
 
