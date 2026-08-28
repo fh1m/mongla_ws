@@ -85,6 +85,16 @@ props:
       red: [0.80, 0.10, 0.10]
       blue: [0.08, 0.25, 0.80]
 
+  # The green mat the four drums sit on, marking the target zone. It is in the
+  # rulebook's own Figure 16, and the rulebook notes it "may not be present" for
+  # 2026 -- so it is a separate prop you place or omit per course rather than
+  # part of the drums. It is also the single biggest thing the bottom camera
+  # sees while hunting drums, which makes it a real detection cue.
+  target_mat:
+    length: 6.0        # along the drum line
+    width: 2.2
+    colour: [0.13, 0.45, 0.20]
+
   starting_zone:
     # "The starting zone is a 140x140cm area marked on the surface of water."
     size: 1.40

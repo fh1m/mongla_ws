@@ -75,3 +75,39 @@ Our procedural PBR route gets the visual realism that actually matters for
 detection at a fraction of the integration risk. Revisit DAVE only for **ocean
 currents** — the one thing it does that we cannot easily reproduce — and take it
 as two vendored plugin packages, not as a workspace.
+
+---
+
+## Should we move to Jazzy now, given the Pi5 / Ubuntu 24.04 plan?
+
+**No — not now, and the SBC change does not force it.**
+
+The question is fair: DAVE targets Jazzy / Ubuntu 24.04, a Pi 5 wants 24.04, and
+doing one migration instead of two is usually right. Three things make it wrong
+here.
+
+**1. The SBC is not the ROS host.** Per §2 of `CLAUDE.md` the Raspberry Pi runs
+BlueOS and routes MAVLink; every ROS 2 node lives on the Jetson. Moving the Pi to
+a Pi 5 on 24.04 changes the MAVLink router's host OS, not the distro our nodes
+build against. There is no forcing function.
+
+**2. What Jazzy buys is smaller than it looks.** From the assessment above:
+`asv_wave_sim` is GPL-3.0 (our stack is not), was tested on Garden, and produces
+**no caustics** — the single visual cue that reads as "underwater". The IOES
+multibeam-sonar fork is abandoned, and their `ardupilot_gazebo` fork sits 10
+commits behind the upstream we already use. So the migration buys waves we cannot
+license comfortably and sonar that is unmaintained.
+
+**3. The realism we actually want is on this side of the fence.** The measured
+finding this round is that our turbidity lever was inert and is now real, and the
+next increment — per-pixel range attenuation via `rgbd_camera` — is a sensor-type
+change in our own model, available on Harmonic today. DAVE is not on that path.
+
+**Cost if we did it anyway:** two colcon workspaces, ROS Humble → Jazzy API
+churn, 659 autonomy + 34 lab tests to re-green, `ros_gz` / `gz-sim` version
+realignment, and the Jetson's JetPack 6.2 image is built around 22.04 — so the
+vehicle's actual compute would have to be re-imaged mid-competition-prep.
+
+**Revisit when:** the Pi 5 hardware is in hand *and* ROS moves off the Jetson, or
+DAVE ships a Harmonic branch, or we need real multibeam sonar for a task. None of
+those is true today.

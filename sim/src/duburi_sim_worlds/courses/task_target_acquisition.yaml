@@ -25,15 +25,27 @@ vehicle:
   yaw: 0.0
 
 props:
+  # Rulebook Figure 16: the four drums stand in a LINE, equally spaced, on a
+  # green mat. They were previously staggered diagonally, which is not what any
+  # competition photo shows and makes the bottom-camera search unrepresentative.
+  #
+  # 1.2 m pitch: the drums are 0.6 m across, so this leaves a clear drum-width
+  # between them. Close enough that two can appear in one bottom-camera frame at
+  # working altitude, which is the case the detector actually has to handle.
+  - model: sauvc_target_mat
+    name: target_mat
+    xy: [9.0, 0.0]
+    yaw: 1.5708
+
   - model: sauvc_drum_red
     name: drum_a
-    xy: [8.0, 1.2]
+    xy: [9.0, 1.8]
   - model: sauvc_drum_blue
     name: drum_b
-    xy: [8.6, 0.4]
+    xy: [9.0, 0.6]
   - model: sauvc_drum_red_pinger
     name: drum_c
-    xy: [9.2, -0.4]
+    xy: [9.0, -0.6]
   - model: sauvc_drum_red
     name: drum_d
-    xy: [9.8, -1.2]
+    xy: [9.0, -1.8]

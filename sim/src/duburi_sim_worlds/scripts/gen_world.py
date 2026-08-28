@@ -61,18 +61,45 @@ SCENE_DEFAULTS = {
 }
 
 # Named lighting / fog presets courses can pick with scene.lighting: clear|competition|murky
+#
+# WHERE THE TURBIDITY ACTUALLY COMES FROM. The <fog> numbers below are written
+# into the world for completeness, but MEASURED 2026-08-28: gz-sim 8 (Harmonic)
+# does NOT apply <scene><fog> to camera-sensor renders. Dropping fog_end from
+# 18 m to 3 m left the 25 m far wall pixel-for-pixel crisp. So the SDF fog block
+# is inert and cannot be the perception lever it was documented as.
+#
+# The lever is `underwater_fx`, which post-processes image_raw -> image_fx in
+# ROS. Each preset therefore carries an "fx" block, emitted next to the world as
+# <course>.fx.yaml and loaded by bridge.launch.py, so `lighting: murky` produces
+# imagery that is actually murky instead of only a differently-worded world file.
 LIGHTING_PRESETS = {
     "clear": {
         "ambient": [0.40, 0.50, 0.55],
         "fog_start": 3.0,
         "fog_end": 40.0,
         "fog_density": 0.01,
+        "fx": {
+            "turbidity": 0.15,
+            "backscatter": 0.30,
+            "blur_sigma": 0.3,
+            "noise": 0.006,
+            "vignette": 0.12,
+            "atten_scale": 0.6,
+        },
     },
     "competition": {
         "ambient": [0.28, 0.40, 0.48],
         "fog_start": 1.2,
         "fog_end": 22.0,
         "fog_density": 0.028,
+        "fx": {
+            "turbidity": 0.45,
+            "backscatter": 0.55,
+            "blur_sigma": 0.8,
+            "noise": 0.012,
+            "vignette": 0.25,
+            "atten_scale": 1.0,
+        },
     },
     "murky": {
         "ambient": [0.18, 0.30, 0.36],
@@ -80,8 +107,20 @@ LIGHTING_PRESETS = {
         "fog_end": 12.0,
         "fog_density": 0.05,
         "fog_colour": [0.10, 0.26, 0.30],
+        "fx": {
+            "turbidity": 0.80,
+            "backscatter": 0.75,
+            "blur_sigma": 1.4,
+            "noise": 0.020,
+            "vignette": 0.35,
+            "atten_scale": 1.8,
+        },
     },
 }
+
+# What a course gets when it names no preset: the same numbers underwater_fx
+# already defaulted to, so an un-annotated course is unchanged by this wiring.
+FX_DEFAULTS = dict(LIGHTING_PRESETS["competition"]["fx"])
 
 PHYSICS_DEFAULTS = {
     "max_step_size": 0.001,
@@ -271,6 +310,20 @@ def generate(course_path: str, spec: dict, outdir: str = WORLDS_DIR) -> str:
     out_path = os.path.join(outdir, f"{stem}.world")
     with open(out_path, "w") as f:
         f.write(world)
+
+    # The turbidity sidecar. See LIGHTING_PRESETS: the world's <fog> is inert in
+    # gz-sim 8, so the preset's real effect is carried here and loaded by
+    # bridge.launch.py as underwater_fx's parameters. Written for every course,
+    # including ones that name no preset, so the file is always there to load.
+    fx = dict(FX_DEFAULTS)
+    fx.update(scene.get("fx") or {})
+    fx_path = os.path.join(outdir, f"{stem}.fx.yaml")
+    with open(fx_path, "w") as f:
+        f.write(f"# GENERATED from {os.path.basename(course_path)} "
+                f"(lighting: {preset_name or 'default'}). Do not edit.\n")
+        f.write("/**:\n  ros__parameters:\n")
+        for k in sorted(fx):
+            f.write(f"    {k}: {fx[k]}\n")
     return out_path
 
 

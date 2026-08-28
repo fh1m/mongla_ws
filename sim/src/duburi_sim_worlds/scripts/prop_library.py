@@ -192,12 +192,14 @@ def _geometry_sphere(radius) -> str:
     return f"<geometry><sphere><radius>{radius:.6g}</radius></sphere></geometry>"
 
 
-def visual(name, geometry, mat, pose="0 0 0 0 0 0", cast_shadows=True) -> str:
+def visual(name, geometry, mat, pose="0 0 0 0 0 0", cast_shadows=True,
+           transparency: float = 0.0) -> str:
     shadows = "" if cast_shadows else "  <cast_shadows>false</cast_shadows>\n"
+    trans = f"  <transparency>{transparency:.3g}</transparency>\n" if transparency else ""
     return (
         f'<visual name="{name}">\n'
         f"  <pose>{pose}</pose>\n"
-        f"{shadows}"
+        f"{shadows}{trans}"
         f"  {geometry}\n"
         f"{_indent(mat, 1)}\n"
         "</visual>"
@@ -537,6 +539,42 @@ def drum(spec: dict, colour_name: str, model_name: str = None, pinger: bool = Fa
     return model(model_name or f"sauvc_drum_{colour_name}", "\n".join(parts))
 
 
+def target_mat(spec: dict) -> str:
+    """The green mat the drums stand on. Floor-anchored, flat, no collision.
+
+    Rulebook Figure 16 shows the four drums in a line on a green mat. It is the
+    largest single thing the bottom camera sees while hunting the target zone,
+    so it is a real detection cue and not decoration -- a drum search that finds
+    the mat first has a much easier job.
+
+    Kept as its own prop rather than being welded to the drums because the
+    rulebook says it "may not be present" for 2026: a course can place the drums
+    without it and the vehicle then has to find them against bare tile.
+    """
+    cfg = spec["props"]["target_mat"]
+    # Thin, and lifted a hair off the floor so it does not z-fight the tiles.
+    #
+    # TRIVIAL ISOTROPIC INERTIA, not the computed plate tensor. A 6.0 x 2.2 x
+    # 0.006 m box gives Ixx+Iyy = 17.017 against Izz = 17.0 -- a valid tensor
+    # must satisfy the triangle inequality and this one sits on the boundary, so
+    # rounding tips it over and Gazebo REFUSES THE WHOLE WORLD with "A link
+    # named mat has invalid inertia". The mat is static and non-colliding, so
+    # its inertia is never integrated; a token value is both honest and safe.
+    # Any very thin, very elongated prop added later will hit the same wall.
+    return model(
+        "sauvc_target_mat",
+        _solid(
+            "mat",
+            _geometry_box(cfg["length"], cfg["width"], 0.006),
+            material(cfg["colour"], emissive_gain=0.30),
+            0.001,
+            (1e-6, 1e-6, 1e-6),
+            "0 0 0.004 0 0 0",
+            False,
+        ),
+    )
+
+
 def starting_zone(spec: dict) -> str:
     """140 x 140 cm marking on the water surface. Surface-anchored.
 
@@ -636,6 +674,11 @@ PROPS = {
     },
     "sauvc_final_gate": {
         "build": final_gate,
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "sauvc_target_mat": {
+        "build": target_mat,
         "anchor": ANCHOR_FLOOR,
         "dynamic": False,
     },
@@ -776,5 +819,36 @@ def pool(spec: dict, pool_cfg: dict = None) -> str:
             ),
         ]
         parts.append(link(f"wall_{name}", "\n".join(body)))
+
+    # WATER SURFACE. Gazebo has no water: the pool is a floor, four walls and a
+    # fog volume, so everything above z=0 was raw <sky> and the boundary read as
+    # a hard edge between "pool" and "outdoors" -- which is not what a single
+    # competition photo looks like. A translucent rippled plane at z=0 is what
+    # turns the sky into something seen THROUGH water.
+    #
+    # NO COLLISION, on purpose: the vehicle surfaces through this plane, and a
+    # collision here would make `surface()` push against a lid.
+    #
+    # cast_shadows off as well -- a 25x16 m shadow caster directly above the
+    # whole arena darkens every prop and is the one thing that would undo the
+    # emissive lift the props rely on to stay visible through fog.
+    parts.append(
+        link(
+            "water_surface",
+            "\n".join([
+                inertial(1.0, (1.0, 1.0, 1.0)),
+                visual(
+                    "water_surface_visual",
+                    _geometry_box(length, width, 0.01),
+                    textured_material(
+                        "water_surface.png", tint=0.95, specular=0.35,
+                        roughness=0.15, emissive=0.22),
+                    "0 0 0 0 0 0",
+                    cast_shadows=False,
+                    transparency=0.62,
+                ),
+            ]),
+        )
+    )
 
     return model("sauvc_pool", "\n".join(parts))

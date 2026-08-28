@@ -1,0 +1,9 @@
+# GENERATED from sauvc26_final.yaml (lighting: murky). Do not edit.
+/**:
+  ros__parameters:
+    atten_scale: 1.8
+    backscatter: 0.75
+    blur_sigma: 1.4
+    noise: 0.02
+    turbidity: 0.8
+    vignette: 0.35

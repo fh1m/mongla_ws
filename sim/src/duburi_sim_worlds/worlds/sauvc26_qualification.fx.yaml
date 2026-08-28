@@ -1,0 +1,9 @@
+# GENERATED from sauvc26_qualification.yaml (lighting: competition). Do not edit.
+/**:
+  ros__parameters:
+    atten_scale: 1.0
+    backscatter: 0.55
+    blur_sigma: 0.8
+    noise: 0.012
+    turbidity: 0.45
+    vignette: 0.25
