@@ -54,18 +54,21 @@ props:
   # "A orange flare may be located anywhere in a rectangular zone 4m-8m from
   #  side of the arena, before the gate." Touching it aborts the attempt.
   #
-  # NEAR THE GATE LINE, not off to one side. The pool is 16 m wide, so "4-8 m
-  # from the side" is the band from quarter-width to the centreline -- y = -1.2
-  # is 6.8 m from the -y wall and legal. Figures 15 and 17 both show it close to
-  # the approach path, which is the whole point: an obstacle 6 m off the line is
-  # not an obstacle. Placed 1.5 m short of the gate so it is genuinely "before"
-  # it and has to be cleared on the run in.
+  # ON THE APPROACH LINE, dead centre. The pool is 16 m wide, so "4-8 m from the
+  # side" reaches the centreline at exactly 8 m: y = 0 is legal, and it is the
+  # only placement that actually obstructs. y = -1.2 was still off to one side
+  # in the viewport -- the hull could drive the gate centre and never meet it,
+  # which is not an obstacle. Placed 1.5 m short of the gate so it is genuinely
+  # "before" it and has to be cleared on the run in.
   - model: sauvc_orange_flare
     name: orange_flare
-    xy: [2.0, -1.2]
+    xy: [2.0, 0.0]
 
   # Target Acquisition: four drums in a LINE on the green mat, equally spaced at
-  # a 1.2 m pitch (Figure 16). One blue and three red, one red carrying the
+  # a 1.6 m PITCH (Figure 16). The pitch is cross-checked against
+  # BumblebeeAS/bb_worlds sauvc_target_acquisition_area (MIT), which places
+  # them at x = +/-0.8 and +/-2.4 -- an independent read by a team that has
+  # been to the venue. 4.8 m of drums centred on the 6.0 m mat. One blue and three red, one red carrying the
   # 45 kHz pinger. Which drum is blue is randomised between attempts -- move them
   # at runtime rather than editing this file.
   - model: sauvc_target_mat
@@ -74,16 +77,16 @@ props:
     yaw: 1.5708
   - model: sauvc_drum_red
     name: drum_red_a
-    xy: [8.5, 1.8]
+    xy: [8.5, 2.4]
   - model: sauvc_drum_blue
     name: drum_blue
-    xy: [8.5, 0.6]
+    xy: [8.5, 0.8]
   - model: sauvc_drum_red_pinger
     name: drum_pinger
-    xy: [8.5, -0.6]
+    xy: [8.5, -0.8]
   - model: sauvc_drum_red
     name: drum_red_b
-    xy: [8.5, -1.8]
+    xy: [8.5, -2.4]
 
 
 

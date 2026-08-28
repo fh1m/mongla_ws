@@ -39,9 +39,9 @@ props:
     name: gate
     xy: [-4.8, 0.0]
 
-  # Rulebook: "4m-8m from side of the arena, before the gate". y = -1.2 is 6.8 m
-  # from the -y wall, i.e. legal and near the centreline -- an obstacle several
-  # metres off the approach line is not an obstacle. 2 m short of the gate.
+  # Rulebook: "4m-8m from side of the arena, before the gate". y = 0 is 8 m from
+  # either wall -- the legal limit, and the only placement that actually sits on
+  # the approach line. 2 m short of the gate.
   - model: sauvc_orange_flare
     name: flare_obstacle
-    xy: [-6.8, -1.2]
+    xy: [-6.8, 0.0]

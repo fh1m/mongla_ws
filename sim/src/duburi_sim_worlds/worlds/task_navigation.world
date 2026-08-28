@@ -343,7 +343,7 @@ SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate d
     <include>
       <uri>model://sauvc_orange_flare</uri>
       <name>flare_obstacle</name>
-      <pose>-6.8 -1.2 -1.6 0 0 0</pose>
+      <pose>-6.8 0 -1.6 0 0 0</pose>
     </include>
 
     <!-- ===================== VEHICLE ===================== -->

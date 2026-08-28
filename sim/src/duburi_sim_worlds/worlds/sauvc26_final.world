@@ -346,7 +346,7 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
     <include>
       <uri>model://sauvc_orange_flare</uri>
       <name>orange_flare</name>
-      <pose>2 -1.2 -1.6 0 0 0</pose>
+      <pose>2 0 -1.6 0 0 0</pose>
     </include>
 
     <include>
@@ -358,25 +358,25 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_red_a</name>
-      <pose>8.5 1.8 -1.6 0 0 0</pose>
+      <pose>8.5 2.4 -1.6 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_blue</uri>
       <name>drum_blue</name>
-      <pose>8.5 0.6 -1.6 0 0 0</pose>
+      <pose>8.5 0.8 -1.6 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red_pinger</uri>
       <name>drum_pinger</name>
-      <pose>8.5 -0.6 -1.6 0 0 0</pose>
+      <pose>8.5 -0.8 -1.6 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_red_b</name>
-      <pose>8.5 -1.8 -1.6 0 0 0</pose>
+      <pose>8.5 -2.4 -1.6 0 0 0</pose>
     </include>
 
     <include>

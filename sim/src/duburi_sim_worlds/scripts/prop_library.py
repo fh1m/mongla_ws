@@ -569,7 +569,7 @@ def target_mat(spec: dict) -> str:
             material(cfg["colour"], emissive_gain=0.30),
             0.001,
             (1e-6, 1e-6, 1e-6),
-            "0 0 0.004 0 0 0",
+            f"0 0 {FLOOR_DECAL_Z} 0 0 0",
             False,
         ),
     )
@@ -591,7 +591,7 @@ def starting_zone(spec: dict) -> str:
     # Thin in z, and lifted clear of the surface so a camera at z = 0 is not
     # sitting inside the geometry.
     thickness = 0.01
-    z = 0.02
+    z = FLOOR_DECAL_Z
 
     parts = []
     for name, sx, sy, x, y in (
@@ -759,6 +759,19 @@ def standalone_sdf(name: str, spec: dict) -> str:
 # --------------------------------------------------------------------------
 # the pool
 # --------------------------------------------------------------------------
+
+
+# Height a flat floor decal must sit at so it is not swallowed by the pool.
+#
+# The floor VISUAL is a 0.01 m slab whose centre is offset +0.005 from the link,
+# so its top face is 0.010 above the model origin -- and props are placed at the
+# floor plane, not at the floor's top face. The green target mat was authored at
+# 0.004 with a 0.006 thickness, which put it entirely INSIDE the floor slab: it
+# rendered nothing at all, and it looked like the prop had never been added.
+#
+# 0.02 is what sauvc_starting_zone already used and is visibly correct. Anything
+# flat that lies on the pool bottom must use this, not a hand-picked epsilon.
+FLOOR_DECAL_Z = 0.02
 
 
 def pool(spec: dict, pool_cfg: dict = None) -> str:
