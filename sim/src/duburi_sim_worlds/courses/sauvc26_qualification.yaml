@@ -13,6 +13,7 @@ scene:
   lighting: competition
   # Qualification is a clean run with nothing to identify, so visibility is set
   # generously. Still murkier than an empty pool so cameras see colour in fog.
+  # fog_* is inert on gz-sim 8; `lighting:` above is the real lever
   fog_start: 1.5
   fog_end: 26.0
   fog_density: 0.022

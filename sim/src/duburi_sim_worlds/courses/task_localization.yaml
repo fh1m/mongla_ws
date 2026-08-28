@@ -15,6 +15,7 @@ pool: sauvc
 
 scene:
   lighting: murky
+  # fog_* is inert on gz-sim 8; `lighting:` above is the real lever
   fog_start: 1.2
   fog_end: 16.0
   fog_density: 0.028
