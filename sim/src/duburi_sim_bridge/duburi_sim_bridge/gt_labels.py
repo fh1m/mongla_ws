@@ -29,6 +29,9 @@ CLASSES = [
     'drum_blue',
     'drum_red_pinger',
     'starting_zone',
+    # Appended, never inserted: these strings are the YOLO class INDICES, so
+    # reordering them silently relabels every dataset recorded before the edit.
+    'target_mat',
 ]
 
 MODEL_TO_CLASS = {
@@ -42,6 +45,7 @@ MODEL_TO_CLASS = {
     'sauvc_drum_blue': 'drum_blue',
     'sauvc_drum_red_pinger': 'drum_red_pinger',
     'sauvc_starting_zone': 'starting_zone',
+    'sauvc_target_mat': 'target_mat',
 }
 
 # Approximate axis-aligned half-extents in metres (x, y, z) in prop frame.

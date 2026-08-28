@@ -97,5 +97,10 @@ Run via lab Scripts API / UI utils — drives planner motions while recording.
 ## Training note
 
 Raw contract topics stay `image_raw`. Prefer `--fx` / `image_fx` when collecting
+for underwater domain gap. The capture -> convert -> train -> run-back-in-sim
+walkthrough now lives in
+[SIM_VISION_TRAINING.md](SIM_VISION_TRAINING.md), and `dataset_to_yolo`
+does the split and data.yaml. The line below is historical:
+
 for underwater domain gap. This repo does **not** include the YOLO train pipeline
 (see `duburi_ws` vision skills/docs).
