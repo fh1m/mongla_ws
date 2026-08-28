@@ -229,6 +229,23 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > "fix" by changing the depth source: AHRS2 is the pool-verified hardware path.
 > Full table: [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
 >
+> **Vision in sim runs BOTH cameras** — `duburi_sim stack` gives
+> `/duburi_detector_forward` (sim front cam) and `/duburi_detector_downward`
+> (bottom cam). Until 2026-08-28 `vision:=true` started **nothing**:
+> `IncludeLaunchDescription` does not scope `launch_arguments`, so the manager
+> include's `vision: 'false'` leaked out and disabled the vision include via its
+> own `IfCondition`, silently. A `GroupAction(scoped=True)` fixes it and a drift
+> test asserts the scope survives. Any sim note saying "run `--no-vision`"
+> predates this.
+>
+> **`bin_fire_blood.pt` has NO `bin` class** — embedded names are
+> `{0: blood, 1: fire}`. Asking for `classes:=bin` detects nothing, silently.
+>
+> **Props follow the SAUVC rulebook** and every prop can be spawned anywhere at
+> runtime: `ros2 run duburi_sim_scenarios props add <model> <name> <x> <y>`.
+> Six courses, three of them single-task. Textures are generated
+> (`gen_world.py --all`), never hand-committed.
+>
 > **Vision in sim has two silent failure modes.** `duburi_sim stack` defaults to
 > `model:=gate_rescue_repair`; the `.pt` is gitignored (mirrored from `~/models`)
 > and a missing `.yaml` sidecar yields an empty allowlist and a silent `[]` every
