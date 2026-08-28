@@ -132,7 +132,12 @@
               <noise type="gaussian">
                 <stddev>@dvl_noise_stddev</stddev>
               </noise>
-              <visualize>false</visualize>
+              <!-- Draws the four beams in the GAZEBO GUI (headless sees nothing,
+                   and RViz cannot see Gazebo debug visuals either -- for RViz
+                   duburi_sim_bridge/dvl_bridge.py publishes an equivalent
+                   MarkerArray). Cheap, and it is the only way to confirm at a
+                   glance that the array is pointed at the floor and locked. -->
+              <visualize>true</visualize>
             </bottom_mode>
           </tracking>
           <resolution>@dvl_resolution</resolution>

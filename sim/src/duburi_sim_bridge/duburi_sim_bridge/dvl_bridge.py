@@ -24,6 +24,8 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from sensor_msgs.msg import Range
+from geometry_msgs.msg import Point
+from visualization_msgs.msg import Marker, MarkerArray
 
 from gz.transport13 import Node as GzNode
 from gz.msgs10.dvl_velocity_tracking_pb2 import DVLVelocityTracking
@@ -41,15 +43,33 @@ class DvlBridge(Node):
     def __init__(self):
         super().__init__('duburi_sim_dvl_bridge')
         self.declare_parameter('gz_topic', '/dvl/velocity')
-        self.declare_parameter('frame_id', 'duburi/dvl_link')
+        # base_link, NOT a dvl_link. The sensor was briefly given its own child
+        # link and read ~0 velocity there, because gz-sim only populates velocity
+        # components on links something enabled them for; it now lives on
+        # base_link. This frame_id still said `duburi/dvl_link` afterwards --
+        # naming a frame that no longer exists. Harmless while nothing consumed
+        # TF, and the first thing RViz rejects.
+        self.declare_parameter('frame_id', 'base_link')
         self.declare_parameter('ns', '/duburi/sim/dvl')
+        # Beam geometry. The DVLBeamState message carries range/rssi/locked but
+        # NOT direction, so the markers cannot be derived from it alone -- these
+        # MUST match <arrangement> in
+        # duburi_sim_description/models/duburi_heavy/model.sdf.in. Parameters
+        # rather than literals so a mismatch can be corrected without a rebuild.
+        self.declare_parameter('beam_tilt_deg', 30.0)
+        self.declare_parameter('beam_rotations_deg', [45.0, 135.0, -45.0, -135.0])
         gz_topic = self.get_parameter('gz_topic').value
         self.frame_id = self.get_parameter('frame_id').value
         ns = self.get_parameter('ns').value
 
+        self.beam_tilt = math.radians(self.get_parameter('beam_tilt_deg').value)
+        self.beam_rots = [math.radians(a) for a in
+                          self.get_parameter('beam_rotations_deg').value]
+
         self.pub_vel = self.create_publisher(
             TwistWithCovarianceStamped, f'{ns}/velocity', 10)
         self.pub_alt = self.create_publisher(Range, f'{ns}/altitude', 10)
+        self.pub_beams = self.create_publisher(MarkerArray, f'{ns}/beams', 10)
 
         self._n_ok = 0
         self._n_dropped = 0
@@ -111,6 +131,51 @@ class DvlBridge(Node):
         rng.max_range = 50.0
         rng.range = msg.target.range.mean
         self.pub_alt.publish(rng)
+
+        self._publish_beams(msg, stamp)
+
+    def _publish_beams(self, msg, stamp) -> None:
+        """Draw the four beams for RViz.
+
+        Gazebo's own `<visualize>true</visualize>` draws these in the Gazebo GUI,
+        but RViz cannot see Gazebo debug visuals and the headless sim has no GUI
+        at all -- so the same information has to cross as ROS markers.
+
+        A beam that lost its lock is drawn too, in a different colour, rather
+        than being dropped: a beam that vanishes looks identical to a bridge that
+        stopped publishing, and telling those apart is the whole point of having
+        the display.
+        """
+        arr = MarkerArray()
+        for i, rot in enumerate(self.beam_rots):
+            beam = msg.beams[i] if i < len(msg.beams) else None
+            # Janus array: tilt from vertical, rotation about the vertical axis.
+            # -z because the array looks at the floor.
+            st = math.sin(self.beam_tilt)
+            d = (st * math.cos(rot), st * math.sin(rot), -math.cos(self.beam_tilt))
+            rng = beam.range.mean if (beam is not None and beam.range.mean > 0) else 0.0
+            locked = bool(beam.locked) if beam is not None else False
+
+            m = Marker()
+            m.header.stamp = stamp
+            m.header.frame_id = self.frame_id
+            m.ns = 'dvl_beams'
+            m.id = i
+            m.type = Marker.LINE_LIST
+            m.action = Marker.ADD
+            m.scale.x = 0.012
+            # Green locked, red unlocked -- and a zero-length beam when there is
+            # no range, so the marker still exists and its absence stays
+            # meaningful.
+            m.color.r = 0.1 if locked else 0.9
+            m.color.g = 0.9 if locked else 0.15
+            m.color.b = 0.2
+            m.color.a = 0.9
+            p0 = Point(x=0.0, y=0.0, z=0.0)
+            p1 = Point(x=d[0] * rng, y=d[1] * rng, z=d[2] * rng)
+            m.points = [p0, p1]
+            arr.markers.append(m)
+        self.pub_beams.publish(arr)
 
 
 def main(args=None):
