@@ -1,0 +1,29 @@
+name: rs_task_gate
+description: >
+  RoboSub Task 1 in isolation: the gate, and nothing else in the water.
+
+  The scored feature is the ASYMMETRY -- red-over-black on one side,
+  black-over-red on the other. The vehicle's choice of side is its role for the
+  whole run, so a gate mission has to classify which half it is looking at, not
+  merely find a rectangle. Clear water, so a failure here is control or
+  classification and not perception.
+
+competition: robosub
+
+scene:
+  lighting: clear
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-6.0, 0.0, -0.6]
+  yaw: 0.0
+
+props:
+  - model: robosub_gate
+    name: gate
+    xy: [-1.0, 0.0]
+  - model: robosub_path_marker
+    name: path_out
+    xy: [1.2, 0.0]
+    yaw: 0.0

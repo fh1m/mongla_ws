@@ -1,0 +1,36 @@
+name: rs_task_bins
+description: >
+  RoboSub Task 3 in isolation: four bins, both roles present.
+
+  A DOWNWARD-camera task. The role image sits on each bin's floor facing up, so
+  the vehicle reads it from above while station-keeping for a marker drop --
+  which makes this the natural drill for the downward alignment path.
+
+competition: robosub
+
+scene:
+  lighting: competition
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-3.0, 0.0, -0.7]
+  yaw: 0.0
+
+props:
+  - model: robosub_bin_survey_repair
+    name: bin_sr_a
+    xy: [0.0, 0.6]
+  - model: robosub_bin_search_rescue
+    name: bin_rescue_a
+    xy: [0.0, -0.6]
+  - model: robosub_bin_survey_repair
+    name: bin_sr_b
+    xy: [0.9, 0.6]
+  - model: robosub_bin_search_rescue
+    name: bin_rescue_b
+    xy: [0.9, -0.6]
+  - model: robosub_path_marker
+    name: path_in
+    xy: [-1.6, 0.0]
+    yaw: 0.0

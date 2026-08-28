@@ -1,0 +1,29 @@
+name: rs_task_slalom
+description: >
+  RoboSub Task 2 in isolation: three sets of WHITE/RED/WHITE pipes.
+
+  Scoring rewards keeping the SAME side of the red pipe the vehicle took at the
+  gate, so the drill is not "pass the gap" but "pass it on a chosen side, three
+  times". The sets are offset in y to stop a single straight line solving it.
+
+competition: robosub
+
+scene:
+  lighting: competition
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-5.0, 0.0, -0.6]
+  yaw: 0.0
+
+props:
+  - model: robosub_slalom
+    name: slalom_1
+    xy: [-2.0, 0.0]
+  - model: robosub_slalom
+    name: slalom_2
+    xy: [-0.5, 0.4]
+  - model: robosub_slalom
+    name: slalom_3
+    xy: [1.0, -0.3]

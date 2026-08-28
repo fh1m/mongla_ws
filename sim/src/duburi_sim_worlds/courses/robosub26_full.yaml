@@ -1,0 +1,108 @@
+name: robosub26_full
+description: >
+  The full RoboSub 2026 Autonomy Challenge course: gate, slalom, bins,
+  torpedoes, octagon, path markers and both pingers.
+
+  Task ORDER follows the handbook's numbering (Begin Assessment -> Avoid Debris
+  -> Recon -> Deploy -> Restore -> Return Home). Task SPACING is ours: the
+  handbook gives prop dimensions and pool depth but not a course layout, since
+  four sections run simultaneously and the arrangement changes. Distances here
+  are chosen so each task is out of detection range of the next, which is the
+  property that makes a full autonomous run a real search problem.
+
+  ROLE. The vehicle picks Survey & Repair or Search & Rescue at the gate, and
+  every later task scores higher for the matching prop. Both variants of the
+  bins and the torpedo board are placed so the choice is live; a mission must
+  actually decide rather than drive to a fixed target.
+
+competition: robosub
+
+scene:
+  lighting: competition
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-8.5, 0.0, -0.5]
+  yaw: 0.0
+
+props:
+  # Task 1/6 -- Begin Assessment. Also the Return Home gate.
+  - model: robosub_gate
+    name: gate
+    xy: [-5.0, 0.0]
+
+  # Path marker: gate -> slalom. "~4 feet long by 6 in wide", ORANGE.
+  - model: robosub_path_marker
+    name: path_gate_slalom
+    xy: [-3.0, 0.0]
+    yaw: 0.0
+
+  # Task 2 -- Avoid Debris. Three sets, staggered in x, WHITE/RED/WHITE each.
+  - model: robosub_slalom
+    name: slalom_1
+    xy: [-1.0, 0.0]
+  - model: robosub_slalom
+    name: slalom_2
+    xy: [0.5, 0.4]
+  - model: robosub_slalom
+    name: slalom_3
+    xy: [2.0, -0.3]
+
+  # Path marker: slalom -> bins.
+  - model: robosub_path_marker
+    name: path_slalom_bins
+    xy: [3.4, 0.0]
+    yaw: 0.0
+
+  # Task 3 -- Recon. Four bins, both roles present.
+  - model: robosub_bin_survey_repair
+    name: bin_sr_a
+    xy: [5.0, 0.6]
+  - model: robosub_bin_search_rescue
+    name: bin_rescue_a
+    xy: [5.0, -0.6]
+  - model: robosub_bin_survey_repair
+    name: bin_sr_b
+    xy: [5.9, 0.6]
+  - model: robosub_bin_search_rescue
+    name: bin_rescue_b
+    xy: [5.9, -0.6]
+
+  # Task 4 -- Deploy. Board plus its pinger; "the pinger is located very close
+  # to the task (sometimes next to, sometimes in the center)".
+  - model: robosub_torpedo_survey_repair
+    name: torpedo_board
+    xy: [8.0, 3.0]
+    yaw: 3.1416
+  - model: robosub_pinger
+    name: pinger_deploy
+    xy: [8.0, 3.6]
+
+  # Task 5 -- Restore. The octagon FLOATS (surface-anchored), with the resupply
+  # table and its collectibles on the floor beneath it, and the second pinger.
+  - model: robosub_octagon
+    name: octagon
+    xy: [8.0, -3.5]
+  - model: robosub_resupply_table
+    name: resupply_table
+    xy: [8.0, -3.5]
+  - model: robosub_pinger
+    name: pinger_restore
+    xy: [8.8, -3.5]
+  - model: robosub_item_bolt
+    name: item_bolt
+    xy: [7.85, -3.35]
+    z_offset: 0.52
+  - model: robosub_item_plug
+    name: item_plug
+    xy: [8.15, -3.35]
+    z_offset: 0.52
+  - model: robosub_item_pill
+    name: item_pill
+    xy: [7.85, -3.65]
+    z_offset: 0.52
+  - model: robosub_item_bandage
+    name: item_bandage
+    xy: [8.15, -3.65]
+    z_offset: 0.52

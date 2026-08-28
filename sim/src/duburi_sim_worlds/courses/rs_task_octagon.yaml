@@ -1,0 +1,46 @@
+name: rs_task_octagon
+description: >
+  RoboSub Task 5 in isolation: the floating octagon, the resupply table, the
+  collectible items and the second pinger.
+
+  The octagon is SURFACE-anchored -- it floats at z = 0 while everything else in
+  this repo stands on the floor. Scoring is for surfacing INSIDE it, so this is
+  the one task whose target is above the vehicle rather than in front of it.
+
+competition: robosub
+
+scene:
+  lighting: clear
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-4.0, 0.0, -1.2]
+  yaw: 0.0
+
+props:
+  - model: robosub_octagon
+    name: octagon
+    xy: [0.0, 0.0]
+  - model: robosub_resupply_table
+    name: resupply_table
+    xy: [0.0, 0.0]
+  - model: robosub_pinger
+    name: pinger_restore
+    xy: [0.9, 0.0]
+  - model: robosub_item_bolt
+    name: item_bolt
+    xy: [-0.15, 0.15]
+    z_offset: 0.52
+  - model: robosub_item_plug
+    name: item_plug
+    xy: [0.15, 0.15]
+    z_offset: 0.52
+  - model: robosub_item_pill
+    name: item_pill
+    xy: [-0.15, -0.15]
+    z_offset: 0.52
+  - model: robosub_item_bandage
+    name: item_bandage
+    xy: [0.15, -0.15]
+    z_offset: 0.52

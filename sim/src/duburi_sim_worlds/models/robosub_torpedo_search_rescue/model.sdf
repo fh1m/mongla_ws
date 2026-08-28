@@ -1,0 +1,236 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="robosub_torpedo_search_rescue">
+    <static>true</static>
+    <link name="large_top">
+      <pose>0 0 0.557 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.0120833</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>9.66667e-05</iyy><iyz>0</iyz>
+          <izz>0.0120133</izz>
+        </inertia>
+      </inertial>
+      <visual name="large_top_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.05</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="large_top_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.05</size></box></geometry>
+      </collision>
+    </link>
+    <link name="large_bottom">
+      <pose>0 0 0.307 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.0120833</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>9.66667e-05</iyy><iyz>0</iyz>
+          <izz>0.0120133</izz>
+        </inertia>
+      </inertial>
+      <visual name="large_bottom_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.05</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="large_bottom_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.05</size></box></geometry>
+      </collision>
+    </link>
+    <link name="large_left">
+      <pose>0 0.2 0.432 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00266667</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00134667</iyy><iyz>0</iyz>
+          <izz>0.00134667</izz>
+        </inertia>
+      </inertial>
+      <visual name="large_left_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.2 0.2</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="large_left_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.2 0.2</size></box></geometry>
+      </collision>
+    </link>
+    <link name="large_right">
+      <pose>0 -0.2 0.432 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00266667</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00134667</iyy><iyz>0</iyz>
+          <izz>0.00134667</izz>
+        </inertia>
+      </inertial>
+      <visual name="large_right_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.2 0.2</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="large_right_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.2 0.2</size></box></geometry>
+      </collision>
+    </link>
+    <link name="small_top">
+      <pose>0 0 0.2755 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.0122408</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000254167</iyy><iyz>0</iyz>
+          <izz>0.0120133</izz>
+        </inertia>
+      </inertial>
+      <visual name="small_top_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.085</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="small_top_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.085</size></box></geometry>
+      </collision>
+    </link>
+    <link name="small_bottom">
+      <pose>0 0 0.0605 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.0122408</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000254167</iyy><iyz>0</iyz>
+          <izz>0.0120133</izz>
+        </inertia>
+      </inertial>
+      <visual name="small_bottom_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.085</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="small_bottom_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.6 0.085</size></box></geometry>
+      </collision>
+    </link>
+    <link name="small_left">
+      <pose>0 0.1825 0.168 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00240417</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000576667</iyy><iyz>0</iyz>
+          <izz>0.00185417</izz>
+        </inertia>
+      </inertial>
+      <visual name="small_left_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.235 0.13</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="small_left_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.235 0.13</size></box></geometry>
+      </collision>
+    </link>
+    <link name="small_right">
+      <pose>0 -0.1825 0.168 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00240417</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000576667</iyy><iyz>0</iyz>
+          <izz>0.00185417</izz>
+        </inertia>
+      </inertial>
+      <visual name="small_right_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.235 0.13</size></box></geometry>
+        <material>
+          <ambient>0.88 0.86 0.8 1</ambient>
+          <diffuse>0.88 0.86 0.8 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.22 0.215 0.2 1</emissive>
+        </material>
+      </visual>
+      <collision name="small_right_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.235 0.13</size></box></geometry>
+      </collision>
+    </link>
+    <link name="role_sign">
+      <pose>0.02 0 0.672 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000775208</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000387671</iyy><iyz>0</iyz>
+          <izz>0.000387671</izz>
+        </inertia>
+      </inertial>
+      <visual name="role_sign_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.305 0.305</size></box></geometry>
+        <material>
+          <ambient>0.16 0.44 0.78 1</ambient>
+          <diffuse>0.16 0.44 0.78 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.04 0.11 0.195 1</emissive>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

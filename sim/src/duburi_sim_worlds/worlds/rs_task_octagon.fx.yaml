@@ -1,0 +1,9 @@
+# GENERATED from rs_task_octagon.yaml (lighting: clear). Do not edit.
+/**:
+  ros__parameters:
+    atten_scale: 0.6
+    backscatter: 0.3
+    blur_sigma: 0.3
+    noise: 0.006
+    turbidity: 0.15
+    vignette: 0.12

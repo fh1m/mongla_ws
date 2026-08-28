@@ -728,6 +728,261 @@ def golf_ball(spec: dict) -> str:
 # `dynamic` whether the model needs buoyancy enabled and can be knocked around
 # `ball_on` height above the model origin at which to auto-place a golf ball
 
+# --------------------------------------------------------------------------
+# RoboSub 2026 props
+#
+# Dimensions come from spec/robosub.yaml, which quotes the Team Handbook with
+# page numbers. Model names carry the `robosub_` prefix, which is what keeps
+# them in the same flat models/ directory as the SAUVC set and what
+# prop_competition() reads to build each against the right pool.
+#
+# Thin plates get TRIVIAL ISOTROPIC inertia, like sauvc_target_mat. A physically
+# correct tensor for a 1.2 x 0.15 x 0.006 m path marker violates the triangle
+# inequality (Ixx + Iyy >= Izz) once floating-point rounds it, and Gazebo then
+# refuses to load the ENTIRE WORLD -- not just the prop. Static visual props do
+# not need a real tensor.
+# --------------------------------------------------------------------------
+
+_THIN = (1e-6, 1e-6, 1e-6)
+
+
+def _role_sign(spec, name, colour, pose):
+    """A 12 in x 12 in vinyl role sign. Every RoboSub task carries one."""
+    cfg = spec["sign"]
+    return _box_link(
+        name, cfg["thickness"], cfg["size"], cfg["size"], colour,
+        0.05, pose, collide=False,
+    )
+
+
+def robosub_gate(spec):
+    """Task 1/6 gate: 3 x 1.5 m, BLACK and RED panels, RED divider.
+
+    'The right side features RED on top, BLACK on bottom; left side reverses
+    this pattern.' The vehicle picks a side, and that choice is its role for
+    the whole run -- so the asymmetry is the scored feature, not decoration.
+    """
+    cfg = spec["props"]["gate"]
+    w, h = cfg["width"], cfg["height"]
+    r = spec["pvc_three_quarter_in"]
+    red, black = cfg["colours"]["red"], cfg["colours"]["black"]
+    half, quarter = w / 2.0, w / 4.0
+    panel_h = h / 2.0
+    parts = []
+
+    # The gate's WIDTH runs along y, so the vehicle passes along x. Posts, top
+    # bar and panels must all agree on that; the panels were offset along x
+    # while being sized along y, which stacked them in the middle of the gap
+    # instead of filling the two halves.
+    for side, y in (("port", -half), ("stbd", half)):
+        parts.append(_cylinder_link(
+            f"post_{side}", r, h, WHITE, 4.0, f"0 {y:.6g} {h / 2.0:.6g} 0 0 0",
+            mat=pvc_material(WHITE)))
+    parts.append(_cylinder_link(
+        "top_bar", r, w, WHITE, 5.0, f"0 0 {h:.6g} 1.5708 0 0",
+        mat=pvc_material(WHITE)))
+
+    # Panels. Left half reverses the right half's red/black order.
+    for side, cy, top, bottom in (
+        ("left", -quarter, black, red),
+        ("right", quarter, red, black),
+    ):
+        for band, colour, cz in (
+            ("top", top, h - panel_h / 2.0),
+            ("bottom", bottom, panel_h / 2.0),
+        ):
+            parts.append(_box_link(
+                f"panel_{side}_{band}", cfg["panel_depth"], w / 2.0, panel_h,
+                colour, 1.0, f"0 {cy:.6g} {cz:.6g} 0 0 0", collide=False))
+
+    # The RED divider hangs 610 mm from the top bar and splits the two sides.
+    parts.append(_box_link(
+        "divider", cfg["divider_depth"], 0.02, cfg["divider_drop"], red,
+        0.5, f"0 0 {h - cfg['divider_drop'] / 2.0:.6g} 0 0 0", collide=False))
+
+    return model("robosub_gate", "\n".join(parts))
+
+
+def robosub_slalom(spec):
+    """Task 2: one set of three moored pipes, WHITE / RED / WHITE.
+
+    Three SETS make the task; this is one, so a course places three of them and
+    can stagger the heights the handbook calls for ('moored at different
+    heights') per instance rather than baking one arrangement in.
+    """
+    cfg = spec["props"]["slalom"]
+    r = spec["pvc_one_in"]
+    h, gap = cfg["height"], cfg["spacing"]
+    parts = []
+    for name, y, colour in (
+        ("pipe_left", gap, cfg["colours"]["white"]),
+        ("pipe_centre", 0.0, cfg["colours"]["red"]),
+        ("pipe_right", -gap, cfg["colours"]["white"]),
+    ):
+        parts.append(_cylinder_link(
+            name, r, h, colour, 1.5, f"0 {y:.6g} {h / 2.0:.6g} 0 0 0",
+            mat=pvc_material(colour)))
+    return model("robosub_slalom", "\n".join(parts))
+
+
+def robosub_bin(spec, role="survey_repair", model_name=None):
+    """Task 3: a 25 L crate with a role image on its floor.
+
+    The image faces UP -- it is read by the downward camera on the way to a
+    marker drop, which is why the bins are a bottom-camera task.
+    """
+    cfg = spec["props"]["bin"]
+    lx, ly, lz, t = cfg["length"], cfg["width"], cfg["height"], cfg["wall"]
+    colour = cfg["colour"]
+    parts = [_box_link("floor", lx, ly, t, colour, 1.0, f"0 0 {t / 2.0:.6g} 0 0 0")]
+    for name, sx, sy, x, y in (
+        ("wall_x_pos", t, ly, (lx - t) / 2.0, 0.0),
+        ("wall_x_neg", t, ly, -(lx - t) / 2.0, 0.0),
+        ("wall_y_pos", lx, t, 0.0, (ly - t) / 2.0),
+        ("wall_y_neg", lx, t, 0.0, -(ly - t) / 2.0),
+    ):
+        parts.append(_box_link(
+            name, sx, sy, lz, colour, 0.5,
+            f"{x:.6g} {y:.6g} {lz / 2.0:.6g} 0 0 0"))
+    sign = spec["roles"][role]["sign_colour"]
+    parts.append(_box_link(
+        "role_image", lx * 0.7, ly * 0.7, 0.004, sign, 0.05,
+        f"0 0 {t + 0.003:.6g} 0 0 0", collide=False))
+    return model(model_name or f"robosub_bin_{role}", "\n".join(parts))
+
+
+def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
+    """Task 4: a 0.6 m board with a large and a small opening.
+
+    Built as four frame slabs around each hole rather than a plate with holes,
+    because SDF primitives cannot express a hole and a mesh would be the only
+    other option. The openings are therefore real gaps a torpedo passes through.
+    """
+    cfg = spec["props"]["torpedo_board"]
+    size, th = cfg["size"], cfg["thickness"]
+    big, small = cfg["large_opening"], cfg["small_opening"]
+    colour = cfg["colour"]
+    parts = []
+
+    # Two openings STACKED, in a board that is a full `size` square.
+    #
+    # The board's plane is y-z (width along y, height along z) so the vehicle
+    # approaches along x, matching the gate. Each opening sits in its own half
+    # of the board and is framed by four slabs, because an SDF primitive cannot
+    # express a hole -- so these are real gaps a torpedo passes through, which
+    # is the point: scoring distinguishes the large opening from the small one.
+    for tag, hole, cz in (
+        ("large", big, size * 0.72),      # upper half
+        ("small", small, size * 0.28),    # lower half
+    ):
+        pane = size / 2.0                 # each opening owns half the height
+        side_w = (size - hole) / 2.0      # frame either side of the gap
+        band_h = (pane - hole) / 2.0      # frame above and below it
+        for name, sy, sz, dy, dz in (
+            ("top", size, band_h, 0.0, hole / 2.0 + band_h / 2.0),
+            ("bottom", size, band_h, 0.0, -(hole / 2.0 + band_h / 2.0)),
+            ("left", side_w, hole, hole / 2.0 + side_w / 2.0, 0.0),
+            ("right", side_w, hole, -(hole / 2.0 + side_w / 2.0), 0.0),
+        ):
+            parts.append(_box_link(
+                f"{tag}_{name}", th, sy, sz, colour, 0.4,
+                f"0 {dy:.6g} {cz + dz:.6g} 0 0 0"))
+
+    sign = spec["roles"][role]["sign_colour"]
+    parts.append(_role_sign(
+        spec, "role_sign", sign, f"{th:.6g} 0 {size * 1.12:.6g} 0 0 0"))
+    return model(model_name or f"robosub_torpedo_{role}", "\n".join(parts))
+
+
+def robosub_octagon(spec):
+    """Task 5: the 2.7 m octagon the vehicle surfaces inside.
+
+    SURFACE-anchored: it floats, so its origin is the water surface at z = 0 and
+    its geometry hangs from there. Getting this wrong puts it on the floor.
+    """
+    cfg = spec["props"]["octagon"]
+    r = cfg["diameter"] / 2.0
+    pr = cfg["pipe_radius"]
+    colour = cfg["colour"]
+    parts = []
+    # Eight sides of a regular octagon, each a chord of the circumscribed circle.
+    side = 2.0 * r * math.sin(math.pi / 8.0)
+    apothem = r * math.cos(math.pi / 8.0)
+    for i in range(8):
+        ang = i * math.pi / 4.0
+        parts.append(_cylinder_link(
+            f"side_{i}", pr, side, colour, 1.0,
+            f"{apothem * math.cos(ang):.6g} {apothem * math.sin(ang):.6g} 0 "
+            f"0 1.5708 {ang + math.pi / 2.0:.6g}",
+            mat=pvc_material(colour)))
+    # Role images hang inward from the frame.
+    for i, (role, ang) in enumerate((
+        ("survey_repair", 0.0), ("search_rescue", math.pi),
+    )):
+        sign = spec["roles"][role]["sign_colour"]
+        parts.append(_role_sign(
+            spec, f"role_sign_{i}", sign,
+            f"{(apothem - 0.1) * math.cos(ang):.6g} "
+            f"{(apothem - 0.1) * math.sin(ang):.6g} -0.35 0 0 {ang:.6g}"))
+    return model("robosub_octagon", "\n".join(parts))
+
+
+def robosub_resupply_table(spec):
+    """Task 5: the 0.6 m table the collectible objects sit on."""
+    cfg = spec["props"]["octagon"]
+    size, h = cfg["table_size"], cfg["table_height"]
+    r = spec["pvc_half_in"]
+    colour = cfg["colour"]
+    parts = [_box_link(
+        "top", size, size, 0.02, colour, 2.0, f"0 0 {h:.6g} 0 0 0",
+        mat=pvc_material(colour))]
+    for i, (dx, dy) in enumerate((
+        (1, 1), (1, -1), (-1, 1), (-1, -1),
+    )):
+        parts.append(_cylinder_link(
+            f"leg_{i}", r, h, colour, 0.5,
+            f"{dx * size / 2.2:.6g} {dy * size / 2.2:.6g} {h / 2.0:.6g} 0 0 0",
+            mat=pvc_material(colour)))
+    return model("robosub_resupply_table", "\n".join(parts))
+
+
+def robosub_path_marker(spec):
+    """Orange path markers pointing gate->slalom and slalom->bins."""
+    cfg = spec["props"]["path_marker"]
+    return model("robosub_path_marker", _solid(
+        "marker",
+        _geometry_box(cfg["length"], cfg["width"], 0.006),
+        material(cfg["colour"], emissive_gain=0.30),
+        0.001, _THIN, f"0 0 {FLOOR_DECAL_Z:.6g} 0 0 0", False,
+    ))
+
+
+def robosub_pinger(spec):
+    """A Benthos ALP-365 stand-in.
+
+    Body only. The acoustics live in the hydrophone model, which reads this
+    prop's POSE from the course -- nothing about the sound is in the geometry,
+    and pretending otherwise by modelling a transducer would be theatre.
+    """
+    cfg = spec["props"]["pinger"]
+    return model("robosub_pinger", _cylinder_link(
+        "body", cfg["radius"], cfg["height"], cfg["colour"], 0.5,
+        f"0 0 {cfg['height'] / 2.0:.6g} 0 0 0"))
+
+
+def robosub_collectible(spec, kind="bolt", model_name=None):
+    """Task 5 pick-up items: jars (bolt, plug) and boxes (pill, bandage)."""
+    cfg = spec["props"]["collectible"]
+    colour = cfg["colours"][kind]
+    if kind in ("bolt", "plug"):
+        r, h = cfg["jar_diameter"] / 2.0, cfg["jar_height"]
+        body = _cylinder_link("body", r, h, colour, 0.15, f"0 0 {h / 2.0:.6g} 0 0 0")
+    else:
+        sz, h = cfg["box_size"], cfg["box_height"]
+        body = _box_link("body", sz, sz, h, colour, 0.15, f"0 0 {h / 2.0:.6g} 0 0 0")
+    return model(model_name or f"robosub_item_{kind}", body, static=False)
+
+
 PROPS = {
     "sauvc_qual_gate": {
         "build": qualification_gate,
@@ -795,6 +1050,78 @@ PROPS = {
         "dynamic": False,
     },
     "sauvc_ball": {"build": ball, "anchor": ANCHOR_FLOOR, "dynamic": True},
+    # ---- RoboSub 2026 -------------------------------------------------
+    "robosub_gate": {
+        "build": robosub_gate,
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_slalom": {
+        "build": robosub_slalom,
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_bin_survey_repair": {
+        "build": lambda s: robosub_bin(s, "survey_repair"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_bin_search_rescue": {
+        "build": lambda s: robosub_bin(s, "search_rescue"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_torpedo_survey_repair": {
+        "build": lambda s: robosub_torpedo_board(s, "survey_repair"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_torpedo_search_rescue": {
+        "build": lambda s: robosub_torpedo_board(s, "search_rescue"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_octagon": {
+        "build": robosub_octagon,
+        "anchor": ANCHOR_SURFACE,
+        "dynamic": False,
+    },
+    "robosub_resupply_table": {
+        "build": robosub_resupply_table,
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_path_marker": {
+        "build": robosub_path_marker,
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_pinger": {
+        "build": robosub_pinger,
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": False,
+    },
+    "robosub_item_bolt": {
+        "build": lambda s: robosub_collectible(s, "bolt"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": True,
+    },
+    "robosub_item_plug": {
+        "build": lambda s: robosub_collectible(s, "plug"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": True,
+    },
+    "robosub_item_pill": {
+        "build": lambda s: robosub_collectible(s, "pill"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": True,
+    },
+    "robosub_item_bandage": {
+        "build": lambda s: robosub_collectible(s, "bandage"),
+        "anchor": ANCHOR_FLOOR,
+        "dynamic": True,
+    },
+
     "sauvc_golf_ball": {"build": golf_ball, "anchor": ANCHOR_FLOOR, "dynamic": True},
 }
 
