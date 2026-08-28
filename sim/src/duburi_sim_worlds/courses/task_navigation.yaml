@@ -7,6 +7,11 @@ description: >
   the detector. Clear-ish water so a failure here is a control or alignment
   failure, not a perception one -- move to sauvc26_final for the murky version.
 
+  SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate
+  distance; this course puts the gate at 7 m so a run is a gate approach and not
+  90 s of open-water transit first. The two are meant to be used together: drill
+  here, verify the real distance there.
+
 pool: sauvc
 
 scene:
@@ -26,13 +31,16 @@ props:
     name: start
     xy: [-11.8, 0.0]
 
-  # Rulebook: "approximately 16m away from the starting zone".
+  # 7 m from the start, NOT the rulebook's ~16 m -- see the description. Long
+  # enough that the gate starts outside a murky-water detection range and has to
+  # be acquired, short enough that a failed approach costs seconds to retry.
   - model: sauvc_final_gate
     name: gate
-    xy: [4.2, 0.0]
+    xy: [-4.8, 0.0]
 
-  # Rulebook: "4m-8m from side of the arena, before the gate". Placed at 6 m
-  # from the -y side, i.e. y = -8.0 + 6.0.
+  # Rulebook: "4m-8m from side of the arena, before the gate". y = -1.2 is 6.8 m
+  # from the -y wall, i.e. legal and near the centreline -- an obstacle several
+  # metres off the approach line is not an obstacle. 2 m short of the gate.
   - model: sauvc_orange_flare
     name: flare_obstacle
-    xy: [0.0, -2.0]
+    xy: [-6.8, -1.2]

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="sauvc_target_mat">
+    <static>true</static>
+    <link name="mat">
+      <pose>0 0 0.004 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>1e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>1e-06</iyy><iyz>0</iyz>
+          <izz>1e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="mat_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>6 2.2 0.006</size></box></geometry>
+        <material>
+          <ambient>0.13 0.45 0.2 1</ambient>
+          <diffuse>0.13 0.45 0.2 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.039 0.135 0.06 1</emissive>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

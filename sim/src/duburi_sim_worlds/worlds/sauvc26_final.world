@@ -73,8 +73,16 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
       <ambient>0.18 0.3 0.36 1</ambient>
       <background>0.08 0.26 0.4 1</background>
       <shadows>true</shadows>
-      <!-- Linear fog stands in for water turbidity. It is the single biggest
-           lever on how hard the perception task is, so it is course-tunable. -->
+      <!-- INERT. Kept because sdformat validates it and a future gz-sim may
+           honour it, but MEASURED on gz-sim 8 (Harmonic) 2026-08-28: this block
+           has NO effect on camera-sensor renders. Dropping <end> from 18 m to
+           3 m left the 25 m far wall pixel-for-pixel identical.
+
+           Water turbidity is produced by `underwater_fx` instead, which
+           post-processes image_raw into image_fx in ROS. The course's
+           `lighting:` preset writes <course>.fx.yaml next to this world and
+           bridge.launch.py loads it. Do not tune turbidity here; nothing will
+           change and the next person will believe the numbers. -->
       <fog>
         <color>0.1 0.26 0.3 1</color>
         <type>linear</type>
@@ -82,6 +90,15 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
         <end>18.0</end>
         <density>0.03</density>
       </fog>
+      <!-- Sky. Only ever seen through the surface looking up, and that is the
+           point: without it the world above z=0 is flat background colour and
+           the surface reads as a hard ceiling. With it there is a horizon, which
+           is what every competition photo shows from below.
+
+           <sky> is what gives the surface something to refract; it does not
+           light the scene (the directional lights below do that), so turning it
+           on does not change how props are exposed. -->
+      <sky></sky>
     </scene>
 
     <!-- Lights stay deliberately dim. Underwater scenes clip to white easily:
@@ -280,6 +297,37 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
           <geometry><box><size>25 0.2 1.6</size></box></geometry>
         </collision>
       </link>
+      <link name="water_surface">
+        <pose>0 0 0 0 0 0</pose>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1</iyy><iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <visual name="water_surface_visual">
+          <pose>0 0 0 0 0 0</pose>
+          <cast_shadows>false</cast_shadows>
+          <transparency>0.62</transparency>
+          <geometry><box><size>25 16 0.01</size></box></geometry>
+          <material>
+            <ambient>0.95 0.95 0.95 1</ambient>
+            <diffuse>0.95 0.95 0.95 1</diffuse>
+            <specular>0.35 0.35 0.35 1</specular>
+            <emissive>0.22 0.22 0.22 1</emissive>
+            <pbr>
+              <metal>
+                <albedo_map>model://sauvc_textures/water_surface.png</albedo_map>
+                <metalness>0.0</metalness>
+                <roughness>0.15</roughness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+      </link>
     </model>
 
     <!-- ===================== PROPS ===================== -->
@@ -298,31 +346,37 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
     <include>
       <uri>model://sauvc_orange_flare</uri>
       <name>orange_flare</name>
-      <pose>0.5 -2.5 -1.6 0 0 0</pose>
+      <pose>2 -1.2 -1.6 0 0 0</pose>
     </include>
 
     <include>
-      <uri>model://sauvc_drum_blue</uri>
-      <name>drum_blue</name>
-      <pose>8 1.6 -1.6 0 0 0</pose>
-    </include>
-
-    <include>
-      <uri>model://sauvc_drum_red_pinger</uri>
-      <name>drum_pinger</name>
-      <pose>8 0 -1.6 0 0 0</pose>
+      <uri>model://sauvc_target_mat</uri>
+      <name>target_mat</name>
+      <pose>8.5 0 -1.6 0 0 1.5708</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_red_a</name>
-      <pose>8 -1.6 -1.6 0 0 0</pose>
+      <pose>8.5 1.8 -1.6 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://sauvc_drum_blue</uri>
+      <name>drum_blue</name>
+      <pose>8.5 0.6 -1.6 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://sauvc_drum_red_pinger</uri>
+      <name>drum_pinger</name>
+      <pose>8.5 -0.6 -1.6 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_red_b</name>
-      <pose>9.6 0.8 -1.6 0 0 0</pose>
+      <pose>8.5 -1.8 -1.6 0 0 0</pose>
     </include>
 
     <include>

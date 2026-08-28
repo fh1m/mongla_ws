@@ -34,6 +34,12 @@ props:
 
   # "The gate may be located anywhere on a horizontal line, parallel to the side
   #  of the swimming pool, approximately 16m away from the starting zone."
+  #
+  # 15.3 m from the start pose, and DELIBERATELY not shortened. It reads as an
+  # absurd distance in the viewport, but that was the inert-fog bug making 25 m
+  # of water look clear; with underwater_fx driven by the `lighting:` preset the
+  # gate is correctly invisible from the start and has to be searched for, which
+  # is the actual competition problem. task_navigation has the 7 m drill version.
   - model: sauvc_final_gate
     name: gate
     xy: [3.5, 0.0]
@@ -41,24 +47,39 @@ props:
 
   # "A orange flare may be located anywhere in a rectangular zone 4m-8m from
   #  side of the arena, before the gate." Touching it aborts the attempt.
+  #
+  # NEAR THE GATE LINE, not off to one side. The pool is 16 m wide, so "4-8 m
+  # from the side" is the band from quarter-width to the centreline -- y = -1.2
+  # is 6.8 m from the -y wall and legal. Figures 15 and 17 both show it close to
+  # the approach path, which is the whole point: an obstacle 6 m off the line is
+  # not an obstacle. Placed 1.5 m short of the gate so it is genuinely "before"
+  # it and has to be cleared on the run in.
   - model: sauvc_orange_flare
     name: orange_flare
-    xy: [0.5, -2.5]
+    xy: [2.0, -1.2]
 
-  # Target Acquisition: four drums, one blue and three red, one of the red ones
-  # carrying the 45 kHz pinger. Order is randomised between attempts.
-  - model: sauvc_drum_blue
-    name: drum_blue
-    xy: [8.0, 1.6]
-  - model: sauvc_drum_red_pinger
-    name: drum_pinger
-    xy: [8.0, 0.0]
+  # Target Acquisition: four drums in a LINE on the green mat, equally spaced at
+  # a 1.2 m pitch (Figure 16). One blue and three red, one red carrying the
+  # 45 kHz pinger. Which drum is blue is randomised between attempts -- move them
+  # at runtime rather than editing this file.
+  - model: sauvc_target_mat
+    name: target_mat
+    xy: [8.5, 0.0]
+    yaw: 1.5708
   - model: sauvc_drum_red
     name: drum_red_a
-    xy: [8.0, -1.6]
+    xy: [8.5, 1.8]
+  - model: sauvc_drum_blue
+    name: drum_blue
+    xy: [8.5, 0.6]
+  - model: sauvc_drum_red_pinger
+    name: drum_pinger
+    xy: [8.5, -0.6]
   - model: sauvc_drum_red
     name: drum_red_b
-    xy: [9.6, 0.8]
+    xy: [8.5, -1.8]
+
+
 
   # Communication task: "These flares could be located anywhere within the main
   # arena." Each carries a golf ball, added automatically by the generator.

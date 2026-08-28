@@ -229,6 +229,25 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > "fix" by changing the depth source: AHRS2 is the pool-verified hardware path.
 > Full table: [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
 >
+> **Water turbidity comes from `underwater_fx`, NOT the world's `<fog>`.** Measured
+> 2026-08-28: gz-sim 8 ignores `<scene><fog>` on camera renders entirely — 18 m →
+> 3 m left the far wall crisp — so the `lighting:` presets were decorative and every
+> dataset had identical clarity whatever preset its course named. Each preset now
+> also carries an `fx` block, written beside the world as `<course>.fx.yaml` and
+> loaded by `bridge.launch.py`. Check it took with
+> `ros2 param get /underwater_fx turbidity` (murky→0.8, competition→0.45). Never
+> tune turbidity in a `.world`; nothing changes. Attenuation is still uniform, not
+> per-pixel — see [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
+>
+> **Pointing vision at a sim camera topic used to receive NOTHING.** `RosTopicCamera`
+> subscribed RELIABLE; every camera publisher (`ros_gz` image_bridge, `underwater_fx`,
+> BlueOS) is BEST_EFFORT, and rclpy answers a QoS mismatch with one WARN and then
+> silence — clean launch, healthy nodes, zero frames. Now `qos_profile_sensor_data`.
+> Run the full pipeline on Gazebo cameras with
+> `vision_dual.launch.py fwd_topic:=…/front_camera/image_fx dwn_topic:=…/bottom_camera/image_fx paused:=false`
+> — **`paused:=false` matters**: the launch defaults to paused (missions resume the
+> detector they need), so without it the HUD reads `det=ERR dets=0` and looks broken.
+>
 > **Vision in sim runs BOTH cameras** — `duburi_sim stack` gives
 > `/duburi_detector_forward` (sim front cam) and `/duburi_detector_downward`
 > (bottom cam). Until 2026-08-28 `vision:=true` started **nothing**:

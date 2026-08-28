@@ -248,7 +248,12 @@ def generate_launch_description():
                 'bridge.launch.py',
             )
         ),
-        launch_arguments={'vehicle_name': vehicle_name}.items(),
+        launch_arguments={
+            'vehicle_name': vehicle_name,
+            'fx_params': PathJoinSubstitution(
+                [worlds_share, 'worlds', [course, '.fx.yaml']]
+            ),
+        }.items(),
         condition=IfCondition(LaunchConfiguration('bridge')),
     )
 

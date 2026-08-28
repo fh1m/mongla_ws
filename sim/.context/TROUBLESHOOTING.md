@@ -258,6 +258,104 @@ Two things make this easy to trip:
 
 `gate_rescue_repair.pt` is `{0: gate, 1: rescue, 2: repair}`.
 
+### A live sim/vision stack fails the autonomy tests
+
+`test_detected_live.py::test_where_uses_live_camera_info` failed once during
+this round and passed in isolation. Cause: the vision stack was still running,
+publishing real detections onto the same topics the test spins its own node on.
+
+Shut the sim and vision down before `colcon test`. A test that passes alone and
+fails in the suite is usually ordering; a test that passes alone and fails with
+the suite *while a stack is up* is the ROS graph, not the test.
+
+### Turbidity: the world's `<fog>` is INERT, `underwater_fx` is the lever
+
+**Measured 2026-08-28 on gz-sim 8 (Harmonic): `<scene><fog>` has no effect on
+camera-sensor renders.** Dropping `<end>` from 18 m to 3 m in `sauvc26_final`
+left the 25 m far wall pixel-for-pixel identical. The same edited world *did*
+lose its clouds when `<sky>` was stripped, which proves the file was actually
+loaded — so this is a real no-op, not a stale-build artifact.
+
+That mattered because the three `lighting:` presets (`clear` / `competition` /
+`murky`) only ever wrote fog numbers. They were documented as "the single
+biggest lever on how hard the perception task is" and they changed **nothing**
+in the image. Every dataset captured before this date has the same clarity
+regardless of which preset its course named.
+
+**Now:** each preset also carries an `fx` block. `gen_world.py` writes it beside
+the world as `<course>.fx.yaml`; `bridge.launch.py` layers it over
+`config/underwater_fx.yaml` and hands it to `underwater_fx`, which post-processes
+`image_raw` -> `image_fx` in ROS. Verify a course's water actually took:
+
+```bash
+ros2 param get /underwater_fx turbidity      # murky -> 0.8, competition -> 0.45
+```
+
+Do **not** tune turbidity by editing `<fog>` in a world or the template. Nothing
+will change and the numbers will read as authoritative to the next person.
+
+Still uniform, not range-dependent: `underwater_fx` attenuates by the *vehicle's*
+depth, so every pixel is degraded equally and a far wall is no hazier than the
+near floor. True per-pixel Beer-Lambert needs a range image; the cheap route is
+switching the front `<sensor type="camera">` to `type="rgbd_camera"` (one sensor
+emits colour **and** depth, so no second parallel camera) and attenuating on it.
+Not done — the colour topic name moves under `rgbd_camera`, so it needs a
+bridge-argument change verified against the `image_raw` contract.
+
+### Vision on sim cameras silently received zero frames (QoS) — FIXED
+
+`RosTopicCamera` subscribed with the rclpy default (depth-10 **RELIABLE**). Every
+camera publisher we point it at — Gazebo's `ros_gz` `image_bridge`,
+`underwater_fx`, BlueOS `image_transport` — publishes **BEST_EFFORT**. A RELIABLE
+subscriber is QoS-incompatible with a BEST_EFFORT publisher, and rclpy does not
+raise: one WARN line, then nothing delivered, forever.
+
+The failure looks like success. Every node starts, no traceback, the launch is
+clean, `ros2 topic list` shows all the vision topics — and the detector sees zero
+frames. The only visible symptom was one line buried in the launch log:
+
+```
+New publisher discovered on topic '...', offering incompatible QoS.
+No messages will be received from it. Last incompatible policy: RELIABILITY
+```
+
+Fixed by subscribing with `qos_profile_sensor_data`. BEST_EFFORT subscribers
+accept **both** kinds of publisher, so this is strictly more permissive.
+
+If you write your own probe against a sim camera topic, use sensor QoS or you
+will reproduce the bug in your tool and blame the sim.
+
+### Running the full vision pipeline on the sim's cameras
+
+```bash
+# T1  sim (image_raw -> underwater_fx -> image_fx)
+ros2 run duburi_sim_bringup duburi_sim sim --headless course:=sauvc26_final
+
+# T2  both detectors on the sim's two cameras
+ros2 launch duburi_vision vision_dual.launch.py \
+    fwd_topic:=/duburi/sim/front_camera/image_fx \
+    dwn_topic:=/duburi/sim/bottom_camera/image_fx \
+    model:=gate_rescue_repair dwn_model:=bin_fire_blood \
+    device_cls:=cpu paused:=false
+```
+
+**`paused:=false` is not optional here.** `vision_dual.launch.py` defaults
+`paused:=true` on purpose — missions resume the one detector a task needs — so
+without it the HUD sits at `det=ERR trk=ERR` with `dets=0` and looks broken. It
+is not; nothing has resumed the detector. Resume live with
+`ros2 param set /duburi_detector_forward paused false`.
+
+`device_cls:=cpu` on a box with no CUDA: registry mode raises and the detector
+node **dies** if left at the `cuda:0` default.
+
+Point at `image_fx`, not `image_raw`, or the model sees water that no pool has.
+
+Verified end to end 2026-08-28: `cam=OK det=OK trk=OK`, boxes drawn on
+`image_debug`. Note the competition weights are trained on *real* RoboSub props
+and mis-fire on the SAUVC sim geometry (a floor edge scored `gate 46%`) — which
+is the argument for capturing a sim dataset and training against it, not a
+pipeline fault.
+
 ### Vision in sim: `vision:=true` used to start nothing at all
 
 Fixed 2026-08-28. `IncludeLaunchDescription` does not scope its

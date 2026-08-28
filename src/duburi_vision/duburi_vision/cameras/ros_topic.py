@@ -37,6 +37,7 @@ class RosTopicCamera(Camera):
 
         from sensor_msgs.msg import Image
         from cv_bridge        import CvBridge
+        from rclpy.qos        import qos_profile_sensor_data
 
         self.name      = str(name)
         self._topic    = str(topic)
@@ -53,7 +54,19 @@ class RosTopicCamera(Camera):
         self._exp_w       = int(expected_width)
         self._exp_h       = int(expected_height)
 
-        self._sub = node.create_subscription(Image, self._topic, self._on_image, 10)
+        # SENSOR_DATA (BEST_EFFORT), not a depth-10 RELIABLE queue.
+        #
+        # Camera publishers -- Gazebo's ros_gz image_bridge, underwater_fx,
+        # BlueOS image_transport -- all publish BEST_EFFORT. A RELIABLE
+        # subscriber is QoS-INCOMPATIBLE with a BEST_EFFORT publisher, and rclpy
+        # does not raise: it logs one WARN and then delivers NOTHING, forever.
+        # The pipeline comes up clean, every node reports healthy, and the
+        # detector sees zero frames. Measured 2026-08-28 against the sim.
+        #
+        # BEST_EFFORT subscribers accept BOTH kinds of publisher, so this is
+        # strictly more permissive -- it does not trade away a real source.
+        self._sub = node.create_subscription(
+            Image, self._topic, self._on_image, qos_profile_sensor_data)
 
         if self._log:
             self._log.info(f"[CAM  ] subscribed to ros image topic {self._topic!r}")

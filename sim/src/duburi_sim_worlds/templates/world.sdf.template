@@ -68,8 +68,16 @@
       <ambient>{ambient} 1</ambient>
       <background>{background} 1</background>
       <shadows>{shadows}</shadows>
-      <!-- Linear fog stands in for water turbidity. It is the single biggest
-           lever on how hard the perception task is, so it is course-tunable. -->
+      <!-- INERT. Kept because sdformat validates it and a future gz-sim may
+           honour it, but MEASURED on gz-sim 8 (Harmonic) 2026-08-28: this block
+           has NO effect on camera-sensor renders. Dropping <end> from 18 m to
+           3 m left the 25 m far wall pixel-for-pixel identical.
+
+           Water turbidity is produced by `underwater_fx` instead, which
+           post-processes image_raw into image_fx in ROS. The course's
+           `lighting:` preset writes <course>.fx.yaml next to this world and
+           bridge.launch.py loads it. Do not tune turbidity here; nothing will
+           change and the next person will believe the numbers. -->
       <fog>
         <color>{fog_colour} 1</color>
         <type>linear</type>
@@ -77,6 +85,15 @@
         <end>{fog_end}</end>
         <density>{fog_density}</density>
       </fog>
+      <!-- Sky. Only ever seen through the surface looking up, and that is the
+           point: without it the world above z=0 is flat background colour and
+           the surface reads as a hard ceiling. With it there is a horizon, which
+           is what every competition photo shows from below.
+
+           <sky> is what gives the surface something to refract; it does not
+           light the scene (the directional lights below do that), so turning it
+           on does not change how props are exposed. -->
+      <sky></sky>
     </scene>
 
     <!-- Lights stay deliberately dim. Underwater scenes clip to white easily:

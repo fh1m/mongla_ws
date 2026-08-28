@@ -197,6 +197,41 @@ def make_stripe(
     print(f"wrote {path}  ({width}x{height})")
 
 
+def make_water_surface(path: str, length_m: float, width_m: float,
+                      px_per_m: int = 24, rng=None) -> None:
+    """Underside of the water surface: overlapping ripples, seen from below.
+
+    Gazebo has no water. The pool is a floor, four walls and a fog volume, so
+    everything above z=0 was raw <sky> and the surface read as a hard edge
+    between "pool" and "sky" -- which is exactly what the competition photos do
+    NOT look like. A translucent rippled plane at z=0 is what turns the sky into
+    something seen THROUGH water.
+
+    Bright, because from below the surface is the brightest thing in the scene
+    (it is where all the light comes in) and the fog then knocks it back.
+    """
+    rng = rng or np.random.default_rng(0)
+    h = max(64, int(round(width_m * px_per_m)))
+    w = max(64, int(round(length_m * px_per_m)))
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float64)
+
+    # A few sine trains at different angles and wavelengths read as wind chop
+    # far better than one, and tile without an obvious repeat.
+    field = np.zeros((h, w))
+    for wavelength, angle, amp in ((11.0, 0.3, 1.0), (23.0, 1.9, 0.7),
+                                   (7.0, 2.7, 0.45), (37.0, 0.9, 0.5)):
+        k = 2.0 * np.pi / wavelength
+        field += amp * np.sin(k * (xx * np.cos(angle) + yy * np.sin(angle)))
+    field /= 2.65
+    field += rng.normal(0.0, 0.05, field.shape)
+
+    base = np.array([0.72, 0.86, 0.93])
+    img = base[None, None, :] * (0.80 + 0.20 * field)[:, :, None]
+    Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).save(
+        path, optimize=True)
+    print(f"wrote {path}  ({w}x{h})")
+
+
 def make_roughness(path: str, base: float, width: int = 128, height: int = 512,
                    variation: float = 0.08, rng=None) -> None:
     """Greyscale roughness map. Uniform gloss is what makes a prop look CG."""
@@ -320,6 +355,10 @@ def main() -> None:
             post_m=float(fg["height"]), band_m=band, gap_m=gap, foot_m=foot,
             rng=rng,
         )
+
+    make_water_surface(
+        os.path.join(args.outdir, "water_surface.png"),
+        pool["length"], pool["width"], rng=rng)
 
     make_drum_rim(os.path.join(args.outdir, "drum_rim.png"))
     for name, key in (("drum_wall_red.png", "red"), ("drum_wall_blue.png", "blue")):
