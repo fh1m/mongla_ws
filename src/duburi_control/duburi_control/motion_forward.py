@@ -51,7 +51,13 @@ _DVL_TIMEOUT_K = 10.0   # generous extra timeout: metres / 0.05 + this
 # the entire budget (measured: 11.3 m of travel on a 1.0 m command).
 _OVERSHOOT_K = 1.5     # stop past this multiple of the target
 _OVERSHOOT_PAD = 0.5   # ...plus this, so short commands are not hair-triggered
-_STALL_S = 6.0         # give it this long to show ANY movement
+# WALL-CLOCK, while the DVL integrates distance in SIM time. Gazebo runs
+# well below real time (RTF ~0.65 measured, lower under load), so a wall
+# second buys well under a second of travel -- a 6 s window false-tripped
+# move_back_dist and move_lateral_dist, whose thrust is weaker than
+# forward. Generous on purpose: the OVERSHOOT guard is what actually
+# bounds a runaway, this one only catches a DVL that is dead on arrival.
+_STALL_S = 15.0         # give it this long to show ANY movement
 _STALL_M = 0.05        # ...and this much counts as movement
 
 

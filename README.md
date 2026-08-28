@@ -413,6 +413,30 @@ expects. Run it before concluding anything from a mission.
 > ```
 </details>
 
+<details open>
+<summary><b>Terminal 3b — RViz: what the vehicle <i>believes</i></b></summary>
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim rviz
+```
+
+Gazebo renders what is **true**; RViz renders what the vehicle **believes** and
+what it can **see**. The saved config draws both poses at once — ground truth as
+axes, the stack's believed pose as an orange arrow — so the AHRS2 depth offset
+(measured 0.64 m in one run) is something you watch rather than read about.
+
+Also: robot model, TF tree, DVL beams (green locked / red not), DVL altitude,
+both cameras, ground-truth track. Brings up `robot_state_publisher` and the
+`odom → base_link` broadcaster with it.
+
+The URDF is **generated** from the same `configs.yaml` as the Gazebo SDF
+(`duburi_sim_description/scripts/generate_urdf.py`), so the model RViz draws
+cannot drift from the model Gazebo simulates.
+
+RViz displays; it does not tune. Gains stay on the existing path:
+`ros2 param set /duburi_manager vision.kp_lat 80.0`.
+</details>
+
 <details>
 <summary><b>Terminal 4 — operator lab (optional)</b></summary>
 

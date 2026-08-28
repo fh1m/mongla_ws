@@ -295,3 +295,106 @@ sim time rather than wall clock, and `ros_gz_bridge` cannot carry the message at
 all. All four are written up in
 [`.context/DVL_AND_SONAR.md`](.context/DVL_AND_SONAR.md), which also explains
 why **sonar is not available** in Gazebo Harmonic and what to use instead.
+
+---
+
+## Full stack, terminal by terminal (GUI + DVL + RViz + lab)
+
+Every terminal starts with the same three lines, **autonomy sourced before the
+sim**:
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/Ros_workspaces/duburi_ws/install/setup.bash
+source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
+export GZ_IP=127.0.0.1
+```
+
+### T1 — Gazebo with the GUI
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim stop      # ALWAYS first: one sim only
+ros2 run duburi_sim_bringup duburi_sim sim       # GUI (drop --headless)
+```
+
+Wait for **`JSON received`**. The GUI is where the **DVL beams** are drawn — four
+lines from the hull to the floor. Headless shows nothing, which is why the same
+beams are also published as RViz markers.
+
+### T2 — the autonomy stack, with the DVL
+
+```bash
+export DUBURI_WS=~/Ros_workspaces/duburi_ws
+ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+```
+
+Defaults to `yaw_source=sim_dvl` — AHRS heading + DVL position. Look for
+`[DVL  ] sim DVL subscribed to /dvl/velocity`. Add
+`yaw_source:=mavlink_ahrs` to run without a DVL, in which case the `*_dist`
+verbs **refuse** rather than dead-reckon.
+
+### T3 — RViz
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim rviz
+```
+
+Brings up `robot_state_publisher`, the `odom -> base_link` broadcaster and RViz
+with the saved config. **Gazebo shows what is true; RViz shows what the vehicle
+believes and can see** — which is why two poses are drawn:
+
+| display | meaning |
+|---|---|
+| `pose TRUTH (Gazebo)` — axes | where the hull actually is |
+| `pose BELIEVED (stack)` — orange arrow | where the stack thinks it is |
+
+They separate vertically by the AHRS2 depth offset (measured 0.64 m in one run).
+That gap *is* the bug class this simulator exists to expose.
+
+Also shown: the robot model, the TF tree, DVL beams (green locked / red not),
+DVL altitude, both camera feeds, and a ground-truth track.
+
+### T4 — the operator lab
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim lab
+# http://localhost:28765     port: cat /tmp/duburi-$USER/lab_port.txt
+```
+
+Mode selector, yaw teleop (q/e), ground-truth vs believed depth, connection
+health, dataset integrity badges.
+
+### T5 — drive it
+
+```bash
+ros2 run duburi_sim_bridge contract_check        # prove the surface first
+ros2 run duburi_planner mission sim_shakedown    # arm -> depth -> out -> back
+
+# individual verbs
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi set_depth --target -0.8
+ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 55
+ros2 run duburi_planner duburi arc --duration 6 --gain 60 --target_yaw 90
+ros2 run duburi_planner duburi disarm
+
+# measure any verb against ground truth
+ros2 run duburi_sim_bridge verb_audit --group heading
+```
+
+### Live tuning
+
+RViz displays; it does not tune. Gains stay where they already are:
+
+```bash
+ros2 param set /duburi_manager vision.kp_lat 80.0
+ros2 param list /duburi_manager
+```
+
+### Shutdown
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim stop
+```
+
+> **Reset between audit runs.** The pool spans x = ±12.5 and the hull drifts into
+> a wall; once pinned, nothing moves and every verb looks dead.

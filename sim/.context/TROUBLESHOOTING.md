@@ -147,6 +147,65 @@ validated in the pool, not here.**
    error on a turn that is accurate to 1.4° — a correct verb flagged Type B by a
    wrong harness.
 
+## Verb audit — what each verb PHYSICALLY does
+
+Measured against `/duburi/sim/ground_truth`, not against the verb's own result.
+Rerun with `ros2 run duburi_sim_bridge verb_audit`.
+
+Two failure shapes are worth naming, because unit tests cannot see either:
+
+- **Type A, false negative** — the verb fails, the physics succeeded.
+- **Type B, false positive** — the verb reports success while doing nothing, the
+  wrong thing, or something it cannot measure. Far more dangerous.
+
+| verb | measured | verdict |
+|---|---|---|
+| `move_forward` / `move_back` | +2.80 m / −2.82 m body-x, cross-track ~0.01 m | OK |
+| `move_right` / `move_left` | −2.53 m / +2.48 m body-y (**+y is PORT**, REP-103) | OK |
+| `yaw_right` / `yaw_left` | 45° commanded → 44.1° / 43.9° ground truth | OK |
+| `turn` (absolute) | 45° commanded → 43.7° | OK |
+| `head` | reports 46.5° vs truth 43.6° | OK |
+| `lock_heading` | **0.0° drift under lateral thrust** (the disturbance test) | OK |
+| `unlock_heading` | releases | OK |
+| `set_mode` | `/duburi/state` confirms ALT_HOLD and MANUAL | OK |
+| `set_depth` | true depth within 2.5 cm of command | OK |
+| `style_yaw` | −58.6° rotation | moves; times out short (see below) |
+| `style_roll` | needs headroom; inconclusive near the surface | retest at depth |
+| `arc` | drives forward 0.58 m vs 0.60 m control ✓, heading short | **fixed, see below** |
+| `move_forward_dist` | 1.0 m → 1.26 m true (was **2.361 m**) | fixed last round |
+| `move_back_dist` / `move_lateral_dist` | refuse without DVL; stall guard was too tight | guard widened |
+| `fire` | fails loudly with no payload | OK |
+| `surface` | never confirms in sim | Type A, documented above |
+| `vision_align` / `vision_move` | never-fail contract holds | see sidecar note |
+
+### `arc` reported a perfect result while 165° off  — FIXED
+
+`command-reference.md` advertises arc's `error_value` as "heading drift vs
+expected". It was a hardcoded `0.0`. Commanded to `target_yaw=200` for 6 s the
+hull finished at **5.1°** and reported `err=0.000, "arc: completed"`.
+
+Ending short is legitimate — `duration` bounds the manoeuvre. Claiming to have
+ended on target is not. It now reports
+`completed at 5.1deg (-165.1deg from target 200)`.
+
+### Two open items
+
+- **`style_yaw` times out.** It rotates (−58.6° measured) but does not reach its
+  target inside 30 s: `yaw_style_yaw timeout after 30.0s -- cur=162.6 tgt=199.4
+  err=+36.8`. Tuning, not a false report — it fails honestly.
+- **`style_roll` needs vertical headroom.** Near the surface it has nowhere to
+  go; retest at depth before drawing a conclusion.
+
+### Traps when adding checks to the harness
+
+- **Body +y is PORT** (REP-103). An earlier pass wrongly flagged
+  `move_left`/`move_right` as inverted over this.
+- **Ground truth cannot settle a yaw DIRECTION.** The hull carries angular
+  momentum through the settle and wraps past ±180°, so the measured sign flips
+  between runs. Use the RC PWM instead: `Ch4 > 1500 = RIGHT`.
+- **Reset the sim between runs.** The hull drifts into a wall (pool spans
+  x = ±12.5) and then nothing moves, which reads exactly like a dead verb.
+
 ## `surface()` times out / `calibrate_depth` refuses / depth reads deeper than it is
 
 **One cause, three symptoms.** Measured 2026-08-27 against ground truth.

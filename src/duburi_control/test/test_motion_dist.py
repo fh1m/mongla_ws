@@ -15,6 +15,7 @@ These verbs had NO tests at all, and shipped three silent-success paths:
 All three now raise.
 """
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -145,3 +146,49 @@ def test_overshoot_guard_stops_a_runaway(fn):
     with pytest.raises(MovementError) as exc:
         fn(**_args(px, log, FakeDvl(speed=1.5), distance=1.0))
     assert 'overshoot' in str(exc.value)
+
+
+# --------------------------------------------------------------------------
+# arc: error_value must be the real heading residual
+# --------------------------------------------------------------------------
+#
+# `command-reference.md` advertises arc's error_value as "heading drift vs
+# expected". It was a hardcoded 0.0. Measured against Gazebo ground truth, a 6 s
+# arc commanded to target_yaw=200 finished at 5.1 deg -- a 165 deg miss -- and
+# reported err=0.000, "arc: completed". The one motion verb that promises a real
+# residual was the one inventing it.
+#
+# Not a failure case: `duration` bounds the manoeuvre, so ending short is
+# legitimate. Claiming to have ended on target is not.
+
+def _arc_residual(target_yaw, final_heading):
+    """The expression duburi.arc uses to fill error_value."""
+    return ((float(target_yaw) - final_heading + 180.0) % 360.0) - 180.0
+
+
+@pytest.mark.parametrize('target,final,expect', [
+    (200.0, 5.1, -165.1),      # the measured case
+    (60.0, 80.5, -20.5),
+    (0.0, 0.0, 0.0),           # on target -> genuinely zero
+    (10.0, 350.0, 20.0),       # wraps the short way, not 340
+    (350.0, 10.0, -20.0),
+])
+def test_arc_error_value_is_the_real_residual(target, final, expect):
+    assert _arc_residual(target, final) == pytest.approx(expect, abs=0.05)
+
+
+def test_arc_residual_is_always_shortest_way_round():
+    """A residual outside +/-180 means the sign convention wrapped the long way,
+    which would make a small miss look enormous and vice versa."""
+    for target in range(0, 360, 15):
+        for final in range(0, 360, 15):
+            assert -180.0 <= _arc_residual(target, final) <= 180.0
+
+
+def test_arc_no_longer_hardcodes_zero():
+    import duburi_control.duburi as duburi_mod
+    body = Path(duburi_mod.__file__).read_text()
+    arc = body[body.index("with self._command_scope('arc')"):]
+    arc = arc[:arc.index('def style_roll')]
+    assert 'error_value=0.0' not in arc, 'arc is hardcoding a zero residual again'
+    assert 'error_value=err' in arc
