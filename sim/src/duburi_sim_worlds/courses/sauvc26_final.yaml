@@ -14,9 +14,15 @@ description: >
 pool: sauvc
 
 scene:
+  # Competition water is not clear. `lighting: murky` is what makes that true in
+  # the IMAGE -- it carries the underwater_fx block (turbidity 0.8) written out
+  # as sauvc26_final.fx.yaml. Turn it down to `competition` when debugging and
+  # back up before a pool test.
+  #
+  # The fog_* keys below are inert: gz-sim 8 ignores <scene><fog> on camera
+  # renders (measured -- 18 m -> 3 m changed nothing). Kept only so the world
+  # still carries the intent. Do not tune perception difficulty here.
   lighting: murky
-  # Competition water is not clear. This is the main lever on perception
-  # difficulty, so turn it down when debugging and back up before a pool test.
   fog_start: 1.0
   fog_end: 18.0
   fog_density: 0.03

@@ -272,3 +272,52 @@ def test_thruster_pwm_range_agrees_between_the_model_and_ardusub():
     assert f'<servo_max>{hi}</servo_max>' in sdf, (
         f'duburi_sub.parm says MOT_PWM_MAX={hi}; the Gazebo plugin disagrees.'
     )
+
+
+def test_every_course_has_a_turbidity_sidecar_beside_its_world():
+    """`lighting:` must reach the image, not just the world file.
+
+    gz-sim 8 ignores <scene><fog> on camera renders (measured 2026-08-28:
+    fog_end 18 m -> 3 m left a 25 m wall pixel-identical), so a course's
+    turbidity is carried by <course>.fx.yaml and loaded into underwater_fx by
+    bridge.launch.py. A world without its sidecar silently falls back to the
+    package default and the preset goes back to being decorative -- which is the
+    exact bug this pair replaced, so it is worth a test rather than a habit.
+    """
+    worlds = sorted((SIM / 'src/duburi_sim_worlds/worlds').glob('*.world'))
+    assert worlds, 'no generated worlds found'
+    missing = [w.name for w in worlds if not w.with_suffix('.fx.yaml').exists()]
+    assert not missing, (
+        f'worlds with no turbidity sidecar: {missing}. '
+        'Run scripts/gen_world.py --all rather than hand-editing worlds/.'
+    )
+
+
+def test_the_sidecar_carries_the_params_underwater_fx_declares():
+    """A key the node does not declare is silently ignored by rclpy."""
+    import yaml
+
+    fx_node = (SIM / 'src/duburi_sim_bridge/duburi_sim_bridge/'
+                     'underwater_fx.py').read_text()
+    declared = set(re.findall(r"declare_parameter\(\s*'([^']+)'", fx_node))
+    assert declared, 'could not parse underwater_fx parameters'
+
+    sidecar = SIM / 'src/duburi_sim_worlds/worlds/sauvc26_final.fx.yaml'
+    keys = set(yaml.safe_load(sidecar.read_text())['/**']['ros__parameters'])
+    assert keys, 'sidecar declares nothing'
+    assert keys <= declared, (
+        f'sidecar sets parameters underwater_fx does not declare: '
+        f'{sorted(keys - declared)}'
+    )
+
+
+def test_the_murky_preset_is_actually_murkier_than_the_clear_one():
+    """Guards the ordering, not the numbers -- the presets are pool-tunable."""
+    import yaml
+
+    def turbidity(course):
+        path = SIM / f'src/duburi_sim_worlds/worlds/{course}.fx.yaml'
+        return yaml.safe_load(path.read_text())['/**']['ros__parameters']['turbidity']
+
+    # sauvc26_final is `murky`, task_navigation is `competition`.
+    assert turbidity('sauvc26_final') > turbidity('task_navigation')
