@@ -531,9 +531,20 @@ class Duburi(VisionVerbs):
                            abort_fn=self._abort_fn)
             new_heading = self._current_heading()
             self._retarget_heading_lock(new_heading)
+            # error_value was a hardcoded 0.0 while command-reference.md
+            # advertises it as "heading drift vs expected". Measured against
+            # Gazebo ground truth, a 6 s arc to target_yaw=60 finished ~20 deg
+            # short and still reported err=0.000 -- the one motion verb that
+            # promises a real residual was the one inventing it.
+            #
+            # NOT a failure: `duration` bounds the manoeuvre, so ending short is
+            # legitimate. What was wrong is claiming to have ended on target.
+            err = ((float(target_yaw) - new_heading + 180.0) % 360.0) - 180.0
             return self._make_result(
-                True, 'arc: completed',
-                final_value=new_heading, error_value=0.0)
+                True,
+                f'arc: completed at {new_heading:.1f}deg '
+                f'({err:+.1f}deg from target {float(target_yaw):.0f})',
+                final_value=new_heading, error_value=err)
 
     # ================================================================== #
     #  Style maneuvers  — 360° rotation on roll, pitch, or yaw axis    #

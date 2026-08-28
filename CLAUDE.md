@@ -207,6 +207,12 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > which produce a sensor that looks fine and reads wrong. **Sonar does not exist
 > in Gazebo Harmonic**; use `gpu_lidar` or the DVL's altitude.
 >
+> **RViz** (`duburi_sim rviz`) draws the robot model, TF, DVL beams and — the
+> point — **ground truth and the stack's believed pose at once**, so the AHRS2
+> offset is visible rather than tabulated. URDF is GENERATED from the same
+> `configs.yaml` as the SDF; there is no hand-written robot description to drift.
+> Nothing published TF before this, which is why RViz was previously unusable.
+>
 > **End-to-end check:** `ros2 run duburi_planner mission sim_shakedown` — arm,
 > hold depth, out, back, surface, disarm. Symmetric legs *are* the return-to-origin
 > mechanism; measure the residual against `/duburi/sim/ground_truth`. Measured
