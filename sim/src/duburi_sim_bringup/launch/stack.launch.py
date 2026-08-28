@@ -37,7 +37,7 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument(
             'vision', default_value='true',
-            description='Start the vision pipeline on the sim front camera.',
+            description='Start the vision pipeline on BOTH sim cameras.',
         ),
         DeclareLaunchArgument(
             'model', default_value='gate_rescue_repair',

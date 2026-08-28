@@ -20,7 +20,7 @@
           <ambient>0.08 0.25 0.8 1</ambient>
           <diffuse>0.08 0.25 0.8 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.02 0.0625 0.2 1</emissive>
+          <emissive>0.044 0.1375 0.44 1</emissive>
         </material>
       </visual>
       <collision name="base_collision">
