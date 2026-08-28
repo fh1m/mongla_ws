@@ -16,6 +16,9 @@ pool: sauvc
 
 scene:
   lighting: competition
+  # Gazebo's animated Gerstner surface instead of the static plane. NEEDS
+  # NETWORK ON FIRST RUN -- the model is fetched from Fuel and cached.
+  water_surface: gerstner
   # fog_* is inert on gz-sim 8; `lighting:` above is the real lever
   fog_start: 2.0
   fog_end: 22.0
