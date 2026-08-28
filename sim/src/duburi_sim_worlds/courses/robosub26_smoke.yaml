@@ -1,0 +1,18 @@
+name: robosub26_smoke
+description: >
+  Bare RoboSub 2026 pool, no props. Proves the multi-competition foundation:
+  a 20 x 12 m arena at the handbook's 2.1 m depth, with its own textures
+  generated at its own aspect. Props land on top of this in Phase B.
+
+competition: robosub
+
+scene:
+  lighting: competition
+
+vehicle:
+  model: duburi_heavy
+  name: duburi
+  pose: [-8.0, 0.0, -0.5]
+  yaw: 0.0
+
+props: []

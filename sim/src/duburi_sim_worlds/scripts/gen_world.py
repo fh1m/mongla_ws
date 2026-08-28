@@ -177,13 +177,16 @@ def _include(uri: str, name: str, pose: str) -> str:
 
 def resolve_pool(course: dict, spec: dict) -> dict:
     """Resolve the course's `pool` field into a concrete pool config."""
-    pool = course.get("pool", "sauvc")
+    # A named preset is a COMPETITION -- every competition with a spec file
+    # brings its own pool. This used to accept the single literal "sauvc".
+    pool = course.get("pool", course.get("competition", "sauvc"))
     if isinstance(pool, str):
-        if pool != "sauvc":
+        known = pl.competitions()
+        if pool not in known:
             raise ValueError(
-                f"unknown pool preset '{pool}'; use 'sauvc' or an inline mapping"
-            )
-        return dict(spec["pool"])
+                f"unknown pool preset {pool!r}; "
+                f"use one of {', '.join(known)} or an inline mapping")
+        return dict(pl.load_spec(competition=pool)["pool"])
 
     cfg = dict(spec["pool"])
     cfg.update(pool)
@@ -196,9 +199,8 @@ def resolve_pool(course: dict, spec: dict) -> dict:
         print(
             f"  warning: pool depth {cfg['depth']} m differs from the arena spec "
             f"({spec['pool']['depth']} m). Depth-spanning props "
-            "(sauvc_qual_gate, sauvc_orange_flare) were generated for the spec "
-            "depth and will not reach. Update spec/arena.yaml and re-run "
-            "--all instead.",
+            "were generated for the spec depth and will not reach. Update "
+            "spec/<competition>.yaml and re-run --all instead.",
             file=sys.stderr,
         )
     return cfg
@@ -274,9 +276,19 @@ def build_vehicle(course: dict, pool_cfg: dict):
     return _include(model_name, name, pose_str), name
 
 
-def generate(course_path: str, spec: dict, outdir: str = WORLDS_DIR) -> str:
+def generate(course_path: str, spec: dict = None, outdir: str = WORLDS_DIR) -> str:
     with open(course_path) as f:
         course = yaml.safe_load(f)
+
+    # The COURSE chooses its competition, so each world is generated against its
+    # own spec. Passing one spec for every course is what would silently build a
+    # RoboSub world against SAUVC's 1.6 m pool. An explicit `spec` still wins so
+    # `--spec` keeps working.
+    competition = course.get("competition", course.get("pool", "sauvc"))
+    if not isinstance(competition, str):
+        competition = "sauvc"
+    if spec is None:
+        spec = pl.load_spec(competition=competition)
 
     stem = os.path.splitext(os.path.basename(course_path))[0]
     world_name = course.get("name", stem)
@@ -404,7 +416,10 @@ def main() -> None:
         help="Regenerate textures, props and every course in courses/.",
     )
     parser.add_argument("--list", action="store_true", help="List available courses.")
-    parser.add_argument("--spec", default=pl.DEFAULT_SPEC, help="Arena spec YAML.")
+    parser.add_argument(
+        "--spec", default=None,
+        help="Arena spec YAML. Default: each course picks its own from "
+             "its `competition:` key.")
     parser.add_argument("--outdir", default=WORLDS_DIR, help="Output directory.")
     args = parser.parse_args()
 
@@ -423,7 +438,7 @@ def main() -> None:
     else:
         parser.error("give one or more course files, or --all")
 
-    spec = pl.load_spec(args.spec)
+    spec = pl.load_spec(args.spec) if args.spec else None
     for path in targets:
         print(f"--- {os.path.basename(path)}")
         print(f"  wrote {generate(path, spec, args.outdir)}")

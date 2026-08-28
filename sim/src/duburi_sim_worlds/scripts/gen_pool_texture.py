@@ -64,7 +64,14 @@ TILE_NOISE = 0.014
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG = os.path.dirname(HERE)
 DEFAULT_SPEC = os.path.join(PKG, "spec", "arena.yaml")
-DEFAULT_OUTDIR = os.path.join(PKG, "models", "sauvc_textures")
+def outdir_for(competition: str) -> str:
+    """models/<competition>_textures. Per competition because the floor and wall
+    PNGs are sized from that competition's pool -- one shared set stretched over
+    a differently-shaped pool is wrong with no error anywhere."""
+    return os.path.join(PKG, "models", f"{competition}_textures")
+
+
+DEFAULT_OUTDIR = outdir_for("sauvc")
 
 
 def _grout_mask(height: int, width: int, tile_px: int) -> np.ndarray:
@@ -368,18 +375,33 @@ def make_drum_rim(path: str, width: int = 256, height: int = 64) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--spec", default=DEFAULT_SPEC, help="Arena spec YAML.")
-    parser.add_argument("--outdir", default=DEFAULT_OUTDIR, help="Output directory.")
+    parser.add_argument("--spec", default=None, help="Arena spec YAML.")
+    parser.add_argument("--competition", default=None,
+                        help="Only this competition (default: all).")
+    parser.add_argument("--outdir", default=None, help="Output directory.")
     parser.add_argument("--seed", type=int, default=2026, help="Mosaic RNG seed.")
     args = parser.parse_args()
 
-    with open(args.spec) as f:
-        spec = yaml.safe_load(f)
+    comps = [args.competition] if args.competition else _competitions()
+    for comp in comps:
+        spec_file = args.spec or os.path.join(PKG, "spec", f"{comp}.yaml")
+        with open(spec_file) as f:
+            spec = yaml.safe_load(f)
+        outdir = args.outdir or outdir_for(comp)
+        _generate(spec, outdir, args.seed, comp)
 
+
+def _competitions() -> list:
+    d = os.path.join(PKG, "spec")
+    return sorted(f[:-5] for f in os.listdir(d) if f.endswith(".yaml"))
+
+
+def _generate(spec: dict, outdir: str, seed: int, competition: str) -> None:
     pool = spec["pool"]
     px_per_m = int(spec.get("texture_px_per_m", 64))
-    os.makedirs(args.outdir, exist_ok=True)
-    rng = np.random.default_rng(args.seed)
+    os.makedirs(outdir, exist_ok=True)
+    rng = np.random.default_rng(seed)
+    args = type("A", (), {"outdir": outdir})()   # keeps the body below unchanged
 
     make_floor(
         pool["length"],
@@ -404,8 +426,19 @@ def main() -> None:
     )
 
     # ---- prop textures -------------------------------------------------
-    # Driven by the rulebook segment sizes in spec/arena.yaml, NOT by a band
-    # count, so the physical stripe pitch is right on every post length.
+    # Everything above is pool geometry and applies to any competition.
+    # Everything below is keyed to SAUVC prop names in the spec.
+    if competition != "sauvc":
+        make_roughness(os.path.join(args.outdir, "rough_pvc.png"), 0.62, rng=rng)
+        make_roughness(os.path.join(args.outdir, "rough_plastic.png"), 0.78, rng=rng)
+        make_roughness(os.path.join(args.outdir, "rough_fabric.png"), 0.88, rng=rng)
+        make_water_surface(
+            os.path.join(args.outdir, "water_surface.png"),
+            pool["length"], pool["width"], rng=rng)
+        return
+
+    # Driven by the rulebook segment sizes in spec/<competition>.yaml, NOT by a
+    # band count, so the physical stripe pitch is right on every post length.
     props = spec["props"]
     fg = props["final_gate"]
     band = float(fg.get("stripe_band_m", 0.20))

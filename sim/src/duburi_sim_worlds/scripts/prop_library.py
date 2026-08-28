@@ -7,7 +7,7 @@ these into standalone `model://` models, `gen_world.py` builds pool geometry
 inline into each world, and `duburi_sim_scenarios` reuses the same emitters to
 spawn props into a running simulator. Nothing else should describe a prop.
 
-All dimensions come from spec/arena.yaml, which quotes the rulebook.
+All dimensions come from spec/<competition>.yaml, which quotes the rulebook.
 
 Anchoring convention. Every prop is authored with its origin at the point it is
 mounted from, and declares which that is:
@@ -29,14 +29,74 @@ ANCHOR_SURFACE = "surface"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG = os.path.dirname(HERE)
-DEFAULT_SPEC = os.path.join(PKG, "spec", "arena.yaml")
+SPEC_DIR = os.path.join(PKG, "spec")
+DEFAULT_COMPETITION = "sauvc"
+DEFAULT_SPEC = os.path.join(SPEC_DIR, f"{DEFAULT_COMPETITION}.yaml")
 
-TEXTURE_MODEL = "sauvc_textures"
+def texture_model(competition: str = DEFAULT_COMPETITION) -> str:
+    """Texture model name for a competition.
+
+    Per-competition because gen_pool_texture sizes the floor and wall PNGs from
+    that competition's pool. Sharing one texture model between a 25x16 m pool
+    and a 20x12 m one would stretch the tile pitch, silently -- the same class
+    of failure as the aspect-correct textures we already fixed once.
+    """
+    return f"{competition}_textures"
 
 
-def load_spec(path: str = DEFAULT_SPEC) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f)
+TEXTURE_MODEL = texture_model()
+
+
+def spec_path(competition: str = DEFAULT_COMPETITION) -> str:
+    """Path to a competition's arena spec.
+
+    One file per competition rather than one file with a competition key: the
+    specs are mostly rulebook quotations, and nesting them would have meant
+    re-indenting every line of a file whose value is precisely those comments.
+    """
+    path = os.path.join(SPEC_DIR, f"{competition}.yaml")
+    if not os.path.isfile(path):
+        raise ValueError(
+            f"unknown competition {competition!r}; "
+            f"known: {', '.join(competitions())}")
+    return path
+
+
+def competitions() -> list:
+    """Every competition with a spec file -- discovered, not listed."""
+    return sorted(f[:-5] for f in os.listdir(SPEC_DIR) if f.endswith(".yaml"))
+
+
+def load_spec(path: str = None, competition: str = DEFAULT_COMPETITION) -> dict:
+    """Load a competition's spec.
+
+    An explicit `path` still wins, so `--spec` and existing callers are
+    unaffected; otherwise the competition selects the file.
+    """
+    with open(path or spec_path(competition)) as f:
+        spec = yaml.safe_load(f)
+    spec.setdefault("competition", competition)
+    return spec
+
+
+def prop_competition(name: str) -> str:
+    """Which competition a prop belongs to.
+
+    Derived from the model-name prefix rather than stored on every registry
+    entry. The prefix convention already exists (`sauvc_final_gate`), so
+    deriving it means a new prop cannot be registered with the tag missing or
+    disagreeing with its own name -- the failure mode that let target_mat sit in
+    one table and not the other.
+    """
+    entry = PROPS.get(name)
+    if entry and "competition" in entry:
+        return entry["competition"]
+    head = name.split("_", 1)[0]
+    if head in competitions():
+        return head
+    raise ValueError(
+        f"cannot tell which competition {name!r} belongs to: name it "
+        f"'<competition>_...' or set 'competition' in its PROPS entry")
 
 
 # --------------------------------------------------------------------------
@@ -83,14 +143,16 @@ def textured_material(
     roughness: float = 0.85,
     emissive: float = 0.0,
     roughness_map: str = "",
+    competition: str = DEFAULT_COMPETITION,
 ) -> str:
-    """A PBR material driven by a texture in the sauvc_textures model.
+    """A PBR material driven by a texture in the <competition>_textures model.
 
     No emissive map on large surfaces. An emissive map in Gazebo adds the image
     at full strength on top of the lit result, which on a pool floor doubles the
     brightness and clips colour. Small props can take a flat emissive lift.
     """
-    uri = f"model://{TEXTURE_MODEL}/{texture}"
+    tex_model = texture_model(competition)
+    uri = f"model://{tex_model}/{texture}"
     e = f"{emissive:.3g} {emissive:.3g} {emissive:.3g} 1"
     return (
         "<material>\n"
@@ -103,7 +165,7 @@ def textured_material(
         f"      <albedo_map>{uri}</albedo_map>\n"
         "      <metalness>0.0</metalness>\n"
         + (
-            f"      <roughness_map>model://{TEXTURE_MODEL}/{roughness_map}</roughness_map>\n"
+            f"      <roughness_map>model://{tex_model}/{roughness_map}</roughness_map>\n"
             if roughness_map
             else f"      <roughness>{roughness:.3g}</roughness>\n"
         )
@@ -782,6 +844,7 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
     more expensive than the boxes that describe it exactly.
     """
     cfg = pool_cfg or spec["pool"]
+    comp = spec.get("competition", DEFAULT_COMPETITION)
     length = cfg["length"]
     width = cfg["width"]
     depth = cfg["depth"]
@@ -797,7 +860,7 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
         visual(
             "floor_visual",
             _geometry_box(length, width, 0.01),
-            textured_material("pool_floor.png"),
+            textured_material("pool_floor.png", competition=comp),
             f"0 0 {0.005:.6g} 0 0 0",
         ),
         collision("floor_collision", _geometry_box(length, width, 0.1), "0 0 -0.05 0 0 0"),
@@ -822,7 +885,7 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
             visual(
                 f"wall_{name}_visual",
                 _geometry_box(*vis_size),
-                textured_material(texture),
+                textured_material(texture, competition=comp),
                 f"{x:.6g} {y:.6g} {-depth / 2.0:.6g} 0 0 0",
             ),
             collision(
@@ -858,7 +921,7 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
                     _geometry_box(length, width, 0.01),
                     textured_material(
                         "water_surface.png", tint=0.95, specular=0.35,
-                        roughness=0.15, emissive=0.22),
+                        roughness=0.15, emissive=0.22, competition=comp),
                     "0 0 0 0 0 0",
                     cast_shadows=False,
                     transparency=0.62,
@@ -867,4 +930,4 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
         )
         )
 
-    return model("sauvc_pool", "\n".join(parts))
+    return model(f"{comp}_pool", "\n".join(parts))

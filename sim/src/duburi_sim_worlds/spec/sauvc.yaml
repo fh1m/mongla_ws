@@ -1,4 +1,4 @@
-# Single source of truth for SAUVC arena geometry.
+# Single source of truth for SAUVC arena geometry. One file per competition;
 #
 # Read by scripts/gen_pool_texture.py, scripts/gen_props.py and
 # scripts/gen_world.py. Change a dimension here and re-run
