@@ -19,6 +19,7 @@ Every test **skips cleanly when ``sim/`` is absent** — a sparse checkout that
 excludes the sim (the documented 15 W Jetson recipe) must not fail this suite.
 """
 import ast
+import sys
 import re
 from pathlib import Path
 
@@ -341,3 +342,63 @@ def test_dvl_beam_visuals_are_off_in_the_generated_model():
         'DVL beam visuals are ON in the generated model. Set '
         'dvl.visualize_beams: false and regenerate, or accept 4.5x fewer frames.'
     )
+
+
+def _prop_library():
+    import importlib.util
+    path = SIM / 'src/duburi_sim_worlds/scripts/prop_library.py'
+    spec = importlib.util.spec_from_file_location('prop_library', path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules['prop_library'] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_each_competition_has_its_own_pool_and_textures():
+    """Two competitions, two pools, and nothing shared that is size-dependent.
+
+    RoboSub's pool is 2.1 m deep and SAUVC's is 1.6 m. Depth-spanning props bake
+    pool depth in at generation time, and the floor/wall textures are sized from
+    the pool, so a shared spec or a shared texture model produces geometry and
+    tile pitch that are wrong with no error anywhere -- the class of failure
+    this repo keeps meeting.
+    """
+    pl = _prop_library()
+    comps = pl.competitions()
+    assert {'sauvc', 'robosub'} <= set(comps)
+
+    depths, tex = {}, set()
+    for c in comps:
+        spec = pl.load_spec(competition=c)
+        depths[c] = spec['pool']['depth']
+        tex.add(pl.texture_model(c))
+    assert depths['sauvc'] != depths['robosub'], (
+        'the two pools have the same depth; if that is now true on purpose, '
+        'this test is what should change')
+    assert len(tex) == len(comps), 'competitions share a texture model'
+
+
+def test_a_world_is_generated_against_its_own_competition():
+    """The course's `competition:` must reach the pool, not just the spec.
+
+    A RoboSub world carrying `sauvc_pool` and `model://sauvc_textures` is the
+    exact bug this caught during the refactor: pool DIMENSIONS came from the
+    right spec while the model name and textures came from the default, because
+    `--spec` defaulted to the SAUVC file and overrode the per-course choice.
+    """
+    import re
+    worlds = SIM / 'src/duburi_sim_worlds/worlds'
+    courses = SIM / 'src/duburi_sim_worlds/courses'
+    for course in sorted(courses.glob('*.yaml')):
+        world = worlds / f'{course.stem}.world'
+        if not world.exists():
+            continue
+        text = course.read_text()
+        m = re.search(r'^competition:\s*(\S+)', text, re.M)
+        comp = m.group(1) if m else 'sauvc'
+        w = world.read_text()
+        assert f'<model name="{comp}_pool"' in w, f'{world.name}: wrong pool model'
+        others = {f'model://{c}_textures' for c in ('sauvc', 'robosub')} - {
+            f'model://{comp}_textures'}
+        for wrong in others:
+            assert wrong not in w, f'{world.name} references {wrong}'

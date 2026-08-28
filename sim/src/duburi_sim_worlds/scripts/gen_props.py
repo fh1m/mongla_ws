@@ -56,10 +56,22 @@ TEXTURES_CONFIG = """<?xml version="1.0"?>
 """
 
 
-def generate(spec_path: str, outdir: str) -> None:
-    spec = pl.load_spec(spec_path)
+def generate(spec_path: str, outdir: str, competition: str = None) -> None:
+    """Bake every prop of one competition into models/<name>/model.sdf.
 
+    Props are built against THEIR OWN competition's spec, not one global spec.
+    That is the whole reason this is per-competition: depth-spanning props --
+    the qualification gate, the orange flare -- read pool depth at build time
+    and bake it in. SAUVC's pool is 1.6 m and RoboSub's is 2.1 m, so a single
+    shared spec would silently generate one of them against the wrong pool.
+    Model names already carry the competition prefix, so both sets coexist in
+    one flat models/ directory without collision.
+    """
     for name in sorted(pl.PROPS):
+        comp = pl.prop_competition(name)
+        if competition and comp != competition:
+            continue
+        spec = pl.load_spec(spec_path if competition else None, competition=comp)
         model_dir = os.path.join(outdir, name)
         os.makedirs(model_dir, exist_ok=True)
 
@@ -70,21 +82,27 @@ def generate(spec_path: str, outdir: str) -> None:
 
         print(f"wrote {model_dir}/model.sdf")
 
-    # The texture directory needs a model.config to be resolvable as a model.
-    tex_dir = os.path.join(outdir, pl.TEXTURE_MODEL)
-    os.makedirs(tex_dir, exist_ok=True)
-    with open(os.path.join(tex_dir, "model.config"), "w") as f:
-        f.write(TEXTURES_CONFIG)
-    print(f"wrote {tex_dir}/model.config")
+    # Each competition's texture directory needs a model.config to resolve as a
+    # model. One per competition because the floor/wall PNGs are sized from that
+    # competition's pool.
+    for comp in ([competition] if competition else pl.competitions()):
+        tex_dir = os.path.join(outdir, pl.texture_model(comp))
+        os.makedirs(tex_dir, exist_ok=True)
+        with open(os.path.join(tex_dir, "model.config"), "w") as f:
+            f.write(TEXTURES_CONFIG.replace("sauvc", comp))
+        print(f"wrote {tex_dir}/model.config")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--spec", default=pl.DEFAULT_SPEC, help="Arena spec YAML.")
+    parser.add_argument("--spec", default=None,
+                        help="Arena spec YAML (overrides --competition).")
+    parser.add_argument("--competition", default=None,
+                        help="Only this competition (default: all).")
     parser.add_argument("--outdir", default=DEFAULT_OUTDIR, help="models/ directory.")
     args = parser.parse_args()
 
-    generate(args.spec, args.outdir)
+    generate(args.spec, args.outdir, args.competition)
 
 
 if __name__ == "__main__":
