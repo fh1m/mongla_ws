@@ -28,6 +28,7 @@ setup(
             'contract_check = duburi_sim_bridge.contract_check:main',
             'mavlink_check = duburi_sim_bridge.mavlink_check:main',
             'record_cameras = duburi_sim_bridge.record_cameras:main',
+            'dataset_to_yolo = duburi_sim_bridge.dataset_to_yolo:main',
             'underwater_fx = duburi_sim_bridge.underwater_fx:main',
             'dvl_bridge = duburi_sim_bridge.dvl_bridge:main',
             'tf_broadcaster = duburi_sim_bridge.tf_broadcaster:main',

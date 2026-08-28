@@ -39,6 +39,7 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 from sensor_msgs.msg import CameraInfo, Image
 
 from duburi_sim_bridge.paths import sim_ws_root
+from duburi_sim_bridge.underwater_fx import apply_underwater_fx
 from duburi_sim_bridge.gt_labels import (
     CLASSES,
     format_yolo_line,
@@ -109,6 +110,52 @@ def _image_to_bgr(msg: Image) -> np.ndarray:
     return img
 
 
+def _fx_params_for(course: str, lighting: str = '') -> dict:
+    """The course's own turbidity, from the <course>.fx.yaml sidecar.
+
+    Recording has to use the SAME water the live sim shows, or a dataset
+    captured from `lighting: murky` would quietly be clear. The sidecar is the
+    one source of truth for that (gz-sim ignores the world's <scene><fog>
+    entirely -- see gen_world.py), and it is what bridge.launch.py feeds the
+    live node, so reading it here keeps the two paths from drifting.
+
+    Falls back to the package defaults if the sidecar is missing, exactly as
+    bridge.launch.py does, so a hand-written world still records something sane.
+    """
+    keys = ('turbidity', 'backscatter', 'blur_sigma', 'noise', 'vignette',
+            'atten_scale')
+    params = {}
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        import yaml
+        share = Path(get_package_share_directory('duburi_sim_worlds'))
+        presets = share / 'worlds' / 'lighting_presets.yaml'
+        if lighting and presets.is_file():
+            # --lighting overrides the course, so a murky/clear PAIR of the same
+            # scene comes out of one sim launch instead of two courses that
+            # would also differ in prop placement.
+            table = yaml.safe_load(presets.read_text())
+            if lighting not in table:
+                raise KeyError(
+                    f'unknown lighting {lighting!r}; known: '
+                    f"{', '.join(sorted(table))}")
+            params = table[lighting]
+        elif (share / 'worlds' / f'{course}.fx.yaml').is_file():
+            params = yaml.safe_load(
+                (share / 'worlds' / f'{course}.fx.yaml').read_text()
+            )['/**']['ros__parameters']
+        else:
+            share = Path(get_package_share_directory('duburi_sim_bridge'))
+            params = yaml.safe_load(
+                (share / 'config' / 'underwater_fx.yaml').read_text()
+            )['/**']['ros__parameters']
+    except Exception:
+        params = {}
+    defaults = {'turbidity': 0.45, 'backscatter': 0.55, 'blur_sigma': 0.8,
+                'noise': 0.012, 'vignette': 0.25, 'atten_scale': 1.0}
+    return {k: float(params.get(k, defaults[k])) for k in keys}
+
+
 class CameraRecorder(Node):
     def __init__(
         self,
@@ -120,6 +167,7 @@ class CameraRecorder(Node):
         fps: float,
         course: str,
         label: str,
+        lighting: str = '',
     ) -> None:
         super().__init__('record_cameras')
         self._out_dir = out_dir
@@ -129,6 +177,7 @@ class CameraRecorder(Node):
         self._fps_hint = fps
         self._course = course
         self._label = label
+        self._depth = -0.8       # until the first ground-truth odom arrives
         self._lock = threading.Lock()
         self._frames: dict[str, list[np.ndarray]] = {c: [] for c in cameras}
         self._counts = {c: 0 for c in cameras}
@@ -162,10 +211,21 @@ class CameraRecorder(Node):
             if self._write_labels:
                 (out_dir / 'labels' / cam).mkdir(parents=True, exist_ok=True)
 
-        topics = {
-            'front': FRONT_FX if use_fx else FRONT_RAW,
-            'bottom': BOTTOM_FX if use_fx else BOTTOM_RAW,
-        }
+        # --fx reads image_RAW and filters in-process; it does NOT subscribe to
+        # image_fx.
+        #
+        # Measured 2026-08-28: the underwater_fx node burns a full CPU core even
+        # with `enabled: false` -- i.e. as a pure subscribe-and-republish, doing
+        # no image work at all. The cost is rclpy moving ~1 MB Image messages,
+        # four crossings per frame per camera, and it drags the cameras from
+        # 12 Hz down to 5 Hz and the recording to 2.4 fps. The filter itself is
+        # 4.4 ms and irrelevant next to that.
+        #
+        # So the frame is already here, in memory, and applying the filter costs
+        # 4.4 ms while subscribing to a filtered copy of it costs most of a core.
+        # Same pixels, recorded at the sim's real frame rate.
+        self._fx_params = _fx_params_for(course, lighting) if use_fx else None
+        topics = {'front': FRONT_RAW, 'bottom': BOTTOM_RAW}
         self._topics = {c: topics[c] for c in cameras}
         for cam in cameras:
             self.create_subscription(
@@ -209,6 +269,7 @@ class CameraRecorder(Node):
         xyz = (p.x, p.y, p.z)
         quat = (q.x, q.y, q.z, q.w)
         self._pose = (xyz, quat)
+        self._depth = p.z
         sample = {'x': p.x, 'y': p.y, 'z': p.z}
         if self._gt_start is None:
             self._gt_start = sample
@@ -241,6 +302,9 @@ class CameraRecorder(Node):
         except ValueError as exc:
             self.get_logger().warn(f'{name}: {exc}')
             return
+
+        if self._fx_params is not None:
+            bgr = apply_underwater_fx(bgr, self._depth, **self._fx_params)
 
         h, w = bgr.shape[:2]
         frame = bgr.copy()
@@ -322,14 +386,24 @@ def main(argv=None) -> int:
     )
     parser.add_argument('--frames', action='store_true')
     parser.add_argument('--labels', action='store_true', help='Write YOLO GT labels.')
-    parser.add_argument('--fx', action='store_true', help='Record image_fx instead of raw.')
+    parser.add_argument('--fx', action='store_true',
+                        help="Apply the course's underwater turbidity to the "
+                             'recorded frames (in-process; does NOT subscribe '
+                             'to image_fx -- see _fx_params_for).')
     parser.add_argument('--cameras', default='front,bottom', help='Comma list: front,bottom.')
     parser.add_argument('--course', default='sauvc26_qualification')
+    parser.add_argument(
+        '--lighting', default='',
+        help="Override the course's water with a named preset "
+             '(clear|competition|murky). Use it to capture a murky/clear PAIR '
+             'of the same scene from ONE sim launch. Implies --fx.')
     parser.add_argument('--label', default='', help='Run tag prefix (default: course name).')
     parser.add_argument('--outdir', default='')
     parser.add_argument('--script-id', default='', dest='script_id')
     args = parser.parse_args(argv)
 
+    if args.lighting:
+        args.fx = True
     cameras = [c.strip() for c in args.cameras.split(',') if c.strip()]
     for c in cameras:
         if c not in ('front', 'bottom'):
@@ -353,6 +427,7 @@ def main(argv=None) -> int:
         args.fps,
         args.course,
         tag,
+        args.lighting,
     )
 
     stop = {'flag': False}
@@ -380,6 +455,7 @@ def main(argv=None) -> int:
         meta = {
             'label': tag,
             'course': args.course,
+            'lighting': args.lighting or None,
             'script_id': args.script_id or None,
             'duration_s': round(elapsed, 3),
             'fps_requested': args.fps,
