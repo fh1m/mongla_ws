@@ -88,7 +88,8 @@ Both sim cameras, both detectors, boxes on `image_debug`:
 ros2 launch duburi_vision vision_dual.launch.py \
     fwd_topic:=/duburi/sim/front_camera/image_fx \
     dwn_topic:=/duburi/sim/bottom_camera/image_fx \
-    model:=gate_rescue_repair dwn_model:=bin_fire_blood \
+    fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \
+    dwn_model:=bin_fire_blood dwn_classes:=blood,fire \
     device_cls:=cpu paused:=false viewer:=true
 ```
 
@@ -100,6 +101,8 @@ Four things here are not optional and each one fails silently if you skip it:
 | `paused:=false` | The launch defaults to **paused** — missions resume the detector they need. Without it the HUD reads `det=ERR dets=0` and looks broken. Resume live with `ros2 param set /duburi_detector_forward paused false`. |
 | `device_cls:=cpu` | On a box with no CUDA the detector node **dies** at the `cuda:0` default. |
 | `image_fx` not `image_raw` | `image_fx` is the water. `image_raw` is a clean render no pool has. |
+| `fwd_model:` not `model:` | **`ros2 launch` silently ignores an unknown `key:=value`.** `model:=sauvc_sim` is accepted, does nothing, and the detector quietly runs the `fwd_model` default — you get plausible detections from the WRONG weights. Verify with `ros2 param get /duburi_detector_forward classes`. |
+| `fwd_classes:` alongside it | The class allowlist is a SEPARATE argument that does not follow the model. Point `fwd_model` at new weights without it and every detection is filtered out: a silent `[]` forever. |
 
 Healthy looks like this on the `duburi_display` line:
 
@@ -220,8 +223,21 @@ cd ~/Ros_workspaces/duburi_ws && ./build_dubomini.sh   # mirrors ~/models into t
 ```bash
 ros2 launch duburi_vision vision_dual.launch.py \
     fwd_topic:=/duburi/sim/front_camera/image_fx \
-    model:=sauvc_sim device_cls:=cpu paused:=false viewer:=true
+    dwn_topic:=/duburi/sim/bottom_camera/image_fx \
+    fwd_model:=sauvc_sim \
+    fwd_classes:=final_gate,orange_flare,starting_zone \
+    dwn_model:=sauvc_sim dwn_classes:=drum_red,drum_blue \
+    device_cls:=cpu paused:=false viewer:=true
 ```
+
+**Order matters: stack (T2) BEFORE vision (T3).** `duburi_sim stack` runs a
+cleanup pass that matches `ros2 launch duburi_vision` and `lib/duburi_vision/`,
+so starting the stack second kills a vision pipeline you already have running.
+Nothing is logged in the vision terminal -- the processes simply stop, and the
+verbs then fail with `NO_CAMERA / no camera_info`.
+
+Pass `dwn_topic:` even if you only care about the forward camera: without it the
+downward camera node tries to open webcam index 4, fails, and dies.
 
 Then drive it with the two vision verbs:
 
@@ -240,6 +256,71 @@ verb to it:
 ```
 
 ---
+
+## What the first real run produced, and why the score lied
+
+The first model trained by this pipeline scored **mAP50 = 0.993** and was
+hit-and-miss in the actual sim. Both reasons were in the dataset, and neither
+was visible from the training output:
+
+```
+                   all        154        459       0.99      0.808      0.993      0.564
+```
+
+**The val set was 153 frames of a parked vehicle.** `dataset_to_yolo` splits by
+run precisely so that near-duplicate frames do not straddle the split -- but one
+of the runs was itself a stationary capture, so the val set was 153 copies of
+one image containing exactly one gate, one flare and one starting zone. The
+score measured whether the model could find a gate in an image it had
+effectively memorised. Splitting by run is necessary and **not sufficient: the
+val run has to contain motion.**
+
+**Three of eleven classes had zero instances.** `qual_gate`, `flare_yellow` and
+`target_mat` never appeared, `flare_blue` appeared four times. The summary still
+printed "11 classes" and the model still emitted 11 logits, most untrainable.
+
+`target_mat` was a genuine bug rather than a recording gap: it had been added to
+`gt_labels.MODEL_TO_CLASS` but not to `PROP_HALF_EXTENTS`, and the projector
+skipped it at a `half is None` guard **in silence**. `classes.txt` gained the
+name, 1469 frames were labelled, and not one carried a mat. The two tables are
+now checked against each other at import so this fails loudly.
+
+The precision/recall pair is the tell that a raw mAP hides. The last training
+epoch read **precision 0.236, recall 1.000** -- the model firing boxes almost
+everywhere, which is what "hit and miss" looks like from the operator's seat.
+
+`dataset_to_yolo` now prints all of this before you spend a GPU-hour:
+
+```
+  WARNING: 3 class(es) have ZERO instances and cannot be learnt: qual_gate, ...
+  WARNING: very few instances: flare_blue (4)
+  WARNING: val run(s) barely moved: sim_clear_20260828_145251. Near-identical
+           frames make the val score a memorisation score -- it will look
+           excellent and the model will still miss in the sim.
+```
+
+### What to do differently on the next dataset
+
+1. **Fly every run, including the val run.** A stationary capture is only useful
+   as a negatives source.
+2. **Vary prop placement between runs.** All four runs used the same course with
+   props at identical coordinates, so "where the gate is" is a constant the
+   model can learn instead of what a gate looks like. The runtime spawn service
+   exists for exactly this:
+   `ros2 run duburi_sim_scenarios props add sauvc_final_gate gate <x> <y>`.
+3. **Record the courses that contain the missing classes** --
+   `sauvc26_qualification` for `qual_gate`, `task_target_acquisition` for the
+   drums and the mat.
+4. **Read precision and recall, never mAP alone.** P 0.24 / R 1.00 at mAP 0.99
+   is a model that has learnt to always guess.
+
+Despite all that, the *pipeline* is verified end to end. With the trained
+weights loaded the detector reports `final_gate 0.97`, `starting_zone 0.94`,
+`orange_flare 0.56`, and the vision verbs close the loop on them:
+
+```
+vision_align -> OK  final=0.000  err=4.219  msg="vision_align: aligned (4/45px)"
+```
 
 ## The loop, once you have all this
 
