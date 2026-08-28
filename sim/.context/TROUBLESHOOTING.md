@@ -178,6 +178,38 @@ Two failure shapes are worth naming, because unit tests cannot see either:
 | `surface` | never confirms in sim | Type A, documented above |
 | `vision_align` / `vision_move` | never-fail contract holds | see "class allowlist" below |
 
+### The vehicle shadows the drum it is about to drop into
+
+Measured from the bottom camera hovering over a drum, i.e. the exact instant of
+the Target Acquisition drop:
+
+| surface | RGB | colour spread |
+|---|---|---|
+| pool floor (control) | `[125, 154, 172]` | **46.8** |
+| drum base, emissive 0.25 | `[115, 122, 129]` | **13.5** |
+| drum base, emissive 0.55 | `[138, 149, 160]` | **22.0** |
+
+The drum base is the entire colour cue for choosing blue-vs-red, and at drop
+range it desaturates towards grey. This is **not a texture failure** -- the
+albedo maps are correct (`drum_wall_blue.png` mean RGB `[18, 59, 189]`) and the
+drums render distinctly blue and red from the FRONT camera at normal range. It
+is the vehicle casting its own shadow on the prop directly beneath it.
+
+That is physically right, and it is a real problem competition teams have. The
+emissive lift on the drum base is raised to 0.55 to recover what can be
+recovered without making the drum glow. **Do not tune a bin detector on the
+front camera and assume it transfers to the drop.**
+
+Measure it yourself rather than eyeballing a fogged frame:
+
+```bash
+ros2 topic echo /duburi/sim/bottom_camera/image_raw --once   # RAW render
+```
+
+`image_raw` is the clean Gazebo render; `underwater_fx` publishes its degraded
+copy to **`image_fx`**, a different topic. Measuring the wrong one will tell you
+the renderer is broken when it is not.
+
 ### The class allowlist, and the silent `[]`
 
 A detector that matches **zero** classes returns `[]` on every frame forever. It

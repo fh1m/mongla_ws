@@ -451,7 +451,16 @@ def drum(spec: dict, colour_name: str, model_name: str = None, pinger: bool = Fa
         # Base disc, in the drum's colour. This is the dominant cue for the
         # downward camera looking into the drum.
         _cylinder_link(
-            "base", radius, thickness, colour, 3.0, f"0 0 {thickness / 2.0:.6g} 0 0 0"
+            "base", radius, thickness, colour, 3.0,
+            f"0 0 {thickness / 2.0:.6g} 0 0 0",
+            # Stronger emissive lift than the default 0.25. Measured from the
+            # bottom camera hovering over a drum -- i.e. the exact instant of the
+            # ball drop -- the base read RGB [115,122,129], a colour spread of
+            # 13 against the floor's 64. The vehicle shadows the drum it is
+            # about to drop into, and a shadowed blue disc under blue-grey
+            # ambient is grey. The colour of this disc is the whole cue for
+            # Target Acquisition, so it has to survive its own shadow.
+            mat=material(colour, emissive_gain=0.55),
         ),
         # Banded rim at the lip — reads as a painted metal edge on camera.
         _cylinder_link(
