@@ -6,7 +6,7 @@
 > updated; any remaining "sibling" phrasing is historical.
 
 **Read this first.** Gazebo Harmonic + ArduSub SITL for Mongla AUV (Duburi 4.5).
-Sibling of [`../duburi_ws`](../../duburi_ws). Drop-in MAVLink/camera surface so autonomy
+Nested inside [`duburi_ws`](../..); autonomy lives in [`../../src`](../../src). MAVLink/camera surface so autonomy
 does not need sim-specific forks.
 
 ## 5-minute orientation
@@ -47,6 +47,7 @@ duburi_sim stop → duburi_sim sim → duburi_sim stack --no-vision → duburi_s
 | [TESTING.md](TESTING.md) | QA | contract/mavlink/smoke/lab checklists |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Operators | Lost control, black cams, orphans |
 | [DVL_AND_SONAR.md](DVL_AND_SONAR.md) | Native Gazebo DVL: how it is wired, the four traps, and why sonar is not available |
+| [DAVE_AND_VEHICLES.md](DAVE_AND_VEHICLES.md) | Project DAVE assessment (Jazzy-only, do not adopt) + other AUV models |
 | [WORLD_EDITING.md](WORLD_EDITING.md) | Operators | Prop spawn/move, custom assets, limits |
 | [PLOTJUGGLER.md](PLOTJUGGLER.md) | Operators | Desktop timeseries vs Foxglove |
 | [TESTING_SUITE.md](TESTING_SUITE.md) | Maintainers | Lab amenity roadmap |

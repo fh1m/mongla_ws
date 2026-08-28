@@ -459,6 +459,15 @@ ros2 run duburi_sim_bringup duburi_sim lab
 <details>
 <summary><b>Terminal 5 — run missions against the sim</b></summary>
 
+Vision runs on **both** cameras: `duburi_sim stack` starts
+`/duburi_detector_forward` on the sim front camera and `/duburi_detector_downward`
+on the bottom one, labelled so missions resolve them exactly as on the vehicle.
+Pick a single-task course to drill one thing at a time —
+`duburi_sim sim course:=task_navigation` (or `task_target_acquisition`,
+`task_localization`) — and move any prop live with
+`ros2 run duburi_sim_scenarios props move <name> <x> <y>`.
+
+
 ```bash
 ros2 run duburi_planner mission --list
 ros2 run duburi_planner mission gate_flare_prequal

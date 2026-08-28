@@ -176,7 +176,44 @@ Two failure shapes are worth naming, because unit tests cannot see either:
 | `move_back_dist` / `move_lateral_dist` | refuse without DVL; stall guard was too tight | guard widened |
 | `fire` | fails loudly with no payload | OK |
 | `surface` | never confirms in sim | Type A, documented above |
-| `vision_align` / `vision_move` | never-fail contract holds | see sidecar note |
+| `vision_align` / `vision_move` | never-fail contract holds | see "class allowlist" below |
+
+### The class allowlist, and the silent `[]`
+
+A detector that matches **zero** classes returns `[]` on every frame forever. It
+is not an error and the pipeline looks healthy: topics publish, FPS is normal,
+the HUD draws. The one signal is a single line at startup:
+
+```
+[YOLO ] class_allowlist=[...] matched 0 classes in model. Detector will return []
+        for every frame. Available: [...]
+```
+
+Two things make this easy to trip:
+
+- **`bin_fire_blood.pt` has NO `bin` class.** The stem names the dataset, not the
+  classes — the weights contain exactly `{0: blood, 1: fire}`. A bin mission
+  asking for `classes:=bin` detects nothing, silently. The sim's downward
+  detector therefore defaults to `dwn_classes:=fire,blood`.
+- **A missing `<stem>.yaml` sidecar is NOT itself the failure.** The loader falls
+  back to the weights' embedded `names`. The failure is when the allowlist a
+  mission asks for does not intersect whatever names are in play.
+
+`gate_rescue_repair.pt` is `{0: gate, 1: rescue, 2: repair}`.
+
+### Vision in sim: `vision:=true` used to start nothing at all
+
+Fixed 2026-08-28. `IncludeLaunchDescription` does not scope its
+`launch_arguments`, so the manager include's `vision: 'false'` leaked into the
+outer scope and overwrote `stack.launch.py`'s own `vision` argument. The vision
+include then skipped itself via `IfCondition` — no error, no node, for any value
+of `vision:=`. That is why the older notes here tell you to run `--no-vision`.
+
+Both cameras now run: `duburi_sim stack` gives
+`/duburi_detector_forward` (sim front camera) and `/duburi_detector_downward`
+(sim bottom camera). If only one appears, check the `GroupAction(scoped=True)`
+around the manager include is still there — `test_sim_contract_drift.py` asserts
+it precisely because the failure is silent.
 
 ### `arc` reported a perfect result while 165° off  — FIXED
 

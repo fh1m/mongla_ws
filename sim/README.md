@@ -398,3 +398,65 @@ ros2 run duburi_sim_bringup duburi_sim stop
 
 > **Reset between audit runs.** The pool spans x = ±12.5 and the hull drifts into
 > a wall; once pinned, nothing moves and every verb looks dead.
+
+---
+
+## Courses
+
+`courses/*.yaml` + `gen_world.py --all`. Six today:
+
+| course | what it is for |
+|---|---|
+| `pool_empty` | bare pool, no props — hydrodynamics and step response |
+| `sauvc26_qualification` | the qualification gate, ~10 m out |
+| `sauvc26_final` | the full arena: gate, orange flare, four drums, three bump flares |
+| `task_navigation` | gate + flare only, clearer water — drill the gate approach |
+| `task_target_acquisition` | the four-drum target zone alone |
+| `task_localization` | the three bump flares alone, in fog — the hardest detection |
+
+The per-task courses exist so a failure is attributable: with the whole arena in
+frame you cannot tell a control problem from the detector locking onto the wrong
+prop. They also run at different turbidity, so perception is exercised across
+conditions rather than one preset.
+
+Prop placement follows the rulebook distances. Where the rulebook gives a **zone**
+rather than a point — the orange flare, the bump flares, the drum order — one
+legal arrangement is baked in and you vary it at runtime rather than editing YAML:
+
+```bash
+ros2 run duburi_sim_scenarios props list
+ros2 run duburi_sim_scenarios props add sauvc_drum_blue drum_x 8.0 1.0
+ros2 run duburi_sim_scenarios props move flare_red -2.0 4.0
+ros2 run duburi_sim_scenarios props remove drum_x
+```
+
+Any registered prop, any pose, live — the same catalogue the World tab in the lab
+drives. Adding a new prop is a builder plus one `PROPS` entry in
+`duburi_sim_worlds/scripts/prop_library.py`; that single registration lights it up
+in the model generator, the world generator, the ROS spawn service, the CLI and
+the web catalogue at once.
+
+## Vision in sim
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim stack        # BOTH cameras + detectors
+ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+```
+
+Gives `/duburi_detector_forward` on the sim front camera and
+`/duburi_detector_downward` on the bottom camera, correctly labelled so missions
+and the vision verbs resolve `/duburi/vision/<name>/*` exactly as they do on the
+vehicle.
+
+> `vision:=true` started **nothing at all** until 2026-08-28 — a launch-scope leak
+> silently disabled the whole include. Older notes telling you to run
+> `--no-vision` predate the fix. See
+> [`.context/TROUBLESHOOTING.md`](.context/TROUBLESHOOTING.md).
+
+Useful arguments (all forwarded to `vision_dual.launch.py`):
+
+| arg | default | note |
+|---|---|---|
+| `dwn_classes` | `fire,blood` | **`bin_fire_blood.pt` has no `bin` class** |
+| `device_cls` | `cuda:0` | set `cpu` on a host without CUDA, or the detector dies |
+| `viewer` | `false` | HUD on one camera; `f`/`d` switches |
