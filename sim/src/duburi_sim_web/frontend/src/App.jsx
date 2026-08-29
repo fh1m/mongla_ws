@@ -95,6 +95,158 @@ function CamGrid({ mode }) {
   )
 }
 
+// Deadzone + expo, identical maths to duburi_sim_web/joystick.py so a pad on
+// the browser machine and one on the lab machine fly the same.
+const JOY_DEADZONE = 0.08
+const JOY_EXPO = 0.35
+function joyShape(v) {
+  const x = Math.max(-1, Math.min(1, v || 0))
+  if (Math.abs(x) <= JOY_DEADZONE) return 0
+  const sign = x > 0 ? 1 : -1
+  const t = (Math.abs(x) - JOY_DEADZONE) / (1 - JOY_DEADZONE)
+  return sign * ((1 - JOY_EXPO) * t + JOY_EXPO * t ** 3)
+}
+
+// A gamepad plugged into the machine running the BROWSER. This is the QGC
+// arrangement -- the ground station reads the stick and sends commands over
+// the link -- and it is the one that works when the lab is on another machine.
+// A pad on the lab machine is read there instead (/api/vehicle/joystick); both
+// end up in the same TeleopStreamer, so there is never a second RC writer.
+function useGamepad({ enabled, gain, onArm, onDisarm }) {
+  const [pad, setPad] = useState(null)
+  const state = useRef({ axes: [0, 0, 0, 0], buttons: [], sending: false })
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    let raf = 0
+    let last = 0
+    const prevButtons = []
+
+    const tick = async (now) => {
+      raf = requestAnimationFrame(tick)
+      const pads = navigator.getGamepads ? navigator.getGamepads() : []
+      const gp = Array.from(pads).find((p) => p && p.connected)
+      if (!gp) {
+        if (pad) setPad(null)
+        return
+      }
+      // Xbox layout: LS x/y = 0/1, RS x/y = 2/3. Kernel js numbering differs
+      // (triggers sit at 2), which is why the two readers do not share a map.
+      const lat = joyShape(gp.axes[0])
+      const fwd = joyShape(-gp.axes[1])
+      const yaw = joyShape(gp.axes[2])
+      const up = joyShape(-gp.axes[3])
+
+      gp.buttons.forEach((b, i) => {
+        const down = !!b.pressed
+        if (down && !prevButtons[i]) {
+          if (i === 0) onArm?.()
+          if (i === 1) onDisarm?.()
+        }
+        prevButtons[i] = down
+      })
+
+      setPad({ id: gp.id, index: gp.index, axes: [fwd, lat, up, yaw] })
+
+      // Fixed 25 Hz, not per-frame: the RC stream runs at 20 Hz, so anything
+      // faster is wasted requests, and anything slower shows up as stepping.
+      if (now - last < 40 || state.current.sending) return
+      last = now
+      const active = Math.max(Math.abs(fwd), Math.abs(lat), Math.abs(up), Math.abs(yaw)) > 0
+      if (!active && !state.current.wasActive) return
+      state.current.wasActive = active
+      state.current.sending = true
+      try {
+        await api('/api/vehicle/teleop', {
+          method: 'POST',
+          body: JSON.stringify({ fwd, lat, up, yaw, gain }),
+        })
+      } catch {
+        /* ignore */
+      } finally {
+        state.current.sending = false
+      }
+    }
+
+    raf = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(raf)
+      // Centre on unmount. A released stick that never reaches the server
+      // leaves the last value latched in the RC stream.
+      api('/api/vehicle/teleop', {
+        method: 'POST',
+        body: JSON.stringify({ fwd: 0, lat: 0, up: 0, yaw: 0 }),
+      }).catch(() => {})
+    }
+  }, [enabled, gain, onArm, onDisarm])
+
+  return pad
+}
+
+function AxisBar({ label, value }) {
+  const pct = Math.min(100, Math.abs(value) * 100)
+  return (
+    <div className="joy-axis">
+      <span className="joy-axis-label">{label}</span>
+      <div className="joy-axis-track">
+        <div
+          className="joy-axis-fill"
+          style={{
+            width: `${pct / 2}%`,
+            left: value >= 0 ? '50%' : `${50 - pct / 2}%`,
+          }}
+        />
+      </div>
+      <span className="joy-axis-value">{value >= 0 ? '+' : ''}{value.toFixed(2)}</span>
+    </div>
+  )
+}
+
+function ControllerPanel({ browserPad, labPad, enabled, setEnabled }) {
+  const active = browserPad || (labPad?.connected ? labPad : null)
+  const axes = browserPad
+    ? browserPad.axes
+    : [labPad?.axes?.fwd || 0, labPad?.axes?.lat || 0,
+       labPad?.axes?.up || 0, labPad?.axes?.yaw || 0]
+  const where = browserPad ? 'browser' : 'lab host'
+  return (
+    <div className="joy-panel">
+      <div className="joy-head">
+        <span className={`joy-dot ${active ? 'live' : ''}`} />
+        <strong>{active ? 'CONTROLLER ACTIVE' : 'no controller'}</strong>
+        {active && <span className="muted joy-where">{where}</span>}
+        <label className="joy-toggle">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          browser pad
+        </label>
+      </div>
+      {active ? (
+        <>
+          <div className="joy-name">
+            {browserPad ? browserPad.id : `${labPad.name} (${labPad.device})`}
+          </div>
+          <AxisBar label="fwd" value={axes[0]} />
+          <AxisBar label="lat" value={axes[1]} />
+          <AxisBar label="up" value={axes[2]} />
+          <AxisBar label="yaw" value={axes[3]} />
+          {labPad?.connected && !browserPad && (
+            <div className="muted joy-hint">gain {labPad.gain} — LB/RB to change</div>
+          )}
+        </>
+      ) : (
+        <div className="muted joy-hint">
+          plug a pad in and press a button — or run the lab with
+          {' '}<code>DUBURI_JOYSTICK=/dev/input/js0</code>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Dpad({ armed, onArmToggle, gain, setGain, busy }) {
   const axes = useRef({ fwd: 0, lat: 0, up: 0, yaw: 0 })
   const held = useRef(new Set())
@@ -333,6 +485,7 @@ function Operate({ status, refresh }) {
   const course = status?.active_course || status?.sim?.active_course || 'sauvc26_qualification'
   const [camMode, setCamMode] = useState('both')
   const [gain, setGain] = useState(0.55)
+  const [padEnabled, setPadEnabled] = useState(true)
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('gate_approach')
   const [recCams, setRecCams] = useState({ front: true, bottom: true })
@@ -371,6 +524,22 @@ function Operate({ status, refresh }) {
       setBusy(false)
     }
   }, [refresh])
+
+  // A pad on the BROWSER machine. Arm/disarm go through the same handlers the
+  // on-screen buttons use, so a stick cannot reach the vehicle by a path the
+  // operator's own clicks do not.
+  const onPadArm = useCallback(() => {
+    if (!armedRef.current) onArmToggle()
+  }, [onArmToggle])
+  const onPadDisarm = useCallback(() => {
+    if (armedRef.current) onArmToggle()
+  }, [onArmToggle])
+  const browserPad = useGamepad({
+    enabled: padEnabled,
+    gain,
+    onArm: onPadArm,
+    onDisarm: onPadDisarm,
+  })
 
   const onSetMode = useCallback(async (mode) => {
     setBusy(true)
@@ -524,6 +693,12 @@ function Operate({ status, refresh }) {
         </div>
 
         <h2>teleop</h2>
+        <ControllerPanel
+          browserPad={browserPad}
+          labPad={status?.joystick}
+          enabled={padEnabled}
+          setEnabled={setPadEnabled}
+        />
         <Dpad
           armed={!!st.armed}
           onArmToggle={onArmToggle}

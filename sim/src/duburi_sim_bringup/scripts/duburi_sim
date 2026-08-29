@@ -100,6 +100,7 @@ patterns = (
     'lib/duburi_sim_bridge/payload_sim',
     'lib/duburi_sim_bridge/fault_injection',
     'lib/duburi_sim_bridge/bno085_sim',
+    'lib/duburi_sim_bridge/scoring',
     'lib/duburi_sim_scenarios/prop_manager',
     'duburi_sim_worlds/worlds',
     'ros_gz_image/image_bridge',
@@ -140,6 +141,7 @@ Commands:
   sim [--headless] [args...]   Gazebo + ArduSub + bridge (GUI on by default)
   stack [--no-vision]          duburi_ws manager against a running simulator
   smoke                        arm → set_depth -1 → move_forward 8s
+  joystick                     Live gamepad status in the terminal (needs `lab`)
   lab                          Operator web UI on :28765 (DUBURI_LAB_PORT; needs sim+stack)
   plotjuggler                  Launch PlotJuggler with sim layout (needs ros-humble-plotjuggler-ros)
 
@@ -289,6 +291,53 @@ PY
     timeout 5 ros2 topic echo /duburi/state --once
     echo "[duburi-sim] smoke OK"
     ;;
+  joystick)
+    # A CLI view of the gamepad, for flying from a terminal. The pad is READ
+    # BY THE LAB (one RC writer, never two), so this is a live status monitor
+    # against its API rather than a second reader competing for the device.
+    _source_ros
+    _lab_port="${DUBURI_LAB_PORT:-$(cat "$_RT/lab_port.txt" 2>/dev/null || echo 28765)}"
+    python3 - "$_lab_port" <<'JOYSTICK_PY'
+import json, sys, time, urllib.error, urllib.request
+
+url = f'http://127.0.0.1:{sys.argv[1]}/api/vehicle/joystick'
+
+
+def bar(v, width=17):
+    mid = width // 2
+    cells = ['-'] * width
+    cells[mid] = '|'
+    n = int(round(abs(v) * mid))
+    for i in range(1, n + 1):
+        cells[mid + i if v > 0 else mid - i] = '#'
+    return ''.join(cells)
+
+
+print(f'watching {url}   (ctrl-c to stop)')
+try:
+    while True:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as r:
+                s = json.load(r)
+        except (urllib.error.URLError, OSError):
+            sys.stdout.write('\r  lab not reachable -- start it with `duburi_sim lab`   ')
+            sys.stdout.flush(); time.sleep(1.0); continue
+        if not s.get('connected'):
+            sys.stdout.write('\r  NO CONTROLLER  (plug a pad in, or set '
+                             'DUBURI_JOYSTICK=/dev/input/js0)         ')
+        else:
+            a = s['axes']
+            sys.stdout.write(
+                f"\r  ACTIVE {s['name'][:20]:20} fwd{bar(a['fwd'])} "
+                f"lat{bar(a['lat'])} up{bar(a['up'])} yaw{bar(a['yaw'])} "
+                f"gain {s['gain']:.2f}  ")
+        sys.stdout.flush()
+        time.sleep(0.1)
+except KeyboardInterrupt:
+    print()
+JOYSTICK_PY
+    ;;
+
   lab)
     _source_ros
     _lab_port="${DUBURI_LAB_PORT:-28765}"

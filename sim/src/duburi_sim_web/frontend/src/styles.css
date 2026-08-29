@@ -678,3 +678,49 @@ a {
   color: var(--muted);
   border-color: var(--muted);
 }
+
+/* --- gamepad panel ------------------------------------------------------ */
+.joy-panel {
+  border: 1px solid var(--line, #2a2f3a);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.joy-head { display: flex; align-items: center; gap: 8px; }
+.joy-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #555; flex: 0 0 auto;
+}
+.joy-dot.live {
+  background: #3fbf6f;
+  box-shadow: 0 0 6px #3fbf6f;
+}
+.joy-where { margin-left: 2px; }
+.joy-toggle {
+  margin-left: auto; display: flex; align-items: center; gap: 4px;
+  font-weight: normal;
+}
+.joy-name {
+  margin: 6px 0 8px; opacity: 0.7;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.joy-hint { margin-top: 6px; }
+.joy-axis { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+.joy-axis-label { width: 26px; opacity: 0.7; }
+.joy-axis-track {
+  position: relative; flex: 1; height: 6px;
+  background: #1c2029; border-radius: 3px; overflow: hidden;
+}
+.joy-axis-track::after {
+  content: ''; position: absolute; left: 50%; top: 0;
+  width: 1px; height: 100%; background: #39404d;
+}
+.joy-axis-fill {
+  position: absolute; top: 0; height: 100%;
+  background: #4a9eff; border-radius: 3px;
+}
+.joy-axis-value {
+  width: 42px; text-align: right; font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
