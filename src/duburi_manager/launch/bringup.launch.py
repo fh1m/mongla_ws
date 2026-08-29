@@ -58,6 +58,13 @@ def generate_launch_description():
         # right default on the vehicle. In simulation there is no CH340: point
         # this at the PTY that `payload_sim` creates
         # (payload_port:=/tmp/duburi-$USER/payload) and fire() works there too.
+        # 'auto' scans USB VID/PID for the ESP32-C3 (303a:1001). In sim there
+        # is no ESP32: point this at the PTY that `bno085_sim` creates
+        # (bno085_port:=/tmp/duburi-$USER/bno085) and yaw_source:=bno085 --
+        # what the vehicle actually flies -- works there too.
+        DeclareLaunchArgument('bno085_port', default_value='auto',
+                              description='BNO085 device, or "auto" to scan '
+                                          'USB VID/PID.'),
         DeclareLaunchArgument('payload_port', default_value='auto',
                               description='Payload board device, or "auto" to '
                                           'scan USB VID/PID.'),
@@ -114,6 +121,7 @@ def generate_launch_description():
             'nucleus_dvl_password': 'nortek',
             'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
             'payload_port':         LaunchConfiguration('payload_port'),
+            'bno085_port':          LaunchConfiguration('bno085_port'),
         }],
     )
 

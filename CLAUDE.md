@@ -282,6 +282,28 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > semantic label, and a prop missing from it is **invisible** to the sensor.
 > Measured cost: none (12.83 Hz vs a 12.75 Hz baseline).
 >
+> **`yaw_source:=bno085` RUNS IN SIM** — the sim supported 2 of the 4 yaw
+> sources, and the missing two (`bno085`, `bno085_dvl`) are the ones the vehicle
+> flies, so the whole heading loop could only be tuned against a sensor it does
+> not use. `bno085_sim` presents a **PTY** speaking the firmware's JSON-line
+> contract, so the **unmodified** `BNO085Source` runs — including the Pixhawk
+> calibration handshake (`[SENS ] BNO085 calibrated pixhawk=90.00° bno_raw=36.79°
+> offset=+53.21°`). Measured against Gazebo ground truth through four turns:
+> **worst error 0.16°**, and `turn` now *terminates* on this path (impossible
+> with a real BNO on a desk). Drift is the datasheet's **0.5 °/min** (BNO08X rev
+> 1.17 Fig 6-14, Gaming RV — our `SH2_GYRO_INTEGRATED_RV` is mag-free per §2.2.6)
+> as a **fixed per-run ZRO bias**, so error grows *linearly* (~5° in 10 min).
+> **Two conventions are silent if wrong**: the board emits **+CCW sensor-frame**
+> (the driver negates once) and **boot-relative** (or the calibration handshake
+> becomes a no-op). One flight-code fix: `dtr=True` on a device with no modem
+> control lines raised ENOTTY and killed the sensors node — now caught.
+> **`bno085_sim_dvl`** is the sim twin of the pool's `bno085_dvl` (BNO heading +
+> Gazebo DVL position) — measured turn 177.8°, forward 1.02/1.00 m, lateral
+> 0.82/0.80 m. `duburi_sim stack` now takes `key:=value` passthrough; launching
+> `stack.launch.py` by hand skips its kill of prior stacks, and **two managers on
+> 14550 look exactly like a broken sensor**.
+> [`sim/.context/BNO085.md`](sim/.context/BNO085.md).
+>
 > **FAULTS CAN BE INJECTED NOW** — DVL dropout, camera loss, MAVLink loss,
 > battery sag and a dead thruster. Every one of those recovery paths existed in
 > the code and had **never run in sim**. Arm with a duration, which self-clears:

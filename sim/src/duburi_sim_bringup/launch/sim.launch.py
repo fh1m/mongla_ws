@@ -159,6 +159,10 @@ def generate_launch_description():
                         'with it off, nothing in the fault path touches the '
                         'link the whole session depends on.'),
         DeclareLaunchArgument(
+            'bno085', default_value='true',
+            description='Virtual BNO085 board on a PTY, so yaw_source:=bno085 '
+                        'and bno085_dvl work in sim.'),
+        DeclareLaunchArgument(
             'payload', default_value='true',
             description='Virtual payload board on a PTY, so fire() and the '
                         'mid-hold align(fire=...) shot run in simulation.'),
@@ -362,6 +366,18 @@ def generate_launch_description():
         output='screen',
     )
 
+    # Virtual BNO085. Always on: it costs one 50 Hz PTY writer, and with it
+    # absent `yaw_source:=bno085` -- what the vehicle actually flies -- cannot
+    # be run in sim at all.
+    bno = Node(
+        package='duburi_sim_bridge',
+        executable='bno085_sim',
+        name='bno085_sim',
+        parameters=[{'vehicle': vehicle_name}],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('bno085')),
+    )
+
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -389,6 +405,7 @@ def generate_launch_description():
             current,
             payload,
             faults,
+            bno,
             bridge,
             wait,
             # Everything that talks to the FDM socket starts only once Gazebo has

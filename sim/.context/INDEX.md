@@ -82,6 +82,8 @@ duburi_sim stop → duburi_sim sim → duburi_sim stack --no-vision → duburi_s
 | `duburi_sim_scenarios` | Runtime prop spawn/move/delete |
 | `duburi_sim_web` | FastAPI + React operator lab |
 
+- [`BNO085.md`](BNO085.md) — virtual BNO085 board, so `yaw_source:=bno085`
+  (what the vehicle flies) runs in sim; datasheet-grounded drift.
 - [`FAULTS.md`](FAULTS.md) — inject a DVL dropout, camera loss, MAVLink
   loss, battery sag or a dead thruster, so the recovery paths run.
 - [`PAYLOAD.md`](PAYLOAD.md) — virtual payload board: `fire()` and the
