@@ -58,8 +58,14 @@ SCENE_DEFAULTS = {
     "fog_end": 22.0,
     "fog_density": 0.028,
     "shadows": True,
-    # plane | gerstner | none  -- see WATER_SURFACES below.
-    "water_surface": "plane",
+    # plane | gerstner | none -- see WATER_SURFACES below.
+    #
+    # DEFAULT gerstner. The animated surface is verified to render in camera
+    # SENSOR frames, not just the GUI, so every course gets it and a course
+    # opts out rather than opting in. Courses were previously defaulting to the
+    # static plane and only task_navigation asked for waves, which is why every
+    # other course looked like it had no water at all.
+    "water_surface": "gerstner",
 }
 
 # How the water surface at z = 0 is drawn.
@@ -233,10 +239,41 @@ def build_props(course: dict, spec: dict, pool_cfg: dict):
         if "z" in entry:
             z = entry["z"]
         else:
-            z = floor_z if meta["anchor"] == pl.ANCHOR_FLOOR else 0.0
+            # Floor-anchored props sit on the floor AT THEIR OWN x, not at a
+            # single pool depth. SAUVC's floor is a shallow V (1.6 m centre,
+            # 1.2 m ends), so a drum in the target zone placed at a flat -1.6 m
+            # would hang 0.34 m in the water with nothing under it. Flat pools
+            # return the same number everywhere, so nothing else changes.
+            pitch = 0.0
+            if meta["anchor"] == pl.ANCHOR_FLOOR:
+                z = -pl.floor_depth_at(pool_cfg, x)
+                # Tilt with the floor. Anything resting on a slope is tilted by
+                # it; for the flat decals that is the difference between lying
+                # on the floor and having one edge buried in it.
+                pitch = pl.floor_pitch_at(pool_cfg, x)
+            else:
+                z = 0.0
             z += entry.get("z_offset", 0.0)
 
-        blocks.append(_include(model_name, name, f"{x:.6g} {y:.6g} {z:.6g} 0 0 {yaw:.6g}"))
+        # DECOMPOSE the world tilt into the prop's OWN roll and pitch.
+        #
+        # SDF composes rpy as Rz(yaw)·Ry(pitch)·Rx(roll), so roll and pitch are
+        # about the prop's axes AFTER yaw. Putting the whole tilt in `pitch`
+        # therefore tilts it about the wrong axis as soon as yaw is non-zero --
+        # the target mat is yawed 90 degrees, so its "pitch" tips it along the
+        # pool's y, where the floor is flat, and leaves the across-grade
+        # direction untilted. Silent, and exactly the failure the tilt was
+        # added to fix.
+        #
+        # A small world tilt about +y decomposes into the yawed frame as
+        # roll = tilt·sin(yaw), pitch = tilt·cos(yaw). Verified against
+        # measured link poses in Gazebo, not just derived.
+        roll = pitch * math.sin(yaw)
+        prop_pitch = pitch * math.cos(yaw)
+        blocks.append(_include(
+            model_name, name,
+            f"{x:.6g} {y:.6g} {z:.6g} "
+            f"{roll:.6g} {prop_pitch:.6g} {yaw:.6g}"))
         if meta["dynamic"]:
             dynamic.append(name)
 

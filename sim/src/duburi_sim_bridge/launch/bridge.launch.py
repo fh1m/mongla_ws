@@ -22,6 +22,8 @@ BOTTOM_IMAGE = '/duburi/sim/bottom_camera/image_raw'
 FRONT_INFO = '/duburi/sim/front_camera/camera_info'
 BOTTOM_INFO = '/duburi/sim/bottom_camera/camera_info'
 GROUND_TRUTH = '/duburi/sim/ground_truth'
+FRONT_BOXES = '/duburi/sim/front_camera/boxes'
+BOTTOM_BOXES = '/duburi/sim/bottom_camera/boxes'
 
 
 def _underwater_fx(context, fx_defaults):
@@ -105,11 +107,21 @@ def generate_launch_description():
                 'gz.msgs.CameraInfo',
                 odom_spec,
                 '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
+                # Ground-truth 2D boxes for dataset labelling. ros_gz_bridge
+                # ships this conversion compiled in (Detection2DArray <-
+                # gz.msgs.AnnotatedAxisAligned2DBox_V), unlike the DVL below
+                # which has none and needs a node of its own.
+                '/front_boxes@vision_msgs/msg/Detection2DArray['
+                'gz.msgs.AnnotatedAxisAligned2DBox_V',
+                '/bottom_boxes@vision_msgs/msg/Detection2DArray['
+                'gz.msgs.AnnotatedAxisAligned2DBox_V',
             ],
             remappings=[
                 ('/front_camera/camera_info', FRONT_INFO),
                 ('/bottom_camera/camera_info', BOTTOM_INFO),
                 (odom_gz_topic, GROUND_TRUTH),
+                ('/front_boxes', FRONT_BOXES),
+                ('/bottom_boxes', BOTTOM_BOXES),
             ],
             output='screen',
         ),

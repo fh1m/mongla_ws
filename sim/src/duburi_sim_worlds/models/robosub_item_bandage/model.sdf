@@ -2,15 +2,18 @@
 <sdf version="1.9">
   <model name="robosub_item_bandage">
     <static>false</static>
+    <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
+      <label>24</label>
+    </plugin>
     <link name="body">
       <pose>0 0 0.015 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.15</mass>
+        <mass>0.243432</mass>
         <inertia>
-          <ixx>9.945e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>9.945e-05</iyy><iyz>0</iyz>
-          <izz>0.0001764</izz>
+          <ixx>0.000161395</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000161395</iyy><iyz>0</iyz>
+          <izz>0.000286276</izz>
         </inertia>
       </inertial>
       <visual name="body_visual">

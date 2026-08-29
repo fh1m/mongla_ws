@@ -131,8 +131,8 @@ Deliberately clearer water than the final course: this task is flown looking DOW
     <!-- Water surface at z = 0, floor at z = -1.6. -->
     <model name="sauvc_pool">
       <static>true</static>
-      <link name="floor">
-        <pose>0 0 -1.6 0 0 0</pose>
+      <link name="floor_neg">
+        <pose>-6.25 0 -1.4 0 0.0319891 0</pose>
         <inertial>
           <pose>0 0 0 0 0 0</pose>
           <mass>1000</mass>
@@ -142,9 +142,9 @@ Deliberately clearer water than the final course: this task is flown looking DOW
             <izz>1000</izz>
           </inertia>
         </inertial>
-        <visual name="floor_visual">
+        <visual name="floor_neg_visual">
           <pose>0 0 0.005 0 0 0</pose>
-          <geometry><box><size>25 16 0.01</size></box></geometry>
+          <geometry><box><size>12.5064 16 0.01</size></box></geometry>
           <material>
             <ambient>0.55 0.55 0.55 1</ambient>
             <diffuse>0.55 0.55 0.55 1</diffuse>
@@ -152,16 +152,49 @@ Deliberately clearer water than the final course: this task is flown looking DOW
             <emissive>0 0 0 1</emissive>
             <pbr>
               <metal>
-                <albedo_map>model://sauvc_textures/pool_floor.png</albedo_map>
+                <albedo_map>model://sauvc_textures/pool_floor_neg.png</albedo_map>
                 <metalness>0.0</metalness>
                 <roughness>0.85</roughness>
               </metal>
             </pbr>
           </material>
         </visual>
-        <collision name="floor_collision">
+        <collision name="floor_neg_collision">
           <pose>0 0 -0.05 0 0 0</pose>
-          <geometry><box><size>25 16 0.1</size></box></geometry>
+          <geometry><box><size>12.5064 16 0.1</size></box></geometry>
+        </collision>
+      </link>
+      <link name="floor_pos">
+        <pose>6.25 0 -1.4 0 -0.0319891 0</pose>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1000</mass>
+          <inertia>
+            <ixx>1000</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1000</iyy><iyz>0</iyz>
+            <izz>1000</izz>
+          </inertia>
+        </inertial>
+        <visual name="floor_pos_visual">
+          <pose>0 0 0.005 0 0 0</pose>
+          <geometry><box><size>12.5064 16 0.01</size></box></geometry>
+          <material>
+            <ambient>0.55 0.55 0.55 1</ambient>
+            <diffuse>0.55 0.55 0.55 1</diffuse>
+            <specular>0.08 0.08 0.08 1</specular>
+            <emissive>0 0 0 1</emissive>
+            <pbr>
+              <metal>
+                <albedo_map>model://sauvc_textures/pool_floor_pos.png</albedo_map>
+                <metalness>0.0</metalness>
+                <roughness>0.85</roughness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+        <collision name="floor_pos_collision">
+          <pose>0 0 -0.05 0 0 0</pose>
+          <geometry><box><size>12.5064 16 0.1</size></box></geometry>
         </collision>
       </link>
       <link name="wall_x_pos">
@@ -296,68 +329,43 @@ Deliberately clearer water than the final course: this task is flown looking DOW
           <geometry><box><size>25 0.2 1.6</size></box></geometry>
         </collision>
       </link>
-      <link name="water_surface">
-        <pose>0 0 0 0 0 0</pose>
-        <inertial>
-          <pose>0 0 0 0 0 0</pose>
-          <mass>1</mass>
-          <inertia>
-            <ixx>1</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>1</iyy><iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-        </inertial>
-        <visual name="water_surface_visual">
-          <pose>0 0 0 0 0 0</pose>
-          <cast_shadows>false</cast_shadows>
-          <transparency>0.62</transparency>
-          <geometry><box><size>25 16 0.01</size></box></geometry>
-          <material>
-            <ambient>0.95 0.95 0.95 1</ambient>
-            <diffuse>0.95 0.95 0.95 1</diffuse>
-            <specular>0.35 0.35 0.35 1</specular>
-            <emissive>0.22 0.22 0.22 1</emissive>
-            <pbr>
-              <metal>
-                <albedo_map>model://sauvc_textures/water_surface.png</albedo_map>
-                <metalness>0.0</metalness>
-                <roughness>0.15</roughness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-      </link>
     </model>
 
     <!-- ===================== PROPS ===================== -->
     <include>
       <uri>model://sauvc_target_mat</uri>
       <name>target_mat</name>
-      <pose>9 0 -1.6 0 0 1.5708</pose>
+      <pose>9 0 -1.312 -0.0319891 1.17502e-07 1.5708</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_a</name>
-      <pose>9 2.4 -1.6 0 0 0</pose>
+      <pose>9 2.4 -1.312 -0 -0.0319891 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_blue</uri>
       <name>drum_b</name>
-      <pose>9 0.8 -1.6 0 0 0</pose>
+      <pose>9 0.8 -1.312 -0 -0.0319891 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red_pinger</uri>
       <name>drum_c</name>
-      <pose>9 -0.8 -1.6 0 0 0</pose>
+      <pose>9 -0.8 -1.312 -0 -0.0319891 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_drum_red</uri>
       <name>drum_d</name>
-      <pose>9 -2.4 -1.6 0 0 0</pose>
+      <pose>9 -2.4 -1.312 -0 -0.0319891 0</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/waves</uri>
+      <name>water_surface</name>
+      <pose>0 0 0 0 0 0</pose>
     </include>
 
     <!-- ===================== VEHICLE ===================== -->

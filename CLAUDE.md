@@ -260,6 +260,20 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > **`bin_fire_blood.pt` has NO `bin` class** — embedded names are
 > `{0: blood, 1: fire}`. Asking for `classes:=bin` detects nothing, silently.
 >
+> **Sim vision + datasets: one page has every combination** —
+> [`sim/.context/VISION_AND_DATASETS.md`](sim/.context/VISION_AND_DATASETS.md):
+> all 13 courses, how to author a new course or prop, single/dual camera ×
+> single/multi model, Gazebo bounding-box labelling (occlusion-correct, free)
+> vs hand labelling, OpenCV, and running full missions. **Ground-truth labels
+> now come from Gazebo's `boundingbox_camera`**, not a geometric projector —
+> `prop_library.DETECTION_CLASSES` is both the YOLO class index and the Gazebo
+> semantic label, and a prop missing from it is **invisible** to the sensor.
+> Measured cost: none (12.83 Hz vs a 12.75 Hz baseline).
+>
+> **The SAUVC floor SLOPES** — 1.6 m centre, 1.2 m ends. Props sit on the floor
+> at their own x and are pitched to match it; a flat −1.6 m left target-zone
+> drums 0.34 m in the air.
+>
 > **TWO COMPETITIONS now.** `spec/arena.yaml` split into `spec/sauvc.yaml` +
 > `spec/robosub.yaml`; a course picks one with `competition: robosub`. RoboSub's
 > pool is **2.1 m** deep vs SAUVC's 1.6 m, which is why this needed a refactor and

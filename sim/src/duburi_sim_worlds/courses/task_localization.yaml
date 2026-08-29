@@ -27,12 +27,16 @@ vehicle:
   yaw: 0.0
 
 props:
+  # SCATTERED, not in a row -- "these flares could be located anywhere within"
+  # the zone. Same three points as sauvc26_final so a drill here transfers.
+  # A row is the one arrangement that makes the task trivial: find one and the
+  # other two are a fixed offset away.
   - model: sauvc_flare_red
     name: flare_red
-    xy: [-1.0, 3.0]
+    xy: [0.8, 3.1]
   - model: sauvc_flare_yellow
     name: flare_yellow
-    xy: [2.5, -1.5]
+    xy: [-0.8, -3.4]
   - model: sauvc_flare_blue
     name: flare_blue
-    xy: [6.0, 2.0]
+    xy: [-2.0, 2.2]

@@ -2,6 +2,9 @@
 <sdf version="1.9">
   <model name="robosub_octagon">
     <static>true</static>
+    <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
+      <label>17</label>
+    </plugin>
     <link name="side_0">
       <pose>1.24724 0 0 0 1.5708 1.5708</pose>
       <inertial>
@@ -211,7 +214,7 @@
       </collision>
     </link>
     <link name="role_sign_0">
-      <pose>1.14724 0 -0.35 0 0 0</pose>
+      <pose>1.14724 0 -0.35 0 0 3.14159</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
@@ -225,15 +228,22 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.004 0.305 0.305</size></box></geometry>
         <material>
-          <ambient>0.85 0.42 0.12 1</ambient>
-          <diffuse>0.85 0.42 0.12 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2125 0.105 0.03 1</emissive>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.06 0.06 0.06 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/role_hammer_pick.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.55</roughness>
+            </metal>
+          </pbr>
         </material>
       </visual>
     </link>
     <link name="role_sign_1">
-      <pose>-1.14724 1.40496e-16 -0.35 0 0 3.14159</pose>
+      <pose>-1.14724 1.40496e-16 -0.35 0 0 6.28319</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
@@ -247,10 +257,17 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.004 0.305 0.305</size></box></geometry>
         <material>
-          <ambient>0.16 0.44 0.78 1</ambient>
-          <diffuse>0.16 0.44 0.78 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.04 0.11 0.195 1</emissive>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.06 0.06 0.06 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/role_ring_buoy.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.55</roughness>
+            </metal>
+          </pbr>
         </material>
       </visual>
     </link>

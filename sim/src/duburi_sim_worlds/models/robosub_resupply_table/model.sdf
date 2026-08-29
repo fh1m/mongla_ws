@@ -2,6 +2,9 @@
 <sdf version="1.9">
   <model name="robosub_resupply_table">
     <static>true</static>
+    <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
+      <label>18</label>
+    </plugin>
     <link name="top">
       <pose>0 0 0.5 0 0 0</pose>
       <inertial>
@@ -28,8 +31,112 @@
         <geometry><box><size>0.6 0.6 0.02</size></box></geometry>
       </collision>
     </link>
+    <link name="rim_xp">
+      <pose>0.2895 0 0.52 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.006015</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>2.235e-05</iyy><iyz>0</iyz>
+          <izz>0.00600735</izz>
+        </inertia>
+      </inertial>
+      <visual name="rim_xp_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.021 0.6 0.03</size></box></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="rim_xp_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.021 0.6 0.03</size></box></geometry>
+      </collision>
+    </link>
+    <link name="rim_xn">
+      <pose>-0.2895 0 0.52 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>0.006015</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>2.235e-05</iyy><iyz>0</iyz>
+          <izz>0.00600735</izz>
+        </inertia>
+      </inertial>
+      <visual name="rim_xn_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.021 0.6 0.03</size></box></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="rim_xn_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.021 0.6 0.03</size></box></geometry>
+      </collision>
+    </link>
+    <link name="rim_yp">
+      <pose>0 0.2895 0.52 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>2.235e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.006015</iyy><iyz>0</iyz>
+          <izz>0.00600735</izz>
+        </inertia>
+      </inertial>
+      <visual name="rim_yp_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.6 0.021 0.03</size></box></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="rim_yp_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.6 0.021 0.03</size></box></geometry>
+      </collision>
+    </link>
+    <link name="rim_yn">
+      <pose>0 -0.2895 0.52 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>2.235e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.006015</iyy><iyz>0</iyz>
+          <izz>0.00600735</izz>
+        </inertia>
+      </inertial>
+      <visual name="rim_yn_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.6 0.021 0.03</size></box></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="rim_yn_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.6 0.021 0.03</size></box></geometry>
+      </collision>
+    </link>
     <link name="leg_0">
-      <pose>0.272727 0.272727 0.25 0 0 0</pose>
+      <pose>0.2895 0.2895 0.25 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -55,7 +162,7 @@
       </collision>
     </link>
     <link name="leg_1">
-      <pose>0.272727 -0.272727 0.25 0 0 0</pose>
+      <pose>0.2895 -0.2895 0.25 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -81,7 +188,7 @@
       </collision>
     </link>
     <link name="leg_2">
-      <pose>-0.272727 0.272727 0.25 0 0 0</pose>
+      <pose>-0.2895 0.2895 0.25 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -107,7 +214,7 @@
       </collision>
     </link>
     <link name="leg_3">
-      <pose>-0.272727 -0.272727 0.25 0 0 0</pose>
+      <pose>-0.2895 -0.2895 0.25 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -130,6 +237,58 @@
       <collision name="leg_3_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.0105</radius><length>0.5</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="foot_yp">
+      <pose>0 0.2895 0.03 0 1.5708 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.012011</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.012011</iyy><iyz>0</iyz>
+          <izz>2.205e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="foot_yp_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.6</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="foot_yp_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.6</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="foot_yn">
+      <pose>0 -0.2895 0.03 0 1.5708 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.012011</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.012011</iyy><iyz>0</iyz>
+          <izz>2.205e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="foot_yn_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.6</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="foot_yn_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.6</length></cylinder></geometry>
       </collision>
     </link>
   </model>

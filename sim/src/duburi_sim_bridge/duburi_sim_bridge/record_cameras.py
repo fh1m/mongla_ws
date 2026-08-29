@@ -37,19 +37,21 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
+from vision_msgs.msg import Detection2DArray
 
 from duburi_sim_bridge.paths import sim_ws_root
 from duburi_sim_bridge.underwater_fx import apply_underwater_fx
-from duburi_sim_bridge.gt_labels import (
+from duburi_sim_bridge.box_labels import (
     CLASSES,
+    boxes_to_yolo,
     format_yolo_line,
-    load_course_props,
-    project_props_yolo,
     write_classes_file,
 )
 
 FRONT_RAW = '/duburi/sim/front_camera/image_raw'
 BOTTOM_RAW = '/duburi/sim/bottom_camera/image_raw'
+FRONT_BOXES = '/duburi/sim/front_camera/boxes'
+BOTTOM_BOXES = '/duburi/sim/bottom_camera/boxes'
 FRONT_FX = '/duburi/sim/front_camera/image_fx'
 BOTTOM_FX = '/duburi/sim/bottom_camera/image_fx'
 FRONT_INFO = '/duburi/sim/front_camera/camera_info'
@@ -194,16 +196,19 @@ class CameraRecorder(Node):
         self._disk_thread = threading.Thread(target=self._disk_worker, daemon=True)
         self._disk_thread.start()
 
-        self._props = []
+        # Labels come from Gazebo's boundingbox_camera, not from projecting
+        # prop AABBs ourselves. The GPU already knows what is visible, so the
+        # boxes are occlusion- and truncation-correct for free -- the projector
+        # gave a hidden crate a full box, and it had no idea a prop was behind
+        # another one. It also means the course YAML is no longer consulted:
+        # anything spawned at RUNTIME is labelled too, which the projector
+        # could never do.
+        self._boxes = {c: None for c in cameras}
         if write_labels:
-            path = _course_yaml(course)
-            if path.is_file():
-                self._props = load_course_props(path)
-                write_classes_file(out_dir / 'classes.txt')
-                self.get_logger().info(f'GT labels from {path} ({len(self._props)} props)')
-            else:
-                self.get_logger().warn(f'course yaml missing: {path}; labels disabled')
-                self._write_labels = False
+            write_classes_file(out_dir / 'classes.txt')
+            self.get_logger().info(
+                f'GT labels from Gazebo bounding-box cameras '
+                f'({len(CLASSES)} classes)')
 
         for cam in cameras:
             if dump_frames:
@@ -231,6 +236,11 @@ class CameraRecorder(Node):
             self.create_subscription(
                 Image, self._topics[cam], lambda m, c=cam: self._on_image(c, m), _REC_QOS
             )
+            if self._write_labels:
+                self.create_subscription(
+                    Detection2DArray,
+                    FRONT_BOXES if cam == 'front' else BOTTOM_BOXES,
+                    lambda m, c=cam: self._on_boxes(c, m), _REC_QOS)
             info_topic = FRONT_INFO if cam == 'front' else BOTTOM_INFO
             self.create_subscription(
                 CameraInfo, info_topic, lambda m, c=cam: self._on_info(c, m), _REC_QOS
@@ -282,17 +292,20 @@ class CameraRecorder(Node):
     def _on_info(self, cam: str, msg: CameraInfo) -> None:
         self._info[cam] = msg
 
+    def _on_boxes(self, cam: str, msg) -> None:
+        with self._lock:
+            self._boxes[cam] = msg
+
     def _label_rows(self, cam: str, w: int, h: int):
-        if not self._write_labels or self._pose is None:
+        if not self._write_labels:
             return []
-        info = self._info.get(cam)
-        if info is not None and len(info.k) >= 9:
-            fx, fy, cx, cy = info.k[0], info.k[4], info.k[2], info.k[5]
-        else:
-            fx = fy = w / (2 * np.tan(1.396 / 2))
-            cx, cy = w / 2.0, h / 2.0
-        xyz, quat = self._pose
-        return project_props_yolo(self._props, xyz, quat, cam, w, h, fx, fy, cx, cy)
+        with self._lock:
+            msg = self._boxes.get(cam)
+        # No boxes yet is NOT the same as no props visible: an empty label file
+        # is a legitimate negative and a missing one is a broken frame, so a
+        # frame recorded before the first box message must still be a real
+        # empty rather than a silently absent label.
+        return boxes_to_yolo(msg, w, h) if msg is not None else []
 
     def _on_image(self, name: str, msg: Image) -> None:
         if self._stop:

@@ -402,3 +402,53 @@ def test_a_world_is_generated_against_its_own_competition():
             f'model://{comp}_textures'}
         for wrong in others:
             assert wrong not in w, f'{world.name} references {wrong}'
+
+
+def test_lab_pool_profile_matches_the_arena_specs():
+    """The lab's altitude readout duplicates the pool geometry in JS.
+
+    App.jsx has no route to spec/*.yaml, so it carries its own copy of each
+    pool's length/depth/edge-depth to turn ground-truth z into an altitude. An
+    operator reads that number to decide whether the vehicle is about to
+    ground, and a stale copy is wrong by up to the full slope -- 0.4 m at
+    SAUVC's ends. Nothing but this test keeps the two in step.
+    """
+    import re
+
+    pl = _prop_library()
+    js = (SIM / 'src/duburi_sim_web/frontend/src/App.jsx').read_text()
+    block = re.search(r'const POOL_PROFILE = \{(.*?)\n\}', js, re.S)
+    assert block, 'POOL_PROFILE missing from App.jsx'
+
+    for comp in ('sauvc', 'robosub'):
+        row = re.search(
+            comp + r':\s*\{\s*length:\s*([\d.]+),\s*depth:\s*([\d.]+),\s*'
+            r'edge:\s*([\d.]+|null)', block.group(1))
+        assert row, f'{comp} missing from POOL_PROFILE'
+        pool = pl.load_spec(competition=comp)['pool']
+        assert float(row.group(1)) == pytest.approx(pool['length'])
+        assert float(row.group(2)) == pytest.approx(pool['depth'])
+        edge = pool.get('floor_edge_depth')
+        if row.group(3) == 'null':
+            assert not edge, f'{comp} slopes in the spec but is flat in the lab'
+        else:
+            assert float(row.group(3)) == pytest.approx(edge)
+
+
+def test_floor_anchored_props_sit_on_the_sloped_floor():
+    """A flat -depth placement leaves props hanging over a sloped floor.
+
+    SAUVC's target zone is 2 m from the far wall where the floor has risen to
+    1.26 m; a drum placed at a flat -1.6 m floats 0.34 m with nothing under it.
+    """
+    import re
+
+    pl = _prop_library()
+    pool = pl.load_spec(competition='sauvc')['pool']
+    world = (SIM / 'src/duburi_sim_worlds/worlds/sauvc26_final.world').read_text()
+    for name in ('drum_blue', 'orange_flare', 'gate'):
+        m = re.search(rf'<name>{name}</name>\s*<pose>(\S+) (\S+) (\S+)', world)
+        assert m, name
+        x, z = float(m.group(1)), float(m.group(3))
+        assert z == pytest.approx(-pl.floor_depth_at(pool, x), abs=1e-3), (
+            f'{name} at x={x} sits at {z}, not on the floor')

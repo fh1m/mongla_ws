@@ -55,19 +55,11 @@ props:
     xy: [3.4, 0.0]
     yaw: 0.0
 
-  # Task 3 -- Recon. Four bins, both roles present.
-  - model: robosub_bin_survey_repair
-    name: bin_sr_a
-    xy: [5.0, 0.6]
-  - model: robosub_bin_search_rescue
-    name: bin_rescue_a
-    xy: [5.0, -0.6]
-  - model: robosub_bin_survey_repair
-    name: bin_sr_b
-    xy: [5.9, 0.6]
-  - model: robosub_bin_search_rescue
-    name: bin_rescue_b
-    xy: [5.9, -0.6]
+  # Task 3 -- Recon. One pipeline carrying all four crates.
+  - model: robosub_bins
+    name: bins
+    xy: [5.5, 0.0]
+
 
   # Task 4 -- Deploy. Board plus its pinger; "the pinger is located very close
   # to the task (sometimes next to, sometimes in the center)".

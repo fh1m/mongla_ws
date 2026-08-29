@@ -2,72 +2,23 @@
 <sdf version="1.9">
   <model name="robosub_gate">
     <static>true</static>
-    <link name="post_port">
-      <pose>0 -1.5 0.75 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>4</mass>
-        <inertia>
-          <ixx>0.750177</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.750177</iyy><iyz>0</iyz>
-          <izz>0.00035378</izz>
-        </inertia>
-      </inertial>
-      <visual name="post_port_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>1.5</length></cylinder></geometry>
-        <material>
-          <ambient>0.92 0.92 0.92 1</ambient>
-          <diffuse>0.92 0.92 0.92 1</diffuse>
-          <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2576 0.2576 0.2576 1</emissive>
-        </material>
-      </visual>
-      <collision name="post_port_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>1.5</length></cylinder></geometry>
-      </collision>
-    </link>
-    <link name="post_stbd">
-      <pose>0 1.5 0.75 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>4</mass>
-        <inertia>
-          <ixx>0.750177</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.750177</iyy><iyz>0</iyz>
-          <izz>0.00035378</izz>
-        </inertia>
-      </inertial>
-      <visual name="post_stbd_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>1.5</length></cylinder></geometry>
-        <material>
-          <ambient>0.92 0.92 0.92 1</ambient>
-          <diffuse>0.92 0.92 0.92 1</diffuse>
-          <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2576 0.2576 0.2576 1</emissive>
-        </material>
-      </visual>
-      <collision name="post_stbd_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>1.5</length></cylinder></geometry>
-      </collision>
-    </link>
+    <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
+      <label>12</label>
+    </plugin>
     <link name="top_bar">
       <pose>0 0 1.5 1.5708 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>5</mass>
         <inertia>
-          <ixx>3.75022</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.75022</iyy><iyz>0</iyz>
-          <izz>0.000442225</izz>
+          <ixx>3.75035</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.75035</iyy><iyz>0</iyz>
+          <izz>0.000697225</izz>
         </inertia>
       </inertial>
       <visual name="top_bar_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>3</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0167</radius><length>3</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -77,116 +28,226 @@
       </visual>
       <collision name="top_bar_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>3</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0167</radius><length>3</length></cylinder></geometry>
       </collision>
     </link>
-    <link name="panel_left_top">
-      <pose>0 -0.75 1.125 0 0 0</pose>
+    <link name="post_port">
+      <pose>0 -1.5 0.75 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1</mass>
+        <mass>4</mass>
         <inertia>
-          <ixx>0.234375</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.0473563</iyy><iyz>0</iyz>
-          <izz>0.187981</izz>
+          <ixx>0.750279</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.750279</iyy><iyz>0</iyz>
+          <izz>0.00055778</izz>
         </inertia>
       </inertial>
-      <visual name="panel_left_top_visual">
+      <visual name="post_port_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.076 1.5 0.75</size></box></geometry>
+        <geometry><cylinder><radius>0.0167</radius><length>1.5</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="post_port_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0167</radius><length>1.5</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="band_port_upper">
+      <pose>0 -1.5 1.0428 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.0124306</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0124306</iyy><iyz>0</iyz>
+          <izz>8.71531e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="band_port_upper_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.020875</radius><length>0.6096</length></cylinder></geometry>
         <material>
           <ambient>0.07 0.07 0.08 1</ambient>
           <diffuse>0.07 0.07 0.08 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.0175 0.0175 0.02 1</emissive>
+          <emissive>0.0154 0.0154 0.0176 1</emissive>
         </material>
       </visual>
     </link>
-    <link name="panel_left_bottom">
-      <pose>0 -0.75 0.375 0 0 0</pose>
+    <link name="band_port_lower">
+      <pose>0 -1.5 0.4332 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1</mass>
+        <mass>0.4</mass>
         <inertia>
-          <ixx>0.234375</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.0473563</iyy><iyz>0</iyz>
-          <izz>0.187981</izz>
+          <ixx>0.0124306</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0124306</iyy><iyz>0</iyz>
+          <izz>8.71531e-05</izz>
         </inertia>
       </inertial>
-      <visual name="panel_left_bottom_visual">
+      <visual name="band_port_lower_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.076 1.5 0.75</size></box></geometry>
+        <geometry><cylinder><radius>0.020875</radius><length>0.6096</length></cylinder></geometry>
         <material>
           <ambient>0.72 0.11 0.13 1</ambient>
           <diffuse>0.72 0.11 0.13 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.18 0.0275 0.0325 1</emissive>
+          <emissive>0.1584 0.0242 0.0286 1</emissive>
         </material>
       </visual>
     </link>
-    <link name="panel_right_top">
-      <pose>0 0.75 1.125 0 0 0</pose>
+    <link name="post_stbd">
+      <pose>0 1.5 0.75 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1</mass>
+        <mass>4</mass>
         <inertia>
-          <ixx>0.234375</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.0473563</iyy><iyz>0</iyz>
-          <izz>0.187981</izz>
+          <ixx>0.750279</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.750279</iyy><iyz>0</iyz>
+          <izz>0.00055778</izz>
         </inertia>
       </inertial>
-      <visual name="panel_right_top_visual">
+      <visual name="post_stbd_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.076 1.5 0.75</size></box></geometry>
+        <geometry><cylinder><radius>0.0167</radius><length>1.5</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="post_stbd_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0167</radius><length>1.5</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="band_stbd_upper">
+      <pose>0 1.5 1.0428 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.0124306</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0124306</iyy><iyz>0</iyz>
+          <izz>8.71531e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="band_stbd_upper_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.020875</radius><length>0.6096</length></cylinder></geometry>
         <material>
           <ambient>0.72 0.11 0.13 1</ambient>
           <diffuse>0.72 0.11 0.13 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.18 0.0275 0.0325 1</emissive>
+          <emissive>0.1584 0.0242 0.0286 1</emissive>
         </material>
       </visual>
     </link>
-    <link name="panel_right_bottom">
-      <pose>0 0.75 0.375 0 0 0</pose>
+    <link name="band_stbd_lower">
+      <pose>0 1.5 0.4332 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1</mass>
+        <mass>0.4</mass>
         <inertia>
-          <ixx>0.234375</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.0473563</iyy><iyz>0</iyz>
-          <izz>0.187981</izz>
+          <ixx>0.0124306</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0124306</iyy><iyz>0</iyz>
+          <izz>8.71531e-05</izz>
         </inertia>
       </inertial>
-      <visual name="panel_right_bottom_visual">
+      <visual name="band_stbd_lower_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.076 1.5 0.75</size></box></geometry>
+        <geometry><cylinder><radius>0.020875</radius><length>0.6096</length></cylinder></geometry>
         <material>
           <ambient>0.07 0.07 0.08 1</ambient>
           <diffuse>0.07 0.07 0.08 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.0175 0.0175 0.02 1</emissive>
+          <emissive>0.0154 0.0154 0.0176 1</emissive>
         </material>
       </visual>
     </link>
     <link name="divider">
-      <pose>0 0 1.195 0 0 0</pose>
+      <pose>0 0 1.1952 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
         <inertia>
-          <ixx>0.0155208</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.0156125</iyy><iyz>0</iyz>
-          <izz>0.000125042</izz>
+          <ixx>0.0155914</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0155914</iyy><iyz>0</iyz>
+          <izz>0.000215053</izz>
         </inertia>
       </inertial>
       <visual name="divider_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.051 0.02 0.61</size></box></geometry>
+        <geometry><box><size>0.0508 0.0508 0.6096</size></box></geometry>
         <material>
           <ambient>0.72 0.11 0.13 1</ambient>
           <diffuse>0.72 0.11 0.13 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.18 0.0275 0.0325 1</emissive>
+          <emissive>0.1584 0.0242 0.0286 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="sign_survey_repair">
+      <pose>0 -0.66 1.1951 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000775208</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000387671</iyy><iyz>0</iyz>
+          <izz>0.000387671</izz>
+        </inertia>
+      </inertial>
+      <visual name="sign_survey_repair_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.305 0.305</size></box></geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.06 0.06 0.06 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/role_compass.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.55</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+    <link name="sign_search_rescue">
+      <pose>0 0.66 1.1951 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000775208</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000387671</iyy><iyz>0</iyz>
+          <izz>0.000387671</izz>
+        </inertia>
+      </inertial>
+      <visual name="sign_search_rescue_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.305 0.305</size></box></geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.06 0.06 0.06 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/role_sos.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.55</roughness>
+            </metal>
+          </pbr>
         </material>
       </visual>
     </link>

@@ -42,6 +42,7 @@ duburi_sim stop → duburi_sim sim → duburi_sim stack --no-vision → duburi_s
 | [CONTRACT.md](CONTRACT.md) | Autonomy integrators | Topics / ports / sizes that must not drift |
 | [INTEGRATION_DUBURI_WS.md](INTEGRATION_DUBURI_WS.md) | `duburi_ws` devs | `srot` vs `main`, pixhawk, vision remap |
 | [LAB_API.md](LAB_API.md) | Lab / UI | FastAPI routes, World restart semantics |
+| [VISION_AND_DATASETS.md](VISION_AND_DATASETS.md) | **Vision / data** | **★ Every camera/model combination, all 13 courses, making new courses+props, Gazebo-labelled and hand-labelled datasets, OpenCV, running missions** |
 | [ROBOSUB_AND_ACOUSTICS.md](ROBOSUB_AND_ACOUSTICS.md) | **Competitions** | **★ RoboSub 2026 props/courses, the two-competition arena spec, and the hydrophone both competitions need** |
 | [SIM_VISION_TRAINING.md](SIM_VISION_TRAINING.md) | **Vision / data** | **★ Terminal by terminal: sim -> vision pipeline -> auto-labelled dataset -> trained sim-native model -> vision verbs back in sim** |
 | [DATASETS.md](DATASETS.md) | Vision / data | `record_cameras`, meta.json, YOLO labels |

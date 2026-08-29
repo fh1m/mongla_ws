@@ -79,6 +79,156 @@ Neither produced an error. Render a frame of every new prop.
 
 ---
 
+## The props, corrected (2026-08-29)
+
+The first pass was built from the handbook's *prose* and several props came out
+wrong. Corrected against the CAD figures:
+
+| Prop | First attempt | Corrected |
+|---|---|---|
+| Gate | two solid red/black panels filling the frame | a **pass-through PVC frame** — 3.048 m bar, 1.524 m legs in 609.6 mm bands, red divider, two role signs |
+| Bins | 4 loose crates on the floor, image lying inside | **one prop**: a raised PVC pipeline with 4 crates hanging off it, 0.335 m square (CleverMade 25 L), role panels standing on posts |
+| Torpedo | H-frame, 0.53 × 0.25 m, two square gaps | a 0.6 m **printed board on legs**, four **red circular** openings, all four role images |
+| Path markers | decals flat on the floor | two 457 mm segments on **PVC T-stands**, 0.3 m off the bottom |
+| Slalom | white/red/white pipes | unchanged — this one was right |
+
+### Role imagery is the real emoji
+
+`gen_pool_texture.make_role_image` renders the **actual glyphs** RoboNation
+prints — 🔥 💧 🧭 🔨 🆘 🛟 🚑 🚒 — from `NotoColorEmoji.ttf`.
+
+**That font is a CBDT bitmap with a single 109 px strike**, so
+`truetype(..., 109)` is the *only* size that loads; anything else raises
+`invalid pixel size`. Render at 109 and resample. Missing font degrades to a
+grey panel with a warning rather than failing the asset build.
+
+The droplet is **re-tinted magenta**. Noto's is blue, RoboNation's is magenta,
+and Search & Rescue has to be told from Survey & Repair's orange fire —
+blue-vs-orange is an *easier* discrimination than the real one, so leaving it
+blue would make the sim task easier than the pool task.
+
+### Sign orientation is rulebook-defined, and it is easy to get wrong
+
+`_role_sign` builds a plate whose **thickness runs along local x**, so the
+printed faces are ±x and the sign already faces along x at `rpy 0 0 0`. Adding
+`yaw 1.5708` turns it **edge-on** — visible as a thin white line, not an image.
+Every gate sign was doing exactly that.
+
+| Prop | Faces | Pose |
+|---|---|---|
+| Gate | the approaching AUV | `rpy 0 0 0` |
+| Torpedo | the AUV (it is the aim point) | `rpy 0 0 0` |
+| Bins | up-and-back, for the downward camera | pitched ~30° |
+| Octagon | **inward**, into the octagon | `yaw = ang + π` |
+
+The octagon's was also wrong: plain `ang` aims each image at the pool wall,
+where nothing can read it.
+
+## Ground-truth labels now come from Gazebo
+
+`gt_labels.py` is gone. It projected prop AABBs itself and admitted in its own
+docstring that it did "not a full Gazebo visibility check" — a crate behind
+another crate still got a full box. Worse, it contained **only `sauvc_*`
+entries**, so all 14 RoboSub props resolved to `None` and a RoboSub course
+recorded **empty label files**, silently.
+
+Replaced by a `boundingbox_camera` per camera, with
+`prop_library.DETECTION_CLASSES` as the single registry: **the index is both
+the YOLO class and the Gazebo semantic label**, so there is no second table to
+disagree with the first. Three hand-maintained tables deleted.
+
+> **A prop with no label is INVISIBLE to the sensor.** Gazebo emits a box only
+> for an entity carrying a `SemanticLabel`, and says nothing about one that has
+> none. A test asserts every registered prop has a non-zero label; class 0 is
+> reserved for background because gz-sim reports unlabelled entities as 0.
+
+Two things improved beyond the occlusion fix: **runtime spawns are labelled**
+(the projector read the course YAML, so `props add` was invisible to it), and
+the course YAML is no longer consulted at all.
+
+**Measured cost — the reason this is on by default:** these sensors render on
+the same Ogre2 thread as the cameras, the thread that collapsed to 2.83 Hz when
+the DVL drew beam visuals. With box sensors on: **12.83 Hz, 5.7 ms jitter**,
+against a 12.75 Hz baseline. No measurable cost.
+
+Verified on `robosub26_full`: 447 frames, 447 labels, **446 non-empty**, 3893
+boxes across 7 classes — a course that recorded nothing at all before.
+
+## Water is on everywhere now
+
+`water_surface: gerstner` is the **default** in `SCENE_DEFAULTS`; a course opts
+out rather than in. Only `task_navigation` had asked for it, which is why every
+other course looked like it had no water.
+
+## Course layout, corrected against the official plans (2026-08-29)
+
+The SAUVC props were in the wrong **zones**. The course plan divides the pool
+into bands measured from the start wall, and props go in bands, not at points:
+
+| Band | From start wall | x range | Holds |
+|---|---|---|---|
+| Starting zone | 0 – ~4 m | −12.5 … −8.5 | the 140 cm start square |
+| Orange flare | ~4 – ~8 m | −8.5 … −4.5 | the orange flare, **anywhere in it** |
+| RGB flares | ~8 – ~16 m | −4.5 … +3.5 | red/yellow/blue, **anywhere in it** |
+| Gate line | ~16 m | +3.5 | the gate, anywhere along the line |
+| Target zone | ~2 m from far wall | +10.5 | the four drums and the mat |
+
+Two corrections: the orange flare was 1.5 m short of the **gate**, in the wrong
+band entirely — it belongs 4–8 m from the *start*, a mid-transit obstacle. And
+the three RGB flares were in a neat evenly-spaced row, which is the one
+arrangement that makes the task trivial: find one and the other two are a fixed
+offset away. They are scattered across their band now, as the plan draws them.
+
+### The SAUVC floor SLOPES
+
+The rulebook's side view gives **1.6 m at the pool centre rising to 1.2 m at
+both ends** — a shallow V at a 3.2 % grade. This was modelled as a flat 1.6 m,
+which is wrong in three ways that all show up in practice:
+
+* A drum in the target zone sat **0.34 m above the floor** with nothing under it.
+* The DVL's bottom-track altitude is constant along a transit when it should change.
+* A depth hold that clears the floor mid-pool grounds at the ends.
+
+`floor_depth_at()` and `floor_pitch_at()` give the depth and the local tilt.
+Floor-anchored props now sit on the floor **at their own x** and are **pitched
+to match it** — anything resting on a slope is tilted by it, and for the 6 ×
+2.2 m target mat that is the difference between lying flat and having one edge
+buried. Verified: both mat edges clear the floor by exactly `FLOOR_DECAL_Z`.
+
+The floor itself is two tilted slabs meeting at x = 0, not a mesh: the collision
+stays a primitive, and a mesh floor for a 25 m pool costs far more to collide
+against than two boxes that describe it exactly. A pool with no
+`floor_edge_depth` is flat, so RoboSub and every other course are untouched.
+
+The lab's altitude readout follows the slope too — it carried a hardcoded
+−1.6 m, which overstated altitude by up to 0.4 m near either wall, and that is
+the number an operator reads to decide whether the vehicle is about to ground.
+A drift test asserts the JS copy still matches the arena specs.
+
+### Bin images go INSIDE the bins
+
+"**Inside** the bins will be images representing each role" — handbook p. 47,
+verbatim. The image lies **flat on the bin floor**, facing up at the downward
+camera: you read it looking down into the bin, then drop a marker into that
+same bin.
+
+Two wrong versions preceded this. First it sat on **top** of the crate — a lid
+over the opening you have to drop through. Then it stood upright on a post
+beside the crate: readable, but not what the handbook says, and it puts the
+image somewhere a marker never goes.
+
+### The collectibles were positively buoyant
+
+They floated off the resupply table and oscillated against the surface. Not a
+physics-engine artefact — the model was wrong: a flat 0.15 kg against 192 cm³
+(jar) and 212 cm³ (box) of displacement, so every one of them was lighter than
+the water it displaced. Mass is now **computed from volume** at 1150 kg/m³, so
+they rest on the table and stay where a manipulator puts them while still being
+light enough to lift. Measured: zero drift over 12 s.
+
+The table gained a **rim** as well. A bare plate lets an item slide off the edge
+the moment the vehicle disturbs the water, and then the task is unrunnable.
+
 ## The courses
 
 ```bash
