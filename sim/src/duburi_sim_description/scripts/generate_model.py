@@ -254,6 +254,12 @@ class ModelParams:
         self.dvl_resolution = dvl["resolution"]
         self.dvl_maximum_range = dvl["maximum_range"]
         self.dvl_minimum_range = dvl["minimum_range"]
+        # Box sensors cost a render pass on the SAME Ogre2 thread the cameras
+        # use -- the thread that took the sim from 12.75 Hz to 2.83 Hz when the
+        # DVL drew beam visuals. Measured cost is small (see ROBOSUB doc), so
+        # they stay on; this is the knob if that ever changes.
+        self.boxes_always_on = 1
+
         self.dvl_visualize_beams = str(
             dvl.get("visualize_beams", DVL_DEFAULTS["visualize_beams"])
         ).lower()

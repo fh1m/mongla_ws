@@ -129,8 +129,8 @@ SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate d
     <!-- Water surface at z = 0, floor at z = -1.6. -->
     <model name="sauvc_pool">
       <static>true</static>
-      <link name="floor">
-        <pose>0 0 -1.6 0 0 0</pose>
+      <link name="floor_neg">
+        <pose>-6.25 0 -1.4 0 0.0319891 0</pose>
         <inertial>
           <pose>0 0 0 0 0 0</pose>
           <mass>1000</mass>
@@ -140,9 +140,9 @@ SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate d
             <izz>1000</izz>
           </inertia>
         </inertial>
-        <visual name="floor_visual">
+        <visual name="floor_neg_visual">
           <pose>0 0 0.005 0 0 0</pose>
-          <geometry><box><size>25 16 0.01</size></box></geometry>
+          <geometry><box><size>12.5064 16 0.01</size></box></geometry>
           <material>
             <ambient>0.55 0.55 0.55 1</ambient>
             <diffuse>0.55 0.55 0.55 1</diffuse>
@@ -150,16 +150,49 @@ SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate d
             <emissive>0 0 0 1</emissive>
             <pbr>
               <metal>
-                <albedo_map>model://sauvc_textures/pool_floor.png</albedo_map>
+                <albedo_map>model://sauvc_textures/pool_floor_neg.png</albedo_map>
                 <metalness>0.0</metalness>
                 <roughness>0.85</roughness>
               </metal>
             </pbr>
           </material>
         </visual>
-        <collision name="floor_collision">
+        <collision name="floor_neg_collision">
           <pose>0 0 -0.05 0 0 0</pose>
-          <geometry><box><size>25 16 0.1</size></box></geometry>
+          <geometry><box><size>12.5064 16 0.1</size></box></geometry>
+        </collision>
+      </link>
+      <link name="floor_pos">
+        <pose>6.25 0 -1.4 0 -0.0319891 0</pose>
+        <inertial>
+          <pose>0 0 0 0 0 0</pose>
+          <mass>1000</mass>
+          <inertia>
+            <ixx>1000</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>1000</iyy><iyz>0</iyz>
+            <izz>1000</izz>
+          </inertia>
+        </inertial>
+        <visual name="floor_pos_visual">
+          <pose>0 0 0.005 0 0 0</pose>
+          <geometry><box><size>12.5064 16 0.01</size></box></geometry>
+          <material>
+            <ambient>0.55 0.55 0.55 1</ambient>
+            <diffuse>0.55 0.55 0.55 1</diffuse>
+            <specular>0.08 0.08 0.08 1</specular>
+            <emissive>0 0 0 1</emissive>
+            <pbr>
+              <metal>
+                <albedo_map>model://sauvc_textures/pool_floor_pos.png</albedo_map>
+                <metalness>0.0</metalness>
+                <roughness>0.85</roughness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+        <collision name="floor_pos_collision">
+          <pose>0 0 -0.05 0 0 0</pose>
+          <geometry><box><size>12.5064 16 0.1</size></box></geometry>
         </collision>
       </link>
       <link name="wall_x_pos">
@@ -306,13 +339,13 @@ SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate d
     <include>
       <uri>model://sauvc_final_gate</uri>
       <name>gate</name>
-      <pose>-4.8 0 -1.6 0 0 0</pose>
+      <pose>-4.8 0 -1.4464 0 0.0319891 0</pose>
     </include>
 
     <include>
       <uri>model://sauvc_orange_flare</uri>
       <name>flare_obstacle</name>
-      <pose>-6.8 0 -1.6 0 0 0</pose>
+      <pose>-6.8 0 -1.3824 0 0.0319891 0</pose>
     </include>
 
     <include>

@@ -18,18 +18,11 @@ vehicle:
   yaw: 0.0
 
 props:
-  - model: robosub_bin_survey_repair
-    name: bin_sr_a
-    xy: [0.0, 0.6]
-  - model: robosub_bin_search_rescue
-    name: bin_rescue_a
-    xy: [0.0, -0.6]
-  - model: robosub_bin_survey_repair
-    name: bin_sr_b
-    xy: [0.9, 0.6]
-  - model: robosub_bin_search_rescue
-    name: bin_rescue_b
-    xy: [0.9, -0.6]
+  # ONE prop: the PVC pipeline with all four crates hanging off it.
+  - model: robosub_bins
+    name: bins
+    xy: [0.5, 0.0]
+
   - model: robosub_path_marker
     name: path_in
     xy: [-1.6, 0.0]

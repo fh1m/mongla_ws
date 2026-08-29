@@ -373,6 +373,143 @@ def make_drum_rim(path: str, width: int = 256, height: int = 64) -> None:
     print(f"wrote {path}  ({width}x{height})")
 
 
+
+# ---------------------------------------------------------------------------
+# RoboSub role imagery
+# ---------------------------------------------------------------------------
+
+# RoboNation prints the task images as emoji on 12x12 in vinyl. Rendering the
+# ACTUAL glyphs -- rather than an approximation of them -- is the whole point:
+# every RoboSub task after the gate scores on matching the role the vehicle
+# chose, so the discrimination a detector has to learn is fire-vs-droplet, and
+# it should be learning it from the real artwork.
+NOTO_EMOJI = "/usr/local/share/fonts/noto/NotoColorEmoji.ttf"
+
+# RoboNation's Search & Rescue droplet is magenta; Noto's is blue. See _glyph_rgba.
+MAGENTA_DROPLET = (1.45, 0.28, 0.80)
+
+# The eight images, by the name used in spec/robosub.yaml.
+ROLE_GLYPHS = {
+    "fire": "\U0001F525",          # Survey & Repair    (bins, torpedo)
+    "droplet": "\U0001F4A7",       # Search & Rescue    (bins, torpedo)
+    "compass": "\U0001F9ED",       # Survey & Repair    (gate, octagon)
+    "hammer_pick": "\U00002692",   # Survey & Repair    (gate, octagon)
+    "sos": "\U0001F198",           # Search & Rescue    (gate, octagon)
+    "ring_buoy": "\U0001F6DF",     # Search & Rescue    (gate, octagon)
+    "ambulance": "\U0001F691",     # Search & Rescue    (torpedo)
+    "fire_engine": "\U0001F692",   # Survey & Repair    (torpedo)
+}
+
+
+
+def _glyph_rgba(glyph, size=136, hue_shift=None):
+    """One emoji as RGBA at `size`, optionally recoloured.
+
+    `hue_shift` exists for the droplet. Noto renders it BLUE; RoboNation prints
+    a magenta one, and Search & Rescue is the role a detector has to tell from
+    Survey & Repair's orange fire. Blue-vs-orange would actually be an easier
+    discrimination than the real magenta-vs-orange, so leaving it blue would
+    make the sim task easier than the pool task -- the wrong direction.
+    """
+    from PIL import ImageDraw, ImageFont
+    font = ImageFont.truetype(NOTO_EMOJI, 109)   # the font's only strike
+    img = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    ImageDraw.Draw(img).text((size // 2, size // 2), glyph, font=font,
+                             embedded_color=True, anchor="mm")
+    if hue_shift is not None:
+        a = np.asarray(img).astype(np.float32)
+        rgb, alpha = a[..., :3], a[..., 3:]
+        lum = rgb.mean(axis=2, keepdims=True)
+        # Re-tint toward the target while keeping the glyph's own shading.
+        a[..., :3] = np.clip(lum * np.array(hue_shift, dtype=np.float32), 0, 255)
+        img = Image.fromarray(
+            np.concatenate([a[..., :3], alpha], axis=2).astype(np.uint8), "RGBA")
+    return img
+
+
+def make_role_image(path, glyph, px=256, border=0.055, rng=None,
+                    hue_shift=None):
+    """A printed vinyl role sign: one emoji, centred on white, thin dark edge.
+
+    NotoColorEmoji is a CBDT BITMAP font with a single 109 px strike, so
+    `truetype(..., 109)` is the only size that loads -- anything else raises
+    `invalid pixel size`. Render at 109 and resample up; that is not a
+    workaround to tidy away later, it is how the font works.
+
+    Falls back to a flat grey square with a loud warning rather than aborting
+    the whole asset build, because the font is a system package and a fresh
+    machine may not have it. A missing sign then looks obviously wrong in the
+    render instead of silently looking like a legitimately blank panel.
+    """
+    img = Image.new("RGB", (px, px), (255, 255, 255))
+    try:
+        glyph_img = _glyph_rgba(glyph, hue_shift=hue_shift)
+        inner = int(px * (1.0 - 2.2 * border))
+        g = glyph_img.resize((inner, inner), Image.LANCZOS)
+        img.paste(g, ((px - inner) // 2, (px - inner) // 2), g)
+    except Exception as exc:                      # noqa: BLE001 - see docstring
+        print(f"  WARNING: no emoji glyph for {os.path.basename(path)} ({exc}); "
+              f"writing a blank panel. Install fonts-noto-color-emoji.")
+        img = Image.new("RGB", (px, px), (170, 170, 170))
+
+    # The printed signs have a dark border; it also gives a detector an edge to
+    # find when the glyph itself washes out in turbid water.
+    a = np.asarray(img).astype(np.float32) / 255.0
+    b = max(1, int(px * border * 0.45))
+    a[:b, :], a[-b:, :], a[:, :b], a[:, -b:] = 0.12, 0.12, 0.12, 0.12
+    Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)).save(
+        path, optimize=True)
+    print(f"wrote {path}  ({px}x{px})")
+
+
+def make_torpedo_panel(path, role, spec, px=512, rng=None):
+    """The Task 4 board face: four RED CIRCLE openings plus role artwork.
+
+    The circles are where a torpedo goes and the emoji say which role the board
+    is for. Generated as ONE image for the whole 0.6 m board, so the generated
+    prop can carry the artwork on a flat face while the vendored mesh carries
+    real physical holes.
+    """
+    img = np.ones((px, px, 3), dtype=np.float32)
+    yy, xx = np.mgrid[0:px, 0:px].astype(np.float32)
+
+    # The real board carries ALL FOUR images -- fire, fire-engine, droplet,
+    # ambulance -- with the openings interleaved between them. You fire through
+    # the circle next to YOUR role's image, which is why both roles appear on
+    # both boards and only the arrangement differs. A board showing one role's
+    # artwork alone would make the task trivially separable and score nothing
+    # like the real one.
+    if role == "survey_repair":
+        corners = (("fire", 0.22, 0.22), ("fire_engine", 0.78, 0.22),
+                   ("ambulance", 0.22, 0.78), ("droplet", 0.78, 0.78))
+        holes = ((0.50, 0.30, 0.115), (0.50, 0.70, 0.072),
+                 (0.22, 0.50, 0.072), (0.78, 0.50, 0.115))
+    else:
+        corners = (("droplet", 0.22, 0.22), ("ambulance", 0.78, 0.22),
+                   ("fire_engine", 0.22, 0.78), ("fire", 0.78, 0.78))
+        holes = ((0.50, 0.30, 0.072), (0.50, 0.70, 0.115),
+                 (0.22, 0.50, 0.115), (0.78, 0.50, 0.072))
+
+    for cx, cy, r in holes:
+        d = np.sqrt((xx / px - cx) ** 2 + (yy / px - cy) ** 2)
+        img[(d < r) & (d > r * 0.78)] = (0.72, 0.06, 0.09)   # red annulus
+        img[d <= r * 0.78] = (0.10, 0.16, 0.20)              # opening = dark water
+
+    try:
+        base = Image.fromarray((img * 255).astype(np.uint8))
+        side = int(px * 0.20)
+        for name, gx, gy in corners:
+            shift = MAGENTA_DROPLET if name == "droplet" else None
+            g = _glyph_rgba(ROLE_GLYPHS[name], hue_shift=shift)
+            g = g.resize((side, side), Image.LANCZOS)
+            base.paste(g, (int(gx * px - side / 2), int(gy * px - side / 2)), g)
+        base.save(path, optimize=True)
+    except Exception as exc:                      # noqa: BLE001
+        print(f"  WARNING: torpedo panel without glyphs ({exc})")
+        Image.fromarray((img * 255).astype(np.uint8)).save(path, optimize=True)
+    print(f"wrote {path}  ({px}x{px})")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", default=None, help="Arena spec YAML.")
@@ -403,13 +540,22 @@ def _generate(spec: dict, outdir: str, seed: int, competition: str) -> None:
     rng = np.random.default_rng(seed)
     args = type("A", (), {"outdir": outdir})()   # keeps the body below unchanged
 
-    make_floor(
-        pool["length"],
-        pool["width"],
-        px_per_m,
-        os.path.join(args.outdir, "pool_floor.png"),
-        rng,
-    )
+    floor_png = os.path.join(args.outdir, "pool_floor.png")
+    make_floor(pool["length"], pool["width"], px_per_m, floor_png, rng)
+
+    # A SLOPED floor is two slabs, each only half the pool long. A box face maps
+    # its texture exactly ONCE, so handing both slabs the full-length PNG
+    # squeezes 25 m of floor into 12.5 m and then repeats it -- anisotropic
+    # mosaic, and the two cross markers appear four times in the wrong places.
+    # Slice the real floor in half so each slab shows its own half.
+    if pool.get("floor_edge_depth"):
+        whole = Image.open(floor_png)
+        mid = whole.size[0] // 2
+        whole.crop((0, 0, mid, whole.size[1])).save(
+            os.path.join(args.outdir, "pool_floor_neg.png"), optimize=True)
+        whole.crop((mid, 0, whole.size[0], whole.size[1])).save(
+            os.path.join(args.outdir, "pool_floor_pos.png"), optimize=True)
+        print(f"wrote pool_floor_{{neg,pos}}.png  ({mid}x{whole.size[1]} each)")
     make_wall(
         pool["length"],
         pool["depth"],
@@ -435,6 +581,15 @@ def _generate(spec: dict, outdir: str, seed: int, competition: str) -> None:
         make_water_surface(
             os.path.join(args.outdir, "water_surface.png"),
             pool["length"], pool["width"], rng=rng)
+        if competition == "robosub":
+            for name, glyph in ROLE_GLYPHS.items():
+                make_role_image(
+                    os.path.join(args.outdir, f"role_{name}.png"), glyph, rng=rng,
+                    hue_shift=MAGENTA_DROPLET if name == "droplet" else None)
+            for role in ("survey_repair", "search_rescue"):
+                make_torpedo_panel(
+                    os.path.join(args.outdir, f"torpedo_panel_{role}.png"),
+                    role, spec, rng=rng)
         return
 
     # Driven by the rulebook segment sizes in spec/<competition>.yaml, NOT by a

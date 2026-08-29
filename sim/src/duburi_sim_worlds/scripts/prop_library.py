@@ -176,7 +176,7 @@ def textured_material(
     )
 
 
-def stripe_material(texture: str) -> str:
+def stripe_material(texture: str, competition: str = DEFAULT_COMPETITION) -> str:
     """Gate stripe albedo with enough self-light to read through fog.
 
     The emissive lift is NOT decoration -- see material() above. Without it the
@@ -184,23 +184,23 @@ def stripe_material(texture: str) -> str:
     """
     return textured_material(
         texture, tint=0.75, specular=0.25, emissive=0.12,
-        roughness_map="rough_pvc.png",
+        roughness_map="rough_pvc.png", competition=competition,
     )
 
 
-def fabric_material(texture: str, emissive: float = 0.14) -> str:
+def fabric_material(texture: str, emissive: float = 0.14, competition: str = DEFAULT_COMPETITION) -> str:
     """Inflated-fabric flares: matte, no specular hotspot."""
     return textured_material(
         texture, tint=0.80, specular=0.06, emissive=emissive,
-        roughness_map="rough_fabric.png",
+        roughness_map="rough_fabric.png", competition=competition,
     )
 
 
-def plastic_material(texture: str, emissive: float = 0.10) -> str:
+def plastic_material(texture: str, emissive: float = 0.10, competition: str = DEFAULT_COMPETITION) -> str:
     """Moulded plastic drum walls."""
     return textured_material(
         texture, tint=0.72, specular=0.14, emissive=emissive,
-        roughness_map="rough_plastic.png",
+        roughness_map="rough_plastic.png", competition=competition,
     )
 
 
@@ -281,10 +281,92 @@ def link(name, body: str, pose="0 0 0 0 0 0") -> str:
     return f'<link name="{name}">\n  <pose>{pose}</pose>\n{_indent(body, 1)}\n</link>'
 
 
-def model(name, body: str, static: bool = True) -> str:
+# ---------------------------------------------------------------------------
+# Detection classes
+# ---------------------------------------------------------------------------
+#
+# APPEND ONLY. NEVER INSERT, NEVER REORDER, NEVER DELETE.
+#
+# The position in this list IS the YOLO class index AND the Gazebo semantic
+# label. Both are baked into every dataset ever recorded, so moving an entry
+# silently relabels history: a run captured last month would decode with this
+# month's meaning and nothing would error. Retire a prop by leaving its slot in
+# place, not by removing the line.
+#
+# This replaces gt_labels.CLASSES / MODEL_TO_CLASS / PROP_HALF_EXTENTS. The
+# half-extents are gone entirely -- Gazebo's boundingbox_camera measures the
+# real projected box on the GPU, occlusion and truncation included, so there is
+# nothing left to hand-maintain and nothing left to disagree with itself.
+#
+# Label 0 is reserved: gz-sim treats an unlabelled entity as 0, so using it for
+# a real class would make "background" and that class indistinguishable.
+DETECTION_CLASSES = [
+    "_background",              # 0 -- reserved, never assigned to a prop
+    "sauvc_qual_gate",
+    "sauvc_final_gate",
+    "sauvc_orange_flare",
+    "sauvc_flare_red",
+    "sauvc_flare_yellow",
+    "sauvc_flare_blue",
+    "sauvc_drum_red",
+    "sauvc_drum_blue",
+    "sauvc_drum_red_pinger",
+    "sauvc_starting_zone",
+    "sauvc_target_mat",
+    "robosub_gate",
+    "robosub_slalom",
+    "robosub_bins",
+    "robosub_torpedo_survey_repair",
+    "robosub_torpedo_search_rescue",
+    "robosub_octagon",
+    "robosub_resupply_table",
+    "robosub_path_marker",
+    "robosub_pinger",
+    "robosub_item_bolt",
+    "robosub_item_plug",
+    "robosub_item_pill",
+    "robosub_item_bandage",
+    # Appended 2026-08-29 -- the balls were never classes under the old
+    # gt_labels list. New entries go HERE, at the end, always.
+    "sauvc_ball",
+    "sauvc_golf_ball",
+]
+
+_LABEL_OF = {n: i for i, n in enumerate(DETECTION_CLASSES)}
+
+if len(set(DETECTION_CLASSES)) != len(DETECTION_CLASSES):
+    raise RuntimeError("duplicate entry in DETECTION_CLASSES; labels must be unique")
+
+
+def detection_label(model_name: str) -> int:
+    """Semantic label for a prop, or 0 if it is not a detection target.
+
+    0 rather than an exception on purpose: the pool shell, the vehicle and the
+    water surface all flow through model() and none of them is a class.
+    """
+    return _LABEL_OF.get(model_name, 0)
+
+
+def model(name, body: str, static: bool = True, label: int = None) -> str:
+    """One <model>, carrying its semantic label when it is a detection target.
+
+    The label plugin is what makes Gazebo's boundingbox_camera emit a box for
+    this model at all. WITHOUT IT THE SENSOR PUBLISHES NOTHING AND SAYS NOTHING
+    -- an unlabelled prop is simply absent from every frame's annotations, with
+    no warning anywhere, which is the same silent-empty-labels failure this
+    project has already been bitten by once.
+    """
+    lab = detection_label(name) if label is None else label
+    plugin = "" if not lab else (
+        '  <plugin filename="gz-sim-label-system" '
+        'name="gz::sim::systems::Label">\n'
+        f"    <label>{lab}</label>\n"
+        "  </plugin>\n"
+    )
     return (
         f'<model name="{name}">\n'
         f"  <static>{'true' if static else 'false'}</static>\n"
+        f"{plugin}"
         f"{_indent(body, 1)}\n"
         "</model>"
     )
@@ -746,59 +828,107 @@ def golf_ball(spec: dict) -> str:
 _THIN = (1e-6, 1e-6, 1e-6)
 
 
-def _role_sign(spec, name, colour, pose):
-    """A 12 in x 12 in vinyl role sign. Every RoboSub task carries one."""
+def _role_sign(spec, name, image, pose, size=None):
+    """A 12 in x 12 in printed vinyl role sign.
+
+    The image is the ACTUAL emoji RoboNation prints, rendered by
+    gen_pool_texture.make_role_image. It must go on a THIN SQUARE plate: an SDF
+    box applies one material to all six faces and stretches the albedo across
+    each of them exactly once, so a non-square plate distorts the glyph and a
+    thick one shows it on the edges too.
+
+    ORIENTATION CONVENTION -- read this before writing a pose. The plate's
+    THICKNESS runs along its local x, so the printed faces are +x and -x and
+    the sign already faces along x with pose rpy 0 0 0. Adding yaw 1.5708 turns
+    it EDGE-ON, which is what every gate sign was doing: visible as a thin
+    white line rather than an image.
+
+    Every one of these signs has a rulebook-defined direction it must face,
+    because the vehicle has to READ it:
+
+      gate     faces the approaching AUV, i.e. along the run axis (x), so
+               rpy 0 0 0. The handbook front view shows both signs hanging
+               flat off the top bar toward the vehicle.
+      bins     read from ABOVE by the downward camera, so pitched back off
+               vertical rather than square-on.
+      torpedo  faces the AUV like the gate: the board is what you aim at.
+      octagon  the images "hang inward", so each faces the octagon centre --
+               yaw = ang + pi, not ang, which points them outward.
+    """
     cfg = spec["sign"]
+    side = size or cfg["size"]
     return _box_link(
-        name, cfg["thickness"], cfg["size"], cfg["size"], colour,
-        0.05, pose, collide=False,
+        name, cfg["thickness"], side, side, WHITE, 0.05, pose, collide=False,
+        # Low emissive on purpose. The lift exists so props stay visible
+        # through fog, but on a PRINTED face it flattens the artwork -- and the
+        # artwork is the thing a detector has to classify. Enough to lift it
+        # off the background, not enough to wash the colour out.
+        mat=textured_material(f"role_{image}.png", tint=1.0, specular=0.06,
+                              roughness=0.55, emissive=0.10,
+                              competition="robosub"),
     )
 
 
 def robosub_gate(spec):
-    """Task 1/6 gate: 3 x 1.5 m, BLACK and RED panels, RED divider.
+    """Task 1/6 gate -- a PASS-THROUGH PVC frame, 3.048 m x 1.524 m.
 
-    'The right side features RED on top, BLACK on bottom; left side reverses
-    this pattern.' The vehicle picks a side, and that choice is its role for
-    the whole run -- so the asymmetry is the scored feature, not decoration.
+    Built wrong the first time as two solid panels filling the opening, which
+    is not a gate at all: the vehicle drives THROUGH this. From the handbook
+    CAD it is a horizontal top bar carried on two legs, each leg banded into
+    two 609.6 mm colour segments, plus a 609.6 x 50.8 mm red divider hanging
+    from the centre of the bar and two 305 mm role signs.
+
+    THE ASYMMETRY IS THE SCORED FEATURE. Front view: the right leg is RED over
+    BLACK and the left leg is BLACK over RED; the back face reverses both. The
+    side the vehicle picks IS its role for the rest of the run, so a gate
+    mission has to read which half it is looking at -- not merely find a gap.
     """
     cfg = spec["props"]["gate"]
     w, h = cfg["width"], cfg["height"]
-    r = spec["pvc_three_quarter_in"]
+    r = spec["pvc_one_in"]
     red, black = cfg["colours"]["red"], cfg["colours"]["black"]
-    half, quarter = w / 2.0, w / 4.0
-    panel_h = h / 2.0
+    band = cfg["band_length"]
+    half = w / 2.0
     parts = []
 
-    # The gate's WIDTH runs along y, so the vehicle passes along x. Posts, top
-    # bar and panels must all agree on that; the panels were offset along x
-    # while being sized along y, which stacked them in the middle of the gap
-    # instead of filling the two halves.
-    for side, y in (("port", -half), ("stbd", half)):
-        parts.append(_cylinder_link(
-            f"post_{side}", r, h, WHITE, 4.0, f"0 {y:.6g} {h / 2.0:.6g} 0 0 0",
-            mat=pvc_material(WHITE)))
+    # Width runs along y; the vehicle passes along x. Legs hang from the bar.
     parts.append(_cylinder_link(
         "top_bar", r, w, WHITE, 5.0, f"0 0 {h:.6g} 1.5708 0 0",
         mat=pvc_material(WHITE)))
 
-    # Panels. Left half reverses the right half's red/black order.
-    for side, cy, top, bottom in (
-        ("left", -quarter, black, red),
-        ("right", quarter, red, black),
+    for side, y, upper, lower in (
+        ("port", -half, black, red),      # left  as seen from the front
+        ("stbd", half, red, black),       # right as seen from the front
     ):
-        for band, colour, cz in (
-            ("top", top, h - panel_h / 2.0),
-            ("bottom", bottom, panel_h / 2.0),
+        # A plain stub between the bar and the first colour band, as the CAD
+        # shows, then the two bands.
+        parts.append(_cylinder_link(
+            f"post_{side}", r, h, WHITE, 4.0,
+            f"0 {y:.6g} {h / 2.0:.6g} 0 0 0", mat=pvc_material(WHITE)))
+        for tag, colour, cz in (
+            ("upper", upper, h - 0.1524 - band / 2.0),
+            ("lower", lower, h - 0.1524 - band * 1.5),
         ):
-            parts.append(_box_link(
-                f"panel_{side}_{band}", cfg["panel_depth"], w / 2.0, panel_h,
-                colour, 1.0, f"0 {cy:.6g} {cz:.6g} 0 0 0", collide=False))
+            # Slightly proud of the post so the band reads as painted pipe.
+            parts.append(_cylinder_link(
+                f"band_{side}_{tag}", r * 1.25, band, colour, 0.4,
+                f"0 {y:.6g} {cz:.6g} 0 0 0", collide=False,
+                mat=material(colour, emissive_gain=0.22)))
 
-    # The RED divider hangs 610 mm from the top bar and splits the two sides.
+    # The red divider: hangs from the centre of the bar, 609.6 mm down.
     parts.append(_box_link(
-        "divider", cfg["divider_depth"], 0.02, cfg["divider_drop"], red,
-        0.5, f"0 0 {h - cfg['divider_drop'] / 2.0:.6g} 0 0 0", collide=False))
+        "divider", cfg["divider_width"], cfg["divider_width"],
+        cfg["divider_drop"], red, 0.5,
+        f"0 0 {h - cfg['divider_drop'] / 2.0:.6g} 0 0 0", collide=False,
+        mat=material(red, emissive_gain=0.22)))
+
+    # Role signs hang from the bar, 152.4 mm below it, one per role.
+    for role, y in (("survey_repair", -w * 0.22), ("search_rescue", w * 0.22)):
+        image = spec["roles"][role]["gate_images"][0]
+        parts.append(_role_sign(
+            spec, f"sign_{role}", image,
+            # rpy 0 0 0 -- the plate already faces along x, at the AUV.
+            f"0 {y:.6g} {h - 0.1524 - spec['sign']['size'] / 2.0:.6g} 0 0 0"))
 
     return model("robosub_gate", "\n".join(parts))
 
@@ -825,72 +955,119 @@ def robosub_slalom(spec):
     return model("robosub_slalom", "\n".join(parts))
 
 
-def robosub_bin(spec, role="survey_repair", model_name=None):
-    """Task 3: a 25 L crate with a role image on its floor.
+def robosub_bins(spec):
+    """Task 3 -- ONE prop: a PVC pipeline with four crates hanging off its sides.
 
-    The image faces UP -- it is read by the downward camera on the way to a
-    marker drop, which is why the bins are a bottom-camera task.
+    Built wrong the first time as four loose crates sitting on the floor. The
+    handbook is explicit: "3D pipeline made from PVC supported off the bottom
+    of the pool", and "four bins hang off the SIDES of the pipeline" -- two
+    Survey & Repair, two Search & Rescue. Making it one model also matches how
+    it is placed: the whole assembly goes down as a unit.
+
+    The crates are CleverMade 25 L: 0.335 x 0.335 x 0.28 m, square in plan.
     """
     cfg = spec["props"]["bin"]
     lx, ly, lz, t = cfg["length"], cfg["width"], cfg["height"], cfg["wall"]
     colour = cfg["colour"]
-    parts = [_box_link("floor", lx, ly, t, colour, 1.0, f"0 0 {t / 2.0:.6g} 0 0 0")]
-    for name, sx, sy, x, y in (
-        ("wall_x_pos", t, ly, (lx - t) / 2.0, 0.0),
-        ("wall_x_neg", t, ly, -(lx - t) / 2.0, 0.0),
-        ("wall_y_pos", lx, t, 0.0, (ly - t) / 2.0),
-        ("wall_y_neg", lx, t, 0.0, -(ly - t) / 2.0),
-    ):
+    ph, span = cfg["pipeline_height"], cfg["pipeline_span"]
+    r = spec["pvc_three_quarter_in"]
+    parts = []
+
+    # The pipeline: a spine with two cross members, standing on four feet.
+    parts.append(_cylinder_link(
+        "spine", r, span, WHITE, 2.0, f"0 0 {ph:.6g} 0 1.5708 0",
+        mat=pvc_material(WHITE)))
+    for i, x in ((0, -span / 3.0), (1, span / 3.0)):
+        parts.append(_cylinder_link(
+            f"cross_{i}", r, span * 0.72, WHITE, 1.5,
+            f"{x:.6g} 0 {ph:.6g} 1.5708 0 0", mat=pvc_material(WHITE)))
+        for j, y in ((0, -span * 0.36), (1, span * 0.36)):
+            parts.append(_cylinder_link(
+                f"leg_{i}{j}", r, ph, WHITE, 1.0,
+                f"{x:.6g} {y:.6g} {ph / 2.0:.6g} 0 0 0",
+                mat=pvc_material(WHITE)))
+
+    # Four crates hanging off the cross members, two per role.
+    layout = (
+        ("sr_a", "survey_repair", -span / 3.0, -span * 0.36),
+        ("sr_b", "survey_repair", span / 3.0, span * 0.36),
+        ("rescue_a", "search_rescue", -span / 3.0, span * 0.36),
+        ("rescue_b", "search_rescue", span / 3.0, -span * 0.36),
+    )
+    for tag, role, cx, cy in layout:
+        base = ph - lz / 2.0
         parts.append(_box_link(
-            name, sx, sy, lz, colour, 0.5,
-            f"{x:.6g} {y:.6g} {lz / 2.0:.6g} 0 0 0"))
-    sign = spec["roles"][role]["sign_colour"]
-    parts.append(_box_link(
-        "role_image", lx * 0.7, ly * 0.7, 0.004, sign, 0.05,
-        f"0 0 {t + 0.003:.6g} 0 0 0", collide=False))
-    return model(model_name or f"robosub_bin_{role}", "\n".join(parts))
+            f"crate_{tag}_floor", lx, ly, t, colour, 1.0,
+            f"{cx:.6g} {cy:.6g} {base:.6g} 0 0 0",
+            mat=plastic_material("rough_plastic.png", competition="robosub")))
+        for name, sx, sy, dx, dy in (
+            ("xp", t, ly, (lx - t) / 2.0, 0.0),
+            ("xn", t, ly, -(lx - t) / 2.0, 0.0),
+            ("yp", lx, t, 0.0, (ly - t) / 2.0),
+            ("yn", lx, t, 0.0, -(ly - t) / 2.0),
+        ):
+            parts.append(_box_link(
+                f"crate_{tag}_{name}", sx, sy, lz, colour, 0.5,
+                f"{cx + dx:.6g} {cy + dy:.6g} {base + lz / 2.0:.6g} 0 0 0"))
+
+        # "INSIDE the bins will be images representing each role" -- handbook
+        # p. 47, verbatim. The image lies FLAT ON THE BIN FLOOR, inside the
+        # crate, facing up at the downward camera. That is the whole shape of
+        # the task: you read the image looking down into the bin, then drop a
+        # marker into that same bin.
+        #
+        # Two wrong versions preceded this. First it sat on TOP of the crate,
+        # which is a lid over the opening you have to drop through. Then it
+        # stood upright on a post beside the crate, which is readable but is
+        # not what the handbook says and puts the image somewhere a marker
+        # never goes.
+        #
+        # rpy 0 1.5708 0 lays the plate flat: _role_sign builds it with its
+        # thickness along local x, so a 90-degree pitch turns the printed faces
+        # to point up and down.
+        image = spec["roles"][role]["task_image"]
+        parts.append(_role_sign(
+            spec, f"panel_{tag}", image,
+            f"{cx:.6g} {cy:.6g} {base + t + 0.004:.6g} 0 1.5708 0",
+            size=(lx - 2.0 * t) * 0.92))
+
+    return model("robosub_bins", "\n".join(parts))
 
 
 def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
-    """Task 4: a 0.6 m board with a large and a small opening.
+    """Task 4 -- a 0.6 m printed board on two PVC legs, with FOUR openings.
 
-    Built as four frame slabs around each hole rather than a plate with holes,
-    because SDF primitives cannot express a hole and a mesh would be the only
-    other option. The openings are therefore real gaps a torpedo passes through.
+    Built wrong the first time as an H-shaped frame with two square gaps and
+    the wrong overall size. The real board is a full 2 ft square standing on
+    legs, printed with all four role images, and its openings are CIRCLES.
+
+    SDF has no primitive with a hole, so the geometry here is the board's
+    printed FACE (carrying the artwork, openings included) plus a ring of short
+    boxes approximating each circular rim. For a torpedo that must physically
+    pass through, use `robosub_torpedo_mesh` -- the vendored mesh has real
+    holes. This variant is the regenerable one and is what a detector sees.
     """
     cfg = spec["props"]["torpedo_board"]
     size, th = cfg["size"], cfg["thickness"]
-    big, small = cfg["large_opening"], cfg["small_opening"]
-    colour = cfg["colour"]
+    r_pvc = spec["pvc_one_in"]
+    legs = cfg.get("leg_height", 0.55)
+    cz = legs + size / 2.0
     parts = []
 
-    # Two openings STACKED, in a board that is a full `size` square.
-    #
-    # The board's plane is y-z (width along y, height along z) so the vehicle
-    # approaches along x, matching the gate. Each opening sits in its own half
-    # of the board and is framed by four slabs, because an SDF primitive cannot
-    # express a hole -- so these are real gaps a torpedo passes through, which
-    # is the point: scoring distinguishes the large opening from the small one.
-    for tag, hole, cz in (
-        ("large", big, size * 0.72),      # upper half
-        ("small", small, size * 0.28),    # lower half
-    ):
-        pane = size / 2.0                 # each opening owns half the height
-        side_w = (size - hole) / 2.0      # frame either side of the gap
-        band_h = (pane - hole) / 2.0      # frame above and below it
-        for name, sy, sz, dy, dz in (
-            ("top", size, band_h, 0.0, hole / 2.0 + band_h / 2.0),
-            ("bottom", size, band_h, 0.0, -(hole / 2.0 + band_h / 2.0)),
-            ("left", side_w, hole, hole / 2.0 + side_w / 2.0, 0.0),
-            ("right", side_w, hole, -(hole / 2.0 + side_w / 2.0), 0.0),
-        ):
-            parts.append(_box_link(
-                f"{tag}_{name}", th, sy, sz, colour, 0.4,
-                f"0 {dy:.6g} {cz + dz:.6g} 0 0 0"))
+    for i, y in ((0, -size / 2.0), (1, size / 2.0)):
+        parts.append(_cylinder_link(
+            f"leg_{i}", r_pvc, legs + size, WHITE, 2.0,
+            f"0 {y:.6g} {(legs + size) / 2.0:.6g} 0 0 0",
+            mat=pvc_material(WHITE)))
 
-    sign = spec["roles"][role]["sign_colour"]
-    parts.append(_role_sign(
-        spec, "role_sign", sign, f"{th:.6g} 0 {size * 1.12:.6g} 0 0 0"))
+    # The printed face. One thin plate carrying the whole artwork, so the
+    # openings, the red rims and the four role images are all in register.
+    parts.append(_box_link(
+        "board", th, size, size, WHITE, 3.0, f"0 0 {cz:.6g} 0 0 0",
+        mat=textured_material(f"torpedo_panel_{role}.png", tint=1.0,
+                              specular=0.06, roughness=0.6, emissive=0.10,
+                              competition="robosub")))
+
     return model(model_name or f"robosub_torpedo_{role}", "\n".join(parts))
 
 
@@ -919,42 +1096,89 @@ def robosub_octagon(spec):
     for i, (role, ang) in enumerate((
         ("survey_repair", 0.0), ("search_rescue", math.pi),
     )):
-        sign = spec["roles"][role]["sign_colour"]
+        image = spec["roles"][role]["gate_images"][1]
         parts.append(_role_sign(
-            spec, f"role_sign_{i}", sign,
+            spec, f"role_sign_{i}", image,
+            # yaw = ang + pi so the printed face looks INTO the octagon --
+            # "hanging role images ... facing inward". Plain `ang` aims the
+            # image at the pool wall, where nothing can read it.
             f"{(apothem - 0.1) * math.cos(ang):.6g} "
-            f"{(apothem - 0.1) * math.sin(ang):.6g} -0.35 0 0 {ang:.6g}"))
+            f"{(apothem - 0.1) * math.sin(ang):.6g} -0.35 0 0 "
+            f"{ang + math.pi:.6g}"))
     return model("robosub_octagon", "\n".join(parts))
 
 
 def robosub_resupply_table(spec):
-    """Task 5: the 0.6 m table the collectible objects sit on."""
+    """Task 5 resupply table: 2 ft x 2 ft of 1/2 in PVC, on braced legs.
+
+    The collectible items stand on this, so the top has to be a real surface
+    with a rim -- a bare plate lets an item slide off the edge the moment the
+    vehicle disturbs the water, and then the task is unrunnable.
+    """
     cfg = spec["props"]["octagon"]
     size, h = cfg["table_size"], cfg["table_height"]
     r = spec["pvc_half_in"]
     colour = cfg["colour"]
+    half = size / 2.0 - r
     parts = [_box_link(
         "top", size, size, 0.02, colour, 2.0, f"0 0 {h:.6g} 0 0 0",
         mat=pvc_material(colour))]
-    for i, (dx, dy) in enumerate((
-        (1, 1), (1, -1), (-1, 1), (-1, -1),
-    )):
+
+    # A rim around the top so items cannot slide off.
+    for tag, sx, sy, dx, dy in (
+        ("xp", r * 2, size, half, 0.0), ("xn", r * 2, size, -half, 0.0),
+        ("yp", size, r * 2, 0.0, half), ("yn", size, r * 2, 0.0, -half),
+    ):
+        parts.append(_box_link(
+            f"rim_{tag}", sx, sy, 0.03, colour, 0.2,
+            f"{dx:.6g} {dy:.6g} {h + 0.02:.6g} 0 0 0",
+            mat=pvc_material(colour)))
+
+    for i, (dx, dy) in enumerate(((1, 1), (1, -1), (-1, 1), (-1, -1))):
         parts.append(_cylinder_link(
             f"leg_{i}", r, h, colour, 0.5,
-            f"{dx * size / 2.2:.6g} {dy * size / 2.2:.6g} {h / 2.0:.6g} 0 0 0",
+            f"{dx * half:.6g} {dy * half:.6g} {h / 2.0:.6g} 0 0 0",
             mat=pvc_material(colour)))
+    # Foot rails, as the CAD shows -- and they stop the table tipping.
+    for tag, y in (("yp", half), ("yn", -half)):
+        parts.append(_cylinder_link(
+            f"foot_{tag}", r, size, colour, 0.4,
+            f"0 {y:.6g} 0.03 0 1.5708 0", mat=pvc_material(colour)))
     return model("robosub_resupply_table", "\n".join(parts))
 
 
 def robosub_path_marker(spec):
-    """Orange path markers pointing gate->slalom and slalom->bins."""
+    """Orange path marker: two 18 in segments on PVC T-stands, off the bottom.
+
+    Built wrong the first time as a decal lying flat on the pool floor. The CAD
+    shows it raised on stands, which matters for the downward camera: an
+    elevated marker has a shadow and a parallax offset from the floor tiling,
+    and a decal has neither.
+
+    "Each path marker is placed directly after the current task and points to
+    the next task" -- so the ORIENTATION carries information, and there are
+    exactly two: gate to slalom, and slalom to bins.
+    """
     cfg = spec["props"]["path_marker"]
-    return model("robosub_path_marker", _solid(
-        "marker",
-        _geometry_box(cfg["length"], cfg["width"], 0.006),
-        material(cfg["colour"], emissive_gain=0.30),
-        0.001, _THIN, f"0 0 {FLOOR_DECAL_Z:.6g} 0 0 0", False,
-    ))
+    seg, n = cfg["segment_length"], int(cfg["segments"])
+    w, th, hgt = cfg["width"], cfg["thickness"], cfg["stand_height"]
+    r = spec["pvc_half_in"]
+    colour = cfg["colour"]
+    parts = []
+    total = seg * n
+    for i in range(n):
+        cx = -total / 2.0 + seg * (i + 0.5)
+        parts.append(_box_link(
+            f"segment_{i}", seg, w, th, colour, 0.6,
+            f"{cx:.6g} 0 {hgt:.6g} 0 0 0",
+            mat=material(colour, emissive_gain=0.32)))
+        parts.append(_cylinder_link(
+            f"stand_{i}", r, hgt, WHITE, 0.4,
+            f"{cx:.6g} 0 {hgt / 2.0:.6g} 0 0 0", mat=pvc_material(WHITE)))
+        parts.append(_cylinder_link(
+            f"foot_{i}", r, w * 2.2, WHITE, 0.4,
+            f"{cx:.6g} 0 0.02 1.5708 0 0", mat=pvc_material(WHITE)))
+    return model("robosub_path_marker", "\n".join(parts))
 
 
 def robosub_pinger(spec):
@@ -971,16 +1195,33 @@ def robosub_pinger(spec):
 
 
 def robosub_collectible(spec, kind="bolt", model_name=None):
-    """Task 5 pick-up items: jars (bolt, plug) and boxes (pill, bandage)."""
+    """Task 5 pick-up items: jars (bolt, plug) and boxes (pill, bandage).
+
+    MASS IS COMPUTED FROM VOLUME, not picked. These were 0.15 kg flat, which is
+    LESS than the water they displace (192 cm3 jar, 212 cm3 box), so every one
+    of them was positively buoyant: they rose off the resupply table and
+    oscillated against the surface. That is not a physics-engine artefact, it
+    is the model being wrong -- an object a vehicle is meant to pick up and
+    carry has to sit still on a table first.
+
+    Slightly negative (density 1150 kg/m3) so they rest on the table and stay
+    where a manipulator puts them, while still being light enough to lift.
+    """
     cfg = spec["props"]["collectible"]
     colour = cfg["colours"][kind]
+    density = float(cfg.get("density", 1150.0))
     if kind in ("bolt", "plug"):
         r, h = cfg["jar_diameter"] / 2.0, cfg["jar_height"]
-        body = _cylinder_link("body", r, h, colour, 0.15, f"0 0 {h / 2.0:.6g} 0 0 0")
+        mass = math.pi * r * r * h * density
+        body = _cylinder_link("body", r, h, colour, mass,
+                              f"0 0 {h / 2.0:.6g} 0 0 0")
     else:
         sz, h = cfg["box_size"], cfg["box_height"]
-        body = _box_link("body", sz, sz, h, colour, 0.15, f"0 0 {h / 2.0:.6g} 0 0 0")
+        mass = sz * sz * h * density
+        body = _box_link("body", sz, sz, h, colour, mass,
+                         f"0 0 {h / 2.0:.6g} 0 0 0")
     return model(model_name or f"robosub_item_{kind}", body, static=False)
+
 
 
 PROPS = {
@@ -1061,13 +1302,8 @@ PROPS = {
         "anchor": ANCHOR_FLOOR,
         "dynamic": False,
     },
-    "robosub_bin_survey_repair": {
-        "build": lambda s: robosub_bin(s, "survey_repair"),
-        "anchor": ANCHOR_FLOOR,
-        "dynamic": False,
-    },
-    "robosub_bin_search_rescue": {
-        "build": lambda s: robosub_bin(s, "search_rescue"),
+    "robosub_bins": {
+        "build": robosub_bins,
         "anchor": ANCHOR_FLOOR,
         "dynamic": False,
     },
@@ -1163,6 +1399,52 @@ def standalone_sdf(name: str, spec: dict) -> str:
 FLOOR_DECAL_Z = 0.02
 
 
+
+def floor_depth_at(cfg: dict, x: float) -> float:
+    """Depth of the pool floor below the surface at longitudinal position x.
+
+    SAUVC's pool is not flat. The rulebook's side view gives 1.2 m at the two
+    ends and 1.6 m at the centre -- a shallow V, 3.2 % grade. That matters for
+    more than looks: a prop dropped at a fixed -1.6 m sits 0.34 m in the air at
+    the target zone, the DVL's bottom-track altitude changes as the vehicle
+    transits, and a depth hold that clears the floor mid-pool can ground at the
+    ends.
+
+    A pool with no `floor_edge_depth` is flat and this returns its one depth,
+    so RoboSub and every existing course are unaffected.
+    """
+    deep = cfg["depth"]
+    edge = cfg.get("floor_edge_depth")
+    if not edge:
+        return deep
+    half = cfg["length"] / 2.0
+    t = min(abs(float(x)) / half, 1.0) if half else 0.0
+    return deep - (deep - edge) * t
+
+
+
+def floor_pitch_at(cfg: dict, x: float) -> float:
+    """Pitch of the floor at x, so a prop resting on it lies FLAT ON it.
+
+    Anything sitting on a sloped floor is tilted by that slope -- trivially
+    true, and it matters most for the flat decals. The 6 x 2.2 m target mat
+    spans 2.2 m across the grade, so an unpitched mat has one edge buried in
+    the floor and the other floating above it: the same swallowed-decal failure
+    already fixed once for a different reason.
+
+    Sign follows the surface normal: on the -x half the floor rises toward the
+    wall, on the +x half it rises the other way. Zero for a flat pool.
+    """
+    edge = cfg.get("floor_edge_depth")
+    if not edge:
+        return 0.0
+    half = cfg["length"] / 2.0
+    if not half:
+        return 0.0
+    grade = (cfg["depth"] - edge) / half
+    return math.atan(grade) * (1.0 if x < 0 else -1.0)
+
+
 def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str:
     """The pool shell: a textured floor and four walls, water surface at z = 0.
 
@@ -1182,17 +1464,51 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
 
     parts = []
 
-    floor_body = [
-        inertial(1000.0, (1000.0, 1000.0, 1000.0)),
-        visual(
-            "floor_visual",
-            _geometry_box(length, width, 0.01),
-            textured_material("pool_floor.png", competition=comp),
-            f"0 0 {0.005:.6g} 0 0 0",
-        ),
-        collision("floor_collision", _geometry_box(length, width, 0.1), "0 0 -0.05 0 0 0"),
-    ]
-    parts.append(link("floor", "\n".join(floor_body), f"0 0 {floor_z:.6g} 0 0 0"))
+    # THE FLOOR. Flat unless the pool declares `floor_edge_depth`, in which
+    # case it is the shallow V the SAUVC side view draws: 1.6 m at the centre
+    # rising to 1.2 m at both ends. Built as two tilted slabs meeting at x = 0
+    # rather than a mesh, so the collision stays a primitive -- a mesh floor
+    # for a 25 m pool costs far more to collide against than two boxes that
+    # describe it exactly.
+    edge_depth = cfg.get("floor_edge_depth")
+    if not edge_depth:
+        floor_body = [
+            inertial(1000.0, (1000.0, 1000.0, 1000.0)),
+            visual(
+                "floor_visual",
+                _geometry_box(length, width, 0.01),
+                textured_material("pool_floor.png", competition=comp),
+                f"0 0 {0.005:.6g} 0 0 0",
+            ),
+            collision("floor_collision", _geometry_box(length, width, 0.1),
+                      "0 0 -0.05 0 0 0"),
+        ]
+        parts.append(link("floor", "\n".join(floor_body),
+                          f"0 0 {floor_z:.6g} 0 0 0"))
+    else:
+        half = length / 2.0
+        rise = cfg["depth"] - edge_depth          # 0.4 m over half the pool
+        pitch = math.atan2(rise, half)            # tilt of each slab
+        slab = math.hypot(half, rise)             # its true length
+        for tag, sign in (("neg", -1.0), ("pos", 1.0)):
+            # Centre of each slab: halfway along it, half the rise up.
+            cx = sign * half / 2.0
+            cz = floor_z + rise / 2.0
+            body = [
+                inertial(1000.0, (1000.0, 1000.0, 1000.0)),
+                visual(
+                    f"floor_{tag}_visual",
+                    _geometry_box(slab, width, 0.01),
+                    # Its OWN half of the floor image -- see gen_pool_texture.
+                    textured_material(f"pool_floor_{tag}.png", competition=comp),
+                    "0 0 0.005 0 0 0",
+                ),
+                collision(f"floor_{tag}_collision",
+                          _geometry_box(slab, width, 0.1), "0 0 -0.05 0 0 0"),
+            ]
+            parts.append(link(
+                f"floor_{tag}", "\n".join(body),
+                f"{cx:.6g} 0 {cz:.6g} 0 {-sign * pitch:.6g} 0"))
 
     # Walls. Each is a thin visual slab facing inward plus a thicker collision
     # box outside it, so the vehicle stops at the tiled surface it can see.

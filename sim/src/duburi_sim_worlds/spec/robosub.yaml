@@ -40,11 +40,18 @@ pvc_one_in: 0.0167      # 1 in nominal, 33.4 mm OD
 # the gate. Colours here are for the generated sign textures, not rulebook
 # values -- the handbook specifies imagery (compass/hammer-pick, ring-buoy/SOS,
 # fire, droplet), not colours.
+# The role images are RENDERED FROM THE ACTUAL EMOJI RoboNation prints, by
+# gen_pool_texture.make_role_image, into models/robosub_textures/role_*.png.
+# The colours below are only the fallback if the emoji font is missing.
 roles:
   survey_repair:
-    sign_colour: [0.85, 0.42, 0.12]      # fire / fire-engine imagery
+    sign_colour: [0.85, 0.42, 0.12]
+    gate_images: [compass, hammer_pick]
+    task_image: fire
   search_rescue:
-    sign_colour: [0.16, 0.44, 0.78]      # droplet / ambulance imagery
+    sign_colour: [0.16, 0.44, 0.78]
+    gate_images: [sos, ring_buoy]
+    task_image: droplet
 
 sign:
   # "12 in x 12 in (305 mm x 305 mm)" -- pp. 45, 49, 53.
@@ -59,7 +66,10 @@ props:
     width: 3.0
     height: 1.5
     # "24 in (610 mm)" -- the divider drop from the top bar.
-    divider_drop: 0.610
+    divider_drop: 0.6096
+    divider_width: 0.0508
+    # Each leg carries two 24 in colour bands.
+    band_length: 0.6096
     # 3 in corrugated boxes form the panels; 2 in flat sheet forms the divider.
     panel_depth: 0.076
     divider_depth: 0.051
@@ -79,15 +89,21 @@ props:
       red: [0.72, 0.11, 0.13]
 
   bin:
-    # "Four bins (CleverMade Collapsible Milk Crate 25L)" (p. 49). The crate's
-    # published external size; the handbook gives the model, not the dimensions.
-    length: 0.40
-    width: 0.30
-    height: 0.27
+    # CleverMade Collapsible Milk Crate 25L. The TeamTime slide gives the exact
+    # size the handbook omits: 13.2" x 13.2" x 11" (33.5 x 33.5 x 28 cm). It is
+    # SQUARE in plan -- the 0.40 x 0.30 used before was invented.
+    length: 0.335
+    width: 0.335
+    height: 0.28
     wall: 0.012
     colour: [0.18, 0.18, 0.20]
-    # "a 3D pipeline made from PVC supported off the bottom of the pool" (p. 47)
-    pipeline_height: 0.5
+    # "3D pipeline made from PVC supported off the bottom of the pool", and
+    # "four bins hang off the SIDES of the pipeline" -- two Survey & Repair,
+    # two Search & Rescue. The bins are not free-standing on the floor.
+    pipeline_height: 0.55
+    pipeline_span: 1.30
+    # 12x12 in role panels stand on the pipework beside the crates.
+    panel_height: 0.85
 
   torpedo_board:
     # "2 ft x 2 ft (0.6m x 0.6m)" with "two different size openings" (p. 51).
@@ -98,9 +114,16 @@ props:
     large_opening: 0.20
     small_opening: 0.13
     colour: [0.88, 0.86, 0.80]
-    # Scoring standoffs: "far (1 ft, 0.3m) and farther (1.5 ft, 0.46m)" (p. 50).
-    standoff_far: 0.30
-    standoff_farther: 0.46
+    # SCORING STANDOFFS -- THE TWO SOURCES DISAGREE, so both are recorded.
+    #   Handbook p. 50:      far 1 ft (0.3 m),  farther 1.5 ft (0.46 m)
+    #   TeamTime-2 slide:    far 1.0 m,         farther 1.5 m
+    # The slide is the later document and its numbers are the ones a mission
+    # should be tuned against, so they are the active pair. If a rules update
+    # settles it the other way, swap these two lines and say so here.
+    standoff_far: 1.00
+    standoff_farther: 1.50
+    standoff_far_handbook: 0.30
+    standoff_farther_handbook: 0.46
 
   octagon:
     # "A 9 ft (2.7m) diameter octagon floats on the surface" (p. 52).
@@ -118,6 +141,10 @@ props:
     jar_height: 0.050
     box_size: 0.084
     box_height: 0.030
+    # Slightly denser than water so the items REST on the table instead of
+    # floating off it. At the old flat 0.15 kg every one was positively
+    # buoyant. See robosub_collectible.
+    density: 1150.0
     colours:
       bolt: [0.55, 0.55, 0.58]
       plug: [0.80, 0.65, 0.25]
@@ -126,8 +153,13 @@ props:
 
   path_marker:
     # "~4 feet (~1.2m) long by 6 in (15 cm) wide. The Path is colored ORANGE."
-    length: 1.2
-    width: 0.15
+    # The CAD shows it as TWO 18 in (457.2 mm) segments on PVC T-stands, held
+    # OFF the bottom -- not a decal painted on the floor.
+    segment_length: 0.4572
+    segments: 2
+    width: 0.1524
+    thickness: 0.02
+    stand_height: 0.30
     colour: [0.95, 0.42, 0.05]
 
   pinger:

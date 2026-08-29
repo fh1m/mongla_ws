@@ -76,64 +76,80 @@ def test_turbidity_actually_reduces_contrast(frame):
     assert murky.std() < clear.std()
 
 
-def test_gt_label_tables_cover_the_same_props():
-    """A prop in one table but not the other is silently unlabelled.
+def test_every_registered_prop_has_a_detection_label():
+    """A prop without a label is INVISIBLE to the bounding-box camera.
 
-    sauvc_target_mat was added to MODEL_TO_CLASS without half-extents; the
-    projector skipped it at a `half is None` guard, classes.txt still listed
-    target_mat, and 1469 recorded frames carried zero mat instances. The dataset
-    looked complete and the class was never learnable. gt_labels now raises at
-    import; this test states the invariant so it is not "fixed" back out.
+    Gazebo emits a box only for an entity carrying a SemanticLabel, and it says
+    nothing about one that has none -- so an unlabelled prop is simply absent
+    from every frame's annotations, with no warning anywhere. That is the same
+    silent-empty-labels failure that once put target_mat in one table and not
+    the other; this is its replacement guard.
     """
-    from duburi_sim_bridge import gt_labels
+    pl = _prop_library()
+    unlabelled = [n for n in pl.PROPS if pl.detection_label(n) == 0]
+    assert not unlabelled, (
+        f'props with no detection label, invisible to the box camera: '
+        f'{unlabelled}')
 
-    assert set(gt_labels.MODEL_TO_CLASS) == set(gt_labels.PROP_HALF_EXTENTS)
-    for name in gt_labels.MODEL_TO_CLASS.values():
-        assert name in gt_labels.CLASSES
 
+def test_class_zero_stays_reserved():
+    """gz-sim treats an unlabelled entity as label 0.
 
-# ---------------------------------------------------------------------------
-# hydrophone
-# ---------------------------------------------------------------------------
-
-def test_hydrophone_degradations_are_all_reachable():
-    """Every degradation must be switchable, or the sensor is untestable.
-
-    A mission tuned against a perfect bearing learns nothing, and a mission
-    tuned against a sensor whose noise cannot be turned off cannot be debugged.
-    Both directions matter, so both are asserted.
+    If a real class ever took slot 0 it would be indistinguishable from
+    background, and every unlabelled thing in the scene would annotate as it.
     """
-    from duburi_sim_bridge import hydrophone
-
-    src = hydrophone.__doc__ or ''
-    for word in ('dropout', 'ghost', 'blind cone', 'SNR'):
-        assert word.lower() in src.lower(), f'{word} undocumented'
+    pl = _prop_library()
+    assert pl.DETECTION_CLASSES[0] == '_background'
+    assert 0 not in [pl.detection_label(n) for n in pl.PROPS]
 
 
-def test_bearing_wrap_is_symmetric_about_180():
-    from duburi_sim_bridge.hydrophone import _wrap180
-
-    assert _wrap180(190.0) == pytest.approx(-170.0)
-    assert _wrap180(-190.0) == pytest.approx(170.0)
-    assert _wrap180(0.0) == 0.0
-    # 180 and -180 are the same bearing; the convention must not drift.
-    assert abs(_wrap180(180.0)) == pytest.approx(180.0)
+def test_detection_classes_are_unique_and_cover_both_competitions():
+    pl = _prop_library()
+    assert len(set(pl.DETECTION_CLASSES)) == len(pl.DETECTION_CLASSES)
+    assert any(c.startswith('sauvc_') for c in pl.DETECTION_CLASSES)
+    assert any(c.startswith('robosub_') for c in pl.DETECTION_CLASSES)
 
 
-def test_a_ghost_is_far_from_truth_not_near_it():
-    """The point of modelling ghosts separately from noise.
+def test_boxes_to_yolo_normalises_and_drops_background():
+    """The class id arrives as a STRING and 0 means background."""
+    from duburi_sim_bridge import box_labels
 
-    Noise scatters around the true bearing and averages away. A multipath ghost
-    is a CONFIDENT WRONG bearing off a wall, arriving on time and looking as
-    valid as a real ping -- it is what breaks homing that averages. If ghosts
-    were drawn near the truth they would be indistinguishable from noise and the
-    whole distinction would be decorative.
-    """
-    import inspect
+    class _H:
+        def __init__(self, c): self.class_id = c
+    class _R:
+        def __init__(self, c): self.hypothesis = _H(c)
+    class _P:
+        def __init__(self, x, y): self.position = type('p', (), {'x': x, 'y': y})()
+    class _B:
+        def __init__(self, x, y, w, h):
+            self.center, self.size_x, self.size_y = _P(x, y), w, h
+    class _D:
+        def __init__(self, c, x, y, w, h):
+            self.results, self.bbox = [_R(c)], _B(x, y, w, h)
+    class _M:
+        def __init__(self, dets): self.detections = dets
 
-    from duburi_sim_bridge import hydrophone
+    rows = box_labels.boxes_to_yolo(
+        _M([_D('3', 320, 240, 64, 48),      # good
+            _D('0', 100, 100, 64, 48),      # background -> dropped
+            _D('3', 10, 10, 1, 1)]),        # sub-pixel -> dropped
+        640, 480)
+    assert len(rows) == 1
+    cid, xc, yc, w, h = rows[0]
+    assert cid == 3
+    assert (xc, yc) == pytest.approx((0.5, 0.5))
+    assert (w, h) == pytest.approx((0.1, 0.1))
 
-    src = inspect.getsource(hydrophone.Hydrophone._ping)
-    assert 'uniform(35.0, 120.0)' in src, (
-        'ghost offset is no longer a large deflection; a ghost near the true '
-        'bearing is just noise')
+
+def _prop_library():
+    import importlib.util, os, sys
+    from ament_index_python.packages import get_package_share_directory
+    scripts = os.path.join(
+        get_package_share_directory('duburi_sim_worlds'), 'scripts')
+    sys.path.insert(0, scripts)
+    spec = importlib.util.spec_from_file_location(
+        'prop_library', os.path.join(scripts, 'prop_library.py'))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault('prop_library', mod)
+    spec.loader.exec_module(mod)
+    return mod

@@ -2,27 +2,164 @@
 <sdf version="1.9">
   <model name="robosub_path_marker">
     <static>true</static>
-    <link name="marker">
-      <pose>0 0 0.02 0 0 0</pose>
+    <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
+      <label>19</label>
+    </plugin>
+    <link name="segment_0">
+      <pose>-0.2286 0 0.3 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.001</mass>
+        <mass>0.6</mass>
         <inertia>
-          <ixx>1e-06</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>1e-06</iyy><iyz>0</iyz>
-          <izz>1e-06</izz>
+          <ixx>0.00118129</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0104716</iyy><iyz>0</iyz>
+          <izz>0.0116129</izz>
         </inertia>
       </inertial>
-      <visual name="marker_visual">
+      <visual name="segment_0_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>1.2 0.15 0.006</size></box></geometry>
+        <geometry><box><size>0.4572 0.1524 0.02</size></box></geometry>
         <material>
           <ambient>0.95 0.42 0.05 1</ambient>
           <diffuse>0.95 0.42 0.05 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.285 0.126 0.015 1</emissive>
+          <emissive>0.304 0.1344 0.016 1</emissive>
         </material>
       </visual>
+      <collision name="segment_0_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.4572 0.1524 0.02</size></box></geometry>
+      </collision>
+    </link>
+    <link name="stand_0">
+      <pose>-0.2286 0 0.15 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00301103</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00301103</iyy><iyz>0</iyz>
+          <izz>2.205e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="stand_0_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.3</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="stand_0_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.3</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="foot_0">
+      <pose>-0.2286 0 0.02 1.5708 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00375811</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00375811</iyy><iyz>0</iyz>
+          <izz>2.205e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="foot_0_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.33528</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="foot_0_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.33528</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="segment_1">
+      <pose>0.2286 0 0.3 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.6</mass>
+        <inertia>
+          <ixx>0.00118129</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0104716</iyy><iyz>0</iyz>
+          <izz>0.0116129</izz>
+        </inertia>
+      </inertial>
+      <visual name="segment_1_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.4572 0.1524 0.02</size></box></geometry>
+        <material>
+          <ambient>0.95 0.42 0.05 1</ambient>
+          <diffuse>0.95 0.42 0.05 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.304 0.1344 0.016 1</emissive>
+        </material>
+      </visual>
+      <collision name="segment_1_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.4572 0.1524 0.02</size></box></geometry>
+      </collision>
+    </link>
+    <link name="stand_1">
+      <pose>0.2286 0 0.15 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00301103</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00301103</iyy><iyz>0</iyz>
+          <izz>2.205e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="stand_1_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.3</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="stand_1_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.3</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="foot_1">
+      <pose>0.2286 0 0.02 1.5708 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.4</mass>
+        <inertia>
+          <ixx>0.00375811</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00375811</iyy><iyz>0</iyz>
+          <izz>2.205e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="foot_1_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.33528</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+      <collision name="foot_1_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0105</radius><length>0.33528</length></cylinder></geometry>
+      </collision>
     </link>
   </model>
 </sdf>

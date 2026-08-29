@@ -18,6 +18,10 @@ pool:
   # the bottom). Both depth-spanning props are generated against this number, so
   # if you change it you must regenerate them.
   depth: 1.6
+  # The floor SLOPES. The rulebook side view gives 1.6 m at the pool centre
+  # rising to 1.2 m at both ends -- a shallow V at about a 3.2 % grade. Remove
+  # this key for a flat floor; RoboSub has none and is flat.
+  floor_edge_depth: 1.2
   wall_thickness: 0.2
   # Water surface sits at z = 0. The floor is therefore at z = -depth.
 

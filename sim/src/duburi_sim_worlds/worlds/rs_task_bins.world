@@ -293,68 +293,25 @@ A DOWNWARD-camera task. The role image sits on each bin's floor facing up, so th
           <geometry><box><size>20 0.2 2.1</size></box></geometry>
         </collision>
       </link>
-      <link name="water_surface">
-        <pose>0 0 0 0 0 0</pose>
-        <inertial>
-          <pose>0 0 0 0 0 0</pose>
-          <mass>1</mass>
-          <inertia>
-            <ixx>1</ixx><ixy>0</ixy><ixz>0</ixz>
-            <iyy>1</iyy><iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-        </inertial>
-        <visual name="water_surface_visual">
-          <pose>0 0 0 0 0 0</pose>
-          <cast_shadows>false</cast_shadows>
-          <transparency>0.62</transparency>
-          <geometry><box><size>20 12 0.01</size></box></geometry>
-          <material>
-            <ambient>0.95 0.95 0.95 1</ambient>
-            <diffuse>0.95 0.95 0.95 1</diffuse>
-            <specular>0.35 0.35 0.35 1</specular>
-            <emissive>0.22 0.22 0.22 1</emissive>
-            <pbr>
-              <metal>
-                <albedo_map>model://robosub_textures/water_surface.png</albedo_map>
-                <metalness>0.0</metalness>
-                <roughness>0.15</roughness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-      </link>
     </model>
 
     <!-- ===================== PROPS ===================== -->
     <include>
-      <uri>model://robosub_bin_survey_repair</uri>
-      <name>bin_sr_a</name>
-      <pose>0 0.6 -2.1 0 0 0</pose>
-    </include>
-
-    <include>
-      <uri>model://robosub_bin_search_rescue</uri>
-      <name>bin_rescue_a</name>
-      <pose>0 -0.6 -2.1 0 0 0</pose>
-    </include>
-
-    <include>
-      <uri>model://robosub_bin_survey_repair</uri>
-      <name>bin_sr_b</name>
-      <pose>0.9 0.6 -2.1 0 0 0</pose>
-    </include>
-
-    <include>
-      <uri>model://robosub_bin_search_rescue</uri>
-      <name>bin_rescue_b</name>
-      <pose>0.9 -0.6 -2.1 0 0 0</pose>
+      <uri>model://robosub_bins</uri>
+      <name>bins</name>
+      <pose>0.5 0 -2.1 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://robosub_path_marker</uri>
       <name>path_in</name>
       <pose>-1.6 0 -2.1 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/openrobotics/models/waves</uri>
+      <name>water_surface</name>
+      <pose>0 0 0 0 0 0</pose>
     </include>
 
     <!-- ===================== VEHICLE ===================== -->

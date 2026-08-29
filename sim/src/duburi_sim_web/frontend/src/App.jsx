@@ -298,7 +298,26 @@ function LinkDots({ link = {}, teleop }) {
 }
 
 // Pool floor from duburi_sim_worlds/spec/arena.yaml (surface z=0, depth 1.6).
-const POOL_FLOOR_M = -1.6
+// SAUVC's floor is a shallow V: 1.6 m at the centre, 1.2 m at both ends. A
+// constant -1.6 here overstated altitude by up to 0.4 m near either wall, and
+// the operator reads this number to decide whether the vehicle is about to
+// ground. RoboSub's pool is flat at 2.1 m.
+//
+// Kept in sync with duburi_sim_worlds/spec/*.yaml by hand -- the lab has no
+// route to the arena spec, so a drift test in the autonomy package asserts
+// these numbers still match.
+const POOL_PROFILE = {
+  sauvc: { length: 25.0, depth: 1.6, edge: 1.2 },
+  robosub: { length: 20.0, depth: 2.1, edge: null },
+}
+
+function floorDepthAt(course, x) {
+  const p = (course || '').startsWith('robosub') || (course || '').startsWith('rs_')
+    ? POOL_PROFILE.robosub : POOL_PROFILE.sauvc
+  if (!p.edge || !Number.isFinite(x)) return -p.depth
+  const t = Math.min(Math.abs(x) / (p.length / 2), 1)
+  return -(p.depth - (p.depth - p.edge) * t)
+}
 // Mirrors ALLOWED_MODES in server.py. Kept short on purpose: SURFACE has its
 // own verb and POSHOLD needs DVL/EKF params the sim does not set.
 const MODES = ['MANUAL', 'STABILIZE', 'ALT_HOLD', 'ACRO', 'DEPTH_HOLD']
@@ -470,7 +489,7 @@ function Operate({ status, refresh }) {
           <div><dt>depth</dt><dd>{fmtM(st.depth_m)}</dd></div>
           <div><dt>yaw</dt><dd>{fmtDeg(st.yaw_deg)}</dd></div>
           <div><dt>battery</dt><dd>{st.battery_voltage != null ? `${Number(st.battery_voltage).toFixed(1)} V` : '—'}</dd></div>
-          <div><dt>alt</dt><dd>{fmtM(gt?.have ? Math.abs(POOL_FLOOR_M - gt.z) : null)}</dd></div>
+          <div><dt>alt</dt><dd>{fmtM(gt?.have ? Math.abs(floorDepthAt(st?.active_course, gt.x) - gt.z) : null)}</dd></div>
           {/* course is a single 21-char unbreakable token; in a half-width
               track it set the grid's min-content and forced the whole sidebar
               to overflow. Full width is the honest place for it. */}

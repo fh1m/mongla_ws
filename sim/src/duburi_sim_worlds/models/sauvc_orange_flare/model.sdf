@@ -2,6 +2,9 @@
 <sdf version="1.9">
   <model name="sauvc_orange_flare">
     <static>true</static>
+    <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
+      <label>3</label>
+    </plugin>
     <link name="flare">
       <pose>0 0 0.8 0 0 0</pose>
       <inertial>
