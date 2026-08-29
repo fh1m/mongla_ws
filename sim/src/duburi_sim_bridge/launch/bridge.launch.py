@@ -88,10 +88,19 @@ def generate_launch_description():
             package='ros_gz_image',
             executable='image_bridge',
             name='duburi_sim_image_bridge',
-            arguments=['/front_camera', '/bottom_camera'],
+            # Range images are bridged too. When configs.yaml leaves
+            # `range_cameras: false` the sensors are stripped from the model
+            # and these two simply never carry anything -- image_bridge
+            # advertises the topic either way, which is why `gz topic -l` still
+            # lists them. Harmless, but do not read their presence as evidence
+            # the sensors are running.
+            arguments=['/front_camera', '/bottom_camera',
+                       '/front_range', '/bottom_range'],
             remappings=[
                 ('/front_camera', FRONT_IMAGE),
                 ('/bottom_camera', BOTTOM_IMAGE),
+                ('/front_range', '/duburi/sim/front_camera/range'),
+                ('/bottom_range', '/duburi/sim/bottom_camera/range'),
             ],
             output='screen',
         ),

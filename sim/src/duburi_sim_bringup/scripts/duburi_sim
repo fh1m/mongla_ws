@@ -89,6 +89,14 @@ patterns = (
     # A leak here does not look like a leak; it looks like "the sim got slow".
     'lib/duburi_sim_bridge/dvl_bridge',
     'lib/duburi_sim_bridge/tf_broadcaster',
+    # Added 2026-08-29 after six orphans (4x t200_curve, 2x hydrophone) were
+    # found alive from earlier runs, one for 16 hours. Same leak as dvl_bridge:
+    # a node added to the launch and not to this list survives every `stop`,
+    # and the symptom is never "a process leaked" -- it is "the sim got slow".
+    # ANY new node in sim.launch.py belongs here.
+    'lib/duburi_sim_bridge/t200_curve',
+    'lib/duburi_sim_bridge/water_current',
+    'lib/duburi_sim_bridge/hydrophone',
     'lib/duburi_sim_scenarios/prop_manager',
     'duburi_sim_worlds/worlds',
     'ros_gz_image/image_bridge',

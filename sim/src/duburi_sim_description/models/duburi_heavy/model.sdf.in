@@ -212,6 +212,42 @@
            Same intrinsics as the colour camera above -- the boxes have to be
            in the same image frame as the pixels they annotate, so the two
            sensors share every camera token rather than getting their own. -->
+      <!-- RANGE image, for PER-PIXEL attenuation.
+           underwater_fx attenuates by the VEHICLE's depth, so every pixel is
+           degraded identically and a wall 20 m away is exactly as clear as the
+           floor 1 m below. Real water attenuates along the PATH THE LIGHT
+           TRAVELLED, which is what makes a distant prop fade while a near one
+           stays sharp -- the single strongest depth cue an underwater image
+           has, and the thing a detector must cope with at range.
+
+           A depth_camera rather than an rgbd_camera: rgbd would move the
+           colour topic and break the image_raw contract every consumer relies
+           on. This is additive. -->
+      <sensor name="front_range" type="depth_camera">
+        <!-- always_on=0 does NOT stop this rendering: Gazebo creates the
+             sensor regardless and the render pass is paid anyway. Measured:
+             the topics were still published and the cameras still ran slow
+             with always_on=0. The generator therefore OMITS this whole block
+             unless configs.yaml sets range_cameras: true. -->
+        <always_on>1</always_on>
+        <update_rate>@camera_update_rate</update_rate>
+        <visualize>false</visualize>
+        <topic>front_range</topic>
+        <camera name="front_range">
+          <horizontal_fov>@camera_hfov</horizontal_fov>
+          <image>
+            <width>@camera_width</width>
+            <height>@camera_height</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>@camera_far_clip</far>
+          </clip>
+          <optical_frame_id>front_camera_link_optical</optical_frame_id>
+        </camera>
+      </sensor>
+
       <sensor name="front_boxes" type="boundingbox_camera">
         <always_on>@boxes_always_on</always_on>
         <update_rate>@camera_update_rate</update_rate>
@@ -286,6 +322,42 @@
            Same intrinsics as the colour camera above -- the boxes have to be
            in the same image frame as the pixels they annotate, so the two
            sensors share every camera token rather than getting their own. -->
+      <!-- RANGE image, for PER-PIXEL attenuation.
+           underwater_fx attenuates by the VEHICLE's depth, so every pixel is
+           degraded identically and a wall 20 m away is exactly as clear as the
+           floor 1 m below. Real water attenuates along the PATH THE LIGHT
+           TRAVELLED, which is what makes a distant prop fade while a near one
+           stays sharp -- the single strongest depth cue an underwater image
+           has, and the thing a detector must cope with at range.
+
+           A depth_camera rather than an rgbd_camera: rgbd would move the
+           colour topic and break the image_raw contract every consumer relies
+           on. This is additive. -->
+      <sensor name="bottom_range" type="depth_camera">
+        <!-- always_on=0 does NOT stop this rendering: Gazebo creates the
+             sensor regardless and the render pass is paid anyway. Measured:
+             the topics were still published and the cameras still ran slow
+             with always_on=0. The generator therefore OMITS this whole block
+             unless configs.yaml sets range_cameras: true. -->
+        <always_on>1</always_on>
+        <update_rate>@camera_update_rate</update_rate>
+        <visualize>false</visualize>
+        <topic>bottom_range</topic>
+        <camera name="bottom_range">
+          <horizontal_fov>@camera_hfov</horizontal_fov>
+          <image>
+            <width>@camera_width</width>
+            <height>@camera_height</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>@camera_far_clip</far>
+          </clip>
+          <optical_frame_id>bottom_camera_link_optical</optical_frame_id>
+        </camera>
+      </sensor>
+
       <sensor name="bottom_boxes" type="boundingbox_camera">
         <always_on>@boxes_always_on</always_on>
         <update_rate>@camera_update_rate</update_rate>
@@ -612,6 +684,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <plugin
@@ -624,6 +707,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <plugin
@@ -637,6 +731,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <plugin
@@ -650,6 +755,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <plugin
@@ -662,6 +778,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <plugin
@@ -675,6 +802,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <plugin
@@ -688,6 +826,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <plugin
@@ -700,6 +849,17 @@
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>@use_angvel_cmd</use_angvel_cmd>
+      <!-- WAKE. Blue Robotics' T200 data is BOLLARD PULL -- thrust with the
+           vehicle held still -- so without this the propeller makes the same
+           force at 0.7 m/s as it does at rest. It does not: as the hull moves,
+           inflow rises, the blade's angle of attack drops and thrust falls.
+           This is why a real vehicle creeps toward its top speed while the sim
+           snapped to it.
+           thrust = rho * D^4 * Ct * |w|w * (alpha_1 + alpha_2 * J), with
+           J the advance ratio built from wake_fraction. -->
+      <wake_fraction>@wake_fraction</wake_fraction>
+      <alpha_1>@alpha_1</alpha_1>
+      <alpha_2>@alpha_2</alpha_2>
     </plugin>
 
     <!-- ArduSub link. type=COMMAND means this plugin does not actuate the joint

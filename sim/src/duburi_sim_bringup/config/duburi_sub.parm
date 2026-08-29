@@ -41,6 +41,37 @@ BRD_SAFETY_DEFLT 0
 # --- Simulated sensor noise -------------------------------------------------
 SIM_BARO_RND     0.02
 
+# ---------------------------------------------------------------------------
+# SENSOR NOISE. Until now only the barometer had any, so EKF3 in sim was fed
+# cleaner data than it will ever see on the vehicle -- and HEADING DRIFT, the
+# most persistent real-world problem this project has and the entire reason
+# `yaw_source` exists, simply did not happen in simulation.
+#
+# A heading loop tuned against a noiseless compass is tuned against a problem
+# the pool does not pose. These values are ArduPilot's own SITL defaults for a
+# consumer-grade IMU, which is what a Pixhawk 2.4.8 carries.
+# ---------------------------------------------------------------------------
+SIM_ACC_RND      0.5
+SIM_GYR_RND      0.5
+SIM_MAG_RND      2.0
+
+# Gyro bias drift, deg/s per run. This is what makes a heading estimate walk
+# away over a mission rather than staying put, and it is the specific failure
+# the BNO085/DVL yaw sources exist to work around.
+SIM_DRIFT_SPEED  0.05
+SIM_DRIFT_TIME   5
+
+# ---------------------------------------------------------------------------
+# BATTERY. The T200 curve is voltage-interpolated -- 36 N at 12 V against 66 N
+# at 20 V -- so a sagging pack makes late-mission manoeuvres measurably weaker
+# than the same manoeuvre at the start, exactly as in the pool.
+#
+# 16.0 V is 4S nominal. FS_BATT_ENABLE stays 0: a sim run must not be aborted
+# by a battery failsafe mid-experiment.
+# ---------------------------------------------------------------------------
+SIM_BATT_VOLTAGE 16.0
+BATT_MONITOR     4
+
 # --- Telemetry --------------------------------------------------------------
 SR1_EXTRA1       10
 SR1_EXTRA2       10

@@ -13,6 +13,8 @@
   <world name="{world_name}">
 
     <!-- ===================== SYSTEMS ===================== -->
+    <plugin filename="gz-sim-particle-emitter-system"
+            name="gz::sim::systems::ParticleEmitter"/>
     <plugin filename="gz-sim-physics-system"
             name="gz::sim::systems::Physics"/>
     <plugin filename="gz-sim-user-commands-system"
@@ -147,6 +149,14 @@
     <!-- Water surface at z = 0, floor at z = {floor_z}. -->
 {pool}
 
+    <!-- MARINE SNOW. Suspended particulate drifting through the beam.
+         `underwater_fx` degrades every pixel by the VEHICLE's depth, so it
+         cannot produce anything range-dependent -- a far wall is exactly as
+         hazy as the near floor, and nothing moves between frames. Real
+         particulate is the cue that is missing: it occludes, it drifts, and it
+         gives a detector something to be robust to that fog cannot.
+         `snow: 0` in a course's scene block turns it off. -->
+{marine_snow}
     <!-- ===================== PROPS ===================== -->
 {props}
 

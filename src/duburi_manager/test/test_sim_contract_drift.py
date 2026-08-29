@@ -519,3 +519,47 @@ def test_every_translational_axis_has_a_recorded_measurement():
                      'RESULTS.md').read_text()
     for axis in ('surge', 'sway', 'heave'):
         assert f'| {axis} |' in results, f'{axis} has no recorded measurement'
+
+
+def test_golf_balls_sit_on_their_flares_not_beside_them():
+    """A ball placed straight up from a TILTED flare misses the cup entirely.
+
+    SAUVC's floor slopes, so each flare is pitched to stand normal to it. The
+    top of an 0.8 m pole is therefore displaced horizontally by
+    height*sin(pitch) and sits slightly lower than height above the base.
+    Adding the ball's lift straight up put it ~21 mm above and ~26 mm to one
+    side of the cup: it spawned in open water and fell, every single run.
+
+    Verified by HEIGHT against the computed cup position, never by whether the
+    ball moves. A ball at rest on the pool floor does not move either, which is
+    exactly how an earlier "held for 75 s" check passed while all three balls
+    were down.
+    """
+    import math
+    import re
+
+    pl = _prop_library()
+    spec = pl.load_spec(competition='sauvc')
+    pool = spec['pool']
+    lift = (spec['props']['bump_flare']['height'] + 0.006
+            + spec['props']['golf_ball']['diameter'] / 2.0)
+
+    world = (SIM / 'src/duburi_sim_worlds/worlds/sauvc26_final.world').read_text()
+    checked = 0
+    for colour in ('red', 'yellow', 'blue'):
+        fm = re.search(rf'<name>sauvc_flare_{colour}</name>|'
+                       rf'<name>flare_{colour}</name>\s*<pose>([^<]+)</pose>', world)
+        bm = re.search(rf'<name>flare_{colour}_ball</name>\s*<pose>([^<]+)</pose>',
+                       world)
+        if not (fm and fm.group(1) and bm):
+            continue
+        fx, fy, fz, _, fp, _ = [float(v) for v in fm.group(1).split()]
+        bx, by, bz = [float(v) for v in bm.group(1).split()[:3]]
+
+        assert bz == pytest.approx(fz + lift * math.cos(fp), abs=2e-3), (
+            f'{colour} ball height ignores the flare pitch')
+        assert bx == pytest.approx(fx + lift * math.sin(fp), abs=2e-3), (
+            f'{colour} ball is not over the cup; it will fall on the first step')
+        checked += 1
+
+    assert checked == 3, f'only checked {checked} flares'
