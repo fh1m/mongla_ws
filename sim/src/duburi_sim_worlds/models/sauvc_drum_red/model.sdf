@@ -88,32 +88,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_0_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_0">
-      <pose>0.268 0 0.15 0 0 0.000000</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_0_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_1">
       <pose>0.275806 0.0896149 0.15 0 0 0.314159</pose>
@@ -141,32 +115,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_1_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_1">
-      <pose>0.254883 0.0828166 0.15 0 0 0.314159</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_1_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -198,32 +146,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_2_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_2">
-      <pose>0.216817 0.157526 0.15 0 0 0.628319</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_2_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_3">
       <pose>0.170458 0.234615 0.15 0 0 0.942478</pose>
@@ -251,32 +173,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_3_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_3">
-      <pose>0.157526 0.216817 0.15 0 0 0.942478</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_3_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -308,32 +204,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_4_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_4">
-      <pose>0.0828166 0.254883 0.15 0 0 1.256637</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_4_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_5">
       <pose>1.77574e-17 0.29 0.15 0 0 1.570796</pose>
@@ -361,32 +231,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_5_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_5">
-      <pose>1.64103e-17 0.268 0.15 0 0 1.570796</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_5_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -418,32 +262,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_6_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_6">
-      <pose>-0.0828166 0.254883 0.15 0 0 1.884956</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_6_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_7">
       <pose>-0.170458 0.234615 0.15 0 0 2.199115</pose>
@@ -471,32 +289,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_7_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_7">
-      <pose>-0.157526 0.216817 0.15 0 0 2.199115</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_7_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -528,32 +320,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_8_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_8">
-      <pose>-0.216817 0.157526 0.15 0 0 2.513274</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_8_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_9">
       <pose>-0.275806 0.0896149 0.15 0 0 2.827433</pose>
@@ -581,32 +347,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_9_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_9">
-      <pose>-0.254883 0.0828166 0.15 0 0 2.827433</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_9_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -638,32 +378,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_10_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_10">
-      <pose>-0.268 3.28205e-17 0.15 0 0 3.141593</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_10_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_11">
       <pose>-0.275806 -0.0896149 0.15 0 0 3.455752</pose>
@@ -691,32 +405,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_11_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_11">
-      <pose>-0.254883 -0.0828166 0.15 0 0 3.455752</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_11_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -748,32 +436,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_12_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_12">
-      <pose>-0.216817 -0.157526 0.15 0 0 3.769911</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_12_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_13">
       <pose>-0.170458 -0.234615 0.15 0 0 4.084070</pose>
@@ -801,32 +463,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_13_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_13">
-      <pose>-0.157526 -0.216817 0.15 0 0 4.084070</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_13_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -858,32 +494,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_14_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_14">
-      <pose>-0.0828166 -0.254883 0.15 0 0 4.398230</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_14_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_15">
       <pose>-5.32721e-17 -0.29 0.15 0 0 4.712389</pose>
@@ -911,32 +521,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_15_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_15">
-      <pose>-4.92308e-17 -0.268 0.15 0 0 4.712389</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_15_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -968,32 +552,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_16_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_16">
-      <pose>0.0828166 -0.254883 0.15 0 0 5.026548</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_16_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_17">
       <pose>0.170458 -0.234615 0.15 0 0 5.340708</pose>
@@ -1021,32 +579,6 @@
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
             </metal>
           </pbr>
-        </material>
-      </visual>
-      <collision name="wall_17_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_17">
-      <pose>0.157526 -0.216817 0.15 0 0 5.340708</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_17_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
         </material>
       </visual>
     </link>
@@ -1078,32 +610,6 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_18_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
-    </link>
-    <link name="liner_18">
-      <pose>0.216817 -0.157526 0.15 0 0 5.654867</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
-        <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
-        </inertia>
-      </inertial>
-      <visual name="liner_18_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
-        <material>
-          <ambient>0.8 0.1 0.1 1</ambient>
-          <diffuse>0.8 0.1 0.1 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
-        </material>
-      </visual>
     </link>
     <link name="wall_19">
       <pose>0.275806 -0.0896149 0.15 0 0 5.969026</pose>
@@ -1133,32 +639,92 @@
           </pbr>
         </material>
       </visual>
-      <collision name="wall_19_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0985537 0.3</size></box></geometry>
-      </collision>
     </link>
-    <link name="liner_19">
-      <pose>0.254883 -0.0828166 0.15 0 0 5.969026</pose>
+    <link name="liner">
+      <pose>0 0 0.15 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.05</mass>
         <inertia>
-          <ixx>8.3094e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>7.50133e-05</iyy><iyz>0</iyz>
-          <izz>8.10736e-06</izz>
+          <ixx>0.0015</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0015</iyy><iyz>0</iyz>
+          <izz>0.00225</izz>
         </inertia>
       </inertial>
-      <visual name="liner_19_visual">
+      <visual name="liner_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.0985537 0.3</size></box></geometry>
+        <geometry><cylinder><radius>0.272</radius><length>0.294</length></cylinder></geometry>
         <material>
           <ambient>0.8 0.1 0.1 1</ambient>
           <diffuse>0.8 0.1 0.1 1</diffuse>
           <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.025 0.025 1</emissive>
+          <emissive>0.24 0.03 0.03 1</emissive>
         </material>
       </visual>
+    </link>
+    <link name="collide_xp">
+      <pose>0.28 0 0.15 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.01</iyy><iyz>0</iyz>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+      <collision name="collide_xp_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.04 0.56 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="collide_xn">
+      <pose>-0.28 0 0.15 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.01</iyy><iyz>0</iyz>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+      <collision name="collide_xn_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.04 0.56 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="collide_yp">
+      <pose>0 0.28 0.15 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.01</iyy><iyz>0</iyz>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+      <collision name="collide_yp_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.56 0.04 0.3</size></box></geometry>
+      </collision>
+    </link>
+    <link name="collide_yn">
+      <pose>0 -0.28 0.15 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.01</iyy><iyz>0</iyz>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+      <collision name="collide_yn_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.56 0.04 0.3</size></box></geometry>
+      </collision>
     </link>
   </model>
 </sdf>

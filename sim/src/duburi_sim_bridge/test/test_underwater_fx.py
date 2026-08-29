@@ -153,3 +153,135 @@ def _prop_library():
     sys.modules.setdefault('prop_library', mod)
     spec.loader.exec_module(mod)
     return mod
+
+
+# ---------------------------------------------------------------------------
+# T200 thrust curve
+# ---------------------------------------------------------------------------
+
+def test_t200_curve_matches_the_published_data():
+    """The curve must track Blue Robotics' own measurements.
+
+    These coefficients were fitted to
+    T200-Public-Performance-Data-10-20V-September-2019.xlsx. If someone retunes
+    them by eye the fit is what silently degrades, so the endpoints and the
+    asymmetry are pinned here.
+    """
+    from duburi_sim_bridge.t200_curve import thrust_at_pwm
+
+    # Published 16 V endpoints: +51.4 N forward, -39.9 N reverse.
+    assert thrust_at_pwm(1900, 16.0) == pytest.approx(51.4, abs=2.5)
+    assert thrust_at_pwm(1100, 16.0) == pytest.approx(-39.9, abs=2.5)
+
+    # Reverse is ~78 % of forward across the whole voltage range. A symmetric
+    # thruster is the single most misleading simplification here: a vehicle
+    # that brakes as hard as it accelerates flatters every manoeuvre.
+    for volts in (12.0, 16.0, 20.0):
+        fwd, rev = thrust_at_pwm(1900, volts), abs(thrust_at_pwm(1100, volts))
+        assert 0.70 < rev / fwd < 0.85, f'{volts} V asymmetry lost'
+
+
+def test_t200_deadband_produces_exactly_zero():
+    """A T200 does NOTHING near neutral, and that is a feature.
+
+    Measured A/B in the sim at gain 15: the old linear model travelled 0.37 m,
+    the real curve travelled 0.00 m. The deadband is why a real vehicle cannot
+    hold a millimetre-precise station -- small corrections do nothing at all
+    until they suddenly do something. A sim without it teaches gains that do
+    not survive contact with water.
+    """
+    from duburi_sim_bridge.t200_curve import thrust_at_pwm
+
+    for pwm in (1480, 1490, 1500, 1510, 1520):
+        assert thrust_at_pwm(pwm, 16.0) == 0.0, f'{pwm} should be inside the deadband'
+    assert thrust_at_pwm(1540, 16.0) > 0.0
+    assert thrust_at_pwm(1460, 16.0) < 0.0
+
+
+def test_t200_is_monotonic_and_voltage_scaled():
+    """More command is more thrust; more volts is more thrust."""
+    from duburi_sim_bridge.t200_curve import thrust_at_pwm
+
+    fwd = [thrust_at_pwm(p, 16.0) for p in range(1530, 1901, 10)]
+    assert all(b >= a for a, b in zip(fwd, fwd[1:])), 'forward not monotonic'
+    rev = [thrust_at_pwm(p, 16.0) for p in range(1470, 1099, -10)]
+    assert all(b <= a for a, b in zip(rev, rev[1:])), 'reverse not monotonic'
+    # 12 V makes ~36 N, 20 V makes ~66 N. Voltage is not cosmetic.
+    assert thrust_at_pwm(1900, 12.0) < thrust_at_pwm(1900, 16.0) < thrust_at_pwm(1900, 20.0)
+
+
+def test_pwm_round_trip_is_exact():
+    """The node recovers PWM from the affine thrust ArduPilotPlugin computed."""
+    from duburi_sim_bridge.t200_curve import pwm_from_linear_thrust
+
+    assert pwm_from_linear_thrust(0.0, 50.0) == pytest.approx(1500.0)
+    assert pwm_from_linear_thrust(50.0, 50.0) == pytest.approx(1900.0)
+    assert pwm_from_linear_thrust(-50.0, 50.0) == pytest.approx(1100.0)
+    # Out-of-range commands clamp rather than extrapolate off the curve.
+    assert pwm_from_linear_thrust(999.0, 50.0) == pytest.approx(1900.0)
+
+
+# ---------------------------------------------------------------------------
+# water current
+# ---------------------------------------------------------------------------
+
+def test_water_current_publishes_to_the_bare_topic():
+    """`/ocean_current`, NOT `/model/<name>/ocean_current`.
+
+    The plugin's <namespace> element makes the namespaced form look right, and
+    it is what the docs imply. It is wrong: `gz topic -i` shows the namespaced
+    topic with a publisher and no subscriber, and the bare one with a
+    subscriber and no publisher. Measured -- a 0.12 m/s current on the
+    namespaced topic moved the vehicle 6 mm in 40 s; on the bare topic, 1.374 m.
+
+    Publishing into the void is silent, so this is pinned rather than trusted.
+    """
+    import inspect
+
+    from duburi_sim_bridge import water_current
+
+    src = inspect.getsource(water_current.WaterCurrent.__init__)
+    assert "self._topic = '/ocean_current'" in src, (
+        'water_current is publishing somewhere the hydrodynamics plugin is not '
+        'listening; check with `gz topic -i -t /ocean_current`')
+
+
+def test_current_defaults_to_still_water():
+    """Zero by default: adding a disturbance must be a deliberate act.
+
+    A course that silently gained a current would make every previously tuned
+    duration wrong with no visible cause.
+    """
+    import inspect
+
+    from duburi_sim_bridge import water_current
+
+    src = inspect.getsource(water_current.WaterCurrent.__init__)
+    assert "declare_parameter('speed', 0.05)" in src or \
+           "declare_parameter('speed', 0.0)" in src
+
+
+def test_t200_low_command_is_where_the_curve_bites():
+    """The curve's effect is concentrated at LOW command, and that is the point.
+
+    Measured A/B in the sim, same course, fresh world each arm:
+
+        gain 30:  linear 0.340 m/s plateau,  T200 0.342 m/s  -- identical
+        gain 15:  linear travelled 0.37 m,   T200 travelled 0.00 m
+
+    At usable command the two agree, because ArduSub closes a loop and simply
+    asks for more PWM to get the same speed. At small command it CANNOT
+    compensate: below the deadband there is no PWM that produces thrust, and
+    the vehicle does nothing at all.
+
+    That asymmetry is exactly the pool behaviour the sim was missing. Transit
+    verbs are unaffected; fine alignment and station-keeping are not, and those
+    are the behaviours that used to look better in sim than in water.
+    """
+    from duburi_sim_bridge.t200_curve import thrust_at_pwm, pwm_from_linear_thrust
+
+    # A small demand lands inside the deadband and produces nothing.
+    assert thrust_at_pwm(pwm_from_linear_thrust(2.0, 50.0), 16.0) == 0.0
+    # A usable demand produces most of what was asked for.
+    big = thrust_at_pwm(pwm_from_linear_thrust(40.0, 50.0), 16.0)
+    assert big > 30.0

@@ -35,6 +35,8 @@ setup(
             'verb_audit = duburi_sim_bridge.verb_audit:main',
             'rviz_check = duburi_sim_bridge.rviz_check:main',
             'hydrophone = duburi_sim_bridge.hydrophone:main',
+            't200_curve = duburi_sim_bridge.t200_curve:main',
+            'water_current = duburi_sim_bridge.water_current:main',
         ],
     },
 )

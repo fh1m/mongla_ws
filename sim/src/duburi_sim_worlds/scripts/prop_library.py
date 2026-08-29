@@ -631,35 +631,19 @@ def drum(spec: dict, colour_name: str, model_name: str = None, pinger: bool = Fa
         pose = f"{x:.6g} {y:.6g} {height / 2.0:.6g} 0 0 {angle:.6f}"
         parts.append(
             _box_link(
+                # VISUAL ONLY. The ring needs 20 segments to LOOK like a drum,
+                # but 20 collision boxes per drum is 80 shapes for four drums,
+                # and the solver checks every one every step -- measured as the
+                # dominant cost in a 101-shape course running at RTF 0.5. The
+                # wall's physical job (keep a dropped ball in) is done by the
+                # coarse collision ring added after this loop.
                 f"wall_{i}", thickness, seg_w, height, exterior, 0.2, pose,
+                collide=False,
                 # Moulded-plastic wall rather than flat dark grey. The drum is
                 # 60 cm across and fills the bottom camera during Target
                 # Acquisition, so this is the single most valuable surface to
                 # texture in the whole arena.
                 mat=plastic_material(f"drum_wall_{colour_name}.png"),
-            )
-        )
-        # A thin coloured liner just inside the black wall, so the interior reads
-        # as the drum's colour from any angle rather than only from directly above.
-        liner_pose = (
-            f"{(radius - thickness * 1.6) * math.cos(angle):.6g} "
-            f"{(radius - thickness * 1.6) * math.sin(angle):.6g} "
-            f"{height / 2.0:.6g} 0 0 {angle:.6f}"
-        )
-        parts.append(
-            link(
-                f"liner_{i}",
-                "\n".join(
-                    [
-                        inertial(0.01, box_inertia(0.01, 0.004, seg_w, height)),
-                        visual(
-                            f"liner_{i}_visual",
-                            _geometry_box(0.004, seg_w, height),
-                            material(colour),
-                        ),
-                    ]
-                ),
-                liner_pose,
             )
         )
 
@@ -679,6 +663,55 @@ def drum(spec: dict, colour_name: str, model_name: str = None, pinger: bool = Fa
                 mat=material(marker, emissive_gain=0.45, specular=0.4),
             )
         )
+
+    # INTERIOR LINER -- ONE cylinder, not a second 20-segment ring.
+    #
+    # It exists so the inside of the drum reads as the drum's colour from an
+    # angle, not only from straight above. That is a purely visual job, and a
+    # ring of 20 boxes does it no better than one cylinder while costing 20
+    # draw calls per drum across every render pass. Measured: the four drums
+    # were 169 of this course's 191 visuals, and stripping the props took the
+    # sim from RTF 0.5 to 1.0 -- rendering, not collision, is what props cost.
+    parts.append(
+        link(
+            "liner",
+            "\n".join([
+                inertial(0.05, cylinder_inertia(0.05, radius, height)),
+                visual(
+                    "liner_visual",
+                    _geometry_cylinder(radius - thickness * 1.4, height * 0.98),
+                    material(colour, emissive_gain=0.30),
+                ),
+            ]),
+            f"0 0 {height / 2.0:.6g} 0 0 0",
+        )
+    )
+
+    # COARSE COLLISION RING. The 20 visual segments above carry no collision;
+    # this is what actually stops a dropped ball rolling out sideways. Four
+    # boxes instead of twenty, arranged as a square around the drum's inside
+    # diameter -- a ball that clears the rim still cannot escape, and the
+    # solver checks 4 shapes per drum rather than 20.
+    #
+    # Deliberately NOT a solid cylinder: that would close the top and make the
+    # drop impossible, which is the reason the wall was a ring in the first
+    # place.
+    inner = radius - thickness
+    for tag, sx, sy, dx, dy in (
+        ("xp", thickness * 2, inner * 2, inner, 0.0),
+        ("xn", thickness * 2, inner * 2, -inner, 0.0),
+        ("yp", inner * 2, thickness * 2, 0.0, inner),
+        ("yn", inner * 2, thickness * 2, 0.0, -inner),
+    ):
+        parts.append(link(
+            f"collide_{tag}",
+            "\n".join([
+                inertial(0.1, (0.01, 0.01, 0.01)),
+                collision(f"collide_{tag}_collision",
+                          _geometry_box(sx, sy, height)),
+            ]),
+            f"{dx:.6g} {dy:.6g} {height / 2.0:.6g} 0 0 0",
+        ))
 
     return model(model_name or f"sauvc_drum_{colour_name}", "\n".join(parts))
 
@@ -976,15 +1009,19 @@ def robosub_bins(spec):
     # The pipeline: a spine with two cross members, standing on four feet.
     parts.append(_cylinder_link(
         "spine", r, span, WHITE, 2.0, f"0 0 {ph:.6g} 0 1.5708 0",
-        mat=pvc_material(WHITE)))
+        collide=False, mat=pvc_material(WHITE)))
     for i, x in ((0, -span / 3.0), (1, span / 3.0)):
+        # The pipework is SCENERY, not collision. A marker is dropped into a
+        # crate; nothing in the task pushes the frame around, and every pipe
+        # given a collision shape is one more the solver checks every step.
         parts.append(_cylinder_link(
             f"cross_{i}", r, span * 0.72, WHITE, 1.5,
-            f"{x:.6g} 0 {ph:.6g} 1.5708 0 0", mat=pvc_material(WHITE)))
+            f"{x:.6g} 0 {ph:.6g} 1.5708 0 0", collide=False,
+            mat=pvc_material(WHITE)))
         for j, y in ((0, -span * 0.36), (1, span * 0.36)):
             parts.append(_cylinder_link(
                 f"leg_{i}{j}", r, ph, WHITE, 1.0,
-                f"{x:.6g} {y:.6g} {ph / 2.0:.6g} 0 0 0",
+                f"{x:.6g} {y:.6g} {ph / 2.0:.6g} 0 0 0", collide=False,
                 mat=pvc_material(WHITE)))
 
     # Four crates hanging off the cross members, two per role.
@@ -1088,10 +1125,11 @@ def robosub_octagon(spec):
     for i in range(8):
         ang = i * math.pi / 4.0
         parts.append(_cylinder_link(
+            # Scored by surfacing INSIDE it, not by contact.
             f"side_{i}", pr, side, colour, 1.0,
             f"{apothem * math.cos(ang):.6g} {apothem * math.sin(ang):.6g} 0 "
             f"0 1.5708 {ang + math.pi / 2.0:.6g}",
-            mat=pvc_material(colour)))
+            collide=False, mat=pvc_material(colour)))
     # Role images hang inward from the frame.
     for i, (role, ang) in enumerate((
         ("survey_repair", 0.0), ("search_rescue", math.pi),
@@ -1138,12 +1176,13 @@ def robosub_resupply_table(spec):
         parts.append(_cylinder_link(
             f"leg_{i}", r, h, colour, 0.5,
             f"{dx * half:.6g} {dy * half:.6g} {h / 2.0:.6g} 0 0 0",
-            mat=pvc_material(colour)))
+            collide=False, mat=pvc_material(colour)))
     # Foot rails, as the CAD shows -- and they stop the table tipping.
     for tag, y in (("yp", half), ("yn", -half)):
         parts.append(_cylinder_link(
             f"foot_{tag}", r, size, colour, 0.4,
-            f"0 {y:.6g} 0.03 0 1.5708 0", mat=pvc_material(colour)))
+            f"0 {y:.6g} 0.03 0 1.5708 0", collide=False,
+            mat=pvc_material(colour)))
     return model("robosub_resupply_table", "\n".join(parts))
 
 

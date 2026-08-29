@@ -156,10 +156,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_0_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.5</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="leg_1">
       <pose>0.2895 -0.2895 0.25 0 0 0</pose>
@@ -182,10 +178,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_1_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.5</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="leg_2">
       <pose>-0.2895 0.2895 0.25 0 0 0</pose>
@@ -208,10 +200,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_2_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.5</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="leg_3">
       <pose>-0.2895 -0.2895 0.25 0 0 0</pose>
@@ -234,10 +222,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_3_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.5</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="foot_yp">
       <pose>0 0.2895 0.03 0 1.5708 0</pose>
@@ -260,10 +244,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="foot_yp_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.6</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="foot_yn">
       <pose>0 -0.2895 0.03 0 1.5708 0</pose>
@@ -286,10 +266,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="foot_yn_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>0.6</length></cylinder></geometry>
-      </collision>
     </link>
   </model>
 </sdf>
