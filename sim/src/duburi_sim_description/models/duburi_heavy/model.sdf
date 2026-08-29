@@ -109,7 +109,15 @@
         <pose degrees="true">0.0 0.0 -0.1 0 0 180</pose>
         <always_on>1</always_on>
         <update_rate>8.0</update_rate>
-        <topic>dvl/velocity</topic>
+        <!-- RAW, because `fault_injection` republishes this as
+             `dvl/velocity` -- the topic the autonomy stack actually reads.
+             That interposition is the only way to simulate a DVL dropout: the
+             stack subscribes to Gazebo directly (SimDvlSource), so nothing on
+             the ROS side can take the sensor away from it. Same shape as the
+             T200 curve sitting on cmd_thrust_linear.
+             CONSEQUENCE: without that node running there is no `dvl/velocity`
+             at all, and every *_dist verb refuses. -->
+        <topic>dvl/velocity_raw</topic>
         <gz:dvl>
           <type>phased_array</type>
           <arrangement degrees="true">

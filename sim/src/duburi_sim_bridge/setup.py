@@ -38,6 +38,7 @@ setup(
             't200_curve = duburi_sim_bridge.t200_curve:main',
             'water_current = duburi_sim_bridge.water_current:main',
             'payload_sim = duburi_sim_bridge.payload_sim:main',
+            'fault_injection = duburi_sim_bridge.fault_injection:main',
         ],
     },
 )

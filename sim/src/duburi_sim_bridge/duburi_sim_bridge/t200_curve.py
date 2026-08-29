@@ -57,6 +57,7 @@ import math
 import time
 
 import rclpy
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 
 # Fitted from the published data, per side, on u = (pwm - deadband_edge) /
@@ -149,6 +150,12 @@ class T200Curve(Node):
         # 0.15 s is the order quoted for a T200 under load. Set 0 to disable.
         self.declare_parameter('spinup_tau', 0.15)
         self.declare_parameter('enabled', True)
+        # FAULT INJECTION. A dead thruster is a real competition failure -- a
+        # flooded penetrator, a cut lead, a cooked ESC -- and ArduSub's
+        # allocation matrix has to fly the vehicle on the remaining seven. It
+        # cannot be tested any other way in sim, and this node is already the
+        # only thing between ArduSub and the propellers.
+        self.declare_parameter('dead_thrusters', [0])
 
         from gz.transport13 import Node as GzNode
         from gz.msgs10.double_pb2 import Double
@@ -157,6 +164,13 @@ class T200Curve(Node):
         self._gz = GzNode()
         self._max = float(self.get_parameter('max_thrust').value)
         self._volts = float(self.get_parameter('voltage').value)
+        self._dead = self._parse_dead(
+            self.get_parameter('dead_thrusters').value)
+        # voltage was READ ONCE and cached, so setting it at runtime did
+        # nothing. Battery sag needs it live: the T200 curve is
+        # voltage-interpolated, which is the whole mechanism by which a sagging
+        # pack costs thrust.
+        self.add_on_set_parameters_callback(self._on_params)
         self._tau = float(self.get_parameter('spinup_tau').value)
         self._state = {}
         self._last = {}
@@ -182,7 +196,40 @@ class T200Curve(Node):
         self.create_timer(10.0, self._report)
         self._n = 0
 
+    @staticmethod
+    def _parse_dead(value) -> set:
+        """`[0]` means none -- thrusters are numbered from 1.
+
+        An empty integer_array cannot round-trip through ROS parameters (it
+        arrives typeless and the declaration is rejected), so the no-fault
+        value has to be a sentinel rather than `[]`.
+        """
+        return {int(v) for v in (value or []) if int(v) > 0}
+
+    def _on_params(self, params) -> SetParametersResult:
+        for p in params:
+            if p.name == 'voltage':
+                self._volts = float(p.value)
+                self.get_logger().warn(
+                    f'[T200 ] battery now {self._volts:.2f} V '
+                    f'(deadband {_interp_table(self._volts)["db"]})')
+            elif p.name == 'dead_thrusters':
+                self._dead = self._parse_dead(p.value)
+                self.get_logger().warn(
+                    f'[T200 ] dead thrusters: '
+                    f'{sorted(self._dead) if self._dead else "none"}')
+        return SetParametersResult(successful=True)
+
     def _on_cmd(self, idx: int, msg) -> None:
+        if idx in self._dead:
+            # Publish zero rather than simply not publishing: the Thruster
+            # plugin LATCHES its last command, so a silenced channel would keep
+            # producing whatever thrust it had when it "failed".
+            m = self._Double()
+            m.data = 0.0
+            self._pub[idx].publish(m)
+            self._state[idx] = 0.0
+            return
         if not self.get_parameter('enabled').value:
             out = msg.data
         else:

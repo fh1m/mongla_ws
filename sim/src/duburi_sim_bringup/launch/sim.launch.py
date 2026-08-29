@@ -32,7 +32,11 @@ from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 
 # ArduSub and the ArduPilot Gazebo plugin are built outside this workspace, so
 # neither colcon nor the package hooks can point at them.
@@ -149,6 +153,12 @@ def generate_launch_description():
             'current_heading', default_value='0.0',
             description='Current bearing in world frame, degrees.'),
         DeclareLaunchArgument(
+            'mavlink_relay', default_value='false',
+            description='Route the autopilot link through the fault injector '
+                        'so it can be cut (mavlink_loss_s). Off by default: '
+                        'with it off, nothing in the fault path touches the '
+                        'link the whole session depends on.'),
+        DeclareLaunchArgument(
             'payload', default_value='true',
             description='Virtual payload board on a PTY, so fire() and the '
                         'mid-hold align(fire=...) shot run in simulation.'),
@@ -259,7 +269,15 @@ def generate_launch_description():
             '-I0',
             '--home', LaunchConfiguration('home'),
             # Primary MAVLink link out to duburi_ws.
-            '--serial0', f'udpclient:127.0.0.1:{MAVLINK_PRIMARY_PORT}',
+            # Straight to the manager, unless the fault injector's relay is
+            # in the path -- see the `mavlink_relay` argument.
+            '--serial0', [
+                'udpclient:127.0.0.1:',
+                PythonExpression([
+                    "'14559' if '",
+                    LaunchConfiguration('mavlink_relay'),
+                    "' == 'true' else '", str(MAVLINK_PRIMARY_PORT), "'"]),
+            ],
             # Secondary link for a GCS.
             '--serial1', f'udpclient:127.0.0.1:{MAVLINK_GCS_PORT}',
         ],
@@ -329,6 +347,21 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('payload')),
     )
 
+    # Fault injection. Always on and inert until a fault is armed -- but note
+    # it also REPUBLISHES THE DVL (the sensor emits dvl/velocity_raw and this
+    # is what turns it into dvl/velocity), so without it every *_dist verb
+    # refuses. That is the price of being able to take the DVL away at all.
+    faults = Node(
+        package='duburi_sim_bridge',
+        executable='fault_injection',
+        name='faults',
+        parameters=[{
+            'mavlink_relay': LaunchConfiguration('mavlink_relay'),
+            'battery_nominal_v': LaunchConfiguration('battery_volts'),
+        }],
+        output='screen',
+    )
+
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -355,6 +388,7 @@ def generate_launch_description():
             t200,
             current,
             payload,
+            faults,
             bridge,
             wait,
             # Everything that talks to the FDM socket starts only once Gazebo has

@@ -210,10 +210,25 @@ def test_sim_pushes_mavlink_to_the_port_the_sim_profile_binds():
         f'ArduSub SITL pushes to {primary} but PROFILES["sim"] binds '
         f'{_profile_port("sim")} -- the manager would sit on a silent socket.'
     )
-    assert 'udpclient:127.0.0.1:{MAVLINK_PRIMARY_PORT}' in src, (
+    assert 'udpclient:127.0.0.1:' in src, (
         'ArduSub must be the udp CLIENT on --serial0 and the manager the '
         'listener (PROFILES["sim"] is a udpin bind); two listeners connect to '
         'nothing and the manager waits forever on a silent socket.'
+    )
+    # --serial0 is no longer one literal: `mavlink_relay:=true` routes it via
+    # the fault injector so the link can be cut. What still has to hold is that
+    # the DEFAULT is the port the sim profile binds -- the relay is opt-in, and
+    # a wrong default would leave every ordinary run on a silent socket.
+    serial0 = re.search(r"'--serial0',(.*?)\n\s*#\s*Secondary", src, re.S)
+    assert serial0, "could not find the --serial0 argument in sim.launch.py"
+    block = serial0.group(1)
+    # The ELSE branch specifically -- "the port appears somewhere in the
+    # expression" would pass a version that had the two branches swapped, which
+    # is the whole regression this guards.
+    assert re.search(r'else[^\]]*MAVLINK_PRIMARY_PORT', block), (
+        f'--serial0 must fall back to MAVLINK_PRIMARY_PORT ({primary}) when '
+        f'the fault-injection relay is off; the relay port belongs in the '
+        f'other branch. Got: {block.strip()}'
     )
 
 
