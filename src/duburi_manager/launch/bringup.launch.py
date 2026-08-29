@@ -54,6 +54,13 @@ def generate_launch_description():
                               description='Yaw source: dvl|mavlink_ahrs|bno085'),
         DeclareLaunchArgument('dvl_host',        default_value='192.168.2.201'),
         DeclareLaunchArgument('dvl_port',        default_value='9000'),
+        # 'auto' scans USB VID/PID for the CH340 payload board, which is the
+        # right default on the vehicle. In simulation there is no CH340: point
+        # this at the PTY that `payload_sim` creates
+        # (payload_port:=/tmp/duburi-$USER/payload) and fire() works there too.
+        DeclareLaunchArgument('payload_port', default_value='auto',
+                              description='Payload board device, or "auto" to '
+                                          'scan USB VID/PID.'),
         DeclareLaunchArgument('dvl_auto_connect', default_value='true',
                               description='Auto-connect DVL at startup (true|false)'),
         DeclareLaunchArgument('vision',     default_value='false',
@@ -106,6 +113,7 @@ def generate_launch_description():
             'nucleus_dvl_port':     LaunchConfiguration('dvl_port'),
             'nucleus_dvl_password': 'nortek',
             'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
+            'payload_port':         LaunchConfiguration('payload_port'),
         }],
     )
 

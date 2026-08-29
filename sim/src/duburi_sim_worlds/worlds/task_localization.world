@@ -26,6 +26,15 @@ The flares are 80 cm tall and only 1.6 cm across, which makes this the hardest D
     <plugin filename="gz-sim-scene-broadcaster-system"
             name="gz::sim::systems::SceneBroadcaster"/>
 
+    <!-- Launch impulse for simulated torpedos, from `payload_sim`. A spawned
+         projectile has no way to be given an initial velocity -- EntityFactory
+         carries a pose and nothing else -- so the launch is a real force
+         applied for a real burn time, which means the projectile then flies
+         and COLLIDES under ordinary physics instead of being teleported along
+         a scripted path. Costs nothing when no wrench is published. -->
+    <plugin filename="gz-sim-apply-link-wrench-system"
+            name="gz::sim::systems::ApplyLinkWrench"/>
+
     <!-- Required by the vehicle's IMU, which feeds ArduSub over the JSON link. -->
     <plugin filename="gz-sim-imu-system"
             name="gz::sim::systems::Imu"/>
@@ -60,6 +69,18 @@ The flares are 80 cm tall and only 1.6 cm across, which makes this the hardest D
       <enable>flare_red_ball</enable>
       <enable>flare_yellow_ball</enable>
       <enable>flare_blue_ball</enable>
+      <enable>payload_shot_0</enable>
+      <enable>payload_shot_1</enable>
+      <enable>payload_shot_2</enable>
+      <enable>payload_shot_3</enable>
+      <enable>payload_shot_4</enable>
+      <enable>payload_shot_5</enable>
+      <enable>payload_shot_6</enable>
+      <enable>payload_shot_7</enable>
+      <enable>payload_shot_8</enable>
+      <enable>payload_shot_9</enable>
+      <enable>payload_shot_10</enable>
+      <enable>payload_shot_11</enable>
     </plugin>
 
     <!-- ===================== ENVIRONMENT ===================== -->

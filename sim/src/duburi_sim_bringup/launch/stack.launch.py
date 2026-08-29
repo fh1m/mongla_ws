@@ -30,6 +30,17 @@ def generate_launch_description():
     # back to a timed guess and reported success anyway (1.0 m commanded ->
     # 2.361 m travelled). Set mavlink_ahrs to reproduce the old heading-only
     # setup; the *_dist verbs then refuse rather than guessing.
+    # The virtual payload board `payload_sim` creates. Passed explicitly rather
+    # than left at 'auto': auto scans USB for a CH340, finds nothing in sim, and
+    # every fire() then fails quietly -- which is the exact gap payload_sim was
+    # written to close.
+    payload_arg = DeclareLaunchArgument(
+        'payload_port',
+        default_value=os.path.join(
+            f'/tmp/duburi-{os.environ.get("USER", "user")}', 'payload'),
+        description='Payload device. Defaults to the sim virtual board; pass '
+                    '"auto" to scan USB instead.')
+
     yaw_source_arg = DeclareLaunchArgument(
         'yaw_source', default_value='sim_dvl',
         description='sim_dvl (AHRS heading + Gazebo DVL position) | mavlink_ahrs')
@@ -100,6 +111,7 @@ def generate_launch_description():
             'yaw_source': LaunchConfiguration('yaw_source'),
             'vision': 'false',
             'dvl_auto_connect': 'false',
+            'payload_port': LaunchConfiguration('payload_port'),
             'viewer': 'false',
         }.items(),
     )], scoped=True)
@@ -135,4 +147,4 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('vision')),
     )
 
-    return LaunchDescription([yaw_source_arg] + args + [manager, vision])
+    return LaunchDescription([yaw_source_arg, payload_arg] + args + [manager, vision])

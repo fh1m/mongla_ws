@@ -282,6 +282,23 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > semantic label, and a prop missing from it is **invisible** to the sensor.
 > Measured cost: none (12.83 Hz vs a 12.75 Hz baseline).
 >
+> **`fire()` NOW RUNS IN SIM** — the payload was the one autonomy path with no
+> simulated equivalent, so `align(fire=…, fire_t=…)` had never executed outside
+> the pool. `payload_sim` presents a **PTY** that the **unmodified** `PayloadDriver`
+> opens exactly as it opens the CH340 (`payload_port:=/tmp/duburi-$USER/payload`);
+> each shot lands on `/duburi/sim/payload/fired` **and** spawns a buoyant, dragged,
+> colliding body, so a hit is decided by physics. Check it with
+> `payload_check.py`. **Ballistics are approximate, not calibrated** (no added-mass
+> model; nothing published to fit), and **pass-through is not scorable on the
+> generated board** — its openings are printed on a solid plate, so a good shot
+> *strikes* it; use the vendored mesh variant for real holes.
+> Traps, all measured: a spawned model **cannot be given an initial velocity**
+> (hence an `ApplyLinkWrench` burn); **buoyancy is a whitelist read once at world
+> load**, so shots reuse pre-baked `payload_shot_*` names or they sink instantly;
+> the round must clear the hull's collision box or the vehicle punts it; and drag
+> coefficients ride **body** axes on a round pitched 90°, so flight is body-z.
+> [`sim/.context/PAYLOAD.md`](sim/.context/PAYLOAD.md).
+>
 > **Cylinder props were not solid.** DART's own collision detector returns false
 > for `[CylinderShape]-[BoxShape]` — the hull's collision shape is a box and every
 > pipe prop is a cylinder, so the vehicle drove through gate legs, slalom pipes and

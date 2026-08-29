@@ -194,6 +194,11 @@ PHYSICS_DEFAULTS = {
 }
 
 # Roughly Dhaka. Only matters to ArduSub's simulated compass.
+# How many payload projectiles can be in flight//on the floor at once. The
+# names are baked into every world's buoyancy whitelist, so this is a world
+# generation constant, not a node parameter -- `payload_sim` must agree with it.
+PAYLOAD_SHOT_SLOTS = 12
+
 MAGNETIC_FIELD = "3.9e-05 1.1e-06 2.6e-05"
 
 
@@ -476,7 +481,15 @@ def generate(course_path: str, spec: dict = None, outdir: str = WORLDS_DIR) -> s
         )
     vehicle_xml, vehicle_name = build_vehicle(course, pool_cfg)
 
-    enabled = ([vehicle_name] if vehicle_name else []) + dynamic
+    # `payload_sim` spawns torpedos and dropper markers at RUNTIME, and the
+    # buoyancy <enable> list is a whitelist read once at world load -- so a
+    # projectile that is not named here sinks like a stone the instant it
+    # appears (measured: spawned at 1.0 m, on the 2.1 m floor within 0.5 s).
+    # The node therefore fires from a FIXED, pre-declared pool of names and
+    # recycles them, which is the only way a spawned body can be buoyant.
+    shot_enables = [f"payload_shot_{i}" for i in range(PAYLOAD_SHOT_SLOTS)]
+
+    enabled = ([vehicle_name] if vehicle_name else []) + dynamic + shot_enables
     buoyancy_enables = "\n".join(f"      <enable>{n}</enable>" for n in enabled)
 
     with open(TEMPLATE) as f:
