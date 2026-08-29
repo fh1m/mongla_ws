@@ -82,6 +82,10 @@ duburi_sim stop → duburi_sim sim → duburi_sim stack --no-vision → duburi_s
 | `duburi_sim_scenarios` | Runtime prop spawn/move/delete |
 | `duburi_sim_web` | FastAPI + React operator lab |
 
+- [`JOYSTICK.md`](JOYSTICK.md) — fly the AUV with a gamepad, from the
+  browser or the lab host; mapping, feel, and the watchdog trap.
+- [`SCORING.md`](SCORING.md) — style points, the coin flip, gate side and
+  the SAUVC flare sequence, scored from ground truth.
 - [`BNO085.md`](BNO085.md) — virtual BNO085 board, so `yaw_source:=bno085`
   (what the vehicle flies) runs in sim; datasheet-grounded drift.
 - [`FAULTS.md`](FAULTS.md) — inject a DVL dropout, camera loss, MAVLink

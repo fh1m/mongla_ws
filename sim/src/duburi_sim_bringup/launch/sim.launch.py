@@ -159,6 +159,10 @@ def generate_launch_description():
                         'with it off, nothing in the fault path touches the '
                         'link the whole session depends on.'),
         DeclareLaunchArgument(
+            'scoring', default_value='true',
+            description='Score style points and gate transits from ground '
+                        'truth. Read-only.'),
+        DeclareLaunchArgument(
             'bno085', default_value='true',
             description='Virtual BNO085 board on a PTY, so yaw_source:=bno085 '
                         'and bno085_dvl work in sim.'),
@@ -378,6 +382,17 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('bno085')),
     )
 
+    # Scoring: style points, gate side, coin flip. Read-only against ground
+    # truth, so it can never affect a run it is watching.
+    scoring = Node(
+        package='duburi_sim_bridge',
+        executable='scoring',
+        name='scoring',
+        parameters=[{'world': course, 'vehicle': vehicle_name}],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('scoring')),
+    )
+
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -406,6 +421,7 @@ def generate_launch_description():
             payload,
             faults,
             bno,
+            scoring,
             bridge,
             wait,
             # Everything that talks to the FDM socket starts only once Gazebo has

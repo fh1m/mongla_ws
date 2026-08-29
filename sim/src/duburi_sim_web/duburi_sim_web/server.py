@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from duburi_sim_web.ros_bridge import RosWorker
 from duburi_sim_web.script_runner import ScriptRunner
+from duburi_sim_web.joystick import JoystickReader
 from duburi_sim_web.teleop import TeleopStreamer
 
 HERE = Path(__file__).resolve().parent
@@ -90,6 +91,34 @@ def _courses_dir() -> Path:
 worker = RosWorker()
 runner = ScriptRunner(_scripts_dir(), _workspace_root() / 'datasets')
 teleop = TeleopStreamer()
+
+
+def _joystick_button(action: str) -> None:
+    """Arm/disarm from a pad button.
+
+    Deliberately routed through the same handlers the UI buttons use, so a
+    stick cannot reach the vehicle by a path the operator's own clicks do not.
+    """
+    try:
+        if action == 'arm':
+            vehicle_arm()
+        elif action == 'disarm':
+            vehicle_disarm()
+    except Exception:
+        pass
+
+
+# A gamepad plugged into the machine running the lab. The other supported
+# place for one is the machine running the BROWSER, which the UI reads with
+# the Gamepad API and POSTs to /api/vehicle/teleop -- the QGC arrangement,
+# where the ground station reads the stick. Both drive the same TeleopStreamer,
+# so there is never a second RC writer.
+joystick = JoystickReader(
+    teleop,
+    device=os.environ.get('DUBURI_JOYSTICK') or None,
+    on_button=_joystick_button,
+    logger=lambda m: print(m, flush=True),
+)
 _record_proc: Optional[subprocess.Popen] = None
 _record_lock = threading.Lock()
 _record_meta: dict = {}
@@ -387,6 +416,7 @@ def _start_sim_job(body: SimBody, do_stop: bool) -> dict:
 def _startup():
     worker.start()
     teleop.start()
+    joystick.start()
     # Best-effort prop_manager for the default course.
     try:
         if not _manager_up():
@@ -398,6 +428,7 @@ def _startup():
 
 @app.on_event('shutdown')
 def _shutdown():
+    joystick.stop()
     teleop.set_axes(0, 0, 0, 0)
     teleop.stop()
 
@@ -417,6 +448,7 @@ def sim_status():
         'manager': _manager_up(),
         'lab_ros': worker.node is not None,
         'teleop': teleop.snapshot(),
+        'joystick': joystick.snapshot(),
         'restart': _job_snapshot(),  # alias for older UI
         'sim': _job_snapshot(),
         'active_course': _job_snapshot()['active_course'],
@@ -572,6 +604,19 @@ def vehicle_teleop(body: TeleopBody):
 @app.get('/api/vehicle/teleop')
 def vehicle_teleop_status():
     return teleop.snapshot()
+
+
+@app.get('/api/vehicle/joystick')
+def vehicle_joystick():
+    """State of a gamepad attached to the LAB machine.
+
+    A pad attached to the browser's machine does not appear here -- the UI
+    reads that one itself and reports it separately. Raw axis and button
+    indices are included because js numbering depends on which controls a pad
+    declares (a pad without triggers shifts every later index), which is the
+    same reason QGC ships a joystick calibration page.
+    """
+    return joystick.snapshot()
 
 
 @app.get('/api/fx')

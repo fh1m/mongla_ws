@@ -282,6 +282,32 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > semantic label, and a prop missing from it is **invisible** to the sensor.
 > Measured cost: none (12.83 Hz vs a 12.75 Hz baseline).
 >
+> **GAMEPAD TELEOP** — fly the hull with a stick for dataset collection and
+> feel-testing. Two places a pad can live, both supported and both driving the
+> **same `TeleopStreamer`** (never a second RC writer, and it uses **tcp:5763**
+> so it cannot fight `udpin:14550`): on the **browser** machine (lab UI, Gamepad
+> API — the QGC arrangement, works when the lab is remote) or on the **lab**
+> machine (`DUBURI_JOYSTICK=/dev/input/js0`). The UI shows a **CONTROLLER ACTIVE**
+> panel with live axis bars; `duburi_sim joystick` is the terminal equivalent.
+> F310-verified map: left stick fwd/strafe, right stick yaw/vertical, A=arm,
+> B=disarm, LB/RB=gain. **A held stick emits NO events** — pushing only on events
+> let `TeleopStreamer`'s 0.35 s watchdog centre the hull mid-command: 6 s of full
+> forward moved **0.188 m** instead of **1.220 m**. Now pushed at 50 Hz.
+> **js axis/button numbers are not universal** (a pad without triggers shifts
+> every later index), which is why the map is a parameter.
+> [`sim/.context/JOYSTICK.md`](sim/.context/JOYSTICK.md).
+>
+> **SCORED ELEMENTS ARE SCORED NOW** — `/duburi/sim/score` publishes style points,
+> gate side, the coin flip and the SAUVC flare sequence, read-only from ground
+> truth. **Style follows the handbook's awkward clause** ("returning to the last
+> previous orientation won't count"): a barrel roll scores 8, oscillating 90↔0
+> four times scores **+2 with 3 returns rejected**. `ros2 param set /scoring coin
+> flip` places the vehicle per the rulebook and **breaks any mission that
+> hard-codes its start heading**. Flare order is settable at runtime and
+> out-of-order hits are caught. **Bin lights are NOT modelled** — no rule text in
+> the 2025 handbook to implement against.
+> [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
+>
 > **`yaw_source:=bno085` RUNS IN SIM** — the sim supported 2 of the 4 yaw
 > sources, and the missing two (`bno085`, `bno085_dvl`) are the ones the vehicle
 > flies, so the whole heading loop could only be tuned against a sensor it does

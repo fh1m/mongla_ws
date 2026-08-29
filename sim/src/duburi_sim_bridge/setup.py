@@ -40,6 +40,7 @@ setup(
             'payload_sim = duburi_sim_bridge.payload_sim:main',
             'fault_injection = duburi_sim_bridge.fault_injection:main',
             'bno085_sim = duburi_sim_bridge.bno085_sim:main',
+            'scoring = duburi_sim_bridge.scoring:main',
         ],
     },
 )
