@@ -58,10 +58,30 @@ Deliberately clearer water than the final course: this task is flown looking DOW
     </plugin>
 
     <!-- ===================== ENVIRONMENT ===================== -->
+    <!-- SOLVER. The three top-level numbers were the only physics settings for
+         a long time; everything below them was DART's default, unstated and
+         unexaminable.
+
+         max_step_size stays at 1 ms unless something measured says otherwise.
+         The reason is the added-mass ratio: heave carries 18.7 kg of added mass
+         against a 13.5 kg hull, a ratio of 1.38, and the documented failure
+         mode is that ratio diverging into an ODE assertion (HYDRODYNAMICS.md).
+         A larger step buys speed and spends exactly the margin that keeps that
+         from happening.
+
+         The collision detector matters more than the iteration count here: this
+         world is a handful of primitive boxes and cylinders, not meshes, so the
+         solver is not where the time goes -- rendering is (see PHYSICS.md). -->
     <physics name="default" type="dart">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
       <real_time_update_rate>1000</real_time_update_rate>
+      <dart>
+        <collision_detector>dart</collision_detector>
+        <solver>
+          <solver_type>dantzig</solver_type>
+        </solver>
+      </dart>
     </physics>
 
     <gravity>0 0 -9.81</gravity>

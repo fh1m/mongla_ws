@@ -9,11 +9,11 @@
       <pose>0 0 0.55 0 1.5708 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>2</mass>
+        <mass>1</mass>
         <inertia>
-          <ixx>0.281755</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.281755</iyy><iyz>0</iyz>
-          <izz>0.00017689</izz>
+          <ixx>0.140878</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.140878</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
       <visual name="spine_visual">
@@ -27,30 +27,8 @@
         </material>
       </visual>
     </link>
-    <link name="cross_0">
-      <pose>-0.433333 0 0.55 1.5708 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>1.5</mass>
-        <inertia>
-          <ixx>0.109578</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.109578</iyy><iyz>0</iyz>
-          <izz>0.000132667</izz>
-        </inertia>
-      </inertial>
-      <visual name="cross_0_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.936</length></cylinder></geometry>
-        <material>
-          <ambient>0.92 0.92 0.92 1</ambient>
-          <diffuse>0.92 0.92 0.92 1</diffuse>
-          <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2576 0.2576 0.2576 1</emissive>
-        </material>
-      </visual>
-    </link>
-    <link name="leg_00">
-      <pose>-0.433333 -0.468 0.275 0 0 0</pose>
+    <link name="foot_riser_0">
+      <pose>-0.590909 0 0.275 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
@@ -60,7 +38,7 @@
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="leg_00_visual">
+      <visual name="foot_riser_0_visual">
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
         <material>
@@ -71,8 +49,30 @@
         </material>
       </visual>
     </link>
-    <link name="leg_01">
-      <pose>-0.433333 0.468 0.275 0 0 0</pose>
+    <link name="foot_0">
+      <pose>-0.590909 0 0.03 1.5708 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0208776</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0208776</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="foot_0_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.5</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="foot_riser_1">
+      <pose>0.590909 0 0.275 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
@@ -82,7 +82,7 @@
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="leg_01_visual">
+      <visual name="foot_riser_1_visual">
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
         <material>
@@ -93,20 +93,20 @@
         </material>
       </visual>
     </link>
-    <link name="cross_1">
-      <pose>0.433333 0 0.55 1.5708 0 0</pose>
+    <link name="foot_1">
+      <pose>0.590909 0 0.03 1.5708 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1.5</mass>
+        <mass>1</mass>
         <inertia>
-          <ixx>0.109578</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.109578</iyy><iyz>0</iyz>
-          <izz>0.000132667</izz>
+          <ixx>0.0208776</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0208776</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="cross_1_visual">
+      <visual name="foot_1_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.936</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.5</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -115,20 +115,20 @@
         </material>
       </visual>
     </link>
-    <link name="leg_10">
-      <pose>0.433333 -0.468 0.275 0 0 0</pose>
+    <link name="arm_sr_a">
+      <pose>-0.39 0.26 0.55 1.5708 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
         <inertia>
-          <ixx>0.0252526</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.0252526</iyy><iyz>0</iyz>
+          <ixx>0.0225776</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0225776</iyy><iyz>0</iyz>
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="leg_10_visual">
+      <visual name="arm_sr_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.52</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -137,20 +137,20 @@
         </material>
       </visual>
     </link>
-    <link name="leg_11">
-      <pose>0.433333 0.468 0.275 0 0 0</pose>
+    <link name="riser_sr_a">
+      <pose>-0.39 0.52 0.7 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
         <inertia>
-          <ixx>0.0252526</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.0252526</iyy><iyz>0</iyz>
+          <ixx>0.00857756</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00857756</iyy><iyz>0</iyz>
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="leg_11_visual">
+      <visual name="riser_sr_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.32</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -160,7 +160,7 @@
       </visual>
     </link>
     <link name="crate_sr_a_floor">
-      <pose>-0.433333 -0.468 0.41 0 0 0</pose>
+      <pose>-0.39 0.52 0.85 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
@@ -193,7 +193,7 @@
       </collision>
     </link>
     <link name="crate_sr_a_xp">
-      <pose>-0.271833 -0.468 0.55 0 0 0</pose>
+      <pose>-0.2285 0.52 0.99 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -219,7 +219,7 @@
       </collision>
     </link>
     <link name="crate_sr_a_xn">
-      <pose>-0.594833 -0.468 0.55 0 0 0</pose>
+      <pose>-0.5515 0.52 0.99 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -245,7 +245,7 @@
       </collision>
     </link>
     <link name="crate_sr_a_yp">
-      <pose>-0.433333 -0.3065 0.55 0 0 0</pose>
+      <pose>-0.39 0.6815 0.99 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -271,7 +271,7 @@
       </collision>
     </link>
     <link name="crate_sr_a_yn">
-      <pose>-0.433333 -0.6295 0.55 0 0 0</pose>
+      <pose>-0.39 0.3585 0.99 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -297,19 +297,19 @@
       </collision>
     </link>
     <link name="panel_sr_a">
-      <pose>-0.433333 -0.468 0.426 0 1.5708 0</pose>
+      <pose>-0.5977 0.52 0.993213 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000682205</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000341169</iyy><iyz>0</iyz>
-          <izz>0.000341169</izz>
+          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000422079</iyy><iyz>0</iyz>
+          <izz>0.000422079</izz>
         </inertia>
       </inertial>
       <visual name="panel_sr_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.28612 0.28612</size></box></geometry>
+        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
@@ -325,174 +325,74 @@
         </material>
       </visual>
     </link>
-    <link name="crate_sr_b_floor">
-      <pose>0.433333 0.468 0.41 0 0 0</pose>
+    <link name="panel_post_sr_a">
+      <pose>-0.5977 0.52 0.90092 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
         <inertia>
-          <ixx>0.00936408</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00936408</iyy><iyz>0</iyz>
-          <izz>0.0187042</izz>
+          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="crate_sr_b_floor_visual">
+      <visual name="panel_post_sr_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
         <material>
-          <ambient>0.72 0.72 0.72 1</ambient>
-          <diffuse>0.72 0.72 0.72 1</diffuse>
-          <specular>0.14 0.14 0.14 1</specular>
-          <emissive>0.1 0.1 0.1 1</emissive>
-          <pbr>
-            <metal>
-              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
-              <metalness>0.0</metalness>
-              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
-            </metal>
-          </pbr>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="crate_sr_b_floor_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
-      </collision>
     </link>
-    <link name="crate_sr_b_xp">
-      <pose>0.594833 0.468 0.55 0 0 0</pose>
+    <link name="arm_rescue_a">
+      <pose>-0.13 -0.26 0.55 1.5708 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.5</mass>
+        <mass>1</mass>
         <inertia>
-          <ixx>0.00794271</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00327267</iyy><iyz>0</iyz>
-          <izz>0.00468204</izz>
+          <ixx>0.0225776</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0225776</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="crate_sr_b_xp_visual">
+      <visual name="arm_rescue_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.52</length></cylinder></geometry>
         <material>
-          <ambient>0.18 0.18 0.2 1</ambient>
-          <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="crate_sr_b_xp_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
-      </collision>
     </link>
-    <link name="crate_sr_b_xn">
-      <pose>0.271833 0.468 0.55 0 0 0</pose>
+    <link name="riser_rescue_a">
+      <pose>-0.13 -0.52 0.6 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.5</mass>
+        <mass>1</mass>
         <inertia>
-          <ixx>0.00794271</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00327267</iyy><iyz>0</iyz>
-          <izz>0.00468204</izz>
+          <ixx>0.00124422</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00124422</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
-      <visual name="crate_sr_b_xn_visual">
+      <visual name="riser_rescue_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.12</length></cylinder></geometry>
         <material>
-          <ambient>0.18 0.18 0.2 1</ambient>
-          <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
-        </material>
-      </visual>
-      <collision name="crate_sr_b_xn_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
-      </collision>
-    </link>
-    <link name="crate_sr_b_yp">
-      <pose>0.433333 0.6295 0.55 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.5</mass>
-        <inertia>
-          <ixx>0.00327267</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00794271</iyy><iyz>0</iyz>
-          <izz>0.00468204</izz>
-        </inertia>
-      </inertial>
-      <visual name="crate_sr_b_yp_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
-        <material>
-          <ambient>0.18 0.18 0.2 1</ambient>
-          <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
-        </material>
-      </visual>
-      <collision name="crate_sr_b_yp_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
-      </collision>
-    </link>
-    <link name="crate_sr_b_yn">
-      <pose>0.433333 0.3065 0.55 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.5</mass>
-        <inertia>
-          <ixx>0.00327267</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00794271</iyy><iyz>0</iyz>
-          <izz>0.00468204</izz>
-        </inertia>
-      </inertial>
-      <visual name="crate_sr_b_yn_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
-        <material>
-          <ambient>0.18 0.18 0.2 1</ambient>
-          <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
-        </material>
-      </visual>
-      <collision name="crate_sr_b_yn_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
-      </collision>
-    </link>
-    <link name="panel_sr_b">
-      <pose>0.433333 0.468 0.426 0 1.5708 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.000682205</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000341169</iyy><iyz>0</iyz>
-          <izz>0.000341169</izz>
-        </inertia>
-      </inertial>
-      <visual name="panel_sr_b_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.28612 0.28612</size></box></geometry>
-        <material>
-          <ambient>1 1 1 1</ambient>
-          <diffuse>1 1 1 1</diffuse>
-          <specular>0.06 0.06 0.06 1</specular>
-          <emissive>0.1 0.1 0.1 1</emissive>
-          <pbr>
-            <metal>
-              <albedo_map>model://robosub_textures/role_fire.png</albedo_map>
-              <metalness>0.0</metalness>
-              <roughness>0.55</roughness>
-            </metal>
-          </pbr>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
     </link>
     <link name="crate_rescue_a_floor">
-      <pose>-0.433333 0.468 0.41 0 0 0</pose>
+      <pose>-0.13 -0.52 0.65 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
@@ -525,7 +425,7 @@
       </collision>
     </link>
     <link name="crate_rescue_a_xp">
-      <pose>-0.271833 0.468 0.55 0 0 0</pose>
+      <pose>0.0315 -0.52 0.79 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -551,7 +451,7 @@
       </collision>
     </link>
     <link name="crate_rescue_a_xn">
-      <pose>-0.594833 0.468 0.55 0 0 0</pose>
+      <pose>-0.2915 -0.52 0.79 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -577,7 +477,7 @@
       </collision>
     </link>
     <link name="crate_rescue_a_yp">
-      <pose>-0.433333 0.6295 0.55 0 0 0</pose>
+      <pose>-0.13 -0.3585 0.79 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -603,7 +503,7 @@
       </collision>
     </link>
     <link name="crate_rescue_a_yn">
-      <pose>-0.433333 0.3065 0.55 0 0 0</pose>
+      <pose>-0.13 -0.6815 0.79 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -629,19 +529,19 @@
       </collision>
     </link>
     <link name="panel_rescue_a">
-      <pose>-0.433333 0.468 0.426 0 1.5708 0</pose>
+      <pose>-0.3377 -0.52 0.793212 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000682205</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000341169</iyy><iyz>0</iyz>
-          <izz>0.000341169</izz>
+          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000422079</iyy><iyz>0</iyz>
+          <izz>0.000422079</izz>
         </inertia>
       </inertial>
       <visual name="panel_rescue_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.28612 0.28612</size></box></geometry>
+        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
@@ -657,8 +557,306 @@
         </material>
       </visual>
     </link>
+    <link name="panel_post_rescue_a">
+      <pose>-0.3377 -0.52 0.70092 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="panel_post_rescue_a_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="arm_sr_b">
+      <pose>0.182 0.26 0.55 1.5708 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0225776</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0225776</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="arm_sr_b_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.52</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="riser_sr_b">
+      <pose>0.182 0.52 0.525 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.000452556</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000452556</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="riser_sr_b_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.07</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="crate_sr_b_floor">
+      <pose>0.182 0.52 0.5 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.00936408</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00936408</iyy><iyz>0</iyz>
+          <izz>0.0187042</izz>
+        </inertia>
+      </inertial>
+      <visual name="crate_sr_b_floor_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
+        <material>
+          <ambient>0.72 0.72 0.72 1</ambient>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <collision name="crate_sr_b_floor_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
+      </collision>
+    </link>
+    <link name="crate_sr_b_xp">
+      <pose>0.3435 0.52 0.64 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>0.00794271</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00327267</iyy><iyz>0</iyz>
+          <izz>0.00468204</izz>
+        </inertia>
+      </inertial>
+      <visual name="crate_sr_b_xp_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <material>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.045 0.045 0.05 1</emissive>
+        </material>
+      </visual>
+      <collision name="crate_sr_b_xp_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+      </collision>
+    </link>
+    <link name="crate_sr_b_xn">
+      <pose>0.0205 0.52 0.64 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>0.00794271</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00327267</iyy><iyz>0</iyz>
+          <izz>0.00468204</izz>
+        </inertia>
+      </inertial>
+      <visual name="crate_sr_b_xn_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <material>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.045 0.045 0.05 1</emissive>
+        </material>
+      </visual>
+      <collision name="crate_sr_b_xn_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+      </collision>
+    </link>
+    <link name="crate_sr_b_yp">
+      <pose>0.182 0.6815 0.64 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>0.00327267</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00794271</iyy><iyz>0</iyz>
+          <izz>0.00468204</izz>
+        </inertia>
+      </inertial>
+      <visual name="crate_sr_b_yp_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <material>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.045 0.045 0.05 1</emissive>
+        </material>
+      </visual>
+      <collision name="crate_sr_b_yp_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+      </collision>
+    </link>
+    <link name="crate_sr_b_yn">
+      <pose>0.182 0.3585 0.64 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>0.00327267</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00794271</iyy><iyz>0</iyz>
+          <izz>0.00468204</izz>
+        </inertia>
+      </inertial>
+      <visual name="crate_sr_b_yn_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <material>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.045 0.045 0.05 1</emissive>
+        </material>
+      </visual>
+      <collision name="crate_sr_b_yn_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+      </collision>
+    </link>
+    <link name="panel_sr_b">
+      <pose>-0.0257 0.52 0.643212 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000422079</iyy><iyz>0</iyz>
+          <izz>0.000422079</izz>
+        </inertia>
+      </inertial>
+      <visual name="panel_sr_b_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.06 0.06 0.06 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/role_fire.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>0.55</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+    <link name="panel_post_sr_b">
+      <pose>-0.0257 0.52 0.55092 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="panel_post_sr_b_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="arm_rescue_b">
+      <pose>0.442 -0.26 0.55 1.5708 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.0225776</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0225776</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="arm_rescue_b_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.52</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="riser_rescue_b">
+      <pose>0.442 -0.52 0.64 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.00337756</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00337756</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="riser_rescue_b_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.2</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
+        </material>
+      </visual>
+    </link>
     <link name="crate_rescue_b_floor">
-      <pose>0.433333 -0.468 0.41 0 0 0</pose>
+      <pose>0.442 -0.52 0.73 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
@@ -691,7 +889,7 @@
       </collision>
     </link>
     <link name="crate_rescue_b_xp">
-      <pose>0.594833 -0.468 0.55 0 0 0</pose>
+      <pose>0.6035 -0.52 0.87 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -717,7 +915,7 @@
       </collision>
     </link>
     <link name="crate_rescue_b_xn">
-      <pose>0.271833 -0.468 0.55 0 0 0</pose>
+      <pose>0.2805 -0.52 0.87 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -743,7 +941,7 @@
       </collision>
     </link>
     <link name="crate_rescue_b_yp">
-      <pose>0.433333 -0.3065 0.55 0 0 0</pose>
+      <pose>0.442 -0.3585 0.87 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -769,7 +967,7 @@
       </collision>
     </link>
     <link name="crate_rescue_b_yn">
-      <pose>0.433333 -0.6295 0.55 0 0 0</pose>
+      <pose>0.442 -0.6815 0.87 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -795,19 +993,19 @@
       </collision>
     </link>
     <link name="panel_rescue_b">
-      <pose>0.433333 -0.468 0.426 0 1.5708 0</pose>
+      <pose>0.2343 -0.52 0.873212 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000682205</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000341169</iyy><iyz>0</iyz>
-          <izz>0.000341169</izz>
+          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000422079</iyy><iyz>0</iyz>
+          <izz>0.000422079</izz>
         </inertia>
       </inertial>
       <visual name="panel_rescue_b_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.28612 0.28612</size></box></geometry>
+        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
@@ -820,6 +1018,28 @@
               <roughness>0.55</roughness>
             </metal>
           </pbr>
+        </material>
+      </visual>
+    </link>
+    <link name="panel_post_rescue_b">
+      <pose>0.2343 -0.52 0.78092 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1</mass>
+        <inertia>
+          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <izz>8.8445e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="panel_post_rescue_b_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <material>
+          <ambient>0.92 0.92 0.92 1</ambient>
+          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
     </link>

@@ -91,6 +91,18 @@ class ThrusterRig:
     def surge(self) -> float:
         return self.linear[0]
 
+    @property
+    def sway(self) -> float:
+        return self.linear[1]
+
+    @property
+    def heave(self) -> float:
+        return self.linear[2]
+
+    @property
+    def yaw_rate(self) -> float:
+        return self.angular[2]
+
     def command(self, newtons) -> None:
         """Send thrust. Accepts a scalar for all eight or a {index: N} mapping."""
         if not isinstance(newtons, dict):
