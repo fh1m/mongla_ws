@@ -295,3 +295,86 @@ within a second. Would need a short-pulse method like `thruster_survey.py` uses.
   almost none of it, and the octagon task is the only time the vehicle surfaces.
 - **CFD-quality flow.** The current model reproduces the disturbance, not its
   cause. Anything more is a research project, not a competition simulator.
+
+
+---
+
+## Realism additions (2026-08-29)
+
+### Sensor noise — the highest-value item, and it was one config file
+
+`SIM_ACC_RND`, `SIM_GYR_RND`, `SIM_MAG_RND` and `SIM_DRIFT_SPEED` were all
+unset: only the barometer had any noise. **EKF3 in sim was being fed cleaner
+data than it will ever see on the vehicle**, so heading drift — the most
+persistent real-world problem this project has, and the entire reason
+`yaw_source` exists — simply did not happen in simulation. A heading loop tuned
+against a noiseless compass is tuned against a problem the pool does not pose.
+
+Values are ArduPilot's own SITL defaults for a consumer-grade IMU, which is what
+a Pixhawk 2.4.8 carries. `SIM_DRIFT_SPEED` is the one that makes a heading
+estimate walk away over a mission rather than staying put.
+
+### Battery sag
+
+`SIM_BATT_VOLTAGE 16.0` (4S nominal) with `BATT_MONITOR 4`. The T200 curve is
+already voltage-interpolated — 36 N at 12 V against 66 N at 20 V — so a sagging
+pack makes a late-mission manoeuvre measurably weaker than the same manoeuvre at
+the start. `FS_BATT_ENABLE` stays 0: a sim run must not be aborted by a failsafe
+mid-experiment.
+
+### Thruster wake
+
+`wake_fraction 0.2`, `alpha_1 1.0`, `alpha_2 -0.3` on all eight thrusters. Blue
+Robotics' data is **bollard pull** — thrust with the vehicle held still — so
+without this the propeller made the same force at 0.7 m/s as at rest. It does
+not: inflow rises, angle of attack drops, thrust falls. This is why a real
+vehicle creeps toward its top speed while the sim snapped to it.
+
+### Marine snow
+
+A `particle_emitter` sized to the pool, 60 particles/s, drifting slowly down.
+`underwater_fx` degrades every pixel by the *vehicle's* depth, so it cannot
+produce anything range-dependent and nothing moves between frames. Particulate
+occludes, drifts, and gives a detector something to be robust to that fog
+cannot. `scene.snow: 0` turns it off. Measured cost: **none** (6.42 Hz with,
+6.58 Hz without — inside the noise).
+
+### Per-pixel attenuation — built, and OFF by default
+
+`underwater_fx` now accepts a range image and attenuates **along the path the
+light actually travelled**, so a wall 20 m away fades while the floor 1 m below
+stays sharp. Verified: with a synthetic range image, near/far differ by 124 grey
+levels where uniform attenuation gives them identical values.
+
+Two things had to be calibrated or fixed:
+
+- **`ATTEN_RGB` is an open-ocean coefficient and far too strong for a pool.**
+  Applied raw, red fell to 0.004 of its value at 20 m and the far wall went
+  black. `RANGE_ATTEN 0.22` and a `RANGE_FLOOR` keep the far field
+  visible-but-degraded, which is the point — a detector must find props at range
+  through worse imagery, not be handed a frame it cannot work with.
+- **`always_on 0` does NOT disable a Gazebo sensor.** The topics were still
+  published and the render pass still paid. The generator now **omits the whole
+  sensor block** unless `configs.yaml` sets `range_cameras: true`.
+
+It is off by default because it is genuinely expensive — two extra render passes
+took the cameras from 12 Hz to 4 Hz on the SAUVC final course. Turn it on for a
+perception experiment; `underwater_fx` falls back to uniform attenuation when no
+range image arrives, so the sim is correct either way, just less faithful.
+
+> `gz topic -l` still lists `/front_range` and `/bottom_range` when the sensors
+> are stripped — `image_bridge` advertises them regardless. Do not read their
+> presence as evidence the sensors are running; check for data.
+
+### The process leak, again
+
+Six orphans were found alive from earlier runs — four `t200_curve`, two
+`hydrophone`, one for over 16 hours — because the nodes were added to
+`sim.launch.py` and not to `duburi_sim stop`'s kill list. Exactly the
+`dvl_bridge` leak from 2026-08-28, repeated with the new nodes. A single `stop`
+then reaped **62** leftover processes.
+
+The symptom is never "a process leaked". It is "the sim got slow", and it sends
+you looking for the wrong thing — this time it cost a full round of frame-rate
+A/Bs against snow and range cameras that were both innocent. **Any new node in
+`sim.launch.py` belongs in that list.**

@@ -15,6 +15,8 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
   <world name="sauvc26_final">
 
     <!-- ===================== SYSTEMS ===================== -->
+    <plugin filename="gz-sim-particle-emitter-system"
+            name="gz::sim::systems::ParticleEmitter"/>
     <plugin filename="gz-sim-physics-system"
             name="gz::sim::systems::Physics"/>
     <plugin filename="gz-sim-user-commands-system"
@@ -352,6 +354,32 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
       </link>
     </model>
 
+    <!-- MARINE SNOW. Suspended particulate drifting through the beam.
+         `underwater_fx` degrades every pixel by the VEHICLE's depth, so it
+         cannot produce anything range-dependent -- a far wall is exactly as
+         hazy as the near floor, and nothing moves between frames. Real
+         particulate is the cue that is missing: it occludes, it drifts, and it
+         gives a detector something to be robust to that fog cannot.
+         `snow: 0` in a course's scene block turns it off. -->
+    <model name="marine_snow">
+      <static>true</static>
+      <pose>0 0 -0.8 0 0 0</pose>
+      <link name="link">
+        <particle_emitter name="snow" type="box">
+          <emitting>true</emitting>
+          <size>25 16 1.6</size>
+          <particle_size>0.012 0.012 0.012</particle_size>
+          <lifetime>18</lifetime>
+          <min_velocity>0.01</min_velocity>
+          <max_velocity>0.05</max_velocity>
+          <scale_rate>0</scale_rate>
+          <rate>60</rate>
+          <color_start>0.85 0.88 0.85 0.30</color_start>
+          <color_end>0.75 0.80 0.78 0.05</color_end>
+          <topic>marine_snow</topic>
+        </particle_emitter>
+      </link>
+    </model>
     <!-- ===================== PROPS ===================== -->
     <include>
       <uri>model://sauvc_starting_zone</uri>
@@ -410,7 +438,7 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
     <include>
       <uri>model://sauvc_golf_ball</uri>
       <name>flare_blue_ball</name>
-      <pose>-2 2.2 -0.71719 0 0 0</pose>
+      <pose>-1.97354 2.2 -0.709073 0 0 0</pose>
     </include>
 
     <include>
@@ -422,7 +450,7 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
     <include>
       <uri>model://sauvc_golf_ball</uri>
       <name>flare_red_ball</name>
-      <pose>0.8 3.1 -0.75559 0 0 0</pose>
+      <pose>0.773538 3.1 -0.747473 0 0 0</pose>
     </include>
 
     <include>
@@ -434,7 +462,7 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
     <include>
       <uri>model://sauvc_golf_ball</uri>
       <name>flare_yellow_ball</name>
-      <pose>-0.8 -3.4 -0.75559 0 0 0</pose>
+      <pose>-0.773538 -3.4 -0.747473 0 0 0</pose>
     </include>
 
     <include>

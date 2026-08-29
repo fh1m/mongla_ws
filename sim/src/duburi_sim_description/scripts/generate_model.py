@@ -166,6 +166,7 @@ class ModelParams:
         use_angvel_cmd: int,
         cameras: dict,
         dvl: dict = None,
+        range_cameras: bool = False,
         fdm_addr: str = "127.0.0.1",
         fdm_port_in: int = 9002,
         odom_publish_frequency: float = 50.0,
@@ -258,7 +259,27 @@ class ModelParams:
         # use -- the thread that took the sim from 12.75 Hz to 2.83 Hz when the
         # DVL drew beam visuals. Measured cost is small (see ROBOSUB doc), so
         # they stay on; this is the knob if that ever changes.
+        # Propeller wake. gz-sim's Thruster defaults are alpha_1=1, alpha_2=0,
+        # i.e. thrust independent of speed. 0.2 is the standard wake fraction
+        # for an open propeller in undisturbed flow; alpha_2 negative is what
+        # makes thrust fall as the advance ratio rises.
+        self.wake_fraction = 0.2
+        self.alpha_1 = 1.0
+        self.alpha_2 = -0.3
+
         self.boxes_always_on = 1
+        # Range images cost a render pass each, and unlike the bounding-box
+        # cameras -- which measured free -- these are EXPENSIVE: enabling both
+        # took the cameras from 12 Hz to 4 Hz on the SAUVC final course. That
+        # is the difference between a usable dataset capture and a slideshow.
+        #
+        # So they are OFF by default. Per-pixel attenuation is the most
+        # physically faithful part of the image pipeline and it is worth having
+        # for a perception experiment, but not at a 3x frame-rate cost on every
+        # ordinary run. `range_cameras: true` in configs.yaml turns them on;
+        # underwater_fx falls back to uniform attenuation when no range image
+        # arrives, so the sim is correct either way, just less faithful.
+        self.range_always_on = int(bool(range_cameras))
 
         self.dvl_visualize_beams = str(
             dvl.get("visualize_beams", DVL_DEFAULTS["visualize_beams"])
@@ -457,6 +478,7 @@ def get_model_params_from_config(config_path: str) -> ModelParams:
         config["control_method"],
         cameras=_merge_cameras(config),
         dvl=_merge_dvl(config),
+        range_cameras=config.get("range_cameras", False),
         fdm_addr=ardupilot.get("fdm_addr", "127.0.0.1"),
         fdm_port_in=ardupilot.get("fdm_port_in", 9002),
         odom_publish_frequency=config.get("odom_publish_frequency", 50.0),
@@ -469,6 +491,13 @@ def generate_model(input_path: str, output_path: str, config_path: str) -> None:
 
     with open(input_path) as f:
         s = f.read()
+
+    # Strip the range-camera sensors entirely unless they are asked for.
+    # Disabling them with always_on=0 does not work -- Gazebo creates and
+    # renders the sensor anyway -- and each one costs a full render pass on the
+    # thread the colour cameras share.
+    if not params.get("range_always_on"):
+        s = re.sub(r"\n +<!-- RANGE image.*?</sensor>\n", "\n", s, flags=re.S)
 
     pattern = re.compile(r"@(\w+)")
     missing = sorted(

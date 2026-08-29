@@ -13,6 +13,8 @@
   <world name="robosub26_smoke">
 
     <!-- ===================== SYSTEMS ===================== -->
+    <plugin filename="gz-sim-particle-emitter-system"
+            name="gz::sim::systems::ParticleEmitter"/>
     <plugin filename="gz-sim-physics-system"
             name="gz::sim::systems::Physics"/>
     <plugin filename="gz-sim-user-commands-system"
@@ -314,6 +316,32 @@
       </link>
     </model>
 
+    <!-- MARINE SNOW. Suspended particulate drifting through the beam.
+         `underwater_fx` degrades every pixel by the VEHICLE's depth, so it
+         cannot produce anything range-dependent -- a far wall is exactly as
+         hazy as the near floor, and nothing moves between frames. Real
+         particulate is the cue that is missing: it occludes, it drifts, and it
+         gives a detector something to be robust to that fog cannot.
+         `snow: 0` in a course's scene block turns it off. -->
+    <model name="marine_snow">
+      <static>true</static>
+      <pose>0 0 -1.05 0 0 0</pose>
+      <link name="link">
+        <particle_emitter name="snow" type="box">
+          <emitting>true</emitting>
+          <size>20 12 2.1</size>
+          <particle_size>0.012 0.012 0.012</particle_size>
+          <lifetime>18</lifetime>
+          <min_velocity>0.01</min_velocity>
+          <max_velocity>0.05</max_velocity>
+          <scale_rate>0</scale_rate>
+          <rate>60</rate>
+          <color_start>0.85 0.88 0.85 0.30</color_start>
+          <color_end>0.75 0.80 0.78 0.05</color_end>
+          <topic>marine_snow</topic>
+        </particle_emitter>
+      </link>
+    </model>
     <!-- ===================== PROPS ===================== -->
 
 

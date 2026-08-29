@@ -1343,11 +1343,24 @@ PROPS = {
         # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
         # ball settles into it. Sitting it a full radius above the pole put it
         # balanced on the rim instead of nested.
-        # Ball nests INTO the rim ring: cup floor top, plus enough of the ball
-        # to clear the 0.92-radius rim it rests against.
+        # Ball centre sits a FULL RADIUS above the cup floor's top face, which
+        # is where a sphere resting on a surface actually is.
+        #
+        # Two previous versions used a fraction of the diameter (0.34, then
+        # 0.30) on the theory that the ball "nests into" the rim. It does not:
+        # the rim radius is 0.92 of the ball's, so the ball rests on the rim's
+        # inner edge at essentially its own radius above the floor. Those
+        # fractions put the sphere's centre 8.5 mm BELOW where it belongs,
+        # i.e. interpenetrating the cup floor -- and the solver resolves an
+        # overlap by ejecting the lighter body. The ball was being launched
+        # off the flare on the first physics step, not falling off it.
+        #
+        # This is why the earlier "held for 75 s" check passed while the balls
+        # were on the floor: it measured whether z CHANGED, not whether z was
+        # RIGHT. A ball already at rest on the pool bottom is perfectly stable.
         "ball_on": lambda s: s["props"]["bump_flare"]["height"]
         + 0.006
-        + s["props"]["golf_ball"]["diameter"] * 0.30,
+        + s["props"]["golf_ball"]["diameter"] / 2.0,
     },
     "sauvc_flare_yellow": {
         "build": lambda s: bump_flare(s, "yellow"),
@@ -1356,11 +1369,24 @@ PROPS = {
         # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
         # ball settles into it. Sitting it a full radius above the pole put it
         # balanced on the rim instead of nested.
-        # Ball nests INTO the rim ring: cup floor top, plus enough of the ball
-        # to clear the 0.92-radius rim it rests against.
+        # Ball centre sits a FULL RADIUS above the cup floor's top face, which
+        # is where a sphere resting on a surface actually is.
+        #
+        # Two previous versions used a fraction of the diameter (0.34, then
+        # 0.30) on the theory that the ball "nests into" the rim. It does not:
+        # the rim radius is 0.92 of the ball's, so the ball rests on the rim's
+        # inner edge at essentially its own radius above the floor. Those
+        # fractions put the sphere's centre 8.5 mm BELOW where it belongs,
+        # i.e. interpenetrating the cup floor -- and the solver resolves an
+        # overlap by ejecting the lighter body. The ball was being launched
+        # off the flare on the first physics step, not falling off it.
+        #
+        # This is why the earlier "held for 75 s" check passed while the balls
+        # were on the floor: it measured whether z CHANGED, not whether z was
+        # RIGHT. A ball already at rest on the pool bottom is perfectly stable.
         "ball_on": lambda s: s["props"]["bump_flare"]["height"]
         + 0.006
-        + s["props"]["golf_ball"]["diameter"] * 0.30,
+        + s["props"]["golf_ball"]["diameter"] / 2.0,
     },
     "sauvc_flare_blue": {
         "build": lambda s: bump_flare(s, "blue"),
@@ -1369,11 +1395,24 @@ PROPS = {
         # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
         # ball settles into it. Sitting it a full radius above the pole put it
         # balanced on the rim instead of nested.
-        # Ball nests INTO the rim ring: cup floor top, plus enough of the ball
-        # to clear the 0.92-radius rim it rests against.
+        # Ball centre sits a FULL RADIUS above the cup floor's top face, which
+        # is where a sphere resting on a surface actually is.
+        #
+        # Two previous versions used a fraction of the diameter (0.34, then
+        # 0.30) on the theory that the ball "nests into" the rim. It does not:
+        # the rim radius is 0.92 of the ball's, so the ball rests on the rim's
+        # inner edge at essentially its own radius above the floor. Those
+        # fractions put the sphere's centre 8.5 mm BELOW where it belongs,
+        # i.e. interpenetrating the cup floor -- and the solver resolves an
+        # overlap by ejecting the lighter body. The ball was being launched
+        # off the flare on the first physics step, not falling off it.
+        #
+        # This is why the earlier "held for 75 s" check passed while the balls
+        # were on the floor: it measured whether z CHANGED, not whether z was
+        # RIGHT. A ball already at rest on the pool bottom is perfectly stable.
         "ball_on": lambda s: s["props"]["bump_flare"]["height"]
         + 0.006
-        + s["props"]["golf_ball"]["diameter"] * 0.30,
+        + s["props"]["golf_ball"]["diameter"] / 2.0,
     },
     "sauvc_drum_red": {
         "build": lambda s: drum(s, "red"),

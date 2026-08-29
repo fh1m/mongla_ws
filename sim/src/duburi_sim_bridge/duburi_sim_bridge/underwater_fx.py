@@ -28,6 +28,8 @@ from sensor_msgs.msg import Image
 
 FRONT_RAW = '/duburi/sim/front_camera/image_raw'
 BOTTOM_RAW = '/duburi/sim/bottom_camera/image_raw'
+FRONT_RANGE = '/duburi/sim/front_camera/range'
+BOTTOM_RANGE = '/duburi/sim/bottom_camera/range'
 FRONT_FX = '/duburi/sim/front_camera/image_fx'
 BOTTOM_FX = '/duburi/sim/bottom_camera/image_fx'
 GROUND_TRUTH = '/duburi/sim/ground_truth'
@@ -35,6 +37,11 @@ GROUND_TRUTH = '/duburi/sim/ground_truth'
 # Water attenuation coefficients (1/m), roughly Jerlov coastal water.
 ATTEN_RGB = np.array([0.45, 0.18, 0.12], dtype=np.float32)
 HAZE_RGB = np.array([0.05, 0.22, 0.28], dtype=np.float32)
+
+# Pool water is far clearer than the open ocean ATTEN_RGB describes. See the
+# per-pixel block in apply_underwater_fx.
+RANGE_ATTEN = 0.22
+RANGE_FLOOR = 0.30
 
 
 def _msg_to_bgr(msg: Image) -> np.ndarray:
@@ -133,6 +140,9 @@ def apply_underwater_fx(
     noise: float,
     vignette: float,
     atten_scale: float = 1.0,
+    # Per-pixel path length, metres, same shape as the frame. None ->
+    # uniform attenuation by the vehicle's own depth, the old behaviour.
+    range_m=None,
 ) -> np.ndarray:
     """Return a degraded BGR image. depth_m is negative below the surface."""
     depth = max(0.05, abs(float(depth_m)))
@@ -177,6 +187,30 @@ def apply_underwater_fx(
         lut[0, :, c] = ramp * (gain[c] * k / 255.0) + (bias[c] * k + mean_post[c] * (1.0 - k))
     out = cv2.LUT(bgr, lut)
 
+    if range_m is not None and range_m.shape[:2] == bgr.shape[:2]:
+        # The LUT above applied ONE path length to every pixel. Correct each by
+        # the ratio between its true path and that one, so near pixels get less
+        # attenuation and far pixels more. Doing it as a correction keeps the
+        # LUT -- which is what makes this fast -- for one exponential per frame.
+        r = np.nan_to_num(range_m, nan=depth, posinf=depth, neginf=depth)
+        r = np.clip(r, 0.05, 40.0).astype(np.float32)
+        # RANGE_ATTEN scales the along-path coefficient down from the open-ocean
+        # figures in ATTEN_RGB. Those are right for the sea and much too strong
+        # for a chlorinated pool: applied raw, the far wall of a 25 m pool went
+        # essentially black (red down to 0.004 of its value at 20 m) while a
+        # real pool photo shows the far end clearly, just blue and low-contrast.
+        #
+        # The floor keeps the far field visible-but-degraded, which is the point
+        # -- a detector must find props at range through worse imagery, not be
+        # handed a black frame it cannot possibly work with.
+        rel = (r * (0.35 + 0.65 * t) - path)[:, :, None]
+        att = np.exp(-ATTEN_RGB.reshape(1, 1, 3) * rel * atten_scale * RANGE_ATTEN)
+        out *= np.maximum(att, RANGE_FLOOR)
+        # Haze accumulates along the path too: a distant surface is not merely
+        # dimmer, it is washed toward the colour of the water in between.
+        far = np.clip(rel * 0.02 * t, 0.0, 0.55)
+        out = out * (1.0 - far) + HAZE_RGB.reshape(1, 1, 3) * far
+
     # ONE uint8 conversion, at the very end.
     #
     # Blur, noise and vignette each used to round-trip the whole frame
@@ -216,6 +250,11 @@ class UnderwaterFx(Node):
         self.declare_parameter('enabled', True)
 
         self._depth = -0.8
+        # Latest range image per camera, for per-pixel attenuation. None until
+        # one arrives, and the filter falls back to uniform if it never does --
+        # so a missing depth sensor degrades to the old behaviour rather than
+        # to a crash or a black frame.
+        self._range = {'front': None, 'bottom': None}
         self._reload_params()
         if self.get_parameter('randomize_on_start').value:
             self._randomize()
@@ -224,10 +263,18 @@ class UnderwaterFx(Node):
         self._pub_front = self.create_publisher(Image, FRONT_FX, qos_profile_sensor_data)
         self._pub_bottom = self.create_publisher(Image, BOTTOM_FX, qos_profile_sensor_data)
         self.create_subscription(
-            Image, FRONT_RAW, lambda m: self._on_image(m, self._pub_front), qos_profile_sensor_data
+            Image, FRONT_RANGE, lambda m: self._on_range('front', m),
+            qos_profile_sensor_data
         )
         self.create_subscription(
-            Image, BOTTOM_RAW, lambda m: self._on_image(m, self._pub_bottom), qos_profile_sensor_data
+            Image, BOTTOM_RANGE, lambda m: self._on_range('bottom', m),
+            qos_profile_sensor_data
+        )
+        self.create_subscription(
+            Image, FRONT_RAW, lambda m: self._on_image(m, self._pub_front, 'front'), qos_profile_sensor_data
+        )
+        self.create_subscription(
+            Image, BOTTOM_RAW, lambda m: self._on_image(m, self._pub_bottom, 'bottom'), qos_profile_sensor_data
         )
         self.add_on_set_parameters_callback(self._on_params)
         self.get_logger().info(
@@ -277,7 +324,16 @@ class UnderwaterFx(Node):
     def _on_odom(self, msg: Odometry) -> None:
         self._depth = float(msg.pose.pose.position.z)
 
-    def _on_image(self, msg: Image, pub) -> None:
+    def _on_range(self, cam: str, msg: Image) -> None:
+        # 32FC1 from Gazebo's depth_camera: metres along the optical axis.
+        try:
+            a = np.frombuffer(msg.data, dtype=np.float32)
+            self._range[cam] = a[:msg.height * msg.width].reshape(
+                msg.height, msg.width)
+        except Exception:
+            self._range[cam] = None
+
+    def _on_image(self, msg: Image, pub, cam: str = 'front') -> None:
         # NOTHING unless somebody is watching this camera.
         #
         # This node is the single biggest drag on simulator smoothness, and the
@@ -314,6 +370,7 @@ class UnderwaterFx(Node):
                 self._noise,
                 self._vignette,
                 self._atten_scale,
+                range_m=self._range.get(cam),
             )
         pub.publish(_bgr_to_msg(bgr, msg.header.stamp, msg.header.frame_id))
 

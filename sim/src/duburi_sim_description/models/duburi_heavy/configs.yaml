@@ -152,4 +152,10 @@ ardupilot:
   fdm_addr: "127.0.0.1"
   fdm_port_in: 9002
 
+# Per-pixel light attenuation needs a depth image per camera. Each costs a
+# full render pass on the thread the colour cameras share, so this is OFF by
+# default and turned on for a perception experiment. underwater_fx falls back
+# to uniform attenuation by vehicle depth when no range image arrives.
+range_cameras: false
+
 odom_publish_frequency: 50.0

@@ -66,6 +66,11 @@ SCENE_DEFAULTS = {
     # static plane and only task_navigation asked for waves, which is why every
     # other course looked like it had no water at all.
     "water_surface": "gerstner",
+    # Marine snow density, particles per second. 0 disables it entirely.
+    # Deliberately modest: this is suspended sediment in a swimming pool, not a
+    # deep-ocean snowfall, and a blizzard would obscure the props rather than
+    # test a detector against them.
+    "snow": 60.0,
 }
 
 # How the water surface at z = 0 is drawn.
@@ -297,10 +302,26 @@ def build_props(course: dict, spec: dict, pool_cfg: dict):
         ball_on = meta.get("ball_on")
         if ball_on and entry.get("ball", True):
             ball_name = f"{name}_ball"
-            ball_z = z + ball_on(spec)
+            lift = ball_on(spec)
+
+            # FOLLOW THE FLARE'S TILT. On SAUVC's sloped floor a flare is
+            # pitched to stand normal to the floor, so the top of an 0.8 m pole
+            # is displaced HORIZONTALLY by height*sin(pitch) and sits slightly
+            # lower than height above the base. Adding the lift straight up put
+            # the ball 21 mm above the cup and about 26 mm to one side of it --
+            # so it spawned in open water beside the flare and fell, every run.
+            #
+            # This is why the "does z change" check passed while every ball was
+            # on the floor: a ball at rest on the bottom is perfectly stable.
+            # Verify a ball by its HEIGHT against the cup, never by stability.
+            ball_x = x + lift * math.sin(prop_pitch) * math.cos(yaw)
+            ball_y = y + lift * math.sin(prop_pitch) * math.sin(yaw) \
+                + lift * math.sin(roll)
+            ball_z = z + lift * math.cos(prop_pitch) * math.cos(roll)
             blocks.append(
                 _include(
-                    "sauvc_golf_ball", ball_name, f"{x:.6g} {y:.6g} {ball_z:.6g} 0 0 0"
+                    "sauvc_golf_ball", ball_name,
+                    f"{ball_x:.6g} {ball_y:.6g} {ball_z:.6g} 0 0 0"
                 )
             )
             dynamic.append(ball_name)
@@ -367,6 +388,33 @@ def generate(course_path: str, spec: dict = None, outdir: str = WORLDS_DIR) -> s
             f"unknown water_surface {water_surface!r}; "
             f"known: {', '.join(WATER_SURFACES)}")
 
+    snow_rate = float(scene.get("snow", 60.0))
+    if snow_rate > 0:
+        # Sized to the pool and centred in it, so particles exist wherever the
+        # vehicle goes. Emitted slowly downward, as settling sediment does.
+        marine_snow = f"""    <model name="marine_snow">
+      <static>true</static>
+      <pose>0 0 {-pool_cfg['depth'] / 2.0:.6g} 0 0 0</pose>
+      <link name="link">
+        <particle_emitter name="snow" type="box">
+          <emitting>true</emitting>
+          <size>{pool_cfg['length']:.6g} {pool_cfg['width']:.6g} """ \
+            f"""{pool_cfg['depth']:.6g}</size>
+          <particle_size>0.012 0.012 0.012</particle_size>
+          <lifetime>18</lifetime>
+          <min_velocity>0.01</min_velocity>
+          <max_velocity>0.05</max_velocity>
+          <scale_rate>0</scale_rate>
+          <rate>{snow_rate:.6g}</rate>
+          <color_start>0.85 0.88 0.85 0.30</color_start>
+          <color_end>0.75 0.80 0.78 0.05</color_end>
+          <topic>marine_snow</topic>
+        </particle_emitter>
+      </link>
+    </model>"""
+    else:
+        marine_snow = ""
+
     props_xml, dynamic = build_props(course, spec, pool_cfg)
     if water_surface == "gerstner":
         # Sits at z=0 like the plane it replaces. No collision (the model is
@@ -405,6 +453,7 @@ def generate(course_path: str, spec: dict = None, outdir: str = WORLDS_DIR) -> s
         fog_end=scene["fog_end"],
         fog_density=scene["fog_density"],
         floor_z=f"{-pool_cfg['depth']:.6g}",
+        marine_snow=marine_snow,
         pool=_indent(pl.pool(spec, pool_cfg, water_surface), 2),
         props=_indent(props_xml, 2),
         vehicle=_indent(vehicle_xml, 2),
