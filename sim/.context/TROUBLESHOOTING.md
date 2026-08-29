@@ -503,3 +503,39 @@ export DUBURI_WS=/path/to/duburi_ws
 
 Always use `duburi_sim stack` (forces `flight_controller:=pixhawk`) or pass that
 arg yourself. See [INTEGRATION_DUBURI_WS.md](INTEGRATION_DUBURI_WS.md).
+
+
+## Marine snow is in the GUI but not in any image topic
+
+**Gazebo particle emitters do not render to camera sensors.** This is the same
+GUI-scene / sensor-scene split that makes `<scene><fog>` inert: gz-sim renders
+one scene for the GUI and another for sensors, and particles only reach the
+first.
+
+Measured: 0.4 m particles at 4000/s, the emitter confirmed alive (`gz topic -i
+-t /marine_snow` shows a subscriber, the rate command returns rc=0), and the
+frame off `/duburi/sim/front_camera/image_fx` came back as clean as with the
+emitter switched off. Per-pixel stddev over 14 frames was **1.4700 with snow
+and 1.4678 without** — indistinguishable, and the "without" arm was marginally
+higher.
+
+So **raising the `snow:` rate in a course will make the GUI prettier and change
+no dataset whatsoever.** The particulate the vision pipeline sees is composited
+in `underwater_fx.ParticleField` and is controlled by the `particulate`
+parameter:
+
+```bash
+ros2 param set /underwater_fx particulate 0.6    # more
+ros2 param set /underwater_fx particulate 0.0    # off
+```
+
+Measured cost on `image_fx`: 6.35 → 6.06 Hz (4.6 %). The GUI emitter at 900/s
+costs nothing measurable (7.63 vs 7.61 Hz on `image_raw` with the GUI up).
+
+Particles there **persist and drift** rather than being resampled per frame.
+That is deliberate: a per-frame speckle is just `noise`, which the filter
+already applies and which a detector ignores. Coherent motes that move slowly
+are what put spurious small blobs in front of a bounding box across consecutive
+frames. `test_particulate.py` asserts both halves — that the field moves at all,
+and that it does not move so far in 100 ms that consecutive frames share no
+particles.

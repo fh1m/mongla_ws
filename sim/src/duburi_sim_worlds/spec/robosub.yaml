@@ -65,6 +65,11 @@ props:
     #  this pattern. The divider is RED."
     width: 3.0
     height: 1.5
+    # "floating just below the surface and moored to the bottom" (p. 32). The
+    # handbook does not put a number on "just below", so this is ours: deep
+    # enough that the top bar is properly submerged, shallow enough that the
+    # clear water beneath the frame is the 0.5 m the task implies.
+    submergence: 0.1
     # "24 in (610 mm)" -- the divider drop from the top bar.
     divider_drop: 0.6096
     divider_width: 0.0508

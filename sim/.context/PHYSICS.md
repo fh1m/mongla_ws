@@ -378,3 +378,80 @@ The symptom is never "a process leaked". It is "the sim got slow", and it sends
 you looking for the wrong thing — this time it cost a full round of frame-rate
 A/Bs against snow and range cameras that were both innocent. **Any new node in
 `sim.launch.py` belongs in that list.**
+
+
+## Collision detection — `bullet`, and why not DART's own
+
+**DART's built-in collision detector does not support several primitive pairs,
+and silently generates no contact for them.** With `collision_detector: dart`
+the server logs, once per pair per step:
+
+```
+[DARTCollisionDetector] Attempting to check for an unsupported shape pair:
+[CylinderShape] - [BoxShape]. Returning false.
+```
+
+"Returning false" means exactly what it says. The hull's collision shape is a
+**box** and every pipe prop — gate legs, slalom pipes, flare poles, path
+markers — is a **cylinder**, so the vehicle drove through all of them.
+
+Measured on `robosub26_full`, identical thrust driven straight at a gate leg
+versus the same push into open water:
+
+| detector | into the leg | open water | surge through the leg |
+|---|---|---|---|
+| `dart`   | 1.739 m | 1.715 m | flat 0.656 m/s — no contact at all |
+| `bullet` | 2.362 m | 3.586 m | 0.658 → 0.303 m/s at x = −5.26 |
+
+Predicted geometric contact is x = −5.246 (leg at −5.0, pipe radius 0.017,
+hull half-length 0.229). The `bullet` arm decelerates at −5.26. The DART arm
+holds cruise speed the whole way through. The unsupported-pair error count goes
+8 → 0.
+
+**This overturns an earlier decision recorded in `gen_world.py`.** `bullet` +
+`dantzig` measured ~5 % slower than `dart` over 443 RTF samples and `dart` was
+selected on that basis. The comparison was real and it measured the wrong
+quantity: a faster simulator that does not collide is not a cheaper trade-off,
+it is the wrong answer. The sim is render-bound anyway, so the 5 % is not where
+the time goes.
+
+**If you change this setting, re-run the collision A/B, not an RTF sample.**
+A one-armed version of that test is not enough either — the first run of it
+"stopped short of the leg" and the control arm showed it had simply run out of
+travel budget.
+
+### Consequence: the RoboSub gate is now solid
+
+Working cylinder contacts plus a surface-hung gate (below) means the clear
+water under the frame is 1.6–2.1 m — about 0.5 m. A sim mission that transited
+the gate at 0.8 m depth passed through the legs before and will now hit them.
+That is correct behaviour, not a regression.
+
+## Thruster wake — applied, and small at pool speeds
+
+`thrust_coefficient` and `alpha_1`/`alpha_2` are **mutually exclusive** in
+`gz-sim-thruster-system`. The model set both, so the velocity-dependent term
+was ignored:
+
+```
+The [alpha_2] value will be ignored as a [thrust_coefficient] was also
+defined through the SDF file.
+```
+
+Removing the eight `<thrust_coefficient>` tags takes that warning **8 → 0**,
+which is the proof the parameter is now consumed. `alpha_1 = 0.02` preserves
+the old static coefficient, so bollard pull is unchanged and only the speed
+falloff is new.
+
+**Do not read this as "wake matters here."** `Ct = alpha_1 + alpha_2·J` with
+`alpha_2 = −0.012` is a ~6 % thrust reduction at the advance ratios a 0.1 m
+propeller sees at pool speeds, i.e. ~3 % in terminal velocity. Measured surge
+went 0.658 → 0.649 m/s (1.4 %) and sway 0.563 → 0.559 (0.7 %) — and the
+open-water arm of the collision A/B spread 0.652–0.661 m/s *within a single
+run*, so the sway figure is inside noise and the surge figure is barely outside
+it. **The warning count is the evidence; the velocity delta is not.**
+
+Unlike the T200 curve, these coefficients are **modelled, not measured** — Blue
+Robotics publish bollard-pull data only, which by definition contains no speed
+dependence. `alpha_2` comes from open-propeller theory and puts zero thrust at
+J = 1.67.

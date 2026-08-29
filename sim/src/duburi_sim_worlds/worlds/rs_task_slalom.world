@@ -76,7 +76,7 @@ Scoring rewards keeping the SAME side of the red pipe the vehicle took at the ga
       <real_time_factor>1.0</real_time_factor>
       <real_time_update_rate>1000</real_time_update_rate>
       <dart>
-        <collision_detector>dart</collision_detector>
+        <collision_detector>bullet</collision_detector>
         <solver>
           <solver_type>dantzig</solver_type>
         </solver>
@@ -330,16 +330,23 @@ Scoring rewards keeping the SAME side of the red pipe the vehicle took at the ga
       <link name="link">
         <particle_emitter name="snow" type="box">
           <emitting>true</emitting>
-          <size>20 12 2.1</size>
-          <particle_size>0.012 0.012 0.012</particle_size>
-          <lifetime>18</lifetime>
-          <min_velocity>0.01</min_velocity>
-          <max_velocity>0.05</max_velocity>
+          <size>12 12 2.1</size>
+          <particle_size>0.006 0.006 0.006</particle_size>
+          <lifetime>30</lifetime>
+          <min_velocity>0.004</min_velocity>
+          <max_velocity>0.025</max_velocity>
           <scale_rate>0</scale_rate>
-          <rate>60</rate>
-          <color_start>0.85 0.88 0.85 0.30</color_start>
-          <color_end>0.75 0.80 0.78 0.05</color_end>
+          <rate>900</rate>
           <topic>marine_snow</topic>
+          <material>
+            <diffuse>0.80 0.84 0.80</diffuse>
+            <specular>0.05 0.05 0.05</specular>
+            <pbr>
+              <metal>
+                <albedo_map>model://robosub_textures/marine_snow.png</albedo_map>
+              </metal>
+            </pbr>
+          </material>
         </particle_emitter>
       </link>
     </model>

@@ -66,11 +66,15 @@ SCENE_DEFAULTS = {
     # static plane and only task_navigation asked for waves, which is why every
     # other course looked like it had no water at all.
     "water_surface": "gerstner",
-    # Marine snow density, particles per second. 0 disables it entirely.
-    # Deliberately modest: this is suspended sediment in a swimming pool, not a
-    # deep-ocean snowfall, and a blizzard would obscure the props rather than
-    # test a detector against them.
-    "snow": 60.0,
+    # Marine snow, particles per second. 0 disables it entirely.
+    #
+    # DENSITY is what reads on camera, not count. 60/s spread over a whole
+    # 25 x 16 x 1.6 m pool put roughly one particle per 10 cubic metres -- a
+    # handful of specks at infinity rather than anything a camera would call
+    # particulate. The emitter is now a box around the VEHICLE (see below) and
+    # the rate is per that much smaller volume, which is why this number can
+    # rise a long way without becoming a blizzard.
+    "snow": 900.0,
 }
 
 # How the water surface at z = 0 is drawn.
@@ -161,19 +165,31 @@ PHYSICS_DEFAULTS = {
     "max_step_size": 0.001,
     "real_time_factor": 1.0,
     "real_time_update_rate": 1000,
-    # MEASURED, and the answer was "leave it alone".
+    # collision_detector is a CORRECTNESS setting, not a speed one.
     #
-    # `bullet` + `dantzig` looked like the obvious choice for a world of
-    # primitive shapes with few simultaneous contacts. Over 443 samples on
-    # sauvc26_final it gave median RTF 0.373 against DART's own defaults at
-    # 0.393 -- a 5 % regression, inside the run-to-run noise.
+    # DART's built-in detector does not support several primitive pairs. With
+    # `dart` selected, gz floods the log with
+    #     [DARTCollisionDetector] Attempting to check for an unsupported shape
+    #     pair: [CylinderShape] - [BoxShape]. Returning false.
+    # and "returning false" means exactly what it says: no contact is generated.
+    # The hull's collision shape is a BOX and every pipe prop -- gate legs,
+    # slalom pipes, flare poles, path markers -- is a CYLINDER, so the vehicle
+    # drove through all of them.
     #
-    # That is consistent with the rest of the RTF work: this sim is
-    # RENDER-bound, not solver-bound (PHYSICS.md). Tuning the solver is tuning
-    # the part that is not the bottleneck. These stay at DART's defaults, and
-    # they are exposed here so the next person can re-measure rather than
-    # re-guess -- the alternatives are ode|bullet|fcl|dart and dantzig|pgs.
-    "collision_detector": "dart",
+    # MEASURED, A/B on robosub26_full, identical thrust into a gate leg vs into
+    # open water: with `dart`, 1.739 m vs 1.715 m and a flat 0.656 m/s through
+    # the leg -- no collision at all. With `bullet`, the leg stops it.
+    #
+    # This overturns an earlier decision recorded here. `bullet` + `dantzig`
+    # measured ~5 % slower than `dart` over 443 RTF samples, and on that basis
+    # `dart` was selected. That comparison was real but it measured the wrong
+    # quantity: a faster simulator that does not collide is not a cheaper
+    # trade-off, it is the wrong answer. The sim is render-bound anyway
+    # (PHYSICS.md), so the 5 % is not where the time goes.
+    #
+    # Alternatives are ode|bullet|fcl|dart and dantzig|pgs. If you change this,
+    # re-run the collision A/B, not just an RTF sample.
+    "collision_detector": "bullet",
     "solver_type": "dantzig",
 }
 
@@ -388,27 +404,60 @@ def generate(course_path: str, spec: dict = None, outdir: str = WORLDS_DIR) -> s
             f"unknown water_surface {water_surface!r}; "
             f"known: {', '.join(WATER_SURFACES)}")
 
-    snow_rate = float(scene.get("snow", 60.0))
+    snow_rate = float(scene.get("snow", 900.0))
     if snow_rate > 0:
-        # Sized to the pool and centred in it, so particles exist wherever the
-        # vehicle goes. Emitted slowly downward, as settling sediment does.
+        # THIS EMITTER IS FOR THE OPERATOR'S EYES ONLY. It does NOT reach any
+        # camera sensor, so it does NOT appear in image_raw, image_fx, a
+        # recorded dataset, or anything the detector sees.
+        #
+        # MEASURED: 0.4 m particles at 4000/s, the emitter confirmed alive with
+        # a subscriber on its own topic, and the frame off
+        # /duburi/sim/front_camera/image_fx came back pixel-for-pixel as clean
+        # as with the emitter switched off. Per-pixel stddev over 14 frames was
+        # 1.4700 with snow and 1.4678 without -- indistinguishable. It is the
+        # same GUI-scene / sensor-scene split that makes <scene><fog> useless.
+        #
+        # The particulate the VISION PIPELINE sees is composited in
+        # `underwater_fx.ParticleField` instead. Raising the rate here will
+        # make the GUI prettier and change no dataset whatsoever.
+        #
+        # DENSITY is what reads on camera, not particle count. The old emitter
+        # spanned the whole 25 x 16 x 1.6 m pool at 60/s, which is roughly one
+        # particle per 10 cubic metres -- specks at infinity, not particulate.
+        # This one covers the central 12 x 12 m at 15x the rate. It is static:
+        # gz-sim particle emitters live in a model, and the world file cannot
+        # inject a link into the vehicle, so following the hull would need a
+        # node teleporting a model every frame. The pool is small enough that
+        # a centred box covers everywhere the vehicle actually operates.
+        #
+        # <color_start>/<color_end> are NOT set, because gz-sim logs
+        #   "ParticleEmitter SetColorRange is currently disabled"
+        # and ignores them -- that is why particles used to render as hard
+        # white dots. The soft falloff is in marine_snow.png's alpha channel
+        # and the tint is <diffuse>.
         marine_snow = f"""    <model name="marine_snow">
       <static>true</static>
       <pose>0 0 {-pool_cfg['depth'] / 2.0:.6g} 0 0 0</pose>
       <link name="link">
         <particle_emitter name="snow" type="box">
           <emitting>true</emitting>
-          <size>{pool_cfg['length']:.6g} {pool_cfg['width']:.6g} """ \
-            f"""{pool_cfg['depth']:.6g}</size>
-          <particle_size>0.012 0.012 0.012</particle_size>
-          <lifetime>18</lifetime>
-          <min_velocity>0.01</min_velocity>
-          <max_velocity>0.05</max_velocity>
+          <size>12 12 {pool_cfg['depth']:.6g}</size>
+          <particle_size>0.006 0.006 0.006</particle_size>
+          <lifetime>30</lifetime>
+          <min_velocity>0.004</min_velocity>
+          <max_velocity>0.025</max_velocity>
           <scale_rate>0</scale_rate>
           <rate>{snow_rate:.6g}</rate>
-          <color_start>0.85 0.88 0.85 0.30</color_start>
-          <color_end>0.75 0.80 0.78 0.05</color_end>
           <topic>marine_snow</topic>
+          <material>
+            <diffuse>0.80 0.84 0.80</diffuse>
+            <specular>0.05 0.05 0.05</specular>
+            <pbr>
+              <metal>
+                <albedo_map>model://{pl.texture_model(competition)}/marine_snow.png</albedo_map>
+              </metal>
+            </pbr>
+          </material>
         </particle_emitter>
       </link>
     </model>"""
