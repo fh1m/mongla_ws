@@ -705,7 +705,19 @@
     <!-- ArduSub link. type=COMMAND means this plugin does not actuate the joint
          itself; it republishes a gz.msgs.Double onto cmd_topic, which the
          Thruster plugin above consumes. Chain is:
-           ArduSub -> PWM over UDP 9002 -> here -> cmd_thrust -> joint force. -->
+           ArduSub -> PWM over UDP 9002 -> here -> cmd_thrust_linear
+                   -> duburi_sim_bridge/t200_curve -> cmd_thrust -> joint force.
+
+         The topic is cmd_thrust_LINEAR because this plugin can only apply an
+         affine map, `(normalised_pwm + offset) * multiplier`. A real T200 has a
+         +/-28 us deadband, makes only ~78 % of its forward thrust in reverse,
+         and follows a quadratic -- a straight line is out by 12 N, 24 % of full
+         thrust, and worst exactly where fine corrections live. t200_curve
+         reshapes it against Blue Robotics' published performance data.
+
+         WITHOUT that node running the thrusters receive NOTHING: this topic
+         has no other subscriber. duburi_sim's `sim` starts it; if you launch
+         sim.launch.py by hand, pass t200:=true (the default). -->
     <plugin name="ArduPilotPlugin" filename="libArduPilotPlugin.so">
       <fdm_addr>127.0.0.1</fdm_addr>
       <fdm_port_in>9002</fdm_port_in>
@@ -726,7 +738,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster1_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster1_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>
@@ -735,7 +747,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster2_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster2_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>
@@ -744,7 +756,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster3_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster3_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>
@@ -753,7 +765,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster4_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster4_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>
@@ -762,7 +774,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster5_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster5_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>
@@ -771,7 +783,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster6_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster6_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>
@@ -780,7 +792,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster7_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster7_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>
@@ -789,7 +801,7 @@
         <servo_min>1100</servo_min>
         <servo_max>1900</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/duburi_heavy/joint/thruster8_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/model/duburi_heavy/joint/thruster8_joint/cmd_thrust_linear</cmd_topic>
         <offset>-0.5</offset>
         <multiplier>100</multiplier>
       </control>

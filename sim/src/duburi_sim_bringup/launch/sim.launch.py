@@ -31,6 +31,7 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 # ArduSub and the ArduPilot Gazebo plugin are built outside this workspace, so
@@ -131,6 +132,38 @@ def generate_launch_description():
     wait_script = os.path.join(bringup_share, 'launch', 'wait_for_gazebo.py')
 
     args = [
+        DeclareLaunchArgument(
+            'vehicle_model', default_value='duburi_heavy',
+            description="The vehicle MODEL name, which is not the course's "
+                        'instance name. Both thruster plugins bake their gz '
+                        'topics from the model the SDF was generated with.'),
+        DeclareLaunchArgument(
+            'current', default_value='true',
+            description='Run the water-current node (speed 0 = still water).'),
+        DeclareLaunchArgument(
+            'current_speed', default_value='0.0',
+            description='Steady current, m/s. 0.05-0.10 is a realistic pool '
+                        'circulation; it is what vision.ki_lat exists to null, '
+                        'and with 0 that term has nothing to fight.'),
+        DeclareLaunchArgument(
+            'current_heading', default_value='0.0',
+            description='Current bearing in world frame, degrees.'),
+        DeclareLaunchArgument(
+            't200', default_value='true',
+            description='Shape thrust through the real T200 curve. Turning '
+                        'this OFF leaves the thrusters unfed -- ArduPilotPlugin '
+                        'publishes to cmd_thrust_linear and nothing else reads '
+                        'it. Off is for A/B comparison only.'),
+        DeclareLaunchArgument(
+            'battery_volts', default_value='16.0',
+            description='Pack voltage the T200 curve is evaluated at. A T200 '
+                        'makes 36 N at 12 V and 66 N at 20 V, so this is not '
+                        'cosmetic. 16 V is 4S nominal.'),
+        DeclareLaunchArgument(
+            'thruster_tau', default_value='0.15',
+            description='Thruster spin-up time constant, seconds. 0 disables '
+                        'the lag and makes thrust step instantly, which is what '
+                        'the sim did before.'),
         DeclareLaunchArgument(
             'course',
             default_value='sauvc26_qualification',
@@ -240,6 +273,42 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('mavproxy')),
     )
 
+    # The T200 curve node. NOT optional in practice: ArduPilotPlugin now
+    # publishes to cmd_thrust_LINEAR, and this is the only subscriber -- without
+    # it the thrusters get nothing at all and the vehicle sits inert. It is a
+    # separate node rather than a plugin because ArduPilotPlugin can only apply
+    # an affine map, and a real T200 is not affine.
+    t200 = Node(
+        package='duburi_sim_bridge',
+        executable='t200_curve',
+        name='t200_curve',
+        parameters=[{
+            # The MODEL name, not the course's instance name: both plugins
+            # bake their topics from the model the SDF was generated with.
+            'vehicle': LaunchConfiguration('vehicle_model'),
+            'voltage': LaunchConfiguration('battery_volts'),
+            'spinup_tau': LaunchConfiguration('thruster_tau'),
+        }],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('t200')),
+    )
+
+    # Water current. Default 0 m/s so nothing changes unless a course or the
+    # operator asks for it -- but the node always runs, so `ros2 param set
+    # /water_current speed 0.08` turns the pool on mid-run without a restart.
+    current = Node(
+        package='duburi_sim_bridge',
+        executable='water_current',
+        name='water_current',
+        parameters=[{
+            'vehicle': LaunchConfiguration('vehicle_model'),
+            'speed': LaunchConfiguration('current_speed'),
+            'heading_deg': LaunchConfiguration('current_heading'),
+        }],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('current')),
+    )
+
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -263,6 +332,8 @@ def generate_launch_description():
         + [
             gazebo_server,
             gazebo_gui,
+            t200,
+            current,
             bridge,
             wait,
             # Everything that talks to the FDM socket starts only once Gazebo has

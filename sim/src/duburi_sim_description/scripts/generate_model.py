@@ -310,6 +310,10 @@ class ModelParams:
             topic += "vel" if use_angvel_cmd else "thrust"
 
             setattr(self, f"thruster{thruster_num}_topic", topic)
+            # ArduPilotPlugin publishes the raw AFFINE thrust here; the
+            # t200_curve node reshapes it against the real T200 curve and
+            # republishes on the topic above, which the Thruster plugin reads.
+            setattr(self, f"linear_thruster{thruster_num}_topic", topic + "_linear")
 
 
 def _merge_cameras(config: dict) -> dict:

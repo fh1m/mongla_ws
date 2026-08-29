@@ -26,10 +26,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="spine_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>1.3</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="cross_0">
       <pose>-0.433333 0 0.55 1.5708 0 0</pose>
@@ -52,10 +48,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="cross_0_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.936</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="leg_00">
       <pose>-0.433333 -0.468 0.275 0 0 0</pose>
@@ -78,10 +70,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_00_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="leg_01">
       <pose>-0.433333 0.468 0.275 0 0 0</pose>
@@ -104,10 +92,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_01_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="cross_1">
       <pose>0.433333 0 0.55 1.5708 0 0</pose>
@@ -130,10 +114,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="cross_1_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.936</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="leg_10">
       <pose>0.433333 -0.468 0.275 0 0 0</pose>
@@ -156,10 +136,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_10_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="leg_11">
       <pose>0.433333 0.468 0.275 0 0 0</pose>
@@ -182,10 +158,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="leg_11_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.55</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="crate_sr_a_floor">
       <pose>-0.433333 -0.468 0.41 0 0 0</pose>

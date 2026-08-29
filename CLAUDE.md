@@ -260,6 +260,18 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > **`bin_fire_blood.pt` has NO `bin` class** — embedded names are
 > `{0: blood, 1: fire}`. Asking for `classes:=bin` detects nothing, silently.
 >
+> **Thrusters follow the REAL T200 curve** (Blue Robotics' published data), not
+> a straight line — which was wrong by 12.24 N, 24 % of full thrust. ±28 µs
+> deadband, reverse at 78 % of forward, quadratic ramp, 0.15 s spin-up. Measured
+> A/B: at `--gain 30` behaviour is unchanged (ArduSub closes a loop and asks for
+> more PWM), but at `--gain 15` the vehicle now **does not move at all** where it
+> used to travel 0.37 m. Transit verbs are unaffected; fine alignment and
+> station-keeping are, and that is the pool behaviour the sim was missing.
+> **Water current** is live too (`current_speed:=0.08`) — 0.12 m/s drifts the
+> hull 1.374 m in 40 s, which is what `vision.ki_lat` exists to fight and
+> previously had nothing to fight. Both in
+> [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
+>
 > **Sim vision + datasets: one page has every combination** —
 > [`sim/.context/VISION_AND_DATASETS.md`](sim/.context/VISION_AND_DATASETS.md):
 > all 13 courses, how to author a new course or prop, single/dual camera ×

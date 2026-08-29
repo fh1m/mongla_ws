@@ -26,10 +26,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_0_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="side_1">
       <pose>0.88193 0.88193 0 0 1.5708 2.35619</pose>
@@ -52,10 +48,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_1_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="side_2">
       <pose>7.63713e-17 1.24724 0 0 1.5708 3.14159</pose>
@@ -78,10 +70,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_2_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="side_3">
       <pose>-0.88193 0.88193 0 0 1.5708 3.92699</pose>
@@ -104,10 +92,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_3_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="side_4">
       <pose>-1.24724 1.52743e-16 0 0 1.5708 4.71239</pose>
@@ -130,10 +114,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_4_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="side_5">
       <pose>-0.88193 -0.88193 0 0 1.5708 5.49779</pose>
@@ -156,10 +136,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_5_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="side_6">
       <pose>-2.29114e-16 -1.24724 0 0 1.5708 6.28319</pose>
@@ -182,10 +158,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_6_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="side_7">
       <pose>0.88193 -0.88193 0 0 1.5708 7.06858</pose>
@@ -208,10 +180,6 @@
           <emissive>0.2576 0.2576 0.2576 1</emissive>
         </material>
       </visual>
-      <collision name="side_7_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0105</radius><length>1.03325</length></cylinder></geometry>
-      </collision>
     </link>
     <link name="role_sign_0">
       <pose>1.14724 0 -0.35 0 0 3.14159</pose>

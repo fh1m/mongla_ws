@@ -452,3 +452,36 @@ def test_floor_anchored_props_sit_on_the_sloped_floor():
         x, z = float(m.group(1)), float(m.group(3))
         assert z == pytest.approx(-pl.floor_depth_at(pool, x), abs=1e-3), (
             f'{name} at x={x} sits at {z}, not on the floor')
+
+
+def test_courses_stay_within_a_render_budget():
+    """Props cost RENDER time, not collision time -- and that is the surprise.
+
+    Measured 2026-08-29 on sauvc26_final with ArduSub: the full course ran at
+    RTF 0.37-0.65 while the SAME world with every prop stripped ran at 1.00.
+    Cutting collision shapes 101 -> 37 changed nothing. Halving the drums' draw
+    calls (a 20-segment interior liner became one cylinder) took it to
+    0.71-0.91.
+
+    So the number to watch is VISUALS, not collisions, and it is paid four
+    times over -- two cameras plus two bounding-box cameras all render the
+    scene. A prop that adds twenty visuals adds eighty draw calls per step.
+
+    The budget is deliberately loose; it exists to catch a prop that quietly
+    adds a ring of fifty segments, not to police careful work.
+    """
+    import re
+
+    worlds = SIM / 'src/duburi_sim_worlds/worlds'
+    models = SIM / 'src/duburi_sim_worlds/models'
+    counts = {d.name: (d / 'model.sdf').read_text().count('<visual')
+              for d in models.iterdir() if (d / 'model.sdf').is_file()}
+
+    for world in sorted(worlds.glob('*.world')):
+        text = world.read_text()
+        used = re.findall(r'<uri>model://([a-z_0-9]+)</uri>', text)
+        total = sum(counts.get(m, 0) for m in used)
+        assert total <= 260, (
+            f'{world.name} draws {total} prop visuals; every one is rendered by '
+            f'both cameras AND both bounding-box cameras. Simplify the worst '
+            f'offender rather than raising this number.')
