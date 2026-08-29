@@ -99,6 +99,7 @@ patterns = (
     'lib/duburi_sim_bridge/hydrophone',
     'lib/duburi_sim_bridge/payload_sim',
     'lib/duburi_sim_bridge/fault_injection',
+    'lib/duburi_sim_bridge/bno085_sim',
     'lib/duburi_sim_scenarios/prop_manager',
     'duburi_sim_worlds/worlds',
     'ros_gz_image/image_bridge',
@@ -227,9 +228,17 @@ time.sleep(1)
 print('[duburi-sim] cleared prior stack processes')
 PY
     vision=true
+    passthrough=()
     for a in "$@"; do
       case "$a" in
         --no-vision) vision=false ;;
+        # Pass any other key:=value straight through to the launch file --
+        # yaw_source:= in particular, now that the sim supports all four
+        # sources (bno085 and bno085_sim_dvl arrived with the virtual BNO
+        # board). Launching stack.launch.py by hand instead would skip the
+        # kill above, and two managers on udpin:14550 fight in ways that look
+        # like a broken sensor.
+        *:=*) passthrough+=("$a") ;;
         *) echo "unknown arg: $a" >&2; exit 1 ;;
       esac
     done
@@ -237,8 +246,9 @@ PY
       echo "WARN: ardusub is not running. Start the simulator first:" >&2
       echo "  ros2 run duburi_sim_bringup duburi_sim sim" >&2
     fi
-    echo "[duburi-sim] launching duburi_ws stack (vision:=$vision) ..."
-    exec ros2 launch duburi_sim_bringup stack.launch.py "vision:=$vision"
+    echo "[duburi-sim] launching duburi_ws stack (vision:=$vision${passthrough[*]:+ ${passthrough[*]}}) ..."
+    exec ros2 launch duburi_sim_bringup stack.launch.py "vision:=$vision" \
+        ${passthrough[@]+"${passthrough[@]}"}
     ;;
   smoke)
     _source_ros

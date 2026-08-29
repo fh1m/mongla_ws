@@ -126,6 +126,43 @@ def _build_sim_dvl(*, pixhawk, logger=None, sim_dvl_topic='/dvl/velocity', **_):
     return CompositeBnoDvlSource(ahrs, dvl, logger=logger, name='sim_dvl')
 
 
+def _build_bno085_sim_dvl(*, port, baud, logger=None, pixhawk=None,
+                          sim_dvl_topic='/dvl/velocity', **_):
+    """BNO085 heading + Gazebo DVL position -- the SIM twin of `bno085_dvl`.
+
+    The pool configuration is `bno085_dvl`: BNO for heading, Nucleus for
+    position. In simulation the Nucleus is not reachable, so that source comes
+    up with heading only and every `*_dist` verb is dead -- which left the
+    pool's actual configuration with no sim equivalent at all. This is the same
+    composite with the Gazebo DVL in the Nucleus's place, so a mission can be
+    rehearsed on the sensor pair it will fly.
+
+    Requires the virtual BNO board (`bno085_sim`), or an explicit `port` to
+    real hardware.
+    """
+    from .sources.bno085 import BNO085Source
+    from .sources.sim_dvl import SimDvlSource
+    from .sources.composite_bno_dvl import CompositeBnoDvlSource
+
+    def _read_pixhawk_yaw():
+        if pixhawk is None:
+            return None
+        attitude = pixhawk.get_attitude()
+        return None if attitude is None else attitude['yaw']
+
+    bno = BNO085Source(
+        port=port,
+        baud=baud,
+        logger=logger,
+        reference_yaw_provider=_read_pixhawk_yaw if pixhawk is not None else None,
+    )
+    dvl = SimDvlSource(topic=sim_dvl_topic, logger=logger)
+    # Eager, like _build_sim_dvl: the gz subscription is local and cheap, and a
+    # mission that forgets dvl_connect would silently have no position.
+    dvl.connect()
+    return CompositeBnoDvlSource(bno, dvl, logger=logger, name='bno085_sim_dvl')
+
+
 # Registered sources. witmotion is wired up as a fail-loud stub so users
 # hitting `yaw_source='witmotion'` get a clear "not implemented" message
 # instead of a generic "unknown source" error from make_yaw_source.
@@ -135,6 +172,8 @@ BUILDERS = {
     'dvl':          _build_nucleus_dvl,
     'nucleus_dvl':  _build_nucleus_dvl,
     'bno085_dvl':   _build_bno085_dvl,   # BNO heading + DVL position
+    # Sim twin of bno085_dvl: BNO heading + Gazebo DVL position.
+    'bno085_sim_dvl': _build_bno085_sim_dvl,
     'dvl_bno':      _build_bno085_dvl,   # alias
     'sim_dvl':      _build_sim_dvl,     # Gazebo DVL position + AHRS heading
     'witmotion':    _build_witmotion_stub,

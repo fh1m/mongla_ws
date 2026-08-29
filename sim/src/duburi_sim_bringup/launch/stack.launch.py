@@ -41,6 +41,18 @@ def generate_launch_description():
         description='Payload device. Defaults to the sim virtual board; pass '
                     '"auto" to scan USB instead.')
 
+    # The virtual BNO085 that `bno085_sim` creates. Passed explicitly for the
+    # same reason as payload_port: 'auto' scans USB for the ESP32-C3's
+    # VID/PID (303a:1001), finds nothing in sim, and yaw_source:=bno085 dies
+    # at startup -- which is what made the vehicle's own heading source
+    # untestable here.
+    bno_arg = DeclareLaunchArgument(
+        'bno085_port',
+        default_value=os.path.join(
+            f'/tmp/duburi-{os.environ.get("USER", "user")}', 'bno085'),
+        description='BNO085 device. Defaults to the sim virtual board; pass '
+                    '"auto" to scan USB instead.')
+
     yaw_source_arg = DeclareLaunchArgument(
         'yaw_source', default_value='sim_dvl',
         description='sim_dvl (AHRS heading + Gazebo DVL position) | mavlink_ahrs')
@@ -112,6 +124,7 @@ def generate_launch_description():
             'vision': 'false',
             'dvl_auto_connect': 'false',
             'payload_port': LaunchConfiguration('payload_port'),
+            'bno085_port': LaunchConfiguration('bno085_port'),
             'viewer': 'false',
         }.items(),
     )], scoped=True)
@@ -147,4 +160,4 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('vision')),
     )
 
-    return LaunchDescription([yaw_source_arg, payload_arg] + args + [manager, vision])
+    return LaunchDescription([yaw_source_arg, payload_arg, bno_arg] + args + [manager, vision])

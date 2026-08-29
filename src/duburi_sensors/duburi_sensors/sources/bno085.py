@@ -143,7 +143,22 @@ class BNO085Source:
         _ser.open()
         time.sleep(0.1)         # let USB CDC ACM settle (kernel cdc_acm sends control msgs)
         _ser.reset_input_buffer()
-        _ser.dtr = True         # arm HWCDC device→host stream
+        # Arm the HWCDC device→host stream. Wrapped because NOT EVERY SERIAL
+        # DEVICE HAS MODEM CONTROL LINES: on one without them (a PTY, some
+        # USB-serial bridges) pyserial's TIOCMBIS raises
+        # `OSError: [Errno 25] Inappropriate ioctl for device` and, unhandled,
+        # it took the whole sensors node down before a single frame was read.
+        # DTR is a nicety on such a device -- there is no ESP32 on the far end
+        # gating its output on it -- so a failure here is not a reason to lose
+        # the heading source. On real hardware the ioctl succeeds and the
+        # behaviour is exactly as before.
+        try:
+            _ser.dtr = True
+        except OSError as exc:
+            if self._log:
+                self._log.info(
+                    f'[SENS ] {port} has no modem control lines '
+                    f'({exc}) -- continuing without DTR')
         self._serial = _ser
 
         self._thread = threading.Thread(
