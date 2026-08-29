@@ -282,6 +282,23 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > semantic label, and a prop missing from it is **invisible** to the sensor.
 > Measured cost: none (12.83 Hz vs a 12.75 Hz baseline).
 >
+> **FAULTS CAN BE INJECTED NOW** — DVL dropout, camera loss, MAVLink loss,
+> battery sag and a dead thruster. Every one of those recovery paths existed in
+> the code and had **never run in sim**. Arm with a duration, which self-clears:
+> `ros2 param set /faults dvl_dropout_s 6.0` (also `camera_loss_s`,
+> `mavlink_loss_s`, `battery_sag_v`; dead thruster is
+> `ros2 param set /t200_curve dead_thrusters "[3]"`). Measured: a DVL dropout
+> makes `move_forward_dist` **refuse** instead of dead-reckoning; camera loss
+> gives `vision_align` **NO_CAMERA (3)** vs the **LOST (1)** it returns when the
+> target merely is not there; a cut link makes `arm` return **NO_ACK**; 16→13 V
+> costs **14.2 %** of the distance; thruster 3 goes 12.72 N → 0.00 N with
+> thruster 1 untouched. **`/faults` is load-bearing**: the DVL sensor now emits
+> `dvl/velocity_raw` and that node republishes `dvl/velocity`, so without it
+> every `*_dist` verb refuses. MAVLink cutting needs opt-in
+> `mavlink_relay:=true`. **`/duburi/state` is NOT a link probe** — with
+> `yaw_source=sim_dvl` its yaw comes from Gazebo and it ran at 22 Hz through a
+> fully cut link. [`sim/.context/FAULTS.md`](sim/.context/FAULTS.md).
+>
 > **`fire()` NOW RUNS IN SIM** — the payload was the one autonomy path with no
 > simulated equivalent, so `align(fire=…, fire_t=…)` had never executed outside
 > the pool. `payload_sim` presents a **PTY** that the **unmodified** `PayloadDriver`

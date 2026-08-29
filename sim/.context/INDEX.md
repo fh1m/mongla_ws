@@ -82,5 +82,7 @@ duburi_sim stop → duburi_sim sim → duburi_sim stack --no-vision → duburi_s
 | `duburi_sim_scenarios` | Runtime prop spawn/move/delete |
 | `duburi_sim_web` | FastAPI + React operator lab |
 
+- [`FAULTS.md`](FAULTS.md) — inject a DVL dropout, camera loss, MAVLink
+  loss, battery sag or a dead thruster, so the recovery paths run.
 - [`PAYLOAD.md`](PAYLOAD.md) — virtual payload board: `fire()` and the
   mid-hold `align(fire=…)` shot in sim, through a PTY the real driver opens.
