@@ -485,3 +485,37 @@ def test_courses_stay_within_a_render_budget():
             f'{world.name} draws {total} prop visuals; every one is rendered by '
             f'both cameras AND both bounding-box cameras. Simplify the worst '
             f'offender rather than raising this number.')
+
+
+def test_thrust_test_rigs_document_the_t200_conflict():
+    """The test rigs and the T200 node publish to the SAME topic.
+
+    `thruster_rig.py` commands `cmd_thrust` directly, which is also what
+    t200_curve publishes to. Run them together and the rig is fighting a second
+    publisher: measured surge came back at 0.330 m/s against 0.661 predicted, a
+    50 % error that looks exactly like wrong drag coefficients.
+
+    There is no way to detect this from inside the rig -- gz-transport is happy
+    to have two publishers -- so the requirement is written down where someone
+    running the tool will read it.
+    """
+    results = (SIM / 'src/duburi_sim_description/models/duburi_heavy/'
+                     'RESULTS.md')
+    assert results.is_file(), 'validation results are not recorded anywhere'
+    text = results.read_text()
+    assert 't200:=false' in text, 'the T200/rig topic conflict is undocumented'
+    assert 'runway' in text.lower(), 'the pool-length trap is undocumented'
+
+
+def test_every_translational_axis_has_a_recorded_measurement():
+    """Surge alone was the entire validation of the hydrodynamic model.
+
+    Sway's quadratic drag is -217 against surge's -141 -- a different number on
+    a different axis, and nothing had ever checked it. This asserts the results
+    file still carries all three, so a future edit cannot quietly drop back to
+    one.
+    """
+    results = (SIM / 'src/duburi_sim_description/models/duburi_heavy/'
+                     'RESULTS.md').read_text()
+    for axis in ('surge', 'sway', 'heave'):
+        assert f'| {axis} |' in results, f'{axis} has no recorded measurement'

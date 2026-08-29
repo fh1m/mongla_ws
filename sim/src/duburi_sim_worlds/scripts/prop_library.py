@@ -554,6 +554,7 @@ def bump_flare(spec: dict, colour_name: str) -> str:
     colour = cfg["colours"][colour_name]
     radius = cfg["diameter"] / 2.0
     height = cfg["height"]
+    ball_r = spec["props"]["golf_ball"]["diameter"] / 2.0
     pvc = pvc_material(colour)
 
     parts = [
@@ -566,12 +567,49 @@ def bump_flare(spec: dict, colour_name: str) -> str:
             f"0 0 {height / 2.0:.6g} 0 0 0",
             mat=pvc,
         ),
+        # A CUP at the tip with a RIM WALL, so the ball is held rather than
+        # balanced.
+        #
+        # Two failed attempts precede this. Balancing the ball on the flat top
+        # of a 1.6 cm pole is a metastable equilibrium -- once water current was
+        # added every ball rolled off within seconds. Adding a "cup" that was
+        # actually a flat disc NARROWER than the ball changed nothing: a disc
+        # has no wall, so there was still nothing to roll against.
+        #
+        # This is a ring of thin wall segments around a floor, inside diameter
+        # a little under the ball's, so the ball nests into the opening and is
+        # held by contact with the rim. A cylinder would close the top and the
+        # AUV could not bump the ball out, which is the whole task.
+        #
+        # NOT a solid cup for the same reason the drum wall is a ring: the ball
+        # has to be removable from above.
+        _cylinder_link(
+            "cup_floor",
+            ball_r * 1.05,
+            0.006,
+            colour,
+            0.05,
+            f"0 0 {height + 0.003:.6g} 0 0 0",
+            mat=pvc,
+        ),
         # A small base disc, so a pole this thin does not look like it is
         # floating and has something to stand on.
         _cylinder_link(
             "base", 0.06, 0.01, colour, 0.2, "0 0 0.005 0 0 0", mat=pvc
         ),
     ]
+    # The rim: eight thin wall segments around the cup floor. Inside radius is
+    # just under the ball's, so the ball rests ON the rim and is trapped
+    # laterally while still liftable straight up.
+    rim_r = ball_r * 0.92
+    for i in range(8):
+        a = i * math.pi / 4.0
+        parts.append(_box_link(
+            f"cup_rim_{i}", 0.004, rim_r * 0.85, 0.016, colour, 0.01,
+            f"{rim_r * math.cos(a):.6g} {rim_r * math.sin(a):.6g} "
+            f"{height + 0.012:.6g} 0 0 {a:.6g}",
+            mat=pvc))
+
     return model(f"sauvc_flare_{colour_name}", "\n".join(parts))
 
 
@@ -989,15 +1027,24 @@ def robosub_slalom(spec):
 
 
 def robosub_bins(spec):
-    """Task 3 -- ONE prop: a PVC pipeline with four crates hanging off its sides.
+    """Task 3 -- a BRANCHING 3D pipeline with four crates cantilevered off it.
 
-    Built wrong the first time as four loose crates sitting on the floor. The
-    handbook is explicit: "3D pipeline made from PVC supported off the bottom
-    of the pool", and "four bins hang off the SIDES of the pipeline" -- two
-    Survey & Repair, two Search & Rescue. Making it one model also matches how
-    it is placed: the whole assembly goes down as a unit.
+    Third attempt, and the previous two were both wrong in instructive ways.
+    First: four loose crates on the floor. Then: a flat rectangular frame with
+    the crates sitting inside it and pipe ends poking out past them, which is
+    what the top view showed and is not what the CAD shows at all.
 
-    The crates are CleverMade 25 L: 0.335 x 0.335 x 0.28 m, square in plan.
+    From the handbook figure the structure is a SPINE with T-branches, each
+    branch reaching out and UP to carry one crate on the end of a short riser.
+    The four crates sit at DIFFERENT HEIGHTS and different reaches -- that is
+    the "3D" in "3D pipeline made from PVC", and it is the whole difficulty of
+    the task: the AUV cannot hold one altitude and drop into all four, it has
+    to re-acquire depth per bin.
+
+    Each crate carries its role image on its floor, facing up, because that is
+    how the downward camera reads it on the way in.
+
+    Crates are CleverMade 25 L: 0.335 x 0.335 x 0.28 m, square in plan.
     """
     cfg = spec["props"]["bin"]
     lx, ly, lz, t = cfg["length"], cfg["width"], cfg["height"], cfg["wall"]
@@ -1006,36 +1053,41 @@ def robosub_bins(spec):
     r = spec["pvc_three_quarter_in"]
     parts = []
 
-    # The pipeline: a spine with two cross members, standing on four feet.
-    parts.append(_cylinder_link(
-        "spine", r, span, WHITE, 2.0, f"0 0 {ph:.6g} 0 1.5708 0",
-        collide=False, mat=pvc_material(WHITE)))
-    for i, x in ((0, -span / 3.0), (1, span / 3.0)):
-        # The pipework is SCENERY, not collision. A marker is dropped into a
-        # crate; nothing in the task pushes the frame around, and every pipe
-        # given a collision shape is one more the solver checks every step.
+    def pipe(name, length, pose):
+        # Pipework is SCENERY. A marker is dropped INTO a crate; nothing in the
+        # task pushes the frame, and every pipe with a collision shape is one
+        # more the solver checks every step.
         parts.append(_cylinder_link(
-            f"cross_{i}", r, span * 0.72, WHITE, 1.5,
-            f"{x:.6g} 0 {ph:.6g} 1.5708 0 0", collide=False,
+            name, r, length, WHITE, 1.0, pose, collide=False,
             mat=pvc_material(WHITE)))
-        for j, y in ((0, -span * 0.36), (1, span * 0.36)):
-            parts.append(_cylinder_link(
-                f"leg_{i}{j}", r, ph, WHITE, 1.0,
-                f"{x:.6g} {y:.6g} {ph / 2.0:.6g} 0 0 0", collide=False,
-                mat=pvc_material(WHITE)))
 
-    # Four crates hanging off the cross members, two per role.
+    # The spine, along x, on two feet.
+    pipe("spine", span, f"0 0 {ph:.6g} 0 1.5708 0")
+    for i, x in ((0, -span / 2.2), (1, span / 2.2)):
+        pipe(f"foot_riser_{i}", ph, f"{x:.6g} 0 {ph / 2.0:.6g} 0 0 0")
+        pipe(f"foot_{i}", 0.5, f"{x:.6g} 0 0.03 1.5708 0 0")
+
+    # Four branches off the spine. Each reaches out in y and rises to its own
+    # height, so no two crates share an altitude.
+    #                 tag          role            x        y     lift
     layout = (
-        ("sr_a", "survey_repair", -span / 3.0, -span * 0.36),
-        ("sr_b", "survey_repair", span / 3.0, span * 0.36),
-        ("rescue_a", "search_rescue", -span / 3.0, span * 0.36),
-        ("rescue_b", "search_rescue", span / 3.0, -span * 0.36),
+        ("sr_a",      "survey_repair", -span * 0.30,  0.52,  0.30),
+        ("rescue_a",  "search_rescue", -span * 0.10, -0.52,  0.10),
+        ("sr_b",      "survey_repair",  span * 0.14,  0.52, -0.05),
+        ("rescue_b",  "search_rescue",  span * 0.34, -0.52,  0.18),
     )
-    for tag, role, cx, cy in layout:
-        base = ph - lz / 2.0
+    for tag, role, bx, by, lift in layout:
+        z = ph + lift
+        # Horizontal arm out to the crate, then a short riser up to its base.
+        pipe(f"arm_{tag}", abs(by),
+             f"{bx:.6g} {by / 2.0:.6g} {ph:.6g} 1.5708 0 0")
+        pipe(f"riser_{tag}", abs(lift) + 0.02,
+             f"{bx:.6g} {by:.6g} {ph + lift / 2.0:.6g} 0 0 0")
+
+        base = z
         parts.append(_box_link(
             f"crate_{tag}_floor", lx, ly, t, colour, 1.0,
-            f"{cx:.6g} {cy:.6g} {base:.6g} 0 0 0",
+            f"{bx:.6g} {by:.6g} {base:.6g} 0 0 0",
             mat=plastic_material("rough_plastic.png", competition="robosub")))
         for name, sx, sy, dx, dy in (
             ("xp", t, ly, (lx - t) / 2.0, 0.0),
@@ -1045,28 +1097,28 @@ def robosub_bins(spec):
         ):
             parts.append(_box_link(
                 f"crate_{tag}_{name}", sx, sy, lz, colour, 0.5,
-                f"{cx + dx:.6g} {cy + dy:.6g} {base + lz / 2.0:.6g} 0 0 0"))
+                f"{bx + dx:.6g} {by + dy:.6g} {base + lz / 2.0:.6g} 0 0 0"))
 
-        # "INSIDE the bins will be images representing each role" -- handbook
-        # p. 47, verbatim. The image lies FLAT ON THE BIN FLOOR, inside the
-        # crate, facing up at the downward camera. That is the whole shape of
-        # the task: you read the image looking down into the bin, then drop a
-        # marker into that same bin.
+        # The role image is a VERTICAL framed panel standing beside its crate
+        # on the pipework -- that is what the CAD figure shows, four upright
+        # signs on the frame, not artwork lying in the bottom of the bins.
         #
-        # Two wrong versions preceded this. First it sat on TOP of the crate,
-        # which is a lid over the opening you have to drop through. Then it
-        # stood upright on a post beside the crate, which is readable but is
-        # not what the handbook says and puts the image somewhere a marker
-        # never goes.
+        # The handbook's "inside the bins will be images" describes which bin
+        # each image belongs to, not that the print is laid flat in it. Reading
+        # it the literal way put a plate across the opening a marker has to be
+        # dropped through, which is the second time this prop has been built
+        # with the target obstructed.
         #
-        # rpy 0 1.5708 0 lays the plate flat: _role_sign builds it with its
-        # thickness along local x, so a 90-degree pitch turns the printed faces
-        # to point up and down.
+        # Upright also means the FORWARD camera can read the role on approach,
+        # which is how a mission chooses a bin before it is overhead.
         image = spec["roles"][role]["task_image"]
+        side = lx * 0.95
         parts.append(_role_sign(
             spec, f"panel_{tag}", image,
-            f"{cx:.6g} {cy:.6g} {base + t + 0.004:.6g} 0 1.5708 0",
-            size=(lx - 2.0 * t) * 0.92))
+            f"{bx - lx * 0.62:.6g} {by:.6g} {base + side * 0.45:.6g} 0 0 0",
+            size=side))
+        pipe(f"panel_post_{tag}", side * 0.5,
+             f"{bx - lx * 0.62:.6g} {by:.6g} {base + side * 0.16:.6g} 0 0 0")
 
     return model("robosub_bins", "\n".join(parts))
 
@@ -1288,22 +1340,40 @@ PROPS = {
         "build": lambda s: bump_flare(s, "red"),
         "anchor": ANCHOR_FLOOR,
         "dynamic": False,
+        # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
+        # ball settles into it. Sitting it a full radius above the pole put it
+        # balanced on the rim instead of nested.
+        # Ball nests INTO the rim ring: cup floor top, plus enough of the ball
+        # to clear the 0.92-radius rim it rests against.
         "ball_on": lambda s: s["props"]["bump_flare"]["height"]
-        + s["props"]["golf_ball"]["diameter"] / 2.0,
+        + 0.006
+        + s["props"]["golf_ball"]["diameter"] * 0.30,
     },
     "sauvc_flare_yellow": {
         "build": lambda s: bump_flare(s, "yellow"),
         "anchor": ANCHOR_FLOOR,
         "dynamic": False,
+        # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
+        # ball settles into it. Sitting it a full radius above the pole put it
+        # balanced on the rim instead of nested.
+        # Ball nests INTO the rim ring: cup floor top, plus enough of the ball
+        # to clear the 0.92-radius rim it rests against.
         "ball_on": lambda s: s["props"]["bump_flare"]["height"]
-        + s["props"]["golf_ball"]["diameter"] / 2.0,
+        + 0.006
+        + s["props"]["golf_ball"]["diameter"] * 0.30,
     },
     "sauvc_flare_blue": {
         "build": lambda s: bump_flare(s, "blue"),
         "anchor": ANCHOR_FLOOR,
         "dynamic": False,
+        # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
+        # ball settles into it. Sitting it a full radius above the pole put it
+        # balanced on the rim instead of nested.
+        # Ball nests INTO the rim ring: cup floor top, plus enough of the ball
+        # to clear the 0.92-radius rim it rests against.
         "ball_on": lambda s: s["props"]["bump_flare"]["height"]
-        + s["props"]["golf_ball"]["diameter"] / 2.0,
+        + 0.006
+        + s["props"]["golf_ball"]["diameter"] * 0.30,
     },
     "sauvc_drum_red": {
         "build": lambda s: drum(s, "red"),

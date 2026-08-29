@@ -156,6 +156,20 @@ PHYSICS_DEFAULTS = {
     "max_step_size": 0.001,
     "real_time_factor": 1.0,
     "real_time_update_rate": 1000,
+    # MEASURED, and the answer was "leave it alone".
+    #
+    # `bullet` + `dantzig` looked like the obvious choice for a world of
+    # primitive shapes with few simultaneous contacts. Over 443 samples on
+    # sauvc26_final it gave median RTF 0.373 against DART's own defaults at
+    # 0.393 -- a 5 % regression, inside the run-to-run noise.
+    #
+    # That is consistent with the rest of the RTF work: this sim is
+    # RENDER-bound, not solver-bound (PHYSICS.md). Tuning the solver is tuning
+    # the part that is not the bottleneck. These stay at DART's defaults, and
+    # they are exposed here so the next person can re-measure rather than
+    # re-guess -- the alternatives are ode|bullet|fcl|dart and dantzig|pgs.
+    "collision_detector": "dart",
+    "solver_type": "dantzig",
 }
 
 # Roughly Dhaka. Only matters to ArduSub's simulated compass.
@@ -377,6 +391,8 @@ def generate(course_path: str, spec: dict = None, outdir: str = WORLDS_DIR) -> s
         world_name=world_name,
         water_density=f"{course.get('water_density', 1000.0):.6g}",
         buoyancy_enables=buoyancy_enables,
+        collision_detector=physics["collision_detector"],
+        solver_type=physics["solver_type"],
         max_step_size=physics["max_step_size"],
         real_time_factor=physics["real_time_factor"],
         real_time_update_rate=physics["real_time_update_rate"],
