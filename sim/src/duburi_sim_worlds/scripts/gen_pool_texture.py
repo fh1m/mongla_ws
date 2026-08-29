@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+import math
 import os
 
 import numpy as np
@@ -510,6 +511,30 @@ def make_torpedo_panel(path, role, spec, px=512, rng=None):
     print(f"wrote {path}  ({px}x{px})")
 
 
+def make_particle_sprite(path: str, size: int = 64) -> None:
+    """A soft round speck for the marine-snow emitter.
+
+    gz-sim logs "ParticleEmitter SetColorRange is currently disabled" and
+    ignores <color_start>/<color_end>, so the only way to stop particles
+    rendering as hard-edged white quads is to give the material a sprite whose
+    ALPHA falls off to zero at the edge. The colour then comes from <diffuse>.
+    """
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    px = img.load()
+    c = (size - 1) / 2.0
+    for y in range(size):
+        for x in range(size):
+            r = math.hypot(x - c, y - c) / c
+            if r >= 1.0:
+                continue
+            # Smoothstep falloff, then squared so the core stays bright and the
+            # halo goes soft -- a linear ramp reads as a flat disc.
+            t = 1.0 - r
+            a = t * t * (3.0 - 2.0 * t)
+            px[x, y] = (255, 255, 255, int(255 * a * a))
+    img.save(path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", default=None, help="Arena spec YAML.")
@@ -570,6 +595,8 @@ def _generate(spec: dict, outdir: str, seed: int, competition: str) -> None:
         os.path.join(args.outdir, "pool_wall_short.png"),
         rng,
     )
+
+    make_particle_sprite(os.path.join(args.outdir, "marine_snow.png"))
 
     # ---- prop textures -------------------------------------------------
     # Everything above is pool geometry and applies to any competition.

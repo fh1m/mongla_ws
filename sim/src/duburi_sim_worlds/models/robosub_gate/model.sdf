@@ -6,7 +6,7 @@
       <label>12</label>
     </plugin>
     <link name="top_bar">
-      <pose>0 0 1.5 1.5708 0 0</pose>
+      <pose>0 0 -0.1 1.5708 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>5</mass>
@@ -32,7 +32,7 @@
       </collision>
     </link>
     <link name="post_port">
-      <pose>0 -1.5 0.75 0 0 0</pose>
+      <pose>0 -1.5 -0.85 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>4</mass>
@@ -58,7 +58,7 @@
       </collision>
     </link>
     <link name="band_port_upper">
-      <pose>0 -1.5 1.0428 0 0 0</pose>
+      <pose>0 -1.5 -0.5572 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.4</mass>
@@ -80,7 +80,7 @@
       </visual>
     </link>
     <link name="band_port_lower">
-      <pose>0 -1.5 0.4332 0 0 0</pose>
+      <pose>0 -1.5 -1.1668 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.4</mass>
@@ -102,7 +102,7 @@
       </visual>
     </link>
     <link name="post_stbd">
-      <pose>0 1.5 0.75 0 0 0</pose>
+      <pose>0 1.5 -0.85 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>4</mass>
@@ -128,7 +128,7 @@
       </collision>
     </link>
     <link name="band_stbd_upper">
-      <pose>0 1.5 1.0428 0 0 0</pose>
+      <pose>0 1.5 -0.5572 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.4</mass>
@@ -150,7 +150,7 @@
       </visual>
     </link>
     <link name="band_stbd_lower">
-      <pose>0 1.5 0.4332 0 0 0</pose>
+      <pose>0 1.5 -1.1668 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.4</mass>
@@ -172,7 +172,7 @@
       </visual>
     </link>
     <link name="divider">
-      <pose>0 0 1.1952 0 0 0</pose>
+      <pose>0 0 -0.4048 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -194,7 +194,7 @@
       </visual>
     </link>
     <link name="sign_survey_repair">
-      <pose>0 -0.66 1.1951 0 0 0</pose>
+      <pose>0 -0.66 -0.4049 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
@@ -223,7 +223,7 @@
       </visual>
     </link>
     <link name="sign_search_rescue">
-      <pose>0 0.66 1.1951 0 0 0</pose>
+      <pose>0 0.66 -0.4049 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
@@ -248,6 +248,50 @@
               <roughness>0.55</roughness>
             </metal>
           </pbr>
+        </material>
+      </visual>
+    </link>
+    <link name="mooring_port">
+      <pose>0 -1.5 -1.85 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.00208423</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00208423</iyy><iyz>0</iyz>
+          <izz>1.8e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="mooring_port_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.006</radius><length>0.5</length></cylinder></geometry>
+        <material>
+          <ambient>0.15 0.15 0.14 1</ambient>
+          <diffuse>0.15 0.15 0.14 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.0375 0.0375 0.035 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="mooring_stbd">
+      <pose>0 1.5 -1.85 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.00208423</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00208423</iyy><iyz>0</iyz>
+          <izz>1.8e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="mooring_stbd_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.006</radius><length>0.5</length></cylinder></geometry>
+        <material>
+          <ambient>0.15 0.15 0.14 1</ambient>
+          <diffuse>0.15 0.15 0.14 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+          <emissive>0.0375 0.0375 0.035 1</emissive>
         </material>
       </visual>
     </link>

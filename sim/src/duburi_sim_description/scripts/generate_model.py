@@ -263,9 +263,26 @@ class ModelParams:
         # i.e. thrust independent of speed. 0.2 is the standard wake fraction
         # for an open propeller in undisturbed flow; alpha_2 negative is what
         # makes thrust fall as the advance ratio rises.
+        # PROPELLER WAKE. Ct = alpha_1 + alpha_2 * J, evaluated each step.
+        #
+        # alpha_1 is the STATIC thrust coefficient -- the same 0.02 that used to
+        # be <thrust_coefficient> -- so bollard-pull behaviour is unchanged and
+        # only the speed falloff is new. alpha_1 = 1.0 (gz's default) would have
+        # changed Ct by 50x and quietly rescaled every propeller speed.
+        #
+        # PROVENANCE, since the T200 numbers are measured and these are not:
+        # Blue Robotics publish bollard-pull only -- thrust with the vehicle
+        # held still -- so there is no T200 Ct-vs-J curve to fit. alpha_2 is
+        # from open-propeller theory, where Ct falls roughly linearly with
+        # advance ratio and vanishes near J ~ 1.5-2 for a low-pitch prop.
+        # -0.012 puts the zero at J = 1.67. Marked as MODELLED, not measured,
+        # in PHYSICS.md; a real Ct-J curve would replace it.
+        #
+        # wake_fraction 0.2 is the standard figure for an open propeller in
+        # undisturbed flow, which is what a thruster on an open frame sees.
         self.wake_fraction = 0.2
-        self.alpha_1 = 1.0
-        self.alpha_2 = -0.3
+        self.alpha_1 = 0.02
+        self.alpha_2 = -0.012
 
         self.boxes_always_on = 1
         # Range images cost a render pass each, and unlike the bounding-box

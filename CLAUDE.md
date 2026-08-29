@@ -282,6 +282,34 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > semantic label, and a prop missing from it is **invisible** to the sensor.
 > Measured cost: none (12.83 Hz vs a 12.75 Hz baseline).
 >
+> **Cylinder props were not solid.** DART's own collision detector returns false
+> for `[CylinderShape]-[BoxShape]` — the hull's collision shape is a box and every
+> pipe prop is a cylinder, so the vehicle drove through gate legs, slalom pipes and
+> flare poles. Measured A/B into a gate leg vs open water: `dart` gave 1.739 m vs
+> 1.715 m at a flat 0.656 m/s (no contact); `bullet` decelerates at the predicted
+> contact point. Now `collision_detector: bullet`. This **overturns** an earlier
+> choice made on a 5 % RTF sample — that measured the wrong quantity. Consequence:
+> the RoboSub gate is solid now, so a mission transiting it at 0.8 m will hit the
+> legs where it used to pass through. **Changing this setting requires re-running
+> the collision A/B, not an RTF sample** ([`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md)).
+>
+> **The RoboSub gate hangs from the SURFACE, and you pass UNDER it.** Handbook p. 32:
+> *"It is buoyant, floating just below the surface and moored to the bottom… The AUV
+> can pass through the gate at any depth from the floor to just below the gate"* and
+> *"chooses a marine animal by passing under a specific side."* It was modelled
+> standing on the floor, which put the top bar at 0.58 m and blocked the bottom.
+> Now the bar sits 0.1 m deep, the legs reach 1.62 m, and the clear water is the
+> ~0.5 m beneath — which is the one number a gate mission must get right.
+>
+> **Gazebo particle emitters do NOT reach camera sensors** — the same GUI-scene /
+> sensor-scene split that makes `<scene><fog>` inert. 0.4 m particles at 4000/s left
+> `image_fx` pixel-identical (per-frame stddev 1.4700 with vs 1.4678 without). Raising
+> a course's `snow:` rate changes the GUI and **no dataset**. The particulate the
+> vision pipeline sees is composited in `underwater_fx.ParticleField`
+> (`ros2 param set /underwater_fx particulate 0.6`; 4.6 % frame-rate cost) and it
+> **drifts coherently** rather than resampling — a per-frame speckle is just `noise`,
+> which a detector ignores.
+>
 > **The SAUVC floor SLOPES** — 1.6 m centre, 1.2 m ends. Props sit on the floor
 > at their own x and are pitched to match it; a flat −1.6 m left target-zone
 > drums 0.34 m in the air.

@@ -943,11 +943,21 @@ def _role_sign(spec, name, image, pose, size=None):
 def robosub_gate(spec):
     """Task 1/6 gate -- a PASS-THROUGH PVC frame, 3.048 m x 1.524 m.
 
-    Built wrong the first time as two solid panels filling the opening, which
-    is not a gate at all: the vehicle drives THROUGH this. From the handbook
-    CAD it is a horizontal top bar carried on two legs, each leg banded into
-    two 609.6 mm colour segments, plus a 609.6 x 50.8 mm red divider hanging
-    from the centre of the bar and two 305 mm role signs.
+    SURFACE-anchored, and that is the whole point of this prop. Handbook p. 32,
+    verbatim:
+
+        "It is buoyant, floating just below the surface and moored to the
+         bottom. ... The AUV can pass through the gate at any depth from the
+         floor to just below the gate."
+        "The AUV chooses a marine animal by passing under a specific side."
+
+    So the frame hangs DOWN from just under the water surface and the clear
+    water is BELOW it -- the opposite of a gate standing on the floor, which is
+    how this was modelled until now. It changes the one number a gate mission
+    must get right: approach depth. Floor-anchored, the top bar sat 0.58 m deep
+    and the legs blocked the floor; hung from the surface in RoboSub's 2.1 m
+    pool the bar is 0.1 m deep, the legs reach 1.62 m, and the vehicle passes
+    between them anywhere below that.
 
     THE ASYMMETRY IS THE SCORED FEATURE. Front view: the right leg is RED over
     BLACK and the left leg is BLACK over RED; the back face reverses both. The
@@ -960,11 +970,15 @@ def robosub_gate(spec):
     red, black = cfg["colours"]["red"], cfg["colours"]["black"]
     band = cfg["band_length"]
     half = w / 2.0
+    # How far under the surface the buoyant frame floats. "Just below" is not a
+    # number the handbook gives, so it is a spec key rather than a literal.
+    sub = float(cfg.get("submergence", 0.1))
+    bar_z = -sub
     parts = []
 
     # Width runs along y; the vehicle passes along x. Legs hang from the bar.
     parts.append(_cylinder_link(
-        "top_bar", r, w, WHITE, 5.0, f"0 0 {h:.6g} 1.5708 0 0",
+        "top_bar", r, w, WHITE, 5.0, f"0 0 {bar_z:.6g} 1.5708 0 0",
         mat=pvc_material(WHITE)))
 
     for side, y, upper, lower in (
@@ -972,13 +986,13 @@ def robosub_gate(spec):
         ("stbd", half, red, black),       # right as seen from the front
     ):
         # A plain stub between the bar and the first colour band, as the CAD
-        # shows, then the two bands.
+        # shows, then the two bands. Everything hangs BELOW bar_z.
         parts.append(_cylinder_link(
             f"post_{side}", r, h, WHITE, 4.0,
-            f"0 {y:.6g} {h / 2.0:.6g} 0 0 0", mat=pvc_material(WHITE)))
+            f"0 {y:.6g} {bar_z - h / 2.0:.6g} 0 0 0", mat=pvc_material(WHITE)))
         for tag, colour, cz in (
-            ("upper", upper, h - 0.1524 - band / 2.0),
-            ("lower", lower, h - 0.1524 - band * 1.5),
+            ("upper", upper, bar_z - 0.1524 - band / 2.0),
+            ("lower", lower, bar_z - 0.1524 - band * 1.5),
         ):
             # Slightly proud of the post so the band reads as painted pipe.
             parts.append(_cylinder_link(
@@ -990,7 +1004,7 @@ def robosub_gate(spec):
     parts.append(_box_link(
         "divider", cfg["divider_width"], cfg["divider_width"],
         cfg["divider_drop"], red, 0.5,
-        f"0 0 {h - cfg['divider_drop'] / 2.0:.6g} 0 0 0", collide=False,
+        f"0 0 {bar_z - cfg['divider_drop'] / 2.0:.6g} 0 0 0", collide=False,
         mat=material(red, emissive_gain=0.22)))
 
     # Role signs hang from the bar, 152.4 mm below it, one per role.
@@ -999,7 +1013,21 @@ def robosub_gate(spec):
         parts.append(_role_sign(
             spec, f"sign_{role}", image,
             # rpy 0 0 0 -- the plate already faces along x, at the AUV.
-            f"0 {y:.6g} {h - 0.1524 - spec['sign']['size'] / 2.0:.6g} 0 0 0"))
+            f"0 {y:.6g} {bar_z - 0.1524 - spec['sign']['size'] / 2.0:.6g} 0 0 0"))
+
+    # "moored to the bottom" -- two lines from the foot of each leg to the
+    # floor. Non-colliding: they are rope, and a vehicle that clips one should
+    # not be stopped by it. They exist because they are VISIBLE, a near-vertical
+    # line either side of the opening that a detector will see and that the real
+    # course really has.
+    leg_foot = bar_z - h
+    floor_z = -float(spec["pool"]["depth"])
+    tether = max(0.05, leg_foot - floor_z)
+    for side, y in (("port", -half), ("stbd", half)):
+        parts.append(_cylinder_link(
+            f"mooring_{side}", 0.006, tether, (0.15, 0.15, 0.14), 0.1,
+            f"0 {y:.6g} {leg_foot - tether / 2.0:.6g} 0 0 0", collide=False,
+            mat=material((0.15, 0.15, 0.14))))
 
     return model("robosub_gate", "\n".join(parts))
 
@@ -1442,7 +1470,7 @@ PROPS = {
     # ---- RoboSub 2026 -------------------------------------------------
     "robosub_gate": {
         "build": robosub_gate,
-        "anchor": ANCHOR_FLOOR,
+        "anchor": ANCHOR_SURFACE,
         "dynamic": False,
     },
     "robosub_slalom": {

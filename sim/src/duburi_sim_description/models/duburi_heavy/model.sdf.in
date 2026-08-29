@@ -671,15 +671,32 @@
       </axis>
     </joint>
 
-    <!-- Counter-rotation is expressed as a negative thrust_coefficient, not as a
-         negative control multiplier. Signs here must stay paired with the
-         ArduPilotPlugin multipliers below. -->
+    <!-- Counter-rotation USED to be a negative thrust_coefficient here. That
+         tag is gone: it is mutually exclusive with the alpha_* wake model, and
+         with both present gz-sim silently ignored the wake.
+         Nothing physical is lost -- this plugin applies no reaction torque, so
+         the sign only ever set which way the propeller mesh spun on screen. -->
     <plugin
         filename="gz-sim-thruster-system"
         name="gz::sim::systems::Thruster">
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster1_joint</joint_name>
-      <thrust_coefficient>@thrust_coefficient</thrust_coefficient>
+      <!-- NO <thrust_coefficient> HERE, deliberately. It and the alpha_* pair
+           are MUTUALLY EXCLUSIVE: with both set, gz-sim logs
+             "The [alpha_2] value will be ignored as a [thrust_coefficient]
+              was also defined through the SDF file"
+           and the wake model does nothing. That is exactly what shipped last
+           round -- velocity-dependent thrust written up as done, silently
+           inert, because it was never measured afterwards.
+
+           Ct is now computed each step as alpha_1 + alpha_2 * J. alpha_1 is
+           our previous static Ct, so stationary thrust is unchanged and the
+           only new behaviour is the falloff with speed.
+
+           COST: counter-rotation was expressed as a negative Ct, and that is
+           lost. It is spin direction only -- this plugin applies no reaction
+           torque (checked in the binary), so no force or moment changes. The
+           propellers now all spin the same way on screen. -->
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
@@ -702,7 +719,22 @@
         name="gz::sim::systems::Thruster">
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster2_joint</joint_name>
-      <thrust_coefficient>@thrust_coefficient</thrust_coefficient>
+      <!-- NO <thrust_coefficient> HERE, deliberately. It and the alpha_* pair
+           are MUTUALLY EXCLUSIVE: with both set, gz-sim logs
+             "The [alpha_2] value will be ignored as a [thrust_coefficient]
+              was also defined through the SDF file"
+           and the wake model does nothing. That is exactly what shipped last
+           round -- velocity-dependent thrust written up as done, silently
+           inert, because it was never measured afterwards.
+
+           Ct is now computed each step as alpha_1 + alpha_2 * J. alpha_1 is
+           our previous static Ct, so stationary thrust is unchanged and the
+           only new behaviour is the falloff with speed.
+
+           COST: counter-rotation was expressed as a negative Ct, and that is
+           lost. It is spin direction only -- this plugin applies no reaction
+           torque (checked in the binary), so no force or moment changes. The
+           propellers now all spin the same way on screen. -->
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
@@ -726,7 +758,6 @@
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster3_joint</joint_name>
       <!-- Reverse spin to balance torque -->
-      <thrust_coefficient>-@thrust_coefficient</thrust_coefficient>
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
@@ -750,7 +781,6 @@
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster4_joint</joint_name>
       <!-- Reverse spin to balance torque -->
-      <thrust_coefficient>-@thrust_coefficient</thrust_coefficient>
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
@@ -773,7 +803,22 @@
         name="gz::sim::systems::Thruster">
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster5_joint</joint_name>
-      <thrust_coefficient>@thrust_coefficient</thrust_coefficient>
+      <!-- NO <thrust_coefficient> HERE, deliberately. It and the alpha_* pair
+           are MUTUALLY EXCLUSIVE: with both set, gz-sim logs
+             "The [alpha_2] value will be ignored as a [thrust_coefficient]
+              was also defined through the SDF file"
+           and the wake model does nothing. That is exactly what shipped last
+           round -- velocity-dependent thrust written up as done, silently
+           inert, because it was never measured afterwards.
+
+           Ct is now computed each step as alpha_1 + alpha_2 * J. alpha_1 is
+           our previous static Ct, so stationary thrust is unchanged and the
+           only new behaviour is the falloff with speed.
+
+           COST: counter-rotation was expressed as a negative Ct, and that is
+           lost. It is spin direction only -- this plugin applies no reaction
+           torque (checked in the binary), so no force or moment changes. The
+           propellers now all spin the same way on screen. -->
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
@@ -797,7 +842,6 @@
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster6_joint</joint_name>
       <!-- Reverse spin to balance torque -->
-      <thrust_coefficient>-@thrust_coefficient</thrust_coefficient>
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
@@ -821,7 +865,6 @@
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster7_joint</joint_name>
       <!-- Reverse spin to balance torque -->
-      <thrust_coefficient>-@thrust_coefficient</thrust_coefficient>
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>
@@ -844,7 +887,22 @@
         name="gz::sim::systems::Thruster">
       <namespace>@model_name_plain</namespace>
       <joint_name>thruster8_joint</joint_name>
-      <thrust_coefficient>@thrust_coefficient</thrust_coefficient>
+      <!-- NO <thrust_coefficient> HERE, deliberately. It and the alpha_* pair
+           are MUTUALLY EXCLUSIVE: with both set, gz-sim logs
+             "The [alpha_2] value will be ignored as a [thrust_coefficient]
+              was also defined through the SDF file"
+           and the wake model does nothing. That is exactly what shipped last
+           round -- velocity-dependent thrust written up as done, silently
+           inert, because it was never measured afterwards.
+
+           Ct is now computed each step as alpha_1 + alpha_2 * J. alpha_1 is
+           our previous static Ct, so stationary thrust is unchanged and the
+           only new behaviour is the falloff with speed.
+
+           COST: counter-rotation was expressed as a negative Ct, and that is
+           lost. It is spin direction only -- this plugin applies no reaction
+           torque (checked in the binary), so no force or moment changes. The
+           propellers now all spin the same way on screen. -->
       <fluid_density>@fluid_density</fluid_density>
       <propeller_diameter>@propeller_diameter</propeller_diameter>
       <velocity_control>true</velocity_control>

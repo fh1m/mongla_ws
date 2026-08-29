@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+import time
+
 import cv2
 import numpy as np
 import rclpy
@@ -42,6 +44,9 @@ HAZE_RGB = np.array([0.05, 0.22, 0.28], dtype=np.float32)
 # per-pixel block in apply_underwater_fx.
 RANGE_ATTEN = 0.22
 RANGE_FLOOR = 0.30
+
+
+PARTICLE_RGB = np.array([0.80, 0.84, 0.80], dtype=np.float32)
 
 
 def _msg_to_bgr(msg: Image) -> np.ndarray:
@@ -131,6 +136,77 @@ def _vignette_mask(shape: tuple, vignette: float) -> np.ndarray:
     return np.ascontiguousarray(np.repeat(mask[:, :, None], shape[2], axis=2))
 
 
+
+class ParticleField:
+    """Drifting suspended particulate, composited into the camera image.
+
+    THIS EXISTS BECAUSE GAZEBO'S PARTICLE EMITTER DOES NOT REACH CAMERA
+    SENSORS. Measured: 0.4 m particles at 4000/s, emitter confirmed alive with
+    a subscriber on its topic, and the frame from `front_camera/image_fx` was
+    pixel-for-pixel as clean as with the emitter off. It is the same split that
+    made `<scene><fog>` useless -- gz-sim renders a GUI scene and a sensor
+    scene, and particles only land in the first. The Gazebo emitter is kept for
+    the operator's view; everything the VISION PIPELINE sees comes from here.
+
+    Particles persist frame to frame and sink. That is the whole point: a
+    per-frame random speckle is just noise, which `noise` already provides, and
+    a detector is unbothered by it. Coherent specks that drift are what put
+    spurious small blobs in front of a bounding box across consecutive frames,
+    which is the thing worth testing against.
+    """
+
+    def __init__(self, count: int = 260, seed: int = 7) -> None:
+        rng = np.random.default_rng(seed)
+        # x, y in [0,1] image fractions; z is a pseudo-distance in [0.15, 1]
+        # that sets both size and brightness, so the field reads as a volume
+        # rather than a decal.
+        self.xy = rng.random((count, 2), dtype=np.float32)
+        self.z = rng.uniform(0.15, 1.0, count).astype(np.float32)
+        self.drift = rng.normal(0.0, 0.004, (count, 2)).astype(np.float32)
+        self.rng = rng
+
+    def step(self, dt: float) -> None:
+        dt = float(np.clip(dt, 0.0, 0.5))
+        # Sink, plus each particle's own lateral drift. Nearer particles (small
+        # z) sweep faster -- parallax, and it is what makes the field read as
+        # depth instead of a flat overlay.
+        # Rates are SLOW on purpose. The first cut moved a particle ~10 px in
+        # 100 ms, which does not overlap its own previous position at 1-4 px
+        # radius -- that is a fresh speckle every frame, i.e. noise, and the
+        # coherence this class exists for was absent. These give roughly
+        # 2-20 px/s depending on depth, which a tracker can follow.
+        speed = (1.0 / np.maximum(self.z, 0.15))[:, None]
+        self.xy += self.drift * speed * dt
+        self.xy[:, 1] += 0.004 * dt * speed[:, 0]
+        # Wrap. A particle that leaves is replaced at a fresh random depth so
+        # the field does not slowly sort itself into layers.
+        out = (self.xy < -0.05) | (self.xy > 1.05)
+        rows = out.any(axis=1)
+        n = int(rows.sum())
+        if n:
+            self.xy[rows] = self.rng.random((n, 2), dtype=np.float32)
+            self.z[rows] = self.rng.uniform(0.15, 1.0, n).astype(np.float32)
+
+    def render(self, shape: tuple, strength: float) -> np.ndarray:
+        """An (h, w) float32 alpha map in [0, 1]."""
+        h, w = shape[0], shape[1]
+        mask = np.zeros((h, w), dtype=np.float32)
+        if strength <= 1e-4:
+            return mask
+        px = (self.xy[:, 0] * w).astype(np.int32)
+        py = (self.xy[:, 1] * h).astype(np.int32)
+        # Radius from 1 px at the back to ~4 px at the front.
+        rad = np.clip((1.0 / self.z) * 1.1, 1.0, 4.0).astype(np.int32)
+        alpha = np.clip((1.0 / self.z) * 0.16, 0.05, 0.85) * strength
+        for i in range(len(px)):
+            if 0 <= px[i] < w and 0 <= py[i] < h:
+                cv2.circle(mask, (int(px[i]), int(py[i])), int(rad[i]),
+                           float(alpha[i]), -1)
+        # One blur turns hard discs into out-of-focus motes. Suspended matter a
+        # few centimetres from a lens is never in focus.
+        return cv2.GaussianBlur(mask, (5, 5), 1.4)
+
+
 def apply_underwater_fx(
     bgr: np.ndarray,
     depth_m: float,
@@ -143,6 +219,8 @@ def apply_underwater_fx(
     # Per-pixel path length, metres, same shape as the frame. None ->
     # uniform attenuation by the vehicle's own depth, the old behaviour.
     range_m=None,
+    # (h, w) float32 alpha map of suspended particulate, from ParticleField.
+    particles=None,
 ) -> np.ndarray:
     """Return a degraded BGR image. depth_m is negative below the surface."""
     depth = max(0.05, abs(float(depth_m)))
@@ -226,6 +304,13 @@ def apply_underwater_fx(
     if noise > 1e-4:
         out += _noise_tile(out.shape) * (noise * (0.5 + t))
 
+    if particles is not None:
+        # Composited BEFORE vignette and AFTER attenuation: a mote floating a
+        # few centimetres from the lens is not dimmed by 8 m of water, but it
+        # does fall off toward the frame edge with everything else.
+        a = particles[:, :, None]
+        out = out * (1.0 - a) + PARTICLE_RGB.reshape(1, 1, 3) * a
+
     if vignette > 1e-4:
         # Full (h, w, 3), not (h, w, 1) broadcast -- same 3.09 ms -> 0.6 ms
         # reason as the gain above.
@@ -246,6 +331,10 @@ class UnderwaterFx(Node):
         self.declare_parameter('noise', 0.012)
         self.declare_parameter('vignette', 0.25)
         self.declare_parameter('atten_scale', 1.0)
+        # Suspended particulate. 0 disables it. This is NOT the Gazebo marine
+        # snow emitter -- that one is invisible to camera sensors (see
+        # ParticleField) -- it is the only particulate the detector ever sees.
+        self.declare_parameter('particulate', 0.35)
         self.declare_parameter('randomize_on_start', False)
         self.declare_parameter('enabled', True)
 
@@ -255,6 +344,8 @@ class UnderwaterFx(Node):
         # so a missing depth sensor degrades to the old behaviour rather than
         # to a crash or a black frame.
         self._range = {'front': None, 'bottom': None}
+        self._particles = ParticleField()
+        self._particle_t = time.monotonic()
         self._reload_params()
         if self.get_parameter('randomize_on_start').value:
             self._randomize()
@@ -289,6 +380,7 @@ class UnderwaterFx(Node):
         self._noise = float(self.get_parameter('noise').value)
         self._vignette = float(self.get_parameter('vignette').value)
         self._atten_scale = float(self.get_parameter('atten_scale').value)
+        self._particulate = float(self.get_parameter('particulate').value)
         self._enabled = bool(self.get_parameter('enabled').value)
 
     def _randomize(self) -> None:
@@ -317,6 +409,8 @@ class UnderwaterFx(Node):
                 self._vignette = float(p.value)
             elif p.name == 'atten_scale':
                 self._atten_scale = float(p.value)
+            elif p.name == 'particulate':
+                self._particulate = float(p.value)
             elif p.name == 'enabled':
                 self._enabled = bool(p.value)
         return SetParametersResult(successful=True)
@@ -360,6 +454,16 @@ class UnderwaterFx(Node):
         except ValueError as exc:
             self.get_logger().warn(str(exc))
             return
+        particles = None
+        if self._enabled and self._particulate > 1e-4:
+            # Advance on MEASURED elapsed time, not a per-frame constant. The
+            # two cameras publish at different and variable rates, and a fixed
+            # step made the drift speed depend on frame rate -- the same trap
+            # the T200 spin-up filter fell into.
+            now = time.monotonic()
+            self._particles.step(now - self._particle_t)
+            self._particle_t = now
+            particles = self._particles.render(bgr.shape, self._particulate)
         if self._enabled:
             bgr = apply_underwater_fx(
                 bgr,
@@ -371,6 +475,7 @@ class UnderwaterFx(Node):
                 self._vignette,
                 self._atten_scale,
                 range_m=self._range.get(cam),
+                particles=particles,
             )
         pub.publish(_bgr_to_msg(bgr, msg.header.stamp, msg.header.frame_id))
 
