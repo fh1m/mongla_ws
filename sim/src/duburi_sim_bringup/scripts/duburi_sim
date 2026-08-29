@@ -97,6 +97,7 @@ patterns = (
     'lib/duburi_sim_bridge/t200_curve',
     'lib/duburi_sim_bridge/water_current',
     'lib/duburi_sim_bridge/hydrophone',
+    'lib/duburi_sim_bridge/payload_sim',
     'lib/duburi_sim_scenarios/prop_manager',
     'duburi_sim_worlds/worlds',
     'ros_gz_image/image_bridge',

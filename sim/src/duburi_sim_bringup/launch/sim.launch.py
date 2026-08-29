@@ -149,6 +149,10 @@ def generate_launch_description():
             'current_heading', default_value='0.0',
             description='Current bearing in world frame, degrees.'),
         DeclareLaunchArgument(
+            'payload', default_value='true',
+            description='Virtual payload board on a PTY, so fire() and the '
+                        'mid-hold align(fire=...) shot run in simulation.'),
+        DeclareLaunchArgument(
             't200', default_value='true',
             description='Shape thrust through the real T200 curve. Turning '
                         'this OFF leaves the thrusters unfed -- ArduPilotPlugin '
@@ -309,6 +313,22 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('current')),
     )
 
+    # Virtual payload board. Always on: it costs one idle PTY reader, and the
+    # alternative is duburi.fire() silently doing nothing in sim -- the exact
+    # gap this node exists to close. Point the manager at it with
+    # `payload_port:=/tmp/duburi-$USER/payload`.
+    payload = Node(
+        package='duburi_sim_bridge',
+        executable='payload_sim',
+        name='payload_sim',
+        parameters=[{
+            'world': course,
+            'vehicle': vehicle_name,
+        }],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('payload')),
+    )
+
     bridge = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -334,6 +354,7 @@ def generate_launch_description():
             gazebo_gui,
             t200,
             current,
+            payload,
             bridge,
             wait,
             # Everything that talks to the FDM socket starts only once Gazebo has

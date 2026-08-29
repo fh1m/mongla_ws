@@ -23,6 +23,15 @@ The scored feature is the ASYMMETRY -- red-over-black on one side, black-over-re
     <plugin filename="gz-sim-scene-broadcaster-system"
             name="gz::sim::systems::SceneBroadcaster"/>
 
+    <!-- Launch impulse for simulated torpedos, from `payload_sim`. A spawned
+         projectile has no way to be given an initial velocity -- EntityFactory
+         carries a pose and nothing else -- so the launch is a real force
+         applied for a real burn time, which means the projectile then flies
+         and COLLIDES under ordinary physics instead of being teleported along
+         a scripted path. Costs nothing when no wrench is published. -->
+    <plugin filename="gz-sim-apply-link-wrench-system"
+            name="gz::sim::systems::ApplyLinkWrench"/>
+
     <!-- Required by the vehicle's IMU, which feeds ArduSub over the JSON link. -->
     <plugin filename="gz-sim-imu-system"
             name="gz::sim::systems::Imu"/>
@@ -54,6 +63,18 @@ The scored feature is the ASYMMETRY -- red-over-black on one side, black-over-re
         </density_change>
       </graded_buoyancy>
       <enable>duburi</enable>
+      <enable>payload_shot_0</enable>
+      <enable>payload_shot_1</enable>
+      <enable>payload_shot_2</enable>
+      <enable>payload_shot_3</enable>
+      <enable>payload_shot_4</enable>
+      <enable>payload_shot_5</enable>
+      <enable>payload_shot_6</enable>
+      <enable>payload_shot_7</enable>
+      <enable>payload_shot_8</enable>
+      <enable>payload_shot_9</enable>
+      <enable>payload_shot_10</enable>
+      <enable>payload_shot_11</enable>
     </plugin>
 
     <!-- ===================== ENVIRONMENT ===================== -->
