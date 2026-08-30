@@ -77,3 +77,27 @@ def test_hovering_on_a_boundary_does_not_ratchet():
 def test_partial_rotation_does_not_score():
     axis = AxisStyle(2.0)
     assert _walk(axis, [0.0, 30.0, 60.0, 30.0, 0.0]) == 0.0
+
+
+# --------------------------------------------------------------------------
+# The scoring node's pose reader is a CHILD process
+# --------------------------------------------------------------------------
+def test_pose_stream_binary_is_in_the_stop_kill_list():
+    """`duburi_sim stop` must kill what the scoring node spawns.
+
+    scoring.py reads poses through `gz topic -e` rather than an rclpy/gz-python
+    subscription (see the docstring there for why). That is a child process,
+    and SIGKILLing the parent runs no cleanup handler -- so unless `stop`
+    matches it by name, it survives every `stop` and quietly eats CPU that
+    Gazebo's render loop needs. Exactly the dvl_bridge and t200_curve leaks,
+    which each cost a debugging round before anyone looked at `ps`.
+
+    `gz topic` execs `gz-transport-topic`, which is NOT matched by the list's
+    `gz sim ` entry (trailing space), so it needs its own line.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    stop = (root / 'duburi_sim_bringup' / 'scripts' / 'duburi_sim').read_text()
+    assert 'gz-transport-topic' in stop, (
+        'scoring spawns `gz topic -e`; add its binary to duburi_sim stop')
