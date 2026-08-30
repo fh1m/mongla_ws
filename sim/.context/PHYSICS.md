@@ -593,3 +593,65 @@ The full-gain chain itself is verified end to end and clips nowhere: gain 1.0
 `RC5_MAX` = 53.21 N, the T200's full published thrust at 16 V. The UI's own
 thrust readout mirrors `t200_curve` to within 0.5 percentage points across the
 whole slider.
+
+## Props hinge the way they are actually moored (2026-08-31)
+
+Two reported bugs, one root cause each, and neither was a collision problem.
+
+**The RoboSub gate's role markers would not move.** The gate was
+`<static>true</static>` — `model()` defaults to static and `robosub_gate` never
+opted out. Round 6 gave the boards collision, so the hull stopped dead against
+them, but a static model welds every link to the world and no amount of
+collision makes a static link move.
+
+It is now dynamic with the **frame pinned**: `joint("gate_mooring", "world",
+"top_bar")` holds the moored 3 m structure exactly where the course put it — it
+is far heavier than the hull, and a gate that drifted would move the geometry
+the scorer measures against. The two 305 mm boards and the 610 mm divider hang
+on revolute hinges about the bar's own axis, so they swing fore and aft, the
+direction a hull transiting along x actually pushes them.
+
+**The restoring force is the FASTENING, not gravity**, and that took three
+measurements to get right:
+
+| restoring model | knocked to | 15 s later | 21 s later |
+|---|---|---|---|
+| weight only, damping 0.02 | −56.9° | — | −5.3° (still moving) |
+| weight only, damping 1.5 | −54.4° | −41.3° | — (worse) |
+| **spring k=3.0, damping 0.4** | **−22.7°** | **0.0°, still** | — |
+
+Raising damping made it *slower*, which is the tell that the missing term was a
+spring and not a damper: 0.08 kg of net weight over a 0.15 m lever is 0.12 N·m,
+and quadratic drag is worth almost nothing at the velocities that produces. A
+real vinyl print is zip-tied flat and springs back from its fastening, so that
+is what is modelled — and the board can then weigh what corrugated plastic
+actually weighs (0.15 kg) instead of being made artificially heavy.
+
+`top_bar` displacement through all of this: **0.0000 m**. The mooring holds.
+
+**The three slalom pipes moved as one.** They were `weld_all`-ed into a single
+rigid body, deliberately — "shoves the set rather than scattering three loose
+poles". The handbook says otherwise ("moored at different heights to the floor,
+and floating vertically", i.e. individually), and so did the pool.
+
+Un-welding alone is **not** the fix, and the measurement said so immediately: a
+free pipe took the hit, travelled 2.29 m in 3.7 s and then diverged the solver
+outright. A moored pipe is not a free body. Each pipe is now a self-righting
+inverted pendulum — anchor disc welded to the world, pipe on a **universal**
+joint at its base (two axes, because a hull can brush a pipe from any bearing
+and a single hinge yields along one heading and stands rigid along the other),
+with 0.44 kg of buoyancy above the hinge standing it upright.
+
+Measured after: centre pipe knocked to **26.6°**, home by **7.3 s**, residual
+< 0.004 m and < 0.5°. Left and right pipes: **exactly 0.0000 m and 0.0°
+throughout.** It can be pushed over and it cannot be pushed away.
+
+### Two traps in measuring any of this
+
+- **`gz.msgs.Entity` has no `parent` field.** A wrench addressed as
+  `entity {name: "sign" parent {name: "gate"}}` fails to parse — and `gz topic`
+  still exits **0**. No force is applied and the prop reads as "does not move".
+  Entity names must be fully scoped: `gate::sign_survey_repair`.
+- **Link names in `dynamic_pose/info` are unscoped and repeat across models** —
+  three `pipe_centre` entries, one per slalom set. Key on the numeric `id`, or
+  you will measure a different set than the one you pushed.

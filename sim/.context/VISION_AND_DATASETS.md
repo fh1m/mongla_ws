@@ -378,3 +378,70 @@ vision pipeline with nothing logged, and the verbs then fail `NO_CAMERA`.
 
 Detection thresholds and vision gains. Sim imagery is cleaner than pool water
 even at `murky`. **Control behaviour and every `/duburi/move` verb do transfer.**
+
+## The torpedo board's openings are REAL now — and why that mattered most
+
+The collision plate was always genuinely open, tiled into strips around each
+hole. The **visual never was**: one solid box with dark disks painted on an RGB
+texture with no alpha. So an opening never parallaxed, never showed water or a
+prop behind it, and never responded to light or fog. **A detector trained on
+that learns a painted bullseye, not a hole** — which is the transfer failure
+this simulator exists to catch, and the reason the board read as clip art beside
+a photograph.
+
+Resolution was never the bottleneck. The panel was already 512 px across a
+0.6 m board — about 853 px/m, thirteen times the pool floor. What it lacked was
+a hole, anti-aliasing (every circle was a boolean mask), and any surface
+treatment at all: it was the one prop in the library that ignored the `rng` it
+accepted while every other prop had weave, ribbing, scuffs or noise.
+
+**A box cannot have a hole in it**, so the visual is now a generated mesh —
+`scripts/gen_prop_meshes.py`, cut from `prop_library.torpedo_openings()`, the
+same list the collision strips are tiled from. That invariant is load-bearing:
+the artwork and the collision drifted apart once before, and a shot lined up on
+the printed circle struck solid board with nothing in any log to say why.
+
+Three mesh traps, each of which produced a *silent* wrong render:
+
+- **`<mesh>` must be wrapped in `<geometry>`.** Without it SDF logs "XML
+  Element[mesh] … not defined in SDF", copies it through as an unknown child,
+  and the renderer fails the visual — the board simply is not drawn, its legs
+  floating on their own.
+- **The mesh needs vertex normals.** Without `vn` the material never samples its
+  albedo map and the board renders as a flat white plate: geometry perfect,
+  artwork gone, mesh loading without complaint.
+- **Do not put geometry behind an opening.** A thin rim cylinder added for a
+  labelling experiment rendered as a solid disc that plugged all four holes —
+  four painted dots again, by a different route.
+
+2026 layout, from the TeamTime "Task 4 — Deploy (Torpedoes)" slide: **four
+openings** (two large, two small) in a 2×2, with all four emergency images on
+both boards and only the image/size pairing distinguishing the two versions.
+The cells live in `spec/robosub.yaml`, so a rules update is one edit.
+
+## Per-visual labels do NOT give per-visual boxes — measured, negative
+
+The pool detectors are trained on **sub-features**: `gate_rescue_repair.pt`
+classifies `gate`/`rescue`/`repair`, `bin_fire_blood.pt` classifies
+`blood`/`fire`. The sim labels **whole models** (`robosub_gate`, `robosub_bins`),
+so **a dataset captured in simulation cannot train any model a mission actually
+runs.** That is worth stating plainly, because it is the largest remaining
+sim-to-real gap in vision and it is not obvious from any log.
+
+`gz-sim-label-system` accepts a `<visual>`-scope label, and it does change which
+class a model is annotated as — with the gate's model label suppressed and only
+the boards labelled, `repair` appeared in **268 of 268** bounding-box frames.
+But it does **not** produce a box per visual. With the frame visuals labelled
+`robosub_gate` and the two boards labelled `repair`/`rescue`, **267 of 267**
+frames carried only `robosub_gate`. The sensor emits one box per model; a visual
+label merely competes to name it.
+
+So this path is closed. Getting sub-feature classes needs each sub-feature to be
+its **own model**, which costs the joints that make the boards swing — a real
+trade, not a small edit. The `label=` argument on `visual()` is kept, unused,
+with this finding in its docstring, because the next person to try will reach
+for exactly that argument.
+
+> Unexplained and pre-existing: every bounding-box frame also carries a
+> **class 242**, which is outside `DETECTION_CLASSES`. It predates this work and
+> appears on every course. Worth chasing before trusting a raw box count.

@@ -47,11 +47,15 @@ roles:
   survey_repair:
     sign_colour: [0.85, 0.42, 0.12]
     gate_images: [compass, hammer_pick]
+    # `task_image` is the single bin symbol. `task_images` is the 2026 torpedo
+    # PAIR -- the board carries a role's symbol AND its vehicle.
     task_image: fire
+    task_images: [fire, fire_engine]
   search_rescue:
     sign_colour: [0.16, 0.44, 0.78]
     gate_images: [sos, ring_buoy]
     task_image: droplet
+    task_images: [droplet, ambulance]
 
 sign:
   # "12 in x 12 in (305 mm x 305 mm)" -- pp. 45, 49, 53.
@@ -118,6 +122,23 @@ props:
     # the scoring distinguishes ("larger opening first, then smaller").
     large_opening: 0.20
     small_opening: 0.13
+    # LAYOUT -- 2026. The TeamTime "Task 4 - Deploy (Torpedoes)" slide shows
+    # each board as a 2x2 of image+opening cells: FOUR images (fire, fire
+    # engine, ambulance, blood drop) and FOUR openings, two large and two
+    # small. The 2025 handbook text is thinner ("two different size openings",
+    # ":fire::fire_engine: for Survey & Repair and :drop_of_blood::ambulance:
+    # for Search & Rescue") and does not contradict it.
+    #
+    # Positions are CELL CENTRES in units of the board half-size, y across and
+    # z up, so the geometry survives a change to `size`. Both board versions
+    # carry all four images; only which image sits beside which OPENING SIZE
+    # differs, so a detector cannot read the role from image presence alone --
+    # which is the discrimination the real task demands.
+    cells:
+      - {y:  0.5, z:  0.5, size: large}
+      - {y: -0.5, z:  0.5, size: small}
+      - {y:  0.5, z: -0.5, size: small}
+      - {y: -0.5, z: -0.5, size: large}
     colour: [0.88, 0.86, 0.80]
     # SCORING STANDOFFS -- THE TWO SOURCES DISAGREE, so both are recorded.
     #   Handbook p. 50:      far 1 ft (0.3 m),  farther 1.5 ft (0.46 m)

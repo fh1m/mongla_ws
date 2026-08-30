@@ -255,13 +255,51 @@ def _geometry_sphere(radius) -> str:
 
 
 def visual(name, geometry, mat, pose="0 0 0 0 0 0", cast_shadows=True,
-           transparency: float = 0.0) -> str:
+           transparency: float = 0.0, label: str = None) -> str:
+    """One <visual>, optionally carrying its OWN semantic label.
+
+    IT DOES NOT DO WHAT IT LOOKS LIKE IT DOES. Measured 2026-08-31, and left
+    here so the next attempt starts from the measurement instead of repeating
+    it:
+
+      * `gz-sim-label-system` really does attach at visual scope -- it carries a
+        VisualTag component and the SDF is accepted without complaint.
+      * A label on a visual DOES change which class the model is annotated as:
+        with the gate's model-scope label suppressed and only the role boards
+        labelled, `repair` appeared in 268 of 268 bounding-box frames.
+      * But it does NOT produce a box PER VISUAL. Re-run with the frame visuals
+        labelled `robosub_gate` and the two boards labelled `repair`/`rescue`,
+        and 267 of 267 frames carried ONLY `robosub_gate`. One box per model is
+        what the sensor emits; a visual label merely competes to name it.
+
+    So sub-feature classes -- the `rescue`/`repair`, `fire`/`blood`, `hole` that
+    `gate_rescue_repair.pt`, `bin_fire_blood.pt` and the torpedo mission are
+    actually trained on -- CANNOT be produced this way, and a dataset captured
+    in simulation still cannot train the models the missions run. Getting there
+    needs each sub-feature to be its OWN MODEL, which costs the joints that make
+    the boards swing, so it is a real trade and not a small edit.
+
+    Nothing in the tree passes `label` today. The parameter stays because the
+    finding above is worth more than the four lines it costs, and because the
+    next person to try this will reach for exactly this argument.
+    """
     shadows = "" if cast_shadows else "  <cast_shadows>false</cast_shadows>\n"
     trans = f"  <transparency>{transparency:.3g}</transparency>\n" if transparency else ""
+    lab = ""
+    if label:
+        lid = detection_label(label)
+        if not lid:
+            raise SystemExit(
+                f"visual {name!r}: {label!r} is not in DETECTION_CLASSES. Append "
+                "it -- never insert, the index is the YOLO class id.")
+        lab = ('  <plugin filename="gz-sim-label-system" '
+               'name="gz::sim::systems::Label">\n'
+               f"    <label>{lid}</label>\n"
+               "  </plugin>\n")
     return (
         f'<visual name="{name}">\n'
         f"  <pose>{pose}</pose>\n"
-        f"{shadows}{trans}"
+        f"{shadows}{trans}{lab}"
         f"  {geometry}\n"
         f"{_indent(mat, 1)}\n"
         "</visual>"
@@ -322,18 +360,82 @@ def rod_drag(diameter, length, cd=1.0, rho=1000.0):
             0.5 * rho * cd * diameter * length ** 4 / 4.0)
 
 
-def joint(name, parent, child, jtype="fixed") -> str:
-    """Weld two links of a DYNAMIC model together.
+def plate_drag(side, thickness, cd=1.2, rho=1000.0):
+    """(face, edge, rotational) quadratic drag for a flat plate. See `hydrodynamics`.
+
+    A hanging board is nothing like a rod: broadside it sweeps its whole area,
+    edge-on almost none. `hydrodynamics` takes one figure for BOTH horizontal
+    axes, so the face value is applied to the in-plane horizontal axis too --
+    an over-damping that costs nothing here, because a board hinged about that
+    axis barely moves along it.
+    """
+    return (0.5 * rho * cd * side * side,
+            0.5 * rho * cd * side * thickness,
+            0.5 * rho * cd * side * side ** 3 / 4.0)
+
+
+def joint(name, parent, child, jtype="fixed", axis=None, limit=None,
+          damping=0.0, pose=None, axis2=None, stiffness=0.0, reference=0.0) -> str:
+    """Join two links of a DYNAMIC model.
 
     A static model needs none of these -- <static>true</static> welds every
     link to the world implicitly, which is why this file had zero joints until
     props became pushable. The moment a model goes dynamic that stops being
     true: an unjointed multi-link model is N SEPARATE FREE BODIES that fly
     apart on the first physics step, with nothing logged.
+
+    `parent` may be the literal `world`, which PINS the child in place inside an
+    otherwise dynamic model -- the gate uses it so the moored frame cannot be
+    shoved while the boards hanging off it still swing.
+
+    axis    : (x, y, z) unit vector, required for a revolute joint.
+    axis2   : second axis, for a `universal` joint -- a prop that can be shoved
+              from any bearing needs two, or it yields along one heading and is
+              rigid along the other.
+    stiffness / reference :
+              a torsional spring pulling the joint back toward `reference`.
+              This is how a FASTENED board behaves: a 305 mm vinyl print
+              zip-tied to a bar springs back because of its fastening, not
+              because of its weight. Trying to do it with weight alone was
+              measured and does not work -- 0.08 kg of restoring force over a
+              0.15 m lever is 0.12 N.m, and the board crawled home over 20 s.
+              Raising damping to compensate made it slower still, which is the
+              tell that the missing term was the spring, not the damper.
+    limit   : (lower, upper) radians. WITHOUT IT a struck board keeps rotating
+              and winds through the frame it hangs from; the real thing is
+              zip-tied and swings through a limited arc.
+    damping : joint-space damping. Drag on the link (see `hydrodynamics`) does
+              most of the work, but a hinge with neither rings at its own
+              frequency for a long time.
+    pose    : anchor, IN THE CHILD LINK'S FRAME. Default (None) hinges about the
+              child's own centre, which for a hanging board means it pivots
+              about its middle like a propeller. A board zip-tied along its top
+              edge wants `pose` at that edge.
     """
+    body = (f'  <parent>{parent}</parent>\n'
+            f'  <child>{child}</child>\n')
+    if pose is not None:
+        body += f'  <pose>{pose}</pose>\n'
+    for tag, vec in (("axis", axis), ("axis2", axis2)):
+        if vec is None:
+            continue
+        lim = ""
+        if limit is not None:
+            lim = (f"    <limit>\n"
+                   f"      <lower>{limit[0]:.6g}</lower>\n"
+                   f"      <upper>{limit[1]:.6g}</upper>\n"
+                   f"    </limit>\n")
+        body += (f'  <{tag}>\n'
+                 f'    <xyz>{vec[0]:.6g} {vec[1]:.6g} {vec[2]:.6g}</xyz>\n'
+                 f'{lim}'
+                 f'    <dynamics>\n'
+                 f'      <damping>{damping:.6g}</damping>\n'
+                 f'      <spring_stiffness>{stiffness:.6g}</spring_stiffness>\n'
+                 f'      <spring_reference>{reference:.6g}</spring_reference>\n'
+                 f'    </dynamics>\n'
+                 f'  </{tag}>\n')
     return (f'<joint name="{name}" type="{jtype}">\n'
-            f'  <parent>{parent}</parent>\n'
-            f'  <child>{child}</child>\n'
+            f'{body}'
             f'</joint>')
 
 
@@ -452,7 +554,7 @@ def model(name, body: str, static: bool = True, label: int = None) -> str:
 
 
 def _solid(name, geometry, mat, mass, inertia, pose="0 0 0 0 0 0", collide=True,
-           visible=True, surface=""):
+           visible=True, surface="", label=None):
     """A link with matching visual and collision geometry.
 
     `visible=False` gives a COLLISION-ONLY link. That exists because two
@@ -469,7 +571,7 @@ def _solid(name, geometry, mat, mass, inertia, pose="0 0 0 0 0 0", collide=True,
     """
     parts = [inertial(mass, inertia)]
     if visible:
-        parts.append(visual(f"{name}_visual", geometry, mat))
+        parts.append(visual(f"{name}_visual", geometry, mat, label=label))
     if collide:
         parts.append(collision(f"{name}_collision", geometry, surface=surface))
     return link(name, "\n".join(parts), pose)
@@ -477,7 +579,7 @@ def _solid(name, geometry, mat, mass, inertia, pose="0 0 0 0 0 0", collide=True,
 
 def _cylinder_link(
     name, radius, length, colour, mass, pose, collide=True, mat=None,
-    visible=True, surface="",
+    visible=True, surface="", label=None,
 ):
     return _solid(
         name,
@@ -489,11 +591,12 @@ def _cylinder_link(
         collide,
         visible,
         surface,
+        label,
     )
 
 
 def _box_link(name, sx, sy, sz, colour, mass, pose, collide=True, mat=None,
-              visible=True, surface=""):
+              visible=True, surface="", label=None):
     return _solid(
         name,
         _geometry_box(sx, sy, sz),
@@ -504,6 +607,7 @@ def _box_link(name, sx, sy, sz, colour, mass, pose, collide=True, mat=None,
         collide,
         visible,
         surface,
+        label,
     )
 
 
@@ -1067,7 +1171,8 @@ def golf_ball(spec: dict) -> str:
 _THIN = (1e-6, 1e-6, 1e-6)
 
 
-def _role_sign(spec, name, image, pose, size=None, collide=False):
+def _role_sign(spec, name, image, pose, size=None, collide=False, mass=0.05,
+               label=None):
     """A 12 in x 12 in printed vinyl role sign.
 
     The image is the ACTUAL emoji RoboNation prints, rendered by
@@ -1097,7 +1202,8 @@ def _role_sign(spec, name, image, pose, size=None, collide=False):
     cfg = spec["sign"]
     side = size or cfg["size"]
     return _box_link(
-        name, cfg["thickness"], side, side, WHITE, 0.05, pose, collide=collide,
+        name, cfg["thickness"], side, side, WHITE, mass, pose, collide=collide,
+        label=label,
         # Low emissive on purpose. The lift exists so props stay visible
         # through fog, but on a PRINTED face it flattens the artwork -- and the
         # artwork is the thing a detector has to classify. Enough to lift it
@@ -1179,8 +1285,11 @@ def robosub_gate(spec):
         mat=material(red, emissive_gain=0.22)))
 
     # Role signs hang from the bar, 152.4 mm below it, one per role.
+    sign_side = spec["sign"]["size"]
+    sign_names = []
     for role, y in (("survey_repair", -w * 0.22), ("search_rescue", w * 0.22)):
         image = spec["roles"][role]["gate_images"][0]
+        sign_names.append(f"sign_{role}")
         parts.append(_role_sign(
             spec, f"sign_{role}", image,
             # rpy 0 0 0 -- the plate already faces along x, at the AUV.
@@ -1189,7 +1298,15 @@ def robosub_gate(spec):
             # gate mouth; a hull driving through one is the sim lying about
             # where the clear water is, which is the one thing a gate mission
             # has to get right.
-            collide=True))
+            collide=True,
+            # Corrugated plastic, and it is BUOYANT -- 305 x 305 x 4 mm
+            # displaces 0.372 kg against about 0.15 kg of board. What holds it
+            # flat in the pool is the fastening, so that is where the restoring
+            # force is modelled (the hinge's spring, below) rather than faked by
+            # making the board heavy. An earlier attempt did exactly that and
+            # the measurement said no: weight alone brought it back over 20 s.
+            mass=0.15,
+            ))
 
     # "moored to the bottom" -- two lines from the foot of each leg to the
     # floor. Non-colliding: they are rope, and a vehicle that clips one should
@@ -1205,7 +1322,57 @@ def robosub_gate(spec):
             f"0 {y:.6g} {leg_foot - tether / 2.0:.6g} 0 0 0", collide=False,
             mat=material((0.15, 0.15, 0.14))))
 
-    return model("robosub_gate", "\n".join(parts))
+    # --- what moves, and what does not -------------------------------------
+    #
+    # The gate WAS static, which is why a hull that hit a role marker stopped
+    # dead against it and nothing budged: Round 6 gave the signs collision, but
+    # <static>true</static> welds every link to the world, so no amount of
+    # collision can make a static link move.
+    #
+    # It is now dynamic with the FRAME PINNED. A fixed joint to `world` holds
+    # the moored 3 m structure exactly where the course put it -- it is far
+    # heavier than the hull, and a gate that drifted would move the geometry
+    # the scorer measures the run against. Everything hanging off the bar
+    # swings.
+    parts.extend(weld_all("top_bar", [
+        "post_port", "post_stbd",
+        "band_port_upper", "band_port_lower",
+        "band_stbd_upper", "band_stbd_lower",
+        "mooring_port", "mooring_stbd",
+    ]))
+    parts.append(joint("gate_mooring", "world", "top_bar"))
+
+    # The boards hinge about the bar's own axis (y), so they swing FORE AND AFT
+    # -- the direction a hull transiting along x actually pushes them. The
+    # anchor sits at each board's top edge, not its centre, or it pivots about
+    # its middle like a propeller.
+    face, edge, rot = plate_drag(sign_side, spec["sign"]["thickness"])
+    for _name in sign_names:
+        parts.append(joint(f"{_name}_hinge", "top_bar", _name, "revolute",
+                           axis=(0.0, 1.0, 0.0), limit=(-1.0, 1.0),
+                           # The FASTENING is the restoring force, not gravity.
+                           # Measured with gravity alone (damping 0.02): -56.9
+                           # deg, still -5.3 deg at t=21.5 s. Raising damping to
+                           # 1.5 made it WORSE -- -41.3 deg at t=15.4 s, a
+                           # near-linear crawl -- which is what an overdamped
+                           # hinge with almost no restoring torque looks like.
+                           # k = 3.0 N.m/rad against I ~ 0.014 kg.m^2 puts the
+                           # natural period near 0.4 s, and damping 0.4 is close
+                           # to critical, so it deflects and comes straight back.
+                           stiffness=3.0, reference=0.0, damping=0.4,
+                           pose=f"0 0 {sign_side / 2.0:.6g} 0 0 0"))
+        parts.append(hydrodynamics(_name, face, edge, rot))
+
+    # The divider is a 610 mm plate hanging down the gate mouth; same hinge.
+    _dw, _dd = cfg["divider_width"], cfg["divider_drop"]
+    d_face, d_edge, d_rot = plate_drag(_dd, _dw)
+    parts.append(joint("divider_hinge", "top_bar", "divider", "revolute",
+                       axis=(0.0, 1.0, 0.0), limit=(-1.0, 1.0),
+                       stiffness=6.0, reference=0.0, damping=0.8,
+                       pose=f"0 0 {_dd / 2.0:.6g} 0 0 0"))
+    parts.append(hydrodynamics("divider", d_face, d_edge, d_rot))
+
+    return model("robosub_gate", "\n".join(parts), static=False)
 
 
 def robosub_slalom(spec):
@@ -1225,7 +1392,6 @@ def robosub_slalom(spec):
     pipe_m = 0.35                      # hollow capped 1 in PVC
     anchor_r, anchor_h, anchor_m = 0.05, 0.012, 0.90
     parts = []
-    names = []
     for name, y, colour in (
         ("pipe_left", gap, cfg["colours"]["white"]),
         ("pipe_centre", 0.0, cfg["colours"]["red"]),
@@ -1239,11 +1405,38 @@ def robosub_slalom(spec):
             f"{name}_anchor", anchor_r, anchor_h, colour, anchor_m,
             f"0 {y:.6g} {anchor_h / 2.0:.6g} 0 0 0",
             mat=pvc_material(colour), surface=friction(0.8)))
-        names += [name, f"{name}_anchor"]
 
-    # One rigid set: the three pipes are moored as a unit, so a hull that
-    # clips one shoves the set rather than scattering three loose poles.
-    parts.extend(weld_all(names[0], names[1:]))
+    # THREE INDEPENDENT PIPES, EACH MOORED TO THE FLOOR ON ITS OWN HINGE.
+    #
+    # This used to be `weld_all(names[0], names[1:])` -- one rigid body, on the
+    # reasoning that a hull clipping one pipe should shove the set "rather than
+    # scattering three loose poles". That is not what the handbook describes
+    # ("moored at different heights to the floor, and floating vertically",
+    # i.e. each pipe individually) and it is not what the pool does: clipping
+    # the left pipe left the centre and right ones swinging too, which taught a
+    # slalom mission that the whole gap moves when you touch its edge.
+    #
+    # Simply un-welding them is NOT enough, and the first attempt proved it:
+    # measured, an unmoored pipe took the hit, travelled 2.29 m in 3.7 s and
+    # then diverged the solver outright. A free body is not what a moored pipe
+    # is.
+    #
+    # So each pipe is a self-righting inverted pendulum, which is what the
+    # handbook actually describes. The anchor disc is WELDED TO THE WORLD (it
+    # is the mooring block) and the pipe hangs off it on a UNIVERSAL joint at
+    # its base -- two axes, because a hull can brush a pipe from any bearing
+    # and a single hinge would yield along one heading and stand rigid along
+    # the other. The pipe displaces 0.789 kg against 0.35 kg of mass, so 0.44 kg
+    # of buoyancy above the hinge stands it upright and rights it after a knock.
+    # It can be pushed over and it cannot be pushed AWAY.
+    for pipe in ("pipe_left", "pipe_centre", "pipe_right"):
+        parts.append(joint(f"{pipe}_mooring", "world", f"{pipe}_anchor"))
+        parts.append(joint(
+            f"{pipe}_hinge", f"{pipe}_anchor", pipe, "universal",
+            axis=(1.0, 0.0, 0.0), axis2=(0.0, 1.0, 0.0),
+            limit=(-1.2, 1.2), damping=0.05,
+            pose=f"0 0 {-h / 2.0:.6g} 0 0 0"))
+
     for name in ("pipe_left", "pipe_centre", "pipe_right"):
         parts.append(hydrodynamics(name, *rod_drag(2.0 * r, h)))
     return model("robosub_slalom", "\n".join(parts), static=False)
@@ -1359,17 +1552,21 @@ def torpedo_openings(spec: dict):
     you could shoot through -- so a mission aimed at the artwork hit board, and
     the sim scored it as a miss for a reason no operator could see.
 
-    The rulebook is unambiguous that there are two: "corrugated plastic backing
-    with vinyl printed images and two sized openings", the larger and the
-    smaller, which is also what `spec/robosub.yaml` records. y is across the
-    board, z is up, both relative to the plate centre.
+    2026 LAYOUT: FOUR openings, two large and two small, one per cell of a 2x2
+    -- the arrangement the TeamTime "Task 4 - Deploy (Torpedoes)" slide shows,
+    each opening paired with one of the four emergency images. The 2025
+    handbook says only "two different size openings", which is about the two
+    SIZES and does not contradict the count. The cells live in
+    `spec/robosub.yaml` so a rules update is one edit, not a code change.
+
+    y is across the board, z is up, both relative to the plate centre.
     """
     cfg = spec["props"]["torpedo_board"]
-    quarter = cfg["size"] / 4.0
-    return [
-        (-quarter, quarter, cfg["large_opening"] / 2.0),
-        (quarter, -quarter, cfg["small_opening"] / 2.0),
-    ]
+    half = cfg["size"] / 2.0
+    radius = {"large": cfg["large_opening"] / 2.0,
+              "small": cfg["small_opening"] / 2.0}
+    return [(c["y"] * half, c["z"] * half, radius[c["size"]])
+            for c in cfg["cells"]]
 
 
 def torpedo_openings_uv(spec: dict):
@@ -1484,17 +1681,41 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
     # physical board, this plate is the visible one. Both drawing gave two
     # co-planar surfaces at the same thickness, which z-fought into the streaky
     # grey mess that hid the artwork entirely.
-    parts.append(_box_link(
-        "board", th, size, size, WHITE, 3.0, f"0 0 {cz:.6g} 0 0 0",
-        collide=False,
-        mat=textured_material(f"torpedo_panel_{role}.png", tint=1.0,
-                              specular=0.06, roughness=0.6, emissive=0.10,
-                              competition="robosub")))
+    #
+    # AND IT IS A MESH, NOT A BOX, because a box cannot have a hole in it. The
+    # openings used to be PAINTED on a solid face: dark disks on an RGB texture
+    # with no alpha. They never parallaxed, never showed water or a prop behind
+    # them, never responded to fog. A detector trained on that learns a painted
+    # bullseye rather than a hole, which is exactly the transfer failure this
+    # simulator exists to catch. The mesh is generated by gen_prop_meshes.py
+    # from torpedo_openings() -- the same list the collision strips below are
+    # tiled from, so the hole you can see stays the hole you can shoot through.
+    parts.append(link("board", "\n".join([
+        inertial(3.0, box_inertia(3.0, th, size, size)),
+        visual("board_visual",
+               # The <geometry> wrapper is not optional: without it SDF logs
+               # "XML Element[mesh] ... not defined in SDF", copies it through
+               # as an unknown child, and the renderer then fails the visual
+               # outright -- the board simply is not drawn, legs floating on
+               # their own, with the reason 60 lines up the log.
+               f'<geometry><mesh>'
+               f'<uri>model://robosub_meshes/meshes/torpedo_plate.obj</uri>'
+               f'</mesh></geometry>',
+               textured_material(f"torpedo_panel_{role}.png", tint=1.0,
+                                 specular=0.06, roughness=0.6, emissive=0.10,
+                                 competition="robosub")),
+    ]), f"0 0 {cz:.6g} 0 0 0"))
 
     # Openings, in plate coordinates. Placed to match the printed artwork:
     # the larger opening upper-left, the smaller lower-right.
     openings = torpedo_openings(spec)
     parts.extend(_plate_with_holes("plate", size, th, openings, cz))
+
+    # NO RIM GEOMETRY. A first attempt put a thin cylinder behind each opening
+    # to give the edge some depth; rendered, they were solid discs that PLUGGED
+    # the holes the mesh had just cut -- four painted dots again, by a different
+    # route. The printed red annulus in the texture is the rim, and the mesh's
+    # own wall gives the edge its thickness.
 
     # "The 'far' distance is denoted by the horizontal bars at the bottom of
     # the board" (p. 36). Two bars, because the spec carries two standoffs.
@@ -1795,7 +2016,10 @@ PROPS = {
     "robosub_gate": {
         "build": robosub_gate,
         "anchor": ANCHOR_SURFACE,
-        "dynamic": False,
+        # Dynamic, but the frame is pinned to the world by a fixed joint -- the
+        # role boards and the divider are what swing. Both halves of this flag
+        # must agree with <static> in the model or build_props refuses.
+        "dynamic": True,
     },
     "robosub_slalom": {
         "build": robosub_slalom,

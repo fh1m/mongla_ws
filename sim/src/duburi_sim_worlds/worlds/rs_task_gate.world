@@ -63,6 +63,7 @@ The scored feature is the ASYMMETRY -- red-over-black on one side, black-over-re
         </density_change>
       </graded_buoyancy>
       <enable>duburi</enable>
+      <enable>gate</enable>
       <enable>payload_shot_0</enable>
       <enable>payload_shot_1</enable>
       <enable>payload_shot_2</enable>

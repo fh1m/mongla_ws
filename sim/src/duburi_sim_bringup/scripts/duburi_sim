@@ -152,7 +152,7 @@ Commands:
   stack [--no-vision]          duburi_ws manager against a running simulator
   smoke                        arm → set_depth -1 → move_forward 8s
   joystick                     Live gamepad status in the terminal (needs `lab`)
-  view [chase|free|<model>]    Chase the vehicle with the Gazebo camera, or let go
+  view [high|chase|free|<model>]  High aimed 3rd-person, close chase, or let go
   lab                          Operator web UI on :28765 (DUBURI_LAB_PORT; needs sim+stack)
   plotjuggler                  Launch PlotJuggler with sim layout (needs ros-humble-plotjuggler-ros)
 
@@ -428,6 +428,27 @@ JOYSTICK_PY
     # world instance is `duburi` on every course (the model is `duburi_heavy`);
     # passing the model name silently follows nothing.
     _target="${1:-chase}"
+    # `high` is a different mechanism, not a different offset.
+    #
+    # /gui/follow only sets the camera's POSITION -- gz-rendering applies the
+    # follow offset and leaves the orientation alone, which is why a raised
+    # camera keeps staring wherever gui.config's pitch left it. /gui/track with
+    # FOLLOW_LOOK_AT (mode 4) is the aimed rig, and it exists ONLY at runtime:
+    # the SDF block parses follow_target, follow_offset and follow_pgain and
+    # nothing else.
+    if [[ "$_target" == "high" ]]; then
+      if ! gz service -s /gui/track --reqtype gz.msgs.CameraTrack \
+           --reptype gz.msgs.Boolean --timeout 2000 \
+           --req "track_mode: 4 follow_target {name: \"duburi\"} \
+                  track_target {name: \"duburi\"} \
+                  follow_offset {x: -6.0 y: 0.6 z: 2.4} \
+                  follow_pgain: 0.03 track_pgain: 0.05" >/dev/null 2>&1; then
+        echo "[duburi-sim] no Gazebo GUI is running (or it is headless)" >&2
+        exit 1
+      fi
+      echo "[duburi-sim] camera high and aimed at duburi -- 'view chase' or 'view free'"
+      exit 0
+    fi
     case "$_target" in
       chase) _target="duburi" ;;
       free)  _target="" ;;
