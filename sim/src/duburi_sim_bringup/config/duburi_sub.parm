@@ -39,7 +39,17 @@ FS_BATT_ENABLE   0
 BRD_SAFETY_DEFLT 0
 
 # --- Simulated sensor noise -------------------------------------------------
-SIM_BARO_RND     0.02
+# BAR30, from the sensor's own datasheet rather than a guess. The Bar30 is a
+# TE MS5837-30BA: "resolution of 0.2 mbar", which the datasheet itself states
+# as a "water depth resolution of 2 mm". SIM_BARO_RND is in METRES of height
+# (SITL_Baro.cpp, @Units: m), so that is 0.002.
+#
+# The previous 0.02 was ten times too noisy -- a 20 mm noise floor on the one
+# sensor every single mission depends on, which is the difference between a
+# depth hold that looks twitchy in sim and one that does not. Nothing errored;
+# it simply made the sim harder than the vehicle in a way that would have been
+# tuned around.
+SIM_BARO_RND     0.002
 
 # ---------------------------------------------------------------------------
 # SENSOR NOISE. Until now only the barometer had any, so EKF3 in sim was fed

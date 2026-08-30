@@ -207,7 +207,12 @@ def main(argv=None) -> None:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        # Guarded: `ros2 launch` SIGINTs the whole group, and rclpy may have
+        # already torn the context down. An unguarded call then raises
+        # "rcl_shutdown already called" and the node exits 1 -- a clean
+        # ctrl-c reports three processes as DIED.
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

@@ -95,11 +95,18 @@ class Bno085Sim(Node):
         # Fault injection, same shape as /faults: a duration that self-clears.
         self.declare_parameter('dropout_s', 0.0)
 
+        # Cached, because the 50 Hz write loop read them through
+        # get_parameter() -- three lock-taking calls per frame.
+        self._rate_hz = float(self.get_parameter('rate_hz').value)
+        self._noise_deg = float(self.get_parameter('noise_deg').value)
+        self._boot_offset = float(self.get_parameter('boot_offset_deg').value)
+
         self._truth_yaw = None
         self._drift = 0.0
         self._drift_t = time.monotonic()
         self._dropout_until = 0.0
         self._frames = 0
+        self._dropped = 0
 
         import random
         self._rng = random.Random(0xB0)
@@ -113,6 +120,14 @@ class Bno085Sim(Node):
         self._gz_connect()
 
         self._master, slave = pty.openpty()
+        # NON-BLOCKING writes. A PTY write blocks once the buffer fills, and
+        # the buffer fills whenever the host end reads slower than 50 Hz --
+        # which stalls the whole write loop and drags the stream rate down
+        # (measured 50 -> 22.7 Hz the moment the stack attached). A real USB
+        # CDC link does not stall the sensor; the frame is simply lost. Drop
+        # it here for the same reason, so the board's rate is its own and the
+        # host's backlog is the host's problem.
+        os.set_blocking(self._master, False)
         self._port = os.ttyname(slave)
         # Hold the slave fd. Closing it makes every later read on the master
         # raise EIO as soon as the client disconnects -- the board would work
@@ -195,8 +210,8 @@ class Bno085Sim(Node):
         self._drift += self._bias * (dt / 60.0)
 
         truth = self._truth_yaw if self._truth_yaw is not None else 0.0
-        noise = self._rng.gauss(0.0, float(self.get_parameter('noise_deg').value))
-        boot = float(self.get_parameter('boot_offset_deg').value)
+        noise = self._rng.gauss(0.0, self._noise_deg)
+        boot = self._boot_offset
 
         # Gazebo yaw is ENU/+CCW already, and so is the firmware, so no
         # negation here -- BNO085Source._reader_loop does that once on the
@@ -206,9 +221,26 @@ class Bno085Sim(Node):
 
     def _write_loop(self) -> None:
         t0 = time.monotonic()
+        next_frame = t0
         while True:
-            hz = max(1.0, float(self.get_parameter('rate_hz').value))
-            time.sleep(1.0 / hz)
+            # DEADLINE SCHEDULING, not sleep-per-iteration.
+            #
+            # `sleep(1/hz)` makes the PERIOD 1/hz PLUS the work, so the rate is
+            # always under target and degrades with load. Measured with the
+            # Gazebo GUI up, it fell 49.3 -> 23.2 Hz, and that is not cosmetic:
+            # BNO085Source._STALE_S is 0.08 s, four frames at 50 Hz, so at
+            # 23 Hz the driver holds under two frames per stale window and
+            # starts flapping between fresh and stale. Sleeping to the next
+            # deadline keeps the rate flat and lets a slow tick catch up.
+            hz = max(1.0, self._rate_hz)
+            next_frame += 1.0 / hz
+            delay = next_frame - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            else:
+                # Fell far behind (a suspended process, a stalled host): resync
+                # rather than spin trying to emit a burst of stale frames.
+                next_frame = time.monotonic()
             if self._dropout_until > time.monotonic():
                 continue
             line = json.dumps({
@@ -218,6 +250,9 @@ class Bno085Sim(Node):
             try:
                 os.write(self._master, line.encode())
                 self._frames += 1
+            except BlockingIOError:
+                # Host is behind; the frame is gone, exactly as on the wire.
+                self._dropped += 1
             except OSError:
                 # Nobody has the far end open yet, or it just closed. The real
                 # board keeps talking to a disconnected host too.
@@ -240,7 +275,13 @@ class Bno085Sim(Node):
 
     def _on_params(self, params) -> SetParametersResult:
         for p in params:
-            if p.name == 'dropout_s':
+            if p.name == 'rate_hz':
+                self._rate_hz = float(p.value)
+            elif p.name == 'noise_deg':
+                self._noise_deg = float(p.value)
+            elif p.name == 'boot_offset_deg':
+                self._boot_offset = float(p.value)
+            elif p.name == 'dropout_s':
                 secs = float(p.value)
                 if secs <= 0.0:
                     self._dropout_until = 0.0
@@ -255,8 +296,12 @@ class Bno085Sim(Node):
         if self._frames:
             self.get_logger().info(
                 f'[BNO-SIM] {self._frames / 10.0:.1f} Hz, '
-                f'accumulated drift {self._drift:+.2f} deg')
+                f'accumulated drift {self._drift:+.2f} deg'
+                + (f', {self._dropped} frames dropped (host behind)'
+                   if self._dropped else ''))
             self._frames = 0
+            self._dropped = 0
+        self._dropped = 0
 
     def destroy_node(self) -> bool:
         if self._link and os.path.islink(self._link):
