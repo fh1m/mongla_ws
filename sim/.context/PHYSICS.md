@@ -553,3 +553,43 @@ and could not slide, load-bearing the moment one can. Ballast discs carry
 µ = 0.8 in **both** the `<ode>` and `<bullet>` blocks, since the world runs
 DART with bullet's collision detector and which one reads the value is not
 worth guessing at.
+
+## Gain is monotonic submerged, and NOT at the surface
+
+Measured 2026-08-30 through the lab's own HTTP teleop path, fresh world per
+arm (start pose identical to 0.01 m every time), 9 s window after a 5 s
+spin-up, `set_depth -0.8` + `lock_heading` so displacement is path length:
+
+| gain | PWM | thrust/thruster | measured | drag-limited prediction |
+|---|---|---|---|---|
+| 25 % | 1600 | 5.94 N | 0.109 m/s | 0.109 (reference) |
+| 55 % | 1720 | 20.84 N | 0.222 m/s | 0.204 |
+| 100 % | 1900 | 53.21 N | **0.369 m/s** | 0.326 |
+
+Monotonic, and slightly above `v ∝ √F` because the hull is still accelerating
+inside the window — terminal speed is approached asymptotically. Heading held
+92–93° throughout, so path length and displacement agree to 1 mm.
+
+**The same A/B at the surface is non-monotonic**: unstabilized (MANUAL, no
+depth hold) at z ≈ −0.2 m, the numbers were 0.112 / 0.220 / **0.077** m/s —
+full gain *slower than quarter* gain, repeatably. Nothing is wrong with the
+gain chain. The hull top is at the waterline in graded buoyancy with no
+attitude stabilization; pitch and yaw moments grow with speed², nothing
+corrects them, and the vehicle plows and curves instead of translating. Yaw
+drift grew monotonically with gain (−0.01 → 0.18 → 0.29 m of lateral
+displacement), which is the tell.
+
+Two lessons for any future speed measurement here:
+
+- **Measure in the configuration the vehicle flies** — submerged, ALT_HOLD,
+  heading locked. A surface MANUAL number is real, but it is a measurement of
+  attitude divergence, not of thrust.
+- **Straight-line displacement is not speed.** It collapses when the hull
+  curves, so a fast vehicle going the wrong way reads as a slow one. Log path
+  length beside it, or lock the heading so the two agree.
+
+The full-gain chain itself is verified end to end and clips nowhere: gain 1.0
+→ PWM 1900 = `MOT_PWM_MAX` = the model's `<servo_max>` = ArduPilot's
+`RC5_MAX` = 53.21 N, the T200's full published thrust at 16 V. The UI's own
+thrust readout mirrors `t200_curve` to within 0.5 percentage points across the
+whole slider.

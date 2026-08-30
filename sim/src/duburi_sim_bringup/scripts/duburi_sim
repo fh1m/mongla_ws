@@ -106,6 +106,15 @@ patterns = (
     'ros_gz_image/image_bridge',
     'ros_gz_bridge/parameter_bridge',
     'gz sim ',
+    # The scoring node's pose reader is a `gz topic -e` CHILD process, and the
+    # binary it execs is `gz-transport-topic`, which matches neither `gz sim `
+    # (trailing space) nor the parent's own pattern. SIGKILLing the parent
+    # cannot clean it up -- no handler runs -- so it outlived every `stop`
+    # until this line. Same family as the dvl_bridge and t200_curve leaks
+    # above: a subscriber nobody stops, and the symptom is never "a process
+    # leaked", it is "the sim got slow". `stop` already kills `gz sim`, so a
+    # lingering gz topic echo is in scope.
+    'gz-transport-topic',
     'bin/ardusub',
 )
 killed = []
