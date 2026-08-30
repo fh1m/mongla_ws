@@ -539,3 +539,31 @@ are what put spurious small blobs in front of a bounding box across consecutive
 frames. `test_particulate.py` asserts both halves — that the field moves at all,
 and that it does not move so far in 100 ms that consecutive frames share no
 particles.
+
+## Lab loads a blank page: `/` is 200 but `/assets/index-<hash>.js` is 404
+
+The served `index.html` is current and the assets it names are from the
+previous frontend build. Nothing logs an error — the page is delivered, the
+browser then fails to fetch its own bundle, and the served directory looks
+populated because it is full of *older* hashed files.
+
+Cause: `colcon build` installs `index.html` as a **symlink back to source**, so
+it tracks every `npm run build` immediately — but `setup.py::_static_files()`
+enumerates the hashed asset **filenames** at colcon-build time. Rebuild the
+frontend without rebuilding the package and the two halves are from different
+builds.
+
+`server._static_dir()` now rejects a candidate directory whose `index.html`
+references assets that are not in it, and falls through to the next candidate
+(the source `static/`, which is always self-consistent). So the lab serves a
+working page either way, and prints a WARNING naming the stale directory.
+
+To clear the warning properly, rebuild the package after a frontend build:
+
+```bash
+cd sim && ./build_sim.sh          # or: colcon build --base-paths src --packages-select duburi_sim_web
+```
+
+Note the installed `static/assets/` accumulates every past build's hashes plus
+dangling symlinks into `build/`. That is untidy, not broken — the page only
+ever loads the two names its own `index.html` cites.
