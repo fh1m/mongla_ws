@@ -185,7 +185,8 @@ class Duburi(VisionVerbs):
                  distance_provider=None,
                  heartbeat=None,
                  quick_settle=False,
-                 payload=None):
+                 payload=None,
+                 baro_calibration=True):
         """vision_state_provider(camera_name) -> VisionState | None.
 
         Injected by the manager so the facade can stay rclpy-free and
@@ -230,6 +231,7 @@ class Duburi(VisionVerbs):
         self.vision_state_provider = vision_state_provider
         self._heartbeat        = heartbeat
         self.quick_settle      = bool(quick_settle)
+        self._baro_calibration = bool(baro_calibration)
         self._payload          = payload
         self._distance_provider = distance_provider
         # Projection-axis hint for calc_distance: the LAST move_* verb sets this
@@ -1062,6 +1064,22 @@ class Duburi(VisionVerbs):
         """Shared baro re-zero body. `strict` fails on any problem (standalone
         verb); non-strict logs loudly and returns without raising (mission_reset
         hook -- must never break the reset's safety duties)."""
+        # Simulator opt-out. ArduSub SITL's barometer cannot be calibrated: it
+        # ACKs PREFLIGHT_CALIBRATION as ACCEPTED and, measured, either does
+        # nothing or re-zeros ground pressure treating water pressure as AIR --
+        # a few centimetres of hull draft became +20.3 m of apparent altitude,
+        # after which the simulated baro stopped tracking depth at all. So in
+        # sim this call is not a no-op, it is destructive, and running it would
+        # make `surface()` confirm while the hull sits 1.2 m down.
+        #
+        # The default is True: on the pool hull this calibration is real, it is
+        # what fixes the pre-dive Bar30 drift, and nothing here changes it. Only
+        # the sim launch turns it off.
+        if not self._baro_calibration:
+            self.log.info('[BARO ] depth calibration disabled '
+                          '(baro_calibration=false) -- skipping')
+            return self._make_result(not strict,
+                                     'calibrate_depth: disabled')
         # Disarmed gate: arm-state is the surface proxy. NEVER calibrate a diving
         # hull -- that zeroes depth at the wrong reference and set_depth(-1) then
         # drives to the wrong actual depth.

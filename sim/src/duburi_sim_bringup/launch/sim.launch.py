@@ -213,6 +213,11 @@ def generate_launch_description():
             description=f'Open a MAVProxy console on UDP {MAVLINK_GCS_PORT}.',
         ),
         DeclareLaunchArgument(
+            'depth_reference', default_value='true',
+            description='Zero the simulated depth reference against ground '
+                        'truth at startup. Off leaves the raw SITL offset, '
+                        'which breaks surface() and mission_reset.'),
+        DeclareLaunchArgument(
             'ardusub_params', default_value='duburi_sub.parm',
             description='Parameter overlay in duburi_sim_bringup/config. Use '
                         'duburi_sub_extnav.parm to test the ATT_POS_MOCAP path.',
@@ -323,6 +328,30 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('t200')),
     )
 
+    # Zero the depth reference at the surface -- the calibration SITL will not
+    # do. The vehicle spawns SUBMERGED (each course picks its own z), and
+    # ArduSub ACKs PREFLIGHT_CALIBRATION without zeroing, so `AHRS2.altitude`
+    # (the depth the stack reads) carries a constant per-course offset: -0.344 m
+    # on sauvc26_qualification. That breaks `surface()` (never confirms) and
+    # `mission_reset()` (baro re-zero refused). Runs once and exits.
+    #
+    # It listens on the GCS link, so it is skipped when MAVProxy wants that
+    # port -- two readers on one udpin steal each other's packets.
+    depth_ref = Node(
+        package='duburi_sim_bridge',
+        executable='depth_reference',
+        name='depth_reference',
+        parameters=[{
+            'gcs_port': MAVLINK_GCS_PORT,
+            'enabled': LaunchConfiguration('depth_reference'),
+        }],
+        output='screen',
+        condition=IfCondition(
+            PythonExpression([
+                "'", LaunchConfiguration('ardusub'), "' == 'true' and '",
+                LaunchConfiguration('mavproxy'), "' == 'false'"])),
+    )
+
     # Water current. Default 0 m/s so nothing changes unless a course or the
     # operator asks for it -- but the node always runs, so `ros2 param set
     # /water_current speed 0.08` turns the pool on mid-run without a restart.
@@ -427,7 +456,7 @@ def generate_launch_description():
             # Everything that talks to the FDM socket starts only once Gazebo has
             # proved it is serving one.
             RegisterEventHandler(
-                OnProcessExit(target_action=wait, on_exit=[ardusub, mavproxy])
+                OnProcessExit(target_action=wait, on_exit=[ardusub, mavproxy, depth_ref])
             ),
         ]
     )

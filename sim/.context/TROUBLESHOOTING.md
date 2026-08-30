@@ -567,3 +567,56 @@ cd sim && ./build_sim.sh          # or: colcon build --base-paths src --packages
 Note the installed `static/assets/` accumulates every past build's hashes plus
 dangling symlinks into `build/`. That is untidy, not broken — the page only
 ever loads the two names its own `index.html` cites.
+
+## `surface()` never confirms, and `mission_reset` refuses to re-zero the baro
+
+Both were one cause, and it was in the COURSE, not the autonomy code.
+
+The stack reads depth from `AHRS2.altitude` — the pool-verified hardware path.
+On the real vehicle that reads true depth because the hull is powered on
+*floating at the surface*, so the reference is captured there. Every sim course
+**spawned the vehicle submerged**, each at its own depth, so the reference was
+captured under water and every later reading carried a constant offset.
+Measured against Gazebo ground truth (steady to four decimals for 220 s,
+identical armed and disarmed):
+
+| course | spawn z | offset |
+|---|---|---|
+| `sauvc26_qualification` | −0.8 | **−0.344 m** |
+| `robosub26_full` | −0.5 | −0.044 m |
+| `sauvc26_final` | −0.3 | +0.016 m |
+
+The offset tracks the spawn depth. Consequences, which interlock:
+
+- `surface()` commands 0.0 m. ArduSub takes the hull up correctly — it controls
+  on **EKF3, whose altitude is accurate** (−0.007 against a true −0.036) — but
+  the readback plateaus near −0.4, so the verb never confirms.
+- `mission_reset()`'s baro re-zero is REFUSED: pre-cal −0.38 exceeds
+  `_BARO_SURFACE_BOUND_M` (0.30). **Do not widen that bound** — it catches a
+  real pool baro fault.
+
+**Fix: every course now spawns at −0.4 m**, near the surface like a real launch.
+Measured on the worst course afterwards: offset +0.017 m, `surface()` confirms
+in 12.3 s with the hull genuinely at −0.074 m, and depth readback tracks truth
+to 7 mm at −0.95 m.
+
+`depth_reference` (in `duburi_sim_bridge`, on by default) re-measures this at
+every startup and fails loudly if a new course spawns too deep. It only
+reports — see below for why it must never correct.
+
+### Two things that look like fixes and are not
+
+**`BARO_ALT_OFFSET`.** It zeroes the surface reading, and then the barometer
+**stops tracking depth**: measured, readback frozen at −0.030 m with the hull
+at −1.206 m, so `surface()` *CONFIRMED while 1.2 m down*. A false pass is worse
+than the hang it replaced.
+
+**Calibrating the baro.** ArduSub SITL **ACKs `MAV_CMD_PREFLIGHT_CALIBRATION`
+as ACCEPTED without calibrating** — the exact command `calibrate_depth` and
+QGC's "Calibrate Pressure" send. At best nothing happens; at worst it re-zeros
+ground pressure treating water pressure as *air*, and a few centimetres of hull
+draft became **+20.3 m** of apparent altitude, after which every depth verb was
+garbage. The sim launch therefore passes `baro_calibration:=false`
+(`stack.launch.py` → `bringup.launch.py` → the manager). **The pool default is
+unchanged and stays `true`** — on the real Bar30 that calibration is real and is
+what fixes the pre-dive drift.

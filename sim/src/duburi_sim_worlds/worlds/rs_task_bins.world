@@ -394,7 +394,7 @@ A DOWNWARD-camera task. The role image sits on each bin's floor facing up, so th
     <include>
       <uri>model://duburi_heavy</uri>
       <name>duburi</name>
-      <pose>-3 0 -0.7 0 0 0</pose>
+      <pose>-3 0 -0.4 0 0 0</pose>
     </include>
 
   </world>

@@ -394,7 +394,7 @@ The scored feature is the ASYMMETRY -- red-over-black on one side, black-over-re
     <include>
       <uri>model://duburi_heavy</uri>
       <name>duburi</name>
-      <pose>-6 0 -0.6 0 0 0</pose>
+      <pose>-6 0 -0.4 0 0 0</pose>
     </include>
 
   </world>

@@ -219,14 +219,27 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > 0.266 m and 0.200 m horizontal, along-track only 0.037/0.011 m — cross-track
 > heading drift dominates.
 >
-> **Sim depth readback is offset; the hull is not.** Depth comes from
-> `AHRS2.altitude` (secondary DCM) while ArduSub controls on EKF3. Measured error
-> **0.33 m at the surface, ~0.16 m at depth** — not constant. Consequences:
-> `surface()` never confirms (targets 0.00, AHRS2 plateaus ~−0.4) and
-> `mission_reset`'s baro re-zero is REFUSED (`|−0.36| > 0.30` surface bound), the
-> two interlocking. `set_depth` is fine in substance — true depth measured within
-> 2.5 cm of command. Pool floor is **1.6 m**; deeper targets bottom out. Do NOT
-> "fix" by changing the depth source: AHRS2 is the pool-verified hardware path.
+> **Depth readback was offset because every course SPAWNED THE HULL SUBMERGED —
+> fixed 2026-08-31.** Depth comes from `AHRS2.altitude`, and on the pool that
+> reads true because the hull is powered on *floating*, capturing its reference
+> at the surface. Each sim course spawned at its own depth, so the reference was
+> captured under water and the offset **tracked the spawn z**: −0.344 m at spawn
+> −0.8, −0.044 at −0.5, +0.016 at −0.3 (constant with depth, and identical armed
+> or disarmed — the earlier "0.33 at the surface, 0.16 at depth" was a
+> point-sampling artifact and is retracted). `surface()` never confirmed and
+> `mission_reset`'s re-zero was REFUSED (`|−0.38| > 0.30`), interlocking. Every
+> course now spawns at **−0.4 m**; measured after: offset **+0.017 m**,
+> `surface()` confirms in 12.3 s genuinely surfaced, readback tracks truth to
+> 7 mm at −0.95 m. `depth_reference` re-checks this at every startup and fails
+> loudly if a new course spawns too deep. **Two non-fixes, both measured:**
+> `BARO_ALT_OFFSET` zeroes the surface reading and then the baro **stops tracking
+> depth** (frozen at −0.03 m with the hull at −1.21 m — `surface()` CONFIRMED
+> while submerged); and ArduSub SITL **ACKs `PREFLIGHT_CALIBRATION` as ACCEPTED
+> without calibrating**, at worst re-zeroing ground pressure as *air* (+20.3 m of
+> apparent altitude), which is why the sim passes `baro_calibration:=false` —
+> **the pool default stays `true`**. Do NOT change the depth source or widen
+> `_BARO_SURFACE_BOUND_M`; both exist for real pool faults. Pool floor is
+> **1.6 m**; deeper targets bottom out.
 > Full table: [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
 >
 > **Water turbidity comes from `underwater_fx`, NOT the world's `<fog>`.** Measured
