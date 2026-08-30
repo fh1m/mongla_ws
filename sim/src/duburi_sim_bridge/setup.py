@@ -41,6 +41,7 @@ setup(
             'fault_injection = duburi_sim_bridge.fault_injection:main',
             'bno085_sim = duburi_sim_bridge.bno085_sim:main',
             'scoring = duburi_sim_bridge.scoring:main',
+            'depth_reference = duburi_sim_bridge.depth_reference:main',
         ],
     },
 )

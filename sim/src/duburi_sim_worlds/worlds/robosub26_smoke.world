@@ -383,7 +383,7 @@
     <include>
       <uri>model://duburi_heavy</uri>
       <name>duburi</name>
-      <pose>-8 0 -0.5 0 0 0</pose>
+      <pose>-8 0 -0.4 0 0 0</pose>
     </include>
 
   </world>

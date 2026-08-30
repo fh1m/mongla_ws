@@ -65,6 +65,11 @@ def generate_launch_description():
         DeclareLaunchArgument('bno085_port', default_value='auto',
                               description='BNO085 device, or "auto" to scan '
                                           'USB VID/PID.'),
+        DeclareLaunchArgument(
+            'baro_calibration', default_value='true',
+            description='Re-zero the barometer at the surface. TRUE on the pool '
+                        'hull. The simulator passes false: SITL ACKs the '
+                        'calibration and then stops tracking depth.'),
         DeclareLaunchArgument('payload_port', default_value='auto',
                               description='Payload board device, or "auto" to '
                                           'scan USB VID/PID.'),
@@ -121,6 +126,7 @@ def generate_launch_description():
             'nucleus_dvl_password': 'nortek',
             'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
             'payload_port':         LaunchConfiguration('payload_port'),
+            'baro_calibration':     LaunchConfiguration('baro_calibration'),
             'bno085_port':          LaunchConfiguration('bno085_port'),
         }],
     )

@@ -125,6 +125,13 @@ def generate_launch_description():
             'dvl_auto_connect': 'false',
             'payload_port': LaunchConfiguration('payload_port'),
             'bno085_port': LaunchConfiguration('bno085_port'),
+            # SITL's barometer cannot be calibrated: it ACKs
+            # PREFLIGHT_CALIBRATION and then stops tracking depth (measured:
+            # readback froze near 0 while the hull sat 1.2 m down, so surface()
+            # CONFIRMED while submerged -- a false pass, worse than the hang it
+            # replaced). mission_reset auto-runs that calibration, so it has to
+            # be off here. The pool default is unchanged.
+            'baro_calibration': 'false',
             'viewer': 'false',
         }.items(),
     )], scoped=True)

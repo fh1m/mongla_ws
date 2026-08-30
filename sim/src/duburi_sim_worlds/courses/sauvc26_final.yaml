@@ -30,7 +30,7 @@ scene:
 vehicle:
   model: duburi_heavy
   name: duburi
-  pose: [-11.8, 0.0, -0.3]
+  pose: [-11.8, 0.0, -0.4]
   yaw: 0.0
 
 props:

@@ -24,7 +24,7 @@ vehicle:
   name: duburi
   # Mid-water in the starting zone, facing +x toward the qualification gate.
   # Deep enough that the mesh is clearly under the surface in the Gazebo GUI.
-  pose: [-11.8, 0.0, -0.8]
+  pose: [-11.8, 0.0, -0.4]
   yaw: 0.0
 
 props:

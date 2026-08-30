@@ -171,6 +171,9 @@ class AUVManagerNode(Node):
         self.declare_parameter('bno085_port',          'auto')
         self.declare_parameter('bno085_baud',          115200)
         self.declare_parameter('payload_port',         'auto')
+        # Pool default True. The sim launch sets it False: ArduSub SITL's
+        # barometer ACKs PREFLIGHT_CALIBRATION and then stops tracking depth.
+        self.declare_parameter('baro_calibration',     True)
         self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
         self.declare_parameter('nucleus_dvl_port',     9000)
         self.declare_parameter('nucleus_dvl_password', 'nortek')
@@ -377,6 +380,9 @@ class AUVManagerNode(Node):
             distance_provider=self._distance_state_for,
             heartbeat=self.heartbeat,
             payload=self._payload,
+            # False only in simulation -- SITL's baro cannot be calibrated and
+            # the attempt is destructive. See Duburi._run_baro_calibration.
+            baro_calibration=self.get_parameter('baro_calibration').value,
         )
 
     def _distance_state_for(self):

@@ -18,7 +18,7 @@ vehicle:
   name: duburi
   # Mid-pool at mid-depth, well clear of the walls and floor so a step response
   # is not contaminated by ground effect or contacts.
-  pose: [0.0, 0.0, -0.8]
+  pose: [0.0, 0.0, -0.4]
   yaw: 0.0
 
 props: []

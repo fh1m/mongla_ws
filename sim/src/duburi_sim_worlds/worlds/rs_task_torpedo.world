@@ -394,7 +394,7 @@ Both openings are real gaps a torpedo passes through, not painted circles. Maxim
     <include>
       <uri>model://duburi_heavy</uri>
       <name>duburi</name>
-      <pose>-3.5 0 -0.9 0 0 0</pose>
+      <pose>-3.5 0 -0.4 0 0 0</pose>
     </include>
 
   </world>

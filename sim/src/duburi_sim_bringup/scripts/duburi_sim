@@ -101,6 +101,7 @@ patterns = (
     'lib/duburi_sim_bridge/fault_injection',
     'lib/duburi_sim_bridge/bno085_sim',
     'lib/duburi_sim_bridge/scoring',
+    'lib/duburi_sim_bridge/depth_reference',
     'lib/duburi_sim_scenarios/prop_manager',
     'duburi_sim_worlds/worlds',
     'ros_gz_image/image_bridge',
