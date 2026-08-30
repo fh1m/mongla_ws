@@ -62,6 +62,30 @@ def _scripts_dir() -> Path:
         return PKG / 'scripts'
 
 
+def _static_complete(root: Path) -> bool:
+    """Does this build directory hold the assets its own index.html names?
+
+    The installed share/ copy can hold a CURRENT index.html beside STALE
+    assets: colcon installs index.html as a symlink back to source (so it
+    tracks every `npm run build`), while the hashed asset filenames are
+    enumerated by setup.py at *colcon build* time. Rebuild the frontend
+    without rebuilding the package and the page still serves 200 while every
+    `/assets/index-<hash>.js` it references 404s -- a blank app, no error.
+    So a candidate only counts when it is internally consistent.
+    """
+    index = root / 'index.html'
+    if not index.is_file():
+        return False
+    try:
+        html = index.read_text()
+    except OSError:
+        return False
+    for ref in re.findall(r'(?:src|href)="/(assets/[^"]+)"', html):
+        if not (root / ref).is_file():
+            return False
+    return True
+
+
 def _static_dir() -> Optional[Path]:
     candidates = [
         PKG / 'static',
@@ -74,7 +98,14 @@ def _static_dir() -> Optional[Path]:
     except Exception:
         pass
     for c in candidates:
+        if _static_complete(c):
+            return c
+    # Nothing consistent -- fall back to any index.html at all rather than
+    # serving no UI, and say why.
+    for c in candidates:
         if (c / 'index.html').is_file():
+            print(f'[lab ] WARNING: {c} index.html references assets that are '
+                  f'not installed -- run sim/build_sim.sh', file=sys.stderr)
             return c
     return None
 
