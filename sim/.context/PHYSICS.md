@@ -455,3 +455,101 @@ Unlike the T200 curve, these coefficients are **modelled, not measured** — Blu
 Robotics publish bollard-pull data only, which by definition contains no speed
 dependence. `alpha_2` comes from open-propeller theory and puts zero thrust at
 J = 1.67.
+
+---
+
+## Props that react — dynamic, self-righting, and damped
+
+Until now **every prop except the balls was `<static>true</static>`**. A static
+body still *generates* contact, so the vehicle stopped dead at a flare — it
+just has no mass in the solver and cannot be pushed. That reads as "the sim has
+collisions" and is not the same thing.
+
+The knockable set is now dynamic: the three SAUVC bump flares and the RoboSub
+slalom sets. Heavy structures (gate frame, torpedo board, bins, drums) stay
+static but got back the collisions they were missing.
+
+### Net-negative and top-buoyant, not "buoyant and moored"
+
+The obvious design — make it buoyant and tether it — does not work. **A
+net-buoyant free body just accelerates upward until it hits the surface**,
+because buoyancy supplies no restoring force in *translation*. What works is
+the opposite pairing:
+
+    net weight NEGATIVE          -> it presses on the floor and stays put
+    centre of BUOYANCY above
+    centre of MASS               -> it rights itself from any tilt
+
+Those are compatible: dense low ballast, near-buoyant volume above it. The
+flare, computed from its own geometry rather than chosen:
+
+| | value |
+|---|---|
+| mass / displacement | 0.640 kg / 0.292 kg |
+| net weight in water | **0.348 kg down** |
+| centre of mass | z = 0.0425 m |
+| centre of buoyancy | z = 0.2721 m — **0.230 m above** |
+| righting couple | **0.513 · sin θ N·m**, positive at every angle |
+
+It also rights from **flat**: the CoM sits 0.0425 m up standing and 0.060 m up
+lying on its side, so gravity alone has no barrier, and the buoyancy couple is
+pure gain on top.
+
+### A dynamic model must be WELDED
+
+`prop_library.py` had **zero `<joint>` elements**, because `<static>true</static>`
+welds every link to the world implicitly. Drop that and an 11-link flare is
+**eleven free bodies** that fly apart on the first step, silently. Every
+dynamic prop now carries fixed joints (`weld_all`).
+
+### Without drag it rings forever
+
+Only the vehicle carried hydrodynamics, so a knocked prop moved like a body in
+*air*. Measured on the first working version:
+
+| | peak tilt | at t = 24 s |
+|---|---|---|
+| no drag | 87.6° | **still swinging 25°** |
+| Fossen drag on the pole | 15.4° | **at rest by t = 3 s** |
+
+The golf ball comes off either way (0.664 m drop with drag), but a flare that
+never stops moving ejects balls spontaneously afterwards. Coefficients come
+from the prop's own dimensions (`rod_drag`), not from taste: transverse
+`½ρC_dA`, rotational `½ρC_d·d·L⁴/4`. Added mass is deliberately absent, as on
+the vehicle — it belongs in `<fluid_added_mass>` and setting both double-counts.
+
+Props share the **bare `/ocean_current`** with the vehicle, so a hydrodynamics
+-enabled prop now feels the pool current too. At 0.05 m/s that is a ~0.7° lean.
+
+### Two traps this closes
+
+**The registry flag and `<static>` are set in two places.** `meta["dynamic"]`
+only decides the buoyancy whitelist; whether a body moves is decided by
+`model(..., static=)` in the build function. Disagree and nothing errors — a
+prop marked dynamic but built static gets buoyancy applied to something that
+cannot move, and one built dynamic without the flag gets **no buoyancy at all**
+and sinks. `build_props` now refuses on either mismatch (verified by flipping
+one flag and confirming the generator stops).
+
+**DART's own collision detector silently returns false for cylinder-box**, and
+the flare's base disc on the pool floor is exactly that pair. If anyone reverts
+`collision_detector` to `dart` for the measured 5 %, **every flare falls
+through the floor.**
+
+### Collisions restored
+
+Links the hull was driving through: the gate role signs and its red divider
+(305 mm and 610 mm boards hanging in the gate mouth — without them the gate is
+one wide opening and side-selection is not a task), the bin role panels, and
+the **entire bins pipework**, which was scenery on the argument that nothing in
+the task pushes the frame. True of the task, false of the vehicle, which was
+descending straight through it. An approach that only works because the sim
+lets the hull occupy the structure is an approach that fails in the pool.
+
+### Contact surfaces
+
+Nothing in this tree set `<friction>` before — fine while every prop was static
+and could not slide, load-bearing the moment one can. Ballast discs carry
+µ = 0.8 in **both** the `<ode>` and `<bullet>` blocks, since the world runs
+DART with bullet's collision detector and which one reads the value is not
+worth guessing at.

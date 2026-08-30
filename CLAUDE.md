@@ -456,6 +456,55 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > averages). Verified against ground truth: median 5.4° error, 7 % ghosts. Full
 > detail: [`sim/.context/ROBOSUB_AND_ACOUSTICS.md`](sim/.context/ROBOSUB_AND_ACOUSTICS.md).
 >
+> **PROPS REACT NOW.** Every prop but the balls was `<static>true</static>` — a
+> static body *generates* contact (so the hull stopped dead at a flare) but has
+> no mass in the solver and **cannot be pushed**. The knockable set (SAUVC bump
+> flares, RoboSub slalom) is dynamic, and the links a hull was driving straight
+> through are solid again: gate role signs, the gate's red divider, bin panels
+> and the **whole bins pipework**. The design is **net weight negative + centre
+> of buoyancy above centre of mass** — "buoyant and moored" does not work,
+> because a net-buoyant free body just rises. Flare: 0.348 kg down, CoB 0.230 m
+> above CoM, righting couple 0.513·sinθ N·m. **A dynamic multi-link model must
+> be WELDED** (`<static>` was the implicit weld; without joints an 11-link
+> flare is 11 free bodies). **And it needs drag or it rings forever** — measured
+> 87.6° peak still swinging 25° at t=24 s without, 15.4° and at rest by t=3 s
+> with. The registry `dynamic` flag and the `<static>` tag are set in two places
+> and `build_props` now **refuses** when they disagree (silent zero-buoyancy
+> otherwise). [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
+>
+> **The torpedo board's holes are the holes you can shoot through.** The texture
+> drew **four** openings, the collision cut **two**, in different places — a
+> shot lined up on the artwork struck solid board. Both now come from
+> `prop_library.torpedo_openings()`. The streaky washed-out render was
+> **z-fighting**: the 40 collision strips and the printed face were coplanar at
+> the same thickness and both drawn; strips are collision-only now, **45 visuals
+> → 3**. The two red standoff bars are gone — a bar's *height* cannot encode a
+> firing *distance*.
+>
+> **GAIN IS A PERCENTAGE, AND 100 % IS THE DEFAULT.** Nothing was clamping the
+> vehicle (full stick = PWM 1900 = `MOT_PWM_MAX`); it was `GAIN_DEFAULT = 0.55`
+> plus the T200 deadband, which makes 55 % of stick **39 % of thrust** and the
+> old 0.15 slider floor **4 %**. The UI now reads 1–100 % and shows what a
+> setting actually delivers. One floor (`teleop.GAIN_MIN = 0.10`) replaces three
+> that disagreed. **The view starts underwater behind the hull and follows it** —
+> `CameraTracking` was loaded with an empty body and tracked nothing; the target
+> is `duburi`, the world *instance* name (the model is `duburi_heavy`, which
+> silently follows nothing). `duburi_sim view free|chase` breaks out and back.
+>
+> **THE WHOLE COURSE IS SCORED NOW, against both rulebooks.** `rulebook.py`
+> holds each published line item with its citation, and the lab has a **score**
+> page: what was earned, the evidence, what remains. **Both maxima are always
+> shown** — SAUVC 230 reachable of 310, RoboSub 14700 of 21800 — because a total
+> that quietly counts unreachable points reads like a competition result.
+> Not modelled and *said so*: octagon object handling (4900 — **no manipulator
+> on the sim vehicle**), IVC (1000, phase 2), bin lights (1000, no rule text).
+> **Geometry now comes from the course**: the launch passed only the world name,
+> so every geometry param ran at its `robosub26_full` default and the scorer
+> watched for a gate at x=−5 on all 13 courses. **Penalties are edge-triggered**
+> from ground truth (two touches over 8.0 s gave exactly two −5s, not sixty).
+> The run clock **starts on arm**, and the card is written to `DUBURI_RUN_DIR`
+> beside the mission scorecards. [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
+>
 > **Props follow the SAUVC rulebook** and every prop can be spawned anywhere at
 > runtime: `ros2 run duburi_sim_scenarios props add <model> <name> <x> <y>`.
 > Six courses, three of them single-task. Textures are generated

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <sdf version="1.9">
   <model name="sauvc_flare_yellow">
-    <static>true</static>
+    <static>false</static>
     <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
       <label>5</label>
     </plugin>
@@ -9,11 +9,11 @@
       <pose>0 0 0.4 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.1</mass>
+        <mass>0.02</mass>
         <inertia>
-          <ixx>0.00533493</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00533493</iyy><iyz>0</iyz>
-          <izz>3.2e-06</izz>
+          <ixx>0.00106699</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00106699</iyy><iyz>0</iyz>
+          <izz>6.4e-07</izz>
         </inertia>
       </inertial>
       <visual name="pole_visual">
@@ -35,11 +35,11 @@
       <pose>0 0 0.803 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
+        <mass>0.008</mass>
         <inertia>
-          <ixx>6.4318e-06</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>6.4318e-06</iyy><iyz>0</iyz>
-          <izz>1.25636e-05</izz>
+          <ixx>1.02909e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>1.02909e-06</iyy><iyz>0</iyz>
+          <izz>2.01018e-06</izz>
         </inertia>
       </inertial>
       <visual name="cup_floor_visual">
@@ -61,11 +61,11 @@
       <pose>0 0 0.005 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.2</mass>
+        <mass>0.6</mass>
         <inertia>
-          <ixx>0.000181667</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000181667</iyy><iyz>0</iyz>
-          <izz>0.00036</izz>
+          <ixx>0.000545</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000545</iyy><iyz>0</iyz>
+          <izz>0.00108</izz>
         </inertia>
       </inertial>
       <visual name="base_visual">
@@ -81,17 +81,23 @@
       <collision name="base_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.06</radius><length>0.01</length></cylinder></geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            <bullet><friction>0.8</friction><friction2>0.8</friction2></bullet>
+          </friction>
+        </surface>
       </collision>
     </link>
     <link name="cup_rim_0">
       <pose>0.019642 0 0.812 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_0_visual">
@@ -113,11 +119,11 @@
       <pose>0.013889 0.013889 0.812 0 0 0.785398</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_1_visual">
@@ -139,11 +145,11 @@
       <pose>1.20273e-18 0.019642 0.812 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_2_visual">
@@ -165,11 +171,11 @@
       <pose>-0.013889 0.013889 0.812 0 0 2.35619</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_3_visual">
@@ -191,11 +197,11 @@
       <pose>-0.019642 2.40545e-18 0.812 0 0 3.14159</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_4_visual">
@@ -217,11 +223,11 @@
       <pose>-0.013889 -0.013889 0.812 0 0 3.92699</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_5_visual">
@@ -243,11 +249,11 @@
       <pose>-3.60818e-18 -0.019642 0.812 0 0 4.71239</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_6_visual">
@@ -269,11 +275,11 @@
       <pose>0.013889 -0.013889 0.812 0 0 5.49779</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>0.01</mass>
+        <mass>0.0015</mass>
         <inertia>
-          <ixx>4.45622e-07</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>2.26667e-07</iyy><iyz>0</iyz>
-          <izz>2.45622e-07</izz>
+          <ixx>6.68433e-08</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.4e-08</iyy><iyz>0</iyz>
+          <izz>3.68433e-08</izz>
         </inertia>
       </inertial>
       <visual name="cup_rim_7_visual">
@@ -291,5 +297,55 @@
         <geometry><box><size>0.004 0.0166957 0.016</size></box></geometry>
       </collision>
     </link>
+    <joint name="base_pole_fix" type="fixed">
+      <parent>base</parent>
+      <child>pole</child>
+    </joint>
+    <joint name="base_cup_floor_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_floor</child>
+    </joint>
+    <joint name="base_cup_rim_0_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_0</child>
+    </joint>
+    <joint name="base_cup_rim_1_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_1</child>
+    </joint>
+    <joint name="base_cup_rim_2_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_2</child>
+    </joint>
+    <joint name="base_cup_rim_3_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_3</child>
+    </joint>
+    <joint name="base_cup_rim_4_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_4</child>
+    </joint>
+    <joint name="base_cup_rim_5_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_5</child>
+    </joint>
+    <joint name="base_cup_rim_6_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_6</child>
+    </joint>
+    <joint name="base_cup_rim_7_fix" type="fixed">
+      <parent>base</parent>
+      <child>cup_rim_7</child>
+    </joint>
+    <plugin filename="gz-sim-hydrodynamics-system" name="gz::sim::systems::Hydrodynamics">
+      <link_name>pole</link_name>
+      <water_density>1000.0</water_density>
+      <xUabsU>-6.4</xUabsU>
+      <yVabsV>-6.4</yVabsV>
+      <zWabsW>-0.100531</zWabsW>
+      <kPabsP>-0.8192</kPabsP>
+      <mQabsQ>-0.8192</mQabsQ>
+      <nRabsR>-0.8192</nRabsR>
+    </plugin>
   </model>
 </sdf>

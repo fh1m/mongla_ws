@@ -724,3 +724,43 @@ a {
   width: 42px; text-align: right; font-variant-numeric: tabular-nums;
   opacity: 0.75;
 }
+
+/* --- score page ---------------------------------------------------------
+   Three states have to be distinguishable at a glance, because the whole
+   point is telling "we did not do this" from "this cannot be done here":
+   earned is inked, available is muted, not-modelled is struck through. */
+.score-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-3); }
+.score-total { text-align: right; line-height: 1.2; }
+.score-total strong { display: block; font-size: 2.4rem; letter-spacing: -0.02em; }
+.score-total em { display: block; font-style: normal; color: var(--muted); font-size: 0.8rem; }
+.score-total em.tiny { font-size: 0.7rem; opacity: 0.75; }
+
+.score-bar { height: 4px; background: var(--line); margin: var(--sp-2) 0 var(--sp-3); }
+.score-bar i { display: block; height: 100%; background: var(--ink); }
+
+.score-facts { list-style: none; display: flex; gap: var(--sp-4); flex-wrap: wrap; margin: 0; padding: 0; }
+.score-facts li { font-size: 0.85rem; }
+.score-facts span { display: block; color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.score-abort { margin-top: var(--sp-2); font-weight: 600; color: #a11; }
+
+.score-list { list-style: none; margin: 0; padding: 0; }
+.score-item { display: grid; grid-template-columns: 1.4rem 1fr auto; gap: var(--sp-2);
+              padding: 0.3rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.score-item:last-child { border-bottom: 0; }
+.score-item .tick { color: var(--muted); }
+.score-item .pts { font-variant-numeric: tabular-nums; color: var(--muted); }
+.score-item .what em { display: block; font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.score-item .what em.evidence::before { content: '↳ '; }
+
+.score-item.got { color: var(--ink); }
+.score-item.got .tick, .score-item.got .pts { color: var(--ink); font-weight: 600; }
+.score-item.dead { opacity: 0.45; }
+.score-item.dead .what { text-decoration: line-through; text-decoration-thickness: 1px; }
+.score-item.dead .what em { text-decoration: none; }
+.score-item.pen .tick, .score-item.pen .pts { color: #a11; font-weight: 600; }
+
+.score-remaining { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.85rem; }
+
+/* gain reads as a percentage now, with what it actually delivers under it */
+.gain span em { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); }

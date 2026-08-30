@@ -73,9 +73,13 @@ import threading
 import time
 
 import rclpy
+import yaml
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from std_msgs.msg import Int32, String
+
+from . import rulebook
+from .paths import runtime_dir
 
 
 
@@ -146,6 +150,135 @@ class AxisStyle:
                 'quadrant': self.current}
 
 
+def _course_yaml(world: str) -> dict:
+    """The course definition a running world was generated from."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        path = os.path.join(get_package_share_directory('duburi_sim_worlds'),
+                            'courses', f'{world}.yaml')
+        with open(path) as fh:
+            return yaml.safe_load(fh) or {}
+    except Exception:
+        return {}
+
+
+def _spec_yaml(competition: str) -> dict:
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        path = os.path.join(get_package_share_directory('duburi_sim_worlds'),
+                            'spec', f'{competition}.yaml')
+        with open(path) as fh:
+            return yaml.safe_load(fh) or {}
+    except Exception:
+        return {}
+
+
+def _resolve_competition(world: str) -> str:
+    """Which rulebook a running course is scored against.
+
+    `competition:` is a course-yaml key that the world GENERATOR consumes and
+    never writes into the .world, so at runtime there is nothing to read and
+    the web UI had resorted to prefix-matching the course name. Read the course
+    file back and apply the generator's own fallback chain, so the two cannot
+    disagree: competition -> pool -> sauvc.
+    """
+    try:
+        course = _course_yaml(world)
+        return course.get('competition', course.get('pool', 'sauvc'))
+    except Exception:
+        return 'sauvc'
+
+
+class Scorecard:
+    """What the run has earned, against one competition's table.
+
+    Awards are IDEMPOTENT per key: passing the gate twice is one gate score,
+    and the scorer calls `award` freely from a 2 Hz timer without having to
+    remember whether it already did. Items the rulebook allows more than once
+    (two markers, two torpedoes, eight style rotations) carry a `repeat` cap
+    and count up to it.
+    """
+
+    def __init__(self, competition: str) -> None:
+        self.competition = competition
+        self.rules = rulebook.book(competition)
+        self._earned = {}       # key -> {'count': n, 'evidence': [...]}
+        self._penalties = []
+        self._bonus = {}        # computed values (timing), key -> points
+
+    def _item(self, key):
+        for task in self.rules['tasks']:
+            for it in task['items']:
+                if it['key'] == key:
+                    return it
+        return None
+
+    def award(self, key, evidence='') -> bool:
+        """Record one achievement. False if it was already at its cap."""
+        it = self._item(key)
+        if it is None:
+            return False
+        rec = self._earned.setdefault(key, {'count': 0, 'evidence': []})
+        if rec['count'] >= it['repeat']:
+            return False
+        rec['count'] += 1
+        if evidence:
+            rec['evidence'].append(evidence)
+        return True
+
+    def penalise(self, key, evidence='') -> None:
+        for it in self.rules['penalties']:
+            if it['key'] == key:
+                self._penalties.append(
+                    {'key': key, 'label': it['label'],
+                     'points': it['points'], 'evidence': evidence})
+                return
+
+    def set_bonus(self, key, points) -> None:
+        self._bonus[key] = points
+
+    @property
+    def total(self) -> float:
+        t = 0.0
+        for key, rec in self._earned.items():
+            it = self._item(key)
+            if it is not None and it['state'] == rulebook.SCORED:
+                t += it['points'] * rec['count']
+        t += sum(self._bonus.values())
+        t += sum(p['points'] for p in self._penalties)
+        return round(t, 2)
+
+    def snapshot(self) -> dict:
+        full, reach = rulebook.maxima(self.rules)
+        tasks = []
+        for task in self.rules['tasks']:
+            items = []
+            for it in task['items']:
+                rec = self._earned.get(it['key'], {'count': 0, 'evidence': []})
+                items.append({
+                    'key': it['key'], 'label': it['label'],
+                    'points': it['points'], 'repeat': it['repeat'],
+                    'state': it['state'], 'note': it['note'],
+                    'count': rec['count'],
+                    'evidence': rec['evidence'],
+                    'earned': (self._bonus.get(it['key'])
+                               if it['key'] in self._bonus
+                               else it['points'] * rec['count']
+                               if it['state'] == rulebook.SCORED else 0),
+                })
+            tasks.append({'key': task['key'], 'label': task['label'],
+                          'items': items})
+        return {
+            'competition': self.competition,
+            'name': self.rules['name'],
+            'total': self.total,
+            'max_rulebook': full,
+            'max_reachable': reach,
+            'tasks': tasks,
+            'penalties': self._penalties,
+        }
+
+
 class Scoring(Node):
     def __init__(self) -> None:
         super().__init__('scoring')
@@ -183,6 +316,18 @@ class Scoring(Node):
         self.declare_parameter('bin_y', 0.0)
         self.declare_parameter('bin_size', [0.61, 0.305])
         self.declare_parameter('score_payload', True)
+        # Pool geometry, for the contact penalties. SAUVC deducts 5 points per
+        # touch of the bottom or a wall and 2 for touching the gate, and
+        # nothing detected either before -- the one part of its table a
+        # practice run can actually lose points on.
+        self.declare_parameter('pool_length', 25.0)
+        self.declare_parameter('pool_width', 16.0)
+        self.declare_parameter('pool_depth', 1.6)
+        self.declare_parameter('pool_edge_depth', 0.0)
+        self.declare_parameter('contact_margin', 0.18)
+        # 'start' / 'stop' / 'reset'. Both time bonuses need a run clock, and
+        # the run does not begin when the node does.
+        self.declare_parameter('run', '')
 
         self._world = self.get_parameter('world').value
         self._vehicle = self.get_parameter('vehicle').value
@@ -211,6 +356,20 @@ class Scoring(Node):
         self._shot_results = []
         self._shot_z_cache = {}
 
+        self._competition = _resolve_competition(self._world)
+        self._card = Scorecard(self._competition)
+        self._adopt_course_geometry()
+        self._run_t0 = None
+        self._run_end = None
+        self._touching = False
+        self._touch_s = 0.0
+        self._touch_n = 0
+        self._last_tick = None
+        self._card_path = None
+
+        self.get_logger().info(
+            f'[SCORE] scoring {self._world} against {self._card.rules["name"]}')
+
         self._gz_connect()
         self._pub = self.create_publisher(String, SCORE_TOPIC, 10)
         # The timer runs unconditionally and no-ops on an empty sequence. The
@@ -222,10 +381,22 @@ class Scoring(Node):
         self.create_timer(0.5, self._score_shots)
         self.create_subscription(Int32, '/duburi/sim/payload/fired',
                                  self._on_fired, 10)
+        # The run starts when the vehicle arms, because that is when a
+        # competition run starts. Waiting for an operator to remember a param
+        # would mean every scorecard's time bonus was quietly wrong.
+        try:
+            from duburi_interfaces.msg import DuburiState
+            self.create_subscription(DuburiState, '/duburi/state',
+                                     self._on_state, 10)
+        except ImportError:
+            self.get_logger().info(
+                '[SCORE] duburi_interfaces not on the path -- start the run '
+                "clock by hand: ros2 param set /scoring run start")
         if seq:
             self.get_logger().info(
                 f'[SCORE] flare sequence to hit: {" -> ".join(seq)}')
         self.add_on_set_parameters_callback(self._on_params)
+        self.create_timer(0.5, self._check_contact)
         self.create_timer(0.5, self._publish)
         self.create_timer(10.0, self._report)
 
@@ -298,6 +469,15 @@ class Scoring(Node):
         self._side = side
         self._transits.append({'side': side, 'depth_m': round(z, 3),
                                'y_m': round(y - gy, 3)})
+        # First crossing is the gate, the second is Return Home -- the same
+        # gate scores twice in RoboSub and the rulebook counts them apart.
+        if len(self._transits) == 1:
+            self._card.award('gate_pass', f'{side} side at {z:.2f} m')
+            if self._competition == 'robosub':
+                self._card.award('gate_control', self._control_evidence())
+                self._card.award('random_role', f'took the {side} side')
+        elif len(self._transits) == 2:
+            self._card.award('return_home', f'back through at {z:.2f} m')
         self.get_logger().warn(
             f'[SCORE] GATE TRANSIT on the {side} side at {z:.2f} m '
             f'({y - gy:+.2f} m off centre) -- that is the role for this run')
@@ -395,6 +575,7 @@ class Scoring(Node):
                 order = len(self._flare_hits)
                 expected = self._flare_expected[order]
                 ok = expected == colour
+                self._card.award('flare_bump', f'{colour} ({order + 1} of 3)')
                 self._flare_hits.append({
                     'colour': colour, 'position': order + 1,
                     'in_order': ok, 't': round(time.time(), 1),
@@ -492,11 +673,52 @@ class Scoring(Node):
         result['distance_band'] = ('farther' if rng >= farther
                                    else 'far' if rng >= far else 'near')
         self._shot_results.append(result)
+        self._award_shot(result)
         self.get_logger().warn(
             f"[SCORE] {shot['kind'].upper()} {result['outcome'].upper()} "
             f"-- fired from {rng:.2f} m ({result['distance_band']})"
             + (f", opening {result['opening']}" if result.get('opening')
                else ''))
+
+    def _award_shot(self, result: dict) -> None:
+        """Score a graded shot against the table.
+
+        The distance bonuses are ADDITIVE on a scoring shot, not alternatives:
+        a torpedo through an opening from "farther" earns the pass-through and
+        the band. A shot that misses earns neither, however far away it was
+        fired from -- the band rewards a hard shot, not a distant one.
+        """
+        band, ev = result.get('distance_band'), f"{result['fired_range_m']:.2f} m"
+        if result['kind'] == 'torpedo':
+            if result['outcome'] != 'through':
+                return
+            self._card.award('torp_any', f"{result['opening']} opening, {ev}")
+            if band == 'farther':
+                self._card.award('torp_farther', ev)
+            elif band == 'far':
+                self._card.award('torp_far', ev)
+            # "Larger opening first, then smaller."
+            hits = [r for r in self._shot_results
+                    if r['kind'] == 'torpedo' and r['outcome'] == 'through']
+            if [h.get('opening') for h in hits] == ['large', 'small']:
+                self._card.award('torp_sequence', 'large then small')
+        elif result['outcome'] == 'in_bin':
+            if self._competition == 'robosub':
+                self._card.award('bin_any', ev)
+            else:
+                self._card.award('drum_red', ev)
+
+    def _control_evidence(self) -> str:
+        """Evidence for "maintain control" -- heading held across the transit.
+
+        The handbook draws the line at actively holding a heading versus
+        drifting through, so the honest report is the heading the vehicle was
+        actually on when it crossed. A number an operator can dispute beats a
+        bare tick.
+        """
+        if self._pose is None:
+            return 'no pose'
+        return f'heading {math.degrees(self._pose[5]):.0f} deg at the gate'
 
     def _grade_torpedo(self, shot: dict) -> dict:
         """Through an opening, or merely on the board?"""
@@ -582,6 +804,8 @@ class Scoring(Node):
             if p.name == 'coin' and str(p.value or '').strip():
                 self._coin = None
                 self._do_coin_once(str(p.value).strip().lower())
+            elif p.name == 'run' and str(p.value).strip():
+                self._run_control(str(p.value).strip().lower())
         return SetParametersResult(successful=True)
 
     def snapshot(self) -> dict:
@@ -603,9 +827,212 @@ class Scoring(Node):
                     and len(self._flare_hits) == len(self._flare_expected)
                     and all(h['in_order'] for h in self._flare_hits)),
             },
+            'run': {
+                'competition': self._competition,
+                'running': self._run_t0 is not None and self._run_end is None,
+                'elapsed_s': round(self._elapsed(), 1),
+                'limit_s': self._card.rules['run_seconds'],
+                'contact_s': round(self._touch_s, 1),
+                'touches': self._touch_n,
+                'aborted': self._abort_reason(),
+            },
+            'card': self._card.snapshot(),
         }
 
+    def _adopt_course_geometry(self) -> None:
+        """Take the gate, board, bin and pool geometry FROM THE COURSE.
+
+        These were defaults matching `robosub26_full`, and the launch passed
+        only the world name -- so on the other twelve courses the scorer was
+        watching for a gate transit at x = -5 when the gate was somewhere else
+        entirely, and reported "not transited" for a run that went through it.
+        Nothing logged, because nothing was wrong: it was looking exactly where
+        it had been told to.
+
+        An explicitly-set parameter still wins, so a course with an unusual
+        layout can be corrected without editing it.
+        """
+        course = _course_yaml(self._world)
+        spec = _spec_yaml(self._competition)
+        if not course:
+            return
+        pool = spec.get('pool', {})
+        overrides = {}
+        if pool:
+            overrides['pool_length'] = float(pool.get('length', 25.0))
+            overrides['pool_width'] = float(pool.get('width', 16.0))
+            overrides['pool_depth'] = float(pool.get('depth', 1.6))
+            overrides['pool_edge_depth'] = float(pool.get('floor_edge_depth', 0.0))
+
+        for entry in course.get('props') or []:
+            model = str(entry.get('model', ''))
+            xy = entry.get('xy') or [0.0, 0.0]
+            if 'gate' in model:
+                overrides['gate_x'], overrides['gate_y'] = float(xy[0]), float(xy[1])
+            elif 'torpedo' in model:
+                overrides['board_x'], overrides['board_y'] = float(xy[0]), float(xy[1])
+            elif 'bins' in model or 'drum' in model:
+                overrides.setdefault('bin_x', float(xy[0]))
+                overrides.setdefault('bin_y', float(xy[1]))
+
+        board = (spec.get('props') or {}).get('torpedo_board') or {}
+        if board:
+            overrides['standoff_far'] = float(board.get('standoff_far', 1.0))
+            overrides['standoff_farther'] = float(board.get('standoff_farther', 1.5))
+
+        from rclpy.parameter import Parameter
+        if overrides:
+            self.set_parameters([Parameter(k, value=v)
+                                 for k, v in overrides.items()])
+            self.get_logger().info(
+                f'[SCORE] geometry from {self._world}: '
+                f'gate x={overrides.get("gate_x", "?")} '
+                f'board x={overrides.get("board_x", "?")} '
+                f'pool {overrides.get("pool_length", "?")}'
+                f'x{overrides.get("pool_width", "?")}'
+                f'x{overrides.get("pool_depth", "?")} m')
+
+    def _on_state(self, msg) -> None:
+        armed = bool(getattr(msg, 'armed', False))
+        if armed and self._run_t0 is None:
+            self._run_control('start')
+        elif not armed and self._run_t0 and not self._run_end:
+            self._run_control('stop')
+
+    # -- run clock ---------------------------------------------------------
+
+    def _elapsed(self) -> float:
+        if self._run_t0 is None:
+            return 0.0
+        return (self._run_end or time.time()) - self._run_t0
+
+    def _abort_reason(self):
+        """SAUVC aborts a run on sustained or repeated pool contact."""
+        limit_s = self._card.rules.get('abort_contact_s')
+        limit_n = self._card.rules.get('abort_touches')
+        if limit_s and self._touch_s > limit_s:
+            return f'{self._touch_s:.1f} s of pool contact (limit {limit_s})'
+        if limit_n and self._touch_n > limit_n:
+            return f'{self._touch_n} touches (limit {limit_n})'
+        return None
+
+    def _run_control(self, action: str) -> None:
+        if action == 'start':
+            self._run_t0, self._run_end = time.time(), None
+            self.get_logger().info('[SCORE] run clock started')
+        elif action == 'stop' and self._run_t0 and not self._run_end:
+            self._run_end = time.time()
+            self._score_time_bonus()
+            self._write_card()
+            self.get_logger().info(
+                f'[SCORE] run ended at {self._elapsed():.1f} s -- '
+                f'{self._card.total:.1f} points')
+        elif action == 'reset':
+            self._card = Scorecard(self._competition)
+            self._run_t0 = self._run_end = None
+            self._touch_s = 0.0
+            self._touch_n = 0
+            self.get_logger().info('[SCORE] scorecard reset')
+
+    def _score_time_bonus(self) -> None:
+        """The two competitions compute this differently; both need the clock."""
+        left = max(0.0, self._card.rules['run_seconds'] - self._elapsed())
+        if self._competition == 'robosub':
+            # "whole minutes remaining plus fractional seconds", x100.
+            self._card.award('time', f'{left:.0f} s remaining')
+            self._card.set_bonus('time', round(left / 60.0 * 100.0, 2))
+        else:
+            # SAUVC: (900 - run) x 0.03, and only with two tasks complete.
+            self._card.award('timing', f'{self._elapsed():.0f} s run')
+            self._card.set_bonus('timing', round(left * 0.03, 2))
+
+    # -- penalties ---------------------------------------------------------
+
+    def _check_contact(self) -> None:
+        """Pool bottom / wall contact, from ground truth rather than a sensor.
+
+        There is no contact sensor in the world template, and adding one would
+        report every physics step rather than every touch. Proximity to the
+        pool shell is cheaper, survives a restart, and -- the part that matters
+        -- is EDGE TRIGGERED: a penalty lands once when the hull arrives at the
+        wall, not sixty times a second while it sits there. That distinction
+        is the whole difference between a -5 and a -300.
+        """
+        now = time.time()
+        dt = 0.0 if self._last_tick is None else now - self._last_tick
+        self._last_tick = now
+        if self._pose is None or self._run_t0 is None or self._run_end:
+            return
+        x, y, z = self._pose[0], self._pose[1], self._pose[2]
+        m = float(self.get_parameter('contact_margin').value)
+        half_l = float(self.get_parameter('pool_length').value) / 2.0
+        half_w = float(self.get_parameter('pool_width').value) / 2.0
+        floor = -self._floor_depth(x)
+        touching = (abs(x) > half_l - m or abs(y) > half_w - m
+                    or z < floor + m)
+        if touching:
+            self._touch_s += dt
+            if not self._touching:
+                self._touch_n += 1
+                where = ('the floor' if z < floor + m else 'a wall')
+                self._card.penalise('touch_pool', f'{where} at {self._elapsed():.0f} s')
+                self.get_logger().warning(
+                    f'[SCORE] PENALTY: touched {where} '
+                    f'(touch {self._touch_n}, {self._touch_s:.1f} s total)')
+        self._touching = touching
+
+    def _floor_depth(self, x: float) -> float:
+        """Pool depth at x. SAUVC's floor slopes; RoboSub's does not."""
+        deep = float(self.get_parameter('pool_depth').value)
+        edge = float(self.get_parameter('pool_edge_depth').value)
+        if edge <= 0.0:
+            return deep
+        half = float(self.get_parameter('pool_length').value) / 2.0
+        return deep - (deep - edge) * min(1.0, abs(x) / half)
+
+    def _write_card(self) -> None:
+        """Persist beside the autonomy mission scorecards.
+
+        Everything above lived in memory, so a sim restart -- which is also how
+        you change course -- erased the run you had just done. DUBURI_RUN_DIR
+        is the tree the mission scorecards already use, so a practice run's
+        two halves land under one timestamp.
+        """
+        try:
+            base = os.environ.get('DUBURI_RUN_DIR') or os.path.expanduser(
+                '~/duburi_runs')
+            os.makedirs(base, exist_ok=True)
+            stamp = time.strftime('%Y%m%dT%H%M%S')
+            self._card_path = os.path.join(
+                base, f'score_{self._world}_{stamp}.json')
+            with open(self._card_path, 'w') as fh:
+                json.dump(self.snapshot(), fh, indent=2)
+            self.get_logger().info(f'[SCORE] scorecard -> {self._card_path}')
+        except Exception as exc:                       # noqa: BLE001
+            self.get_logger().warning(f'[SCORE] could not write scorecard: {exc}')
+
+    def _sync_awards(self) -> None:
+        """Mirror the continuously-measured elements onto the card.
+
+        Style and the coin flip are not events, they are running totals, so
+        they are re-synced each tick rather than awarded once. `award` is
+        capped and idempotent, which is what makes calling it from a timer
+        safe -- the count only ever walks up to the rulebook's own limit.
+        """
+        if self._competition != 'robosub':
+            return
+        for _ in range(self._yaw.changes
+                       - self._card._earned.get('style_yaw', {}).get('count', 0)):
+            self._card.award('style_yaw', f'{self._yaw.changes} x 90 deg')
+        rp = self._roll.changes + self._pitch.changes
+        for _ in range(rp - self._card._earned.get(
+                'style_rp', {}).get('count', 0)):
+            self._card.award('style_rp', f'{rp} x 90 deg')
+        if self._coin:
+            self._card.award('coin_flip', f'{self._coin} -- vehicle replaced')
+
     def _publish(self) -> None:
+        self._sync_awards()
         self._pub.publish(String(data=json.dumps(self.snapshot())))
 
     def _report(self) -> None:

@@ -31,6 +31,8 @@ import numpy as np
 import yaml
 from PIL import Image
 
+import prop_library as pl
+
 # Palette, linear 0-1. Competition pool: pale blue mosaic tiles, white grout,
 # navy lane lines, black cross markers.
 FIELD = np.array([0.58, 0.80, 0.90])
@@ -464,32 +466,33 @@ def make_role_image(path, glyph, px=256, border=0.055, rng=None,
 
 
 def make_torpedo_panel(path, role, spec, px=512, rng=None):
-    """The Task 4 board face: four RED CIRCLE openings plus role artwork.
+    """The Task 4 board face: TWO openings plus the two role images.
 
-    The circles are where a torpedo goes and the emoji say which role the board
-    is for. Generated as ONE image for the whole 0.6 m board, so the generated
-    prop can carry the artwork on a flat face while the vendored mesh carries
-    real physical holes.
+    THE OPENINGS ARE NOT DEFINED HERE. They come from
+    `prop_library.torpedo_openings_uv`, the same list the collision plate is
+    tiled around. They used to be written out twice and had drifted badly: this
+    function painted FOUR circles while the collision cut TWO, in different
+    places. A shot lined up on the artwork struck solid board, and nothing in
+    any log said why.
+
+    Two, not four, is also what the rulebook says -- "vinyl printed images and
+    two sized openings" -- and what spec/robosub.yaml has always recorded.
+
+    Layout is a 2x2: the two openings on one diagonal, the two role images
+    (fire = Survey & Repair, droplet = Search & Rescue) on the other. Both
+    images appear on both boards; only which corner each takes differs, so a
+    detector cannot separate the roles by presence alone.
     """
     img = np.ones((px, px, 3), dtype=np.float32)
     yy, xx = np.mgrid[0:px, 0:px].astype(np.float32)
 
-    # The real board carries ALL FOUR images -- fire, fire-engine, droplet,
-    # ambulance -- with the openings interleaved between them. You fire through
-    # the circle next to YOUR role's image, which is why both roles appear on
-    # both boards and only the arrangement differs. A board showing one role's
-    # artwork alone would make the task trivially separable and score nothing
-    # like the real one.
+    holes = pl.torpedo_openings_uv(spec)
+
+    # The images take the corners the openings leave free.
     if role == "survey_repair":
-        corners = (("fire", 0.22, 0.22), ("fire_engine", 0.78, 0.22),
-                   ("ambulance", 0.22, 0.78), ("droplet", 0.78, 0.78))
-        holes = ((0.50, 0.30, 0.115), (0.50, 0.70, 0.072),
-                 (0.22, 0.50, 0.072), (0.78, 0.50, 0.115))
+        corners = (("fire", 0.25, 0.25), ("droplet", 0.75, 0.75))
     else:
-        corners = (("droplet", 0.22, 0.22), ("ambulance", 0.78, 0.22),
-                   ("fire_engine", 0.22, 0.78), ("fire", 0.78, 0.78))
-        holes = ((0.50, 0.30, 0.072), (0.50, 0.70, 0.115),
-                 (0.22, 0.50, 0.115), (0.78, 0.50, 0.072))
+        corners = (("droplet", 0.25, 0.25), ("fire", 0.75, 0.75))
 
     for cx, cy, r in holes:
         d = np.sqrt((xx / px - cx) ** 2 + (yy / px - cy) ** 2)

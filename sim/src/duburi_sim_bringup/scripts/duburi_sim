@@ -142,6 +142,7 @@ Commands:
   stack [--no-vision]          duburi_ws manager against a running simulator
   smoke                        arm → set_depth -1 → move_forward 8s
   joystick                     Live gamepad status in the terminal (needs `lab`)
+  view [chase|free|<model>]    Chase the vehicle with the Gazebo camera, or let go
   lab                          Operator web UI on :28765 (DUBURI_LAB_PORT; needs sim+stack)
   plotjuggler                  Launch PlotJuggler with sim layout (needs ros-humble-plotjuggler-ros)
 
@@ -406,6 +407,31 @@ JOYSTICK_PY
       exec ros2 run plotjuggler plotjuggler --layout "$layout"
     else
       exec ros2 run plotjuggler plotjuggler
+    fi
+    ;;
+  view)
+    # The GUI camera follows the vehicle from startup (gui.config), so this is
+    # for BREAKING OUT of the follow and getting back into it without
+    # restarting -- to look at a prop, then return to the run.
+    #
+    # /gui/follow takes a model name; an EMPTY name releases the camera. The
+    # world instance is `duburi` on every course (the model is `duburi_heavy`);
+    # passing the model name silently follows nothing.
+    _target="${1:-chase}"
+    case "$_target" in
+      chase) _target="duburi" ;;
+      free)  _target="" ;;
+    esac
+    if ! gz service -s /gui/follow --reqtype gz.msgs.StringMsg \
+         --reptype gz.msgs.Boolean --timeout 2000 \
+         --req "data: \"$_target\"" >/dev/null 2>&1; then
+      echo "[duburi-sim] no Gazebo GUI is running (or it is headless)" >&2
+      exit 1
+    fi
+    if [[ -n "$_target" ]]; then
+      echo "[duburi-sim] camera following $_target -- 'view free' to let go"
+    else
+      echo "[duburi-sim] camera released"
     fi
     ;;
   -h|--help|help|"")

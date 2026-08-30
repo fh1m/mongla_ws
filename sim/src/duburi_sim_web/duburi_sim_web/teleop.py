@@ -25,9 +25,22 @@ CH_LATERAL = 5
 NO_OVERRIDE = 65535
 
 DEFAULT_ENDPOINT = os.environ.get('DUBURI_TELEOP_ENDPOINT', 'tcp:127.0.0.1:5763')
+# One floor, shared by the UI slider, the gamepad step and this clamp. They
+# were 0.15 / 0.10 / 0.05, so the same "minimum" meant three different things.
+# Below about 0.10 the command is inside ArduSub's own 30 us RC deadzone and
+# the vehicle does not move at all, so a lower floor only buys dead travel.
+GAIN_MIN = 0.10
 STREAM_HZ = 20.0
 WATCHDOG_S = 0.35
-GAIN_DEFAULT = 0.55  # fraction of full stick (±100%)
+# Fraction of full stick. 1.0 = PWM 1900 = full authority, which is also
+# MOT_PWM_MAX and the model's <servo_max>, so nothing downstream clips it.
+#
+# This was 0.55, and the T200 deadband makes that much slower than it reads:
+# forward thrust only starts at PWM 1528, so gain 0.55 -> PWM 1720 -> 20.9 N of
+# a possible 53.2 N. 55% of stick is 39% of thrust. Full authority is the right
+# default for dataset collection and feel-testing; turn it down to go gentle,
+# rather than starting throttled and wondering why the hull feels dead.
+GAIN_DEFAULT = 1.0
 
 
 def _pct_to_pwm(pct: float) -> int:
@@ -88,7 +101,7 @@ class TeleopStreamer:
             self._up = float(up)
             self._yaw = float(yaw)
             if gain is not None:
-                self._gain = max(0.05, min(1.0, float(gain)))
+                self._gain = max(GAIN_MIN, min(1.0, float(gain)))
             self._last_update = time.monotonic()
             return self._snapshot_unlocked()
 

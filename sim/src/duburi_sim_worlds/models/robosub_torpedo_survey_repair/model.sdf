@@ -97,16 +97,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c0_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c0_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -123,16 +113,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c1_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c1_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -149,16 +129,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c2_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c2_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -175,16 +145,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c3_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c3_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -201,16 +161,6 @@
           <izz>0.00068251</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c4_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.404231 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c4_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.404231 0.0230769</size></box></geometry>
@@ -227,16 +177,6 @@
           <izz>4.69336e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c5_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c5_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
@@ -253,16 +193,6 @@
           <izz>0.000632931</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c6_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.389234 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c6_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.389234 0.0230769</size></box></geometry>
@@ -279,16 +209,6 @@
           <izz>3.48449e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c7_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c7_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
@@ -305,16 +225,6 @@
           <izz>0.000619271</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c8_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.385 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c8_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.385 0.0230769</size></box></geometry>
@@ -331,16 +241,6 @@
           <izz>3.17708e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c9_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.085 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c9_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.085 0.0230769</size></box></geometry>
@@ -357,16 +257,6 @@
           <izz>0.000632931</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c10_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.389234 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c10_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.389234 0.0230769</size></box></geometry>
@@ -383,16 +273,6 @@
           <izz>3.48449e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c11_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c11_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
@@ -409,16 +289,6 @@
           <izz>0.00068251</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c12_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.404231 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c12_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.404231 0.0230769</size></box></geometry>
@@ -435,16 +305,6 @@
           <izz>4.69336e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c13_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c13_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
@@ -461,16 +321,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c14_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c14_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -487,16 +337,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c15_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c15_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -513,16 +353,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c16_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c16_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -539,16 +369,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c17_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c17_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -565,16 +385,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c18_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c18_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -591,16 +401,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c19_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c19_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -617,16 +417,6 @@
           <izz>5.35035e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c20_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c20_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
@@ -643,16 +433,6 @@
           <izz>0.00070735</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c21_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c21_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
@@ -669,16 +449,6 @@
           <izz>2.69126e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c22_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c22_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
@@ -695,16 +465,6 @@
           <izz>0.000596512</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c23_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c23_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
@@ -721,16 +481,6 @@
           <izz>1.73176e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c24_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c24_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
@@ -747,16 +497,6 @@
           <izz>0.000545538</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c25_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.361288 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c25_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.361288 0.0230769</size></box></geometry>
@@ -773,16 +513,6 @@
           <izz>1.32383e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c26_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c26_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
@@ -799,16 +529,6 @@
           <izz>0.000519986</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c27_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.352699 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c27_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.352699 0.0230769</size></box></geometry>
@@ -825,16 +545,6 @@
           <izz>1.20833e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c28_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.05 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c28_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.05 0.0230769</size></box></geometry>
@@ -851,16 +561,6 @@
           <izz>0.000512083</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c29_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.35 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c29_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.35 0.0230769</size></box></geometry>
@@ -877,16 +577,6 @@
           <izz>1.32383e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c30_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c30_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
@@ -903,16 +593,6 @@
           <izz>0.000519986</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c31_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.352699 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c31_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.352699 0.0230769</size></box></geometry>
@@ -929,16 +609,6 @@
           <izz>1.73176e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c32_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c32_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
@@ -955,16 +625,6 @@
           <izz>0.000545538</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c33_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.361288 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c33_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.361288 0.0230769</size></box></geometry>
@@ -981,16 +641,6 @@
           <izz>2.69126e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c34_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c34_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
@@ -1007,16 +657,6 @@
           <izz>0.000596512</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c35_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c35_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
@@ -1033,16 +673,6 @@
           <izz>5.35035e-05</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c36_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c36_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
@@ -1059,16 +689,6 @@
           <izz>0.00070735</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c37_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c37_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
@@ -1085,16 +705,6 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c38_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c38_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
@@ -1111,64 +721,10 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <visual name="plate_c39_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1</ambient>
-          <diffuse>0.8 0.8 0.8 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.2 0.2 1</emissive>
-        </material>
-      </visual>
       <collision name="plate_c39_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
-    </link>
-    <link name="bar_0">
-      <pose>0 0 0.5 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.00096375</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>5.41667e-06</iyy><iyz>0</iyz>
-          <izz>0.000961667</izz>
-        </inertia>
-      </inertial>
-      <visual name="bar_0_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.48 0.03</size></box></geometry>
-        <material>
-          <ambient>0.85 0.15 0.12 1</ambient>
-          <diffuse>0.85 0.15 0.12 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.17 0.03 0.024 1</emissive>
-        </material>
-      </visual>
-    </link>
-    <link name="bar_1">
-      <pose>0 0 0.44 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.00096375</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>5.41667e-06</iyy><iyz>0</iyz>
-          <izz>0.000961667</izz>
-        </inertia>
-      </inertial>
-      <visual name="bar_1_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.48 0.03</size></box></geometry>
-        <material>
-          <ambient>0.85 0.15 0.12 1</ambient>
-          <diffuse>0.85 0.15 0.12 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.17 0.03 0.024 1</emissive>
-        </material>
-      </visual>
     </link>
   </model>
 </sdf>

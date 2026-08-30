@@ -113,3 +113,36 @@ state** at open, with `JS_EVENT_INIT` set. Those axis values are real and must
 be applied, but a button reported as held in that burst is a state report, not
 an operator action — firing `arm` from it would arm the vehicle the moment the
 pad is plugged in. A test asserts it does not.
+
+---
+
+## Gain is a percentage now, and 100 % is the default
+
+**Nothing was clamping the vehicle.** Full stick at gain 1.0 gives PWM 1900,
+which is exactly `MOT_PWM_MAX`, the model's `<servo_max>` and ArduPilot's own
+`RCn_MAX` default — the chain is consistent end to end.
+
+It felt slow because `GAIN_DEFAULT` was **0.55**, and the T200 deadband makes
+that much slower than it reads. Forward thrust does not begin until PWM 1528:
+
+| gain | PWM | thrust | of full |
+|---|---|---|---|
+| 0.15 (old slider floor) | 1560 | 2.2 N | **4 %** |
+| 0.55 (old default) | 1720 | 20.9 N | **39 %** |
+| 1.00 | 1900 | 53.2 N | 100 % |
+
+So "half gain" was never half speed. Three changes:
+
+- **`GAIN_DEFAULT` is 1.0.** Full authority is the right default for dataset
+  collection and feel-testing; turn it down to go gentle, rather than starting
+  throttled and wondering why the hull feels dead.
+- **The UI reads 1–100 %**, and shows what that setting actually *delivers*
+  underneath it. The wire still carries a fraction — one conversion at the edge.
+- **One floor.** It was 0.15 in the UI, 0.10 on the gamepad and 0.05 in the
+  server clamp, so the same "minimum" meant three different things. Now
+  `teleop.GAIN_MIN = 0.10`, imported by the others. Below about that the
+  command is inside ArduSub's own 30 µs RC deadzone and the vehicle does not
+  move at all, so a lower floor only buys dead travel.
+
+At gain 1.0 the vehicle is not artificially limited: its terminal speed is hull
+drag (~0.65 m/s cruise), which is the number the T200 round exists to make real.
