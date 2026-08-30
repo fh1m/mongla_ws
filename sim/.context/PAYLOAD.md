@@ -95,6 +95,51 @@ body +x pointing *down*. Written the obvious way round, the streamlined
 coefficient resisted the sink and the broadside coefficient resisted the
 flight: the shot travelled 0.14 m in 2 s where it had covered 2.47 m.
 
+## Ballistics — the numbers a shot is timed against
+
+Everything here is derived for the projectile, not copied, because where a
+round goes is what a vision pipeline has to time a shot against.
+
+| | torpedo | dropper |
+|---|---|---|
+| size | 51 mm x 152 mm (rulebook p. 64 max box) | 50 mm ball |
+| mass | 325 g, displaces 311 g -> **14 g negative** | 118 g, displaces 65 g |
+| muzzle | ~4.5 m/s (12.2 N for 0.12 s) | released, no impulse |
+| drag | Cd 0.12 nose-on, 1.0 broadside | Cd 0.47 |
+| added mass | 0.1x displacement axial, 1.0x broadside | 0.5x, isotropic |
+
+**Added mass was the stated gap in the first version and is now modelled.** A
+body accelerating underwater drags water with it, so it behaves as though
+heavier -- and for a cylinder moving broadside that is about its own
+displacement, against a tenth of it nose-on. Without it a round decelerates and
+turns like something thrown in air, which is exactly the behaviour a pipeline
+would learn to time against and then not find in the pool.
+
+Measured, fired level from 0.8 m out: the round covers **2.63 m** and crosses
+the board plane still travelling, with the lateral position held to the
+millimetre. Drop across a 1.5 m shot is about 17 mm, which is what 14 g of
+negative buoyancy gives once added mass is counted.
+
+### Two bugs that made the launcher look feeble
+
+**The burn was measured in WALL time.** A persistent wrench applied for
+`0.12 s` of wall clock delivers `0.12 * RTF` seconds of thrust: at the RTF
+these courses run, the round left the tube at **1.0 m/s instead of 4.5** and
+every shot fell short. It also meant the same code fired differently on a fast
+machine and a slow one. The burn now runs on the **sim clock**.
+
+**gz-transport drops a publish before discovery completes.** The launch wrench
+was published immediately after the spawn, so the first shots after startup got
+**no impulse at all** -- the round simply sank away from the muzzle at 0.2 m/s.
+Nothing logs a dropped publish; the shot just looks weak. The node now waits on
+`has_connections()`.
+
+Both were invisible in any log and both needed the trajectory sampled off the
+pose stream to see -- `gz model -m <name> -p` takes ~2 s per call, which cannot
+resolve a half-second flight. A trace that slow also reads a RECYCLED slot as
+though it were the new shot, which is how an earlier "it never moved" reading
+was produced.
+
 ## Fidelity limits — read before trusting a sim shot
 
 The **serial and ROS path is exact** (it is the flight driver). The
@@ -108,9 +153,48 @@ The **serial and ROS path is exact** (it is the flight driver). The
   the round drops about 0.09 m. A real slingshot round's numbers are not known
   to us, so treat the drop as *representative, not calibrated* — unlike the
   T200 curve, none of this comes from published measurements.
-- **Pass-through is not yet scorable on the generated board.** SDF has no
-  primitive with a hole, so `robosub_torpedo_board`'s openings are printed on a
-  solid plate: a round that is aimed correctly *strikes* it rather than passing
-  through. Measured reach 7.990 m against a board face at 8.0 m, still at
-  depth. For real pass-through use the vendored mesh variant
-  (`robosub_torpedo_mesh`), which has actual holes.
+- **Pass-through IS scorable now.** SDF has no primitive with a hole, so the
+  board's collision is tiled in horizontal strips with the circles cut out
+  (`_plate_with_holes`) -- 120 boxes for two openings, all primitives. The
+  printed face carries the artwork and does not collide. That is what makes
+  the rulebook's own distinction measurable.
+- The **flight is modelled, not calibrated**. Drag and added-mass coefficients
+  are computed from the geometry with textbook Cd values; no published
+  ballistics exist for a team-built launcher to fit against. Treat the drop and
+  range as representative. Unlike the T200 curve, none of this comes from
+  measurements of the real article.
+
+
+## Scoring a shot
+
+`/duburi/sim/score` grades every fired round, to the handbook (p. 36):
+
+> "Points are awarded for firing torpedoes through any opening. A torpedo must
+> pass through the opening for full points. Partial points are awarded if the
+> torpedo touches the board without passing through. ... Additional points are
+> awarded for firing torpedoes further away from the board. The 'far' distance
+> is denoted by the horizontal bars at the bottom of the board."
+
+```
+[SCORE] torpedo fired at 1.71 m from the target
+[SCORE] TORPEDO THROUGH -- fired from 1.71 m (farther), opening large
+```
+
+Each round carries `outcome` (`through` / `miss` / `past_board`, or
+`in_bin` / `outside_bin` for a dropper), which `opening` it took, the range
+**at the moment of firing**, and the `distance_band` against the two standoffs.
+
+The range is recorded when the trigger is pulled, not at impact: the rule names
+the firing position, and the vehicle drifts several centimetres while a round
+is in flight -- which is the whole difference on a 1.0 m boundary.
+
+Verified three ways in one run, because "it scored something" is not evidence:
+
+| aim | outcome | band |
+|---|---|---|
+| large opening, 1.2 m | **through**, opening `large` | far |
+| solid board, 1.2 m | **miss** (stopped at the plate) | far |
+| large opening, 1.7 m | **through**, opening `large` | **farther** |
+
+The board also carries the two red bars the rulebook describes, so the "far"
+line is visible to the operator and to a camera.

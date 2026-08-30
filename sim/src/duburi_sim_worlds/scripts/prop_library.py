@@ -1151,18 +1151,78 @@ def robosub_bins(spec):
     return model("robosub_bins", "\n".join(parts))
 
 
+def _plate_with_holes(prefix, size, thickness, openings, cz, strips=26):
+    """Collision for a flat plate that a projectile can pass THROUGH.
+
+    SDF has no primitive with a hole, and that is not a cosmetic problem here:
+    the rulebook scores a torpedo differently for passing through an opening
+    (full points) than for striking the board (partial), so a solid plate makes
+    the task's own distinction unmeasurable. A good shot and a near miss both
+    just bounce.
+
+    The plate is therefore tiled in horizontal strips, and each strip is cut
+    into the spans that are NOT inside an opening -- one collision box per
+    span, typically 60-70 for two holes. They are primitives, so this is cheap,
+    and the strip resolution only has to be finer than the projectile: at 26
+    strips a 0.6 m board has 23 mm rows against a 51 mm round.
+
+    `openings` is [(y, z, radius), ...] in plate coordinates. The plate faces
+    along x, so its extent runs in y (across) and z (up).
+    """
+    half = size / 2.0
+    step = size / strips
+    parts = []
+    n = 0
+    for i in range(strips):
+        # Row centre, relative to the plate centre.
+        rz = -half + (i + 0.5) * step
+        # Where this row is blocked, as (from, to) spans in y.
+        blocked = []
+        for oy, oz, r in openings:
+            dz = abs(rz - oz)
+            if dz >= r:
+                continue
+            # Half-width of the circle at this height.
+            hw = math.sqrt(r * r - dz * dz)
+            blocked.append((oy - hw, oy + hw))
+        blocked.sort()
+
+        # Walk the row left to right, emitting the gaps between blocked spans.
+        cursor = -half
+        spans = []
+        for lo, hi in blocked:
+            if lo > cursor:
+                spans.append((cursor, min(lo, half)))
+            cursor = max(cursor, hi)
+        if cursor < half:
+            spans.append((cursor, half))
+
+        for lo, hi in spans:
+            width = hi - lo
+            if width < 1e-4:
+                continue
+            parts.append(_box_link(
+                f'{prefix}_c{n}', thickness, width, step,
+                (0.8, 0.8, 0.8), 0.05,
+                f'0 {(lo + hi) / 2.0:.6g} {cz + rz:.6g} 0 0 0',
+                mat=material((0.8, 0.8, 0.8))))
+            n += 1
+    return parts
+
+
 def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
-    """Task 4 -- a 0.6 m printed board on two PVC legs, with FOUR openings.
+    """Task 4 -- a 0.6 m printed board on two PVC legs, with real openings.
 
     Built wrong the first time as an H-shaped frame with two square gaps and
     the wrong overall size. The real board is a full 2 ft square standing on
     legs, printed with all four role images, and its openings are CIRCLES.
 
-    SDF has no primitive with a hole, so the geometry here is the board's
-    printed FACE (carrying the artwork, openings included) plus a ring of short
-    boxes approximating each circular rim. For a torpedo that must physically
-    pass through, use `robosub_torpedo_mesh` -- the vendored mesh has real
-    holes. This variant is the regenerable one and is what a detector sees.
+    THE OPENINGS ARE NOW PHYSICALLY OPEN. The printed face carries the artwork
+    and does not collide; the collision is a strip-tiled plate with the two
+    circles cut out (see `_plate_with_holes`). That is what makes the
+    rulebook's own distinction measurable -- "A torpedo must pass through the
+    opening for full points. Partial points are awarded if the torpedo touches
+    the board without passing through" (p. 36).
     """
     cfg = spec["props"]["torpedo_board"]
     size, th = cfg["size"], cfg["thickness"]
@@ -1179,11 +1239,32 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
 
     # The printed face. One thin plate carrying the whole artwork, so the
     # openings, the red rims and the four role images are all in register.
+    # NO COLLISION -- the strip tiling below is the physical board.
     parts.append(_box_link(
         "board", th, size, size, WHITE, 3.0, f"0 0 {cz:.6g} 0 0 0",
+        collide=False,
         mat=textured_material(f"torpedo_panel_{role}.png", tint=1.0,
                               specular=0.06, roughness=0.6, emissive=0.10,
                               competition="robosub")))
+
+    # Openings, in plate coordinates. Placed to match the printed artwork:
+    # the larger opening upper-left, the smaller lower-right.
+    quarter = size / 4.0
+    openings = [
+        (-quarter, quarter, cfg["large_opening"] / 2.0),
+        (quarter, -quarter, cfg["small_opening"] / 2.0),
+    ]
+    parts.extend(_plate_with_holes("plate", size, th, openings, cz))
+
+    # "The 'far' distance is denoted by the horizontal bars at the bottom of
+    # the board" (p. 36). Two bars, because the spec carries two standoffs.
+    for i, key in enumerate(("standoff_far", "standoff_farther")):
+        if key not in cfg:
+            continue
+        parts.append(_box_link(
+            f"bar_{i}", th, size * 0.8, 0.03, (0.85, 0.15, 0.12), 0.05,
+            f"0 0 {cz - size / 2.0 - 0.05 - i * 0.06:.6g} 0 0 0",
+            collide=False, mat=material((0.85, 0.15, 0.12), emissive_gain=0.2)))
 
     return model(model_name or f"robosub_torpedo_{role}", "\n".join(parts))
 

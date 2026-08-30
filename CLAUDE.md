@@ -347,6 +347,28 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > `yaw_source=sim_dvl` its yaw comes from Gazebo and it ran at 22 Hz through a
 > fully cut link. [`sim/.context/FAULTS.md`](sim/.context/FAULTS.md).
 >
+> **FIRED ROUNDS FLY LIKE ROUNDS NOW, AND ARE SCORED.** The torpedo is the
+> rulebook's own article (51×152 mm, 325 g against 311 g displaced — 14 g
+> negative) with **added mass** modelled (1.0× displacement broadside, 0.1×
+> nose-on), so it decelerates and turns like a body in water rather than one in
+> air. Measured: **2.63 m of flight**, ~17 mm of drop over a 1.5 m shot. Two
+> bugs made the launcher look feeble and neither logged anything: the burn was
+> **wall time**, so at this RTF the round got a quarter of its impulse (1.0 m/s
+> instead of 4.5), and **gz-transport drops a publish before discovery**, so
+> early shots got no impulse at all. **The torpedo board's openings are
+> physically open** — collision tiled in strips with the circles cut out — so
+> `/duburi/sim/score` grades a shot the way the handbook does: `through` vs
+> `miss`, which opening, and the range **at the moment of firing** banded
+> against the two standoff bars. **Trace a shot off the pose stream, never
+> `gz model -m` (~2 s/call)** — too slow to resolve a half-second flight, and it
+> reads a *recycled* slot as the new shot.
+> [`sim/.context/PAYLOAD.md`](sim/.context/PAYLOAD.md).
+>
+> **Bar30 noise is the datasheet's.** `SIM_BARO_RND` is in **metres**, and ours
+> was `0.02` — ten times too noisy on the one sensor every mission depends on.
+> The Bar30 is a TE MS5837-30BA: 0.2 mbar resolution, which its datasheet states
+> as **2 mm of water depth**. Now `0.002`.
+>
 > **`fire()` NOW RUNS IN SIM** — the payload was the one autonomy path with no
 > simulated equivalent, so `align(fire=…, fire_t=…)` had never executed outside
 > the pool. `payload_sim` presents a **PTY** that the **unmodified** `PayloadDriver`

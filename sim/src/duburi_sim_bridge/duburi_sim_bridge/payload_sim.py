@@ -70,72 +70,149 @@ FIRED_TOPIC = '/duburi/sim/payload/fired'
 TORPEDO_CHANNELS = (1, 2)
 DROPPER_CHANNELS = (3, 4)
 
-# Torpedo: 40 mm x 180 mm, and the mass is set from the DISPLACEMENT rather
-# than picked. This cylinder displaces 226.2 g of water, so 228 g is 1.8 g
-# negative -- it sinks, but at 0.08 m/s^2, which is ~18 mm of drop over a 1.5 m
-# shot.
-#
-# The margin has to be this fine because THE PROJECTILE HAS NO DRAG. It carries
-# no hydrodynamics plugin, so nothing limits its sink rate: an earlier 235 g
-# round (9 g negative) accelerated to the pool floor in about a second and the
-# shot was meaningless. Measured against this exact geometry: 100 g surfaced,
-# 226 g held station (+17 mm in 2 s), 235 g fell 811 mm in 2 s -- which is
-# free acceleration at the predicted 0.38 m/s^2, not a buoyancy failure.
-_TORPEDO_R, _TORPEDO_L, _TORPEDO_M = 0.02, 0.18, 0.228
-# Dropper marker: a 40 mm ball that displaces 34 g and masses 60 g, so it sinks
-# and stays where it lands, which is what gets scored.
-_DROPPER_R, _DROPPER_M = 0.02, 0.06
+# TORPEDO, to the rulebook (p. 64): "Each torpedo must fit within a box 2.0"
+# square and 6" long (51 x 51 x 152 mm)" and "must weigh no more than 2.0 lbs
+# (0.91 kg) in air". So a 51 mm body, 152 mm long.
+_TORPEDO_R = 0.0255
+_TORPEDO_L = 0.152
+_TORPEDO_NOSE = 0.045
+# Mass is DERIVED FROM DISPLACEMENT, never picked. This body displaces 311 g of
+# water, so 325 g is 14 g negative: it sinks at 0.22 m/s^2 once added mass is
+# counted, which is 17 mm of drop across a 1.5 m shot. Well inside the 0.91 kg
+# limit. An earlier guess of 790 g was 479 g negative and plummeted -- the
+# arithmetic catches that in one line and the eye does not.
+_TORPEDO_M = 0.325
+# Streamlined nose-on, bluff broadside.
+_TORPEDO_CD_AXIAL = 0.12
+_TORPEDO_CD_CROSS = 1.0
+
+# DROPPER: same rulebook box, but the shape stays a ball -- it is released, not
+# fired, and a sphere is what falls predictably into a bin. Displaces 65 g;
+# 118 g sinks and stays where it lands, which is what gets scored.
+_DROPPER_R = 0.025
+_DROPPER_M = 0.118
+
+WATER_DENSITY = 1000.0
+
+def _torpedo_visual() -> str:
+    """A torpedo that LOOKS like one: tapered nose, body, tail fins.
+
+    Not decoration. The operator judges a shot by watching it, and a bare
+    cylinder gives no cue which way the round points -- which is exactly what
+    you need to see when a shot leaves the tube mis-aimed or tumbles in flight.
+    """
+    body_l = _TORPEDO_L - _TORPEDO_NOSE
+    rgba = '0.95 0.35 0.05 1'
+    out = []
+    out.append(
+        '      <visual name="body">\n'
+        f'        <pose>0 0 {-_TORPEDO_NOSE / 2.0:.6g} 0 0 0</pose>\n'
+        f'        <geometry><cylinder><radius>{_TORPEDO_R}</radius>'
+        f'<length>{body_l:.6g}</length></cylinder></geometry>\n'
+        f'        <material><diffuse>{rgba}</diffuse>'
+        f'<ambient>{rgba}</ambient></material>\n'
+        '      </visual>')
+    out.append(
+        '      <visual name="nose">\n'
+        f'        <pose>0 0 {body_l / 2.0:.6g} 0 0 0</pose>\n'
+        f'        <geometry><sphere><radius>{_TORPEDO_R}</radius>'
+        '</sphere></geometry>\n'
+        '        <material><diffuse>0.95 0.95 0.9 1</diffuse>'
+        '<ambient>0.95 0.95 0.9 1</ambient></material>\n'
+        '      </visual>')
+    for i in range(4):
+        ang = i * math.pi / 2.0
+        fr = _TORPEDO_R * 0.8
+        out.append(
+            f'      <visual name="fin{i}">\n'
+            f'        <pose>{fr * math.cos(ang):.6g} {fr * math.sin(ang):.6g} '
+            f'{-body_l / 2.0 - _TORPEDO_NOSE / 2.0 + 0.025:.6g} '
+            f'0 0 {ang:.6g}</pose>\n'
+            f'        <geometry><box><size>{_TORPEDO_R:.6g} 0.003 0.04</size>'
+            '</box></geometry>\n'
+            '        <material><diffuse>0.12 0.12 0.12 1</diffuse>'
+            '<ambient>0.12 0.12 0.12 1</ambient></material>\n'
+            '      </visual>')
+    return '\n'.join(out)
 
 
 def _projectile_sdf(name: str, pose: str, kind: str) -> str:
+    """One fired body, with the hydrodynamics that decide where it lands.
+
+    ADDED MASS IS THE POINT, and it was the stated gap in the first version. A
+    body accelerating underwater drags water with it, so it behaves as though
+    heavier -- and for a cylinder moving BROADSIDE the added mass is about its
+    own displacement, while nose-on it is a tenth of that. Without it a round
+    decelerates and turns like an object in air, which is exactly the behaviour
+    a vision pipeline would learn to time shots against and then find missing
+    in the pool.
+
+    Every coefficient is computed for THIS body: drag as 0.5*rho*Cd*A, added
+    mass as a fraction of displaced mass. Nothing is copied from the vehicle.
+
+    THE COEFFICIENTS RIDE BODY AXES AND THE ROUND IS PITCHED 90 deg. An SDF
+    cylinder's length runs along its own z, so a torpedo laid along the flight
+    path has body +z forward and body +x pointing DOWN. Written the obvious way
+    round, the streamlined value resists the sink and the bluff value resists
+    the flight: measured, 0.14 m of travel in 2 s where it should cover 2.5 m.
+    """
     if kind == 'torpedo':
-        geom = (f'<cylinder><radius>{_TORPEDO_R}</radius>'
-                f'<length>{_TORPEDO_L}</length></cylinder>')
-        mass, rgba = _TORPEDO_M, '1 0.35 0 1'
+        r, length, mass = _TORPEDO_R, _TORPEDO_L, _TORPEDO_M
+        cd_axial, cd_cross = _TORPEDO_CD_AXIAL, _TORPEDO_CD_CROSS
+        collision = (f'<cylinder><radius>{r}</radius>'
+                     f'<length>{length:.6g}</length></cylinder>')
+        visual = _torpedo_visual()
+        area_axial = math.pi * r ** 2
+        area_cross = 2.0 * r * length
+        displaced = area_axial * length * WATER_DENSITY
+        am_axial, am_cross = 0.1 * displaced, 1.0 * displaced
     else:
-        geom = f'<sphere><radius>{_DROPPER_R}</radius></sphere>'
-        mass, rgba = _DROPPER_M, '0.1 0.8 0.3 1'
-    # A solid-ish inertia. It only has to be self-consistent and non-zero: the
-    # projectile's tumbling is not a scored quantity, where it lands is.
-    i = max(1e-5, mass * 0.01 ** 2)
-    # DRAG, and it is not decoration. Without it nothing limits the sink rate:
-    # a projectile 5.6 g negative accelerated the whole way down and reached
-    # the floor mid-flight, which made the shot meaningless and looked exactly
-    # like a buoyancy bug. Quadratic coefficients are 0.5*rho*Cd*A for this
-    # body -- broadside 0.0036 m^2 at Cd 1.0, axial 0.00126 m^2 at Cd 0.2 --
-    # so the same 5.6 g now settles at a terminal 0.17 m/s instead.
-    broadside = -0.5 * 1000.0 * 1.0 * (2 * _TORPEDO_R * _TORPEDO_L)
-    axial = -0.5 * 1000.0 * 0.1 * (math.pi * _TORPEDO_R ** 2)
-    # THE COEFFICIENTS GO ON BODY AXES, AND THE ROUND IS PITCHED 90 deg.
-    # An SDF cylinder's length runs along its own z, so a torpedo lying along
-    # the flight path is spawned with pitch = pi/2 -- which puts body +z along
-    # the flight and body +x pointing DOWN. Written the obvious way round, the
-    # streamlined coefficient ended up resisting the sink and the broadside one
-    # resisting the flight: measured, the shot travelled 0.14 m in 2 s where it
-    # had covered 2.28 m with no drag at all. Body z = flight, body x = depth.
-    drag = (f'    <xUabsU>{broadside:.4g}</xUabsU>\n'
-            f'    <yVabsV>{broadside:.4g}</yVabsV>\n'
-            f'    <zWabsW>{axial:.4g}</zWabsW>\n'
-            f'    <kPabsP>-0.01</kPabsP>\n'
-            f'    <mQabsQ>-0.01</mQabsQ>\n'
-            f'    <nRabsR>-0.01</nRabsR>')
-    return f'''<?xml version="1.0"?><sdf version="1.9">
-<model name="{name}"><pose>{pose}</pose>
-  <link name="body">
-    <inertial><mass>{mass}</mass><inertia>
-      <ixx>{i:.6g}</ixx><iyy>{i:.6g}</iyy><izz>{i:.6g}</izz>
-      <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>
-    <collision name="collision"><geometry>{geom}</geometry></collision>
-    <visual name="visual"><geometry>{geom}</geometry>
-      <material><diffuse>{rgba}</diffuse><ambient>{rgba}</ambient></material>
-    </visual>
-  </link>
-  <plugin filename="gz-sim-hydrodynamics-system"
-          name="gz::sim::systems::Hydrodynamics">
-    <link_name>body</link_name>
-{drag}
-  </plugin>
-</model></sdf>'''
+        r, length, mass = _DROPPER_R, 2 * _DROPPER_R, _DROPPER_M
+        cd_axial = cd_cross = 0.47
+        collision = f'<sphere><radius>{r}</radius></sphere>'
+        rgba = '0.10 0.85 0.30 1'
+        visual = ('      <visual name="visual">\n'
+                  f'        <geometry><sphere><radius>{r}</radius></sphere>'
+                  '</geometry>\n'
+                  f'        <material><diffuse>{rgba}</diffuse>'
+                  f'<ambient>{rgba}</ambient></material>\n'
+                  '      </visual>')
+        area_axial = area_cross = math.pi * r ** 2
+        displaced = (4.0 / 3.0) * math.pi * r ** 3 * WATER_DENSITY
+        # A sphere's added mass is half its displacement, on every axis.
+        am_axial = am_cross = 0.5 * displaced
+
+    axial = -0.5 * WATER_DENSITY * cd_axial * area_axial
+    cross = -0.5 * WATER_DENSITY * cd_cross * area_cross
+    i_long = max(1e-6, mass * r ** 2 / 2.0)
+    i_trans = max(1e-6, mass * (3 * r ** 2 + length ** 2) / 12.0)
+
+    return (
+        '<?xml version="1.0"?><sdf version="1.9">\n'
+        f'<model name="{name}"><pose>{pose}</pose>\n'
+        '  <link name="body">\n'
+        f'    <inertial><mass>{mass:.6g}</mass><inertia>\n'
+        f'      <ixx>{i_trans:.6g}</ixx><iyy>{i_trans:.6g}</iyy>'
+        f'<izz>{i_long:.6g}</izz>\n'
+        '      <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia></inertial>\n'
+        f'    <collision name="collision"><geometry>{collision}</geometry>'
+        '</collision>\n'
+        f'{visual}\n'
+        '  </link>\n'
+        '  <plugin filename="gz-sim-hydrodynamics-system"\n'
+        '          name="gz::sim::systems::Hydrodynamics">\n'
+        '    <link_name>body</link_name>\n'
+        f'    <xDotU>{-am_cross:.6g}</xDotU>\n'
+        f'    <yDotV>{-am_cross:.6g}</yDotV>\n'
+        f'    <zDotW>{-am_axial:.6g}</zDotW>\n'
+        f'    <xUabsU>{cross:.6g}</xUabsU>\n'
+        f'    <yVabsV>{cross:.6g}</yVabsV>\n'
+        f'    <zWabsW>{axial:.6g}</zWabsW>\n'
+        '    <kPabsP>-0.002</kPabsP>\n'
+        '    <mQabsQ>-0.002</mQabsQ>\n'
+        '    <nRabsR>-0.0005</nRabsR>\n'
+        '  </plugin>\n'
+        '</model></sdf>')
 
 
 class PayloadSim(Node):
@@ -144,9 +221,15 @@ class PayloadSim(Node):
         self.declare_parameter('world', 'sauvc26_final')
         self.declare_parameter('vehicle', 'duburi')
         self.declare_parameter('port_link', '')
-        # Launch impulse. 7.6 N for 0.12 s on 228 g is a 4.0 m/s muzzle
-        # velocity, which drag then bleeds off over the next couple of metres.
-        self.declare_parameter('launch_force_n', 7.6)
+        # Launch impulse. 12.2 N for 0.12 s on 325 g is a 4.5 m/s muzzle
+        # velocity. The rulebook caps this by feel rather than number --
+        # "Torpedoes must travel at a 'safe' speed. A 'safe' speed is one that
+        # would not cause a bruise when it strikes a person underwater from
+        # close range" (p. 64) -- and 4.5 m/s from a 325 g round is a plausible
+        # reading of that. Drag bleeds it to ~1 m/s over 4.7 m, so the useful
+        # firing envelope covers the rulebook's 1.0 m and 1.5 m standoffs with
+        # margin.
+        self.declare_parameter('launch_force_n', 12.2)
         self.declare_parameter('burn_time_s', 0.12)
         # Where a round leaves the hull, in body axes (x forward, z up).
         #
@@ -166,9 +249,25 @@ class PayloadSim(Node):
         self._pose = None          # (x, y, z)
         self._yaw = 0.0
         self._slot = 0
+        self._spawned = set()
         self._lock = threading.Lock()
 
         self._gz = GzNode()
+        # Sim clock, because the launch burn must be measured in SIM TIME.
+        # A wall-clock sleep gives the round `burn * RTF` seconds of thrust:
+        # measured at RTF 0.23 a 0.12 s burn delivered a quarter of its
+        # impulse and the round left the tube at 1.0 m/s instead of 4.5, so
+        # every shot fell short and the launcher looked feeble rather than
+        # mistimed. It also means the same code fires differently on a fast
+        # machine and a slow one.
+        self._sim_time = None
+        try:
+            from gz.msgs10.world_stats_pb2 import WorldStatistics
+            self._gz.subscribe(WorldStatistics, f'/world/{self._world}/stats',
+                               self._on_stats)
+        except ImportError:
+            self.get_logger().warn(
+                '[PAYLOAD-SIM] no world stats -- burn falls back to wall clock')
         self._pub_wrench = self._gz.advertise(
             f'/world/{self._world}/wrench/persistent', EntityWrench)
         self._pub_clear = self._gz.advertise(
@@ -218,6 +317,19 @@ class PayloadSim(Node):
         except OSError as exc:
             self.get_logger().warn(f'[PAYLOAD-SIM] no symlink at {link}: {exc}')
             return ''
+
+    def _on_stats(self, msg) -> None:
+        self._sim_time = msg.sim_time.sec + msg.sim_time.nsec * 1e-9
+
+    def _sleep_sim(self, seconds: float) -> None:
+        """Block until `seconds` of SIM time have passed."""
+        if self._sim_time is None:
+            time.sleep(seconds)
+            return
+        target = self._sim_time + seconds
+        deadline = time.monotonic() + 30.0     # never hang on a paused sim
+        while self._sim_time < target and time.monotonic() < deadline:
+            time.sleep(0.002)
 
     def _on_odom(self, msg: GzOdometry) -> None:
         p = msg.pose.position
@@ -269,8 +381,13 @@ class PayloadSim(Node):
 
         # Recycle the slot. A create with a live name is refused, and reusing a
         # name is the only way a spawned body can be buoyant (see module note).
-        self._gz.request(f'/world/{self._world}/remove',
-                         self._entity(name), Entity, Boolean, 2000)
+        # Only remove a slot we have actually filled -- Gazebo logs
+        # "Entity named [payload_shot_0] ... not found, so not removed" at ERR
+        # level otherwise, so every first shot printed an error that looked
+        # like a failure and was not.
+        if name in self._spawned:
+            self._gz.request(f'/world/{self._world}/remove',
+                             self._entity(name), Entity, Boolean, 2000)
 
         req = EntityFactory()
         req.sdf = _projectile_sdf(name, pose, kind)
@@ -280,18 +397,33 @@ class PayloadSim(Node):
         if not (ok and rep.data):
             self.get_logger().warn(f'[PAYLOAD-SIM] spawn of {name} refused')
             return
+        self._spawned.add(name)
         if kind != 'torpedo':
             return
 
         force = float(self.get_parameter('launch_force_n').value)
         burn = float(self.get_parameter('burn_time_s').value)
+        # WAIT FOR DISCOVERY, DO NOT SLEEP FOR IT. gz-transport silently drops
+        # a publish before the remote subscriber has been discovered, so the
+        # first shots after startup left the tube with NO launch impulse at
+        # all -- the round simply sank away from the muzzle at 0.2 m/s and
+        # every one of them was scored a miss. Nothing logs a dropped publish;
+        # the shot just looks feeble.
+        deadline = time.monotonic() + 3.0
+        while (not self._pub_wrench.has_connections()
+               and time.monotonic() < deadline):
+            time.sleep(0.02)
+        if not self._pub_wrench.has_connections():
+            self.get_logger().warn(
+                '[PAYLOAD-SIM] no subscriber on the wrench topic -- the round '
+                'will be released with no launch impulse')
         w = EntityWrench()
         w.entity.name = name
         w.entity.type = Entity.MODEL
         w.wrench.force.x = force * cy
         w.wrench.force.y = force * sy
         self._pub_wrench.publish(w)
-        time.sleep(burn)
+        self._sleep_sim(burn)
         self._pub_clear.publish(self._entity(name))
 
     @staticmethod

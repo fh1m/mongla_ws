@@ -28,6 +28,25 @@ quietly hard-coded its start heading fails the moment it is taken up. This
 node can perform the flip and place the vehicle, so that assumption breaks in
 practice instead of at the competition.
 
+TORPEDOES (handbook p. 36), verbatim:
+
+    "Points are awarded for firing torpedoes through any opening. A torpedo
+     must pass through the opening for full points. Partial points are awarded
+     if the torpedo touches the board without passing through. ... Additional
+     points are awarded for firing torpedoes further away from the board. The
+     'far' distance is denoted by the horizontal bars at the bottom of the
+     board."
+
+So a shot is graded on three things the sim could not previously observe:
+whether it went THROUGH, which opening, and how far the vehicle was when it
+fired. Each fired round is tracked from the muzzle until it stops, and the
+range at the moment of firing is recorded -- not at impact, because the vehicle
+may drift while the round is in flight and it is the firing position the rule
+names.
+
+BINS: a dropper scores by landing inside the bin, so its resting position is
+tested against the bin footprint, again after it has actually settled.
+
 GATE SIDE. "The AUV chooses a marine animal by passing under a specific side",
 so the side taken IS the role for the rest of the run. The transit watcher
 reports which half the vehicle passed through and at what depth.
@@ -56,7 +75,7 @@ import time
 import rclpy
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import Int32, String
 
 
 
@@ -147,6 +166,23 @@ class Scoring(Node):
         # Empty disables the check (RoboSub courses have no flares).
         self.declare_parameter('flare_sequence', [''])
         self.declare_parameter('flare_drop_m', 0.25)
+        # Torpedo board. Openings are (y OFFSET from board_y, z in world,
+        # radius) -- an offset rather than absolute y because the board is
+        # placed with yaw = pi in robosub26_full, which mirrors its own y, and
+        # an absolute figure silently describes the wrong hole. Defaults match
+        # that course: large opening high and to one side, small low and the
+        # other.
+        self.declare_parameter('board_x', 8.0)
+        self.declare_parameter('board_y', 3.0)
+        self.declare_parameter('board_openings',
+                               [0.15, -1.10, 0.10, -0.15, -1.40, 0.065])
+        self.declare_parameter('standoff_far', 1.0)
+        self.declare_parameter('standoff_farther', 1.5)
+        # Bin footprint for a dropper, "24 in x 12 in" (610 x 305 mm).
+        self.declare_parameter('bin_x', 0.0)
+        self.declare_parameter('bin_y', 0.0)
+        self.declare_parameter('bin_size', [0.61, 0.305])
+        self.declare_parameter('score_payload', True)
 
         self._world = self.get_parameter('world').value
         self._vehicle = self.get_parameter('vehicle').value
@@ -170,6 +206,10 @@ class Scoring(Node):
         self._flare_hits = []
         self._flare_home = {}
         self._ball_z_cache = {}
+        # Fired rounds, keyed by model name, tracked from muzzle to rest.
+        self._shots = {}
+        self._shot_results = []
+        self._shot_z_cache = {}
 
         self._gz_connect()
         self._pub = self.create_publisher(String, SCORE_TOPIC, 10)
@@ -179,6 +219,9 @@ class Scoring(Node):
         # construction made `ros2 param set` return "successful" and do
         # nothing, which is the worst of both.
         self.create_timer(0.5, self._check_flares)
+        self.create_timer(0.5, self._score_shots)
+        self.create_subscription(Int32, '/duburi/sim/payload/fired',
+                                 self._on_fired, 10)
         if seq:
             self.get_logger().info(
                 f'[SCORE] flare sequence to hit: {" -> ".join(seq)}')
@@ -309,6 +352,11 @@ class Scoring(Node):
                         z = (pose.get('position') or {}).get('z')
                         if z is not None:
                             self._ball_z_cache[name] = float(z)
+                    elif name.startswith('payload_shot_'):
+                        pos = pose.get('position') or {}
+                        self._shot_z_cache[name] = (
+                            float(pos.get('x', 0.0)), float(pos.get('y', 0.0)),
+                            float(pos.get('z', 0.0)))
             proc.wait()
             if not self._stop_stream:
                 time.sleep(1.0)
@@ -356,6 +404,132 @@ class Scoring(Node):
                     f'({order + 1} of {len(self._flare_expected)}) -- '
                     + ('in order' if ok else
                        f'OUT OF ORDER, expected {expected}'))
+
+
+    # -- fired rounds ------------------------------------------------------
+
+    def _on_fired(self, msg) -> None:
+        """A payload channel fired. Record the range NOW, not at impact.
+
+        The rule names the firing position -- "firing torpedoes further away
+        from the board" -- and the vehicle can drift several centimetres while
+        a round is in flight, which is the difference between "far" and not on
+        a 1.0 m boundary.
+        """
+        if not self.get_parameter('score_payload').value or self._pose is None:
+            return
+        channel = int(msg.data)
+        kind = 'torpedo' if channel in (1, 2) else 'dropper'
+        x, y, z = self._pose[0], self._pose[1], self._pose[2]
+        if kind == 'torpedo':
+            bx = float(self.get_parameter('board_x').value)
+            by = float(self.get_parameter('board_y').value)
+            rng = math.hypot(bx - x, by - y)
+        else:
+            bx = float(self.get_parameter('bin_x').value)
+            by = float(self.get_parameter('bin_y').value)
+            rng = math.hypot(bx - x, by - y)
+        self._pending_shot = {
+            'channel': channel, 'kind': kind,
+            'fired_range_m': round(rng, 3),
+            'fired_from': [round(x, 3), round(y, 3), round(z, 3)],
+            't': time.monotonic(), 'name': None, 'settled': False,
+        }
+        self.get_logger().info(
+            f'[SCORE] {kind} fired at {rng:.2f} m from the target')
+
+    def _adopt_new_shots(self) -> None:
+        """Attach the pending fire record to whichever model just appeared."""
+        pending = getattr(self, '_pending_shot', None)
+        if pending is None:
+            return
+        for name in self._shot_z_cache:
+            if name not in self._shots:
+                pending['name'] = name
+                self._shots[name] = pending
+                self._pending_shot = None
+                return
+
+    def _score_shots(self) -> None:
+        """Grade every round that has come to rest."""
+        self._adopt_new_shots()
+        for name, shot in list(self._shots.items()):
+            if shot['settled']:
+                continue
+            pos = self._shot_z_cache.get(name)
+            if pos is None:
+                continue
+            last = shot.get('last_pos')
+            shot['last_pos'] = pos
+            if last is None:
+                continue
+            moved = math.dist(pos, last)
+            shot['still_for'] = (shot.get('still_for', 0.0) + 0.5
+                                 if moved < 0.01 else 0.0)
+            # A round in flight passes the board plane; record the crossing
+            # while it happens, because where it ENDS says nothing about
+            # whether it went through.
+            if shot['kind'] == 'torpedo':
+                bx = float(self.get_parameter('board_x').value)
+                if (last[0] - bx) * (pos[0] - bx) < 0.0:
+                    shot['crossed_plane'] = True
+                    shot['crossing'] = (pos[1], pos[2])
+            if shot['still_for'] < 1.0:
+                continue
+            shot['settled'] = True
+            self._grade(shot, pos)
+
+    def _grade(self, shot: dict, rest) -> None:
+        if shot['kind'] == 'torpedo':
+            result = self._grade_torpedo(shot)
+        else:
+            result = self._grade_dropper(shot, rest)
+        result.update({k: shot[k] for k in ('channel', 'kind',
+                                            'fired_range_m', 'fired_from')})
+        far = float(self.get_parameter('standoff_far').value)
+        farther = float(self.get_parameter('standoff_farther').value)
+        rng = shot['fired_range_m']
+        result['distance_band'] = ('farther' if rng >= farther
+                                   else 'far' if rng >= far else 'near')
+        self._shot_results.append(result)
+        self.get_logger().warn(
+            f"[SCORE] {shot['kind'].upper()} {result['outcome'].upper()} "
+            f"-- fired from {rng:.2f} m ({result['distance_band']})"
+            + (f", opening {result['opening']}" if result.get('opening')
+               else ''))
+
+    def _grade_torpedo(self, shot: dict) -> dict:
+        """Through an opening, or merely on the board?"""
+        if not shot.get('crossed_plane'):
+            return {'outcome': 'miss', 'opening': None,
+                    'note': 'never reached the board plane'}
+        y, z = shot['crossing']
+        vals = list(self.get_parameter('board_openings').value or [])
+        openings = [vals[i:i + 3] for i in range(0, len(vals) - 2, 3)]
+        by = float(self.get_parameter('board_y').value)
+        for idx, (oy, oz, r) in enumerate(openings):
+            if math.hypot(y - (by + oy), z - oz) <= r:
+                return {'outcome': 'through',
+                        'opening': 'large' if idx == 0 else 'small',
+                        'miss_dist_m': 0.0}
+        # It crossed the plane outside every opening. With the board's
+        # collision plate now genuinely holed, that means it went past the
+        # edge; a round that STRUCK the board never crosses at all.
+        nearest = min((math.hypot(y - (by + oy), z - oz) - r)
+                      for oy, oz, r in openings) if openings else None
+        return {'outcome': 'past_board', 'opening': None,
+                'miss_dist_m': round(nearest, 3) if nearest else None}
+
+    def _grade_dropper(self, shot: dict, rest) -> dict:
+        bx = float(self.get_parameter('bin_x').value)
+        by = float(self.get_parameter('bin_y').value)
+        sx, sy = list(self.get_parameter('bin_size').value)[:2]
+        inside = abs(rest[0] - bx) <= sx / 2.0 and abs(rest[1] - by) <= sy / 2.0
+        return {
+            'outcome': 'in_bin' if inside else 'outside_bin',
+            'rest': [round(v, 3) for v in rest],
+            'miss_dist_m': round(math.hypot(rest[0] - bx, rest[1] - by), 3),
+        }
 
     # -- coin flip ---------------------------------------------------------
 
@@ -420,6 +594,7 @@ class Scoring(Node):
             },
             'gate': {'side': self._side, 'transits': self._transits},
             'coin': self._coin,
+            'shots': self._shot_results,
             'flares': {
                 'expected': self._flare_expected,
                 'hits': self._flare_hits,
