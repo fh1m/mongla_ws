@@ -138,7 +138,7 @@
             <bottom_mode>
               <when>best</when>
               <noise type="gaussian">
-                <stddev>0.002</stddev>
+                <stddev>0.0065</stddev>
               </noise>
               <!-- Draws the four beams in the GAZEBO GUI. NOT cheap, despite
                    what this comment used to claim: these are debug visuals on
@@ -153,7 +153,7 @@
           <resolution>0.01</resolution>
           <!-- The SAUVC pool is 1.6 m deep, so the useful altitude band is well
                under a metre: minimum_range matters far more than maximum. -->
-          <maximum_range>50.0</maximum_range>
+          <maximum_range>75.0</maximum_range>
           <minimum_range>0.1</minimum_range>
           <!-- ENU to SFM -->
           <reference_frame>0 0 0 0 0 -1.570796</reference_frame>
@@ -189,7 +189,7 @@
           <!-- Without this both cameras default to a bare /camera_info and
                stomp on each other. -->
           <camera_info_topic>front_camera/camera_info</camera_info_topic>
-          <horizontal_fov>1.396</horizontal_fov>
+          <horizontal_fov>1.0064</horizontal_fov>
           <image>
             <width>640</width>
             <height>480</height>
@@ -228,7 +228,7 @@
         <topic>front_boxes</topic>
         <camera name="front_boxes">
           <box_type>2d</box_type>
-          <horizontal_fov>1.396</horizontal_fov>
+          <horizontal_fov>1.0064</horizontal_fov>
           <image>
             <width>640</width>
             <height>480</height>
@@ -265,7 +265,7 @@
         <topic>bottom_camera</topic>
         <camera name="bottom_camera">
           <camera_info_topic>bottom_camera/camera_info</camera_info_topic>
-          <horizontal_fov>1.396</horizontal_fov>
+          <horizontal_fov>1.0064</horizontal_fov>
           <image>
             <width>640</width>
             <height>480</height>
@@ -303,7 +303,7 @@
         <topic>bottom_boxes</topic>
         <camera name="bottom_boxes">
           <box_type>2d</box_type>
-          <horizontal_fov>1.396</horizontal_fov>
+          <horizontal_fov>1.0064</horizontal_fov>
           <image>
             <width>640</width>
             <height>480</height>

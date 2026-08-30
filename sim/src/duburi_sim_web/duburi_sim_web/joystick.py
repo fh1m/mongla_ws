@@ -63,9 +63,18 @@ INVERTED_AXES = ('fwd', 'up')            # kernel reports up as negative
 DEFAULT_BUTTON_MAP = {
     0: 'arm',            # A
     1: 'disarm',         # B
+    2: 'fire',           # X -- torpedo
+    3: 'drop',           # Y -- marker
     4: 'gain_down',      # LB
     5: 'gain_up',        # RB
 }
+
+# Payload channels, in the order a press consumes them. The rulebook allows
+# "up to two markers" and "up to two torpedoes" (p. 64), so a pad press walks
+# 1 -> 2 and then reports the tube empty rather than firing forever. Practising
+# against an unlimited magazine teaches a timing that does not exist.
+FIRE_CHANNELS = (1, 2)          # torpedo
+DROP_CHANNELS = (3, 4)          # marker / dropper
 
 # QGC exposes gain as a first-class control because a single fixed stick scale
 # is either too coarse for alignment or too slow for transit. Same idea here.
@@ -117,6 +126,9 @@ class JoystickReader:
         self._on_button = on_button
         self._log = logger
 
+        # Remaining rounds, consumed in order. Reset by `reload`.
+        self._magazine = {'fire': list(FIRE_CHANNELS),
+                          'drop': list(DROP_CHANNELS)}
         self._axes = {k: 0.0 for k in self._axis_map}
         self._raw = {}
         self._buttons = {}
@@ -152,6 +164,7 @@ class JoystickReader:
             'axes': dict(self._axes),
             'buttons': {str(k): v for k, v in self._buttons.items() if v},
             'gain': round(self._gain, 2),
+            'rounds': {k: list(v) for k, v in self._magazine.items()},
             'deadzone': self._deadzone,
             'expo': self._expo,
             'events': self._events,
@@ -245,8 +258,35 @@ class JoystickReader:
             if value and not initial:
                 self._press(number)
 
+    def reload(self) -> None:
+        """Refill both tubes -- a new run, not a new vehicle."""
+        self._magazine = {'fire': list(FIRE_CHANNELS),
+                          'drop': list(DROP_CHANNELS)}
+
     def _press(self, number: int) -> None:
         action = self._button_map.get(number)
+        if action in ('fire', 'drop'):
+            remaining = self._magazine[action]
+            if not remaining:
+                if self._log:
+                    self._log(f'[JOY  ] {action}: no rounds left '
+                              f'(the rulebook allows two)')
+                return
+            # PEEK, then consume only if the shot actually went. A fire that
+            # the vehicle refuses -- the disarmed interlock is the common one
+            # -- must not cost a round: measured, pressing X before arming
+            # burned torpedo 1 and the next press fired torpedo 2, so the
+            # operator silently had one shot instead of two.
+            channel = remaining[0]
+            ok = True
+            if self._on_button:
+                ok = self._on_button(f'{action}:{channel}') is not False
+            if ok:
+                remaining.pop(0)
+            elif self._log:
+                self._log(f'[JOY  ] {action} ch={channel} refused -- '
+                          f'round not consumed')
+            return
         if action == 'gain_up':
             self._gain = min(GAIN_MAX, round(self._gain + GAIN_STEP, 2))
         elif action == 'gain_down':

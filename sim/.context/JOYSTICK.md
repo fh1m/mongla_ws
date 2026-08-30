@@ -42,8 +42,24 @@ Verified against a real Logitech F310 in XInput mode.
 | Left stick | forward / strafe |
 | Right stick | yaw / vertical |
 | A | arm |
-| B | disarm |
+| B | disarm (and reload both tubes) |
+| **X** | **fire a torpedo** (channel 1, then 2) |
+| **Y** | **drop a marker** (channel 3, then 4) |
 | LB / RB | gain down / up (0.10 – 1.00) |
+
+**The magazine is the rulebook's.** "A vehicle may carry up to two markers" and
+"up to two torpedoes" (p. 64), so each button walks its two channels and then
+reports the tube empty. Practising against an unlimited magazine teaches a shot
+timing that does not exist on the vehicle. Disarm ends a run and reloads;
+`POST /api/vehicle/reload` does it without disarming.
+
+Fire and drop go through the same handler the on-screen buttons use, so the
+**disarmed interlock still applies** — pressing X before arming is refused, in
+sim exactly as in the pool. **A refused shot does not cost a round**: before
+that was fixed, one press before arming silently burned torpedo 1 and left the
+operator with one shot where they expected two.
+
+The panel shows what is left: `X fire 2/2 · Y drop 2/2`.
 
 Gain is a first-class control for the same reason QGC exposes it: one fixed
 stick scale is either too coarse for alignment or too slow for transit.

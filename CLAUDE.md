@@ -364,6 +364,30 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > reads a *recycled* slot as the new shot.
 > [`sim/.context/PAYLOAD.md`](sim/.context/PAYLOAD.md).
 >
+> **GAMEPAD X = FIRE, Y = DROP**, with the rulebook's magazine: "up to two
+> markers" and "up to two torpedoes" (p. 64), so X walks channels 1→2 and Y
+> walks 3→4, then reports the tube empty; **disarm reloads**. Routed through the
+> same handler the UI buttons use, so the **disarmed interlock still refuses a
+> fire before arm** — and **a refused shot does not cost a round** (it burned
+> torpedo 1 before the fix, leaving one shot where the operator expected two).
+> Works from the browser pad and the lab-host pad alike. **Two `lab_server`
+> processes look exactly like a stale readout** — one serves the API while the
+> other reads the pad; same family as two managers on 14550.
+>
+> **DVL and camera are datasheet-grounded now (round 5).** The DVL noise was
+> `0.002` copied from gz's own `dvl_world`; Nortek quote the Nucleus1000 at
+> **~1 % accuracy** (the 0.3 % variant is export-controlled and not what we
+> carry), bottom-track **0.1–75 m**. Gazebo's `<stddev>` is a fixed floor while
+> a real DVL's error is **proportional to velocity**, so `0.0065` is 1 % at this
+> hull's 0.65 m/s cruise — right at cruise, pessimistic slower, optimistic
+> faster, and said so rather than left to be discovered.
+> **The camera FOV was the in-air number.** Blue Robotics specify 80°
+> horizontal *in air*; through a flat port Snell's law gives
+> `2·asin(sin 40°/1.333)` = **57.7°**, 28 % narrower. It ran the wrong way: the
+> sim showed more of the course than the vehicle ever sees, so every search
+> pattern was calibrated against a view that does not exist. Verified through
+> `camera_info` (fx 581.3 → 57.7°).
+>
 > **Bar30 noise is the datasheet's.** `SIM_BARO_RND` is in **metres**, and ours
 > was `0.02` — ten times too noisy on the one sensor every mission depends on.
 > The Bar30 is a TE MS5837-30BA: 0.2 mbar resolution, which its datasheet states

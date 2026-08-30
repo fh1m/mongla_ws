@@ -93,19 +93,32 @@ runner = ScriptRunner(_scripts_dir(), _workspace_root() / 'datasets')
 teleop = TeleopStreamer()
 
 
-def _joystick_button(action: str) -> None:
-    """Arm/disarm from a pad button.
+def _joystick_button(action: str) -> bool:
+    """Arm / disarm / fire / drop from a pad button.
 
     Deliberately routed through the same handlers the UI buttons use, so a
-    stick cannot reach the vehicle by a path the operator's own clicks do not.
+    stick cannot reach the vehicle by a path the operator's own clicks do not
+    -- including the disarmed interlock, which refuses a fire before arm in
+    sim exactly as in the pool.
+
+    `fire:N` / `drop:N` carry the channel the reader picked, because the
+    magazine (two rounds each, per the rulebook) lives with the reader.
     """
     try:
         if action == 'arm':
             vehicle_arm()
         elif action == 'disarm':
             vehicle_disarm()
-    except Exception:
-        pass
+        elif action.startswith(('fire:', 'drop:')):
+            kind, channel = action.split(':')
+            print(f'[JOY  ] {kind} -> payload channel {channel}', flush=True)
+            vehicle_cmd(MoveBody(cmd='fire', fire_channel=int(channel)))
+        return True
+    except Exception as exc:
+        print(f'[JOY  ] {action} failed: {exc}', flush=True)
+        # False tells the reader to keep the round: a refused fire must not
+        # cost a torpedo.
+        return False
 
 
 # A gamepad plugged into the machine running the lab. The other supported
@@ -166,6 +179,8 @@ class MoveBody(BaseModel):
     # why mode changes were unreachable from the browser: the request reached
     # argparse with a required argument missing and died with exit 2.
     target_name: Optional[str] = None
+    # `fire` takes a channel: 1/2 torpedo, 3/4 dropper.
+    fire_channel: Optional[int] = None
 
 
 class TeleopBody(BaseModel):
@@ -553,6 +568,11 @@ def vehicle_cmd(body: MoveBody):
         extra += ['--target', str(body.target)]
     if body.timeout is not None:
         extra += ['--timeout', str(body.timeout)]
+    if body.fire_channel is not None:
+        if int(body.fire_channel) not in (1, 2, 3, 4):
+            raise HTTPException(400, 'fire_channel must be 1-4 '
+                                     '(1/2 torpedo, 3/4 dropper)')
+        extra += ['--fire_channel', str(int(body.fire_channel))]
     if body.target_name is not None:
         name = body.target_name.strip().upper()
         if name not in ALLOWED_MODES:
@@ -592,7 +612,16 @@ def vehicle_arm():
 @app.post('/api/vehicle/disarm')
 def vehicle_disarm():
     teleop.set_axes(0, 0, 0, 0)
+    # Disarm ends a run, so the tubes are reloaded. Otherwise a practice
+    # session gets exactly two shots and then silently stops firing.
+    joystick.reload()
     return vehicle_cmd(MoveBody(cmd='disarm'))
+
+
+@app.post('/api/vehicle/reload')
+def vehicle_reload():
+    joystick.reload()
+    return {'ok': True, **joystick.snapshot()}
 
 
 @app.post('/api/vehicle/teleop')
