@@ -136,7 +136,21 @@ cameras:
   width: 640
   height: 480
   update_rate: 30.0
-  hfov: 1.396          # ~80 deg
+  # 1.0064 rad = 57.7 deg, the UNDERWATER field of view.
+  #
+  # The Blue Robotics Low-Light HD USB camera is specified at 80 deg
+  # horizontal IN AIR, and 80 deg is what this was set to. But the camera
+  # looks through a flat port into water, and Snell's law narrows it:
+  #     theta_water = 2 * asin(sin(40 deg) / 1.333) = 57.7 deg
+  # -- 28 % narrower than the number on the datasheet.
+  #
+  # That gap runs the wrong way for us. A sim camera that sees 80 deg shows
+  # more of the course than the vehicle ever will, so a mission tuned here
+  # keeps targets in frame that the real hull would have lost off the edge,
+  # and every search pattern is calibrated against a view that does not
+  # exist. This is the single most consequential number for vision work in
+  # the whole model.
+  hfov: 1.0064
   far_clip: 30.0
   noise_stddev: 0.007
   front:

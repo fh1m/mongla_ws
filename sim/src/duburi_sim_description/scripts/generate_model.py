@@ -117,12 +117,25 @@ DVL_DEFAULTS = {
     # Just below the hull, alongside the bottom camera.
     "z": -0.10,
     "update_rate": 8.0,
-    # +/- 0.4 cm/s within 2 stddevs, the reference figure.
-    "noise_stddev": 0.002,
+    # NORTEK NUCLEUS1000, not the Gazebo demo world this used to copy.
+    #
+    # Nortek quote the Nucleus1000 at "approximately 1 percent accuracy"
+    # (export-license-free; the 0.3 % variant is export controlled and is not
+    # what we carry). The previous 0.002 m/s was "the reference figure" from
+    # gz's own dvl_world, which describes a different instrument.
+    #
+    # THE SHAPE IS WRONG TOO, and Gazebo cannot express the right one: a real
+    # DVL's error is PROPORTIONAL to the measured velocity, while
+    # <noise type="gaussian"><stddev> is a fixed floor. 0.0065 is 1 % at the
+    # 0.65 m/s this hull cruises at, so it is right at cruise, pessimistic
+    # when creeping, and optimistic at full speed. Stated here rather than
+    # left to be discovered from a distance error that scales oddly.
+    "noise_stddev": 0.0065,
     "resolution": 0.01,
     # The SAUVC pool floor is 1.6 m down, so max range is never the binding
     # constraint; minimum_range is, because the hull flies close to the bottom.
-    "maximum_range": 50.0,
+    # Nortek: bottom-track "from over 0.1 to 75 m range".
+    "maximum_range": 75.0,
     "minimum_range": 0.1,
     # OFF, and this is the single most expensive flag in the model.
     #

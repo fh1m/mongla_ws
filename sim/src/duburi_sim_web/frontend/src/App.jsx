@@ -112,8 +112,15 @@ function joyShape(v) {
 // the link -- and it is the one that works when the lab is on another machine.
 // A pad on the lab machine is read there instead (/api/vehicle/joystick); both
 // end up in the same TeleopStreamer, so there is never a second RC writer.
-function useGamepad({ enabled, gain, onArm, onDisarm }) {
+// Two rounds of each, per the rulebook (p. 64: "up to two markers", "up to
+// two torpedoes"). Practising against an unlimited magazine teaches a timing
+// that does not exist on the vehicle.
+const FIRE_CHANNELS = [1, 2]
+const DROP_CHANNELS = [3, 4]
+
+function useGamepad({ enabled, gain, onArm, onDisarm, onPayload }) {
   const [pad, setPad] = useState(null)
+  const mag = useRef({ fire: [...FIRE_CHANNELS], drop: [...DROP_CHANNELS] })
   const state = useRef({ axes: [0, 0, 0, 0], buttons: [], sending: false })
 
   useEffect(() => {
@@ -141,12 +148,19 @@ function useGamepad({ enabled, gain, onArm, onDisarm }) {
         const down = !!b.pressed
         if (down && !prevButtons[i]) {
           if (i === 0) onArm?.()
-          if (i === 1) onDisarm?.()
+          if (i === 1) { mag.current = { fire: [...FIRE_CHANNELS], drop: [...DROP_CHANNELS] }; onDisarm?.() }
+          if (i === 2 || i === 3) {
+            const kind = i === 2 ? 'fire' : 'drop'
+            const channel = mag.current[kind].shift()
+            if (channel === undefined) onPayload?.(kind, null)
+            else onPayload?.(kind, channel)
+          }
         }
         prevButtons[i] = down
       })
 
-      setPad({ id: gp.id, index: gp.index, axes: [fwd, lat, up, yaw] })
+      setPad({ id: gp.id, index: gp.index, axes: [fwd, lat, up, yaw],
+               rounds: { fire: [...mag.current.fire], drop: [...mag.current.drop] } })
 
       // Fixed 25 Hz, not per-frame: the RC stream runs at 20 Hz, so anything
       // faster is wasted requests, and anything slower shows up as stepping.
@@ -178,7 +192,7 @@ function useGamepad({ enabled, gain, onArm, onDisarm }) {
         body: JSON.stringify({ fwd: 0, lat: 0, up: 0, yaw: 0 }),
       }).catch(() => {})
     }
-  }, [enabled, gain, onArm, onDisarm])
+  }, [enabled, gain, onArm, onDisarm, onPayload])
 
   return pad
 }
@@ -209,6 +223,8 @@ function ControllerPanel({ browserPad, labPad, enabled, setEnabled }) {
     : [labPad?.axes?.fwd || 0, labPad?.axes?.lat || 0,
        labPad?.axes?.up || 0, labPad?.axes?.yaw || 0]
   const where = browserPad ? 'browser' : 'lab host'
+  const rounds = (browserPad?.rounds) || (labPad?.rounds)
+    || { fire: [], drop: [] }
   return (
     <div className="joy-panel">
       <div className="joy-head">
@@ -233,9 +249,12 @@ function ControllerPanel({ browserPad, labPad, enabled, setEnabled }) {
           <AxisBar label="lat" value={axes[1]} />
           <AxisBar label="up" value={axes[2]} />
           <AxisBar label="yaw" value={axes[3]} />
-          {labPad?.connected && !browserPad && (
-            <div className="muted joy-hint">gain {labPad.gain} — LB/RB to change</div>
-          )}
+          <div className="muted joy-hint">
+            {browserPad ? '' : `gain ${labPad.gain} — LB/RB · `}
+            X fire {rounds.fire.length}/2 · Y drop {rounds.drop.length}/2
+            {rounds.fire.length + rounds.drop.length === 0
+              ? ' — empty, disarm to reload' : ''}
+          </div>
         </>
       ) : (
         <div className="muted joy-hint">
@@ -534,11 +553,29 @@ function Operate({ status, refresh }) {
   const onPadDisarm = useCallback(() => {
     if (armedRef.current) onArmToggle()
   }, [onArmToggle])
+  const onPadPayload = useCallback(async (kind, channel) => {
+    if (channel === null) {
+      setMsg(`${kind}: no rounds left — disarm to reload`)
+      return
+    }
+    setMsg(`${kind} -> channel ${channel} ...`)
+    try {
+      await api('/api/vehicle/cmd', {
+        method: 'POST',
+        body: JSON.stringify({ cmd: 'fire', fire_channel: channel }),
+      })
+      setMsg(`${kind} channel ${channel} away`)
+    } catch (e) {
+      setMsg(e.message)
+    }
+  }, [])
+
   const browserPad = useGamepad({
     enabled: padEnabled,
     gain,
     onArm: onPadArm,
     onDisarm: onPadDisarm,
+    onPayload: onPadPayload,
   })
 
   const onSetMode = useCallback(async (mode) => {

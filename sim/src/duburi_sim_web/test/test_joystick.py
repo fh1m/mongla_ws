@@ -166,3 +166,70 @@ def test_snapshot_reports_enough_to_map_an_unknown_pad():
     for key in ('connected', 'device', 'name', 'axes', 'buttons', 'gain',
                 'deadzone', 'expo', 'events'):
         assert key in snap
+
+
+def test_fire_and_drop_are_mapped_to_free_buttons():
+    """X fires a torpedo, Y drops a marker.
+
+    A and B are already arm/disarm, LB/RB are gain. X and Y are the next two
+    an F310 reports, and putting an irreversible action behind its own button
+    rather than a stick gesture is the ArduSub/QGC convention.
+    """
+    assert DEFAULT_BUTTON_MAP[2] == 'fire'
+    assert DEFAULT_BUTTON_MAP[3] == 'drop'
+
+
+def test_the_magazine_holds_what_the_rulebook_allows():
+    """"A vehicle may carry up to two markers" / "two torpedoes" (p. 64).
+
+    Practising against an unlimited magazine teaches a shot timing that does
+    not exist on the vehicle.
+    """
+    from duburi_sim_web.joystick import DROP_CHANNELS, FIRE_CHANNELS
+
+    assert len(FIRE_CHANNELS) == 2 and len(DROP_CHANNELS) == 2
+    # 1/2 torpedo, 3/4 dropper -- the same map as PayloadDriver.
+    from duburi_control.payload import CHANNEL_NAMES
+    for ch in FIRE_CHANNELS:
+        assert CHANNEL_NAMES[ch].startswith('torpedo')
+    for ch in DROP_CHANNELS:
+        assert CHANNEL_NAMES[ch].startswith('dropper')
+
+
+def test_rounds_are_consumed_in_order_and_run_out():
+    fired = []
+    r = JoystickReader(FakeTeleop(), device='/dev/null',
+                       on_button=lambda a: (fired.append(a), True)[1])
+    for _ in range(4):
+        r._press(2)                      # X
+    assert fired == ['fire:1', 'fire:2'], f'{fired}'
+    assert r.snapshot()['rounds']['fire'] == []
+
+
+def test_a_refused_shot_does_not_cost_a_round():
+    """THE bug this guards.
+
+    The disarmed interlock refuses a fire before arm. If the round were
+    consumed anyway the operator would silently have one torpedo instead of
+    two -- measured: pressing X before arming burned channel 1, and the next
+    press fired channel 2.
+    """
+    r = JoystickReader(FakeTeleop(), device='/dev/null',
+                       on_button=lambda a: False)
+    r._press(2)
+    assert r.snapshot()['rounds']['fire'] == [1, 2], 'a refused shot was billed'
+
+    # And a handler that returns nothing at all counts as success, so an
+    # ordinary callback does not have to know about this protocol.
+    r2 = JoystickReader(FakeTeleop(), device='/dev/null',
+                        on_button=lambda a: None)
+    r2._press(2)
+    assert r2.snapshot()['rounds']['fire'] == [2]
+
+
+def test_reload_refills_both_tubes():
+    r = JoystickReader(FakeTeleop(), device='/dev/null', on_button=lambda a: True)
+    r._press(2)
+    r._press(3)
+    r.reload()
+    assert r.snapshot()['rounds'] == {'fire': [1, 2], 'drop': [3, 4]}
