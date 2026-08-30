@@ -526,6 +526,24 @@ def vehicle_state():
     return snap
 
 
+@app.get('/api/score')
+def score():
+    """The live scorecard, as the scorer publishes it.
+
+    Polled like every other panel rather than streamed: the scorer publishes at
+    2 Hz and the UI already polls at 2 s, so adding SSE would buy nothing and
+    cost a transport nobody else here uses.
+    """
+    if worker.node is None:
+        raise HTTPException(503, 'ROS lab node not ready')
+    card = worker.node.snapshot().get('score') or {}
+    if not card:
+        return {'available': False,
+                'hint': 'no /duburi/sim/score -- start the sim with '
+                        'scoring:=true (the default)'}
+    return {'available': True, **card}
+
+
 _VERB_RE = re.compile(r'^[a-z][a-z0-9_]*$')
 
 

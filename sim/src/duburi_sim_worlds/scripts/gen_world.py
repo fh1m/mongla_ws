@@ -317,6 +317,23 @@ def build_props(course: dict, spec: dict, pool_cfg: dict):
         if meta["dynamic"]:
             dynamic.append(name)
 
+        # THE REGISTRY FLAG AND THE <static> TAG ARE SET IN TWO PLACES, so
+        # check they agree. `meta["dynamic"]` only decides the buoyancy
+        # whitelist below; whether the body actually moves is decided by
+        # `model(..., static=)` in the prop's own build function. Disagree and
+        # nothing errors: a prop marked dynamic but built static gets buoyancy
+        # enabled on a body that cannot move, and one built dynamic without the
+        # flag gets NO BUOYANCY AT ALL and sinks. Both look like physics bugs
+        # and neither logs a word, so the generator refuses instead.
+        is_static = "<static>true</static>" in pl.PROPS[model_name]["build"](spec)
+        if meta["dynamic"] and is_static:
+            raise SystemExit(
+                f"{model_name}: registry says dynamic, model.sdf says static")
+        if not meta["dynamic"] and not is_static:
+            raise SystemExit(
+                f"{model_name}: model.sdf says dynamic, registry does not -- "
+                "it would get no buoyancy")
+
         # Bump flares carry a golf ball that the AUV has to knock off. Placing it
         # here rather than inside the flare model keeps it a separate dynamic
         # body, which is what makes knocking it off possible at all.

@@ -29,6 +29,7 @@ BOTTOM_FX = '/duburi/sim/bottom_camera/image_fx'
 FRONT_RAW = '/duburi/sim/front_camera/image_raw'
 BOTTOM_RAW = '/duburi/sim/bottom_camera/image_raw'
 GROUND_TRUTH = '/duburi/sim/ground_truth'
+SCORE_TOPIC = '/duburi/sim/score'
 STATE_TOPIC = '/duburi/state'
 
 
@@ -70,6 +71,7 @@ class LabRosNode(Node):
             'have_state': False,
         }
         self._gt = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'have': False}
+        self._score = {}
         self._fx_params = {
             'turbidity': 0.45,
             'backscatter': 0.55,
@@ -86,6 +88,10 @@ class LabRosNode(Node):
         if DuburiState is not None:
             self.create_subscription(DuburiState, STATE_TOPIC, self._on_state, 10)
         self.create_subscription(Odometry, GROUND_TRUTH, self._on_gt, 10)
+        # The scorer has published this since it was written and nothing ever
+        # read it, so a practice run's score existed only in a terminal.
+        from std_msgs.msg import String as _String
+        self.create_subscription(_String, SCORE_TOPIC, self._on_score, 10)
 
         self._set_cli = self.create_client(SetParameters, '/underwater_fx/set_parameters')
         self._get_cli = self.create_client(GetParameters, '/underwater_fx/get_parameters')
@@ -128,6 +134,15 @@ class LabRosNode(Node):
         with self._lock:
             self._gt = {'x': p.x, 'y': p.y, 'z': p.z, 'have': True}
 
+    def _on_score(self, msg) -> None:
+        import json
+        try:
+            payload = json.loads(msg.data)
+        except (ValueError, TypeError):
+            return
+        with self._lock:
+            self._score = payload
+
     def latest_jpeg(self, cam: str) -> Optional[bytes]:
         with self._lock:
             return self._jpeg.get(cam)
@@ -137,6 +152,7 @@ class LabRosNode(Node):
             return {
                 'state': dict(self._state),
                 'ground_truth': dict(self._gt),
+                'score': dict(self._score),
                 'use_fx': self._use_fx,
                 'fx': dict(self._fx_params),
                 'cameras': {

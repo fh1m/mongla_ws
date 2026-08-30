@@ -192,6 +192,10 @@
           <emissive>0.1584 0.0242 0.0286 1</emissive>
         </material>
       </visual>
+      <collision name="divider_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.0508 0.0508 0.6096</size></box></geometry>
+      </collision>
     </link>
     <link name="sign_survey_repair">
       <pose>0 -0.66 -0.4049 0 0 0</pose>
@@ -221,6 +225,10 @@
           </pbr>
         </material>
       </visual>
+      <collision name="sign_survey_repair_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.305 0.305</size></box></geometry>
+      </collision>
     </link>
     <link name="sign_search_rescue">
       <pose>0 0.66 -0.4049 0 0 0</pose>
@@ -250,6 +258,10 @@
           </pbr>
         </material>
       </visual>
+      <collision name="sign_search_rescue_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.004 0.305 0.305</size></box></geometry>
+      </collision>
     </link>
     <link name="mooring_port">
       <pose>0 -1.5 -1.85 0 0 0</pose>

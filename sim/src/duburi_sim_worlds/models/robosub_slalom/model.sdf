@@ -1,19 +1,19 @@
 <?xml version="1.0"?>
 <sdf version="1.9">
   <model name="robosub_slalom">
-    <static>true</static>
+    <static>false</static>
     <plugin filename="gz-sim-label-system" name="gz::sim::systems::Label">
       <label>13</label>
     </plugin>
     <link name="pipe_left">
-      <pose>0 0.6 0.45 0 0 0</pose>
+      <pose>0 0.6 0.462 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1.5</mass>
+        <mass>0.35</mass>
         <inertia>
-          <ixx>0.101355</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.101355</iyy><iyz>0</iyz>
-          <izz>0.000209167</izz>
+          <ixx>0.0236494</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0236494</iyy><iyz>0</iyz>
+          <izz>4.88057e-05</izz>
         </inertia>
       </inertial>
       <visual name="pipe_left_visual">
@@ -31,15 +31,47 @@
         <geometry><cylinder><radius>0.0167</radius><length>0.9</length></cylinder></geometry>
       </collision>
     </link>
-    <link name="pipe_centre">
-      <pose>0 0 0.45 0 0 0</pose>
+    <link name="pipe_left_anchor">
+      <pose>0 0.6 0.006 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1.5</mass>
+        <mass>0.9</mass>
         <inertia>
-          <ixx>0.101355</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.101355</iyy><iyz>0</iyz>
-          <izz>0.000209167</izz>
+          <ixx>0.0005733</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0005733</iyy><iyz>0</iyz>
+          <izz>0.001125</izz>
+        </inertia>
+      </inertial>
+      <visual name="pipe_left_anchor_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.05</radius><length>0.012</length></cylinder></geometry>
+        <material>
+          <ambient>0.9 0.9 0.9 1</ambient>
+          <diffuse>0.9 0.9 0.9 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.252 0.252 0.252 1</emissive>
+        </material>
+      </visual>
+      <collision name="pipe_left_anchor_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.05</radius><length>0.012</length></cylinder></geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            <bullet><friction>0.8</friction><friction2>0.8</friction2></bullet>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="pipe_centre">
+      <pose>0 0 0.462 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.35</mass>
+        <inertia>
+          <ixx>0.0236494</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0236494</iyy><iyz>0</iyz>
+          <izz>4.88057e-05</izz>
         </inertia>
       </inertial>
       <visual name="pipe_centre_visual">
@@ -57,15 +89,47 @@
         <geometry><cylinder><radius>0.0167</radius><length>0.9</length></cylinder></geometry>
       </collision>
     </link>
-    <link name="pipe_right">
-      <pose>0 -0.6 0.45 0 0 0</pose>
+    <link name="pipe_centre_anchor">
+      <pose>0 0 0.006 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
-        <mass>1.5</mass>
+        <mass>0.9</mass>
         <inertia>
-          <ixx>0.101355</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.101355</iyy><iyz>0</iyz>
-          <izz>0.000209167</izz>
+          <ixx>0.0005733</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0005733</iyy><iyz>0</iyz>
+          <izz>0.001125</izz>
+        </inertia>
+      </inertial>
+      <visual name="pipe_centre_anchor_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.05</radius><length>0.012</length></cylinder></geometry>
+        <material>
+          <ambient>0.72 0.11 0.13 1</ambient>
+          <diffuse>0.72 0.11 0.13 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.2016 0.0308 0.0364 1</emissive>
+        </material>
+      </visual>
+      <collision name="pipe_centre_anchor_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.05</radius><length>0.012</length></cylinder></geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            <bullet><friction>0.8</friction><friction2>0.8</friction2></bullet>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="pipe_right">
+      <pose>0 -0.6 0.462 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.35</mass>
+        <inertia>
+          <ixx>0.0236494</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0236494</iyy><iyz>0</iyz>
+          <izz>4.88057e-05</izz>
         </inertia>
       </inertial>
       <visual name="pipe_right_visual">
@@ -83,5 +147,87 @@
         <geometry><cylinder><radius>0.0167</radius><length>0.9</length></cylinder></geometry>
       </collision>
     </link>
+    <link name="pipe_right_anchor">
+      <pose>0 -0.6 0.006 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.9</mass>
+        <inertia>
+          <ixx>0.0005733</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0005733</iyy><iyz>0</iyz>
+          <izz>0.001125</izz>
+        </inertia>
+      </inertial>
+      <visual name="pipe_right_anchor_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.05</radius><length>0.012</length></cylinder></geometry>
+        <material>
+          <ambient>0.9 0.9 0.9 1</ambient>
+          <diffuse>0.9 0.9 0.9 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.252 0.252 0.252 1</emissive>
+        </material>
+      </visual>
+      <collision name="pipe_right_anchor_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.05</radius><length>0.012</length></cylinder></geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            <bullet><friction>0.8</friction><friction2>0.8</friction2></bullet>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+    <joint name="pipe_left_pipe_left_anchor_fix" type="fixed">
+      <parent>pipe_left</parent>
+      <child>pipe_left_anchor</child>
+    </joint>
+    <joint name="pipe_left_pipe_centre_fix" type="fixed">
+      <parent>pipe_left</parent>
+      <child>pipe_centre</child>
+    </joint>
+    <joint name="pipe_left_pipe_centre_anchor_fix" type="fixed">
+      <parent>pipe_left</parent>
+      <child>pipe_centre_anchor</child>
+    </joint>
+    <joint name="pipe_left_pipe_right_fix" type="fixed">
+      <parent>pipe_left</parent>
+      <child>pipe_right</child>
+    </joint>
+    <joint name="pipe_left_pipe_right_anchor_fix" type="fixed">
+      <parent>pipe_left</parent>
+      <child>pipe_right_anchor</child>
+    </joint>
+    <plugin filename="gz-sim-hydrodynamics-system" name="gz::sim::systems::Hydrodynamics">
+      <link_name>pipe_left</link_name>
+      <water_density>1000.0</water_density>
+      <xUabsU>-15.03</xUabsU>
+      <yVabsV>-15.03</yVabsV>
+      <zWabsW>-0.438079</zWabsW>
+      <kPabsP>-2.73922</kPabsP>
+      <mQabsQ>-2.73922</mQabsQ>
+      <nRabsR>-2.73922</nRabsR>
+    </plugin>
+    <plugin filename="gz-sim-hydrodynamics-system" name="gz::sim::systems::Hydrodynamics">
+      <link_name>pipe_centre</link_name>
+      <water_density>1000.0</water_density>
+      <xUabsU>-15.03</xUabsU>
+      <yVabsV>-15.03</yVabsV>
+      <zWabsW>-0.438079</zWabsW>
+      <kPabsP>-2.73922</kPabsP>
+      <mQabsQ>-2.73922</mQabsQ>
+      <nRabsR>-2.73922</nRabsR>
+    </plugin>
+    <plugin filename="gz-sim-hydrodynamics-system" name="gz::sim::systems::Hydrodynamics">
+      <link_name>pipe_right</link_name>
+      <water_density>1000.0</water_density>
+      <xUabsU>-15.03</xUabsU>
+      <yVabsV>-15.03</yVabsV>
+      <zWabsW>-0.438079</zWabsW>
+      <kPabsP>-2.73922</kPabsP>
+      <mQabsQ>-2.73922</mQabsQ>
+      <nRabsR>-2.73922</nRabsR>
+    </plugin>
   </model>
 </sdf>

@@ -78,7 +78,8 @@ DROP_CHANNELS = (3, 4)          # marker / dropper
 
 # QGC exposes gain as a first-class control because a single fixed stick scale
 # is either too coarse for alignment or too slow for transit. Same idea here.
-GAIN_MIN, GAIN_MAX, GAIN_STEP = 0.10, 1.00, 0.10
+from .teleop import GAIN_DEFAULT, GAIN_MIN   # one floor, see teleop.py
+GAIN_MAX, GAIN_STEP = 1.00, 0.10
 
 # Sticks do not return exactly to zero; without a deadzone the vehicle creeps.
 DEFAULT_DEADZONE = 0.08
@@ -113,7 +114,7 @@ class JoystickReader:
                  button_map: dict | None = None,
                  deadzone: float = DEFAULT_DEADZONE,
                  expo: float = DEFAULT_EXPO,
-                 gain: float = 0.55,
+                 gain: float = GAIN_DEFAULT,
                  on_button=None,
                  logger=None) -> None:
         self._teleop = teleop

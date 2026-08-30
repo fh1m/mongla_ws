@@ -66,8 +66,11 @@ The flares are 80 cm tall and only 1.6 cm across, which makes this the hardest D
         </density_change>
       </graded_buoyancy>
       <enable>duburi</enable>
+      <enable>flare_red</enable>
       <enable>flare_red_ball</enable>
+      <enable>flare_yellow</enable>
       <enable>flare_yellow_ball</enable>
+      <enable>flare_blue</enable>
       <enable>flare_blue_ball</enable>
       <enable>payload_shot_0</enable>
       <enable>payload_shot_1</enable>

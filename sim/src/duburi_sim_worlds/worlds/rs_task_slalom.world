@@ -63,6 +63,9 @@ Scoring rewards keeping the SAME side of the red pipe the vehicle took at the ga
         </density_change>
       </graded_buoyancy>
       <enable>duburi</enable>
+      <enable>slalom_1</enable>
+      <enable>slalom_2</enable>
+      <enable>slalom_3</enable>
       <enable>payload_shot_0</enable>
       <enable>payload_shot_1</enable>
       <enable>payload_shot_2</enable>

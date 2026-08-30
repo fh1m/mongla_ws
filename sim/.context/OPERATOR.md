@@ -138,3 +138,37 @@ ros2 run duburi_sim_bringup duburi_sim stop
 
 `stop` does not kill `lab_server` by default (pattern list is sim/stack focused).
 Stop the lab terminal separately, or `pkill -f duburi_sim_web/lab_server` if orphaned.
+
+---
+
+## The view — third-person by default
+
+The run used to open on `<camera_pose>-14 0 4</camera_pose>`: 4 m up in the
+air, looking down at the water surface. You could see the pool and not the run.
+
+The GUI camera now starts **underwater behind the hull** and **follows it**.
+`CameraTracking` was already loaded in `gui.config` with an empty body, so it
+never tracked anything; it now has a `follow_target` of `duburi` — the world
+*instance* name, which is the same on all 13 courses (the model name is
+`duburi_heavy`, and passing that silently follows nothing).
+
+The offset is behind, slightly left and slightly above: dead astern hides the
+hull behind its own wake, dead overhead loses the horizon, and both make it
+hard to tell whether the vehicle is level. `follow_pgain` is deliberately low —
+a stiff follow transmits every yaw correction to the camera and the picture
+shakes.
+
+```bash
+duburi_sim view          # chase the vehicle (the default)
+duburi_sim view free     # let go, fly the camera by hand
+duburi_sim view chase    # back to following
+```
+
+Useful for looking at a prop mid-run and then returning to the vehicle without
+restarting.
+
+## The score page
+
+`duburi_sim lab` now has a **score** tab: every rulebook line item for the
+running course's competition, what it is worth, whether it was earned, and the
+evidence. Full detail in [SCORING.md](SCORING.md).

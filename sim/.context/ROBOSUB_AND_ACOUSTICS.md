@@ -316,3 +316,42 @@ The genuinely novel acoustic work is the **pinger** above — SAUVC Task 2 and b
 RoboSub pinger tasks. What Task 4 still needs is a **sequence-scoring node**:
 assert the flares were bumped in the commanded order, which is a contact-and-
 scoring problem like `gate_transit_check.py`, not an acoustics one. Not built.
+
+---
+
+## The torpedo board — one source of truth
+
+Two defects, both visible in a render and neither logged.
+
+**The streaky washed-out plate was z-fighting.** `_plate_with_holes` tiles the
+board's collision into 40 strip boxes; the printed face is a box of the *same
+thickness* at the *same x*, centred on the *same z*. Both emitted visuals, so
+two co-planar surfaces fought and the artwork — the thing a detector has to
+classify — disappeared into grey streaks. The strips are now
+**collision-only** (`_solid(visible=False)`) and the printed face is the only
+thing drawn: **45 visuals → 3**, collisions unchanged at 42.
+
+That is also free performance. RTF here is driven by visuals, not collisions
+(cutting collision shapes 101 → 37 changed it not at all), and every visual is
+paid four times over — two cameras plus two bounding-box cameras.
+
+**The holes you could see were not the holes you could shoot through.** The
+texture generator drew **four** openings at (0.50,0.30) (0.50,0.70) (0.22,0.50)
+(0.78,0.50) in UV; the collision cut **two**, elsewhere. A mission lined up on
+the artwork struck solid board and the sim scored it a miss, for a reason no
+operator could see.
+
+The rulebook is unambiguous — "vinyl printed images and **two sized openings**"
+— so the collision was right and the artwork was wrong. Both now come from
+`prop_library.torpedo_openings()`, with `torpedo_openings_uv()` doing the one
+metre→UV conversion. They were written out twice and had drifted; now they
+cannot.
+
+**The standoff bars are gone.** Two red rectangles used to hang in open water
+below the board on nothing. The scored standoff is a *horizontal firing
+distance* — a bar's height cannot encode one, so they marked nothing and in a
+render just looked like a mistake. They are not replaced: a floor stripe at the
+scored range would be a training aid, and this prop feeds the vision datasets,
+so painting something the competition will not have teaches the detector
+something false. The range belongs on the operator's readout, which is where
+the scoring dashboard now puts it.

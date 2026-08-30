@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const PAGES = ['operate', 'world', 'datasets']
+// What a gain setting actually DELIVERS, which is not what it reads.
+//
+// The T200 does not begin producing thrust until PWM 1528 (a 28 us deadband
+// either side of neutral, then a quadratic curve), so the bottom of the range
+// is nearly inert and the middle is weaker than the number suggests: gain 55%
+// is 39% of thrust, and 15% is about 4%. Showing both numbers is the honest
+// version -- otherwise "half gain" reads like half speed and is not.
+const PWM_DEAD = 1528, PWM_MAX = 1900;
+function thrustPct(g) {
+  const pwm = 1500 + g * 400;
+  if (pwm <= PWM_DEAD) return 0;
+  const u = (pwm - PWM_DEAD) / (PWM_MAX - PWM_DEAD);
+  const full = 25.69 + 27.95 - 0.43;
+  return Math.round((25.69 * u * u + 27.95 * u - 0.43) / full * 100);
+}
+
+const PAGES = ['operate', 'score', 'world', 'datasets']
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -420,13 +436,13 @@ function Dpad({ armed, onArmToggle, gain, setGain, busy }) {
         gain
         <input
           type="range"
-          min="0.15"
-          max="1"
-          step="0.05"
-          value={gain}
-          onChange={(e) => setGain(Number(e.target.value))}
+          min="10"
+          max="100"
+          step="5"
+          value={Math.round(gain * 100)}
+          onChange={(e) => setGain(Number(e.target.value) / 100)}
         />
-        <span>{gain.toFixed(2)}</span>
+        <span>{Math.round(gain * 100)}%<em>{thrustPct(gain)}% thrust</em></span>
       </label>
       <p className="hint">wasd move · q/e yaw · r/f depth · space arm</p>
     </div>
@@ -503,7 +519,7 @@ function Operate({ status, refresh }) {
       : null
   const course = status?.active_course || status?.sim?.active_course || 'sauvc26_qualification'
   const [camMode, setCamMode] = useState('both')
-  const [gain, setGain] = useState(0.55)
+  const [gain, setGain] = useState(1.0)
   const [padEnabled, setPadEnabled] = useState(true)
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('gate_approach')
@@ -1172,6 +1188,148 @@ function Datasets() {
   )
 }
 
+
+// ---------------------------------------------------------------------------
+// Score -- what the run was actually worth
+// ---------------------------------------------------------------------------
+//
+// Every item is one line of the published rulebook, in the rulebook's own
+// words, in one of three states: earned, still available, or NOT MODELLED --
+// scored by the competition but not judgeable here. The third state is the
+// reason the header shows the reachable maximum next to the rulebook maximum.
+// A total that quietly counts unreachable points reads like a competition
+// result and is not one.
+
+function mmss(s) {
+  const t = Math.max(0, Math.round(s || 0))
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
+}
+
+function ScoreItem({ item }) {
+  const dead = item.state === 'not_modelled'
+  const got = item.count > 0
+  const cls = dead ? 'score-item dead' : got ? 'score-item got' : 'score-item'
+  return (
+    <li className={cls}>
+      <span className="tick">{dead ? '—' : got ? '✓' : '·'}</span>
+      <span className="what">
+        {item.label}
+        {item.repeat > 1 && <em> ×{item.repeat}</em>}
+        {dead && <em className="why">not modelled: {item.note}</em>}
+        {!dead && item.note && <em className="why">{item.note}</em>}
+        {item.evidence.map((e, i) => (
+          <em key={i} className="evidence">{e}</em>
+        ))}
+      </span>
+      <span className="pts">
+        {got ? `+${item.earned}` : dead ? '' : item.points * item.repeat}
+      </span>
+    </li>
+  )
+}
+
+function Score() {
+  const [card, setCard] = useState(null)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setCard(await api('/api/score'))
+        setErr(null)
+      } catch (e) {
+        setErr(String(e.message || e))
+      }
+    }
+    load()
+    const id = setInterval(load, 2000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (err) return <main className="page single"><div className="panel wide"><p className="muted">lab offline — {err}</p></div></main>
+  if (!card) return <main className="page single"><div className="panel wide"><p className="muted">waiting for the scorer…</p></div></main>
+  if (!card.available) {
+    return (
+      <main className="page single">
+        <div className="panel wide">
+          <h2>score</h2>
+          <p className="muted">{card.hint}</p>
+        </div>
+      </main>
+    )
+  }
+
+  const run = card.run || {}
+  const c = card.card || {}
+  const pct = c.max_reachable ? Math.round((c.total / c.max_reachable) * 100) : 0
+  const remaining = []
+  for (const t of c.tasks || []) {
+    for (const it of t.items || []) {
+      if (it.state === 'scored' && it.count < it.repeat) {
+        remaining.push(`${it.label}${it.count ? ` (${it.count}/${it.repeat})` : ''}`)
+      }
+    }
+  }
+
+  return (
+    <main className="page single">
+      <div className="panel wide">
+        <div className="score-head">
+          <div>
+            <h2>{c.name}</h2>
+            <p className="muted mono tiny">{card.competition} · {run.running ? 'RUN LIVE' : 'not running'}</p>
+          </div>
+          <div className="score-total">
+            <strong>{c.total}</strong>
+            <em>of {c.max_reachable} reachable</em>
+            <em className="tiny">rulebook maximum {c.max_rulebook}</em>
+          </div>
+        </div>
+
+        <div className="score-bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></div>
+
+        <ul className="score-facts">
+          <li><span>clock</span>{mmss(run.elapsed_s)} / {mmss(run.limit_s)}</li>
+          <li><span>pool contact</span>{(run.contact_s || 0).toFixed(1)} s · {run.touches || 0} touches</li>
+          <li><span>penalties</span>{(c.penalties || []).reduce((a, p) => a + p.points, 0)}</li>
+        </ul>
+        {run.aborted && <p className="score-abort">RUN ABORTED — {run.aborted}</p>}
+      </div>
+
+      {(c.tasks || []).map((t) => (
+        <div className="panel wide" key={t.key}>
+          <h3>{t.label}</h3>
+          <ul className="score-list">
+            {t.items.map((it) => <ScoreItem key={it.key} item={it} />)}
+          </ul>
+        </div>
+      ))}
+
+      {(c.penalties || []).length > 0 && (
+        <div className="panel wide">
+          <h3>penalties</h3>
+          <ul className="score-list">
+            {c.penalties.map((p, i) => (
+              <li className="score-item pen" key={i}>
+                <span className="tick">!</span>
+                <span className="what">{p.label}<em className="evidence">{p.evidence}</em></span>
+                <span className="pts">{p.points}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="panel wide">
+        <h3>what remains</h3>
+        {remaining.length === 0
+          ? <p className="muted">everything the sim can score has been scored.</p>
+          : <ul className="score-remaining">{remaining.map((r, i) => <li key={i}>{r}</li>)}</ul>}
+      </div>
+    </main>
+  )
+}
+
 export default function App() {
   const [page, setPage] = useState('operate')
   const [status, setStatus] = useState(null)
@@ -1221,6 +1379,7 @@ export default function App() {
         <div className="tagline">build. break. learn. repeat.</div>
       </header>
       {page === 'operate' && <Operate status={status} refresh={refresh} />}
+      {page === 'score' && <Score />}
       {page === 'world' && <World status={status} refresh={refresh} />}
       {page === 'datasets' && <Datasets />}
       <footer>

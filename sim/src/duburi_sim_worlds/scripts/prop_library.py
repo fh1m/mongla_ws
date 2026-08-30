@@ -268,17 +268,96 @@ def visual(name, geometry, mat, pose="0 0 0 0 0 0", cast_shadows=True,
     )
 
 
-def collision(name, geometry, pose="0 0 0 0 0 0") -> str:
+def collision(name, geometry, pose="0 0 0 0 0 0", surface: str = "") -> str:
+    surf = f"{_indent(surface, 1)}\n" if surface else ""
     return (
         f'<collision name="{name}">\n'
         f"  <pose>{pose}</pose>\n"
         f"  {geometry}\n"
+        f"{surf}"
         "</collision>"
     )
 
 
 def link(name, body: str, pose="0 0 0 0 0 0") -> str:
     return f'<link name="{name}">\n  <pose>{pose}</pose>\n{_indent(body, 1)}\n</link>'
+
+
+def hydrodynamics(link_name, xy_quad, z_quad, rot_quad) -> str:
+    """Fossen drag on one link of a DYNAMIC prop.
+
+    WITHOUT THIS A KNOCKED PROP RINGS FOREVER. Only the vehicle carried
+    hydrodynamics, so a prop moved like a body in air -- and a self-righting
+    flare with no drag is a pendulum with nothing to remove its energy.
+    Measured before adding it: knocked to 87.6 degrees, then still swinging
+    through 25 degrees 24 s later.
+
+    Quadratic terms only. The linear ones matter near zero velocity where
+    there is nothing left to damp, and leaving them out keeps this to the three
+    numbers that can actually be derived from the prop's own dimensions:
+
+        translational   1/2 * rho * Cd * A          (A = projected area)
+        rotational      1/2 * rho * Cd * d * L^4/4  (a rod sweeping about one end)
+
+    Added mass is deliberately absent, as on the vehicle: it belongs in the
+    link's <fluid_added_mass>, and setting it in both places double-counts.
+    """
+    return (f'<plugin filename="gz-sim-hydrodynamics-system" '
+            f'name="gz::sim::systems::Hydrodynamics">\n'
+            f'  <link_name>{link_name}</link_name>\n'
+            f'  <water_density>1000.0</water_density>\n'
+            f'  <xUabsU>{-abs(xy_quad):.6g}</xUabsU>\n'
+            f'  <yVabsV>{-abs(xy_quad):.6g}</yVabsV>\n'
+            f'  <zWabsW>{-abs(z_quad):.6g}</zWabsW>\n'
+            f'  <kPabsP>{-abs(rot_quad):.6g}</kPabsP>\n'
+            f'  <mQabsQ>{-abs(rot_quad):.6g}</mQabsQ>\n'
+            f'  <nRabsR>{-abs(rot_quad):.6g}</nRabsR>\n'
+            f'</plugin>')
+
+
+def rod_drag(diameter, length, cd=1.0, rho=1000.0):
+    """(transverse, axial, rotational) quadratic drag for a rod. See `hydrodynamics`."""
+    return (0.5 * rho * cd * diameter * length,
+            0.5 * rho * cd * math.pi * (diameter / 2.0) ** 2,
+            0.5 * rho * cd * diameter * length ** 4 / 4.0)
+
+
+def joint(name, parent, child, jtype="fixed") -> str:
+    """Weld two links of a DYNAMIC model together.
+
+    A static model needs none of these -- <static>true</static> welds every
+    link to the world implicitly, which is why this file had zero joints until
+    props became pushable. The moment a model goes dynamic that stops being
+    true: an unjointed multi-link model is N SEPARATE FREE BODIES that fly
+    apart on the first physics step, with nothing logged.
+    """
+    return (f'<joint name="{name}" type="{jtype}">\n'
+            f'  <parent>{parent}</parent>\n'
+            f'  <child>{child}</child>\n'
+            f'</joint>')
+
+
+def weld_all(root: str, children) -> list:
+    """Fixed joints welding every `children` link to `root`. See `joint`."""
+    return [joint(f"{root}_{c}_fix", root, c) for c in children]
+
+
+def friction(mu=0.8) -> str:
+    """An explicit contact friction surface.
+
+    Nothing in this tree set friction before, so every contact ran on whatever
+    the engine defaulted to -- fine while every prop was static and could not
+    slide, load-bearing the moment one can. BOTH engine blocks are written
+    because the world runs DART with bullet's collision detector, and which one
+    reads the value is not worth guessing at.
+    """
+    return ('<surface>\n'
+            '  <friction>\n'
+            f'    <ode><mu>{mu}</mu><mu2>{mu}</mu2></ode>\n'
+            f'    <bullet><friction>{mu}</friction>'
+            f'<friction2>{mu}</friction2></bullet>\n'
+            '  </friction>\n'
+            '</surface>')
 
 
 # ---------------------------------------------------------------------------
@@ -372,16 +451,33 @@ def model(name, body: str, static: bool = True, label: int = None) -> str:
     )
 
 
-def _solid(name, geometry, mat, mass, inertia, pose="0 0 0 0 0 0", collide=True):
-    """A link with matching visual and collision geometry."""
-    parts = [inertial(mass, inertia), visual(f"{name}_visual", geometry, mat)]
+def _solid(name, geometry, mat, mass, inertia, pose="0 0 0 0 0 0", collide=True,
+           visible=True, surface=""):
+    """A link with matching visual and collision geometry.
+
+    `visible=False` gives a COLLISION-ONLY link. That exists because two
+    co-planar surfaces both carrying a visual is not a cosmetic problem: the
+    torpedo board's tiled collision plate sat in exactly the same plane, at
+    exactly the same thickness, as its printed face, and the two z-fought into
+    a streaky grey mess that hid the artwork the task is detected from. One
+    physical surface should be drawn once.
+
+    It is also free performance. RTF here is driven by visuals, not collisions
+    (PHYSICS.md: cutting collision shapes 101 -> 37 changed it not at all), and
+    every visual is paid four times over -- two cameras plus two bounding-box
+    cameras.
+    """
+    parts = [inertial(mass, inertia)]
+    if visible:
+        parts.append(visual(f"{name}_visual", geometry, mat))
     if collide:
-        parts.append(collision(f"{name}_collision", geometry))
+        parts.append(collision(f"{name}_collision", geometry, surface=surface))
     return link(name, "\n".join(parts), pose)
 
 
 def _cylinder_link(
-    name, radius, length, colour, mass, pose, collide=True, mat=None
+    name, radius, length, colour, mass, pose, collide=True, mat=None,
+    visible=True, surface="",
 ):
     return _solid(
         name,
@@ -391,10 +487,13 @@ def _cylinder_link(
         cylinder_inertia(mass, radius, length),
         pose,
         collide,
+        visible,
+        surface,
     )
 
 
-def _box_link(name, sx, sy, sz, colour, mass, pose, collide=True, mat=None):
+def _box_link(name, sx, sy, sz, colour, mass, pose, collide=True, mat=None,
+              visible=True, surface=""):
     return _solid(
         name,
         _geometry_box(sx, sy, sz),
@@ -403,6 +502,8 @@ def _box_link(name, sx, sy, sz, colour, mass, pose, collide=True, mat=None):
         box_inertia(mass, sx, sy, sz),
         pose,
         collide,
+        visible,
+        surface,
     )
 
 
@@ -544,6 +645,63 @@ def orange_flare(spec: dict) -> str:
     )
 
 
+# --------------------------------------------------------------------------
+# Flare mass budget -- why a knocked flare stands back up
+# --------------------------------------------------------------------------
+#
+# The flare has to do two things that pull in opposite directions: STAY ON THE
+# FLOOR when the pool current pushes it, and RIGHT ITSELF when the vehicle
+# knocks it over. The tempting answer -- "make it buoyant and moor it" -- is
+# wrong: a net-buoyant free body just accelerates upward until it hits the
+# surface, because buoyancy supplies no restoring force in TRANSLATION.
+#
+# What works is the opposite pairing:
+#
+#   net weight NEGATIVE      -> it presses on the floor and stays put
+#   centre of BUOYANCY well
+#   ABOVE centre of MASS     -> it rights itself from any tilt
+#
+# Those are compatible: dense low ballast, near-buoyant volume above it. It is
+# how a weighted marker buoy works, and how the real flare works.
+#
+# The numbers, all from this file's own geometry (water 1000 kg/m^3):
+#
+#   link        volume m^3    displaces kg     mass kg
+#   pole        1.6085e-4     0.1609           0.020    (sealed hollow pipe)
+#   cup_floor   9.47e-6       0.0095           0.008
+#   8x rim      8.55e-6       0.0086           0.012 total
+#   base        1.131e-4      0.1131           0.600    <- ballast
+#   TOTAL       2.919e-4      0.2919           0.640
+#
+#   net weight in water   0.348 kg  = 3.41 N DOWN     -> cannot float away
+#   centre of mass        z = 0.0425 m
+#   centre of buoyancy    z = 0.2722 m               -> 0.230 m ABOVE the CoM
+#   righting couple       0.513 * sin(theta) N*m, positive at every angle
+#
+# It also rights itself from FLAT, which a pivot argument would not show: the
+# centre of mass sits 0.0425 m up standing and 0.060 m up lying on its side, so
+# gravity alone has no barrier to getting up, and the buoyancy couple is pure
+# gain on top of that.
+#
+# Two consequences worth stating because they are not obvious:
+#
+# - The golf ball needs only ~7 degrees of tilt to leave the cup. Its net
+#   seating force is 0.0051 kg -- it very nearly floats -- so effective gravity
+#   in the cup is 1.09 m/s^2 and the righting motion itself throws it out. The
+#   knock task therefore works easily, AND any residual flare wobble ejects
+#   balls on its own, which is what ball_check.py catches.
+# - DART's own collision detector silently returns false for cylinder-box, and
+#   the base disc on the pool floor IS a cylinder on a box. If anyone ever
+#   reverts collision_detector to `dart` for the measured 5%, every flare falls
+#   through the floor. The note also lives beside that setting in gen_world.py.
+_FLARE_M_POLE = 0.020
+_FLARE_M_CUP = 0.008
+_FLARE_M_RIM = 0.0015
+_FLARE_M_BASE = 0.600
+_FLARE_BASE_R = 0.06
+_FLARE_BASE_H = 0.01
+
+
 def bump_flare(spec: dict, colour_name: str) -> str:
     """80 cm tall, ~1.6 cm diameter pole. Floor-anchored.
 
@@ -563,7 +721,7 @@ def bump_flare(spec: dict, colour_name: str) -> str:
             radius,
             height,
             colour,
-            0.1,
+            _FLARE_M_POLE,
             f"0 0 {height / 2.0:.6g} 0 0 0",
             mat=pvc,
         ),
@@ -588,14 +746,18 @@ def bump_flare(spec: dict, colour_name: str) -> str:
             ball_r * 1.05,
             0.006,
             colour,
-            0.05,
+            _FLARE_M_CUP,
             f"0 0 {height + 0.003:.6g} 0 0 0",
             mat=pvc,
         ),
         # A small base disc, so a pole this thin does not look like it is
         # floating and has something to stand on.
+        # THE BALLAST. Dense and low: it is what makes the flare stand up
+        # again instead of lying where it was knocked. See _FLARE_M_BASE.
         _cylinder_link(
-            "base", 0.06, 0.01, colour, 0.2, "0 0 0.005 0 0 0", mat=pvc
+            "base", _FLARE_BASE_R, _FLARE_BASE_H, colour, _FLARE_M_BASE,
+            f"0 0 {_FLARE_BASE_H / 2.0:.6g} 0 0 0", mat=pvc,
+            surface=friction(0.8),
         ),
     ]
     # The rim: eight thin wall segments around the cup floor. Inside radius is
@@ -605,12 +767,18 @@ def bump_flare(spec: dict, colour_name: str) -> str:
     for i in range(8):
         a = i * math.pi / 4.0
         parts.append(_box_link(
-            f"cup_rim_{i}", 0.004, rim_r * 0.85, 0.016, colour, 0.01,
+            f"cup_rim_{i}", 0.004, rim_r * 0.85, 0.016, colour, _FLARE_M_RIM,
             f"{rim_r * math.cos(a):.6g} {rim_r * math.sin(a):.6g} "
             f"{height + 0.012:.6g} 0 0 {a:.6g}",
             mat=pvc))
 
-    return model(f"sauvc_flare_{colour_name}", "\n".join(parts))
+    # DYNAMIC, so it must be WELDED. A static model is welded to the world
+    # implicitly; drop that and these eleven links are eleven free bodies.
+    parts.extend(weld_all(
+        "base", ["pole", "cup_floor"] + [f"cup_rim_{i}" for i in range(8)]))
+    parts.append(hydrodynamics("pole", *rod_drag(cfg["diameter"], height)))
+
+    return model(f"sauvc_flare_{colour_name}", "\n".join(parts), static=False)
 
 
 def drum(spec: dict, colour_name: str, model_name: str = None, pinger: bool = False) -> str:
@@ -899,7 +1067,7 @@ def golf_ball(spec: dict) -> str:
 _THIN = (1e-6, 1e-6, 1e-6)
 
 
-def _role_sign(spec, name, image, pose, size=None):
+def _role_sign(spec, name, image, pose, size=None, collide=False):
     """A 12 in x 12 in printed vinyl role sign.
 
     The image is the ACTUAL emoji RoboNation prints, rendered by
@@ -929,7 +1097,7 @@ def _role_sign(spec, name, image, pose, size=None):
     cfg = spec["sign"]
     side = size or cfg["size"]
     return _box_link(
-        name, cfg["thickness"], side, side, WHITE, 0.05, pose, collide=False,
+        name, cfg["thickness"], side, side, WHITE, 0.05, pose, collide=collide,
         # Low emissive on purpose. The lift exists so props stay visible
         # through fog, but on a PRINTED face it flattens the artwork -- and the
         # artwork is the thing a detector has to classify. Enough to lift it
@@ -1004,7 +1172,10 @@ def robosub_gate(spec):
     parts.append(_box_link(
         "divider", cfg["divider_width"], cfg["divider_width"],
         cfg["divider_drop"], red, 0.5,
-        f"0 0 {bar_z - cfg['divider_drop'] / 2.0:.6g} 0 0 0", collide=False,
+        f"0 0 {bar_z - cfg['divider_drop'] / 2.0:.6g} 0 0 0",
+        # SOLID -- a 610 mm plate hanging down the middle of the gate mouth is
+        # what makes the two sides two separate choices. Driven through, the
+        # gate is one wide opening and the side-selection task is not a task.
         mat=material(red, emissive_gain=0.22)))
 
     # Role signs hang from the bar, 152.4 mm below it, one per role.
@@ -1013,7 +1184,12 @@ def robosub_gate(spec):
         parts.append(_role_sign(
             spec, f"sign_{role}", image,
             # rpy 0 0 0 -- the plate already faces along x, at the AUV.
-            f"0 {y:.6g} {bar_z - 0.1524 - spec['sign']['size'] / 2.0:.6g} 0 0 0"))
+            f"0 {y:.6g} {bar_z - 0.1524 - spec['sign']['size'] / 2.0:.6g} 0 0 0",
+            # SOLID. These are 305 mm corrugated-plastic boards hanging in the
+            # gate mouth; a hull driving through one is the sim lying about
+            # where the clear water is, which is the one thing a gate mission
+            # has to get right.
+            collide=True))
 
     # "moored to the bottom" -- two lines from the foot of each leg to the
     # floor. Non-colliding: they are rope, and a vehicle that clips one should
@@ -1042,16 +1218,35 @@ def robosub_slalom(spec):
     cfg = spec["props"]["slalom"]
     r = spec["pvc_one_in"]
     h, gap = cfg["height"], cfg["spacing"]
+    # Ballasted the same way as the flare, for the same reason and by the same
+    # arithmetic -- see the flare mass budget above. One mechanism, verified
+    # once. A 1 in PVC pipe of this length displaces far more than it weighs,
+    # so without the anchor disc a pushable pipe would simply surface.
+    pipe_m = 0.35                      # hollow capped 1 in PVC
+    anchor_r, anchor_h, anchor_m = 0.05, 0.012, 0.90
     parts = []
+    names = []
     for name, y, colour in (
         ("pipe_left", gap, cfg["colours"]["white"]),
         ("pipe_centre", 0.0, cfg["colours"]["red"]),
         ("pipe_right", -gap, cfg["colours"]["white"]),
     ):
         parts.append(_cylinder_link(
-            name, r, h, colour, 1.5, f"0 {y:.6g} {h / 2.0:.6g} 0 0 0",
+            name, r, h, colour, pipe_m,
+            f"0 {y:.6g} {anchor_h + h / 2.0:.6g} 0 0 0",
             mat=pvc_material(colour)))
-    return model("robosub_slalom", "\n".join(parts))
+        parts.append(_cylinder_link(
+            f"{name}_anchor", anchor_r, anchor_h, colour, anchor_m,
+            f"0 {y:.6g} {anchor_h / 2.0:.6g} 0 0 0",
+            mat=pvc_material(colour), surface=friction(0.8)))
+        names += [name, f"{name}_anchor"]
+
+    # One rigid set: the three pipes are moored as a unit, so a hull that
+    # clips one shoves the set rather than scattering three loose poles.
+    parts.extend(weld_all(names[0], names[1:]))
+    for name in ("pipe_left", "pipe_centre", "pipe_right"):
+        parts.append(hydrodynamics(name, *rod_drag(2.0 * r, h)))
+    return model("robosub_slalom", "\n".join(parts), static=False)
 
 
 def robosub_bins(spec):
@@ -1082,11 +1277,13 @@ def robosub_bins(spec):
     parts = []
 
     def pipe(name, length, pose):
-        # Pipework is SCENERY. A marker is dropped INTO a crate; nothing in the
-        # task pushes the frame, and every pipe with a collision shape is one
-        # more the solver checks every step.
+        # SOLID. This was scenery on the argument that nothing in the task
+        # pushes the frame -- true of the task, false of the vehicle, which
+        # was descending straight through the pipework to reach the crates.
+        # An approach that only works because the sim lets the hull occupy the
+        # structure is an approach that fails in the pool.
         parts.append(_cylinder_link(
-            name, r, length, WHITE, 1.0, pose, collide=False,
+            name, r, length, WHITE, 1.0, pose,
             mat=pvc_material(WHITE)))
 
     # The spine, along x, on two feet.
@@ -1144,11 +1341,51 @@ def robosub_bins(spec):
         parts.append(_role_sign(
             spec, f"panel_{tag}", image,
             f"{bx - lx * 0.62:.6g} {by:.6g} {base + side * 0.45:.6g} 0 0 0",
-            size=side))
+            size=side, collide=True))
         pipe(f"panel_post_{tag}", side * 0.5,
              f"{bx - lx * 0.62:.6g} {by:.6g} {base + side * 0.16:.6g} 0 0 0")
 
     return model("robosub_bins", "\n".join(parts))
+
+
+def torpedo_openings(spec: dict):
+    """The Task 4 board's openings, in PLATE coordinates: [(y, z, radius), ...].
+
+    THE ONE PLACE THE OPENINGS ARE DEFINED. The collision plate is tiled around
+    this list and the printed artwork draws this list, because they were
+    previously written out twice and drifted: the texture painted FOUR circles
+    at (0.50,0.30) (0.50,0.70) (0.22,0.50) (0.78,0.50) in UV while the collision
+    cut TWO somewhere else entirely. The holes you could see were not the holes
+    you could shoot through -- so a mission aimed at the artwork hit board, and
+    the sim scored it as a miss for a reason no operator could see.
+
+    The rulebook is unambiguous that there are two: "corrugated plastic backing
+    with vinyl printed images and two sized openings", the larger and the
+    smaller, which is also what `spec/robosub.yaml` records. y is across the
+    board, z is up, both relative to the plate centre.
+    """
+    cfg = spec["props"]["torpedo_board"]
+    quarter = cfg["size"] / 4.0
+    return [
+        (-quarter, quarter, cfg["large_opening"] / 2.0),
+        (quarter, -quarter, cfg["small_opening"] / 2.0),
+    ]
+
+
+def torpedo_openings_uv(spec: dict):
+    """`torpedo_openings` mapped into texture UV: [(u, v, r_frac), ...].
+
+    Ogre maps a box face's texture with u along the face's local RIGHT and v
+    along its local DOWN. The board's face is +x, whose right is -y and whose
+    down is -z, giving the mapping below. If a render ever shows the large
+    opening on the wrong side, THIS is the single line to flip -- not the
+    texture generator, which now has no geometry of its own to get wrong.
+    """
+    size = spec["props"]["torpedo_board"]["size"]
+    return [
+        (0.5 - y / size, 0.5 - z / size, r / size)
+        for (y, z, r) in torpedo_openings(spec)
+    ]
 
 
 def _plate_with_holes(prefix, size, thickness, openings, cz, strips=26):
@@ -1205,7 +1442,8 @@ def _plate_with_holes(prefix, size, thickness, openings, cz, strips=26):
                 f'{prefix}_c{n}', thickness, width, step,
                 (0.8, 0.8, 0.8), 0.05,
                 f'0 {(lo + hi) / 2.0:.6g} {cz + rz:.6g} 0 0 0',
-                mat=material((0.8, 0.8, 0.8))))
+                mat=material((0.8, 0.8, 0.8)),
+                visible=False))
             n += 1
     return parts
 
@@ -1238,8 +1476,14 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
             mat=pvc_material(WHITE)))
 
     # The printed face. One thin plate carrying the whole artwork, so the
-    # openings, the red rims and the four role images are all in register.
-    # NO COLLISION -- the strip tiling below is the physical board.
+    # openings, their red rims and the two role images stay in register --
+    # they all come from torpedo_openings() now, not from two hand-written
+    # lists that had already drifted apart.
+    #
+    # NO COLLISION, and NO VISUAL on the strips below: the strip tiling is the
+    # physical board, this plate is the visible one. Both drawing gave two
+    # co-planar surfaces at the same thickness, which z-fought into the streaky
+    # grey mess that hid the artwork entirely.
     parts.append(_box_link(
         "board", th, size, size, WHITE, 3.0, f"0 0 {cz:.6g} 0 0 0",
         collide=False,
@@ -1249,22 +1493,21 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
 
     # Openings, in plate coordinates. Placed to match the printed artwork:
     # the larger opening upper-left, the smaller lower-right.
-    quarter = size / 4.0
-    openings = [
-        (-quarter, quarter, cfg["large_opening"] / 2.0),
-        (quarter, -quarter, cfg["small_opening"] / 2.0),
-    ]
+    openings = torpedo_openings(spec)
     parts.extend(_plate_with_holes("plate", size, th, openings, cz))
 
     # "The 'far' distance is denoted by the horizontal bars at the bottom of
     # the board" (p. 36). Two bars, because the spec carries two standoffs.
-    for i, key in enumerate(("standoff_far", "standoff_farther")):
-        if key not in cfg:
-            continue
-        parts.append(_box_link(
-            f"bar_{i}", th, size * 0.8, 0.03, (0.85, 0.15, 0.12), 0.05,
-            f"0 0 {cz - size / 2.0 - 0.05 - i * 0.06:.6g} 0 0 0",
-            collide=False, mat=material((0.85, 0.15, 0.12), emissive_gain=0.2)))
+    # NO STANDOFF MARKER. There used to be two red bars hanging in open water
+    # under the board, on nothing. The scored standoff is a HORIZONTAL firing
+    # distance -- a bar's height cannot encode it, so they marked nothing and
+    # in a render just looked like a mistake.
+    #
+    # They are not replaced. A floor marker at the scored range would be a
+    # training aid, and this prop feeds the vision datasets: painting a stripe
+    # on the floor that will not be at the competition teaches the detector
+    # something false. The range belongs on the operator's readout, which is
+    # where the scoring dashboard now puts it -- not in the water.
 
     return model(model_name or f"robosub_torpedo_{role}", "\n".join(parts))
 
@@ -1448,7 +1691,7 @@ PROPS = {
     "sauvc_flare_red": {
         "build": lambda s: bump_flare(s, "red"),
         "anchor": ANCHOR_FLOOR,
-        "dynamic": False,
+        "dynamic": True,
         # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
         # ball settles into it. Sitting it a full radius above the pole put it
         # balanced on the rim instead of nested.
@@ -1474,7 +1717,7 @@ PROPS = {
     "sauvc_flare_yellow": {
         "build": lambda s: bump_flare(s, "yellow"),
         "anchor": ANCHOR_FLOOR,
-        "dynamic": False,
+        "dynamic": True,
         # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
         # ball settles into it. Sitting it a full radius above the pole put it
         # balanced on the rim instead of nested.
@@ -1500,7 +1743,7 @@ PROPS = {
     "sauvc_flare_blue": {
         "build": lambda s: bump_flare(s, "blue"),
         "anchor": ANCHOR_FLOOR,
-        "dynamic": False,
+        "dynamic": True,
         # Ball sits IN the cup: cup top (height + 10 mm) minus the depth the
         # ball settles into it. Sitting it a full radius above the pole put it
         # balanced on the rim instead of nested.
@@ -1557,7 +1800,7 @@ PROPS = {
     "robosub_slalom": {
         "build": robosub_slalom,
         "anchor": ANCHOR_FLOOR,
-        "dynamic": False,
+        "dynamic": True,
     },
     "robosub_bins": {
         "build": robosub_bins,
