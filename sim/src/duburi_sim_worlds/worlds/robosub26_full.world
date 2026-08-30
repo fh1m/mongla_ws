@@ -64,6 +64,7 @@ ROLE. The vehicle picks Survey & Repair or Search & Rescue at the gate, and ever
         </density_change>
       </graded_buoyancy>
       <enable>duburi</enable>
+      <enable>gate</enable>
       <enable>slalom_1</enable>
       <enable>slalom_2</enable>
       <enable>slalom_3</enable>

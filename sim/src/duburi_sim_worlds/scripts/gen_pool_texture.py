@@ -465,44 +465,105 @@ def make_role_image(path, glyph, px=256, border=0.055, rng=None,
     print(f"wrote {path}  ({px}x{px})")
 
 
-def make_torpedo_panel(path, role, spec, px=512, rng=None):
-    """The Task 4 board face: TWO openings plus the two role images.
+def make_torpedo_panel(path, role, spec, px=1024, rng=None):
+    """The Task 4 board face: FOUR openings and the FOUR role images, 2026.
 
     THE OPENINGS ARE NOT DEFINED HERE. They come from
     `prop_library.torpedo_openings_uv`, the same list the collision plate is
-    tiled around. They used to be written out twice and had drifted badly: this
-    function painted FOUR circles while the collision cut TWO, in different
-    places. A shot lined up on the artwork struck solid board, and nothing in
-    any log said why.
+    tiled around and the visual mesh is cut from. They used to be written out
+    twice and had drifted badly -- this function painted FOUR circles while the
+    collision cut TWO, in different places, so a shot lined up on the artwork
+    struck solid board and nothing in any log said why.
 
-    Two, not four, is also what the rulebook says -- "vinyl printed images and
-    two sized openings" -- and what spec/robosub.yaml has always recorded.
+    2026 layout, from the TeamTime "Task 4 - Deploy (Torpedoes)" slide: a 2x2 of
+    image+opening cells, two large openings and two small, with all four
+    emergency images (fire, fire engine, ambulance, blood drop) on BOTH boards.
+    Only which image sits beside which opening size differs between the two
+    versions, so a detector cannot separate the roles by image presence alone --
+    which is the discrimination the real task demands.
 
-    Layout is a 2x2: the two openings on one diagonal, the two role images
-    (fire = Survey & Repair, droplet = Search & Rescue) on the other. Both
-    images appear on both boards; only which corner each takes differs, so a
-    detector cannot separate the roles by presence alone.
+    WHAT CHANGED, AND WHY IT MATTERS FOR A DATASET
+    This was the one prop in the library with no surface treatment at all: a
+    flat `np.ones` field, boolean-mask circles with stair-stepped edges, and the
+    `rng` it accepts ignored. Every other prop already had weave, ribbing,
+    scuffs or noise. Clip art on a white field is not something a detector can
+    learn a real board from, and the openings above were the larger half of the
+    same problem. So: supersample for real edges, corrugated-plastic ribbing
+    (the backing the rulebook names), print bleed and wear.
+
+    Resolution was never the bottleneck -- 512 px over 0.6 m was already 13x the
+    pool floor -- but it is raised to 1024 because four images and four rims now
+    share the face where two did.
     """
-    img = np.ones((px, px, 3), dtype=np.float32)
-    yy, xx = np.mgrid[0:px, 0:px].astype(np.float32)
+    rng = rng or np.random.default_rng(2026)
+    ss = 3                                          # supersample factor
+    big = px * ss
+    img = np.ones((big, big, 3), dtype=np.float32)
+    yy, xx = np.mgrid[0:big, 0:big].astype(np.float32)
+
+    # --- corrugated plastic backing -------------------------------------
+    # The rulebook calls the board "corrugated plastic backing with vinyl
+    # print". Flutes run vertically; the print sits on top of them, so the
+    # ribbing shows through as a faint periodic shading rather than as colour.
+    flute_px = big / 60.0
+    ribs = 0.020 * np.cos(2.0 * np.pi * xx / flute_px)
+    img += ribs[:, :, None]
+
+    # Vinyl print is not perfectly white and does not stay clean in a pool.
+    # Low-frequency blotching, via PIL rather than scipy: this tree has no
+    # scipy dependency and adding one for a blur would be the wrong trade.
+    coarse = rng.normal(0.5, 0.16, (48, 48)).astype(np.float32)
+    grime = np.asarray(Image.fromarray(
+        (np.clip(coarse, 0, 1) * 255).astype(np.uint8)
+    ).resize((big, big), Image.BICUBIC), dtype=np.float32) / 255.0
+    img *= (1.0 - 0.055 * grime)[:, :, None]
+    img += rng.normal(0.0, 0.004, (big, big, 1)).astype(np.float32)
 
     holes = pl.torpedo_openings_uv(spec)
 
-    # The images take the corners the openings leave free.
-    if role == "survey_repair":
-        corners = (("fire", 0.25, 0.25), ("droplet", 0.75, 0.75))
-    else:
-        corners = (("droplet", 0.25, 0.25), ("fire", 0.75, 0.75))
-
+    # --- openings -------------------------------------------------------
+    # Anti-aliased by construction: coverage is a smooth ramp across one
+    # supersampled pixel, not a boolean mask. The old hard mask is what made
+    # the circles read as stair-stepped clip art.
     for cx, cy, r in holes:
-        d = np.sqrt((xx / px - cx) ** 2 + (yy / px - cy) ** 2)
-        img[(d < r) & (d > r * 0.78)] = (0.72, 0.06, 0.09)   # red annulus
-        img[d <= r * 0.78] = (0.10, 0.16, 0.20)              # opening = dark water
+        d = np.sqrt((xx / big - cx) ** 2 + (yy / big - cy) ** 2)
+        e = 0.6 / big
+        # Band widened from 0.80r: the mesh cut overshoots the radius slightly,
+        # and at 0.80 the small openings lost their rim entirely.
+        rim = np.clip((r - d) / e, 0.0, 1.0) * np.clip((d - r * 0.70) / e, 0.0, 1.0)
+        hole = np.clip((r * 0.80 - d) / e, 0.0, 1.0)
+        img = img * (1.0 - rim[:, :, None]) + np.array(
+            (0.72, 0.06, 0.09), dtype=np.float32) * rim[:, :, None]
+        # The hole itself is a placeholder only: the MESH is what actually
+        # opens now, so nothing is ever drawn through this. Kept dark so a
+        # stale flat-plate build is obviously wrong rather than subtly wrong.
+        img = img * (1.0 - hole[:, :, None]) + np.array(
+            (0.05, 0.08, 0.10), dtype=np.float32) * hole[:, :, None]
 
+    # Printed edge, so the board reads as a bounded object through fog.
+    b = int(big * 0.012)
+    img[:b, :] = img[-b:, :] = img[:, :b] = img[:, -b:] = (0.22, 0.22, 0.24)
+
+    base = Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8))
+    base = base.resize((px, px), Image.LANCZOS)
+
+    # --- the four images ------------------------------------------------
+    # Each sits in the cell DIAGONALLY OPPOSITE its own opening, so image and
+    # opening pair without overlapping. Both boards carry all four; the two
+    # versions differ in which image is next to the large opening.
+    order = spec["roles"][role]["task_images"] + spec["roles"][
+        "search_rescue" if role == "survey_repair" else "survey_repair"
+    ]["task_images"]
     try:
-        base = Image.fromarray((img * 255).astype(np.uint8))
-        side = int(px * 0.20)
-        for name, gx, gy in corners:
+        side = int(px * 0.15)
+        for (cx, cy, r), name in zip(holes, order):
+            # Each image sits in the board CORNER diagonally outside its own
+            # opening. Pushing them toward the centre instead put all four in a
+            # heap in the middle -- rendered once, obvious, fixed. Corners are
+            # the only region four 0.15-wide glyphs and four openings of up to
+            # 0.167 UV radius all fit without fighting.
+            gx = 0.105 if cx < 0.5 else 0.895
+            gy = 0.105 if cy < 0.5 else 0.895
             shift = MAGENTA_DROPLET if name == "droplet" else None
             g = _glyph_rgba(ROLE_GLYPHS[name], hue_shift=shift)
             g = g.resize((side, side), Image.LANCZOS)
@@ -510,8 +571,8 @@ def make_torpedo_panel(path, role, spec, px=512, rng=None):
         base.save(path, optimize=True)
     except Exception as exc:                      # noqa: BLE001
         print(f"  WARNING: torpedo panel without glyphs ({exc})")
-        Image.fromarray((img * 255).astype(np.uint8)).save(path, optimize=True)
-    print(f"wrote {path}  ({px}x{px})")
+        base.save(path, optimize=True)
+    print(f"wrote {path}  ({px}x{px}, {len(holes)} openings)")
 
 
 def make_particle_sprite(path: str, size: int = 64) -> None:

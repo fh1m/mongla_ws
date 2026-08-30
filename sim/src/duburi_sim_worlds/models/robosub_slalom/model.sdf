@@ -179,25 +179,104 @@
         </surface>
       </collision>
     </link>
-    <joint name="pipe_left_pipe_left_anchor_fix" type="fixed">
-      <parent>pipe_left</parent>
+    <joint name="pipe_left_mooring" type="fixed">
+      <parent>world</parent>
       <child>pipe_left_anchor</child>
     </joint>
-    <joint name="pipe_left_pipe_centre_fix" type="fixed">
-      <parent>pipe_left</parent>
-      <child>pipe_centre</child>
+    <joint name="pipe_left_hinge" type="universal">
+      <parent>pipe_left_anchor</parent>
+      <child>pipe_left</child>
+      <pose>0 0 -0.45 0 0 0</pose>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-1.2</lower>
+          <upper>1.2</upper>
+        </limit>
+        <dynamics>
+          <damping>0.05</damping>
+          <spring_stiffness>0</spring_stiffness>
+          <spring_reference>0</spring_reference>
+        </dynamics>
+      </axis>
+      <axis2>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1.2</lower>
+          <upper>1.2</upper>
+        </limit>
+        <dynamics>
+          <damping>0.05</damping>
+          <spring_stiffness>0</spring_stiffness>
+          <spring_reference>0</spring_reference>
+        </dynamics>
+      </axis2>
     </joint>
-    <joint name="pipe_left_pipe_centre_anchor_fix" type="fixed">
-      <parent>pipe_left</parent>
+    <joint name="pipe_centre_mooring" type="fixed">
+      <parent>world</parent>
       <child>pipe_centre_anchor</child>
     </joint>
-    <joint name="pipe_left_pipe_right_fix" type="fixed">
-      <parent>pipe_left</parent>
-      <child>pipe_right</child>
+    <joint name="pipe_centre_hinge" type="universal">
+      <parent>pipe_centre_anchor</parent>
+      <child>pipe_centre</child>
+      <pose>0 0 -0.45 0 0 0</pose>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-1.2</lower>
+          <upper>1.2</upper>
+        </limit>
+        <dynamics>
+          <damping>0.05</damping>
+          <spring_stiffness>0</spring_stiffness>
+          <spring_reference>0</spring_reference>
+        </dynamics>
+      </axis>
+      <axis2>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1.2</lower>
+          <upper>1.2</upper>
+        </limit>
+        <dynamics>
+          <damping>0.05</damping>
+          <spring_stiffness>0</spring_stiffness>
+          <spring_reference>0</spring_reference>
+        </dynamics>
+      </axis2>
     </joint>
-    <joint name="pipe_left_pipe_right_anchor_fix" type="fixed">
-      <parent>pipe_left</parent>
+    <joint name="pipe_right_mooring" type="fixed">
+      <parent>world</parent>
       <child>pipe_right_anchor</child>
+    </joint>
+    <joint name="pipe_right_hinge" type="universal">
+      <parent>pipe_right_anchor</parent>
+      <child>pipe_right</child>
+      <pose>0 0 -0.45 0 0 0</pose>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-1.2</lower>
+          <upper>1.2</upper>
+        </limit>
+        <dynamics>
+          <damping>0.05</damping>
+          <spring_stiffness>0</spring_stiffness>
+          <spring_reference>0</spring_reference>
+        </dynamics>
+      </axis>
+      <axis2>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1.2</lower>
+          <upper>1.2</upper>
+        </limit>
+        <dynamics>
+          <damping>0.05</damping>
+          <spring_stiffness>0</spring_stiffness>
+          <spring_reference>0</spring_reference>
+        </dynamics>
+      </axis2>
     </joint>
     <plugin filename="gz-sim-hydrodynamics-system" name="gz::sim::systems::Hydrodynamics">
       <link_name>pipe_left</link_name>

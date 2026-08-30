@@ -68,10 +68,18 @@ def test_flare_has_drag_or_it_rings_forever():
     assert 'gz-sim-hydrodynamics-system' in pl.bump_flare(SAUVC, 'red')
 
 
-def test_slalom_is_dynamic_welded_and_bottom_heavy():
+def test_slalom_is_dynamic_moored_and_damped():
+    """Renamed from ..._welded_...: the weld WAS the bug.
+
+    This asserted one welded tree (`joints == bodies - 1`), which is exactly the
+    single rigid body that made a hit on one pipe swing all three. Each pipe is
+    now moored to the world and hinged at its own base -- three sub-assemblies,
+    six joints for six bodies. Per-pipe independence is asserted in
+    test_prop_joints.py.
+    """
     m = _model(pl.robosub_slalom(ROBOSUB))
     assert m.find('static').text == 'false'
-    assert len(m.findall('joint')) == len(_bodies(m)) - 1
+    assert len(m.findall('joint')) >= len(_bodies(m)) - 1
     assert 'gz-sim-hydrodynamics-system' in pl.robosub_slalom(ROBOSUB)
 
 
@@ -122,7 +130,10 @@ def test_the_openings_you_see_are_the_openings_you_can_shoot_through():
     """One source of truth. The texture drew four; the collision cut two."""
     plate = pl.torpedo_openings(ROBOSUB)
     uv = pl.torpedo_openings_uv(ROBOSUB)
-    assert len(plate) == len(uv) == 2
+    # FOUR as of the 2026 layout, not two. What this test is really for is that
+    # the two lists stay the SAME list -- they drifted apart once and a shot
+    # lined up on the artwork struck solid board.
+    assert len(plate) == len(uv) == 4
     size = ROBOSUB['props']['torpedo_board']['size']
     for (y, z, r), (u, v, ru) in zip(plate, uv):
         assert abs(ru - r / size) < 1e-9

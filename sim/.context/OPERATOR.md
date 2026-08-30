@@ -172,3 +172,43 @@ restarting.
 `duburi_sim lab` now has a **score** tab: every rulebook line item for the
 running course's competition, what it is worth, whether it was earned, and the
 evidence. Full detail in [SCORING.md](SCORING.md).
+
+## `duburi_sim view high` — a third-person camera that actually aims
+
+**Follow sets position only; it does not aim.** gz-rendering applies
+`follow_offset` to the camera's position and leaves its orientation alone
+(`Camera.hh` says so in as many words). The starting pitch in `gui.config` was
++0.12 rad **nose-up**, so raising the camera lifted it while it kept staring
+upward — you got a higher view of the underside of the water surface, not a
+better view of the vehicle. That is why the run still read as first-person after
+the chase offset was set in Round 6.
+
+Two changes, and they only work together:
+
+- `camera_pose` is pitched **−0.30 rad, nose down**, and the follow offset is
+  `-5.0 0.4 1.5` — five metres astern, 1.5 m up, about a 17° elevation from
+  three times the old distance, so the hull *and* the prop it is working sit in
+  frame together instead of the hull filling it.
+- `follow_pgain` 0.008 → 0.03. At five metres the old gain lagged most of a
+  length through a turn and the vehicle swam out of frame.
+
+Height is bought by moving **back**, not up, on purpose: the offset is in the
+hull's own frame and the water visual sits at z = 0, so at a 0.8 m run depth
+much more elevation puts the camera through the surface looking down at it.
+
+```bash
+ros2 run duburi_sim_bringup duburi_sim view high    # aimed 3rd-person, high
+ros2 run duburi_sim_bringup duburi_sim view chase   # the close chase
+ros2 run duburi_sim_bringup duburi_sim view free    # let go and fly by hand
+```
+
+`view high` is a **different mechanism**, not a different offset: it publishes
+`gz.msgs.CameraTrack` on `/gui/track` with `track_mode: 4` (`FOLLOW_LOOK_AT`),
+which is the genuinely aimed rig and exists **only at runtime** — the SDF block
+parses `follow_target`, `follow_offset` and `follow_pgain` and nothing else
+(verified by string-dumping the installed `libCameraTracking.so`).
+
+> **The lab's video panels and the docked `ImageDisplay` widgets are the
+> vehicle's own cameras and are irreducibly first-person.** None of the above
+> changes them. A third-person feed in the lab would need a new world camera
+> plus a bridge; it does not exist today.
