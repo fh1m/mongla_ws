@@ -1329,6 +1329,14 @@ def robosub_gate(spec):
     for role, y in (("survey_repair", -w * 0.22), ("search_rescue", w * 0.22)):
         image = spec["roles"][role]["gate_images"][0]
         sign_names.append(f"sign_{role}")
+        # A NESTED MODEL, not a bare link.
+        #
+        # gz merges every labelled link of a model into ONE box
+        # (Ogre2BoundingBoxCamera::MergeMultiLinksModels2D), which is why
+        # visual-scope labels gave 267/267 frames of `robosub_gate` and not one
+        # of `repair`. A nested <model> is its own merge group, so it can carry
+        # its own class -- and the hinge still reaches it with a `::`-scoped
+        # child name.
         parts.append(_role_sign(
             spec, f"sign_{role}", image,
             # rpy 0 0 0 -- the plate already faces along x, at the AUV.

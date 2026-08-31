@@ -152,7 +152,7 @@ Commands:
   stack [--no-vision]          duburi_ws manager against a running simulator
   smoke                        arm → set_depth -1 → move_forward 8s
   joystick                     Live gamepad status in the terminal (needs `lab`)
-  view [high|chase|free|<model>]  High aimed 3rd-person, close chase, or let go
+  view [far|high|chase|free|<model>]  Aimed 3rd-person at range, close chase, or let go
   lab                          Operator web UI on :28765 (DUBURI_LAB_PORT; needs sim+stack)
   plotjuggler                  Launch PlotJuggler with sim layout (needs ros-humble-plotjuggler-ros)
 
@@ -428,25 +428,51 @@ JOYSTICK_PY
     # world instance is `duburi` on every course (the model is `duburi_heavy`);
     # passing the model name silently follows nothing.
     _target="${1:-chase}"
-    # `high` is a different mechanism, not a different offset.
+    # `high` and `far` are a different MECHANISM, not a different offset.
     #
-    # /gui/follow only sets the camera's POSITION -- gz-rendering applies the
-    # follow offset and leaves the orientation alone, which is why a raised
-    # camera keeps staring wherever gui.config's pitch left it. /gui/track with
-    # FOLLOW_LOOK_AT (mode 4) is the aimed rig, and it exists ONLY at runtime:
-    # the SDF block parses follow_target, follow_offset and follow_pgain and
-    # nothing else.
-    if [[ "$_target" == "high" ]]; then
-      if ! gz service -s /gui/track --reqtype gz.msgs.CameraTrack \
+    # /gui/follow sets the camera's POSITION and leaves its orientation alone
+    # (gz-rendering's BaseCamera applies followOffset to position only, and
+    # Camera.hh says so). The aimed rig is track_mode FOLLOW_LOOK_AT, which
+    # needs BOTH follow_target and track_target.
+    #
+    # /gui/track IS A TOPIC, NOT A SERVICE. The plugin subscribes to it
+    # (OnTrackSub); Node::Advertise is instantiated only for StringMsg,
+    # GUICamera and Vector3d, never CameraTrack. The first version of this
+    # command called `gz service -s /gui/track` -- which cannot succeed -- and
+    # swallowed the failure into "no Gazebo GUI is running (or it is
+    # headless)". So `view high` never worked, and said something false about
+    # why. A publish returns no reply, so there is no success code to test
+    # either: check that the GUI is there FIRST, with a service that really is
+    # one, then publish.
+    if [[ "$_target" == "high" || "$_target" == "far" ]]; then
+      # THE POOL CAPS THE HEIGHT, and there is no way around it.
+      #
+      # The water surface is an OPAQUE model (Fuel openrobotics/waves) sitting
+      # at z=0, the RoboSub pool is 2.1 m deep and the hull runs about 0.8 m
+      # down -- so there is at most ~0.8 m of headroom, and a camera above the
+      # surface sees water and nothing else. Measured: at z offsets of 2.2 and
+      # 3.2 the camera really did move (the pose stream confirms it), and it
+      # really was looking at the underside of nothing useful.
+      #
+      # So elevation is bought by DISTANCE, not by altitude. `far` puts eleven
+      # metres of course in frame, which is the "see the vehicle and the world
+      # it is working" view; it is not a bird's eye, and cannot be.
+      if [[ "$_target" == "high" ]]; then
+        _off="x: -6.0, y: 0.8, z: 0.40"
+      else
+        _off="x: -12.0, y: 1.5, z: 0.40"
+      fi
+      if ! gz service -s /gui/follow --reqtype gz.msgs.StringMsg \
            --reptype gz.msgs.Boolean --timeout 2000 \
-           --req "track_mode: 4 follow_target {name: \"duburi\"} \
-                  track_target {name: \"duburi\"} \
-                  follow_offset {x: -6.0 y: 0.6 z: 2.4} \
-                  follow_pgain: 0.03 track_pgain: 0.05" >/dev/null 2>&1; then
+           --req 'data: "duburi"' >/dev/null 2>&1; then
         echo "[duburi-sim] no Gazebo GUI is running (or it is headless)" >&2
         exit 1
       fi
-      echo "[duburi-sim] camera high and aimed at duburi -- 'view chase' or 'view free'"
+      gz topic -t /gui/track -m gz.msgs.CameraTrack \
+        -p "track_mode: 4, follow_target {name: \"duburi\"}, \
+            track_target {name: \"duburi\"}, follow_offset {$_off}, \
+            follow_pgain: 0.05, track_pgain: 0.08" >/dev/null 2>&1
+      echo "[duburi-sim] camera ${_target}, aimed at duburi -- 'view chase' or 'view free'"
       exit 0
     fi
     case "$_target" in

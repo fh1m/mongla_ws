@@ -210,8 +210,11 @@
       </sensor>
 
       <!-- Ground-truth 2D boxes, from the GPU, for dataset labelling.
-           Occlusion- and truncation-correct: this replaced a geometric AABB
-           projector that gave a full box to a crate hidden behind another one.
+           Occlusion- and truncation-correct ONLY SINCE 2026-08-31: the
+           box_type below asked for `2d`, which is not a valid token, so gz
+           used FULLBOX2D and handed a full box to a crate hidden behind
+           another one -- exactly what this comment used to claim had been
+           fixed.
 
            A box is emitted ONLY for a model carrying a <label>, set by the
            gz-sim-label-system plugin that prop_library.model() writes. An
@@ -227,7 +230,15 @@
         <visualize>false</visualize>
         <topic>front_boxes</topic>
         <camera name="front_boxes">
-          <box_type>2d</box_type>
+          <!-- `visible_2d`, NOT `2d`. `2d` IS NOT A VALID TOKEN -- the set is
+               full_2d / full_box_2d / visible_2d / visible_box_2d / 3d -- so
+               gz silently fell back to its default, BBT_FULLBOX2D, documented
+               as "the full box of OCCLUDED objects". Every dataset captured
+               before 2026-08-31 therefore has no occlusion correctness at all,
+               while the comment below claimed the opposite. An invalid token
+               costs one line in stderr and nothing else, which is why it stood
+               for so long. -->
+          <box_type>visible_2d</box_type>
           <horizontal_fov>1.0064</horizontal_fov>
           <image>
             <width>640</width>
@@ -285,8 +296,11 @@
       </sensor>
 
       <!-- Ground-truth 2D boxes, from the GPU, for dataset labelling.
-           Occlusion- and truncation-correct: this replaced a geometric AABB
-           projector that gave a full box to a crate hidden behind another one.
+           Occlusion- and truncation-correct ONLY SINCE 2026-08-31: the
+           box_type below asked for `2d`, which is not a valid token, so gz
+           used FULLBOX2D and handed a full box to a crate hidden behind
+           another one -- exactly what this comment used to claim had been
+           fixed.
 
            A box is emitted ONLY for a model carrying a <label>, set by the
            gz-sim-label-system plugin that prop_library.model() writes. An
@@ -302,7 +316,15 @@
         <visualize>false</visualize>
         <topic>bottom_boxes</topic>
         <camera name="bottom_boxes">
-          <box_type>2d</box_type>
+          <!-- `visible_2d`, NOT `2d`. `2d` IS NOT A VALID TOKEN -- the set is
+               full_2d / full_box_2d / visible_2d / visible_box_2d / 3d -- so
+               gz silently fell back to its default, BBT_FULLBOX2D, documented
+               as "the full box of OCCLUDED objects". Every dataset captured
+               before 2026-08-31 therefore has no occlusion correctness at all,
+               while the comment below claimed the opposite. An invalid token
+               costs one line in stderr and nothing else, which is why it stood
+               for so long. -->
+          <box_type>visible_2d</box_type>
           <horizontal_fov>1.0064</horizontal_fov>
           <image>
             <width>640</width>
