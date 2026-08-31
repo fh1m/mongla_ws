@@ -654,9 +654,11 @@ throughout.** It can be pushed over and it cannot be pushed away.
   Entity names must be fully scoped: `gate::sign_survey_repair`.
 - **Link names in `dynamic_pose/info` are unscoped and repeat across models** —
   three `pipe_centre` entries, one per slalom set. Key on the numeric `id`, or
-  you will measure a different set than the one you pushed.
+  you will measure a different set than the one you pushed. Necessary but **not
+  sufficient**: those poses are also **model-relative**, and the model frame
+  rides the canonical link — see *Thruster wash on props* below.
 
-## Thruster wash on props — built, wired, NOT demonstrated (2026-08-31)
+## Thruster wash on props — DEMONSTRATED (2026-08-31)
 
 `wake_fraction` is **not** this, and the name invites the confusion: it reduces
 a thruster's own thrust as the hull's speed raises inflow at its blades. That is
@@ -667,26 +669,73 @@ were not.
 
 `thruster_wash` models the hull as a momentum jet pointing astern, and pushes
 dynamic props inside its cone with a persistent wrench that is cleared when they
-leave. It is **off by default**, because three A/B runs — nine seconds of
-forward drive at gain 85 past three slalom pipes, wash on against wash off —
-moved exactly one body in both arms, and that body was the vehicle.
+leave. The run this note asked for two rounds running — **park the hull upstream
+of a prop and hold thrust** — has now been done. Hull pinned 0.7 m ahead of
+`slalom_1` on `rs_task_slalom`, held at the node's own reported **+103.52 N** of
+net forward thrust for 25 s:
 
-Two real bugs were found and fixed on the way, both worth keeping:
+| arm | peak pipe deflection |
+|---|---|
+| wash **off** | 0.001° |
+| wash **on** | **7.331°** (all three pipes) |
+
+All three pipes move equally because `_prop_xy` returns the **model's** position
+for every one of its links, so they share one cone test and one force. That is
+the documented simplification, not an artifact.
+
+It **stays off by default** this round. It is demonstrated, not regression-tested
+against a full mission or the scorer, and it changes how props behave mid-run;
+turning it on is `wash:=true` and belongs to the round that re-runs those.
+`targets` lists **only the slalom pipes** — gate markers and flares will not
+swing, whatever the cone reaches.
+
+### The measurement frame is the trap, not the physics
+
+**Do not measure this off `/world/<w>/pose/info`.** It reports a link's pose
+**relative to its model frame**, and that frame rides the model's **canonical
+link** — the first link authored, which for the slalom prop is `pipe_left`. So:
+
+- push `pipe_left` and it reads **0.00° forever** while `pipe_centre` and
+  `pipe_right` report *its* counter-rotation and appear to swing;
+- push all three and every reading **collapses to ~0 precisely because it is
+  working** — they swing together, and the frame swings with them.
+
+Both symptoms were chased separately for most of a round, as "one pipe is
+welded" and "multi-link wrenches don't stack". They were one artifact. The tell
+was that two different bodies read an **identical** 49.48° — two things reading
+exactly alike are usually one thing, not two. It was settled by watching the
+**model entity's own pose**, which rotated 49.48° while its canonical link's
+link-relative pose stayed at 0.00. `dynamic_pose/info` uses the same convention
+and does **not** save you; compose model × link, or watch the model.
+
+Measured along the way, and each one worth keeping:
+
+- **Persistent wrenches on different links coexist fine.** Centre and right held
+  49.9° and 55.6° simultaneously. There is no per-entity limit and no burst
+  problem; the apparent one was the frame.
+- **Publish rate does not matter** for a persistent wrench: 10 Hz gave 51.0°,
+  5 Hz gave 50.0°, same force. It is stored until replaced or cleared.
+- **Four equal thruster commands are a pure YAW, not full ahead.** The A/B rig
+  drove exactly that and the node correctly reported **0.00 N** of jet. Forward
+  is t1/t2 astern, t3/t4 ahead. `net_body_thrust` sums as a **vector** for this
+  reason and `test_thruster_wash.py` pins it — a scalar sum of magnitudes would
+  have claimed 146 N of wash off a vehicle going nowhere.
+
+Three earlier bugs, all fixed, all of which produced a node that ran, logged and
+pushed nothing:
 
 - **The first version used hull speed as the jet speed.** Wrong quantity: wash
   is set by the thrusters, not by how fast the hull travels, and a vehicle
-  holding station against a current has zero speed and full wash. 0.37 m/s of
-  hull gives 0.14 N at a metre, which is a couple of degrees on a moored pipe.
+  holding station against a current has zero speed and full wash. Worse, the
+  gate stayed `if speed > 0.05`, so the parked-hull experiment this very section
+  kept asking for would have measured nothing.
 - **`gz.transport13.Node` has no `publish` method.** You `advertise()` a topic
   to get a `Publisher` and publish on that; `node.publish(...)` raises
-  AttributeError inside the timer callback, where it is swallowed. The node
-  starts, logs its parameters, reports the props it loaded, and pushes nothing.
-  **Two of the three A/B runs were measuring a node that had never published a
-  byte** — a reminder that "the node is running and logging" is not evidence it
-  is doing anything.
-
-What has **not** been ruled out is the test. The slalom props sit at x = −2.0,
-−0.5, +1.0 and the hull starts at −5, so through most of a 3.3 m run they are
-*ahead* of it and an astern cone never reaches them. A run that parks the hull
-upstream of a prop and holds thrust would settle it. Until someone does that,
-this is an unproven node and is labelled one.
+  AttributeError inside the timer callback, where it is swallowed. **Two of the
+  three A/B runs were measuring a node that had never published a byte** — "the
+  node is running and logging" is not evidence it is doing anything.
+- **`msg.entity.type = 2  # LINK`.** In `gz.msgs.Entity` **2 is MODEL and LINK
+  is 3**, so every wrench addressed a model named `slalom_1::pipe_centre`, which
+  does not exist, and ApplyLinkWrench dropped it in silence. Separated from "the
+  prop is stiff" by putting the same wrench on a known-free body: the
+  collectible flew, the pipe did not.

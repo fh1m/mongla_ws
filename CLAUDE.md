@@ -547,6 +547,32 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > The run clock **starts on arm**, and the card is written to `DUBURI_RUN_DIR`
 > beside the mission scorecards. [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
 >
+> **THE HULL'S WASH MOVES PROPS NOW — and the thing that hid it was a frame,
+> not the physics.** `thruster_wash` was built two rounds ago, wired, and never
+> once shown to move anything. Parked 0.7 m upstream of a slalom set at the
+> node's own +103.52 N of net forward thrust: **wash off 0.001°, wash on
+> 7.331°**. Three real bugs were fixed on the way — hull speed used as the jet
+> speed (a vehicle holding station has zero speed and full wash), a
+> `node.publish()` that **does not exist** on `gz.transport13.Node` and raised
+> into a swallowed callback, and `entity.type = 2  # LINK` when **2 is MODEL and
+> LINK is 3**, which made every wrench address a model that does not exist.
+> But the reason it still looked dead afterwards was the measurement:
+> **`/world/<w>/pose/info` reports a link's pose RELATIVE TO ITS MODEL FRAME,
+> and that frame rides the model's CANONICAL link** — the first one authored.
+> So the pipe that swings reads 0.00° forever, its neighbours report its
+> counter-rotation and appear to move, and pushing all three collapses every
+> reading to ~0 *precisely because it is working*. Two symptoms, one artifact;
+> the tell was an **identical** 49.48° on two different bodies.
+> `dynamic_pose/info` shares the convention and does not save you — compose
+> model × link, or watch the model's own pose. Also measured: persistent
+> wrenches on different links **coexist** (49.9° and 55.6° at once), publish
+> **rate is irrelevant** to a persistent wrench (10 Hz 51.0° vs 5 Hz 50.0°), and
+> **four equal thruster commands are a pure YAW** — the A/B rig drove exactly
+> that and the node rightly reported 0.00 N of jet. It stays **off by default**
+> (`wash:=true`): demonstrated, not yet regressed against a full mission, and
+> `targets` covers **only the slalom pipes**.
+> [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
+>
 > **Props follow the SAUVC rulebook** and every prop can be spawned anywhere at
 > runtime: `ros2 run duburi_sim_scenarios props add <model> <name> <x> <y>`.
 > Six courses, three of them single-task. Textures are generated
