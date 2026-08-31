@@ -1378,14 +1378,22 @@ def robosub_gate(spec):
     for role, y in (("survey_repair", -w * 0.22), ("search_rescue", w * 0.22)):
         image = spec["roles"][role]["gate_images"][0]
         sign_names.append(f"sign_{role}")
-        # A NESTED MODEL, not a bare link.
+        # A PLAIN LINK, and per-sign labels are NOT possible. This comment
+        # used to claim the opposite -- "a nested <model> is its own merge
+        # group, so it can carry its own class" -- and it SURVIVED THE REVERT
+        # of the experiment that disproved it, so it sat here asserting a
+        # capability the code beneath it does not have.
         #
-        # gz merges every labelled link of a model into ONE box
-        # (Ogre2BoundingBoxCamera::MergeMultiLinksModels2D), which is why
-        # visual-scope labels gave 267/267 frames of `robosub_gate` and not one
-        # of `repair`. A nested <model> is its own merge group, so it can carry
-        # its own class -- and the hinge still reaches it with a `::`-scoped
-        # child name.
+        # Measured twice, ~270 frames each, both reverted whole: gz merges
+        # everything under a top-level model instance into ONE box and picks
+        # one label for it (Ogre2BoundingBoxCamera::MergeMultiLinksModels2D).
+        # Visual-scope labels gave 267/267 frames of `robosub_gate`; nesting
+        # changed nothing. That is why `repair`/`rescue` are deliberately absent
+        # from DETECTION_CLASSES -- nothing emits them.
+        #
+        # The only remaining path is each sub-feature as its own TOP-LEVEL model
+        # placed by the course, which costs the hinge joints that let these
+        # boards swing. Settled negative; stop re-testing it each round.
         parts.append(_role_sign(
             spec, f"sign_{role}", image,
             # rpy 0 0 0 -- the plate already faces along x, at the AUV.

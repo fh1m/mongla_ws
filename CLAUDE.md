@@ -249,8 +249,14 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > also carries an `fx` block, written beside the world as `<course>.fx.yaml` and
 > loaded by `bridge.launch.py`. Check it took with
 > `ros2 param get /underwater_fx turbidity` (murky→0.8, competition→0.45). Never
-> tune turbidity in a `.world`; nothing changes. Attenuation is still uniform, not
-> per-pixel — see [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
+> tune turbidity in a `.world`; nothing changes. **Attenuation IS per-pixel** —
+> `underwater_fx` attenuates along the path the light actually travelled
+> (verified: 124 grey levels between near and far), and it is dark only because
+> the vehicle's `depth_camera` sensors are stripped unless
+> `configs.yaml: range_cameras: true`. (This line previously said "still
+> uniform, not per-pixel" — **retracted**; that was corrected in `.context/`
+> and never propagated here.) See
+> [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
 >
 > **Pointing vision at a sim camera topic used to receive NOTHING.** `RosTopicCamera`
 > subscribed RELIABLE; every camera publisher (`ros_gz` image_bridge, `underwater_fx`,
@@ -541,7 +547,8 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > page: what was earned, the evidence, what remains. **Both maxima are always
 > shown** — SAUVC 230 reachable of 310, RoboSub 14700 of 21800 — because a total
 > that quietly counts unreachable points reads like a competition result.
-> Not modelled and *said so*: octagon object handling (4900 — **no manipulator
+> Not modelled and *said so*: octagon object handling (**5,100** — the 4,900
+> once quoted here was wrong; `rulebook.maxima()` computes 5,100 — **no manipulator
 > on the sim vehicle**), IVC (1000, phase 2), bin lights (1000, no rule text).
 > **Geometry now comes from the course**: the launch passed only the world name,
 > so every geometry param ran at its `robosub26_full` default and the scorer
