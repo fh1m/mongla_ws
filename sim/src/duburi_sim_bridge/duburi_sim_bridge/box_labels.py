@@ -12,6 +12,13 @@ step with the class list.
 Gazebo already renders the scene. Asking it for the boxes gives occlusion and
 truncation for free, on the GPU, and deletes three hand-maintained tables.
 
+BUT IT ONLY DID SO FROM 2026-08-31. The sensor was declared `<box_type>2d</>`,
+which is not a valid token -- the set is full_2d / full_box_2d / visible_2d /
+visible_box_2d / 3d -- so gz fell back to FULLBOX2D, "the full box of occluded
+objects", and the paragraph above was describing something the sim was not
+doing. A crate behind a crate still got a full box, which is the exact defect
+the projector was replaced to fix. Datasets captured before that date carry it.
+
 Two properties worth stating because they are what changed:
 
   * RUNTIME SPAWNS ARE LABELLED. The projector read the course YAML, so a prop

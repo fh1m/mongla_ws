@@ -212,3 +212,32 @@ parses `follow_target`, `follow_offset` and `follow_pgain` and nothing else
 > vehicle's own cameras and are irreducibly first-person.** None of the above
 > changes them. A third-person feed in the lab would need a new world camera
 > plus a bridge; it does not exist today.
+
+## `view high` never worked, and the pool caps how high it can go
+
+`/gui/track` is a **topic, not a service**. The plugin subscribes to it
+(`OnTrackSub`); `Node::Advertise` is instantiated only for `StringMsg`,
+`GUICamera` and `Vector3d`, never `CameraTrack`. The first version of
+`duburi_sim view high` called `gz service -s /gui/track`, which cannot succeed,
+and swallowed the failure into **"no Gazebo GUI is running (or it is
+headless)"** — so the command never worked *and* said something false about why.
+It publishes now, and checks the GUI first with a service that really is one.
+
+**The pool caps the height, and there is no way around it.** The water surface
+is an opaque model (Fuel `openrobotics/waves`) at z = 0, the RoboSub pool is
+2.1 m deep, and the hull runs about 0.8 m down — so there is at most ~0.8 m of
+headroom. Verified by driving the camera there: at z offsets of 2.2 and 3.2 the
+camera really did move (the pose stream confirms it) and was looking at the
+underside of the surface.
+
+So elevation is bought by **distance**, not altitude:
+
+```bash
+duburi_sim view far     # 12 m astern -- the vehicle and the task in one frame
+duburi_sim view high    # 6 m astern, over the shoulder
+duburi_sim view chase   # the close follow
+duburi_sim view free    # let go and fly by hand
+```
+
+`far` is the "watch the run" view. It is **not** a bird's eye, and in a 2.1 m
+pool it cannot be.
