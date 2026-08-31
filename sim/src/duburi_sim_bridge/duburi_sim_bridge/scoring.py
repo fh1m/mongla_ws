@@ -173,6 +173,98 @@ def _spec_yaml(competition: str) -> dict:
         return {}
 
 
+def _prop_library():
+    """`prop_library` from the worlds package, at runtime.
+
+    THE SCORER MUST NOT RE-DERIVE PROP GEOMETRY. Re-deriving is exactly what
+    broke it: `board_openings` was a hand-typed default describing a TWO-opening
+    board, the board became a FOUR-opening board, and nothing connected the two
+    -- so a torpedo fired dead centre through a real opening was graded
+    PAST_BOARD. The module that cuts the mesh and paints the texture is the only
+    honest source for what the scorer is aiming at.
+
+    `scripts/` is installed into the package share, so this is an import, not a
+    copy.
+    """
+    try:
+        import sys
+        from ament_index_python.packages import get_package_share_directory
+        scripts = os.path.join(
+            get_package_share_directory('duburi_sim_worlds'), 'scripts')
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        import prop_library                                    # noqa: PLC0415
+        return prop_library
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def _board_plate_z(spec: dict, board: dict, pool_depth: float) -> float:
+    """World z of the plate's centre -- the origin `torpedo_openings()` is
+    relative to. Floor, plus the legs, plus half the board."""
+    return (-pool_depth + float(board.get('leg_height', 0.55))
+            + float(board.get('size', 0.6)) / 2.0)
+
+
+def _board_openings_world(pl, spec: dict, board: dict, pool_depth: float,
+                          yaw: float):
+    """Openings as the grader wants them: (y_offset, world_z, radius) x N.
+
+    TWO FRAME CONVERSIONS, BOTH SILENT IF WRONG.
+
+    1. `torpedo_openings()` returns PLATE-relative (y, z) -- z is +-0.132 about
+       the plate centre. The grader compares against absolute world z, so the
+       plate centre has to be added. The old hand-typed default had z = -1.10
+       and -1.40, which happen to be close to the right rows; that near-miss is
+       part of why nothing looked obviously broken.
+    2. The board's YAW maps plate +y to world -y at yaw = pi, which is how every
+       course places it. A y-sign error is INVISIBLE on a shot at y ~ 0 -- the
+       centre opening grades correctly either way -- so this is verified by
+       firing at a SIDE opening, not a middle one.
+    """
+    cz = _board_plate_z(spec, board, pool_depth)
+    c, sn = math.cos(yaw), math.sin(yaw)
+    out = []
+    for oy, oz, r in pl.torpedo_openings(spec):
+        # Rotation about z of a point at plate (x=0, y=oy): y -> oy*cos(yaw).
+        # The x term is the board's own thickness and does not enter the
+        # (y, z) test the grader does at the board plane.
+        out.extend([float(oy * c - 0.0 * sn), float(cz + oz), float(r)])
+    return out
+
+
+def _board_opening_kinds(pl, spec: dict):
+    """'large' / 'small' per opening, IN THE SAME ORDER.
+
+    The grader used `'large' if idx == 0 else 'small'`, which cannot describe a
+    board with two of each. `torpedo_layout()` already carries the kind that the
+    mesh and the texture were built from; nothing needs to be inferred.
+    """
+    return [str(e['kind']) for e in pl.torpedo_layout(spec)
+            if e.get('radius') is not None]
+
+
+def _bin_targets_world(pl, spec: dict, bins_xy):
+    """The FOUR crate centres in world xy, flattened to [x0, y0, x1, y1, ...].
+
+    The grader tested one box at the bins MODEL ORIGIN. Four crates hang +-0.52 m
+    off the pipeline, so no crate was ever inside it -- while the origin itself,
+    which is mid-air on the pipework between them, scored. Every drop that
+    actually landed in a bin was graded `outside_bin`.
+    """
+    import re
+    xml = pl.robosub_bins(spec)
+    out = []
+    for m in re.finditer(
+            r'<link name="(crate_[a-z_]+)_floor">\s*<pose>'
+            r'\s*([-\d.eE]+)\s+([-\d.eE]+)', xml):
+        out.extend([float(bins_xy[0]) + float(m.group(2)),
+                    float(bins_xy[1]) + float(m.group(3))])
+    if not out:
+        raise ValueError('no crate floors found in the bins model')
+    return out
+
+
 def _resolve_competition(world: str) -> str:
     """Which rulebook a running course is scored against.
 
@@ -307,14 +399,40 @@ class Scoring(Node):
         # other.
         self.declare_parameter('board_x', 8.0)
         self.declare_parameter('board_y', 3.0)
-        self.declare_parameter('board_openings',
-                               [0.15, -1.10, 0.10, -0.15, -1.40, 0.065])
+        # DERIVED, not typed. `_adopt_course_geometry` overwrites this from
+        # `prop_library.torpedo_openings()` at startup. The value here is only
+        # what a scorer with no worlds package would fall back to, and it is
+        # deliberately EMPTY: a hand-typed default describing a two-opening
+        # board is what silently graded every real four-opening shot as a miss,
+        # and an empty list makes that failure loud instead.
+        #
+        # `[0.0]`, NOT `[]`: rclpy infers a parameter's type from its default,
+        # and an EMPTY list infers BYTE_ARRAY -- after which setting a double
+        # array over it does nothing and `ros2 param get` answers "Byte values
+        # are: []". The derived openings were silently discarded that way on the
+        # first run of this fix. A one-element list types it DOUBLE_ARRAY and is
+        # still not a valid opening (the grader reads triples, so it yields
+        # none), which keeps the no-geometry case loud.
+        self.declare_parameter('board_openings', [0.0])
+        self.declare_parameter('board_opening_kinds', [''])
         self.declare_parameter('standoff_far', 1.0)
         self.declare_parameter('standoff_farther', 1.5)
-        # Bin footprint for a dropper, "24 in x 12 in" (610 x 305 mm).
+        # Bin footprint for a dropper. Was "24 in x 12 in" (610 x 305 mm) --
+        # an older rule; the 2026 target is a CleverMade crate, 0.335 SQUARE,
+        # and `_adopt_course_geometry` takes it from the spec.
+        #
+        # `bin_x`/`bin_y` are the bins MODEL origin and are kept only for the
+        # firing-range readout. They are NOT the drop target: four crates hang
+        # +-0.52 m off the pipeline, so a box at the origin contains no crate at
+        # all, while the origin itself is mid-air on the pipework between them.
+        # `bin_targets` is the flattened list of the four crate centres.
         self.declare_parameter('bin_x', 0.0)
         self.declare_parameter('bin_y', 0.0)
-        self.declare_parameter('bin_size', [0.61, 0.305])
+        self.declare_parameter('bin_size', [0.335, 0.335])
+        # `[0.0]` for the same rclpy typing reason as `board_openings` above.
+        self.declare_parameter('bin_targets', [0.0])
+        # The bins pipework's length, for placing the magnetic detectors.
+        self.declare_parameter('pipeline_span', 1.30)
         # How close the hull must pass for a magnetic detector to trip. The
         # handbook gives no number, so this is ours and is labelled as such.
         self.declare_parameter('light_reach', 0.75)
@@ -734,11 +852,18 @@ class Scoring(Node):
         y, z = shot['crossing']
         vals = list(self.get_parameter('board_openings').value or [])
         openings = [vals[i:i + 3] for i in range(0, len(vals) - 2, 3)]
+        kinds = [k for k in self.get_parameter('board_opening_kinds').value
+                 if k]
+        if not openings:
+            return {'outcome': 'ungraded', 'opening': None,
+                    'note': 'no board geometry -- see [SCORE] errors at startup'}
         by = float(self.get_parameter('board_y').value)
         for idx, (oy, oz, r) in enumerate(openings):
             if math.hypot(y - (by + oy), z - oz) <= r:
                 return {'outcome': 'through',
-                        'opening': 'large' if idx == 0 else 'small',
+                        # From the LAYOUT, not the index. `idx == 0` cannot
+                        # label a board with two large openings and two small.
+                        'opening': kinds[idx] if idx < len(kinds) else '?',
                         'miss_dist_m': 0.0}
         # It crossed the plane outside every opening. With the board's
         # collision plate now genuinely holed, that means it went past the
@@ -749,14 +874,28 @@ class Scoring(Node):
                 'miss_dist_m': round(nearest, 3) if nearest else None}
 
     def _grade_dropper(self, shot: dict, rest) -> dict:
-        bx = float(self.get_parameter('bin_x').value)
-        by = float(self.get_parameter('bin_y').value)
+        """Inside ANY of the four crates, not inside one box at the origin.
+
+        This tested a single footprint centred on the bins model origin. Four
+        crates hang +-0.52 m off the pipeline, so every crate was outside it and
+        the origin -- open water on the pipework, between the crates -- was in.
+        A marker that landed squarely in a bin graded `outside_bin`.
+        """
+        vals = list(self.get_parameter('bin_targets').value or [])
+        targets = [vals[i:i + 2] for i in range(0, len(vals) - 1, 2)]
         sx, sy = list(self.get_parameter('bin_size').value)[:2]
-        inside = abs(rest[0] - bx) <= sx / 2.0 and abs(rest[1] - by) <= sy / 2.0
+        if not targets:
+            return {'outcome': 'ungraded', 'rest': [round(v, 3) for v in rest],
+                    'note': 'no bin geometry -- see [SCORE] errors at startup'}
+        best = min(targets, key=lambda t: math.hypot(rest[0] - t[0],
+                                                     rest[1] - t[1]))
+        inside = any(abs(rest[0] - tx) <= sx / 2.0
+                     and abs(rest[1] - ty) <= sy / 2.0 for tx, ty in targets)
         return {
             'outcome': 'in_bin' if inside else 'outside_bin',
             'rest': [round(v, 3) for v in rest],
-            'miss_dist_m': round(math.hypot(rest[0] - bx, rest[1] - by), 3),
+            'miss_dist_m': round(math.hypot(rest[0] - best[0],
+                                            rest[1] - best[1]), 3),
         }
 
     # -- coin flip ---------------------------------------------------------
@@ -845,6 +984,20 @@ class Scoring(Node):
             'card': self._card.snapshot(),
         }
 
+    @staticmethod
+    def _board_yaw(course: dict) -> float:
+        for entry in course.get('props') or []:
+            if 'torpedo' in str(entry.get('model', '')):
+                return float(entry.get('yaw', 0.0))
+        return 0.0
+
+    @staticmethod
+    def _bins_xy(course: dict):
+        for entry in course.get('props') or []:
+            if 'bins' in str(entry.get('model', '')):
+                return entry.get('xy') or [0.0, 0.0]
+        return None
+
     def _adopt_course_geometry(self) -> None:
         """Take the gate, board, bin and pool geometry FROM THE COURSE.
 
@@ -885,6 +1038,34 @@ class Scoring(Node):
         if board:
             overrides['standoff_far'] = float(board.get('standoff_far', 1.0))
             overrides['standoff_farther'] = float(board.get('standoff_farther', 1.5))
+
+        # THE OPENINGS AND THE CRATES, FROM THE GEOMETRY THAT BUILT THEM.
+        pl = _prop_library()
+        if pl is not None:
+            depth = overrides.get('pool_depth', 2.1)
+            try:
+                overrides['board_openings'] = _board_openings_world(
+                    pl, spec, board, depth,
+                    self._board_yaw(course))
+                overrides['board_opening_kinds'] = _board_opening_kinds(pl, spec)
+            except Exception as exc:                           # noqa: BLE001
+                self.get_logger().error(
+                    f'[SCORE] could not derive the board openings ({exc}) -- '
+                    'torpedo pass-through will NOT score')
+            try:
+                bins_xy = self._bins_xy(course)
+                if bins_xy is not None:
+                    overrides['bin_targets'] = _bin_targets_world(
+                        pl, spec, bins_xy)
+                    overrides['bin_size'] = [
+                        float(spec['props']['bin']['length']),
+                        float(spec['props']['bin']['width'])]
+                    overrides['pipeline_span'] = float(
+                        spec['props']['bin'].get('pipeline_span', 1.30))
+            except Exception as exc:                           # noqa: BLE001
+                self.get_logger().error(
+                    f'[SCORE] could not derive the bin targets ({exc}) -- '
+                    'marker drops will NOT score')
 
         from rclpy.parameter import Parameter
         if overrides:
@@ -1007,7 +1188,14 @@ class Scoring(Node):
         reach = float(self.get_parameter('light_reach').value)
         bx = float(self.get_parameter('bin_x').value)
         by = float(self.get_parameter('bin_y').value)
-        span = float(self.get_parameter('bin_size').value[0])
+        # THE PIPELINE's span, not a CRATE's. This read `bin_size[0]`, which is
+        # a crate footprint, and used it to place detectors along the pipework
+        # -- the same class of mistake as the drop target: a dimension borrowed
+        # from the wrong object because both happened to be lengths. It moved
+        # when `bin_size` was corrected 0.61 -> 0.335, which is how it surfaced.
+        # Detectors now sit at +-span/4 of the 1.30 m pipeline: +-0.325 m, where
+        # the pipework actually runs, rather than +-0.15 m from its centre.
+        span = float(self.get_parameter('pipeline_span').value)
         x, y = self._pose[0], self._pose[1]
         for i, off in enumerate((-span / 4.0, span / 4.0)):
             near = math.hypot(x - bx, y - (by + off)) < reach

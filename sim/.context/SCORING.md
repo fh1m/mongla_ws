@@ -171,3 +171,95 @@ resolve in the Python bindings' descriptor pool, thrown inside gz's own
 callback thread where it prints a traceback and is otherwise swallowed — a
 subscription that looks alive and delivers nothing. It reads one long-lived
 `gz topic -e --json-output` instead.
+
+---
+
+## Round 13 — the two task graders could not award their tasks
+
+Asked whether torpedo-through-hole and bin-drop scoring actually worked, both
+were **tested rather than trusted**, and both were broken. Neither logged
+anything, because nothing *was* wrong: the scorer was looking exactly where it
+had been told to look.
+
+### Torpedo: a perfect shot graded a miss
+
+Fired dead-centre on a real opening from exactly 1.00 m, physically through the
+board:
+
+```
+[SCORE] TORPEDO PAST_BOARD -- fired from 1.00 m (far)
+```
+
+`board_openings` was a hand-typed **two**-opening default, left behind by the
+2026 four-opening rewrite, and **nothing derived it from the geometry**:
+
+| | scorer (before) | `prop_library.torpedo_openings()` |
+|---|---|---|
+| count | 2 | **4** |
+| radii | 0.10 / 0.065 | 0.07 / 0.0475 |
+| frame | absolute world z | plate-relative (±0.132) |
+
+`'large' if idx == 0 else 'small'` also cannot label a board with **two** large
+openings and **two** small; sizes now come from `torpedo_layout()`'s own `kind`.
+
+### Bins: no crate was inside the scored footprint
+
+```
+[SCORE] DROPPER OUTSIDE_BIN -- fired from 0.65 m (near)
+```
+
+`bin_x`/`bin_y` are the bins **model origin**, but four crates hang **±0.52 m**
+off the pipeline, and the box was 0.61 × 0.305 — an older rule; the 2026
+CleverMade crate is **0.335 square**. Half-extent in y was 0.1525, so every
+crate sat 3.4× outside it, and the only place that scored was the origin itself:
+open water on the pipework **between** the crates.
+
+### Both now come from the module that built the props
+
+`prop_library` is installed into the worlds package share, so the scorer imports
+it rather than keeping a second copy of the numbers — a second copy is precisely
+how this happened. `_adopt_course_geometry` derives `board_openings`,
+`board_opening_kinds`, `bin_targets` and `bin_size` at startup, and **says so
+loudly** if it cannot; the fallback defaults no longer describe a board.
+
+`_check_bin_lights` had the same disease and is fixed with it: it used a
+**crate** dimension (`bin_size[0]`) to place detectors along the **pipeline**,
+so detectors sat ±0.15 m from the centre instead of ±0.325 m of the 1.30 m
+pipe run. It reads `pipeline_span` now. This changes RoboSub bin-light totals.
+
+### Measured after
+
+```
+[SCORE] TORPEDO THROUGH -- fired from 1.02 m (far), opening large
+[SCORE] DROPPER IN_BIN  -- fired from 0.65 m (near)      # crate sr_a
+[SCORE] DROPPER IN_BIN  -- fired from 0.54 m (near)      # crate rescue_a
+[SCORE] DROPPER OUTSIDE_BIN -- fired from 0.00 m (near)  # pipework: the
+                                                         # negative control,
+                                                         # and the only place
+                                                         # that used to score
+```
+
+### Two frame traps, and two rclpy traps
+
+- **Plate-relative → world z.** `torpedo_openings()` is ±0.132 about the plate
+  centre; the grader compares absolute z. The stale default's −1.10 / −1.40 were
+  close enough to the real rows to look plausible.
+- **Board yaw.** At yaw = π (how every course places it) plate +y maps to world
+  −y. A y-sign error is **invisible on a centred shot**, so `test_the_board_yaw_
+  flips_the_side_an_opening_is_on` checks it directly rather than leaving it to
+  an end-to-end run that cannot see it.
+- **An empty-list parameter default infers BYTE_ARRAY in rclpy.** Setting a
+  double array over it then does nothing, silently — `ros2 param get` answers
+  `Byte values are: []`. The derived openings were discarded that way on the
+  first run of this fix. Defaults are `[0.0]`.
+- **`set_pose` with no `orientation` leaves the hull at whatever heading it
+  drifted to.** Three of four end-to-end shots flew parallel to the board at
+  yaw 89.9° and read exactly like a scorer fault. (Pinning the hull at 20 Hz
+  through the shot is *also* wrong — it punts the round as it spawns, the
+  muzzle-clearance trap in PAYLOAD.md.)
+
+`test_score_geometry.py` covers all four openings, a 1 mm miss at each rim, all
+four crates, the pipework between them, both frame conversions, and the guard
+for the whole class — **the scorer's opening count must equal
+`len(torpedo_openings(spec))`**, so a spec change fails loudly instead of being
+ignored. Four defects were reintroduced to confirm the tests bite.
