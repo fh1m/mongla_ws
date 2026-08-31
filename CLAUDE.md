@@ -372,7 +372,10 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > physically open** — collision tiled in strips with the circles cut out — so
 > `/duburi/sim/score` grades a shot the way the handbook does: `through` vs
 > `miss`, which opening, and the range **at the moment of firing** banded
-> against the two standoff bars. **Trace a shot off the pose stream, never
+> against the two standoff bars. (**That was written true of the two-opening
+> board and was FALSE from the four-opening rewrite until round 13** — the
+> grader kept the old openings and called every real shot `past_board`. It
+> derives them from `prop_library` now; see the scorer note below.) **Trace a shot off the pose stream, never
 > `gz model -m` (~2 s/call)** — too slow to resolve a half-second flight, and it
 > reads a *recycled* slot as the new shot.
 > [`sim/.context/PAYLOAD.md`](sim/.context/PAYLOAD.md).
@@ -622,6 +625,33 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > (`wash:=true`): demonstrated, not yet regressed against a full mission, and
 > `targets` covers **only the slalom pipes**.
 > [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
+>
+> **THE SCORER COULD NOT AWARD THE TWO TASKS IT EXISTS TO SCORE — FIXED, AND
+> THE EARLIER CLAIM IS RETRACTED.** Asked whether torpedo-through-hole and
+> bin-drop scoring worked, both were TESTED rather than trusted, and both were
+> broken. A torpedo fired dead-centre through a real opening from 1.00 m graded
+> **PAST_BOARD**; a marker landing squarely in a crate graded **OUTSIDE_BIN**.
+> Neither logged anything, because nothing *was* wrong — the scorer was looking
+> exactly where it had been told. `board_openings` was a hand-typed **two**-
+> opening default left behind by the 2026 four-opening rewrite (radii 0.10/0.065
+> vs the real 0.07/0.0475, absolute z vs plate-relative), and nothing derived it
+> from the geometry; `'large' if idx == 0 else 'small'` cannot label a board
+> with **two of each**. The drop target was a single 0.61×0.305 box (an older
+> rule; the 2026 crate is **0.335 square**) at the bins **model origin**, while
+> four crates hang **±0.52 m** off the pipeline — so no crate was ever inside
+> it, and the origin, open water on the pipework *between* the crates, was the
+> only place that scored. Both now derive from **`prop_library`** — the module
+> that cuts the mesh and paints the texture — because a second copy of a number
+> is exactly how this happened. `_check_bin_lights` had the same disease: it
+> used a **crate** dimension (`bin_size[0]`) to place detectors along the
+> **pipeline**, so they now read `pipeline_span` (±0.325 m, not ±0.15). Measured
+> after: **TORPEDO THROUGH opening large**, **DROPPER IN_BIN** at two different
+> crates, and **OUTSIDE_BIN** on the pipework — the negative control. **Two
+> rclpy traps:** an empty-list parameter default infers **BYTE_ARRAY**, after
+> which a double array set over it is silently discarded (`ros2 param get`
+> answers "Byte values are: []") — defaults are `[0.0]`; and a `set_pose` with
+> no `orientation` leaves the hull at whatever heading it drifted to, which
+> fires rounds parallel to the board and reads as a scorer fault.
 >
 > **Props follow the SAUVC rulebook** and every prop can be spawned anywhere at
 > runtime: `ros2 run duburi_sim_scenarios props add <model> <name> <x> <y>`.
