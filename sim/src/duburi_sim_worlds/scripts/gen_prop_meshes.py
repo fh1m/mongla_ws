@@ -175,6 +175,59 @@ def plate_with_holes(size, thickness, holes, segments=HOLE_SEGMENTS):
     return verts, uvs, faces, norms
 
 
+def lattice_panel(width, height, thickness, cols, rows, bar):
+    """A rectangular panel with a grid of rectangular holes -- a crate wall.
+
+    The real CleverMade crate the rulebook names has latticed walls, and you can
+    see into and through them. That matters here for two reasons: the downward
+    camera has to see a marker land INSIDE a crate, and a solid slab reads as a
+    featureless black box in fog, which is exactly what the render showed.
+
+    It is GEOMETRY rather than an alpha-cutout texture, and not by preference:
+    `SetAlphaFromTexture` exists only in the gz-rendering C++ API, there is no
+    SDF element for it, and `visual()` exposes only a scalar `<transparency>`.
+    So a see-through wall has to be built, not painted. The bars are quads, so
+    a whole wall is a few hundred triangles rather than the tens of thousands a
+    hole-cutting grid would cost.
+
+    Returns (verts, uvs, faces, norms) like `plate_with_holes`.
+    """
+    verts, uvs, faces, norms = [], [], [], []
+    half_w, half_h, half_t = width / 2.0, height / 2.0, thickness / 2.0
+
+    def slab(y0, y1, z0, z1):
+        """One bar, as a box. Six quads; hard edges need their own normals."""
+        base = len(verts)
+        corners = [(y0, z0), (y1, z0), (y1, z1), (y0, z1)]
+        for nx, x in ((1.0, half_t), (-1.0, -half_t)):
+            for (y, z) in corners:
+                verts.append((x, y, z))
+                uvs.append((0.5 + y / width, 0.5 + z / height))
+                norms.append((nx, 0.0, 0.0))
+        f, b = base + 1, base + 5
+        faces.extend([(f, f + 1, f + 2), (f, f + 2, f + 3),
+                      (b, b + 2, b + 1), (b, b + 3, b + 2)])
+        # Four side walls, so a bar seen edge-on has thickness.
+        for k in range(4):
+            a0, a1 = f + k, f + (k + 1) % 4
+            b0, b1 = b + k, b + (k + 1) % 4
+            faces.extend([(a0, b0, b1), (a0, b1, a1)])
+
+    # Vertical bars, then horizontal ones. The outer frame is one bar each side,
+    # so the wall keeps a solid rim like the moulded crate does.
+    pitch_y = width / cols
+    pitch_z = height / rows
+    for i in range(cols + 1):
+        y = -half_w + i * pitch_y
+        slab(max(-half_w, y - bar / 2.0), min(half_w, y + bar / 2.0),
+             -half_h, half_h)
+    for j in range(rows + 1):
+        z = -half_h + j * pitch_z
+        slab(-half_w, half_w,
+             max(-half_h, z - bar / 2.0), min(half_h, z + bar / 2.0))
+    return verts, uvs, faces, norms
+
+
 def write_obj(path, verts, uvs, faces, norms, name="plate"):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as fh:
@@ -205,6 +258,15 @@ def main():
                     verts, uvs, faces, norms, name="torpedo_plate")
     print(f"wrote {out}  ({len(verts)} verts, {len(faces)} tris, "
           f"{len(holes)} holes)")
+
+    binc = spec["props"]["bin"]
+    verts, uvs, faces, norms = lattice_panel(
+        binc["length"], binc["height"], binc["wall"],
+        binc.get("lattice_cols", 5), binc.get("lattice_rows", 4),
+        binc.get("lattice_bar", 0.022))
+    out = write_obj(os.path.join(MESH_DIR, "crate_wall.obj"),
+                    verts, uvs, faces, norms, name="crate_wall")
+    print(f"wrote {out}  ({len(verts)} verts, {len(faces)} tris, latticed)")
 
     cfgdir = os.path.dirname(MESH_DIR)
     with open(os.path.join(cfgdir, "model.config"), "w") as fh:

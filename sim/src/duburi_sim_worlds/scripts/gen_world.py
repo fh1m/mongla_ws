@@ -581,7 +581,12 @@ def write_lighting_presets(outdir: str) -> str:
 
 def regenerate_assets() -> None:
     """Re-run the texture and prop generators before building worlds."""
-    for script in ("gen_pool_texture.py", "gen_props.py"):
+    # gen_prop_meshes.py was NOT in this list, so every `--all` regenerated the
+    # textures and the prop SDFs while leaving the meshes at whatever they were
+    # -- a torpedo plate cut for the old opening list, silently, with the SDF
+    # around it updated. Meshes are generated from the same spec as everything
+    # else and belong in the same regenerate.
+    for script in ("gen_pool_texture.py", "gen_prop_meshes.py", "gen_props.py"):
         path = os.path.join(HERE, script)
         print(f"--- {script}")
         subprocess.run([sys.executable, path], check=True, stdout=subprocess.DEVNULL)

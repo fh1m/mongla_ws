@@ -20,10 +20,10 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.0167</radius><length>1.15</length></cylinder></geometry>
         <material>
-          <ambient>0.92 0.92 0.92 1</ambient>
-          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2576 0.2576 0.2576 1</emissive>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
         </material>
       </visual>
       <collision name="leg_0_collision">
@@ -46,15 +46,183 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.0167</radius><length>1.15</length></cylinder></geometry>
         <material>
-          <ambient>0.92 0.92 0.92 1</ambient>
-          <diffuse>0.92 0.92 0.92 1</diffuse>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2576 0.2576 0.2576 1</emissive>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
         </material>
       </visual>
       <collision name="leg_1_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><cylinder><radius>0.0167</radius><length>1.15</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="rail_top">
+      <pose>0 0 1.15 1.5708 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1.2</mass>
+        <inertia>
+          <ixx>0.0360837</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0360837</iyy><iyz>0</iyz>
+          <izz>0.000167334</izz>
+        </inertia>
+      </inertial>
+      <visual name="rail_top_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0167</radius><length>0.6</length></cylinder></geometry>
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
+        </material>
+      </visual>
+      <collision name="rail_top_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0167</radius><length>0.6</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="rail_bottom">
+      <pose>0 0 0.55 1.5708 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>1.2</mass>
+        <inertia>
+          <ixx>0.0360837</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0360837</iyy><iyz>0</iyz>
+          <izz>0.000167334</izz>
+        </inertia>
+      </inertial>
+      <visual name="rail_bottom_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0167</radius><length>0.6</length></cylinder></geometry>
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
+        </material>
+      </visual>
+      <collision name="rail_bottom_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.0167</radius><length>0.6</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="brace_0">
+      <pose>0.225 -0.3 0.275 0 0.68573 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.8</mass>
+        <inertia>
+          <ixx>0.0337024</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0337024</iyy><iyz>0</iyz>
+          <izz>7.13958e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="brace_0_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.01336</radius><length>0.710634</length></cylinder></geometry>
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
+        </material>
+      </visual>
+      <collision name="brace_0_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.01336</radius><length>0.710634</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="brace_foot_0">
+      <pose>0.45 -0.3 0.006 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.3</mass>
+        <inertia>
+          <ixx>5.71469e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>5.71469e-05</iyy><iyz>0</iyz>
+          <izz>0.000107094</izz>
+        </inertia>
+      </inertial>
+      <visual name="brace_foot_0_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02672</radius><length>0.012</length></cylinder></geometry>
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
+        </material>
+      </visual>
+      <collision name="brace_foot_0_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02672</radius><length>0.012</length></cylinder></geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            <bullet><friction>0.8</friction><friction2>0.8</friction2></bullet>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="brace_1">
+      <pose>0.225 0.3 0.275 0 0.68573 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.8</mass>
+        <inertia>
+          <ixx>0.0337024</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0337024</iyy><iyz>0</iyz>
+          <izz>7.13958e-05</izz>
+        </inertia>
+      </inertial>
+      <visual name="brace_1_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.01336</radius><length>0.710634</length></cylinder></geometry>
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
+        </material>
+      </visual>
+      <collision name="brace_1_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.01336</radius><length>0.710634</length></cylinder></geometry>
+      </collision>
+    </link>
+    <link name="brace_foot_1">
+      <pose>0.45 0.3 0.006 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.3</mass>
+        <inertia>
+          <ixx>5.71469e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>5.71469e-05</iyy><iyz>0</iyz>
+          <izz>0.000107094</izz>
+        </inertia>
+      </inertial>
+      <visual name="brace_foot_1_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02672</radius><length>0.012</length></cylinder></geometry>
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+          <specular>0.55 0.55 0.55 1</specular>
+          <emissive>0.1736 0.1764 0.182 1</emissive>
+        </material>
+      </visual>
+      <collision name="brace_foot_1_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><cylinder><radius>0.02672</radius><length>0.012</length></cylinder></geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+            <bullet><friction>0.8</friction><friction2>0.8</friction2></bullet>
+          </friction>
+        </surface>
       </collision>
     </link>
     <link name="board">
@@ -119,375 +287,375 @@
       </collision>
     </link>
     <link name="plate_c2">
-      <pose>0 -0.244231 0.607692 0 0 0</pose>
+      <pose>0 0 0.607692 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>5.40557e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>5.35035e-05</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c2_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c3">
-      <pose>0 0.0942308 0.607692 0 0 0</pose>
+      <pose>0 0 0.630769 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000707902</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.00070735</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c3_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c4">
-      <pose>0 -0.26108 0.630769 0 0 0</pose>
+      <pose>0 -0.269003 0.653846 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>2.74649e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>1.8233e-05</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>2.69126e-05</izz>
+          <izz>1.76807e-05</izz>
         </inertia>
       </inertial>
       <collision name="plate_c4_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.0619949 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c5">
-      <pose>0 0.11108 0.630769 0 0 0</pose>
+      <pose>0 0.0590025 0.653846 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000597064</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.000970215</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000596512</izz>
+          <izz>0.000969663</izz>
         </inertia>
       </inertial>
       <collision name="plate_c5_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.481995 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c6">
-      <pose>0 -0.269356 0.653846 0 0 0</pose>
+      <pose>0 -0.28334 0.676923 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>1.78698e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>6.8447e-06</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.73176e-05</izz>
+          <izz>6.29244e-06</izz>
         </inertia>
       </inertial>
       <collision name="plate_c6_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.0333194 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c7">
-      <pose>0 0.0214714 0.653846 0 0 0</pose>
+      <pose>0 -0.0525859 0.676923 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000116371</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00017134</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000115819</izz>
+          <izz>0.000170787</izz>
         </inertia>
       </inertial>
       <collision name="plate_c7_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.165519 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.201467 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c8">
-      <pose>0 0.247885 0.653846 0 0 0</pose>
+      <pose>0 0.197926 0.676923 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>4.74858e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00017587</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>4.69336e-05</izz>
+          <izz>0.000175318</izz>
         </inertia>
       </inertial>
       <collision name="plate_c8_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.204148 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c9">
-      <pose>0 -0.27365 0.676923 0 0 0</pose>
+      <pose>0 -0.288823 0.7 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>1.37906e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>4.301e-06</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.32383e-05</izz>
+          <izz>3.74873e-06</izz>
         </inertia>
       </inertial>
       <collision name="plate_c9_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.0223539 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c10">
-      <pose>0 0.0182676 0.676923 0 0 0</pose>
+      <pose>0 -0.0571556 0.7 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>8.6157e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.000123198</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>8.56047e-05</izz>
+          <izz>0.000122646</izz>
         </inertia>
       </inertial>
       <collision name="plate_c10_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.141934 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.170396 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c11">
-      <pose>0 0.255383 0.676923 0 0 0</pose>
+      <pose>0 0.207979 0.7 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>3.53972e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.000143351</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>3.48449e-05</izz>
+          <izz>0.000142799</izz>
         </inertia>
       </inertial>
       <collision name="plate_c11_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.184043 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c12">
-      <pose>0 -0.275 0.7 0 0 0</pose>
+      <pose>0 -0.289908 0.723077 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>1.26356e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>3.91647e-06</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.20833e-05</izz>
+          <izz>3.3642e-06</izz>
         </inertia>
       </inertial>
       <collision name="plate_c12_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.05 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.0201844 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c13">
-      <pose>0 0.0175 0.7 0 0 0</pose>
+      <pose>0 -0.0577061 0.723077 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>7.81564e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.000115597</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>7.76042e-05</izz>
+          <izz>0.000115044</izz>
         </inertia>
       </inertial>
       <collision name="plate_c13_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.135 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.164956 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c14">
-      <pose>0 0.2575 0.7 0 0 0</pose>
+      <pose>0 0.209614 0.723077 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>3.23231e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00013838</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>3.17708e-05</izz>
+          <izz>0.000137827</izz>
         </inertia>
       </inertial>
       <collision name="plate_c14_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.085 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.180772 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c15">
-      <pose>0 -0.27365 0.723077 0 0 0</pose>
+      <pose>0 -0.287044 0.746154 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>1.37906e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>5.01642e-06</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.32383e-05</izz>
+          <izz>4.46415e-06</izz>
         </inertia>
       </inertial>
       <collision name="plate_c15_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.0259113 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c16">
-      <pose>0 0.0182676 0.723077 0 0 0</pose>
+      <pose>0 -0.0560842 0.746154 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>8.6157e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.000136701</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>8.56047e-05</izz>
+          <izz>0.000136148</izz>
         </inertia>
       </inertial>
       <collision name="plate_c16_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.141934 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.179654 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c17">
-      <pose>0 0.255383 0.723077 0 0 0</pose>
+      <pose>0 0.205129 0.746154 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>3.53972e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.000152229</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>3.48449e-05</izz>
+          <izz>0.000151676</izz>
         </inertia>
       </inertial>
       <collision name="plate_c17_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.189743 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c18">
-      <pose>0 -0.269356 0.746154 0 0 0</pose>
+      <pose>0 -0.278851 0.769231 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>1.78698e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>9.67387e-06</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.73176e-05</izz>
+          <izz>9.1216e-06</izz>
         </inertia>
       </inertial>
       <collision name="plate_c18_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.0422988 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c19">
-      <pose>0 0.0214714 0.746154 0 0 0</pose>
+      <pose>0 0.0688506 0.769231 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000116371</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00089272</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000115819</izz>
+          <izz>0.000892167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c19_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.165519 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.462299 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c20">
-      <pose>0 0.247885 0.746154 0 0 0</pose>
+      <pose>0 0 0.792308 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>4.74858e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>4.69336e-05</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c20_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c21">
-      <pose>0 -0.26108 0.769231 0 0 0</pose>
+      <pose>0 0 0.815385 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>2.74649e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>2.69126e-05</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c21_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c22">
-      <pose>0 0.11108 0.769231 0 0 0</pose>
+      <pose>0 0 0.838462 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000597064</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000596512</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c22_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c23">
-      <pose>0 -0.244231 0.792308 0 0 0</pose>
+      <pose>0 0 0.861538 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>5.40557e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>5.35035e-05</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c23_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c24">
-      <pose>0 0.0942308 0.792308 0 0 0</pose>
+      <pose>0 0 0.884615 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000707902</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.00070735</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c24_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c25">
-      <pose>0 0 0.815385 0 0 0</pose>
+      <pose>0 0 0.907692 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
@@ -503,39 +671,263 @@
       </collision>
     </link>
     <link name="plate_c26">
-      <pose>0 0 0.838462 0 0 0</pose>
+      <pose>0 -0.278851 0.930769 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>9.67387e-06</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.00150167</izz>
+          <izz>9.1216e-06</izz>
         </inertia>
       </inertial>
       <collision name="plate_c26_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.0422988 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c27">
-      <pose>0 0 0.861538 0 0 0</pose>
+      <pose>0 0.0688506 0.930769 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00089272</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.00150167</izz>
+          <izz>0.000892167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c27_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.462299 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c28">
-      <pose>0 0 0.884615 0 0 0</pose>
+      <pose>0 -0.287044 0.953846 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>5.01642e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>4.46415e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c28_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0259113 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c29">
+      <pose>0 -0.0560842 0.953846 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000136701</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000136148</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c29_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.179654 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c30">
+      <pose>0 0.205129 0.953846 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000152229</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000151676</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c30_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.189743 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c31">
+      <pose>0 -0.289908 0.976923 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>3.91647e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>3.3642e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c31_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0201844 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c32">
+      <pose>0 -0.0577061 0.976923 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000115597</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000115044</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c32_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.164956 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c33">
+      <pose>0 0.209614 0.976923 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.00013838</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000137827</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c33_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.180772 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c34">
+      <pose>0 -0.288823 1 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>4.301e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>3.74873e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c34_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0223539 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c35">
+      <pose>0 -0.0571556 1 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000123198</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000122646</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c35_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.170396 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c36">
+      <pose>0 0.207979 1 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000143351</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000142799</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c36_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.184043 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c37">
+      <pose>0 -0.28334 1.02308 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>6.8447e-06</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>6.29244e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c37_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0333194 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c38">
+      <pose>0 -0.0525859 1.02308 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.00017134</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000170787</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c38_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.201467 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c39">
+      <pose>0 0.197926 1.02308 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.00017587</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000175318</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c39_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.204148 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c40">
+      <pose>0 -0.269003 1.04615 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>1.8233e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>1.76807e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c40_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.0619949 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c41">
+      <pose>0 0.0590025 1.04615 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.05</mass>
+        <inertia>
+          <ixx>0.000970215</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>3.8856e-06</iyy><iyz>0</iyz>
+          <izz>0.000969663</izz>
+        </inertia>
+      </inertial>
+      <collision name="plate_c41_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.02 0.481995 0.0230769</size></box></geometry>
+      </collision>
+    </link>
+    <link name="plate_c42">
+      <pose>0 0 1.06923 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
@@ -545,380 +937,28 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <collision name="plate_c28_collision">
+      <collision name="plate_c42_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
-    <link name="plate_c29">
-      <pose>0 -0.0942308 0.907692 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.000707902</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.00070735</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c29_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c30">
-      <pose>0 0.244231 0.907692 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>5.40557e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>5.35035e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c30_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c31">
-      <pose>0 -0.11108 0.930769 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.000597064</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000596512</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c31_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c32">
-      <pose>0 0.26108 0.930769 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>2.74649e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>2.69126e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c32_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c33">
-      <pose>0 -0.247885 0.953846 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>4.74858e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>4.69336e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c33_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c34">
-      <pose>0 -0.0214714 0.953846 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.000116371</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000115819</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c34_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.165519 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c35">
-      <pose>0 0.269356 0.953846 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>1.78698e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.73176e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c35_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c36">
-      <pose>0 -0.255383 0.976923 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>3.53972e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>3.48449e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c36_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c37">
-      <pose>0 -0.0182676 0.976923 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>8.6157e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>8.56047e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c37_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.141934 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c38">
-      <pose>0 0.27365 0.976923 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>1.37906e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.32383e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c38_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c39">
-      <pose>0 -0.2575 1 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>3.23231e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>3.17708e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c39_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.085 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c40">
-      <pose>0 -0.0175 1 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>7.81564e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>7.76042e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c40_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.135 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c41">
-      <pose>0 0.275 1 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>1.26356e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.20833e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c41_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.05 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c42">
-      <pose>0 -0.255383 1.02308 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>3.53972e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>3.48449e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c42_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0892344 0.0230769</size></box></geometry>
-      </collision>
-    </link>
     <link name="plate_c43">
-      <pose>0 -0.0182676 1.02308 0 0 0</pose>
+      <pose>0 0 1.09231 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>8.6157e-05</ixx><ixy>0</ixy><ixz>0</ixz>
+          <ixx>0.00150222</ixx><ixy>0</ixy><ixz>0</ixz>
           <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>8.56047e-05</izz>
+          <izz>0.00150167</izz>
         </inertia>
       </inertial>
       <collision name="plate_c43_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.141934 0.0230769</size></box></geometry>
+        <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
     <link name="plate_c44">
-      <pose>0 0.27365 1.02308 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>1.37906e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.32383e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c44_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0526991 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c45">
-      <pose>0 -0.247885 1.04615 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>4.74858e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>4.69336e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c45_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.104231 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c46">
-      <pose>0 -0.0214714 1.04615 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.000116371</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000115819</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c46_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.165519 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c47">
-      <pose>0 0.269356 1.04615 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>1.78698e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>1.73176e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c47_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.061288 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c48">
-      <pose>0 -0.11108 1.06923 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.000597064</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.000596512</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c48_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.37784 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c49">
-      <pose>0 0.26108 1.06923 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>2.74649e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>2.69126e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c49_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.0778398 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c50">
-      <pose>0 -0.0942308 1.09231 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>0.000707902</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>0.00070735</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c50_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.411538 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c51">
-      <pose>0 0.244231 1.09231 0 0 0</pose>
-      <inertial>
-        <pose>0 0 0 0 0 0</pose>
-        <mass>0.05</mass>
-        <inertia>
-          <ixx>5.40557e-05</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>3.8856e-06</iyy><iyz>0</iyz>
-          <izz>5.35035e-05</izz>
-        </inertia>
-      </inertial>
-      <collision name="plate_c51_collision">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.02 0.111538 0.0230769</size></box></geometry>
-      </collision>
-    </link>
-    <link name="plate_c52">
       <pose>0 0 1.11538 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
@@ -929,12 +969,12 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <collision name="plate_c52_collision">
+      <collision name="plate_c44_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>
     </link>
-    <link name="plate_c53">
+    <link name="plate_c45">
       <pose>0 0 1.13846 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
@@ -945,7 +985,7 @@
           <izz>0.00150167</izz>
         </inertia>
       </inertial>
-      <collision name="plate_c53_collision">
+      <collision name="plate_c45_collision">
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.02 0.6 0.0230769</size></box></geometry>
       </collision>

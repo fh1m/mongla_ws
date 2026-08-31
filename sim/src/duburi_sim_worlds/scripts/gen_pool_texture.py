@@ -323,6 +323,55 @@ def make_roughness(path: str, base: float, width: int = 128, height: int = 512,
     print(f"wrote {path}  ({width}x{height})")
 
 
+def make_normal_map(path: str, height, strength: float = 2.0) -> None:
+    """Tangent-space normal map from a height field.
+
+    NOTHING in this tree used a normal map before, and it is the clearest single
+    tell that a prop is CG: a perfectly smooth surface with its detail painted
+    into the albedo. Painted detail does not move when the light moves, and it
+    does not survive a viewpoint change -- which is exactly what breaks feature
+    matching, since descriptors key on local gradients.
+
+    Standard encoding: n = normalize(-dh/dx, -dh/dy, 1/strength), mapped from
+    [-1,1] to [0,255]. A flat surface is the familiar (128, 128, 255).
+    """
+    h = np.asarray(height, dtype=np.float32)
+    dx = np.gradient(h, axis=1) * strength
+    dy = np.gradient(h, axis=0) * strength
+    nz = np.ones_like(h)
+    inv = 1.0 / np.sqrt(dx * dx + dy * dy + nz * nz)
+    rgb = np.stack([-dx * inv, -dy * inv, nz * inv], axis=2)
+    img = ((rgb * 0.5 + 0.5) * 255.0).clip(0, 255).astype(np.uint8)
+    Image.fromarray(img).save(path, optimize=True)
+    print(f"wrote {path}  ({h.shape[1]}x{h.shape[0]} normal)")
+
+
+def _pvc_height(width: int, height: int, rng) -> np.ndarray:
+    """Extrusion seams and the faint die lines that run along a PVC tube."""
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    h = 0.45 * np.sin(2.0 * np.pi * xx / (width / 3.0))
+    h += 0.18 * np.sin(2.0 * np.pi * xx / 7.0)
+    h += rng.normal(0.0, 0.06, (height, width)).astype(np.float32)
+    return h
+
+
+def _plastic_height(width: int, height: int, rng) -> np.ndarray:
+    """Moulded-plastic pebbling, plus the odd scuff."""
+    coarse = rng.normal(0.0, 1.0, (height // 8, width // 8)).astype(np.float32)
+    h = np.asarray(Image.fromarray(
+        ((coarse - coarse.min()) / max(1e-6, coarse.ptp()) * 255).astype(np.uint8)
+    ).resize((width, height), Image.BICUBIC), dtype=np.float32) / 255.0
+    h = 0.9 * h + 0.15 * rng.normal(0.0, 1.0, (height, width)).astype(np.float32)
+    return h
+
+
+def _fabric_height(width: int, height: int, rng) -> np.ndarray:
+    """Woven flare fabric: a weave in both directions."""
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    h = 0.35 * np.sin(2.0 * np.pi * xx / 5.0) + 0.35 * np.sin(2.0 * np.pi * yy / 5.0)
+    return h + rng.normal(0.0, 0.07, (height, width)).astype(np.float32)
+
+
 def make_flare_fabric(path: str, colour, width: int = 128, height: int = 640,
                       rng=None) -> None:
     """The orange flare is an inflated fabric tube, not a painted pipe.
@@ -388,10 +437,14 @@ def make_drum_rim(path: str, width: int = 256, height: int = 64) -> None:
 # it should be learning it from the real artwork.
 NOTO_EMOJI = "/usr/local/share/fonts/noto/NotoColorEmoji.ttf"
 
-# RoboNation's Search & Rescue droplet is magenta; Noto's is blue. See _glyph_rgba.
+# Only the Noto FALLBACK needs this: Noto's droplet is blue where RoboNation's
+# is magenta. The vendored Fluent droplet is already the right colour, so the
+# intended path never re-tints -- which matters, because re-tinting collapses
+# the glyph to luminance and destroys the shading a detector reads.
 MAGENTA_DROPLET = (1.45, 0.28, 0.80)
 
-# The eight images, by the name used in spec/robosub.yaml.
+# Codepoints for the FALLBACK path only -- the vendored PNGs are the
+# intended source. Keyed by the name used in spec/robosub.yaml.
 ROLE_GLYPHS = {
     "fire": "\U0001F525",          # Survey & Repair    (bins, torpedo)
     "droplet": "\U0001F4A7",       # Search & Rescue    (bins, torpedo)
@@ -405,16 +458,38 @@ ROLE_GLYPHS = {
 
 
 
-def _glyph_rgba(glyph, size=136, hue_shift=None):
-    """One emoji as RGBA at `size`, optionally recoloured.
+EMOJI_DIR = os.path.join(os.path.dirname(HERE), "models", "robosub_textures",
+                         "emoji")
 
-    `hue_shift` exists for the droplet. Noto renders it BLUE; RoboNation prints
-    a magenta one, and Search & Rescue is the role a detector has to tell from
-    Survey & Repair's orange fire. Blue-vs-orange would actually be an easier
-    discrimination than the real magenta-vs-orange, so leaving it blue would
-    make the sim task easier than the pool task -- the wrong direction.
+
+def _glyph_rgba(name, size=136, hue_shift=None):
+    """One task image as RGBA at `size`.
+
+    Loads the VENDORED Microsoft Fluent 3D PNG -- the set RoboNation actually
+    prints -- and falls back, loudly, to striking the Noto emoji font.
+
+    The font path is a fallback and not the intent, for two measured reasons.
+    NotoColorEmoji is a CBDT BITMAP face with a SINGLE 109 px strike, so every
+    glyph was drawn at 109 px and resampled up to fill a 256 px placard or a
+    1024 px board -- soft by construction. And Noto's droplet is BLUE where
+    RoboNation's is magenta, so the old code collapsed the glyph to luminance
+    and multiplied by a tint, throwing away the shading that makes it legible
+    and leaving a flat pink blob. The Fluent droplet is already magenta, so
+    `hue_shift` is dead weight on that path and is accepted only to keep the
+    fallback honest.
     """
     from PIL import ImageDraw, ImageFont
+
+    asset = os.path.join(EMOJI_DIR, f"{name}.png")
+    if os.path.isfile(asset):
+        img = Image.open(asset).convert("RGBA")
+        # LANCZOS both ways: these are 256 px renders, so a placard upsamples
+        # slightly and a board glyph downsamples. Neither is a font strike.
+        return img.resize((size, size), Image.LANCZOS)
+
+    print(f"  WARNING: no vendored artwork for {name!r} -- falling back to the "
+          f"Noto font's 109 px strike. Run scripts/fetch_emoji.py.")
+    glyph = ROLE_GLYPHS.get(name, "?")
     font = ImageFont.truetype(NOTO_EMOJI, 109)   # the font's only strike
     img = Image.new("RGBA", (size, size), (255, 255, 255, 0))
     ImageDraw.Draw(img).text((size // 2, size // 2), glyph, font=font,
@@ -423,32 +498,28 @@ def _glyph_rgba(glyph, size=136, hue_shift=None):
         a = np.asarray(img).astype(np.float32)
         rgb, alpha = a[..., :3], a[..., 3:]
         lum = rgb.mean(axis=2, keepdims=True)
-        # Re-tint toward the target while keeping the glyph's own shading.
         a[..., :3] = np.clip(lum * np.array(hue_shift, dtype=np.float32), 0, 255)
         img = Image.fromarray(
             np.concatenate([a[..., :3], alpha], axis=2).astype(np.uint8), "RGBA")
     return img
 
 
-def make_role_image(path, glyph, px=256, border=0.055, rng=None,
+def make_role_image(path, name, px=512, border=0.055, rng=None,
                     hue_shift=None):
-    """A printed vinyl role sign: one emoji, centred on white, thin dark edge.
+    """A printed vinyl role sign: one task image, centred on white, thin edge.
 
-    NotoColorEmoji is a CBDT BITMAP font with a single 109 px strike, so
-    `truetype(..., 109)` is the only size that loads -- anything else raises
-    `invalid pixel size`. Render at 109 and resample up; that is not a
-    workaround to tidy away later, it is how the font works.
+    512 px, not 256. The artwork is now a vendored 256 px Fluent render rather
+    than a 109 px font strike, so the placard can carry it at close to its own
+    resolution instead of throwing half of it away.
 
     Falls back to a flat grey square with a loud warning rather than aborting
-    the whole asset build, because the font is a system package and a fresh
-    machine may not have it. A missing sign then looks obviously wrong in the
+    the whole asset build. A missing sign then looks obviously wrong in the
     render instead of silently looking like a legitimately blank panel.
     """
     img = Image.new("RGB", (px, px), (255, 255, 255))
     try:
-        glyph_img = _glyph_rgba(glyph, hue_shift=hue_shift)
         inner = int(px * (1.0 - 2.2 * border))
-        g = glyph_img.resize((inner, inner), Image.LANCZOS)
+        g = _glyph_rgba(name, size=inner, hue_shift=hue_shift)
         img.paste(g, ((px - inner) // 2, (px - inner) // 2), g)
     except Exception as exc:                      # noqa: BLE001 - see docstring
         print(f"  WARNING: no emoji glyph for {os.path.basename(path)} ({exc}); "
@@ -496,9 +567,16 @@ def make_torpedo_panel(path, role, spec, px=1024, rng=None):
     share the face where two did.
     """
     rng = rng or np.random.default_rng(2026)
+    cfg = spec["props"]["torpedo_board"]
     ss = 3                                          # supersample factor
     big = px * ss
-    img = np.ones((big, big, 3), dtype=np.float32)
+    # GREY, from the spec. `torpedo_board.colour` had been declared since the
+    # prop was written and never read by anything -- the panel was white purely
+    # because this line used to be `np.ones`. The CAD's panel is grey, and a
+    # white board against a pale pool is a much easier detection than the real
+    # one.
+    img = np.ones((big, big, 3), dtype=np.float32) * np.array(
+        cfg["colour"], dtype=np.float32)
     yy, xx = np.mgrid[0:big, 0:big].astype(np.float32)
 
     # --- corrugated plastic backing -------------------------------------
@@ -528,10 +606,15 @@ def make_torpedo_panel(path, role, spec, px=1024, rng=None):
     for cx, cy, r in holes:
         d = np.sqrt((xx / big - cx) ** 2 + (yy / big - cy) ** 2)
         e = 0.6 / big
-        # Band widened from 0.80r: the mesh cut overshoots the radius slightly,
-        # and at 0.80 the small openings lost their rim entirely.
-        rim = np.clip((r - d) / e, 0.0, 1.0) * np.clip((d - r * 0.70) / e, 0.0, 1.0)
-        hole = np.clip((r * 0.80 - d) / e, 0.0, 1.0)
+        # THE RING IS DRAWN OUTSIDE THE HOLE, NOT INSIDE IT.
+        #
+        # It used to span 0.70r..r -- which is exactly the material the mesh
+        # CUTS AWAY, so the painted ring was applied to board that no longer
+        # exists and the openings rendered as bare holes with no rim at all.
+        # Widening the band only moved more of it into the void. Drawn from r
+        # outward it lands on solid board and survives any overcut.
+        rim = np.clip((d - r) / e, 0.0, 1.0) * np.clip((r * 1.34 - d) / e, 0.0, 1.0)
+        hole = np.clip((r - d) / e, 0.0, 1.0)
         img = img * (1.0 - rim[:, :, None]) + np.array(
             (0.72, 0.06, 0.09), dtype=np.float32) * rim[:, :, None]
         # The hole itself is a placeholder only: the MESH is what actually
@@ -555,18 +638,15 @@ def make_torpedo_panel(path, role, spec, px=1024, rng=None):
         "search_rescue" if role == "survey_repair" else "survey_repair"
     ]["task_images"]
     try:
-        side = int(px * 0.15)
-        for (cx, cy, r), name in zip(holes, order):
-            # Each image sits in the board CORNER diagonally outside its own
-            # opening. Pushing them toward the centre instead put all four in a
-            # heap in the middle -- rendered once, obvious, fixed. Corners are
-            # the only region four 0.15-wide glyphs and four openings of up to
-            # 0.167 UV radius all fit without fighting.
-            gx = 0.105 if cx < 0.5 else 0.895
-            gy = 0.105 if cy < 0.5 else 0.895
-            shift = MAGENTA_DROPLET if name == "droplet" else None
-            g = _glyph_rgba(ROLE_GLYPHS[name], hue_shift=shift)
-            g = g.resize((side, side), Image.LANCZOS)
+        # The images sit in their OWN spec slots now, alternating with the
+        # openings across two rows of four, which is the arrangement the CAD
+        # draws. They were previously jammed into the four corners at 15 % of
+        # board width, because four corner openings had taken every other slot.
+        side = int(px * cfg.get("image_size", 0.21))
+        for slot, name in zip(cfg["images"], order):
+            gx = 0.5 - slot["y"] / 2.0
+            gy = 0.5 - slot["z"] / 2.0
+            g = _glyph_rgba(name, size=side)
             base.paste(g, (int(gx * px - side / 2), int(gy * px - side / 2)), g)
         base.save(path, optimize=True)
     except Exception as exc:                      # noqa: BLE001
@@ -669,14 +749,21 @@ def _generate(spec: dict, outdir: str, seed: int, competition: str) -> None:
         make_roughness(os.path.join(args.outdir, "rough_pvc.png"), 0.62, rng=rng)
         make_roughness(os.path.join(args.outdir, "rough_plastic.png"), 0.78, rng=rng)
         make_roughness(os.path.join(args.outdir, "rough_fabric.png"), 0.88, rng=rng)
+        for nm, fn, w, hgt, st in (
+            ("norm_pvc.png", _pvc_height, 128, 512, 6.0),
+            ("norm_plastic.png", _plastic_height, 512, 256, 7.0),
+            ("norm_fabric.png", _fabric_height, 128, 640, 5.0),
+        ):
+            make_normal_map(os.path.join(args.outdir, nm),
+                            fn(w, hgt, rng), strength=st)
+
         make_water_surface(
             os.path.join(args.outdir, "water_surface.png"),
             pool["length"], pool["width"], rng=rng)
         if competition == "robosub":
-            for name, glyph in ROLE_GLYPHS.items():
+            for name in ROLE_GLYPHS:
                 make_role_image(
-                    os.path.join(args.outdir, f"role_{name}.png"), glyph, rng=rng,
-                    hue_shift=MAGENTA_DROPLET if name == "droplet" else None)
+                    os.path.join(args.outdir, f"role_{name}.png"), name, rng=rng)
             for role in ("survey_repair", "search_rescue"):
                 make_torpedo_panel(
                     os.path.join(args.outdir, f"torpedo_panel_{role}.png"),

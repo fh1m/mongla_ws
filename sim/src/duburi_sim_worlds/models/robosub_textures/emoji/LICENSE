@@ -1,0 +1,6 @@
+Microsoft Fluent Emoji -- 3D style
+https://github.com/microsoft/fluentui-emoji
+Copyright (c) Microsoft Corporation.  Licensed under the MIT License.
+
+Vendored by scripts/fetch_emoji.py. These are the images RoboNation prints on
+the RoboSub task props; see that script for why the emoji FONT is not used.

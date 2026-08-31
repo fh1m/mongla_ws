@@ -202,15 +202,16 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
         <material>
-          <ambient>0.72 0.72 0.72 1</ambient>
-          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
           <specular>0.14 0.14 0.14 1</specular>
-          <emissive>0.1 0.1 0.1 1</emissive>
+          <emissive>0.04 0.04 0.04 1</emissive>
           <pbr>
             <metal>
               <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -233,12 +234,21 @@
       </inertial>
       <visual name="crate_sr_a_xp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_a_xp_collision">
@@ -259,12 +269,21 @@
       </inertial>
       <visual name="crate_sr_a_xn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_a_xn_collision">
@@ -273,7 +292,7 @@
       </collision>
     </link>
     <link name="crate_sr_a_yp">
-      <pose>-0.39 0.6815 0.99 0 0 0</pose>
+      <pose>-0.39 0.6815 0.99 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -285,12 +304,21 @@
       </inertial>
       <visual name="crate_sr_a_yp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_a_yp_collision">
@@ -299,7 +327,7 @@
       </collision>
     </link>
     <link name="crate_sr_a_yn">
-      <pose>-0.39 0.3585 0.99 0 0 0</pose>
+      <pose>-0.39 0.3585 0.99 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -311,12 +339,21 @@
       </inertial>
       <visual name="crate_sr_a_yn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_a_yn_collision">
@@ -325,19 +362,19 @@
       </collision>
     </link>
     <link name="panel_sr_a">
-      <pose>-0.5977 0.52 0.993213 0 0 0</pose>
+      <pose>-0.8575 0.52 1.00578 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000422079</iyy><iyz>0</iyz>
-          <izz>0.000422079</izz>
+          <ixx>0.000359494</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000179814</iyy><iyz>0</iyz>
+          <izz>0.000179814</izz>
         </inertia>
       </inertial>
       <visual name="panel_sr_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
@@ -354,23 +391,23 @@
       </visual>
       <collision name="panel_sr_a_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
       </collision>
     </link>
     <link name="panel_post_sr_a">
-      <pose>-0.5977 0.52 0.90092 0 0 0</pose>
+      <pose>-0.8575 0.52 0.924772 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
         <inertia>
-          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <ixx>0.00813284</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00813284</iyy><iyz>0</iyz>
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
       <visual name="panel_post_sr_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -380,7 +417,7 @@
       </visual>
       <collision name="panel_post_sr_a_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
       </collision>
     </link>
     <link name="arm_rescue_a">
@@ -450,15 +487,16 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
         <material>
-          <ambient>0.72 0.72 0.72 1</ambient>
-          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
           <specular>0.14 0.14 0.14 1</specular>
-          <emissive>0.1 0.1 0.1 1</emissive>
+          <emissive>0.04 0.04 0.04 1</emissive>
           <pbr>
             <metal>
               <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -481,12 +519,21 @@
       </inertial>
       <visual name="crate_rescue_a_xp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_a_xp_collision">
@@ -507,12 +554,21 @@
       </inertial>
       <visual name="crate_rescue_a_xn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_a_xn_collision">
@@ -521,7 +577,7 @@
       </collision>
     </link>
     <link name="crate_rescue_a_yp">
-      <pose>-0.13 -0.3585 0.79 0 0 0</pose>
+      <pose>-0.13 -0.3585 0.79 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -533,12 +589,21 @@
       </inertial>
       <visual name="crate_rescue_a_yp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_a_yp_collision">
@@ -547,7 +612,7 @@
       </collision>
     </link>
     <link name="crate_rescue_a_yn">
-      <pose>-0.13 -0.6815 0.79 0 0 0</pose>
+      <pose>-0.13 -0.6815 0.79 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -559,12 +624,21 @@
       </inertial>
       <visual name="crate_rescue_a_yn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_a_yn_collision">
@@ -573,19 +647,19 @@
       </collision>
     </link>
     <link name="panel_rescue_a">
-      <pose>-0.3377 -0.52 0.793212 0 0 0</pose>
+      <pose>-0.5975 -0.52 0.805775 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000422079</iyy><iyz>0</iyz>
-          <izz>0.000422079</izz>
+          <ixx>0.000359494</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000179814</iyy><iyz>0</iyz>
+          <izz>0.000179814</izz>
         </inertia>
       </inertial>
       <visual name="panel_rescue_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
@@ -602,23 +676,23 @@
       </visual>
       <collision name="panel_rescue_a_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
       </collision>
     </link>
     <link name="panel_post_rescue_a">
-      <pose>-0.3377 -0.52 0.70092 0 0 0</pose>
+      <pose>-0.5975 -0.52 0.724772 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
         <inertia>
-          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <ixx>0.00813284</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00813284</iyy><iyz>0</iyz>
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
       <visual name="panel_post_rescue_a_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -628,7 +702,7 @@
       </visual>
       <collision name="panel_post_rescue_a_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
       </collision>
     </link>
     <link name="arm_sr_b">
@@ -698,15 +772,16 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
         <material>
-          <ambient>0.72 0.72 0.72 1</ambient>
-          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
           <specular>0.14 0.14 0.14 1</specular>
-          <emissive>0.1 0.1 0.1 1</emissive>
+          <emissive>0.04 0.04 0.04 1</emissive>
           <pbr>
             <metal>
               <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -729,12 +804,21 @@
       </inertial>
       <visual name="crate_sr_b_xp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_b_xp_collision">
@@ -755,12 +839,21 @@
       </inertial>
       <visual name="crate_sr_b_xn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_b_xn_collision">
@@ -769,7 +862,7 @@
       </collision>
     </link>
     <link name="crate_sr_b_yp">
-      <pose>0.182 0.6815 0.64 0 0 0</pose>
+      <pose>0.182 0.6815 0.64 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -781,12 +874,21 @@
       </inertial>
       <visual name="crate_sr_b_yp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_b_yp_collision">
@@ -795,7 +897,7 @@
       </collision>
     </link>
     <link name="crate_sr_b_yn">
-      <pose>0.182 0.3585 0.64 0 0 0</pose>
+      <pose>0.182 0.3585 0.64 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -807,12 +909,21 @@
       </inertial>
       <visual name="crate_sr_b_yn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_sr_b_yn_collision">
@@ -821,19 +932,19 @@
       </collision>
     </link>
     <link name="panel_sr_b">
-      <pose>-0.0257 0.52 0.643212 0 0 0</pose>
+      <pose>-0.2855 0.52 0.655775 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000422079</iyy><iyz>0</iyz>
-          <izz>0.000422079</izz>
+          <ixx>0.000359494</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000179814</iyy><iyz>0</iyz>
+          <izz>0.000179814</izz>
         </inertia>
       </inertial>
       <visual name="panel_sr_b_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
@@ -850,23 +961,23 @@
       </visual>
       <collision name="panel_sr_b_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
       </collision>
     </link>
     <link name="panel_post_sr_b">
-      <pose>-0.0257 0.52 0.55092 0 0 0</pose>
+      <pose>-0.2855 0.52 0.574772 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
         <inertia>
-          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <ixx>0.00813284</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00813284</iyy><iyz>0</iyz>
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
       <visual name="panel_post_sr_b_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -876,7 +987,7 @@
       </visual>
       <collision name="panel_post_sr_b_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
       </collision>
     </link>
     <link name="arm_rescue_b">
@@ -946,15 +1057,16 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry><box><size>0.335 0.335 0.012</size></box></geometry>
         <material>
-          <ambient>0.72 0.72 0.72 1</ambient>
-          <diffuse>0.72 0.72 0.72 1</diffuse>
+          <ambient>0.18 0.18 0.2 1</ambient>
+          <diffuse>0.18 0.18 0.2 1</diffuse>
           <specular>0.14 0.14 0.14 1</specular>
-          <emissive>0.1 0.1 0.1 1</emissive>
+          <emissive>0.04 0.04 0.04 1</emissive>
           <pbr>
             <metal>
               <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -977,12 +1089,21 @@
       </inertial>
       <visual name="crate_rescue_b_xp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_b_xp_collision">
@@ -1003,12 +1124,21 @@
       </inertial>
       <visual name="crate_rescue_b_xn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.012 0.335 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_b_xn_collision">
@@ -1017,7 +1147,7 @@
       </collision>
     </link>
     <link name="crate_rescue_b_yp">
-      <pose>0.442 -0.3585 0.87 0 0 0</pose>
+      <pose>0.442 -0.3585 0.87 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -1029,12 +1159,21 @@
       </inertial>
       <visual name="crate_rescue_b_yp_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_b_yp_collision">
@@ -1043,7 +1182,7 @@
       </collision>
     </link>
     <link name="crate_rescue_b_yn">
-      <pose>0.442 -0.6815 0.87 0 0 0</pose>
+      <pose>0.442 -0.6815 0.87 0 0 1.5708</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.5</mass>
@@ -1055,12 +1194,21 @@
       </inertial>
       <visual name="crate_rescue_b_yn_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.335 0.012 0.28</size></box></geometry>
+        <geometry><mesh><uri>model://robosub_meshes/meshes/crate_wall.obj</uri></mesh></geometry>
         <material>
           <ambient>0.18 0.18 0.2 1</ambient>
           <diffuse>0.18 0.18 0.2 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.045 0.045 0.05 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.04 0.04 0.04 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+              <double_sided>true</double_sided>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="crate_rescue_b_yn_collision">
@@ -1069,19 +1217,19 @@
       </collision>
     </link>
     <link name="panel_rescue_b">
-      <pose>0.2343 -0.52 0.873212 0 0 0</pose>
+      <pose>-0.0255 -0.52 0.885775 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.05</mass>
         <inertia>
-          <ixx>0.000844026</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.000422079</iyy><iyz>0</iyz>
-          <izz>0.000422079</izz>
+          <ixx>0.000359494</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000179814</iyy><iyz>0</iyz>
+          <izz>0.000179814</izz>
         </inertia>
       </inertial>
       <visual name="panel_rescue_b_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
@@ -1098,23 +1246,23 @@
       </visual>
       <collision name="panel_rescue_b_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><box><size>0.004 0.31825 0.31825</size></box></geometry>
+        <geometry><box><size>0.004 0.2077 0.2077</size></box></geometry>
       </collision>
     </link>
     <link name="panel_post_rescue_b">
-      <pose>0.2343 -0.52 0.78092 0 0 0</pose>
+      <pose>-0.0255 -0.52 0.804772 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>1</mass>
         <inertia>
-          <ixx>0.00215429</ixx><ixy>0</ixy><ixz>0</ixz>
-          <iyy>0.00215429</iyy><iyz>0</iyz>
+          <ixx>0.00813284</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.00813284</iyy><iyz>0</iyz>
           <izz>8.8445e-05</izz>
         </inertia>
       </inertial>
       <visual name="panel_post_rescue_b_visual">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
         <material>
           <ambient>0.92 0.92 0.92 1</ambient>
           <diffuse>0.92 0.92 0.92 1</diffuse>
@@ -1124,7 +1272,7 @@
       </visual>
       <collision name="panel_post_rescue_b_collision">
         <pose>0 0 0 0 0 0</pose>
-        <geometry><cylinder><radius>0.0133</radius><length>0.159125</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.0133</radius><length>0.31155</length></cylinder></geometry>
       </collision>
     </link>
   </model>
