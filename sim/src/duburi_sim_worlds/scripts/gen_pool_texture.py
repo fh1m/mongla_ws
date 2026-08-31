@@ -613,7 +613,13 @@ def make_torpedo_panel(path, role, spec, px=1024, rng=None):
         # exists and the openings rendered as bare holes with no rim at all.
         # Widening the band only moved more of it into the void. Drawn from r
         # outward it lands on solid board and survives any overcut.
-        rim = np.clip((d - r) / e, 0.0, 1.0) * np.clip((r * 1.34 - d) / e, 0.0, 1.0)
+        # Band from the SPEC, not a literal: `prop_library.torpedo_layout`
+        # packs the columns using this same multiple as the ring's outer
+        # radius, so a hard-coded number here would let the drawn ring and
+        # the reserved space drift apart -- which is the whole class of bug
+        # this board keeps being rebuilt for.
+        rim = (np.clip((d - r) / e, 0.0, 1.0)
+               * np.clip((r * cfg["ring_band"] - d) / e, 0.0, 1.0))
         hole = np.clip((r - d) / e, 0.0, 1.0)
         img = img * (1.0 - rim[:, :, None]) + np.array(
             (0.72, 0.06, 0.09), dtype=np.float32) * rim[:, :, None]
@@ -638,14 +644,13 @@ def make_torpedo_panel(path, role, spec, px=1024, rng=None):
         "search_rescue" if role == "survey_repair" else "survey_repair"
     ]["task_images"]
     try:
-        # The images sit in their OWN spec slots now, alternating with the
-        # openings across two rows of four, which is the arrangement the CAD
-        # draws. They were previously jammed into the four corners at 15 % of
-        # board width, because four corner openings had taken every other slot.
-        side = int(px * cfg.get("image_size", 0.21))
-        for slot, name in zip(cfg["images"], order):
-            gx = 0.5 - slot["y"] / 2.0
-            gy = 0.5 - slot["z"] / 2.0
+        # PLACED BY THE PACKER, not by this file. The images alternate with the
+        # openings across two rows of four -- the arrangement the CAD draws --
+        # and their column centres come from `prop_library.torpedo_layout`, the
+        # same call the mesh and the collision plate read. Placing them here
+        # from hand-typed spec coordinates is what put an emoji inside a hole.
+        for (gx, gy, frac), name in zip(pl.torpedo_images_uv(spec), order):
+            side = max(1, int(px * frac))
             g = _glyph_rgba(name, size=side)
             base.paste(g, (int(gx * px - side / 2), int(gy * px - side / 2)), g)
         base.save(path, optimize=True)
@@ -653,6 +658,25 @@ def make_torpedo_panel(path, role, spec, px=1024, rng=None):
         print(f"  WARNING: torpedo panel without glyphs ({exc})")
         base.save(path, optimize=True)
     print(f"wrote {path}  ({px}x{px}, {len(holes)} openings)")
+
+
+def make_surface_maps(outdir: str, rng) -> None:
+    """The shared roughness + normal maps every prop material reads.
+
+    Both competitions call this. Round 9 wrote the normal maps in the RoboSub
+    branch only, so every SAUVC prop -- gates, mats, flares, drums -- kept a
+    perfectly smooth surface with its detail painted on, and nothing said so:
+    a missing <normal_map> is simply an absent element, not an error.
+    """
+    make_roughness(os.path.join(outdir, "rough_pvc.png"), 0.62, rng=rng)
+    make_roughness(os.path.join(outdir, "rough_plastic.png"), 0.78, rng=rng)
+    make_roughness(os.path.join(outdir, "rough_fabric.png"), 0.88, rng=rng)
+    for nm, fn, w, hgt, st in (
+        ("norm_pvc.png", _pvc_height, 128, 512, 6.0),
+        ("norm_plastic.png", _plastic_height, 512, 256, 7.0),
+        ("norm_fabric.png", _fabric_height, 128, 640, 5.0),
+    ):
+        make_normal_map(os.path.join(outdir, nm), fn(w, hgt, rng), strength=st)
 
 
 def make_particle_sprite(path: str, size: int = 64) -> None:
@@ -746,16 +770,7 @@ def _generate(spec: dict, outdir: str, seed: int, competition: str) -> None:
     # Everything above is pool geometry and applies to any competition.
     # Everything below is keyed to SAUVC prop names in the spec.
     if competition != "sauvc":
-        make_roughness(os.path.join(args.outdir, "rough_pvc.png"), 0.62, rng=rng)
-        make_roughness(os.path.join(args.outdir, "rough_plastic.png"), 0.78, rng=rng)
-        make_roughness(os.path.join(args.outdir, "rough_fabric.png"), 0.88, rng=rng)
-        for nm, fn, w, hgt, st in (
-            ("norm_pvc.png", _pvc_height, 128, 512, 6.0),
-            ("norm_plastic.png", _plastic_height, 512, 256, 7.0),
-            ("norm_fabric.png", _fabric_height, 128, 640, 5.0),
-        ):
-            make_normal_map(os.path.join(args.outdir, nm),
-                            fn(w, hgt, rng), strength=st)
+        make_surface_maps(args.outdir, rng)
 
         make_water_surface(
             os.path.join(args.outdir, "water_surface.png"),
@@ -811,9 +826,7 @@ def _generate(spec: dict, outdir: str, seed: int, competition: str) -> None:
 
     # Roughness maps. Uniform gloss is a large part of why untextured props read
     # as CG; PVC and moulded plastic are matte and unevenly so.
-    make_roughness(os.path.join(args.outdir, "rough_pvc.png"), 0.62, rng=rng)
-    make_roughness(os.path.join(args.outdir, "rough_plastic.png"), 0.78, rng=rng)
-    make_roughness(os.path.join(args.outdir, "rough_fabric.png"), 0.88, rng=rng)
+    make_surface_maps(args.outdir, rng)
 
 
 if __name__ == "__main__":

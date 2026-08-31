@@ -110,7 +110,6 @@ props:
     # How far the role placard stands off its crate face. It used to be tucked
     # 0.04 m in front of the crate at nearly the crate's own width, so it read
     # as the crate's front panel rather than as a separate sign.
-    panel_standoff: 0.30
     lattice_cols: 5
     lattice_rows: 4
     lattice_bar: 0.022
@@ -142,39 +141,42 @@ props:
     leg_height: 0.55
     large_opening: 0.14
     small_opening: 0.095
-    # LAYOUT -- 2026. The TeamTime "Task 4 - Deploy (Torpedoes)" slide shows
-    # each board as a 2x2 of image+opening cells: FOUR images (fire, fire
-    # engine, ambulance, blood drop) and FOUR openings, two large and two
-    # small. The 2025 handbook text is thinner ("two different size openings",
-    # ":fire::fire_engine: for Survey & Repair and :drop_of_blood::ambulance:
-    # for Search & Rescue") and does not contradict it.
+    # LAYOUT -- 2026. The TeamTime "Task 4 - Deploy (Torpedoes)" slide and the
+    # CAD both show a board of FOUR openings and FOUR role images, arranged in
+    # two rows with the images alternating with the rings.
     #
-    # Positions are CELL CENTRES in units of the board half-size, y across and
-    # z up, so the geometry survives a change to `size`. Both board versions
-    # carry all four images; only which image sits beside which OPENING SIZE
-    # differs, so a detector cannot read the role from image presence alone --
-    # which is the discrimination the real task demands.
-    # LAYOUT -- two rows of four, alternating image / opening, which is what the
-    # CAD draws: a role image, then a ring, then the other role image, then a
-    # ring. The earlier 2x2 put an opening at each corner and left nowhere for
-    # the artwork, so the images ended up shrunk into the margins.
+    # ONLY THE ORDER IS DECLARED HERE. The column POSITIONS are packed by
+    # prop_library.torpedo_layout() from the radii below, and that is the whole
+    # point: the previous version hand-picked four column centres 0.235 apart
+    # while a large ring's outer radius (0.157) plus an image's half-width
+    # (0.105) needs 0.262. An overlap was guaranteed by arithmetic the moment
+    # those numbers were chosen, and the large ring ran 0.006 off the board
+    # edge. Nothing checked it. Now nothing can drift: change a radius and the
+    # packing moves with it, and test_torpedo_board.py fails on any overlap.
     #
-    # Units are HALF-SIZE (y across, z up), so the layout survives a change to
-    # `size`. Columns sit at y = +-0.75 / +-0.25; rows at z = +-0.44.
-    cells:
-      - {y:  0.24, z:  0.44, size: small}
-      - {y: -0.70, z:  0.44, size: large}
-      - {y:  0.24, z: -0.44, size: small}
-      - {y: -0.70, z: -0.44, size: large}
-    # The printed images take the slots the openings leave. Order pairs with
-    # `roles.<role>.task_images` then the OTHER role's pair, so both boards
-    # carry all four and only the image/opening-size pairing differs.
-    images:
-      - {y:  0.70, z:  0.44}
-      - {y: -0.24, z:  0.44}
-      - {y:  0.70, z: -0.44}
-      - {y: -0.24, z: -0.44}
-    image_size: 0.21
+    # The two board versions differ only in which image sits beside the LARGE
+    # opening, so a detector cannot read the role from image presence alone.
+    rows:
+      - z:  0.44
+        slots: [image, large, image, small]
+      - z: -0.44
+        slots: [image, small, image, large]
+    # Ring outer radius as a multiple of the opening radius. Was 1.34 -- a third
+    # of the ring's own radius in thickness, which rendered as a thick brown
+    # annulus where the CAD draws a thin bright red circle. Narrowing it is also
+    # what buys the space the four columns need.
+    ring_band: 1.10
+    # METRES, and the key was renamed to say so. It used to be `image_size` and
+    # meant a FRACTION of the texture (the one reader was `px * image_size`).
+    # The packer works in metres like every other length here, and a key whose
+    # unit changed under its old name is the same silent-drift bug this round
+    # exists to kill -- so the name changed with it.
+    image_size_m: 0.10
+    # Keep every element clear of the frame. The uprights sit at +-size/2 with
+    # radius pvc_one_in = 0.0167, so the panel's clear half-width is 0.2833 and
+    # a 0.04 inset stands 23 mm off the tube. Chosen from the frame, not from
+    # what happens to make the row fit.
+    inset: 0.04
     # Cool mid-grey, matching the CAD. Was [0.88,0.86,0.80] -- a warm off-white
     # that had never been read by any code, so nothing revealed it was wrong
     # until the panel started using it.

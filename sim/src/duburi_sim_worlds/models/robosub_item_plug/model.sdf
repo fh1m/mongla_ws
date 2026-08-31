@@ -22,8 +22,16 @@
         <material>
           <ambient>0.8 0.65 0.25 1</ambient>
           <diffuse>0.8 0.65 0.25 1</diffuse>
-          <specular>0.2 0.2 0.2 1</specular>
-          <emissive>0.2 0.1625 0.0625 1</emissive>
+          <specular>0.14 0.14 0.14 1</specular>
+          <emissive>0.1 0.1 0.1 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_plastic.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_plastic.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="body_collision">

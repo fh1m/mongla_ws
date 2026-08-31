@@ -23,7 +23,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="pole_collision">
@@ -49,7 +57,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_floor_collision">
@@ -75,7 +91,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="base_collision">
@@ -107,7 +131,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_0_collision">
@@ -133,7 +165,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_1_collision">
@@ -159,7 +199,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_2_collision">
@@ -185,7 +233,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_3_collision">
@@ -211,7 +267,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_4_collision">
@@ -237,7 +301,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_5_collision">
@@ -263,7 +335,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_6_collision">
@@ -289,7 +369,15 @@
           <ambient>0.88 0.08 0.08 1</ambient>
           <diffuse>0.88 0.08 0.08 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2464 0.0224 0.0224 1</emissive>
+          <emissive>0.246 0.246 0.246 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://sauvc_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://sauvc_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="cup_rim_7_collision">

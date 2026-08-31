@@ -24,6 +24,14 @@
           <diffuse>0.9 0.9 0.9 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
           <emissive>0.252 0.252 0.252 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="pipe_left_collision">
@@ -50,6 +58,14 @@
           <diffuse>0.9 0.9 0.9 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
           <emissive>0.252 0.252 0.252 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="pipe_left_anchor_collision">
@@ -81,7 +97,15 @@
           <ambient>0.72 0.11 0.13 1</ambient>
           <diffuse>0.72 0.11 0.13 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2016 0.0308 0.0364 1</emissive>
+          <emissive>0.202 0.202 0.202 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="pipe_centre_collision">
@@ -107,7 +131,15 @@
           <ambient>0.72 0.11 0.13 1</ambient>
           <diffuse>0.72 0.11 0.13 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
-          <emissive>0.2016 0.0308 0.0364 1</emissive>
+          <emissive>0.202 0.202 0.202 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="pipe_centre_anchor_collision">
@@ -140,6 +172,14 @@
           <diffuse>0.9 0.9 0.9 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
           <emissive>0.252 0.252 0.252 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="pipe_right_collision">
@@ -166,6 +206,14 @@
           <diffuse>0.9 0.9 0.9 1</diffuse>
           <specular>0.55 0.55 0.55 1</specular>
           <emissive>0.252 0.252 0.252 1</emissive>
+          <pbr>
+            <metal>
+              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
+              <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
+            </metal>
+          </pbr>
         </material>
       </visual>
       <collision name="pipe_right_anchor_collision">

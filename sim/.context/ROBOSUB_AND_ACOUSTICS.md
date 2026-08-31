@@ -44,7 +44,7 @@ All dimensions are quoted with page numbers in `spec/robosub.yaml`.
 | `robosub_gate` | 3 × 1.5 m, 610 mm divider (p. 45) | **Asymmetric on purpose** |
 | `robosub_slalom` | 0.9 m 1-in PVC, WHITE/RED/WHITE (p. 47) | One SET; place three |
 | `robosub_bin_*` | 25 L crate + 305 mm role image (p. 49) | Downward-camera task |
-| `robosub_torpedo_*` | 0.6 m board, two openings (p. 51) | Standoffs 0.30 / 0.46 m |
+| `robosub_torpedo_*` | 0.6 m board, FOUR openings, two sizes (p. 51) | Standoffs 0.30 / 0.46 m |
 | `robosub_octagon` | 2.7 m diameter, floats (p. 52) | **Surface-anchored** |
 | `robosub_resupply_table` | 0.6 m, ½ in PVC (p. 53) | Holds the collectibles |
 | `robosub_path_marker` | 1.2 × 0.15 m, ORANGE (p. 54) | gate→slalom, slalom→bins |
@@ -57,9 +57,10 @@ All dimensions are quoted with page numbers in `spec/robosub.yaml`.
   The vehicle's choice of side *is its role for the whole run*, and every later
   task scores higher for the matching prop. A gate mission must classify which
   half it is looking at, not just find a rectangle.
-- The **torpedo board's two openings** are genuine gaps, framed by four slabs
-  each, because an SDF primitive cannot express a hole. Scoring distinguishes
-  large-then-small, so a torpedo has to actually pass through.
+- The **torpedo board's four openings** (two large, two small) are genuine gaps
+  — a strip-tiled collision plate and a cut mesh, because an SDF primitive
+  cannot express a hole. Scoring distinguishes large-then-small, so a torpedo
+  has to actually pass through.
 
 **Thin plates get trivial isotropic inertia.** A physically correct tensor for a
 1.2 × 0.15 × 0.006 m path marker violates the triangle inequality once
@@ -394,11 +395,142 @@ texture is not a preference: `SetAlphaFromTexture` exists only in the
 gz-rendering **C++ API**, there is **no SDF element** for it, and `visual()`
 exposes only a scalar `<transparency>`.
 
-**The placards were reading as the crate's front panel.** At 0.318 m wide — very
-nearly the 0.335 m crate face — standing 0.04 m in front of it, that is exactly
-what it looked like. They are now 0.62× the crate, standing off on their own
-posts with daylight around them, as the CAD shows.
+~~**The placards were reading as the crate's front panel.**~~ **SUPERSEDED in
+Round 10 — the placards are deleted entirely and the role image is the crate
+floor.** Kept for the record: at 0.318 m wide against a 0.335 m crate face and
+standing 0.04 m off it, the sign read as the crate's front panel; shrinking it
+to 0.62× and standing it off on a post then ran the post through the middle of
+the sign face. See "The bin role image is the crate floor" below.
 
 `textured_material` also gained an **RGB tint**, because a shared texture has to
 carry a prop's own colour: the crate lattice reuses the moulded-plastic albedo,
 and a scalar tint can only make it a darker grey, never near-black.
+
+## Round 10 — the board's layout is packed, not typed (2026-08-31)
+
+### The arithmetic was the bug; the render was the symptom
+
+Round 9's board put four columns at u = 0.15 / 0.38 / 0.62 / 0.85 — spacing
+**0.235** — while a large ring's outer radius (0.157) plus an image's half-width
+(0.105) needs **0.262** between their centres. An overlap was guaranteed the
+moment those numbers were chosen, and the large ring ran **0.006 past the board
+edge**. Measured off the generated PNG:
+
+| element | UV extent | |
+|---|---|---|
+| image | 0.045 … 0.255 | |
+| ring-small | 0.274 … 0.486 | |
+| image | 0.515 … 0.725 | overlaps the next ring by **0.031** |
+| ring-large | 0.694 … **1.006** | **off the board** |
+
+That is what "emojis into the holes" and "holes hitting the walls of the board"
+were. **Nothing checked it.**
+
+`spec/robosub.yaml` now declares only the **order** of a row's slots. The column
+centres are packed by `prop_library.torpedo_layout()` from the same radii the
+mesh cuts and the texture paints, spread with equal gaps inside `inset`.
+`test_torpedo_board.py::test_nothing_on_the_board_overlaps_anything_else` walks
+that layout and fails on a non-positive gap, an element past the edge, or two
+rows running into each other. Verified it bites: `image_size_m: 0.18` fails with
+`gap -0.0328 m`.
+
+`image_size` was **renamed to `image_size_m`** in the same edit. It used to mean
+a *fraction of the texture* (`px * image_size`) and now means metres — a key
+whose unit changes under its old name is the same silent drift this board keeps
+being rebuilt for.
+
+### The UV mapping was measured, not reasoned
+
+The plate is a **mesh** now, so Ogre's box-face convention stopped applying and
+`_plate_uv` kept the box's `0.5 - y` — which painted every ring and image on the
+**mirrored** side. At 1.0 m the render showed eight circles: four cut, four
+painted, side by side. Two rounds of reasoning about which axis was flipped gave
+two different wrong answers, so it was settled with a **diagnostic texture** —
+four labelled quadrants, one render:
+
+```
+sampled_u = vt_u          no horizontal flip
+sampled_v = 1 - vt_v      OBJ `vt` is bottom-origin, PIL row 0 is the top
+```
+
+The mesh writes `vt = (0.5 + y/size, 0.5 + z/size)`; a point at (y, z) is
+therefore sampled from PIL `(0.5 + y/size, 0.5 - z/size)`, which is what
+`_plate_uv` returns. The v term looks like the mesh's inverse and is correct.
+**Flip both sides and nothing changes** — the generator would paint where the
+mesh then samples and the error cancels itself, which is why the first two
+attempted fixes each produced a different wrong render.
+
+### The kickstand braces raked the wrong way
+
+`pitch = atan2(rake, legs)` put one brace end on the floor **directly under**
+the board and the other in open water **behind** it, pointing up at nothing,
+while the foot pad sat at `x = rake` where the brace never reached — the "legs
+skewed and pointing half up". `pi - atan2(rake, legs)` flips the z half of the
+axis, putting the ends at (0, `legs`) on the bottom rail and (`rake`, 0) on the
+floor. **The foot pad did not move**: it was already at the corrected brace's
+floor end, so the plan's "move the foot pad" item is dropped as unnecessary.
+
+### The bin role image is the crate floor
+
+The placards are **deleted**, posts and all. Their post ran `base … base +
+side·1.5` through a sign centred at `base + side·0.75` — straight through the
+middle of the sign face — and the two `+x` crates' signs landed at x = −0.02, in
+among the other crates' arms. That is "the pipes are into images".
+
+The image is now the `crate_{tag}_floor` texture, which is the handbook read
+literally ("Inside the bins will be images representing each role") and this
+prop's own docstring all along. A CleverMade crate is square in plan
+(0.335 × 0.335) so the glyph maps undistorted, and nothing crosses the opening a
+marker is dropped through.
+
+> **Capability change, stated rather than discovered later:** the **forward**
+> camera can no longer read a bin's role on approach; only the **downward** one
+> can. That is already how the bin mission works
+> (`align('fire', camera='downward', …)`), so no mission changes.
+
+The bin **light** moved with them — it had been mounted on the placard's
+standoff. It is now an up-facing lens on the crate's outboard rim, where a
+downward camera coming in on the bin actually sees it.
+
+### The prop pass landed, and it is not a no-op
+
+`pvc_material()` was a **flat colour with no maps at all**, and it is what the
+gate, the slalom, the bins pipework, the torpedo frame, the octagon, the
+resupply table and every path marker are made of — so the props a gate mission
+and a slalom mission actually look at were the smoothest surfaces in the scene.
+`pvc_textured_material()` was added in Round 9 to fix this and **called by
+nothing**, because it took no colour and every call site passes one. It is now
+folded into `pvc_material`, which tints the shared grey PVC albedo by the pipe's
+colour.
+
+Also landed: `stripe_material` and `fabric_material` gained normal maps; the
+target mat, the starting-zone marking, the pinger and the four collectibles came
+off flat colour; and **`gen_pool_texture` wrote the normal maps in the RoboSub
+branch only**, so every SAUVC prop had none — that branch is now shared
+(`make_surface_maps`).
+
+Measured, front camera, `robosub26_full`, with vs without normal maps:
+
+| view | pixels changed > 2/255 |
+|---|---|
+| gate | **32.5 %** |
+| slalom | **12.3 %** |
+| bins | **7.0 %** |
+
+Round 9's own threshold is that a map changing < 1 % of pixels is a no-op. RTF
+over 55 samples: **0.0158 with, 0.0160 without** — no measurable cost.
+
+`test_prop_assets.py::test_every_prop_carries_a_normal_map` pins it, with
+`sauvc_ball` and `sauvc_golf_ball` exempt **by name**: a sphere is smooth, and a
+normal map on one is a fetch that changes no pixel.
+
+### The opening camera was above the water
+
+`camera_pose` was `z = +0.9` with the water surface at z = 0, so the run opened
+looking at sky; `follow_offset` z = 0.45 against a hull spawning at −0.4 m put
+the chase camera at +0.05, above the surface again. Now `-9.5 0 -0.7` and a
+follow z of **0.25** (−0.15 at spawn, −0.55 at an 0.8 m run depth), with the
+`view high` / `view far` presets corrected to match.
+`test_camera_depth.py` asserts no camera z offset surfaces at the −0.4 m spawn
+— this is the third round the surface has caught a camera change, and it should
+be caught by a test rather than a screenshot.
