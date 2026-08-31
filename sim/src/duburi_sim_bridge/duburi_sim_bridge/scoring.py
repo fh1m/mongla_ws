@@ -751,6 +751,27 @@ class Scoring(Node):
         for name in self._shot_z_cache:
             if name not in self._shots:
                 pending['name'] = name
+                # SEED THE TRACK WITH THE FIRING POSITION.
+                #
+                # Without this the first observation of a shot is thrown away
+                # (`if last is None: continue` below), so plane-crossing
+                # detection only starts from the SECOND sample. The timer runs
+                # at 0.5 s and a torpedo covers the 0.6 m to the board in about
+                # 0.35 s, so the round is usually already PAST the plane by the
+                # time there is anything to compare against -- both samples sit
+                # on the far side, no sign change is ever seen, and a shot that
+                # physically flew through an opening is graded `miss`.
+                #
+                # Measured: rounds traced off the pose stream travelled +3.458 m
+                # and +3.428 m in x, from -0.600 through the board at x = 0,
+                # while the scorer called both misses. The one shot per fresh
+                # world that "worked" was winning this race by luck, which is
+                # why this looked like a first-shot-only bug.
+                #
+                # `fired_from` is the vehicle's own position at the trigger and
+                # is always on the near side, so it is the correct reference and
+                # costs nothing -- it was already in the record.
+                pending['last_pos'] = tuple(pending['fired_from'])
                 self._shots[name] = pending
                 self._pending_shot = None
                 return
@@ -778,7 +799,20 @@ class Scoring(Node):
                 bx = float(self.get_parameter('board_x').value)
                 if (last[0] - bx) * (pos[0] - bx) < 0.0:
                     shot['crossed_plane'] = True
-                    shot['crossing'] = (pos[1], pos[2])
+                    # INTERPOLATE TO THE PLANE. `pos` is merely the first sample
+                    # taken AFTER the crossing, and at a 0.5 s tick a round
+                    # doing 1.7 m/s is most of a metre past the board by then --
+                    # far enough that it has fallen out of the opening it went
+                    # through. Measured: three shots that physically passed
+                    # cleanly were logged 0.29-0.36 m off, purely from grading
+                    # them where they were next seen rather than where they
+                    # crossed. Linear interpolation between the straddling
+                    # samples is exact enough over one tick and costs nothing.
+                    span = pos[0] - last[0]
+                    f = (bx - last[0]) / span if abs(span) > 1e-9 else 0.0
+                    f = max(0.0, min(1.0, f))
+                    shot['crossing'] = (last[1] + f * (pos[1] - last[1]),
+                                        last[2] + f * (pos[2] - last[2]))
             if shot['still_for'] < 1.0:
                 continue
             shot['settled'] = True

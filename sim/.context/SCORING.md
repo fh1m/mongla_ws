@@ -263,3 +263,72 @@ four crates, the pipework between them, both frame conversions, and the guard
 for the whole class — **the scorer's opening count must equal
 `len(torpedo_openings(spec))`**, so a spec change fails loudly instead of being
 ignored. Four defects were reintroduced to confirm the tests bite.
+
+---
+
+## Round 14 — the rig, and the two more scorer bugs it found
+
+Round 13 closed with one of four openings confirmed live. Building a real rig to
+close that gap found **two further scorer defects**, both of which had been
+silently mis-grading shots that physically went through.
+
+### `score_check` — a rig that reports its OWN failures as its own
+
+`ros2 run duburi_sim_bridge score_check [--task torpedo|bins]`. It drives the
+`duburi` CLI by subprocess (never importing `duburi_ws` — `gate_transit_check`
+sets that rule), **verifies its own preconditions from ground truth before
+firing**, and reports `RIG FAILED` distinctly from a scorer verdict. That
+distinction is the whole point: in round 13 a hull sitting at yaw 89.9 deg was
+indistinguishable from a broken grader.
+
+### Bug 1 — the first observation of every shot was thrown away
+
+`_score_shots` did `if last is None: continue`, so plane-crossing detection only
+began at the **second** sample. The timer runs at 0.5 s and a torpedo covers the
+0.6 m to the board in ~0.35 s, so the round was usually already past the plane
+before there was anything to compare against — both samples on the far side, no
+sign change, `miss`. Traced off the pose stream, two rounds travelled **+3.458 m
+and +3.428 m** in x, from −0.600 clean through the board at x = 0, while the
+scorer called both misses.
+
+Fixed by seeding the track with `fired_from`, the vehicle's own position at the
+trigger, which is always on the near side and was **already in the record**.
+
+### Bug 2 — the crossing was recorded where the round was NEXT SEEN
+
+With detection fixed, shots became `past_board` instead: the crossing point was
+taken as the first sample *after* the plane, which at 1.7 m/s is most of a metre
+downrange, by which time the round has fallen out of the opening it passed
+through. Measured **0.29–0.36 m** of apparent miss on shots that went cleanly
+through. Fixed by interpolating between the straddling samples to x = board_x.
+
+### Where it stands, honestly
+
+| task | result |
+|---|---|
+| **bins** | **5/5** — all four crates `in_bin`, plus the pipework negative control `outside_bin`. Automated and repeatable. |
+| **torpedo** | **1/4** on a clean world. Both scorer bugs above are fixed and independently justified, but the rig still cannot place the hull precisely enough for four consecutive shots. |
+
+The remaining shortfall is **the rig, not the scorer**. `fired_from` shows the
+hull climbing between placement and trigger (−1.056 → −1.005, i.e. 51 mm high
+against a small opening of radius 47.5 mm) and drifting further on each
+successive shot: ALT_HOLD is correctly returning the vehicle to its last
+*commanded* depth after each teleport.
+
+**Commanding `set_depth` at the placement depth was tried and REVERTED** — it
+re-engages ALT_HOLD, which moves the hull while the shot is being set up, and
+the run went 1/4 → 0/4. Recorded because the reasoning was sound and the
+measurement disagreed.
+
+The real fix is to stop teleporting and **fly the hull to each firing point with
+the stack's own verbs**, which is also the only version that exercises what a
+mission actually does. That is next round's work. `score_check` reports the
+shortfall rather than hiding it, and exits non-zero.
+
+### Also, the muzzle lead
+
+A round does not leave from the hull's centre: `payload_sim` spawns it
+`muzzle_down_m` (0.05 m) below, so aiming the hull at an opening fires **low by
+more than a small opening's radius** (0.0475 m). The rig reads that parameter
+from the node rather than retyping it, and adds the gravity drop. A real mission
+carries the same lead in its `align(depth=)`.
