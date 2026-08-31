@@ -494,6 +494,35 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > → 3**. The two red standoff bars are gone — a bar's *height* cannot encode a
 > firing *distance*.
 >
+> **THE BOARD'S COLUMNS ARE PACKED, NOT TYPED — AND THE BIN IMAGE IS THE CRATE
+> FLOOR.** Four column centres 0.235 apart while a large ring's outer radius
+> (0.157) plus an image's half-width (0.105) needs 0.262: the overlap was
+> guaranteed by arithmetic, and the large ring ran 0.006 **off the board**.
+> Nothing checked it. `spec/robosub.yaml` now declares only the row's slot
+> ORDER; `prop_library.torpedo_layout()` packs the positions from the same
+> radii the mesh cuts and the texture paints, and a test fails on any overlap
+> or non-positive gap (verified: `image_size_m: 0.18` → `gap -0.0328 m`).
+> `image_size` → **`image_size_m`** because its unit changed. The plate is a
+> **mesh**, so Ogre's box-face UV convention stopped applying and every ring
+> was painted on the mirrored side — settled with a **four-quadrant diagnostic
+> texture**, not reasoning: `sampled_u = vt_u`, `sampled_v = 1 - vt_v`. Flip
+> BOTH the mesh and `_plate_uv` and nothing changes; the error cancels. The
+> kickstand braces raked the wrong way (`atan2` → **`pi - atan2`**); the foot
+> pad was already right and did NOT move. **The bin placards and their posts
+> are deleted** — a post ran through the middle of its own sign face — and the
+> role image is the `crate_{tag}_floor` texture, the handbook read literally.
+> **Consequence: only the DOWNWARD camera can read a bin's role now**, which is
+> already how the bin mission works. And `pvc_material()` — the gate, slalom,
+> bins pipework, torpedo frame, octagon, table and every path marker — was a
+> **flat colour with no maps at all**; `pvc_textured_material()` was added last
+> round to fix that and called by nothing. Folded in, plus normal maps on the
+> mats, stripes, pinger and collectibles, and the SAUVC branch that had never
+> written normal maps at all. Measured: **32.5 / 12.3 / 7.0 %** of pixels change
+> at the gate / slalom / bins, RTF **0.0158 vs 0.0160** (no cost).
+> **The opening camera was above the water** (`camera_pose` z = +0.9, surface at
+> z = 0) — now `-9.5 0 -0.7` with a follow z of 0.25, and a test asserts no
+> camera offset surfaces at the −0.4 m spawn.
+>
 > **GAIN IS A PERCENTAGE, AND 100 % IS THE DEFAULT.** Nothing was clamping the
 > vehicle (full stick = PWM 1900 = `MOT_PWM_MAX`); it was `GAIN_DEFAULT = 0.55`
 > plus the T200 deadband, which makes 55 % of stick **39 % of thrust** and the

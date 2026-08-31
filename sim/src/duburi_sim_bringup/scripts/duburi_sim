@@ -459,9 +459,9 @@ JOYSTICK_PY
       # metres of course in frame, which is the "see the vehicle and the world
       # it is working" view; it is not a bird's eye, and cannot be.
       if [[ "$_target" == "high" ]]; then
-        _off="x: -6.0, y: 0.8, z: 0.40"
+        _off="x: -6.0, y: 0.8, z: 0.25"
       else
-        _off="x: -12.0, y: 1.5, z: 0.40"
+        _off="x: -12.0, y: 1.5, z: 0.25"
       fi
       if ! gz service -s /gui/follow --reqtype gz.msgs.StringMsg \
            --reptype gz.msgs.Boolean --timeout 2000 \

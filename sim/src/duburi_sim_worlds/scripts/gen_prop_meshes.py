@@ -72,9 +72,24 @@ def plate_with_holes(size, thickness, holes, segments=HOLE_SEGMENTS):
 
     def add(y, z, x):
         verts.append((x, y, z))
-        # u across y, v up z, both 0..1 over the plate -- the same mapping a box
-        # face gives, so an existing panel texture lands unchanged.
-        uvs.append((0.5 - y / size, 0.5 - z / size))
+        # BOTH AXES ARE FLIPPED RELATIVE TO `prop_library._plate_uv`, and that
+        # is deliberate -- measured off a front-camera render, not reasoned to.
+        #
+        # `_plate_uv` is the AUTHORING mapping: where the texture generator
+        # PAINTS a ring or an image for a given plate coordinate. This is the
+        # SAMPLING mapping, and two flips sit between them:
+        #
+        #   u  the plate is a mesh now, not a box, so Ogre's box-face convention
+        #      no longer applies. Looking at the printed (+x) face means looking
+        #      DOWN -x, which puts +y on the viewer's right -- so u has to grow
+        #      with y or the artwork renders mirrored.
+        #   v  OBJ `vt` is bottom-origin while PIL row 0 is the top of the image.
+        #
+        # The first render after the packer landed showed the panel rotated a
+        # clean 180 degrees, which is exactly both flips at once. Flip these in
+        # `_plate_uv` INSTEAD and nothing changes: the generator would paint at
+        # the same place the mesh then samples, and the error cancels itself.
+        uvs.append((0.5 + y / size, 0.5 + z / size))
         return len(verts)
 
     # A regular grid over the plate, with the cells that fall inside a hole
