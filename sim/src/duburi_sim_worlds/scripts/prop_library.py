@@ -1616,6 +1616,19 @@ def robosub_bins(spec):
             f"{bx - lx / 2.0 - stand:.6g} {by:.6g} "
             f"{base + side * 0.75:.6g} 0 0 0",
             size=side, collide=True))
+        # THE LIGHT, and the magnetic detector beside it.
+        #
+        # 2026 adds "integrated lights and magnetic detectors" to the pipework,
+        # scored 500 per light. The lens is a small emissive disc on the riser
+        # where a downward camera can see it; the scorer extinguishes it on a
+        # close pass. Emissive rather than an actual <light>: a point light per
+        # crate is four more shadow casters on a render-bound sim, and what a
+        # detector reads is the bright lens, not the pool it lights.
+        parts.append(_cylinder_link(
+            f"light_{tag}", r * 1.9, 0.014, (1.0, 0.92, 0.55), 0.05,
+            f"{bx - lx / 2.0 - stand * 0.45:.6g} {by:.6g} "
+            f"{base + 0.055:.6g} 0 0 0", collide=False,
+            mat=material((1.0, 0.92, 0.55), emissive_gain=0.85)))
         pipe(f"panel_post_{tag}", side * 1.5,
              f"{bx - lx / 2.0 - stand:.6g} {by:.6g} "
              f"{base + side * 0.36:.6g} 0 0 0")

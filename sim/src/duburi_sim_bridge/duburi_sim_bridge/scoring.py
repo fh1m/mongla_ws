@@ -315,6 +315,9 @@ class Scoring(Node):
         self.declare_parameter('bin_x', 0.0)
         self.declare_parameter('bin_y', 0.0)
         self.declare_parameter('bin_size', [0.61, 0.305])
+        # How close the hull must pass for a magnetic detector to trip. The
+        # handbook gives no number, so this is ours and is labelled as such.
+        self.declare_parameter('light_reach', 0.75)
         self.declare_parameter('score_payload', True)
         # Pool geometry, for the contact penalties. SAUVC deducts 5 points per
         # touch of the bottom or a wall and 2 for touching the gate, and
@@ -362,6 +365,8 @@ class Scoring(Node):
         self._run_t0 = None
         self._run_end = None
         self._touching = False
+        self._light_near: dict = {}
+        self._light_off: dict = {}
         self._touch_s = 0.0
         self._touch_n = 0
         self._last_tick = None
@@ -397,6 +402,7 @@ class Scoring(Node):
                 f'[SCORE] flare sequence to hit: {" -> ".join(seq)}')
         self.add_on_set_parameters_callback(self._on_params)
         self.create_timer(0.5, self._check_contact)
+        self.create_timer(0.5, self._check_bin_lights)
         self.create_timer(0.5, self._publish)
         self.create_timer(10.0, self._report)
 
@@ -980,6 +986,41 @@ class Scoring(Node):
                     f'[SCORE] PENALTY: touched {where} '
                     f'(touch {self._touch_n}, {self._touch_s:.1f} s total)')
         self._touching = touching
+
+    def _check_bin_lights(self) -> None:
+        """Magnetic detectors on the bins pipework, 500 per light, max 2.
+
+        2026 adds "integrated lights and magnetic detectors" to the pipeline. A
+        magnetic detector fires on PROXIMITY, so proximity from ground truth is
+        the honest model -- and, exactly as with the pool-contact penalty, it
+        has to be EDGE TRIGGERED. Two passes over a detector must award twice,
+        not once per tick for as long as the hull loiters there; the difference
+        between 1000 points and a nonsense number is one boolean.
+
+        Awarded only while ARMED and inside a run, so parking the hull on the
+        pipework between runs cannot bank points.
+        """
+        if self._pose is None or self._run_t0 is None or self._run_end:
+            return
+        if self._competition != 'robosub':
+            return
+        reach = float(self.get_parameter('light_reach').value)
+        bx = float(self.get_parameter('bin_x').value)
+        by = float(self.get_parameter('bin_y').value)
+        span = float(self.get_parameter('bin_size').value[0])
+        x, y = self._pose[0], self._pose[1]
+        for i, off in enumerate((-span / 4.0, span / 4.0)):
+            near = math.hypot(x - bx, y - (by + off)) < reach
+            was = self._light_near.get(i, False)
+            if near and not was and not self._light_off.get(i, False):
+                self._light_off[i] = True
+                self._card.award(
+                    'bin_light',
+                    f'detector {i + 1} at {self._elapsed():.0f} s')
+                self.get_logger().info(
+                    f'[SCORE] bin light {i + 1} off '
+                    f'({len(self._light_off)} of 2)')
+            self._light_near[i] = near
 
     def _floor_depth(self, x: float) -> float:
         """Pool depth at x. SAUVC's floor slopes; RoboSub's does not."""

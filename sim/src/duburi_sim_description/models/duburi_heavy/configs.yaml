@@ -170,6 +170,13 @@ ardupilot:
 # full render pass on the thread the colour cameras share, so this is OFF by
 # default and turned on for a perception experiment. underwater_fx falls back
 # to uniform attenuation by vehicle depth when no range image arrives.
+#
+# THE COST IS MEASURED, NOT ESTIMATED: the cameras go from 12 Hz to 4 Hz with
+# these on (.context/PHYSICS.md). That is a third of the frame rate for light
+# that falls off correctly with distance -- worth it for a dataset run where
+# imagery is the product, not worth it for a control-loop session where the
+# vision verbs need frames. Set it deliberately, per session, and say which
+# you used when you report a result.
 range_cameras: false
 
 odom_publish_frequency: 50.0

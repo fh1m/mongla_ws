@@ -344,13 +344,22 @@ ros2 param get /underwater_fx turbidity      # murky -> 0.8, competition -> 0.45
 Do **not** tune turbidity by editing `<fog>` in a world or the template. Nothing
 will change and the numbers will read as authoritative to the next person.
 
-Still uniform, not range-dependent: `underwater_fx` attenuates by the *vehicle's*
-depth, so every pixel is degraded equally and a far wall is no hazier than the
-near floor. True per-pixel Beer-Lambert needs a range image; the cheap route is
-switching the front `<sensor type="camera">` to `type="rgbd_camera"` (one sensor
-emits colour **and** depth, so no second parallel camera) and attenuating on it.
-Not done — the colour topic name moves under `rgbd_camera`, so it needs a
-bridge-argument change verified against the `image_raw` contract.
+> **RETRACTED 2026-08-31.** This paragraph used to say attenuation was "still
+> uniform, not range-dependent … Not done", and recommended switching the front
+> camera to an `rgbd_camera`. Both halves are wrong now.
+>
+> **Per-pixel Beer–Lambert is built and verified** (`underwater_fx.py:268-290`),
+> keyed on a range image. It is **off by default**, and only because the two
+> extra render passes took the cameras from **12 Hz to 4 Hz**
+> (`PHYSICS.md:361`). Turn it on with `range_cameras: true` in
+> `duburi_heavy/configs.yaml` and accept that cost knowingly.
+>
+> And the `rgbd_camera` route it recommended was **consciously rejected**
+> (`model.sdf.in:229-232`): it moves the colour topic and breaks the `image_raw`
+> contract every consumer relies on. A parallel `depth_camera` was added
+> instead. Leaving the recommendation in place pointed the next reader straight
+> at the one design that had already been discarded — which is exactly how a
+> stale doc costs more than no doc.
 
 ### Vision on sim cameras silently received zero frames (QoS) — FIXED
 
