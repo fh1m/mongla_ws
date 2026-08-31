@@ -534,3 +534,92 @@ follow z of **0.25** (−0.15 at spawn, −0.55 at an 0.8 m run depth), with the
 `test_camera_depth.py` asserts no camera z offset surfaces at the −0.4 m spawn
 — this is the third round the surface has caught a camera change, and it should
 be caught by a test rather than a screenshot.
+
+---
+
+## Round 12 — the board is white, the pipes are red, the water is in the pool
+
+Four render defects, three of which had the same shape: a value was being read
+from the wrong place and nothing said so.
+
+### The coloured props were washed out, and it was a roughness map
+
+`pvc_material` passed **`rough_pvc.png` as the `albedo_map`** as well as the
+roughness map, and `stripe_material` / `plastic_material` / `fabric_material`
+were called with `rough_*.png` as their albedo at five more sites. A roughness
+map is a mid-grey noise field — `rough_pvc` means **0.618** — and Ogre
+multiplies albedo by diffuse, so every coloured prop rendered at 62 % of its own
+colour. Then a **flat grey `<emissive>`** was added on top, which lifts all three
+channels equally and is a desaturation term. A slalom pipe specified
+`[0.72, 0.11, 0.13]` reached the screen near `[0.65, 0.27, 0.28]`: pale pink.
+
+Fixed by generating real near-white albedos (`make_albedo`, mean 0.97, carrying
+the same height field as the matching normal map so what you see and what
+catches the light are one surface) and making the emissive **per channel**. This
+was a round-10 regression, introduced when `pvc_textured_material` was folded
+into `pvc_material`, and it hit every coloured pipe including the gate divider.
+
+### The board is WHITE
+
+`torpedo_board.colour` was `[0.56, 0.57, 0.59]`, justified in the spec as
+"matching the CAD". **Retracted:** the official RoboSub *Task 4 — Deploy
+(Torpedoes)* slide shows the printed board as a white field with four large
+images and four thin **bright red** rings. A task slide showing the printed
+board beats a proportions drawing on what colour the print is. The ring red went
+`(0.72, 0.06, 0.09)` → `(0.93, 0.11, 0.14)` for the same reason; red is the
+first channel a pool takes, and a brick red arrives brown.
+
+**Stated consequence:** a white board against a pale pool is an *easier* detect
+than a grey one, so sim-tuned confidence thresholds for this prop are optimistic.
+That is a fidelity argument, not a reason to keep it grey.
+
+Images went `0.10` → **`0.12` m**, and 0.12 because that is what the row fits.
+0.16 was tried — usable width is `2 × (0.3 − 0.04) = 0.52 m`, the two rings eat
+0.2585, so four elements need `2 × image ≤ 0.2615` before any gap —
+and `test_torpedo_board.py` caught it at **−0.0195 m**. The slide's apparent
+proportions come from a 2×2 of image+ring *cells*; ours is a four-column row.
+Growing the images needs the arrangement changed, not the number raised.
+
+**Rejected on measurement:** lifting the panel's `emissive` 0.10 → 0.22 to make
+the white read whiter. It worked (face 130 → 158, +22 %) and it cost the
+artwork 27 % of its redness (44 → 32) in the same frame — the *same* grey-emissive
+desaturation this round just removed from `pvc_material`. A vertical board in a
+pool is grazing-lit; that is what it is. Kept at 0.10.
+
+### Two legs, not four
+
+The rear kickstand — two raking braces and their foot pads — is **deleted**. It
+was added so a 0.6 m board on two thin poles would not read as unsupported, and
+it read as a four-legged trestle instead. Last round fixed the braces' rake
+(`pi - atan2`, they had raked the wrong way); this round deletes the geometry
+that fix was correcting, and `brace_rake` goes with it rather than remaining a
+spec key nothing reads. `test_the_board_stands_on_exactly_two_legs` replaces the
+rake test.
+
+### Water is in the pool now
+
+`water_surface` defaulted to **`gerstner`**, which includes `openrobotics/waves`
+— an **unbounded** ocean at z = 0. It animates and it does reach camera sensors,
+which is why it was made the default; it also covers the entire world, so the
+pool sat in an open sea and every view outside the walls was underwater.
+
+Default is back to **`plane`**, which `prop_library.pool` builds at exactly the
+pool's `length × width`. `gerstner` stays selectable for an open-water look and
+is simply the wrong default for a pool. Bounding the Fuel model is not a config
+change — `<include>` has no reliable scale for a Fuel model — so it was not
+attempted.
+
+The reason the default had been flipped away from `plane` in the first place is
+real and had to be fixed, not reverted around: at **0.62 transparency** the
+plane was effectively not there, and the first render after switching showed sky
+through the surface and a pool that read as **empty**. Now `0.18` and
+blue-tinted `(0.42, 0.60, 0.68)` — from underneath, a water surface is a dim
+mirror of the pool, not a window.
+
+`test_water_containment.py` guards all three properties (no unbounded ocean, the
+surface spans exactly its pool, transparency ≤ 0.35) across every generated
+world, and **all three were verified to bite** by reintroducing each defect. Its
+pool lookup reads each course's own `pool:` key — guessing the competition from
+the filename passed three worlds against the wrong pool, since
+`task_navigation` / `task_localization` / `task_target_acquisition` all say
+`pool: sauvc` with no "sauvc" in the name.

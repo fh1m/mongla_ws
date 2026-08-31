@@ -213,10 +213,12 @@ def generate_launch_description():
             description=f'Open a MAVProxy console on UDP {MAVLINK_GCS_PORT}.',
         ),
         DeclareLaunchArgument(
-            'wash', default_value='false',
-            description="Push dynamic props with the hull's wash. OFF by "
-                        "default: built and wired, but no run has yet shown it "
-                        "moving a prop. See thruster_wash.py."),
+            'wash', default_value='true',
+            description="Push dynamic props with the hull's wash. ON by "
+                        "default since round 12: measured 7.331 deg of pipe "
+                        "deflection parked 0.7 m upstream at +103.5 N, against "
+                        "0.001 deg with it off. Targets the slalom pipes only. "
+                        "See thruster_wash.py."),
         DeclareLaunchArgument(
             'depth_reference', default_value='true',
             description='Zero the simulated depth reference against ground '

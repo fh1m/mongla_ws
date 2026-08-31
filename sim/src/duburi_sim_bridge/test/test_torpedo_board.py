@@ -78,24 +78,20 @@ def test_nothing_on_the_board_overlaps_anything_else():
     assert hi_bot > lo_top, 'the two rows overlap'
 
 
-def test_the_rear_braces_run_from_the_rail_to_the_floor():
-    """They used to rake the wrong way: `atan2(rake, legs)` put one end on the
-    floor directly UNDER the board and the other in open water behind it,
-    pointing up at nothing, while the foot pad sat where the brace never
-    reached. That is the "legs skewed and pointing half up" in the render."""
-    import math
-    cfg = _spec()['props']['torpedo_board']
-    rake, legs = cfg['brace_rake'], cfg['leg_height']
-    length = math.hypot(rake, legs)
-    pitch = math.pi - math.atan2(rake, legs)
-    axis = (math.sin(pitch), math.cos(pitch))
-    cx, cz = rake / 2.0, legs / 2.0
-    ends = [(cx + s * length / 2.0 * axis[0], cz + s * length / 2.0 * axis[1])
-            for s in (1, -1)]
-    floor = min(ends, key=lambda e: e[1])
-    rail = max(ends, key=lambda e: e[1])
-    assert abs(floor[1]) < 1e-9 and abs(floor[0] - rake) < 1e-9
-    assert abs(rail[0]) < 1e-9 and abs(rail[1] - legs) < 1e-9
+def test_the_board_stands_on_exactly_two_legs():
+    """It had FOUR: two uprights and two raking kickstand braces with foot pads.
+
+    The braces were added so a 0.6 m board on two thin poles would not read as
+    unsupported, and the render showed the cost -- a four-legged trestle where
+    the task slide and the pool photographs show two legs. Last round fixed the
+    braces' rake (`pi - atan2`); this round deletes them, so the test that
+    checked the rake is replaced by one that checks they are gone. `brace_rake`
+    went with them: a spec key nothing reads is how the last one of these hid.
+    """
+    xml = _pl().robosub_torpedo_board(_spec(), role='survey_repair')
+    assert xml.count('<link name="leg_') == 2
+    assert 'brace' not in xml
+    assert 'brace_rake' not in _spec()['props']['torpedo_board']
 
 
 def test_every_role_carries_an_image_pair():

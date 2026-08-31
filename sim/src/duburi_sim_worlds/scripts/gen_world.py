@@ -60,12 +60,22 @@ SCENE_DEFAULTS = {
     "shadows": True,
     # plane | gerstner | none -- see WATER_SURFACES below.
     #
-    # DEFAULT gerstner. The animated surface is verified to render in camera
-    # SENSOR frames, not just the GUI, so every course gets it and a course
-    # opts out rather than opting in. Courses were previously defaulting to the
-    # static plane and only task_navigation asked for waves, which is why every
-    # other course looked like it had no water at all.
-    "water_surface": "gerstner",
+    # DEFAULT plane, and the default moved BACK for containment.
+    #
+    # `gerstner` includes openrobotics/waves, which is an UNBOUNDED ocean at
+    # z = 0. It animates, it does render in camera sensor frames, and it also
+    # covers the entire world -- so the pool sat in the middle of an open sea,
+    # every view outside the walls was underwater, and looking up from the deck
+    # showed ocean to the horizon. A competition pool is a box of water in air.
+    #
+    # `plane` is pool-sized by construction (see prop_library.pool): it spans
+    # exactly length x width, so there is water in the pool and nothing outside
+    # it. The trade is honest and worth stating: the surface no longer animates.
+    # Bounding the Fuel waves model is not a config change -- <include> has no
+    # reliable scale for a Fuel model and clipping its shader is a project, not
+    # a fix -- so `gerstner` stays SELECTABLE for anyone who wants the open-water
+    # look, and is the wrong default for a pool.
+    "water_surface": "plane",
     # Marine snow, particles per second. 0 disables it entirely.
     #
     # DENSITY is what reads on camera, not count. 60/s spread over a whole

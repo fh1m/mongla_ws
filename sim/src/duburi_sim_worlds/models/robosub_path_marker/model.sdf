@@ -52,7 +52,7 @@
           <emissive>0.258 0.258 0.258 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <albedo_map>model://robosub_textures/albedo_pvc.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
               <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
@@ -86,7 +86,7 @@
           <emissive>0.258 0.258 0.258 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <albedo_map>model://robosub_textures/albedo_pvc.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
               <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
@@ -146,7 +146,7 @@
           <emissive>0.258 0.258 0.258 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <albedo_map>model://robosub_textures/albedo_pvc.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
               <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
@@ -180,7 +180,7 @@
           <emissive>0.258 0.258 0.258 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://robosub_textures/rough_pvc.png</albedo_map>
+              <albedo_map>model://robosub_textures/albedo_pvc.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://robosub_textures/rough_pvc.png</roughness_map>
               <normal_map>model://robosub_textures/norm_pvc.png</normal_map>
