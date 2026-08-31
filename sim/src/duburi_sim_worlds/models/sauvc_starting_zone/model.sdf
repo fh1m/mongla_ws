@@ -27,7 +27,7 @@
           <emissive>0.22 0.22 0.22 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://sauvc_textures/rough_fabric.png</albedo_map>
+              <albedo_map>model://sauvc_textures/albedo_fabric.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_fabric.png</roughness_map>
               <normal_map>model://sauvc_textures/norm_fabric.png</normal_map>
@@ -58,7 +58,7 @@
           <emissive>0.22 0.22 0.22 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://sauvc_textures/rough_fabric.png</albedo_map>
+              <albedo_map>model://sauvc_textures/albedo_fabric.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_fabric.png</roughness_map>
               <normal_map>model://sauvc_textures/norm_fabric.png</normal_map>
@@ -89,7 +89,7 @@
           <emissive>0.22 0.22 0.22 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://sauvc_textures/rough_fabric.png</albedo_map>
+              <albedo_map>model://sauvc_textures/albedo_fabric.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_fabric.png</roughness_map>
               <normal_map>model://sauvc_textures/norm_fabric.png</normal_map>
@@ -120,7 +120,7 @@
           <emissive>0.22 0.22 0.22 1</emissive>
           <pbr>
             <metal>
-              <albedo_map>model://sauvc_textures/rough_fabric.png</albedo_map>
+              <albedo_map>model://sauvc_textures/albedo_fabric.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_fabric.png</roughness_map>
               <normal_map>model://sauvc_textures/norm_fabric.png</normal_map>

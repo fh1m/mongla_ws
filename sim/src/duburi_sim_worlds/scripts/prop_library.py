@@ -151,11 +151,19 @@ def pvc_material(colour, emissive_gain: float = 0.28,
 
     `emissive_gain` keeps its meaning -- see `material()`: underwater scenes are
     fogged and singly lit, and without a self-illumination term props read as
-    near-black to the cameras.
+    near-black to the cameras. It is applied PER CHANNEL, not as a grey: a flat
+    grey emissive lifts all three channels equally, which is a desaturation
+    term, and on a red pipe it is most of what made it pink.
+
+    THE ALBEDO IS `albedo_pvc.png`, NOT `rough_pvc.png`. This passed the
+    ROUGHNESS map as the albedo -- a mid-grey noise field, mean 0.618 -- so
+    every pipe rendered at 62 % of its own colour before the grey emissive
+    washed the rest out. Measured: [0.72, 0.11, 0.13] reached the screen near
+    [0.65, 0.27, 0.28], which is the pale pink in the slalom screenshots.
     """
-    e = min(0.6, max(colour) * emissive_gain)
+    e = [min(0.6, c * emissive_gain) for c in colour]
     return textured_material(
-        "rough_pvc.png", tint=colour, specular=0.55, emissive=e,
+        "albedo_pvc.png", tint=colour, specular=0.55, emissive=e,
         roughness_map="rough_pvc.png", normal_map="norm_pvc.png",
         competition=competition,
     )
@@ -191,7 +199,12 @@ def textured_material(
     """
     tex_model = texture_model(competition)
     uri = f"model://{tex_model}/{texture}"
-    e = f"{emissive:.3g} {emissive:.3g} {emissive:.3g} 1"
+    # Emissive may be a scalar (grey) or an RGB triple. The triple is not a
+    # nicety: emissive is ADDED to the lit result, so a grey lift on a coloured
+    # prop raises the two channels the colour does not use and desaturates it.
+    ec = ((emissive, emissive, emissive)
+          if isinstance(emissive, (int, float)) else tuple(emissive))
+    e = f"{ec[0]:.3g} {ec[1]:.3g} {ec[2]:.3g} 1"
     # `tint` may be a scalar (grey) or an RGB triple. The triple exists because
     # a shared texture has to be able to carry a prop's own colour: the crate
     # lattice reuses the moulded-plastic albedo but a CleverMade crate is
@@ -225,7 +238,8 @@ def textured_material(
     )
 
 
-def stripe_material(texture: str, competition: str = DEFAULT_COMPETITION) -> str:
+def stripe_material(texture: str = "albedo_pvc.png",
+                    competition: str = DEFAULT_COMPETITION) -> str:
     """Gate stripe albedo with enough self-light to read through fog.
 
     The emissive lift is NOT decoration -- see material() above. Without it the
@@ -238,7 +252,8 @@ def stripe_material(texture: str, competition: str = DEFAULT_COMPETITION) -> str
     )
 
 
-def fabric_material(texture: str, emissive: float = 0.14,
+def fabric_material(texture: str = "albedo_fabric.png",
+                    emissive: float = 0.14,
                     competition: str = DEFAULT_COMPETITION, tint=0.80) -> str:
     """Inflated fabric and printed vinyl: matte, no specular hotspot.
 
@@ -253,7 +268,8 @@ def fabric_material(texture: str, emissive: float = 0.14,
     )
 
 
-def plastic_material(texture: str, emissive: float = 0.10,
+def plastic_material(texture: str = "albedo_plastic.png",
+                     emissive: float = 0.10,
                      competition: str = DEFAULT_COMPETITION,
                      double_sided: bool = False, tint=0.72) -> str:
     """Moulded plastic drum walls and crate lattice."""
@@ -1120,7 +1136,7 @@ def target_mat(spec: dict) -> str:
             # flat-colour material, and it is the biggest single thing the
             # bottom camera sees while hunting the target zone -- so it is also
             # the biggest smooth-CG tell in the frame.
-            fabric_material("rough_fabric.png", emissive=0.14,
+            fabric_material("albedo_fabric.png", emissive=0.14,
                             tint=cfg["colour"]),
             0.001,
             (1e-6, 1e-6, 1e-6),
@@ -1166,7 +1182,7 @@ def starting_zone(spec: dict) -> str:
                             _geometry_box(sx, sy, thickness),
                             # Painted/taped surface marking, so it takes
                             # the same vinyl treatment as the target mat.
-                            fabric_material("rough_fabric.png",
+                            fabric_material("albedo_fabric.png",
                                             emissive=0.22,
                                             tint=colour),
                             cast_shadows=False,
@@ -1624,7 +1640,7 @@ def robosub_bins(spec):
         # collision stays a plain box, because a marker only has to land inside
         # the crate, not thread a bar. Double-sided, or a thin wall vanishes
         # when seen from within.
-        wall_mat = plastic_material("rough_plastic.png", competition="robosub",
+        wall_mat = plastic_material("albedo_plastic.png", competition="robosub",
                                     double_sided=True, tint=colour,
                                     emissive=0.04)
         for name, sx, sy, dx, dy, yaw in (
@@ -1885,7 +1901,7 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
     parts = []
 
     # THE FRAME. The board is not a bare plate on two sticks: the CAD shows a
-    # tube rectangle around the panel, standing on legs with rear braces. Ours
+    # tube rectangle around the panel, standing on two legs. Ours
     # had no frame at all and its legs sat flush with the panel edge, doubling
     # as its side edges -- which is why the render read as a sheet of card
     # balanced on two poles rather than a built structure.
@@ -1905,34 +1921,13 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
             f"rail_{tag}", r_pvc, size, GREY_PVC, 1.2,
             f"0 0 {z:.6g} 1.5708 0 0", mat=frame_mat))
 
-    # REAR KICKSTAND. Two braces raking back from the frame to the floor -- the
-    # thing that stops a 0.6 m board on two thin legs reading as unsupported.
-    # `rake` is how far back the foot lands; the brace is the hypotenuse, and
-    # its pitch is the angle that puts it there.
-    rake = cfg.get("brace_rake", 0.45)
-    brace_len = math.hypot(rake, legs)
-    # pi MINUS the angle, and the minus is the whole fix. A cylinder pitched by
-    # `p` about y has axis (sin p, 0, cos p) and is centred at (rake/2, legs/2),
-    # so its ends are the centre plus and minus half that axis. With
-    # `atan2(rake, legs)` those ends are (0, 0) -- the floor directly UNDER the
-    # board -- and (rake, legs), which is open water behind it: the brace raked
-    # the wrong way and pointed up at nothing, while the foot pad sat at
-    # x = rake where the brace never reached. `pi - atan2` flips the z half of
-    # the axis, putting the ends at (0, legs) on the bottom rail and (rake, 0)
-    # on the floor. The foot pad was already at the second of those and does
-    # not move -- the round-10 plan called for moving it, and that item is
-    # dropped: it was correct all along and only the pitch was wrong.
-    pitch = math.pi - math.atan2(rake, legs)
-    for i, y in ((0, -size / 2.0), (1, size / 2.0)):
-        parts.append(_cylinder_link(
-            f"brace_{i}", r_pvc * 0.8, brace_len, GREY_PVC, 0.8,
-            f"{rake / 2.0:.6g} {y:.6g} {legs / 2.0:.6g} 0 {pitch:.6g} 0",
-            mat=frame_mat))
-        # A foot pad, so the brace ends on something rather than in the floor.
-        parts.append(_cylinder_link(
-            f"brace_foot_{i}", r_pvc * 1.6, 0.012, GREY_PVC, 0.3,
-            f"{rake:.6g} {y:.6g} 0.006 0 0 0", mat=frame_mat,
-            surface=friction(0.8)))
+    # NO REAR KICKSTAND. The board stands on its TWO legs, which is what the
+    # task slide and the pool photographs show. Two raking braces and their foot
+    # pads were added to stop it "reading as unsupported", and they read as four
+    # legs instead -- two upright, two slanted -- which is not the prop. Last
+    # round fixed the braces' pitch (`pi - atan2`, they had raked the wrong way);
+    # this round deletes the geometry that fix was correcting, and `brace_rake`
+    # goes with it rather than staying as a spec key nothing reads.
 
     # The printed face. One thin plate carrying the whole artwork, so the
     # openings, their red rims and the two role images stay in register --
@@ -1963,6 +1958,16 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
                f'<geometry><mesh>'
                f'<uri>model://robosub_meshes/meshes/torpedo_plate.obj</uri>'
                f'</mesh></geometry>',
+               # emissive STAYS 0.10. Raising it to 0.22 was tried and
+               # REJECTED on measurement: the panel is a vertical face in a
+               # scene lit from above, so a 0.93 white texture reaches the
+               # camera at 0.51 and the lift did brighten it (130 -> 158, +22%)
+               # -- but emissive is added as a GREY, so the artwork's redness
+               # fell 44 -> 32 (-27%) in the same frame. That is precisely the
+               # desaturation this round removed from pvc_material, and adding
+               # it back here to make white look whiter would be incoherent.
+               # Grazing-lit is what a vertical board in a pool IS; the board
+               # is already the brightest object in frame.
                textured_material(f"torpedo_panel_{role}.png", tint=1.0,
                                  specular=0.06, roughness=0.6, emissive=0.10,
                                  competition="robosub")),
@@ -2118,7 +2123,7 @@ def robosub_pinger(spec):
     return model("robosub_pinger", _cylinder_link(
         "body", cfg["radius"], cfg["height"], cfg["colour"], 0.5,
         f"0 0 {cfg['height'] / 2.0:.6g} 0 0 0",
-        mat=plastic_material("rough_plastic.png", competition="robosub",
+        mat=plastic_material("albedo_plastic.png", competition="robosub",
                              tint=cfg["colour"])))
 
 
@@ -2138,7 +2143,7 @@ def robosub_collectible(spec, kind="bolt", model_name=None):
     cfg = spec["props"]["collectible"]
     colour = cfg["colours"][kind]
     density = float(cfg.get("density", 1150.0))
-    item_mat = plastic_material("rough_plastic.png", competition="robosub",
+    item_mat = plastic_material("albedo_plastic.png", competition="robosub",
                                 tint=colour)
     if kind in ("bolt", "plug"):
         r, h = cfg["jar_diameter"] / 2.0, cfg["jar_height"]
@@ -2552,12 +2557,25 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
                 visual(
                     "water_surface_visual",
                     _geometry_box(length, width, 0.01),
+                    # SEEN FROM BELOW, which is the only view that matters:
+                    # every camera in this simulator is under it. At 0.62 it
+                    # was effectively not there -- the first render after this
+                    # became the default showed sky through the surface and a
+                    # pool that read as EMPTY, which is what "every course
+                    # looked like it had no water" meant when the default was
+                    # flipped to the unbounded Fuel ocean to hide it. Fixing
+                    # the plane is the right lever; the ocean was the wrong one
+                    # because it put water outside the pool as well as in it.
+                    #
+                    # Blue-tinted rather than near-white: from underneath, a
+                    # water surface is a dim mirror of the pool, not a window.
                     textured_material(
-                        "water_surface.png", tint=0.95, specular=0.35,
-                        roughness=0.15, emissive=0.22, competition=comp),
+                        "water_surface.png", tint=(0.42, 0.60, 0.68),
+                        specular=0.35, roughness=0.15, emissive=0.10,
+                        competition=comp),
                     "0 0 0 0 0 0",
                     cast_shadows=False,
-                    transparency=0.62,
+                    transparency=0.18,
                 ),
             ]),
         )

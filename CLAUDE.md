@@ -547,6 +547,56 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > The run clock **starts on arm**, and the card is written to `DUBURI_RUN_DIR`
 > beside the mission scorecards. [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
 >
+> **THE COLOURED PROPS WERE WASHED OUT BECAUSE A ROUGHNESS MAP WAS BEING USED
+> AS THE ALBEDO.** `pvc_material` passed `rough_pvc.png` as the `albedo_map` as
+> well as the roughness map, and `stripe_`/`plastic_`/`fabric_material` were
+> called with `rough_*.png` as their albedo at five more sites. A roughness map
+> is a mid-grey noise field — `rough_pvc` means **0.618** — and Ogre multiplies
+> albedo by diffuse, so every coloured prop rendered at 62 % of its own colour;
+> then a **flat grey `<emissive>`** was added on top, which lifts all three
+> channels equally and desaturates what is left. A slalom pipe specified
+> `[0.72, 0.11, 0.13]` arrived near `[0.65, 0.27, 0.28]` — pale pink. Fixed with
+> real near-white albedos (`make_albedo`, sharing each surface's height field
+> with its normal map) and a **per-channel** emissive. A round-10 regression,
+> and it hit every coloured pipe including the gate divider.
+>
+> **THE TORPEDO BOARD IS WHITE, ITS RINGS ARE BRIGHT RED, AND IT STANDS ON TWO
+> LEGS.** `colour` was `[0.56,0.57,0.59]` "matching the CAD" — **retracted**: the
+> official *Task 4 — Deploy (Torpedoes)* slide shows a white printed field with
+> thin bright-red rings, and a slide of the printed board beats a proportions
+> drawing on what colour the print is. Ring red `(0.72,0.06,0.09)` →
+> `(0.93,0.11,0.14)`, since red is the first channel a pool takes and brick red
+> arrives brown. **Consequence, stated not discovered: a white board is an
+> EASIER detect than grey, so sim-tuned thresholds for this prop are
+> optimistic.** Images `0.10` → **`0.12` m** — 0.12 because that is what the row
+> fits; 0.16 was tried and `test_torpedo_board.py` caught it at **−0.0195 m**
+> (usable 0.52 m, rings eat 0.2585). The rear kickstand is **deleted**: two
+> raking braces plus foot pads read as a four-legged trestle, so this round
+> removes the geometry whose rake last round had fixed, and `brace_rake` goes
+> with it. **Rejected on measurement:** lifting the panel emissive 0.10 → 0.22
+> brightened the face 22 % and cost the artwork **27 % of its redness** — the
+> same grey-emissive desaturation just removed from `pvc_material`.
+>
+> **WATER IS IN THE POOL NOW, NOT EVERYWHERE.** `water_surface` defaulted to
+> `gerstner`, which includes `openrobotics/waves` — an **unbounded** ocean at
+> z = 0 — so the pool sat in an open sea and every view outside the walls was
+> underwater. Default is back to **`plane`**, which `prop_library.pool` builds at
+> exactly the pool's `length × width`; `gerstner` stays selectable and is simply
+> the wrong default for a pool (`<include>` has no reliable scale for a Fuel
+> model, so bounding it is not a config change). The reason the default had been
+> flipped away from `plane` was real and is fixed rather than reverted around:
+> at **0.62 transparency** the plane was effectively not there and the pool read
+> as **EMPTY** — now `0.18` and blue-tinted, because from underneath a water
+> surface is a dim mirror, not a window. `test_water_containment.py` guards all
+> three properties across every world and **all three were verified to bite**.
+> Its pool lookup reads each course's own `pool:` key: three courses say
+> `pool: sauvc` with no "sauvc" in the filename.
+>
+> **THE WASH IS ON BY DEFAULT** (`wash:=false` to disable). The scorer has no
+> prop-displacement rule, `contract_check` and `smoke` pass with it on, and RTF
+> is unchanged — **median 0.0132 both ways** over ~370 samples per arm (read the
+> median; the means differ on startup transient alone).
+>
 > **THE HULL'S WASH MOVES PROPS NOW — and the thing that hid it was a frame,
 > not the physics.** `thruster_wash` was built two rounds ago, wired, and never
 > once shown to move anything. Parked 0.7 m upstream of a slalom set at the

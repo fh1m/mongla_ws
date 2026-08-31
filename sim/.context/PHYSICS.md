@@ -683,11 +683,19 @@ All three pipes move equally because `_prop_xy` returns the **model's** position
 for every one of its links, so they share one cone test and one force. That is
 the documented simplification, not an artifact.
 
-It **stays off by default** this round. It is demonstrated, not regression-tested
-against a full mission or the scorer, and it changes how props behave mid-run;
-turning it on is `wash:=true` and belongs to the round that re-runs those.
-`targets` lists **only the slalom pipes** — gate markers and flares will not
-swing, whatever the cone reaches.
+It is **ON by default as of round 12** (`wash:=false` to disable). The
+regression the previous round asked for was run: the scorer has **no
+prop-displacement rule** — its contact penalties are vehicle-versus-pool, and
+the only `moved` threshold in `scoring.py` is a fired round coming to rest — so
+a deflected pipe cannot move a score. `contract_check` satisfied and `smoke` OK
+with it on, the node reports **16 prop positions loaded** on `robosub26_full`,
+and RTF is unchanged: **median 0.0132 both ways** over ~370 samples per arm.
+(Read the median, not the mean — the means were 0.0195 off vs 0.0335 on, which
+is startup transient, and this is exactly the render-bound signal that one
+reading cannot resolve.)
+
+`targets` still lists **only the slalom pipes** — gate markers and flares will
+not swing, whatever the cone reaches.
 
 ### The measurement frame is the trap, not the physics
 

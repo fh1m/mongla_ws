@@ -134,8 +134,6 @@ props:
     # openings a third of the board, which crowded out the printed images and is
     # visibly wider than the drawing. A torpedo is 51 mm square, so 0.14 m is
     # still nearly three times the round.
-    # How far back the rear kickstand feet land from the frame.
-    brace_rake: 0.45
     # Wired at last: this had been read with a .get() default of 0.55 while the
     # spec never carried it, so the value here was doing nothing.
     leg_height: 0.55
@@ -171,16 +169,31 @@ props:
     # The packer works in metres like every other length here, and a key whose
     # unit changed under its old name is the same silent-drift bug this round
     # exists to kill -- so the name changed with it.
-    image_size_m: 0.10
+    # 0.12, up from 0.10 -- and 0.12 because that is what the row FITS, not
+    # because it is what the slide's proportions suggest. The images there look
+    # comparable to the large opening, and 0.16 was tried: usable width is
+    # 2*(0.3 - 0.04) = 0.52 m, the two rings eat 0.2585, so four elements need
+    # 2*image <= 0.2615 before any gap at all. test_torpedo_board.py caught it
+    # at -0.0195 m. The board is 0.6 m and carries four elements per row; the
+    # slide's apparent proportions are a 2x2 of image+ring CELLS, which is a
+    # different packing from our four-column row. Growing this needs the
+    # arrangement changed, not the number raised.
+    image_size_m: 0.12
     # Keep every element clear of the frame. The uprights sit at +-size/2 with
     # radius pvc_one_in = 0.0167, so the panel's clear half-width is 0.2833 and
     # a 0.04 inset stands 23 mm off the tube. Chosen from the frame, not from
     # what happens to make the row fit.
     inset: 0.04
-    # Cool mid-grey, matching the CAD. Was [0.88,0.86,0.80] -- a warm off-white
-    # that had never been read by any code, so nothing revealed it was wrong
-    # until the panel started using it.
-    colour: [0.56, 0.57, 0.59]
+    # WHITE. The official RoboSub "Task 4 - Deploy (Torpedoes)" slide shows the
+    # board as a WHITE field carrying four large images and four thin red rings.
+    # This was [0.56,0.57,0.59] "matching the CAD", and that reading is
+    # RETRACTED: a task slide showing the printed board beats a proportions
+    # drawing on what colour the print is. Consequence, stated rather than
+    # discovered: a white board against a pale pool is an EASIER detection than
+    # a grey one, so sim-tuned confidence thresholds for this prop are
+    # optimistic. That is a fidelity argument, not a reason to keep it grey --
+    # the real board is white.
+    colour: [0.95, 0.95, 0.95]
     # SCORING STANDOFFS -- THE TWO SOURCES DISAGREE, so both are recorded.
     #   Handbook p. 50:      far 1 ft (0.3 m),  farther 1.5 ft (0.46 m)
     #   TeamTime-2 slide:    far 1.0 m,         farther 1.5 m

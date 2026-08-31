@@ -323,6 +323,34 @@ def make_roughness(path: str, base: float, width: int = 128, height: int = 512,
     print(f"wrote {path}  ({width}x{height})")
 
 
+def make_albedo(path: str, height, base: float = 0.97,
+                contrast: float = 0.05) -> None:
+    """A near-WHITE albedo carrying the same relief as its normal map.
+
+    THIS EXISTS BECAUSE THE ROUGHNESS MAPS WERE BEING USED AS ALBEDOS.
+    `pvc_material` passed `rough_pvc.png` as both the `albedo_map` and the
+    `roughness_map`, and `stripe_material` / `plastic_material` /
+    `fabric_material` were called with `rough_*.png` as their albedo argument at
+    five more sites. A roughness map is a mid-grey noise field -- `rough_pvc`
+    means **0.618** -- and Ogre multiplies albedo by diffuse, so every coloured
+    prop rendered at 62 % of its own colour and then had a FLAT GREY emissive
+    added on top, which lifts all three channels equally and desaturates what
+    is left. A slalom pipe specified [0.72, 0.11, 0.13] reached the screen at
+    about [0.65, 0.27, 0.28]: pale pink. That is the washed-out red in the
+    screenshots, and it hit every coloured pipe including the gate's divider.
+
+    So the albedo is near-white and the TINT carries the colour, which is what
+    `tint` was always for. Keeping the relief at low contrast means a tinted
+    surface still has structure rather than being a flat colour chip.
+    """
+    h = np.asarray(height, dtype=np.float32)
+    span = max(1e-6, float(h.max() - h.min()))
+    v = np.clip(base + contrast * (2.0 * (h - h.min()) / span - 1.0), 0.0, 1.0)
+    img = np.repeat((v * 255).astype(np.uint8)[:, :, None], 3, axis=2)
+    Image.fromarray(img).save(path, optimize=True)
+    print(f"wrote {path}  ({h.shape[1]}x{h.shape[0]}, mean {v.mean():.3f})")
+
+
 def make_normal_map(path: str, height, strength: float = 2.0) -> None:
     """Tangent-space normal map from a height field.
 
@@ -621,8 +649,11 @@ def make_torpedo_panel(path, role, spec, px=1024, rng=None):
         rim = (np.clip((d - r) / e, 0.0, 1.0)
                * np.clip((r * cfg["ring_band"] - d) / e, 0.0, 1.0))
         hole = np.clip((r - d) / e, 0.0, 1.0)
+        # VIVID red, not brick. The task slide draws these as bright pure-red
+        # circles; (0.72, 0.06, 0.09) is a dark brick that a pool's blue cast
+        # crushes to brown, and red is the first channel underwater takes.
         img = img * (1.0 - rim[:, :, None]) + np.array(
-            (0.72, 0.06, 0.09), dtype=np.float32) * rim[:, :, None]
+            (0.93, 0.11, 0.14), dtype=np.float32) * rim[:, :, None]
         # The hole itself is a placeholder only: the MESH is what actually
         # opens now, so nothing is ever drawn through this. Kept dark so a
         # stale flat-plate build is obviously wrong rather than subtly wrong.
@@ -671,12 +702,17 @@ def make_surface_maps(outdir: str, rng) -> None:
     make_roughness(os.path.join(outdir, "rough_pvc.png"), 0.62, rng=rng)
     make_roughness(os.path.join(outdir, "rough_plastic.png"), 0.78, rng=rng)
     make_roughness(os.path.join(outdir, "rough_fabric.png"), 0.88, rng=rng)
-    for nm, fn, w, hgt, st in (
-        ("norm_pvc.png", _pvc_height, 128, 512, 6.0),
-        ("norm_plastic.png", _plastic_height, 512, 256, 7.0),
-        ("norm_fabric.png", _fabric_height, 128, 640, 5.0),
+    # One height field per surface, feeding BOTH its normal map and its albedo.
+    # They must come from the same field or the relief you can see and the
+    # relief that catches the light are different surfaces.
+    for nm, alb, fn, w, hgt, st in (
+        ("norm_pvc.png", "albedo_pvc.png", _pvc_height, 128, 512, 6.0),
+        ("norm_plastic.png", "albedo_plastic.png", _plastic_height, 512, 256, 7.0),
+        ("norm_fabric.png", "albedo_fabric.png", _fabric_height, 128, 640, 5.0),
     ):
-        make_normal_map(os.path.join(outdir, nm), fn(w, hgt, rng), strength=st)
+        h = fn(w, hgt, rng)
+        make_normal_map(os.path.join(outdir, nm), h, strength=st)
+        make_albedo(os.path.join(outdir, alb), h)
 
 
 def make_particle_sprite(path: str, size: int = 64) -> None:
