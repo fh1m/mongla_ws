@@ -105,6 +105,15 @@ props:
     width: 0.335
     height: 0.28
     wall: 0.012
+    # The moulded lattice. Bars are geometry, not an alpha texture -- SDF has no
+    # element for alpha-cutout, so a see-through wall has to be built.
+    # How far the role placard stands off its crate face. It used to be tucked
+    # 0.04 m in front of the crate at nearly the crate's own width, so it read
+    # as the crate's front panel rather than as a separate sign.
+    panel_standoff: 0.30
+    lattice_cols: 5
+    lattice_rows: 4
+    lattice_bar: 0.022
     colour: [0.18, 0.18, 0.20]
     # "3D pipeline made from PVC supported off the bottom of the pool", and
     # "four bins hang off the SIDES of the pipeline" -- two Survey & Repair,
@@ -120,8 +129,19 @@ props:
     thickness: 0.02
     # Opening sizes are not stated numerically; these are the large/small pair
     # the scoring distinguishes ("larger opening first, then smaller").
-    large_opening: 0.20
-    small_opening: 0.13
+    # Sizes are NOT stated numerically anywhere in the handbook. These are read
+    # off the CAD's proportions -- the large ring is about a quarter of the
+    # board's width and the small about a sixth. The previous 0.20/0.13 made the
+    # openings a third of the board, which crowded out the printed images and is
+    # visibly wider than the drawing. A torpedo is 51 mm square, so 0.14 m is
+    # still nearly three times the round.
+    # How far back the rear kickstand feet land from the frame.
+    brace_rake: 0.45
+    # Wired at last: this had been read with a .get() default of 0.55 while the
+    # spec never carried it, so the value here was doing nothing.
+    leg_height: 0.55
+    large_opening: 0.14
+    small_opening: 0.095
     # LAYOUT -- 2026. The TeamTime "Task 4 - Deploy (Torpedoes)" slide shows
     # each board as a 2x2 of image+opening cells: FOUR images (fire, fire
     # engine, ambulance, blood drop) and FOUR openings, two large and two
@@ -134,12 +154,31 @@ props:
     # carry all four images; only which image sits beside which OPENING SIZE
     # differs, so a detector cannot read the role from image presence alone --
     # which is the discrimination the real task demands.
+    # LAYOUT -- two rows of four, alternating image / opening, which is what the
+    # CAD draws: a role image, then a ring, then the other role image, then a
+    # ring. The earlier 2x2 put an opening at each corner and left nowhere for
+    # the artwork, so the images ended up shrunk into the margins.
+    #
+    # Units are HALF-SIZE (y across, z up), so the layout survives a change to
+    # `size`. Columns sit at y = +-0.75 / +-0.25; rows at z = +-0.44.
     cells:
-      - {y:  0.5, z:  0.5, size: large}
-      - {y: -0.5, z:  0.5, size: small}
-      - {y:  0.5, z: -0.5, size: small}
-      - {y: -0.5, z: -0.5, size: large}
-    colour: [0.88, 0.86, 0.80]
+      - {y:  0.24, z:  0.44, size: small}
+      - {y: -0.70, z:  0.44, size: large}
+      - {y:  0.24, z: -0.44, size: small}
+      - {y: -0.70, z: -0.44, size: large}
+    # The printed images take the slots the openings leave. Order pairs with
+    # `roles.<role>.task_images` then the OTHER role's pair, so both boards
+    # carry all four and only the image/opening-size pairing differs.
+    images:
+      - {y:  0.70, z:  0.44}
+      - {y: -0.24, z:  0.44}
+      - {y:  0.70, z: -0.44}
+      - {y: -0.24, z: -0.44}
+    image_size: 0.21
+    # Cool mid-grey, matching the CAD. Was [0.88,0.86,0.80] -- a warm off-white
+    # that had never been read by any code, so nothing revealed it was wrong
+    # until the panel started using it.
+    colour: [0.56, 0.57, 0.59]
     # SCORING STANDOFFS -- THE TWO SOURCES DISAGREE, so both are recorded.
     #   Handbook p. 50:      far 1 ft (0.3 m),  farther 1.5 ft (0.46 m)
     #   TeamTime-2 slide:    far 1.0 m,         farther 1.5 m

@@ -84,6 +84,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -113,6 +114,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -142,6 +144,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -171,6 +174,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -200,6 +204,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -229,6 +234,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -258,6 +264,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -287,6 +294,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -316,6 +324,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -345,6 +354,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -374,6 +384,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -403,6 +414,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -432,6 +444,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -461,6 +474,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -490,6 +504,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -519,6 +534,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -548,6 +564,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -577,6 +594,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -606,6 +624,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>
@@ -635,6 +654,7 @@
               <albedo_map>model://sauvc_textures/drum_wall_blue.png</albedo_map>
               <metalness>0.0</metalness>
               <roughness_map>model://sauvc_textures/rough_plastic.png</roughness_map>
+              <normal_map>model://sauvc_textures/norm_plastic.png</normal_map>
             </metal>
           </pbr>
         </material>

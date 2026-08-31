@@ -355,3 +355,50 @@ scored range would be a training aid, and this prop feeds the vision datasets,
 so painting something the competition will not have teaches the detector
 something false. The range belongs on the operator's readout, which is where
 the scoring dashboard now puts it.
+
+## Task 3 and Task 4 props rebuilt against the CAD (2026-08-31)
+
+**Torpedo board.** It had *no frame at all*: a bare plate with two legs flush
+against its edge, doubling as its side edges, which read as a sheet of card on
+two poles. It now has the CAD's structure — uprights, top and bottom rails, and
+two **rear kickstand braces** on feet (`brace_rake`) — around an inset panel.
+
+The panel is **grey**. `torpedo_board.colour` had been in the spec since the prop
+was written and **never read by anything**; the panel was white purely because
+the texture generator started from `np.ones`. A white board against a pale pool
+is also a much easier detection than the real one.
+
+Layout is the CAD's **two rows of four, alternating image and opening**, not the
+2×2 of corner openings that left the artwork nowhere to go — the images had been
+shrunk to 15 % of board width and pushed into the margins. Openings dropped from
+0.20/0.13 m to **0.14/0.095 m**: neither is stated numerically anywhere in the
+handbook, and the old pair made an opening a third of the board, visibly wider
+than the drawing. A torpedo is 51 mm square, so 0.14 m is still nearly 3× the
+round.
+
+> **The printed red ring is drawn OUTSIDE the hole radius, not inside it.** It
+> used to span 0.70r–r, which is exactly the material the mesh **cuts away**, so
+> the ring was applied to board that no longer existed and the openings rendered
+> as bare holes. Widening the band only moved more of it into the void.
+
+**Bins.** Two separate causes, and only one was what it looked like. The crates
+were *already* open-topped and *already* near-black in the spec — but the four
+walls were the **only links in the prop with no `mat=` at all**, so they fell
+through to a flat solid-colour material while the crate floor got a textured PBR
+one. A flat slab in fog is the "solid grey box" the render showed.
+
+The walls are now **latticed geometry** (`gen_prop_meshes.lattice_panel`, 132
+triangles, one shared mesh instanced 16×) with `<double_sided>` so a wall seen
+from inside the crate is still drawn. Geometry rather than an alpha-cutout
+texture is not a preference: `SetAlphaFromTexture` exists only in the
+gz-rendering **C++ API**, there is **no SDF element** for it, and `visual()`
+exposes only a scalar `<transparency>`.
+
+**The placards were reading as the crate's front panel.** At 0.318 m wide — very
+nearly the 0.335 m crate face — standing 0.04 m in front of it, that is exactly
+what it looked like. They are now 0.62× the crate, standing off on their own
+posts with daylight around them, as the CAD shows.
+
+`textured_material` also gained an **RGB tint**, because a shared texture has to
+carry a prop's own colour: the crate lattice reuses the moulded-plastic albedo,
+and a scalar tint can only make it a darker grey, never near-black.

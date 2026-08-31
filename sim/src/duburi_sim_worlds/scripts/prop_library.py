@@ -131,6 +131,15 @@ def material(colour, emissive_gain: float = 0.25, specular: float = 0.2) -> str:
     )
 
 
+def pvc_textured_material(competition: str = DEFAULT_COMPETITION) -> str:
+    """PVC tube with its extrusion seams in relief rather than painted on."""
+    return textured_material(
+        "rough_pvc.png", tint=0.86, specular=0.35, emissive=0.10,
+        roughness_map="rough_pvc.png", normal_map="norm_pvc.png",
+        competition=competition,
+    )
+
+
 def pvc_material(colour, emissive_gain: float = 0.28) -> str:
     """Slightly specular PVC look for competition flares."""
     return material(colour, emissive_gain=emissive_gain, specular=0.55)
@@ -143,6 +152,8 @@ def textured_material(
     roughness: float = 0.85,
     emissive: float = 0.0,
     roughness_map: str = "",
+    normal_map: str = "",
+    double_sided: bool = False,
     competition: str = DEFAULT_COMPETITION,
 ) -> str:
     """A PBR material driven by a texture in the <competition>_textures model.
@@ -150,14 +161,33 @@ def textured_material(
     No emissive map on large surfaces. An emissive map in Gazebo adds the image
     at full strength on top of the lit result, which on a pool floor doubles the
     brightness and clips colour. Small props can take a flat emissive lift.
+
+    `normal_map` is new and matters more than it sounds. Until now NOTHING in
+    this tree used one, so every prop was a perfectly smooth surface with its
+    detail painted on -- which is the single clearest tell of a CG render, and
+    the worst case for feature matching, because descriptors key on local
+    gradients and a painted gradient does not move with the light. SDF 1.9's
+    <pbr><metal> has accepted normal_map all along.
+
+    `double_sided` is required by any thin geometry you can get behind -- a
+    latticed crate wall seen from inside the crate is a back face, and without
+    this it is simply not drawn.
     """
     tex_model = texture_model(competition)
     uri = f"model://{tex_model}/{texture}"
     e = f"{emissive:.3g} {emissive:.3g} {emissive:.3g} 1"
+    # `tint` may be a scalar (grey) or an RGB triple. The triple exists because
+    # a shared texture has to be able to carry a prop's own colour: the crate
+    # lattice reuses the moulded-plastic albedo but a CleverMade crate is
+    # near-black, and a scalar tint can only make that texture darker grey. The
+    # first render after the crates went textured showed exactly that -- pale
+    # grey lattice where the spec had said [0.18,0.18,0.20] all along.
+    tc = (tint, tint, tint) if isinstance(tint, (int, float)) else tuple(tint)
+    ts = f"{tc[0]:.3g} {tc[1]:.3g} {tc[2]:.3g}"
     return (
         "<material>\n"
-        f"  <ambient>{tint:.3g} {tint:.3g} {tint:.3g} 1</ambient>\n"
-        f"  <diffuse>{tint:.3g} {tint:.3g} {tint:.3g} 1</diffuse>\n"
+        f"  <ambient>{ts} 1</ambient>\n"
+        f"  <diffuse>{ts} 1</diffuse>\n"
         f"  <specular>{specular:.3g} {specular:.3g} {specular:.3g} 1</specular>\n"
         f"  <emissive>{e}</emissive>\n"
         "  <pbr>\n"
@@ -169,6 +199,9 @@ def textured_material(
             if roughness_map
             else f"      <roughness>{roughness:.3g}</roughness>\n"
         )
+        + (f"      <normal_map>model://{tex_model}/{normal_map}</normal_map>\n"
+           if normal_map else "")
+        + ("      <double_sided>true</double_sided>\n" if double_sided else "")
         +
         "    </metal>\n"
         "  </pbr>\n"
@@ -196,11 +229,14 @@ def fabric_material(texture: str, emissive: float = 0.14, competition: str = DEF
     )
 
 
-def plastic_material(texture: str, emissive: float = 0.10, competition: str = DEFAULT_COMPETITION) -> str:
-    """Moulded plastic drum walls."""
+def plastic_material(texture: str, emissive: float = 0.10,
+                     competition: str = DEFAULT_COMPETITION,
+                     double_sided: bool = False, tint=0.72) -> str:
+    """Moulded plastic drum walls and crate lattice."""
     return textured_material(
-        texture, tint=0.72, specular=0.14, emissive=emissive,
-        roughness_map="rough_plastic.png", competition=competition,
+        texture, tint=tint, specular=0.14, emissive=emissive,
+        roughness_map="rough_plastic.png", normal_map="norm_plastic.png",
+        double_sided=double_sided, competition=competition,
     )
 
 
@@ -616,6 +652,9 @@ def _box_link(name, sx, sy, sz, colour, mass, pose, collide=True, mat=None,
 # --------------------------------------------------------------------------
 
 WHITE = [0.92, 0.92, 0.92]
+# The RoboSub task frames are grey tube in the CAD, not white PVC. Kept separate
+# from WHITE so the SAUVC props, which really are white PVC, do not move with it.
+GREY_PVC = [0.62, 0.63, 0.65]
 
 
 def qualification_gate(spec: dict) -> str:
@@ -1506,16 +1545,40 @@ def robosub_bins(spec):
         parts.append(_box_link(
             f"crate_{tag}_floor", lx, ly, t, colour, 1.0,
             f"{bx:.6g} {by:.6g} {base:.6g} 0 0 0",
-            mat=plastic_material("rough_plastic.png", competition="robosub")))
-        for name, sx, sy, dx, dy in (
-            ("xp", t, ly, (lx - t) / 2.0, 0.0),
-            ("xn", t, ly, -(lx - t) / 2.0, 0.0),
-            ("yp", lx, t, 0.0, (ly - t) / 2.0),
-            ("yn", lx, t, 0.0, -(ly - t) / 2.0),
+            mat=plastic_material("rough_plastic.png", competition="robosub",
+                                 tint=colour, emissive=0.04)))
+        # LATTICED WALLS. The rulebook names a CleverMade collapsible crate and
+        # its walls are moulded lattice -- you can see into it and through it.
+        # These were solid slabs, and worse, they were the ONLY links in the
+        # prop with no `mat=` at all, so they fell through to a flat
+        # solid-colour material while the crate floor got a textured PBR one.
+        # A flat black slab in fog is exactly the "solid grey box" the render
+        # showed.
+        #
+        # The visual is a shared mesh (132 triangles, instanced 16 times); the
+        # collision stays a plain box, because a marker only has to land inside
+        # the crate, not thread a bar. Double-sided, or a thin wall vanishes
+        # when seen from within.
+        wall_mat = plastic_material("rough_plastic.png", competition="robosub",
+                                    double_sided=True, tint=colour,
+                                    emissive=0.04)
+        for name, sx, sy, dx, dy, yaw in (
+            ("xp", t, ly, (lx - t) / 2.0, 0.0, 0.0),
+            ("xn", t, ly, -(lx - t) / 2.0, 0.0, 0.0),
+            ("yp", lx, t, 0.0, (ly - t) / 2.0, 1.5708),
+            ("yn", lx, t, 0.0, -(ly - t) / 2.0, 1.5708),
         ):
-            parts.append(_box_link(
-                f"crate_{tag}_{name}", sx, sy, lz, colour, 0.5,
-                f"{bx + dx:.6g} {by + dy:.6g} {base + lz / 2.0:.6g} 0 0 0"))
+            pose = (f"{bx + dx:.6g} {by + dy:.6g} "
+                    f"{base + lz / 2.0:.6g} 0 0 {yaw:.6g}")
+            parts.append(link(f"crate_{tag}_{name}", "\n".join([
+                inertial(0.5, box_inertia(0.5, sx, sy, lz)),
+                visual(f"crate_{tag}_{name}_visual",
+                       '<geometry><mesh><uri>'
+                       'model://robosub_meshes/meshes/crate_wall.obj'
+                       '</uri></mesh></geometry>', wall_mat),
+                collision(f"crate_{tag}_{name}_collision",
+                          _geometry_box(sx, sy, lz)),
+            ]), pose))
 
         # The role image is a VERTICAL framed panel standing beside its crate
         # on the pipework -- that is what the CAD figure shows, four upright
@@ -1529,14 +1592,25 @@ def robosub_bins(spec):
         #
         # Upright also means the FORWARD camera can read the role on approach,
         # which is how a mission chooses a bin before it is overhead.
+        # CLEAR OF THE CRATE, and smaller than it.
+        #
+        # It used to be 0.318 m wide -- nearly the full 0.335 m crate face --
+        # standing 0.04 m in front of it. At that size and that distance it did
+        # not read as a sign beside a crate, it read as the crate's FRONT PANEL,
+        # which is exactly what the render showed and why the bins looked like
+        # solid boxes with a symbol printed on them. The CAD has the placards
+        # standing off on the pipework with daylight around them.
         image = spec["roles"][role]["task_image"]
-        side = lx * 0.95
+        side = lx * 0.62
+        stand = float(cfg.get("panel_standoff", 0.30))
         parts.append(_role_sign(
             spec, f"panel_{tag}", image,
-            f"{bx - lx * 0.62:.6g} {by:.6g} {base + side * 0.45:.6g} 0 0 0",
+            f"{bx - lx / 2.0 - stand:.6g} {by:.6g} "
+            f"{base + side * 0.75:.6g} 0 0 0",
             size=side, collide=True))
-        pipe(f"panel_post_{tag}", side * 0.5,
-             f"{bx - lx * 0.62:.6g} {by:.6g} {base + side * 0.16:.6g} 0 0 0")
+        pipe(f"panel_post_{tag}", side * 1.5,
+             f"{bx - lx / 2.0 - stand:.6g} {by:.6g} "
+             f"{base + side * 0.36:.6g} 0 0 0")
 
     return model("robosub_bins", "\n".join(parts))
 
@@ -1666,11 +1740,44 @@ def robosub_torpedo_board(spec, role="survey_repair", model_name=None):
     cz = legs + size / 2.0
     parts = []
 
+    # THE FRAME. The board is not a bare plate on two sticks: the CAD shows a
+    # tube rectangle around the panel, standing on legs with rear braces. Ours
+    # had no frame at all and its legs sat flush with the panel edge, doubling
+    # as its side edges -- which is why the render read as a sheet of card
+    # balanced on two poles rather than a built structure.
+    #
+    # Uprights run the full height and carry the rails; the panel is inset
+    # inside them.
+    frame_mat = pvc_material(GREY_PVC)
     for i, y in ((0, -size / 2.0), (1, size / 2.0)):
         parts.append(_cylinder_link(
-            f"leg_{i}", r_pvc, legs + size, WHITE, 2.0,
+            f"leg_{i}", r_pvc, legs + size, GREY_PVC, 2.0,
             f"0 {y:.6g} {(legs + size) / 2.0:.6g} 0 0 0",
-            mat=pvc_material(WHITE)))
+            mat=frame_mat))
+
+    # Top and bottom rails, closing the rectangle.
+    for tag, z in (("top", legs + size), ("bottom", legs)):
+        parts.append(_cylinder_link(
+            f"rail_{tag}", r_pvc, size, GREY_PVC, 1.2,
+            f"0 0 {z:.6g} 1.5708 0 0", mat=frame_mat))
+
+    # REAR KICKSTAND. Two braces raking back from the frame to the floor -- the
+    # thing that stops a 0.6 m board on two thin legs reading as unsupported.
+    # `rake` is how far back the foot lands; the brace is the hypotenuse, and
+    # its pitch is the angle that puts it there.
+    rake = cfg.get("brace_rake", 0.45)
+    brace_len = math.hypot(rake, legs)
+    pitch = math.atan2(rake, legs)
+    for i, y in ((0, -size / 2.0), (1, size / 2.0)):
+        parts.append(_cylinder_link(
+            f"brace_{i}", r_pvc * 0.8, brace_len, GREY_PVC, 0.8,
+            f"{rake / 2.0:.6g} {y:.6g} {legs / 2.0:.6g} 0 {pitch:.6g} 0",
+            mat=frame_mat))
+        # A foot pad, so the brace ends on something rather than in the floor.
+        parts.append(_cylinder_link(
+            f"brace_foot_{i}", r_pvc * 1.6, 0.012, GREY_PVC, 0.3,
+            f"{rake:.6g} {y:.6g} 0.006 0 0 0", mat=frame_mat,
+            surface=friction(0.8)))
 
     # The printed face. One thin plate carrying the whole artwork, so the
     # openings, their red rims and the two role images stay in register --
