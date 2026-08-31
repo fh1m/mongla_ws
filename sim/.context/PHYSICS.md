@@ -655,3 +655,38 @@ throughout.** It can be pushed over and it cannot be pushed away.
 - **Link names in `dynamic_pose/info` are unscoped and repeat across models** —
   three `pipe_centre` entries, one per slalom set. Key on the numeric `id`, or
   you will measure a different set than the one you pushed.
+
+## Thruster wash on props — built, wired, NOT demonstrated (2026-08-31)
+
+`wake_fraction` is **not** this, and the name invites the confusion: it reduces
+a thruster's own thrust as the hull's speed raises inflow at its blades. That is
+a self-effect on the vehicle and applies **no force to anything else**. Nothing
+in the simulator made a moving hull disturb its surroundings — which did not
+matter while every prop was welded to the world, and started to the moment they
+were not.
+
+`thruster_wash` models the hull as a momentum jet pointing astern, and pushes
+dynamic props inside its cone with a persistent wrench that is cleared when they
+leave. It is **off by default**, because three A/B runs — nine seconds of
+forward drive at gain 85 past three slalom pipes, wash on against wash off —
+moved exactly one body in both arms, and that body was the vehicle.
+
+Two real bugs were found and fixed on the way, both worth keeping:
+
+- **The first version used hull speed as the jet speed.** Wrong quantity: wash
+  is set by the thrusters, not by how fast the hull travels, and a vehicle
+  holding station against a current has zero speed and full wash. 0.37 m/s of
+  hull gives 0.14 N at a metre, which is a couple of degrees on a moored pipe.
+- **`gz.transport13.Node` has no `publish` method.** You `advertise()` a topic
+  to get a `Publisher` and publish on that; `node.publish(...)` raises
+  AttributeError inside the timer callback, where it is swallowed. The node
+  starts, logs its parameters, reports the props it loaded, and pushes nothing.
+  **Two of the three A/B runs were measuring a node that had never published a
+  byte** — a reminder that "the node is running and logging" is not evidence it
+  is doing anything.
+
+What has **not** been ruled out is the test. The slalom props sit at x = −2.0,
+−0.5, +1.0 and the hull starts at −5, so through most of a 3.3 m run they are
+*ahead* of it and an astern cone never reaches them. A run that parks the hull
+upstream of a prop and holds thrust would settle it. Until someone does that,
+this is an unproven node and is labelled one.

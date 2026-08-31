@@ -213,6 +213,11 @@ def generate_launch_description():
             description=f'Open a MAVProxy console on UDP {MAVLINK_GCS_PORT}.',
         ),
         DeclareLaunchArgument(
+            'wash', default_value='false',
+            description="Push dynamic props with the hull's wash. OFF by "
+                        "default: built and wired, but no run has yet shown it "
+                        "moving a prop. See thruster_wash.py."),
+        DeclareLaunchArgument(
             'depth_reference', default_value='true',
             description='Zero the simulated depth reference against ground '
                         'truth at startup. Off leaves the raw SITL offset, '
@@ -326,6 +331,22 @@ def generate_launch_description():
         }],
         output='screen',
         condition=IfCondition(LaunchConfiguration('t200')),
+    )
+
+    # The hull's wash on the props it drives past. `wake_fraction` on the
+    # vehicle is NOT this -- that reduces a thruster's own thrust from the
+    # hull's own speed and applies no force to anything else. Nothing made a
+    # moving hull disturb its surroundings until props became pushable.
+    wash = Node(
+        package='duburi_sim_bridge',
+        executable='thruster_wash',
+        name='thruster_wash',
+        parameters=[{
+            'world': course,
+            'enabled': LaunchConfiguration('wash'),
+        }],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('wash')),
     )
 
     # Zero the depth reference at the surface -- the calibration SITL will not
@@ -451,6 +472,7 @@ def generate_launch_description():
             faults,
             bno,
             scoring,
+            wash,
             bridge,
             wait,
             # Everything that talks to the FDM socket starts only once Gazebo has

@@ -72,3 +72,31 @@ def test_computed_bonus_is_reported_as_earned_not_as_the_table_value():
              if it['key'] == 'timing'][0]
     assert bonus['earned'] == 14.4
     assert card.total == 14.4
+
+
+# --------------------------------------------------------------------------
+# Bin lights -- 2026
+# --------------------------------------------------------------------------
+def test_bin_lights_are_scored_now():
+    """They were NOT_MODELLED on the grounds that "magnetically activated
+    lights are not in the handbook text". That was true of the 2025 handbook
+    and is no longer true: the 2026 task description specifies a "PVC structure
+    with integrated lights and magnetic detectors", and the scoring page gives
+    500 per light, max 2.
+    """
+    from duburi_sim_bridge import rulebook as rb
+    bins = next(t for t in rb.ROBOSUB['tasks'] if t['key'] == 'bins')
+    light = next(i for i in bins['items'] if i['key'] == 'bin_light')
+    assert light['state'] == rb.SCORED, light.get('note')
+    assert light['points'] == 500 and light['repeat'] == 2
+
+
+def test_bin_lights_count_toward_the_reachable_maximum():
+    """A NOT_MODELLED item is excluded from what the sim can actually score, so
+    flipping it has to move the reachable total -- otherwise the dashboard is
+    still telling the operator those 1000 points are out of reach."""
+    from duburi_sim_bridge import rulebook as rb
+    book, reach = rb.maxima(rb.ROBOSUB)     # (rulebook total, reachable)
+    assert reach <= book
+    # 14700 before; the two lights are worth 500 each
+    assert reach >= 15700, reach

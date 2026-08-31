@@ -104,9 +104,12 @@ ROBOSUB = {
         {'key': 'bins', 'label': 'Task 3 - Recon (Bins)', 'items': [
             item('bin_any', 'Marker in any bin', 300, repeat=2),
             item('bin_correct', 'Marker in the correct bin', 800, repeat=2),
-            item('bin_light', 'Turn off a light', 500, NOT_MODELLED,
-                 'magnetically activated lights are not in the handbook text, '
-                 'so there is no rule to implement against', repeat=2),
+            # Was NOT_MODELLED on the grounds that "magnetically activated
+            # lights are not in the handbook text". True of the 2025 handbook,
+            # no longer true: the 2026 task description specifies a "PVC
+            # structure with integrated lights and magnetic detectors", and the
+            # scoring page gives 500 per light, max 2.
+            item('bin_light', 'Turn off a light', 500, repeat=2),
         ]},
         {'key': 'torpedo', 'label': 'Task 4 - Deploy (Torpedoes)', 'items': [
             item('torp_any', 'Torpedo through any opening', 600, repeat=2),
