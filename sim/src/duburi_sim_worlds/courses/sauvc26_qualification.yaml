@@ -20,7 +20,7 @@ scene:
   ambient: [0.30, 0.42, 0.50]
 
 vehicle:
-  model: dubomini
+  model: duburi_heavy
   name: duburi
   # Mid-water in the starting zone, facing +x toward the qualification gate.
   # Deep enough that the mesh is clearly under the surface in the Gazebo GUI.

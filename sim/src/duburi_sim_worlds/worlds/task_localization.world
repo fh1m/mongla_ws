@@ -393,7 +393,7 @@ The flares are 80 cm tall and only 1.6 cm across, which makes this the hardest D
           <pose>0 0 0 0 0 0</pose>
           <cast_shadows>false</cast_shadows>
           <transparency>0.18</transparency>
-          <geometry><box><size>25 16 0.01</size></box></geometry>
+          <geometry><mesh><uri>model://robosub_meshes/meshes/water_sauvc.obj</uri></mesh></geometry>
           <material>
             <ambient>0.42 0.6 0.68 1</ambient>
             <diffuse>0.42 0.6 0.68 1</diffuse>
@@ -483,7 +483,7 @@ The flares are 80 cm tall and only 1.6 cm across, which makes this the hardest D
 
     <!-- ===================== VEHICLE ===================== -->
     <include>
-      <uri>model://dubomini</uri>
+      <uri>model://duburi_heavy</uri>
       <name>duburi</name>
       <pose>-6 0 -0.4 0 0 0</pose>
     </include>

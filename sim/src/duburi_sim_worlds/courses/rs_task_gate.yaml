@@ -14,7 +14,7 @@ scene:
   lighting: clear
 
 vehicle:
-  model: dubomini
+  model: duburi_heavy
   name: duburi
   pose: [-6.0, 0.0, -0.4]
   yaw: 0.0

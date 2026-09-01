@@ -2556,6 +2556,31 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
     # emissive lift the props rely on to stay visible through fog.
     # SKIPPED for `water_surface: gerstner`, which uses Gazebo's own animated
     # Gerstner surface instead; two surfaces at z=0 would z-fight.
+    # A SUBDIVIDED, DOUBLE-SIDED GRID -- and NOT animated. Round 23 got the
+    # geometry prerequisite in and could not get ShaderParam to drive it; the
+    # measurements are in .context/PHYSICS.md so the next attempt starts from
+    # them rather than from scratch. In short: the GLSL COMPILES (a deliberately
+    # broken one aborts the server, exit -6, and logs the compile failure -- so
+    # the old "a failing shader renders nothing and logs nothing" line is wrong
+    # for gz-sim 8), the plugin DOES replace the material (100 % of pixels
+    # differ from this one), and every <param> value arrives as ZERO: changing
+    # the fragment shader wholesale, and changing `tau` by three orders of
+    # magnitude, both left the render byte-identical at mean 97.667.
+    #
+    # The grid is kept because it is verified equivalent to the box it replaced
+    # (mean 111.452 vs 111.424 from a probe camera under it) and because it is
+    # the thing that was missing every previous round: a <box> is 8 vertices and
+    # a vertex-displacement shader has nothing to displace.
+    #
+    # `gerstner` remains the unbounded Fuel ocean and remains the wrong default
+    # for a pool.
+    #
+    # NO COLLISION, on purpose: the vehicle surfaces through this sheet, and a
+    # collision here would make `surface()` push against a lid.
+    #
+    # cast_shadows off as well -- a 25x16 m shadow caster directly above the
+    # whole arena darkens every prop and is the one thing that would undo the
+    # emissive lift the props rely on to stay visible through fog.
     if water_surface == "plane":
         parts.append(
         link(
@@ -2564,25 +2589,26 @@ def pool(spec: dict, pool_cfg: dict = None, water_surface: str = "plane") -> str
                 inertial(1.0, (1.0, 1.0, 1.0)),
                 visual(
                     "water_surface_visual",
-                    _geometry_box(length, width, 0.01),
-                    # SEEN FROM BELOW, which is the only view that matters:
-                    # every camera in this simulator is under it. At 0.62 it
-                    # was effectively not there -- the first render after this
-                    # became the default showed sky through the surface and a
-                    # pool that read as EMPTY, which is what "every course
-                    # looked like it had no water" meant when the default was
-                    # flipped to the unbounded Fuel ocean to hide it. Fixing
-                    # the plane is the right lever; the ocean was the wrong one
-                    # because it put water outside the pool as well as in it.
-                    #
+                    f'<geometry><mesh><uri>model://robosub_meshes/meshes/'
+                    f'water_{comp}.obj</uri></mesh></geometry>',
                     # Blue-tinted rather than near-white: from underneath, a
                     # water surface is a dim mirror of the pool, not a window.
+                    # This material is what renders if the shader fails to
+                    # compile is caught and the plugin removed; while the
+                    # plugin is live the shader owns the colour.
                     textured_material(
                         "water_surface.png", tint=(0.42, 0.60, 0.68),
                         specular=0.35, roughness=0.15, emissive=0.10,
                         competition=comp),
                     "0 0 0 0 0 0",
                     cast_shadows=False,
+                    # KEPT even though the fragment shader writes its own alpha:
+                    # <transparency> is what puts the visual in Ogre's
+                    # transparent render queue in the first place. At 0.62 the
+                    # sheet was effectively not there and the pool read as
+                    # EMPTY, which is what "every course looked like it had no
+                    # water" meant when the default was flipped to the
+                    # unbounded ocean to hide it.
                     transparency=0.18,
                 ),
             ]),

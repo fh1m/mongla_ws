@@ -141,7 +141,7 @@ class T200Curve(Node):
         #
         # `vehicle` is the model name and matches what the SDF was generated
         # with; it is the one both plugins agree on.
-        self.declare_parameter('vehicle', 'dubomini')
+        self.declare_parameter('vehicle', 'duburi_heavy')
         self.declare_parameter('thrusters', 8)
         self.declare_parameter('max_thrust', 50.0)
         self.declare_parameter('voltage', 16.0)
