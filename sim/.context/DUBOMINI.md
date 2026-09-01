@@ -133,3 +133,88 @@ published.
 4. **Inertia from a water-tight CAD export** — gz-sim 8 computes it from the
    mesh, and `hullv3.stl` is not water-tight, so the values are scaled from
    Duburi and marked ASSUMED.
+
+---
+
+## Round 20 — it looked like a blob, and it was two faults at once
+
+The vehicle flew correctly from round 19 and rendered as a uniform pale-grey
+shape with no readable features. Two independent causes, both found by
+inspecting the exported file rather than by looking at it:
+
+1. **The DAE had no vertex normals.** `<input semantic="NORMAL">` was simply
+   absent, so the renderer had no shading information and 203,000 triangles read
+   as a flat silhouette. It presented as a colour problem and was a geometry
+   problem.
+2. **One geometry, one material.** The decimator concatenated all 3,276 CAD
+   components into a single mesh, so the vehicle could only ever be one flat
+   colour — the SDF `<material>` added in round 19 was correct *given that mesh*.
+
+**And the colour was wrong.** The team's own render was downloaded from
+`bracuduburi.com/assets/renders/dubomini/dubomini_render_9.png` and **sampled**:
+
+| part | official render |
+|---|---|
+| frame plate (matte) | 0.375 |
+| enclosure front (gloss) | 0.18 |
+| enclosure side | 0.036 |
+| thruster duct | 0.216 |
+| prop blades | 0.165–0.181, blue-teal |
+| camera bezel | bare metal, bright |
+
+The real vehicle is **near-black**. The model painted everything **0.70** —
+lighter than every surface on it.
+
+### Per-part export, and the bolts
+
+`gen_vehicle_mesh.py` now splits the assembly into five classified groups, each
+its own geometry with its own material and **computed normals**. Classification
+is by size because an STL carries no names, and the components separate cleanly:
+
+| class | parts | faces | kept |
+|---|---|---|---|
+| fastener | 3,158 | 1,005,623 (46.7 %) | **dropped** |
+| fitting | 80 | 526,044 | → 23,423 |
+| duct | 8 | 346,652 | → 25,944 |
+| body | 20 | 189,534 | → 41,044 |
+| frame | 4 | 51,263 | → 30,000 |
+| enclosure | 6 | 32,555 | → 20,000 |
+
+**Dropping the fasteners removes 46.7 % of every triangle for 0.14 L of
+geometry** — sub-25 mm bolts no camera in this simulator resolves. Verified: the
+vehicle's extents are unchanged to within 1 mm, so the envelope did not shrink.
+203k → **140k faces**, and RTF is unchanged (median 0.0164 against 0.0169).
+
+### The values sit BELOW the sampled ones, deliberately
+
+`underwater_fx` adds haze that lifts every surface toward the water colour, so a
+value matching the render exactly arrives on camera lighter than the render.
+Measured on the first pass: an enclosure specified 0.055 rendered at **62/255**
+against the render's 46.
+
+What must survive the fog is the **ordering** — enclosure darkest, then duct and
+body, frame lightest — because that ordering is what makes it read as this
+machine rather than a shape. Measured against the official render:
+
+| part | first pass | **shipped** | official |
+|---|---|---|---|
+| enclosure | 68.6 | **58.9** | 46.0 |
+| duct | 75.0 | **64.6** | 55.0 |
+| frame | 108.2 | **109.4** | 96.0 |
+
+Luminance spread across the vehicle is **149.9** where a blob would be near
+zero. Flight is unaffected: 1.386 m in 8 s with dy −0.004.
+
+### The check is the render, not a pixel-diff
+
+Round 16 A/B'd a material change on the other vehicle, measured 33.8 % of pixels
+changed, and shipped a hull that had been **erased**. A pixel-diff proves a
+change reached the renderer; it says nothing about whether the result is right.
+So this round's check is **sampling the sim render against the official render's
+values**, and the numbers above are that check.
+
+### Known limitation
+
+The props are inside the ducts and share their group, so `duct` carries a slight
+blue bias rather than the render's separate black duct and blue-teal blades.
+Separating them needs a finer classifier than size alone.

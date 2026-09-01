@@ -332,6 +332,22 @@ class ModelParams:
         # PER CHANNEL: a flat grey lift is a desaturation term, which is exactly
         # what washed the colour out of every prop before round 12.
         lv = livery or {}
+        # Per-part livery tokens. A vehicle whose mesh is grouped can be
+        # painted per group; one merged geometry can only ever be one flat
+        # colour, which is what made Dubomini a pale blob.
+        for _part, _fallback in (("frame", [0.375, 0.375, 0.38]),
+                                 ("enclosure", [0.055, 0.055, 0.06]),
+                                 ("body", [0.14, 0.14, 0.15]),
+                                 ("duct", [0.18, 0.195, 0.215]),
+                                 ("fitting", [0.30, 0.30, 0.31])):
+            _c = lv.get(_part, _fallback)
+            _g = float(lv.get("emissive_gain", 0.10))
+            setattr(self, f"{_part}_colour",
+                    " ".join(f"{v:.4g}" for v in _c))
+            setattr(self, f"{_part}_specular",
+                    float(lv.get(f"{_part}_specular", 0.3)))
+            setattr(self, f"{_part}_emissive",
+                    " ".join(f"{min(0.6, v * _g):.4g}" for v in _c))
         hull = lv.get("hull", [0.62, 0.63, 0.65])
         thr = lv.get("thruster", [0.09, 0.26, 0.30])
         gain = float(lv.get("emissive_gain", 0.22))

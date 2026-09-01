@@ -305,20 +305,57 @@ range_cameras:
 # operator-view and RViz change, and it is worth saying that plainly rather than
 # implying a realism gain that is not there.
 livery:
-  # Brushed 5083 aluminium, WARM. A neutral grey here is a no-op: the
-  # recolour preserves luminance, so tinting the mesh's greys toward
-  # another grey returns them unchanged (measured: 2.2 % of pixels).
-  # The warmth is what makes the frame read as machined metal.
-  hull: [0.70, 0.66, 0.58]
-  hull_specular: 0.42
-  # Anodised deep teal on the thruster housings.
-  thruster: [0.09, 0.26, 0.30]
-  thruster_specular: 0.30
-  # Self-illumination, for the same reason every prop has it: an underwater
-  # scene is fogged and singly lit, and without it the hull reads near-black in
-  # the operator view. Applied PER CHANNEL -- a grey emissive is a desaturation
-  # term, which is what washed out every coloured prop before round 12.
-  emissive_gain: 0.22
+  # SAMPLED FROM THE TEAM'S OWN RENDER, not chosen.
+  #
+  # `bracuduburi.com/assets/renders/dubomini/dubomini_render_9.png` was
+  # downloaded and its part classes measured directly. The vehicle is
+  # NEAR-BLACK, and the previous single value of 0.70 was lighter than every
+  # surface on it:
+  #
+  #     frame plate (matte)    0.375
+  #     enclosure front gloss  0.18
+  #     enclosure side         0.036
+  #     thruster duct          0.216
+  #     prop blades            0.165-0.181, blue-teal
+  #     top window             0.482, translucent
+  #     camera bezel           bare metal, bright
+  #
+  # A dark vehicle is genuinely hard to see in a fogged pool. That is what the
+  # real one is, and the sim should teach it rather than flatter it.
+  #
+  # THESE SIT BELOW THE SAMPLED VALUES ON PURPOSE. underwater_fx adds haze that
+  # LIFTS every surface toward the water colour, so a value matching the render
+  # exactly arrives on camera lighter than the render. Measured on the first
+  # pass: an enclosure specified 0.055 rendered at 62/255 against the render's
+  # 46, and the duct at 67 against 55. What must survive the fog is the
+  # ORDERING -- enclosure darkest, then duct and body, frame lightest -- because
+  # that ordering is what makes it read as this machine rather than a blob.
+  #
+  # Welded Aluminium 5083 is the published frame material; the plates read as
+  # matte mid-grey rather than bright metal because they are raw, not polished.
+  frame:     [0.375, 0.375, 0.380]
+  frame_specular: 0.22
+  # Gloss black. High specular is what makes it read as a sealed box rather
+  # than as matte plastic -- the render's front face sits at 0.18 purely from
+  # its own highlight while the side is 0.036.
+  enclosure: [0.030, 0.030, 0.034]
+  enclosure_specular: 0.65
+  # Bodies: the pressure cylinders and mounts, between the two.
+  body:      [0.100, 0.100, 0.110]
+  body_specular: 0.35
+  # T200 ducts, black with the blue-teal props visible inside them. Grouped
+  # geometry cannot separate duct from prop, so this carries a slight blue
+  # bias -- the props are the part a camera sees through the duct opening.
+  duct:      [0.120, 0.135, 0.155]
+  duct_specular: 0.30
+  # Brackets, clamps and the camera bezels. The bezel is bare metal and is the
+  # brightest thing on the vehicle, which is why this class is lighter.
+  fitting:   [0.300, 0.300, 0.310]
+  fitting_specular: 0.45
+  # Per channel, for the reason round 12 established: a flat grey emissive
+  # lifts all three channels equally and is a desaturation term. Kept LOW --
+  # this vehicle is meant to be dark.
+  emissive_gain: 0.10
 
 # --------------------------------------------------------------- gripper ----
 # OFF BY DEFAULT. Turning it on changes the vehicle's weight and trim, so it is

@@ -106,11 +106,56 @@ def test_added_mass_is_positive_and_heave_dominates():
     assert am['zDotW'] > 3 * am['xDotU']
 
 
-def test_the_mesh_is_referenced_and_the_collision_is_decomposed():
+def test_the_vehicle_is_painted_per_part_not_as_one_blob():
+    """One merged geometry can only ever be one flat colour.
+
+    The first export concatenated all 3,276 CAD components into a single mesh
+    with a single material, and had NO VERTEX NORMALS -- so the renderer had
+    neither per-part colour nor shading information, and the vehicle rendered
+    as a pale featureless blob. Both faults at once, and both silent.
+    """
     sdf = _sdf()
-    assert 'model://dubomini/meshes/dubomini.dae' in sdf
+    for part in ('frame', 'enclosure', 'body', 'duct', 'fitting'):
+        assert f'model://dubomini/meshes/dubomini_{part}.dae' in sdf, part
+        assert f'<visual name="{part}_visual">' in sdf, part
     assert 'convex_decomposition' in sdf, (
         'the hull collision must be decomposed by Gazebo, not left as a raw mesh')
+
+
+def test_the_meshes_carry_vertex_normals():
+    """Their absence is why the vehicle rendered flat, and nothing said so.
+
+    A DAE without `<input semantic="NORMAL">` gives the renderer no shading
+    information at all; 140,000 triangles then look like a silhouette. It
+    presented as a colour problem and was a geometry problem.
+    """
+    meshes = os.path.join(MODEL, 'meshes')
+    found = 0
+    for part in ('frame', 'enclosure', 'body', 'duct', 'fitting'):
+        path = os.path.join(meshes, f'dubomini_{part}.dae')
+        if not os.path.isfile(path):
+            continue
+        with open(path) as fh:
+            assert 'NORMAL' in fh.read(), f'{part} exported without normals'
+        found += 1
+    if not found:
+        pytest.skip('meshes not generated')
+
+
+def test_the_livery_is_dark_and_ordered_like_the_real_vehicle():
+    """Sampled from the team's own render, not chosen.
+
+    The enclosure must be the darkest thing on the vehicle and the frame the
+    lightest structural part -- that ORDERING is what makes it read as this
+    machine. The previous single value of 0.70 was lighter than every surface
+    measured off the render.
+    """
+    lv = _cfg()['livery']
+    lum = {k: 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]
+           for k, v in lv.items() if isinstance(v, list)}
+    assert lum['enclosure'] < lum['body'] < lum['frame']
+    assert lum['duct'] < lum['frame']
+    assert max(lum.values()) < 0.45, 'near-black vehicle; 0.70 was wrong'
 
 
 def test_net_buoyancy_is_the_declared_trim():
