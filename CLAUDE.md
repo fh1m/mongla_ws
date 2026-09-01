@@ -557,6 +557,22 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > The run clock **starts on arm**, and the card is written to `DUBURI_RUN_DIR`
 > beside the mission scorecards. [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
 >
+> **THE TORPEDO RIG WENT 1/4 → 3/4, AND THE CAUSE WAS CALL ORDERING.**
+> `score_check` read its shot count with a `ros2 topic echo` (~2 s) and fired
+> with another (~2 s) — **after** the pose check — leaving ~4 s of drift between
+> verifying the aim and pulling the trigger, on an armed hull in ALT_HOLD.
+> Shot 1 fires soon after placement and later ones accumulate the delay, so it
+> looked like a first-shot-only defect. **The previously-recorded hypothesis
+> (`ros2 topic echo` vs a live gz-transport subscription) is RETRACTED** — a
+> guess written up as a lead. Three hypotheses have now been wrong on this one
+> defect (impulse loss, shot spacing, transport) and all three are kept in the
+> source so nobody re-runs them. Also: the pre-trigger tolerance is now the
+> **opening's** (a third of its radius) not the rig's 50 mm — which exceeds a
+> small opening's 47.5 mm radius — and the hull must be **still**, not merely in
+> place, the same idea as `align(settle=)`. **Opening 2 still fails and is NOT
+> isolated**; an attempt to test it alone was my own bug (recycled slot names
+> are not "new" keys, so fired shots reported `NO MODEL`). Bins stay **5/5**.
+>
 > **THE HULL IS OURS NOW, AND THE PIXELS WERE CHECKED.** The vehicle visual is
 > a BlueROV2 Heavy `.dae` and carried **the vendor's colours**, so every render
 > showed somebody else's AUV. `configs.yaml` gained a `livery:` block —
