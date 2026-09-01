@@ -179,4 +179,85 @@ ardupilot:
 # you used when you report a result.
 range_cameras: false
 
+# ---------------------------------------------------------------- livery ----
+# THE HULL IS OURS, NOT A STOCK BlueROV2.
+#
+# The visual is a BlueROV2 Heavy mesh (MIT, from bluerov2_gz) and it carried the
+# vendor's own colours, so every render and every operator view showed somebody
+# else's vehicle. Duburi 4.5 is an octagonal Marine 5083 ALUMINIUM hull, which
+# is what these numbers describe: a brushed-aluminium body rather than the
+# stock black polymer, with the team's accent on the thrusters so the eight
+# vectored units read apart from the frame at a glance.
+#
+# An SDF <material> overrides the mesh's embedded material, so this needs no
+# mesh edit and stays a config change.
+#
+# It is DELIBERATELY not a detection concern: the vehicle is semantic label 0
+# (background) and is never a target, so no dataset changes with this. It is an
+# operator-view and RViz change, and it is worth saying that plainly rather than
+# implying a realism gain that is not there.
+livery:
+  # Brushed 5083 aluminium: slightly warm, mid-value, low saturation.
+  hull: [0.62, 0.63, 0.65]
+  hull_specular: 0.42
+  # Anodised deep teal on the thruster housings.
+  thruster: [0.09, 0.26, 0.30]
+  thruster_specular: 0.30
+  # Self-illumination, for the same reason every prop has it: an underwater
+  # scene is fogged and singly lit, and without it the hull reads near-black in
+  # the operator view. Applied PER CHANNEL -- a grey emissive is a desaturation
+  # term, which is what washed out every coloured prop before round 12.
+  emissive_gain: 0.22
+
+# --------------------------------------------------------------- gripper ----
+# OFF BY DEFAULT. Turning it on changes the vehicle's weight and trim, so it is
+# opt-in and every consequence below is stated rather than discovered.
+#
+# Modelled on the Blue Robotics Newton Subsea Gripper, from its published
+# specification -- there is no public URDF or Gazebo model of it (Blue
+# Robotics' own forum, May 2024), so this is authored from the datasheet the
+# way every prop in this tree is authored from published figures:
+#
+#     jaw opening      62 mm
+#     length           303.2 mm closed / 309.2 mm open
+#     body diameter    36 mm
+#     mass             524 g in air, 267 g submerged
+#     actuation        1.6 s open-to-close, PWM 1100-1900 (1500 neutral)
+#     grip force       97 N at the tip, 124 N mid-jaw
+#
+# WHAT THIS DOES NOT DO: it does not make the octagon's object-handling points
+# scorable. Those stay NOT_MODELLED in rulebook.py (5,100 RoboSub points, 60
+# SAUVC) because no autonomy verb commands it -- a mission cannot grab. This is
+# geometry, mass and a grasp mechanic to develop against, not a scoring change.
+gripper:
+  enabled: false
+  # On the hull's underside front, jaws forward -- where a Newton mounts.
+  x: 0.24
+  y: 0.0
+  z: -0.09
+  body_radius: 0.018        # 36 mm diameter
+  body_length: 0.20         # the visible body; the datasheet 303 mm includes
+                            # the jaws, which are separate links below
+  jaw_length: 0.10
+  jaw_radius: 0.008
+  # Half the 62 mm opening, as a hinge angle each jaw swings through.
+  jaw_open_rad: 0.62
+  # The datasheet's full-travel time. The controller is rate-limited to it, so
+  # a grab takes as long in the sim as it does on the vehicle.
+  actuation_s: 1.6
+  mass: 0.524               # in AIR. The submerged 267 g follows from the
+                            # displacement below and is not typed twice.
+  # THE TRAP THIS EXISTS FOR. The buoyancy collision box is DERIVED:
+  #     collision_z = (mass + buoyancy_adjustment) / (bx * by * fluid_density)
+  # so adding 524 g of gripper without adding displacement makes the vehicle
+  # sink. The gripper displaces 524 - 267 = 257 g of water, which still leaves
+  # it 267 g negative -- correctly, because a Newton IS negatively buoyant.
+  #
+  # A real team trims that out with foam, and so does this: `trim_kg` restores
+  # the hull's original +0.1 kg net buoyancy so the flight model does not
+  # silently change under the vision work. Set it to 0.0 to fly the untrimmed
+  # vehicle and watch it sink, which is also a legitimate thing to want.
+  displacement: 0.257
+  trim_kg: 0.267
+
 odom_publish_frequency: 50.0

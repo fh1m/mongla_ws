@@ -747,3 +747,84 @@ pushed nothing:
   does not exist, and ApplyLinkWrench dropped it in silence. Separated from "the
   prop is stiff" by putting the same wrench on a known-free body: the
   collectible flew, the pipe did not.
+
+## Round 16 — the hull is ours, and it has a gripper mount (2026-09-01)
+
+### The livery, and the check that it is real
+
+The vehicle visual is a BlueROV2 Heavy `.dae` (MIT, from `bluerov2_gz`) and it
+carried **the vendor's own colours**, so every render and every operator view
+showed somebody else's vehicle. `configs.yaml` now has a `livery:` block and the
+template puts an SDF `<material>` on the hull and on all eight thruster visuals:
+brushed 5083 aluminium `[0.62, 0.63, 0.65]` for the hull, anodised deep teal
+`[0.09, 0.26, 0.30]` on the thrusters, emissive applied **per channel** for the
+reason round 12 established — a flat grey lift is a desaturation term.
+
+**DECLARED IS NOT RENDERED, so this was A/B'd against pixels.** This tree has
+caught four separate cases where gz accepted a declaration and nothing changed
+(`<scene><fog>`, particle emitters, a hand-written shader, a missing normal
+map). The check spawns a second visual-only hull in front of the vehicle and
+photographs it with the vehicle's own front camera:
+
+| hull colour | patch RGB |
+|---|---|
+| aluminium `[0.62, 0.63, 0.65]` | `[123, 134, 143]` |
+| forced red `[0.90, 0.05, 0.05]` | `[153, 39, 41]` |
+
+**33.8 % of the frame changed, max delta 214.** An SDF `<material>` does
+override a DAE's embedded material, so the livery needs no mesh edit.
+
+Stated plainly because it would be easy to imply otherwise: **this changes no
+dataset.** The vehicle is semantic label 0 (background) and is never a detection
+target. It is an operator-view and RViz change.
+
+### The gripper: geometry, mass and trim — nothing commands it
+
+Modelled on the Blue Robotics Newton Subsea Gripper from its published
+datasheet (62 mm jaw, 303.2 mm, 36 mm body, 524 g air / 267 g submerged, 1.6 s
+open-to-close, PWM 1100–1900). **There is no public URDF or Gazebo model of this
+part** — Blue Robotics' own forum, May 2024 — so it is authored here the way
+every prop in this tree is authored from published figures.
+
+`gripper: enabled: false` by default. When on: three links, two revolute jaws
+with `JointPositionController` on a shared topic, and matching URDF geometry.
+When off it is **textually stripped** from the SDF, not merely disabled — that
+is how the range cameras cost 12 Hz → 4 Hz while claiming to be off.
+
+**The buoyancy trap, and the arithmetic error it caught.** The collision box is
+derived — `collision_z = (mass + buoyancy_adjustment) / (bx·by·ρ)` — and
+`buoyancy_adjustment` is the **net** figure, displaced minus mass. So adding the
+gripper's mass already adds an equal displacement implicitly, and the correction
+is only the part it fails to displace: `0.524 − 0.257 = 0.267 kg`, which is its
+submerged weight, as it must be. Adding the displacement *on top* of that double
+counted and put the vehicle at **+0.624 kg net** — over-buoyant, from a part
+that sinks. Caught by checking the derived net against the intended +0.1 rather
+than by trusting the arithmetic.
+
+Measured after: **+0.0999 kg net with the gripper off, +0.0999 kg with it on.**
+`trim_kg` is the foam a real team bolts on, and it keeps the flight model —
+fitted to a measured 0.95 m/s top speed — from changing under the vision work.
+Set it to `0.0` to fly the untrimmed vehicle and watch it sink, which is also a
+legitimate thing to want.
+
+**Top speed is UNMEASURED with the gripper fitted.** It is off by default and
+the trim keeps net buoyancy identical, so the flown model is unchanged; a
+`drag_survey.py` A/B belongs to the round that turns it on.
+
+### Why there is no DetachableJoint yet
+
+`DetachableJoint` is the right mechanism — DART will not hold a grasped body
+reliably by contact, and Harmonic's version supports attach *and* re-attach over
+topics. But **the plugin names its child model in the SDF, at load time**, and
+what a gripper grabs is not known until it grabs it. A first draft wrote
+`<child_model>__model__</child_model>`, which compiles and attaches the jaw to
+**the vehicle itself** — a self-attachment that is at best inert and at worst
+something the solver fights, on the hull the hydrodynamics are fitted to. It was
+removed rather than left in looking finished.
+
+What lands with it is a runtime node that creates the joint against the model
+actually being grasped, the way `payload_sim` spawns a projectile. Until then
+**nothing commands the gripper**, and the octagon's object-handling points stay
+`NOT_MODELLED` in `rulebook.py` — 5,100 RoboSub and 60 SAUVC. This round is
+geometry, mass, trim and two working jaw controllers, and it is not a scoring
+change.

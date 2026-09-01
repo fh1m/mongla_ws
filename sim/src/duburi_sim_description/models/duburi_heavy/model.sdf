@@ -56,6 +56,17 @@
             <scale>0.025 0.025 0.025</scale>
           </mesh>
         </geometry>
+        <!-- OUR HULL, NOT THE VENDOR'S. The mesh is a BlueROV2 Heavy (MIT,
+             bluerov2_gz) and carried its own colours, so every render showed
+             somebody else's vehicle. An SDF <material> overrides the mesh's
+             embedded material, so Duburi's brushed-aluminium livery needs no
+             mesh edit. Emissive is per channel -- see configs.yaml. -->
+        <material>
+          <ambient>0.62 0.63 0.65 1</ambient>
+          <diffuse>0.62 0.63 0.65 1</diffuse>
+          <specular>0.42 0.42 0.42 1</specular>
+          <emissive>0.1364 0.1386 0.143 1</emissive>
+        </material>
       </visual>
 
       <!-- This box is NOT the hull. Its volume times fluid_density equals the
@@ -392,6 +403,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -415,6 +432,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -438,6 +461,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -461,6 +490,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -484,6 +519,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -507,6 +548,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -530,6 +577,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -553,6 +606,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>0.09 0.26 0.3 1</ambient>
+          <diffuse>0.09 0.26 0.3 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.0198 0.0572 0.066 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -896,6 +955,7 @@
          WITHOUT that node running the thrusters receive NOTHING: this topic
          has no other subscriber. duburi_sim's `sim` starts it; if you launch
          sim.launch.py by hand, pass t200:=true (the default). -->
+
     <plugin name="ArduPilotPlugin" filename="libArduPilotPlugin.so">
       <fdm_addr>127.0.0.1</fdm_addr>
       <fdm_port_in>9002</fdm_port_in>

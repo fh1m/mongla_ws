@@ -75,7 +75,26 @@ TEMPLATE = """<?xml version="1.0"?>
     <origin xyz="{dvx} {dvy} {dvz}" rpy="3.1415927 0 0"/>
   </joint>
 
+{gripper}
 </robot>
+"""
+
+# Emitted only when configs.yaml enables the gripper, so the URDF and the SDF
+# describe the same vehicle. RViz would otherwise show a hull with no arm while
+# Gazebo simulated one -- the exact SDF/URDF divergence the drift guard exists
+# to prevent, just in the other direction.
+GRIPPER = """
+  <!-- Newton-shaped gripper. The jaws are revolute in the SDF; here they are
+       FIXED at the closed position, for the same reason the thrusters are not
+       emitted at all: nothing publishes /joint_states for them, so
+       robot_state_publisher would either demand a stream that does not exist or
+       peg them at zero. A closed jaw is the honest still pose. -->
+  <link name="gripper_body_link"/>
+  <joint name="gripper_mount_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="gripper_body_link"/>
+    <origin xyz="{gx} {gy} {gz}" rpy="0 1.5707963 0"/>
+  </joint>
 """
 
 
@@ -92,6 +111,8 @@ def main():
         fcx=p.front_camera_x, fcy=p.front_camera_y, fcz=p.front_camera_z,
         bcx=p.bottom_camera_x, bcy=p.bottom_camera_y, bcz=p.bottom_camera_z,
         dvx=p.dvl_x, dvy=p.dvl_y, dvz=p.dvl_z,
+        gripper=(GRIPPER.format(gx=p.gripper_x, gy=p.gripper_y,
+                                gz=p.gripper_z) if p.gripper_on else ''),
     )
     # `--` is illegal inside an XML comment and every parser rejects the file.
     # Caught here rather than at load time, because a URDF that fails to parse

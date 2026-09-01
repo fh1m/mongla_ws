@@ -557,6 +557,34 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > The run clock **starts on arm**, and the card is written to `DUBURI_RUN_DIR`
 > beside the mission scorecards. [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
 >
+> **THE HULL IS OURS NOW, AND THE PIXELS WERE CHECKED.** The vehicle visual is
+> a BlueROV2 Heavy `.dae` and carried **the vendor's colours**, so every render
+> showed somebody else's AUV. `configs.yaml` gained a `livery:` block —
+> brushed 5083 aluminium hull, anodised teal thrusters, emissive **per channel**
+> (a grey lift desaturates, per round 12) — applied as an SDF `<material>`, so
+> no mesh edit. **Declared is not rendered**, and this tree has caught four
+> cases where gz accepted a declaration and nothing changed, so it was A/B'd by
+> spawning a second hull and photographing it with the vehicle's own camera:
+> aluminium `[123,134,143]` vs a forced red `[153,39,41]`, **33.8 % of the frame
+> changed**. Stated plainly: this changes **no dataset** — the vehicle is
+> semantic label 0 and is never a target.
+>
+> **THE GRIPPER IS GEOMETRY, MASS AND TRIM — NOTHING COMMANDS IT.** A Newton
+> Subsea Gripper from the published datasheet (62 mm jaw, 524 g air / 267 g
+> submerged, 1.6 s), because **no public URDF or Gazebo model of it exists**.
+> `gripper: enabled: false`; when off it is **textually stripped**, not merely
+> disabled — that is how the range cameras cost 12 Hz → 4 Hz "switched off".
+> **The buoyancy trap caught a real error of mine**: `buoyancy_adjustment` is
+> the NET figure, so adding the gripper's mass already adds its displacement
+> implicitly; adding the displacement again put the hull at **+0.624 kg** —
+> over-buoyant, from a part that sinks. The correction is only the shortfall
+> (0.524 − 0.257 = **0.267 kg**, its submerged weight). Measured after:
+> **+0.0999 kg net both with and without**. **No `DetachableJoint` yet** — the
+> plugin names its child model at LOAD time and a gripper does not know what it
+> will grab; the first draft's `__model__` attached the jaw to the vehicle
+> itself, so it was removed rather than left looking finished. The octagon's
+> object-handling points stay `NOT_MODELLED`.
+>
 > **THE COLOURED PROPS WERE WASHED OUT BECAUSE A ROUGHNESS MAP WAS BEING USED
 > AS THE ALBEDO.** `pvc_material` passed `rough_pvc.png` as the `albedo_map` as
 > well as the roughness map, and `stripe_`/`plastic_`/`fabric_material` were
