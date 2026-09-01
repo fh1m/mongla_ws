@@ -41,7 +41,9 @@ Typical usage:
 """
 
 import math
+import os
 import re
+import sys
 from argparse import ArgumentParser
 
 import yaml
@@ -312,6 +314,18 @@ class ModelParams:
         # underwater_fx falls back to uniform attenuation when no range image
         # arrives, so the sim is correct either way, just less faithful.
         self.range_always_on = int(bool(range_cameras))
+        # THE RANGE CAMERAS GET THEIR OWN RESOLUTION AND RATE.
+        #
+        # They mirrored the colour cameras exactly -- 640x480 at 30 Hz -- and
+        # that is what costs 12 Hz -> 4 Hz when they are on. Attenuation is a
+        # smooth, low-frequency correction: it does not need the detector's
+        # resolution, and nothing reads the range image per-pixel-sharp.
+        # Separating them is what makes an affordability sweep possible at all;
+        # before this the only choice was full price or nothing.
+        rng = (range_cameras if isinstance(range_cameras, dict) else {})
+        self.range_width = int(rng.get("width", 160))
+        self.range_height = int(rng.get("height", 120))
+        self.range_update_rate = float(rng.get("update_rate", 5.0))
 
         # LIVERY. An SDF <material> overrides the mesh's embedded one, so the
         # hull can be ours without touching the vendor .dae. Emissive is applied
@@ -589,9 +603,33 @@ def get_model_params_from_config(config_path: str) -> ModelParams:
     )
 
 
+def _repaint_meshes(config_path: str, model_dir: str) -> None:
+    """Regenerate the livery meshes alongside the SDF, from the same config.
+
+    Run HERE rather than by hand for the reason the SDF/URDF drift guard
+    exists: a `livery:` edit that is not followed by a mesh regeneration ships
+    a vehicle wearing the previous colours, and nothing would say so.
+    """
+    import yaml as _yaml
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gen_livery_mesh import repaint                        # noqa: PLC0415
+
+    with open(config_path) as fh:
+        lv = (_yaml.safe_load(fh) or {}).get("livery") or {}
+    hull = lv.get("hull", [0.62, 0.63, 0.65])
+    accent = lv.get("thruster", [0.09, 0.26, 0.30])
+    meshes = os.path.join(model_dir, "meshes")
+    for stem in ("duburi_heavy", "t200_ccw_prop", "t200_cw_prop"):
+        src = os.path.join(meshes, f"{stem}.dae")
+        if os.path.isfile(src):
+            repaint(src, os.path.join(meshes, f"{stem}_livery.dae"),
+                    hull, accent)
+
+
 def generate_model(input_path: str, output_path: str, config_path: str) -> None:
     """Render the template at input_path into output_path using config_path."""
     params = vars(get_model_params_from_config(config_path)) | globals()
+    _repaint_meshes(config_path, os.path.dirname(os.path.abspath(input_path)))
 
     with open(input_path) as f:
         s = f.read()
