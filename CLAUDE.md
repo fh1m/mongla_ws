@@ -603,6 +603,34 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > neutral black now and the blades carry the render's blue-teal, **the one
 > coloured thing on an otherwise black vehicle**.
 >
+> **SUNLIGHT: MOVING CAUSTICS AND SURFACE GLARE — and the engine question,
+> answered with numbers.** Both competitions run in **outdoor pools under direct
+> sun**, and the sim had neither. `underwater_fx` gained `SunlightField` and
+> `SurfaceGlare`, on by default via the lighting presets (clear 0.70/0.45,
+> competition 0.50/0.35, murky 0.22/0.15 — murky water scatters the net out).
+> **Caustics are WORLD-ANCHORED**, sampled at the world position each pixel
+> looks at via the range image; painted in image space they swim with the camera
+> and read as a dirty lens. Measured: **55.8 % of floor pixels change**, floor
+> mean 93.33 → 92.86 (brightness preserved — caustics redistribute light, they
+> do not add it). Three defects on the way, each of which looked like it worked:
+> the raw wave sum drove frame gain to **−0.082** (negative light — take the
+> positive part, light focuses where the surface is concave); soft blotches
+> instead of filaments (a caustic is an *envelope where rays cross*, far peakier
+> than the surface making it); and **a parameter declared but missing from
+> `_on_params` is silently un-tunable** — `ros2 param set` says success, the
+> node keeps its construction-time value.
+> **`LensFlare` JOINS `<fog>` AND THE PARTICLE EMITTER as a third feature that
+> does not reach these sensors.** It loads and binds (`gz -v 4` prints "Lens
+> flare attached to camera named") and produces **nothing**: flare off mean 99.8
+> / p99 118, on 99.5 / 117, with a positional light 99.3 / 117. Wiring kept and
+> documented so nobody retries it. **The trap: the sim runs `gz -v 2`, which
+> hides info messages — "no flare log" was not evidence of failure.**
+> **GPU IS ALREADY USED AND IS NOT THE BOTTLENECK**: measured live at **23–29 %,
+> 416 MiB of 6144** while the gz server sat at **207 % CPU**. The sim is
+> CPU-bound, so GPU shader work is nearly free — which is the quantitative
+> reason to stay on Gazebo rather than switch engines. More CPU post-processing
+> is the expensive direction. [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
+>
 > **THE SIM FLIES THE REAL DUBOMINI NOW.** Two rounds of recolouring a BlueROV2
 > could not fix what was actually wrong: it was a BlueROV2. `hullv3.stl` (the
 > team's own CAD, 2.15 M triangles, 3,276 components, **Y-up millimetres**) is

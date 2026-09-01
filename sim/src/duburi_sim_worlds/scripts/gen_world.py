@@ -129,6 +129,13 @@ LIGHTING_PRESETS = {
         "fog_density": 0.01,
         "fx": {
             "turbidity": 0.15,
+            # SUNLIGHT. Both competitions are run in OUTDOOR pools,
+            # so the moving light net and the surface glare are the
+            # normal appearance of a frame, not an extra. They scale
+            # with clarity: clear water carries the net furthest,
+            # murky water scatters it out before it reaches the floor.
+            "caustics": 0.7,
+            "glare": 0.45,
             "backscatter": 0.30,
             "blur_sigma": 0.3,
             "noise": 0.006,
@@ -143,6 +150,13 @@ LIGHTING_PRESETS = {
         "fog_density": 0.028,
         "fx": {
             "turbidity": 0.45,
+            # SUNLIGHT. Both competitions are run in OUTDOOR pools,
+            # so the moving light net and the surface glare are the
+            # normal appearance of a frame, not an extra. They scale
+            # with clarity: clear water carries the net furthest,
+            # murky water scatters it out before it reaches the floor.
+            "caustics": 0.5,
+            "glare": 0.35,
             "backscatter": 0.55,
             "blur_sigma": 0.8,
             "noise": 0.012,
@@ -158,6 +172,13 @@ LIGHTING_PRESETS = {
         "fog_colour": [0.10, 0.26, 0.30],
         "fx": {
             "turbidity": 0.80,
+            # SUNLIGHT. Both competitions are run in OUTDOOR pools,
+            # so the moving light net and the surface glare are the
+            # normal appearance of a frame, not an extra. They scale
+            # with clarity: clear water carries the net furthest,
+            # murky water scatters it out before it reaches the floor.
+            "caustics": 0.22,
+            "glare": 0.15,
             "backscatter": 0.75,
             "blur_sigma": 1.4,
             "noise": 0.020,

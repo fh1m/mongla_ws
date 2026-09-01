@@ -223,6 +223,7 @@
           </noise>
           <optical_frame_id>front_camera_link_optical</optical_frame_id>
         </camera>
+      
       </sensor>
 
       <!-- Ground-truth 2D boxes, from the GPU, for dataset labelling.
@@ -344,6 +345,7 @@
           </noise>
           <optical_frame_id>bottom_camera_link_optical</optical_frame_id>
         </camera>
+      
       </sensor>
 
       <!-- Ground-truth 2D boxes, from the GPU, for dataset labelling.

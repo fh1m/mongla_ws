@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+import math
 import time
 
 import cv2
@@ -137,6 +138,182 @@ def _vignette_mask(shape: tuple, vignette: float) -> np.ndarray:
 
 
 
+# Sun through water: warm, and biased away from blue because the blue is what
+# the water already scatters back at you everywhere else.
+GLARE_RGB = np.array([1.00, 0.96, 0.86], dtype=np.float32)
+
+# The vehicle's UNDERWATER horizontal FOV, 57.7 deg. NOT the 80 deg on the
+# datasheet: that is the in-air figure and Snell's law narrows it through a flat
+# port. Used to turn a pixel into a ray, so a caustic lands where the pixel is
+# actually looking rather than 28 % off.
+CAMERA_HFOV = 1.0064
+
+# How tightly caustic light concentrates into filaments. 1.0 is the raw surface
+# curvature and renders as soft blotches; real caustics are an envelope where
+# rays cross, which is far peakier than the surface that makes them.
+CAUSTIC_SHARPNESS = 2.6
+
+class SunlightField:
+    """Moving caustics and surface glare, the way an outdoor pool actually looks.
+
+    WHY THIS IS HERE AND NOT IN THE RENDERER
+    ----------------------------------------
+    RoboSub and SAUVC are both run in OUTDOOR pools under direct sun, so the
+    wobbling light net on the floor and the glare off the surface are not
+    decoration -- they are the dominant appearance of most frames a mission
+    consumes, and the sim has never had either.
+
+    Three renderer routes were tried and measured before writing this:
+
+      * `<scene><fog>` -- never reaches camera sensors (18 m -> 3 m left the far
+        wall pixel-identical). Already replaced by the LUT above.
+      * `particle_emitter` -- never reaches camera sensors (stddev 1.4700 with
+        vs 1.4678 without). Already replaced by ParticleField above.
+      * `LensFlare` -- DOES attach (gz prints "Lens flare attached to camera
+        named" at -v 4) and produces NO measurable output in this scene, with
+        the directional sun and with a purpose-added positional light:
+        flare off mean 99.8 / p99 118, flare on mean 99.5 / p99 117.
+
+    So this is the third effect in this file that exists because the renderer
+    would not do it. That is a pattern, not an accident, and it is the reason
+    the answer to "are we at Gazebo\'s ceiling" is "for THESE effects, yes --
+    and the CPU path already works".
+
+    CAUSTICS ARE WORLD-ANCHORED, WHICH IS THE WHOLE DIFFICULTY
+    ----------------------------------------------------------
+    A caustic pattern painted in image space swims with the camera and reads as
+    a dirty lens. Real caustics are fixed to the world: the vehicle moves
+    THROUGH them. So the pattern is sampled at the world position each pixel is
+    looking at, recovered from the range image the depth camera already
+    publishes -- which is why `range_cameras` being on by default matters
+    beyond attenuation.
+
+    The interference maths is the same one `gen_pool_texture._caustics()` bakes
+    into the floor albedo: nine travelling waves, amplitude 1/k^2, Laplacian
+    positive part, because light focuses where the surface is concave. Two
+    failure modes are already recorded there and inherited here -- too few long
+    waves gives parallel diagonal BANDS (a directional prior a detector will
+    learn), and 1/k amplitude lets the shortest wave dominate after the k^2
+    Laplacian.
+
+    The bake stays: it is the still, always-correct floor pattern. This adds the
+    MOTION on top, and unlike the bake it lands on every surface in view -- the
+    props and the pool walls included, which the floor-only bake never touched.
+    """
+
+    # Nine waves, wavelengths 0.22-0.65 m, as the floor bake uses.
+    _K = np.array([2.0 * np.pi / w for w in
+                   (0.65, 0.58, 0.49, 0.44, 0.38, 0.33, 0.29, 0.25, 0.22)],
+                  dtype=np.float32)
+
+    def __init__(self, seed: int = 11) -> None:
+        rng = np.random.default_rng(seed)
+        ang = rng.uniform(0.0, 2.0 * np.pi, len(self._K)).astype(np.float32)
+        self._dir = np.stack([np.cos(ang), np.sin(ang)], axis=1)
+        # Deep-water dispersion: omega = sqrt(g k). Short waves travel faster,
+        # which is what stops the pattern moving as one rigid sheet.
+        self._omega = np.sqrt(9.81 * self._K).astype(np.float32)
+        self._amp = (1.0 / self._K ** 2).astype(np.float32)
+        self._amp /= self._amp.sum()
+        self._phase = rng.uniform(0.0, 2.0 * np.pi, len(self._K)).astype(np.float32)
+
+    def sample(self, wx, wy, t):
+        """Caustic intensity at world (wx, wy) and time t, mean ~1."""
+        s = np.zeros_like(wx, dtype=np.float32)
+        for i in range(len(self._K)):
+            ph = (self._K[i] * (self._dir[i, 0] * wx + self._dir[i, 1] * wy)
+                  - self._omega[i] * t + self._phase[i])
+            # The LAPLACIAN of the surface, not the surface: light focuses where
+            # it is concave, which is -k^2 * amplitude * sin/cos of the phase.
+            s += (self._amp[i] * self._K[i]) * np.cos(ph)
+        # POSITIVE PART, THEN MEAN-CENTRED -- and both halves matter.
+        #
+        # Light FOCUSES where the surface is concave and merely thins where it
+        # is convex; there is no such thing as negative light. The raw sum runs
+        # symmetrically about zero, and used directly it drove the frame gain to
+        # -0.082, i.e. a negative image. Clamping at zero gives the bright
+        # filaments their characteristic sparse, peaky look.
+        #
+        # Subtracting the mean afterwards keeps the frame's average brightness
+        # unchanged, so turning caustics on does not silently expose the whole
+        # image up -- the pattern redistributes light rather than adding it.
+        s = np.maximum(s, 0.0)
+        # SHARPEN INTO FILAMENTS. The positive part alone is smooth, and the
+        # first render showed exactly that: soft blotches rather than the thin
+        # bright net a pool actually has. Real caustics are a CAUSTIC -- an
+        # envelope where rays cross -- so the intensity is concentrated far more
+        # tightly than the surface curvature that produces it. Raising the
+        # focused part to a power reproduces that: peaks stay, the broad
+        # low-level glow collapses.
+        peak = float(s.max())
+        if peak > 1e-6:
+            s = (s / peak) ** CAUSTIC_SHARPNESS
+        return s - float(s.mean())
+
+    def apply(self, img, range_m, pose, t, strength, hfov):
+        """Multiply the frame by a world-anchored, animated caustic net."""
+        if range_m is None or strength <= 0.0 or range_m.shape[:2] != img.shape[:2]:
+            return img
+        h, w = img.shape[:2]
+        r = np.nan_to_num(range_m, nan=6.0, posinf=6.0, neginf=6.0)
+        r = np.clip(r, 0.15, 25.0).astype(np.float32)
+
+        # Pixel ray directions in the camera frame, then the world XY the ray
+        # lands on. Only x/y matter: caustics are a function of position on the
+        # horizontal plane, which is what makes them stay put as the hull moves.
+        fx = (0.5 * w) / np.tan(0.5 * hfov)
+        u = (np.arange(w, dtype=np.float32) - 0.5 * w) / fx
+        v = (np.arange(h, dtype=np.float32) - 0.5 * h) / fx
+        uu, vv = np.meshgrid(u, v)
+        px, py, pz, yaw = pose
+        c, s_ = np.cos(yaw), np.sin(yaw)
+        # camera looks along +x body; +u is to the right (-y), +v is down (-z)
+        bx, by = 1.0, -uu
+        wx = px + r * (bx * c - by * s_)
+        wy = py + r * (bx * s_ + by * c)
+
+        net = self.sample(wx, wy, t)
+        # Caustics wash out with distance: the pattern is projected from the
+        # surface and scattering blurs it long before the geometry disappears.
+        fade = np.clip(1.0 - (r - 1.0) / 9.0, 0.15, 1.0)
+        # Clamped positive: the darkest a caustic shadow gets is still lit by
+        # scattered light, and a negative gain is an inverted image.
+        gain = np.clip(1.0 + strength * net * fade, 0.25, 3.0)
+        return img * gain[:, :, None]
+
+
+class SurfaceGlare:
+    """Brightening and bloom toward the water surface.
+
+    Looking up in an outdoor pool, the surface is a bright, blown-out sheet with
+    the sun disc smeared across it -- the single strongest cue that the vehicle
+    is shallow and pointing up, and a genuine hazard for a detector, which sees
+    a washed-out frame exactly when it is trying to find a gate near the
+    surface.
+
+    Applied in image space because that is where it lives: the effect is the
+    camera looking at a bright thing, not a property of the geometry. It keys
+    off the RANGE image so the bloom lands on distant bright regions rather
+    than being smeared over the whole frame.
+    """
+
+    def apply(self, img, range_m, strength):
+        if strength <= 0.0:
+            return img
+        lum = img.mean(axis=2)
+        # The blown-out part only: a soft knee well above the frame mean, so a
+        # merely bright floor does not bloom.
+        thr = float(np.percentile(lum, 96.0))
+        hot = np.clip((lum - thr) / max(1e-3, 1.0 - thr), 0.0, 1.0)
+        if range_m is not None and range_m.shape[:2] == img.shape[:2]:
+            r = np.nan_to_num(range_m, nan=25.0, posinf=25.0, neginf=25.0)
+            # Only FAR bright things bloom: the surface and the sun through it,
+            # not a prop 40 cm from the lens.
+            hot *= np.clip((r - 2.0) / 6.0, 0.0, 1.0)
+        bloom = cv2.GaussianBlur(hot, (0, 0), sigmaX=max(2.0, img.shape[1] / 40.0))
+        return img + (strength * bloom)[:, :, None] * GLARE_RGB.reshape(1, 1, 3)
+
+
 class ParticleField:
     """Drifting suspended particulate, composited into the camera image.
 
@@ -207,6 +384,10 @@ class ParticleField:
         return cv2.GaussianBlur(mask, (5, 5), 1.4)
 
 
+# Stateless, so one module-level instance is correct and costs nothing.
+GLARE = SurfaceGlare()
+
+
 def apply_underwater_fx(
     bgr: np.ndarray,
     depth_m: float,
@@ -221,6 +402,12 @@ def apply_underwater_fx(
     range_m=None,
     # (h, w) float32 alpha map of suspended particulate, from ParticleField.
     particles=None,
+    # Sunlight. `sun` is (SunlightField, (x, y, z, yaw), t_seconds, hfov_rad);
+    # the two strengths are separate because caustics belong to the SCENE and
+    # glare belongs to the CAMERA, and a session may want one without the other.
+    caustics: float = 0.0,
+    glare: float = 0.0,
+    sun=None,
 ) -> np.ndarray:
     """Return a degraded BGR image. depth_m is negative below the surface."""
     depth = max(0.05, abs(float(depth_m)))
@@ -289,6 +476,22 @@ def apply_underwater_fx(
         far = np.clip(rel * 0.02 * t, 0.0, 0.55)
         out = out * (1.0 - far) + HAZE_RGB.reshape(1, 1, 3) * far
 
+    # SUNLIGHT, after attenuation and before blur.
+    #
+    # Order matters and is not arbitrary: caustics are light arriving at a
+    # surface, so they belong with the surface's own colour and must be dimmed
+    # by the same water the surface is seen through -- applying them after the
+    # attenuation LUT would paint a crisp light net onto a wall that is
+    # supposed to be washed out. Glare is the opposite: it is what the CAMERA
+    # does with a bright source, so it sits outside the water term and is added
+    # last of the light effects, before blur smears it.
+    if sun is not None and (caustics > 0.0 or glare > 0.0):
+        field, pose, t_now, hfov = sun
+        if caustics > 0.0:
+            out = field.apply(out, range_m, pose, t_now, caustics, hfov)
+        if glare > 0.0:
+            out = GLARE.apply(out, range_m, glare)
+
     # ONE uint8 conversion, at the very end.
     #
     # Blur, noise and vignette each used to round-trip the whole frame
@@ -335,10 +538,18 @@ class UnderwaterFx(Node):
         # snow emitter -- that one is invisible to camera sensors (see
         # ParticleField) -- it is the only particulate the detector ever sees.
         self.declare_parameter('particulate', 0.35)
+        # SUNLIGHT. Off by default: both change every frame a detector sees,
+        # so they are a stated choice per session rather than something that
+        # quietly appears in every capture -- the same stance as `lens_flare`.
+        self.declare_parameter('caustics', 0.0)
+        self.declare_parameter('glare', 0.0)
         self.declare_parameter('randomize_on_start', False)
         self.declare_parameter('enabled', True)
 
         self._depth = -0.8
+        self._pose = (0.0, 0.0, -0.8, 0.0)
+        self._sun = SunlightField()
+        self._t0 = time.monotonic()
         # Latest range image per camera, for per-pixel attenuation. None until
         # one arrives, and the filter falls back to uniform if it never does --
         # so a missing depth sensor degrades to the old behaviour rather than
@@ -381,6 +592,8 @@ class UnderwaterFx(Node):
         self._vignette = float(self.get_parameter('vignette').value)
         self._atten_scale = float(self.get_parameter('atten_scale').value)
         self._particulate = float(self.get_parameter('particulate').value)
+        self._caustics = float(self.get_parameter('caustics').value)
+        self._glare = float(self.get_parameter('glare').value)
         self._enabled = bool(self.get_parameter('enabled').value)
 
     def _randomize(self) -> None:
@@ -411,12 +624,31 @@ class UnderwaterFx(Node):
                 self._atten_scale = float(p.value)
             elif p.name == 'particulate':
                 self._particulate = float(p.value)
+            # A parameter declared and read at startup but MISSING here is
+            # silently un-tunable: `ros2 param set` reports success, the value
+            # changes in the parameter server, and the node keeps using the one
+            # it read at construction. Measured on the first run of this
+            # feature -- caustics 0.0 -> 0.45 moved the frame diff by 0.4 out of
+            # 10.5, which reads as "the effect does nothing" and was in fact
+            # "the effect was never switched on".
+            elif p.name == 'caustics':
+                self._caustics = float(p.value)
+            elif p.name == 'glare':
+                self._glare = float(p.value)
             elif p.name == 'enabled':
                 self._enabled = bool(p.value)
         return SetParametersResult(successful=True)
 
     def _on_odom(self, msg: Odometry) -> None:
         self._depth = float(msg.pose.pose.position.z)
+        # FULL POSE, not just depth. Caustics are sampled at the world position
+        # each pixel looks at, so the pattern stays put in the world while the
+        # vehicle moves through it. Anchored to the camera instead, it swims
+        # with the view and reads as a dirty lens.
+        pos, ori = msg.pose.pose.position, msg.pose.pose.orientation
+        self._pose = (float(pos.x), float(pos.y), float(pos.z),
+                      math.atan2(2.0 * (ori.w * ori.z + ori.x * ori.y),
+                                 1.0 - 2.0 * (ori.y * ori.y + ori.z * ori.z)))
 
     def _on_range(self, cam: str, msg: Image) -> None:
         # 32FC1 from Gazebo's depth_camera: metres along the optical axis.
@@ -476,6 +708,10 @@ class UnderwaterFx(Node):
                 self._atten_scale,
                 range_m=self._range.get(cam),
                 particles=particles,
+                caustics=self._caustics,
+                glare=self._glare,
+                sun=(self._sun, self._pose, time.monotonic() - self._t0,
+                     CAMERA_HFOV),
             )
         pub.publish(_bgr_to_msg(bgr, msg.header.stamp, msg.header.frame_id))
 
@@ -489,6 +725,9 @@ class UnderwaterFx(Node):
             'atten_scale': self._atten_scale,
             'enabled': self._enabled,
             'depth_m': self._depth,
+            'particulate': self._particulate,
+            'caustics': self._caustics,
+            'glare': self._glare,
         }
 
 

@@ -4,6 +4,8 @@
     atten_scale: 1.8
     backscatter: 0.75
     blur_sigma: 1.4
+    caustics: 0.22
+    glare: 0.15
     noise: 0.02
     turbidity: 0.8
     vignette: 0.35

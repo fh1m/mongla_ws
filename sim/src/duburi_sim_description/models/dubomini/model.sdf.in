@@ -332,6 +332,45 @@
           </noise>
           <optical_frame_id>front_camera_link_optical</optical_frame_id>
         </camera>
+      
+        <!-- SUN GLARE. RoboSub and SAUVC are both run in OUTDOOR pools under
+             direct sun, so glare is not decoration -- it is the dominant
+             appearance of a frame looking anywhere near the surface, and a
+             detector that has never seen it meets it for the first time at the
+             competition.
+
+             `LensFlare` is a first-party Harmonic RENDER PASS and it attaches
+             INSIDE the <sensor>, which is the server-side sensor path -- so
+             unlike <scene><fog> and the particle emitter, it reaches camera
+             images rather than only the GUI. That distinction is the whole
+             reason this is achievable at all; see TROUBLESHOOTING.md.
+
+             STRIPPED, not disabled, when off. `always_on 0` does not stop a
+             Gazebo sensor rendering and a disabled plugin still costs its pass
+             -- the same trap that made the range cameras cost a third of the
+             frame rate while claiming to be off. -->
+        <plugin filename="gz-sim-lens-flare-system"
+                name="gz::sim::systems::LensFlare">
+          <!-- MEASURED AND UNPROVEN -- read before spending time here.
+               The plugin DOES load and bind: at `-v 4` gz prints "Lens flare
+               attached to camera named" for both cameras. It then produces NO
+               MEASURABLE OUTPUT in this scene. Tested pointing up at the sun
+               from underwater and from the air, with `light_name` bound to the
+               directional `sun` AND to a purpose-added positional light:
+
+                   flare off   mean 99.8  p99 118  saturated 0.00 %
+                   flare on    mean 99.5  p99 117  saturated 0.00 %
+                   point light mean 99.3  p99 117  saturated 0.00 %
+
+               So the wiring is kept and correct, and the EFFECT is delivered by
+               `underwater_fx.SurfaceGlare` instead -- the same decision the
+               fog and the particle emitter forced. Do not re-run this
+               experiment; it is recorded so nobody has to. -->
+          <light_name>sun</light_name>
+          <scale>@flare_scale</scale>
+          <color>@flare_colour</color>
+        </plugin>
+        <!-- LENSFLARE -->
       </sensor>
 
       <!-- Ground-truth 2D boxes, from the GPU, for dataset labelling.
@@ -453,6 +492,45 @@
           </noise>
           <optical_frame_id>bottom_camera_link_optical</optical_frame_id>
         </camera>
+      
+        <!-- SUN GLARE. RoboSub and SAUVC are both run in OUTDOOR pools under
+             direct sun, so glare is not decoration -- it is the dominant
+             appearance of a frame looking anywhere near the surface, and a
+             detector that has never seen it meets it for the first time at the
+             competition.
+
+             `LensFlare` is a first-party Harmonic RENDER PASS and it attaches
+             INSIDE the <sensor>, which is the server-side sensor path -- so
+             unlike <scene><fog> and the particle emitter, it reaches camera
+             images rather than only the GUI. That distinction is the whole
+             reason this is achievable at all; see TROUBLESHOOTING.md.
+
+             STRIPPED, not disabled, when off. `always_on 0` does not stop a
+             Gazebo sensor rendering and a disabled plugin still costs its pass
+             -- the same trap that made the range cameras cost a third of the
+             frame rate while claiming to be off. -->
+        <plugin filename="gz-sim-lens-flare-system"
+                name="gz::sim::systems::LensFlare">
+          <!-- MEASURED AND UNPROVEN -- read before spending time here.
+               The plugin DOES load and bind: at `-v 4` gz prints "Lens flare
+               attached to camera named" for both cameras. It then produces NO
+               MEASURABLE OUTPUT in this scene. Tested pointing up at the sun
+               from underwater and from the air, with `light_name` bound to the
+               directional `sun` AND to a purpose-added positional light:
+
+                   flare off   mean 99.8  p99 118  saturated 0.00 %
+                   flare on    mean 99.5  p99 117  saturated 0.00 %
+                   point light mean 99.3  p99 117  saturated 0.00 %
+
+               So the wiring is kept and correct, and the EFFECT is delivered by
+               `underwater_fx.SurfaceGlare` instead -- the same decision the
+               fog and the particle emitter forced. Do not re-run this
+               experiment; it is recorded so nobody has to. -->
+          <light_name>sun</light_name>
+          <scale>@flare_scale</scale>
+          <color>@flare_colour</color>
+        </plugin>
+        <!-- LENSFLARE -->
       </sensor>
 
       <!-- Ground-truth 2D boxes, from the GPU, for dataset labelling.
