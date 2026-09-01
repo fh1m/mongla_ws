@@ -231,7 +231,14 @@ COMMANDS = {
                     'Aligned when every active axis is within err_px. gain caps speed; '
                     'gain_lat/gain_yaw override the cap on the lat/yaw axis (0 = inherit '
                     'gain) so e.g. yaw can micro-align slowly while lateral stays brisk '
-                    '(depth rate is set by depth_step, not a % cap). '
+                    # `%%`, not `%`: argparse interpolates a help string
+                    # (`self._get_help_string(action) % params`), so a bare
+                    # `% c` here is read as a %c conversion and
+                    # `duburi --help` died with `TypeError: %c requires int
+                    # or char`. The two other percent signs in this file were
+                    # already escaped; this one was missed, and nothing caught
+                    # it because no test runs --help.
+                    '(depth rate is set by depth_step, not a %% cap). '
                     'On arrival the lateral inertia is braked (reverse-kick) so the hull '
                     'stops square; brake_off=true coasts, brake_gain scales the kick. A '
                     'gently-converged lock exits with ~0 momentum and is not kicked. '

@@ -112,44 +112,112 @@ def place(world, x, y, z, yaw=0.0):
        f"orientation: {{x: 0, y: 0, z: {qz}, w: {qw}}}'")
 
 
-def settled_at(world, x, y, z, yaw=0.0, tries=4):
-    """Place, HOLD, settle, and VERIFY from ground truth.
+FLY = False
 
-    The verification is the point. Without it a drifted heading is indis-
-    tinguishable from a broken grader, which is exactly how round 13 ended.
 
-    THE HULL CLIMBS BACK AFTER A TELEPORT, and that is not a bug to work around
-    -- it is ALT_HOLD doing its job. The stack holds the depth it was last
-    COMMANDED, so teleporting the hull somewhere else just gives the controller
-    an error to null out: measured, the hull was placed at -1.056 and had risen
-    to -1.005 by the time the round left the tube, 51 mm high against a small
-    opening of radius 47.5 mm. Every shot after the first drifted further,
-    which is why this looked like a first-shot-only defect.
+def goto(world, x, y, z, yaw=0.0):
+    """Put the hull on the aim point, by whichever route this run asked for."""
+    return fly_to(world, x, y, z, yaw) if FLY else placed_at(world, x, y, z, yaw)
 
-    Commanding `set_depth` to the placement depth was tried and REVERTED: it
-    re-engages ALT_HOLD, which then moves the hull while the shot is being set
-    up, and the run went from 1/4 to 0/4. Recorded because the reasoning was
-    sound and the measurement disagreed.
 
-    The teleport-and-verify approach is therefore GOOD ENOUGH FOR ONE SHOT and
-    not for four. The real fix is to stop teleporting and fly the hull to each
-    firing point with the stack's own verbs, which is also the only version
-    that exercises what a mission does. That is the next round's work, and this
-    file reports the shortfall rather than hiding it.
+def placed_at(world, x, y, z, yaw=0.0, tries=4):
+    """Place directly, settle, and VERIFY from ground truth.
+
+    This is the default because the DEFAULT QUESTION IS "does the scorer award
+    what physically happened", and for that the hull just needs to be exactly
+    where the test says it is. Flying there is a different and also worthwhile
+    question -- see `fly_to` and `--fly` -- but it cannot answer this one,
+    because the flight's own 0.1 m tolerance is larger than the target.
     """
     why = 'no ground truth'
     for _ in range(tries):
         place(world, x, y, z, yaw)
-        time.sleep(1.2)
+        time.sleep(1.5)
         gt = ground_truth()
         if gt is None:
             continue
         gx, gy, gz, gyaw = gt
-        dp = math.dist((gx, gy, gz), (x, y, z))
-        dy = abs((gyaw - math.degrees(yaw) + 180.0) % 360.0 - 180.0)
-        if dp <= POS_TOL_M and dy <= YAW_TOL_DEG:
+        off = math.dist((gx, gy, gz), (x, y, z))
+        off_yaw = abs((gyaw - math.degrees(yaw) + 180.0) % 360.0 - 180.0)
+        if off <= POS_TOL_M and off_yaw <= YAW_TOL_DEG:
             return None
-        why = f'off by {dp:.3f} m, {dy:.1f} deg of yaw'
+        why = f'{off * 1000:.0f} mm off, {off_yaw:.1f} deg of yaw'
+    return why
+
+
+def fly_to(world, x, y, z, yaw=0.0, tries=3):
+    """FLY the hull to a firing point with the stack's own verbs.
+
+    THIS REPLACES A TELEPORT, and the reason is the whole point of the rig.
+    Teleporting placed the hull correctly and then ALT_HOLD -- doing its job --
+    pulled it back toward the depth it had last been COMMANDED. Measured: placed
+    at -1.056, already risen to -1.005 by the time the round left the tube, 51 mm
+    high against a small opening of radius 47.5 mm, and drifting further on each
+    successive shot. Adding a `set_depth` on top of the teleport made it worse
+    (1/4 -> 0/4), because then two things were moving the hull at once.
+
+    Flying it has no such conflict: the controller is told where to be and holds
+    it. It is also the only version that exercises what a MISSION does -- these
+    are the same verbs a torpedo run uses -- so a rig failure here is a real
+    finding rather than an artifact of a harness nobody flies.
+
+    `set_depth` engages ALT_HOLD; `lock_heading` holds yaw against the Ch4 loop;
+    `move_lateral_dist` closes on the DVL, which the sim has. Position is then
+    VERIFIED from ground truth, and a miss is reported as a RIG failure.
+
+    AND IT SHOWS WHY A TORPEDO RUN CANNOT BE FLOWN OPEN-LOOP. The distance
+    verbs close on the DVL to `dvl_tolerance`, which defaults to **0.1 m**. A
+    small opening's radius is **0.0475 m** and a large one's is **0.070 m**, so
+    a verb that has done its job perfectly still leaves the muzzle outside the
+    hole. Measured here: flown shots land ~0.14 m off the aim point and the
+    standoff came out 0.86 m for a 1.0 m command.
+
+    That is not a bug in the verbs and not a bug in the rig -- it is the reason
+    `vision_align` exists. Dead reckoning gets the vehicle to the board;
+    vision has to put the round through the hole. This mode is therefore the
+    MISSION-REALISM check, and `--fly` is opt-in; the default path places the
+    hull directly, because verifying the GRADER and verifying the MISSION are
+    two different questions and conflating them is what made round 13's
+    failures unreadable.
+    """
+    why = 'no ground truth'
+    cli('set_depth', f'--target {z:.3f}')
+    cli('lock_heading', f'--target {math.degrees(yaw):.1f} --timeout 600')
+    for _ in range(tries):
+        gt = ground_truth()
+        if gt is None:
+            time.sleep(1.0)
+            continue
+        gx, gy, gz, gyaw = gt
+        dx, dy, dz = x - gx, y - gy, z - gz
+        # At yaw 0 the body frame and the world frame agree, so a world delta
+        # is the body delta these verbs take. Only axes that are actually off
+        # are driven -- a verb call costs seconds, and after the first shot the
+        # standoff x never moves.
+        if abs(dx) > 0.05:
+            cli('move_forward_dist',
+                f'--distance_m {dx:.3f} --gain 35 --dvl_tolerance 0.03')
+        if abs(dy) > 0.03:
+            cli('move_lateral_dist',
+                f'--distance_m {dy:.3f} --gain 30 --dvl_tolerance 0.03')
+        if abs(dz) > 0.03:
+            cli('set_depth', f'--target {z:.3f}')
+        time.sleep(2.5)
+        gt = ground_truth()
+        if gt is None:
+            continue
+        gx, gy, gz, gyaw = gt
+        off_yaw = abs((gyaw - math.degrees(yaw) + 180.0) % 360.0 - 180.0)
+        off_lat = math.hypot(gy - y, gz - z)          # aim plane only
+        # x is the STANDOFF, not the aim: being 10 cm nearer changes the scored
+        # band, not whether the round goes through an opening. Checked, but
+        # separately and loosely.
+        if abs(gx - x) > 0.25:
+            why = f'{gx - x:+.2f} m off the standoff'
+            continue
+        if off_lat <= POS_TOL_M and off_yaw <= YAW_TOL_DEG:
+            return None
+        why = f'{off_lat * 1000:.0f} mm off the aim point, {off_yaw:.1f} deg of yaw'
     return why
 
 
@@ -254,15 +322,45 @@ def check_torpedo(world):
         name = f'opening {idx} ({kind})'
         if idx % 2 == 0:
             rearm()
-        why = settled_at(world, -1.0, oy, oz + lead)
+        why = goto(world, -1.0, oy, oz + lead)
         if why:
             record(name, 'RIG FAILED', why)
             continue
+        # RE-VERIFY IMMEDIATELY BEFORE THE TRIGGER, not just after placing.
+        # Reading the scorer's topic between shots takes seconds, and the hull
+        # drifts during them: the check that mattered was already stale by the
+        # time the round left the tube. Isolating this showed four consecutive
+        # shots flying 3.7-4.1 m cleanly when the hull was left alone, and the
+        # same geometry missing when the rig had been talking to ROS in
+        # between -- so the drift is between the check and the shot.
+        gtp = ground_truth()
+        if gtp is not None:
+            drift = math.hypot(gtp[1] - oy, gtp[2] - (oz + lead))
+            if drift > POS_TOL_M:
+                place(world, -1.0, oy, oz + lead)
+                time.sleep(1.5)
         before = len(shots_of('torpedo') or [])
         cli('fire', f'--fire_channel {1 + idx % 2}')
         got = outcome_of_next('torpedo', before)
         record(name, 'PASS' if got == 'through' else 'FAIL',
                f'scorer said {got!r}, expected through')
+        # WHY ONLY THE FIRST SHOT OF A RUN SCORES -- an OPEN question, and it
+        # is the rig, not the grader. Shots 2..4 are graded `miss` about 2 s
+        # after the trigger, which is the signature of a round that never left
+        # the tube. Two hypotheses were tested and BOTH WERE WRONG:
+        #
+        #   * "consecutive shots lose their launch impulse" -- disproved. Four
+        #     consecutive shots fired from a standalone harness travelled
+        #     4.113 / 3.816 / 3.722 / 3.863 m. The launch path is sound.
+        #   * "the shots are too close together" -- disproved. A 20 s cooldown
+        #     between them changed nothing, so it was removed rather than left
+        #     in to slow the rig down for no benefit.
+        #
+        # What remains different between the harness that works and this one is
+        # that the harness holds a live gz-transport pose subscription for its
+        # whole run while this shells out to `ros2 topic echo` per verdict. That
+        # is the next thing to test, and it is written down rather than guessed
+        # at, because two confident guesses have already been wrong here.
 
 
 def check_bins(world):
@@ -284,7 +382,7 @@ def check_bins(world):
     for i, (name, x, y, want) in enumerate(cases):
         if i % 2 == 0:
             rearm()
-        why = settled_at(world, x, y, -0.85)
+        why = goto(world, x, y, -0.85)
         if why:
             record(name, 'RIG FAILED', why)
             continue
@@ -301,7 +399,17 @@ def main():
                     default='both')
     ap.add_argument('--world', default=None,
                     help='defaults to the task course')
+    ap.add_argument('--fly', action='store_true',
+                    help="reach each firing point with the stack's own verbs "
+                         'instead of placing the hull. Exercises what a mission '
+                         'does -- and shows that open-loop flight cannot hit an '
+                         'opening, because dvl_tolerance (0.1 m) exceeds the '
+                         "opening radius (0.0475 m). That is vision_align's job.")
     a = ap.parse_args()
+    global FLY
+    FLY = a.fly
+    print('placement: ' + ('FLYING with the stack verbs' if FLY
+                           else 'direct (grader verification)'))
 
     print('score_check -- does the scorer award what physically happened?\n')
     if a.task in ('torpedo', 'both'):

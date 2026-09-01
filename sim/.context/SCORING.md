@@ -332,3 +332,53 @@ A round does not leave from the hull's centre: `payload_sim` spawns it
 more than a small opening's radius** (0.0475 m). The rig reads that parameter
 from the node rather than retyping it, and adds the gravity drop. A real mission
 carries the same lead in its `align(depth=)`.
+
+### Round 15 — flying the rig, and why a torpedo run needs vision
+
+`score_check` gained `--fly`, which reaches each firing point with the stack's
+own verbs (`set_depth`, `lock_heading`, `move_forward_dist`,
+`move_lateral_dist`) instead of placing the hull. It is **opt-in**, and the
+default is still a direct placement, because *verifying the grader* and
+*verifying the mission* are two different questions and round 13 showed what
+conflating them costs.
+
+**The flying mode produced a real mission finding.** The distance verbs close on
+the DVL to `dvl_tolerance`, default **0.1 m**. A small opening's radius is
+**0.0475 m** and a large one's **0.070 m**, so a verb that has done its job
+perfectly still leaves the muzzle outside the hole — measured, flown shots land
+~0.14 m off the aim point and a 1.0 m standoff command came out at 0.86 m.
+
+That is not a defect in the verbs or the rig. **It is the reason `vision_align`
+exists**: dead reckoning gets the vehicle to the board, and vision has to put
+the round through the hole. Worth stating because a torpedo mission written as
+"fly to the standoff and fire" cannot work, and nothing previously said so.
+
+### Still open: only the first shot of a run scores
+
+Torpedo stands at **1/4**, bins at **5/5**. Shots 2–4 are graded `miss` about
+2 s after the trigger — the signature of a round that never left the tube.
+**Two hypotheses were tested and both were wrong:**
+
+- *"consecutive shots lose their launch impulse"* — **disproved.** Four
+  consecutive shots from a standalone harness travelled 4.113 / 3.816 / 3.722 /
+  3.863 m. The launch path is sound.
+- *"the shots are too close together"* — **disproved.** A 20 s cooldown changed
+  nothing, and was removed rather than left in to slow the rig for no benefit.
+
+What still differs between the harness that works and the rig that does not is
+that the harness holds a live gz-transport pose subscription for its whole run,
+while the rig shells out to `ros2 topic echo` per verdict. That is the next
+thing to test. It is written down rather than guessed at, because two confident
+guesses have already been wrong here.
+
+**This is a rig limitation, not a grader one.** Every opening is covered by unit
+tests against the same geometry the mesh is cut from, and opening 0 passes
+end-to-end on every run. `score_check` exits non-zero rather than hiding it.
+
+### A crash nobody had hit
+
+`ros2 run duburi_planner duburi --help` died with `TypeError: %c requires int or
+char`. argparse interpolates help strings (`self._get_help_string(action) %
+params`), and one help string in `commands.py` had a bare `% cap` where the two
+others in the same file were correctly escaped `%%`. Nothing caught it because
+no test runs `--help`.
