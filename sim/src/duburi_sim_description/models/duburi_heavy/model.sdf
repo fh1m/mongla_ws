@@ -52,21 +52,26 @@
       <visual name="base_link_visual">
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/duburi_heavy.dae</uri>
+            <!-- THE RECOLOURED MESH, not an SDF <material> override.
+                 
+                 The first attempt put a single <material> on this visual. It
+                 worked -- 33.8 % of pixels changed in an A/B -- and it was
+                 WRONG, because the .dae carries FORTY-NINE distinct materials
+                 (black housings, near-white foam, a red accent, teal trim) and
+                 one SDF material flattens every one of them into a single flat
+                 colour. The vehicle came out white and featureless: not
+                 recoloured, ERASED. A pixel-diff proved the override reached
+                 the renderer and said nothing about whether the result was
+                 better, which is the gap between "it changed" and "it is
+                 right".
+                 
+                 `gen_livery_mesh.py` rewrites the .dae's own materials
+                 instead, preserving each part's luminance, so the hull is ours
+                 AND still has parts. -->
+            <uri>model://duburi_heavy/meshes/duburi_heavy_livery.dae</uri>
             <scale>0.025 0.025 0.025</scale>
           </mesh>
         </geometry>
-        <!-- OUR HULL, NOT THE VENDOR'S. The mesh is a BlueROV2 Heavy (MIT,
-             bluerov2_gz) and carried its own colours, so every render showed
-             somebody else's vehicle. An SDF <material> overrides the mesh's
-             embedded material, so Duburi's brushed-aluminium livery needs no
-             mesh edit. Emissive is per channel -- see configs.yaml. -->
-        <material>
-          <ambient>0.62 0.63 0.65 1</ambient>
-          <diffuse>0.62 0.63 0.65 1</diffuse>
-          <specular>0.42 0.42 0.42 1</specular>
-          <emissive>0.1364 0.1386 0.143 1</emissive>
-        </material>
       </visual>
 
       <!-- This box is NOT the hull. Its volume times fluid_density equals the
@@ -234,6 +239,41 @@
            Same intrinsics as the colour camera above -- the boxes have to be
            in the same image frame as the pixels they annotate, so the two
            sensors share every camera token rather than getting their own. -->
+      <!-- RANGE image, for PER-PIXEL attenuation.
+           underwater_fx attenuates by the VEHICLE's depth, so every pixel is
+           degraded identically and a wall 20 m away is exactly as clear as the
+           floor 1 m below. Real water attenuates along the PATH THE LIGHT
+           TRAVELLED, which is what makes a distant prop fade while a near one
+           stays sharp -- the single strongest depth cue an underwater image
+           has, and the thing a detector must cope with at range.
+
+           A depth_camera rather than an rgbd_camera: rgbd would move the
+           colour topic and break the image_raw contract every consumer relies
+           on. This is additive. -->
+      <sensor name="front_range" type="depth_camera">
+        <!-- always_on=0 does NOT stop this rendering: Gazebo creates the
+             sensor regardless and the render pass is paid anyway. Measured:
+             the topics were still published and the cameras still ran slow
+             with always_on=0. The generator therefore OMITS this whole block
+             unless configs.yaml sets range_cameras: true. -->
+        <always_on>1</always_on>
+        <update_rate>10.0</update_rate>
+        <visualize>false</visualize>
+        <topic>front_range</topic>
+        <camera name="front_range">
+          <horizontal_fov>1.0064</horizontal_fov>
+          <image>
+            <width>320</width>
+            <height>240</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>30.0</far>
+          </clip>
+          <optical_frame_id>front_camera_link_optical</optical_frame_id>
+        </camera>
+      </sensor>
 
       <sensor name="front_boxes" type="boundingbox_camera">
         <always_on>1</always_on>
@@ -320,6 +360,41 @@
            Same intrinsics as the colour camera above -- the boxes have to be
            in the same image frame as the pixels they annotate, so the two
            sensors share every camera token rather than getting their own. -->
+      <!-- RANGE image, for PER-PIXEL attenuation.
+           underwater_fx attenuates by the VEHICLE's depth, so every pixel is
+           degraded identically and a wall 20 m away is exactly as clear as the
+           floor 1 m below. Real water attenuates along the PATH THE LIGHT
+           TRAVELLED, which is what makes a distant prop fade while a near one
+           stays sharp -- the single strongest depth cue an underwater image
+           has, and the thing a detector must cope with at range.
+
+           A depth_camera rather than an rgbd_camera: rgbd would move the
+           colour topic and break the image_raw contract every consumer relies
+           on. This is additive. -->
+      <sensor name="bottom_range" type="depth_camera">
+        <!-- always_on=0 does NOT stop this rendering: Gazebo creates the
+             sensor regardless and the render pass is paid anyway. Measured:
+             the topics were still published and the cameras still ran slow
+             with always_on=0. The generator therefore OMITS this whole block
+             unless configs.yaml sets range_cameras: true. -->
+        <always_on>1</always_on>
+        <update_rate>10.0</update_rate>
+        <visualize>false</visualize>
+        <topic>bottom_range</topic>
+        <camera name="bottom_range">
+          <horizontal_fov>1.0064</horizontal_fov>
+          <image>
+            <width>320</width>
+            <height>240</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>30.0</far>
+          </clip>
+          <optical_frame_id>bottom_camera_link_optical</optical_frame_id>
+        </camera>
+      </sensor>
 
       <sensor name="bottom_boxes" type="boundingbox_camera">
         <always_on>1</always_on>
@@ -400,15 +475,9 @@
         <pose>0 0 0 -1.570796 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -429,15 +498,9 @@
         <pose>0 0 0 -1.570796 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -458,15 +521,9 @@
         <pose>0 0 0 1.570796 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -487,15 +544,9 @@
         <pose>0 0 0 1.570796 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -516,15 +567,9 @@
         <pose>0 0 0 -1.570796 0 1.570796</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -545,15 +590,9 @@
         <pose>0 0 0 1.570796 0 1.570796</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -574,15 +613,9 @@
         <pose>0 0 0 1.570796 0 1.570796</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>
@@ -603,15 +636,9 @@
         <pose>0 0 0 -1.570796 0 1.570796</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>0.09 0.26 0.3 1</ambient>
-          <diffuse>0.09 0.26 0.3 1</diffuse>
-          <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.0198 0.0572 0.066 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>0.002</mass>

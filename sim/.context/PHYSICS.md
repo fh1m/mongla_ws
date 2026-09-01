@@ -828,3 +828,69 @@ actually being grasped, the way `payload_sim` spawns a projectile. Until then
 `NOT_MODELLED` in `rulebook.py` — 5,100 RoboSub and 60 SAUVC. This round is
 geometry, mass, trim and two working jaw controllers, and it is not a scoring
 change.
+
+## Round 18 — the livery erased the vehicle; per-pixel water is free
+
+### The white AUV was my regression, and the pixel-diff is what hid it
+
+Round 16 put a single SDF `<material>` on the hull visual and A/B'd it: 33.8 %
+of pixels changed, so it was called done. **It was wrong.** The `.dae` carries
+**49 distinct materials** — black thruster housings, near-white foam, a red
+accent, teal trim, a full 0.00–1.00 luminance range — and one SDF material
+collapses every one of them into a flat colour. The vehicle came out **white and
+featureless: not recoloured, erased.**
+
+The diff proved the override reached the renderer. It said nothing about whether
+the result was *better*, and that is the whole gap between "it changed" and "it
+is right". A pixel-diff is evidence a check is worth doing, not the check.
+
+Fixed by recolouring the **mesh's own materials** (`gen_livery_mesh.py`, run by
+`generate_model.py` so it cannot drift): 45 distinct materials preserved, full
+luminance range intact, and the vehicle has parts again.
+
+**Two further passes were also arithmetically correct and visually nothing**,
+and both are worth keeping:
+
+- Tinting the mesh's **greys** toward a **grey** hull at preserved luminance is
+  the *identity map*. A 0.098 housing came back 0.096. Measured: **2.2 %** of
+  pixels changed against stock. A brushed-aluminium hull is nearly neutral, so
+  the vehicle cannot be made ours through its greys — only through its accents.
+- Forcing the accents to **preserve luminance** turned the stock cyan floats
+  into *brighter* cyan (0.46, 0.96, 0.98), because scaling a dark accent up to a
+  light material's brightness is what that constraint means. **4.5 %.**
+
+Settled with a square-root brightness modulation on the accents: floats now read
+as our deep teal at their own relative brightness. **3.0 % of the frame changes
+against stock** — a subtle livery, and stated as subtle rather than oversold.
+
+### The Sketchfab DuboMini is not usable, and why
+
+`skfb.ly/pKzsB` — "Dubo Mini" by *Adnan5haikh*, "DuboMini 2.0 is an AUV by BRACU
+Duburi". Three independent blockers: **no download is offered**, **no licence is
+specified** (so all rights reserved), and it is **2.9 M triangles / 1.5 M
+vertices** — two orders of magnitude past a sim mesh. It is the team's own
+model, so the path is the **source CAD from that author, decimated**, not the
+Sketchfab page.
+
+### Per-pixel attenuation is FREE, and the old trade is retracted
+
+The depth cameras **mirrored the colour cameras exactly** — 640×480 at 30 Hz —
+and *that* was the cost, not per-pixel attenuation. Attenuation is a smooth,
+low-frequency correction and nothing reads the range image sharp, so the two are
+separable. Measured on `robosub26_full`:
+
+| range camera | camera Hz | cost |
+|---|---|---|
+| **off** (baseline) | 7.740 | — |
+| 640×480 @ 30 (the old mirror) | 6.468 | **−16 %** |
+| **320×240 @ 10** | **7.674** | **−0.9 %** ← default |
+| 160×120 @ 5 | 7.543 | −2.5 % |
+
+**`range_cameras` is now ON by default** at 320×240 @ 10. The two cheap points
+are within noise of each other and of the baseline; 320×240 is chosen over
+160×120 for the better range image at the same price, **not** because it
+measured faster — that difference is noise and must not be read as a result.
+
+This **retires** the documented "12 Hz → 4 Hz, set it deliberately per session"
+trade. The third of the frame rate was the price of a second full-resolution
+render pass.

@@ -104,26 +104,75 @@ def test_the_gripper_is_stripped_from_the_sdf_when_disabled():
 
 
 def test_the_hull_wears_our_livery_not_the_vendors():
-    """The mesh is a BlueROV2 Heavy and carried the vendor's colours; an SDF
-    <material> overrides it, so this needs no mesh edit."""
-    cfg, sdf = _cfg(), _sdf(False)
-    hull = ' '.join(f'{c:.4g}' for c in cfg['livery']['hull'])
-    assert f'<diffuse>{hull} 1</diffuse>' in sdf
-    thruster = ' '.join(f'{c:.4g}' for c in cfg['livery']['thruster'])
-    assert sdf.count(f'<diffuse>{thruster} 1</diffuse>') == 8
+    """The livery lives in the MESH, not in an SDF <material>.
 
-
-def test_the_emissive_is_per_channel_not_grey():
-    """A flat grey emissive lifts all three channels equally, which is a
-    desaturation term -- it is what washed the colour out of every prop before
-    round 12, and the hull would go the same way."""
+    An SDF material on a mesh visual replaces the material for the WHOLE mesh,
+    and this .dae carries 49 of them. The first version did exactly that and
+    erased the vehicle -- white and featureless -- while a pixel-diff happily
+    reported 33.8 % of the frame changed. So this asserts the shape of the fix:
+    the visual points at the recoloured mesh and carries NO material override.
+    """
     sdf = _sdf(False)
-    for m in re.finditer(r'<emissive>([\d.]+) ([\d.]+) ([\d.]+) 1</emissive>',
-                         sdf):
-        r, g, b = (float(m.group(i)) for i in (1, 2, 3))
-        if r == g == b == 0.0:
-            continue
-        assert not (r == g == b), 'grey emissive desaturates the livery'
-        break
-    else:
-        pytest.fail('no emissive found on the vehicle')
+    assert 'duburi_heavy_livery.dae' in sdf
+    vis = sdf[sdf.index('base_link_visual'):]
+    vis = vis[:vis.index('</visual>')]
+    # Strip XML comments first: the visual carries a long note explaining why
+    # there is no <material> here, and that note contains the word.
+    import re as _re
+    vis = _re.sub(r'<!--.*?-->', '', vis, flags=_re.S)
+    assert '<material>' not in vis, (
+        'an SDF material here flattens all 49 of the mesh\'s materials')
+
+
+def test_the_livery_mesh_keeps_the_vehicle_s_parts():
+    """Preserving per-part detail is the POINT, not a nicety.
+
+    The failure this guards against is not "wrong colour" -- it is a vehicle
+    with no parts. Luminance range and distinct-material count are what say the
+    housings are still dark against the foam.
+    """
+    import re as _re
+    meshes = os.path.join(MODEL, 'meshes')
+    src = os.path.join(meshes, 'duburi_heavy.dae')
+    dst = os.path.join(meshes, 'duburi_heavy_livery.dae')
+    if not (os.path.isfile(src) and os.path.isfile(dst)):
+        pytest.skip('meshes not present')
+
+    def stats(path):
+        with open(path) as fh:
+            cols = _re.findall(r'<color sid="diffuse">([^<]+)</color>', fh.read())
+        vals = [tuple(float(v) for v in c.split()[:3]) for c in cols]
+        lum = [0.299 * r + 0.587 * g + 0.114 * b for r, g, b in vals]
+        return len(set(vals)), min(lum), max(lum)
+
+    n_src, lo_src, hi_src = stats(src)
+    n_dst, lo_dst, hi_dst = stats(dst)
+    assert n_dst == n_src, 'the recolour collapsed distinct materials'
+    assert hi_dst - lo_dst > 0.8, 'the recolour flattened the luminance range'
+
+
+def test_the_livery_mesh_is_actually_different_from_stock():
+    """Otherwise it is a copy with a new name.
+
+    Two earlier passes were arithmetically correct and changed almost nothing:
+    tinting greys toward a grey hull is the identity map, and forcing the
+    accents to preserve luminance only made the stock cyan brighter.
+    """
+    import re as _re
+    meshes = os.path.join(MODEL, 'meshes')
+    src, dst = (os.path.join(meshes, f) for f in
+                ('duburi_heavy.dae', 'duburi_heavy_livery.dae'))
+    if not (os.path.isfile(src) and os.path.isfile(dst)):
+        pytest.skip('meshes not present')
+
+    def cols(path):
+        with open(path) as fh:
+            return [tuple(round(float(v), 4) for v in c.split()[:3])
+                    for c in _re.findall(
+                        r'<color sid="diffuse">([^<]+)</color>', fh.read())]
+
+    a, b = cols(src), cols(dst)
+    moved = sum(1 for x, y in zip(a, b)
+                if max(abs(p - q) for p, q in zip(x, y)) > 0.02)
+    assert moved >= len(a) // 3, (
+        f'only {moved}/{len(a)} materials moved -- the livery is a no-op')

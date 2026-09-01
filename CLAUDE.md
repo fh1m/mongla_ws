@@ -573,17 +573,30 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > isolated**; an attempt to test it alone was my own bug (recycled slot names
 > are not "new" keys, so fired shots reported `NO MODEL`). Bins stay **5/5**.
 >
-> **THE HULL IS OURS NOW, AND THE PIXELS WERE CHECKED.** The vehicle visual is
-> a BlueROV2 Heavy `.dae` and carried **the vendor's colours**, so every render
-> showed somebody else's AUV. `configs.yaml` gained a `livery:` block —
-> brushed 5083 aluminium hull, anodised teal thrusters, emissive **per channel**
-> (a grey lift desaturates, per round 12) — applied as an SDF `<material>`, so
-> no mesh edit. **Declared is not rendered**, and this tree has caught four
-> cases where gz accepted a declaration and nothing changed, so it was A/B'd by
-> spawning a second hull and photographing it with the vehicle's own camera:
-> aluminium `[123,134,143]` vs a forced red `[153,39,41]`, **33.8 % of the frame
-> changed**. Stated plainly: this changes **no dataset** — the vehicle is
-> semantic label 0 and is never a target.
+> **THE LIVERY ERASED THE VEHICLE, AND A PIXEL-DIFF IS WHAT HID IT.** A single
+> SDF `<material>` on the hull visual A/B'd at 33.8 % of pixels changed — and it
+> was **wrong**: the `.dae` carries **49 distinct materials** and one SDF
+> material collapses all of them, so the AUV came out **white and featureless —
+> not recoloured, ERASED**. The diff proved the override reached the renderer
+> and said nothing about whether the result was *better*. Fixed by recolouring
+> the **mesh's own materials** (`gen_livery_mesh.py`, run by
+> `generate_model.py` so it cannot drift): 45 materials and the full luminance
+> range preserved. **Two further passes were also arithmetically correct and
+> visually nothing** — tinting greys toward a **grey** hull at preserved
+> luminance is the *identity map* (2.2 %), and forcing accents to preserve
+> luminance only made the stock cyan *brighter* (4.5 %). Settled at **3.0 %**
+> with a sqrt brightness modulation; a subtle livery, said to be subtle.
+> **The Sketchfab DuboMini is not usable**: no download, no licence stated, and
+> **2.9 M triangles**. It is the team's own model — get the source CAD from its
+> author and decimate.
+>
+> **PER-PIXEL ATTENUATION IS FREE, AND THE OLD TRADE IS RETRACTED.** The depth
+> cameras **mirrored the colour cameras** (640×480 @ 30) and *that* was the
+> cost. Measured: off **7.740 Hz**, 640×480@30 **6.468** (−16 %), 320×240@10
+> **7.674** (−0.9 %), 160×120@5 **7.543**. `range_cameras` is **ON by default**
+> at 320×240@10. This retires the "12 Hz → 4 Hz, set it deliberately per
+> session" line — the frame rate went on a second full-resolution render pass,
+> not on the attenuation.
 >
 > **THE GRIPPER IS GEOMETRY, MASS AND TRIM — NOTHING COMMANDS IT.** A Newton
 > Subsea Gripper from the published datasheet (62 mm jaw, 524 g air / 267 g

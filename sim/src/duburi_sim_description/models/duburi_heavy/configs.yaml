@@ -172,12 +172,36 @@ ardupilot:
 # to uniform attenuation by vehicle depth when no range image arrives.
 #
 # THE COST IS MEASURED, NOT ESTIMATED: the cameras go from 12 Hz to 4 Hz with
-# these on (.context/PHYSICS.md). That is a third of the frame rate for light
-# that falls off correctly with distance -- worth it for a dataset run where
-# imagery is the product, not worth it for a control-loop session where the
-# vision verbs need frames. Set it deliberately, per session, and say which
-# you used when you report a result.
-range_cameras: false
+# that claim is RETRACTED -- see the measurements below. The third of the frame
+# rate was the price of a second FULL-RESOLUTION render pass, not the price of
+# per-pixel attenuation, and the two are separable.
+# Per-pixel attenuation. `false`, or a block giving the depth cameras their OWN
+# resolution and rate -- which is the point: they used to mirror the colour
+# cameras exactly (640x480 @ 30 Hz) and that is what cost 12 Hz -> 4 Hz.
+# Attenuation is a smooth, low-frequency correction and nothing reads the range
+# image sharp, so it can be far cheaper than the image it corrects.
+#
+# MEASURED, camera Hz on robosub26_full:
+#
+#     off (baseline)        7.740 Hz     --
+#     640x480 @ 30          6.468 Hz     -16 %   (the old mirror-the-colour-
+#                                                 camera setting)
+#     320x240 @ 10          7.674 Hz     -0.9 %  <- default
+#     160x120 @  5          7.543 Hz     -2.5 %
+#
+# So per-pixel attenuation is essentially FREE once the depth cameras stop
+# mirroring the colour cameras, and it is on by default. The two cheap points
+# are within noise of each other and of the baseline; 320x240 is chosen over
+# 160x120 for the better range image at the same price, not because it measured
+# faster -- that difference is noise and should not be read as a result.
+#
+# This retires the "12 Hz -> 4 Hz, set it deliberately per session" trade: the
+# cost was never per-pixel attenuation, it was rendering a second 640x480 @ 30
+# pass for a correction that is smooth and low-frequency.
+range_cameras:
+  width: 320
+  height: 240
+  update_rate: 10.0
 
 # ---------------------------------------------------------------- livery ----
 # THE HULL IS OURS, NOT A STOCK BlueROV2.
@@ -197,8 +221,11 @@ range_cameras: false
 # operator-view and RViz change, and it is worth saying that plainly rather than
 # implying a realism gain that is not there.
 livery:
-  # Brushed 5083 aluminium: slightly warm, mid-value, low saturation.
-  hull: [0.62, 0.63, 0.65]
+  # Brushed 5083 aluminium, WARM. A neutral grey here is a no-op: the
+  # recolour preserves luminance, so tinting the mesh's greys toward
+  # another grey returns them unchanged (measured: 2.2 % of pixels).
+  # The warmth is what makes the frame read as machined metal.
+  hull: [0.70, 0.66, 0.58]
   hull_specular: 0.42
   # Anodised deep teal on the thruster housings.
   thruster: [0.09, 0.26, 0.30]

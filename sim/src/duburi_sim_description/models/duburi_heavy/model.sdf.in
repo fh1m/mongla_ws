@@ -52,21 +52,26 @@
       <visual name="base_link_visual">
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/duburi_heavy.dae</uri>
+            <!-- THE RECOLOURED MESH, not an SDF <material> override.
+                 
+                 The first attempt put a single <material> on this visual. It
+                 worked -- 33.8 % of pixels changed in an A/B -- and it was
+                 WRONG, because the .dae carries FORTY-NINE distinct materials
+                 (black housings, near-white foam, a red accent, teal trim) and
+                 one SDF material flattens every one of them into a single flat
+                 colour. The vehicle came out white and featureless: not
+                 recoloured, ERASED. A pixel-diff proved the override reached
+                 the renderer and said nothing about whether the result was
+                 better, which is the gap between "it changed" and "it is
+                 right".
+                 
+                 `gen_livery_mesh.py` rewrites the .dae's own materials
+                 instead, preserving each part's luminance, so the hull is ours
+                 AND still has parts. -->
+            <uri>model://duburi_heavy/meshes/duburi_heavy_livery.dae</uri>
             <scale>0.025 0.025 0.025</scale>
           </mesh>
         </geometry>
-        <!-- OUR HULL, NOT THE VENDOR'S. The mesh is a BlueROV2 Heavy (MIT,
-             bluerov2_gz) and carried its own colours, so every render showed
-             somebody else's vehicle. An SDF <material> overrides the mesh's
-             embedded material, so Duburi's brushed-aluminium livery needs no
-             mesh edit. Emissive is per channel -- see configs.yaml. -->
-        <material>
-          <ambient>@hull_colour 1</ambient>
-          <diffuse>@hull_colour 1</diffuse>
-          <specular>@hull_specular @hull_specular @hull_specular 1</specular>
-          <emissive>@hull_emissive 1</emissive>
-        </material>
       </visual>
 
       <!-- This box is NOT the hull. Its volume times fluid_density equals the
@@ -252,14 +257,14 @@
              with always_on=0. The generator therefore OMITS this whole block
              unless configs.yaml sets range_cameras: true. -->
         <always_on>1</always_on>
-        <update_rate>@camera_update_rate</update_rate>
+        <update_rate>@range_update_rate</update_rate>
         <visualize>false</visualize>
         <topic>front_range</topic>
         <camera name="front_range">
           <horizontal_fov>@camera_hfov</horizontal_fov>
           <image>
-            <width>@camera_width</width>
-            <height>@camera_height</height>
+            <width>@range_width</width>
+            <height>@range_height</height>
             <format>R_FLOAT32</format>
           </image>
           <clip>
@@ -373,14 +378,14 @@
              with always_on=0. The generator therefore OMITS this whole block
              unless configs.yaml sets range_cameras: true. -->
         <always_on>1</always_on>
-        <update_rate>@camera_update_rate</update_rate>
+        <update_rate>@range_update_rate</update_rate>
         <visualize>false</visualize>
         <topic>bottom_range</topic>
         <camera name="bottom_range">
           <horizontal_fov>@camera_hfov</horizontal_fov>
           <image>
-            <width>@camera_width</width>
-            <height>@camera_height</height>
+            <width>@range_width</width>
+            <height>@range_height</height>
             <format>R_FLOAT32</format>
           </image>
           <clip>
@@ -470,15 +475,9 @@
         <pose>0 0 0 -@d90 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -499,15 +498,9 @@
         <pose>0 0 0 -@d90 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -528,15 +521,9 @@
         <pose>0 0 0 @d90 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -557,15 +544,9 @@
         <pose>0 0 0 @d90 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -586,15 +567,9 @@
         <pose>0 0 0 -@d90 0 @d90</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -615,15 +590,9 @@
         <pose>0 0 0 @d90 0 @d90</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -644,15 +613,9 @@
         <pose>0 0 0 @d90 0 @d90</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_cw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -673,15 +636,9 @@
         <pose>0 0 0 -@d90 0 @d90</pose>
         <geometry>
           <mesh>
-            <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
+            <uri>model://duburi_heavy/meshes/t200_ccw_prop_livery.dae</uri>
           </mesh>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -1053,12 +1010,6 @@
             <radius>@gripper_body_r</radius><length>@gripper_body_l</length>
           </cylinder>
         </geometry>
-        <material>
-          <ambient>@thruster_colour 1</ambient>
-          <diffuse>@thruster_colour 1</diffuse>
-          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
-          <emissive>@thruster_emissive 1</emissive>
-        </material>
       </visual>
       <collision name="gripper_body_collision">
         <geometry>
