@@ -573,36 +573,6 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > isolated**; an attempt to test it alone was my own bug (recycled slot names
 > are not "new" keys, so fired shots reported `NO MODEL`). Bins stay **5/5**.
 >
-> **THE DUBOMINI LOOKED LIKE A BLOB, AND IT WAS TWO SILENT FAULTS AT ONCE.**
-> The exported DAE had **no vertex normals** (`<input semantic="NORMAL">` simply
-> absent), so the renderer had no shading information and 203k triangles read as
-> a flat silhouette — it presented as a colour problem and was a geometry one.
-> And the decimator had merged all **3,276 CAD components into one geometry**,
-> so the vehicle could only ever be one flat colour. The mesh now exports as
-> **five classified groups** (frame / enclosure / body / duct / fitting), each
-> with its own material and computed normals.
-> **THE COLOURS ARE SAMPLED FROM THE TEAM'S OWN RENDER**
-> (`bracuduburi.com/assets/renders/dubomini/dubomini_render_9.png`), not chosen:
-> frame **0.375**, enclosure **0.036–0.18** gloss, duct **0.216**, props
-> blue-teal. The vehicle is **near-black** and the model had painted everything
-> **0.70** — lighter than every surface on it. Values sit *below* the sampled
-> ones on purpose: `underwater_fx` haze LIFTS every surface, so an enclosure
-> specified 0.055 rendered at 62/255 against the render's 46. What must survive
-> the fog is the **ordering** (enclosure darkest → frame lightest), and it does:
-> measured **58.9 / 64.6 / 109.4** against the render's 46 / 55 / 96, with a
-> luminance spread of **149.9** where a blob is ~0.
-> **3,158 fasteners were dropped — 46.7 % of every triangle for 0.14 L of
-> geometry**, bolts no sim camera resolves; extents unchanged to 1 mm, 203k →
-> 140k faces, RTF unchanged (0.0164 vs 0.0169), flight unaffected (1.386 m in
-> 8 s, dy −0.004). **The check is the render against the official render, not a
-> pixel-diff** — round 16 measured 33.8 % of pixels changed and shipped an
-> erased hull. **The props are their own group as of round 21** —
-> size alone cannot separate them (nine components match the prop envelope,
-> only eight are props), so the discriminator is **containment**: a prop sits
-> inside a duct's bounding box and nothing else on the vehicle does. Ducts are
-> neutral black now and the blades carry the render's blue-teal, **the one
-> coloured thing on an otherwise black vehicle**.
->
 > **SUNLIGHT: MOVING CAUSTICS AND SURFACE GLARE — and the engine question,
 > answered with numbers.** Both competitions run in **outdoor pools under direct
 > sun**, and the sim had neither. `underwater_fx` gained `SunlightField` and
@@ -631,46 +601,28 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > reason to stay on Gazebo rather than switch engines. More CPU post-processing
 > is the expensive direction. [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
 >
-> **THE SIM FLIES THE REAL DUBOMINI NOW.** Two rounds of recolouring a BlueROV2
-> could not fix what was actually wrong: it was a BlueROV2. `hullv3.stl` (the
-> team's own CAD, 2.15 M triangles, 3,276 components, **Y-up millimetres**) is
-> in as the `dubomini` model and is the **default vehicle on all 13 courses**;
-> `duburi_heavy` stays selectable as the Duburi 4.5 proxy. Verified against
-> `bracuduburi.com/auv/dubomini` BEFORE building on it — the STL's length
-> matches the published 545.9 mm to **0.0 mm**. **14.6 kg** published.
-> Collision is Gazebo's own `optimization="convex_decomposition"` (no V-HACD
-> install); the visual is decimated to 9.5 % of faces with extents within
-> **4 mm** and hull volume within **1.1 %**. RTF median **0.0169**.
->
-> **BUOYANCY CANNOT COME FROM THE MESH** and is ASSUMED (+0.2 kg): the signed
-> volume is 6.58 L against a 14.6 kg vehicle — **8 kg negative, a rock** —
-> because the enclosures are modelled as *shells* and the sealed air that floats
-> it is not in the mesh at all. The convex hull is 31.8 L, so the truth is
-> between those. **Get it weighed in water; it is the most valuable number
-> missing.** Drag and inertia are still the BlueROV2's and marked ASSUMED, so
-> **speed is not calibrated** — 0.16 m/s against Duburi's ~0.65.
->
-> **A MESH GIVES AN AXIS LINE, NOT A PUSH DIRECTION** — the distinction cost a
-> debugging pass. The 8 T200 ducts are recovered from the CAD (the horizontals
-> land at **exactly ±45.0°**, and sit 0.228 m out in x against Duburi's 0.14 —
-> this hull's yaw authority). But which way a duct *pushes* is prop handedness
-> and ESC wiring, which are not geometry: −45° and +135° are the **same line**.
-> Taking the CAD reading literally, ArduSub's measured forward mix
-> `[−33,−27,+33,+27]` summed to **(0.0, −8.5) N — zero forward thrust**, and the
-> vehicle drifted diagonally at 0.045 m/s while **nothing logged a fault**,
-> because nothing was faulty. With the frame's signs: (84.9, 0.0) N, and
-> **0.268 m diagonal → 0.958 m straight**.
->
-> **ADDED MASS IS SOLVED, NOT COPIED** — Capytaine BEM on the hull: surge 8.57,
-> sway 10.81, **heave 64.51 kg** (4.4× the vehicle's mass, where Duburi's is
-> 1.4×). That is a flat plate's real physics, not an error. It runs on the
-> **convex hull** because the assembly is not water-tight, so it is an **UPPER
-> BOUND**. Two traps: Capytaine 3.0's `assemble_dataset` **silently drops** the
-> no-free-surface case (their #88) and returns no `added_mass` at all, reading
-> like a failed solve; and SDF's `fluid_added_mass` is **positive** where the
-> plugin's `<xDotU>` is negative. Sustained high-gain runs still lose depth —
-> ALT_HOLD against 64.5 kg of heave. Full detail:
-> [`sim/.context/DUBOMINI.md`](sim/.context/DUBOMINI.md).
+> **THE `dubomini` SIM MODEL IS GONE (round 23) — RETRACTING WHAT THIS FILE
+> SAID ABOUT IT.** Rounds 19-21 built the team's own `hullv3.stl` into the sim
+> as the `dubomini` model and made it the default on all 13 courses. **That is
+> no longer true**: the model, its meshes, `gen_vehicle_mesh.py` and
+> `added_mass.py` are deleted, and **`duburi_heavy` is the vehicle on every
+> course again**. The team is preparing a proper URDF with full information, and
+> one known-good vehicle beats a half-specified one waiting to be replaced.
+> **Consequence, stated so it is not rediscovered:** every number measured on
+> that hull is stale — `verb_audit` and `score_check` results (torpedo 3/4, bins
+> 5/5), the 0.16 m/s uncalibrated speed, and the RTF 0.0169 baseline. The
+> revert also **re-validates** `payload_sim`'s `muzzle_forward_m = 0.40`, which
+> is derived from the BlueROV2's 0.229 m collision reach and was never
+> re-derived for the other hull.
+> **Two findings survive because they will apply again to the incoming URDF**,
+> and the full record is kept at
+> [`sim/.context/DUBOMINI.md`](sim/.context/DUBOMINI.md):
+> **a mesh gives an axis LINE, not a push direction** — CAD-literal thruster
+> yaws made ArduSub's measured forward mix `[-33,-27,+33,+27]` sum to
+> **(0.0, -8.5) N, zero forward thrust**, while nothing logged a fault because
+> nothing was faulty; and **buoyancy cannot come from a shell mesh** — 6.58 L of
+> signed volume against a 14.6 kg vehicle is **8 kg negative, a rock**, because
+> the sealed air that floats it is not in the mesh at all.
 >
 > **THE LIVERY ERASED THE VEHICLE, AND A PIXEL-DIFF IS WHAT HID IT.** A single
 > SDF `<material>` on the hull visual A/B'd at 33.8 % of pixels changed — and it
@@ -685,9 +637,8 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > luminance is the *identity map* (2.2 %), and forcing accents to preserve
 > luminance only made the stock cyan *brighter* (4.5 %). Settled at **3.0 %**
 > with a sqrt brightness modulation; a subtle livery, said to be subtle.
-> **The Sketchfab DuboMini is not usable**: no download, no licence stated, and
-> **2.9 M triangles**. It is the team's own model — get the source CAD from its
-> author and decimate.
+> **The Sketchfab DuboMini is not usable** (checked while hunting for a hull):
+> no download, no licence stated, **2.9 M triangles**.
 >
 > **PER-PIXEL ATTENUATION IS FREE, AND THE OLD TRADE IS RETRACTED.** The depth
 > cameras **mirrored the colour cameras** (640×480 @ 30) and *that* was the
@@ -742,6 +693,36 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > with it. **Rejected on measurement:** lifting the panel emissive 0.10 → 0.22
 > brightened the face 22 % and cost the artwork **27 % of its redness** — the
 > same grey-emissive desaturation just removed from `pvc_material`.
+>
+> **THE WATER SURFACE IS A MESH NOW, AND STILL NOT ANIMATED — AND "A FAILING
+> SHADER LOGS NOTHING" IS RETRACTED.** The surface was a `<box>`: 8 vertices,
+> which is the whole reason an animated bounded surface was carried and cut
+> across rounds 12, 13, 14, 19 and 22 — a vertex-displacement shader had nothing
+> to displace. It is a **subdivided, double-sided grid** now (0.25 m cells, one
+> mesh per pool), verified equivalent to the box it replaced (probe-camera mean
+> **111.452 vs 111.424**). The Gerstner shader on top is **NOT shipped**: it
+> compiles and it is applied (**100 % of pixels** differ from the plugin-stripped
+> control) but **every `<param>` arrives as zero** — rewriting the fragment
+> shader wholesale and changing `tau` by three orders of magnitude both left the
+> render **byte-identical at mean 97.667**. The open question is ShaderParam's
+> parameter delivery on gz-sim 8, and the Fuel wiring it was copied from is
+> authored for ign-gazebo6.
+> **`gz -v 2` DOES report a shader compile failure — by aborting the server**
+> (`OGRE EXCEPTION … failed to compile`, `exit code -6`). So a live sim is
+> positive evidence the GLSL compiled, which is the opposite of the old
+> "renders nothing and logs nothing" line and is what proved the shader above
+> was running.
+> **Three defects were found on the way and every one returned a plausible
+> NUMBER rather than an error**: the surface was never in frame (a pinned,
+> pitched-up hull **rights itself in milliseconds** — CoB above CoM); the visual
+> had **no `<geometry>` wrapper**, so SDF dropped it silently; and the sheet was
+> **single-sided facing +z** while every camera here is underneath, so Ogre2
+> culled it. The tool that caught all three was **painting the surface opaque
+> magenta and counting magenta pixels** — a frame-to-frame diff cannot tell a
+> static surface from an absent one, and it kept returning numbers that read as
+> findings. `test_water_containment.py` now reads the span off the **OBJ's own
+> vertices** and asserts the `<geometry>` wrapper; both guards were verified to
+> bite, along with a grid too coarse for the shortest wave.
 >
 > **WATER IS IN THE POOL NOW, NOT EVERYWHERE.** `water_surface` defaulted to
 > `gerstner`, which includes `openrobotics/waves` — an **unbounded** ocean at

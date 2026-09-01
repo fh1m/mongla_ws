@@ -12,7 +12,7 @@ scene:
   lighting: competition
 
 vehicle:
-  model: dubomini
+  model: duburi_heavy
   name: duburi
   pose: [-5.0, 0.0, -0.4]
   yaw: 0.0

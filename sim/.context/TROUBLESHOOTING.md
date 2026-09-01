@@ -287,15 +287,76 @@ turbidity bug above. So "custom shaders work" needed proving, not assuming.
 
 **Two traps cost most of the time it took to establish that**, both worth knowing:
 
-1. **A shader that fails renders NOTHING, and logs nothing.** A hand-written
-   marker shader made the visual disappear entirely from the camera — no error,
-   no warning, at `-v 4`. An absent object looks exactly like "the plugin does
-   not apply here", which is the wrong conclusion.
+1. ~~**A shader that fails renders NOTHING, and logs nothing.**~~ **RETRACTED
+   2026-09-01 (round 23), and the truth is more useful.** A fragment shader with
+   a deliberate syntax error does not fail quietly — it **aborts the server**:
+
+   ```
+   OGRE EXCEPTION(3:RenderingAPIException): Fragment Program
+     _gz_PoolSurface_fs_330.glsl failed to compile.
+   process has died [exit code -6, cmd 'gz sim -v 2 -s -r ...']
+   ```
+
+   That is at `-v 2`, the verbosity the sim actually runs at. So on gz-sim 8 a
+   **live sim is positive evidence that the GLSL compiled**, which is a much
+   stronger diagnostic than the old line allowed — it was what proved round 23's
+   water shader was compiling and being applied while still producing a static
+   image. The original observation (a visual that vanished with no log) was real
+   but had a different cause; do not read a missing object as a failed compile.
 2. **Check framing with a control before concluding anything.** Two intermediate
    readings here were nonsense because the 1000 m wave plane was simply outside
    the camera frustum. The control that settled it was the *same mesh at the same
    pose with the plugin stripped* — if the control is also invisible, the finding
    is about framing, not about the feature.
+
+### The animated bounded surface: geometry IN, shader OUT (round 23)
+
+The surface is a **subdivided, double-sided mesh** now (`gen_prop_meshes.water_grid`,
+one per pool: 20x12 and 25x16, 0.25 m cells). It is **not animated**. Everything
+below is measured, so the next attempt starts here instead of from scratch.
+
+**Three defects on the way, and every one of them produced a plausible number
+rather than an error.** The order matters: each was hidden by the one before it.
+
+| # | what looked true | what was true | what caught it |
+|---|---|---|---|
+| 1 | "the shader does not animate" | the water surface **was not in frame at all** — the pose was pinned on `duburi`, and a buoyant hull with CoB above CoM rights itself in milliseconds, so a pitched-up camera is level again before the next frame | painting the surface opaque magenta and counting magenta pixels: **0.00 %** |
+| 2 | "the mesh fails to load" | the visual had **no `<geometry>` wrapper**. `_geometry_box()` wraps; the hand-written `<mesh>` string did not, SDF dropped it, and the visual rendered nothing — silently | box control also 0.00 % magenta, which ruled the mesh out |
+| 3 | "the shader is inert" | the sheet was **single-sided facing +z**, and every camera here is UNDER it, so Ogre2 culled it. Not an error, nothing logged | box (has a downward face) **100 %** magenta vs mesh **0.00 %**, same material, same pose |
+
+**The magenta control is the tool.** A frame-to-frame diff cannot tell "static
+surface" from "no surface"; an unmistakable colour can. Three interpretations
+were wrong in a row because the diff kept returning a number.
+
+**Where it actually stands.** With geometry fixed and the surface filling the
+frame, the shader:
+
+- **compiles** — a deliberately broken fragment shader aborts gz (see the
+  retraction above), and this one does not, so it is being built and bound;
+- **is applied** — **100 % of pixels** differ from the same visual with the
+  plugin stripped (97.667 vs 111.452 mean);
+- **receives no parameter values.** Rewriting the fragment shader wholesale
+  (a two-colour power curve → a Snell's-window step) left the render
+  **byte-identical at mean 97.667**, and so did changing `tau` from 2.0 to
+  0.001. Both should have changed every pixel. The uniforms are arriving as
+  zero, which makes the sheet flat and the colour constant.
+
+So the open question is **`<param>` delivery**, not GLSL and not framing. The
+wiring emitted was `<plugin filename="gz-sim-shader-param-system">` on the
+visual, shader paths relative to the `.world`, `float_array` for the vectors and
+`<value>TIME</value>` with no `<type>` for `t` — copied from the Fuel `waves`
+model, which is authored for **ign-gazebo6**, not gz-sim 8.
+
+**The mesh is kept** because it is verified equivalent to the box it replaced
+(probe-camera mean **111.452 vs 111.424**) and because a `<box>` is 8 vertices —
+having nothing to displace is exactly why this item was carried and cut across
+rounds 12, 13, 14, 19 and 22.
+
+**Measurement rig**: spawn a static probe model with its own camera and read it
+off gz-transport. Do **not** use `EntityFactory`'s `sdf:` pose — it is
+overridden by the request's own `pose` field, and a probe authored with a pose
+in its SDF spawns at the origin looking at sky, reporting an identical mean in
+every arm.
 
 ### Animated water surface: `water_surface: gerstner`
 

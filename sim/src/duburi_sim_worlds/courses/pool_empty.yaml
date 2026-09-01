@@ -14,7 +14,7 @@ scene:
   ambient: [0.5, 0.55, 0.6]
 
 vehicle:
-  model: dubomini
+  model: duburi_heavy
   name: duburi
   # Mid-pool at mid-depth, well clear of the walls and floor so a step response
   # is not contaminated by ground effect or contacts.

@@ -243,6 +243,61 @@ def lattice_panel(width, height, thickness, cols, rows, bar):
     return verts, uvs, faces, norms
 
 
+# The water surface used to be a <box>: 8 vertices, which is why the animated
+# surface was carried and cut across five rounds. A vertex-displacement shader
+# needs vertices to displace, so the surface is a subdivided grid instead.
+#
+# One mesh PER POOL, not a unit mesh with <scale>. Gazebo would happily scale a
+# 1x1 grid to 25x16, but the Gerstner vertex shader runs in OBJECT space and the
+# scale is applied afterwards -- a non-uniform scale would stretch the waves by
+# 25/16 along one axis and leave the wavelength meaningless. Two pools, two
+# meshes, wavelengths that mean metres in both.
+WATER_CELL_M = 0.25
+
+
+def water_grid(length, width, cell=WATER_CELL_M):
+    """A flat z=0 grid spanning exactly length x width, centred on the origin.
+
+    UVs run 0..1 across the sheet so the existing water_surface.png tiles the
+    same way it did on the box face.
+    """
+    nx = max(2, int(round(length / cell)))
+    ny = max(2, int(round(width / cell)))
+    verts, uvs, norms, faces = [], [], [], []
+    for j in range(ny + 1):
+        for i in range(nx + 1):
+            u = i / nx
+            v = j / ny
+            verts.append((-length / 2.0 + u * length,
+                          -width / 2.0 + v * width, 0.0))
+            uvs.append((u, v))
+            norms.append((0.0, 0.0, 1.0))
+    # DOUBLE-SIDED, and this is the whole reason the surface rendered NOTHING
+    # on the first attempt: a sheet wound to face +z is back-facing to every
+    # camera in this simulator, all of which are UNDER it, and Ogre2 culls back
+    # faces by default. It is not an error and nothing logs it. The control that
+    # caught it was painting the surface opaque magenta: a <box> came back 100 %
+    # magenta and this mesh came back 0.00 % with the same material at the same
+    # pose. Emitting the mirrored winding costs 2x triangles on a sheet that is
+    # ~8k, against a sim that is CPU-bound and 25 % GPU.
+    base = len(verts)
+    verts.extend(verts[:base])
+    uvs.extend(uvs[:base])
+    norms.extend([(0.0, 0.0, -1.0)] * base)
+    for j in range(ny):
+        for i in range(nx):
+            a = j * (nx + 1) + i + 1          # OBJ indices are 1-based
+            b = a + 1
+            c = a + (nx + 1)
+            d = c + 1
+            faces.append((a, b, d))
+            faces.append((a, d, c))
+            # underside: same quad, reversed winding
+            faces.append((a + base, d + base, b + base))
+            faces.append((a + base, c + base, d + base))
+    return verts, uvs, faces, norms
+
+
 def write_obj(path, verts, uvs, faces, norms, name="plate"):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as fh:
@@ -282,6 +337,16 @@ def main():
     out = write_obj(os.path.join(MESH_DIR, "crate_wall.obj"),
                     verts, uvs, faces, norms, name="crate_wall")
     print(f"wrote {out}  ({len(verts)} verts, {len(faces)} tris, latticed)")
+
+    for comp in ("robosub", "sauvc"):
+        with open(os.path.join(os.path.dirname(HERE), "spec",
+                               f"{comp}.yaml")) as fh:
+            poolc = yaml.safe_load(fh)["pool"]
+        verts, uvs, faces, norms = water_grid(poolc["length"], poolc["width"])
+        out = write_obj(os.path.join(MESH_DIR, f"water_{comp}.obj"),
+                        verts, uvs, faces, norms, name=f"water_{comp}")
+        print(f"wrote {out}  ({len(verts)} verts, {len(faces)} tris, "
+              f'{poolc["length"]}x{poolc["width"]} m)')
 
     cfgdir = os.path.dirname(MESH_DIR)
     with open(os.path.join(cfgdir, "model.config"), "w") as fh:
