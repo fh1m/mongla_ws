@@ -98,13 +98,30 @@ def thrusters(mesh):
 # triangle in the file, for 0.14 L of bounding volume. No camera in this
 # simulator resolves an M5 bolt head at any working distance, and paying half
 # the mesh budget for them starved the parts that ARE visible.
-PART_CLASSES = ('frame', 'enclosure', 'body', 'duct', 'fitting')
+PART_CLASSES = ('frame', 'enclosure', 'body', 'duct', 'prop', 'fitting')
 
 
-def classify(component) -> str:
+def classify(component, ducts=None) -> str:
+    """What a part IS, from how big it is -- and, for props, WHERE it is.
+
+    Size alone cannot separate a propeller from the other 87 mm parts on this
+    vehicle: nine components match the prop envelope and only eight of them are
+    propellers. The discriminator is CONTAINMENT -- a prop sits inside a duct's
+    bounding box and nothing else on the vehicle does. That test finds exactly
+    8 of the 9 candidates and correctly rejects the last.
+
+    This is why `duct` used to carry a blue bias: the blades were merged into
+    their duct's group, so a black duct and a blue-teal prop had to share one
+    colour. They are separate parts in the CAD; only the classifier was coarse.
+    """
     e = sorted(component.extents, reverse=True)
     if 90 < e[0] < 105 and len(component.faces) > 40000:
         return 'duct'                      # a T200 duct, same test as thrusters()
+    if ducts and 80 < e[0] < 92 and 12000 < len(component.faces) < 17000:
+        c = component.centroid
+        for lo, hi in ducts:
+            if bool(np.all(c > lo)) and bool(np.all(c < hi)):
+                return 'prop'
     if e[0] > 300:
         return 'frame'                     # the four long rails and plates
     if e[0] < 25:
@@ -139,7 +156,7 @@ def decimate(mesh, target_faces: int):
 # the vehicle's silhouette and the ducts are its most recognisable feature, so
 # they keep detail; fittings are numerous and small.
 BUDGET = {'frame': 30000, 'enclosure': 20000, 'body': 20000,
-          'duct': 16000, 'fitting': 12000}
+          'duct': 16000, 'prop': 14000, 'fitting': 12000}
 
 
 def build_groups(mesh, verbose: bool = True):
@@ -154,8 +171,12 @@ def build_groups(mesh, verbose: bool = True):
     import trimesh
     buckets = {k: [] for k in PART_CLASSES}
     dropped = 0
-    for c in mesh.split(only_watertight=False):
-        k = classify(c)
+    comps = mesh.split(only_watertight=False)
+    # Duct envelopes first: a prop is DEFINED by sitting inside one.
+    ducts = [c.bounds for c in comps
+             if 90 < c.extents.max() < 105 and len(c.faces) > 40000]
+    for c in comps:
+        k = classify(c, ducts)
         if k == 'fastener':
             dropped += len(c.faces)
             continue

@@ -338,7 +338,8 @@ class ModelParams:
         for _part, _fallback in (("frame", [0.375, 0.375, 0.38]),
                                  ("enclosure", [0.055, 0.055, 0.06]),
                                  ("body", [0.14, 0.14, 0.15]),
-                                 ("duct", [0.18, 0.195, 0.215]),
+                                 ("duct", [0.115, 0.115, 0.12]),
+                                 ("prop", [0.105, 0.135, 0.175]),
                                  ("fitting", [0.30, 0.30, 0.31])):
             _c = lv.get(_part, _fallback)
             _g = float(lv.get("emissive_gain", 0.10))

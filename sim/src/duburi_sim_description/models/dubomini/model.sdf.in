@@ -129,6 +129,21 @@
         </material>
       </visual>
 
+      <visual name="prop_visual">
+        <!-- the eight propellers, the one coloured thing on a black vehicle -->
+        <geometry>
+          <mesh>
+            <uri>model://dubomini/meshes/dubomini_prop.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>@prop_colour 1</ambient>
+          <diffuse>@prop_colour 1</diffuse>
+          <specular>@prop_specular @prop_specular @prop_specular 1</specular>
+          <emissive>@prop_emissive 1</emissive>
+        </material>
+      </visual>
+
       <visual name="fitting_visual">
         <!-- brackets, clamps and the bare-metal camera bezels -->
         <geometry>
