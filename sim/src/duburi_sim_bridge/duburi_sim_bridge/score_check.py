@@ -333,34 +333,61 @@ def check_torpedo(world):
         # shots flying 3.7-4.1 m cleanly when the hull was left alone, and the
         # same geometry missing when the rig had been talking to ROS in
         # between -- so the drift is between the check and the shot.
-        gtp = ground_truth()
-        if gtp is not None:
-            drift = math.hypot(gtp[1] - oy, gtp[2] - (oz + lead))
-            if drift > POS_TOL_M:
-                place(world, -1.0, oy, oz + lead)
-                time.sleep(1.5)
+        # READ THE SHOT COUNT FIRST, THEN AIM, THEN FIRE. The order is the
+        # whole fix. `shots_of()` is a `ros2 topic echo` that costs ~2 s and
+        # `cli('fire')` another ~2 s, so with the count read AFTER the pose
+        # check there were about FOUR SECONDS of drift between verifying the
+        # aim and pulling the trigger -- on an armed hull in ALT_HOLD, which
+        # moves. The check passed and the shot still went wide, which is why
+        # this looked like a first-shot-only defect: shot 1 fires soon after
+        # the initial placement and the later ones accumulate the delay.
+        #
+        # An earlier note here blamed the difference on `ros2 topic echo`
+        # versus a live gz-transport subscription. RETRACTED -- that was a
+        # guess, and the timing above is the actual mechanism.
         before = len(shots_of('torpedo') or [])
+        # The pre-trigger tolerance is the OPENING's, not the rig's general
+        # one. POS_TOL_M is 50 mm and a small opening's radius is 47.5 mm, so a
+        # drift the general check calls acceptable is a miss. Re-place until
+        # the aim is inside a third of the radius, which is the only tolerance
+        # that means anything here.
+        aim_tol = _r / 3.0
+        prev = None
+        for _ in range(4):
+            gtp = ground_truth()
+            if gtp is None:
+                break
+            drift = math.hypot(gtp[1] - oy, gtp[2] - (oz + lead))
+            # STILL, NOT JUST IN PLACE. A hull that is on the aim point but
+            # still MOVING carries the round with it, and the shot after a
+            # re-arm is exactly that case: disarming drops the depth hold and
+            # re-arming re-engages it, so the vehicle is settling through the
+            # aim point rather than sitting on it. Position alone passed and
+            # the round still went nowhere -- graded in 10.6 s against 13-19 s
+            # for the shots that flew, which is what a round that barely left
+            # the tube looks like.
+            #
+            # This is the same idea as `align(settle=)` in the real stack:
+            # in-band AND barely moving, not in-band alone.
+            moving = (math.dist(gtp[:3], prev[:3]) if prev else 1.0)
+            prev = gtp
+            if drift <= aim_tol and moving < 0.01:
+                break
+            if drift > aim_tol:
+                place(world, -1.0, oy, oz + lead)
+            time.sleep(1.2)
         cli('fire', f'--fire_channel {1 + idx % 2}')
         got = outcome_of_next('torpedo', before)
         record(name, 'PASS' if got == 'through' else 'FAIL',
                f'scorer said {got!r}, expected through')
-        # WHY ONLY THE FIRST SHOT OF A RUN SCORES -- an OPEN question, and it
-        # is the rig, not the grader. Shots 2..4 are graded `miss` about 2 s
-        # after the trigger, which is the signature of a round that never left
-        # the tube. Two hypotheses were tested and BOTH WERE WRONG:
-        #
-        #   * "consecutive shots lose their launch impulse" -- disproved. Four
-        #     consecutive shots fired from a standalone harness travelled
-        #     4.113 / 3.816 / 3.722 / 3.863 m. The launch path is sound.
-        #   * "the shots are too close together" -- disproved. A 20 s cooldown
-        #     between them changed nothing, so it was removed rather than left
-        #     in to slow the rig down for no benefit.
-        #
-        # What remains different between the harness that works and this one is
-        # that the harness holds a live gz-transport pose subscription for its
-        # whole run while this shells out to `ros2 topic echo` per verdict. That
-        # is the next thing to test, and it is written down rather than guessed
-        # at, because two confident guesses have already been wrong here.
+        # Three hypotheses were tested before the real one. Kept, because the
+        # wrong ones cost real time and the next reader should not re-run them:
+        #   * "consecutive shots lose their launch impulse" -- DISPROVED. Four
+        #     shots from a standalone harness flew 4.113/3.816/3.722/3.863 m.
+        #   * "the shots are too close together" -- DISPROVED. A 20 s cooldown
+        #     changed nothing.
+        #   * "`ros2 topic echo` versus a live subscription" -- WRONG MECHANISM.
+        # It was the ORDER of the calls: see the note above the trigger.
 
 
 def check_bins(world):

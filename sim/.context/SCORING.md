@@ -382,3 +382,50 @@ char`. argparse interpolates help strings (`self._get_help_string(action) %
 params`), and one help string in `commands.py` had a bare `% cap` where the two
 others in the same file were correctly escaped `%%`. Nothing caught it because
 no test runs `--help`.
+
+
+### Round 17 — torpedo 1/4 → 3/4, and the hypothesis I had written down was wrong
+
+The gap was **call ordering in the rig**, not anything about transports.
+
+`shots_of()` is a `ros2 topic echo` costing ~2 s and `cli('fire')` another ~2 s,
+and the shot count was being read *after* the pose check. That left about **four
+seconds of drift between verifying the aim and pulling the trigger**, on an
+armed hull in ALT_HOLD, which moves. The check passed and the shot still went
+wide — and because shot 1 fires soon after the initial placement while later
+ones accumulate the delay, it presented as a first-shot-only defect.
+
+Reading the count first, then aiming, then firing immediately: **1/4 → 3/4.**
+
+**The previous note here blamed `ros2 topic echo` versus a live gz-transport
+subscription. That is RETRACTED** — it was a guess written up as a lead, and the
+mechanism above is what it actually was. Three hypotheses have now been wrong on
+this one defect (impulse loss, shot spacing, transport), and all three are kept
+in the source so the next reader does not re-run them.
+
+Also tightened, both justified rather than tuned:
+
+- **The pre-trigger tolerance is the opening's, not the rig's.** `POS_TOL_M` is
+  50 mm and a small opening's radius is 47.5 mm, so a drift the general check
+  called acceptable was a miss. It now re-places until the aim is inside a third
+  of the radius.
+- **Still, not merely in place.** A hull on the aim point but still *moving*
+  carries the round with it. The same idea as `align(settle=)` in the real
+  stack: in-band *and* barely moving.
+
+**Opening 2 (small, bottom row) still fails reproducibly, and I did not isolate
+it.** It is graded in 10.6 s against 13–19 s for the shots that fly, which is
+what a round that barely left the tube looks like. Neither the tolerance nor the
+stillness gate changed it. An attempt to test it in isolation was **my own bug**
+— `payload_sim` recycles slot names, so a reused slot is not a "new" key and the
+harness reported `NO MODEL` for shots that had actually fired. Recorded as an
+open item rather than left as a plausible-sounding guess.
+
+`score_check --task torpedo` exits non-zero on it. Bins remain **5/5**.
+
+### And a crash nobody had hit
+
+`ros2 run duburi_planner duburi --help` died with `TypeError: %c requires int or
+char`. argparse interpolates help strings, and one in `commands.py` had a bare
+`% cap` where the two others in the same file were correctly `%%`. Nothing
+caught it because no test runs `--help`.
