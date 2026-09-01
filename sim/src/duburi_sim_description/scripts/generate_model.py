@@ -182,6 +182,7 @@ class ModelParams:
         cameras: dict,
         dvl: dict = None,
         range_cameras: bool = False,
+        lens_flare=None,
         livery: dict = None,
         gripper: dict = None,
         fdm_addr: str = "127.0.0.1",
@@ -314,6 +315,16 @@ class ModelParams:
         # underwater_fx falls back to uniform attenuation when no range image
         # arrives, so the sim is correct either way, just less faithful.
         self.range_always_on = int(bool(range_cameras))
+
+        # SUN GLARE. `lens_flare: false`, or a block with scale/colour.
+        # Outdoor-pool competitions are run under direct sun and the sim has
+        # never had glare at all, so a detector trained here has never seen the
+        # single strongest artefact it will meet at the venue.
+        lf = lens_flare if isinstance(lens_flare, dict) else {}
+        self.lens_flare_on = int(bool(lens_flare))
+        self.flare_scale = float(lf.get("scale", 0.4))
+        _fc = lf.get("colour", [1.0, 0.95, 0.85])
+        self.flare_colour = " ".join(f"{v:.4g}" for v in _fc)
         # THE RANGE CAMERAS GET THEIR OWN RESOLUTION AND RATE.
         #
         # They mirrored the colour cameras exactly -- 640x480 at 30 Hz -- and
@@ -627,6 +638,7 @@ def get_model_params_from_config(config_path: str) -> ModelParams:
         cameras=_merge_cameras(config),
         dvl=_merge_dvl(config),
         range_cameras=config.get("range_cameras", False),
+        lens_flare=config.get("lens_flare", False),
         livery=config.get("livery") or {},
         gripper=grip,
         fdm_addr=ardupilot.get("fdm_addr", "127.0.0.1"),
@@ -682,6 +694,13 @@ def generate_model(input_path: str, output_path: str, config_path: str) -> None:
     # disabled feature that is still IN the SDF is still paid for. Leaving eight
     # extra links and two joint controllers in place "but switched off" is how
     # the range cameras cost 12 Hz -> 4 Hz while claiming to be off.
+    # Same textual strip as the range cameras and the gripper, and for the same
+    # measured reason: a disabled feature that is still IN the SDF is still paid
+    # for. `always_on 0` does not stop a Gazebo sensor rendering.
+    if not params.get("lens_flare_on"):
+        s = re.sub(r"\n +<!-- SUN GLARE\..*?<!-- LENSFLARE -->\n", "\n", s,
+                   flags=re.S)
+
     if not params.get("gripper_on"):
         s = re.sub(r"\n +<!-- GRIPPER.*?<!-- /GRIPPER -->\n", "\n", s,
                    flags=re.S)

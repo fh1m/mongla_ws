@@ -894,3 +894,99 @@ measured faster — that difference is noise and must not be read as a result.
 This **retires** the documented "12 Hz → 4 Hz, set it deliberately per session"
 trade. The third of the frame rate was the price of a second full-resolution
 render pass.
+
+## Round 22 — sunlight, and the answer to "are we at Gazebo's ceiling"
+
+### The strategic question, answered with measurements
+
+**No, and the evidence is specific.** Exactly **two** rendering features are
+structurally blocked by gz-sim's GUI-scene / sensor-scene split, and both
+already have working CPU replacements in `underwater_fx`:
+
+| blocked | measured |
+|---|---|
+| `<scene><fog>` | 18 m → 3 m left the far wall pixel-identical |
+| `particle_emitter` | per-frame stddev 1.4700 with vs 1.4678 without |
+
+Everything else demonstrably reaches camera sensors: GLSL via `ShaderParam`
+(48.7 % of pixels), shadows, normal maps, per-pixel attenuation (124 grey
+levels).
+
+**A third feature joined the blocked list this round.** `LensFlare` — a
+first-party Harmonic render pass, `libgz-sim8-lens-flare-system.so`, attached
+inside `<sensor>` — **loads and binds and produces nothing here**:
+
+```
+gz -v 4:  "Lens flare attached to camera named"     (both cameras)
+
+flare off          mean 99.8   p99 118   saturated 0.00 %
+flare on           mean 99.5   p99 117   saturated 0.00 %
++ positional light mean 99.3   p99 117   saturated 0.00 %
+```
+
+Tested underwater and in air, with `light_name` bound to the directional `sun`
+and to a purpose-added point light. The wiring is kept and correct, and is
+documented in the model template so nobody repeats the experiment. **Note the
+trap that cost the most time: the sim runs `gz -v 2`, which hides info
+messages — so "no flare log" was not evidence of failure, and the plugin was
+working all along.**
+
+### What shipped instead: `SunlightField` and `SurfaceGlare`
+
+Both competitions are run in **outdoor pools under direct sun**, so the moving
+light net and surface glare are the normal appearance of a frame, not an extra.
+
+**Caustics are world-anchored, which is the whole difficulty.** A pattern
+painted in image space swims with the camera and reads as a dirty lens. These
+are sampled at the world position each pixel is looking at, recovered from the
+range image the depth cameras already publish — which is why `range_cameras`
+being on by default matters beyond attenuation.
+
+The interference maths is the one `gen_pool_texture._caustics()` bakes into the
+floor, with a time term. The bake stays as the still floor pattern; this adds
+the **motion**, and unlike the bake it lands on **every surface in view** —
+props and pool walls included, which the floor-only bake never touched.
+
+Three defects found and fixed while building it, each of which produced
+something that looked like it worked:
+
+- **Negative light.** The raw wave sum runs symmetrically about zero and drove
+  the frame gain to **−0.082** — an inverted image. Light focuses where the
+  surface is concave and merely thins where it is convex, so the positive part
+  is taken and then mean-centred, which also keeps frame brightness unchanged.
+- **Soft blotches instead of filaments.** The positive part alone is smooth.
+  Real caustics are an *envelope where rays cross*, far peakier than the surface
+  producing them — hence `CAUSTIC_SHARPNESS`.
+- **A parameter declared but not in `_on_params` is silently un-tunable.**
+  `ros2 param set` reports success, the server value changes, and the node keeps
+  the value it read at construction. Measured: caustics 0.0 → 0.45 moved the
+  frame diff by 0.4 out of 10.5, which reads as "the effect does nothing" and
+  was in fact "the effect was never switched on".
+
+Measured in the running sim, static camera over the floor at strength 1.2:
+**55.8 % of floor pixels changed, max 81**, floor mean 93.33 → 92.86 (brightness
+preserved), frame-to-frame diff 9.27 → 10.20 (the animation).
+
+Defaults ride the lighting presets and scale with clarity — clear 0.70/0.45,
+competition 0.50/0.35, murky 0.22/0.15 — because murky water scatters the net
+out before it reaches the floor.
+
+### GPU: already used, and NOT the bottleneck
+
+Measured during a live run: **GPU 23–29 %, 416 MiB of 6144**, while the gz
+server sat at **207 % CPU**. `glxinfo` confirms OpenGL 4.6 on the NVIDIA driver
+and the world already selects `ogre2`.
+
+So the sim is **CPU-bound, not GPU-bound**, and GPU-side shader work is close to
+free — which is the quantitative reason the answer to the engine question is
+"stay". Conversely, more CPU post-processing in `underwater_fx` is the expensive
+direction, and this round added two effects there; if that becomes the limit,
+the right move is a `ShaderParam` fragment shader, not a faster Python.
+
+### Honest limits
+
+- The caustics are **soft rather than sharply filamentary** at competition
+  turbidity. They are applied before the blur, which is physically defensible —
+  scattering blurs caustics too — but it costs crispness.
+- **The animated water SURFACE, splash, and the Dubomini dynamics rescale were
+  not reached** this round.

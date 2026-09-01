@@ -288,3 +288,27 @@ gripper:
   trim_kg: 0.267
 
 odom_publish_frequency: 50.0
+
+# SUN GLARE on the cameras. `false`, or a block:
+#
+#   lens_flare:
+#     scale: 0.4
+#     colour: [1.0, 0.95, 0.85]
+#
+# OFF BY DEFAULT, deliberately. Glare is a real condition to train against AND a
+# real way to make a dataset harder than the pool it came from, so it is a
+# stated choice per session rather than something that quietly appears in every
+# capture.
+#
+# IT IS A CONFIG SETTING, NOT A LAUNCH ARG, and that is a property of the
+# architecture rather than an oversight: model.sdf is a BUILD ARTIFACT generated
+# from this file, so nothing at launch time can add a plugin to it. Same as
+# `range_cameras`. To enable:
+#
+#     edit this block, then
+#     scripts/generate_model.py models/<vehicle>/model.sdf.in \
+#         models/<vehicle>/model.sdf models/<vehicle>/configs.yaml
+#     ./build_sim.sh --packages-select duburi_sim_description
+#
+# (the SDF/URDF drift guard fails the test suite if you edit this and forget.)
+lens_flare: false
