@@ -702,11 +702,17 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > mesh per pool), verified equivalent to the box it replaced (probe-camera mean
 > **111.452 vs 111.424**). The Gerstner shader on top is **NOT shipped**: it
 > compiles and it is applied (**100 % of pixels** differ from the plugin-stripped
-> control) but **every `<param>` arrives as zero** — rewriting the fragment
-> shader wholesale and changing `tau` by three orders of magnitude both left the
-> render **byte-identical at mean 97.667**. The open question is ShaderParam's
-> parameter delivery on gz-sim 8, and the Fuel wiring it was copied from is
-> authored for ign-gazebo6.
+> control) but **its fragment stage never runs**: a shader consisting of nothing
+> but `fragColor = vec4(1,0,1,1)`, with **no uniforms at all**, renders
+> **0.00 % magenta** and the same mean **97.667**. Three means bracket it —
+> 122.836 with no surface, 111.452 with the surface's own material, 97.667 with
+> ShaderParam attached. The Fuel wiring it was copied from is authored for
+> **ign-gazebo6**, not gz-sim 8, which is the first thing to check.
+> **This round's own first answer — "every `<param>` arrives as zero" — is
+> RETRACTED**; it was inferred from two experiments that could not tell the
+> hypotheses apart (both shaders reduce to the same output under it, and `tau`
+> only scales an amplitude that was already zero). A **fourth** wrong diagnosis
+> in the same round, on top of the three below.
 > **`gz -v 2` DOES report a shader compile failure — by aborting the server**
 > (`OGRE EXCEPTION … failed to compile`, `exit code -6`). So a live sim is
 > positive evidence the GLSL compiled, which is the opposite of the old

@@ -335,22 +335,40 @@ frame, the shader:
   retraction above), and this one does not, so it is being built and bound;
 - **is applied** — **100 % of pixels** differ from the same visual with the
   plugin stripped (97.667 vs 111.452 mean);
-- **receives no parameter values.** Rewriting the fragment shader wholesale
-  (a two-colour power curve → a Snell's-window step) left the render
-  **byte-identical at mean 97.667**, and so did changing `tau` from 2.0 to
-  0.001. Both should have changed every pixel. The uniforms are arriving as
-  zero, which makes the sheet flat and the colour constant.
+- **does not execute its fragment stage.** A fragment shader consisting of
+  nothing but `fragColor = vec4(1.0, 0.0, 1.0, 1.0)` — **no uniforms at all** —
+  renders **0.00 % magenta** and the same **97.667**. That is the whole answer,
+  and it took a fourth wrong diagnosis to get to it.
 
-So the open question is **`<param>` delivery**, not GLSL and not framing. The
-wiring emitted was `<plugin filename="gz-sim-shader-param-system">` on the
-visual, shader paths relative to the `.world`, `float_array` for the vectors and
-`<value>TIME</value>` with no `<type>` for `t` — copied from the Fuel `waves`
-model, which is authored for **ign-gazebo6**, not gz-sim 8.
+**RETRACTING THIS ROUND'S OWN FIRST CONCLUSION.** It was written up, committed
+and pushed as *"every `<param>` arrives as zero"*, inferred from two experiments
+— rewriting the fragment shader wholesale, and changing `tau` by three orders of
+magnitude. **Neither one discriminated.** Under a zero-uniform hypothesis both
+shaders reduce to `col = vec3(0)` with `alpha = 0`, so both were invisible
+either way; `tau` only scales an amplitude that was already zero. Two
+experiments that cannot distinguish the hypotheses were read as confirming one.
+The uniform-free magenta shader is the test that separates them, and it is one
+sim launch.
+
+So the open question is **why the custom fragment program is not running**, not
+`<param>` delivery. Three distinct means bracket it: **122.836** with no water
+surface at all, **111.452** with the surface and its normal material, **97.667**
+with ShaderParam attached — so the visual *is* still drawn with the plugin on,
+just not by the shader as written. The wiring emitted was
+`<plugin filename="gz-sim-shader-param-system">` on the visual, shader paths
+relative to the `.world`, `float_array` for the vectors and `<value>TIME</value>`
+with no `<type>` for `t`, copied from the Fuel `waves` model — which is authored
+for **ign-gazebo6**, not gz-sim 8, and is the first thing to check.
 
 **The mesh is kept** because it is verified equivalent to the box it replaced
 (probe-camera mean **111.452 vs 111.424**) and because a `<box>` is 8 vertices —
 having nothing to displace is exactly why this item was carried and cut across
 rounds 12, 13, 14, 19 and 22.
+
+**Not a defect**: Ogre logs three `Cannot locate an appropriate 2D texture
+coordinate set … to create tangents` exceptions on `rs_task_slalom`, which
+contains neither `torpedo_plate.obj` nor `crate_wall.obj`. Counted both ways:
+**3 with the water mesh, 3 with the box**. Pre-existing, and not the water sheet.
 
 **Measurement rig**: spawn a static probe model with its own camera and read it
 off gz-transport. Do **not** use `EntityFactory`'s `sdf:` pose — it is
