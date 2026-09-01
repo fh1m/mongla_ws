@@ -1,0 +1,374 @@
+# Dubomini 2.0 — the REAL vehicle, from the team's own CAD.
+#
+# Edit this file and re-run scripts/generate_model.py; never hand-edit model.sdf.
+# The buoyancy collision box is derived from mass, bounding_box,
+# buoyancy_adjustment and fluid_density, so changing any of those without
+# regenerating leaves the model silently mis-weighted.
+#
+# PROVENANCE. Geometry comes from `hullv3.stl` (2,149,667 triangles, 3,276
+# components, Y-up, millimetres) and the published spec at
+# bracuduburi.com/auv/dubomini. The two agree: the STL's length matches the
+# quoted 54.59 cm overall to 0.0 mm, which is what says this mesh is that
+# vehicle. Width and height agree to 5.9 and 2.5 mm.
+#
+# WHAT IS MEASURED AND WHAT IS ASSUMED -- read this before trusting a number.
+#   MEASURED (published): mass 14.6 kg in air, overall dimensions, Aluminium
+#     5083 frame, 8x T200 in a 6-DOF vectored arrangement.
+#   DERIVED FROM THE CAD: every thruster position and axis below, and the
+#     bounding box.
+#   ASSUMED: buoyancy, and the hydrodynamic coefficients. Each is marked. The
+#     spec page gives no buoyancy, no depth rating and no top speed, and none of
+#     those can be recovered from geometry.
+
+model_name: "dubomini"
+
+# PUBLISHED: "Weight (in Air): 14.6 kg (32.2 lbs)".
+mass: 14.6
+
+fluid_density: 1000.0
+
+control_method: 0  # 0 = thrust (cmd_thrust), 1 = angular velocity (cmd_vel)
+
+# From the STL bounding box, converted CAD(Y-up, mm) -> Gazebo(Z-up, m):
+#   length 0.5459 (published 0.5459), width 0.4702 (published 0.4643),
+#   height 0.1693 (published 0.1668).
+# Only x and y feed the buoyancy collision box.
+bounding_box:
+  x: 0.5459
+  y: 0.4702
+  z: 0.1693
+
+center_of_mass:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+
+# ASSUMED, and it matters. The centre of volume sits ABOVE the centre of mass
+# and that separation is the vehicle's entire passive righting moment in roll
+# and pitch. 1 cm is the figure carried over from the Duburi model, where it was
+# chosen deliberately over bluerov2_gz's far stiffer 4.9 cm. Dubomini's real
+# separation is a function of where its buoyancy foam and batteries sit and is
+# not in the published spec.
+center_of_volume:
+  x: 0.0
+  y: 0.0
+  z: 0.01
+
+# ASSUMED: net buoyancy in kg, positive = floats.
+#
+# THIS CANNOT COME FROM THE MESH, and the arithmetic says why. The STL's signed
+# volume is 6.58 L, which would displace 6.58 kg against a 14.6 kg vehicle --
+# 8.0 kg NEGATIVE, a rock. The enclosures are modelled as SHELLS, so the sealed
+# air that actually floats this vehicle is not in the mesh volume at all. The
+# convex hull is 31.8 L, so the true displacement lies between those bounds and
+# ~14.6 L (neutral) is 46 % of the envelope, which is reasonable for an open
+# frame -- but reasonable is not measured.
+#
+# +0.2 kg is the usual AUV trim. REPLACE THIS WITH THE MEASURED FIGURE when
+# somebody weighs the vehicle in water; it is the single most valuable number
+# missing from this model.
+buoyancy_adjustment: 0.2
+
+# ASSUMED, scaled from the Duburi 4.5 model by this vehicle's dimensions.
+#
+# gz-sim 8 can compute moments of inertia from a WATER-TIGHT mesh, which would
+# have made these real. `hullv3.stl` is NOT water-tight -- 2,178 of its 3,276
+# components are, the assembly is not -- so that path is unavailable and this is
+# said plainly rather than left looking derived. Recovering it needs the CAD
+# exported as a closed solid.
+inertia:
+  ixx: 0.28
+  iyy: 0.35
+  izz: 0.52
+
+# EVERY NUMBER HERE IS FROM THE CAD, not from a datasheet or a guess.
+#
+# The published spec says only "vectored arrangement with empirically
+# distributed placement" and gives no coordinates. These are recovered from the
+# STL by `gen_vehicle_mesh.thrusters()`: the eight identical ~43k-face
+# components with a ~97 mm envelope are the T200 ducts, and each thrust axis is
+# that cylinder's SHORT principal axis (the duct is 97 mm across, ~70 mm long).
+#
+# The check that the extraction is reading real features rather than fitting
+# noise: the four horizontals come out at EXACTLY +-45.0 degrees, which is the
+# vectored-X layout. Nothing was rounded to get there.
+#
+# Compared with Duburi 4.5, Dubomini's horizontals sit much further out in x
+# (0.228 against 0.14) -- substantially more yaw authority, which is what
+# "agile" means for this hull.
+thrusters:
+  - x: 0.2280    # Thruster 1, front starboard vectored
+    y: -0.1519
+    z: 0.0479
+    # THE CAD GIVES THE AXIS LINE; IT DOES NOT GIVE THE PUSH DIRECTION.
+    #
+    # The measured duct axis is (+0.705, +0.706), i.e. the +135 deg line. But a
+    # duct is a cylinder: its axis is a LINE, and which way the thruster
+    # actually pushes along it is set by prop handedness and ESC wiring, which
+    # are nowhere in the geometry. -45 and +135 are the same line, 180 deg
+    # apart.
+    #
+    # The sign is therefore taken from the ArduSub `vectored_6dof` frame, whose
+    # mixer is what flies this vehicle. Measured: ArduSub's forward command is
+    # [-33, -27, +33, +27] across thrusters 1-4, which against the +135/+45
+    # reading sums to (0.0, -8.5) N -- ZERO forward thrust and a sideways
+    # nudge. The vehicle drifted diagonally at 0.045 m/s and nothing logged a
+    # fault, because nothing was faulty: every thruster did as it was told.
+    # With the frame's own convention the same mix sums to (84.9, 0.0) N.
+    #
+    # POSITIONS remain from the CAD and are real; only the four signs come from
+    # the frame definition.
+    yaw_deg: -45.0
+  - x: 0.2280    # Thruster 2, front port vectored, duct axis (+0.705, -0.705)
+    y: 0.1510      #   = the -135 deg line; sign from the ArduSub frame
+    z: 0.0479
+    yaw_deg: -135.0
+  - x: -0.2250   # Thruster 3, aft starboard vectored, duct axis (+0.705, -0.705)
+    y: -0.1520     #   = the +45 deg line
+    z: 0.0479
+    yaw_deg: 45.0
+  - x: -0.2250   # Thruster 4, aft port vectored, duct axis (+0.705, +0.706)
+    y: 0.1509      #   = the +135 deg line
+    z: 0.0479
+    yaw_deg: 135.0
+  - x: 0.1061    # Thruster 5, front starboard vertical
+    y: -0.1707
+    z: 0.0618
+  - x: 0.1061    # Thruster 6, front port vertical
+    y: 0.1697
+    z: 0.0618
+  - x: -0.1031   # Thruster 7, aft starboard vertical
+    y: -0.1707
+    z: 0.0618
+  - x: -0.1031   # Thruster 8, aft port vertical
+    y: 0.1697
+    z: 0.0618
+
+# --- Fossen hydrodynamic coefficients ---------------------------------------
+#
+# From the ROV-Simulator benchmark's identified BlueROV2 Heavy model. Full
+# provenance, units and the sign derivation are in HYDRODYNAMICS.md; read that
+# before touching any number here.
+# THE TWO BLOCKS BELOW HAVE OPPOSITE SIGN CONVENTIONS. This is not a typo.
+#
+# `drag` feeds the Hydrodynamics plugin, which negates twice, so the force it
+# applies is +xU*u. Damping coefficients must therefore be negative to oppose
+# motion; a positive one gives a vehicle that accelerates itself.
+#
+# `added_mass` does NOT feed that plugin. It is emitted as the link's
+# <fluid_added_mass> matrix, which is a real inertia and so is positive.
+# generate_model.py rejects negative values here. The reason for the split is
+# stability, and it is covered in HYDRODYNAMICS.md; the short version is that
+# heave adds 18.7 kg to a 13.5 kg vehicle, and the plugin's explicit treatment
+# of that diverges within a second of sim time.
+
+added_mass:
+  # SOLVED, not copied: Capytaine boundary-element method on this vehicle's own
+  # hull, at infinite frequency with the free surface removed -- the standard
+  # treatment for a deeply submerged ROV. `scripts/added_mass.py` reproduces it.
+  #
+  # HEAVE IS 64.5 kg AGAINST A 14.6 kg VEHICLE -- 4.4x, where Duburi's is 1.4x.
+  # That is not an error: Dubomini is a flat plate, 546 x 470 x 169 mm, and a
+  # flat body accelerating perpendicular to its own face drags an enormous
+  # amount of water with it. A circular disc of this radius gives 42 kg from the
+  # closed-form 8/3 rho a^3, so 64.5 for a squarer planform is the right order.
+  # It is also WHY this vehicle will feel sluggish in heave and quick in surge,
+  # which is a real property of the hull rather than a tuning choice.
+  #
+  # UPPER BOUND, and in a known direction. The BEM needs a closed surface and
+  # `hullv3.stl` is 3,276 disconnected components, so the solve runs on the
+  # CONVEX HULL -- which displaces more water than an open frame does. These
+  # coefficients therefore over-estimate; the real vehicle accelerates slightly
+  # more readily than this model will.
+  #
+  # Sign: SDF //inertial/fluid_added_mass takes POSITIVE magnitudes while the
+  # Hydrodynamics plugin's <xDotU> family is negative. Capytaine returns
+  # positive, so these feed the SDF form directly.
+  xDotU: 8.5697
+  yDotV: 10.8124
+  zDotW: 64.5087
+  kDotP: 0.2937
+  mDotQ: 0.6185
+  nDotR: 0.0718
+
+drag:
+  # First-order damping. Sway, roll and yaw really are zero in the source: those
+  # axes are modelled as purely quadratically damped. This is not missing data.
+  linear:
+    xU: -13.7          # N*s/m
+    yV: 0.0
+    zW: -33.0          # N*s/m
+    kP: 0.0
+    mQ: -0.8           # N*m*s/rad
+    nR: 0.0
+
+  # Second-order damping. These replace the flat-plate estimates the generator
+  # would otherwise derive from the bounding box, which understate drag badly:
+  # they predict a 1.56 m/s top speed against Blue Robotics' published ~1.0 m/s.
+  # These values give 0.95 m/s.
+  quadratic:
+    xUabsU: -141.0     # N*s^2/m^2
+    yVabsV: -217.0     # N*s^2/m^2
+    zWabsW: -190.0     # N*s^2/m^2
+    kPabsP: -1.192     # N*m*s^2/rad^2
+    mQabsQ: -0.47      # N*m*s^2/rad^2
+    nRabsR: -1.5       # N*m*s^2/rad^2
+
+# 640x480 is fixed by the sim_front / sim_bottom profiles in
+# duburi_vision/config/cameras.yaml. far_clip stands in for water turbidity.
+cameras:
+  width: 640
+  height: 480
+  update_rate: 30.0
+  # 1.0064 rad = 57.7 deg, the UNDERWATER field of view.
+  #
+  # The Blue Robotics Low-Light HD USB camera is specified at 80 deg
+  # horizontal IN AIR, and 80 deg is what this was set to. But the camera
+  # looks through a flat port into water, and Snell's law narrows it:
+  #     theta_water = 2 * asin(sin(40 deg) / 1.333) = 57.7 deg
+  # -- 28 % narrower than the number on the datasheet.
+  #
+  # That gap runs the wrong way for us. A sim camera that sees 80 deg shows
+  # more of the course than the vehicle ever will, so a mission tuned here
+  # keeps targets in frame that the real hull would have lost off the edge,
+  # and every search pattern is calibrated against a view that does not
+  # exist. This is the single most consequential number for vision work in
+  # the whole model.
+  hfov: 1.0064
+  far_clip: 30.0
+  noise_stddev: 0.007
+  front:
+    x: 0.2
+    y: 0.0
+    z: 0.0
+  bottom:
+    x: 0.0
+    y: 0.0
+    z: -0.1
+
+ardupilot:
+  fdm_addr: "127.0.0.1"
+  fdm_port_in: 9002
+
+# Per-pixel light attenuation needs a depth image per camera. Each costs a
+# full render pass on the thread the colour cameras share, so this is OFF by
+# default and turned on for a perception experiment. underwater_fx falls back
+# to uniform attenuation by vehicle depth when no range image arrives.
+#
+# THE COST IS MEASURED, NOT ESTIMATED: the cameras go from 12 Hz to 4 Hz with
+# that claim is RETRACTED -- see the measurements below. The third of the frame
+# rate was the price of a second FULL-RESOLUTION render pass, not the price of
+# per-pixel attenuation, and the two are separable.
+# Per-pixel attenuation. `false`, or a block giving the depth cameras their OWN
+# resolution and rate -- which is the point: they used to mirror the colour
+# cameras exactly (640x480 @ 30 Hz) and that is what cost 12 Hz -> 4 Hz.
+# Attenuation is a smooth, low-frequency correction and nothing reads the range
+# image sharp, so it can be far cheaper than the image it corrects.
+#
+# MEASURED, camera Hz on robosub26_full:
+#
+#     off (baseline)        7.740 Hz     --
+#     640x480 @ 30          6.468 Hz     -16 %   (the old mirror-the-colour-
+#                                                 camera setting)
+#     320x240 @ 10          7.674 Hz     -0.9 %  <- default
+#     160x120 @  5          7.543 Hz     -2.5 %
+#
+# So per-pixel attenuation is essentially FREE once the depth cameras stop
+# mirroring the colour cameras, and it is on by default. The two cheap points
+# are within noise of each other and of the baseline; 320x240 is chosen over
+# 160x120 for the better range image at the same price, not because it measured
+# faster -- that difference is noise and should not be read as a result.
+#
+# This retires the "12 Hz -> 4 Hz, set it deliberately per session" trade: the
+# cost was never per-pixel attenuation, it was rendering a second 640x480 @ 30
+# pass for a correction that is smooth and low-frequency.
+range_cameras:
+  width: 320
+  height: 240
+  update_rate: 10.0
+
+# ---------------------------------------------------------------- livery ----
+# THE HULL IS OURS, NOT A STOCK BlueROV2.
+#
+# The visual is a BlueROV2 Heavy mesh (MIT, from bluerov2_gz) and it carried the
+# vendor's own colours, so every render and every operator view showed somebody
+# else's vehicle. Duburi 4.5 is an octagonal Marine 5083 ALUMINIUM hull, which
+# is what these numbers describe: a brushed-aluminium body rather than the
+# stock black polymer, with the team's accent on the thrusters so the eight
+# vectored units read apart from the frame at a glance.
+#
+# An SDF <material> overrides the mesh's embedded material, so this needs no
+# mesh edit and stays a config change.
+#
+# It is DELIBERATELY not a detection concern: the vehicle is semantic label 0
+# (background) and is never a target, so no dataset changes with this. It is an
+# operator-view and RViz change, and it is worth saying that plainly rather than
+# implying a realism gain that is not there.
+livery:
+  # Brushed 5083 aluminium, WARM. A neutral grey here is a no-op: the
+  # recolour preserves luminance, so tinting the mesh's greys toward
+  # another grey returns them unchanged (measured: 2.2 % of pixels).
+  # The warmth is what makes the frame read as machined metal.
+  hull: [0.70, 0.66, 0.58]
+  hull_specular: 0.42
+  # Anodised deep teal on the thruster housings.
+  thruster: [0.09, 0.26, 0.30]
+  thruster_specular: 0.30
+  # Self-illumination, for the same reason every prop has it: an underwater
+  # scene is fogged and singly lit, and without it the hull reads near-black in
+  # the operator view. Applied PER CHANNEL -- a grey emissive is a desaturation
+  # term, which is what washed out every coloured prop before round 12.
+  emissive_gain: 0.22
+
+# --------------------------------------------------------------- gripper ----
+# OFF BY DEFAULT. Turning it on changes the vehicle's weight and trim, so it is
+# opt-in and every consequence below is stated rather than discovered.
+#
+# Modelled on the Blue Robotics Newton Subsea Gripper, from its published
+# specification -- there is no public URDF or Gazebo model of it (Blue
+# Robotics' own forum, May 2024), so this is authored from the datasheet the
+# way every prop in this tree is authored from published figures:
+#
+#     jaw opening      62 mm
+#     length           303.2 mm closed / 309.2 mm open
+#     body diameter    36 mm
+#     mass             524 g in air, 267 g submerged
+#     actuation        1.6 s open-to-close, PWM 1100-1900 (1500 neutral)
+#     grip force       97 N at the tip, 124 N mid-jaw
+#
+# WHAT THIS DOES NOT DO: it does not make the octagon's object-handling points
+# scorable. Those stay NOT_MODELLED in rulebook.py (5,100 RoboSub points, 60
+# SAUVC) because no autonomy verb commands it -- a mission cannot grab. This is
+# geometry, mass and a grasp mechanic to develop against, not a scoring change.
+gripper:
+  enabled: false
+  # On the hull's underside front, jaws forward -- where a Newton mounts.
+  x: 0.24
+  y: 0.0
+  z: -0.09
+  body_radius: 0.018        # 36 mm diameter
+  body_length: 0.20         # the visible body; the datasheet 303 mm includes
+                            # the jaws, which are separate links below
+  jaw_length: 0.10
+  jaw_radius: 0.008
+  # Half the 62 mm opening, as a hinge angle each jaw swings through.
+  jaw_open_rad: 0.62
+  # The datasheet's full-travel time. The controller is rate-limited to it, so
+  # a grab takes as long in the sim as it does on the vehicle.
+  actuation_s: 1.6
+  mass: 0.524               # in AIR. The submerged 267 g follows from the
+                            # displacement below and is not typed twice.
+  # THE TRAP THIS EXISTS FOR. The buoyancy collision box is DERIVED:
+  #     collision_z = (mass + buoyancy_adjustment) / (bx * by * fluid_density)
+  # so adding 524 g of gripper without adding displacement makes the vehicle
+  # sink. The gripper displaces 524 - 267 = 257 g of water, which still leaves
+  # it 267 g negative -- correctly, because a Newton IS negatively buoyant.
+  #
+  # A real team trims that out with foam, and so does this: `trim_kg` restores
+  # the hull's original +0.1 kg net buoyancy so the flight model does not
+  # silently change under the vision work. Set it to 0.0 to fly the untrimmed
+  # vehicle and watch it sink, which is also a legitimate thing to want.
+  displacement: 0.257
+  trim_kg: 0.267
+
+odom_publish_frequency: 50.0

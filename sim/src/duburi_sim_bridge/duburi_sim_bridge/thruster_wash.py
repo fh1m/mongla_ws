@@ -165,7 +165,7 @@ class ThrusterWash(Node):
         # trap `t200_curve` documents: ArduPilotPlugin bakes the MODEL name into
         # its topic while a course names the INSTANCE something else, and
         # subscribing to the wrong one is silent.
-        self.declare_parameter('vehicle', 'duburi_heavy')
+        self.declare_parameter('vehicle', 'dubomini')
         # Below this there is no jet worth applying. 2 N of net horizontal
         # thrust is trim, not drive.
         self.declare_parameter('min_thrust_n', 2.0)

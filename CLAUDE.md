@@ -573,6 +573,47 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > isolated**; an attempt to test it alone was my own bug (recycled slot names
 > are not "new" keys, so fired shots reported `NO MODEL`). Bins stay **5/5**.
 >
+> **THE SIM FLIES THE REAL DUBOMINI NOW.** Two rounds of recolouring a BlueROV2
+> could not fix what was actually wrong: it was a BlueROV2. `hullv3.stl` (the
+> team's own CAD, 2.15 M triangles, 3,276 components, **Y-up millimetres**) is
+> in as the `dubomini` model and is the **default vehicle on all 13 courses**;
+> `duburi_heavy` stays selectable as the Duburi 4.5 proxy. Verified against
+> `bracuduburi.com/auv/dubomini` BEFORE building on it — the STL's length
+> matches the published 545.9 mm to **0.0 mm**. **14.6 kg** published.
+> Collision is Gazebo's own `optimization="convex_decomposition"` (no V-HACD
+> install); the visual is decimated to 9.5 % of faces with extents within
+> **4 mm** and hull volume within **1.1 %**. RTF median **0.0169**.
+>
+> **BUOYANCY CANNOT COME FROM THE MESH** and is ASSUMED (+0.2 kg): the signed
+> volume is 6.58 L against a 14.6 kg vehicle — **8 kg negative, a rock** —
+> because the enclosures are modelled as *shells* and the sealed air that floats
+> it is not in the mesh at all. The convex hull is 31.8 L, so the truth is
+> between those. **Get it weighed in water; it is the most valuable number
+> missing.** Drag and inertia are still the BlueROV2's and marked ASSUMED, so
+> **speed is not calibrated** — 0.16 m/s against Duburi's ~0.65.
+>
+> **A MESH GIVES AN AXIS LINE, NOT A PUSH DIRECTION** — the distinction cost a
+> debugging pass. The 8 T200 ducts are recovered from the CAD (the horizontals
+> land at **exactly ±45.0°**, and sit 0.228 m out in x against Duburi's 0.14 —
+> this hull's yaw authority). But which way a duct *pushes* is prop handedness
+> and ESC wiring, which are not geometry: −45° and +135° are the **same line**.
+> Taking the CAD reading literally, ArduSub's measured forward mix
+> `[−33,−27,+33,+27]` summed to **(0.0, −8.5) N — zero forward thrust**, and the
+> vehicle drifted diagonally at 0.045 m/s while **nothing logged a fault**,
+> because nothing was faulty. With the frame's signs: (84.9, 0.0) N, and
+> **0.268 m diagonal → 0.958 m straight**.
+>
+> **ADDED MASS IS SOLVED, NOT COPIED** — Capytaine BEM on the hull: surge 8.57,
+> sway 10.81, **heave 64.51 kg** (4.4× the vehicle's mass, where Duburi's is
+> 1.4×). That is a flat plate's real physics, not an error. It runs on the
+> **convex hull** because the assembly is not water-tight, so it is an **UPPER
+> BOUND**. Two traps: Capytaine 3.0's `assemble_dataset` **silently drops** the
+> no-free-surface case (their #88) and returns no `added_mass` at all, reading
+> like a failed solve; and SDF's `fluid_added_mass` is **positive** where the
+> plugin's `<xDotU>` is negative. Sustained high-gain runs still lose depth —
+> ALT_HOLD against 64.5 kg of heave. Full detail:
+> [`sim/.context/DUBOMINI.md`](sim/.context/DUBOMINI.md).
+>
 > **THE LIVERY ERASED THE VEHICLE, AND A PIXEL-DIFF IS WHAT HID IT.** A single
 > SDF `<material>` on the hull visual A/B'd at 33.8 % of pixels changed — and it
 > was **wrong**: the `.dae` carries **49 distinct materials** and one SDF

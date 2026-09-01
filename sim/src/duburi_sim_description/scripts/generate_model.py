@@ -415,6 +415,20 @@ class ModelParams:
             setattr(self, f"thruster{thruster_num}_x", thruster[0])
             setattr(self, f"thruster{thruster_num}_y", thruster[1])
             setattr(self, f"thruster{thruster_num}_z", thruster[2])
+            # PER-THRUSTER YAW, and it must come from the config rather than
+            # the template.
+            #
+            # The BlueROV2 template hard-codes -45/-135/+45/+135, and Dubomini
+            # inherited those when its template was derived from it -- while its
+            # CAD says +135/+45/+45/+135. Thruster 1 would have pushed 90
+            # degrees away from where its duct points, and NOTHING would say so:
+            # the vehicle still moves, just not where it was told. Thrust
+            # allocation is the one number whose error is invisible in a log.
+            #
+            # Default 0.0 keeps the vertical thrusters (5-8) unchanged, and the
+            # BlueROV2 model keeps its own literals in its own template.
+            setattr(self, f"thruster{thruster_num}_yaw",
+                    float(thruster[3]) if len(thruster) > 3 else 0.0)
 
             topic = f"/model/{model_name}/joint/thruster{thruster_num}_joint/cmd_"
             topic += "vel" if use_angvel_cmd else "thrust"
@@ -588,7 +602,8 @@ def get_model_params_from_config(config_path: str) -> ModelParams:
         added_mass,
         current,
         [
-            (thruster["x"], thruster["y"], thruster["z"])
+            (thruster["x"], thruster["y"], thruster["z"],
+             math.radians(thruster.get("yaw_deg", 0.0)))
             for thruster in config["thrusters"]
         ],
         config["control_method"],
@@ -619,6 +634,11 @@ def _repaint_meshes(config_path: str, model_dir: str) -> None:
     hull = lv.get("hull", [0.62, 0.63, 0.65])
     accent = lv.get("thruster", [0.09, 0.26, 0.30])
     meshes = os.path.join(model_dir, "meshes")
+    # Only the BlueROV2-derived vehicle wears the generated livery. Dubomini's
+    # mesh is the team's own CAD and already looks like the vehicle; recolouring
+    # it would be repainting the real thing to match a proxy.
+    if not os.path.isfile(os.path.join(meshes, "duburi_heavy.dae")):
+        return
     for stem in ("duburi_heavy", "t200_ccw_prop", "t200_cw_prop"):
         src = os.path.join(meshes, f"{stem}.dae")
         if os.path.isfile(src):
