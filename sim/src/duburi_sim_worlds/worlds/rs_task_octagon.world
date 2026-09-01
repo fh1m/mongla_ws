@@ -451,7 +451,7 @@ The octagon is SURFACE-anchored -- it floats at z = 0 while everything else in t
 
     <!-- ===================== VEHICLE ===================== -->
     <include>
-      <uri>model://duburi_heavy</uri>
+      <uri>model://dubomini</uri>
       <name>duburi</name>
       <pose>-4 0 -0.4 0 0 0</pose>
     </include>

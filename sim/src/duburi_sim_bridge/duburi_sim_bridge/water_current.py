@@ -44,7 +44,7 @@ class WaterCurrent(Node):
     def __init__(self) -> None:
         super().__init__('water_current')
 
-        self.declare_parameter('vehicle', 'duburi_heavy')
+        self.declare_parameter('vehicle', 'dubomini')
         # Steady set, in WORLD frame, m/s. The hydrodynamics plugin expects a
         # world-frame vector and handles the body-frame projection itself.
         self.declare_parameter('speed', 0.05)

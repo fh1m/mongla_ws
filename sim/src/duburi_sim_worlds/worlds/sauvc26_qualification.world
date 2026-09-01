@@ -450,7 +450,7 @@ Pool coordinates: origin at the pool centre, water surface at z = 0, so the -x w
 
     <!-- ===================== VEHICLE ===================== -->
     <include>
-      <uri>model://duburi_heavy</uri>
+      <uri>model://dubomini</uri>
       <name>duburi</name>
       <pose>-11.8 0 -0.4 0 0 0</pose>
     </include>

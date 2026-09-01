@@ -457,7 +457,7 @@ SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate d
 
     <!-- ===================== VEHICLE ===================== -->
     <include>
-      <uri>model://duburi_heavy</uri>
+      <uri>model://dubomini</uri>
       <name>duburi</name>
       <pose>-11.8 0 -0.4 0 0 0</pose>
     </include>

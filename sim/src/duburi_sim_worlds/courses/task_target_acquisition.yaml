@@ -20,7 +20,7 @@ scene:
   fog_density: 0.02
 
 vehicle:
-  model: duburi_heavy
+  model: dubomini
   name: duburi
   pose: [4.0, 0.0, -0.4]
   yaw: 0.0

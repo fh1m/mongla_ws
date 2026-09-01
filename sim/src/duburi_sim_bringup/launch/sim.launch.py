@@ -137,7 +137,14 @@ def generate_launch_description():
 
     args = [
         DeclareLaunchArgument(
-            'vehicle_model', default_value='duburi_heavy',
+            # DUBOMINI IS THE DEFAULT VEHICLE. This is the MODEL name, and it
+            # is load-bearing well beyond the mesh: ArduPilotPlugin bakes it
+            # into every thruster cmd_topic, so `t200_curve` subscribing to the
+            # wrong one leaves the thrusters with NO commands at all -- the
+            # vehicle simply sits there, and nothing logs a reason. `duburi` is
+            # the INSTANCE name and is unchanged, which is what payload_sim,
+            # scoring and bno085_sim address.
+            'vehicle_model', default_value='dubomini',
             description="The vehicle MODEL name, which is not the course's "
                         'instance name. Both thruster plugins bake their gz '
                         'topics from the model the SDF was generated with.'),
