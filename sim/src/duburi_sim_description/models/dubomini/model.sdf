@@ -60,29 +60,87 @@
            No <material>: the mesh carries its own, and one SDF material
            flattens every one of them. That mistake cost a round on the other
            vehicle. -->
-      <visual name="base_link_visual">
+      <!-- ONE VISUAL PER PART CLASS. The previous export merged all 3,276
+           CAD components into a single geometry with a single material, so the
+           vehicle could only ever be one flat colour -- and it had NO VERTEX
+           NORMALS, so the renderer had no shading information either. It read
+           as a pale blob for both reasons at once.
+
+           Colours are SAMPLED from the team's own render (see configs.yaml),
+           not chosen. This vehicle is near-black. -->
+
+      <visual name="frame_visual">
+        <!-- the four long rails and plates -- the vehicle silhouette -->
         <geometry>
           <mesh>
-            <uri>model://dubomini/meshes/dubomini.dae</uri>
+            <uri>model://dubomini/meshes/dubomini_frame.dae</uri>
           </mesh>
         </geometry>
-        <!-- HERE a single <material> is CORRECT, and it is worth saying why,
-             because on the other vehicle the same tag erased the mesh.
-             
-             An STL carries no material at all, and the DAE exported from it
-             inherits none -- so the hull rendered PURE BLACK. There are no
-             per-part materials to flatten: this is additive, not destructive.
-             The BlueROV2 mesh was the opposite case, 49 materials that one tag
-             collapsed. Same tag, opposite effect, and the difference is a
-             property of the mesh rather than of the tag.
-             
-             Aluminium 5083, which is what the published spec says the frame is
-             welded from. Emissive is per channel; a grey lift desaturates. -->
         <material>
-          <ambient>0.7 0.66 0.58 1</ambient>
-          <diffuse>0.7 0.66 0.58 1</diffuse>
-          <specular>0.42 0.42 0.42 1</specular>
-          <emissive>0.154 0.1452 0.1276 1</emissive>
+          <ambient>0.375 0.375 0.38 1</ambient>
+          <diffuse>0.375 0.375 0.38 1</diffuse>
+          <specular>0.22 0.22 0.22 1</specular>
+          <emissive>0.0375 0.0375 0.038 1</emissive>
+        </material>
+      </visual>
+
+      <visual name="enclosure_visual">
+        <!-- the sealed electronics box: GLOSS black, high specular -->
+        <geometry>
+          <mesh>
+            <uri>model://dubomini/meshes/dubomini_enclosure.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.03 0.03 0.034 1</ambient>
+          <diffuse>0.03 0.03 0.034 1</diffuse>
+          <specular>0.65 0.65 0.65 1</specular>
+          <emissive>0.003 0.003 0.0034 1</emissive>
+        </material>
+      </visual>
+
+      <visual name="body_visual">
+        <!-- pressure cylinders and mounts -->
+        <geometry>
+          <mesh>
+            <uri>model://dubomini/meshes/dubomini_body.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.1 0.1 0.11 1</ambient>
+          <diffuse>0.1 0.1 0.11 1</diffuse>
+          <specular>0.35 0.35 0.35 1</specular>
+          <emissive>0.01 0.01 0.011 1</emissive>
+        </material>
+      </visual>
+
+      <visual name="duct_visual">
+        <!-- the eight T200 ducts, with the blue-teal props inside them -->
+        <geometry>
+          <mesh>
+            <uri>model://dubomini/meshes/dubomini_duct.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.12 0.135 0.155 1</ambient>
+          <diffuse>0.12 0.135 0.155 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <emissive>0.012 0.0135 0.0155 1</emissive>
+        </material>
+      </visual>
+
+      <visual name="fitting_visual">
+        <!-- brackets, clamps and the bare-metal camera bezels -->
+        <geometry>
+          <mesh>
+            <uri>model://dubomini/meshes/dubomini_fitting.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.3 0.3 0.31 1</ambient>
+          <diffuse>0.3 0.3 0.31 1</diffuse>
+          <specular>0.45 0.45 0.45 1</specular>
+          <emissive>0.03 0.03 0.031 1</emissive>
         </material>
       </visual>
 

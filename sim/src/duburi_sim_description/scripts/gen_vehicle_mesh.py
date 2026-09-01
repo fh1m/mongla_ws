@@ -88,50 +88,124 @@ def thrusters(mesh):
     return out
 
 
-def decimate(mesh, target_faces: int):
-    """Reduce the VISUAL only. Collision is Gazebo's job -- see the model.
+# What a part IS, from how big it is. The CAD carries no names -- an STL never
+# does -- so this is the only classification available, and the component
+# analysis makes it fall out cleanly: the eight ducts are identical ~43k-face
+# parts with a ~97 mm envelope, the four frame plates are the only things over
+# 300 mm, and 3,158 sub-25 mm parts are bolts.
+#
+# FASTENERS ARE DROPPED, and the arithmetic is why: 3,158 parts, 46.7 % of every
+# triangle in the file, for 0.14 L of bounding volume. No camera in this
+# simulator resolves an M5 bolt head at any working distance, and paying half
+# the mesh budget for them starved the parts that ARE visible.
+PART_CLASSES = ('frame', 'enclosure', 'body', 'duct', 'fitting')
 
-    2.15 M triangles is roughly a hundred times a sane sim mesh, and the cost is
-    paid on every camera in the scene (two colour, two bounding-box, plus the
-    GUI), so it is the single most expensive number in the vehicle.
+
+def classify(component) -> str:
+    e = sorted(component.extents, reverse=True)
+    if 90 < e[0] < 105 and len(component.faces) > 40000:
+        return 'duct'                      # a T200 duct, same test as thrusters()
+    if e[0] > 300:
+        return 'frame'                     # the four long rails and plates
+    if e[0] < 25:
+        return 'fastener'                  # dropped
+    if e[0] > 150:
+        return 'enclosure'
+    if e[0] > 80:
+        return 'body'
+    return 'fitting'
+
+
+def decimate(mesh, target_faces: int):
+    """Reduce a mesh toward a face budget, and RECOMPUTE ITS NORMALS.
+
+    The normals are not a detail. The first export of this vehicle had none --
+    `<input semantic="NORMAL">` simply absent from the DAE -- so the renderer
+    had no shading information at all and 200,000 triangles rendered as a flat
+    pale silhouette. It looked like a colour problem and was a geometry problem.
     """
     import fast_simplification
-    v, f = np.asarray(mesh.vertices), np.asarray(mesh.faces)
-    frac = 1.0 - min(0.99, target_faces / max(1, len(f)))
-    vo, fo = fast_simplification.simplify(v, f, frac)
     import trimesh
-    return trimesh.Trimesh(vertices=vo, faces=fo, process=False)
+    v, f = np.asarray(mesh.vertices), np.asarray(mesh.faces)
+    if len(f) > target_faces:
+        frac = 1.0 - target_faces / len(f)
+        v, f = fast_simplification.simplify(v, f, frac)
+    out = trimesh.Trimesh(vertices=v, faces=f, process=False)
+    out.fix_normals()
+    return out
+
+
+# Face budget per class. Weighted by what a camera actually sees: the frame is
+# the vehicle's silhouette and the ducts are its most recognisable feature, so
+# they keep detail; fittings are numerous and small.
+BUDGET = {'frame': 30000, 'enclosure': 20000, 'body': 20000,
+          'duct': 16000, 'fitting': 12000}
+
+
+def build_groups(mesh, verbose: bool = True):
+    """Split the assembly into named, separately-materialled meshes.
+
+    ONE MERGED GEOMETRY CANNOT BE COLOURED. The previous export concatenated all
+    3,276 components into a single mesh with a single material, so there was
+    nothing to paint separately even in principle -- the vehicle could only ever
+    be one flat colour. Grouping is what makes a black enclosure, a grey frame
+    and teal props possible at all.
+    """
+    import trimesh
+    buckets = {k: [] for k in PART_CLASSES}
+    dropped = 0
+    for c in mesh.split(only_watertight=False):
+        k = classify(c)
+        if k == 'fastener':
+            dropped += len(c.faces)
+            continue
+        buckets[k].append(c)
+
+    groups = {}
+    for name, parts in buckets.items():
+        if not parts:
+            continue
+        merged = trimesh.util.concatenate(parts)
+        small = decimate(merged, BUDGET[name])
+        small.vertices = to_gazebo(np.asarray(small.vertices))
+        groups[name] = small
+        if verbose:
+            print(f'  {name:10s} {len(parts):4d} parts  '
+                  f'{len(merged.faces):8,} -> {len(small.faces):7,} faces')
+    if verbose:
+        print(f'  {"fastener":10s} {dropped:>15,} faces DROPPED')
+    return groups
 
 
 def main(argv=None):
     a = argv if argv is not None else sys.argv[1:]
     if len(a) < 2:
-        print('usage: gen_vehicle_mesh.py SRC.stl OUTDIR [target_faces]',
-              file=sys.stderr)
+        print('usage: gen_vehicle_mesh.py SRC.stl OUTDIR', file=sys.stderr)
         return 2
     src, outdir = a[0], a[1]
-    target = int(a[2]) if len(a) > 2 else 60000
 
     mesh = load(src)
     print(f'source: {len(mesh.faces):,} faces, '
           f'{len(mesh.split(only_watertight=False)):,} components, '
           f'watertight={mesh.is_watertight}')
 
-    small = decimate(mesh, target)
-    small.vertices = to_gazebo(np.asarray(small.vertices))
     os.makedirs(outdir, exist_ok=True)
-    dst = os.path.join(outdir, 'dubomini.dae')
-    small.export(dst)
-    print(f'visual : {len(small.faces):,} faces -> {dst}')
+    groups = build_groups(mesh)
+    total = 0
+    for name, g in groups.items():
+        dst = os.path.join(outdir, f'dubomini_{name}.dae')
+        g.export(dst)
+        total += len(g.faces)
+    print(f'visual : {total:,} faces across {len(groups)} groups')
 
-    # The convex hull: the collision proxy AND the closed form the added-mass
-    # solve needs. Exported so both read the same geometry.
+    # The collision proxy AND the closed form the added-mass solve needs.
+    # Built from the FULL assembly, fasteners included: dropping bolts must not
+    # change the vehicle's envelope.
     hull = mesh.convex_hull
     hull.vertices = to_gazebo(np.asarray(hull.vertices))
     hdst = os.path.join(outdir, 'dubomini_hull.stl')
     hull.export(hdst)
-    print(f'hull   : {len(hull.faces):,} faces, '
-          f'{hull.volume * 1000:.2f} L -> {hdst}')
+    print(f'hull   : {len(hull.faces):,} faces, {hull.volume * 1000:.2f} L')
     return 0
 
 

@@ -573,6 +573,32 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > isolated**; an attempt to test it alone was my own bug (recycled slot names
 > are not "new" keys, so fired shots reported `NO MODEL`). Bins stay **5/5**.
 >
+> **THE DUBOMINI LOOKED LIKE A BLOB, AND IT WAS TWO SILENT FAULTS AT ONCE.**
+> The exported DAE had **no vertex normals** (`<input semantic="NORMAL">` simply
+> absent), so the renderer had no shading information and 203k triangles read as
+> a flat silhouette — it presented as a colour problem and was a geometry one.
+> And the decimator had merged all **3,276 CAD components into one geometry**,
+> so the vehicle could only ever be one flat colour. The mesh now exports as
+> **five classified groups** (frame / enclosure / body / duct / fitting), each
+> with its own material and computed normals.
+> **THE COLOURS ARE SAMPLED FROM THE TEAM'S OWN RENDER**
+> (`bracuduburi.com/assets/renders/dubomini/dubomini_render_9.png`), not chosen:
+> frame **0.375**, enclosure **0.036–0.18** gloss, duct **0.216**, props
+> blue-teal. The vehicle is **near-black** and the model had painted everything
+> **0.70** — lighter than every surface on it. Values sit *below* the sampled
+> ones on purpose: `underwater_fx` haze LIFTS every surface, so an enclosure
+> specified 0.055 rendered at 62/255 against the render's 46. What must survive
+> the fog is the **ordering** (enclosure darkest → frame lightest), and it does:
+> measured **58.9 / 64.6 / 109.4** against the render's 46 / 55 / 96, with a
+> luminance spread of **149.9** where a blob is ~0.
+> **3,158 fasteners were dropped — 46.7 % of every triangle for 0.14 L of
+> geometry**, bolts no sim camera resolves; extents unchanged to 1 mm, 203k →
+> 140k faces, RTF unchanged (0.0164 vs 0.0169), flight unaffected (1.386 m in
+> 8 s, dy −0.004). **The check is the render against the official render, not a
+> pixel-diff** — round 16 measured 33.8 % of pixels changed and shipped an
+> erased hull. Known limitation: props share the duct group, so `duct` carries a
+> blue bias rather than separate black duct and teal blades.
+>
 > **THE SIM FLIES THE REAL DUBOMINI NOW.** Two rounds of recolouring a BlueROV2
 > could not fix what was actually wrong: it was a BlueROV2. `hullv3.stl` (the
 > team's own CAD, 2.15 M triangles, 3,276 components, **Y-up millimetres**) is
