@@ -115,7 +115,7 @@ def test_the_vehicle_is_painted_per_part_not_as_one_blob():
     as a pale featureless blob. Both faults at once, and both silent.
     """
     sdf = _sdf()
-    for part in ('frame', 'enclosure', 'body', 'duct', 'fitting'):
+    for part in ('frame', 'enclosure', 'body', 'duct', 'prop', 'fitting'):
         assert f'model://dubomini/meshes/dubomini_{part}.dae' in sdf, part
         assert f'<visual name="{part}_visual">' in sdf, part
     assert 'convex_decomposition' in sdf, (
@@ -131,7 +131,7 @@ def test_the_meshes_carry_vertex_normals():
     """
     meshes = os.path.join(MODEL, 'meshes')
     found = 0
-    for part in ('frame', 'enclosure', 'body', 'duct', 'fitting'):
+    for part in ('frame', 'enclosure', 'body', 'duct', 'prop', 'fitting'):
         path = os.path.join(meshes, f'dubomini_{part}.dae')
         if not os.path.isfile(path):
             continue
@@ -168,3 +168,39 @@ def test_net_buoyancy_is_the_declared_trim():
     displaced = (float(box.group(1)) * float(box.group(2))
                  * float(box.group(3)) * c['fluid_density'])
     assert displaced - mass == pytest.approx(c['buoyancy_adjustment'], abs=1e-3)
+
+
+def test_the_propellers_are_their_own_part():
+    """Round 20 shipped with the blades merged into their ducts, so a black
+    duct and a blue-teal prop had to share one colour and `duct` carried a
+    compromise blue bias.
+
+    Size alone cannot separate them -- NINE components match the prop envelope
+    and only eight are propellers. The discriminator is CONTAINMENT: a prop
+    sits inside a duct's bounding box and nothing else on this vehicle does.
+    This asserts that premise still holds on the exported meshes, because if it
+    stops holding the classifier silently mislabels parts.
+    """
+    trimesh = pytest.importorskip('trimesh')
+    import numpy as _np
+    meshes = os.path.join(MODEL, 'meshes')
+    duct = os.path.join(meshes, 'dubomini_duct.dae')
+    prop = os.path.join(meshes, 'dubomini_prop.dae')
+    if not (os.path.isfile(duct) and os.path.isfile(prop)):
+        pytest.skip('meshes not generated')
+    d = trimesh.load(duct, force='mesh')
+    p = trimesh.load(prop, force='mesh')
+    assert bool(_np.all(p.bounds[0] >= d.bounds[0] - 1e-3)), (
+        'propellers must sit inside the duct envelope')
+    assert bool(_np.all(p.bounds[1] <= d.bounds[1] + 1e-3))
+
+
+def test_the_propellers_are_the_only_coloured_thing():
+    """The vehicle is black except for its blades -- that is what the render
+    shows, and it is the one hue a camera has to work with."""
+    lv = _cfg()['livery']
+    def cast(c):
+        return c[2] - c[0]
+    assert cast(lv['prop']) > 0.04, 'the props should read blue-teal'
+    for part in ('frame', 'enclosure', 'body', 'duct'):
+        assert cast(lv[part]) < 0.02, f'{part} should be near-neutral'

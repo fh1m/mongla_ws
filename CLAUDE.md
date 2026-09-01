@@ -596,8 +596,12 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > 140k faces, RTF unchanged (0.0164 vs 0.0169), flight unaffected (1.386 m in
 > 8 s, dy −0.004). **The check is the render against the official render, not a
 > pixel-diff** — round 16 measured 33.8 % of pixels changed and shipped an
-> erased hull. Known limitation: props share the duct group, so `duct` carries a
-> blue bias rather than separate black duct and teal blades.
+> erased hull. **The props are their own group as of round 21** —
+> size alone cannot separate them (nine components match the prop envelope,
+> only eight are props), so the discriminator is **containment**: a prop sits
+> inside a duct's bounding box and nothing else on the vehicle does. Ducts are
+> neutral black now and the blades carry the render's blue-teal, **the one
+> coloured thing on an otherwise black vehicle**.
 >
 > **THE SIM FLIES THE REAL DUBOMINI NOW.** Two rounds of recolouring a BlueROV2
 > could not fix what was actually wrong: it was a BlueROV2. `hullv3.stl` (the

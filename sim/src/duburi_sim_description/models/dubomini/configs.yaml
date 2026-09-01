@@ -343,11 +343,17 @@ livery:
   # Bodies: the pressure cylinders and mounts, between the two.
   body:      [0.100, 0.100, 0.110]
   body_specular: 0.35
-  # T200 ducts, black with the blue-teal props visible inside them. Grouped
-  # geometry cannot separate duct from prop, so this carries a slight blue
-  # bias -- the props are the part a camera sees through the duct opening.
-  duct:      [0.120, 0.135, 0.155]
+  # T200 ducts: BLACK, with no blue bias any more. The props are their own
+  # group now (see below), so the duct can finally be the black the render
+  # shows instead of a compromise between duct and blade.
+  duct:      [0.115, 0.115, 0.120]
   duct_specular: 0.30
+  # The propellers, sampled at 0.165-0.181 with a clear blue-teal cast -- the
+  # one genuinely coloured thing on an otherwise black vehicle, and the part a
+  # camera sees through the duct opening. Separating them from the ducts is
+  # what round 20 left undone.
+  prop:      [0.105, 0.135, 0.175]
+  prop_specular: 0.40
   # Brackets, clamps and the camera bezels. The bezel is bare metal and is the
   # brightest thing on the vehicle, which is why this class is lighter.
   fitting:   [0.300, 0.300, 0.310]

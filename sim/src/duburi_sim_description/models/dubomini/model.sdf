@@ -122,10 +122,25 @@
           </mesh>
         </geometry>
         <material>
-          <ambient>0.12 0.135 0.155 1</ambient>
-          <diffuse>0.12 0.135 0.155 1</diffuse>
+          <ambient>0.115 0.115 0.12 1</ambient>
+          <diffuse>0.115 0.115 0.12 1</diffuse>
           <specular>0.3 0.3 0.3 1</specular>
-          <emissive>0.012 0.0135 0.0155 1</emissive>
+          <emissive>0.0115 0.0115 0.012 1</emissive>
+        </material>
+      </visual>
+
+      <visual name="prop_visual">
+        <!-- the eight propellers, the one coloured thing on a black vehicle -->
+        <geometry>
+          <mesh>
+            <uri>model://dubomini/meshes/dubomini_prop.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.105 0.135 0.175 1</ambient>
+          <diffuse>0.105 0.135 0.175 1</diffuse>
+          <specular>0.4 0.4 0.4 1</specular>
+          <emissive>0.0105 0.0135 0.0175 1</emissive>
         </material>
       </visual>
 

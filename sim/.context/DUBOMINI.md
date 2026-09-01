@@ -218,3 +218,50 @@ values**, and the numbers above are that check.
 The props are inside the ducts and share their group, so `duct` carries a slight
 blue bias rather than the render's separate black duct and blue-teal blades.
 Separating them needs a finer classifier than size alone.
+
+---
+
+## Round 21 — the propellers are their own part
+
+Round 20 shipped with a stated limitation: the blades were merged into their
+ducts, so a black duct and a blue-teal prop had to share one colour and `duct`
+carried a compromise blue bias. That is now closed.
+
+**Size alone cannot separate them.** Nine components match the propeller
+envelope (80–92 mm, 12–17 k faces) and only eight are propellers. The
+discriminator is **containment** — a prop sits inside a duct's bounding box, and
+nothing else on this vehicle does. That test finds exactly 8 of the 9 candidates
+and correctly rejects the last.
+
+The ducts can now be the black the render shows (0.115 neutral) instead of a
+compromise, and the props carry the render's blue-teal (0.105, 0.135, 0.175) —
+**the one genuinely coloured thing on an otherwise black vehicle**, and the one
+hue a camera has to work with.
+
+| | before | after |
+|---|---|---|
+| groups | 5 | **6** |
+| duct colour | 0.120/0.135/0.155 (blue bias) | **0.115 neutral** |
+| prop colour | *(shared the duct's)* | **0.105/0.135/0.175** |
+| faces | 140,411 | 143,450 |
+| RTF median | 0.0164 | **0.0163** |
+| forward, 8 s @ 60 | 1.386 m, dy −0.004 | **1.401 m, dy −0.019** |
+
+### Two measurement traps hit while verifying this
+
+Both are worth keeping, because both produced a confident-looking number that
+meant nothing:
+
+- **A close-up A/B where the observing hull had drifted.** The two frames showed
+  different parts of the vehicle, so an 83.5 % pixel diff measured the camera
+  move, not the mesh change. Pin *both* poses, or compare nothing.
+- **A whole-scene diff for a prop-only recolour reported 76 % of pixels
+  changed** — and the pool floor accounted for 82.7 % of its own region. A
+  propeller cannot repaint the floor: `underwater_fx` noise and particulate are
+  stochastic, so consecutive renders differ everywhere. The **duct-interior
+  sample** (58.4 → 45.9) is a directional measurement of the right region and is
+  valid; the global diff is not.
+
+The separation is therefore verified **structurally** — two distinct meshes,
+prop bounds provably inside duct bounds, two distinct colours in the SDF — which
+is what a stochastic renderer cannot wash out.
