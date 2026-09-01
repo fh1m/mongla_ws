@@ -56,6 +56,17 @@
             <scale>0.025 0.025 0.025</scale>
           </mesh>
         </geometry>
+        <!-- OUR HULL, NOT THE VENDOR'S. The mesh is a BlueROV2 Heavy (MIT,
+             bluerov2_gz) and carried its own colours, so every render showed
+             somebody else's vehicle. An SDF <material> overrides the mesh's
+             embedded material, so Duburi's brushed-aluminium livery needs no
+             mesh edit. Emissive is per channel -- see configs.yaml. -->
+        <material>
+          <ambient>@hull_colour 1</ambient>
+          <diffuse>@hull_colour 1</diffuse>
+          <specular>@hull_specular @hull_specular @hull_specular 1</specular>
+          <emissive>@hull_emissive 1</emissive>
+        </material>
       </visual>
 
       <!-- This box is NOT the hull. Its volume times fluid_density equals the
@@ -462,6 +473,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -485,6 +502,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -508,6 +531,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -531,6 +560,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -554,6 +589,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -577,6 +618,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -600,6 +647,12 @@
             <uri>model://duburi_heavy/meshes/t200_cw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -623,6 +676,12 @@
             <uri>model://duburi_heavy/meshes/t200_ccw_prop.dae</uri>
           </mesh>
         </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
       </visual>
       <inertial>
         <mass>@propeller_mass</mass>
@@ -966,6 +1025,172 @@
          WITHOUT that node running the thrusters receive NOTHING: this topic
          has no other subscriber. duburi_sim's `sim` starts it; if you launch
          sim.launch.py by hand, pass t200:=true (the default). -->
+    <!-- GRIPPER. Stripped entirely unless configs.yaml enables it -- see
+         generate_model.py. A disabled feature left in the SDF is still paid
+         for; that is how the range cameras cost a third of the frame rate
+         while claiming to be off.
+
+         Newton Subsea Gripper geometry, from the published datasheet: 62 mm
+         jaw opening, 36 mm body, 524 g in air / 267 g submerged, 1.6 s
+         open-to-close. There is no public URDF or Gazebo model of this part,
+         so it is authored here the way every prop is authored from figures.
+
+         THE JAWS ARE REVOLUTE AND POSITION-CONTROLLED. The grasp itself is
+         NOT wired yet -- see the note where it will go, below. -->
+    <link name="gripper_body">
+      <pose>@gripper_x @gripper_y @gripper_z 0 1.5708 0</pose>
+      <inertial>
+        <mass>@gripper_body_m</mass>
+        <inertia>
+          <ixx>@gripper_body_i</ixx><iyy>@gripper_body_i</iyy>
+          <izz>@gripper_body_i</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="gripper_body_visual">
+        <geometry>
+          <cylinder>
+            <radius>@gripper_body_r</radius><length>@gripper_body_l</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>@thruster_colour 1</ambient>
+          <diffuse>@thruster_colour 1</diffuse>
+          <specular>@thruster_specular @thruster_specular @thruster_specular 1</specular>
+          <emissive>@thruster_emissive 1</emissive>
+        </material>
+      </visual>
+      <collision name="gripper_body_collision">
+        <geometry>
+          <cylinder>
+            <radius>@gripper_body_r</radius><length>@gripper_body_l</length>
+          </cylinder>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="gripper_mount" type="fixed">
+      <parent>base_link</parent><child>gripper_body</child>
+    </joint>
+
+    <link name="gripper_jaw_left">
+      <pose relative_to="gripper_body">0 0 @gripper_jaw_x 0 0 0</pose>
+      <inertial>
+        <mass>@gripper_jaw_m</mass>
+        <inertia>
+          <ixx>@gripper_jaw_i</ixx><iyy>@gripper_jaw_i</iyy>
+          <izz>@gripper_jaw_i</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="gripper_jaw_left_visual">
+        <pose>0 0 @gripper_jaw_x 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>@gripper_jaw_r</radius><length>@gripper_jaw_l</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>@hull_colour 1</ambient>
+          <diffuse>@hull_colour 1</diffuse>
+          <specular>@hull_specular @hull_specular @hull_specular 1</specular>
+          <emissive>@hull_emissive 1</emissive>
+        </material>
+      </visual>
+      <collision name="gripper_jaw_left_collision">
+        <pose>0 0 @gripper_jaw_x 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>@gripper_jaw_r</radius><length>@gripper_jaw_l</length>
+          </cylinder>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="gripper_jaw_left_joint" type="revolute">
+      <parent>gripper_body</parent><child>gripper_jaw_left</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit><lower>0</lower><upper>@gripper_open</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+      </axis>
+    </joint>
+
+    <link name="gripper_jaw_right">
+      <pose relative_to="gripper_body">0 0 @gripper_jaw_x 0 0 0</pose>
+      <inertial>
+        <mass>@gripper_jaw_m</mass>
+        <inertia>
+          <ixx>@gripper_jaw_i</ixx><iyy>@gripper_jaw_i</iyy>
+          <izz>@gripper_jaw_i</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <visual name="gripper_jaw_right_visual">
+        <pose>0 0 @gripper_jaw_x 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>@gripper_jaw_r</radius><length>@gripper_jaw_l</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>@hull_colour 1</ambient>
+          <diffuse>@hull_colour 1</diffuse>
+          <specular>@hull_specular @hull_specular @hull_specular 1</specular>
+          <emissive>@hull_emissive 1</emissive>
+        </material>
+      </visual>
+      <collision name="gripper_jaw_right_collision">
+        <pose>0 0 @gripper_jaw_x 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>@gripper_jaw_r</radius><length>@gripper_jaw_l</length>
+          </cylinder>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="gripper_jaw_right_joint" type="revolute">
+      <parent>gripper_body</parent><child>gripper_jaw_right</child>
+      <axis>
+        <!-- Mirrored, so one commanded angle opens both jaws symmetrically. -->
+        <xyz>-1 0 0</xyz>
+        <limit><lower>0</lower><upper>@gripper_open</upper></limit>
+        <dynamics><damping>0.5</damping></dynamics>
+      </axis>
+    </joint>
+
+    <plugin filename="gz-sim-joint-position-controller-system"
+            name="gz::sim::systems::JointPositionController">
+      <joint_name>gripper_jaw_left_joint</joint_name>
+      <topic>/model/@model_name_plain/gripper/jaw</topic>
+      <p_gain>4.0</p_gain><i_gain>0.05</i_gain><d_gain>0.4</d_gain>
+    </plugin>
+    <plugin filename="gz-sim-joint-position-controller-system"
+            name="gz::sim::systems::JointPositionController">
+      <joint_name>gripper_jaw_right_joint</joint_name>
+      <topic>/model/@model_name_plain/gripper/jaw</topic>
+      <p_gain>4.0</p_gain><i_gain>0.05</i_gain><d_gain>0.4</d_gain>
+    </plugin>
+
+    <!-- THE GRASP IS NOT WIRED YET, and that is deliberate rather than
+         forgotten.
+         
+         `DetachableJoint` is the right mechanism -- DART will not hold a
+         grasped body reliably by contact, and Harmonic's version supports
+         attach AND re-attach over topics, which is what a gripper needs. But
+         the plugin names its child model IN THE SDF, at load time, and the
+         thing a gripper grabs is not known until it grabs it. Writing
+         `<child_model>__model__</child_model>` here does compile and would
+         attach the jaw to THE VEHICLE ITSELF -- a self-attachment that is at
+         best inert and at worst something the solver has to fight, on the hull
+         whose 0.95 m/s top speed the hydrodynamics are fitted to. So it is
+         left out rather than left in looking finished.
+
+         What lands with it is a runtime node that spawns the joint against the
+         model actually being grasped, the way `payload_sim` spawns a
+         projectile. Until then the gripper is GEOMETRY, MASS AND TRIM plus two
+         working jaw controllers: nothing commands it, and the octagon's
+         object-handling points stay NOT_MODELLED in rulebook.py. -->
+    <!-- /GRIPPER -->
+
     <plugin name="ArduPilotPlugin" filename="libArduPilotPlugin.so">
       <fdm_addr>@fdm_addr</fdm_addr>
       <fdm_port_in>@fdm_port_in</fdm_port_in>

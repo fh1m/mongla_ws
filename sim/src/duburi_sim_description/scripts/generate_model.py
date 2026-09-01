@@ -180,6 +180,8 @@ class ModelParams:
         cameras: dict,
         dvl: dict = None,
         range_cameras: bool = False,
+        livery: dict = None,
+        gripper: dict = None,
         fdm_addr: str = "127.0.0.1",
         fdm_port_in: int = 9002,
         odom_publish_frequency: float = 50.0,
@@ -311,6 +313,49 @@ class ModelParams:
         # arrives, so the sim is correct either way, just less faithful.
         self.range_always_on = int(bool(range_cameras))
 
+        # LIVERY. An SDF <material> overrides the mesh's embedded one, so the
+        # hull can be ours without touching the vendor .dae. Emissive is applied
+        # PER CHANNEL: a flat grey lift is a desaturation term, which is exactly
+        # what washed the colour out of every prop before round 12.
+        lv = livery or {}
+        hull = lv.get("hull", [0.62, 0.63, 0.65])
+        thr = lv.get("thruster", [0.09, 0.26, 0.30])
+        gain = float(lv.get("emissive_gain", 0.22))
+        self.hull_colour = " ".join(f"{c:.4g}" for c in hull)
+        self.hull_specular = float(lv.get("hull_specular", 0.42))
+        self.hull_emissive = " ".join(f"{min(0.6, c * gain):.4g}" for c in hull)
+        self.thruster_colour = " ".join(f"{c:.4g}" for c in thr)
+        self.thruster_specular = float(lv.get("thruster_specular", 0.30))
+        self.thruster_emissive = " ".join(
+            f"{min(0.6, c * gain):.4g}" for c in thr)
+
+        # GRIPPER. Every token is defined whether or not it is enabled, because
+        # the template is validated for unknown tokens BEFORE the disabled block
+        # is stripped -- a token that only exists when the feature is on would
+        # make the generator fail on the default config.
+        gr = gripper or {}
+        self.gripper_on = int(bool(gr.get("enabled", False)))
+        self.gripper_x = float(gr.get("x", 0.24))
+        self.gripper_y = float(gr.get("y", 0.0))
+        self.gripper_z = float(gr.get("z", -0.09))
+        self.gripper_body_r = float(gr.get("body_radius", 0.018))
+        self.gripper_body_l = float(gr.get("body_length", 0.20))
+        self.gripper_jaw_l = float(gr.get("jaw_length", 0.10))
+        self.gripper_jaw_r = float(gr.get("jaw_radius", 0.008))
+        self.gripper_open = float(gr.get("jaw_open_rad", 0.62))
+        self.gripper_actuation_s = float(gr.get("actuation_s", 1.6))
+        # Split the mass: most in the body, a little in each jaw.
+        gm = float(gr.get("mass", 0.524))
+        self.gripper_body_m = round(gm * 0.8, 6)
+        self.gripper_jaw_m = round(gm * 0.1, 6)
+        # A slender body about its own centre; good enough for a 0.5 kg part
+        # hanging off a 13.5 kg hull, and said so rather than implied.
+        self.gripper_body_i = round(
+            gm * 0.8 * self.gripper_body_l ** 2 / 12.0, 8)
+        self.gripper_jaw_i = round(
+            gm * 0.1 * self.gripper_jaw_l ** 2 / 12.0, 8)
+        self.gripper_jaw_x = round(self.gripper_body_l / 2.0, 6)
+
         self.dvl_visualize_beams = str(
             dvl.get("visualize_beams", DVL_DEFAULTS["visualize_beams"])
         ).lower()
@@ -401,7 +446,34 @@ def get_model_params_from_config(config_path: str) -> ModelParams:
     bounding_y = config["bounding_box"]["y"]
     bounding_z = config["bounding_box"]["z"]
 
-    displaced_mass = mass + config["buoyancy_adjustment"]
+    # THE GRIPPER CHANGES THE VEHICLE'S WEIGHT AND ITS DISPLACEMENT, and both
+    # have to move together or the derived collision box below is wrong.
+    #
+    # A Newton is 524 g in air and 267 g submerged, so it displaces 257 g and is
+    # 267 g NEGATIVE. Adding only the mass sinks the vehicle; adding only the
+    # displacement floats it. `trim_kg` is the foam a real team bolts on to
+    # cancel the difference, and it defaults to exactly that so enabling the
+    # gripper does not silently retune a flight model that was fitted to a
+    # measured 0.95 m/s top speed.
+    #
+    # `buoyancy_adjustment` is the NET figure -- displaced minus mass -- so
+    # adding the gripper's mass ALREADY adds an equal displacement implicitly.
+    # The correction is therefore only the part the gripper fails to displace:
+    #     shortfall = gripper_mass - gripper_displacement = 0.524 - 0.257
+    #               = 0.267 kg, which is its submerged weight, as it must be.
+    # Adding the displacement on top of that was double counting and put the
+    # vehicle at +0.624 kg net -- over-buoyant, from a part that sinks. Caught
+    # by checking the derived net against the intended +0.1 rather than by
+    # trusting the arithmetic.
+    grip = config.get("gripper") or {}
+    grip_on = bool(grip.get("enabled", False))
+    buoy = config["buoyancy_adjustment"]
+    if grip_on:
+        gmass = float(grip.get("mass", 0.0))
+        mass += gmass
+        shortfall = gmass - float(grip.get("displacement", 0.0))
+        buoy += float(grip.get("trim_kg", 0.0)) - shortfall
+    displaced_mass = mass + buoy
 
     # The collision box is deliberately not the hull. Its z is chosen so that
     # box volume * fluid_density == displaced_mass.
@@ -509,6 +581,8 @@ def get_model_params_from_config(config_path: str) -> ModelParams:
         cameras=_merge_cameras(config),
         dvl=_merge_dvl(config),
         range_cameras=config.get("range_cameras", False),
+        livery=config.get("livery") or {},
+        gripper=grip,
         fdm_addr=ardupilot.get("fdm_addr", "127.0.0.1"),
         fdm_port_in=ardupilot.get("fdm_port_in", 9002),
         odom_publish_frequency=config.get("odom_publish_frequency", 50.0),
@@ -528,6 +602,14 @@ def generate_model(input_path: str, output_path: str, config_path: str) -> None:
     # thread the colour cameras share.
     if not params.get("range_always_on"):
         s = re.sub(r"\n +<!-- RANGE image.*?</sensor>\n", "\n", s, flags=re.S)
+
+    # Same textual strip as the range cameras, and for the same reason: a
+    # disabled feature that is still IN the SDF is still paid for. Leaving eight
+    # extra links and two joint controllers in place "but switched off" is how
+    # the range cameras cost 12 Hz -> 4 Hz while claiming to be off.
+    if not params.get("gripper_on"):
+        s = re.sub(r"\n +<!-- GRIPPER.*?<!-- /GRIPPER -->\n", "\n", s,
+                   flags=re.S)
 
     pattern = re.compile(r"@(\w+)")
     missing = sorted(
