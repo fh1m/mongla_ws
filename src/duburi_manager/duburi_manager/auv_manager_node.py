@@ -45,7 +45,8 @@ from duburi_interfaces.msg import DuburiState                            # noqa:
 from duburi_control import (                                            # noqa: E402
     COMMANDS, Duburi, Heartbeat, Pixhawk, fields_for, tracing,
 )
-from duburi_control.fc import make_flight_controller                     # noqa: E402
+from duburi_control.fc import make_flight_controller
+from duburi_control.fc.port_guard import PortGuard                     # noqa: E402
 from duburi_control.fc.srot_protocol import (                            # noqa: E402
     MSG_ID_ESC_STATUS as SROT_MSG_ID_ESC_STATUS,
     SOURCE_SYSID as SROT_SOURCE_SYSID,
@@ -350,6 +351,12 @@ class AUVManagerNode(Node):
         if self._is_srot:
             baud_kw['source_system'] = SROT_SOURCE_SYSID
             baud_kw['source_component'] = SROT_SOURCE_COMPID
+        # Claim the port BEFORE opening it. On srot every open reboots the flight
+        # controller (fc/port_guard.py has the measurements), so a second process
+        # touching this device mid-mission is a silent disarm-and-reinit. The
+        # kernel does not lock a tty; this does. A non-serial endpoint is a no-op.
+        self._port_guard = PortGuard(self._profile['conn'], log=self.get_logger())
+        self._port_guard.acquire()
         self.master  = mavutil.mavlink_connection(self._profile['conn'], **baud_kw)
         self.master.wait_heartbeat()
         # Build the backend behind the FlightController HAL. PixhawkFC is-a Pixhawk,

@@ -931,6 +931,21 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
         out.append((FAIL, 'pymavlink/srot_protocol import', str(exc)))
         return out
 
+    # A preflight that reboots the flight controller is not a preflight. Opening
+    # this port asserts DTR and resets the ESP32 (measured -- fc/port_guard.py),
+    # so running bringup_check against a live manager silently disarms the
+    # vehicle and wipes its configured stream rates. Report it as a WARN section
+    # rather than doing it.
+    from duburi_control.fc.port_guard import PortGuard, PortBusy
+    _guard = PortGuard(port)
+    try:
+        _guard.acquire()
+    except PortBusy as exc:
+        out.append((WARN, 'srot serial port',
+                    f'{port} is already in use -- skipped. Opening it would REBOOT '
+                    f'the board. {str(exc).splitlines()[0]}'))
+        return out
+
     conn = None
     try:
         conn = mavutil.mavlink_connection(port, **baud_kw)
@@ -1039,6 +1054,10 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
                 conn.close()
             except Exception:                      # noqa: BLE001
                 pass
+        # Release AFTER the close, not before: between them the device is still
+        # open, and handing the claim over early is exactly the window where a
+        # waiting process opens it and reboots the board.
+        _guard.release()
     return out
 
 

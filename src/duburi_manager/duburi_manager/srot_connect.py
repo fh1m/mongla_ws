@@ -36,6 +36,8 @@ os.environ.setdefault('MAVLINK20', '1')
 
 from pymavlink import mavutil                                        # noqa: E402
 
+from duburi_control.fc.port_guard import PortGuard, PortBusy
+
 try:
     from .connection_config import (find_srot_serial, SROT_BAUD,
                                 resolve_srot_profile, diagnose_bridge)
@@ -624,6 +626,17 @@ def main(argv=None) -> int:
     if not args.json:
         where = f'{path} @ {args.baud}' if is_serial else path
         print(f'{DIM}connecting to {where} ...{RESET}')
+    # Refuse rather than reboot. This is a hand-run diagnostic, so the realistic
+    # way the flight controller gets restarted mid-mission is an operator running
+    # THIS while the manager is up: opening the port asserts DTR and resets the
+    # ESP32 (measured -- fc/port_guard.py). A tool that silently disarms the
+    # vehicle it is inspecting is worse than one that will not start.
+    _guard = PortGuard(path)
+    try:
+        _guard.acquire()
+    except PortBusy as exc:
+        print(f'{exc}', file=sys.stderr)
+        return 2
     try:
         conn = mavutil.mavlink_connection(
             path, **baud_kw,
