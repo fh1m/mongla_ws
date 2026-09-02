@@ -837,9 +837,31 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
     A rev compare cannot express "check a stored value"; a param read can.
 
     The two numbers are asserted separately on purpose: bumping the tracker is routine
-    bookkeeping, raising the requirement is a decision to refuse hardware."""
-    assert sp.FW_BEHAVIOUR_REV == 9
-    assert sp.FW_BEHAVIOUR_REV_REQUIRED == 2
+    bookkeeping, raising the requirement is a decision to refuse hardware.
+
+    *** THE "EVERY REV IS ADDITIVE" CLAIM ABOVE EXPIRED AT REV 10. ***  It held for
+    3..9 and the reasoning is kept because it is still the right test to apply. Two
+    later revisions fail it:
+
+      rev 10  YAW SENSE WAS INVERTED AND IS NOW CORRECT. An improper axis transform
+              left the frame left-handed, so on a rev <= 9 board turning right makes
+              yaw DECREASE -- measured in water 2026-08-07. MANUAL is unaffected
+              (open loop); STABILIZE and DEPTH_HOLD span the hull. Any absolute
+              heading, and any host loop that closes on yaw, has the wrong sign.
+      rev 13  SROT_MOVE REQUIRES ARMED. Below it, a move sent while disarmed runs its
+              whole profile with the thrusters silent and answers ACCEPTED at 100 %.
+              The firmware's own note names duburi_ws as the consumer that would
+              advance an entire mission on a dead hull.
+
+    So the requirement is RAISED TO 10, and rev 10 is the reason on its own. This host
+    is about to close a vision loop on yaw through STABILIZE; on a rev <= 9 board that
+    loop diverges instead of converging, and it does so silently because roll and pitch
+    read correctly. That is the "refuse hardware" case this docstring reserves the
+    decision for -- not stranding a working vehicle, but declining one whose heading
+    sign is wrong. Rev 13 alone would not justify it (an over-eager ACK is caught by
+    our own arm check); rev 10 does."""
+    assert sp.FW_BEHAVIOUR_REV == 14
+    assert sp.FW_BEHAVIOUR_REV_REQUIRED == 10
 
 
 def test_a_dead_link_ages_out_instead_of_being_restamped_forever():
@@ -967,10 +989,17 @@ def test_the_threshold_follows_depth_p_instead_of_a_hardcoded_output():
 
 
 def test_a_healthy_surface_reading_arms_normally():
-    """~0.03 m at the surface -> DEPTH_CMD ~ -0.22 at DEPTH_P=3.0. Comfortably clear;
-    if this ever fails the guard has become a nuisance that gets overridden by habit."""
+    """~0.03 m at the surface -> DEPTH_CMD ~ -0.035 at DEPTH_P=0.5. Comfortably clear;
+    if this ever fails the guard has become a nuisance that gets overridden by habit.
+
+    The fixture MOVED with the firmware, and that is the point of writing it in the
+    board's units. `DEPTH_CMD = clamp(DEPTH_P * (depth - 0.10))`, and fw f533bd2 took
+    DEF_DEPTH_P from 3.0 to 0.5 after the water test tuned it. The same physical surface
+    reading therefore emits -0.035 now where it emitted -0.21 before. Feeding the old
+    -0.22 to a host that assumes 0.5 claims 0.44 m of error and REFUSES to arm a healthy
+    board."""
     fc = _fc()
-    fc.note_named_value(_nvf('DEPTH_CMD', -0.22))
+    fc.note_named_value(_nvf('DEPTH_CMD', -0.035))
     assert fc.check_depth_loop_settled()[0] is True
 
 
@@ -1353,10 +1382,13 @@ def test_the_guard_subtracts_the_previews_own_target():
     refusal it did not deserve. Subtracting the target recovers the board's own depth,
     which is the quantity actually being judged."""
     fc = _fc()
-    fc.note_named_value(_nvf('DEPTH_CMD', -0.30))     # exactly 0.00 m at DEPTH_P=3.0
+    # Values are DEPTH_P-dependent by construction; these are DEPTH_P=0.5 (fw rev 14,
+    # water-tuned). 0.5 * (0.00 - 0.10) = -0.05.
+    fc.note_named_value(_nvf('DEPTH_CMD', -0.05))     # exactly 0.00 m at DEPTH_P=0.5
     ok, reason = fc.check_depth_loop_settled()
     assert ok is True and '+0.00 m' in reason
 
     healthy = _fc()
-    healthy.note_named_value(_nvf('DEPTH_CMD', -0.74))   # the real -0.15 m reading
+    # 0.5 * (-0.15 - 0.10) = -0.125
+    healthy.note_named_value(_nvf('DEPTH_CMD', -0.125))  # the real -0.15 m reading
     assert healthy.check_depth_loop_settled()[0] is True

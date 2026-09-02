@@ -17,6 +17,13 @@ BIN_DEPTH_M           = -1.0    # downward camera must see bin clearly
 TORPEDO_DEPTH_M       = None    # align with hole center; fill at pool
 
 # ── Headings (degrees) — fill after compass survey ─────────────────────────────
+# ⚠ SROT YAW SENSE CHANGED AT FIRMWARE REV 10 (2026-08-07). Before rev 10 an
+# improper axis transform left the frame left-handed and yaw SILENTLY INVERTED
+# while roll and pitch read correctly -- turning right made yaw DECREASE, measured
+# in water. Any heading written down against a rev <= 9 board is NEGATED on a rev
+# >= 10 board. These four are still None (nothing recorded, so nothing to
+# convert), but check the board's rev before transcribing a heading from an older
+# pool-day note. `SrotFC.read_behaviour_rev()` reports it.
 SLALOM_HEADING_DEG    = None    # compass heading to slalom course
 BIN_HEADING_DEG       = None    # compass heading to bin
 TORPEDO_HEADING_DEG   = None    # compass heading to torpedo board

@@ -345,8 +345,16 @@ DEPTH_CMD_SATURATED = 0.99
 DEPTH_OFFSET_WARN_M = 0.20
 
 # fw `DEF_DEPTH_P` (include/config.h). Fallback when the board never answered the
-# param read -- pinned by the drift test so it cannot rot.
-DEPTH_P_DEFAULT = 3.0
+# param read -- pinned by the drift test so it cannot rot, and the pin EARNED ITS KEEP:
+# fw f533bd2 moved it 3.0 -> 0.5 after the 2026-08-07 water test ("my structural estimate
+# of P was right; D was 20x too strong" -- the working set is P 0.5 / I 0.1 / D 0.01).
+#
+# The direction of this error is what matters. `check_depth_loop_settled` recovers the
+# depth error as `DEPTH_CMD / depth_p`, so assuming 3.0 against a board running 0.5
+# divides the recovered error by SIX: 1.8 m of real error would read as 0.30 m and pass
+# the arming guard. It fails OPEN, on the one check standing between a phantom baro and
+# full vertical thrust. Read from the board when it answers; this is only the fallback.
+DEPTH_P_DEFAULT = 0.5
 
 # YAW_REF (NAMED_VALUE_FLOAT, fw rev 9) -- `yaw_ref::State`. ONLY 2 means the heading
 # is absolute; anything else and ATTITUDE.yaw is relative to wherever the BNO booted,
@@ -446,7 +454,31 @@ YAW_REF_NAMES = {
 #      volt/curr pins (a battery reading we only display), 2213c9a is their AGENTS.md.
 #      Neither of the two that ARE ours is a host-code change -- the wire is identical, and the drift suite is green
 #      against d6f1da5 -- but do not read "rev 7" as "one small additive change".
-FW_BEHAVIOUR_REV = 9
+#   rev 10 (2026-08-07) YAW SENSE IS CORRECTED, AND THIS ONE IS NOT ADDITIVE.
+#      BNO_SWAP_ROLL_PITCH was an improper transform (swap x/y, keep z -- determinant -1),
+#      leaving the frame left-handed and SILENTLY INVERTING YAW while roll and pitch read
+#      correctly. Measured in water 2026-08-07: turning right made yaw DECREASE. MANUAL was
+#      fine (open loop); STABILIZE and DEPTH_HOLD span the hull.
+#      *** ANY HEADING RECORDED AGAINST REV <= 9 HAS THE OPPOSITE SENSE ***, absolute
+#      MOVE_TURN targets included. Every heading constant, pool-day note and recorded
+#      competition_config heading taken before this is negated. The mag alignment must be
+#      re-run after flashing. This is why the constant below is not merely "bumped".
+#      Also: MOTOR_DETECT now decides on the gyro projection onto the expected angular
+#      direction (the old "dominant axis" was degenerate for M5-M8 and gave a wrong vertical
+#      result) and ends DISARMED in MANUAL rather than armed in STABILIZE.
+#   rev 11 autotune limit-cycle validity is median + consensus, not min-vs-max.
+#   rev 12 autotune holds depth through the rate/angle phases.
+#   rev 13 SROT_MOVE REQUIRES ARMED. The movement state machine never consulted the arm
+#      state, so a move sent while disarmed ran its whole profile with the thrusters silent
+#      and finished ACCEPTED at 100 %. Measured: a 3 m FORWARD "completed" in 3.5 s having
+#      moved nothing -- and the doc names US as the consumer that would advance an entire
+#      mission on a dead hull. It is now TEMPORARILY_REJECTED + "SROT_MOVE refused: arm
+#      first". See ACK_TEMPORARILY_REJECTED below: our retry-on-that-code path must not
+#      spin forever on a disarmed board.
+#      Also adds per-axis ATC_RAT_*_FLTD and the previously absent ATC_RAT_*_FLTT.
+#   rev 14 the depth refusal names WHY instead of one identical "No depth sensor" for three
+#      faults, publishes BARO_HEALTH, and makes the jitter threshold the BARO_JIT_MAX param.
+FW_BEHAVIOUR_REV = 14
 
 # The minimum revision this host code assumes. Flashing older firmware than this
 # re-opens the coasting MOVE_STOP with no host brake left to cover it.
@@ -456,7 +488,13 @@ FW_BEHAVIOUR_REV = 9
 # The axis flip is a PARAM this hull sets, not a revision property -- gating it here would
 # strand a working rev-2 board while still not catching a rev-7 board with FRAME_REVERSE
 # left at 0. The check that would actually catch it is a param read, not a rev compare.
-FW_BEHAVIOUR_REV_REQUIRED = 2
+# RAISED 2 -> 10 (2026-09-03). Rev 10 corrected an INVERTED YAW SENSE: below it,
+# STABILIZE and DEPTH_HOLD span the hull because turning right makes yaw decrease,
+# while roll and pitch read correctly so nothing looks wrong. Any host loop that closes
+# on yaw -- which is exactly what the vision path does -- diverges on a rev <= 9 board.
+# That is worth refusing hardware for; the older reasoning below is kept because it is
+# still the right question to ask of every future rev.
+FW_BEHAVIOUR_REV_REQUIRED = 10
 
 # WHERE THE BOARD REPORTS IT: `AUTOPILOT_VERSION.middleware_sw_version`. The board has
 # no middleware, so that field was zero and free; request the message with
