@@ -61,6 +61,20 @@ class WebcamCamera(Camera):
                 f'[CAM  ] webcam {device!r} opened: requested {width}x{height}@{fps} '
                 f'-> got {self._actual_w}x{self._actual_h}@{self._actual_fps:.1f}  '
                 f'fourcc={fourcc_str}')
+            # A camera that quietly delivers a fraction of what was asked is the
+            # most expensive kind of silent underperformance here, because
+            # nothing downstream looks broken -- the pipeline is simply slower
+            # than its own accelerator. Measured: the Hailo backend runs at
+            # 70-80 Hz while the ROS graph published 29.2 Hz, purely because the
+            # profile asked for 30 fps. This line is the difference between
+            # noticing that in a log and finding it with a stopwatch.
+            if self._actual_fps < 0.6 * float(fps):
+                self._log.warn(
+                    f'[CAM  ] {device!r} is delivering {self._actual_fps:.1f} fps '
+                    f'against {fps} requested. The mode may not exist at this '
+                    f'resolution/fourcc -- check `v4l2-ctl -d <dev> '
+                    f'--list-formats-ext`. Perception is capped here, not at '
+                    f'the detector.')
 
         self._idx          = 0
         self._last_ok      = 0.0

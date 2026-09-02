@@ -28,6 +28,45 @@ duburi_vision:
       fps:      30
       frame_id: laptop_cam
 
+    # ── Raspberry Pi 5 + AI HAT+ ────────────────────────────────────────────
+    # MEASURED on this bench, not assumed. These are the settings that make the
+    # Hailo's speed visible: the detector runs at 70-80 Hz, and with the 30 fps
+    # `forward` profile the ROS graph published 29.2 Hz -- the CAMERA was the
+    # cap, not the accelerator.
+    #
+    # `fps: 210` IS A PROPERTY OF THE MICRODIA GLOBAL-SHUTTER UNIT ON THIS
+    # BENCH, not of the Pi and not of the vehicle's cameras. v4l2-ctl confirms
+    # MJPG 640x360 @ 210/120/90 on this device; the second camera here (a
+    # Fantech webcam) caps at 15 Hz at every resolution. Do not read 210 as a
+    # platform capability.
+    #
+    # 640x360 costs nothing: the network input is a 640x640 letterbox, so 720p
+    # was being downscaled to this anyway, and the horizontal FOV is identical
+    # (measured scale 1.01, correlation 0.98). The old 720p setting cost half
+    # the frame rate for nothing.
+    #
+    # device_path, not device: an index is not port-stable and two identical
+    # cameras swap on reboot. by-path is tied to the physical USB port.
+    pi_forward:
+      source:      webcam
+      device_path: /dev/v4l/by-path/platform-xhci-hcd.1-usb-0:2:1.0-video-index0
+      width:       640
+      height:      360
+      fps:         210
+      frame_id:    forward_cam
+
+    # Second USB controller, so it does not contend with pi_forward.
+    # NOTE: the unit currently in this port is a Fantech webcam that caps at
+    # 15 Hz -- the profile asks for 90 and the camera_node WARN will fire and
+    # say so, which is the intended behaviour rather than a misconfiguration.
+    pi_downward:
+      source:      webcam
+      device_path: /dev/v4l/by-path/platform-xhci-hcd.0-usb-0:1:1.0-video-index0
+      width:       640
+      height:      360
+      fps:         90
+      frame_id:    downward_cam
+
     # Vehicle — Blue Robotics Low-Light HD USB on Jetson Orin Nano.
     # Bench override: -p device:=N at launch (no file edit needed).
     forward:
