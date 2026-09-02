@@ -1042,6 +1042,23 @@ class SrotFC(FlightController):
         missions depend on, and a request to DISABLE HEARTBEAT is refused with
         DENIED rather than accepted-and-ignored. `hz <= 0` restores the board's
         compiled default for that stream.
+
+        VERIFIED ON HARDWARE 2026-09-03 (fw rev 14), and one result is a trap:
+
+            baseline            10.17 Hz  (100.0 ms)   the compiled default
+            ask 50 Hz           50.17 Hz  ( 20.0 ms)   ACK ACCEPTED
+            ask 100 Hz          50.00 Hz  ( 20.0 ms)   ACK *ACCEPTED*, clamped
+            restore (hz<=0)     10.25 Hz  (100.0 ms)   ACK ACCEPTED
+
+        A BELOW-FLOOR REQUEST IS ACCEPTED, NOT DENIED. The ACK says nothing about
+        the rate you actually got, so a host that asks for 100 Hz and believes the
+        ACCEPTED will size its loop for 10 ms of feedback and get 20. The only way
+        to know the delivered rate is to measure the arrivals. (DENIED is reserved
+        for an unknown msgid and for disabling HEARTBEAT.)
+
+        This is also the first time the 50 Hz in `SROT_MESSAGE_RATES` has been
+        confirmed to take effect: the board had only ever been observed at its
+        10 Hz default, because nothing had run the manager against it.
         """
         if hz is None:
             return None
