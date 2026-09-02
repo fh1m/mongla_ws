@@ -60,7 +60,8 @@ from cv_bridge        import CvBridge
 
 from duburi_vision import draw
 from duburi_vision.detection.detector  import largest
-from duburi_vision.detection.yolo      import YoloDetector
+from duburi_vision.detection.factory   import make_detector
+from duburi_vision.detection.detector  import Detector
 from duburi_vision.detection.messages  import detections_to_array
 
 # Throttle for the always-on operator alignment line (seconds). Matches the
@@ -139,7 +140,7 @@ class DetectorNode(Node):
         # Per-model confidence overrides: CSV 'name=conf' (e.g.
         # 'torpedo_blood_hole=0.55,gate_rescue_repair=0.35'). Applies on top of
         # the uniform `conf` above, targeting individual registry entries, and
-        # PERSISTS across active_model switches (each YoloDetector holds its own
+        # PERSISTS across active_model switches (each detector holds its own
         # threshold). Empty = every model uses `conf`. Live-tunable.
         self.declare_parameter('model_conf',          '')
         self.declare_parameter('iou',                 0.5)
@@ -172,7 +173,7 @@ class DetectorNode(Node):
         # ── Registry (multi-model) ─────────────────────────────────────
         models_str   = str(self.get_parameter('models').value).strip()
         active_model = str(self.get_parameter('active_model').value).strip()
-        self._registry: Dict[str, YoloDetector] = {}
+        self._registry: Dict[str, Detector] = {}
         # stem -> registry-key index so set_model() accepts the STEM as well as the
         # launch key (missions/ClassRef switch by stem). Empty in single-model mode.
         self._stem_to_key: Dict[str, str] = {}
@@ -191,7 +192,10 @@ class DetectorNode(Node):
             log = self.get_logger()
 
             def _load_one(name: str, stem: str):
-                det = YoloDetector(
+                # The backend follows the extension the resolver found on THIS
+                # machine: .hef on the Pi + AI HAT+, .engine on the Jetson, .pt
+                # anywhere. Missions pass stems, so nothing above this changes.
+                det = make_detector(
                     model_path=stem,
                     device=device, conf=conf, iou=iou, imgsz=imgsz,
                     half=half, max_det=max_det, class_allowlist=allowlist,
@@ -240,7 +244,7 @@ class DetectorNode(Node):
             # Registry is non-empty from here. active_model may be a KEY or a STEM.
             active_key = self._resolve_model_key(active_model) if active_model else None
             if active_key is not None:
-                self._det: YoloDetector = self._registry[active_key]
+                self._det: Detector = self._registry[active_key]
                 self._active_name: Optional[str] = active_key
             else:
                 first = next(iter(self._registry))
@@ -259,7 +263,7 @@ class DetectorNode(Node):
             # Single-model mode: load async so ROS subscriber starts immediately.
             # Frames received before the model is ready are silently dropped.
             self._active_name = None
-            self._det: Optional[YoloDetector] = None
+            self._det: Optional[Detector] = None
             # Canonical name of the one loaded model, known synchronously from the
             # launch arg. set_model(<this stem>) is then a no-op SUCCESS (already
             # active) instead of a hard "no registry" reject -- so a ClassRef or
@@ -324,15 +328,15 @@ class DetectorNode(Node):
         self._publish_classes(classes_param)
 
     def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, max_det, allowlist):
-        """Background thread: load YoloDetector, then go live. Node subscribes before this runs."""
+        """Background thread: load the detector, then go live. Node subscribes before this runs."""
         try:
-            det = YoloDetector(
+            det = make_detector(
                 model_path=model_path,
                 device=device, conf=conf, iou=iou, imgsz=imgsz,
                 half=half, max_det=max_det, class_allowlist=allowlist,
                 logger=self.get_logger())
         except Exception as exc:
-            self.get_logger().fatal(f"[DET  ] YoloDetector init FAILED: {exc}")
+            self.get_logger().fatal(f"[DET  ] detector init FAILED: {exc}")
             return
         # Apply any allowlist change that arrived during load via a param callback.
         pending = self._pending_allowlist
@@ -430,7 +434,7 @@ class DetectorNode(Node):
         """Apply per-model conf overrides (CSV 'name=conf') to the registry.
 
         Each named entry gets its own threshold, persisting across active_model
-        switches (the override lives on the YoloDetector). In single-model mode a
+        switches (the override lives on the detector). In single-model mode a
         pair naming the loaded model (or its stem) applies to it. Unknown names
         are warned, not fatal -- a live-tuned param must never crash the node.
         """
