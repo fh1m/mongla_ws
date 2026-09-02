@@ -1,0 +1,156 @@
+<!doctype html><meta charset=utf-8><title>Mongla console</title>
+<link rel=stylesheet href="/console.css">
+<header>
+  <h1>Mongla</h1>
+  <div class=path>camera → hailo-8 → bearing → control → srot → thrusters</div>
+  <div class=spacer></div>
+  <span id=armed class=pill>—</span><span id=mode class=pill>—</span>
+  <span id=fw class=pill>—</span><span id=uptime class=pill>—</span>
+  <span id=reboots class=pill>—</span><span id=throttled class=pill>—</span>
+</header>
+
+<div class=grid>
+  <!-- what the camera sees -->
+  <div class="card c5">
+    <h2>Forward camera <em id=t_target>—</em></h2>
+    <img class=cam src="/stream">
+    <div class=legend>
+      <span><i class=sw style="background:var(--sense)"></i>target</span>
+      <span><i class=sw style="background:#333d4a"></i>deadband 2.5°</span>
+      <span><i class=sw style="background:var(--cmd)"></i>command</span>
+    </div>
+  </div>
+
+  <!-- where it is, and where it is being told to go -->
+  <div class="card c4">
+    <h2>Vehicle <em>top-down, hull rotates with heading</em></h2>
+    <canvas id=auv height=330></canvas>
+    <div class=legend>
+      <span><i class=sw style="background:var(--cmd)"></i>thrust fwd</span>
+      <span><i class=sw style="background:var(--fault)"></i>reverse</span>
+      <span><i class=sw style="background:var(--sense)"></i>bearing</span>
+    </div>
+  </div>
+
+  <!-- attitude and depth: the instruments -->
+  <div class="card c3">
+    <h2>Attitude</h2>
+    <div class=body style="display:flex;gap:10px;align-items:flex-start">
+      <canvas id=horizon height=132 style="flex:1"></canvas>
+      <canvas id=depth height=132 style="width:62px;flex:none"></canvas>
+    </div>
+    <canvas id=hdg height=40></canvas>
+    <div class=body style="padding-top:9px">
+      <div class=kv>
+        <div class=k>depth</div><div class=v><span id=t_depth>—</span> m
+          <span class=sub id=t_depthraw></span></div>
+        <div class=k>heading</div><div class=v><span id=t_hdg>—</span>°</div>
+        <div class=k>roll / pitch</div><div class=v><span id=t_roll>—</span> /
+          <span id=t_pitch>—</span>°</div>
+        <div class=k>yaw rate</div><div class=v><span id=t_yawrate>—</span> °/s</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- the claim under test -->
+  <div class="card c5">
+    <h2>Bearing → command <em id=t_snaps>0</em></h2>
+    <canvas id=tr_bear height=140></canvas>
+    <div class=legend>
+      <span><i class=sw style="background:rgba(74,168,255,.35)"></i>bearing raw</span>
+      <span><i class=sw style="background:var(--sense)"></i>filtered (α-β .25/.02)</span>
+      <span><i class=sw style="background:var(--cmd)"></i>lateral cmd ×30</span>
+      <span>gate snaps →</span>
+    </div>
+  </div>
+
+  <div class="card c4">
+    <h2>Thrusters <em id=t_esc>—</em></h2>
+    <canvas id=thr height=120></canvas>
+    <div class=legend>
+      <span>outline = commanded (board mixer + FRAME_REVERSE)</span>
+      <span>fill = measured rpm</span>
+    </div>
+  </div>
+
+  <div class="card c3">
+    <h2>Vision pipeline</h2>
+    <canvas id=pipe height=66></canvas>
+    <div class=body style="padding-top:4px">
+      <div class=kv>
+        <div class=k>control loop</div><div class=v><span id=t_loop>—</span> Hz</div>
+        <div class=k>detector</div><div class=v><span id=t_det>—</span> Hz</div>
+        <div class=k>bearing</div><div class=v><span id=t_bear>—</span>°
+          <span class=sub id=t_bearraw></span></div>
+        <div class=k>lateral cmd</div><div class=v id=t_lat>—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- nav filters, raw behind filtered -->
+  <div class="card c4">
+    <h2>Depth <em>raw vs filtered</em></h2>
+    <canvas id=tr_depth height=104></canvas>
+  </div>
+  <div class="card c4">
+    <h2>Heading <em>raw vs filtered · wrap-aware</em></h2>
+    <canvas id=tr_hdg height=104></canvas>
+  </div>
+  <div class="card c4">
+    <h2>Attitude <em>roll · pitch · yaw rate</em></h2>
+    <canvas id=tr_att height=104></canvas>
+  </div>
+
+  <!-- health, presence-aware -->
+  <div class="card c6">
+    <h2>Health <em>hatched = absent, not zero</em></h2>
+    <div class=body><div class=mat id=mat></div></div>
+  </div>
+
+  <div class="card c3">
+    <h2>Link <em>115200 8N1</em></h2>
+    <canvas id=link height=52></canvas>
+    <div class=body style="padding-top:2px">
+      <div class=kv>
+        <div class=k>rx</div><div class=v><span id=t_bps>—</span> B/s</div>
+        <div class=k>board load</div><div class=v><span id=t_load>—</span> %</div>
+        <div class=k>drop / errors</div><div class=v><span id=t_drop>—</span> /
+          <span id=t_errs>—</span></div>
+        <div class=k>battery</div><div class=v><span id=t_batt>—</span> V</div>
+        <div class=k>5V rail</div><div class=v><span id=t_vcc>—</span> V</div>
+        <div class=k>press / water</div><div class=v><span id=t_press>—</span> mb ·
+          <span id=t_wtemp>—</span>°C</div>
+        <div class=k>|B| field</div><div class=v><span id=t_mag>—</span> µT</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card c3">
+    <h2>Message rates <em>4 s window</em></h2>
+    <div class=body><div class="kv" id=rates></div></div>
+  </div>
+
+  <div class="card c6">
+    <h2>Hosts</h2>
+    <div class=body>
+      <div class=kv>
+        <div class=k>pi cpu</div><div class=v><span id=t_cpu>—</span> %</div>
+        <div class=k>pi temp</div><div class=v><span id=t_ptemp>—</span> °C</div>
+        <div class=k>arm clock</div><div class=v><span id=t_clock>—</span> GHz</div>
+        <div class=k>pi memory</div><div class=v><span id=t_mem>—</span> MB</div>
+        <div class=k>board heap</div><div class=v><span id=t_heap>—</span> KB</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card c6">
+    <h2>Control</h2>
+    <div class=btns>
+      <button class=go onclick="fetch('/arm')">Arm · stabilize</button>
+      <button class=stop onclick="fetch('/disarm')">Disarm</button>
+    </div>
+    <div class=legend><span>opens disarmed · disarms on close, on Ctrl-C, and on
+      the button · STABILIZE only, never AUTO</span></div>
+  </div>
+</div>
+<script src="/console.js"></script>
