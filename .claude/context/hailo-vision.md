@@ -248,6 +248,91 @@ hailo compiler gate_rescue_repair_optimized.har --hw-arch hailo8
 backup (`gate_abid`, genuine underwater footage with surface caustics). The eval
 100 are disjoint from the 320.
 
+## Performance: 41.5 -> 82.3 Hz, with no loss of field of view
+
+The first end-to-end harness was strictly serial and used the camera at 1280x720
+@90. Re-measured and tuned, on our own model:
+
+| configuration | e2e Hz |
+|---|---|
+| 1280x720@90, serial (the original baseline) | **41.5** |
+| 1280x720@90, pipelined | 46.4 |
+| 640x360@90, pipelined | 79.5 |
+| **640x360@210, pipelined** | **82.3** |
+
+**1.98x, and it costs nothing in image quality.** Two measurements make that
+safe to say rather than hope:
+
+1. **640x360 has the SAME field of view as 1280x720.** Measured, not eyeballed —
+   a centre patch matched into the reference across scales gives **scale 1.01,
+   correlation 0.98**. A first attempt to judge this by eye was worthless
+   because the scene moved between captures. This mattered: 640x400 *looks*
+   like a crop, and this codebase already has one FOV error on record (the
+   in-air 80 deg figure used where the in-water 57.7 deg applies).
+2. **There is no resolution loss either.** The network input is a 640x640
+   letterbox, so a 1280x720 frame is downscaled to 640x360 *anyway*. Capturing
+   at 640x360 natively produces the identical network input and skips the
+   downscale.
+
+**The camera was never bandwidth-bound — it was a SETTING.** Sweeping the
+requested rate at 640x360 MJPG:
+
+| asked fps | driver grab | JPEG decode | delivered |
+|---|---|---|---|
+| 30 | 30.49 ms | 1.53 ms | 30.2 Hz |
+| 90 | 10.52 ms | 1.52 ms | 68.8 Hz |
+| **210** | **5.06 ms** | 2.92 ms | **127.8 Hz** |
+
+JPEG decode is **1.5 ms** — trivial. The cost was *waiting for the sensor* at a
+frame interval nobody had set. At 210 the camera stops being the bottleneck
+entirely (127.8 Hz against a ~95 Hz chip).
+
+**Where the remaining gap is.** With frames preloaded and no camera at all, the
+loop runs at **95.4 Hz**; live it is 82.3. The ~1.7 ms difference is thread
+contention on 4 cores (grabber + preprocess + infer + HailoRT's own threads).
+Closing it further has poor returns against a **20 Hz** requirement.
+
+### Two chip facts the benchmark hides
+
+**`hailortcli benchmark` feeds synthetic data**, so host-side NMS has nothing to
+do and every model reports ~98 FPS. On real frames:
+
+| model | classes | infer ms | Hz | dets/frame |
+|---|---|---|---|---|
+| stock COCO yolov11n | 80 | 12.24 | 81.7 | 0.3 |
+| gate_rescue_repair | 3 | 10.49 | 95.4 | 3.3 |
+| bin_fire_blood | 2 | 10.16 | 98.4 | 1.4 |
+| sauvc_sim | 11 | 10.34 | 96.7 | 0.0 |
+
+**Class count costs (~2 ms from 3 to 80 classes, via the output tensor);
+detection count does not.** I predicted the opposite — that the low 0.05
+threshold would cost frame rate through extra NMS work — and the measurement
+killed it: the model with the *most* detections per frame is among the fastest.
+2 -> 11 classes is only 0.18 ms, so `sauvc_sim` needed no special handling.
+
+### Both cameras on one chip
+
+Mongla runs a forward and a downward detector. Measured:
+
+- **A second `VDevice` is refused** — `HAILO_OUT_OF_PHYSICAL_DEVICES (74)`. One
+  process gets one VDevice; two independent inference processes will not work.
+- **Both HEFs on ONE VDevice does work** (two network groups).
+- Solo on that shared device: 91.5 and 97.3 Hz.
+- **Switching network group every frame — the worst case — costs 13.90 ms,
+  i.e. 71.9 Hz combined, ~36 Hz per camera.** Still 1.8x the control loop.
+
+In practice it is better than that: `detector_node` already latches
+`active_camera` and pauses the inactive detector, so the switch happens when a
+mission changes camera, not every frame — the active camera gets the full ~92 Hz.
+
+### Settings to carry into the integration
+
+```
+camera : 640x360 MJPG, CAP_PROP_FPS 210, CAP_PROP_BUFFERSIZE 1
+loop   : capture thread + preprocess thread, single-slot drop-stale queues
+conf   : 0.12-0.15  (fp32 would use 0.20)
+```
+
 ## Verdict
 
 | question | answer |
