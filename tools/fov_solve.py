@@ -370,7 +370,11 @@ def main() -> int:
         'views_used': len(ips), 'views_captured': len(files),
         'grid': [cols, rows], 'square_m': square,
         'board_bow_p2p_mm': float(1000 * (z.max() - z.min())),
-        **{f'{key}_deg': float(val) for key, val in v.items()},
+        # Key names must match camera_node._load_calibration, which reads
+        # 'hfov_deg_air'. It uses .get(..., 0.0), so a mismatch does not crash
+        # -- it silently logs HFOV=0.0 forever.
+        **{f"{key.split('_')[0]}_deg_{key.split('_')[1]}": float(val)
+           for key, val in v.items()},
         'note': ('FOV is invariant to square size; board bow figure is not. '
                  'Water FOV is Snell through a flat port, n=1.333.'),
     }

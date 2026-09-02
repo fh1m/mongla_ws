@@ -1,0 +1,60 @@
+{
+  "image_width": 1280,
+  "image_height": 720,
+  "camera_matrix": [
+    [
+      1027.873431351285,
+      0.0,
+      617.3234155352087
+    ],
+    [
+      0.0,
+      1033.8573665665203,
+      373.0218316003625
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "distortion_coefficients": [
+    -0.023268235554882916,
+    0.09798569415713003,
+    -0.007862820563785036,
+    -0.0013366012494295436,
+    -0.20676798931527188
+  ],
+  "method": "calibrateCameraRO",
+  "chosen_by": "k-fold held-out reprojection error",
+  "holdout_rms_px": 0.36776740523585644,
+  "holdout_rms_other_arm_px": 0.6854871058823508,
+  "train_rms_px": 0.3425142422500318,
+  "fx_fold_sd_px": 0.9600547444150498,
+  "views_used": 25,
+  "views_captured": 25,
+  "grid": [
+    8,
+    6
+  ],
+  "square_m": 0.025,
+  "board_bow_p2p_mm": 2.4830845650285482,
+  "hfov_deg_air": 63.81648181507968,
+  "vfov_deg_air": 38.3973086040623,
+  "dfov_deg_air": 70.92579278079002,
+  "hfov_deg_water": 46.72154504185972,
+  "vfov_deg_water": 28.564052991584578,
+  "note": "FOV is invariant to square size; board bow figure is not. Water FOV is Snell through a flat port, n=1.333.",
+  "camera": "pi_test_global_shutter (Microdia USB, bench test unit)",
+  "captured": "2026-09-03",
+  "external_check": {
+    "board_pattern_width_m": 0.23,
+    "squares_across": 9,
+    "tape_distance_m": 0.9,
+    "solvepnp_predicted_m": 0.9062,
+    "agreement_pct": 0.69,
+    "budget_pct": 2.4,
+    "verdict": "CONSISTENT"
+  },
+  "systematic_uncertainty_note": "A second independent calibration of this camera on a different (more bowed) board gave fx 1008.02 / HFOV water 47.42 deg -- 1.93 % away, which is 21x either run k-fold spread. Quote HFOV +/- 0.7 deg, not the +/-0.05 the fold spread implies: k-fold resamples within ONE capture and cannot see a bias shared by every view in it."
+}
