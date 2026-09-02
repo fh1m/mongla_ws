@@ -185,3 +185,110 @@ def bearing_from_normalised(ex: float, ey: float, w_frac: float, h_frac: float,
     return bearing_from_pixels(u, v, w_frac * width, h_frac * height,
                                width=width, height=height, K=K, D=D,
                                hfov_rad=hfov_rad, vfov_rad=vfov_rad)
+
+
+class BearingFilter:
+    """Alpha-beta smoother for a bearing stream. Chosen on measurement.
+
+    THE PROBLEM, MEASURED on the Pi + Hailo with a `person` target held still:
+
+        bearing jitter        sd 3.83 deg/frame, range 14.8 deg
+        bbox centre           sd 32.5 px   -- and box WIDTH sd 86.8 px
+        pipeline latency      13.7 ms (grab 1.74 + infer 11.96)
+        lag at 30 deg/s       0.41 deg
+
+    Jitter beats lag by ~9x, so there is room to trade lag for smoothness. The
+    box width figure is the tell: the detector is not wandering, it is SNAPPING
+    between "head and torso" and "whole body", which is why the noise is
+    heavy-tailed (kurtosis 4.3) rather than Gaussian.
+
+    WHY ALPHA-BETA AND NOT AN EMA. Measured on that real noise, plus the same
+    noise added to a 30 deg/s slew:
+
+        filter          jitter sd   reduction   lag
+        raw                 3.570          0%   +0.302 deg
+        ema  a=0.15         0.496         86%   +3.564      <- unusable
+        ema  a=0.30         0.897         75%   +1.627
+        median 9            1.147         68%   +2.508
+        alpha-beta .25/.02  0.772         78%   +0.231      <- chosen
+
+    The EMA buys smoothness with lag, one for one. Alpha-beta carries a
+    VELOCITY state, so on steady motion it extrapolates through the pipeline
+    delay -- it came out with LESS lag than the raw signal, not more. On a
+    terminal lock, lag is the error that turns into a miss, so that difference
+    is the whole decision.
+
+    THE GATE IS NOT OPTIONAL. A velocity state keeps extrapolating across a
+    discontinuity, so a reacquire onto a different box makes the filter fly
+    PAST it: a 12 deg step overshoots 1.51 deg and takes 21 frames to settle.
+    Treating a large residual as a NEW target instead of a large error removes
+    it completely (0.00 deg, 0 frames).
+
+    Where to put the gate was also measured, because it has a cliff:
+
+        gate     trips   jitter reduction
+        4-8 deg   1.5%          8-10%     <- fires on ordinary noise, filter dead
+        >= 10     0.0%             81%
+
+    12 deg is chosen for margin: ~4x the measured noise sd, never trips on real
+    noise, and still catches a genuine target switch (12 deg is ~130 px here,
+    a third of the frame).
+    """
+
+    ALPHA = 0.25
+    BETA = 0.02
+    GATE_RAD = math.radians(12.0)
+    # A gap longer than this is a re-acquisition, not a slow frame. Extrapolating
+    # a velocity across a real dropout is how a filter walks a target off the
+    # edge of the frame while reporting a confident bearing.
+    MAX_GAP_S = 0.30
+
+    def __init__(self, alpha=None, beta=None, gate_deg=None):
+        self.alpha = self.ALPHA if alpha is None else float(alpha)
+        self.beta = self.BETA if beta is None else float(beta)
+        self.gate = self.GATE_RAD if gate_deg is None else math.radians(gate_deg)
+        self.reset()
+
+    def reset(self) -> None:
+        self._x = self._y = None
+        self._vx = self._vy = 0.0
+        self._t = None
+        self.resets = 0
+
+    def update(self, bearing: Optional[Bearing], now: float) -> Optional[Bearing]:
+        """Filter one sample. `None` in means target lost -> state is dropped.
+
+        Passing None through rather than holding the last value is deliberate:
+        the caller's loss handling (grace windows, coast, the uplink's
+        send-nothing contract) is what decides what absence means, and a filter
+        that invents continuity takes that decision away from it.
+        """
+        if bearing is None:
+            self.reset()
+            return None
+        if self._x is None or self._t is None or (now - self._t) > self.MAX_GAP_S:
+            self._x, self._y = bearing.angle_x, bearing.angle_y
+            self._vx = self._vy = 0.0
+            self._t = now
+            return bearing
+
+        dt = max(1e-3, now - self._t)
+        self._t = now
+        out = []
+        for meas, pos, vel in ((bearing.angle_x, self._x, self._vx),
+                               (bearing.angle_y, self._y, self._vy)):
+            pred = pos + vel * dt
+            resid = meas - pred
+            if abs(resid) > self.gate:
+                out.append((meas, 0.0, True))
+            else:
+                out.append((pred + self.alpha * resid,
+                            vel + (self.beta / dt) * resid, False))
+        (self._x, self._vx, hit_x), (self._y, self._vy, hit_y) = out
+        if hit_x or hit_y:
+            self.resets += 1
+        # size_x/size_y are NOT filtered here. They are the standoff measure and
+        # feed a one-sided forward axis; smoothing a range signal adds lag to
+        # the axis where lag is a collision.
+        return Bearing(self._x, self._y, bearing.size_x, bearing.size_y,
+                       bearing.calibrated)

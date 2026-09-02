@@ -622,12 +622,39 @@ def test_repeated_stop_stays_a_single_stop():
 def test_unsupported_verbs_are_disjoint_from_move_verbs():
     from duburi_control.fc.srot_fc import UNSUPPORTED_VERBS
     assert not (UNSUPPORTED_VERBS & MOVE_VERBS)
-    # The ones that still lie or crash rather than refuse.
-    for verb in ('lock_heading', 'arc', 'vision_align'):
+    # The ones that still lie or crash rather than refuse. `vision_align` came
+    # OFF this list on 2026-09-03 -- it actuates through MANUAL_CONTROL now; see
+    # test_no_facade_mode_gate_is_reachable_on_srot's 'ported' bucket. The two
+    # kept here are the ones with no such path: `lock_heading` returns success
+    # and holds nothing, and `arc` would pass an absolute heading where the board
+    # expects a yaw RATE.
+    for verb in ('lock_heading', 'arc'):
         assert verb in UNSUPPORTED_VERBS
+    assert 'vision_align' not in UNSUPPORTED_VERBS
+    assert 'vision_move' not in UNSUPPORTED_VERBS
     # move_back came OFF the list: MOVE_BACK=1 was always on the wire and the verb
     # was refused only for a missing _build_params branch. It is a board verb now.
     assert 'move_back' in MOVE_VERBS and 'move_back' not in UNSUPPORTED_VERBS
+
+
+def _assert_srot_ported(names):
+    """A 'ported' verb needs BOTH halves, or the bucket is a hole in the guard.
+
+    Checked structurally, from source, because the whole point of the invariant
+    is to catch someone removing a name from UNSUPPORTED_VERBS without doing the
+    work -- and 'I added it to the allowed set' is exactly that mistake wearing a
+    different hat.
+    """
+    from pathlib import Path
+    pkg = Path(__file__).resolve().parents[1] / 'duburi_control'
+    vv = (pkg / 'vision_verbs.py').read_text()
+    mv = (pkg / 'motion_vision.py').read_text()
+    assert '_srot_backend(self.pixhawk)' in vv, (
+        'vision_verbs no longer skips the ArduSub mode gate on srot, so a '
+        f'ported verb in {sorted(names)} would hit _ensure_alt_hold and raise')
+    assert '_is_srot(pixhawk)' in mv and '_srot_drive(' in mv, (
+        'motion_vision no longer has a srot actuation branch, so a ported verb '
+        'would call send_rc_override, which SrotFC does not implement')
 
 
 def test_no_facade_mode_gate_is_reachable_on_srot():
@@ -651,9 +678,21 @@ def test_no_facade_mode_gate_is_reachable_on_srot():
         'arc', 'style_roll', 'style_yaw',             # _ensure_yaw_capable_mode
         'turn', 'yaw_left', 'yaw_right',              # _ensure_yaw_capable_mode
     }
+    # THE THIRD BUCKET, added 2026-09-03. A verb can also be PORTED: it reaches
+    # the facade, but the gate it would have hit is skipped for this backend and
+    # its body actuates through a primitive SrotFC does implement. That is what
+    # `vision_align` / `vision_move` now are -- `vision_verbs` skips
+    # `_ensure_alt_hold` on srot and `motion_vision._drive` writes
+    # MANUAL_CONTROL instead of `send_rc_override`.
+    #
+    # This bucket is deliberately NOT a free pass. A verb only belongs here once
+    # BOTH halves exist, and the two assertions below check for both, so adding a
+    # name here without doing the work fails exactly as an un-refused verb did.
+    ported = {'vision_align', 'vision_move'}
+    _assert_srot_ported(ported)
     # 'surface' is intercepted in the manager (_run_srot_surface) rather than
     # collapsed or refused -- it is the one deliberate exception.
-    handled = MOVE_VERBS | UNSUPPORTED_VERBS | {'surface'}
+    handled = MOVE_VERBS | UNSUPPORTED_VERBS | ported | {'surface'}
     unreachable = gated - handled
     assert not unreachable, (
         f'{sorted(unreachable)} would reach a facade mode gate on srot, then call '
