@@ -68,6 +68,11 @@ class CameraNode(Node):
         # cleanly; we cast to float at the timer site.
         self.declare_parameter('fps',             30)
         self.declare_parameter('frame_id',        '')
+        # Path to a calibration.json from tools/fov_calibrate.py. Empty (the
+        # default) keeps the historical behaviour EXACTLY: size-only CameraInfo
+        # with K and D left zero. Nothing changes until a real calibration
+        # exists for this camera.
+        self.declare_parameter('calibration',     '')
         self.declare_parameter('publish_rate_hz', 30)
         self.declare_parameter('path',            '')        # for source=video_file
         self.declare_parameter('loop',            True)      # for source=video_file
@@ -91,6 +96,7 @@ class CameraNode(Node):
         ns = f'/duburi/vision/{self._cam_name}'
         self._pub_img  = self.create_publisher(Image,      f'{ns}/image_raw',   10)
         self._pub_info = self.create_publisher(CameraInfo, f'{ns}/camera_info', 10)
+        self._calib = self._load_calibration()
         self._bridge   = CvBridge()
 
         rate = float(self.get_parameter('publish_rate_hz').value)
@@ -261,10 +267,68 @@ class CameraNode(Node):
         info.header = img_msg.header
         info.width  = int(meta.width  or img_msg.width)
         info.height = int(meta.height or img_msg.height)
+        self._fill_calibration(info)
 
         self._pub_img.publish(img_msg)
         self._pub_info.publish(info)
         self._sent += 1
+
+    def _load_calibration(self) -> dict | None:
+        """Load intrinsics measured by tools/fov_calibrate.py, if any.
+
+        Returns None when unset or unreadable -- a missing calibration must
+        never stop the camera. It is published as a WARN, not an exception,
+        because a vehicle that will not stream video is worse than one that
+        streams video without K.
+        """
+        path = str(self.get_parameter('calibration').value or '').strip()
+        if not path:
+            return None
+        try:
+            import json
+            with open(os.path.expanduser(path)) as fh:
+                c = json.load(fh)
+            K = c['camera_matrix']; D = c['distortion_coefficients']
+            cal = {
+                'K': [float(v) for row in K for v in row],
+                'D': [float(v) for v in D],
+                'w': int(c['image_width']), 'h': int(c['image_height']),
+                'hfov': float(c.get('hfov_deg_air', 0.0)),
+            }
+            self.get_logger().info(
+                f"[CAM  ] calibration {os.path.basename(path)}: "
+                f"fx={cal['K'][0]:.1f} fy={cal['K'][4]:.1f} "
+                f"HFOV={cal['hfov']:.1f} deg (measured at {cal['w']}x{cal['h']})")
+            return cal
+        except Exception as exc:
+            self.get_logger().warn(
+                f"[CAM  ] calibration {path!r} not usable ({exc}); "
+                "publishing size-only CameraInfo")
+            return None
+
+    def _fill_calibration(self, info: CameraInfo) -> None:
+        """Populate K/D/P, rescaled if streaming at a different resolution.
+
+        Intrinsics scale LINEARLY with resolution, so a calibration taken at
+        1280x720 is valid at 640x360 -- but only after scaling. Publishing the
+        unscaled matrix would put the principal point off the image and every
+        derived angle would be wrong by 2x, silently.
+        """
+        cal = self._calib
+        if cal is None:
+            return
+        sx = info.width / cal['w']
+        sy = info.height / cal['h']
+        K = list(cal['K'])
+        K[0] *= sx; K[2] *= sx        # fx, cx
+        K[4] *= sy; K[5] *= sy        # fy, cy
+        info.k = K
+        info.d = list(cal['D'])
+        info.distortion_model = 'plumb_bob'
+        info.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        info.p = [K[0], 0.0, K[2], 0.0,
+                  0.0, K[4], K[5], 0.0,
+                  0.0, 0.0, 1.0, 0.0]
 
     def _handle_video_pause(self, req: SetBool.Request,
                              resp: SetBool.Response) -> SetBool.Response:
