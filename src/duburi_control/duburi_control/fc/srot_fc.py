@@ -592,9 +592,23 @@ class SrotFC(FlightController):
     def set_servo(self, channel_1based: int, us: int) -> None:
         """DO_SET_SERVO (183): drive PCA9685 servo `channel_1based` (1-based, so PCA
         ch 0 -> channel_1based=1) to `us` µs. Raw firmware match -- the exact command
-        the SROT board dispatches to its servo expander."""
+        the SROT board dispatches to its servo expander.
+
+        CLAMPED to SERVO_MIN_US..SERVO_MAX_US, and it says so when it clamps.
+        Those constants existed and were unused, so the host sent whatever it was
+        given and relied on the expander to cope -- the same shape as relying on
+        the board to clamp `gain`. A limit enforced only at the far end is not a
+        limit this side can reason about, and on a role-2 switch channel (>=1500
+        = ON) an out-of-band value is indistinguishable from a deliberate one.
+        """
+        raw = int(us)
+        clamped = max(sp.SERVO_MIN_US, min(sp.SERVO_MAX_US, raw))
+        if clamped != raw:
+            self._log_warn(
+                f'[SROT ] set_servo ch{int(channel_1based)}: {raw} us is outside '
+                f'{sp.SERVO_MIN_US}-{sp.SERVO_MAX_US}, clamped to {clamped}')
         self._command_long(sp.CMD_DO_SET_SERVO, p1=float(int(channel_1based)),
-                            p2=float(int(us)))
+                            p2=float(clamped))
 
     def set_relay(self, instance_0based: int, on: bool) -> None:
         """DO_SET_RELAY (181): switch PCA9685 MOSFET `instance_0based` (0-based ->
