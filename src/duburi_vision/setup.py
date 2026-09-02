@@ -13,7 +13,7 @@ setup(
         ('share/' + package_name,              ['package.xml']),
         ('share/' + package_name + '/config',  glob('config/*.yaml')),
         ('share/' + package_name + '/launch',  glob('launch/*.launch.py')),
-        ('share/' + package_name + '/models',  glob('models/*.yaml') + glob('models/*.pt')),
+        ('share/' + package_name + '/models',  glob('models/*.yaml') + glob('models/*.pt') + glob('models/*.hef')),
         # Web console static assets (served by the mission_web node from its source
         # tree via __file__; this install keeps them alongside the installed pkg too).
         ('share/' + package_name + '/web/static', glob('duburi_vision/web/static/*')),
