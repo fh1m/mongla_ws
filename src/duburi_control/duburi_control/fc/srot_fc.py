@@ -162,6 +162,10 @@ class SrotFC(FlightController):
         self._last_vehicle_hb = None
         # (move_type, speed) of the last translation leg sent, for the abort brake.
         self._last_leg = None
+        # Highest ATTITUDE.time_boot_ms seen, for the unplanned-reboot detector.
+        # None until the first sample. See `check_for_reboot()`.
+        self._peak_boot_ms = None
+        self._reboots = 0
         # Board's SROT_FW_BEHAVIOUR_REV once read: int, or None while unknown.
         self._behaviour_rev = None
         self._behaviour_rev_logged = False
@@ -727,6 +731,48 @@ class SrotFC(FlightController):
             return ''
         text = getattr(msg, 'text', '')
         return text.decode() if isinstance(text, bytes) else str(text)
+
+    # Board uptime can wobble by a sample without meaning anything -- messages
+    # are timestamped when built and can be reordered slightly by the tx queue.
+    # A REBOOT drops uptime to near zero, so only a large backwards step counts.
+    _REBOOT_DROP_MS = 3000
+
+    def check_for_reboot(self) -> bool:
+        """True exactly once per unplanned flight-controller restart.
+
+        Opening the serial port reboots this board (see `fc/port_guard.py`), so an
+        FC restart mid-session is a REAL and reachable state, not a theoretical
+        one: any second process that touches the device causes it. After a reboot
+        the board is DISARMED, back in its boot mode, with every setpoint cleared
+        and its stream rates reset to the compiled defaults -- so a mission that
+        keeps issuing verbs is commanding a vehicle that is no longer the one it
+        configured.
+
+        Detected on `ATTITUDE.time_boot_ms` going sharply backwards. That field is
+        the board's own clock, so this needs no host timing and survives a stalled
+        reader thread.
+        """
+        att = self._cache('ATTITUDE')
+        if att is None:
+            return False
+        now_ms = int(getattr(att, 'time_boot_ms', 0))
+        prev = self._peak_boot_ms
+        if prev is None:
+            self._peak_boot_ms = now_ms
+            return False
+        if now_ms < prev - self._REBOOT_DROP_MS:
+            self._reboots += 1
+            self._peak_boot_ms = now_ms
+            if self._log is not None:
+                self._log.error(
+                    f'[SROT ] FLIGHT CONTROLLER REBOOTED -- uptime fell '
+                    f'{prev} -> {now_ms} ms (restart #{self._reboots}). The board is '
+                    f'now DISARMED with default stream rates; anything this session '
+                    f'configured is gone. Most likely cause: a second process opened '
+                    f'the serial port.')
+            return True
+        self._peak_boot_ms = max(prev, now_ms)
+        return False
 
     def telemetry(self) -> Telemetry:
         t = Telemetry()

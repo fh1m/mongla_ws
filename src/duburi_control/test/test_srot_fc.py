@@ -988,6 +988,18 @@ def test_the_threshold_follows_depth_p_instead_of_a_hardcoded_output():
     assert hi.check_depth_loop_settled()[0] is True
 
 
+def _cmd(depth_m, gain=None):
+    """The DEPTH_CMD a board at `depth_m` would emit: clamp(DEPTH_P * (depth - 0.10)).
+
+    Written in METRES on purpose. Hand-typed wire values encode whatever DEPTH_P
+    was current when they were written, and fw f533bd2 retuned it 3.0 -> 0.5 after
+    the 2026-08-07 water test -- at which point every such fixture in this repo
+    silently described a different physical depth.
+    """
+    g = sp.DEPTH_P_DEFAULT if gain is None else gain
+    return max(-1.0, min(1.0, g * (depth_m - 0.10)))
+
+
 def test_a_healthy_surface_reading_arms_normally():
     """~0.03 m at the surface -> DEPTH_CMD ~ -0.035 at DEPTH_P=0.5. Comfortably clear;
     if this ever fails the guard has become a nuisance that gets overridden by habit.
@@ -999,7 +1011,7 @@ def test_a_healthy_surface_reading_arms_normally():
     -0.22 to a host that assumes 0.5 claims 0.44 m of error and REFUSES to arm a healthy
     board."""
     fc = _fc()
-    fc.note_named_value(_nvf('DEPTH_CMD', -0.035))
+    fc.note_named_value(_nvf('DEPTH_CMD', _cmd(0.03)))     # ~3 cm at the surface
     assert fc.check_depth_loop_settled()[0] is True
 
 
@@ -1384,11 +1396,11 @@ def test_the_guard_subtracts_the_previews_own_target():
     fc = _fc()
     # Values are DEPTH_P-dependent by construction; these are DEPTH_P=0.5 (fw rev 14,
     # water-tuned). 0.5 * (0.00 - 0.10) = -0.05.
-    fc.note_named_value(_nvf('DEPTH_CMD', -0.05))     # exactly 0.00 m at DEPTH_P=0.5
+    fc.note_named_value(_nvf('DEPTH_CMD', _cmd(0.00)))    # exactly 0.00 m
     ok, reason = fc.check_depth_loop_settled()
     assert ok is True and '+0.00 m' in reason
 
     healthy = _fc()
     # 0.5 * (-0.15 - 0.10) = -0.125
-    healthy.note_named_value(_nvf('DEPTH_CMD', -0.125))  # the real -0.15 m reading
+    healthy.note_named_value(_nvf('DEPTH_CMD', _cmd(-0.15)))  # the real -0.15 m reading
     assert healthy.check_depth_loop_settled()[0] is True

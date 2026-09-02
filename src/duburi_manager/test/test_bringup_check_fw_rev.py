@@ -138,6 +138,21 @@ def test_absent_pressure_warns_and_says_depth_is_untrustworthy():
     assert status == WARN and 'trustworthy' in detail
 
 
+def _cmd(depth_m, gain=None):
+    """The DEPTH_CMD a board at `depth_m` would emit: clamp(DEPTH_P * (depth - 0.10)).
+
+    Fixtures are written in METRES and converted here, deliberately. Hand-typed
+    wire values silently encode whatever DEPTH_P was current when they were
+    written, and when the firmware retuned the gain (f533bd2, 3.0 -> 0.5 after
+    the 2026-08-07 water test) every one of them started describing a different
+    physical depth -- a "healthy surface reading" fixture became a 0.44 m error.
+    Three test files carried that rot at once. Stating the metres makes the next
+    retune a no-op here.
+    """
+    g = sp.DEPTH_P_DEFAULT if gain is None else gain
+    return max(-1.0, min(1.0, g * (depth_m - 0.10)))
+
+
 def test_an_implausible_barometer_fails_and_names_the_vertical_thrusters():
     """Observed disarmed 2026-08-02: a phantom baro reading -3.1 m at the surface.
     DEPTH_CMD is clamp(DEPTH_P * (depth - 0.10)) so that pins at -1.00. The mixer
@@ -154,7 +169,7 @@ def test_the_preflight_reads_depth_cmd_because_depth_out_is_gone_at_rev_8():
     this probe only ever runs disarmed -- so reading DEPTH_OUT hit the 'not reported'
     WARN branch on a perfectly healthy board and the check silently stopped working.
     A healthy surface reading must PASS, and it must do so from DEPTH_CMD alone."""
-    status, _, _ = _depth_loop_verdict(-0.30)      # exactly 0.00 m at DEPTH_P=3.0
+    status, _, _ = _depth_loop_verdict(_cmd(0.00))     # a board reading exactly 0 m
     assert status == PASS
 
 
@@ -254,7 +269,7 @@ def test_a_healthy_in_air_board_does_not_cry_wolf():
     Subtracting the target recovers the board's actual depth (-0.15 m), which is a
     WARN worth a calibrate_depth and nothing more. A guard that fires on a healthy
     vehicle is a guard that gets overridden by habit."""
-    status, _, detail = _depth_loop_verdict(-0.74)
+    status, _, detail = _depth_loop_verdict(_cmd(-0.15))
     assert status == PASS, 'a 0.15 m offset in air is normal, not a warning'
     assert '-0.15' in detail
 
@@ -262,7 +277,7 @@ def test_a_healthy_in_air_board_does_not_cry_wolf():
 def test_a_real_offset_warns_and_names_the_fix():
     """Between the healthy band and the refusal there is a real offset worth acting
     on. It must name calibrate_depth -- a WARN nobody knows how to clear is noise."""
-    status, _, detail = _depth_loop_verdict(0.45)     # +0.25 m at DEPTH_P = 3.0
+    status, _, detail = _depth_loop_verdict(_cmd(0.25))   # +0.25 m of offset
     assert status == WARN and 'calibrate_depth' in detail
 
 
@@ -278,4 +293,4 @@ def test_saturation_points_at_the_offset_before_the_sensor():
 def test_a_perfectly_zeroed_board_passes_cleanly():
     """DEPTH_CMD = -0.30 at DEPTH_P = 3.0 is exactly 0.00 m. If this ever WARNs, the
     target-offset correction has been lost again."""
-    assert _depth_loop_verdict(-0.30)[0] == PASS
+    assert _depth_loop_verdict(_cmd(0.00))[0] == PASS
