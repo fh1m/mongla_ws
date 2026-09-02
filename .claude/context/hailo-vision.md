@@ -76,11 +76,27 @@ different quantities: a benchmark saturates the chip with queued frames, and an
 AUV has exactly one frame in flight. **Keep YOLO11.** The retraining that the
 benchmark seemed to demand would have bought 9 %.
 
-**2. NMS runs ON-CHIP, and that is why a 4-core Pi keeps up.** The Model Zoo
-HEFs carry a `yolov8_nms_postprocess` op, so the output is already-decoded
-boxes rather than raw feature maps. Host-side decode measures **0.04 ms**. On
-boards where NMS lands on the CPU this is normally the bottleneck; here it is
-free.
+**2. ~~NMS runs ON-CHIP~~ — RETRACTED. HailoRT does NMS on the HOST, inside
+its own library call.** The observation was right and the explanation was
+wrong. The Model Zoo HEFs carry a `yolov8_nms_postprocess` op and the output is
+already-decoded boxes, so a Python-side decode timer reads **0.04 ms** — but
+that is because the work happens *inside* `pipe.infer()` and gets attributed to
+"infer", not because the accelerator did it. The DFC's own tables settle it:
+
+```
+NN_CORE_META_ARCHS = [SSD, YOLOV5, CENTERNET, YOLOV6]
+CPU_META_ARCHS     = [YOLOV5, YOLOX, YOLOV5_SEG, SSD, YOLOV8, DAMOYOLO]
+```
+
+YOLOV8 — which is YOLO11's head — appears **only in the CPU list**. Asking for
+`engine=nn_core` is refused outright: *"The specified meta architecture yolov8
+cannot be run on chip."* So for our model family the NMS is host CPU work.
+
+It is still **cheap** — e2e infer 11.41 ms against `hailortcli` hw_only
+10.8 ms puts it under a millisecond — but it is cheap **because our models have
+3 classes, not 80**, and it will grow with class count. The correct statement is
+"HailoRT's NMS is fast enough to disappear into the infer call here", not "the
+chip does it".
 
 **3. The bottleneck is now the CAMERA.** Of a 17.47 ms loop, `grab` is
 4.67-7.10 ms and letterbox 1.35 ms; the accelerator is 11.41 ms and everything
@@ -127,52 +143,130 @@ bindings are built by their own `setup.py`, which invokes cmake itself. And
 **The bindings version must equal the installed `libhailort` version.** Ours is
 4.24.0 both sides.
 
-## Still blocked: compiling OUR models
+## M2 / M5 — our own model, compiled and measured (2026-09-02)
 
-**M2 and M5 are not done**, and they are the remaining gap. The Hailo
-**Dataflow Compiler is x86_64-only** — the exact mirror of the existing rule
-that TensorRT engines must be built *on* the Jetson, pointing the opposite way,
-which is a good way to lose a day. It is also **not on PyPI**: it needs a Hailo
-Developer Zone account (free) to download.
+`gate_rescue_repair` (YOLO11n, 3 classes) is compiled and running on the chip.
 
-The dev box is a valid DFC host: x86_64, Ubuntu 22.04, **Python 3.10** — which
-is exactly the `cp310` the DFC wheel targets.
+**M2 — our model is FASTER than the stock proxy**, which retires the caveat this
+document previously carried:
 
-Once available:
+| | hw_only FPS | latency |
+|---|---|---|
+| stock COCO yolov11n (80 classes) | 92.4 | 7.81 ms |
+| **ours, `gate_rescue_repair` (3 classes)** | **97.8** | 8.34 ms |
 
+5.8 % faster, exactly as predicted from the smaller NMS workload. **The stock-HEF
+proxy was fair and slightly conservative.**
+
+**M5 — the measurement that decides it.** 100 **real pool** frames (disjoint
+from the 320 used for calibration), conf 0.20 / IoU 0.70 on both sides.
+
+**The result that matters: INT8 does not move the box.**
+
+| comparison | recall | centre error |
+|---|---|---|
+| `.pt` fp32 -> `.onnx` fp32 — **the harness's own noise floor** | 64.2 % | **2.72 px** |
+| `.onnx` fp32 -> `.hef` int8 | 49.3 % | **2.14 px** |
+
+Centre error under quantization (2.14-2.65 px across every threshold tested) is
+**at or below the floor two full-precision runs of the same weights produce**.
+Since `vision.align` steers on centre offset and the torpedo lock holds against
+a 47.5 mm opening, **this is the number that had to be small, and it is.**
+
+**Read the recall numbers only as differences, never as absolutes.** Two fp32
+runs of identical weights only "agree" 64.2 % of the time under greedy IoU>0.5
+matching, because overlapping same-class boxes defeat greedy assignment. **Had I
+not run that fp32 control I would have reported "quantization destroys 54 % of
+detections", which is badly wrong.**
+
+**What quantization actually costs: about 0.08 of confidence.** The int8 model
+finds the same objects and scores them lower, so they fall under a threshold
+tuned for fp32.
+
+**And a hypothesis of mine that the measurement KILLED.** I predicted that
+compiling with a lower baked threshold and filtering back to 0.20 would recover
+them. It does not — the 0.05 build filtered to 0.20 returns the *identical* 104
+detections. The detections are not being clipped at compile time; the int8 model
+genuinely scores them lower. The fix is to **actually run at a lower threshold**,
+which the low baked threshold is what *permits*:
+
+| runtime th | detections | recall vs fp32 | centre px |
+|---|---|---|---|
+| 0.20 | 104 | 50.0 % | 2.48 |
+| 0.15 | 141 | 57.6 % | 2.54 |
+| **0.12** | **173** | **63.9 %** | **2.55** |
+| 0.10 | 210 | 69.4 % | 2.52 |
+
+**At 0.12 the int8 model reaches 63.9 % against the 64.2 % fp32-vs-fp32 ceiling
+— statistically indistinguishable from a full-precision run.**
+
+### The recipe, therefore
+
+1. Compile the HEF with `nms_scores_th` **well below** the intended runtime
+   value (0.05 used here). It costs nothing — 97.7 FPS either way — and it is
+   the only thing that makes step 2 possible, since **runtime conf can only
+   tighten**.
+2. Run at roughly **0.12-0.15** where fp32 would use 0.20. Budget ~0.08 of
+   confidence for INT8.
+3. **Do not compensate for localization.** It is not degraded.
+
+### Reproducing the compile
+
+```bash
+# ONNX: no NMS in the graph, opset 11, Hailo adds its own
+yolo export model=gate_rescue_repair.pt format=onnx opset=11 nms=False
+
+hailo parser onnx gate_rescue_repair.onnx --hw-arch hailo8 \
+  --start-node-names images \
+  --end-node-names /model.23/cv2.0/cv2.0.2/Conv /model.23/cv3.0/cv3.0.2/Conv \
+                   /model.23/cv2.1/cv2.1.2/Conv /model.23/cv3.1/cv3.1.2/Conv \
+                   /model.23/cv2.2/cv2.2.2/Conv /model.23/cv3.2/cv3.2.2/Conv
+hailo optimize gate_rescue_repair.har --hw-arch hailo8 \
+  --calib-set-path calib_set.npy --model-script gate_rescue_repair.alls
+hailo compiler gate_rescue_repair_optimized.har --hw-arch hailo8
 ```
-YOLO11n .pt --export--> ONNX (NMS out of the graph; Hailo does it on-chip)
-            --DFC on the dev box--> .hef      + calibration set (~1024 frames)
-            --copy--> Pi, beside the existing .yaml sidecar
-```
 
-**Training does not change** — keep fine-tuning YOLO11n on the RTX 2060.
+**Traps, each of which cost real time:**
 
-**The calibration set must be real pool imagery, not sim renders.** Sim frames
-are documented in `CLAUDE.md` as too clean, and thresholds tuned on them do not
-transfer; calibrating INT8 on them would bake that optimism into the weights
-themselves.
+- **The DFC's auto NMS config fails** on a custom class count with
+  `The layer named  doesn't exist in the HN` (note the empty name). Write the
+  config JSON explicitly, mapping HAR layer names to strides. Get them from the
+  HAR, not the ONNX — ours were `conv51/conv54` (stride 8), `conv62/conv65`
+  (16), `conv77/conv80` (32).
+- **`.alls` accepts NO comments** — not `//`, not `#`.
+- **Calibration must be RGB.** Ultralytics converts BGR->RGB before the network,
+  so the graph expects RGB; calibrating on BGR quantizes the wrong channel
+  statistics and nothing reports it.
+- **The venv is not enough.** This dev box sources ROS, which sets `PYTHONPATH`
+  ahead of the venv's own site-packages, so a correctly-installed protobuf
+  3.20.3 still imported 7.36.1 from `~/.local` and died with
+  `'MessageFactory' object has no attribute 'GetPrototype'`. Clear `PYTHONPATH`.
+- **DFC 3.34.0 HEFs load fine on HailoRT 4.24.0** — verified, despite the
+  version numbers looking unrelated.
 
-**M5, when it can run, is the one that decides competition viability**, and the
-metric is Mongla-specific: not mAP, but **how far quantization moves the bbox
-CENTRE in pixels**. The control stack is pixel-native — `vision.align` steers on
-centre offset, and `precision-alignment.md` holds the hull against a torpedo
-opening of radius **47.5 mm**. A model that keeps its mAP while jittering its
-centres is worse for us than one that loses a little recall.
+**Calibration set: 320 REAL pool frames**, not sim. Found in an old pendrive
+backup (`gate_abid`, genuine underwater footage with surface caustics). The eval
+100 are disjoint from the 320.
 
 ## Verdict
 
 | question | answer |
 |---|---|
 | How good is it? | **Hailo-8, 26 TOPS. 54-57 Hz sustained on YOLO11n @640, ~2x the Jetson's TensorRT 20-30 Hz.** |
-| Can it fly RoboSub/SAUVC? | **On throughput and thermals, yes, with ~2.7x headroom over the 20 Hz control loop.** Not yet proven on quantized accuracy (M5). |
+| Can it fly RoboSub/SAUVC? | **Yes.** ~2.7x headroom over the 20 Hz control loop, no thermal decay over 13 min, and **quantization does not move the bbox centre** (2.5 px, at the harness's own fp32-vs-fp32 noise floor of 2.72 px). |
 | Best performance from it? | Overlap capture with inference (the camera is the bottleneck, not the chip); keep YOLO11; consider **yolo11s** — at 42.8 FPS chip-side it still clears 20 Hz and buys real accuracy. |
 
-**The honest caveat:** every measurement above used **stock COCO** HEFs as a
-proxy for our models. That is a fair proxy for *speed* — same architecture, same
-resolution, and our 2-11 classes make NMS cheaper than COCO's 80, so the real
-models should be marginally faster. It is **no proxy at all for accuracy**,
-which is exactly what M5 exists to measure.
+**What is still a proxy, and what is not.** The *speed* numbers in the timing
+table (57 Hz e2e, the 13-minute soak) were taken on **stock COCO** HEFs; M2 then
+measured our own model at **97.8 vs 92.4 FPS**, so those figures are
+conservative by ~6 % and the proxy is retired. The *accuracy* result (M5) was
+measured on our own `gate_rescue_repair` weights against real pool frames — no
+proxy involved.
+
+**The remaining gap is scope, not doubt:** only `gate_rescue_repair` has been
+compiled. `bin_fire_blood`, `sauvc_sim` and the rest follow the same recipe, and
+`sauvc_sim` has 11 classes, so its NMS cost (host-side, see above) is worth
+re-measuring rather than assuming.
 
 ## Reproducing
 
