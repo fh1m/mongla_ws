@@ -34,6 +34,25 @@ def _find_firmware() -> Path | None:
         candidate = parent / 'Mongla_others' / 'srot-control-board'
         if (candidate / 'include' / 'config.h').is_file():
             return candidate
+    # Walking up from __file__ finds nothing when the tests run from a git
+    # WORKTREE (/tmp/.../srot_wt) or from the vehicle's own checkout, because
+    # Mongla_others is not above either path. The whole suite then SKIPS -- 24
+    # silent passes-that-are-not-passes, in the two places the answer matters
+    # most. So also walk up from the real repository, which a worktree still
+    # points at.
+    try:
+        import subprocess
+        common = subprocess.run(
+            ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+            cwd=Path(__file__).resolve().parent, capture_output=True, text=True,
+            timeout=5)
+        if common.returncode == 0:
+            for parent in Path(common.stdout.strip()).resolve().parents:
+                candidate = parent / 'Mongla_others' / 'srot-control-board'
+                if (candidate / 'include' / 'config.h').is_file():
+                    return candidate
+    except Exception:
+        pass
     return None
 
 
@@ -213,6 +232,34 @@ def test_firmware_behaviour_rev_is_new_enough():
         f'Rev 1 coasts on MOVE_STOP and strands a move on IN_PROGRESS when a '
         f'failsafe displaces AUTO. Either flash rev >= '
         f'{sp.FW_BEHAVIOUR_REV_REQUIRED} or restore the host-side workarounds.')
+
+
+def test_our_known_current_rev_matches_the_firmware():
+    """`sp.FW_BEHAVIOUR_REV` must equal the firmware's actual rev, not merely clear
+    the required floor.
+
+    The test above only asserts `rev >= FW_BEHAVIOUR_REV_REQUIRED` (2), so our
+    "known current" constant was free to rot -- and it did: it sat at 9 while the
+    board shipped 10, 11, 12, 13, 14. Nothing failed, because 9 >= 2.
+
+    What that cost, concretely. Rev 10 CORRECTED AN INVERTED YAW SENSE, so every
+    heading recorded against <= 9 is negated. Rev 13 made SROT_MOVE require ARMED,
+    changing what TEMPORARILY_REJECTED means on the wire. Both are behaviour a
+    consumer must branch on, and both were invisible here for five revisions.
+
+    Bumping this constant is not bookkeeping: the block beside it in
+    srot_protocol.py is where each revision's meaning is written down, and this
+    assertion is what forces someone to read the firmware's ladder and write it.
+    """
+    src = _read('include', 'config.h')
+    m = re.search(r'#define\s+SROT_FW_BEHAVIOUR_REV\s+(\d+)', src)
+    assert m, 'SROT_FW_BEHAVIOUR_REV not found in include/config.h'
+    rev = int(m.group(1))
+    assert rev == sp.FW_BEHAVIOUR_REV, (
+        f'firmware is at behaviour rev {rev}, srot_protocol.FW_BEHAVIOUR_REV says '
+        f'{sp.FW_BEHAVIOUR_REV}. Read include/config.h\'s revision ladder for '
+        f'{sp.FW_BEHAVIOUR_REV + 1}..{rev}, record what each one changes in the '
+        f'block beside FW_BEHAVIOUR_REV, and branch on anything a consumer feels.')
 
 
 def test_esc_status_291_is_absent_from_our_dialect():

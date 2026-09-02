@@ -696,9 +696,18 @@ class SrotFC(FlightController):
             return f'{verb}: preempted by a newer move'
         st = self._statustext()
         if result == sp.ACK_TEMPORARILY_REJECTED:
-            # Distinct from a plain FAILED: the board was busy, not unable. Say so,
-            # because "retry" is the right response here and not for the others.
-            return f'{verb}: board busy (state lock) -- not started, safe to retry'
+            # Distinct from a plain FAILED: the board did not start the move. But
+            # fw rev 13 gave this code a SECOND meaning -- SROT_MOVE now requires
+            # ARMED and answers "SROT_MOVE refused: arm first" with this same
+            # result. Retrying is right for a state-lock miss and useless for a
+            # disarmed board, so the two must not print the same advice. The
+            # board's own STATUSTEXT is what separates them; report it rather
+            # than guessing from the code alone.
+            if 'arm first' in st.lower():
+                return (f'{verb}: refused -- the board is DISARMED '
+                        f'(fw rev 13+ requires ARMED for SROT_MOVE). Arm, then retry.')
+            return (f'{verb}: board busy (state lock) -- not started, safe to retry'
+                    + (f' ({st})' if st else ''))
         if result == sp.ACK_UNSUPPORTED:
             # The opposite advice to the line above, which is why they must not share
             # a value: this firmware does not implement the verb and never will
