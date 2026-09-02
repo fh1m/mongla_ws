@@ -172,3 +172,128 @@ def test_bearing_is_resolution_independent():
                                     K=half)
     assert full.angle_x == pytest.approx(small.angle_x, abs=1e-9)
     assert full.angle_y == pytest.approx(small.angle_y, abs=1e-9)
+
+
+# --------------------------------------------------------------------------- #
+#  BearingFilter -- the properties the measurements bought
+# --------------------------------------------------------------------------- #
+from duburi_control.bearing import BearingFilter        # noqa: E402
+
+
+def _b(ax_deg, ay_deg=0.0):
+    return Bearing(math.radians(ax_deg), math.radians(ay_deg), 0.1, 0.1, True)
+
+
+def _feed(f, series, dt=0.02):
+    t = 0.0
+    out = []
+    for v in series:
+        t += dt
+        r = f.update(_b(v), t)
+        out.append(math.degrees(r.angle_x) if r else None)
+    return out
+
+
+def test_it_actually_reduces_jitter():
+    import random
+    rng = random.Random(3)
+    noise = [rng.gauss(0, 3.0) for _ in range(400)]     # measured sd ~2.96
+    out = _feed(BearingFilter(), noise)
+    raw_j = _step_sd(noise)
+    filt_j = _step_sd(out)
+    assert filt_j < raw_j * 0.45, (
+        f'only {100*(1-filt_j/raw_j):.0f} % jitter reduction; measured 78-81 %')
+
+
+def _step_sd(xs):
+    d = [xs[i] - xs[i - 1] for i in range(1, len(xs))]
+    m = sum(d) / len(d)
+    return (sum((v - m) ** 2 for v in d) / len(d)) ** 0.5
+
+
+def test_steady_motion_is_not_lagged():
+    """The whole reason for alpha-beta over an EMA. On a constant slew the
+    velocity state must track, so the output sits ON the input rather than
+    trailing it -- an EMA at comparable smoothing trailed by 3.5 deg."""
+    slew = [i * 0.6 for i in range(200)]               # 30 deg/s at 50 Hz
+    out = _feed(BearingFilter(), slew)
+    lag = slew[-1] - out[-1]
+    assert abs(lag) < 0.5, f'lag {lag:.2f} deg on a steady slew'
+
+
+def test_a_big_jump_snaps_instead_of_overshooting():
+    """A reacquire onto a different box is a STEP. Without the gate the
+    velocity state flies past it (measured: 1.51 deg over, 21 frames to
+    settle); with it, the filter treats the sample as a new target.
+
+    20 deg, not 12: 12 is the gate ITSELF, and `> gate` is false at exactly the
+    boundary. The first version of this test used 12.0 and failed for that
+    reason -- it was testing the boundary, not a jump.
+    """
+    series = [0.0] * 20 + [20.0] * 20
+    f = BearingFilter()
+    out = _feed(f, series)
+    post = out[20:]
+    assert max(post) <= 20.0 + 1e-6, f'overshot to {max(post):.2f}'
+    assert abs(post[0] - 20.0) < 1e-6, 'did not snap on the first sample'
+    assert f.resets == 1
+
+
+def test_a_jump_just_UNDER_the_gate_is_filtered_not_snapped():
+    """The complement, and the one that stops the gate being set so low it
+    turns the filter off -- which is exactly what the measured 4-8 deg gates
+    did (1.5 % trips, 81 % -> 8 % jitter reduction)."""
+    f = BearingFilter()
+    out = _feed(f, [0.0] * 20 + [8.0] * 20)
+    assert f.resets == 0
+    assert out[20] < 4.0, 'an in-gate step must be approached, not snapped to' 
+
+
+def test_ordinary_noise_does_not_trip_the_gate():
+    """Measured cliff: a gate at 4-8 deg fired on 1.5 % of samples and cut the
+    jitter reduction from 81 % to 8 % -- a filter that looks like it is
+    filtering and is not.
+
+    Asserted as a RATE, not as exactly zero. On the real trace the 12 deg gate
+    tripped 0/711, but a Gaussian tail will occasionally exceed 4 sigma and
+    demanding a hard zero from a random draw tests the seed rather than the
+    filter. The property that matters is that trips are rare enough not to
+    degrade the smoothing.
+    """
+    import random
+    rng = random.Random(11)
+    f = BearingFilter()
+    n = 2000
+    _feed(f, [rng.gauss(0, 3.0) for _ in range(n)])
+    rate = f.resets / n
+    assert rate < 0.005, (
+        f'gate tripped {f.resets}/{n} = {100*rate:.2f} % on ordinary noise; '
+        f'the measured 4-8 deg gates that broke the filter ran at 1.5 %')
+
+
+def test_loss_clears_the_state_rather_than_holding_a_value():
+    f = BearingFilter()
+    _feed(f, [5.0] * 10)
+    assert f.update(None, 1.0) is None
+    # after loss the next sample must be taken at face value, not blended with
+    # a stale pre-loss estimate
+    out = f.update(_b(-20.0), 1.02)
+    assert math.degrees(out.angle_x) == pytest.approx(-20.0)
+
+
+def test_a_long_gap_is_a_reacquire_not_a_slow_frame():
+    """Extrapolating a velocity across a real dropout walks the target off the
+    frame while reporting a confident bearing."""
+    f = BearingFilter()
+    _feed(f, [i * 0.6 for i in range(50)])             # build up velocity
+    out = f.update(_b(0.0), 99.0)                      # long gap, target at 0
+    assert math.degrees(out.angle_x) == pytest.approx(0.0)
+
+
+def test_the_standoff_measure_is_not_smoothed():
+    """size_x feeds a one-sided forward axis. Lag there is a collision, so it
+    is deliberately passed through."""
+    f = BearingFilter()
+    f.update(_b(0.0), 0.02)
+    out = f.update(Bearing(0.0, 0.0, 0.42, 0.31, True), 0.04)
+    assert out.size_x == 0.42 and out.size_y == 0.31

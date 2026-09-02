@@ -21,6 +21,7 @@ import threading
 import time
 from contextlib import nullcontext
 
+from .errors import MovementError
 from .fc import srot_protocol as sp
 
 from .motion_vision import (
@@ -65,6 +66,11 @@ def _parse_channels(csv: str):
         if 1 <= ch <= sp.PCA9685_NUM_CH:
             out.append(ch)
     return out
+
+
+def _srot_backend(fc) -> bool:
+    """True when actuation goes to the srot board rather than ArduSub."""
+    return getattr(fc, 'name', '') == 'srot'
 
 
 class VisionVerbs:
@@ -155,7 +161,22 @@ class VisionVerbs:
             # axis or downward fill->depth), AND on any downward align -- there the
             # 'depth' axis drives Ch5 surge while ArduSub must still hold the mission
             # depth on Ch3 (or we'd sink/surface uncommanded).
-            if touches_depth or is_downward or float(fwd_fill) > 0.0:
+            # SROT: ALT_HOLD is an ArduSub mode this board does not have, and
+            # the depth axis needs `set_target_depth` (SET_POSITION_TARGET),
+            # which SrotFC does not implement. REFUSE rather than run an align
+            # whose depth axis silently does nothing -- a mission that believes
+            # it is descending onto a bin and is not is the dangerous version.
+            # STABILIZE is the mode here: the board holds attitude and heading
+            # at 500 Hz and lat/yaw/fwd servo on top of it.
+            if _srot_backend(self.pixhawk):
+                if touches_depth or is_downward:
+                    raise MovementError(
+                        "vision_align: the 'depth' axis (and any downward align) "
+                        "is not supported on the SROT backend -- it needs a "
+                        "streamed depth setpoint, which this board does not take. "
+                        "Use lat/yaw/fwd, or drive depth with a separate "
+                        "set_depth once the depth loop is water-verified.")
+            elif touches_depth or is_downward or float(fwd_fill) > 0.0:
                 self._ensure_alt_hold('vision_align')
 
             stable = int(align_stable_frames) or 3
@@ -342,7 +363,10 @@ class VisionVerbs:
             # on ArduSub's onboard depth hold. Ensure ALT_HOLD so the approach
             # holds depth even when a mission jumps straight to vision_move
             # without a prior set_depth (from MANUAL the setpoint is dropped).
-            self._ensure_alt_hold('vision_move')
+            # SROT holds depth on-board (or not at all, in STABILIZE); there
+            # is no ALT_HOLD to ensure and no host depth stream to start.
+            if not _srot_backend(self.pixhawk):
+                self._ensure_alt_hold('vision_move')
             self.log.info(
                 f'[CMD  ] vision_move camera={camera!r} class={target_class!r} '
                 f'{"PASS-THROUGH" if passthrough else "fwd_fill=%.0f%%" % float(fwd_fill)} '

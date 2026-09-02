@@ -1328,9 +1328,28 @@ MOVE_VERBS = frozenset({
 UNSUPPORTED_VERBS = frozenset({
     'lock_heading',
     'move_forward_dist', 'move_back_dist', 'move_lateral_dist',
-    'vision_align', 'vision_move',
     'arc', 'style_yaw',
 })
+
+# `vision_align` / `vision_move` CAME OUT of the set above (2026-09-03). They now
+# actuate through `SrotFC.manual()` -> MANUAL_CONTROL, in STABILIZE, where the
+# board holds attitude and heading at 500 Hz and the host servos lat/yaw/fwd on
+# top. That path does NOT enter AUTO, so it does not touch the depth-loop gate
+# that every SROT_MOVE goes through.
+#
+# WHAT UN-REFUSING COSTS, because it is not free. `UNSUPPORTED_VERBS` was the
+# ONLY thing making the host motion stack unreachable on this backend --
+# `heading_lock`, `motion_yaw`, `motion_depth` are all still present and
+# imported by `duburi.py`. Removing an entry re-arms whatever that verb touches.
+# For these two that is bounded and checked:
+#   * the depth axis is REFUSED in `vision_verbs` (it needs `set_target_depth`,
+#     which this class does not implement) rather than silently doing nothing;
+#   * `_ensure_alt_hold` is skipped -- ALT_HOLD is an ArduSub mode this board
+#     does not have, and hitting the facade's mode gate is what made `surface`
+#     do nothing on this backend;
+#   * `lock_heading` stays refused, so no host lock races the board's own hold.
+# `test_no_facade_mode_gate_is_reachable_on_srot` pins that every verb is in
+# exactly one of these buckets, so the next removal cannot be silent.
 
 
 # ---------------------------------------------------------------------- #

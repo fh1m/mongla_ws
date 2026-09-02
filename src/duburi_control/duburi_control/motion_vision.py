@@ -46,6 +46,7 @@ from typing import Dict, Optional, Set
 
 from .pixhawk import Pixhawk
 from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
+from .motion_rates import VISION_LOOP_HZ_SROT
 from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
 from .motion_rates import LOG_THROTTLE_S
 from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep
@@ -399,6 +400,47 @@ def _present(sample) -> bool:
     return sample is not None and sample.age_s <= _STALE_LIMIT_S
 
 
+def _is_srot(fc) -> bool:
+    """True when the actuation backend is the srot board rather than ArduSub."""
+    return getattr(fc, 'name', '') == 'srot'
+
+
+def _loop_hz(fc) -> float:
+    """Tick rate for THIS backend. See motion_rates for why they differ."""
+    return VISION_LOOP_HZ_SROT if _is_srot(fc) else LOOP_HZ
+
+
+def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float) -> None:
+    """Write one MANUAL_CONTROL frame for the srot board.
+
+    WHY THIS IS NOT `PixhawkFC.manual()` FOR BOTH BACKENDS. The HAL's `manual()`
+    exists on both, but the ArduSub one maps onto `send_rc_override` with all
+    four channels written -- it cannot express the two RELEASE semantics this
+    loop depends on:
+
+      * `release_yaw` releases Ch4 (65535) so the background `HeadingLock` owns
+        yaw. Writing yaw=1500 instead races the lock's own stream, which is the
+        fight the `_drive` docstrings below already warn about.
+      * `throttle_ch = 65535` releases Ch3 so ArduSub's ALT_HOLD owns depth.
+
+    So the ArduSub path is left EXACTLY as it was -- it is the configuration
+    that placed 8th at RoboSub 2025 -- and srot gets its own branch.
+
+    On srot both releases have a different and simpler answer: there is no host
+    heading lock (`lock_heading` is refused on this backend), the board holds
+    attitude and heading itself at 500 Hz in STABILIZE, and MANUAL_CONTROL has
+    no "release" -- every frame carries all four axes. So `release_yaw` becomes
+    "command zero yaw and let the board hold", which is the same intent through
+    a better mechanism.
+
+    `up` is always 0. The depth axis needs `set_target_depth`, which SrotFC does
+    not implement; `vision_verbs` refuses a depth-axis align on this backend
+    rather than letting it silently do nothing.
+    """
+    fc.manual(fwd=fwd_pct / 100.0, lat=lat_pct / 100.0,
+              up=0.0, yaw=yaw_pct / 100.0)
+
+
 def _read_depth(pixhawk) -> float:
     att = pixhawk.get_attitude()
     return float(att['depth']) if att else 0.0
@@ -667,7 +709,11 @@ def align_loop(*,
         ``fwd_pct`` is the optional forward range-hold command (Ch5); it is 0
         unless the forward standoff axis is active (``fwd_fill`` > 0).
         """
-        if release_yaw:
+        if _is_srot(pixhawk):
+            # release_yaw -> command 0 yaw; the board holds heading at 500 Hz.
+            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct,
+                        yaw_pct=0.0 if release_yaw else yaw_pct)
+        elif release_yaw:
             pixhawk.send_rc_translation(
                 throttle=throttle_ch, forward=Pixhawk.percent_to_pwm(fwd_pct),
                 lateral=Pixhawk.percent_to_pwm(lat_pct))
@@ -715,7 +761,8 @@ def align_loop(*,
     surge_ema   = 0.0   # downward: trailing EMA of the signed Ch5 surge command -> brake proxy
     fill_deficit = 0.0  # downward fill->depth: (target_fill - fill), carried into the 5 Hz step
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
-    dt          = 1.0 / LOOP_HZ              # fixed tick (loop sleeps this each pass)
+    loop_hz     = _loop_hz(pixhawk)          # backend-dependent; see motion_rates
+    dt          = 1.0 / loop_hz              # fixed tick (loop sleeps this each pass)
     gate_norm   = VISION_LOCK_GATE_NORM if lock_on else 0.0
     locked_ex: Optional[float] = None        # last-accepted centre -> continuity lock
     locked_ey: Optional[float] = None
@@ -802,7 +849,7 @@ def align_loop(*,
                         log.debug(f"[VIS  ] align LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                time.sleep(1.0 / LOOP_HZ)
+                time.sleep(1.0 / _loop_hz(pixhawk))
                 continue
 
             saw_target = True
@@ -1090,7 +1137,7 @@ def align_loop(*,
                     f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
                     f"'{target_class}' -> err {worst:.0f}/{eff_err:.0f}px")
                 last_log = now
-            time.sleep(1.0 / LOOP_HZ)
+            time.sleep(1.0 / _loop_hz(pixhawk))
     finally:
         try:
             writers.neutral()
@@ -1166,6 +1213,10 @@ def move_loop(*,
     g_lat = gain if gain_lat is None else gain_lat
 
     def _drive(fwd_pct: float, lat_pct: float) -> None:
+        if _is_srot(pixhawk):
+            # move never commands yaw on either backend.
+            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0)
+            return
         if release_yaw:
             pixhawk.send_rc_translation(
                 forward=Pixhawk.percent_to_pwm(fwd_pct),
@@ -1242,7 +1293,7 @@ def move_loop(*,
                     return Outcome(ALIGNED, "passed through", last_lat_err,
                                    last_fill, elapsed, end_x_px, end_y_px)
                 _drive(gain, 0.0)   # no detection -> no lateral, just drive on
-                time.sleep(1.0 / LOOP_HZ)
+                time.sleep(1.0 / _loop_hz(pixhawk))
                 continue
 
             if not present:
@@ -1266,7 +1317,7 @@ def move_loop(*,
                         log.debug(f"[VIS  ] move LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                time.sleep(1.0 / LOOP_HZ)
+                time.sleep(1.0 / _loop_hz(pixhawk))
                 continue
 
             seen_once    = True
@@ -1300,7 +1351,7 @@ def move_loop(*,
                     log.info(f"[ move PASS-THROUGH fill={fill * 100:.0f}% "
                              f"lat={x_off:+.0f}px ] ['{target_class}'] -> clear gate")
                     last_log = now
-                time.sleep(1.0 / LOOP_HZ)
+                time.sleep(1.0 / _loop_hz(pixhawk))
                 continue
 
             if fill >= fwd_fill:
@@ -1337,7 +1388,7 @@ def move_loop(*,
                     f"[ move fill={fill * 100:.0f}% -> {fwd_fill * 100:.0f}% "
                     f"lat={x_off:+.0f}px ] ['{target_class}']{hold_tag}")
                 last_log = now
-            time.sleep(1.0 / LOOP_HZ)
+            time.sleep(1.0 / _loop_hz(pixhawk))
     finally:
         try:
             writers.neutral()
