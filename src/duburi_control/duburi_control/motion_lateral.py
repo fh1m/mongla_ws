@@ -25,9 +25,21 @@ from .motion_writers import (
     thrust_loop, brake_kick_then_settle, final_settle,
     _interruptible_sleep,
 )
+from .errors        import MovementError, MovementTimeout
 
 _DVL_POLL_HZ   = 20
 _DVL_TIMEOUT_K = 10.0
+# See drive_forward_dist for why these exist.
+_OVERSHOOT_K = 1.5
+_OVERSHOOT_PAD = 0.5
+# WALL-CLOCK, while the DVL integrates distance in SIM time. Gazebo runs
+# well below real time (RTF ~0.65 measured, lower under load), so a wall
+# second buys well under a second of travel -- a 6 s window false-tripped
+# move_back_dist and move_lateral_dist, whose thrust is weaker than
+# forward. Generous on purpose: the OVERSHOOT guard is what actually
+# bounds a runaway, this one only catches a DVL that is dead on arrival.
+_STALL_S = 15.0
+_STALL_M = 0.05
 
 
 def drive_lateral_constant(pixhawk, signed_dir, duration, gain, log,
@@ -74,6 +86,9 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                        abort_fn=None):
     """Strafe a fixed distance using DVL position feedback.
 
+    RAISES without a DVL position source -- see drive_forward_dist for why the
+    old open-loop fallback was removed. Returns the measured |y| travelled.
+
     signed_dir: +1 = right, -1 = left
     distance_m: absolute distance in metres (always positive)
     gain:       thrust percentage (0-100)
@@ -88,15 +103,12 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                and hasattr(yaw_source, 'reset_position'))
 
     if not has_dvl:
-        # Open-loop TIME estimate at a HARDCODED 0.2 m/s -- valid only for the
-        # current thruster tune. WARN so a silently-wrong distance is visible.
-        log.warning(f'[{label}] no DVL position source -- OPEN-LOOP fallback at '
-                    f'~0.2 m/s (distance is a rough time estimate, not measured)')
-        rough_s = max(1.0, target_m / 0.2)
-        drive_lateral_constant(pixhawk, signed_dir, rough_s, gain, log,
-                               writers, yaw_source=yaw_source, settle=settle,
-                               abort_fn=abort_fn)
-        return
+        src = getattr(yaw_source, 'name', type(yaw_source).__name__)
+        raise MovementError(
+            f'{label}: no DVL position source (yaw_source={src!r} provides no '
+            f'get_position/reset_position), so {target_m:.2f} m cannot be '
+            f'measured. Use yaw_source=dvl or bno085_dvl on the vehicle, or '
+            f'sim_dvl in Gazebo. For an explicitly timed move use move_left/right.')
 
     yaw_source.reset_position()  # type: ignore[union-attr]
     pwm      = Pixhawk.percent_to_pwm(signed_gain)
@@ -106,11 +118,27 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
     log.info(f'[{label}] DVL dist {target_m:.2f}m  gain={gain:.0f}%  '
              f'tol={tolerance:.3f}m')
 
+    # Same runaway guards as drive_forward_dist: the deadline bounds time, not
+    # distance, so a DVL reading zero means full thrust for the whole budget.
+    overshoot_limit = target_m * _OVERSHOOT_K + _OVERSHOOT_PAD
+    stall_deadline = time.monotonic() + _STALL_S
+
     while time.monotonic() < deadline:
         if abort_fn and abort_fn():
             break
         _, y_m  = yaw_source.get_position()  # type: ignore[union-attr]
         error   = target_m - abs(y_m)
+
+        if abs(y_m) > overshoot_limit:
+            writers.neutral()
+            raise MovementError(
+                f'{label}: overshoot guard -- DVL measured {abs(y_m):.2f}m for a '
+                f'{target_m:.2f}m command. Stopping rather than driving on.')
+        if time.monotonic() > stall_deadline and abs(y_m) < _STALL_M:
+            writers.neutral()
+            raise MovementError(
+                f'{label}: no progress -- DVL still reads {abs(y_m):.3f}m after '
+                f'{_STALL_S:.0f}s at {gain:.0f}% thrust. Refusing to keep driving blind.')
 
         if abs(error) <= tolerance:
             log.info(f'[{label}] reached  y={y_m:.3f}m  err={error:+.3f}m')
@@ -121,8 +149,17 @@ def drive_lateral_dist(pixhawk, signed_dir, distance_m, gain, tolerance,
                  throttle_duration_sec=LOG_THROTTLE)
         time.sleep(interval)
     else:
-        log.info(f'[{label}] timeout  target={target_m:.2f}m')
+        # Frozen-but-connected DVL: same silent-success as the missing-DVL case.
+        writers.neutral()
+        _, y_m = yaw_source.get_position()  # type: ignore[union-attr]
+        raise MovementTimeout(
+            f'{label}: timeout after {target_m / 0.05 + _DVL_TIMEOUT_K:.0f}s -- '
+            f'target={target_m:.2f}m, DVL measured only {abs(y_m):.3f}m. '
+            f'Check the DVL has bottom lock.')
 
-    writers.neutral()
-    if settle > 0.0:
-        _interruptible_sleep(settle, abort_fn)
+    # Brake before the final read -- see drive_forward_dist.
+    brake_kick_then_settle(
+        writers.lateral, writers, -signed_dir * REVERSE_KICK_PCT, log, label,
+        extra_settle=settle, abort_fn=abort_fn)
+    _, y_m = yaw_source.get_position()  # type: ignore[union-attr]
+    return abs(y_m)
