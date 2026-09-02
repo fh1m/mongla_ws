@@ -47,6 +47,7 @@ from duburi_control import (                                            # noqa: 
 )
 from duburi_control.fc import make_flight_controller
 from duburi_control.fc.port_guard import PortGuard                     # noqa: E402
+from duburi_control.bearing import bearing_from_normalised   # noqa: E402
 from duburi_control.fc.srot_protocol import (                            # noqa: E402
     MSG_ID_ESC_STATUS as SROT_MSG_ID_ESC_STATUS,
     SOURCE_SYSID as SROT_SOURCE_SYSID,
@@ -234,6 +235,13 @@ class AUVManagerNode(Node):
         self.declare_parameter('bno085_port',          'auto')
         self.declare_parameter('bno085_baud',          115200)
         self.declare_parameter('payload_port',         'auto')
+        # LANDING_TARGET vision uplink (VISION_API.md). OFF by default: the
+        # board parses msgid 149 and silently DROPS it today, so this is a
+        # producer built ahead of its consumer. '' = disabled; set to a camera
+        # name ('forward') to stream that camera's selected target.
+        self.declare_parameter('vision_uplink_camera', '')
+        self.declare_parameter('vision_uplink_class', '')
+        self.declare_parameter('vision_uplink_hz', 25.0)
         # payload_channels: OPTIONAL per-instance labels, "<board_channel>:<name>",
         # e.g. "9:torpedo_1, 10:torpedo_2, 11:dropper_1".
         #
@@ -728,6 +736,15 @@ class AUVManagerNode(Node):
         # rotation-comp is ~1:1 with the signal, so publish at full rate.
         self.create_timer(0.02, self._imu_rates_tick, callback_group=self.fast_group)
 
+        uplink_cam = str(self.get_parameter('vision_uplink_camera').value).strip()
+        if uplink_cam and self._is_srot:
+            hz = max(1.0, float(self.get_parameter('vision_uplink_hz').value))
+            self.create_timer(1.0 / hz, self._vision_uplink_tick,
+                              callback_group=self.timer_group)
+            self.get_logger().info(
+                f'[VIS  ] LANDING_TARGET uplink: {uplink_cam} @ {hz:.0f} Hz '
+                f'(the board does not consume msgid 149 yet -- producer only)')
+
         # BNO->EKF3 mocap injection is an ArduSub/BlueOS feature; SROT fuses the
         # BNO on-board, so there is no external EKF to feed (skip on the srot path).
         if self._bno_mocap_active and not self._is_srot:
@@ -1080,6 +1097,54 @@ class AUVManagerNode(Node):
         if ok:
             log.info('[SENS ] EKF external-nav yaw confirmed '
                      '(VISO_TYPE=1, EK3_SRC1_YAW=6).')
+
+    def _vision_uplink_tick(self) -> None:
+        """Send ONE LANDING_TARGET for the currently selected target, or nothing.
+
+        SENDING NOTHING IS THE LOSS SIGNAL. `VISION_API.md` §1 has no "lost"
+        flag -- a detector that sees nothing simply stops sending, and the board
+        ages the last bearing out. So this must not re-send a stale sample to
+        "hold" a target: that is indistinguishable from a live one on the wire
+        and defeats the board's staleness timer, which is the whole safety
+        mechanism on this path. Hence the early returns rather than a cached
+        last-good value.
+        """
+        cam = str(self.get_parameter('vision_uplink_camera').value).strip()
+        if not cam:
+            return
+        vstate = self._vision_state_for(cam)
+        if vstate is None:
+            return
+        want = str(self.get_parameter('vision_uplink_class').value).strip()
+        sample = vstate.bbox_error(want)
+        if sample is None:
+            return
+        w, h = vstate.image_size()
+        K, D = vstate.calibration()
+        b = bearing_from_normalised(
+            sample.ex, sample.ey, sample.w_frac, sample.h_frac,
+            width=w, height=h, K=K, D=D)
+        if b is None:
+            # No calibration and no FOV: refuse rather than invent a bearing.
+            # An uncalibrated guess on this wire is a confident wrong heading.
+            if not getattr(self, '_uplink_warned', False):
+                self._uplink_warned = True
+                self.get_logger().warn(
+                    f'[VIS  ] uplink idle: {cam} has no usable CameraInfo.k and no '
+                    f'FOV, so a pixel offset cannot become a bearing. Set the '
+                    f'camera_node `calibration` param.')
+            return
+        if not b.calibrated and not getattr(self, '_uplink_fov_warned', False):
+            self._uplink_fov_warned = True
+            self.get_logger().warn(
+                '[VIS  ] uplink using the FOV fallback, not the calibration: '
+                'bearings carry the linear-approximation error (up to ~2.5 deg '
+                'on our measured lens, and ~1.3 deg at frame centre from the '
+                'off-axis principal point).')
+        try:
+            self.fc.send_landing_target(b, target_num=0)
+        except Exception as exc:                      # noqa: BLE001
+            self.get_logger().warn(f'[VIS  ] landing_target send failed: {exc}')
 
     def _mocap_tick(self) -> None:
         """Stream BNO085 yaw to ArduSub EKF3 at 20 Hz via ATT_POS_MOCAP."""

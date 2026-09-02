@@ -89,6 +89,9 @@ class VisionState:
         self._latest_array: Optional[Detection2DArray] = None
         self._latest_stamp: float = 0.0           # monotonic seconds
         self._image_size:  tuple  = default_image_size
+        # CameraInfo K/D, kept rather than discarded -- see _on_info.
+        self._K = None
+        self._D = None
         self._vis_range_vals: list = []            # parallel to _latest_array.detections
         self._info_seen:   bool   = False
         self._frames:      int    = 0             # image_raw counter (diag only)
@@ -135,6 +138,25 @@ class VisionState:
             with self._lock:
                 self._image_size = (int(msg.width), int(msg.height))
                 self._info_seen  = True
+                # K and D were being received and thrown away. They are what
+                # turns a pixel error into a BEARING -- i.e. what gives a
+                # control gain units of thrust-per-radian instead of
+                # thrust-per-whatever-this-camera-happens-to-be. camera_node
+                # rescales K to the streamed resolution before publishing, so
+                # this is already correct for the frames the detector saw.
+                self._K = list(msg.k) if len(msg.k) >= 9 else None
+                self._D = list(msg.d) if msg.d is not None else None
+
+    def calibration(self):
+        """(K, D) as published, or (None, None).
+
+        `CameraInfo.k` is all zeros until a calibration file is loaded, so a
+        caller must test fx > 0 rather than `k is not None`. `bearing.py` does
+        exactly that, falls back to an FOV, and reports which it used.
+        """
+        with self._lock:
+            return (list(self._K) if self._K else None,
+                    list(self._D) if self._D else None)
 
     def _on_image(self, _msg: Image) -> None:
         # Only used as a "is producer alive" pulse; we don't decode here.

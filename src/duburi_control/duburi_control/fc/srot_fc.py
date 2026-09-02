@@ -1029,6 +1029,57 @@ class SrotFC(FlightController):
         """No-op: SROT fuses the BNO on-board; there is no external EKF to feed."""
         return None
 
+    # LANDING_TARGET (149) -- the vision uplink `VISION_API.md` specifies.
+    #
+    # THE BOARD DOES NOT CONSUME THIS YET. Verified in the firmware source:
+    # `mav_commands::handle()` has no MAVLINK_MSG_ID_LANDING_TARGET case, so the
+    # message is parsed and silently dropped, and `MAV_CMD_SROT_VISION` (31001)
+    # returns MAV_RESULT_UNSUPPORTED. Their spec says so itself: "Status:
+    # specification, not yet implemented."
+    #
+    # It is built now anyway, and default-off, because the firmware side's named
+    # blocker was a measured camera FOV -- which we now have. Shipping the
+    # producer lets them implement against a stream they can actually watch,
+    # rather than against prose.
+    _LANDING_TARGET_TYPE_VISION_OTHER = 3
+    _MAV_FRAME_BODY_FRD = 12
+
+    def send_landing_target(self, bearing, *, target_num: int = 0,
+                            distance_m: float = 0.0) -> None:
+        """Publish one selected target as a body-frame bearing. Fire-and-forget.
+
+        `bearing` is a `duburi_control.bearing.Bearing`. One message per frame
+        for the ONE currently-selected target: the board never sees candidate
+        boxes and never does data association, which is deliberate -- that is
+        the host's job and it is where the class filter, the coast and the
+        continuity lock live.
+
+        ABSENCE OF A MESSAGE IS THE ONLY LOSS SIGNAL. There is no "lost" flag in
+        the spec: a detector that sees nothing simply stops sending, and the
+        board ages the last one out. So a caller must NOT keep re-sending a
+        stale bearing to "hold" a target -- that is indistinguishable from a
+        live one and defeats the board's staleness timer, which is the entire
+        safety mechanism on this path.
+
+        A non-finite field is dropped rather than sent. NaN on this wire would
+        reach a 500 Hz control loop.
+        """
+        vals = (bearing.angle_x, bearing.angle_y, bearing.size_x, bearing.size_y)
+        if not all(math.isfinite(float(v)) for v in vals):
+            self._log_info('[SROT ] landing_target: non-finite bearing, dropped')
+            return
+        with self._tx_lock:
+            self.master.mav.landing_target_send(
+                int(time.time() * 1e6),          # advisory only, per the spec
+                int(target_num) & 0xFF,
+                self._MAV_FRAME_BODY_FRD,
+                float(bearing.angle_x), float(bearing.angle_y),
+                float(distance_m),               # 0 = unknown
+                float(bearing.size_x), float(bearing.size_y),
+                0.0, 0.0, 0.0, (0.0, 0.0, 0.0, 0.0),
+                self._LANDING_TARGET_TYPE_VISION_OTHER,
+                0)                               # position_valid = 0, angle-only
+
     def set_message_rate(self, message_id, hz):
         """MAV_CMD_SET_MESSAGE_INTERVAL (511). Fire-and-forget, like Pixhawk's.
 
