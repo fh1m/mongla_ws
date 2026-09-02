@@ -73,6 +73,56 @@ def _srot_backend(fc) -> bool:
     return getattr(fc, 'name', '') == 'srot'
 
 
+# Modes in which a streamed MANUAL_CONTROL actually reaches the thrusters.
+#
+# STABILIZE is the intended one: the board holds attitude and heading at 500 Hz
+# and lat/yaw/fwd servo on top. MANUAL works too -- raw passthrough, no
+# stabilisation -- and is allowed rather than forced away from, because an
+# operator who deliberately chose it should not be overridden mid-verb.
+_SROT_VISION_MODES = ('STABILIZE', 'MANUAL')
+
+# The mode that made this check necessary. SURFACE is a FAILSAFE DESTINATION,
+# and the firmware deliberately zeroes translation and yaw in it:
+#
+#   "TRANSLATION AND YAW ARE ZEROED. SURFACE is a failsafe destination --
+#    reached on leak, low thruster battery, or GCS loss ... A vehicle that has
+#    lost its operator should not still be driving somewhere."
+#       -- srot task_control_loop.cpp, FlightMode::SURFACE
+#
+# That is correct firmware behaviour. The bug was ours: `vision_align` asserted
+# "STABILIZE is the mode here" in a COMMENT and never set it, so an align in
+# SURFACE ran the whole loop, streamed MANUAL_CONTROL at 50 Hz, and reported
+# success while the board discarded every frame. Same silent-success shape as
+# the pre-rev-13 disarmed SROT_MOVE, which the firmware team fixed precisely
+# because a consumer would advance a mission on a dead hull.
+
+
+def _require_srot_vision_mode(fc, log, verb: str) -> None:
+    """Put the board in a mode where MANUAL_CONTROL actually moves it.
+
+    Sets STABILIZE if it is not already in an acceptable mode, then VERIFIES
+    the change took. Verification is the point: `set_mode` is best-effort on
+    this wire (the firmware's `onSetMode` discards its own return value and
+    sends no ACK), so a request that is silently refused looks identical to one
+    that worked.
+    """
+    mode = (fc.get_mode() or '').upper()
+    if mode in _SROT_VISION_MODES:
+        return
+    if log is not None:
+        log.info(f'[CMD  ] {verb}: board is in {mode or "?"} -- '
+                 f'switching to STABILIZE so MANUAL_CONTROL reaches the thrusters')
+    fc.set_mode('STABILIZE')
+    mode = (fc.get_mode() or '').upper()
+    if mode not in _SROT_VISION_MODES:
+        raise MovementError(
+            f'{verb}: the board is in {mode or "an unknown mode"} and would not '
+            f'accept STABILIZE. In SURFACE the firmware zeroes translation and '
+            f'yaw, so this verb would run, report success, and move nothing. '
+            f'Refusing. (A board in SURFACE is usually there because a failsafe '
+            f'put it there -- check LEAK, thruster battery, and the GCS link.)')
+
+
 class VisionVerbs:
     """Camera-driven verbs for the Duburi facade. Never instantiated alone."""
 
@@ -152,6 +202,12 @@ class VisionVerbs:
 
         with self._command_scope('vision_align'):
             self._send_neutral_and_settle()
+            # Backend precondition FIRST, before resolving the camera. A board
+            # in SURFACE will discard everything this verb sends, so there is
+            # no point subscribing to a vision state (which can block waiting
+            # for the first CameraInfo) only to refuse afterwards.
+            if _srot_backend(self.pixhawk):
+                _require_srot_vision_mode(self.pixhawk, self.log, 'vision_align')
             vstate = self._resolve_vision_state(camera)
             is_downward   = camera in ('downward', 'sim_bottom')
             depth_sign    = -1 if is_downward else +1
@@ -358,6 +414,8 @@ class VisionVerbs:
         passthrough = float(fwd_fill) <= 0.0
         with self._command_scope('vision_move'):
             self._send_neutral_and_settle()
+            if _srot_backend(self.pixhawk):
+                _require_srot_vision_mode(self.pixhawk, self.log, 'vision_move')
             vstate = self._resolve_vision_state(camera)
             # move_loop drives forward but never commands depth -- it relies
             # on ArduSub's onboard depth hold. Ensure ALT_HOLD so the approach

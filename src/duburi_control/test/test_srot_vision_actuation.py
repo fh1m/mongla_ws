@@ -144,3 +144,151 @@ def test_no_frame_ever_commands_the_depth_axis():
     uncommanded vertical thrust."""
     fc = _run_align()
     assert all(c[2] == 0.0 for c in fc.manual_calls)
+
+
+# --------------------------------------------------------------------------- #
+#  The mode gate -- a verb must not run where the board discards its output
+# --------------------------------------------------------------------------- #
+from duburi_control.vision_verbs import (        # noqa: E402
+    _SROT_VISION_MODES, _require_srot_vision_mode,
+)
+from duburi_control.errors import MovementError  # noqa: E402
+
+
+class _ModeFC:
+    """A board whose mode is scriptable, and which records set_mode attempts.
+
+    `accepts` models the firmware's real behaviour: `onSetMode` discards its own
+    return value and sends no ACK, so a refused mode change is indistinguishable
+    from a successful one unless the caller re-reads.
+    """
+    name = 'srot'
+
+    def __init__(self, mode='STABILIZE', accepts=True):
+        self._mode = mode
+        self._accepts = accepts
+        self.set_calls = []
+
+    def get_mode(self):
+        return self._mode
+
+    def set_mode(self, mode, timeout=8.0):
+        self.set_calls.append(mode)
+        if self._accepts:
+            self._mode = mode
+        return (self._accepts, mode)
+
+
+def test_surface_is_refused_rather_than_run():
+    """THE round-26 defect. SURFACE is a failsafe destination and the firmware
+    zeroes translation and yaw in it, so an align there streams 50 Hz of
+    MANUAL_CONTROL, reports success, and moves nothing."""
+    fc = _ModeFC(mode='SURFACE', accepts=False)
+    with pytest.raises(MovementError) as exc:
+        _require_srot_vision_mode(fc, None, 'vision_align')
+    msg = str(exc.value)
+    assert 'SURFACE' in msg
+    assert 'move nothing' in msg or 'moving nothing' in msg
+    # and it must say where to look, not just that it refused
+    assert 'failsafe' in msg.lower()
+
+
+def test_a_bad_mode_is_SET_before_it_is_refused():
+    """Refusing without trying would strand an operator whose board simply
+    booted into the wrong mode -- which is the common case, not the failsafe."""
+    fc = _ModeFC(mode='SURFACE', accepts=True)
+    _require_srot_vision_mode(fc, None, 'vision_align')
+    assert fc.set_calls == ['STABILIZE']
+    assert fc.get_mode() == 'STABILIZE'
+
+
+def test_an_acceptable_mode_is_left_alone():
+    """An operator who deliberately chose MANUAL should not be overridden
+    mid-verb; MANUAL_CONTROL reaches the thrusters there too."""
+    for mode in _SROT_VISION_MODES:
+        fc = _ModeFC(mode=mode)
+        _require_srot_vision_mode(fc, None, 'vision_align')
+        assert fc.set_calls == [], f'{mode} should not have been changed'
+
+
+def test_the_check_re_reads_rather_than_trusting_set_mode():
+    """`set_mode` is best-effort on this wire: the firmware's `onSetMode`
+    discards its return and sends no ACK, so a silent refusal looks exactly
+    like success. Trusting it is how this class of bug survives."""
+    fc = _ModeFC(mode='SURFACE', accepts=False)
+    with pytest.raises(MovementError):
+        _require_srot_vision_mode(fc, None, 'vision_move')
+    assert fc.set_calls == ['STABILIZE'], 'it must at least try'
+
+
+def test_an_unknown_mode_is_refused_not_assumed_fine():
+    fc = _ModeFC(mode='', accepts=False)
+    with pytest.raises(MovementError):
+        _require_srot_vision_mode(fc, None, 'vision_align')
+
+
+# --------------------------------------------------------------------------- #
+#  ...and that the VERB actually calls it
+# --------------------------------------------------------------------------- #
+# The five tests above exercise `_require_srot_vision_mode` directly. That is
+# NOT sufficient, and it was demonstrated: deleting the call site from
+# `vision_align` left all 21 tests green. Same shape as the `_srot_drive` grep
+# that stayed green through the exact change it guarded -- a unit test of a
+# guard says nothing about whether the guarded path invokes it.
+#
+# So this drives the REAL verb against a board in SURFACE.
+from contextlib import contextmanager                # noqa: E402
+from duburi_control.vision_verbs import VisionVerbs  # noqa: E402
+
+
+class _VerbHarness(VisionVerbs):
+    """Enough facade for vision_align/vision_move to reach their mode gate.
+
+    Everything after the gate raises, deliberately: if the gate does NOT fire we
+    want a loud, distinguishable failure rather than a silently-passing test.
+    """
+
+    def __init__(self, fc):
+        self.pixhawk = fc
+        self.log = _Log()
+
+    @contextmanager
+    def _command_scope(self, _verb):
+        yield
+
+    def _send_neutral_and_settle(self):
+        pass
+
+    def _resolve_vision_state(self, _camera):
+        raise AssertionError('reached the vision state -- the mode gate did NOT fire')
+
+    def _ensure_alt_hold(self, _verb):
+        raise AssertionError('took the ArduSub branch on a srot backend')
+
+    def _make_result(self, *a, **k):
+        raise AssertionError('produced a result -- the mode gate did NOT fire')
+
+
+def test_vision_align_ITSELF_refuses_on_a_surface_board():
+    h = _VerbHarness(_ModeFC(mode='SURFACE', accepts=False))
+    with pytest.raises(MovementError) as exc:
+        h.vision_align(camera='forward', target_class='gate', axes='lat,yaw')
+    assert 'SURFACE' in str(exc.value)
+
+
+def test_vision_move_ITSELF_refuses_on_a_surface_board():
+    h = _VerbHarness(_ModeFC(mode='SURFACE', accepts=False))
+    with pytest.raises(MovementError) as exc:
+        h.vision_move(camera='forward', target_class='gate', fwd_fill=80.0)
+    assert 'SURFACE' in str(exc.value)
+
+
+def test_vision_align_SETS_the_mode_when_the_board_will_take_it():
+    """The other half: a board that merely booted into the wrong mode must be
+    corrected and allowed to proceed, not stranded."""
+    fc = _ModeFC(mode='SURFACE', accepts=True)
+    h = _VerbHarness(fc)
+    with pytest.raises(AssertionError, match='mode gate did NOT fire'):
+        h.vision_align(camera='forward', target_class='gate', axes='lat,yaw')
+    assert fc.set_calls == ['STABILIZE']
+    assert fc.get_mode() == 'STABILIZE'
