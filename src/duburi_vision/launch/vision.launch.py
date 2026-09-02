@@ -89,7 +89,13 @@ def generate_launch_description():
                                           'symlink if present, else int `device`)'),
         DeclareLaunchArgument('width',         default_value='640'),
         DeclareLaunchArgument('height',        default_value='480'),
-        DeclareLaunchArgument('fps',           default_value='30'),
+        # 0 = take the fps from the named camera profile. A non-zero value
+        # overrides it. This defaulted to 30 and was ALSO wired into
+        # publish_rate_hz, so every named profile's fps was silently
+        # overridden by this default -- `camera:=pi_forward` (210 fps)
+        # published at 29.999 Hz and nothing said so.
+        DeclareLaunchArgument('fps',           default_value='0',
+                              description='0 = use the camera profile fps'),
         DeclareLaunchArgument('video_file',    default_value='',
                               description='Path to a video file; when set, replaces the live webcam'),
         DeclareLaunchArgument('topic',         default_value='',

@@ -73,7 +73,9 @@ class CameraNode(Node):
         # with K and D left zero. Nothing changes until a real calibration
         # exists for this camera.
         self.declare_parameter('calibration',     '')
-        self.declare_parameter('publish_rate_hz', 30)
+        # 0 = follow the camera's own fps (see the timer below). A positive
+        # value pins the publish rate regardless of what the camera delivers.
+        self.declare_parameter('publish_rate_hz', 0)
         self.declare_parameter('path',            '')        # for source=video_file
         self.declare_parameter('loop',            True)      # for source=video_file
         self.declare_parameter('discover_on_start', False)   # log USB camera table
@@ -89,6 +91,7 @@ class CameraNode(Node):
                 self.get_logger().warn('[CAM  ] no USB cameras found via discover')
 
         self._cam     = self._build_camera_with_retry()
+        self._log_rate_source = True
         self._info    = self._cam.info()
         self._cam_name = str(self._info.get('name') or 'cam')
         self._frame_id = str(self._info.get('frame_id') or self._cam_name)
@@ -99,7 +102,21 @@ class CameraNode(Node):
         self._calib = self._load_calibration()
         self._bridge   = CvBridge()
 
+        # publish_rate_hz <= 0 means "follow the camera", and that is now the
+        # default. It used to default to 30 and vision.launch.py passed its own
+        # `fps` arg (also defaulting to 30) into it, so a NAMED PROFILE's fps was
+        # silently overridden by a launch default: `camera:=pi_forward` asks for
+        # 210 and published 29.999 Hz. Nothing was wrong anywhere -- the camera
+        # ran at 210, the detector could do 70, and the node ticked at 30 in
+        # between. Measured: fixing it took detections 30.0 -> 51.4 Hz and
+        # image_raw 30.0 -> 71.2 Hz on the same hardware.
         rate = float(self.get_parameter('publish_rate_hz').value)
+        if rate <= 0:
+            rate = float(self._info.get('fps') or 30.0)
+            if self._log_rate_source:
+                self.get_logger().info(
+                    f'[CAM  ] publish rate follows the camera: {rate:.1f} Hz '
+                    f'(set publish_rate_hz to pin it)')
         self.create_timer(1.0 / max(rate, 1.0), self._tick)
 
         self._sent    = 0
@@ -180,6 +197,13 @@ class CameraNode(Node):
                 f"camera_node: must set either 'profile' (one of "
                 f"{sorted(CAMERA_PROFILES)}) or 'source' (one of webcam/ros_topic/...)")
 
+        # `fps` now defaults to 0, meaning "the profile decides". This branch has
+        # NO profile to decide, so 0 would ask the driver for zero frames per
+        # second. Fall back to the old default here rather than let a sentinel
+        # leak into a device call.
+        fps_param = int(self.get_parameter('fps').value)
+        fps_explicit = fps_param if fps_param > 0 else 30
+
         kwargs = {
             'name':       str(self.get_parameter('name').value).strip() or source,
             'frame_id':   str(self.get_parameter('frame_id').value).strip()
@@ -202,7 +226,7 @@ class CameraNode(Node):
                 device=dev,
                 width=int(self.get_parameter('width').value),
                 height=int(self.get_parameter('height').value),
-                fps=int(self.get_parameter('fps').value),
+                fps=fps_explicit,
             )
         elif source == 'ros_topic':
             kwargs.update(
@@ -210,7 +234,7 @@ class CameraNode(Node):
                 topic=str(self.get_parameter('topic').value).strip(),
                 expected_width=int(self.get_parameter('width').value),
                 expected_height=int(self.get_parameter('height').value),
-                expected_fps=float(self.get_parameter('fps').value),
+                expected_fps=float(fps_explicit),
             )
         elif source == 'video_file':
             loop_val = self.get_parameter('loop').value
@@ -219,7 +243,7 @@ class CameraNode(Node):
                 loop=bool(loop_val) if not isinstance(loop_val, str) else loop_val.lower() != 'false',
                 width=int(self.get_parameter('width').value),
                 height=int(self.get_parameter('height').value),
-                fps=int(self.get_parameter('fps').value),
+                fps=fps_explicit,
             )
 
         return make_camera(source, logger=self.get_logger(), **kwargs)

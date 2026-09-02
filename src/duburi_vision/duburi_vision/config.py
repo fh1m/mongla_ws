@@ -33,6 +33,28 @@ CAMERA_PROFILES = {
     # ---- Vehicle: Blue Robotics Low-Light HD USB (Jetson Orin Nano) ----- #
     # device indices assume clean Jetson USB enumeration (no IR cameras).
     # Override at pool-day with  device:=N  if enumeration differs.
+    # ── Raspberry Pi 5 + AI HAT+ (see cameras.yaml for the full rationale) ──
+    # 640x360@210 is what makes the Hailo's 70-80 Hz visible: with the 30 fps
+    # 'forward' profile the ROS graph published 29.2 Hz, camera-capped.
+    # 210 is a property of the MICRODIA global-shutter unit on this bench, not
+    # of the Pi and not of the vehicle's cameras.
+    'pi_forward': {
+        'source':      'webcam',
+        'device_path': '/dev/v4l/by-path/platform-xhci-hcd.1-usb-0:2:1.0-video-index0',
+        'width':       640,
+        'height':      360,
+        'fps':         210,
+        'frame_id':    'forward_cam',
+    },
+    'pi_downward': {
+        'source':      'webcam',
+        'device_path': '/dev/v4l/by-path/platform-xhci-hcd.0-usb-0:1:1.0-video-index0',
+        'width':       640,
+        'height':      360,
+        'fps':         90,
+        'frame_id':    'downward_cam',
+    },
+
     'forward': {
         'source':   'webcam',
         'device':   0,
