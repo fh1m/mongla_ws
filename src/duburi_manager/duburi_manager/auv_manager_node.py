@@ -52,6 +52,7 @@ from duburi_control.fc.srot_protocol import (                            # noqa:
     MSG_ID_ESC_STATUS as SROT_MSG_ID_ESC_STATUS,
     SOURCE_SYSID as SROT_SOURCE_SYSID,
     SOURCE_COMPID as SROT_SOURCE_COMPID,
+    uplink_class_num as srot_uplink_class_num,
 )
 from duburi_control.fc.srot_fc import MOVE_VERBS as SROT_MOVE_VERBS       # noqa: E402
 from duburi_control.fc.srot_fc import (                                   # noqa: E402
@@ -1209,7 +1210,17 @@ class AUVManagerNode(Node):
                 'on our measured lens, and ~1.3 deg at frame centre from the '
                 'off-axis principal point).')
         try:
-            self.fc.send_landing_target(b, target_num=0)
+            # The frozen class map, not the detector's own index: `class_id` is
+            # a property of whichever model is loaded and means something
+            # different for every one. Our two senders disagreed about this
+            # field -- this tick sent a hardcoded 0 while the uplink check sent
+            # `d.class_id` -- so neither was a wire contract.
+            self.fc.send_landing_target(
+                b,
+                target_num=srot_uplink_class_num(
+                    getattr(sample, 'class_name', '') or want),
+                coasted=bool(getattr(sample, 'coasted', False)),
+                gap_age_s=float(getattr(sample, 'age_s', 0.0) or 0.0))
         except Exception as exc:                      # noqa: BLE001
             self.get_logger().warn(f'[VIS  ] landing_target send failed: {exc}')
 

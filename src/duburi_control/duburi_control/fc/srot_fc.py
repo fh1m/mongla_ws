@@ -1384,7 +1384,9 @@ class SrotFC(FlightController):
     _MAV_FRAME_BODY_FRD = 12
 
     def send_landing_target(self, bearing, *, target_num: int = 0,
-                            distance_m: float = 0.0) -> None:
+                            distance_m: float = 0.0,
+                            coasted: bool = False,
+                            gap_age_s: float = 0.0) -> None:
         """Publish one selected target as a body-frame bearing. Fire-and-forget.
 
         `bearing` is a `duburi_control.bearing.Bearing`. One message per frame
@@ -1402,6 +1404,19 @@ class SrotFC(FlightController):
 
         A non-finite field is dropped rather than sent. NaN on this wire would
         reach a 500 Hz control loop.
+
+        `coasted` and `gap_age_s` ride the message's spare x/y fields, which the
+        spec leaves undefined and we were sending as literal 0.0. They matter
+        because the board can only age a target from ITS OWN receipt time: it
+        cannot see that what just arrived is a Kalman prediction of a track
+        whose last real detection was 0.35 s ago. Without them a coasted target
+        is DOUBLE-DECAYED -- once by our coast authority and again by the
+        board's staleness -- roughly twice as fast, so a coast we still consider
+        live at 0.6 s is long dead on their side.
+
+        Costs nothing today: the board parses msgid 149 and drops it. It becomes
+        a latent bug the moment staleness is implemented, which is exactly when
+        nobody would think to look here. Proposed upstream in PR #2 §4.
         """
         vals = (bearing.angle_x, bearing.angle_y, bearing.size_x, bearing.size_y)
         if not all(math.isfinite(float(v)) for v in vals):
@@ -1415,7 +1430,11 @@ class SrotFC(FlightController):
                 float(bearing.angle_x), float(bearing.angle_y),
                 float(distance_m),               # 0 = unknown
                 float(bearing.size_x), float(bearing.size_y),
-                0.0, 0.0, 0.0, (0.0, 0.0, 0.0, 0.0),
+                # x = coasted flag, y = seconds since the last REAL detection.
+                # See the docstring; z stays 0 (reserved).
+                1.0 if coasted else 0.0,
+                float(max(0.0, gap_age_s)) if math.isfinite(gap_age_s) else 0.0,
+                0.0, (0.0, 0.0, 0.0, 0.0),
                 self._LANDING_TARGET_TYPE_VISION_OTHER,
                 0)                               # position_valid = 0, angle-only
 
