@@ -128,11 +128,12 @@ class MissionWebNode(Node):
                                      self._mk_det_cb(cam), best,
                                      callback_group=self._cbg)
             # NOTE: classes is READ via the 1 Hz get_parameters poll, NOT the
-            # /classes_filter topic. The detector publishes classes_filter VOLATILE
-            # (depth 10), so a TRANSIENT_LOCAL sub silently gets nothing (durability
-            # mismatch) and a VOLATILE sub misses the retained startup value on a
-            # late join -> the console showed empty class chips. Polling the `classes`
-            # param is join-order-proof and matches how active_model/conf are read.
+            # /classes_filter topic. That was originally forced -- the detector
+            # published classes_filter VOLATILE, so a late-joining console got
+            # nothing and showed empty class chips. The PUBLISHER is now
+            # `qos.LATCHED`, so the topic would work; the poll stays because it
+            # also carries active_model/conf/models/paused, which have no topic
+            # at all, and one join-order-proof path beats two.
             self.create_subscription(Float32MultiArray, f'{ns}/vis_range',
                                      self._mk_vis_cb(cam), best,
                                      callback_group=self._cbg)

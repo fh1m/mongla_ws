@@ -27,7 +27,8 @@ from collections import Counter
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
+
+from duburi_vision import qos
 
 from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection2DArray
@@ -58,7 +59,6 @@ def main(argv=None):
         'image_size':   (0, 0),
         'info_seen':    False,
     }
-    qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
 
     def _on_image(_msg):
         state['image_count'] += 1
@@ -80,14 +80,13 @@ def main(argv=None):
             if cid:
                 state['classes'][cid] += 1
 
-    # BEST_EFFORT to match the publisher's mailbox -- a RELIABLE subscriber
-    # against a BEST_EFFORT publisher receives NOTHING, and a health check that
-    # fails on its own QoS reads as a broken camera.
-    node.create_subscription(
-        Image, f'{ns}/image_raw', _on_image,
-        QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT))
-    node.create_subscription(CameraInfo,       f'{ns}/camera_info', _on_info,  qos)
-    node.create_subscription(Detection2DArray, f'{ns}/detections',  _on_det,   qos)
+    # Straight from the shared table -- a health check that fails on its OWN
+    # QoS reads as a broken camera. See `duburi_vision/qos.py`.
+    node.create_subscription(Image, f'{ns}/image_raw', _on_image, qos.IMAGE)
+    node.create_subscription(CameraInfo,       f'{ns}/camera_info', _on_info,
+                             qos.CAMERA_INFO)
+    node.create_subscription(Detection2DArray, f'{ns}/detections',  _on_det,
+                             qos.DETECTIONS)
 
     print(f'[VCHK ] watching {ns} for {args.duration:.1f}s ...')
     deadline = time.monotonic() + args.duration

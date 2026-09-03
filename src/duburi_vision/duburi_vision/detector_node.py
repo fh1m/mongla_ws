@@ -54,13 +54,10 @@ from typing import Dict, Optional
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (DurabilityPolicy, HistoryPolicy, QoSProfile,
-                       ReliabilityPolicy)
-
 from sensor_msgs.msg import Image
 from cv_bridge        import CvBridge
 
-from duburi_vision import draw
+from duburi_vision import draw, qos
 from duburi_vision.detection.detector  import largest
 from duburi_vision.detection.factory   import make_detector
 from duburi_vision.detection.detector  import Detector
@@ -303,15 +300,18 @@ class DetectorNode(Node):
         # is going to throw all but the newest away in `_on_image` anyway --
         # buying latency and CPU for nothing.
         self._sub          = self.create_subscription(
-            Image, ns_in, self._on_image,
-            QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1,
-                       reliability=ReliabilityPolicy.BEST_EFFORT,
-                       durability=DurabilityPolicy.VOLATILE))
-        self._pub_det      = self.create_publisher(Detection2DArray, f'{ns_out}/detections', 10)
-        self._pub_classes  = self.create_publisher(String, f'{ns_out}/classes_filter', 10)
+            Image, ns_in, self._on_image, qos.IMAGE)
+        self._pub_det      = self.create_publisher(
+            Detection2DArray, f'{ns_out}/detections', qos.DETECTIONS)
+        # LATCHED: the HUD and the console both join AFTER the detector and
+        # must still learn the allowlist. This topic being VOLATILE is exactly
+        # why the console polls `get_parameters` for `classes` instead.
+        self._pub_classes  = self.create_publisher(
+            String, f'{ns_out}/classes_filter', qos.LATCHED)
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)
         if self._publish_dbg:
-            self._pub_dbg = self.create_publisher(Image, f'{ns_out}/image_debug', 5)
+            self._pub_dbg = self.create_publisher(
+                Image, f'{ns_out}/image_debug', qos.DEBUG_IMAGE)
             dbg_hz = max(float(self.get_parameter('debug_image_hz').value), 0.5)
             self._dbg_min_dt = 1.0 / dbg_hz
             self._last_dbg = 0.0

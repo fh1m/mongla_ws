@@ -346,7 +346,14 @@ class BNO085Source:
                 # read costs a single syscall for the whole backlog; the last
                 # fragment is a partial line and is deliberately dropped -- the
                 # next `readline()` completes it.
-                pending = ser.in_waiting
+                #
+                # `getattr`, not `ser.in_waiting`: the drain is an OPTIMISATION,
+                # and a serial-like object without the attribute must fall back
+                # to plain readline() rather than raise. It raised into the
+                # blanket `except Exception` below, which counts a parse error
+                # and warns only every 50th -- so every frame was silently
+                # dropped and the heading source went quiet with almost no log.
+                pending = getattr(ser, 'in_waiting', 0) or 0
                 if pending:
                     chunks = ser.read(pending).split(b'\n')
                     whole = [c for c in chunks[:-1] if c.strip()]

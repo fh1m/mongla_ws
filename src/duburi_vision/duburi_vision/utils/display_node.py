@@ -86,7 +86,7 @@ from std_srvs.srv import SetBool
 from vision_msgs.msg import Detection2DArray
 
 from duburi_interfaces.msg import DuburiState
-from duburi_vision import draw
+from duburi_vision import draw, qos
 from duburi_vision.config import CAMERA_PROFILES
 from duburi_vision.detection.detector import Detection, largest
 from duburi_vision.detection.messages import array_to_detections
@@ -279,7 +279,6 @@ class VisionDisplayNode(Node):
         # Single-slot frame queue.
         self._frame_q: queue.SimpleQueue = queue.SimpleQueue()
 
-        qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
         self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
         # Auto-follow the mission's active camera: the planner publishes it (latched)
@@ -294,7 +293,7 @@ class VisionDisplayNode(Node):
         # 20 Hz timer: processes camera-switch requests from the display thread.
         # create/destroy_subscription must happen inside the executor to avoid wait-set races.
         self.create_timer(0.05, self._process_pending_sub_action)
-        self._cam_subs = self._create_cam_subs(camera, qos_be)
+        self._cam_subs = self._create_cam_subs(camera)
 
         # Video playback control clients (only when video_file_mode=true).
         self._pause_client   = None   # rclpy.Client[SetBool] or None
@@ -342,7 +341,7 @@ class VisionDisplayNode(Node):
         self._pending_sub_action = None
         self._switch_camera(action)
 
-    def _create_cam_subs(self, camera: str, qos_be) -> list:
+    def _create_cam_subs(self, camera: str) -> list:
         raw_topic  = f'/duburi/vision/{camera}/image_raw'
         det_topic  = f'/duburi/vision/{camera}/detections'
         cls_topic  = f'/duburi/vision/{camera}/classes_filter'
@@ -350,10 +349,13 @@ class VisionDisplayNode(Node):
         vr_topic   = f'/duburi/vision/{camera}/vis_range'
         vmap_topic = f'/duburi/vision/{camera}/vis_range_map'
         return [
-            self.create_subscription(Image,             raw_topic,  self._on_image,          qos_be),
-            self.create_subscription(Detection2DArray,  det_topic,  self._on_detections,     10),
-            self.create_subscription(Detection2DArray,  trk_topic,  self._on_tracks,         10),
-            self.create_subscription(String,            cls_topic,  self._on_classes_filter, 10),
+            self.create_subscription(Image,             raw_topic,  self._on_image,          qos.IMAGE),
+            self.create_subscription(Detection2DArray,  det_topic,  self._on_detections,     qos.DETECTIONS),
+            self.create_subscription(Detection2DArray,  trk_topic,  self._on_tracks,         qos.DETECTIONS),
+            # LATCHED, so a HUD started after the detector gets the retained
+            # allowlist immediately instead of blank class chips until the
+            # operator happens to change it.
+            self.create_subscription(String,            cls_topic,  self._on_classes_filter, qos.LATCHED),
             self.create_subscription(Float32MultiArray, vr_topic,   self._on_vis_range,      10),
             self.create_subscription(Image,             vmap_topic, self._on_depth_map,      2),
         ]
@@ -384,8 +386,7 @@ class VisionDisplayNode(Node):
         self._last_frame_t = 0.0
         self._last_det_t   = 0.0
         self._switch_t     = time.monotonic()   # arm the "waiting for stream" overlay
-        qos_be = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
-        self._cam_subs = self._create_cam_subs(name, qos_be)
+        self._cam_subs = self._create_cam_subs(name)
 
     def _on_state(self, msg: DuburiState) -> None:
         self._state = msg
