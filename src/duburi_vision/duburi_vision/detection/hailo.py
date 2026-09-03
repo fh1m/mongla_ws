@@ -258,7 +258,9 @@ class HailoDetector(Detector):
             # of the first mission frame, where it reads as a dropped frame.
             blank = np.zeros((self._size, self._size, 3), np.uint8)
             try:
-                self._acquire().infer({self._in_name: np.expand_dims(blank, 0)})
+                with _DEVICE_LOCK:
+                    self._acquire_locked().infer(
+                        {self._in_name: np.expand_dims(blank, 0)})
             except Exception:
                 pass
 
@@ -335,38 +337,44 @@ class HailoDetector(Detector):
     # ------------------------------------------------------------------ #
     #  Inference
     # ------------------------------------------------------------------ #
-    def _acquire(self):
+    def _acquire_locked(self):
         """Take the chip's single activation, evicting whoever holds it.
 
-        Locked because two detector nodes in one process are two rclpy
-        callbacks, and on a MultiThreadedExecutor they can be on different
-        threads. Without the lock two threads can both observe `_ACTIVE is not
-        self`, both evict, and both enter -- and a double activation is a core
-        dump, not an exception.
+        THE CALLER MUST HOLD `_DEVICE_LOCK` FOR THE INFER TOO, not just for
+        this. Guarding only the handover was measured as a SIGSEGV on the Pi:
+        detector A sat inside `pipe.infer()` while detector B evicted its
+        activation on another thread -- a use-after-free on the stream, and the
+        stack trace showed exactly that (one thread in `pyhailort.infer`, the
+        other in `activate().__enter__`). Two detector nodes in one process are
+        two rclpy callbacks and a MultiThreadedExecutor puts them on different
+        threads, so this is the normal case, not a corner.
+
+        Serialising the infer costs nothing real: the chip runs one graph at a
+        time regardless, and the measured both-cameras figure (69-74 Hz total)
+        was taken serialised.
         """
         global _ACTIVE
-        with _DEVICE_LOCK:
-            if _ACTIVE is self and self._pipe is not None:
-                return self._pipe
-            if _ACTIVE is not None and _ACTIVE is not self:
-                _ACTIVE._release_locked()
-            self._activation = self._ng.activate(self._ngp)
-            self._activation.__enter__()
-            self._pipe = self._InferVStreams(self._ng, self._ivp, self._ovp)
-            self._pipe.__enter__()
-            _ACTIVE = self
-            self._swaps += 1
-            if self._swaps == _SWAP_WARN_AT and self._log:
-                # Not an error -- the mission model is one camera live -- but
-                # two UNPAUSED detectors thrash the activation, and 73.8 Hz
-                # across both cameras reads as "the chip got slower" unless
-                # something says why.
-                self._log.warn(
-                    f'[HAILO] {Path(self._path).name} has taken the activation '
-                    f'{self._swaps} times -- another detector is competing for '
-                    f'the chip. Each swap costs ~4 ms; pause the camera you are '
-                    f'not steering on.')
+        if _ACTIVE is self and self._pipe is not None:
             return self._pipe
+        if _ACTIVE is not None and _ACTIVE is not self:
+            _ACTIVE._release_locked()
+        self._activation = self._ng.activate(self._ngp)
+        self._activation.__enter__()
+        self._pipe = self._InferVStreams(self._ng, self._ivp, self._ovp)
+        self._pipe.__enter__()
+        _ACTIVE = self
+        self._swaps += 1
+        if self._swaps == _SWAP_WARN_AT and self._log:
+            # Not an error -- the mission model is one camera live -- but
+            # two UNPAUSED detectors thrash the activation, and 73.8 Hz
+            # across both cameras reads as "the chip got slower" unless
+            # something says why.
+            self._log.warn(
+                f'[HAILO] {Path(self._path).name} has taken the activation '
+                f'{self._swaps} times -- another detector is competing for '
+                f'the chip. Each swap costs ~4 ms; pause the camera you are '
+                f'not steering on.')
+        return self._pipe
 
     def _release_locked(self) -> None:
         """Give up the activation. Caller holds `_DEVICE_LOCK`."""
@@ -383,7 +391,10 @@ class HailoDetector(Detector):
             return []
         h, w = frame_bgr.shape[:2]
         buf, scale, pad_x, pad_y = letterbox(frame_bgr, self._size)
-        res = self._acquire().infer({self._in_name: np.expand_dims(buf, 0)})
+        # The lock spans acquire AND infer. See `_acquire_locked`.
+        with _DEVICE_LOCK:
+            res = self._acquire_locked().infer(
+                {self._in_name: np.expand_dims(buf, 0)})
         raw = res[self._out_name]
         # Batch of 1: unwrap the leading batch axis.
         per_class = raw[0] if len(raw) else []

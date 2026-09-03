@@ -90,8 +90,17 @@ class _Pipe:
         return False
 
     def infer(self, _feed):
+        # A REAL infer takes ~10 ms, and the whole point of this stub is that
+        # the activation must survive it. The first version returned instantly,
+        # which is why the suite passed while the Pi SEGFAULTED: the other
+        # thread's eviction landed between the two statements below and there
+        # was no window in which to observe it.
         assert CHIP.active == self.ng.name, (
             f'inferred on {self.ng.name} while {CHIP.active} is active')
+        time.sleep(0.002)
+        assert CHIP.active == self.ng.name, (
+            f'{CHIP.active} took the chip while {self.ng.name} was mid-infer '
+            f'-- on hardware this is a use-after-free on the stream')
         return {'out': np.array([[[]]], dtype=object)}
 
 
@@ -223,8 +232,16 @@ def test_alternating_swaps_once_per_change_not_once_per_frame(hailo, tmp_path):
 
 def test_two_threads_cannot_both_hold_it(hailo, tmp_path):
     """Two detector nodes in one process are two rclpy callbacks, and on a
-    MultiThreadedExecutor they run on different threads. Without the lock both
-    can observe `_ACTIVE is not self`, both evict, and both enter."""
+    MultiThreadedExecutor they run on different threads.
+
+    Two distinct failures, and the second one is the one that actually
+    happened. Both threads observing `_ACTIVE is not self` and both entering is
+    a double activation. But guarding ONLY the handover still segfaulted the
+    Pi: detector A sat inside `pipe.infer()` while B evicted its activation,
+    which is a use-after-free on the stream -- the fault handler showed one
+    thread in `pyhailort.infer` and the other in `activate().__enter__`. The
+    lock has to span the infer, so the stub's infer takes time and checks that
+    the chip is still its own on the way out."""
     a, b = _pair(hailo, tmp_path)
     errs = []
 

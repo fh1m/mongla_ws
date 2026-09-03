@@ -103,9 +103,14 @@ def generate_launch_description():
             }],
         )
 
+    # NO `name=` HERE, DELIBERATELY. Launch implements it as `-r __node:=`,
+    # which is PROCESS-wide: setting it renamed all THREE nodes in this process
+    # to `duburi_detector_dual` and ros2 warned about duplicate names. The
+    # launcher's own default name is already `duburi_detector_dual`, and the two
+    # detectors name themselves.
     detectors = Node(
         package='duburi_vision', executable='detector_dual_node',
-        name='duburi_detector_dual', output='screen', ros_arguments=_QUIET,
+        output='screen', ros_arguments=_QUIET,
         parameters=[{
             'fwd_model_path': LaunchConfiguration('fwd_model'),
             'dwn_model_path': LaunchConfiguration('dwn_model'),
