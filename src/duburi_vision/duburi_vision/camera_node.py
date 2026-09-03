@@ -318,6 +318,27 @@ class CameraNode(Node):
         """
         try:
             while rclpy.ok():
+                # THE RATE GATE COMES BEFORE THE READ, because `read()` is
+                # where the JPEG is DECODED.
+                #
+                # It used to sit inside `_publish`, i.e. AFTER the decode, so
+                # at 210 fps capture and a 40 Hz publish this thread decoded
+                # 210 frames a second and discarded 170 of them -- measured at
+                # 55 % of a core for a node whose useful work is ~10 %. The
+                # round-31 note claiming "the mailbox decouples capture from
+                # DECODE" was true of the SOURCE and false of this loop, which
+                # was the only reader and read at capture rate.
+                #
+                # Skipping the read is safe and is the whole point of a
+                # mailbox: an unread frame is simply replaced, so waiting for
+                # the slot and then reading yields the NEWEST frame rather than
+                # the one that happened to finish decoding.
+                wait = self._time_to_next_slot()
+                if wait > 0.0:
+                    # Capped so shutdown stays responsive; a long publish
+                    # period must not make Ctrl-C wait for it.
+                    time.sleep(min(wait, self._IDLE_WAIT_S * 10))
+                    continue
                 frame, meta = self._cam.read()
                 if frame is None or not meta.fresh:
                     # `fresh=False` is the honest answer to "asked faster than
@@ -327,6 +348,16 @@ class CameraNode(Node):
                 self._publish(frame, meta)
         except Exception:
             pass  # camera released during shutdown
+
+    def _time_to_next_slot(self) -> float:
+        """Seconds until the next publish is due; <=0 means now.
+
+        0.0 whenever no rate is pinned (`publish_rate_hz<=0` = follow the
+        camera), so the uncapped path is exactly as it was.
+        """
+        if self._min_period <= 0.0:
+            return 0.0
+        return self._min_period - (time.monotonic() - self._last_pub)
 
     def _publish(self, frame, meta):
         """Publish the frame that just arrived, on the thread that read it.
@@ -347,11 +378,11 @@ class CameraNode(Node):
         deliberately publishing slower than the camera is a real request (a
         remote viewer, a bandwidth cap) -- it just no longer sets the floor.
         """
+        # The gate itself now lives in `_capture_loop`, ahead of the decode.
+        # Only the bookkeeping remains here, on the path that actually
+        # publishes.
         if self._min_period > 0.0:
-            now = time.monotonic()
-            if now - self._last_pub < self._min_period:
-                return
-            self._last_pub = now
+            self._last_pub = time.monotonic()
 
         try:
             img_msg = self._bridge.cv2_to_imgmsg(frame, encoding='bgr8')
