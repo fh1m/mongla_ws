@@ -31,7 +31,15 @@ tracker_node:
     track_buffer: 150
 
     # Consecutive detection frames before a new track is published.
-    # 3 = require 3 consecutive frames before publishing (suppresses turbidity false detections).
+    # 3 = require 3 consecutive frames before publishing (suppresses turbidity
+    # false detections).
+    #
+    # ⚠ IN FRAMES, so it is a DWELL that shrinks as perception speeds up: 0.10 s
+    # at the 20 Hz this was chosen at, 0.07 s at the Pi's measured 30. Same
+    # shape as the coast window and the align dwell -- currently benign at
+    # these rates (a turbidity false positive does not persist 70 ms), and
+    # recorded here so it is re-derived rather than rediscovered if the
+    # detector gets materially faster.
     min_hits: 3
 
     # ByteTrack only: score threshold above which a NEW track id is spawned.

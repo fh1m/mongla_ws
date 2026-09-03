@@ -81,13 +81,18 @@ def generate_launch_description():
         DeclareLaunchArgument('viewer',    default_value='false'),
         DeclareLaunchArgument('tracking',  default_value='true'),
         DeclareLaunchArgument('tracker_type', default_value='ocsort'),
-        # PER CAMERA, because they do not run at the same rate: measured on the
-        # Pi, forward 55 Hz (Hailo-bound) and downward 15 Hz (the Fantech unit
-        # caps there). Every coast window is sized from this, so one shared
-        # value guarantees one of the two trackers has a wrong coast -- and a
-        # tracker with a truncated coast still publishes and looks healthy.
-        # The node measures the real rate and warns if these are off.
-        DeclareLaunchArgument('fwd_frame_rate', default_value='55.0'),
+        # PER CAMERA, because they do not run at the same rate. Every coast
+        # window is sized from this, so one shared value guarantees one of the
+        # two trackers has a wrong coast -- and a tracker with a truncated
+        # coast still publishes and looks healthy.
+        #
+        # These are the rates of the FULL configuration, both cameras live with
+        # tracking on: forward 30.7, downward 14.8 det/s. NOT the 55 they were
+        # first set to -- that was the standalone figure with the other camera
+        # paused, which is not how the stack runs. The node measures the real
+        # rate and reports it either way, so a wrong value here shows up in the
+        # log rather than as a silently truncated coast.
+        DeclareLaunchArgument('fwd_frame_rate', default_value='30.0'),
         DeclareLaunchArgument('dwn_frame_rate', default_value='15.0'),
         DeclareLaunchArgument(
             'fwd_calibration',

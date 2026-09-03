@@ -169,14 +169,13 @@ VISION_I_LAT_MAX = 15.0   # |lateral integral| clamp, % thrust
 # between ticks). Acquisition (no prior centre) stays largest-area.
 VISION_LOCK_GATE_NORM = 0.30   # max normalized centre jump per tick AT 20 Hz
 
-# The rate the gate above was tuned at. It is a per-TICK jump limit, so it is
-# really a VELOCITY -- and leaving it a constant while the loop rate changed
-# silently loosened it: 0.30 of the frame per tick is 6.0 frame-widths/s at
-# 20 Hz and 15.0 at the srot path's 50 Hz, so the same number let a target move
-# 2.5x faster between ticks before the lock let go. The gate exists to stop a
-# second hole or a spurious box stealing the aim on a close-in shot, and a lock
-# that admits anything within 30 % of the frame at 50 Hz is barely a lock.
-# `_lock_gate` converts it to the loop's real dt.
+# The DETECTION rate the gate above was tuned at. It is a per-frame jump limit,
+# so it is really a VELOCITY -- and leaving it a constant while the rate
+# changed silently loosened it: 0.30 of the frame between detections is 6.0
+# frame-widths/s at 20 Hz and 29.4 at the Hailo path's 98 Hz, so the same
+# number let a target move 5x faster before the lock let go. The gate exists to
+# stop a second hole or a spurious box stealing the aim on a close-in shot, and
+# a lock that admits anything within 30 % of the frame is barely a lock.
 VISION_LOCK_GATE_HZ = 20.0
 
 # Never scale below this. At a high loop rate the dt-scaled gate becomes very
@@ -187,15 +186,23 @@ VISION_LOCK_GATE_HZ = 20.0
 VISION_LOCK_GATE_MIN = 0.05
 
 
-def _lock_gate(loop_hz: float) -> float:
-    """The continuity-lock gate for a loop running at `loop_hz`.
+def _lock_gate(dt_s: float) -> float:
+    """The continuity-lock gate for a gap of `dt_s` between accepted centres.
 
-    Pure and side-effect-free so it unit-tests without ROS. At 20 Hz it returns
-    exactly VISION_LOCK_GATE_NORM, so the ArduSub path is unchanged.
+    THE CLOCK IS THE DETECTION INTERVAL, NOT THE CONTROL TICK, and getting that
+    wrong is a defect I shipped and had to correct. The gate limits how far the
+    box may jump between ACCEPTED CENTRES -- and a centre only changes when a
+    new detection lands. Scaling by the control period made it 1.7x TIGHTER
+    than tuned at 50 Hz control over a 30 Hz camera, which drops the lock on a
+    real target instead of holding it: the exact failure the floor below exists
+    to prevent, reintroduced by the fix for the opposite one.
+
+    Pure and side-effect-free so it unit-tests without ROS. At the tuned 20 Hz
+    interval it returns exactly VISION_LOCK_GATE_NORM.
     """
-    if not loop_hz or loop_hz <= 0.0:
+    if not dt_s or dt_s <= 0.0:
         return VISION_LOCK_GATE_NORM
-    scaled = VISION_LOCK_GATE_NORM * (VISION_LOCK_GATE_HZ / float(loop_hz))
+    scaled = VISION_LOCK_GATE_NORM * (float(dt_s) * VISION_LOCK_GATE_HZ)
     return max(VISION_LOCK_GATE_MIN, min(VISION_LOCK_GATE_NORM, scaled))
 
 # --- Minimum achievable deadband ------------------------------------------- #
@@ -813,7 +820,12 @@ def align_loop(*,
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
     loop_hz     = _loop_hz(pixhawk)          # backend-dependent; see motion_rates
     dt          = 1.0 / loop_hz              # fixed tick (loop sleeps this each pass)
-    gate_norm   = _lock_gate(loop_hz) if lock_on else 0.0
+    # Seeded at the control period -- the shortest gap possible, so the gate
+    # starts at its tightest and widens to the real detection interval once one
+    # has been observed. Erring tight before acquisition is safe: there is no
+    # lock to drop yet.
+    gate_norm   = _lock_gate(dt) if lock_on else 0.0
+    last_accept_t: Optional[float] = None
     locked_ex: Optional[float] = None        # last-accepted centre -> continuity lock
     locked_ey: Optional[float] = None
     locked_id   = -1     # tracker id of the locked target -> coast follows this id
@@ -1098,6 +1110,14 @@ def align_loop(*,
             sampled_at   = now - sample.age_s
             is_new_frame = sampled_at > last_frame_at + _FRAME_EPS_S
             if is_new_frame:
+                if lock_on:
+                    # Widen (or tighten) the gate to the interval actually
+                    # observed between accepted frames, floored at the control
+                    # period so a duplicate timestamp cannot collapse it to 0.
+                    if last_accept_t is not None:
+                        gate_norm = _lock_gate(
+                            max(dt, sampled_at - last_accept_t))
+                    last_accept_t = sampled_at
                 last_frame_at = sampled_at
                 if stable == 0:
                     # Start of a fresh in-band run. Stamped on the FRAME's own

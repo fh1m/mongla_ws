@@ -16,42 +16,59 @@ from duburi_control.motion_vision import (            # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
-#  The continuity lock is a VELOCITY limit
+#  The continuity lock is a VELOCITY limit -- keyed on the DETECTION interval
 # --------------------------------------------------------------------------- #
-def test_the_design_rate_is_unchanged():
-    """The ArduSub path runs at 20 Hz and is the configuration that placed 8th.
-    Any scaling that moves it is wrong whatever else it fixes."""
-    assert _lock_gate(VISION_LOCK_GATE_HZ) == pytest.approx(VISION_LOCK_GATE_NORM)
+_TUNED_DT = 1.0 / VISION_LOCK_GATE_HZ
 
 
-def test_a_faster_loop_gets_a_TIGHTER_gate():
-    """0.30 of the frame per tick is 6.0 frame-widths/s at 20 Hz and 15.0 at
-    50 Hz. Holding the number constant let a target move 2.5x faster between
-    ticks before the lock let go -- so the lock loosened by changing nothing."""
-    assert _lock_gate(50.0) < _lock_gate(20.0)
+def test_the_design_interval_is_unchanged():
+    """The ArduSub path ran a 20 Hz detector and is the configuration that
+    placed 8th. Any scaling that moves it is wrong whatever else it fixes."""
+    assert _lock_gate(_TUNED_DT) == pytest.approx(VISION_LOCK_GATE_NORM)
 
 
-def test_the_gate_is_the_same_VELOCITY_at_every_rate():
+def test_faster_DETECTIONS_get_a_tighter_gate():
+    """0.30 of the frame between detections is 6.0 frame-widths/s at 20 Hz and
+    29.4 at 98 Hz. Holding the number constant let a target move 5x faster
+    before the lock let go."""
+    assert _lock_gate(1 / 98.0) < _lock_gate(_TUNED_DT)
+
+
+def test_the_gate_is_the_same_VELOCITY_at_every_interval():
     """The property that makes it a lock rather than a number: allowed jump
-    divided by tick period is constant."""
-    ref = _lock_gate(20.0) * 20.0
+    divided by the gap it happened over is constant."""
+    ref = _lock_gate(_TUNED_DT) / _TUNED_DT
     for hz in (25.0, 40.0, 50.0):
-        assert _lock_gate(hz) * hz == pytest.approx(ref)
+        assert _lock_gate(1 / hz) / (1 / hz) == pytest.approx(ref)
+
+
+def test_the_CONTROL_rate_does_not_enter_it():
+    """THE DEFECT I SHIPPED AND CORRECTED. The gate governs the jump between
+    ACCEPTED CENTRES, and a centre only changes when a new detection lands.
+    Keying it on the control period made it 1.7x TIGHTER than tuned at 50 Hz
+    control over a 30 Hz camera -- dropping the lock on a real target, which is
+    the failure the floor exists to prevent, reintroduced by the fix for the
+    opposite one."""
+    control_hz, detect_hz = 50.0, 30.0
+    assert _lock_gate(1 / detect_hz) > _lock_gate(1 / control_hz)
+    assert _lock_gate(1 / detect_hz) == pytest.approx(
+        VISION_LOCK_GATE_NORM * (20.0 / 30.0))
 
 
 def test_it_never_tightens_below_the_detector_s_own_jitter():
     """The mirror failure, and just as bad: a gate tighter than the per-frame
-    centre noise drops the lock on noise instead of on a real box swap."""
-    assert _lock_gate(500.0) == pytest.approx(VISION_LOCK_GATE_MIN)
+    centre noise drops the lock ON the noise."""
+    assert _lock_gate(1 / 500.0) == pytest.approx(VISION_LOCK_GATE_MIN)
 
 
-def test_a_slower_loop_is_not_LOOSENED_past_the_tuned_value():
+def test_a_slower_detector_is_not_LOOSENED_past_the_tuned_value():
     """Scaling up would admit a bigger jump than was ever tuned for. The
-    constant is a ceiling, not a midpoint."""
-    assert _lock_gate(5.0) == pytest.approx(VISION_LOCK_GATE_NORM)
+    constant is a ceiling, not a midpoint -- and at 3-4 Hz on a raw .pt the
+    scaled value would otherwise be most of the frame."""
+    assert _lock_gate(1 / 4.0) == pytest.approx(VISION_LOCK_GATE_NORM)
 
 
-def test_a_nonsense_rate_falls_back_rather_than_dividing_by_zero():
+def test_a_nonsense_interval_falls_back_rather_than_dividing_by_zero():
     for bad in (0.0, -1.0, None):
         assert _lock_gate(bad) == pytest.approx(VISION_LOCK_GATE_NORM)
 
@@ -92,6 +109,8 @@ from duburi_control.motion_vision import align_loop, ALIGNED    # noqa: E402
 # Reuse the engine's own fakes rather than growing a second set: this file is
 # about two constants, and a private harness here would drift from the one the
 # rest of the engine is tested against.
+from types import SimpleNamespace                              # noqa: E402
+
 from test_motion_vision import (                                # noqa: E402
     _FakePixhawk, _FakeVision, _FakeWriters, _Log, _sample)
 
@@ -172,7 +191,53 @@ def _gate_used(name):
     return v.gates[0]
 
 
-def test_the_loop_passes_the_SCALED_gate_not_the_constant():
-    assert _gate_used('') == pytest.approx(VISION_LOCK_GATE_NORM)
-    assert _gate_used('srot') == pytest.approx(_lock_gate(50.0))
-    assert _gate_used('srot') < _gate_used('')
+def test_the_loop_STARTS_at_the_control_period_then_widens():
+    """Before any interval has been observed there is nothing to key on, so it
+    starts at the shortest gap possible -- tight. Erring tight pre-acquisition
+    is safe: there is no lock to drop yet."""
+    for name, hz in (('', 20.0), ('srot', 50.0)):
+        assert _gate_used(name) == pytest.approx(_lock_gate(1.0 / hz))
+
+
+class _SlowCamera(_GateSpy):
+    """A detector SLOWER than the control loop, which is the whole case.
+
+    An `age_s=0` fake makes every control tick a new frame, so the observed
+    detection interval equals the control period and the two clocks are
+    indistinguishable -- which is exactly why my first version of this test
+    could not tell the corrected code from the bug. Here a frame lands every
+    `every` ticks and `age_s` reports how long ago it did, the way the real
+    `bbox_error` does.
+    """
+
+    def __init__(self, sample, every=2):
+        super().__init__(sample)
+        self.gates = []
+        self.every = every
+        self.n = -1
+
+    def bbox_error(self, *a, **kw):
+        self.gates.append(kw.get('gate_norm'))
+        self.n += 1
+        dt = 1.0 / 50.0                       # the srot control period
+        age = (self.n % self.every) * dt      # 0 on a new frame, then ageing
+        s = self._samples if not isinstance(self._samples, list) else self._samples[0]
+        return SimpleNamespace(ex=s.ex, ey=s.ey, w_frac=s.w_frac, h_frac=s.h_frac,
+                               age_s=age, track_id=1, coasted=False)
+
+
+def test_the_gate_WIDENS_to_the_observed_detection_interval():
+    """A 25 Hz camera under a 50 Hz loop must get the 25 Hz gate, not the 50 Hz
+    one -- twice as wide. Keying it on the control period is what made it 1.7x
+    too tight on the vehicle."""
+    v = _SlowCamera(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3), every=2)
+    align_loop(pixhawk=_Pix('srot'), vision_state=v, target_class='gate',
+               axes={'lat'}, offsets={}, err_px=40.0, duration=0.6, gain=30.0,
+               align_stable_frames=3, lost_grace_s=0.5, lock_on=True,
+               brake=False, writers=_FakeWriters(), log=_Log(), abort_fn=None)
+    seen = [g for g in v.gates if g is not None]
+    assert seen[-1] == pytest.approx(_lock_gate(2.0 / 50.0), rel=0.2), (
+        f'ended at {seen[-1]:.4f}; the 25 Hz gate is '
+        f'{_lock_gate(2.0/50.0):.4f} and the 50 Hz one '
+        f'{_lock_gate(1.0/50.0):.4f}')
+    assert seen[-1] > seen[0], 'the gate never widened off its seed'
