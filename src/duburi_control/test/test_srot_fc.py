@@ -188,6 +188,26 @@ def test_move_timeout_when_no_terminal_ack():
     assert res.code == TIMEOUT
 
 
+def test_a_stall_brakes_the_vehicle_and_not_only_the_caller():
+    """A TIMEOUT is a decision about the HULL, not a return value.
+
+    The board keeps running the active primitive until something displaces it,
+    and on a stall it streams IN_PROGRESS forever (a failsafe mid-leg takes it
+    out of AUTO without ever resolving) -- so the host deadline is the only
+    terminator there is. Returning TIMEOUT without braking hands control back
+    to a mission that believes the move ended, while a 20 kg hull is still
+    driving the leg.
+
+    The abort path has asserted its brake since it was written; this path did
+    not, and 519 tests passed with `stop_motion()` deleted from it.
+    """
+    fc = _fc()
+    fc.move('move_forward', duration=0.0, gain=50.0, timeout=0.05)
+    stops = [s for s in fc.master.mav.sent
+             if s[0] == 'cmd' and s[1] == sp.CMD_SROT_MOVE and s[2][0] == sp.MOVE_STOP]
+    assert stops, 'a stalled move must brake, not just give up on the ACK'
+
+
 # --------------------------------------------------------------------------- #
 #  arm / disarm / mode                                                          #
 # --------------------------------------------------------------------------- #
