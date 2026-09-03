@@ -81,6 +81,14 @@ def generate_launch_description():
         DeclareLaunchArgument('viewer',    default_value='false'),
         DeclareLaunchArgument('tracking',  default_value='true'),
         DeclareLaunchArgument('tracker_type', default_value='ocsort'),
+        # PER CAMERA, because they do not run at the same rate: measured on the
+        # Pi, forward 55 Hz (Hailo-bound) and downward 15 Hz (the Fantech unit
+        # caps there). Every coast window is sized from this, so one shared
+        # value guarantees one of the two trackers has a wrong coast -- and a
+        # tracker with a truncated coast still publishes and looks healthy.
+        # The node measures the real rate and warns if these are off.
+        DeclareLaunchArgument('fwd_frame_rate', default_value='55.0'),
+        DeclareLaunchArgument('dwn_frame_rate', default_value='15.0'),
         DeclareLaunchArgument(
             'fwd_calibration',
             default_value=_calib('pi_forward_1280x720.json')),
@@ -132,13 +140,14 @@ def generate_launch_description():
         }],
     )
 
-    def tracker(camera_name: str) -> Node:
+    def tracker(camera_name: str, rate_arg: str) -> Node:
         return Node(
             package='duburi_vision', executable='tracker_node',
             name=f'duburi_tracker_{camera_name}', output='screen',
             ros_arguments=_QUIET,
             parameters=[{'camera': camera_name,
-                         'tracker_type': LaunchConfiguration('tracker_type')}],
+                         'tracker_type': LaunchConfiguration('tracker_type'),
+                         'frame_rate': LaunchConfiguration(rate_arg)}],
             condition=IfCondition(LaunchConfiguration('tracking')),
         )
 
@@ -146,8 +155,8 @@ def generate_launch_description():
         camera('forward',  'fwd_profile', 'fwd_calibration', 'fwd_device_path'),
         camera('downward', 'dwn_profile', 'dwn_calibration', 'dwn_device_path'),
         detectors,
-        tracker('forward'),
-        tracker('downward'),
+        tracker('forward',  'fwd_frame_rate'),
+        tracker('downward', 'dwn_frame_rate'),
         Node(package='duburi_vision', executable='vision_display',
              name='duburi_display', output='screen',
              parameters=[{'camera': 'forward'}],

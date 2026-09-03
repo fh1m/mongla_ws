@@ -167,7 +167,36 @@ VISION_I_LAT_MAX = 15.0   # |lateral integral| clamp, % thrust
 # spurious box can't steal the aim. Enabled per-call via lock_on; the gate width
 # is a constant (re-tune in code if a target legitimately moves faster than this
 # between ticks). Acquisition (no prior centre) stays largest-area.
-VISION_LOCK_GATE_NORM = 0.30   # max normalized centre jump to stay locked
+VISION_LOCK_GATE_NORM = 0.30   # max normalized centre jump per tick AT 20 Hz
+
+# The rate the gate above was tuned at. It is a per-TICK jump limit, so it is
+# really a VELOCITY -- and leaving it a constant while the loop rate changed
+# silently loosened it: 0.30 of the frame per tick is 6.0 frame-widths/s at
+# 20 Hz and 15.0 at the srot path's 50 Hz, so the same number let a target move
+# 2.5x faster between ticks before the lock let go. The gate exists to stop a
+# second hole or a spurious box stealing the aim on a close-in shot, and a lock
+# that admits anything within 30 % of the frame at 50 Hz is barely a lock.
+# `_lock_gate` converts it to the loop's real dt.
+VISION_LOCK_GATE_HZ = 20.0
+
+# Never scale below this. At a high loop rate the dt-scaled gate becomes very
+# small, and a gate tighter than the detector's own per-frame centre jitter
+# would drop the lock on noise -- the failure mode is the mirror of the one
+# above and just as bad. 0.05 of a 640 px frame is 32 px, comfortably above the
+# few-px jitter measured on this detector.
+VISION_LOCK_GATE_MIN = 0.05
+
+
+def _lock_gate(loop_hz: float) -> float:
+    """The continuity-lock gate for a loop running at `loop_hz`.
+
+    Pure and side-effect-free so it unit-tests without ROS. At 20 Hz it returns
+    exactly VISION_LOCK_GATE_NORM, so the ArduSub path is unchanged.
+    """
+    if not loop_hz or loop_hz <= 0.0:
+        return VISION_LOCK_GATE_NORM
+    scaled = VISION_LOCK_GATE_NORM * (VISION_LOCK_GATE_HZ / float(loop_hz))
+    return max(VISION_LOCK_GATE_MIN, min(VISION_LOCK_GATE_NORM, scaled))
 
 # --- Minimum achievable deadband ------------------------------------------- #
 # A 20 kg hull on open-loop Ch6 thrust against a bbox that itself jitters a few
@@ -206,6 +235,26 @@ VISION_FRESH_ZERO_S = 0.40   # linearly decayed to zero by this age (driving bli
 # or above loop rate (age_s ~ 0 every tick) makes every tick a new frame, so
 # behaviour is unchanged there (and the age_s=0 test doubles stay valid).
 _FRAME_EPS_S = 0.005   # min monotonic gap to count a sample as a new detection
+
+# ...AND the counter must also span real TIME, which counting frames alone
+# stopped guaranteeing when perception got fast.
+#
+# `align_stable_frames = 3` was chosen against a 20 Hz detector, where three
+# distinct frames span two inter-frame gaps = 0.10 s. The Hailo path runs
+# 55-98 Hz, where the same three frames span 0.02-0.05 s. Three detections
+# 20 ms apart are very nearly ONE moment: the hull cannot have settled in it,
+# and a detector's centre noise is correlated across it -- so the gate that
+# exists to stop a single lucky frame declaring ALIGNED (and ARMING THE FIRE)
+# was measuring almost nothing. The frame count alone was FPS-independent in
+# name only; it is the dwell that has to be.
+#
+# Requiring both a frame count and a dwell keeps each doing the job it can:
+# frames rule out a re-read, time rules out a burst. At 20 Hz this is satisfied
+# on the same tick the third frame lands, so the ArduSub path is unchanged
+# except when the detector jitters, where it can cost one extra frame (~10 ms)
+# -- the right price for not firing a torpedo on 20 ms of evidence. At 3-4 Hz
+# three frames already span 0.75-1.0 s and this never binds.
+_ALIGN_STABLE_MIN_S = 0.10
 
 # A detection older than this (seconds) counts as "no target this tick".
 # bbox_error() returns None when the class is absent; this only catches a
@@ -754,6 +803,7 @@ def align_loop(*,
     last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
     prev_worst: Optional[float] = None   # settle gate: worst error last NEW frame (for |Δworst|)
     last_frame_at = float('-inf')        # arrival time of the last COUNTED detection frame
+    stable_since  = float('inf')         # arrival of the FIRST frame of the current in-band run
     last_live_at  = float('-inf')        # monotonic of the last LIVE (non-coasted) sighting -> fire_pass gate
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
@@ -763,7 +813,7 @@ def align_loop(*,
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
     loop_hz     = _loop_hz(pixhawk)          # backend-dependent; see motion_rates
     dt          = 1.0 / loop_hz              # fixed tick (loop sleeps this each pass)
-    gate_norm   = VISION_LOCK_GATE_NORM if lock_on else 0.0
+    gate_norm   = _lock_gate(loop_hz) if lock_on else 0.0
     locked_ex: Optional[float] = None        # last-accepted centre -> continuity lock
     locked_ey: Optional[float] = None
     locked_id   = -1     # tracker id of the locked target -> coast follows this id
@@ -1049,6 +1099,13 @@ def align_loop(*,
             is_new_frame = sampled_at > last_frame_at + _FRAME_EPS_S
             if is_new_frame:
                 last_frame_at = sampled_at
+                if stable == 0:
+                    # Start of a fresh in-band run. Stamped on the FRAME's own
+                    # arrival, not on `now`: `now` is a control tick and at
+                    # 50 Hz control over a 15 Hz camera the two differ by most
+                    # of a frame period, which would credit the dwell with time
+                    # the target was not actually in band.
+                    stable_since = sampled_at
                 # Settle gate compares against the previous NEW frame's error
                 # (re-reads are numerically identical and would trivially pass),
                 # so |Δworst| is a real cross-frame error velocity.
@@ -1056,7 +1113,10 @@ def align_loop(*,
                            or abs(worst - prev_worst) <= settle_px)
                 prev_worst = worst
                 stable = stable + 1 if (all(in_band) and settled) else 0
-            if stable >= align_stable_frames:
+            # Both gates, for the reasons at _ALIGN_STABLE_MIN_S: enough
+            # distinct frames AND enough elapsed time across them.
+            if (stable >= align_stable_frames
+                    and last_frame_at - stable_since >= _ALIGN_STABLE_MIN_S):
                 # First confirmed-centred tick opens the hold window. With
                 # hold_s>0 we keep the loop ALIVE and correcting for hold_s --
                 # the ACTIVE station-keep the operator needs to hold steady
