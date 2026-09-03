@@ -1076,6 +1076,155 @@ class SrotFC(FlightController):
                       f'({sent} keep-alives); the board expires and disarms '
                       f'within {sp.MOTOR_TEST_WINDOW_MAX_MS} ms of the last one')
 
+    # ------------------------------------------------------------------ #
+    #  MOTOR_DETECT -- GATE 0, behind an operator confirmation            #
+    # ------------------------------------------------------------------ #
+    def motor_detect_briefing(self, timeout: float = 2.0) -> str:
+        """What this hull's direction configuration is, RIGHT NOW, read live.
+
+        Three values decide what a detect run does, they are stored in three
+        different places, and no display anywhere shows the product that
+        actually reaches the mixer:
+
+          CAL_MDIRn        what MOTOR_DETECT writes. It COMPOSES (fw rev 6:
+                           `c' = c * agree`), so re-running is idempotent and a
+                           wrong thruster converges in one pass -- but only
+                           because it multiplies, which is the next line.
+          MOT_n_DIRECTION  a separate parameter that MULTIPLIES with CAL_MDIRn.
+                           On this hull M1 and M8 are -1, and they are set
+                           runtime-only and unsaved. Flipping one for a motor
+                           detect already reversed cancels the fix.
+          FRAME_REVERSE    negates all six axis demands AFTER the mix. It is 1
+                           here. A detect run that corrects the per-motor signs
+                           does not know about it, so a successful detect leaves
+                           this wrong and the whole vehicle inverted.
+
+        Read live rather than assumed: a params-reset boot silently restores
+        defaults, and the operator's only clue is one line in a burst of
+        thirteen.
+        """
+        def _p(name):
+            v = self.get_param(name, timeout=timeout)
+            return None if v is None else int(round(v))
+
+        cal = [_p(n) for n in sp.CAL_MDIR_PARAMS]
+        mot = [_p(n) for n in sp.MOT_DIRECTION_PARAMS]
+        fr = _p('FRAME_REVERSE')
+
+        def _row(vals):
+            return ' '.join('?' if v is None else ('-' if v < 0 else '+')
+                            for v in vals)
+
+        eff = []
+        for c, m in zip(cal, mot):
+            eff.append(None if (c is None or m is None) else c * m)
+        # FRAME_REVERSE is applied to the AXIS demand, not per motor, so it is
+        # reported beside the product rather than folded into it -- folding it
+        # in would suggest a per-motor fix for a whole-vehicle inversion.
+        lines = [
+            'MOTOR DETECT -- this hull, read live:',
+            f'  CAL_MDIR1..8     {_row(cal)}   (what detect writes)',
+            f'  MOT_n_DIRECTION  {_row(mot)}   (multiplies with the above)',
+            f'  effective mix    {_row(eff)}',
+            f'  FRAME_REVERSE    {"?" if fr is None else fr}'
+            + ('   <-- negates ALL six axes after the mix; a successful '
+               'detect leaves this wrong' if fr else ''),
+            '',
+            'It pulses all eight thrusters at 30 % and then rewrites the signs',
+            'the attitude controllers use. It needs WATER and a hull free to',
+            'rotate: in air the gyro response is below the 0.05 rad/s gate, the',
+            'run reports FAIL and writes nothing (fw rev 6 -- before that it',
+            'reset every thruster to +1 and reported SUCCESS).',
+            '',
+            f'To run it: motor_detect({sp.MOTOR_DETECT_TOKEN!r})',
+        ]
+        return '\n'.join(lines)
+
+    def motor_detect(self, confirm=None, *,
+                     timeout: float = sp.MOTOR_DETECT_TIMEOUT_S,
+                     abort_fn=None) -> tuple:
+        """Run the board's MOTOR_DETECT (mode 20). Returns (ok, reason).
+
+        CONFIRMATION IS THE POINT OF THIS METHOD. Called without the token it
+        does not run -- it reads the three live values and returns them as the
+        refusal text, so the only way to reach the token is to have been shown
+        what it will change. A bool `force=True` would have made an accidental
+        full-thruster run one keystroke away.
+
+        WE DO NOT CHECK FOR WATER, AND SAY SO RATHER THAN PRETENDING TO. There
+        is no wet sensor on this vehicle; the depth reading at the surface is
+        the same whether the hull is in a pool or on a bench. The refusal text
+        states the requirement instead of implying it was verified.
+
+        The end state is MANUAL and DISARMED, and that is the DESIGNED one, not
+        a fault (fw task_control_loop.cpp:383-406): detect has just rewritten
+        the direction signs, and handing an armed hull straight to a closed-loop
+        controller after an unverified sign change flipped the vehicle in water
+        on 2026-08-07. The operator re-arms to verify.
+        """
+        if confirm != sp.MOTOR_DETECT_TOKEN:
+            return False, ('motor detect NOT run -- confirmation required.\n\n'
+                           + self.motor_detect_briefing())
+        if not self.is_armed():
+            # The board says this too ("Motor detect: arm first (needs water,
+            # free to rotate)") and bounces back to STABILIZE, so without this
+            # the caller watches a mode that silently reverted.
+            return False, ('motor detect requires ARMED -- the board refuses '
+                           'and falls back to STABILIZE')
+
+        before = [self.get_param(n) for n in sp.CAL_MDIR_PARAMS]
+        mark = time.time()
+        ok, why = self.set_mode('MOTOR_DETECT')
+        if not ok:
+            return False, f'could not enter MOTOR_DETECT: {why}'
+
+        deadline = time.monotonic() + max(1.0, float(timeout))
+        while time.monotonic() < deadline:
+            if abort_fn is not None and abort_fn():
+                # Leaving the mode is what stops it driving motors
+                # (task_control_loop.cpp:453). Disarm too, because a mode change
+                # alone leaves thrusters live.
+                self.set_mode('MANUAL')
+                self.disarm()
+                return False, 'motor detect aborted -- left the mode and disarmed'
+            hb = self._vehicle_hb()
+            mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
+            if mode == 'MANUAL' and not self.is_armed():
+                break                       # the board's own completion signal
+            time.sleep(_POLL_S)
+        else:
+            return False, (f'motor detect did not finish in {timeout:.0f}s '
+                           f'(mode {sp.mode_name(getattr(self._vehicle_hb(), "custom_mode", -1))}, '
+                           f'armed {self.is_armed()})'
+                           + self._detect_texts(mark))
+
+        after = [self.get_param(n) for n in sp.CAL_MDIR_PARAMS]
+        changed = [i + 1 for i, (a, b) in enumerate(zip(before, after))
+                   if a is not None and b is not None
+                   and (a < 0) != (b < 0)]
+        # A detect that changed NOTHING is ambiguous on purpose: it is either
+        # idempotent success (already correct -- agree is +1 for every motor) or
+        # a FAIL that correctly declined to write. The board's own text is what
+        # separates them, so it is carried through rather than summarised away.
+        return True, ('motor detect finished -- DISARMED in MANUAL (designed; '
+                      're-arm to verify axes). CAL_MDIR changed on: '
+                      + (', '.join(f'M{n}' for n in changed) if changed
+                         else 'nothing -- already correct, or the run was '
+                              'INCONCLUSIVE and declined to write')
+                      + self._detect_texts(mark))
+
+    def _detect_texts(self, since: float) -> str:
+        """The board's own MotorDetect lines, verbatim.
+
+        It prints DETECTED and EFFECTIVE on two lines because both together
+        exceed the 50-char STATUSTEXT budget and a truncated direction list is
+        actively misleading. Relaying them unedited is the point -- our summary
+        above is derived, theirs is the source.
+        """
+        lines = [t for _, _, t in self.statustext_log(since=since)
+                 if 'otorDetect' in t or 'otor detect' in t]
+        return ('\n  ' + '\n  '.join(lines)) if lines else ''
+
     def thruster_health(self):
         """(ok, reason) -- is every thruster reporting and turning as commanded?
 
