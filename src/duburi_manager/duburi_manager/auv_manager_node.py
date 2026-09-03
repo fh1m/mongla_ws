@@ -239,6 +239,11 @@ class AUVManagerNode(Node):
         # board parses msgid 149 and silently DROPS it today, so this is a
         # producer built ahead of its consumer. '' = disabled; set to a camera
         # name ('forward') to stream that camera's selected target.
+        # Raw MAVLink replay log (.tlog). '' = off; a tag ('gate_am') names the
+        # file, which lands beside the scorecards in DUBURI_RUN_DIR. Everything
+        # the live console shows is derived from this stream, so the log is the
+        # stream itself rather than a second copy of the derived numbers.
+        self.declare_parameter('record', '')
         self.declare_parameter('vision_uplink_camera', '')
         self.declare_parameter('vision_uplink_class', '')
         self.declare_parameter('vision_uplink_hz', 25.0)
@@ -410,6 +415,47 @@ class AUVManagerNode(Node):
             for msg_id, hz in MESSAGE_RATES.items():
                 self.pixhawk.set_message_rate(msg_id, hz)
 
+    def _start_recorder(self) -> None:
+        """Open the raw .tlog if `record:=<tag>` was given, else leave it None.
+
+        Set before the reader thread starts, because the reader is the sink: a
+        recorder attached later would silently miss the startup burst, which is
+        where the board's banner, its behaviour revision and the first
+        NAMED_VALUE_FLOAT sweep live -- exactly the part of a run you go back to
+        the log for.
+
+        Best-effort. A log that cannot be opened must not stop the vehicle from
+        flying, so it degrades to no recording with a loud line rather than
+        raising out of bring-up.
+        """
+        self._recorder = None
+        tag = (self.get_parameter('record').value or '').strip()
+        if not tag:
+            return
+        try:
+            from duburi_manager.srot_recorder import SrotRecorder, default_path
+            self._recorder = SrotRecorder(
+                default_path(tag), log=self.get_logger()).start()
+            # BOTH DIRECTIONS, or the log has no decisions in it.
+            #
+            # The reader thread only ever sees what ARRIVES, so a log fed from
+            # it alone holds COMMAND_ACK and no COMMAND_LONG -- measured on the
+            # first live capture: 5 acks, 0 commands. That is the same
+            # impoverishment the board's own SD log has, and the reason this
+            # log exists at all is to hold what the host DECIDED: the verbs it
+            # issued, the MANUAL_CONTROL it streamed, the heartbeats that keep
+            # the failsafe quiet.
+            #
+            # `send_callback` is pymavlink's own hook, called after every send
+            # with the packed message, so this needs no wrapper around the
+            # transport and no change at any of the seven send sites.
+            self.master.mav.set_send_callback(
+                lambda msg, *_a, **_k: self._recorder.write(msg))
+        except Exception as exc:              # noqa: BLE001
+            self._recorder = None
+            self.get_logger().error(
+                f'[REC  ] recording DISABLED -- could not open the log: {exc!r}')
+
     def _setup_reader_and_warmup(self) -> None:
         """Start the MAVLink reader thread, then wait for AHRS2 + autopilot HB.
 
@@ -424,6 +470,7 @@ class AUVManagerNode(Node):
         self._fast_armed  = False
         self._fast_mode   = ''
         self._fast_batt_v = math.nan
+        self._start_recorder()          # BEFORE the reader -- it is the sink
         self.reader_thread = threading.Thread(
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
@@ -854,6 +901,18 @@ class AUVManagerNode(Node):
                 msg = self.master.recv_match(blocking=False)
                 if msg is None:
                     break
+                # Record BEFORE the demux, and before any type filter: the
+                # log's job is to hold what arrived, including messages nothing
+                # on this side consumes. ESC_STATUS (291) is the live example --
+                # pymavlink drops it, so it is absent from every decoded view
+                # and present in every raw byte.
+                #
+                # `write()` queues and returns; the disk is another thread's
+                # problem. This loop is the only thing draining the link and the
+                # only place the NAMED_VALUE_FLOAT burst can be de-multiplexed,
+                # so it must not wait on anything.
+                if self._recorder is not None:
+                    self._recorder.write(msg)
                 fn = _DEMUX.get(msg.get_type())
                 if fn is not None:
                     fn(msg)
@@ -1506,6 +1565,12 @@ def _emergency_stop(node) -> None:
     else:
         print(f'  {"disarm":<22s} \033[33m[--]\033[0m  ({reason})', file=sys.stderr)
 
+    # LAST of the vehicle steps, so the shutdown itself is in the log. How a run
+    # ended -- whether the disarm was acknowledged, what the board said while it
+    # happened -- is the part you go back to the log for, and a recorder closed
+    # at the top of this function records everything except that.
+    _step('close replay log',   lambda: node._recorder.stop()
+                                        if getattr(node, '_recorder', None) else None)
     _step('close yaw source',   lambda: node.yaw_source.close())
     for cam, vstate in list(node._vision_states.items()):
         _step(f'close vision[{cam}]', lambda v=vstate: v.close())
