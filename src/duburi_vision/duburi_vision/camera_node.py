@@ -192,9 +192,18 @@ class CameraNode(Node):
             fps_override = int(self.get_parameter('fps').value)
             if fps_override > 0:
                 profile['fps'] = fps_override
-                self.get_logger().info(
+                # WARN, not info. The launch files pin the process default to
+                # `warn`, so an info line here is invisible -- and a silently
+                # capped camera is the exact round-26 defect, which cost a
+                # round precisely because nothing said the rate had been
+                # changed. It sits beside the camera's own "delivering X
+                # against Y requested" warning, which is the same class of
+                # notice from the other direction.
+                self.get_logger().warning(
                     f'[CAM  ] fps override → {fps_override} '
-                    f"(profile asked {get_profile(profile_name).get('fps')})")
+                    f"(profile asked {get_profile(profile_name).get('fps')}). "
+                    f'Deliberate: a camera outrunning its detector spends CPU '
+                    f'decoding frames the detector drops.')
             # device_path (by-path symlink) > int device override > profile default.
             if device_path:
                 profile['device'] = device_path

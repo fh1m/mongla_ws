@@ -37,8 +37,13 @@ def test_the_override_says_what_it_replaced():
     """A cap that does not name the profile value it beat is how round 26
     stayed invisible for a whole round."""
     i = SRC.index('fps_override > 0')
-    assert 'fps override' in SRC[i:i + 500]
-    assert "get_profile(profile_name).get('fps')" in SRC[i:i + 500]
+    ctx = SRC[i:i + 900]
+    assert 'fps override' in ctx
+    assert "get_profile(profile_name).get('fps')" in ctx
+    # ...at WARN. The launch files pin the process default to `warn`, so an
+    # info line is invisible -- which is how round 26's silent cap survived a
+    # whole round.
+    assert 'get_logger().warning(' in ctx
 
 
 def test_the_non_profile_branch_still_never_asks_a_driver_for_zero():
