@@ -20,6 +20,8 @@ from typing import Optional, Tuple
 
 import numpy as np
 
+from rclpy.qos import qos_profile_sensor_data
+
 from .camera import Camera, FrameMeta
 
 
@@ -53,7 +55,15 @@ class RosTopicCamera(Camera):
         self._exp_w       = int(expected_width)
         self._exp_h       = int(expected_height)
 
-        self._sub = node.create_subscription(Image, self._topic, self._on_image, 10)
+        # `qos_profile_sensor_data` (BEST_EFFORT) because every camera
+        # publisher here is BEST_EFFORT -- ours, the ros_gz image_bridge,
+        # underwater_fx, BlueOS. A RELIABLE subscriber against those gets one
+        # WARN and then silence: a clean launch, healthy nodes, zero frames.
+        # Its depth 5 is left alone rather than tightened to 1: this source
+        # exists for sim and replay, where a dropped frame is a lost sample
+        # rather than a stale one.
+        self._sub = node.create_subscription(
+            Image, self._topic, self._on_image, qos_profile_sensor_data)
 
         if self._log:
             self._log.info(f"[CAM  ] subscribed to ros image topic {self._topic!r}")

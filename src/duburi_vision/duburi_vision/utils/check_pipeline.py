@@ -80,7 +80,12 @@ def main(argv=None):
             if cid:
                 state['classes'][cid] += 1
 
-    node.create_subscription(Image,            f'{ns}/image_raw',   _on_image, qos)
+    # BEST_EFFORT to match the publisher's mailbox -- a RELIABLE subscriber
+    # against a BEST_EFFORT publisher receives NOTHING, and a health check that
+    # fails on its own QoS reads as a broken camera.
+    node.create_subscription(
+        Image, f'{ns}/image_raw', _on_image,
+        QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT))
     node.create_subscription(CameraInfo,       f'{ns}/camera_info', _on_info,  qos)
     node.create_subscription(Detection2DArray, f'{ns}/detections',  _on_det,   qos)
 

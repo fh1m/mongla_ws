@@ -54,6 +54,8 @@ from typing import Dict, Optional
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import (DurabilityPolicy, HistoryPolicy, QoSProfile,
+                       ReliabilityPolicy)
 
 from sensor_msgs.msg import Image
 from cv_bridge        import CvBridge
@@ -294,7 +296,17 @@ class DetectorNode(Node):
         from vision_msgs.msg import Detection2DArray
         from std_msgs.msg import String
         self._bridge       = CvBridge()
-        self._sub          = self.create_subscription(Image, ns_in, self._on_image, 5)
+        # Depth 1 BEST_EFFORT: the publisher's mailbox is only a mailbox if
+        # the subscriber is one too. A depth-5 RELIABLE queue here (which is
+        # what an int `5` means, and also what `qos_profile_sensor_data` gives)
+        # asks the middleware to hold and retransmit frames for a consumer that
+        # is going to throw all but the newest away in `_on_image` anyway --
+        # buying latency and CPU for nothing.
+        self._sub          = self.create_subscription(
+            Image, ns_in, self._on_image,
+            QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1,
+                       reliability=ReliabilityPolicy.BEST_EFFORT,
+                       durability=DurabilityPolicy.VOLATILE))
         self._pub_det      = self.create_publisher(Detection2DArray, f'{ns_out}/detections', 10)
         self._pub_classes  = self.create_publisher(String, f'{ns_out}/classes_filter', 10)
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)

@@ -34,6 +34,9 @@ import time
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import (DurabilityPolicy, HistoryPolicy, QoSProfile,
+                       ReliabilityPolicy)
+from rclpy.time import Time
 
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg     import Float32, Int32
@@ -105,8 +108,31 @@ class CameraNode(Node):
         self._frame_id = str(self._info.get('frame_id') or self._cam_name)
 
         ns = f'/duburi/vision/{self._cam_name}'
-        self._pub_img  = self.create_publisher(Image,      f'{ns}/image_raw',   10)
-        self._pub_info = self.create_publisher(CameraInfo, f'{ns}/camera_info', 10)
+        # A MAILBOX, NOT A QUEUE -- the DDS half of the same problem the
+        # capture side has. An int depth here means KEEP_LAST at that depth
+        # with RELIABLE reliability, so a slow subscriber makes the middleware
+        # HOLD frames and retransmit them: the consumer then works through a
+        # backlog of old pictures, which is precisely the failure the mailbox
+        # capture path exists to prevent, reintroduced one layer up.
+        #
+        # Note `qos_profile_sensor_data` is NOT this: it is BEST_EFFORT but
+        # KEEP_LAST **depth 5**, i.e. still a five-deep queue. For a stream
+        # where only the newest frame has any value, one is the right number.
+        self._img_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST, depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE)
+        self._pub_img  = self.create_publisher(Image, f'{ns}/image_raw',
+                                               self._img_qos)
+        # CameraInfo stays RELIABLE and TRANSIENT_LOCAL: it is ~1 kB of
+        # calibration that changes never, and a subscriber that joins late must
+        # still receive it. Dropping it would leave `CameraInfo.k` empty and
+        # every pixel->bearing conversion falling back to a guessed FOV.
+        self._pub_info = self.create_publisher(
+            CameraInfo, f'{ns}/camera_info',
+            QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1,
+                       reliability=ReliabilityPolicy.RELIABLE,
+                       durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self._calib = self._load_calibration()
         self._bridge   = CvBridge()
 
@@ -119,21 +145,27 @@ class CameraNode(Node):
         # between. Measured: fixing it took detections 30.0 -> 51.4 Hz and
         # image_raw 30.0 -> 71.2 Hz on the same hardware.
         rate = float(self.get_parameter('publish_rate_hz').value)
+        pinned = rate > 0
         if rate <= 0:
             rate = float(self._info.get('fps') or 30.0)
             if self._log_rate_source:
                 self.get_logger().info(
                     f'[CAM  ] publish rate follows the camera: {rate:.1f} Hz '
                     f'(set publish_rate_hz to pin it)')
-        self.create_timer(1.0 / max(rate, 1.0), self._tick)
+        # A positive publish_rate_hz THROTTLES; it no longer paces. The
+        # capture thread publishes on arrival, so this is a ceiling for the
+        # cases that genuinely want one (a remote viewer, a bandwidth cap) and
+        # 0 -- the default -- means "as fast as the camera produces".
+        self._min_period = (1.0 / rate) if pinned else 0.0
+        self._last_pub = 0.0
 
         self._sent    = 0
         self._dropped = 0
         self._last_log = time.monotonic()
         self.create_timer(2.0, self._log_health)
 
-        # Background capture thread — keeps cap.read() off the ROS executor.
-        self._frame_q: _queue.SimpleQueue = _queue.SimpleQueue()
+        # Background capture thread — keeps read() off the ROS executor AND
+        # owns the publish, so a frame goes out the moment it exists.
         threading.Thread(target=self._capture_loop, daemon=True).start()
 
         # Video file playback controls (only active when source supports pause/seek).
@@ -276,33 +308,62 @@ class CameraNode(Node):
 
         return make_camera(source, logger=self.get_logger(), **kwargs)
 
+    # How long to wait after a source reports "nothing new". A source that
+    # already owns a keep-up thread (the v4l2 mailbox) answers instantly and
+    # truthfully, so polling it costs a lock and this wait sets the extra
+    # latency: at the old 20 ms it added up to a frame period of pure sleep on
+    # top of a pipeline built to remove exactly that. One millisecond is short
+    # against a 16 ms frame and long enough not to spin a core.
+    #
+    # It cannot be zero: `WebcamCamera` and the file source BLOCK inside
+    # read(), so for them this is a backstop, not the pacer.
+    _IDLE_WAIT_S = 0.001
+
     def _capture_loop(self):
-        """Daemon thread: continuously read frames and put latest into queue."""
+        """Daemon thread: read the newest frame, hand it to the timer.
+
+        NOT a buffer. The queue below is one deep and drained before every put,
+        so it is a handoff between this thread and the ROS timer -- the same
+        mailbox discipline the v4l2 source uses against the driver. A frame
+        that arrives while the timer is busy REPLACES the one waiting; it never
+        queues behind it.
+        """
         try:
             while rclpy.ok():
                 frame, meta = self._cam.read()
-                if frame is None:
-                    time.sleep(0.02)
+                if frame is None or not meta.fresh:
+                    # `fresh=False` is the honest answer to "asked faster than
+                    # the camera produces", not an error and not a pause.
+                    time.sleep(self._IDLE_WAIT_S)
                     continue
-                if not meta.fresh:
-                    # Paused / EOF — avoid tight spin; display keeps its last rendered frame.
-                    time.sleep(0.02)
-                    continue
-                # Single-slot: drop stale frame, keep only latest.
-                while not self._frame_q.empty():
-                    try:
-                        self._frame_q.get_nowait()
-                    except _queue.Empty:
-                        break
-                self._frame_q.put_nowait((frame, meta))
+                self._publish(frame, meta)
         except Exception:
             pass  # camera released during shutdown
 
-    def _tick(self):
-        try:
-            frame, meta = self._frame_q.get_nowait()
-        except _queue.Empty:
-            return
+    def _publish(self, frame, meta):
+        """Publish the frame that just arrived, on the thread that read it.
+
+        NOT on a timer. A fixed-rate timer draining a one-deep slot samples it
+        at an arbitrary phase, so a frame waits on average half a timer period
+        for no reason -- measured on this hardware as 15.4 ms of age at the
+        slot against 23.8 ms after a 60 Hz timer, i.e. 8.4 ms of pure sitting
+        still, on a pipeline built to remove exactly that.
+
+        It also removes the queue between the two: a slot plus a timer IS a
+        queue, just a shallow one. The publish is now driven by the event that
+        matters (a frame exists) rather than by a clock that has no way to know
+        when that happened.
+
+        The rate is therefore the camera's, which is what `publish_rate_hz<=0`
+        already meant. A positive `publish_rate_hz` still throttles, because
+        deliberately publishing slower than the camera is a real request (a
+        remote viewer, a bandwidth cap) -- it just no longer sets the floor.
+        """
+        if self._min_period > 0.0:
+            now = time.monotonic()
+            if now - self._last_pub < self._min_period:
+                return
+            self._last_pub = now
 
         try:
             img_msg = self._bridge.cv2_to_imgmsg(frame, encoding='bgr8')
@@ -311,8 +372,23 @@ class CameraNode(Node):
             self._dropped += 1
             return
 
-        stamp = self.get_clock().now().to_msg()
-        img_msg.header.stamp    = stamp
+        # THE CAPTURE TIME, NOT NOW(). This stamped `now()` at PUBLISH time,
+        # which makes the header say the frame is 0 ms old at the instant it
+        # leaves the node -- no matter how long it sat in the driver's queue or
+        # this node's own. Everything downstream that reasons about age reads
+        # this field: `_freshness` decays the lateral command by it, the coast
+        # ladder is measured in it, `is_new_frame` gates the mid-hold fire on
+        # it. All of them were therefore measuring age-since-publish and were
+        # structurally blind to the queueing latency, which is the part that
+        # actually grows when the vehicle is busy.
+        #
+        # `meta.stamp_wall` is the capture instant on the wall clock, derived
+        # by the source from the kernel's monotonic capture stamp. Sources that
+        # cannot know better (a video file, a ROS topic) set it at read time,
+        # which is the best available answer there and no worse than before.
+        img_msg.header.stamp    = Time(
+            seconds=int(meta.stamp_wall),
+            nanoseconds=int((meta.stamp_wall % 1.0) * 1e9)).to_msg()
         img_msg.header.frame_id = self._frame_id
 
         info = CameraInfo()
