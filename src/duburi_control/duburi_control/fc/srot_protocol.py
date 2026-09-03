@@ -766,3 +766,24 @@ PCA_FUNC_NAMES      = {PCA_FUNC_NONE:    'unassigned',
                        PCA_FUNC_LIGHT:   'light',
                        PCA_FUNC_CAMERA:  'camera',
                        PCA_FUNC_AUX:     'aux'}
+
+
+# --------------------------------------------------------------------------- #
+#  MOTOR_DETECT (mode 20) -- the GATE 0 procedure, run from here              #
+# --------------------------------------------------------------------------- #
+# The token an operator must hand `SrotFC.motor_detect()` to actually run it.
+# A bool default would make an accidental run one keystroke away, and this
+# routine PULSES ALL EIGHT THRUSTERS and then rewrites the direction signs the
+# attitude controllers depend on.
+MOTOR_DETECT_TOKEN = 'RUN MOTOR DETECT IN WATER'
+
+# 8 motors x (500 ms settle + 500 ms thrust), plus however long the gyro takes
+# to go quiet before each one. 60 s is generous; the refusal on timeout says
+# what it saw rather than assuming failure.
+MOTOR_DETECT_TIMEOUT_S = 60.0
+
+# The per-motor sign MOTOR_DETECT writes. It MULTIPLIES with MOT_n_DIRECTION;
+# neither display shows the product, which is exactly how the 2026-08-07
+# confusion happened (fw mav_stream.cpp:457).
+CAL_MDIR_PARAMS = tuple(f'CAL_MDIR{i}' for i in range(1, 9))
+MOT_DIRECTION_PARAMS = tuple(f'MOT_{i}_DIRECTION' for i in range(1, 9))
