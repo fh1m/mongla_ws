@@ -281,3 +281,93 @@ def test_competition_is_reported_rather_than_left_to_be_discovered(hailo, tmp_pa
         a.infer(FRAME)
         b.infer(FRAME)
     assert any('competing for the chip' in w for w in warned)
+
+
+# --------------------------------------------------------------------------- #
+#  The baked NMS floor
+# --------------------------------------------------------------------------- #
+def _stub_parse_hef(monkeypatch, mod, text):
+    import subprocess
+    monkeypatch.setattr(
+        mod.subprocess, 'run',
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout=text,
+                                                    stderr=''))
+
+
+def _logger():
+    out = {'warn': [], 'info': []}
+    return out, types.SimpleNamespace(warn=out['warn'].append,
+                                      info=out['info'].append)
+
+
+def test_the_baked_floor_is_read_from_the_hef(hailo, tmp_path, monkeypatch):
+    """There is no Python API for it -- `HEF` exposes stream infos and nothing
+    about the post-process -- so it comes off `hailortcli parse-hef`."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    assert hailo.baked_score_threshold('x.hef') == pytest.approx(0.05)
+
+
+def test_an_unreadable_floor_is_None_not_a_guess(hailo, monkeypatch):
+    """A default would be worse than nothing: it would let the warning below
+    fire, or not fire, on a number nobody measured."""
+    monkeypatch.setattr(hailo.subprocess, 'run',
+                        lambda *a, **k: (_ for _ in ()).throw(OSError('no tool')))
+    assert hailo.baked_score_threshold('x.hef') is None
+
+
+def test_asking_below_the_floor_is_reported(hailo, tmp_path, monkeypatch):
+    """The floor is invisible otherwise: the HEF drops everything under it
+    before the host sees a byte, so a mission believes it lowered the bar."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    warned, log = _logger()
+    hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                        conf=0.02, class_allowlist=None, warmup=False,
+                        logger=log)
+    assert any('BELOW' in w and '0.050' in w for w in warned['warn'])
+
+
+def test_the_cuda_operating_point_is_reported_on_an_int8_graph(
+        hailo, tmp_path, monkeypatch):
+    """0.35-0.45 is the CUDA number, and every launch path ships it. INT8 costs
+    ~0.08 of score, so it is ~3x the intended point -- the single most likely
+    cause of 'the Hailo model misses things'."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    warned, log = _logger()
+    hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                        conf=0.45, class_allowlist=None, warmup=False,
+                        logger=log)
+    assert any('intended operating point' in w for w in warned['warn'])
+
+
+def test_the_intended_point_is_quiet(hailo, tmp_path, monkeypatch):
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    warned, log = _logger()
+    hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                        conf=0.15, class_allowlist=None, warmup=False,
+                        logger=log)
+    assert warned['warn'] == []
+
+
+def test_a_stock_model_baked_at_0_2_does_not_get_the_int8_advice(
+        hailo, tmp_path, monkeypatch):
+    """The advice is 'run at 0.12-0.15', and on a stock HEF that is not
+    reachable -- its floor IS 0.200. Repeating it there would be advice the
+    operator cannot follow."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.200\n')
+    warned, log = _logger()
+    hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                        conf=0.45, class_allowlist=None, warmup=False,
+                        logger=log)
+    assert not any('intended operating point' in w for w in warned['warn'])
+
+
+def test_a_LATER_conf_change_is_checked_too(hailo, tmp_path, monkeypatch):
+    """conf is live-tunable from the mission and from the console, so checking
+    only at construction covers the case that is least likely to be wrong."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    warned, log = _logger()
+    d = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                            conf=0.15, class_allowlist=None, warmup=False,
+                            logger=log)
+    d.update_conf(0.01)
+    assert any('BELOW' in w for w in warned['warn'])

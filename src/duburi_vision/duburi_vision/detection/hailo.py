@@ -44,6 +44,8 @@ vision-servoed hull means driving away from the target.
 from __future__ import annotations
 
 import os
+import re
+import subprocess
 import threading
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
@@ -57,6 +59,14 @@ _INPUT_FALLBACK = 640
 # How many activation swaps before saying so. One is the normal handover from
 # a camera switch; a stream of them means two detectors are competing.
 _SWAP_WARN_AT = 20
+
+# The operating point this backend is compiled FOR. Round 24 measured INT8
+# costing ~0.08 of confidence at the 0.20 point while NOT moving the box centre
+# (2.5 px against a 2.72 px fp32-vs-fp32 noise floor), so the detections are
+# there and score lower. Every launch path ships 0.35-0.45, which is the CUDA
+# number.
+_INT8_OPERATING_POINT_MIN = 0.12
+_INT8_OPERATING_POINT_MAX = 0.15
 
 
 def _load_class_index(model_path: str) -> Optional[Dict[int, str]]:
@@ -93,6 +103,35 @@ def letterbox(im: np.ndarray, size: int):
     px, py = (size - nw) // 2, (size - nh) // 2
     out[py:py + nh, px:px + nw] = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LINEAR)
     return out, s, px, py
+
+
+
+def baked_score_threshold(hef_path: str) -> Optional[float]:
+    """The NMS floor compiled INTO the HEF, or None if it cannot be read.
+
+    There is no Python API for this -- `HEF` exposes stream infos and nothing
+    about the post-process, and the configured network group has only
+    `set_scheduler_threshold`, which is a different thing entirely. So this
+    shells out to `hailortcli parse-hef`, which prints it and costs 15 ms once
+    per detector.
+
+    It matters because the floor is INVISIBLE otherwise: the HEF's NMS layer
+    drops everything below it before the host sees a byte, so a mission that
+    sets conf=0.03 gets 0.05 and is told nothing. Ours are 0.050 and the stock
+    Model Zoo models are 0.200 -- which is why the 0.12-0.15 operating point
+    this backend recommends is reachable on our models and NOT on a stock one.
+
+    Best effort by design. `hailortcli` may not be on PATH, and a detector that
+    refused to start over a diagnostic would be worse than one that says it
+    could not read it.
+    """
+    try:
+        out = subprocess.run(['hailortcli', 'parse-hef', hef_path],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:                                            # noqa: BLE001
+        return None
+    m = re.search(r'Score threshold:\s*([0-9.]+)', out)
+    return float(m.group(1)) if m else None
 
 
 # --------------------------------------------------------------------------- #
@@ -200,13 +239,19 @@ class HailoDetector(Detector):
         self._swaps = 0
         self._ready = True
 
+        self._baked_conf = baked_score_threshold(self._path)
+
         self._allow_ids: Optional[set] = None
         self.update_allowlist(class_allowlist)
 
         if self._log:
+            baked = ('?' if self._baked_conf is None
+                     else f'{self._baked_conf:.3f}')
             self._log.info(
                 f'[HAILO] {Path(self._path).name} in={self._size}x{self._size} '
-                f'classes={len(self._names)} conf={self._conf:.2f}')
+                f'classes={len(self._names)} conf={self._conf:.2f} '
+                f'baked={baked}')
+        self._warn_conf(self._conf)
 
         if warmup:
             # The first infer pays one-time setup. Paying it here keeps it out
@@ -246,6 +291,37 @@ class HailoDetector(Detector):
         the bar.
         """
         self._conf = float(conf)
+        self._warn_conf(self._conf)
+
+    def _warn_conf(self, conf: float) -> None:
+        """Say when the runtime threshold cannot do what it was asked to.
+
+        The class docstring has promised this log since the backend was
+        written and it did not exist, so a mission could believe it had lowered
+        the bar and be silently overruled by a graph compiled hours earlier on
+        an x86 box.
+        """
+        if self._log is None or self._baked_conf is None:
+            return
+        if conf < self._baked_conf - 1e-6:
+            self._log.warn(
+                f'[HAILO] conf={conf:.3f} is BELOW this HEF\'s baked NMS floor '
+                f'of {self._baked_conf:.3f} -- everything under the floor was '
+                f'discarded on-chip and no runtime value brings it back. The '
+                f'effective threshold is {self._baked_conf:.3f}. Recompile the '
+                f'model if you need lower.')
+        elif conf > _INT8_OPERATING_POINT_MAX and self._baked_conf <= 0.1:
+            # Not an error -- a mission may want a tight gate -- but this is the
+            # single most likely cause of "the Hailo model misses things": INT8
+            # costs ~0.08 of score without moving the box, so a CUDA-path 0.45
+            # is roughly three times the intended operating point here.
+            self._log.warn(
+                f'[HAILO] conf={conf:.3f} on an INT8 graph. INT8 costs ~0.08 of '
+                f'score without moving the box centre, so the CUDA path\'s '
+                f'0.35-0.45 is ~3x the intended operating point. This model is '
+                f'baked at {self._baked_conf:.3f} precisely so '
+                f'{_INT8_OPERATING_POINT_MIN:.2f}-{_INT8_OPERATING_POINT_MAX:.2f} '
+                f'is available.')
 
     def update_max_det(self, max_det: int) -> None:
         self._max_det = int(max_det)
