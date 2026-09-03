@@ -122,3 +122,54 @@ We are not asking for `SROT_VISION` soon. The vision loop closes today through
 `MANUAL_CONTROL` in `STABILIZE` and is measured end to end. What we are asking
 for is **the id allocation in §3**, because that is cheap now and irreversible
 later.
+
+---
+
+## 6. Answering your open questions (`VISION_API.md` §9)
+
+You answered Q1 (subtype) and Q2 (gyro rate for yaw damping) in
+`FIRMWARE_CHANGELOG_FOR_DUBURI.md` and we agree with both — Q2 especially, since
+differentiating a 20 Hz bearing on our side would be strictly worse than a
+500 Hz rate you already have. Three were left open. Our positions, so they stop
+being open:
+
+**Q3 — a persistent "vision hold" that outlives one command: yes, eventually,
+but not first.** Every mission we run today is phrased as a bounded command with
+a deadline, and that is deliberate: a bounded verb has an ACK, and the ACK is
+what sequences the mission. A hold that outlives its command needs a second
+mechanism to end it and a defined behaviour when the target is lost, which is
+new failure surface for a capability nothing currently asks for. The one case
+that genuinely wants it is a manipulator task, and we have no manipulator on the
+vehicle. **Suggest deferring until there is one**; `p4` (hold seconds) covers
+every task in the 2026 set.
+
+**Q4 — range: agreed, do not use our monocular distance.** We can send it and we
+do not trust it for control. If the board ever wants real range, a known-size
+target plus angular size is the better construction, and we would rather send
+you the angular size (which we measure directly and well) than a number derived
+from a depth network we cannot validate underwater. **We will keep `distance`
+unset rather than send something plausible-looking.** A field that is present
+and wrong is worse than one that is absent, which is the same rule your
+`DEPTH_ERR` suppression follows.
+
+**Q5 — `target_num`: please treat it as a CLASS id, from a frozen table.** This
+is the one we have a concrete need on. We currently send a hardcoded `0` from
+the runtime while `tools/srot_uplink_check.py` sends `d.class_id` — our own two
+senders disagree about what the field means, which is our bug and we are fixing
+it. The fix needs the mapping to be a **frozen, append-only table** shared by
+both repos, exactly like `SERVOn_FUNCTION` and `movement::Type`:
+
+- **append-only**, because inserting a value silently renames every class after
+  it — the same hazard your `SROT_SERVO_FUNC_*` comment warns about
+- **0 reserved for "unspecified"**, so an unconfigured sender reads as
+  unassigned rather than as whatever class happens to be first
+- mirrored in `srot_protocol.py` on our side and in the spec on yours
+
+We only ever track one target at a time and expect that to continue, so we are
+**not** asking for multi-target. We would just like `target_num` to mean
+something stable if you ever key behaviour on it (e.g. a different standoff for
+a torpedo hole than for a gate).
+
+If you would rather it stayed a pure instance counter, say so and we will send
+`0` deliberately and document it as reserved — either is fine, but the two
+senders on our side need one answer.
