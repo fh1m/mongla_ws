@@ -1,0 +1,37 @@
+# Port-stable camera identity: /dev/duburi_cam_forward and _downward.
+#
+# WHY THIS FILE EXISTS. `cameras.yaml` has always named the cameras by
+# `/dev/v4l/by-path/platform-xhci-hcd.N-usb-...`, and those ID_PATH values are
+# CORRECT -- udevadm reports exactly them. But Raspberry Pi OS's udev rules
+# create only `/dev/v4l/by-id/` for USB video, never `/dev/v4l/by-path/`. So on
+# this Pi both profiles named a symlink the distro does not make, both fell
+# through to the integer index, and BOTH CAMERAS RESOLVED TO /dev/video0 --
+# whichever node started first won and the other died with "failed to open".
+# That is worse than the swap the by-path convention exists to prevent.
+#
+# WHY NOT by-id. The vehicle carries TWO IDENTICAL Blue Robotics cameras and
+# the Sonix module already here reports `SN0001` -- a serial the vendor did not
+# bother to make unique. by-id cannot tell two of them apart; the USB PORT can,
+# which is the whole point of by-path.
+#
+# ID_PATH is the physical port, so re-plugging into the SAME socket keeps the
+# name and moving to another socket changes it. That is the intended behaviour:
+# a camera in the wrong port should be an error, not a silent swap.
+#
+# index0 only: a UVC camera exposes a second /dev/video* node for metadata that
+# cannot capture, and opening it looks exactly like a dead camera.
+#
+#   sudo cp tools/udev/99-duburi-cameras.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=video4linux
+#   ls -l /dev/duburi_cam_*
+#
+# Re-derive the ports for a new build with:
+#   udevadm info -n /dev/videoN | grep ID_PATH=
+
+SUBSYSTEM!="video4linux", GOTO="duburi_cam_end"
+ATTR{index}!="0", GOTO="duburi_cam_end"
+
+ENV{ID_PATH}=="platform-xhci-hcd.1-usb-0:2:1.0", SYMLINK+="duburi_cam_forward"
+ENV{ID_PATH}=="platform-xhci-hcd.0-usb-0:1:1.0", SYMLINK+="duburi_cam_downward"
+
+LABEL="duburi_cam_end"
