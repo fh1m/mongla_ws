@@ -291,7 +291,23 @@ class SrotFC(FlightController):
         return self.master.messages.get(msgtype)
 
     def _clear_ack(self):
+        """Discard the previous command's replies before issuing the next one.
+
+        STATUSTEXT goes with the ACK, and that is not tidiness. pymavlink keeps
+        ONE message per msgid, and STATUSTEXT is the ONLY thing separating two
+        opposite operator instructions: fw rev 13 answers both "board busy,
+        safe to retry" and "refused -- arm first" with ACK_TEMPORARILY_REJECTED,
+        and `_terminal_reason` tells them apart by reading the board's text.
+
+        Left uncleared, an "arm first" from an earlier disarmed attempt sits in
+        that slot indefinitely. The next genuine state-lock rejection then reads
+        as "the board is DISARMED. Arm, then retry." on a board that is armed --
+        so the operator acts on the wrong half of a fork whose whole purpose is
+        to be unambiguous. Same one-slot hazard as PARAM_VALUE and
+        NAMED_VALUE_FLOAT, but here it is load-bearing.
+        """
         self.master.messages.pop('COMMAND_ACK', None)
+        self.master.messages.pop('STATUSTEXT', None)
 
     def _named_value(self, name, max_age_s: float = 3.0):
         """Latest NAMED_VALUE_FLOAT for `name`, or None if it has not arrived recently.

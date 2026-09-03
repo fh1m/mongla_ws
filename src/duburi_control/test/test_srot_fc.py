@@ -38,6 +38,13 @@ class _FakeMav:
         # Simulate the board installing a COMMAND_ACK for this command, if scripted.
         if self._m.auto_ack is not None and self._m.auto_ack.command == cmd:
             self._m.messages['COMMAND_ACK'] = self._m.auto_ack
+        # And the board's own text, which arrives IN REPLY -- never before the
+        # command. `_clear_ack` pops STATUSTEXT with the ACK, because that slot
+        # is the only thing separating "busy, retry" from "arm first", so a
+        # reply planted up front is discarded exactly as a stale one would be.
+        if self._m.auto_status is not None:
+            self._m.messages['STATUSTEXT'] = SimpleNamespace(
+                text=self._m.auto_status)
 
     def manual_control_send(self, target, x, y, z, r, buttons):
         self.sent.append(('manual', x, y, z, r, buttons))
@@ -65,6 +72,7 @@ class _FakeMaster:
     def __init__(self):
         self.messages = {}
         self.auto_ack = None       # SimpleNamespace(command=, result=, progress=)
+        self.auto_status = None    # bytes: STATUSTEXT the board sends in reply
         self.roles = {}            # 'SERVOn_ROLE' -> int; default 2 (SWITCH)
         self.mav = _FakeMav(self)
 
@@ -144,7 +152,7 @@ def test_move_cancelled_is_preempted_not_hang():
 
 def test_move_failed_is_failed_with_statustext():
     fc = _fc()
-    fc.master.messages['STATUSTEXT'] = SimpleNamespace(text=b'No depth sensor')
+    fc.master.auto_status = b'No depth sensor'
     fc.master.auto_ack = _ack(sp.ACK_FAILED)
     res = fc.move('set_depth', target=-1.0)
     assert res.code == FAILED
@@ -195,7 +203,7 @@ def test_arm_rejected_surfaces_prearm_statustext():
     fc = _fc()
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time())
-    fc.master.messages['STATUSTEXT'] = SimpleNamespace(text=b'PreArm: gyro cal')
+    fc.master.auto_status = b'PreArm: gyro cal'
     fc.master.auto_ack = _ack(sp.ACK_FAILED, command=_ARM_CMD)
     ok, reason = fc.arm(timeout=0.3)
     assert not ok and 'PreArm: gyro cal' in reason
