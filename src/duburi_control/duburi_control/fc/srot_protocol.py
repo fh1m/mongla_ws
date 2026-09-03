@@ -298,6 +298,54 @@ MOVE_YAW_RATE   = 45.0    # deg/s default turn rate when p3=0
 MOVE_DEPTH_RATE = 0.20    # m/s dive/ascend ramp
 GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.5)
 
+# --- the LIVE pilot gain, and why setting the parameter cannot reach it ------
+#
+# `JS_GAIN_DEFAULT` is only the POWER-ON value. The firmware keeps the live gain
+# in `s_gain_live`, which lazily adopts the parameter "on first use"
+# (mav_commands.cpp:218) -- and `mav_stream.cpp:850` reads `pilotGain()` in the
+# telemetry loop to publish the GAIN channel. That loop runs from boot, so the
+# latch has ALWAYS happened before a companion finishes connecting.
+#
+# So `set_default_gain()` cannot affect the session that calls it, by
+# construction. Measured on the live board: after our startup writes
+# JS_GAIN_DEFAULT = 1.0, every GAIN sample across a 44 s capture read 0.500.
+# The firmware's own source records the cost of this trap -- "They lost a whole
+# pool session to exactly this: a JS_GAIN_DEFAULT = 1.0 write that never
+# persisted, leaving MANUAL_CONTROL at half authority with nothing to indicate
+# it."
+#
+# The one in-session path the firmware offers is a joystick button function
+# delivered in MANUAL_CONTROL.buttons, dispatched on the PRESS EDGE
+# (`mc.buttons & ~s_prev_buttons`). Verified live: 0.5 -> 1.0 in five presses,
+# the board announcing "Gain 60%" ... "Gain 100%" as it went.
+# MAV_SYS_STATUS_SENSOR_LEAK, from their vendored common.h:139. The board sets
+# `present` always, `enabled` from LEAK_EN, and `health` SET = dry / CLEAR = leak.
+SYS_STATUS_SENSOR_LEAK = 2
+
+JS_FUNC_NONE      = 0
+JS_FUNC_GAIN_INC  = 42
+JS_FUNC_GAIN_DEC  = 43
+GAIN_MIN          = 0.10   # mav_commands.cpp:38
+GAIN_MAX          = 1.00
+GAIN_STEP         = 0.10
+BTN_FUNC_PARAM    = 'BTN{}_FUNCTION'    # BTN0..BTN15
+N_BUTTONS         = 16
+
+# What the board does to a translation demand AFTER the gain, which our control
+# loop does not model:
+#
+#     demand = ((1 - PILOT_EXPO) * sp + PILOT_EXPO * sp**3) * PILOT_SPEED
+#
+# with DEF_PILOT_EXPO = 0.30 and DEF_PILOT_SPEED = 1.0 (config.h:537-538). So
+# the SMALL-SIGNAL gain a vision loop actually sees is
+# `GAIN * (1 - PILOT_EXPO)` -- 0.35 at boot, 0.70 even after the gain fix
+# above. The expo exists so a human stick has fine resolution near centre; for
+# a proportional controller it is an unmodelled 30 % droop exactly in the
+# terminal-alignment regime, plus a cubic term that makes one kp wrong at both
+# ends of the error range.
+PILOT_EXPO_DEFAULT  = 0.30
+PILOT_SPEED_DEFAULT = 1.0
+
 # |DEPTH_OUT| at or above this while DISARMED means the depth controller is already
 # demanding (near-)full heave, and arming would hand that straight to the thrusters.
 # 0.9 rather than 1.0: the failure is saturation, and a loop pinned at 0.95 is in the
