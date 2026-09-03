@@ -200,3 +200,113 @@ every payload after it.
 - `ESC_STATUS` (291) is **not in pymavlink's dialect**: it shows as
   `UNKNOWN_291` at 9.85 Hz and is present in every raw frame. Another reason the
   replay log stores bytes.
+
+---
+
+# The full sweep — all three repos, 2026-09-03
+
+Read end to end: firmware 22.8 k lines, Bondor 6.9 k, ESC flasher 3.4 k. What
+follows is only what changes how `duburi_ws` behaves.
+
+## 9. ⛔ A move can report COMPLETE while it is still running
+
+`snapshot()` caches last-good values for the thruster block and explains why:
+*"a 3 ms miss is not rare … the previous behaviour transmitted all-zero RPM,
+which made a perfectly healthy thruster read 0 in the GCS at random."*
+
+**The `mtx_control` block two blocks above has no cache and no `else`**, so a
+missed lock leaves the default-constructed `Snap`: `armed=false`, `mode=0`,
+**`mv_active=false`**. And `updateMove` reads
+
+```cpp
+bool done = (s.mv_done_seq == s_seq) || (s_seen_active && !s.mv_active);
+```
+
+So one missed 5 ms lock on a mutex the 500 Hz loop takes several times per cycle
+emits a terminal `ACCEPTED` at 100 %, latched by `s_resolved`. **Rev 13's
+failure with a different cause** — except the hull is not dead, it is still
+under way. Filed as **PR #8**. Until it lands, do not act on a single terminal
+move ACK or a single post-arm heartbeat.
+
+## 10. Absence, by message — the table to code against
+
+| signal | what "no data" looks like |
+|---|---|
+| `SCALED_PRESSURE2`, `WTEMP`, `DEPTH_ERR`, `DEPTH_OUT`, `BATTERY_STATUS` | **suppressed** — correct, absence is the signal |
+| `SCALED_IMU2.temperature` | `0` = MAVLink "not provided" sentinel |
+| LoRa `wtemp_c` | `INT8_MIN` sentinel |
+| **`VFR_HUD.alt`** | **`-0.0`, ungated** — reads as "at the surface" with no baro |
+| **`VFR_HUD.throttle`** | **always 0** — `ControlState.out_*` has no writers |
+| **`POWER_STATUS.Vservo`, `CURR`** | **0**, ungated (`BATT_CURR_MULT` is 0.0f) |
+| **`ATTITUDE`, `ESC_*`** | **HELD** at the last good value, streamed at full rate |
+
+So: gate depth on `SCALED_PRESSURE2` presence + `BARO_HEALTH`, never on
+`VFR_HUD.alt`. Cross-check `ATTITUDE` against the `SYS_STATUS` health bits every
+frame, because a dead IMU freezes the attitude rather than dropping it.
+
+## 11. Two more capabilities we own and were not using
+
+**Signed per-thruster RPM.** `ESC_STATUS` (291) is `int32` and signed;
+`ESC_TELEMETRY_*` is `uint16` magnitude. pymavlink does not discard 291 — it
+returns `MAVLink_unknown` carrying the whole frame (`UNKNOWN_291`), 434/434
+CRC-valid on a recorded dive. ⚠ **That return happens BEFORE the CRC check**, so
+validate `x25crc` with `crc_extra = 10` yourself. Built: `esc_status_rpm()`.
+
+**Per-thruster presence.** `thrusters.esc_present` reaches the wire ONLY as
+English — `"Thrusters wired: 1,2,4 (absent: 3)"` at the first arm, and
+`"Thruster N LOST telemetry"` edge-triggered. Sent once each. Built:
+`esc_presence()` / `thruster_health()`, parsed from the STATUSTEXT ring.
+
+**Presence UNKNOWN is not presence OK.** An ESC without Bluejay has no
+bidirectional DShot at all and reports nothing while its motor spins perfectly.
+
+## 12. The boot burst
+
+~13 STATUSTEXTs back to back (`task_mavlink.cpp:29-141`), of which a poller sees
+one. Two change vehicle behaviour silently:
+
+- **`"Params reset to build defaults"`** — a `PARAM_DEFAULTS_VER` bump rewrote
+  every row, so `JS_GAIN_DEFAULT` is back to 0.5 (half authority on every
+  translation) and `LEAK_EN` back to 0.
+- **`"NVS reformatted"`** — additionally loses the sensor calibration.
+
+`boot_warnings()` surfaces these; they belong in `bringup_check --srot` as
+FAILs.
+
+## 13. Corrections to what this document said before the sweep
+
+- **GATE 0 is NOT closed by adding `DO_MOTOR_TEST`.** Two different mechanisms:
+  `DO_MOTOR_TEST` (209) spins ONE motor at a chosen throttle and needs ARMED
+  plus a ≥2 Hz keep-alive; **`MODE_MOTOR_DETECT` (20) is what writes
+  `CAL_MDIRn`**, and per rev 6 it needs **water and a free-to-rotate hull** —
+  it finishes FAIL below 0.05 rad/s, which is what an in-air run produces.
+  Adding both driver methods is right; describing either as closing GATE 0 is
+  not.
+- **⚠ `MOTOR_DETECT` is not a neutral read on this board.** `MOT_n_DIRECTION`
+  and `CAL_MDIRn` **multiply**, this hull has `MOT_1`/`MOT_8 = -1` set
+  **runtime-only, deliberately unsaved**, and `FRAME_REVERSE = 1` — which a
+  successful detect makes wrong. Running it changes stored calibration that
+  then composes with two live overrides. Any driver method must require an
+  explicit confirmation naming those three values.
+- `DIVE`'s **`p3` is ignored** — the descent rate is always `MOVE_DEPTH_RATE`
+  (0.20 m/s). The depth-*rate* loop is deferred roadmap work.
+- **Missions are RAM-only** (`mission.cpp` is a plain array, no NVS) despite
+  `AUTOPILOT_VERSION` advertising `MISSION_INT`. Re-upload after every reboot.
+- **`AUDIT.md` is not the defect ledger** — it stops at rev 2 and cites R46-R56,
+  which do not exist in it. `include/config.h`'s revision block is the ledger,
+  and it runs to rev 14.
+- **Bondor's `FW_BEHAVIOUR_REV_REQUIRED` is still 2** (`protocol.ts`); ours is
+  10. Rev 13 is where a disarmed `SROT_MOVE` stopped faking `ACCEPTED` at 100 %.
+  Their `FlightMode` enum also omits `STUNT` (100) and `PATTERN` (101), which
+  their own LoRa bridge forwards.
+
+## 14. What a Bluejay flash is a precondition for
+
+From the ESC flasher's own docs: stock **BLHeli_S has no bidirectional DShot**,
+so an un-flashed ESC reports no telemetry and the board reads "no ESC" while the
+motor beeps and spins. That is the precondition for ESC presence detection, the
+Pico's RPM loop, and constant-distance timed moves — *the whole `SROT_MOVE`
+design*. Motor direction must be **Forward/Reverse (3D mode)**; the Pico emits
+DShot 3D framing (`1048` neutral) and this is not optional. Until an ESC reports,
+the Pico drives that motor open-loop with no integrator, so it is safe to arm
+and test with stock ESCs.

@@ -1,9 +1,25 @@
 # The Jetson↔SROT vision/control split
 
-> **Status: designed, not built.** The firmware spec is
-> [`Mongla_others/srot-control-board/VISION_API.md`](../../../Mongla_others/srot-control-board/VISION_API.md);
-> the board does not implement it yet. `vision_align` / `vision_move` remain **refused** on the
-> srot backend (`srot_fc.UNSUPPORTED_VERBS`) until it does. Nothing in this document is live.
+> **Status (corrected 2026-09-03): step 2 of the migration below IS live; the
+> board's half is not.** The firmware spec is
+> [`Mongla_others/srot-control-board/VISION_API.md`](../../../Mongla_others/srot-control-board/VISION_API.md).
+>
+> Two corrections to what this header used to say, both of which had been false
+> for a round:
+>
+> * **`vision_align` / `vision_move` are NOT refused on srot.** They were
+>   un-refused in round 26 and actuate today through `MANUAL_CONTROL` in
+>   `STABILIZE`, measured end to end at 70 Hz. Only `STABILIZE` — a vision loop
+>   in `MANUAL` has no attitude or heading hold, so the bounding box moves for
+>   reasons unrelated to the vehicle's position (`vision_verbs._SROT_VISION_MODES`).
+> * **"Nothing in this document is live" is wrong.** The `LANDING_TARGET`
+>   producer is built and default-off, carrying real bearings from the measured
+>   calibration, plus the `coasted` bit, the true gap age and the frozen class
+>   map. What is missing is the CONSUMER: the board parses msgid 149 and drops
+>   it, and `MAV_CMD_SROT_VISION` (31001) returns `UNSUPPORTED`.
+>
+> The FOV that blocked their half is measured and handed over
+> (PR #2), so the remaining work there is theirs.
 
 ## The problem
 

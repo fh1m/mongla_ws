@@ -406,12 +406,6 @@ N_BUTTONS         = 16
 PILOT_EXPO_DEFAULT  = 0.30
 PILOT_SPEED_DEFAULT = 1.0
 
-# |DEPTH_OUT| at or above this while DISARMED means the depth controller is already
-# demanding (near-)full heave, and arming would hand that straight to the thrusters.
-# 0.9 rather than 1.0: the failure is saturation, and a loop pinned at 0.95 is in the
-# same state as one pinned at 1.00. A settled bench loop sits near 0.
-DEPTH_OUT_ARM_LIMIT = 0.90
-
 # The arming guard's real threshold, in METRES of depth error at the surface.
 #
 # It used to be the 0.90 above, applied to DEPTH_OUT. Two things changed that:

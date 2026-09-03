@@ -94,9 +94,18 @@ partial validation.
 Rev 9 makes the disarmed half honest rather than fixing this: `DEPTH_ERR`/`DEPTH_OUT` are now
 **absent** while the controller is not running, instead of streaming a frozen register.
 
-⚠ **`check_depth_loop_settled()` is now structurally dead and must be moved.** It is only
-ever called while disarmed, and under rev 9 `DEPTH_OUT` is *always* absent then — so it can
-never gate anything. Move it onto **`DEPTH_CMD`**, which is deliberately still live:
+✅ **DONE (round 26) — this section described work that is now built.**
+`check_depth_loop_settled()` reads **`DEPTH_CMD`** and derives its threshold from
+`DEPTH_P`, exactly as specified below. The drift test then caught a second bug in
+it: our `DEPTH_P` fallback was a stale **3.0** against a board running **0.5**,
+so the guard divided every reading by 6× too much and a barometer 0.90 m off at
+the surface — three times the limit — back-converted to 0.20 m and **armed**. It
+failed OPEN, on the one interlock between a phantom baro and full vertical
+thrust. `sp.DEPTH_P_DEFAULT` is 0.5 now and the arithmetic is pinned by
+`test_srot_safety.py`.
+
+The in-water half of GATE 2 is still open. The rationale below is kept because it
+is the reasoning the implementation follows:
 
 - Same `±1.0` clamp, so the 2026-08-02 phantom-baro case (`−3…−6.7 m` → `3.0 × −3.1`)
   still pins at **−1.00**.
@@ -106,6 +115,47 @@ never gate anything. Move it onto **`DEPTH_CMD`**, which is deliberately still l
 - ⚠ **Derive the threshold from `DEPTH_P`, don't hardcode `0.90`.** The mapping is
   `|DEPTH_CMD| ≥ 0.90 ⟺ |depth − 0.10| ≥ 0.30 m` **at `DEPTH_P = 3.0`**, and it moves with
   the gain. A healthy surface reading (`depth ≈ 0.026`) gives `≈ −0.22`, comfortably clear.
+
+---
+
+## GATE 2b — configuration, found by reading the firmware (2026-09-03)
+
+Three parameter states that are not defects but will bite in water. All read off
+the live board.
+
+**`LEAK_EN = 0.0`** — and that is the FIRMWARE DEFAULT, not just our board's
+setting (`params.cpp`). It gates the leak failsafe **and** the pre-arm refusal,
+so as configured a leak neither blocks arming nor surfaces the hull. Verified
+safe to enable: with `LEAK_EN = 1` the sensor reads **DRY**, so it will not cause
+spurious refusals. The only honest read is
+`SYS_STATUS.onboard_control_sensors_enabled_extended`, which is what
+`srot_fc.sys_status_leak()` keys on — it returns **None** when nothing is
+watching, never `False`.
+
+**`FS_GCS_COMPID` must be 191.** Bondor's bench-mode button writes **0**
+(wildcard) and its own banner warns *"do NOT press Save on the Parameters tab
+while it is active, or it becomes permanent"* — while its payload workflow tells
+operators to press Save. A permanent 0 means **a dead companion is
+indistinguishable from a live Bondor**, and the vehicle station-keeps at depth
+instead of surfacing. Add it to the preflight read.
+
+**`MOT_BAT_V_MAX = 0`** with `ESPNOW_EN = 1`: the battery feedforward is
+available and switched off, so a timed leg travels further on a full pack than a
+flat one. Their own doc calls this "usually the better first move — it needs no
+water and no learning period". Setting it is a tuning decision, not a fix.
+
+---
+
+## GATE 4 — do not share UDP 14550 with Bondor
+
+Measured on their side, and the danger runs the opposite way to the intuition:
+both processes bind with `SO_REUSEADDR`, both binds succeed, and **the newcomer
+takes the stream** — 544 datagrams in 6 s while the incumbent got a trickle.
+Bondor does not go blind when it opens on top of a running mission; it works
+perfectly and silently starves the companion of telemetry and command ACKs, with
+nothing in either UI to say why.
+
+USB serial is single-owner, so there the conflict is loud. UDP is the quiet one.
 
 ---
 
