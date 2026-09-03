@@ -126,8 +126,21 @@ def _parse_model_conf(s: str) -> Dict[str, float]:
 
 
 class DetectorNode(Node):
-    def __init__(self):
-        super().__init__('duburi_detector')
+    def __init__(self, node_name: str = 'duburi_detector', *,
+                 parameter_overrides=None):
+        """`node_name` and `parameter_overrides` exist so TWO of these can live
+        in one process, which is not a nicety on the Pi -- it is the only way
+        the two-camera path runs at all.
+
+        The Hailo chip allows one VDevice per PROCESS: a second detector
+        process gets HAILO_OUT_OF_PHYSICAL_DEVICES (74). Launch's own `name=`
+        and `parameters=` are process-wide remappings (`__node:=`, `__params:=`)
+        and cannot address two nodes in one process, so the name and the
+        parameter set have to arrive as arguments instead. Defaults keep the
+        single-node executable byte-identical in behaviour.
+        """
+        super().__init__(node_name,
+                         parameter_overrides=list(parameter_overrides or []))
 
         self.declare_parameter('camera',              'laptop')
         self.declare_parameter('image_topic',         '')

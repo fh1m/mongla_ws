@@ -12,6 +12,10 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name,              ['package.xml']),
         ('share/' + package_name + '/config',  glob('config/*.yaml')),
+        # The measured camera intrinsics were NOT installed, so even a launch
+        # file that passed the share path would have found nothing there.
+        ('share/' + package_name + '/config/calibration',
+            glob('config/calibration/*.json')),
         ('share/' + package_name + '/launch',  glob('launch/*.launch.py')),
         ('share/' + package_name + '/models',  glob('models/*.yaml') + glob('models/*.pt') + glob('models/*.hef')),
         # Web console static assets (served by the mission_web node from its source
@@ -31,6 +35,7 @@ setup(
         'console_scripts': [
             'camera_node         = duburi_vision.camera_node:main',
             'detector_node       = duburi_vision.detector_node:main',
+            'detector_dual_node  = duburi_vision.detector_dual_node:main',
             'tracker_node        = duburi_vision.tracker_node:main',
             'vision_node         = duburi_vision.vision_node:main',
             'vision_check        = duburi_vision.utils.check_pipeline:main',
