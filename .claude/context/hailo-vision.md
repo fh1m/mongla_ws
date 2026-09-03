@@ -54,7 +54,7 @@ no host overhead to recover on this model. That is the opposite of the case the
 literature describes (a documented example ran 40-45 FPS at 15-20 % chip
 utilisation, a 25x host-bound gap) — **on our model the chip is the bottleneck.**
 
-## 3. THE FINDING: context count, not model size, sets the ceiling
+## 3. THE FINDING: context count sets the ceiling — and the family sets the context count
 
 ```
 model                    contexts        HW-only FPS
@@ -84,6 +84,38 @@ of latency — but it identifies the cause.
 
 `--power-mode ultra_performance` is **+2.2 % for free** (98.1 -> 100.3) and we
 have never used it.
+
+### 3a. The confound, and the check that separated it
+
+The paragraph above was first written as *"the binding constraint is context
+reconfiguration, not compute"*, which does not follow from that table on its
+own: **every multi-context model there is YOLO11 and both single-context models
+are YOLOv8**, so "context count" and "model family" moved together. The Model
+Zoo's own table (yolov11n 185 vs yolov8n 1036) says the same thing, and
+distrusting it was correct — it is the round-24 trap — but distrusting a number
+is not the same as separating a cause.
+
+The discriminating evidence was already on the Pi. All four of those are
+**Hailo's own Model Zoo compiles at the same 640 input on the same chip**:
+
+```
+yolov8n    5.1 MB   Single Context
+yolov8s   11.3 MB   Single Context      <- LARGER and still single
+yolov11n   7.0 MB   Multi Context x3
+yolov11s  18.0 MB   Multi Context x3
+```
+
+It splits cleanly by **family**, not by size — the 11.3 MB YOLOv8 fits one
+context while the 7.0 MB YOLO11 does not. So the DFC's allocator splits a
+YOLO11 graph at 640 into three contexts even with Hailo's own tuned `.alls`,
+and our custom 3-class YOLO11n is ×3 for the same structural reason their
+80-class one is.
+
+**Consequence, stated so it is not rediscovered:** recompiling our model to a
+single context is very unlikely to be available. The 4.2x is not a win we are
+leaving on the table — it is a win that belongs to a different architecture,
+and reaching it means retraining on YOLOv8, which is out of this round's scope
+and would have to be justified against accuracy, not FPS.
 
 ## 4. The blocking API's cost is constant, and only visible on a fast graph
 
@@ -135,14 +167,24 @@ budget, a p95 of 22.7 ms is a missed tick.
 
 ## 7. What this means for us, in order
 
-1. **Our models are 3-context and that is the whole ceiling.** Recompiling the
-   3-class model to a **single-context** graph is worth up to **4.2x**, and it is
-   the only change that unlocks the rest.
-2. **Async is worthless until (1) happens** — measured 1.00x on the current
-   graph — and worth ~2.4x afterwards.
-3. `ultra_performance` is free and unused.
-4. Batching is the wrong tool for control, but it is the diagnostic that proved
-   the context-switch hypothesis.
+**First, the thing that stops this being a race.** 98 Hz is already **above
+the camera (~79 Hz)** and well above the **50 Hz control loop**. Chip
+throughput is not on the critical path for anything the vehicle does. What is
+still worth having is **latency**, because loop delay is what limits how hard
+terminal alignment can be pushed before the hull oscillates.
+
+1. **Do not chase the 4.2x.** §3a shows it belongs to the YOLOv8 family, not to
+   a compile setting we have not tried. Changing families means retraining, and
+   would have to be argued on accuracy.
+2. **Async buys nothing on our current graph** — measured **1.00x**, not
+   estimated. Revisit only if a single-context model ever ships.
+3. `ultra_performance` is **+2.2 % free and unused** — the one unambiguous win
+   in this whole campaign.
+4. **The real levers for "never lose a detection" are not on this list.** They
+   are the operating threshold (0.35-0.45 shipped against a 0.12-0.15 intended
+   point), the tracker, and the coast — none of which are FPS problems.
+5. Batching is the wrong tool for control, but it is the diagnostic that
+   identified the context switch.
 
 ## 8. The trap this repeats
 
