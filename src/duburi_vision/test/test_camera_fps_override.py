@@ -56,17 +56,23 @@ def test_the_launch_passes_it_through_per_camera():
     15 Hz downward on the same vehicle."""
     launch = (Path(__file__).resolve().parents[1] / 'launch'
               / 'vision_pi.launch.py').read_text()
-    assert "DeclareLaunchArgument('fwd_fps', default_value='60')" in launch
+    assert "DeclareLaunchArgument('fwd_fps', default_value='0')" in launch
     assert "DeclareLaunchArgument('dwn_fps', default_value='0')" in launch
     assert "'fps':         LaunchConfiguration(fps_arg)" in launch
 
 
-def test_the_forward_cap_is_a_measured_value_not_a_round_number():
-    """It is capped BELOW what the camera can deliver, on purpose, and the
-    measurement is in the file. A cap that looks like a downgrade needs its
-    evidence beside it or the next person raises it back."""
+def test_the_reversal_of_the_cap_carries_BOTH_measurements():
+    """The cap was measured correctly and is now wrong, so the file has to hold
+    the old evidence AND the new -- otherwise the next person reads a bare 0,
+    finds the +53 % det/s result in git history, and caps it again.
+
+    This test was inverted rather than deleted: it used to assert the cap's
+    evidence was present, and it is still the right assertion, now over both
+    sides of the reversal."""
     launch = (Path(__file__).resolve().parents[1] / 'launch'
               / 'vision_pi.launch.py').read_text()
     i = launch.index("'fwd_fps'")
-    ctx = launch[max(0, i - 1400):i]
-    assert 'det/s' in ctx and 'uncapped' in ctx
+    ctx = launch[max(0, i - 2600):i]
+    assert 'det/s' in ctx, 'the cap\'s own throughput evidence is gone'
+    assert 'age' in ctx and 'CPU' in ctx, 'the latency evidence that reversed it is gone'
+    assert 'YUYV' in ctx, 'why MJPEG survived the review is not stated'
