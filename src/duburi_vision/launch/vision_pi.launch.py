@@ -86,13 +86,20 @@ def generate_launch_description():
         # two trackers has a wrong coast -- and a tracker with a truncated
         # coast still publishes and looks healthy.
         #
-        # These are the rates of the FULL configuration, both cameras live with
-        # tracking on: forward 30.7, downward 14.8 det/s. NOT the 55 they were
-        # first set to -- that was the standalone figure with the other camera
-        # paused, which is not how the stack runs. The node measures the real
-        # rate and reports it either way, so a wrong value here shows up in the
-        # log rather than as a silently truncated coast.
-        DeclareLaunchArgument('fwd_frame_rate', default_value='30.0'),
+        # Full configuration, both cameras live with tracking on, taken from
+        # the TRACKER'S OWN in-process count -- which is the only trustworthy
+        # source on this machine. Two earlier values were wrong for two
+        # different reasons and the check caught both:
+        #
+        #   55  the standalone figure with the other camera paused, which is
+        #       not how the stack runs
+        #   30  what `ros2 topic hz` reported -- and that tool's own subscriber
+        #       load depresses the stream it measures. It read 27.7 det/s on
+        #       the same run the tracker measured 49.
+        #
+        # The 1.8x gap is worth carrying: `ros2 topic hz` UNDER-REPORTS on a
+        # loaded Pi, so every rate quoted from it is a floor, not a figure.
+        DeclareLaunchArgument('fwd_frame_rate', default_value='49.0'),
         DeclareLaunchArgument('dwn_frame_rate', default_value='15.0'),
         DeclareLaunchArgument(
             'fwd_calibration',
