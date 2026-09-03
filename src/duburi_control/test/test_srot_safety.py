@@ -266,26 +266,38 @@ def _with_depth_cmd(fc, cmd):
     return fc
 
 
-def test_a_stale_depth_p_makes_the_arming_guard_fail_OPEN():
+def test_the_gain_is_what_decides_the_verdict_not_a_margin():
     """The round-26 defect, as arithmetic rather than as a constant.
 
-    The guard recovers the board's depth as `DEPTH_CMD / DEPTH_P + 0.10`. With
-    the board running 0.5 and our fallback stuck at the old 3.0, every depth is
-    divided by 6x too much -- so a barometer reading 0.90 m at the surface
-    (nearly 3x the 0.30 m limit) back-converts to 0.20 m and ARMS. It does not
-    fail to check; it checks and says yes. That is the whole hazard: a guard
-    between a phantom barometer and full vertical thrust, reporting sane.
-    """
-    cmd = 0.40                                # 0.90 m of depth at DEPTH_P 0.5
-    honest = _with_depth_cmd(_pfc(), cmd)
-    honest.depth_p = 0.5
-    ok, why = honest.check_depth_loop_settled()
-    assert ok is False, f'a 0.9 m surface reading must refuse: {why}'
+    The guard recovers the board's depth as `DEPTH_CMD / DEPTH_P + 0.10`, so
+    DEPTH_P is not a refinement of the answer -- it IS the answer's scale. With
+    the board running 0.5 and our fallback stuck at 3.0, every reading was
+    divided by 6x too much, which put a real 0.90 m surface error (three times
+    the limit) at an apparent 0.20 m.
 
-    stale = _with_depth_cmd(_pfc(), cmd)
-    stale.depth_p = 3.0                       # the pre-round-26 fallback
-    assert stale.check_depth_loop_settled()[0] is True, (
-        'this documents the defect: the stale gain ARMS on the same reading')
+    Asserted as the bracket rather than as "the stale value arms". A future
+    sanity bound on `depth_p` would be an IMPROVEMENT, and an assertion that
+    the old behaviour survives cannot tell an improvement from a regression --
+    it would fail on the fix. The bracket says why 6x mattered without pinning
+    the bug in place.
+    """
+    cmd = 0.40
+    true_depth = cmd / 0.5 + sp.DEPTH_PREVIEW_TARGET_M      # what the board sees
+    apparent = cmd / 3.0 + sp.DEPTH_PREVIEW_TARGET_M        # what a stale gain shows
+    assert true_depth > sp.DEPTH_ERR_ARM_LIMIT_M, 'this reading must be refused'
+    assert apparent < sp.DEPTH_ERR_ARM_LIMIT_M, (
+        'and the stale gain must make the SAME reading look acceptable -- '
+        'otherwise this no longer demonstrates the failure mode')
+
+
+def test_the_guard_refuses_that_reading_on_the_boards_own_gain():
+    """The half that must hold whatever else changes: with DEPTH_P read from
+    the board, a barometer 0.90 m off at the surface does not arm."""
+    fc = _with_depth_cmd(_pfc(), 0.40)
+    fc.depth_p = 0.5
+    ok, why = fc.check_depth_loop_settled()
+    assert ok is False, f'a 0.9 m surface reading must refuse: {why}'
+    assert 'IMPLAUSIBLE' in why, 'and must say what it saw, not just refuse'
 
 
 def test_the_default_used_when_the_read_fails_is_the_boards_own_value():
@@ -317,3 +329,63 @@ def test_full_authority_is_what_autonomy_asks_for():
     command runs at half thrust until this is set. Pinned because a wrong value
     here is invisible: the vehicle moves, just not as far as commanded."""
     assert sp.GAIN_FOR_AUTONOMY == 1.0
+
+
+# --------------------------------------------------------------------------- #
+#  Two opposite instructions, one wire code
+# --------------------------------------------------------------------------- #
+def _reason(result, statustext=None, verb='move_forward'):
+    fc = _fc()
+    if statustext is not None:
+        fc.master.messages['STATUSTEXT'] = type(
+            'ST', (), {'text': statustext.encode()})()
+    from duburi_control.fc.srot_fc import DENIED
+    return fc._terminal_reason(verb, DENIED, result)
+
+
+def test_the_two_meanings_of_one_ack_code_are_told_apart():
+    """fw rev 13 gave ACK_TEMPORARILY_REJECTED a SECOND meaning: SROT_MOVE now
+    requires ARMED and refuses with the same result a state-lock miss uses. The
+    two need OPPOSITE actions -- wait and retry, versus arm first -- so a reason
+    string that covers both is worse than no advice."""
+    busy = _reason(sp.ACK_TEMPORARILY_REJECTED, 'state lock held')
+    disarmed = _reason(sp.ACK_TEMPORARILY_REJECTED,
+                       'SROT_MOVE refused: arm first')
+    assert 'safe to retry' in busy
+    assert 'DISARMED' in disarmed and 'Arm' in disarmed
+    assert busy != disarmed
+
+
+def test_unsupported_says_the_opposite_of_retry():
+    """The third fork, and the one a retry loop gets wrong forever: this
+    firmware does not implement the verb and will not until it is flashed."""
+    out = _reason(sp.ACK_UNSUPPORTED)
+    assert 'NOT SUPPORTED' in out and 'do not retry' in out
+
+
+def test_retryable_and_unsupported_are_distinct_on_the_wire():
+    """They must not share a value -- the reason strings are opposite advice."""
+    assert sp.ACK_TEMPORARILY_REJECTED != sp.ACK_UNSUPPORTED
+    assert {sp.ACK_TEMPORARILY_REJECTED, sp.ACK_UNSUPPORTED} <= sp.TERMINAL_ACKS
+
+
+def test_a_previous_commands_statustext_is_not_read_as_this_ones():
+    """STATUSTEXT is a single pymavlink slot, and here it is load-bearing: it is
+    the ONLY thing separating the two meanings above. An 'arm first' left from
+    an earlier disarmed attempt would relabel the next genuine busy rejection as
+    'the board is DISARMED' -- on an armed board, telling the operator to fix
+    something that is not wrong while the real state lock persists."""
+    fc = _fc()
+    fc.master.messages['STATUSTEXT'] = type(
+        'ST', (), {'text': b'SROT_MOVE refused: arm first'})()
+    fc.master.messages['COMMAND_ACK'] = type('A', (), {'result': 0})()
+    fc._clear_ack()
+    assert 'STATUSTEXT' not in fc.master.messages
+    assert 'COMMAND_ACK' not in fc.master.messages
+
+
+def test_a_reason_with_no_statustext_still_reads_sensibly():
+    """The board does not always send text. The advice must survive its absence
+    rather than degrade into a dangling parenthesis."""
+    out = _reason(sp.ACK_TEMPORARILY_REJECTED)
+    assert 'safe to retry' in out and out.endswith('retry')

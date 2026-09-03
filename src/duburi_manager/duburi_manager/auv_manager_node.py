@@ -1246,6 +1246,28 @@ class AUVManagerNode(Node):
         # it meant a manager without that publisher silently lost all of them.
         if not self._is_srot:
             return
+
+        # An unplanned FC restart, checked here for the same reason `telemetry()`
+        # is: `check_for_reboot()` was fully implemented, documented and unit
+        # tested, and called by NOTHING outside its own test. A detector nobody
+        # runs is not a detector.
+        #
+        # It matters most exactly where it was missing. After a reboot the board
+        # is DISARMED, in its boot mode, with every setpoint cleared and stream
+        # rates back to compiled defaults -- while the mission carries on issuing
+        # verbs to a vehicle that is no longer the one it configured. Each verb
+        # then fails in its own way, none of them naming the cause.
+        #
+        # So the active command is ABORTED rather than merely logged: a mission
+        # step that continues here is steering nothing, and the fail-safe default
+        # is to stop and let the operator see why.
+        if self.fc.check_for_reboot():          # logs the cause itself
+            if self.command_active:
+                self.get_logger().error(
+                    '[ACT  ] aborting the active command -- the board restarted '
+                    'under it, so it is disarmed and no longer configured')
+                self.duburi.request_abort()
+
         try:
             tel = self.fc.telemetry()
         except Exception as exc:                      # noqa: BLE001 -- telemetry is best-effort
