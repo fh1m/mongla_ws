@@ -32,10 +32,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 from rclpy.node import Node
-from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
 
 from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection2DArray
+
+from . import qos
 
 
 class VisionNotReadyError(RuntimeError):
@@ -85,21 +86,15 @@ def assert_vision_ready(node: Node, *,
     detect_topic  = f'{ns}/detections'
 
     counters = _Counters()
-    # image_raw is published BEST_EFFORT depth 1 (a mailbox -- only the newest
-    # frame has value). A RELIABLE subscriber is INCOMPATIBLE with a
-    # BEST_EFFORT publisher: rclpy logs one warning and then delivers nothing,
-    # for ever. A preflight tool that reports "0 frames" because of its own QoS
-    # is worse than no preflight, so it must match the publisher.
-    qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
-    img_qos = QoSProfile(depth=1,
-                         reliability=QoSReliabilityPolicy.BEST_EFFORT)
-
+    # Straight from the shared table. A preflight tool that reports "0 frames"
+    # because of its OWN QoS is worse than no preflight -- see `qos.py`.
     sub_image = node.create_subscription(
-        Image, image_topic, lambda _m: counters.bump_image(), img_qos)
+        Image, image_topic, lambda _m: counters.bump_image(), qos.IMAGE)
     sub_info  = node.create_subscription(
-        CameraInfo, info_topic, counters.set_info, qos)
+        CameraInfo, info_topic, counters.set_info, qos.CAMERA_INFO)
     sub_det   = node.create_subscription(
-        Detection2DArray, detect_topic, lambda _m: counters.bump_det(), qos)
+        Detection2DArray, detect_topic, lambda _m: counters.bump_det(),
+        qos.DETECTIONS)
 
     if log is not None:
         log.info(
@@ -155,6 +150,13 @@ def assert_vision_ready(node: Node, *,
         node.destroy_subscription(sub_det)
 
 
+# Enough messages to prove the producer is running rather than having emitted
+# one startup frame. An empty Detection2DArray counts: "the detector is
+# alive and looking" is the question here, not "it can see the target" --
+# that is what `require_detection` asks.
+_MIN_DET_MSGS = 5
+
+
 def wait_vision_state_ready(vision_state, *,
                             timeout: float = 10.0,
                             stale_after: float = 0.8,
@@ -168,7 +170,20 @@ def wait_vision_state_ready(vision_state, *,
     re-entering rclpy from a worker.
 
     `require_detection=True` waits for a fresh Sample (any class) to
-    appear; otherwise we settle for "image + camera_info present".
+    appear; otherwise we settle for "detections flowing + camera_info".
+
+    THE READINESS SIGNAL IS DETECTIONS, NOT FRAMES. It used to be
+    `diagnostics()['image_frames'] >= 5`, which could never become true:
+    `VisionState` subscribed to `image_raw` RELIABLE while `camera_node`
+    publishes it BEST_EFFORT, so the counter stayed at 0 and this function
+    ALWAYS burned its full timeout -- 10 s added to the first vision verb of
+    every mission, reported as "did not pass within 10s", which reads as a
+    slow pipeline rather than a QoS mismatch. The same hazard is called out
+    by name in `assert_vision_ready` above and in `check_pipeline`, and was
+    fixed in five subscribers and missed in the one the control loop uses.
+
+    Detections are also the better gate on the merits: they cannot flow
+    without frames, and they are what the loop actually steers on.
     """
     cache_key = f'state::{id(vision_state)}'
     cached = _PREFLIGHT_CACHE.get(cache_key)
@@ -180,7 +195,7 @@ def wait_vision_state_ready(vision_state, *,
     while True:
         diag = vision_state.diagnostics()
         info_ok    = bool(diag['info_seen'])
-        frames_ok  = int(diag['image_frames']) >= 5
+        frames_ok  = int(diag['det_msgs']) >= _MIN_DET_MSGS
         if require_detection:
             det_ok = vision_state.is_fresh(stale_after)
         else:
@@ -197,14 +212,15 @@ def wait_vision_state_ready(vision_state, *,
                 W, H = status.image_size
                 log.info(
                     f"[VPRE ] state preflight READY  size={W}x{H}  "
-                    f"frames={diag['image_frames']}  "
+                    f"det_msgs={diag['det_msgs']}  "
                     f"after {elapsed:.1f}s")
             return status
 
         if time.monotonic() >= deadline:
             missing = []
             if not info_ok:    missing.append('camera_info')
-            if not frames_ok:  missing.append('image_raw frames')
+            if not frames_ok:
+                missing.append(f'detection messages (<{_MIN_DET_MSGS})')
             if require_detection and not det_ok:
                 missing.append(f'fresh detection (<{stale_after:.2f}s)')
             raise VisionNotReadyError(

@@ -27,15 +27,12 @@ ros2 run duburi_vision camera_node --ros-args \\
 import os
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
-import queue as _queue
 import sys
 import threading
 import time
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (DurabilityPolicy, HistoryPolicy, QoSProfile,
-                       ReliabilityPolicy)
 from rclpy.time import Time
 
 from sensor_msgs.msg import Image, CameraInfo
@@ -43,6 +40,7 @@ from std_msgs.msg     import Float32, Int32
 from std_srvs.srv     import SetBool
 from cv_bridge        import CvBridge
 
+from duburi_vision import qos
 from duburi_vision import (
     CAMERA_PROFILES,
     make_camera, make_camera_from_profile,
@@ -115,24 +113,14 @@ class CameraNode(Node):
         # backlog of old pictures, which is precisely the failure the mailbox
         # capture path exists to prevent, reintroduced one layer up.
         #
-        # Note `qos_profile_sensor_data` is NOT this: it is BEST_EFFORT but
-        # KEEP_LAST **depth 5**, i.e. still a five-deep queue. For a stream
-        # where only the newest frame has any value, one is the right number.
-        self._img_qos = QoSProfile(
-            history=HistoryPolicy.KEEP_LAST, depth=1,
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            durability=DurabilityPolicy.VOLATILE)
+        # Both policies, and the reasoning behind them, live in `qos.py` --
+        # which every subscriber imports too, so the two ends of a link cannot
+        # disagree about a topic they both name.
+        self._img_qos = qos.IMAGE
         self._pub_img  = self.create_publisher(Image, f'{ns}/image_raw',
                                                self._img_qos)
-        # CameraInfo stays RELIABLE and TRANSIENT_LOCAL: it is ~1 kB of
-        # calibration that changes never, and a subscriber that joins late must
-        # still receive it. Dropping it would leave `CameraInfo.k` empty and
-        # every pixel->bearing conversion falling back to a guessed FOV.
         self._pub_info = self.create_publisher(
-            CameraInfo, f'{ns}/camera_info',
-            QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=1,
-                       reliability=ReliabilityPolicy.RELIABLE,
-                       durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            CameraInfo, f'{ns}/camera_info', qos.CAMERA_INFO)
         self._calib = self._load_calibration()
         self._bridge   = CvBridge()
 

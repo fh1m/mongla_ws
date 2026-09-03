@@ -14,8 +14,14 @@ Why this lives in `duburi_manager`, not `duburi_vision`:
 
 Topics consumed (one camera example, `camera='laptop'`):
   /duburi/vision/laptop/detections   vision_msgs/Detection2DArray
+  /duburi/vision/laptop/tracks       vision_msgs/Detection2DArray  (coast only)
   /duburi/vision/laptop/camera_info  sensor_msgs/CameraInfo
-  /duburi/vision/laptop/image_raw    sensor_msgs/Image     (counted only)
+  /duburi/vision/laptop/vis_range    std_msgs/Float32MultiArray
+
+NOT consumed: `image_raw`. The control host does not decode pixels, and a
+subscription costs a full-frame deserialisation per message on the machine
+that has to answer a 50 Hz loop. Anything that needs frames -- the HUD, the
+console, a recorder -- subscribes on its own.
 
 Public surface (called from the control loop, never spinning):
   largest(class_name)        -> Detection2D | None
@@ -41,10 +47,11 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from rclpy.node import Node
-from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
 
 from std_msgs.msg import Float32MultiArray
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo
+
+from duburi_vision import qos
 from vision_msgs.msg import Detection2D, Detection2DArray
 
 
@@ -94,32 +101,43 @@ class VisionState:
         self._D = None
         self._vis_range_vals: list = []            # parallel to _latest_array.detections
         self._info_seen:   bool   = False
-        self._frames:      int    = 0             # image_raw counter (diag only)
+        # Detection message counter. This used to count `image_raw`, which
+        # meant the CONTROL HOST subscribed to the full 691 kB frame stream
+        # to maintain a diagnostic integer -- and it did not even work: the
+        # subscription was RELIABLE against a BEST_EFFORT publisher, so it
+        # received NOTHING and the counter sat at 0 for ever. See the class
+        # docstring; `preflight.wait_vision_state_ready` gated on it.
+        self._det_msgs:    int    = 0
         # Coast layer (opt-in, used only when bbox_error(coast_s>0)): the /tracks
         # topic is the coast SOURCE; /detections stays the authoritative primary.
         self._latest_tracks: Optional[Detection2DArray] = None
         self._last_real: dict = {}                # track_id -> (monotonic_t, score) of last REAL detection
 
         ns = f'/duburi/vision/{camera}'
-        qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
+        # From duburi_vision.qos -- the same objects the PUBLISHERS use, so the
+        # two ends of each link cannot drift apart. They already did once: this
+        # class asked for RELIABLE on a BEST_EFFORT image topic and received
+        # nothing for ever, silently.
         self._sub_det   = node.create_subscription(
-            Detection2DArray, f'{ns}/detections',   self._on_detections, qos)
+            Detection2DArray, f'{ns}/detections',   self._on_detections,
+            qos.DETECTIONS)
         # Coast source. Cheap to subscribe; only CONSULTED when coast_s>0, so a
         # mission that never sets vision.coast_s behaves exactly as before. If
         # the tracker node isn't running, this simply never delivers and coast
         # silently never engages (degrades to raw-/detections behaviour).
         self._sub_trk   = node.create_subscription(
-            Detection2DArray, f'{ns}/tracks',        self._on_tracks,     qos)
+            Detection2DArray, f'{ns}/tracks',        self._on_tracks,
+            qos.DETECTIONS)
         self._sub_info  = node.create_subscription(
-            CameraInfo,       f'{ns}/camera_info',   self._on_info,       qos)
-        self._sub_img   = node.create_subscription(
-            Image,            f'{ns}/image_raw',     self._on_image,      qos)
+            CameraInfo,       f'{ns}/camera_info',   self._on_info,
+            qos.CAMERA_INFO)
         self._sub_vr    = node.create_subscription(
             Float32MultiArray, f'{ns}/vis_range',    self._on_vis_range,  10)
 
         self._log.info(
             f"[VST  ] subscribed camera={camera!r} -> "
-            f"{ns}/detections (+camera_info, +image_raw counter, +vis_range)")
+            f"{ns}/detections (+tracks, +camera_info, +vis_range). "
+            f"NOT image_raw -- the control host has no use for pixels.")
 
     # ------------------------------------------------------------------ #
     #  Subscriber callbacks                                              #
@@ -128,6 +146,7 @@ class VisionState:
         with self._lock:
             self._latest_array = msg
             self._latest_stamp = time.monotonic()
+            self._det_msgs += 1
 
     def _on_tracks(self, msg: Detection2DArray) -> None:
         with self._lock:
@@ -157,11 +176,6 @@ class VisionState:
         with self._lock:
             return (list(self._K) if self._K else None,
                     list(self._D) if self._D else None)
-
-    def _on_image(self, _msg: Image) -> None:
-        # Only used as a "is producer alive" pulse; we don't decode here.
-        with self._lock:
-            self._frames += 1
 
     def _on_vis_range(self, msg: Float32MultiArray) -> None:
         with self._lock:
@@ -413,7 +427,7 @@ class VisionState:
                 'camera':       self._camera,
                 'image_size':   self._image_size,
                 'info_seen':    self._info_seen,
-                'image_frames': self._frames,
+                'det_msgs':     self._det_msgs,
                 'last_age_s':   (time.monotonic() - self._latest_stamp
                                  if self._latest_array is not None
                                  else float('inf')),

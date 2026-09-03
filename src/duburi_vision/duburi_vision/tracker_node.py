@@ -37,7 +37,6 @@ import time
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
 
 from sensor_msgs.msg import CameraInfo
 from vision_msgs.msg import Detection2DArray
@@ -61,6 +60,7 @@ _RATE_WARMUP = 120
 # mean far more than it shifts the rate the coast windows actually see.
 _RATE_MIN_HZ = 0.1
 
+from duburi_vision import qos
 from duburi_vision.detection.messages import array_to_detections
 from duburi_vision.tracking.bytetrack       import ByteTrackWrapper
 from duburi_vision.tracking.roboflow_tracker import RoboflowTracker
@@ -170,14 +170,16 @@ class TrackerNode(Node):
         ) if self._enable_kal else None
 
         ns  = f'/duburi/vision/{cam}'
-        qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
         self._sub_det  = self.create_subscription(
-            Detection2DArray, f'{ns}/detections',  self._on_detections, qos)
+            Detection2DArray, f'{ns}/detections',  self._on_detections,
+            qos.DETECTIONS)
         self._sub_info = self.create_subscription(
             CameraInfo,       f'{ns}/camera_info', self._on_info,
-            QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE))
+            qos.CAMERA_INFO)
+        # `tracks` mirrors `detections`: same shape, same consumers, and the
+        # coast layer treats them as one ladder.
         self._pub      = self.create_publisher(
-            Detection2DArray, f'{ns}/tracks', qos)
+            Detection2DArray, f'{ns}/tracks', qos.DETECTIONS)
 
         self._image_size = (640, 480)
         self._info_seen  = False
