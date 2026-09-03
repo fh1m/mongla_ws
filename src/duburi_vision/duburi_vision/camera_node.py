@@ -36,6 +36,7 @@ from rclpy.node import Node
 from rclpy.time import Time
 
 from sensor_msgs.msg import Image, CameraInfo
+from std_msgs.msg import Header
 from std_msgs.msg     import Float32, Int32
 from std_srvs.srv     import SetBool
 from cv_bridge        import CvBridge
@@ -50,8 +51,27 @@ from duburi_vision.cameras.discover import discover_cameras
 
 
 class CameraNode(Node):
-    def __init__(self):
-        super().__init__('duburi_camera')
+    def __init__(self, node_name: str = 'duburi_camera', *,
+                 parameter_overrides=None, frame_sink=None):
+        """`node_name` / `parameter_overrides` mirror `DetectorNode`.
+
+        Launch implements `name=` and `parameters=` as PROCESS-WIDE
+        remappings (`__node:=`, `__params:=`), so they cannot address two
+        nodes in one process. A composed launcher therefore holds prefixed
+        parameters and hands them down here, exactly as `detector_dual_node`
+        already does for the detectors.
+
+        `frame_sink` is the composed consumer -- an object with
+        `wants_frame()` and `submit_frame(frame, header)`. When present the
+        decoded frame is handed to it directly, skipping the serialise, the
+        transport and the second decode. The image topic is still published,
+        because the HUD, the console, `web_video_server` and any recorder read
+        it; composition takes the topic out of the CONTROL path, it does not
+        delete it.
+        """
+        super().__init__(node_name,
+                         parameter_overrides=list(parameter_overrides or []))
+        self._sink = frame_sink
 
         self.declare_parameter('profile',         '')        # e.g. 'laptop' / 'sim_front'
         self.declare_parameter('source',          '')        # explicit override
@@ -333,7 +353,20 @@ class CameraNode(Node):
                 # mailbox: an unread frame is simply replaced, so waiting for
                 # the slot and then reading yields the NEWEST frame rather than
                 # the one that happened to finish decoding.
-                wait = self._time_to_next_slot()
+                # TWO reasons to decode a frame, and the first one is why
+                # composing the two nodes is worth anything:
+                #
+                #   the SINK is idle    -> it will consume this frame NOW, so
+                #                          it gets the newest picture the
+                #                          instant inference goes free, rather
+                #                          than whichever one the publisher's
+                #                          clock happened to hand over
+                #   the publish slot is due -> the topic's viewers want one
+                #
+                # When neither holds there is nothing to decode for, and a
+                # decode nobody reads is 2.45 ms of a core.
+                wanted = self._sink is not None and self._sink.wants_frame()
+                wait = 0.0 if wanted else self._time_to_next_slot()
                 if wait > 0.0:
                     # Capped so shutdown stays responsive; a long publish
                     # period must not make Ctrl-C wait for it.
@@ -345,9 +378,21 @@ class CameraNode(Node):
                     # the camera produces", not an error and not a pause.
                     time.sleep(self._IDLE_WAIT_S)
                     continue
-                self._publish(frame, meta)
-        except Exception:
-            pass  # camera released during shutdown
+                if wanted:
+                    self._sink.submit_frame(frame, self._make_header(meta))
+                if self._time_to_next_slot() <= 0.0:
+                    self._publish(frame, meta)
+        except Exception as exc:
+            # NOT a bare pass. This used to swallow everything as "camera
+            # released during shutdown", so a programming error in the loop --
+            # a missing attribute, a bad call -- killed the capture thread and
+            # the node went on looking healthy while publishing nothing. Found
+            # exactly that way: a test fixture omitted `_sink` and the loop
+            # died silently instead of raising.
+            if rclpy.ok():
+                self.get_logger().error(
+                    f'[CAM  ] capture loop died: {exc!r} -- this node is now '
+                    f'publishing NOTHING')
 
     def _time_to_next_slot(self) -> float:
         """Seconds until the next publish is due; <=0 means now.
@@ -405,10 +450,7 @@ class CameraNode(Node):
         # by the source from the kernel's monotonic capture stamp. Sources that
         # cannot know better (a video file, a ROS topic) set it at read time,
         # which is the best available answer there and no worse than before.
-        img_msg.header.stamp    = Time(
-            seconds=int(meta.stamp_wall),
-            nanoseconds=int((meta.stamp_wall % 1.0) * 1e9)).to_msg()
-        img_msg.header.frame_id = self._frame_id
+        img_msg.header = self._make_header(meta)
 
         info = CameraInfo()
         info.header = img_msg.header
@@ -419,6 +461,20 @@ class CameraNode(Node):
         self._pub_img.publish(img_msg)
         self._pub_info.publish(info)
         self._sent += 1
+
+    def _make_header(self, meta):
+        """The header for one captured frame, built in ONE place.
+
+        The composed path and the topic path must not diverge on this: the
+        stamp is the capture instant, and every freshness gate downstream
+        reads it. Two constructions of the same header is how they would.
+        """
+        h = Header()
+        h.stamp = Time(
+            seconds=int(meta.stamp_wall),
+            nanoseconds=int((meta.stamp_wall % 1.0) * 1e9)).to_msg()
+        h.frame_id = self._frame_id
+        return h
 
     def _load_calibration(self) -> dict | None:
         """Load intrinsics measured by tools/fov_calibrate.py, if any.

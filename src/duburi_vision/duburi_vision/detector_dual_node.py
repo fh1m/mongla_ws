@@ -1,4 +1,8 @@
-"""Both detectors in ONE process, because the chip allows one VDevice per process.
+"""The whole vision stack in ONE process: two cameras, two detectors, no hop.
+
+Both detectors must share a process because the chip allows one VDevice per
+process (below). Once they do, putting the CAMERAS in the same process costs
+nothing and removes the last soft target in the frame path.
 
 WHY THIS EXECUTABLE EXISTS
 --------------------------
@@ -15,6 +19,35 @@ look like they should work and do not:
 
 So: one process, two `DetectorNode` objects, the shared device and activation
 arbiter in `detection/hailo.py`.
+
+WHY THE CAMERAS JOINED THEM
+---------------------------
+With them in the same process the detector no longer receives frames on a
+topic. It gets the decoded array handed straight across, which removes:
+
+    cv_bridge encode   0.845 ms
+    serialise          1.469 ms
+    transport          1.760 ms
+    imgmsg_to_cv2      a second full-frame copy
+
+...and, worth more than all of it, THE PUBLISHER'S CLOCK. On the topic path
+the detector acts on whichever frame the 40 Hz publish throttle handed over;
+here `CameraNode` reads `DetectorNode.wants_frame()` and decodes at the moment
+inference goes idle, so the picture is the newest one that exists.
+
+`ComposableNodeContainer` would buy NONE of this: rclpy has no intra-process
+comms (that is rclcpp), so composed Python nodes still traverse rmw. The gain
+comes from the direct Python reference, not from ROS composition.
+
+The image topic is still published, throttled, for the HUD, the console,
+`web_video_server` and recorders. Composition takes the topic out of the
+CONTROL path; it does not delete it.
+
+WHAT IS DELIBERATELY UNCHANGED, PART TWO
+----------------------------------------
+The camera nodes keep their names (`duburi_camera_forward` / `_downward`) and
+their topics, so `vision_display`, `mission_web` and `preflight` see exactly
+what they saw before.
 
 WHAT IS DELIBERATELY UNCHANGED
 ------------------------------
@@ -43,6 +76,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 
+from .camera_node   import CameraNode
 from .detector_node import DetectorNode
 
 # Parameters that are per-camera. Anything not here is shared by both, which is
@@ -52,6 +86,17 @@ _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
                'model_conf', 'image_topic')
 _SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_debug_image',
            'debug_image_hz', 'alignment_deadband', 'paused')
+
+# The camera half. Same prefixing scheme, same reason: launch cannot address
+# two nodes in one process.
+_CAM_PER_CAMERA = ('profile', 'device_path', 'calibration', 'fps',
+                   'publish_rate_hz', 'width', 'height')
+_CAM_DEFAULTS = {
+    'profile': '', 'device_path': '', 'calibration': '', 'fps': 0,
+    # A composed detector is fed on demand, so this rate now governs only the
+    # topic's viewers -- not the control path, which is what it used to gate.
+    'publish_rate_hz': 0, 'width': 640, 'height': 480,
+}
 
 _DEFAULTS = {
     'model_path': 'yolov11n', 'models': '', 'active_model': '', 'classes': '',
@@ -77,9 +122,25 @@ class _Launcher(Node):
                 self.declare_parameter(f'{cam}_{key}', _DEFAULTS[key])
         for key in _SHARED:
             self.declare_parameter(key, _DEFAULTS[key])
+        for cam in ('fwd', 'dwn'):
+            for key in _CAM_PER_CAMERA:
+                self.declare_parameter(f'{cam}_cam_{key}', _CAM_DEFAULTS[key])
+
+    def camera_overrides(self, cam: str, camera: str):
+        out = [Parameter('name', value=camera),
+               Parameter('frame_id', value=camera)]
+        for key in _CAM_PER_CAMERA:
+            out.append(Parameter(
+                key, value=self.get_parameter(f'{cam}_cam_{key}').value))
+        return out
 
     def overrides(self, cam: str, camera: str):
-        out = [Parameter('camera', value=camera)]
+        # `direct_feed`: frames arrive by reference from the camera in this
+        # process, so the detector must NOT also subscribe -- it would decode
+        # and infer the same picture twice, and the topic copy is the SLOWER
+        # of the two, so it would be the one acted on half the time.
+        out = [Parameter('camera', value=camera),
+               Parameter('direct_feed', value=True)]
         for key in _PER_CAMERA:
             out.append(Parameter(
                 key, value=self.get_parameter(f'{cam}_{key}').value))
@@ -97,9 +158,20 @@ def main():
             # Built SEQUENTIALLY on purpose. The second one configures a second
             # network group on the device the first created; doing that from a
             # thread pool is how the registry path already trips over itself.
-            nodes.append(DetectorNode(
+            det = DetectorNode(
                 f'duburi_detector_{camera}',
-                parameter_overrides=launcher.overrides(cam, camera)))
+                parameter_overrides=launcher.overrides(cam, camera))
+            nodes.append(det)
+            # The detector FIRST, so the camera never submits to a half-built
+            # sink. `frame_sink=det` is the whole composition -- one Python
+            # reference where a topic used to be.
+            nodes.append(CameraNode(
+                f'duburi_camera_{camera}',
+                parameter_overrides=launcher.camera_overrides(cam, camera),
+                frame_sink=det))
+            launcher.get_logger().info(
+                f'[COMP ] {camera}: camera -> detector DIRECT '
+                f'(no topic in the control path)')
         ex = MultiThreadedExecutor()
         for n in nodes:
             ex.add_node(n)
