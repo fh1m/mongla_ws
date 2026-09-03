@@ -85,10 +85,17 @@ def assert_vision_ready(node: Node, *,
     detect_topic  = f'{ns}/detections'
 
     counters = _Counters()
+    # image_raw is published BEST_EFFORT depth 1 (a mailbox -- only the newest
+    # frame has value). A RELIABLE subscriber is INCOMPATIBLE with a
+    # BEST_EFFORT publisher: rclpy logs one warning and then delivers nothing,
+    # for ever. A preflight tool that reports "0 frames" because of its own QoS
+    # is worse than no preflight, so it must match the publisher.
     qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
+    img_qos = QoSProfile(depth=1,
+                         reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
     sub_image = node.create_subscription(
-        Image, image_topic, lambda _m: counters.bump_image(), qos)
+        Image, image_topic, lambda _m: counters.bump_image(), img_qos)
     sub_info  = node.create_subscription(
         CameraInfo, info_topic, counters.set_info, qos)
     sub_det   = node.create_subscription(

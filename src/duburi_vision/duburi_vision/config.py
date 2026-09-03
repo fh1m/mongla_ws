@@ -1,11 +1,14 @@
-"""Named camera profiles.
+"""Named camera profiles. THIS DICT IS THE ONE THE CODE READS.
 
-The yaml file at `share/duburi_vision/config/cameras.yaml` is the user-facing
-copy operators edit. This dict is the in-code default — handy for tests and
-for `make_camera('laptop')` style one-liners that don't need to read a file.
+`config/cameras.yaml` is the operator-facing copy with the full rationale, and
+NOTHING LOADS IT -- `get_profile` resolves against this dict. That is a trap
+worth stating plainly, because it has already been walked into: switching the
+Pi profiles to the low-latency source by editing only the YAML changed nothing
+at all, and the launch came up on the old source with no error anywhere.
 
-If you add a profile here, add the same row to cameras.yaml so launch files
-can find it without code changes.
+So the two files must agree, and `test_camera_profiles.py` asserts they do
+rather than a docstring asking politely. If you change a profile, change both;
+the test tells you when you did not.
 """
 
 
@@ -39,7 +42,13 @@ CAMERA_PROFILES = {
     # 210 is a property of the MICRODIA global-shutter unit on this bench, not
     # of the Pi and not of the vehicle's cameras.
     'pi_forward': {
-        'source':      'webcam',
+        # `v4l2`, not `webcam`: a keep-up thread and a one-deep mailbox instead
+        # of OpenCV's queue. Measured after a 400 ms consumer stall, against
+        # the kernel's own capture timestamps: a plain read() hands you a
+        # 396 ms-old frame, the standard "drain the queue" recipe 348 ms, this
+        # 17 ms. The driver keeps the OLDEST frames when its buffers fill, so
+        # draining empties a fossil record -- cameras/v4l2_mailbox.py.
+        'source':      'v4l2',
         'device_path': '/dev/v4l/by-path/platform-xhci-hcd.1-usb-0:2:1.0-video-index0',
         'width':       640,
         'height':      360,
@@ -47,12 +56,24 @@ CAMERA_PROFILES = {
         'frame_id':    'forward_cam',
     },
     'pi_downward': {
-        'source':      'webcam',
+        'source':      'v4l2',
         'device_path': '/dev/v4l/by-path/platform-xhci-hcd.0-usb-0:1:1.0-video-index0',
         'width':       640,
         'height':      360,
         'fps':         90,
         'frame_id':    'downward_cam',
+    },
+
+    # Advertised by cameras.yaml and MISSING here, so `camera:=auto` raised
+    # 'unknown profile' from the only table that is loaded. Found by
+    # test_camera_profiles, not by anyone using it.
+    'auto': {
+        'source':   'webcam',
+        'device':   0,
+        'width':    640,
+        'height':   480,
+        'fps':      30,
+        'frame_id': 'auto_cam',
     },
 
     'forward': {

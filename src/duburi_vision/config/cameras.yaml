@@ -48,7 +48,13 @@ duburi_vision:
     # device_path, not device: an index is not port-stable and two identical
     # cameras swap on reboot. by-path is tied to the physical USB port.
     pi_forward:
-      source:      webcam
+      # `v4l2`, not `webcam`: a keep-up thread and a one-deep mailbox instead
+      # of OpenCV's queue. Measured after a 400 ms consumer stall, kernel
+      # timestamps: plain read() hands you a 396 ms-old frame, the standard
+      # "drain the queue" recipe 348 ms, this 17 ms. The driver keeps the
+      # OLDEST frames when its buffers fill, so draining empties a fossil
+      # record -- see cameras/v4l2_mailbox.py.
+      source:      v4l2
       device_path: /dev/v4l/by-path/platform-xhci-hcd.1-usb-0:2:1.0-video-index0
       width:       640
       height:      360
@@ -60,7 +66,7 @@ duburi_vision:
     # 15 Hz -- the profile asks for 90 and the camera_node WARN will fire and
     # say so, which is the intended behaviour rather than a misconfiguration.
     pi_downward:
-      source:      webcam
+      source:      v4l2
       device_path: /dev/v4l/by-path/platform-xhci-hcd.0-usb-0:1:1.0-video-index0
       width:       640
       height:      360
@@ -81,7 +87,7 @@ duburi_vision:
     # Default /dev/video4 on bench; confirm with: v4l2-ctl --list-devices
     downward:
       source:   webcam
-      device:   4
+      device:   2
       width:    640
       height:   480
       fps:      30
