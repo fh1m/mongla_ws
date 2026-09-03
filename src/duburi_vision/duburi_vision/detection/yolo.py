@@ -112,6 +112,18 @@ def _resolve_model_path(name: str) -> str:
     # Jetson the engine is 3-6x faster. Engines are device + TRT-version locked
     # (built on the Jetson via `ros2 run duburi_vision export_engine`), so on a
     # dev box without one we transparently fall back to the .pt.
+    # DUBURI_HEF_DIR FIRST, when it is set. `tools/pi_env.sh` has exported it
+    # since the Pi was set up and NOTHING read it, so the export was a lie: a
+    # HEF that lived only there resolved to nothing, or worse to a stale .pt of
+    # the same stem sitting in the source tree. Env beats tree because a
+    # compiled artifact is a property of THIS machine, and a machine that has
+    # one has been told where.
+    hef_dir = os.environ.get('DUBURI_HEF_DIR', '').strip()
+    if hef_dir:
+        cand = Path(os.path.expanduser(hef_dir)) / f'{name}.hef'
+        if cand.exists():
+            return str(cand)
+
     src_models = _find_src_models_dir()
     if src_models is not None:
         # .hef first: on the Pi + AI HAT+ it is the compiled artifact for THIS
