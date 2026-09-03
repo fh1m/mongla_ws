@@ -198,3 +198,40 @@ exactly** on a chip-bound model (97.9 vs 98.0) and **disagree by 3x** on a
 transfer-bound one. A benchmark measures the chip; whether that is your number
 depends on which side of the bottleneck you are on. **Both measurements were
 right; they were answering different questions.**
+
+---
+
+## 9. The operating point, measured — and what the measurement does NOT show
+
+Every launch path shipped conf **0.35-0.45**, the CUDA number, against HEFs
+baked at 0.05 and a documented INT8 penalty of ~0.08. The Pi paths now default
+to **0.15**. That was an inference until this run; 605 frames through
+`gate_rescue_repair` on the forward camera, one pass, thresholds applied to the
+same boxes:
+
+```
+  102 boxes above the HEF floor
+  scores  min 0.050   p50 0.085   p90 0.215   max 0.850
+
+    conf   boxes kept
+    0.05         102
+    0.12          26
+    0.15          20
+    0.20          15
+    0.35           5
+    0.45           5      <- 0.15 keeps 4.0x more
+```
+
+**The score distribution is real evidence and the recall claim is not.** p50 at
+0.085 and p90 at 0.215 is a distribution squashed against the floor, exactly
+the shape the INT8 penalty predicts, and it is why 0.45 is the wrong knob
+setting for this backend.
+
+But **the camera was pointed at a room, not at a prop.** Most of those 102
+boxes are therefore false positives, and 0.45 rejecting them is the threshold
+working, not a loss. So this measures the distribution, NOT recall — the plan's
+own verification row ("the fix must show up as detections") is **still open**
+and needs a gate/rescue/repair prop in frame.
+
+0.15 stands on the distribution plus the baked floor. Re-run this against a
+real prop before treating it as tuned.

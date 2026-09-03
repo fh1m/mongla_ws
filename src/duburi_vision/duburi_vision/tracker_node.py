@@ -253,13 +253,21 @@ class TrackerNode(Node):
         measured = 1.0 / mid
         if measured < _RATE_MIN_HZ:
             return
-        lo, hi = self._frame_rate / self._rate_tol, self._frame_rate * self._rate_tol
-        if lo <= measured <= hi:
-            self._rate_warned = True      # it is right; stop measuring
-            return
         self._rate_warned = True
+        lo, hi = self._frame_rate / self._rate_tol, self._frame_rate * self._rate_tol
         coast_s = self._kal_frames / measured if measured else float('inf')
-        self.get_logger().warn(
+        if lo <= measured <= hi:
+            # Report it EVEN WHEN IT IS RIGHT. Silence here is indistinguishable
+            # from the check not running, and I could not tell those apart on
+            # the vehicle: no warning appeared at a rate I had measured as out
+            # of band with `ros2 topic hz` -- whose own subscriber load was
+            # depressing the reading. The number the coast windows are actually
+            # sized from is worth one line whatever it says.
+            self.get_logger().warning(
+                f"[TRK  ] detections {measured:.0f} Hz (frame_rate "
+                f"{self._frame_rate:.0f}), coast {coast_s:.2f}s")
+            return
+        self.get_logger().warning(
             f"[TRK  ] detections arrive at {measured:.0f} Hz but frame_rate is "
             f"{self._frame_rate:.0f} -- every coast window is sized from that "
             f"number, so the Kalman coast is really {coast_s:.2f}s, not "

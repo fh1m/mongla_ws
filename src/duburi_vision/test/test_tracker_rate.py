@@ -114,7 +114,21 @@ class _Stub:
         self.warnings = []
 
     def get_logger(self):
-        return type('L', (), {'warn': lambda _s, m: self.warnings.append(m)})()
+        return type('L', (), {
+            'warn':    lambda _s, m: self.warnings.append(m),
+            'warning': lambda _s, m: self.warnings.append(m)})()
+
+    @property
+    def mismatches(self):
+        """Only the lines that say the config is WRONG.
+
+        The node reports the measured rate either way, deliberately: silence is
+        indistinguishable from the check not running, and on the vehicle I
+        could not tell those apart. So a test that asserts `warnings == []`
+        would now be asserting the check is broken -- these assert on the
+        mismatch text instead.
+        """
+        return [w for w in self.warnings if 'but frame_rate is' in w]
 
 
 def _feed(stub, hz, n, t0=0.0):
@@ -130,15 +144,16 @@ def test_a_correct_frame_rate_is_quiet():
     from duburi_vision.tracker_node import _RATE_WARMUP, _RATE_SAMPLES
     s = _Stub(55.0)
     _feed(s, 55.0, _RATE_WARMUP + _RATE_SAMPLES + 5)
-    assert s.warnings == []
+    assert s.mismatches == []
+    assert len(s.warnings) == 1   # ...but it DID report
 
 
 def test_a_wrong_frame_rate_is_named_with_the_real_coast():
     from duburi_vision.tracker_node import _RATE_WARMUP, _RATE_SAMPLES
     s = _Stub(55.0, kal_frames=82)          # 1.5 s at the configured 55 Hz
     _feed(s, 15.0, _RATE_WARMUP + _RATE_SAMPLES + 5)
-    assert len(s.warnings) == 1
-    w = s.warnings[0]
+    assert len(s.mismatches) == 1
+    w = s.mismatches[0]
     assert '15 Hz' in w and 'frame_rate:=15' in w
     assert '5.47s' in w or '5.4' in w       # 82 frames at a real 15 Hz
 
@@ -152,7 +167,7 @@ def test_the_startup_transient_does_not_decide_it():
     s = _Stub(55.0)
     t = _feed(s, 15.0, _RATE_WARMUP)        # the contended start
     _feed(s, 55.0, _RATE_SAMPLES + 5, t0=t)  # then the real rate
-    assert s.warnings == [], (
+    assert s.mismatches == [], (
         'the startup transient was measured instead of the run: ' + str(s.warnings))
 
 
@@ -174,4 +189,18 @@ def test_one_long_gap_does_not_move_the_verdict():
     t = _feed(s, 55.0, _RATE_WARMUP)
     TrackerNode._check_rate(s, t + 5.0)     # a five-second stall
     _feed(s, 55.0, _RATE_SAMPLES + 5, t0=t + 5.0)
-    assert s.warnings == []
+    assert s.mismatches == []
+
+
+def test_the_measured_rate_is_reported_even_when_it_is_RIGHT():
+    """Silence is indistinguishable from the check not running. On the vehicle
+    no warning appeared at a rate I had measured as out of band -- and the
+    check was fine; `ros2 topic hz`'s own subscriber load was depressing my
+    reading. One line either way settles that in the log instead of in a
+    debugging session."""
+    from duburi_vision.tracker_node import _RATE_WARMUP, _RATE_SAMPLES
+    s = _Stub(55.0)
+    _feed(s, 55.0, _RATE_WARMUP + _RATE_SAMPLES + 5)
+    assert len(s.warnings) == 1
+    assert s.mismatches == []
+    assert '55 Hz' in s.warnings[0] and 'coast' in s.warnings[0]
