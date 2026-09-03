@@ -895,7 +895,15 @@ class AUVManagerNode(Node):
         # between two voltages an order of magnitude apart (measured: 1.35 V / 14.74 V).
         note = getattr(self.fc, 'note_named_value', None)
         note_batt = getattr(self.fc, 'note_battery', None)
-        _DEMUX = {'NAMED_VALUE_FLOAT': note, 'BATTERY_STATUS': note_batt}
+        # STATUSTEXT has the identical problem and is worse to miss: the board
+        # sends ~13 announcements as a BURST at boot, so a poller sees the last
+        # one and loses the rest -- including "Params reset to build defaults",
+        # which silently puts the pilot gain back to half authority and disables
+        # the leak failsafe. It is also the ONLY place per-thruster telemetry
+        # presence reaches the wire, and that line is sent once, at first arm.
+        note_text = getattr(self.fc, 'note_statustext', None)
+        _DEMUX = {'NAMED_VALUE_FLOAT': note, 'BATTERY_STATUS': note_batt,
+                  'STATUSTEXT': note_text}
         while True:
             while True:
                 msg = self.master.recv_match(blocking=False)

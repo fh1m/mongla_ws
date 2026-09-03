@@ -26,8 +26,10 @@ bench-unverified. The facade gates dive-dependent verbs; this layer just sends t
 
 from __future__ import annotations
 
+import collections
 import math
 import os
+import re
 import struct
 import threading
 import time
@@ -77,6 +79,12 @@ _POLL_S = 0.05    # cache-poll granularity for ack/arm/mode loops
 # SYS_STATUS wire layout, from the firmware's own vendored header
 # (lib/mavlink/common/mavlink_msg_sys_status.h): MIN_LEN 31 is the base message,
 # LEN 43 includes the three uint32 extended-health fields at 31 / 35 / 39.
+# ESC_STATUS (291): removed from upstream `common`, so pymavlink has no entry
+# for it and surfaces the frame as UNKNOWN_291 -- unvalidated. crc_extra from
+# the message definition; LEN is the full payload before v2 zero-truncation.
+_ESC_STATUS_CRC_EXTRA = 10
+_ESC_STATUS_LEN = 57
+_STATUSTEXT_RING = 64      # a boot burst is ~13 lines; this holds several
 _SYS_STATUS_BASE_LEN = 31
 _SYS_STATUS_EXT_END  = 43
 _LINK_STALE_S = 3.0
@@ -128,6 +136,36 @@ def _ack_budget_s(verb: str, p1: float, p2: float, p5: float) -> float:
     # x2 covers ramp + brake + a slow board; the floor keeps a tiny leg's deadline
     # sane, and p5 (when the caller set one) is honoured as a lower bound.
     return max(expected * 2.0 + _ACK_MARGIN_S, _ACK_MIN_BUDGET_S, float(p5 or 0.0) + _ACK_MARGIN_S)
+
+
+def _decode_esc_status(buf):
+    """(index, [rpm x4]) from a raw ESC_STATUS frame, or None if it fails a check.
+
+    Layout from the firmware's own vendored definition: the payload is
+    `<Q4i4f4fB` = time_usec, rpm[4] (int32, SIGNED), voltage[4], current[4],
+    index. MAVLink v2 truncates trailing zero bytes, so the payload is padded
+    back to full length before unpacking -- the same trap as SYS_STATUS's
+    extended health, and here the trailing field is `index` itself.
+    """
+    try:
+        if len(buf) < 12 or buf[0] != 0xFD:
+            return None                            # not a v2 frame
+        n = buf[1]
+        payload = buf[10:10 + n]
+        if len(payload) != n:
+            return None
+        # pymavlink hands over an UNKNOWN message WITHOUT checking the checksum,
+        # so a corrupt frame would decode into plausible-looking RPM. Check it.
+        crc = mavutil.x25crc(buf[1:10 + n])
+        crc.accumulate_str(chr(_ESC_STATUS_CRC_EXTRA))
+        want = struct.unpack_from('<H', buf, 10 + n)[0]
+        if crc.crc != want:
+            return None
+        payload = payload.ljust(_ESC_STATUS_LEN, b'\x00')
+        fields = struct.unpack('<Q4i4f4fB', payload)
+        return int(fields[-1]), [int(v) for v in fields[1:5]]
+    except Exception:                              # noqa: BLE001
+        return None
 
 
 def _param_id(pv) -> str:
@@ -186,6 +224,17 @@ class SrotFC(FlightController):
         # name -> (value, wall-clock stamp). Our own de-multiplexing of NAMED_VALUE_FLOAT,
         # because pymavlink keeps one message per msgid and SROT rides ~15 names on this one.
         self._named_cache = {}
+        # STATUSTEXT ring. Same one-slot hazard as NAMED_VALUE_FLOAT: the board
+        # bursts ~13 announcements at boot back to back, and pymavlink keeps one
+        # message per msgid, so sampling the slot sees the LAST one and loses the
+        # rest -- including "Params reset to build defaults", which silently
+        # returns JS_GAIN_DEFAULT to 0.5 and LEAK_EN to 0.
+        self._statustext_log = collections.deque(maxlen=_STATUSTEXT_RING)
+        # Per-thruster telemetry presence, parsed from the board's own arm-time
+        # announcements. None until the board has said something -- absence is
+        # not "all healthy". See `esc_presence()`.
+        self._esc_present = None
+        self._esc_lost = set()
         self._last_nvf = None
         # battery id -> (voltage_v, current_a, stamp). SAME single-slot trap as
         # NAMED_VALUE_FLOAT, one layer down: the board sends TWO BATTERY_STATUS
@@ -762,6 +811,94 @@ class SrotFC(FlightController):
     # ------------------------------------------------------------------ #
     #  Telemetry                                                          #
     # ------------------------------------------------------------------ #
+    def note_statustext(self, msg) -> None:
+        """Hook for the manager's MAVLink reader thread, like `note_named_value`.
+
+        The reader sees EVERY STATUSTEXT; this object only ever sees whichever
+        one last landed in pymavlink's single slot. That matters more here than
+        it looks, because the board sends its announcements as a BURST at boot
+        (task_mavlink.cpp): the reset reason, a defaults reset, an NVS reformat,
+        four migration notices, the calibration state and the config banner --
+        13 messages back to back, of which a poller sees one.
+
+        Two of those change how the vehicle behaves and are silent otherwise:
+        "Params reset to build defaults" puts JS_GAIN_DEFAULT back to 0.5 and
+        LEAK_EN back to 0, and "NVS reformatted" additionally loses the sensor
+        calibration.
+
+        Also parses the per-thruster presence lines, which are the only place
+        `esc_present` reaches the wire at all -- the board holds the bitmask in
+        state and publishes it exclusively as English.
+        """
+        text = getattr(msg, 'text', '')
+        text = text.decode(errors='replace') if isinstance(text, bytes) else str(text)
+        text = text.strip('\x00').strip()
+        if not text:
+            return
+        sev = int(getattr(msg, 'severity', 6))
+        self._statustext_log.append((time.time(), sev, text))
+        self._note_esc_line(text)
+
+    def _note_esc_line(self, text: str) -> None:
+        """Per-thruster presence, from the board's own announcements.
+
+        The board decides presence from bidirectional-DShot telemetry and holds
+        it in `thrusters.esc_present`, but that bitmask NEVER reaches the wire
+        as data -- only as these two sentences, once each:
+
+            "Thrusters wired: all 8"            (INFO,  at the first arm)
+            "Thrusters wired: 1,2,4 (absent: 3)"(WARN,  at the first arm)
+            "Thruster 3 LOST telemetry"         (ERROR, on a regression only)
+
+        The summary is sent ONCE per boot and the LOST lines are edge-triggered,
+        so this has to be captured as it goes past. There is no way to ask again.
+        """
+        m = re.match(r'Thrusters wired: all (\d+)', text)
+        if m:
+            self._esc_present = set(range(1, int(m.group(1)) + 1))
+            return
+        m = re.match(r'Thrusters wired: ([\d,]*)', text)
+        if m:
+            wired = m.group(1)
+            self._esc_present = {int(n) for n in wired.split(',') if n.strip().isdigit()}
+            return
+        m = re.match(r'Thruster (\d+) LOST telemetry', text)
+        if m:
+            self._esc_lost.add(int(m.group(1)))
+
+    def statustext_log(self, since: float = 0.0):
+        """(timestamp, severity, text) newest last, optionally since a time."""
+        return [r for r in self._statustext_log if r[0] >= since]
+
+    def boot_warnings(self):
+        """The startup announcements that change how the vehicle behaves.
+
+        Returned as (severity, text) so a caller can grade them. These are FAILs,
+        not notices: a defaults reset silently reverts the pilot gain to half
+        authority and disables the leak failsafe, and the operator's only clue is
+        one line in a burst of thirteen.
+        """
+        keys = ('Params reset to build defaults',
+                'NVS reformatted',
+                'CAL DEFAULTS',
+                'MAG cal MISSING',
+                'SAVE FAILED',
+                'set but NOT saved')
+        return [(sev, txt) for _, sev, txt in self._statustext_log
+                if any(k in txt for k in keys)]
+
+    def esc_presence(self):
+        """(present:set|None, lost:set) -- per-thruster telemetry presence.
+
+        `present is None` means the board has not announced yet, which is NOT
+        the same as "all healthy" and must never be graded as one. The summary
+        is emitted at the FIRST ARM, so a disarmed bench session legitimately
+        has nothing to report.
+        """
+        if self._esc_present is None:
+            return None, set(self._esc_lost)
+        return set(self._esc_present) - self._esc_lost, set(self._esc_lost)
+
     def _statustext(self) -> str:
         msg = self._cache('STATUSTEXT')
         if msg is None:
@@ -810,6 +947,115 @@ class SrotFC(FlightController):
             return True
         self._peak_boot_ms = max(prev, now_ms)
         return False
+
+    def esc_status_rpm(self):
+        """SIGNED per-thruster RPM from ESC_STATUS (291), or None.
+
+        Both repos record that pymavlink "silently discards" msgid 291 because
+        upstream removed it from `common`. It does not. `MAVLink.decode()` ends
+        with:
+
+            if mapkey not in mavlink_map:
+                return MAVLink_unknown(msgId, msgbuf)
+
+        -- a message object carrying the WHOLE FRAME, surfaced as UNKNOWN_291.
+        Verified against a recorded dive: 434 of 434 frames decode.
+
+        Worth the trouble because ESC_STATUS.rpm is `int32` and SIGNED, while
+        ESC_TELEMETRY_*.rpm is `uint16` magnitude only -- the firmware says so
+        itself ("a reversing thruster reports magnitude; the sign lives in the
+        commanded direction, which the companion already knows"). We do know the
+        commanded direction, but only for a thruster we commanded: it cannot
+        tell a prop spun backwards by the wash from one driven backwards, and it
+        says nothing at all when the vehicle is idle. Signed RPM can.
+
+        ⚠ WE MUST CHECK THE CRC OURSELVES. That early return happens BEFORE
+        pymavlink validates the checksum, so an unknown message is handed over
+        unvalidated -- a corrupted frame would otherwise read as plausible RPM.
+        `crc_extra` for ESC_STATUS is 10.
+
+        Returns a tuple of 8 signed ints, or None if nothing valid has arrived.
+        Absence, never zeros: a stopped thruster and a missing message are not
+        the same fact.
+        """
+        out = [None] * 8
+        got = False
+        for key in ('UNKNOWN_291', 'ESC_STATUS'):
+            msg = self._cache(key)
+            if msg is None:
+                continue
+            try:
+                buf = bytes(msg.get_msgbuf())
+            except Exception:                      # noqa: BLE001
+                continue
+            block = _decode_esc_status(buf)
+            if block is None:
+                continue
+            index, rpm = block
+            for i, v in enumerate(rpm):
+                if 0 <= index + i < 8:
+                    out[index + i] = v
+                    got = True
+        return tuple(out) if got else None
+
+    def thruster_health(self):
+        """(ok, reason) -- is every thruster reporting and turning as commanded?
+
+        `ok is None` means UNKNOWN, and that is the important return value. The
+        board announces presence only at the FIRST ARM and only as English, and
+        ESC telemetry exists only on ESCs flashed with Bluejay -- stock BLHeli_S
+        has no bidirectional DShot at all, so an un-flashed ESC is silent while
+        the motor spins perfectly. A gate that answered "healthy" for a vehicle
+        nothing has reported on would be worse than no gate, because it reads as
+        a check that passed.
+
+        Callers must treat None as "do not know", not as a refusal and not as an
+        approval. `duburi_ws` uses it to refuse a PAYLOAD run (where a dead
+        thruster means a missed shot and a wasted round) while allowing a
+        transit, which is the asymmetry that matters.
+        """
+        present, lost = self.esc_presence()
+        if lost:
+            return False, ('thruster(s) '
+                           + ', '.join(str(n) for n in sorted(lost))
+                           + ' LOST telemetry mid-session')
+        if present is None:
+            return None, ('thruster telemetry UNKNOWN -- the board announces '
+                          'presence at the first arm only, and an ESC without '
+                          'Bluejay never reports at all')
+        missing = sorted(set(range(1, 9)) - present)
+        if missing:
+            return False, ('thruster(s) ' + ', '.join(str(n) for n in missing)
+                           + ' report no telemetry (unflashed ESC, or unwired)')
+        return True, f'all {len(present)} thrusters reporting'
+
+    def thruster_stalled(self, commanded=None, min_rpm: int = 50):
+        """Thrusters commanded to turn that are not turning, from SIGNED RPM.
+
+        `commanded` maps 1-based thruster -> commanded sign (-1/0/+1). Without
+        it this only reports zero-RPM thrusters, which on an idle hull is every
+        thruster -- so it returns None rather than a list nobody can act on.
+
+        The signed reading is what makes this worth having: a thruster turning
+        the WRONG WAY is a wiring or direction-calibration fault that unsigned
+        magnitude cannot see, and it is exactly the fault that made every axis
+        respond backwards on this hull in August.
+        """
+        rpm = self.esc_status_rpm()
+        if rpm is None or commanded is None:
+            return None
+        bad = []
+        for n, want in commanded.items():
+            if not want:
+                continue
+            v = rpm[n - 1] if 1 <= n <= 8 else None
+            if v is None:
+                continue
+            if abs(v) < min_rpm:
+                bad.append((n, v, 'not turning'))
+            elif (v > 0) != (want > 0):
+                bad.append((n, v, 'turning the WRONG WAY'))
+        return bad
 
     def sys_status_leak(self):
         """Leak from the SYS_STATUS extended health bits, or None if unreadable.
