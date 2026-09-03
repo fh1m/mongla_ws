@@ -203,12 +203,29 @@ def test_a_bad_mode_is_SET_before_it_is_refused():
 
 
 def test_an_acceptable_mode_is_left_alone():
-    """An operator who deliberately chose MANUAL should not be overridden
-    mid-verb; MANUAL_CONTROL reaches the thrusters there too."""
+    """A board already in an acceptable mode must not be switched mid-verb."""
     for mode in _SROT_VISION_MODES:
         fc = _ModeFC(mode=mode)
         _require_srot_vision_mode(fc, None, 'vision_align')
         assert fc.set_calls == [], f'{mode} should not have been changed'
+
+
+def test_MANUAL_is_switched_to_STABILIZE_and_not_accepted():
+    """MANUAL passes translation through, which is why the first version of
+    this gate accepted it. That was wrong: MANUAL has NO attitude or heading
+    hold (JETSON_COMMS.md -- "the escape hatch, not a driving mode"), and
+    MANUAL_CONTROL carries no roll/pitch field, so nothing corrects a
+    disturbance. The bounding box then moves for reasons unrelated to the
+    vehicle's position and the loop chases them.
+
+    A vision loop in MANUAL is the same class of defect as one in SURFACE: it
+    runs, it reports success, and the number it converged on means nothing.
+    """
+    assert 'MANUAL' not in _SROT_VISION_MODES
+    fc = _ModeFC(mode='MANUAL')
+    _require_srot_vision_mode(fc, None, 'vision_align')
+    assert fc.set_calls == ['STABILIZE'], (
+        'a board in MANUAL must be moved to STABILIZE, not accepted as-is')
 
 
 def test_the_check_re_reads_rather_than_trusting_set_mode():

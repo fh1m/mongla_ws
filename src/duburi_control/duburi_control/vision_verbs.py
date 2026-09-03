@@ -79,7 +79,21 @@ def _srot_backend(fc) -> bool:
 # and lat/yaw/fwd servo on top. MANUAL works too -- raw passthrough, no
 # stabilisation -- and is allowed rather than forced away from, because an
 # operator who deliberately chose it should not be overridden mid-verb.
-_SROT_VISION_MODES = ('STABILIZE', 'MANUAL')
+# STABILIZE ONLY -- and MANUAL is deliberately NOT here.
+#
+# MANUAL passes translation through, which is why the first version of this
+# check accepted it. That reasoning was wrong, and the firmware's own contract
+# says so plainly: "MANUAL (mode 19) is raw passthrough with no stabilization
+# at all -- no heading hold, no attitude hold. It is the escape hatch, not a
+# driving mode. Fly STABILIZE." (JETSON_COMMS.md §6.)
+#
+# For a vision loop that is worse than it sounds. `MANUAL_CONTROL` carries no
+# roll or pitch field, so in MANUAL those demands sit at zero and NOTHING
+# corrects an attitude disturbance -- the hull is free to drift off level and
+# stay there. The bounding box then moves for reasons that have nothing to do
+# with the vehicle's position, and the loop chases them. Every gain in
+# `precision-alignment.md` assumes the board is holding attitude underneath.
+_SROT_VISION_MODES = ('STABILIZE',)
 
 # The mode that made this check necessary. SURFACE is a FAILSAFE DESTINATION,
 # and the firmware deliberately zeroes translation and yaw in it:

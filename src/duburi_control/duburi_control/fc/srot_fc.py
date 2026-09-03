@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import math
 import os
+import struct
 import threading
 import time
 
@@ -72,6 +73,12 @@ _ACK_TO_CODE = {sp.ACK_ACCEPTED: SUCCEEDED, sp.ACK_CANCELLED: PREEMPTED,
 _ARMED_FLAG = mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
 
 _POLL_S = 0.05    # cache-poll granularity for ack/arm/mode loops
+
+# SYS_STATUS wire layout, from the firmware's own vendored header
+# (lib/mavlink/common/mavlink_msg_sys_status.h): MIN_LEN 31 is the base message,
+# LEN 43 includes the three uint32 extended-health fields at 31 / 35 / 39.
+_SYS_STATUS_BASE_LEN = 31
+_SYS_STATUS_EXT_END  = 43
 _LINK_STALE_S = 3.0
 
 _ACK_MARGIN_S     = 5.0    # slack over the expected leg time before calling it a stall
@@ -804,6 +811,55 @@ class SrotFC(FlightController):
         self._peak_boot_ms = max(prev, now_ms)
         return False
 
+    def sys_status_leak(self):
+        """Leak from the SYS_STATUS extended health bits, or None if unreadable.
+
+        We ASKED for this (TASKS_FROM_DUBURI_WS.md §3): LEAK rides the multiplexed
+        NAMED_VALUE_FLOAT, pymavlink keeps one message per msgid, so observing a
+        flooding hull was a lottery on arrival order. The firmware delivered it in
+        rev 3 as `MAV_SYS_STATUS_SENSOR_LEAK` on the extended health bitfield --
+        a LATCHED state that a temperature reading cannot overwrite -- and we
+        never adopted it, because pymavlink 2.4.49's SYS_STATUS schema has 13
+        fields and no extensions (verified: it does not parse them).
+
+        It parses them away; it does not throw them away. The bytes are in the
+        payload, at the offsets the firmware's own accessors use:
+
+            31  onboard_control_sensors_present_extended
+            35  onboard_control_sensors_enabled_extended
+            39  onboard_control_sensors_health_extended
+
+        THE PADDING IS LOAD-BEARING. MAVLink v2 truncates trailing zero bytes, so
+        the payload is not its declared 43: measured off the live board it arrives
+        at 40, with `health_extended` cut to a SINGLE byte. Unpacking four bytes at
+        39 without padding reads past the end. A truncated field is zero by
+        definition, which is what the pad restores.
+
+        Returns None when the sensor is not present or not enabled -- absence, not
+        False. `LEAK_EN = 0` disables the board's own leak failsafe AND its pre-arm
+        refusal, and reporting "no leak" for a vehicle that is not looking is the
+        exact confusion this whole mechanism exists to remove.
+        """
+        msg = self._cache('SYS_STATUS')
+        if msg is None:
+            return None
+        try:
+            buf = bytes(msg.get_msgbuf())
+            payload = buf[10:10 + buf[1]]          # v2 header is 10 bytes
+            if len(payload) <= _SYS_STATUS_BASE_LEN:
+                return None                        # no extension bytes at all
+            payload = payload.ljust(_SYS_STATUS_EXT_END, b'\x00')
+            present, enabled, health = struct.unpack_from(
+                '<III', payload, _SYS_STATUS_BASE_LEN)
+        except Exception:                          # noqa: BLE001
+            return None
+        if not (present & sp.SYS_STATUS_SENSOR_LEAK):
+            return None                            # board is not reporting a leak sensor
+        if not (enabled & sp.SYS_STATUS_SENSOR_LEAK):
+            return None                            # LEAK_EN = 0: nothing is watching
+        # Health bit SET means healthy, i.e. dry. Clear means leak.
+        return not bool(health & sp.SYS_STATUS_SENSOR_LEAK)
+
     def telemetry(self) -> Telemetry:
         t = Telemetry()
         hb = self._vehicle_hb()
@@ -866,9 +922,16 @@ class SrotFC(FlightController):
                 block = self._cache(name)
                 if block is not None:
                     t.rpm = t.rpm + tuple(int(r) for r in getattr(block, 'rpm', ()) or ())
-        leak = self._named_value('LEAK')
-        if leak is not None:
-            t.leak = leak >= 0.5
+        # The latched health bit FIRST, the multiplexed scalar only as a fallback.
+        # NAMED_VALUE_FLOAT('LEAK') is deprecated as of rev 3 and is observed
+        # roughly one call in fifteen; the bit is deterministic.
+        leak_bit = self.sys_status_leak()
+        if leak_bit is not None:
+            t.leak = leak_bit
+        else:
+            leak = self._named_value('LEAK')
+            if leak is not None:
+                t.leak = leak >= 0.5
         wtemp = self._named_value('WTEMP')
         if wtemp is not None:
             t.water_temp_c = wtemp
