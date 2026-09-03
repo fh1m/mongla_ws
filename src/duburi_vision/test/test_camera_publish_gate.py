@@ -58,6 +58,7 @@ def _loop_for(seconds, *, publish_hz):
     """Run the SHIPPING `_capture_loop` against a fake camera for a while."""
     node = object.__new__(CN.CameraNode)
     node._cam = _CountingCam()
+    node._sink = None          # un-composed path
     node._min_period = (1.0 / publish_hz) if publish_hz > 0 else 0.0
     node._last_pub = 0.0
     node._IDLE_WAIT_S = CN.CameraNode._IDLE_WAIT_S
@@ -127,6 +128,7 @@ def test_the_gate_never_sleeps_longer_than_a_shutdown_can_wait():
     """A 0.5 Hz publish must not make Ctrl-C wait two seconds."""
     node = object.__new__(CN.CameraNode)
     node._cam = _CountingCam()
+    node._sink = None          # un-composed path
     node._min_period = 2.0
     node._last_pub = time.monotonic()
     node._IDLE_WAIT_S = CN.CameraNode._IDLE_WAIT_S

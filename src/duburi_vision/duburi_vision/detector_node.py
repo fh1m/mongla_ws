@@ -50,7 +50,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Optional
+from typing import Dict, NamedTuple, Optional
 
 import rclpy
 from rclpy.node import Node
@@ -124,6 +124,18 @@ def _parse_model_conf(s: str) -> Dict[str, float]:
     return result
 
 
+class _DirectFrame(NamedTuple):
+    """A decoded frame handed straight across in one process.
+
+    A tuple rather than a bare ndarray so the HEADER travels with the pixels.
+    They are separable only by accident: the header carries the CAPTURE time,
+    and every freshness gate downstream -- `_freshness`, the coast ladder, the
+    mid-hold torpedo fire -- reads it.
+    """
+    frame: object
+    header: object
+
+
 class DetectorNode(Node):
     def __init__(self, node_name: str = 'duburi_detector', *,
                  parameter_overrides=None):
@@ -163,6 +175,10 @@ class DetectorNode(Node):
         self.declare_parameter('debug_image_hz',      5.0)
         self.declare_parameter('alignment_deadband',  0.05)
         self.declare_parameter('paused',              False)
+        # Set by a composed launcher. Not an operator knob: it says where
+        # frames COME FROM, and flipping it at runtime would leave the node
+        # with neither source.
+        self.declare_parameter('direct_feed',         False)
 
         self._cam_name = str(self.get_parameter('camera').value).strip() or 'cam'
         ns_in  = str(self.get_parameter('image_topic').value).strip() \
@@ -299,7 +315,12 @@ class DetectorNode(Node):
         # asks the middleware to hold and retransmit frames for a consumer that
         # is going to throw all but the newest away in `_on_image` anyway --
         # buying latency and CPU for nothing.
-        self._sub          = self.create_subscription(
+        # DIRECT FEED. When a composed process hands frames straight in (see
+        # `vision_stack_node`), subscribing as well would decode and infer the
+        # same picture twice -- and the topic copy is the SLOWER of the two,
+        # so it would also be the one the detector acted on half the time.
+        self._direct = bool(self.get_parameter('direct_feed').value)
+        self._sub    = None if self._direct else self.create_subscription(
             Image, ns_in, self._on_image, qos.IMAGE)
         self._pub_det      = self.create_publisher(
             Detection2DArray, f'{ns_out}/detections', qos.DETECTIONS)
@@ -337,6 +358,12 @@ class DetectorNode(Node):
         # Inference runs on a background thread so the ROS executor stays free
         # for param callbacks (live class/model switches) during long inferences.
         self._infer_q: _queue.SimpleQueue = _queue.SimpleQueue()
+        # Set while the worker is BLOCKED waiting for a frame, i.e. exactly
+        # when a new one would be consumed immediately. A composed camera reads
+        # this to decide when to decode, so the detector is fed the instant it
+        # goes idle instead of on the publisher's clock -- which is the whole
+        # latency argument for composing them.
+        self._want = threading.Event()
         threading.Thread(target=self._infer_loop, daemon=True).start()
 
         registry_info = (
@@ -384,29 +411,67 @@ class DetectorNode(Node):
 
     def _on_image(self, msg: Image):
         # Single-slot: drop stale frame, enqueue latest only.
+        self._offer(msg)
+
+    # ------------------------------------------------------------------ #
+    #  Direct in-process feed (composed process)                         #
+    # ------------------------------------------------------------------ #
+    def wants_frame(self) -> bool:
+        """True when the worker is idle and would consume a frame NOW.
+
+        A composed camera gates its DECODE on this. `paused` is included
+        because a paused detector consumes frames only to discard them, and on
+        the vehicle the unused camera is paused for most of a mission -- so
+        this is also what stops it decoding 15 fps of pictures nobody reads.
+        """
+        return (self._want.is_set()
+                and not self.get_parameter('paused').value)
+
+    def submit_frame(self, frame_bgr, header) -> None:
+        """Hand over an ALREADY-DECODED frame plus the header that describes it.
+
+        The header must be the one built from the frame's own capture time.
+        Passing the frame without it would leave `detections` stamped with
+        whatever the detector felt like, which is the defect the round-30 and
+        round-32 stamp fixes removed at the two layers either side of this one.
+        """
+        self._offer(_DirectFrame(frame_bgr, header))
+
+    def _offer(self, item) -> None:
         while not self._infer_q.empty():
             try:
                 self._infer_q.get_nowait()
             except _queue.Empty:
                 break
-        self._infer_q.put_nowait(msg)
+        self._infer_q.put_nowait(item)
 
     def _infer_loop(self):
         """Worker thread: decode + infer + publish (never touches the ROS executor)."""
         while rclpy.ok():
             try:
-                msg = self._infer_q.get(timeout=0.5)
+                self._want.set()
+                item = self._infer_q.get(timeout=0.5)
             except _queue.Empty:
                 continue
+            finally:
+                self._want.clear()
 
             if self.get_parameter('paused').value:
                 continue  # frame consumed from queue; skip decode + infer
 
-            try:
-                frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            except Exception as exc:
-                self.get_logger().warning(f"[DET  ] cv_bridge decode failed: {exc!r}")
-                continue
+            if isinstance(item, _DirectFrame):
+                # Already decoded, in this process, by the camera that captured
+                # it. No serialise, no transport, no second copy.
+                frame, header = item.frame, item.header
+            else:
+                header = item.header
+                try:
+                    frame = self._bridge.imgmsg_to_cv2(
+                        item, desired_encoding='bgr8')
+                except Exception as exc:
+                    self.get_logger().warning(
+                        f"[DET  ] cv_bridge decode failed: {exc!r}")
+                    continue
 
             t0 = time.monotonic()
             det = self._det  # atomic ref read under CPython GIL
@@ -426,7 +491,7 @@ class DetectorNode(Node):
                 self._with_target += 1
                 self._log_alignment(primary, frame)
 
-            det_msg = detections_to_array(detections, msg.header)
+            det_msg = detections_to_array(detections, header)
             if not rclpy.ok():
                 return
             try:
@@ -448,7 +513,7 @@ class DetectorNode(Node):
                         source=self._cam_name, fps=fps,
                         healthy=True, deadband=self._deadband, primary=primary)
                     dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
-                    dbg.header = msg.header
+                    dbg.header = header
                     self._pub_dbg.publish(dbg)
                     self._last_dbg = time.monotonic()
                 except Exception as exc:

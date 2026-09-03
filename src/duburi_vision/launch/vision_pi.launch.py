@@ -164,21 +164,11 @@ def generate_launch_description():
         DeclareLaunchArgument('dwn_device_path', default_value=''),
     ]
 
-    def camera(camera_name: str, profile_arg: str, calib_arg: str,
-               device_path_arg: str, fps_arg: str, pub_arg: str) -> Node:
-        return Node(
-            package='duburi_vision', executable='camera_node',
-            name=f'duburi_camera_{camera_name}', output='screen',
-            ros_arguments=_QUIET,
-            parameters=[{
-                'profile':     LaunchConfiguration(profile_arg),
-                'name':        camera_name,
-                'device_path': LaunchConfiguration(device_path_arg),
-                'calibration': LaunchConfiguration(calib_arg),
-                'fps':         LaunchConfiguration(fps_arg),
-                'publish_rate_hz': LaunchConfiguration(pub_arg),
-            }],
-        )
+    # NO SEPARATE CAMERA PROCESSES. The cameras live inside the same process
+    # as the detectors now, so their frames reach inference by reference
+    # instead of by topic -- see `detector_dual_node`. Their parameters arrive
+    # here `fwd_cam_`/`dwn_cam_`-prefixed for the same reason the detectors'
+    # do: launch's `name=`/`parameters=` are process-wide.
 
     # NO `name=` HERE, DELIBERATELY. Launch implements it as `-r __node:=`,
     # which is PROCESS-wide: setting it renamed all THREE nodes in this process
@@ -206,6 +196,17 @@ def generate_launch_description():
             # not from this.
             'device':         'cpu',
             'half':           False,
+
+            'fwd_cam_profile':         LaunchConfiguration('fwd_profile'),
+            'dwn_cam_profile':         LaunchConfiguration('dwn_profile'),
+            'fwd_cam_device_path':     LaunchConfiguration('fwd_device_path'),
+            'dwn_cam_device_path':     LaunchConfiguration('dwn_device_path'),
+            'fwd_cam_calibration':     LaunchConfiguration('fwd_calibration'),
+            'dwn_cam_calibration':     LaunchConfiguration('dwn_calibration'),
+            'fwd_cam_fps':             LaunchConfiguration('fwd_fps'),
+            'dwn_cam_fps':             LaunchConfiguration('dwn_fps'),
+            'fwd_cam_publish_rate_hz': LaunchConfiguration('fwd_publish_hz'),
+            'dwn_cam_publish_rate_hz': LaunchConfiguration('dwn_publish_hz'),
         }],
     )
 
@@ -221,10 +222,6 @@ def generate_launch_description():
         )
 
     return LaunchDescription(args + [
-        camera('forward',  'fwd_profile', 'fwd_calibration', 'fwd_device_path',
-               'fwd_fps', 'fwd_publish_hz'),
-        camera('downward', 'dwn_profile', 'dwn_calibration', 'dwn_device_path',
-               'dwn_fps', 'dwn_publish_hz'),
         detectors,
         tracker('forward',  'fwd_frame_rate'),
         tracker('downward', 'dwn_frame_rate'),

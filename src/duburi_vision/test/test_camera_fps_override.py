@@ -58,7 +58,13 @@ def test_the_launch_passes_it_through_per_camera():
               / 'vision_pi.launch.py').read_text()
     assert "DeclareLaunchArgument('fwd_fps', default_value='0')" in launch
     assert "DeclareLaunchArgument('dwn_fps', default_value='0')" in launch
-    assert "'fps':         LaunchConfiguration(fps_arg)" in launch
+    # The cameras moved INTO the detector process (round 32), so the value now
+    # reaches them as a `<cam>_cam_` prefixed parameter on the composed
+    # launcher rather than through a per-process `camera()` factory. The
+    # requirement is unchanged and is what this asserts: each camera gets its
+    # OWN value, all the way down.
+    assert "'fwd_cam_fps':             LaunchConfiguration('fwd_fps')" in launch
+    assert "'dwn_cam_fps':             LaunchConfiguration('dwn_fps')" in launch
 
 
 def test_the_reversal_of_the_cap_carries_BOTH_measurements():
