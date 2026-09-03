@@ -66,7 +66,15 @@ class CameraNode(Node):
         self.declare_parameter('height',          480)
         # fps / publish_rate_hz declared as int so launch ints pass through
         # cleanly; we cast to float at the timer site.
-        self.declare_parameter('fps',             30)
+        # 0 = "the profile decides", which is what the comment in
+        # _build_camera has claimed since round 26 while this line said 30.
+        # The non-profile branch already falls back to 30 for a 0, so the
+        # sentinel never reaches a device call; the profile branch now honours
+        # a POSITIVE value as an override, the same precedence device_path has
+        # over device. Declaring 30 here is what let a launch default silently
+        # beat every profile in round 26 -- fixed there by removing the launch
+        # default, which left the node's own default able to do it again.
+        self.declare_parameter('fps',             0)
         self.declare_parameter('frame_id',        '')
         # Path to a calibration.json from tools/fov_calibrate.py. Empty (the
         # default) keeps the historical behaviour EXACTLY: size-only CameraInfo
@@ -176,6 +184,17 @@ class CameraNode(Node):
                 profile.setdefault('name', profile_name)
             else:
                 profile['name'] = str(self.get_parameter('name').value).strip()
+            # An explicit positive fps overrides the profile, 0 leaves it
+            # alone. This is the only way to cap a camera without editing a
+            # checked-in config, and capping matters here: the forward camera
+            # delivers 68 Hz raw against a detector that consumes ~50, and the
+            # surplus starves the OTHER camera through USB/CPU contention.
+            fps_override = int(self.get_parameter('fps').value)
+            if fps_override > 0:
+                profile['fps'] = fps_override
+                self.get_logger().info(
+                    f'[CAM  ] fps override → {fps_override} '
+                    f"(profile asked {get_profile(profile_name).get('fps')})")
             # device_path (by-path symlink) > int device override > profile default.
             if device_path:
                 profile['device'] = device_path
