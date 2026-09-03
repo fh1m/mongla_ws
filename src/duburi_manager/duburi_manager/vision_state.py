@@ -76,6 +76,12 @@ class Sample:
     coasted:   bool  = False       # True = tracker-predicted box during a detection gap (no live box)
 
 
+# Bounds on a detection's `header.stamp`, interpreted as wall time. Outside
+# these we do not trust the stamp at all -- see `_capture_monotonic`.
+_STAMP_SKEW_TOL_S = 0.5    # tolerated clock lead between vision host and here
+_STAMP_MAX_AGE_S  = 5.0    # older than this is a stopped clock, not a slow frame
+
+
 class VisionState:
     """One camera's worth of subscribed-and-cached vision state.
 
@@ -95,6 +101,7 @@ class VisionState:
         self._lock          = threading.Lock()
         self._latest_array: Optional[Detection2DArray] = None
         self._latest_stamp: float = 0.0           # monotonic seconds
+        self._stamp_warned: bool  = False        # one-shot, see _capture_monotonic
         self._image_size:  tuple  = default_image_size
         # CameraInfo K/D, kept rather than discarded -- see _on_info.
         self._K = None
@@ -143,10 +150,67 @@ class VisionState:
     #  Subscriber callbacks                                              #
     # ------------------------------------------------------------------ #
     def _on_detections(self, msg: Detection2DArray) -> None:
+        stamp = self._capture_monotonic(msg)
         with self._lock:
             self._latest_array = msg
-            self._latest_stamp = time.monotonic()
+            self._latest_stamp = stamp
             self._det_msgs += 1
+
+    def _capture_monotonic(self, msg) -> float:
+        """The instant the FRAME WAS CAPTURED, on the monotonic clock.
+
+        This used to be `time.monotonic()` at message arrival, and everything
+        downstream that believes it reads FRAME AGE was in fact reading AGE
+        SINCE THE MESSAGE LANDED:
+
+          _freshness       decays the lateral command by it
+          the coast ladder 0.10 / 0.40 / 0.80 / 1.00 s are measured in it
+          is_new_frame     gates the mid-hold torpedo FIRE on it
+          align_stable_frames counts distinct values of it
+
+        None of them could see the capture->inference->transport chain, so the
+        whole measured latency -- ~32 ms median, 48 p95 -- was invisible to the
+        loop that exists to react to it. `motion_vision` even says "sampled_at
+        is the frame's arrival time" in a comment; the consequence was never
+        drawn. Same defect as `camera_node` stamping `now()` at publish, one
+        layer downstream: a carried truth resampled against a local clock.
+
+        CLOCK DOMAINS. `header.stamp` is WALL time (the source derives it from
+        the kernel's monotonic capture stamp); `age_s` is MONOTONIC. Mixing
+        them silently yields ages off by however far the two clocks sit apart.
+        Both offsets are read at the same instant so the difference is the
+        conversion and nothing else.
+
+        FAIL SAFE, NOT FAIL SILENT. A stamp that is absent, in the future, or
+        absurdly old means a publisher we do not understand -- `use_sim_time`,
+        an NTP step, a node still stamping `now()` at publish. Arrival time is
+        then the honest answer and we say so once, rather than handing the
+        control loop a negative age it will treat as very fresh.
+        """
+        now_mono = time.monotonic()
+        try:
+            stamp_wall = (msg.header.stamp.sec
+                          + msg.header.stamp.nanosec * 1e-9)
+        except AttributeError:
+            return now_mono
+        if stamp_wall <= 0.0:
+            return now_mono
+        age = time.time() - stamp_wall
+        if not (-_STAMP_SKEW_TOL_S <= age <= _STAMP_MAX_AGE_S):
+            if not self._stamp_warned:
+                self._stamp_warned = True
+                self._log.warn(
+                    f'[VST  ] detection stamp is {age:+.3f}s from wall clock '
+                    f'-- outside [{-_STAMP_SKEW_TOL_S:+.1f}, '
+                    f'{_STAMP_MAX_AGE_S:.1f}]s. Falling back to arrival time, '
+                    f'so freshness and the coast ladder measure age since '
+                    f'arrival (the pre-fix behaviour) rather than a wrong '
+                    f'number. Check use_sim_time and the clock on the vision '
+                    f'host.')
+            return now_mono
+        # Clamp: a stamp a hair in the future (sub-ms clock jitter between the
+        # two hosts' `time.time()`) must not read as a NEGATIVE age.
+        return now_mono - max(age, 0.0)
 
     def _on_tracks(self, msg: Detection2DArray) -> None:
         with self._lock:
