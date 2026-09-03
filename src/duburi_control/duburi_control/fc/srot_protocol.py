@@ -320,6 +320,66 @@ GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.
 # the board announcing "Gain 60%" ... "Gain 100%" as it went.
 # MAV_SYS_STATUS_SENSOR_LEAK, from their vendored common.h:139. The board sets
 # `present` always, `enabled` from LEAK_EN, and `health` SET = dry / CLEAR = leak.
+# --------------------------------------------------------------------------- #
+#  LANDING_TARGET uplink: the class map and the timeout ladder                 #
+# --------------------------------------------------------------------------- #
+#
+# ⚠ APPEND-ONLY, and 0 is reserved. Same discipline as the firmware's
+# `SROT_SERVO_FUNC_*` and `movement::Type`: these numbers cross a repo boundary
+# by hand, so INSERTING a value silently renames every class after it. 0 must
+# stay UNSPECIFIED so an unconfigured sender reads as "unassigned" rather than
+# as whichever class happens to be first.
+#
+# WHY THIS EXISTS AT ALL: our two senders disagreed. `auv_manager_node`'s uplink
+# tick sent a hardcoded `target_num=0` while `tools/srot_uplink_check.py` sent
+# `d.class_id` -- the detector's own index, which is a property of whichever
+# model happens to be loaded and means something different for every one. So
+# the field was either meaningless or model-dependent, and neither is a wire
+# contract. Proposed upstream in PR #2 (VISION_API §6, answering their Q5).
+UPLINK_CLASS_UNSPECIFIED = 0
+UPLINK_CLASSES = {
+    'gate':       1,
+    'flare':      2,
+    'red_pipe':   3,   # slalom
+    'bin':        4,
+    'blood':      5,
+    'fire':       6,
+    'torpedo':    7,
+    'hole':       8,
+    'rescue':     9,
+    'person':    10,
+}
+UPLINK_CLASS_MAX = 10   # bump when appending; never renumber
+
+
+def uplink_class_num(name) -> int:
+    """Class name -> frozen wire id. Unknown or empty -> 0 = UNSPECIFIED.
+
+    Case-insensitive because the detector's labels and a mission's strings have
+    drifted in case before. An unmapped class deliberately sends 0 rather than
+    raising: the bearing is still correct and still useful, and refusing to
+    uplink a target because nobody has assigned it a number yet would be a
+    worse failure than an unlabelled one.
+    """
+    if not name:
+        return UPLINK_CLASS_UNSPECIFIED
+    return UPLINK_CLASSES.get(str(name).strip().lower(),
+                              UPLINK_CLASS_UNSPECIFIED)
+
+
+# The timeout ladder, declared as a cross-repo contract in VISION_API.md and
+# asserted NOWHERE until now. The ordering is the whole point: each rung must
+# expire strictly before the next, so authority reaches zero BEFORE loss is
+# declared -- which is what makes a detection dropout a glide rather than a
+# lurch. One edit to any of these silently breaks that, and the symptom is a
+# vehicle that jerks when a box flickers.
+UPLINK_FRESHNESS_S   = 0.10   # a sample older than this is not "this frame"
+UPLINK_COAST_S       = 0.40   # steer on the tracker's prediction up to here
+UPLINK_LOST_GRACE_S  = 0.80   # authority ramps to zero across this
+UPLINK_DECLARE_LOST_S = 1.00  # only now is the target gone
+UPLINK_LADDER = (UPLINK_FRESHNESS_S, UPLINK_COAST_S,
+                 UPLINK_LOST_GRACE_S, UPLINK_DECLARE_LOST_S)
+
 SYS_STATUS_SENSOR_LEAK = 2
 
 JS_FUNC_NONE      = 0

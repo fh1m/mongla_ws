@@ -78,7 +78,11 @@ while time.time() < t_end:
     if sent % 12 == 1:
         print(f"{d.cx:7.1f} {math.degrees(b.angle_x):12.3f} {indep:12.3f} "
               f"{wire:10.3f} {math.degrees(b.size_x):9.3f}")
-    fc.send_landing_target(b, target_num=d.class_id)
+    # The frozen map, not `d.class_id`. The detector's index is a property of
+    # whichever model is loaded, so this tool and the runtime were putting
+    # different meanings in the same field.
+    fc.send_landing_target(b, target_num=sp.uplink_class_num(
+        getattr(d, 'class_name', '')))
 cap.release(); det.close(); m.close(); g.release()
 print(f"\nsent {sent} LANDING_TARGET frames")
 print(f"encode/decode round-trip worst error: {worst:.6f} deg (float32 on the wire)")
