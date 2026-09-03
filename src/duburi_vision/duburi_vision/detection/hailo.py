@@ -1,10 +1,12 @@
 """Hailo-8 detector backend: a compiled ``.hef`` behind the same `Detector` API.
 
-Replaces the Jetson's TensorRT path on the Raspberry Pi 5 + AI HAT+. Measured
-in round 24 on this exact hardware: YOLO11n end-to-end at **82.3 Hz** against
-the Jetson's 20-30 Hz, with our own 3-class `gate_rescue_repair` at 97.8 FPS
-chip-side -- faster than the stock 80-class COCO model, so the proxy used to
-plan this was conservative.
+Replaces the Jetson's TensorRT path on the Raspberry Pi 5 + AI HAT+. Round 29
+measured this pipeline at **98.0 Hz** on `gate_rescue_repair` against a
+`hailortcli --hw-only` benchmark of **97.9 FPS** on the same HEF -- so the host
+code is at 100 % of the chip and there is no preprocessing overhead left to
+recover. The full campaign, including why the ceiling is the model's CONTEXT
+COUNT and why async inference buys exactly nothing here, is in
+`.claude/context/hailo-vision.md`.
 
 Four things differ from `.pt` / `.engine`, and each is silent if missed
 ---------------------------------------------------------------------
@@ -42,6 +44,7 @@ vision-servoed hull means driving away from the target.
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -50,6 +53,10 @@ import numpy as np
 from .detector import Detection, Detector
 
 _INPUT_FALLBACK = 640
+
+# How many activation swaps before saying so. One is the normal handover from
+# a camera switch; a stream of them means two detectors are competing.
+_SWAP_WARN_AT = 20
 
 
 def _load_class_index(model_path: str) -> Optional[Dict[int, str]]:
@@ -86,6 +93,47 @@ def letterbox(im: np.ndarray, size: int):
     px, py = (size - nw) // 2, (size - nh) // 2
     out[py:py + nh, px:px + nw] = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LINEAR)
     return out, s, px, py
+
+
+# --------------------------------------------------------------------------- #
+#  ONE DEVICE PER PROCESS, ONE ACTIVE GRAPH AT A TIME                         #
+# --------------------------------------------------------------------------- #
+# Measured on this hardware, because all three options look plausible on paper
+# and two of them do not work:
+#
+#   two PROCESSES, a VDevice each   -> HAILO_OUT_OF_PHYSICAL_DEVICES (74) on the
+#                                      second. This is what `vision_dual` does
+#                                      today, so the dual-camera launch has
+#                                      never been able to start.
+#   multi_process_service + scheduler -> HailoRTInvalidOperationException. The
+#                                      API accepts the flag; the `hailort_service`
+#                                      daemon it needs is not installed.
+#   ROUND_ROBIN scheduler, one process -> SIGSEGV. Not an exception, a core dump.
+#   ONE process, one VDevice, both HEFs configured, activation handed back and
+#   forth                            -> WORKS. 98.2 Hz on the live graph.
+#
+# So two detectors must live in ONE process and take turns. The turn-taking is
+# cheap: swapping costs 4.15 ms median against a 10.18 ms frame, and swapping on
+# EVERY frame still gives 73.8 Hz across both cameras (36.9 Hz each). With the
+# mission model -- one camera live, the other paused -- there are no swaps at
+# all. The tail is the thing to know about: one swap in 295 took 42.69 ms.
+_DEVICE = None
+_DEVICE_LOCK = threading.Lock()
+_ACTIVE: Optional['HailoDetector'] = None
+
+
+def _shared_device():
+    """The process's single VDevice. Created on first use, never released.
+
+    Not released on close() either: releasing it while a second detector still
+    holds a network group configured on it is how you turn a clean shutdown
+    into a segfault, and the process is about to exit anyway.
+    """
+    global _DEVICE
+    if _DEVICE is None:
+        from hailo_platform import VDevice
+        _DEVICE = VDevice()
+    return _DEVICE
 
 
 class HailoDetector(Detector):
@@ -133,21 +181,23 @@ class HailoDetector(Detector):
         shape = tuple(in_info.shape)
         self._size = int(shape[0]) if len(shape) >= 2 else _INPUT_FALLBACK
 
-        # The VDevice is EXCLUSIVE: a second process asking for one gets
-        # HAILO_OUT_OF_PHYSICAL_DEVICES (74). Two cameras therefore share one
-        # device with two network groups, not two devices -- measured round 24.
-        self._target = VDevice()
+        self._target = _shared_device()
         cfg = ConfigureParams.create_from_hef(
             self._hef, interface=HailoStreamInterface.PCIe)
         self._ng = self._target.configure(self._hef, cfg)[0]
         self._ngp = self._ng.create_params()
-        ivp = InputVStreamParams.make(self._ng, format_type=FormatType.UINT8)
-        ovp = OutputVStreamParams.make(self._ng, format_type=FormatType.FLOAT32)
+        self._ivp = InputVStreamParams.make(self._ng, format_type=FormatType.UINT8)
+        self._ovp = OutputVStreamParams.make(self._ng, format_type=FormatType.FLOAT32)
+        self._InferVStreams = InferVStreams
 
-        self._activation = self._ng.activate(self._ngp)
-        self._activation.__enter__()
-        self._pipe = InferVStreams(self._ng, ivp, ovp)
-        self._pipe.__enter__()
+        # ACTIVATION IS DEFERRED, and that is the whole point of this class
+        # holding a shared device. Activating here would mean the SECOND
+        # detector constructed in the process fails at construction -- exactly
+        # the failure this replaces, moved one layer down. It is taken on the
+        # first infer and handed over when the other detector needs it.
+        self._activation = None
+        self._pipe = None
+        self._swaps = 0
         self._ready = True
 
         self._allow_ids: Optional[set] = None
@@ -163,7 +213,7 @@ class HailoDetector(Detector):
             # of the first mission frame, where it reads as a dropped frame.
             blank = np.zeros((self._size, self._size, 3), np.uint8)
             try:
-                self._pipe.infer({self._in_name: np.expand_dims(blank, 0)})
+                self._acquire().infer({self._in_name: np.expand_dims(blank, 0)})
             except Exception:
                 pass
 
@@ -209,12 +259,55 @@ class HailoDetector(Detector):
     # ------------------------------------------------------------------ #
     #  Inference
     # ------------------------------------------------------------------ #
+    def _acquire(self):
+        """Take the chip's single activation, evicting whoever holds it.
+
+        Locked because two detector nodes in one process are two rclpy
+        callbacks, and on a MultiThreadedExecutor they can be on different
+        threads. Without the lock two threads can both observe `_ACTIVE is not
+        self`, both evict, and both enter -- and a double activation is a core
+        dump, not an exception.
+        """
+        global _ACTIVE
+        with _DEVICE_LOCK:
+            if _ACTIVE is self and self._pipe is not None:
+                return self._pipe
+            if _ACTIVE is not None and _ACTIVE is not self:
+                _ACTIVE._release_locked()
+            self._activation = self._ng.activate(self._ngp)
+            self._activation.__enter__()
+            self._pipe = self._InferVStreams(self._ng, self._ivp, self._ovp)
+            self._pipe.__enter__()
+            _ACTIVE = self
+            self._swaps += 1
+            if self._swaps == _SWAP_WARN_AT and self._log:
+                # Not an error -- the mission model is one camera live -- but
+                # two UNPAUSED detectors thrash the activation, and 73.8 Hz
+                # across both cameras reads as "the chip got slower" unless
+                # something says why.
+                self._log.warn(
+                    f'[HAILO] {Path(self._path).name} has taken the activation '
+                    f'{self._swaps} times -- another detector is competing for '
+                    f'the chip. Each swap costs ~4 ms; pause the camera you are '
+                    f'not steering on.')
+            return self._pipe
+
+    def _release_locked(self) -> None:
+        """Give up the activation. Caller holds `_DEVICE_LOCK`."""
+        for obj in (self._pipe, self._activation):
+            try:
+                if obj is not None:
+                    obj.__exit__(None, None, None)
+            except Exception:
+                pass
+        self._pipe = self._activation = None
+
     def infer(self, frame_bgr: np.ndarray) -> List[Detection]:
         if not self._ready or frame_bgr is None:
             return []
         h, w = frame_bgr.shape[:2]
         buf, scale, pad_x, pad_y = letterbox(frame_bgr, self._size)
-        res = self._pipe.infer({self._in_name: np.expand_dims(buf, 0)})
+        res = self._acquire().infer({self._in_name: np.expand_dims(buf, 0)})
         raw = res[self._out_name]
         # Batch of 1: unwrap the leading batch axis.
         per_class = raw[0] if len(raw) else []
@@ -249,19 +342,19 @@ class HailoDetector(Detector):
         return out
 
     def close(self) -> None:
+        """Drop this detector's activation. The DEVICE stays.
+
+        Releasing the shared VDevice here would pull it out from under a second
+        detector that still has a network group configured on it -- a segfault
+        during shutdown, which is the hardest kind to read. It is process-wide
+        and the process is exiting.
+        """
+        global _ACTIVE
         self._ready = False
-        for obj, name in ((getattr(self, '_pipe', None), 'pipe'),
-                          (getattr(self, '_activation', None), 'activation')):
-            try:
-                if obj is not None:
-                    obj.__exit__(None, None, None)
-            except Exception:
-                pass
-        try:
-            if getattr(self, '_target', None) is not None:
-                self._target.release()
-        except Exception:
-            pass
+        with _DEVICE_LOCK:
+            self._release_locked()
+            if _ACTIVE is self:
+                _ACTIVE = None
 
     def __repr__(self) -> str:
         return (f'<HailoDetector {Path(self._path).name} '
