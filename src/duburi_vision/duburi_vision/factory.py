@@ -6,8 +6,17 @@ changes. Mirrors `duburi_sensors.factory.make_yaw_source` exactly.
 """
 
 
-def _build_webcam(*, device=None, width=640, height=480, fps=30,
-                  frame_id='laptop_cam', name='laptop', logger=None, **_):
+def _build_webcam(*, device=None, device_path=None, width=640, height=480,
+                  fps=30, frame_id='laptop_cam', name='laptop', logger=None,
+                  **_):
+    # `device_path` WAS SILENTLY IGNORED. Every profile that names one -- the
+    # two Pi cameras and both vehicle cameras -- passed it in as a kwarg, it
+    # landed in `**_`, and the builder used `device`, which those profiles do
+    # not set. So they all resolved to index 0: whichever camera_node started
+    # first got it and the second died EBUSY, with the operator's own launch
+    # arg being the only thing that had ever made them work.
+    if device_path:
+        device = device_path
     if device is None:
         device = 0
     from .cameras.webcam import WebcamCamera
@@ -16,8 +25,9 @@ def _build_webcam(*, device=None, width=640, height=480, fps=30,
         frame_id=frame_id, name=name, logger=logger)
 
 
-def _build_v4l2(*, device=None, width=640, height=360, fps=60,
-                frame_id='cam', name='cam', logger=None, fourcc='MJPG', **_):
+def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
+                fps=60, frame_id='cam', name='cam', logger=None,
+                fourcc='MJPG', **_):
     """The low-latency path: a keep-up thread and a one-deep mailbox.
 
     Falls back to `webcam` when the device is not a real V4L2 node -- an int
@@ -25,6 +35,9 @@ def _build_v4l2(*, device=None, width=640, height=360, fps=60,
     safe to put in a shared profile: a dev box with a different camera stack
     gets OpenCV instead of a stack trace.
     """
+    # A profile's `device_path` is the device. See `_build_webcam`.
+    if device_path:
+        device = device_path
     if device is None:
         device = '/dev/video0'
     dev = str(device)

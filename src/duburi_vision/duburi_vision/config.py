@@ -49,7 +49,16 @@ CAMERA_PROFILES = {
         # 17 ms. The driver keeps the OLDEST frames when its buffers fill, so
         # draining empties a fossil record -- cameras/v4l2_mailbox.py.
         'source':      'v4l2',
-        'device_path': '/dev/v4l/by-path/platform-xhci-hcd.1-usb-0:2:1.0-video-index0',
+                # `/dev/duburi_cam_*`, from tools/udev/99-duburi-cameras.rules.
+        # NOT `/dev/v4l/by-path/...`: those ID_PATH values are correct --
+        # udevadm reports exactly them -- but Raspberry Pi OS creates only
+        # `by-id` for USB video and never `by-path`. So this named a symlink
+        # the distro does not make, fell through to the integer index, and
+        # BOTH profiles resolved to /dev/video0: whichever node started
+        # first won and the other died EBUSY. The rule also earned itself
+        # immediately -- video0 was the Sonix before a reboot and the
+        # Fantech after, so the raw index had already swapped the cameras.
+        'device_path': '/dev/duburi_cam_forward',
         'width':       640,
         'height':      360,
         'fps':         210,
@@ -57,7 +66,7 @@ CAMERA_PROFILES = {
     },
     'pi_downward': {
         'source':      'v4l2',
-        'device_path': '/dev/v4l/by-path/platform-xhci-hcd.0-usb-0:1:1.0-video-index0',
+                'device_path': '/dev/duburi_cam_downward',
         'width':       640,
         'height':      360,
         'fps':         90,

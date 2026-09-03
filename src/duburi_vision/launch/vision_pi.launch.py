@@ -105,30 +105,67 @@ def generate_launch_description():
             'fwd_calibration',
             default_value=_calib('pi_forward_1280x720.json')),
         DeclareLaunchArgument('dwn_calibration', default_value=''),
-        # 60, AND CAPPING IS WHAT MAKES IT FASTER -- which is the opposite of
-        # what the number looks like. The profile asks for 210, the camera
-        # delivers ~68, and the detector consumes ~30: every surplus frame is
-        # an MJPEG decode and a ROS publish spent on an image that `_on_image`
-        # immediately drops from its single-slot queue. Measured on the Pi,
-        # both cameras live, two runs each:
+        # 0 = the profile's own rate (210), AND THAT REVERSES THE 60 THIS
+        # SHIPPED WITH LAST ROUND. The cap was measured correctly and is now
+        # wrong, because the mailbox changed what a captured frame costs.
         #
-        #     uncapped   forward 20.2 / 21.3 det/s      downward 16.1 / 15.7
-        #     capped 60  forward 32.3 / 31.2 det/s      downward 15.4 / 14.8
+        # The cap's evidence: uncapped 20.2/21.3 det/s, capped-60 32.3/31.2 --
+        # +53 %. True at the time. `cap.read()` DECODED every frame back then,
+        # so a camera outrunning its consumer burned a core on JPEGs nobody
+        # used, and throttling the camera throttled the waste.
         #
-        # +53 % on the camera we steer on, and the other camera unchanged
-        # within run-to-run spread. 30 was also measured (26.9 fwd / 16.7 dwn):
-        # it buys the downward camera a little and costs the forward one more.
+        # The mailbox decoupled them. The pump COPIES (13 us) and does not
+        # decode; `read()` decodes only the frames a consumer actually takes.
+        # So capture rate is now a LATENCY knob rather than a throughput one --
+        # frame age at dequeue is about one capture period. Measured with the
+        # consumer pinned at 30 Hz and decode on demand:
         #
-        # 0 = the profile decides, which is the right value on any machine
-        # whose camera is not outrunning its detector.
-        DeclareLaunchArgument('fwd_fps', default_value='60'),
+        #     capture  30    age 46.12 ms   p95 59.52    CPU 8.0 %
+        #     capture  60    age 23.54 ms   p95 33.32    CPU 7.8 %
+        #     capture 120    age 13.45 ms   p95 18.09    CPU 8.0 %
+        #     capture 210    age  8.94 ms   p95 14.28    CPU 7.8 %
+        #
+        # 2.6x fresher for the SAME CPU. The 60 was costing 14.6 ms of age and
+        # buying nothing once the decode stopped being per-captured-frame.
+        #
+        # MJPEG stays the format, and that is also measured rather than
+        # inherited: YUYV needs no decode (0.55 ms vs 1.94) but 640x360 YUYV is
+        # 450 kB a frame and the bus caps it at 35.4 Hz -- age 20 ms. Paying
+        # 1.4 ms of CPU to halve the age is the right side of that trade.
+        DeclareLaunchArgument('fwd_fps', default_value='0'),
         DeclareLaunchArgument('dwn_fps', default_value='0'),
+        # CAPTURE FAST, PUBLISH AT THE CONSUMER'S RATE. These are different
+        # knobs and conflating them cost a measured regression: uncapping
+        # `fps` alone took the image age down (26.0 -> 23.6 ms) and pushed the
+        # DETECTION age UP (47.5 -> 62.6), because every captured frame was
+        # also PUBLISHED -- 94 messages a second of 691 kB each, which the
+        # executor and DDS pay for whether or not anyone wanted them.
+        #
+        # The mailbox decouples capture from DECODE. This decouples capture
+        # from TRANSPORT: the pump keeps the newest frame available at 210 Hz
+        # for ~0 CPU, and the publish hands over whichever one is newest when
+        # the consumer's period comes round. 0 = publish every captured frame.
+        #
+        # 40 because it is the measured knee, capture pinned at 210:
+        #
+        #     publish every frame (~107 Hz)   detections 55.3 ms  p95 79.0
+        #     publish  60 Hz                  detections 36.6 ms  p95 51.3
+        #     publish  40 Hz                  detections 31.7 ms  p95 39.6
+        #
+        # Slower publishing gives FRESHER detections, which is only paradoxical
+        # if you think of the topic as a stream. It is a mailbox: the consumer
+        # reads about 36 Hz whatever we publish, so anything above that is
+        # 691 kB messages the executor serialises and the consumer discards --
+        # work that delays the frame it does want. 40 is matched to the
+        # consumer; lower would starve it.
+        DeclareLaunchArgument('fwd_publish_hz', default_value='40'),
+        DeclareLaunchArgument('dwn_publish_hz', default_value='0'),
         DeclareLaunchArgument('fwd_device_path', default_value=''),
         DeclareLaunchArgument('dwn_device_path', default_value=''),
     ]
 
     def camera(camera_name: str, profile_arg: str, calib_arg: str,
-               device_path_arg: str, fps_arg: str) -> Node:
+               device_path_arg: str, fps_arg: str, pub_arg: str) -> Node:
         return Node(
             package='duburi_vision', executable='camera_node',
             name=f'duburi_camera_{camera_name}', output='screen',
@@ -139,6 +176,7 @@ def generate_launch_description():
                 'device_path': LaunchConfiguration(device_path_arg),
                 'calibration': LaunchConfiguration(calib_arg),
                 'fps':         LaunchConfiguration(fps_arg),
+                'publish_rate_hz': LaunchConfiguration(pub_arg),
             }],
         )
 
@@ -184,9 +222,9 @@ def generate_launch_description():
 
     return LaunchDescription(args + [
         camera('forward',  'fwd_profile', 'fwd_calibration', 'fwd_device_path',
-               'fwd_fps'),
+               'fwd_fps', 'fwd_publish_hz'),
         camera('downward', 'dwn_profile', 'dwn_calibration', 'dwn_device_path',
-               'dwn_fps'),
+               'dwn_fps', 'dwn_publish_hz'),
         detectors,
         tracker('forward',  'fwd_frame_rate'),
         tracker('downward', 'dwn_frame_rate'),

@@ -90,3 +90,52 @@ def test_every_source_has_a_builder():
     from duburi_vision.factory import BUILDERS
     for name, prof in CAMERA_PROFILES.items():
         assert prof['source'] in BUILDERS, f'{name}: {prof["source"]!r}'
+
+
+# --------------------------------------------------------------------------- #
+#  A profile key that reaches nothing is worse than an absent one
+# --------------------------------------------------------------------------- #
+def test_device_path_in_a_profile_reaches_the_builder():
+    """`device_path` was passed in by every profile that names one and landed
+    in the builder's `**_`, ignored. All four such profiles therefore resolved
+    to device index 0, and the operator's explicit launch arg was the only
+    thing that had ever made two cameras work at once -- the second died EBUSY
+    with a message recommending the very key the profile already set.
+
+    Asserted through `make_camera` rather than on the signature, so a future
+    builder that accepts the kwarg and then drops it still fails."""
+    import duburi_vision.factory as F
+
+    seen = {}
+
+    class _Spy:
+        def __init__(self, **kw):
+            seen.update(kw)
+
+        def info(self):
+            return {}
+
+    orig = F._build_v4l2.__globals__.get('V4L2MailboxCamera')
+    import duburi_vision.cameras.v4l2_mailbox as vm
+    vm.V4L2MailboxCamera = _Spy
+    try:
+        F.make_camera_from_profile(
+            {'source': 'v4l2', 'device_path': '/dev/duburi_cam_forward',
+             'width': 640, 'height': 360, 'fps': 60, 'name': 'f'})
+    finally:
+        if orig is not None:
+            vm.V4L2MailboxCamera = orig
+    assert seen.get('device') == '/dev/duburi_cam_forward', seen
+
+
+@pytest.mark.parametrize('name', ('pi_forward', 'pi_downward'))
+def test_the_pi_profiles_name_a_symlink_this_OS_creates(name):
+    """Raspberry Pi OS creates `/dev/v4l/by-id/` for USB video and NEVER
+    `by-path`, so the by-path values these profiles used to carry -- which
+    udevadm reports correctly -- pointed at nothing. `tools/udev/` supplies
+    `/dev/duburi_cam_*` instead, and the rule earned itself immediately: video0
+    was the Sonix before a reboot and the Fantech after, so the raw index had
+    already swapped the two cameras."""
+    dev = CAMERA_PROFILES[name]['device_path']
+    assert dev.startswith('/dev/duburi_cam_'), dev
+    assert 'by-path' not in dev

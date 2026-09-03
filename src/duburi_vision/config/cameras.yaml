@@ -55,7 +55,7 @@ duburi_vision:
       # OLDEST frames when its buffers fill, so draining empties a fossil
       # record -- see cameras/v4l2_mailbox.py.
       source:      v4l2
-      device_path: /dev/v4l/by-path/platform-xhci-hcd.1-usb-0:2:1.0-video-index0
+      device_path: /dev/duburi_cam_forward
       width:       640
       height:      360
       fps:         210
@@ -67,7 +67,7 @@ duburi_vision:
     # say so, which is the intended behaviour rather than a misconfiguration.
     pi_downward:
       source:      v4l2
-      device_path: /dev/v4l/by-path/platform-xhci-hcd.0-usb-0:1:1.0-video-index0
+      device_path: /dev/duburi_cam_downward
       width:       640
       height:      360
       fps:         90

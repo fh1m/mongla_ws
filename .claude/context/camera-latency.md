@@ -143,3 +143,151 @@ What worked was **measuring each stage against one clock**, plus a
 control-vs-treatment run (both cameras live vs one paused) that separated
 contention from pipeline. Guessing at causes and testing them one at a time
 cost two round trips; the staged measurement answered it in one.
+
+---
+
+# Round 31 — capture fast, publish slow, and one finding that did not survive
+
+## 10. The result
+
+Mission configuration on the vehicle (forward live, downward paused), age from
+the kernel's capture stamp:
+
+```
+                        round 30      round 31
+  image at subscriber   25.9 ms       15.0 ms      p95 28.8 -> 23.0
+  detections            47.5 ms       32.5 ms      p95 64.9 -> 48.4
+```
+
+Three changes, in order of what they bought.
+
+## 11. THE FPS CAP WAS MINE AND IT WAS WRONG
+
+Round 30 capped the forward camera to 60 fps and measured **+53 % detections**
+(20.2/21.3 → 32.3/31.2 det/s). That measurement was correct and the conclusion
+has expired, because the mailbox changed what a captured frame costs.
+
+`cap.read()` used to DECODE every frame, so a camera outrunning its consumer
+burned a core on JPEGs nobody used and throttling the camera throttled the
+waste. The pump only COPIES (13 µs); `read()` decodes on demand. So capture
+rate stopped being a throughput knob and became a **latency** one — frame age
+at dequeue is about one capture period:
+
+```
+  consumer pinned at 30 Hz, decode on demand
+    capture  30    age 46.12 ms   p95 59.52    CPU 8.0 %
+    capture  60    age 23.54 ms   p95 33.32    CPU 7.8 %
+    capture 120    age 13.45 ms   p95 18.09    CPU 8.0 %
+    capture 210    age  8.94 ms   p95 14.28    CPU 7.8 %
+```
+
+**2.6× fresher for identical CPU.** The cap was costing 14.6 ms and buying
+nothing.
+
+MJPEG survives review on measurement, not inheritance: YUYV needs no decode
+(0.55 ms vs 1.94) but 640×360 YUYV is 450 kB a frame and the bus caps it at
+**35.4 Hz, age 20 ms**. Paying 1.4 ms of CPU to halve the age is the right side
+of that trade. (The Pi 5 has no hardware JPEG decoder — the VideoCore VII drops
+the block the Pi 4 had — so every frame is decoded on the A76 cores.)
+
+## 12. CAPTURE RATE AND PUBLISH RATE ARE DIFFERENT KNOBS
+
+Uncapping `fps` alone made detections **worse**: image age 26.0 → 23.6 ms and
+detection age 47.5 → 62.6. Every captured frame was also PUBLISHED — 94
+messages a second of 691 kB, which the executor and DDS pay for whether or not
+anyone wanted them.
+
+The mailbox decouples capture from DECODE. `publish_rate_hz` decouples it from
+TRANSPORT, and with capture pinned at 210:
+
+```
+  publish every frame (~107 Hz)   detections 55.3 ms   p95 79.0
+  publish  60 Hz                  detections 36.6 ms   p95 51.3
+  publish  40 Hz                  detections 31.7 ms   p95 39.6
+```
+
+**Publishing slower gives fresher detections**, which is only paradoxical if
+you think of the topic as a stream. It is a mailbox: the consumer reads ~36 Hz
+whatever we publish, so anything above that is 691 kB messages it discards —
+work that delays the frame it does want.
+
+## 13. LOCK-FREE, AND WHAT THAT IS AND IS NOT WORTH
+
+`self._slot = (payload, cap_t, seq)` is one `STORE_ATTR` publishing an
+immutable tuple, so a reader's one `LOAD_ATTR` gets the whole old frame or the
+whole new one. That is the atomic pointer swap; nothing else is needed.
+
+The buffering is **by refcount, which is better than double buffering**: a
+consumer mid-decode holds its tuple, so the pump's next store cannot touch that
+memory, and it is freed the instant nobody is reading. A fixed pair has to
+reason about whether the reader finished with B before the writer wraps onto
+it; refcounting answers that by construction.
+
+**The lock it replaces was measured: 0.198 µs, 2.0× the bare store, 0.001 % of
+a frame.** So this is not a latency change and is not claimed as one.
+
+## 14. ZERO-COPY IS NOT WORTH IT HERE, AND THE NUMBER SAYS SO
+
+```
+  bytes(mmap[:n])   -- what we do     13.1 µs
+  memoryview(mmap)  -- zero-copy       1.6 µs
+  cv2.imdecode      -- the real work  2450.2 µs
+```
+
+The copy is **0.5 % of the decode it precedes**. True zero-copy means holding
+the buffer until the consumer releases it, which costs the driver one of four
+buffers and risks a stalled consumer pinning one forever — to save 11.5 µs. The
+ROS hop is the bigger number (build 0.845 ms + serialise 1.469 + transport
+1.76) and rclpy has no loaned-message path, so §12 addresses it by sending
+fewer, fresher messages rather than cheaper ones.
+
+## 15. THE FINDING THAT DID NOT SURVIVE ITS OWN TEST
+
+A 100 Hz sensor read by a thread beside CPU-bound **Python** threads:
+
+```
+  competing threads    lag median    delivered rate
+  none                     0.3 ms          99.2 Hz
+  one                    108.4 ms          50.2 Hz
+  three                 2428.8 ms           1.4 Hz
+```
+
+One competitor turns a 100 Hz sensor into a 50 Hz sensor with 108 ms of lag,
+**stamped as fresh** — the reader is not broken, merely unscheduled.
+`sys.setswitchinterval(0.0001)` against the CPython default of 5 ms recovered
+it: 577.6 → 1.2 ms with two competitors, for 19 % of the CPU-bound throughput.
+A one-line 480× fix.
+
+**It was then tested against the real vehicle and it is not reachable.** Our
+hot threads are not CPU-bound Python: the V4L2 pump blocks in `ioctl`, the
+decode is inside OpenCV, the reader blocks in `serial` — all of which release
+the GIL. Against the real srot board with 225 Hz of real JPEG decoding beside
+it:
+
+```
+  drain alone         @5.0 ms   p95 109.75 ms
+  drain + vision      @5.0 ms   p95 108.70 ms   <- 225 Hz of decode costs NOTHING
+  drain alone         @0.1 ms   p95 130.61 ms   <- the "fix" is WORSE
+  drain + vision      @0.1 ms   p95 118.85 ms
+```
+
+More switches on threads that already yield is pure overhead. **Reverted.**
+
+What survives is the BNO reader's drain-to-newest and its `_stale_lines`
+counter — defence in depth, said to be that rather than a fix for a measured
+bug. The tty backlog stayed at 132 bytes through the whole synthetic table, so
+watching `in_waiting` would not have caught it either.
+
+## 16. Two bugs found while verifying, neither about latency
+
+**A profile's `device_path` reached nothing.** Every profile that names one
+passed it as a kwarg into the builder's `**_`, and the builder read `device`,
+which those profiles do not set. All four resolved to index 0: whichever
+camera_node started first won and the second died EBUSY — with an error message
+recommending the very key the profile already set. Masked for as long as the
+operator passed the launch arg explicitly.
+
+**The udev rule earned itself on its first reboot.** `/dev/video0` was the
+Sonix before and the Fantech after, so the raw index had already swapped the
+two cameras. `/dev/duburi_cam_*` now comes from ID_PATH, and the Pi profiles
+name it instead of the `by-path` symlink Raspberry Pi OS never creates.
