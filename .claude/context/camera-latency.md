@@ -291,3 +291,100 @@ operator passed the launch arg explicitly.
 Sonix before and the Fantech after, so the raw index had already swapped the
 two cameras. `/dev/duburi_cam_*` now comes from ID_PATH, and the Pi profiles
 name it instead of the `by-path` symlink Raspberry Pi OS never creates.
+
+---
+
+# Round 32 — the links themselves, and a clock that tells the truth
+
+## 17. TWO LINKS WERE DEAD, AND NEITHER LOGGED ANYTHING
+
+A RELIABLE subscriber against a BEST_EFFORT publisher receives **nothing**.
+rclpy logs one warning at construction and is silent for ever after.
+
+When `image_raw` became a BEST_EFFORT mailbox in round 30, five subscribers
+were updated to match and **one was missed: `vision_state`, the control host.**
+Its frame counter therefore sat at 0 — and `preflight.wait_vision_state_ready`
+gated on exactly that counter, so **every mission's first vision verb burned
+its full 10 s timeout** and reported *"did not pass within 10s"*, which reads
+as a slow pipeline rather than a QoS mismatch.
+
+The warning about this trap was already written down, verbatim, in **five
+files**. A comment repeated five times is not a mechanism. `duburi_vision/qos.py`
+is one table both ends import; ten call sites across four packages now take
+their profiles from it, and `test_qos_contract.py` computes the pairings and
+scans the tree for anything that bypasses it. The scan found two more
+hand-rolled profiles while it was being written.
+
+`vision_state` no longer subscribes to `image_raw` **at all**. The control host
+steers on detections; a raw-image subscription costs a full-frame
+deserialisation per message on the machine that owes a 50 Hz loop.
+
+Second dead link, same shape: `classes_filter` was published VOLATILE, so a HUD
+or console starting after the detector received nothing and showed blank class
+chips. It is LATCHED now.
+
+## 18. `age_s` WAS AGE SINCE ARRIVAL, NOT AGE SINCE CAPTURE
+
+`detector_node` passes `msg.header` through onto `detections`, so the capture
+stamp survives inference and reaches the control host correctly. Then
+`vision_state._on_detections` overwrote it with `time.monotonic()`.
+
+So `_freshness`, the coast ladder, `is_new_frame` (which gates the **mid-hold
+torpedo fire**) and `align_stable_frames` all measured age since the message
+landed. The entire pipeline delay was invisible to the loop built to react to
+it. `motion_vision:1105` even says *"sampled_at is the frame's arrival time"* —
+the fact was recorded, the consequence never drawn. Same defect as round 30's
+`header.stamp = now()`, one layer downstream.
+
+`is_new_frame` **improves** rather than changes: keyed on the same value
+increasing, it now means a distinct FRAME rather than a distinct MESSAGE, which
+is what its docstring always claimed.
+
+## 19. THE FRESHNESS CONSTANTS WERE PREDICTED WRONG AND MEASURE FINE
+
+The expectation going in was that an honest `age_s` would push the loop off
+full authority permanently, forcing `VISION_FRESH_FULL_S` up. Measured on the
+Pi (forward camera, downward paused, 60 s, `72e1e83`):
+
+```
+  image_raw    32.5 Hz   age  med 11.46  p95 14.80  max 18.32 ms
+  detections   34.5 Hz   age  med 27.25  p95 30.76  max 37.91 ms
+  interval             med 27.80  p95 35.54  max 66.87 ms
+```
+
+The detector adds **15.8 ms**. Age when the control loop reads a sample is the
+pipeline age plus the wait for the next tick, so against `FULL=0.10 / ZERO=0.40`:
+
+```
+  med  27.25 + 27.80 =  55.05 ms  -> authority 1.000
+  p95  30.76 + 35.54 =  66.30 ms  -> authority 1.000
+  max  37.91 + 66.87 = 104.78 ms  -> authority 0.984
+  max + one DROPPED detection = 171.65 ms -> authority 0.761
+```
+
+**No change.** Full authority at median and p95; the worst measured case costs
+1.6 %; a genuinely dropped detection costs 24 %, which is the decay doing its
+job. The prediction was wrong because it assumed a higher pipeline age than the
+hardware actually has — recorded here so the constants are not churned again on
+the same reasoning.
+
+## 20. THE VEHICLE WAS RUNNING CODE FROM 18 COMMITS AGO
+
+Found while setting up the bench. The Pi was on a local branch `master` at
+`ac242b1`, tracking nothing, with **972 lines of uncommitted rsync'd work** on
+top — and it could not `git fetch`, because there are no GitHub credentials on
+it. Every file that differed from `srot` turned out to be the *older* version,
+so nothing was lost, but no measurement taken there was measuring the code we
+believed.
+
+`git bundle` is the fix that needs no credentials on the vehicle:
+
+```bash
+git bundle create /tmp/u.bundle <pi-HEAD>..srot          # dev box
+scp /tmp/u.bundle fh1m@10.42.0.28:/tmp/                  # dev box
+git fetch /tmp/u.bundle srot:refs/remotes/origin/srot -f # Pi
+git merge --ff-only origin/srot                          # Pi
+```
+
+The Pi now tracks `origin/srot` properly. **Check `git log --oneline -1` on the
+vehicle before trusting any number taken there.**
