@@ -93,12 +93,30 @@ def generate_launch_description():
             'fwd_calibration',
             default_value=_calib('pi_forward_1280x720.json')),
         DeclareLaunchArgument('dwn_calibration', default_value=''),
+        # 60, AND CAPPING IS WHAT MAKES IT FASTER -- which is the opposite of
+        # what the number looks like. The profile asks for 210, the camera
+        # delivers ~68, and the detector consumes ~30: every surplus frame is
+        # an MJPEG decode and a ROS publish spent on an image that `_on_image`
+        # immediately drops from its single-slot queue. Measured on the Pi,
+        # both cameras live, two runs each:
+        #
+        #     uncapped   forward 20.2 / 21.3 det/s      downward 16.1 / 15.7
+        #     capped 60  forward 32.3 / 31.2 det/s      downward 15.4 / 14.8
+        #
+        # +53 % on the camera we steer on, and the other camera unchanged
+        # within run-to-run spread. 30 was also measured (26.9 fwd / 16.7 dwn):
+        # it buys the downward camera a little and costs the forward one more.
+        #
+        # 0 = the profile decides, which is the right value on any machine
+        # whose camera is not outrunning its detector.
+        DeclareLaunchArgument('fwd_fps', default_value='60'),
+        DeclareLaunchArgument('dwn_fps', default_value='0'),
         DeclareLaunchArgument('fwd_device_path', default_value=''),
         DeclareLaunchArgument('dwn_device_path', default_value=''),
     ]
 
     def camera(camera_name: str, profile_arg: str, calib_arg: str,
-               device_path_arg: str) -> Node:
+               device_path_arg: str, fps_arg: str) -> Node:
         return Node(
             package='duburi_vision', executable='camera_node',
             name=f'duburi_camera_{camera_name}', output='screen',
@@ -108,6 +126,7 @@ def generate_launch_description():
                 'name':        camera_name,
                 'device_path': LaunchConfiguration(device_path_arg),
                 'calibration': LaunchConfiguration(calib_arg),
+                'fps':         LaunchConfiguration(fps_arg),
             }],
         )
 
@@ -152,8 +171,10 @@ def generate_launch_description():
         )
 
     return LaunchDescription(args + [
-        camera('forward',  'fwd_profile', 'fwd_calibration', 'fwd_device_path'),
-        camera('downward', 'dwn_profile', 'dwn_calibration', 'dwn_device_path'),
+        camera('forward',  'fwd_profile', 'fwd_calibration', 'fwd_device_path',
+               'fwd_fps'),
+        camera('downward', 'dwn_profile', 'dwn_calibration', 'dwn_device_path',
+               'dwn_fps'),
         detectors,
         tracker('forward',  'fwd_frame_rate'),
         tracker('downward', 'dwn_frame_rate'),
