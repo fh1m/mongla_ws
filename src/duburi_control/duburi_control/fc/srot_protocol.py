@@ -103,6 +103,28 @@ CMD_USER_3    = 31012      # roll spin (stunt)
 CMD_USER_4    = 31013      # pattern
 CMD_USER_5    = 31014      # autotune start
 
+# MAV_CMD_DO_MOTOR_TEST -- fully implemented on the board and unused by us until
+# now. Standard ArduPilot semantics: p1 = motor (1-BASED), p2 = throttle type
+# (0 = percent, 1 = raw PWM us, 2 = pilot -> DENIED), p3 = throttle, p4 = the
+# keep-alive window in SECONDS.
+#
+# THREE PRECONDITIONS, all enforced by the firmware and all worth knowing before
+# calling it (mav_commands.cpp:366-402):
+#   * MOTORS MUST BE ARMED. Disarmed returns MAV_RESULT_FAILED with
+#     "Arm motors before testing motors."
+#   * IT IS A KEEP-ALIVE, NOT A ONE-SHOT. The board expires the test when the
+#     resends stop -- and expiry AUTO-DISARMS. That is by design (it mirrors
+#     ArduSub's verify_motor_test), so "the vehicle disarmed when I let go" is
+#     the feature, not a fault.
+#   * THE WINDOW IS CLAMPED to 600..3000 ms whatever p4 says, and p4 = 0 gives
+#     600. Bondor asks for 1 s and refreshes every 300 ms.
+CMD_DO_MOTOR_TEST = 209
+MOTOR_TEST_THROTTLE_PERCENT = 0
+MOTOR_TEST_THROTTLE_PWM     = 1
+MOTOR_TEST_WINDOW_MIN_MS = 600     # the firmware's floor; a 0 or absent p4 lands here
+MOTOR_TEST_WINDOW_MAX_MS = 3000    # ...and its ceiling
+MOTOR_TEST_KEEPALIVE_HZ  = 3.3     # 300 ms, Bondor's cadence: >= 2 Hz with margin
+
 # ---------------------------------------------------------------------- #
 #  SROT_MOVE p1 -- WIRE type codes (JETSON_COMMS.md §5 p1 table)          #
 # ---------------------------------------------------------------------- #

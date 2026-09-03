@@ -998,6 +998,84 @@ class SrotFC(FlightController):
                     got = True
         return tuple(out) if got else None
 
+    def motor_test(self, motor_1based: int, throttle_pct: float,
+                   seconds: float = 2.0, *, abort_fn=None) -> tuple:
+        """Spin ONE thruster, holding the board's keep-alive for `seconds`.
+
+        `MAV_CMD_DO_MOTOR_TEST` (209) has been fully implemented on the board
+        the whole time and had no driver method here, so the one procedure that
+        can identify a thruster by making it turn was reachable only from
+        Bondor.
+
+        THE KEEP-ALIVE IS THE SAFETY MECHANISM, WHICH IS WHY THIS OWNS IT.
+        The board expires the test when the resends stop, and expiry
+        auto-disarms -- so a caller that spins a motor and then wedges must not
+        be able to hold it spinning. This blocks for the duration and pumps from
+        inside, and any exit path (a raise, an abort, the deadline) stops
+        resending. The window is clamped to 600..3000 ms by the firmware
+        whatever we ask, so silence for one clamped window is the longest a
+        thruster can run past us.
+
+        Returns (ok, reason). ARMED is required and refused messages come back
+        as the board's own text.
+
+        ⚠ PROPS OFF, OR THE VEHICLE RESTRAINED. This turns a thruster.
+        """
+        n = int(motor_1based)
+        if not 1 <= n <= 8:
+            return False, f'motor {n} out of range 1..8'
+        pct = float(throttle_pct)
+        if not math.isfinite(pct) or not -100.0 <= pct <= 100.0:
+            return False, f'throttle {throttle_pct} must be finite and -100..100'
+        if not self.is_armed():
+            # The board says this too, but saying it here means the caller does
+            # not have to spin a motor to find out.
+            return False, ('motor test requires ARMED (the board refuses with '
+                           '"Arm motors before testing motors.")')
+
+        window_s = max(sp.MOTOR_TEST_WINDOW_MIN_MS,
+                       min(sp.MOTOR_TEST_WINDOW_MAX_MS, 1000.0)) / 1000.0
+        period = 1.0 / sp.MOTOR_TEST_KEEPALIVE_HZ
+        deadline = time.monotonic() + max(0.0, float(seconds))
+        sent = 0
+        try:
+            while time.monotonic() < deadline:
+                if abort_fn is not None and abort_fn():
+                    return False, f'motor test aborted after {sent} keep-alives'
+                self._clear_ack()
+                self._command_long(sp.CMD_DO_MOTOR_TEST,
+                                   p1=float(n),
+                                   p2=float(sp.MOTOR_TEST_THROTTLE_PERCENT),
+                                   p3=pct,
+                                   p4=window_s)
+                sent += 1
+                time.sleep(period)
+                # Check for a refusal AFTER the sleep, not by blocking on one.
+                # A refusal is a property of the request rather than of any
+                # single keep-alive, so it only has to be noticed once -- and
+                # blocking here would make the CADENCE depend on the link,
+                # which is precisely what the keep-alive exists to survive. It
+                # would also eat the caller's requested duration: waiting a
+                # second for an ACK that never comes turned a 1 s test into one
+                # keep-alive, which the board expires.
+                ack = self._cache('COMMAND_ACK')
+                if ack is not None and int(getattr(ack, 'command', 0)) == \
+                        sp.CMD_DO_MOTOR_TEST:
+                    res = int(ack.result)
+                    if res != sp.ACK_ACCEPTED:
+                        st = self._statustext()
+                        return False, (f'motor test refused: '
+                                       f'{sp.ACK_NAMES.get(res, res)}'
+                                       + (f' ({st})' if st else ''))
+        finally:
+            # Stop resending, deliberately and on EVERY path. The board expires
+            # the test within one clamped window and disarms, which is the
+            # designed end state -- there is no "stop" command to send.
+            pass
+        return True, (f'motor {n} tested at {pct:.0f}% for {seconds:.1f}s '
+                      f'({sent} keep-alives); the board expires and disarms '
+                      f'within {sp.MOTOR_TEST_WINDOW_MAX_MS} ms of the last one')
+
     def thruster_health(self):
         """(ok, reason) -- is every thruster reporting and turning as commanded?
 
