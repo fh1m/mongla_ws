@@ -310,3 +310,88 @@ design*. Motor direction must be **Forward/Reverse (3D mode)**; the Pico emits
 DShot 3D framing (`1048` neutral) and this is not optional. Until an ESC reports,
 the Pico drives that motor open-loop with no integrator, so it is safe to arm
 and test with stock ESCs.
+
+---
+
+# 15. What the depth number physically is
+
+Read out of the vendored `lib/MS5837` driver and `bar30.cpp`, because "depth"
+is the one number every mission and every failsafe is built on and we had never
+checked how it is produced.
+
+**Fluid density is `0.99802` g/cm³ — FRESH water at 20 °C.**
+`bar30.cpp:105` calls `setDensity(0.99802f)` explicitly, and the conversion is
+
+```
+depth_m = (pressure_mbar - surface_mbar) / (density * 9.80665 * 10)
+```
+
+Seawater is ~1.024, so **in salt water the reported depth would read ~2.4 %
+shallow** — about 7 cm at 3 m. Both our competitions run in **pools**, so the
+shipped constant is the right one for us and this is a note, not a defect. It
+would become one the day anyone tests in the sea, and there is no density
+parameter to change: it is a compile-time call.
+
+**`surface_mbar` is `CAL_BARO_Z`, not sea level.** Depth zero is wherever the
+baro-zero calibration was last run — which is why an uncalibrated board reads a
+standing offset rather than noise, and why `mission_reset` re-zeroing matters.
+
+**The sample is taken at the LOWEST oversampling the part offers.**
+`bar30.cpp` calls `read()` with no argument → OSR index 0 → OSR 256, ~1 ms per
+conversion. Their own comment records that a higher OSR was tried and made the
+read **fail outright** — no `SCALED_PRESSURE2` at all — so it is not the knob
+it looks like; the 608→744 mbar excursion that prompted trying it was the mag
+report colliding with a Bar30 conversion on the shared I2C0 bus. So the jitter
+we see is partly the setting, and raising it is a firmware question, not a
+parameter.
+
+**Second-order temperature compensation only runs below 20 °C** (`MS5837.cpp:188`).
+Pool water is above that, so on our vehicle the first-order compensation is the
+whole correction.
+
+**The PROM is CRC-4 validated and the RESET delay was a real bug they fixed.**
+Upstream's `reset()` compared `micros()` against a `millis()` start, so the
+mandatory ~2.8 ms post-RESET wait was **zero** and the calibration coefficients
+were timing luck at every boot. A corrupted C5 gives −160 °C or +10 °C — and
+because `dT` feeds `offset` and `sens`, **a bad PROM silently corrupts pressure
+and depth too**. That is the "sometimes −160, sometimes 10, sometimes perfect"
+seen on the vehicle. Three deviations from upstream are marked in their source;
+re-apply all three if the driver is ever re-vendored.
+
+# 16. Two rate/behaviour facts to code against
+
+**`MANUAL_CONTROL` slower than ~1 Hz is silently attenuated.** Full authority
+to `MANUAL_FRESH_MS` = 1000 ms, then a **linear ramp to neutral by 1500 ms**
+(`config.h:640-641`). A ramp, not a cliff, and well inside the 5 s GCS
+failsafe. We stream at 50 Hz so this never engages — but it means a stalled
+vision loop degrades to neutral rather than holding its last command, which is
+the behaviour we want and should not "fix".
+
+**`ESC_STATUS` arrives at ~9.9 Hz, not the 5 Hz the integration doc claims** —
+measured, and consistent with our own 9.85 Hz on `UNKNOWN_291`.
+
+# 17. Corrections to THEIR docs, so we do not act on them
+
+Their own `DOC_DRIFT` file already catches some of these; these are the ones
+that would change what we do:
+
+- **`PARAMETERS.md` disagrees with the code in 12 rows**, including the entire
+  depth PID (doc 3.0/0.5/0.0, code **0.5/0.1/0.01** — the code values are the
+  ones **measured in water on 2026-08-07**) and `ATC_ANG_*_P` (doc 4.5, code
+  **6.0**). Never assert against that file.
+- **The magnetic field band is 8–120 µT in code, 25–65 µT in the docs.** The
+  vehicle measures **14.7 µT** inside the hull — under the documented floor. An
+  assertion built on 25 µT would call a working sensor broken, which is exactly
+  the history: four separate gates refused the yaw reference and none of them
+  printed the number it refused on.
+- **`ARCHITECTURE.md` is the stalest file in their tree** — it still says the
+  board presents as ArduSub 4.1.0 with ~90 compat dummy params, and lists 7
+  modes where there are 11, omitting **AUTO (23) — the entire companion
+  interface**. Do not use it for the wire contract.
+- **`HARDWARE.md` has the battery voltage/current ADC pins swapped** relative
+  to `config.h` (code: volt 39, curr 36), and still names `PM1_VOLT_MULT
+  (0.009088)` — a parameter name and a unit that both no longer exist.
+- **`BATT_CURR_MULT` is a compile-time `0.0f`**, not a parameter, so pack
+  current is structurally zero. Note the asymmetry:
+  `BATTERY_STATUS.current_battery` correctly reports **−1 = unknown**, while
+  `NAMED_VALUE_FLOAT("CURR")` reports **0.0**. Read the former.
