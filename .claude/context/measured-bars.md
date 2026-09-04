@@ -173,3 +173,48 @@ and it is the one the measurement supports.
 samples, a monotonic trend and a plausible mechanism were all present, and the
 result was still an artefact of which clip filled which bin. The tell was
 running it per clip — which cost one extra script and reversed the conclusion.
+
+### Strengthened, and checked for the bias it could have had
+
+The retraction above made the per-clip number load-bearing, so it was re-run
+across **11 clips at 2,600 frames each**, dropping any clip without ≥80 samples
+in *both* bands rather than quoting a ratio built on 39:
+
+    7 clips qualified    growth  min 0.5x   median 1.9x   max 4.1x
+
+Median **1.9×**, against the live rig's 1.56× — and the pooled 16× stays dead.
+
+**The selection this required is itself a hazard**, and it points the flattering
+way: requiring both bands keeps only clips where the approach *succeeded*. If
+detection degrades close-in, the worst cases lose their near-band boxes and get
+dropped, and the survivors would confirm whatever was already argued.
+
+Checked with two probes on the same frames — the detector's own confidence far
+vs near, and the miss rate inside the approach segment:
+
+| clip | conf far → near | Δ | miss % in approach |
+|---|---|---|---|
+| `octagon_2` | 0.944 → 0.965 | +0.021 | 0.0 % |
+| `torp_down_1` | 0.946 → 0.965 | +0.019 | 0.0 % |
+| `oct_front_1` | 0.923 → 0.935 | +0.012 | 0.0 % |
+| `octagon_1` | 0.913 → 0.951 | +0.038 | 3.8 % |
+| `octagon_Bottom` | 0.894 → 0.880 | −0.014 | 5.5 % |
+| **`bin`** | **0.891 → 0.357** | **−0.534** | **12.1 %** |
+| `bin_front_3` | 0.174 → 0.193 | +0.019 | 47.3 % |
+
+**Five of seven show confidence rising or flat close-in with near-zero misses** —
+those near-band boxes are genuinely good and nothing is being hidden.
+
+`bin` is a real close-in collapse — and it is also the clip with the **highest**
+jitter growth (4.1×). `bin_front_3` misses 47 % but at a confidence that is low
+*everywhere* (0.17 far, 0.19 near): uniformly weak, not a range effect.
+
+So the exception proves the rule rather than breaking it: **where confidence
+holds, jitter does not grow; where confidence collapses, it does.** An
+independent probe arriving at the same conclusion as the jitter data, which is
+why `ctrl_conf` and not `range_gain_floor` is the lever.
+
+**One further thing this exposes, unused today:** on `bin` the confidence fell
+0.53 *before* the box began wandering. A confidence **trend** is an early
+warning the control loop does not currently watch — it reads only an absolute
+floor. Worth a look when there is water to validate against.
