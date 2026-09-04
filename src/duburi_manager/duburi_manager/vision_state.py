@@ -101,6 +101,7 @@ class VisionState:
         self._lock          = threading.Lock()
         self._latest_array: Optional[Detection2DArray] = None
         self._latest_stamp: float = 0.0           # monotonic seconds
+        self._evict_warned: bool  = False
         self._stamp_warned: bool  = False        # one-shot, see _capture_monotonic
         # Set on every detections message. A control loop waits on this
         # instead of sleeping a fixed tick, so it acts the moment a new
@@ -431,6 +432,7 @@ class VisionState:
             if track_id >= 0:
                 with self._lock:
                     self._last_real[track_id] = (time.monotonic(), score)
+                    self._evict_last_real()
 
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
@@ -441,6 +443,43 @@ class VisionState:
     # ------------------------------------------------------------------ #
     #  Coast layer helpers (used only when bbox_error(coast_s>0))         #
     # ------------------------------------------------------------------ #
+    # Bounds on `_last_real`. An entry only needs to outlive the longest
+    # coast a caller can ask for, and `_present` rejects anything past
+    # `_STALE_LIMIT_S` (1.0 s) anyway -- 30 s is enormous margin and exists
+    # purely to bound memory.
+    _LAST_REAL_HORIZON_S = 30.0
+    _LAST_REAL_MAX = 256
+
+    def _evict_last_real(self) -> None:
+        """Drop sightings too old to start a coast. CALLER HOLDS THE LOCK.
+
+        `_last_real` was written and never pruned. Two consequences, and the
+        second is the dangerous one: it grew without bound over a mission, and
+        a RECYCLED tracker id inherited the previous object's sighting
+        timestamp -- so a coast could begin from a sighting that belonged to
+        something else, at that object's score.
+
+        Both tracker backends prune their own registries against exactly this
+        hazard (`roboflow_tracker.py:202-211`, `bytetrack.py:138-148`); this
+        dict did not.
+        """
+        if len(self._last_real) <= self._LAST_REAL_MAX:
+            return
+        cutoff = time.monotonic() - self._LAST_REAL_HORIZON_S
+        for tid in [k for k, (t, _s) in self._last_real.items() if t < cutoff]:
+            self._last_real.pop(tid, None)
+        # Still oversized means many LIVE ids, not stale ones. Keep the newest
+        # and SAY SO, rather than growing in silence.
+        if len(self._last_real) > self._LAST_REAL_MAX:
+            newest = sorted(self._last_real.items(),
+                            key=lambda kv: kv[1][0], reverse=True)
+            self._last_real = dict(newest[:self._LAST_REAL_MAX])
+            if not self._evict_warned:
+                self._evict_warned = True
+                self._log.warn(
+                    f'[VST  ] {self._LAST_REAL_MAX}+ live track ids -- the '
+                    f'coast registry is being trimmed. Expect id churn.')
+
     _MATCH_GATE_NORM = 0.20   # max normalized centre distance to call a /tracks box "the same"
 
     def _match_track_id(self, ex: float, ey: float, tracks_array,
@@ -533,14 +572,22 @@ class VisionState:
     #  Lifecycle                                                          #
     # ------------------------------------------------------------------ #
     def close(self) -> None:
-        try:
-            self._node.destroy_subscription(self._sub_det)
-            self._node.destroy_subscription(self._sub_trk)
-            self._node.destroy_subscription(self._sub_info)
-            self._node.destroy_subscription(self._sub_img)
-            self._node.destroy_subscription(self._sub_vr)
-        except Exception as exc:
-            self._log.debug(f"[VST  ] close() ignored: {exc!r}")
+        """Tear down every subscription, INDEPENDENTLY.
+
+        One `try` around all five meant the first failure skipped the rest --
+        and it was failing every time: `_sub_img` is a leftover from when this
+        class subscribed to `image_raw`, the attribute no longer exists, and
+        the AttributeError landed in the bare `except`. So `_sub_vr` was never
+        destroyed and nothing said so.
+        """
+        for name in ('_sub_det', '_sub_trk', '_sub_info', '_sub_vr'):
+            sub = getattr(self, name, None)
+            if sub is None:
+                continue
+            try:
+                self._node.destroy_subscription(sub)
+            except Exception as exc:
+                self._log.debug(f"[VST  ] close() {name}: {exc!r}")
 
 
 # ---------------------------------------------------------------------- #

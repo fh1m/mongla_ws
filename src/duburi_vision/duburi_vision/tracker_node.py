@@ -100,6 +100,59 @@ def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
             track_activation_threshold=track_activation_threshold)
 
 
+def kalman_pass(kalman, tracked, frame_t):
+    """Smooth every track's centre, reviving any filter a real box returns to.
+
+    EXTRACTED SO THE TEST CAN DRIVE IT. The suite already had a test that
+    composed the tracker and the smoother and then reimplemented this loop in
+    a local helper (`test_roboflow_tracker.py:116`) -- so it tested a copy,
+    and the copy did not contain the bug below. A test that reimplements the
+    thing it guards is the `_srot_drive` grep in another costume.
+
+    THE BUG. This used to be:
+
+        if kalman.is_expired(td.track_id):
+            continue
+
+    `is_expired()` reads `predict_streak`, which resets ONLY inside `smooth()`
+    (`kalman.py:83`) -- which the `continue` skipped. And `prune()` only drops
+    filters whose id is ABSENT from `tracked`. So once a filter expired while
+    the backend still held the id, a returning target with that id was
+    suppressed **for ever**: it could never reach the one call that would
+    clear the condition suppressing it.
+
+    Reachable at the shipped config -- the Kalman expires at 30 frames (1.5 s)
+    and the Roboflow backend holds an id for 100 (`int(20/30*150)`), so frames
+    30-100 were a dead zone where a reacquired target was silently missing
+    from `/tracks`. The control coast follows `locked_id`, so it saw nothing,
+    in the exact code path whose job is to survive a gap. Measured the same
+    day on real competition footage: the gate approach has 53 gaps in 57 s,
+    four of them past 1.5 s.
+
+    A still-COASTING track past the horizon stays suppressed -- that guard is
+    why expiry exists, and removing it would trade one bug for a worse one.
+    """
+    kalman.prune({t.track_id for t in tracked})
+    smoothed = []
+    for td in tracked:
+        if kalman.is_expired(td.track_id):
+            if td.predicted:
+                continue              # still coasting: stay suppressed
+            # A real measurement. Drop the stale filter so `smooth()` rebuilds
+            # it from THIS observation rather than extrapolating from a track
+            # that went cold.
+            kalman.drop(td.track_id)
+        cx_hat, cy_hat = kalman.smooth(
+            td.track_id, td.cx, td.cy, frame_t, td.predicted)
+        half_w, half_h = td.width * 0.5, td.height * 0.5
+        smoothed.append(TrackedDetection(
+            class_id=td.class_id, class_name=td.class_name, score=td.score,
+            xyxy=(cx_hat - half_w, cy_hat - half_h,
+                  cx_hat + half_w, cy_hat + half_h),
+            track_id=td.track_id, predicted=td.predicted))
+    return smoothed
+
+
 class TrackerNode(Node):
     def __init__(self):
         super().__init__('duburi_tracker')
@@ -288,30 +341,11 @@ class TrackerNode(Node):
             self.get_logger().error(f"[TRK  ] tracker.update failed: {exc!r}")
             return
 
-        # Kalman smoothing pass.
+        # Kalman smoothing pass. The logic lives in `kalman_pass` so the
+        # test suite can drive the SHIPPING code instead of a copy of it --
+        # see the note on that function.
         if self._kalman is not None:
-            smoothed = []
-            active_ids = {t.track_id for t in tracked}
-            self._kalman.prune(active_ids)
-
-            for td in tracked:
-                if self._kalman.is_expired(td.track_id):
-                    continue
-                cx_hat, cy_hat = self._kalman.smooth(
-                    td.track_id, td.cx, td.cy, frame_t, td.predicted)
-                # Rebuild xyxy with smoothed centre, preserving original size.
-                half_w = td.width  * 0.5
-                half_h = td.height * 0.5
-                smoothed_xyxy = (
-                    cx_hat - half_w, cy_hat - half_h,
-                    cx_hat + half_w, cy_hat + half_h,
-                )
-                smoothed.append(TrackedDetection(
-                    class_id=td.class_id, class_name=td.class_name,
-                    score=td.score, xyxy=smoothed_xyxy,
-                    track_id=td.track_id, predicted=td.predicted,
-                ))
-            tracked = smoothed
+            tracked = kalman_pass(self._kalman, tracked, frame_t)
 
         # Size EMA pass: smooth width/height per track_id independently.
         # Kalman only smoothed centre (cx, cy); raw ByteTrack size jitters every
