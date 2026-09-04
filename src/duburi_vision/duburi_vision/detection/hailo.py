@@ -56,6 +56,12 @@ from .detector import Detection, Detector
 
 _INPUT_FALLBACK = 640
 
+# Async submit/wait budgets. Generous: they are a DEADLOCK guard, not a
+# latency knob -- an inference that takes 1 s has already broken the mission,
+# and a tight bound here would turn a slow frame into an exception.
+_ASYNC_READY_MS = 1000
+_ASYNC_WAIT_MS = 1000
+
 # How many activation swaps before saying so. One is the normal handover from
 # a camera switch; a stream of them means two detectors are competing.
 _SWAP_WARN_AT = 20
@@ -208,10 +214,7 @@ class HailoDetector(Detector):
                 f'Ship the sidecar beside the .hef.')
         self._names: Dict[int, str] = names
 
-        from hailo_platform import (HEF, VDevice, HailoStreamInterface,
-                                    InferVStreams, ConfigureParams,
-                                    InputVStreamParams, OutputVStreamParams,
-                                    FormatType)
+        from hailo_platform import HEF, FormatType
 
         self._hef = HEF(self._path)
         in_info = self._hef.get_input_vstream_infos()[0]
@@ -221,22 +224,81 @@ class HailoDetector(Detector):
         self._size = int(shape[0]) if len(shape) >= 2 else _INPUT_FALLBACK
 
         self._target = _shared_device()
-        cfg = ConfigureParams.create_from_hef(
-            self._hef, interface=HailoStreamInterface.PCIe)
-        self._ng = self._target.configure(self._hef, cfg)[0]
-        self._ngp = self._ng.create_params()
-        self._ivp = InputVStreamParams.make(self._ng, format_type=FormatType.UINT8)
-        self._ovp = OutputVStreamParams.make(self._ng, format_type=FormatType.FLOAT32)
-        self._InferVStreams = InferVStreams
+
+        # THE ASYNC API, AND THE REASON IS THE GIL, NOT SPEED.
+        #
+        # The blocking `InferVStreams.infer()` HOLDS THE GIL for its entire
+        # ~10 ms. Measured against two controls that separate cleanly
+        # (`tools/gil_probe.py`), another Python thread in the process woke:
+        #
+        #     control: time.sleep (releases)     0.05 ms late,  0.0 % over 4 ms
+        #     control: pure-Python spin (holds)  5.11 ms late, 99.9 %
+        #     InferVStreams.infer()              9.21 ms late, 99.6 %
+        #     InferModel run_async + wait        0.05 ms late,  0.0 %
+        #
+        # It is WORSE than the spin control, because the spin at least yields
+        # on CPython's 5 ms switch interval and a C call that never releases
+        # never yields at all. So during every inference the camera's capture
+        # pump could not publish a newer frame and no rclpy executor thread
+        # could run -- 70+ times a second.
+        #
+        # That was measured end to end before it was explained: a composed
+        # camera+detector process showed a frame WAITING 13.82 ms in the
+        # camera's slot, of which only 1.93 ms was our decode, against a
+        # 12.16 ms loop period and 10.22 ms of inference.
+        #
+        # Round 29 measured this API and recorded "async inference buys
+        # exactly nothing". That was true and it was a THROUGHPUT measurement
+        # -- 98.2 Hz async against 98.0 blocking, no gain. Nobody asked
+        # whether it releases the GIL, which is the question that mattered.
+        # The conclusion is not overturned, it was answering a different one.
+        # The blocking path is KEPT, behind an env flag, for two reasons: it
+        # is what `tools/hailo_api_equivalence.py` compares against to prove
+        # the switch moved no pixels, and it is the fallback if a HailoRT
+        # version ever regresses the async path on the vehicle. It is not a
+        # tuning knob and nothing sets it in normal operation.
+        self._blocking = bool(os.environ.get('DUBURI_HAILO_FORCE_BLOCKING'))
+        if self._blocking:
+            from hailo_platform import (HailoStreamInterface, InferVStreams,
+                                        ConfigureParams, InputVStreamParams,
+                                        OutputVStreamParams)
+            cfg = ConfigureParams.create_from_hef(
+                self._hef, interface=HailoStreamInterface.PCIe)
+            self._ng = self._target.configure(self._hef, cfg)[0]
+            self._ngp = self._ng.create_params()
+            self._ivp = InputVStreamParams.make(
+                self._ng, format_type=FormatType.UINT8)
+            self._ovp = OutputVStreamParams.make(
+                self._ng, format_type=FormatType.FLOAT32)
+            self._InferVStreams = InferVStreams
+            self._model = None
+            self._out_shape = ()
+            if self._log:
+                self._log.warn(
+                    '[HAILO] DUBURI_HAILO_FORCE_BLOCKING is set: using the '
+                    'blocking API, which HOLDS THE GIL for the whole ~10 ms '
+                    'inference and stalls the camera pump and every rclpy '
+                    'thread in this process. Diagnostics only.')
+        else:
+            self._model = self._target.create_infer_model(self._path)
+            self._model.input().set_format_type(FormatType.UINT8)
+            self._model.output().set_format_type(FormatType.FLOAT32)
+            self._out_shape = tuple(self._model.output().shape)
 
         # ACTIVATION IS DEFERRED, and that is the whole point of this class
         # holding a shared device. Activating here would mean the SECOND
         # detector constructed in the process fails at construction -- exactly
         # the failure this replaces, moved one layer down. It is taken on the
         # first infer and handed over when the other detector needs it.
-        self._activation = None
-        self._pipe = None
+        self._cim = None            # ConfiguredInferModel, once activated
+        self._bindings = None
+        self._in_buf = None
+        self._out_buf = None
         self._swaps = 0
+        self._pipe = None
+        self._activation = None
+        self._nms_classes = len(self._names)
+        self._nms_warned = False
         self._ready = True
 
         self._baked_conf = baked_score_threshold(self._path)
@@ -258,9 +320,7 @@ class HailoDetector(Detector):
             # of the first mission frame, where it reads as a dropped frame.
             blank = np.zeros((self._size, self._size, 3), np.uint8)
             try:
-                with _DEVICE_LOCK:
-                    self._acquire_locked().infer(
-                        {self._in_name: np.expand_dims(blank, 0)})
+                self.infer(blank)
             except Exception:
                 pass
 
@@ -354,14 +414,35 @@ class HailoDetector(Detector):
         was taken serialised.
         """
         global _ACTIVE
-        if _ACTIVE is self and self._pipe is not None:
-            return self._pipe
+        if _ACTIVE is self and self._cim is not None:
+            return self._cim
         if _ACTIVE is not None and _ACTIVE is not self:
             _ACTIVE._release_locked()
-        self._activation = self._ng.activate(self._ngp)
-        self._activation.__enter__()
-        self._pipe = self._InferVStreams(self._ng, self._ivp, self._ovp)
-        self._pipe.__enter__()
+        # `configure()` builds the ConfiguredInferModel; it does NOT activate
+        # it. Skipping `activate()` raises HAILO_STREAM_NOT_ACTIVATED (72) at
+        # the first `run_async`, which reads like an API-mixing problem and is
+        # really a missing call. (It is invalid with the HailoRT scheduler
+        # enabled -- and enabling the scheduler with two graphs SIGSEGVs, so
+        # taking turns by hand is the only arrangement that works here.)
+        if self._blocking:
+            self._activation = self._ng.activate(self._ngp)
+            self._activation.__enter__()
+            self._pipe = self._InferVStreams(self._ng, self._ivp, self._ovp)
+            self._pipe.__enter__()
+            _ACTIVE = self
+            self._swaps += 1
+            return self._pipe
+        self._cim = self._model.configure()
+        self._cim.__enter__()
+        self._cim.activate()
+        # Buffers allocated ONCE and reused. `set_buffer` binds the array, so
+        # a fresh allocation per frame would be 640x640x3 of churn inside the
+        # hot loop, plus a rebind.
+        self._in_buf = np.zeros((self._size, self._size, 3), np.uint8)
+        self._out_buf = np.zeros(self._out_shape, np.float32)
+        self._bindings = self._cim.create_bindings()
+        self._bindings.input().set_buffer(self._in_buf)
+        self._bindings.output().set_buffer(self._out_buf)
         _ACTIVE = self
         self._swaps += 1
         if self._swaps == _SWAP_WARN_AT and self._log:
@@ -374,17 +455,27 @@ class HailoDetector(Detector):
                 f'{self._swaps} times -- another detector is competing for '
                 f'the chip. Each swap costs ~4 ms; pause the camera you are '
                 f'not steering on.')
-        return self._pipe
+        return self._cim
 
     def _release_locked(self) -> None:
         """Give up the activation. Caller holds `_DEVICE_LOCK`."""
-        for obj in (self._pipe, self._activation):
+        for obj in (getattr(self, '_pipe', None),
+                    getattr(self, '_activation', None)):
             try:
                 if obj is not None:
                     obj.__exit__(None, None, None)
             except Exception:
                 pass
         self._pipe = self._activation = None
+        if self._cim is not None:
+            for call in (self._cim.deactivate,
+                         lambda: self._cim.__exit__(None, None, None)):
+                try:
+                    call()
+                except Exception:
+                    pass
+        self._cim = self._bindings = None
+        self._in_buf = self._out_buf = None
 
     def infer(self, frame_bgr: np.ndarray) -> List[Detection]:
         if not self._ready or frame_bgr is None:
@@ -392,13 +483,60 @@ class HailoDetector(Detector):
         h, w = frame_bgr.shape[:2]
         buf, scale, pad_x, pad_y = letterbox(frame_bgr, self._size)
         # The lock spans acquire AND infer. See `_acquire_locked`.
+        #
+        # It still spans the wait, and that is deliberate: the chip runs one
+        # graph at a time whatever we do, and releasing the lock across the
+        # wait would let the other detector evict this activation mid-flight
+        # -- the use-after-free that was a measured SIGSEGV here.
+        #
+        # THE GIL IS A DIFFERENT LOCK AND `job.wait()` RELEASES IT. That is
+        # the entire reason this path exists: another Python thread -- the
+        # camera's capture pump, an rclpy executor -- runs freely during the
+        # ~10 ms this is waiting, where the blocking API froze all of them.
+        if self._blocking:
+            with _DEVICE_LOCK:
+                res = self._acquire_locked().infer(
+                    {self._in_name: np.expand_dims(buf, 0)})
+            arr = res[self._out_name]
+            per_class = arr[0] if len(arr) else []
+            return self._boxes_to_detections(per_class, w, h, scale,
+                                             pad_x, pad_y)
         with _DEVICE_LOCK:
-            res = self._acquire_locked().infer(
-                {self._in_name: np.expand_dims(buf, 0)})
-        raw = res[self._out_name]
-        # Batch of 1: unwrap the leading batch axis.
-        per_class = raw[0] if len(raw) else []
+            cim = self._acquire_locked()
+            # Copy into the bound buffer rather than rebinding a new array:
+            # the binding is set up once in `_acquire_locked`.
+            self._in_buf[...] = buf
+            cim.wait_for_async_ready(timeout_ms=_ASYNC_READY_MS)
+            job = cim.run_async([self._bindings])
+            job.wait(_ASYNC_WAIT_MS)
+            raw = self._out_buf
+        # THE ASYNC PATH HANDS BACK A FLAT BUFFER, AND THIS IS THE ONE PLACE
+        # THE TWO APIs GENUINELY DIFFER.
+        #
+        # `InferVStreams` returned a dict keyed by vstream name holding a
+        # ragged per-class object array. `InferModel` writes into the buffer we
+        # bound, and for a HAILO_NMS output that buffer is FLAT float32:
+        #
+        #     [ count_0, (y1 x1 y2 x2 score) * MAX, count_1, ... ]
+        #
+        # with a FIXED per-class stride, so class 1 starts at a constant
+        # offset whatever class 0 detected. Measured on this hardware:
+        # shape (1503,) for a 3-class model = 3 * (1 + 100 * 5).
+        #
+        # Getting this wrong does not raise -- it reads scores as coordinates
+        # and hands the control loop a box that tracks nothing. `_nms_stride`
+        # therefore VALIDATES the arithmetic and says so rather than guessing.
+        per_class = self._decode_nms(raw)
+        return self._boxes_to_detections(per_class, w, h, scale, pad_x, pad_y)
 
+    def _boxes_to_detections(self, per_class, w, h, scale, pad_x, pad_y):
+        """Per-class boxes -> Detections. ONE copy, shared by both APIs.
+
+        The blocking and async paths differ ONLY in how the buffer arrives.
+        Two copies of this arithmetic is how they would come to disagree about
+        where a target is, and `tools/hailo_api_equivalence.py` would then be
+        comparing two different box maths rather than two transports.
+        """
         out: List[Detection] = []
         for cid, boxes in enumerate(per_class):
             if boxes is None or len(boxes) == 0:
@@ -426,6 +564,62 @@ class HailoDetector(Detector):
         if len(out) > self._max_det:
             out.sort(key=lambda d: d.score, reverse=True)
             del out[self._max_det:]
+        return out
+
+    def _decode_nms(self, raw) -> list:
+        """Flat HAILO_NMS buffer -> a list of (N, 5) arrays, one per class.
+
+        THE LAYOUT IS PACKED, NOT FIXED-STRIDE, AND THE DIFFERENCE IS SILENT.
+
+            [ count_0, (y1 x1 y2 x2 score) * count_0,
+              count_1, (y1 x1 y2 x2 score) * count_1, ... ]
+
+        Each class's boxes follow its own count immediately; the next count
+        sits right after them. The buffer is SIZED for the worst case --
+        measured (1503,) for a 3-class model, i.e. 3 * (1 + 100 * 5) -- which
+        makes a fixed per-class stride look plausible and arithmetically
+        perfect. It is wrong: reading class 2 at a constant offset lands in
+        the tail padding, finds a count of 0, and silently returns NOTHING for
+        that class.
+
+        Caught only because `tools/hailo_api_equivalence.py` ran both APIs
+        over the same frames: 56 detections blocking, 22 async, with every
+        surviving box IDENTICAL -- boxes being lost, not moved. A smoke test
+        would have passed; so would any check that only looked at class 0.
+
+        Returns the same per-class shape the box maths already expects, so
+        only the transport changed.
+        """
+        ncls = self._nms_classes
+        n_floats = int(raw.size)
+        out = []
+        i = 0
+        for _ in range(ncls):
+            if i >= n_floats:
+                # Ran out of buffer: the remaining classes simply had no
+                # detections and the tail is padding.
+                out.append(())
+                continue
+            n = int(raw[i])
+            i += 1
+            # A count that cannot fit in what is left is corruption, not a
+            # big detection list. Stop rather than reinterpret padding as
+            # boxes -- a fabricated box steers the vehicle.
+            if n < 0 or i + n * 5 > n_floats:
+                if not self._nms_warned:
+                    self._nms_warned = True
+                    if self._log:
+                        self._log.error(
+                            f'[HAILO] NMS buffer claims {n} boxes with '
+                            f'{n_floats - i} floats left -- refusing to '
+                            f'decode past the end. Detections will be short '
+                            f'rather than invented.')
+                out.append(())
+                break
+            out.append(raw[i:i + n * 5].reshape(n, 5) if n else ())
+            i += n * 5
+        while len(out) < ncls:
+            out.append(())
         return out
 
     def close(self) -> None:
