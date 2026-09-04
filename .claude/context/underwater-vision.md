@@ -234,3 +234,67 @@ Two things worth keeping from it:
 
 The cross-prop matrix in §3a is unaffected — none of those four datasets uses
 oriented boxes — but it was re-run to confirm that rather than assumed.
+
+---
+
+## 6. Validation cannot rank our models — measured, three ways
+
+Round 34 addendum. Everything above concerned the data; this concerns how we
+**choose** what we train on it, and it is the finding with the most immediate
+consequence.
+
+### The measurement
+
+Three octagon models from the 2025 archive, each reporting **mAP50 = 0.9950**
+on its own validation split, evaluated on two sessions none of them trained on
+(`tools/recall_matrix.py`, conf 0.15):
+
+| model | val mAP50 | val mAP50-95 | `oct_zawad` | `slot-1_obb` |
+|---|---|---|---|---|
+| `robosub_octagon_n_200_v1` | 0.9950 | 0.8470 | **29.2 %** | **23.3 %** |
+| `robosub_octagon_n_200_final` | 0.9950 | 0.9278 | **72.7 %** | **71.4 %** |
+| `robosub_octagon_n_200_final_again3` | 0.9950 | 0.9570 | 68.3 % | 65.4 % |
+
+A **2.5-3x spread in real recall**, with the ranking reproducible across both
+unseen sessions — and `mAP50` reports all three as **exactly identical**.
+
+### The part that is not a validation-set problem
+
+`v1` and `final` have **literally identical training configurations**. A diff of
+their `args.yaml` files, excluding only the run name and output path, is
+**empty**: same `yolo11n.pt` base, same dataset, 200 epochs, `imgsz 640`,
+`lr0 0.01`, `seed: 0`, `deterministic: true`.
+
+Two runs that differ in nothing recorded produced a **43-point recall gap**.
+Whatever varies (dataloader worker order, cuDNN kernel selection — `seed: 0`
+plus `deterministic: true` evidently did not pin it) is invisible in every
+artefact the training produces.
+
+### What each metric is actually worth
+
+* **`mAP50` is saturated and ranks nothing.** All 25 archived runs report
+  0.995, and most reach it by **epoch 27-38** of a 200-300 epoch run — e.g.
+  `robosub_gate_200_final2` at epoch 31/200, `robosub_bin_front_n_300_v1` at
+  27/300. Validation loss is still falling at the end of every run, so nothing
+  in the curve says "stop"; the metric simply ran out of resolution on the
+  first tenth of the schedule.
+* **`mAP50-95` retains signal within one dataset.** It is the only recorded
+  number that separated the two identical-config runs, and it ranked them
+  correctly (0.847 → 29 %, 0.928 → 73 %). Across *different* datasets it is not
+  comparable — `again3` scores highest (0.957) and places second.
+* **Cross-session recall is the only quantity that predicts deployment.**
+
+### What to do instead
+
+`tools/model_select.py` ranks candidates on held-out sessions and picks on the
+**worst** one, not the mean — a model that is excellent at one venue and
+useless at another loses the run it is used in. Train several with the same
+config (the variance above means that is not a wasted run) and rank them here.
+
+The cost is one evaluation pass per model per session: minutes. The cost of not
+doing it is picking `v1`.
+
+### Why this ranks above every tuning knob in §5
+
+CLAHE moved presence 10.7 → 56.2 %. The conf floor moved it 8.5 points. Model
+selection is a **48-point** swing on data we already own, and it is free.
