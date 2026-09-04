@@ -39,7 +39,28 @@ from launch_ros.actions import Node
 
 # Framework chatter off, our own nodes at info. Same convention as the other
 # launch files: a process default of `warn` with per-logger `info` pins.
+# Process default `warn` to silence rcl/rmw framework chatter, then the nodes
+# we actually want pinned back to `info` BY NAME.
+#
+# The pin was missing here and the process default alone silenced two things
+# the operator depends on:
+#
+#   * the always-on `[ offset lat=.. depth=..px ]` alignment readout, which is
+#     the pool-day bearing telemetry and is emitted at INFO by
+#     `detector_node._log_alignment`
+#   * the 0.1 Hz chip-efficiency line, which reports whether the chip is only
+#     ever seeing the freshest frame -- visible ONLY when it was broken,
+#     because the healthy case logs at info and the failure at warn
+#
+# `vision.launch.py` has always pinned its detector; this launch -- the one
+# the vehicle actually runs -- did not. Every node in the composed process
+# needs naming individually, because a log level is per-LOGGER and the
+# composed process holds five of them.
 _QUIET = ['--log-level', 'warn']
+for _n in ('duburi_detector_dual',
+           'duburi_detector_forward', 'duburi_detector_downward',
+           'duburi_camera_forward', 'duburi_camera_downward'):
+    _QUIET += ['--log-level', f'{_n}:=info']
 
 
 def _calib(name: str) -> str:

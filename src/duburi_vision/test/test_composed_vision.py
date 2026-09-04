@@ -356,3 +356,23 @@ def test_submit_frame_records_that_the_direct_path_is_alive():
     det._fed_direct = False
     det.submit_frame('f', 'h')
     assert det._fed_direct is True
+
+
+def test_the_pi_launch_pins_every_node_back_to_info():
+    """A process-wide `warn` silences per-node INFO, and the composed process
+    holds five loggers.
+
+    Measured on the vehicle: with only `--log-level warn` the always-on
+    `[ offset lat=.. depth=..px ]` alignment readout -- the pool-day bearing
+    telemetry -- printed ZERO times, and the chip-efficiency line was visible
+    only in its failure case (warn) and never in its healthy one (info). After
+    pinning: 225 alignment lines and the efficiency line every 10 s.
+
+    `vision.launch.py` has always pinned its detector. This launch, the one
+    the vehicle actually runs, did not.
+    """
+    launch = (Path(__file__).resolve().parents[1] / 'launch'
+              / 'vision_pi.launch.py').read_text()
+    for node in ('duburi_detector_forward', 'duburi_detector_downward',
+                 'duburi_camera_forward', 'duburi_camera_downward'):
+        assert f"'{node}:=info'" in launch or f'{node}:=info' in launch, node
