@@ -249,3 +249,55 @@ makes the coast layer *exist*; **CLAHE is the one that makes the lock hold.**
 Neither is sufficient alone: at arm C the tracker is working and still loses
 the target for 25 s; CLAHE without the clamp would feed a tracker that emits
 nothing.
+
+
+## 9. ⛔ CLAHE IS NOT UNIVERSALLY GOOD — the counter-example
+
+A second target, the torpedo model over the bin clip, goes the other way:
+
+| arm | gate approach | torpedo on bin |
+|---|---|---|
+| tracker clamp + conf 0.10 | 53.6 % | 79.5 % |
+| **+ CLAHE** | **95.4 %** (+42) | **15.3 %** (−64) |
+
+**This is why it stays off by default**, and it is the single most important
+caveat in this document. Enabling it globally would have halved detection on
+clear water while looking like an improvement on the clip I happened to
+measure first.
+
+The two clips separate cleanly on frame statistics, and **saturation splits
+them harder than blur**:
+
+| | blur (lapvar) | contrast | saturation |
+|---|---|---|---|
+| gate | 315 | 27.7 | **159.9** |
+| bin / torpedo | 1241 | 36.1 | **27.9** |
+
+**The rule: CLAHE helps blurry, low-contrast, SATURATED (green/murky) water
+and hurts sharp, desaturated water.** Physically sensible — it amplifies local
+contrast, which recovers a washed-out target and over-sharpens one that was
+already crisp.
+
+So it is a **per-water** decision, not a per-vehicle one. `water_check` prints
+the three statistics and says which side of the line the pool is on:
+
+```
+ros2 run duburi_vision water_check              # live camera
+python3 tools/water_check.py --video clip.mkv   # a recording
+```
+
+Validated against both measured clips, on frames it had not seen: gate →
+CLAHE ON, bin → CLAHE OFF. In between it says **MEASURE BOTH** rather than
+inventing confidence from a rule fitted to two samples.
+
+### What this changes about §8
+
+§8's "0 % → 95.4 %" stands for the gate. It is not a general claim. The
+general claims from this round are narrower and stronger:
+
+- **The tracker clamp is unconditional** — it helped both targets (0 % → 45.1 %
+  and 0 % → 63.5 %) and cannot hurt, because it only ever lets through a box
+  the detector already published.
+- **conf 0.10 is unconditional** — it helped both (+8.5 and +16.0 points) with
+  jitter flat or better.
+- **CLAHE is conditional**, and now measurable in advance.

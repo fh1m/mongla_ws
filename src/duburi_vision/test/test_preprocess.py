@@ -179,3 +179,44 @@ def test_the_launch_default_survives_the_round_trip():
               / 'vision_pi.launch.py').read_text()
     assert "DeclareLaunchArgument('preprocess', default_value='none')" in launch, \
         "the launch default must not be a value launch coerces to bool"
+
+
+# --------------------------------------------------------------------------- #
+#  It is NOT universally good -- the counter-example that keeps it off
+# --------------------------------------------------------------------------- #
+def test_the_water_check_reproduces_both_MEASURED_verdicts():
+    """CLAHE helped one clip by +42 points and hurt another by -64.
+
+        arm                        gate approach      torpedo on bin
+        tracker + conf 0.10            53.6 %             79.5 %
+        ...+ CLAHE                     95.4 %             15.3 %
+
+    The clips separate on frame statistics -- gate blur 315 / saturation 160,
+    bin blur 1241 / saturation 28 -- so the decision is makeable from the
+    water rather than by trial. These are the two real measurements; if the
+    thresholds ever stop reproducing them, the rule has drifted from the data
+    it came from.
+    """
+    from duburi_vision.utils.water_check import verdict
+
+    assert verdict(315.2, 159.9)[0] == 'CLAHE ON'      # the gate clip
+    assert verdict(1240.6, 27.9)[0] == 'CLAHE OFF'     # the bin clip
+
+
+def test_water_between_the_two_regimes_says_MEASURE_rather_than_guessing():
+    """Two samples do not make a universal threshold. The honest answer in
+    between is 'run a leg each way', not a confident call from a rule fitted
+    to n=2."""
+    from duburi_vision.utils.water_check import verdict
+
+    call, why = verdict(800.0, 100.0)
+    assert call == 'MEASURE BOTH', (call, why)
+
+
+def test_preprocessing_stays_OFF_by_default():
+    """Because of the counter-example above. A change that helps one target by
+    42 points and hurts another by 64 is a per-water decision, and defaulting
+    it on would silently halve detection on clear water."""
+    src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
+           / 'detector_node.py').read_text()
+    assert "self.declare_parameter('preprocess',          'off')" in src

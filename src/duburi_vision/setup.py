@@ -39,6 +39,7 @@ setup(
             'tracker_node        = duburi_vision.tracker_node:main',
             'vision_node         = duburi_vision.vision_node:main',
             'vision_check        = duburi_vision.utils.check_pipeline:main',
+            'water_check         = duburi_vision.utils.water_check:main',
             'vision_thrust_check = duburi_vision.utils.check_thrust:main',
             'tracker_check       = duburi_vision.utils.check_tracker:main',
             'vision_display      = duburi_vision.utils.display_node:main',
