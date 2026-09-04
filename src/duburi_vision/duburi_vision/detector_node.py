@@ -50,6 +50,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from typing import Dict, NamedTuple, Optional
 
 import rclpy
@@ -63,6 +64,7 @@ from duburi_vision.detection.factory   import make_detector
 from duburi_vision.detection.detector  import Detector
 from duburi_vision.detection.messages  import detections_to_array
 from duburi_vision.detection.preprocess import make_preprocessor
+from duburi_vision.detection.rangecrop  import RangeCrop
 
 # Throttle for the always-on operator alignment line (seconds). Matches the
 # control-side vision throttle so the rate feels consistent between the detector
@@ -214,6 +216,13 @@ class DetectorNode(Node):
         # is a real trade the operator should make deliberately.
         self.declare_parameter('preprocess',          'off')
         self.declare_parameter('preprocess_clip',     3.0)
+        # RANGE CROP. Feed the detector a centre crop while the target is far,
+        # so it occupies more of the 640x640 the chip sees. Measured on real
+        # labelled data: recall at 4x the training distance goes 65.9 % ->
+        # 100 %, and at 6.7x, 20.2 % -> 67.4 %. It releases automatically on
+        # approach because a fixed crop LOSES close targets (69 % at 1x).
+        # `imgsz` cannot do this on the Hailo -- it is baked into the HEF.
+        self.declare_parameter('range_crop',          False)
 
         self._cam_name = str(self.get_parameter('camera').value).strip() or 'cam'
         ns_in  = str(self.get_parameter('image_topic').value).strip() \
@@ -369,6 +378,15 @@ class DetectorNode(Node):
                 f"(clahe clip={float(self.get_parameter('preprocess_clip').value)}) "
                 f"-- ~3.8 ms/frame, measured 10.7 % -> 56.2 % presence on "
                 f"blurry footage")
+
+        self._crop = (RangeCrop()
+                      if bool(self.get_parameter('range_crop').value)
+                      else None)
+        if self._crop is not None:
+            self.get_logger().info(
+                '[DET  ] range crop ON -- centre 50 % while the target is '
+                'small, full frame on approach. Recall at 4x range 66 % -> '
+                '100 %, at the cost of half the field of view while active.')
 
         self._direct  = bool(self.get_parameter('direct_feed').value)
         self._ns_in   = ns_in
@@ -605,11 +623,42 @@ class DetectorNode(Node):
             det = self._det  # atomic ref read under CPython GIL
             if det is None:
                 continue  # model still loading — drop frame, keep queue drained
+            # RANGE CROP, decided from the PREVIOUS frame's target size --
+            # the only size available before inferring this one.
+            crop_state = None
+            infer_frame = frame
+            if self._crop is not None:
+                infer_frame, crop_state = self._crop.apply(frame)
             try:
-                detections = det.infer(frame)
+                detections = det.infer(infer_frame)
             except Exception as exc:
                 self.get_logger().error(f"[DET  ] inference failed: {exc!r}")
                 continue
+            if crop_state is not None and crop_state.active and detections:
+                # BACK TO FULL-FRAME COORDINATES. Everything downstream -- the
+                # pixel error, the bearing, the HUD -- is full-frame, and a
+                # missed offset does not raise: it steers at a point displaced
+                # by the crop origin, which reads as a calibration fault.
+                detections = [
+                    replace(d, xyxy=crop_state.to_full(d.xyxy))
+                    for d in detections]
+            if self._crop is not None:
+                # Feed back the largest target's area as a fraction of the
+                # frame the DETECTOR ACTUALLY SAW -- cropped or not. That is
+                # the quantity the exit threshold is defined against: while
+                # cropped, a target filling the crop is close even though it
+                # is a small fraction of the full frame.
+                big = largest(detections)
+                frac = None
+                if big is not None:
+                    area = ((big.xyxy[2] - big.xyxy[0])
+                            * (big.xyxy[3] - big.xyxy[1]))
+                    if crop_state is not None and crop_state.active:
+                        seen = crop_state.w * crop_state.h
+                    else:
+                        seen = frame.shape[1] * frame.shape[0]
+                    frac = area / float(max(seen, 1))
+                self._crop.observe(frac, time.monotonic())
             dt = time.monotonic() - t0
 
             self._frames        += 1

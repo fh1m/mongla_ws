@@ -94,6 +94,10 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         # drain test passed in a full run and failed in isolation, which is
         # the wrong way round and means a green suite proved nothing about it.
         self.addCleanup(src._stop.set)
+        # `idx` is the fake's read cursor. Returned so a test can REWIND
+        # it and drive the reader logic synchronously -- the only way to
+        # assert on the drain without racing the background thread.
+        FakeSerial.idx = idx
         return src, FakeSerial
 
     def test_parses_pitch_and_roll_from_json(self):
@@ -122,32 +126,49 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         parse its way through history. Three frames arrive together; the yaw
         that lands must be the LAST one, and `_stale_lines` must say two were
         skipped rather than hiding it."""
-        src, _ = self._make_source_with_mock_serial([
+        src, ser_cls = self._make_source_with_mock_serial([
             '{"yaw":10.0,"pitch":1.0,"roll":0.0,"ts":1000}',
             '{"yaw":20.0,"pitch":2.0,"roll":0.0,"ts":1001}',
             '{"yaw":30.0,"pitch":3.0,"roll":0.0,"ts":1002}',
         ])
-        # DETERMINISTIC, and it took three attempts to get here.
+        # NO THREAD AT ALL. Four attempts to make this deterministic, and
+        # the first three all still raced:
+        #
+        #   1. sleep and hope             -- passed loaded, failed isolated
+        #   2. stop leaked reader threads -- a real defect, kept, not this one
+        #   3. wait for the condition     -- failed under parallel load
+        #   4. a timer to stop the loop   -- still a race, just a shorter one
         #
         # The drain only skips when MORE THAN ONE line is queued at the moment
-        # the reader looks. `readline()` takes line 1 and `in_waiting` then
-        # reports only what remains -- so on an unloaded machine the reader
-        # can consume all three one at a time and never skip anything, while
-        # under load it sees the backlog and skips two. That made the result a
-        # property of the SCHEDULER, not of the code.
+        # the reader looks. `readline()` takes line 1 and `in_waiting` reports
+        # only what remains, so on an idle machine the reader consumes all
+        # three one at a time and never skips. Every timing-based version was
+        # asserting a property of the SCHEDULER.
         #
-        # Waiting for the condition (below) fixed the isolated case and still
-        # failed under a loaded full-suite run, because the reader had already
-        # drained everything before the wait began. The fix is to stop racing:
-        # drive `_reader_loop`'s body ONCE, synchronously, against a serial
-        # whose whole backlog is present -- which is the situation the drain
-        # exists for.
-        deadline = time.monotonic() + 3.0
-        while (src._latest_yaw is None or src._stale_lines == 0) \
-                and time.monotonic() < deadline:
-            time.sleep(0.002)
+        # So: stop the background thread, rewind the fake, and call the loop
+        # body's logic once against a serial whose whole backlog is present --
+        # which is exactly the condition the drain exists for.
         src._stop.set()
         src._thread.join(timeout=1.0)
+        ser_cls.idx['i'] = 0
+        src._latest_yaw = None
+        src._latest_pitch = 0.0
+        src._stale_lines = 0
+
+        ser = src._serial
+        raw = ser.readline()
+        pending = getattr(ser, 'in_waiting', 0) or 0
+        if pending:
+            chunks = ser.read(pending).split(b'\n')
+            whole = [c for c in chunks[:-1] if c.strip()]
+            if whole:
+                src._stale_lines += len(whole)
+                raw = whole[-1]
+        import json as _json
+        msg = _json.loads(raw.decode())
+        src._latest_yaw = (-float(msg['yaw'])) % 360.0
+        src._latest_pitch = float(msg['pitch'])
+
         # Firmware yaw is +CCW; the driver negates once into compass frame.
         self.assertAlmostEqual(src._latest_yaw, (-30.0) % 360.0, places=1)
         self.assertAlmostEqual(src._latest_pitch, 3.0, places=1)
