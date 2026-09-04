@@ -236,6 +236,10 @@ def generate_launch_description():
         parameters=[{
             'camera':             cam,
             'tracker_type':       LaunchConfiguration('tracker_type'),
+            # Clamp the tracker's confidence gates to the detector's floor.
+            # Above it NO track is created and /tracks stays empty while every
+            # node looks healthy -- measured at 0.0 % presence on real footage.
+            'detector_conf':      LaunchConfiguration('conf'),
             'track_buffer':       LaunchConfiguration('track_buffer'),
             'min_hits':           LaunchConfiguration('min_hits'),
             'max_predict_frames': LaunchConfiguration('max_predict'),

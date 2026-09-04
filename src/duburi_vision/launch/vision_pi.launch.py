@@ -238,7 +238,11 @@ def generate_launch_description():
             ros_arguments=_QUIET,
             parameters=[{'camera': camera_name,
                          'tracker_type': LaunchConfiguration('tracker_type'),
-                         'frame_rate': LaunchConfiguration(rate_arg)}],
+                         'frame_rate': LaunchConfiguration(rate_arg),
+                         # Clamp the tracker's gates to the detector's
+                         # floor: above it NO track is created and
+                         # /tracks stays empty while looking healthy.
+                         'detector_conf': LaunchConfiguration('conf')}],
             condition=IfCondition(LaunchConfiguration('tracking')),
         )
 

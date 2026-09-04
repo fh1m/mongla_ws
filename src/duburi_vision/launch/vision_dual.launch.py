@@ -231,12 +231,18 @@ def generate_launch_description():
             }],
         )
 
-    def tracker(profile: str) -> Node:
+    def tracker(profile: str, conf_arg: str) -> Node:
         return Node(
             package='duburi_vision', executable='tracker_node',
             name=f'duburi_tracker_{profile}', output='screen', ros_arguments=_QUIET,
             parameters=[{'camera': profile,
-                         'tracker_type': LaunchConfiguration('tracker_type')}],
+                         'tracker_type': LaunchConfiguration('tracker_type'),
+                         # Clamp the tracker's confidence gates to the
+                         # detector's floor. Above it NO track is ever
+                         # created and /tracks stays empty while every
+                         # node looks healthy -- measured at 0.0 %
+                         # presence on real competition footage.
+                         'detector_conf': LaunchConfiguration(conf_arg)}],
             condition=IfCondition(LaunchConfiguration('tracking')),
         )
 
@@ -275,8 +281,8 @@ def generate_launch_description():
                  'fwd_conf', 'fwd_model_conf'),
         detector('downward', 'dwn_model', 'dwn_models', 'dwn_classes',
                  'dwn_conf', 'dwn_model_conf'),
-        tracker('forward'),
-        tracker('downward'),
+        tracker('forward',  'fwd_conf'),
+        tracker('downward', 'dwn_conf'),
         distance_node,
         viewer,
         shutdown_on_exit,
