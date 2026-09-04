@@ -371,8 +371,18 @@ def test_the_pi_launch_pins_every_node_back_to_info():
     `vision.launch.py` has always pinned its detector. This launch, the one
     the vehicle actually runs, did not.
     """
-    launch = (Path(__file__).resolve().parents[1] / 'launch'
-              / 'vision_pi.launch.py').read_text()
+    import importlib.util
+    path = (Path(__file__).resolve().parents[1] / 'launch'
+            / 'vision_pi.launch.py')
+    spec = importlib.util.spec_from_file_location('_vision_pi', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # The VALUE, not the source text. The pins are built in a loop, so a
+    # substring search on the file would fail on a correct implementation --
+    # which is exactly what it did on the first version of this test.
+    quiet = mod._QUIET
+    assert quiet[:2] == ['--log-level', 'warn'], quiet[:2]
     for node in ('duburi_detector_forward', 'duburi_detector_downward',
                  'duburi_camera_forward', 'duburi_camera_downward'):
-        assert f"'{node}:=info'" in launch or f'{node}:=info' in launch, node
+        assert f'{node}:=info' in quiet, f'{node} is not pinned back to info'
