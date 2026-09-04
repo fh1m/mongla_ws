@@ -102,3 +102,74 @@ footage rather than against the next rung up.
    which the source reads `0.10` and the interpreter loads `0.03`. It cost
    four phantom failures here. Same family as the install-tree import: the
    file you are reading is not always the code that runs.
+
+---
+
+## 6. `range_gain_floor` — measured, and the answer is "leave it off"
+
+Round 35. The knob ships at `1.0` (off) and `vision_tunables.py:56` states the
+physics: *"loop gain rises ~1/range, so a kp stable far-field over-drives
+close-in and the 20 kg hull oscillates off a small target."* Nobody had measured
+what value it should take. Now measured, three ways, and **the answer is not the
+one the physics argument predicts.**
+
+### What was measured
+
+Box-centre movement per frame, banded by bbox fill, over archived competition
+footage and on the live Pi + Hailo pipeline.
+
+| source | far → near growth |
+|---|---|
+| archive, **pooled across clips** | 16× (raw), 20× (non-clipped boxes only) |
+| archive, **per clip** | **0.6× / 2.1× / 2.9× / 3.0×** |
+| **live pipeline** (person, COCO YOLO11n, 7,939 dets) | **1.56×** |
+
+### The 16× is RETRACTED — it was a composition artefact
+
+Pooling across clips manufactured it. `torpedo_up_1` contributed **1,299**
+far-field samples at jitter 0.00097 — the lowest of any clip — and **zero** near
+samples. That single clip dragged the pooled far-field baseline down ~5× while
+contributing nothing to the near bands, so the pooled ratio measured *which
+clips landed in which bin*, not what happens as a target approaches.
+
+The pooled table was clean, monotonic across six bands, and wrong. **Per-clip is
+the only honest form here**, and per clip the growth is 0.6–3.0× — consistent
+with the live rig's 1.56×, measured independently on different hardware, a
+different model, and a different subject.
+
+Two things that survived the retraction and are worth keeping: the effect is
+**not** frame-edge clipping (excluding every box touching a border leaves it
+intact), and box *size* stability degrades alongside centre stability.
+
+### The bar
+
+**`vision.range_gain_floor` stays at `1.0` (off).** A floor of `0.3` — the value
+the parameter's own comment offers as "gentle" — would cut close-in authority by
+3.3× to fight a 1.6× effect, i.e. it would *cause* the sluggishness it exists to
+prevent. Nothing below **0.6** has any measured support, and even that is
+marginal.
+
+**If close-in instability appears in water, this is the wrong knob for it.**
+
+### The right knob, which the data does point at
+
+Jitter tracks **detection confidence**, not bbox fill:
+
+| clip | conf p50 | growth |
+|---|---|---|
+| `octagon_1` | 0.932 | **0.6×** |
+| `bin.mkv` | 0.906 | 2.1× |
+| `bin_front_3` | **0.211** | **2.9×** |
+
+A marginal detection produces a wandering box at any range. So the lever is
+**`vision.ctrl_conf`** — the control-side confidence floor, already implemented
+and also defaulting to off — which refuses to steer on boxes the detector is not
+sure about. That is a different fix from the one the physics argument suggested,
+and it is the one the measurement supports.
+
+### Method note
+
+**Pool only what is compositionally comparable.** Six bands, thousands of
+samples, a monotonic trend and a plausible mechanism were all present, and the
+result was still an artefact of which clip filled which bin. The tell was
+running it per clip — which cost one extra script and reversed the conclusion.
