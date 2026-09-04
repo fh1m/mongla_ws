@@ -44,6 +44,32 @@ why the operator is told what it buys rather than left to discover it.
 CLAHE, not global equalisation: underwater frames are locally washed out, and
 a global histogram stretch amplifies the backscatter haze along with the
 target. `clipLimit` bounds that amplification per tile.
+
+⛔ IT IS NOT UNIVERSALLY GOOD, AND THIS IS WHY IT IS OFF BY DEFAULT.
+
+Measured on a SECOND target -- the torpedo model over the bin clip, sparse
+detections across a whole run -- it goes the other way:
+
+    arm                        gate approach      torpedo on bin
+    tracker clamp + conf 0.10      53.6 %             79.5 %
+    ...+ CLAHE                     95.4 %  (+42)      15.3 %  (-64)
+
+The two clips separate cleanly on frame statistics, and saturation splits
+them harder than blur does:
+
+                  blur (lapvar)   contrast   saturation
+    gate                  315        27.7        159.9
+    bin/torpedo          1241        36.1         27.9
+
+**The rule: CLAHE helps BLURRY, LOW-CONTRAST, SATURATED water (green/murky)
+and HURTS sharp, desaturated water.** That is physically sensible -- it
+amplifies local contrast, which recovers a washed-out target and over-sharpens
+one that was already crisp, pushing an already-marginal detection past the
+model's decision boundary the wrong way.
+
+So this is a per-water decision, not a per-vehicle one. Judge it from the
+pool on the day: `tools/water_check.py` prints the three statistics and says
+which side of the line the water is on. Do not set it once and forget it.
 """
 from __future__ import annotations
 
