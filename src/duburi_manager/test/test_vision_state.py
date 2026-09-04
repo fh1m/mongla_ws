@@ -269,3 +269,68 @@ def test_stamps_stay_ordered_so_is_new_frame_still_works():
         vs._on_detections(_msg_stamped_wall(base + i * 0.028))
         seen.append(vs._latest_stamp)
     assert seen == sorted(seen) and len(set(seen)) == 4
+
+
+# =========================================================================== #
+#  The coast registry must be bounded, and teardown must be complete
+# =========================================================================== #
+def test_last_real_is_bounded():
+    """`_last_real` was written and never pruned.
+
+    Two consequences, and the second is the dangerous one: unbounded growth
+    over a mission, and a RECYCLED tracker id inheriting the previous
+    object's sighting timestamp -- so a coast could start from a sighting
+    belonging to something else, at that object's score. Both tracker
+    backends prune their own registries against exactly this hazard; this
+    dict did not.
+    """
+    vs = _bare_vstate()
+    cap = VisionState._LAST_REAL_MAX
+    old = time.monotonic() - VisionState._LAST_REAL_HORIZON_S - 1.0
+    for i in range(cap * 2):
+        vs._last_real[i] = (old, 0.5)
+    vs._last_real[999] = (time.monotonic(), 0.9)     # one fresh entry
+    vs._evict_last_real()
+    assert len(vs._last_real) <= cap, len(vs._last_real)
+    assert 999 in vs._last_real, 'the FRESH sighting must survive eviction'
+
+
+def test_eviction_keeps_the_newest_when_all_are_live():
+    """Many live ids is id churn, not staleness. Trim to the newest and warn
+    rather than growing in silence."""
+    warned = []
+    vs = _bare_vstate(_CapturingLog())
+    vs._log.warn = warned.append
+    now = time.monotonic()
+    cap = VisionState._LAST_REAL_MAX
+    for i in range(cap + 50):
+        vs._last_real[i] = (now - (cap + 50 - i) * 0.001, 0.5)
+    vs._evict_last_real()
+    assert len(vs._last_real) == cap
+    assert (cap + 49) in vs._last_real, 'the newest must be kept'
+    assert warned, 'trimming live ids must be announced'
+
+
+def test_eviction_is_a_no_op_below_the_cap():
+    """The common case must not pay for the rare one."""
+    vs = _bare_vstate()
+    vs._last_real[1] = (time.monotonic() - 1e6, 0.5)     # ancient, but alone
+    vs._evict_last_real()
+    assert 1 in vs._last_real, 'a lone old entry is not a leak'
+
+
+def test_close_tears_down_every_subscription():
+    """One `try` around all five meant the first failure skipped the rest --
+    and it failed every time, on `_sub_img`, a leftover from when this class
+    subscribed to `image_raw`. `_sub_vr` was therefore never destroyed."""
+    destroyed = []
+
+    class _Node(_FakeNode):
+        def destroy_subscription(self, sub):
+            destroyed.append(sub)
+
+    vs = VisionState(_Node(), camera='t', default_image_size=(640, 480))
+    vs.close()
+    assert len(destroyed) == 4, (
+        f'{len(destroyed)} of 4 subscriptions torn down -- teardown is '
+        f'partial again')
