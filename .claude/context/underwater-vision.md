@@ -65,7 +65,7 @@ We have almost no data of a prop at the distance where an approach *begins*.
 
 ## 3. The three findings that generalise beyond RoboSub
 
-### 3a. A validation score cannot predict a venue
+### 3a. A validation score cannot predict a venue — and how I misread it
 
 All 25 archived training runs report **mAP50 = 0.995**. Real recall, against
 ground truth, per dataset:
@@ -77,12 +77,51 @@ ground truth, per dataset:
 | torpedo | 8.7 % | 1.8 % | **81.4 %** | 2.0 % |
 | gate | 3.3 % | 0.7 % | 0.0 % | **24.8 %** |
 
-Diagonal 81–100 %, **everything off-diagonal 0–24 %**. These models learned
-their dataset, not their object. A held-out split drawn from the same water,
-the same day, the same camera measures memorisation as generalisation.
+Diagonal 81–100 %, everything off-diagonal 0–24 %.
 
-**The generalisable rule: the only honest validation is a different capture
-session.** Ideally a different venue.
+**⛔ MY FIRST READING OF THIS TABLE WAS WRONG, and the correction is the more
+useful result.** I concluded "these models learned their dataset, not their
+object". That is not what the table shows: **each column is a DIFFERENT PROP**,
+so a bin model scoring 1.4 % on octagon images is behaving correctly. The
+table measures nothing about generalisation.
+
+The right experiment is the same prop across different sessions:
+
+| torpedo model → | v1 | v2 | Torpedo_Down | Torpedo_UP_1 |
+|---|---|---|---|---|
+| recall | 81.5 % | 72.9 % | **100.0 %** | **98.3 %** |
+| sharpness of that set | 51 | 31 | 519 | **2761** |
+
+**It generalises across a 54× sharpness range.** Different day, different
+camera position, wildly different blur — 73–100 %.
+
+And the same prop across the *water* boundary:
+
+| octagon model → | Octagon | new/final | oct_zawad | Octagone_surface |
+|---|---|---|---|---|
+| recall | 99.2 % | 89.3 % | 68.9 % | **2.9 %** |
+| colour cast | +3.9 | +4.2 | −12.9 | **+95.8** |
+| classes | yellow_box… | yellow_box… | red_box… | **shark_octagon** |
+
+The 2.9 % set crosses *both* a water boundary (+96 vs +4) **and** a class
+boundary — it labels a different physical object. So even this does not
+isolate water cleanly, and I am not going to claim it does.
+
+**What the data actually supports**, stated no more strongly than it earns:
+
+- Models transfer well across capture sessions of the same prop, including
+  very different blur — better than I expected.
+- Recall degrades gradually with optical distance from the training set
+  (99 → 89 → 69 %) rather than falling off a cliff.
+- The archive contains no clean same-prop, same-classes, cross-water pair, so
+  **the pure water-transfer question is UNANSWERED with this data.** Collecting
+  one prop in both waters would answer it, and is the cheapest experiment
+  available.
+
+**The generalisable rule that does survive: validate on a different capture
+session, not a held-out split.** A split drawn from the same session shares
+water, lighting and camera, and 0.995 mAP on it told us nothing that the
+73–100 % cross-session numbers did not have to establish independently.
 
 ### 3b. Contrast enhancement is conditional, and the condition is measurable
 
@@ -170,3 +209,28 @@ Ranked by measured evidence, not by novelty.
 Each was plausible, each was believed, and each was overturned by measuring
 something a second time. **That is the method, and it is worth more than any
 individual number above.**
+
+
+## 7. A tool bug that produced a finding-shaped number
+
+`slot-1_obb` measured **3.6 % recall** where a neighbouring dataset with the
+same classes and nearly identical water measured 68.9 %. That 20× gap is not
+something a model does, which is what made it worth chasing rather than
+recording.
+
+The dataset uses **oriented bounding boxes** — 9 fields, four corner points —
+and my label parser read fields 1–5 as `xywh`. It did not raise. It produced
+plausible boxes, some with **negative area (−9.08 %)**, and reported a working
+model as broken. Fixed: **3.6 % → 69.1 %**.
+
+Two things worth keeping from it:
+
+- **A number that implies an implausible mechanism is a bug until proven
+  otherwise.** Models degrade; they do not go from 69 % to 3.6 % between two
+  near-identical datasets.
+- **The neighbour is what made it visible.** A single measurement of
+  `slot-1_obb` would have been believed. Two similar datasets disagreeing by
+  20× could not be.
+
+The cross-prop matrix in §3a is unaffected — none of those four datasets uses
+oriented boxes — but it was re-run to confirm that rather than assumed.

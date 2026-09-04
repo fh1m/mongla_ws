@@ -61,9 +61,22 @@ def _labels(path, w, h):
         p = line.split()
         if len(p) < 5:
             continue
-        cx, cy, bw, bh = (float(v) for v in p[1:5])
-        out.append(((cx - bw / 2) * w, (cy - bh / 2) * h,
-                    (cx + bw / 2) * w, (cy + bh / 2) * h))
+        vals = [float(v) for v in p[1:]]
+        if len(vals) >= 8:
+            # ORIENTED BOXES (YOLO-OBB): 4 corner points, not xywh. Parsing
+            # them as xywh does not raise -- it yields a plausible-looking
+            # box, sometimes with NEGATIVE area, and reports the model as
+            # having 3.6 % recall when it really has ~69 %. Found because a
+            # dataset with the same classes and nearly identical water scored
+            # 20x worse than its neighbour, which is not something a model
+            # does. Take the axis-aligned hull.
+            xs = [vals[i] for i in range(0, 8, 2)]
+            ys = [vals[i] for i in range(1, 8, 2)]
+            out.append((min(xs) * w, min(ys) * h, max(xs) * w, max(ys) * h))
+        else:
+            cx, cy, bw, bh = vals[:4]
+            out.append(((cx - bw / 2) * w, (cy - bh / 2) * h,
+                        (cx + bw / 2) * w, (cy + bh / 2) * h))
     return out
 
 
