@@ -227,8 +227,61 @@ MIN_ALIGN_ERR_PX = 5.0
 # refresh before VISION_FRESH_FULL_S so the factor stays 1.0 -- zero behaviour
 # change; the decay only engages when detections are slow or drop out. ZERO_S is
 # below _STALE_LIMIT_S so the command zeroes BEFORE "target lost" declares.
-VISION_FRESH_FULL_S = 0.10   # full authority while the sample is this fresh (~1 frame)
-VISION_FRESH_ZERO_S = 0.40   # linearly decayed to zero by this age (driving blind)
+#
+# NOTHING HERE IS TIED TO A PARTICULAR CAMERA. The thresholds are DERIVED at
+# runtime from two quantities the loop observes: the pipeline latency and the
+# detection interval. A competition can put any sensor in front of us and this
+# has to keep meaning the same thing.
+#
+# Why derivation is necessary rather than tidy -- measured on the vehicle,
+# both detectors alone, same instrument:
+#
+#                      forward        downward
+#     detections       77.1 Hz         30.1 Hz
+#     sample age med   22.10 ms        46.51 ms
+#             max      32.88 ms        56.42 ms
+#     interval med     13.44 ms        32.41 ms
+#
+# `sample.age_s` is time since CAPTURE, so it carries the whole pipeline. A
+# threshold must therefore cover the PIPELINE (or the loop never reaches full
+# authority at all) plus enough INTERVALS to ride out a missed detection (or
+# it decays during normal operation). Neither term is optional and neither is
+# a constant across cameras.
+#
+# At the old fixed 0.10/0.40 the forward path held FULL authority through
+# seven consecutive missed detections and drove blind at partial authority for
+# 400 ms -- 26 cm at 0.65 m/s. Simply tightening the constant would have put
+# the DOWNWARD path permanently below full authority, since its max age
+# (56.4 ms) already exceeds a 50 ms threshold.
+#
+# The floors and the CEILING are safety rails, not tuning:
+#   * floors    keep a degenerate observation (one sample, a zero interval)
+#               from producing a threshold tighter than the pipeline
+#   * ceilings  bound the derivation, and this is the part that matters.
+#
+# THE FULL CEILING EXISTS BECAUSE DERIVATION ALONE IS UNSAFE. Feed this a
+# pipeline that is ALWAYS 300 ms late and it concludes "300 ms is normal here"
+# and grants full authority -- which is exactly wrong. An observation 300 ms
+# old is 20 cm of travel at this hull's 0.65 m/s cruise, whatever the reason
+# it is old. So full authority is capped at 100 ms (~6.5 cm) no matter what
+# the sensor claims about itself; a genuinely slow camera runs at REDUCED
+# authority, which is the safe answer, and `_warn_low_fps` already surfaces it
+# to the operator rather than leaving it as a mystery sluggishness.
+#
+# The zero ceiling bounds blind driving the same way: a 5 Hz sensor would
+# otherwise derive a zero-authority age above `lost_grace_s`, and the ladder
+# "authority reaches zero BEFORE loss is declared" is what makes a dropout a
+# glide instead of a lurch.
+#
+# Net effect versus the fixed 0.10/0.40 this replaces: never LOOSER than
+# before (full <= 0.10 always), and considerably tighter on a fast camera.
+VISION_FRESH_FULL_S  = 0.05   # floor for full authority
+VISION_FRESH_ZERO_S  = 0.20   # floor for zero authority (driving blind)
+VISION_FRESH_FULL_MAX_S = 0.10  # CEILING on full authority -- see below
+VISION_FRESH_ZERO_MAX_S = 0.80  # CEILING on blind driving; under lost_grace_s (1.0)
+_FRESH_PIPE_K = 1.3    # margin on the observed pipeline latency
+_FRESH_FULL_K = 1.5    # ...plus this many detection intervals -> full
+_FRESH_ZERO_K = 8.0    # ...plus this many -> zero
 
 # Distinct-detection gate for the align stable-frame counter. The counter must
 # advance on new DETECTIONS, not 20 Hz control-loop ticks: otherwise, at a low
@@ -316,20 +369,68 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-def _freshness(age_s: float) -> float:
+def _fresh_bounds(interval_s: float = 0.0, pipe_age_s: float = 0.0):
+    """(full, zero) authority thresholds for the sensor actually attached.
+
+    Derived, never configured: `pipe_age_s` is the latency the pipeline is
+    observed to have (capture -> the loop seeing it) and `interval_s` the gap
+    between detections. Both are measured by the caller.
+
+    Pure and total. With nothing observed yet -- the first frame, or a caller
+    that tracks neither -- it returns the floors, which is the behaviour that
+    shipped before and is safe for a fast camera.
+
+    Invariants it guarantees for ANY input, including hostile ones:
+      * full < zero, so the ramp is never inverted or zero-width
+      * full <= VISION_FRESH_FULL_MAX_S, in ABSOLUTE time -- a slow pipeline
+        does not make old data safe to steer on
+      * zero <= VISION_FRESH_ZERO_MAX_S, so blind driving is bounded on a
+        slow sensor and always ends before `lost_grace_s` declares loss
+      * both >= their floors, so a degenerate measurement cannot produce a
+        threshold tighter than the pipeline itself
+    """
+    if interval_s <= 0.0 and pipe_age_s <= 0.0:
+        return VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S
+    interval_s = max(0.0, interval_s)
+    # THE OBSERVED PIPELINE IS TRUSTED ONLY UP TO THE SAFETY CAP. Beyond it
+    # the pipeline is degraded, and a degraded pipeline must not be allowed to
+    # EXTEND the window we are willing to steer in -- that is the derivation
+    # arguing itself into more trust the worse things get. Measured effect: a
+    # pipeline stuck at 350 ms stretched the zero-authority age to 800 ms and
+    # a 350 ms-old sample still commanded 64 % thrust.
+    base = _FRESH_PIPE_K * min(max(0.0, pipe_age_s), VISION_FRESH_FULL_MAX_S)
+    full = max(VISION_FRESH_FULL_S, base + _FRESH_FULL_K * interval_s)
+    # Capped in ABSOLUTE time, not relative to the sensor. A slow pipeline
+    # does not make old data safe to steer on.
+    full = min(full, VISION_FRESH_FULL_MAX_S)
+    zero = max(VISION_FRESH_ZERO_S, base + _FRESH_ZERO_K * interval_s)
+    zero = min(zero, VISION_FRESH_ZERO_MAX_S)
+    # The ceiling can drag `zero` below `full` on a very slow sensor. Keep a
+    # real ramp rather than a step: a step means the command goes from full
+    # authority to nothing between two ticks.
+    full = min(full, zero * 0.5)
+    return full, zero
+
+
+def _freshness(age_s: float, interval_s: float = 0.0,
+               pipe_age_s: float = 0.0) -> float:
     """Translational-command authority [0,1] as a function of sample age.
 
-    1.0 while the sample is fresher than VISION_FRESH_FULL_S, then linearly to
-    0.0 by VISION_FRESH_ZERO_S (driving blind -> stop). Pure + side-effect-free
+    1.0 while the sample is fresher than the FULL threshold, then linearly to
+    0.0 by the ZERO threshold (driving blind -> stop). Both scale with the
+    observed detection interval; see `_fresh_bounds`. Pure + side-effect-free
     so it unit-tests without ROS. Caps per-frame over-drive at low FPS while
     leaving healthy FPS untouched (frames refresh before decay engages).
+
+    `interval_s` defaults to 0 so every existing caller and test keeps the
+    unscaled behaviour; the loop passes the interval it measures.
     """
-    if age_s <= VISION_FRESH_FULL_S:
+    full, zero = _fresh_bounds(interval_s, pipe_age_s)
+    if age_s <= full:
         return 1.0
-    if age_s >= VISION_FRESH_ZERO_S:
+    if age_s >= zero:
         return 0.0
-    span = VISION_FRESH_ZERO_S - VISION_FRESH_FULL_S
-    return (VISION_FRESH_ZERO_S - age_s) / span
+    return (zero - age_s) / (zero - full)
 
 
 def _coast_authority(coast_age_s: float, coast_s: float) -> float:
@@ -352,7 +453,8 @@ def _coast_authority(coast_age_s: float, coast_s: float) -> float:
     return (coast_s - coast_age_s) / coast_s
 
 
-def _authority(sample, coast_s: float) -> float:
+def _authority(sample, coast_s: float, interval_s: float = 0.0,
+               pipe_age_s: float = 0.0) -> float:
     """Per-tick translational authority for `sample`.
 
     Live box  -> ``_freshness(age)``       (per-frame staleness at low FPS).
@@ -362,7 +464,7 @@ def _authority(sample, coast_s: float) -> float:
     """
     if getattr(sample, 'coasted', False):
         return _coast_authority(sample.age_s, coast_s)
-    return _freshness(sample.age_s)
+    return _freshness(sample.age_s, interval_s, pipe_age_s)
 
 
 # Below this authority, a LIVE bbox is stale enough that freshness-decay is
@@ -854,6 +956,17 @@ def align_loop(*,
     dt          = 1.0 / loop_hz
     _dt_nominal = dt
     _last_pass  = time.monotonic()
+    # Observed detection interval, EMA. The freshness thresholds scale with
+    # it, because "~1 frame" is 13 ms on the forward camera and 32 ms on the
+    # downward one and a fixed constant cannot be both. 0 until two distinct
+    # frames have been seen, which yields the floors -- the unscaled
+    # behaviour -- rather than a wild guess from one sample.
+    det_interval = 0.0
+    # Observed pipeline latency: the sample's age at the instant it FIRST
+    # appears, i.e. capture -> the loop seeing it. EMA'd, and only sampled on
+    # a genuinely new frame -- a re-read's age has grown by however long the
+    # loop took and would inflate it without bound.
+    pipe_age = 0.0
     # Seeded at the control period -- the shortest gap possible, so the gate
     # starts at its tightest and widens to the real detection interval once one
     # has been observed. Erring tight before acquisition is safe: there is no
@@ -1086,7 +1199,7 @@ def align_loop(*,
             # (yaw/depth excluded -- ArduSub bleeds Ch4, holds depth). At healthy
             # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
             # coast curve instead (gap decay), not freshness -- see _authority.
-            fresh = _authority(sample, coast_s)
+            fresh = _authority(sample, coast_s, det_interval, pipe_age)
             _warn_low_fps(log, fresh, sample)   # F3: surface FPS-starvation, don't stall silently
             lat_pct *= fresh
             fwd_pct *= fresh   # forward shares the freshness/coast decay (never braked)
@@ -1164,6 +1277,16 @@ def align_loop(*,
                         gate_norm = _lock_gate(
                             max(dt, sampled_at - last_accept_t))
                     last_accept_t = sampled_at
+                pipe_age = (sample.age_s if pipe_age <= 0.0
+                            else pipe_age + 0.2 * (sample.age_s - pipe_age))
+                if last_frame_at > 0.0:
+                    gap = sampled_at - last_frame_at
+                    # Ignore absurd gaps: a dropout is not a slower camera,
+                    # and letting one widen the interval would loosen the
+                    # freshness thresholds exactly when the target is lost.
+                    if 0.0 < gap <= 0.5:
+                        det_interval = (gap if det_interval <= 0.0
+                                        else det_interval + 0.2 * (gap - det_interval))
                 last_frame_at = sampled_at
                 if stable == 0:
                     # Start of a fresh in-band run. Stamped on the FRAME's own
@@ -1377,6 +1500,13 @@ def move_loop(*,
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
+    # Observed detection interval, EMA -- the freshness thresholds scale with
+    # it (see `_fresh_bounds`). `move_loop` has no distinct-frame machinery of
+    # its own, so it derives arrivals from the sample's own capture time,
+    # which is constant across re-reads of one detection.
+    det_interval  = 0.0
+    last_seen_at  = 0.0
+    pipe_age      = 0.0
     try:
         while True:
             now     = time.monotonic()
@@ -1451,7 +1581,23 @@ def move_loop(*,
             commit_until = None
             fill = _fill(sample, mode)
             last_fill = fill
-            fresh = _authority(sample, coast_s)   # FPS staleness (live) or coast decay
+            sampled_at = now - sample.age_s
+            if sampled_at > last_seen_at + _FRAME_EPS_S or last_seen_at <= 0.0:
+                # A NEW frame: its age is the pipeline latency. A re-read's is
+                # not -- it has grown by however long this loop took.
+                pipe_age = (sample.age_s if pipe_age <= 0.0
+                            else pipe_age + 0.2 * (sample.age_s - pipe_age))
+            if last_seen_at > 0.0 and sampled_at > last_seen_at + _FRAME_EPS_S:
+                gap = sampled_at - last_seen_at
+                # A dropout is not a slower camera. Letting one widen the
+                # interval would loosen the freshness thresholds exactly when
+                # the target has been lost.
+                if gap <= 0.5:
+                    det_interval = (gap if det_interval <= 0.0
+                                    else det_interval + 0.2 * (gap - det_interval))
+            if sampled_at > last_seen_at:
+                last_seen_at = sampled_at
+            fresh = _authority(sample, coast_s, det_interval, pipe_age)  # FPS staleness / coast decay
             _warn_low_fps(log, fresh, sample)     # F3: surface FPS-starvation, don't stall silently
 
             x_off = sample.ex * half_w         # signed horizontal offset (operator px)
