@@ -85,7 +85,8 @@ from .detector_node import DetectorNode
 _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
                'model_conf', 'image_topic')
 _SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_debug_image',
-           'debug_image_hz', 'alignment_deadband', 'paused')
+           'debug_image_hz', 'alignment_deadband', 'paused',
+           'preprocess', 'preprocess_clip')
 
 # The camera half. Same prefixing scheme, same reason: launch cannot address
 # two nodes in one process.
@@ -120,6 +121,9 @@ _DEFAULTS = {
     'device': 'cuda:0', 'half': True, 'iou': 0.5, 'imgsz': 640,
     'max_det': 100, 'publish_debug_image': True, 'debug_image_hz': 5.0,
     'alignment_deadband': 0.05, 'paused': False,
+    # Underwater contrast enhancement -- see detection/preprocess.py.
+    # Off by default: 3.78 ms on the Pi is a real trade.
+    'preprocess': 'off', 'preprocess_clip': 3.0,
 }
 
 
