@@ -374,3 +374,81 @@ detector learned. The prettier the result, the further it has moved. This is
 why the answer to motion blur is exposure control and training-time
 augmentation — changing the image the *camera* forms, or the images the *model*
 learns — and not a filter placed between them.
+
+---
+
+## 8. The confidence floor, measured against false positives at last
+
+`conf 0.15 → 0.10` shipped on **+8.5 points of presence**, with jitter flat.
+Presence counts frames containing a box — **it cannot tell a right box from a
+wrong one**. So the single cost of lowering a confidence floor is the one
+quantity that decision never measured, on a vehicle where a false gate
+detection steers the hull at a wall.
+
+`tools/recall_matrix.py` has computed tp/fp/fn the whole time. It was never
+pointed at this question. `--sweep` now does, from **one inference pass**
+re-thresholded offline (verified equal to N independent passes on a pair where
+the threshold actually moves the result — the first attempt agreed at every
+threshold because every score was above 0.5, which proves nothing).
+
+### What 0.15 → 0.10 actually buys and costs
+
+| pair (held-out unless noted) | Δ recall | Δ precision | F1 knee |
+|---|---|---|---|
+| torpedo, `Torpedo_Down` | +0.0 | +0.0 | 0.50 |
+| torpedo, `torpedo_v1` | +0.0 | +0.0 | 0.25 |
+| bin, `bin-1` | +0.0 | +0.0 | 0.30 |
+| bin, `Final_Bin` | +0.0 | **−1.5** | 0.50 |
+| octagon, `oct_zawad` | +2.1 | **−3.2** | 0.25 |
+| octagon, `slot-1_obb` | +3.0 | **−2.8** | 0.25 |
+| **gate, Mirpur (cross-venue)** | +1.8 | **−8.3** | 0.05 |
+
+**In four of seven pairs it changes nothing at all** — the scores are already
+above 0.5. Where it does move, it buys 2–3 points of recall for 3 points of
+precision, and on the hardest case it costs **8.3 points of precision for
+1.8 of recall**.
+
+**The +8.5 points of presence do not appear as recall.** That is the whole
+lesson: presence rose because more boxes appeared, and on labelled data most of
+the new ones are wrong.
+
+### What the knee says, and the one place it must not be followed blindly
+
+The F1 knee sits at **0.25–0.50 in five of seven pairs** — *higher* than either
+shipped value. Only the cross-venue gate wants 0.05, and that is the case where
+recall has collapsed to 26 % and any box is better than none.
+
+F1 weights a miss and a false positive equally, and for this vehicle they are
+not equal. A miss stalls the control loop — the user's own scenario: gate ahead,
+no detections, thrusters still, clock running. A false positive is partly
+filtered downstream by `lock_on` continuity, `ctrl_conf` and the
+distinct-frame gate. So the operating point should sit **below** the F1 knee,
+not on it.
+
+**The defensible reading: 0.10 is fine and 0.15 is fine; the +8.5-presence
+justification for preferring 0.10 is not.** Both sit below every knee, and the
+difference between them is inside the noise for four of seven pairs. What is
+*not* defensible is going lower on presence evidence.
+
+### A model can be near-zero on its own task — camera view is not in the name
+
+Found while checking a 2.6 % recall that looked like a parser bug and was not:
+
+| model | `bin-1` (downward) | `Final_Bin` |
+|---|---|---|
+| `robosub_bin_front_n_300_v1` | **2.6 %** | **0.0 %** |
+| `robosub_bin_200_v1` | **100 %** | **100 %** |
+| `robosub_bin_final_day_1` | 100 % | 100 % |
+
+A **forward**-camera bin model on **downward** bin imagery. Both report
+mAP50 = 0.995 (§6), so validation cannot separate them, and the name says
+"bin" in both cases. This is §6's finding with a sharper edge: picking the
+wrong one for a downward bin drop gives **2.6 %**, and nothing in the artefacts
+warns you.
+
+### The gap this opened
+
+**Slalom has 2,102 labelled images and no model at all.** No `salom`/`slalom`
+run exists in the archive, while `task_slalom.py` expects a `red_pipe` class.
+It is a scoring task with training data sitting ready and nothing trained on
+it. That is the largest single actionable gap the archive has surfaced.
