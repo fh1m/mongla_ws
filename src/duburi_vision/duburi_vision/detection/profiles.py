@@ -35,12 +35,14 @@ from typing import Dict
 # reading the log can see what was chosen and on what evidence.
 PROFILES: Dict[str, tuple] = {
     'murky': (
-        dict(conf=0.10, preprocess='clahe', preprocess_clip=3.0,
+        dict(conf=0.10, preprocess='off', preprocess_clip=3.0,
              range_crop=True),
-        'green/low-visibility water. CLAHE measured +42 points of target '
-        'presence on blurry saturated footage (10.7 -> 56.2 %); conf 0.10 '
-        'adds 8.5 points with jitter flat; the crop recovers 66 -> 100 % '
-        'recall at 4x range.'),
+        'green/low-visibility water. CLAHE is OFF here too, RETRACTING this '
+        "profile's original +42 claim: re-measured on raw detection rate it "
+        'DESTROYS detections on exactly this footage -- gate 30.4 -> 1.2 %, '
+        'across five independent frame samples and never once positive in '
+        '17 measured configurations spanning 4 props and 3 venues. conf 0.10 '
+        'and the crop are unaffected and still carry this profile.'),
     'clear': (
         dict(conf=0.10, preprocess='off', preprocess_clip=3.0,
              range_crop=True),

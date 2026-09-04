@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 cv2 = pytest.importorskip('cv2')
 
 from duburi_vision.underwater import (        # noqa: E402
-    ON, OFF, UNKNOWN, WaterStats, analyse_frames, frame_stats, recommend,
+    WaterStats, analyse_frames, frame_stats,
 )
 
 
@@ -100,38 +100,18 @@ def test_medians_not_means_so_one_glint_cannot_move_it():
 
 
 # --------------------------------------------------------------------------- #
-#  The recommendation, and its honesty about its own range
+#  The recommender is GONE, and stays gone
 # --------------------------------------------------------------------------- #
-def test_it_reproduces_both_MEASURED_regimes():
-    """The only two conditions measured end to end. If these stop
-    reproducing, the rule has drifted from the data it came from."""
-    gate = WaterStats(sharpness=315.2, contrast=27.7, saturation=159.9,
-                      cast=91.0, brightness=170.0, frames=300)
-    binw = WaterStats(sharpness=1240.6, contrast=36.1, saturation=27.9,
-                      cast=3.0, brightness=174.0, frames=300)
-    assert recommend(gate)[0] == ON
-    assert recommend(binw)[0] == OFF
+def test_there_is_no_clahe_recommender():
+    """It mapped these stats onto a CLAHE verdict using thresholds fitted to
+    two clips, and a third venue proved the mapping wrong in the direction
+    that matters: it said ON for the murkiest water in the archive, where
+    CLAHE measurably does not help. Re-measured across 17 configurations it
+    was never positive, and on the gate it cost 29 points.
 
-
-def test_between_the_regimes_it_REFUSES_to_answer():
-    """n=2 does not make a universal threshold. Saying ON or OFF outside the
-    measured range would be inventing confidence -- which is how a
-    measurement becomes a superstition."""
-    mid = WaterStats(sharpness=750.0, contrast=32.0, saturation=70.0,
-                     cast=40.0, brightness=170.0, frames=100)
-    assert recommend(mid)[0] == UNKNOWN
-
-
-def test_no_frames_is_UNKNOWN_not_a_guess():
-    assert recommend(WaterStats(0, 0, 0, 0, 0, frames=0))[0] == UNKNOWN
-
-
-def test_nan_input_does_not_produce_a_confident_answer():
-    nan = float('nan')
-    assert recommend(WaterStats(nan, nan, nan, nan, nan, frames=10))[0] == UNKNOWN
-
-
-def test_frame_stats_returns_all_five():
-    """A silently short tuple would unpack into the wrong fields, and every
-    number after it would be plausible and wrong."""
-    assert len(frame_stats(_scene())) == 5
+    Asserted rather than merely deleted, because the tempting fix is to
+    re-fit the thresholds on a third clip and ship it again."""
+    import duburi_vision.underwater as u
+    for gone in ('recommend', 'SHARP_MURKY', 'SAT_MURKY', 'SHARP_CLEAR',
+                 'SAT_CLEAR'):
+        assert not hasattr(u, gone), f'{gone} came back'

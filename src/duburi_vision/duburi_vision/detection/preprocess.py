@@ -18,17 +18,50 @@ plus washed-out underwater contrast, and it is the regime an AUV spends most
 of its run in -- a dataset of still frames does not contain it, and no
 threshold recovers a feature the image no longer has.
 
-WHAT IT BUYS, measured across 600 frames of the gate approach at conf 0.15:
+WHAT IT BUYS: NOTHING, AND OFTEN LESS THAN NOTHING. THE ORIGINAL CLAIM HERE
+IS RETRACTED.
 
-    preprocessing        presence   mean score
-    none                   10.7 %      0.226
-    unsharp mask           38.0 %      0.329
-    CLAHE (LAB, clip 2)    56.3 %      0.401
-    CLAHE (YUV, clip 3)    56.2 %      0.410     <- shipped
+This docstring used to record CLAHE taking the gate approach from 10.7 % to
+56.2 % presence -- "five times the presence" -- and that number is what put
+`preprocess='clahe'` into the `murky` profile. Re-measured on RAW DETECTION
+RATE, one variable at a time, it does not reproduce anywhere:
 
-Five times the presence. And it does NOT cost anything on footage that
-already works: bin stays 100 %, octagon stays 100 % and its mean score
-RISES (0.570 -> 0.634).
+    gate_back.mkv, robosub_gate2, conf 0.10, five independent frame samples
+        stride 5  off 0     12.0 % -> 0.4 %
+        stride 7  off 40    30.4 % -> 1.2 %
+        stride 11 off 90    30.8 % -> 2.0 %
+
+    9 still-image cases, 4 props, 3 venues, sharpness 33 .. 1284
+        every delta between -2.7 and +2.7 points
+
+    3 video clips, same measure
+        gate -0.8, bin +3.8, octagon -6.5
+
+Seventeen configurations. Never once meaningfully positive, and on the very
+footage the original claim came from it destroys 95 % of the detections.
+
+WHY, AND IT GENERALISES PAST CLAHE. The models were trained on UNPROCESSED
+underwater frames -- not one of the 25 archived training configs uses blur,
+rotation, perspective, or any contrast augmentation. Any preprocessing that
+makes an image look better to a PERSON moves it away from the distribution the
+detector actually learned. A contrast fix is a domain shift wearing a helpful
+face, and the prettier the result looks the further it has moved.
+
+WHAT THE ORIGINAL MEASUREMENT WAS PROBABLY SEEING. It was taken as tracker
+PRESENCE with the tracker-clamp fix and a conf drop stacked into the same arm,
+not as detector output with one variable moved. The clamp alone took presence
+0.0 -> 45.1 % and conf 0.10 added 8.5 more. Attributing the remainder to the
+last thing switched on is the confounded-A/B trap this round documented
+elsewhere and then walked into.
+
+WHAT SURVIVES. The blur measurement above is real and reproduced across three
+venues: footage, not models, is what separates a 100 % clip from a 1.5 % one.
+That still points at motion blur -- it just says the answer is exposure and
+training-time augmentation, not a filter in front of the detector.
+
+The code stays, selectable as `preprocess:=clahe`, because an operator may
+have water we have never measured. No profile turns it on for them
+(`test_profiles.py::test_no_profile_enables_preprocessing`).
 
 WHY YUV RATHER THAN LAB. Same result, half the price. Measured on the Pi at
 640x360, one thread:

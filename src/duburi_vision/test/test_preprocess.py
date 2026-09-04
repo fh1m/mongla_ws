@@ -185,38 +185,24 @@ def test_the_launch_default_survives_the_round_trip():
         "launch coerces the literal 'off' to boolean False"
 
 
-# --------------------------------------------------------------------------- #
-#  It is NOT universally good -- the counter-example that keeps it off
-# --------------------------------------------------------------------------- #
-def test_the_water_check_reproduces_both_MEASURED_verdicts():
-    """CLAHE helped one clip by +42 points and hurt another by -64.
+def test_the_water_characterisation_still_separates_the_two_regimes():
+    """RETRACTED and narrowed. This used to assert that `recommend()`
+    returned CLAHE ON for the gate water and OFF for the bin water.
+    `recommend()` is gone -- a third venue (sharpness 33, saturation 148) is
+    exactly what its thresholds called ON, and CLAHE measurably does not
+    help there.
 
-        arm                        gate approach      torpedo on bin
-        tracker + conf 0.10            53.6 %             79.5 %
-        ...+ CLAHE                     95.4 %             15.3 %
-
-    The clips separate on frame statistics -- gate blur 315 / saturation 160,
-    bin blur 1241 / saturation 28 -- so the decision is makeable from the
-    water rather than by trial. These are the two real measurements; if the
-    thresholds ever stop reproducing them, the rule has drifted from the data
-    it came from.
-    """
-    from duburi_vision.underwater import WaterStats, recommend
+    What survives is the MEASUREMENT, which reproduced across all three
+    venues: these two waters are genuinely different and the stats say so.
+    That is a fact about the pool. What to do about it is not something two
+    clips ever knew."""
+    from duburi_vision.underwater import WaterStats
 
     gate = WaterStats(315.2, 27.7, 159.9, 91.0, 170.0, frames=300)
     binw = WaterStats(1240.6, 36.1, 27.9, 3.0, 174.0, frames=300)
-    assert recommend(gate)[0] == 'CLAHE ON'
-    assert recommend(binw)[0] == 'CLAHE OFF'
-
-
-def test_water_between_the_two_regimes_says_MEASURE_rather_than_guessing():
-    """Two samples do not make a universal threshold. The honest answer in
-    between is 'run a leg each way', not a confident call from a rule fitted
-    to n=2."""
-    from duburi_vision.underwater import WaterStats, recommend
-
-    call, why = recommend(WaterStats(750.0, 32.0, 70.0, 40.0, 170.0, frames=100))
-    assert call == 'MEASURE BOTH', (call, why)
+    assert binw.sharpness > 3 * gate.sharpness          # 3.9x, not brightness
+    assert gate.saturation > 5 * binw.saturation        # absorption, not blur
+    assert abs(gate.brightness - binw.brightness) < 10  # the useless one
 
 
 def test_preprocessing_stays_OFF_by_default():

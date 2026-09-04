@@ -110,31 +110,57 @@ the 25 training configs uses blur, rotation or perspective augmentation
 (`degrees: 0.0`, `perspective: 0.0`, HSV and mosaic only). The models were
 never shown a blurred frame.
 
-## 4. CLAHE: 5× the detections, and what it costs
+## 4. CLAHE: RETRACTED — it does not help, and usually harms
 
-600 frames of the gate approach at conf 0.15:
+**This section used to read "CLAHE: 5× the detections".** That number does not
+reproduce and the claim is withdrawn. What follows is what replaced it.
 
-| preprocessing | presence | mean score |
+Re-measured on **raw detection rate**, one variable at a time, on the same
+clip the original claim came from:
+
+| sample of `gate_back.mkv` (`robosub_gate2`, conf 0.10) | base | + CLAHE |
 |---|---|---|
-| none | 10.7 % | 0.226 |
-| unsharp mask | 38.0 % | 0.329 |
-| CLAHE (LAB, clip 2) | 56.3 % | 0.401 |
-| **CLAHE (YUV, clip 3)** | **56.2 %** | **0.410** |
+| stride 5, offset 0 | 12.0 % | **0.4 %** |
+| stride 7, offset 40 | 30.4 % | **1.2 %** |
+| stride 11, offset 90 | 30.8 % | **2.0 %** |
 
-And **no cost where it is not needed**: bin 100 → 100 %, octagon 100 → 100 %
-with a *higher* mean score (0.570 → 0.634). YUV over LAB for the same result at
-half the price — 3.78 ms vs 7.07 on the Pi.
+And nowhere else either — 9 still-image cases across 4 props, 3 venues and a
+39× sharpness range gave deltas between −2.7 and +2.7 points; 3 video clips
+gave −0.8, +3.8, −6.5. **Seventeen configurations, never meaningfully
+positive**, and on the gate it destroys 95 % of the detections.
 
-The honest cost, measured on the vehicle with one variable:
+The CLAHE implementation was checked before retracting: it produces a correct,
+artefact-free contrast enhancement. It works. It just moves the image away from
+what the detector learned.
 
-| | detections | age med | CPU |
-|---|---|---|---|
-| CLAHE off | **79.1 Hz** | 21.13 ms | 48.5 % |
-| CLAHE on | 50.3 Hz | 22.00 ms | 60.5 % |
+### Why the original measurement said the opposite
 
-−36 % of rate for 5× the detections on hard footage. **Off by default**;
-`preprocess:=clahe` enables it. That trade is the operator's to make, and it
-depends on water clarity on the day.
+It was taken as **tracker presence** with the tracker-clamp fix and a
+confidence drop stacked into the same arm, not as detector output with one
+variable moved. The clamp alone took presence 0.0 → 45.1 % and conf 0.10 added
+8.5 more. Attributing the remainder to the last thing switched on is the
+confounded-A/B trap recorded in §5 of this same document — written, and then
+walked into.
+
+### The generalisable rule
+
+The models were trained on **unprocessed** underwater frames — not one of the
+25 archived configs uses blur, rotation, perspective, or any contrast
+augmentation. Any preprocessing that makes an image look better **to a person**
+moves it away from the distribution the detector learned. A contrast fix is a
+domain shift wearing a helpful face, and the prettier the output looks the
+further it has moved.
+
+### What survives
+
+The blur finding itself, which reproduced across three venues: **footage, not
+models, separates a 100 % clip from a 1.5 % one.** That still points at motion
+blur. It just says the answers are exposure control and training-time
+augmentation, not a filter in front of the detector.
+
+`preprocess:=clahe` remains selectable for water we have never measured. **No
+profile turns it on** — `test_profiles.py::test_no_profile_enables_preprocessing`
+is the guard, and it was verified to bite.
 
 ## 5. Method notes that cost something to learn
 

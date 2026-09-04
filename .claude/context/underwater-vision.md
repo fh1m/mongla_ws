@@ -298,3 +298,79 @@ doing it is picking `v1`.
 
 CLAHE moved presence 10.7 → 56.2 %. The conf floor moved it 8.5 points. Model
 selection is a **48-point** swing on data we already own, and it is free.
+
+---
+
+## 7. Mirpur: a third water type, and two retractions it forced
+
+The 2025 archive holds a venue nothing in §1–§6 had opened:
+`raw_images/Mirpur/sun_june_29/` — **1,918 frames from a Bangladeshi pool in
+June**, two months and a continent away from the RoboSub footage, holding the
+**same props**: the RoboSub gate with its animal placard, and the RoboSub
+torpedo board with its shark/sawfish artwork and two red rings.
+
+That is the clean cross-water, same-prop experiment §5 said did not exist.
+
+### The water
+
+| set | sharpness | saturation | contrast | cast |
+|---|---|---|---|---|
+| **Mirpur gate** | **31** | 147.7 | 22.7 | **+91.7** |
+| **Mirpur torpedo** | **36** | 154.0 | 22.1 | **+97.8** |
+| RoboSub torpedo | 521 | 153.4 | 35.7 | +113.2 |
+| RoboSub bin | 641 | 138.3 | 36.8 | +99.9 |
+| final_fun bin | 1328 | 22.2 | 37.0 | −0.7 |
+
+**~16× blurrier than RoboSub and 39× blurrier than the clearest set we own.**
+This is by a wide margin the hardest water in the archive.
+
+### Retraction 1 — cross-water transfer is FINE, and §5's worry was wrong
+
+Same prop, RoboSub-trained model, RoboSub water vs Mirpur water:
+
+| model | RoboSub | Mirpur |
+|---|---|---|
+| `torpedo_n_shark-up_200_final2` | 97.5 % | **93.3 %** |
+| `torpedo_n_200_shark-up_v1` | 97.5 % | **93.3 %** |
+| `torpedo_mini_final_day_1` | 96.7 % | 75.0 % |
+
+**Four points lost across a 15× sharpness change, a different pool, a
+different continent and a different season.** The models generalise. §5 ranked
+"validate on a different capture session" first partly out of fear that they
+did not; the fear was unfounded and the ranking should not rest on it. What §6
+showed is the real problem: **the spread between two models of the same prop
+(29 % vs 73 %) is far larger than the spread between two waters for one model
+(97 % vs 93 %).** Which model you pick matters more than which pool you are in.
+
+### Retraction 2 — CLAHE, and the heuristic built on it
+
+Mirpur is precisely the water `underwater.recommend()` was built to catch:
+blurry, saturated, heavily cast. It said `CLAHE ON`. CLAHE measurably does not
+help there — and re-measuring properly showed it does not help anywhere.
+
+Seventeen configurations, four props, three venues, five independent frame
+samples of the original clip: **never meaningfully positive, and on the gate it
+destroys 95 % of the detections** (30.4 % → 1.2 %). Full table and the
+confounded-A/B that produced the original number:
+[`detection-continuity.md`](detection-continuity.md) §4.
+
+Consequences, all landed:
+
+* `murky` profile no longer enables preprocessing (it keeps `conf 0.10` and
+  the crop, which are unaffected and re-measured).
+* `underwater.recommend()` and its four thresholds are **deleted**, not
+  re-fitted. A rule fitted to two clips was wrong on the third; fitting it to
+  three would be the same mistake with better manners. `WaterStats` /
+  `analyse_frames` survive — the characterisation reproduced across all three
+  venues and is a fact about the pool.
+* A guard test asserts no profile turns preprocessing on, and asserts
+  `recommend()` stays gone. Both verified to bite.
+
+### The rule that replaces it
+
+The models were trained on **unprocessed** frames. Any preprocessing that makes
+an image look better **to a person** moves it away from the distribution the
+detector learned. The prettier the result, the further it has moved. This is
+why the answer to motion blur is exposure control and training-time
+augmentation — changing the image the *camera* forms, or the images the *model*
+learns — and not a filter placed between them.
