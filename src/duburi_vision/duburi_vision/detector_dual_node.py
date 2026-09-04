@@ -89,10 +89,21 @@ _SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_debug_image',
 
 # The camera half. Same prefixing scheme, same reason: launch cannot address
 # two nodes in one process.
-_CAM_PER_CAMERA = ('profile', 'device_path', 'calibration', 'fps',
+#
+# `device` IS IN THIS LIST BECAUSE OF A NAME COLLISION, not because anyone
+# needs to set it. Launch parameters are PROCESS-wide, and `device` means two
+# different things to the two kinds of node in this process: the detector's
+# backend (`'cpu'`, a string) and the camera's V4L2 index (`-1`, an integer).
+# Without an explicit per-camera override the process-wide `device: 'cpu'`
+# reaches `CameraNode.declare_parameter('device', -1)` and the WHOLE PROCESS
+# dies at startup with InvalidParameterTypeException. Prefer `device_path`
+# for identity regardless -- a raw index has already swapped the two cameras
+# across a reboot once.
+_CAM_PER_CAMERA = ('profile', 'device', 'device_path', 'calibration', 'fps',
                    'publish_rate_hz', 'width', 'height')
 _CAM_DEFAULTS = {
-    'profile': '', 'device_path': '', 'calibration': '', 'fps': 0,
+    'profile': '', 'device': -1, 'device_path': '', 'calibration': '',
+    'fps': 0,
     # A composed detector is fed on demand, so this rate now governs only the
     # topic's viewers -- not the control path, which is what it used to gate.
     'publish_rate_hz': 0, 'width': 640, 'height': 480,

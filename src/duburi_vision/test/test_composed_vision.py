@@ -236,3 +236,44 @@ def test_the_composed_launcher_turns_direct_feed_ON():
            / 'detector_dual_node.py').read_text()
     assert "Parameter('direct_feed', value=True)" in src
     assert 'frame_sink=det' in src
+
+
+# --------------------------------------------------------------------------- #
+#  Process-wide parameters: two nodes, one namespace
+# --------------------------------------------------------------------------- #
+def test_no_parameter_name_means_two_things_in_one_process():
+    """Launch parameters are PROCESS-wide, so a name declared by BOTH kinds of
+    node must be given per-camera explicitly or the process-wide value reaches
+    the wrong one.
+
+    `device` is exactly that: the detector's backend (`'cpu'`, a string) and
+    the camera's V4L2 index (`-1`, an integer). Composing them killed the whole
+    process at startup with InvalidParameterTypeException -- loudly, at least,
+    but only on hardware. This test is the cheap version of that discovery.
+    """
+    from duburi_vision import detector_dual_node as DD
+
+    cam_src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
+               / 'camera_node.py').read_text()
+    camera_params = {
+        line.split("'")[1]
+        for line in cam_src.splitlines()
+        if "self.declare_parameter('" in line
+    }
+    assert 'device' in camera_params, 'fixture stale -- re-read camera_node'
+
+    shared = set(DD._SHARED)
+    per_cam = set(DD._CAM_PER_CAMERA)
+    clash = (shared & camera_params) - per_cam
+    assert not clash, (
+        f'{sorted(clash)} is declared by BOTH node types and is only set '
+        f'process-wide. Add it to _CAM_PER_CAMERA so the camera gets its own '
+        f'value, or the process-wide one lands on the wrong node.')
+
+
+def test_the_camera_override_actually_carries_device():
+    """Not just listed -- emitted. A key in the table that never reaches a
+    Parameter is the `device_path`-into-`**_` defect again."""
+    from duburi_vision import detector_dual_node as DD
+    assert 'device' in DD._CAM_PER_CAMERA
+    assert DD._CAM_DEFAULTS['device'] == -1, 'must be the camera sentinel'

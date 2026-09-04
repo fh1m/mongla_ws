@@ -68,6 +68,7 @@ import ctypes
 import fcntl
 import mmap
 import os
+import select
 import threading
 import time
 from typing import Optional, Tuple
@@ -190,7 +191,29 @@ class V4L2MailboxCamera(Camera):
 
     # Four buffers. Measured flat from 2 to 8 under this design (26.4-26.6 ms
     # median), so this is slack for a scheduling hiccup, not a tuning knob.
-    _NBUF = 4
+    # BUFFERS ARE SLACK FOR THE PUMP, AND 4 WAS NOT ENOUGH.
+    #
+    # Round 30 measured buffer count as irrelevant to latency (26.4-26.6 ms
+    # flat from 2 to 8) and that measurement stands -- for a pump that is
+    # KEEPING UP, which it was, because nothing else was running.
+    #
+    # In the composed process it is not. Measured with 4 buffers, forward
+    # camera, one detector at 83 Hz in the same process:
+    #
+    #     captured 2341   skipped_to_newest 1677   dropped_by_driver 1688
+    #
+    # The camera produced ~270 Hz and the pump got 156 of them; the other
+    # 1688 were dropped BY THE KERNEL because no buffer was free. 4 buffers at
+    # ~4 ms a frame is 16 ms of slack, and a Python thread on a busy Pi is
+    # descheduled for longer than that.
+    #
+    # This is why skipping to the newest was not enough on its own: a full
+    # queue is a FOSSIL RECORD of the moment the pump stalled -- round 30 §1 --
+    # so skipping through it still yields a fossil. The frames worth having
+    # were never captured. Slack is what keeps them.
+    #
+    # 16 buffers is 64 ms of slack and, at 640x360 MJPEG, about 640 kB.
+    _NBUF = 16
 
     def __init__(self, device='/dev/video0', width=640, height=360, fps=60,
                  frame_id='cam', name='cam', logger=None, fourcc='MJPG'):
@@ -241,6 +264,14 @@ class V4L2MailboxCamera(Camera):
         self._served = -1          # sequence of the frame last handed out
         self._captured = 0
         self._dropped_by_driver = 0
+        # Frames dequeued and handed straight back because a NEWER one was
+        # already waiting. A rising count is the pump being descheduled --
+        # which is exactly what it should absorb, and this is the number that
+        # says it is happening rather than leaving it to be inferred from a
+        # latency figure.
+        self._skipped = 0
+        self._store_age_sum = 0.0
+        self._store_age_max = 0.0
         self._last_seq = None
         self._consec_fail = 0
         self._last_ok = time.monotonic()
@@ -331,13 +362,38 @@ class V4L2MailboxCamera(Camera):
     #  The pump
     # ------------------------------------------------------------------ #
     def _pump_loop(self):
-        """Dequeue, copy, requeue IMMEDIATELY, forever.
+        """Dequeue, SKIP TO THE NEWEST, copy, requeue immediately, forever.
 
-        Requeueing before doing anything else is the whole mechanism: the
-        driver always has a free buffer, so it never drops a frame and never
-        accumulates a queue of old ones. The copy is ~2 kB-30 kB of MJPEG
+        Requeueing before doing anything else is the mechanism that stops the
+        driver ever running out of buffers. The copy is ~2 kB-30 kB of MJPEG
         (memcpy, not a decode) and the decode happens in the consumer, where
         the cost is paid only for frames actually used.
+
+        THE SKIP IS NOT AN OPTIMISATION, IT IS THE SAME MAILBOX RULE ONE LEVEL
+        DOWN, AND LEAVING IT OUT COST 13.7 ms.
+
+        This loop used to take exactly one buffer per iteration. That is fine
+        while it keeps up, and it does not keep up: it is a Python thread, and
+        under a busy consumer (82 Hz of decode and inference in this process)
+        it gets descheduled for longer than a frame period. The driver's queue
+        then fills -- and a full V4L2 queue holds the OLDEST frames, which is
+        the round-30 finding -- so the pump came back and worked through the
+        backlog IN ORDER, publishing stale frames into the slot one at a time.
+
+        Measured on the Pi, forward camera at a true 250 Hz:
+
+            frame age at dequeue, pump alone          4.01 ms
+            age when the CONSUMER's read() returned  17.69 ms
+            of which our own decode                   1.95 ms
+
+        ...leaving 13.7 ms of pure backlog, which is about one full 4-buffer
+        queue at 4 ms a frame. Draining to the newest costs 0.06 ms of
+        dequeue+requeue (measured by `tools/v4l2_latency.py`) and hands the
+        consumer a frame ~one period old instead of ~one queue old.
+
+        The skipped buffers are requeued WITHOUT being copied -- they are the
+        frames we have decided not to look at, and copying them is the work
+        this whole class exists to avoid.
         """
         while not self._stop.is_set():
             try:
@@ -350,6 +406,27 @@ class V4L2MailboxCamera(Camera):
                 self._consec_fail += 1
                 time.sleep(0.01)
                 continue
+
+            skipped_here = 0
+            # Skip to the newest COMPLETE frame already waiting. `select` with
+            # a zero timeout asks "is another one ready RIGHT NOW" without
+            # blocking, so a pump that is keeping up does exactly one extra
+            # syscall per frame and skips nothing.
+            while True:
+                try:
+                    if not select.select([self._fd], [], [], 0)[0]:
+                        break
+                    nb = _Buffer()
+                    nb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+                    nb.memory = V4L2_MEMORY_MMAP
+                    fcntl.ioctl(self._fd, VIDIOC_DQBUF, nb)
+                except OSError:
+                    break
+                # Give the older buffer straight back, uncopied.
+                fcntl.ioctl(self._fd, VIDIOC_QBUF, b)
+                b = nb
+                self._skipped += 1
+                skipped_here += 1
 
             if self._clock_monotonic is None:
                 self._clock_monotonic = (
@@ -373,15 +450,31 @@ class V4L2MailboxCamera(Camera):
                 # The driver produced frames it could not store. Under this
                 # design that should be ~0; a rising count means the pump
                 # itself is being starved of CPU.
-                self._dropped_by_driver += seq - self._last_seq - 1
+                #
+                # MINUS OUR OWN SKIPS. The sequence gap left by deliberately
+                # discarding older buffers looks identical to a kernel drop,
+                # and counting them made this number mirror `skipped` almost
+                # exactly -- which read as "the kernel is dropping 1688
+                # frames" and sent one round of diagnosis the wrong way.
+                self._dropped_by_driver += max(
+                    0, seq - self._last_seq - 1 - skipped_here)
             self._last_seq = seq
             self._captured += 1
             self._consec_fail = 0
             self._last_ok = time.monotonic()
 
+            # Age at the moment the pump publishes it. Together with the
+            # consumer's age-at-read this splits the delay into "the pump was
+            # late" and "the consumer was busy" -- two different problems with
+            # two different fixes, and indistinguishable from either number
+            # alone.
+            self._store_age_sum += (time.monotonic() - cap_t)
+            self._store_age_max = max(self._store_age_max,
+                                      time.monotonic() - cap_t)
+
             # One atomic store. The tuple is built first and published last,
             # so a reader never observes a partially-assembled frame.
-            self._slot = (payload, cap_t, seq)
+            self._slot = (payload, cap_t, seq, time.monotonic())
 
     # ------------------------------------------------------------------ #
     #  Camera interface
@@ -393,7 +486,7 @@ class V4L2MailboxCamera(Camera):
             meta.fresh = False
             return None, meta
 
-        payload, cap_t, seq = slot
+        payload, cap_t, seq, store_t = slot
         if seq == self._served:
             # Asked faster than the camera produces. Returning the same frame
             # again would make it look like a new observation to every
@@ -401,6 +494,7 @@ class V4L2MailboxCamera(Camera):
             # counter, the fire gate. `fresh=False` is the honest answer.
             meta.fresh = False
             meta.stamp_monotonic = cap_t
+            meta.stamp_store = store_t
             return None, meta
 
         frame = self._decoder(payload)
@@ -415,6 +509,12 @@ class V4L2MailboxCamera(Camera):
         # reasons about age is only as honest as this field.
         meta.stamp_monotonic = cap_t
         meta.stamp_wall = time.time() - (time.monotonic() - cap_t)
+        # When the PUMP published this frame. Diagnostic only, and it is the
+        # measurement that separates "the pump was late" from "the consumer
+        # was busy" -- two problems with different fixes that look identical
+        # in the single age number, and cost two wrong hypotheses before it
+        # existed.
+        meta.stamp_store = store_t
         return frame, meta
 
     def _decode_mjpeg(self, payload: bytes):
@@ -446,6 +546,10 @@ class V4L2MailboxCamera(Camera):
             'buffers': self._nbuf,
             'captured': self._captured,
             'dropped_by_driver': self._dropped_by_driver,
+            'skipped_to_newest': self._skipped,
+            'store_age_ms': (1000.0 * self._store_age_sum
+                             / max(self._captured, 1)),
+            'store_age_max_ms': 1000.0 * self._store_age_max,
         }
 
     def close(self) -> None:
