@@ -68,6 +68,12 @@ from duburi_vision.detection.messages  import detections_to_array
 # status line and the manager's mission logs.
 ALIGN_LOG_THROTTLE_S = 0.5
 
+# How long a `direct_feed` detector waits for its first frame by
+# reference before deciding there is no camera in its process and
+# subscribing instead. Long enough that a slow camera open does not
+# trip it, short enough to be invisible at startup.
+_DIRECT_FALLBACK_S = 2.0
+
 
 def _parse_models_param(s: str) -> Dict[str, str]:
     """Parse 'gate=gate_nano_100ep,flare=flare_medium_100ep' → {name: stem}.
@@ -175,10 +181,26 @@ class DetectorNode(Node):
         self.declare_parameter('debug_image_hz',      5.0)
         self.declare_parameter('alignment_deadband',  0.05)
         self.declare_parameter('paused',              False)
-        # Set by a composed launcher. Not an operator knob: it says where
-        # frames COME FROM, and flipping it at runtime would leave the node
-        # with neither source.
-        self.declare_parameter('direct_feed',         False)
+        # ON BY DEFAULT, WITH A FALLBACK, because "off" and "on" both have a
+        # silent failure mode and only one of them is recoverable.
+        #
+        # Direct feed is the arrangement the vehicle runs: the camera in this
+        # process hands frames over by reference. Defaulting it OFF meant the
+        # composed launcher had to remember to switch it on, and forgetting
+        # left the detector subscribing AND being fed -- the same picture
+        # decoded and inferred twice, with the slower copy winning half the
+        # time.
+        #
+        # Defaulting it ON has the opposite risk: a STANDALONE `detector_node`
+        # (vision.launch.py, the Jetson, sim, replay) has no camera in its
+        # process, so it would sit forever receiving nothing, silently. That
+        # is the exact class of bug this round has been removing.
+        #
+        # So it is on, and it SELF-CORRECTS: if no frame arrives by reference
+        # within `_DIRECT_FALLBACK_S`, the node subscribes to the topic and
+        # says so loudly. A misconfiguration costs one warning and two
+        # seconds, never a dead detector.
+        self.declare_parameter('direct_feed',         True)
 
         self._cam_name = str(self.get_parameter('camera').value).strip() or 'cam'
         ns_in  = str(self.get_parameter('image_topic').value).strip() \
@@ -319,9 +341,17 @@ class DetectorNode(Node):
         # `vision_stack_node`), subscribing as well would decode and infer the
         # same picture twice -- and the topic copy is the SLOWER of the two,
         # so it would also be the one the detector acted on half the time.
-        self._direct = bool(self.get_parameter('direct_feed').value)
-        self._sub    = None if self._direct else self.create_subscription(
+        self._direct  = bool(self.get_parameter('direct_feed').value)
+        self._ns_in   = ns_in
+        self._fed_direct = False
+        self._sub = None if self._direct else self.create_subscription(
             Image, ns_in, self._on_image, qos.IMAGE)
+        if self._direct:
+            # The self-correction. A one-shot timer, not a permanent one: once
+            # it has either seen a direct frame or subscribed, there is
+            # nothing left to decide.
+            self._fallback_timer = self.create_timer(
+                _DIRECT_FALLBACK_S, self._check_direct_feed)
         self._pub_det      = self.create_publisher(
             Detection2DArray, f'{ns_out}/detections', qos.DETECTIONS)
         # LATCHED: the HUD and the console both join AFTER the detector and
@@ -427,6 +457,28 @@ class DetectorNode(Node):
         return (self._want.is_set()
                 and not self.get_parameter('paused').value)
 
+    def _check_direct_feed(self) -> None:
+        """Subscribe after all, if nothing was handed to us by reference.
+
+        A detector with `direct_feed` on and no composed camera receives
+        NOTHING, for ever, with no error -- the failure mode this whole round
+        has been about. Two seconds of silence is enough to be sure, and
+        cheap enough that a slow-starting camera does not trip it.
+        """
+        self._fallback_timer.cancel()
+        if self._fed_direct or self._sub is not None:
+            return
+        self.get_logger().warn(
+            f'[DET  ] direct_feed is ON but no frame arrived by reference in '
+            f'{_DIRECT_FALLBACK_S:.0f}s -- there is no camera in this '
+            f'process. Subscribing to {self._ns_in} instead. This works, but '
+            f'it pays the encode+serialise+transport this setting exists to '
+            f'skip; run the composed launcher, or set direct_feed:=false to '
+            f'silence this.')
+        self._direct = False
+        self._sub = self.create_subscription(
+            Image, self._ns_in, self._on_image, qos.IMAGE)
+
     def submit_frame(self, frame_bgr, header) -> None:
         """Hand over an ALREADY-DECODED frame plus the header that describes it.
 
@@ -435,6 +487,7 @@ class DetectorNode(Node):
         whatever the detector felt like, which is the defect the round-30 and
         round-32 stamp fixes removed at the two layers either side of this one.
         """
+        self._fed_direct = True
         self._offer(_DirectFrame(frame_bgr, header))
 
     def _offer(self, item) -> None:

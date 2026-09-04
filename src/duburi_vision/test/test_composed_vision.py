@@ -225,7 +225,7 @@ def test_a_composed_detector_does_not_also_subscribe():
     half the time, at random."""
     src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
            / 'detector_node.py').read_text()
-    assert "self._sub    = None if self._direct else self.create_subscription(" in src
+    assert "self._sub = None if self._direct else self.create_subscription(" in src
 
 
 def test_the_composed_launcher_turns_direct_feed_ON():
@@ -277,3 +277,75 @@ def test_the_camera_override_actually_carries_device():
     from duburi_vision import detector_dual_node as DD
     assert 'device' in DD._CAM_PER_CAMERA
     assert DD._CAM_DEFAULTS['device'] == -1, 'must be the camera sentinel'
+
+
+# --------------------------------------------------------------------------- #
+#  direct_feed defaults ON, and cannot leave a detector silently dead
+# --------------------------------------------------------------------------- #
+def test_direct_feed_defaults_ON():
+    """The vehicle runs composed, so the composed arrangement is the default.
+    Leaving it off meant the launcher had to remember to switch it on, and
+    forgetting cost a double decode+infer with the SLOWER copy winning half
+    the time."""
+    src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
+           / 'detector_node.py').read_text()
+    assert "self.declare_parameter('direct_feed',         True)" in src
+
+
+def test_a_direct_detector_with_no_camera_SUBSCRIBES_rather_than_dying():
+    """The risk of defaulting it on: a standalone `detector_node` -- sim,
+    replay, the Jetson, `vision.launch.py` -- has no camera in its process and
+    would receive NOTHING, for ever, with no error. That is precisely the
+    failure mode this round exists to remove, so the default carries its own
+    recovery."""
+    calls = {'subscribed': 0, 'warned': []}
+    det = object.__new__(DN.DetectorNode)
+    det._direct = True
+    det._fed_direct = False
+    det._sub = None
+    det._ns_in = '/duburi/vision/forward/image_raw'
+    det._on_image = lambda _m: None
+    det._fallback_timer = type('T', (), {'cancel': lambda self: None})()
+
+    def _create_sub(*_a, **_k):
+        calls['subscribed'] += 1
+        return object()
+    det.create_subscription = _create_sub
+    det.get_logger = lambda: type('L', (), {
+        'warn': lambda _s, m: calls['warned'].append(m)})()
+
+    det._check_direct_feed()
+    assert calls['subscribed'] == 1, 'no camera and no subscription = dead node'
+    assert calls['warned'], 'it must SAY it fell back, not do it quietly'
+    assert det._direct is False
+
+
+def test_a_detector_that_WAS_fed_directly_does_not_subscribe():
+    """The composed case: the fallback must not add a redundant subscription
+    on top of a working direct feed -- that is the double-work it prevents."""
+    calls = {'subscribed': 0}
+    det = object.__new__(DN.DetectorNode)
+    det._direct = True
+    det._fed_direct = True          # a frame arrived by reference
+    det._sub = None
+    det._ns_in = '/x'
+    det._fallback_timer = type('T', (), {'cancel': lambda self: None})()
+    det.create_subscription = lambda *_a, **_k: calls.__setitem__(
+        'subscribed', calls['subscribed'] + 1)
+    det.get_logger = lambda: type('L', (), {'warn': lambda _s, m: None})()
+
+    det._check_direct_feed()
+    assert calls['subscribed'] == 0
+    assert det._direct is True
+
+
+def test_submit_frame_records_that_the_direct_path_is_alive():
+    """The flag the fallback reads. If `submit_frame` did not set it, a
+    perfectly healthy composed detector would add a second, redundant
+    subscription two seconds after startup."""
+    import queue as _q
+    det = object.__new__(DN.DetectorNode)
+    det._infer_q = _q.SimpleQueue()
+    det._fed_direct = False
+    det.submit_frame('f', 'h')
+    assert det._fed_direct is True

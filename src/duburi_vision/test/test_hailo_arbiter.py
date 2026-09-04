@@ -42,6 +42,12 @@ class _Chip:
         self.active = None
         self.releases = 0
         self.devices = 0
+        # `configure()` allocates a network group into the chip's ON-CHIP
+        # SRAM; `activate()` only switches between resident groups. Counting
+        # configures is the only way to see the difference from outside, and
+        # without it 19 tests passed while the chip filled up and refused
+        # every inference.
+        self.configures = 0
 
 
 CHIP = _Chip()
@@ -209,6 +215,7 @@ class _InferModel:
             shape=(self._nclasses * (1 + self._CAP * 5),))
 
     def configure(self):
+        CHIP.configures += 1
         return _Cim(self.name)
 
 
@@ -506,3 +513,50 @@ def test_a_LATER_conf_change_is_checked_too(hailo, tmp_path, monkeypatch):
                             logger=log)
     d.update_conf(0.01)
     assert any('BELOW' in w for w in warned['warn'])
+
+
+def test_swapping_does_not_RECONFIGURE_the_graph(tmp_path, hailo):
+    """CONFIGURE ONCE, ACTIVATE MANY -- they are not the same cost.
+
+    `configure()` allocates the network group into the Hailo-8's on-chip
+    SRAM. `activate()` makes an already-resident group the running one.
+    Configuring on every swap allocates a fresh group each time and the chip
+    fills:
+
+        CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL
+        HAILO_OUT_OF_FW_MEMORY (71)
+
+    after which EVERY inference fails, forever, in a tight loop -- measured on
+    the vehicle as 98 % CPU, zero detections, and the image topic starved from
+    36 Hz to 1.6. Nineteen tests passed through it, because none of them could
+    see the difference between the two calls.
+    """
+    a = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                            class_allowlist=None, warmup=False)
+    b = hailo.HailoDetector(model_path=_model(tmp_path, 'dwn', ['fire']),
+                            class_allowlist=None, warmup=False)
+    frame = np.zeros((360, 640, 3), np.uint8)
+
+    CHIP.configures = 0
+    for _ in range(12):          # 24 swaps
+        a.infer(frame)
+        b.infer(frame)
+
+    assert CHIP.configures <= 2, (
+        f'{CHIP.configures} configures for 2 graphs over 24 swaps -- each one '
+        f'allocates chip SRAM that is not reclaimed, and the firmware answers '
+        f'HAILO_OUT_OF_FW_MEMORY once it runs out')
+
+
+def test_the_swap_still_happens(tmp_path, hailo):
+    """The guard on the guard: `configures <= 2` would also pass if the two
+    detectors had stopped taking turns at all, which would be a worse bug."""
+    a = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                            class_allowlist=None, warmup=False)
+    b = hailo.HailoDetector(model_path=_model(tmp_path, 'dwn', ['fire']),
+                            class_allowlist=None, warmup=False)
+    frame = np.zeros((360, 640, 3), np.uint8)
+    for _ in range(4):
+        a.infer(frame)
+        b.infer(frame)
+    assert a._swaps >= 3 and b._swaps >= 3, (a._swaps, b._swaps)
