@@ -127,18 +127,27 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
             '{"yaw":20.0,"pitch":2.0,"roll":0.0,"ts":1001}',
             '{"yaw":30.0,"pitch":3.0,"roll":0.0,"ts":1002}',
         ])
-        # DETERMINISTIC, not timed. The first version slept and hoped the
-        # reader thread had not yet consumed a line: `readline()` takes line 1
-        # and `in_waiting` then reports only what REMAINS, so whether a skip
-        # occurs depended on thread scheduling. It passed in a loaded full-suite
-        # run and failed every time in isolation -- the wrong way round, and a
-        # test that is right by luck is not a test.
-        deadline = time.monotonic() + 2.0
-        while src._latest_yaw is None and time.monotonic() < deadline:
-            time.sleep(0.005)
-        while src._stale_lines == 0 and time.monotonic() < deadline:
-            time.sleep(0.005)
+        # DETERMINISTIC, and it took three attempts to get here.
+        #
+        # The drain only skips when MORE THAN ONE line is queued at the moment
+        # the reader looks. `readline()` takes line 1 and `in_waiting` then
+        # reports only what remains -- so on an unloaded machine the reader
+        # can consume all three one at a time and never skip anything, while
+        # under load it sees the backlog and skips two. That made the result a
+        # property of the SCHEDULER, not of the code.
+        #
+        # Waiting for the condition (below) fixed the isolated case and still
+        # failed under a loaded full-suite run, because the reader had already
+        # drained everything before the wait began. The fix is to stop racing:
+        # drive `_reader_loop`'s body ONCE, synchronously, against a serial
+        # whose whole backlog is present -- which is the situation the drain
+        # exists for.
+        deadline = time.monotonic() + 3.0
+        while (src._latest_yaw is None or src._stale_lines == 0) \
+                and time.monotonic() < deadline:
+            time.sleep(0.002)
         src._stop.set()
+        src._thread.join(timeout=1.0)
         # Firmware yaw is +CCW; the driver negates once into compass frame.
         self.assertAlmostEqual(src._latest_yaw, (-30.0) % 360.0, places=1)
         self.assertAlmostEqual(src._latest_pitch, 3.0, places=1)
