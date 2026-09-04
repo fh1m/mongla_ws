@@ -29,6 +29,7 @@ Install: pip install filterpy
 
 from __future__ import annotations
 
+from .confidence import ConfidenceModel
 from typing import Dict, Tuple
 
 import numpy as np
@@ -75,12 +76,22 @@ class PerTrackKalman:
         self.predict_streak     = 0
 
     def step(self, cx: float, cy: float, dt: float,
-             predicted: bool) -> Tuple[float, float]:
-        """Advance one frame. Returns smoothed (cx_hat, cy_hat)."""
+             predicted: bool, r_scale: float = 1.0) -> Tuple[float, float]:
+        """Advance one frame. Returns smoothed (cx_hat, cy_hat).
+
+        `r_scale` multiplies the measurement noise for THIS update only (NSA):
+        <1 trusts the detection more than the static R, >1 trusts the filter's
+        own prediction instead. Restored afterwards so one doubtful frame does
+        not permanently change how the filter weighs every later one.
+        """
         self._update_F(dt)
         self._kf.predict()
         if not predicted:
+            if r_scale != 1.0:
+                self._kf.R = np.eye(2) * (self._measurement_noise * r_scale)
             self._kf.update(np.array([[cx], [cy]], dtype=float))
+            if r_scale != 1.0:
+                self._kf.R = np.eye(2) * self._measurement_noise
             self.predict_streak = 0
         else:
             self.predict_streak += 1
@@ -113,7 +124,7 @@ class TrackKalmanSmoother:
         Fallback dt for the first frame (seconds). Default 1/20.
     """
 
-    def __init__(self, *,
+    def __init__(self, *, adaptive_noise: bool = False,
                  process_noise: float = 0.1,
                  measurement_noise: float = 1.0,
                  max_predict_frames: int = 5,
@@ -125,9 +136,13 @@ class TrackKalmanSmoother:
 
         self._filters:    Dict[int, PerTrackKalman] = {}
         self._last_t:     Dict[int, float]           = {}
+        # One model per smoother (i.e. per camera): the score distribution is a
+        # property of this detector on this water, shared across its tracks.
+        self._conf_model = ConfidenceModel() if adaptive_noise else None
 
     def smooth(self, track_id: int, cx: float, cy: float,
-               frame_t: float, predicted: bool) -> Tuple[float, float]:
+               frame_t: float, predicted: bool,
+               conf: float = float('nan')) -> Tuple[float, float]:
         """Return Kalman-smoothed (cx_hat, cy_hat) for this track.
 
         Creates a new filter on first sight of a track_id.
@@ -146,7 +161,15 @@ class TrackKalmanSmoother:
         self._last_t[track_id] = frame_t
 
         flt = self._filters[track_id]
-        cx_hat, cy_hat = flt.step(cx, cy, dt, predicted)
+        # NSA: scale this update's measurement noise by how much the detector
+        # trusts its own box, normalised against what THIS detector produces.
+        # Off (1.0) when no confidence is supplied or the model is disabled, so
+        # an existing caller keeps the previous behaviour exactly.
+        r_scale = 1.0
+        if self._conf_model is not None and conf == conf:
+            self._conf_model.observe(conf)
+            r_scale = self._conf_model.nsa_factor(conf)
+        cx_hat, cy_hat = flt.step(cx, cy, dt, predicted, r_scale)
         return cx_hat, cy_hat
 
     def is_expired(self, track_id: int) -> bool:

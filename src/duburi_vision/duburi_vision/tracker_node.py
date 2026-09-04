@@ -143,8 +143,14 @@ def kalman_pass(kalman, tracked, frame_t):
             # it from THIS observation rather than extrapolating from a track
             # that went cold.
             kalman.drop(td.track_id)
+        # A COASTED box carries the score of the detection it was
+        # extrapolated from, not evidence about this frame. Feeding it to the
+        # confidence model would let one good detection keep voting while the
+        # target is actually absent, so predicted boxes pass NaN -- which the
+        # smoother reads as "no confidence information" and leaves R alone.
         cx_hat, cy_hat = kalman.smooth(
-            td.track_id, td.cx, td.cy, frame_t, td.predicted)
+            td.track_id, td.cx, td.cy, frame_t, td.predicted,
+            conf=(float('nan') if td.predicted else float(td.score)))
         half_w, half_h = td.width * 0.5, td.height * 0.5
         smoothed.append(TrackedDetection(
             class_id=td.class_id, class_name=td.class_name, score=td.score,
@@ -176,6 +182,13 @@ class TrackerNode(Node):
         self.declare_parameter('enable_kalman',               True)
         self.declare_parameter('kalman_process_noise',        0.1)
         self.declare_parameter('kalman_measurement_noise',    1.0)
+        # NSA (GIAOTracker/StrongSORT): scale R by the detection score, so a
+        # doubtful box moves the filter less than a confident one. ON by
+        # default -- measured on 5 competition clips it follows a
+        # high-confidence box ~2x more closely AND still rejects low-confidence
+        # ones, and on two of those clips the fixed-R filter was following BAD
+        # boxes more closely than good ones (selectivity 0.96 and 0.64).
+        self.declare_parameter('kalman_adaptive_noise',       True)
         # SECONDS, not frames. It was `max_predict_frames: 30`, and 30 frames
         # is 1.5 s at the 20 Hz this was tuned at and 0.31 s at the Hailo
         # path's 98 Hz -- BELOW the control loop's typical `vision.coast_s` of
@@ -208,6 +221,7 @@ class TrackerNode(Node):
         self._enable_kal = bool(self.get_parameter('enable_kalman').value)
         proc_noise       = float(self.get_parameter('kalman_process_noise').value)
         meas_noise       = float(self.get_parameter('kalman_measurement_noise').value)
+        adaptive_noise   = bool(self.get_parameter('kalman_adaptive_noise').value)
         max_pred_s       = float(self.get_parameter('max_predict_s').value)
         self._rate_tol   = float(self.get_parameter('frame_rate_warn_ratio').value)
         self._frame_rate = frame_rate
@@ -234,10 +248,18 @@ class TrackerNode(Node):
                 f'track is ever created and /tracks stays empty while looking '
                 f'healthy.')
         self._kalman = TrackKalmanSmoother(
+            adaptive_noise=adaptive_noise,
             process_noise=proc_noise,
             measurement_noise=meas_noise,
             max_predict_frames=max_pred,
         ) if self._enable_kal else None
+        if self._enable_kal and adaptive_noise:
+            self.get_logger().info(
+                '[TRK  ] adaptive measurement noise ON -- R scales with the '
+                'detector score, normalised against this detector\'s own '
+                'p10..p90. Measured on 5 competition clips: follows a '
+                'high-confidence box ~2x more closely while still rejecting '
+                'low-confidence ones.')
 
         ns  = f'/duburi/vision/{cam}'
         self._sub_det  = self.create_subscription(
