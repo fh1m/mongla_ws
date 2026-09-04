@@ -177,8 +177,12 @@ def test_the_launch_default_survives_the_round_trip():
     the same to `make_preprocessor` and stays a string through launch."""
     launch = (Path(__file__).resolve().parents[1] / 'launch'
               / 'vision_pi.launch.py').read_text()
-    assert "DeclareLaunchArgument('preprocess', default_value='none')" in launch, \
-        "the launch default must not be a value launch coerces to bool"
+    # 'auto' now, not 'none': it is the SENTINEL that lets a profile decide,
+    # and it is still a string, so it survives launch's bool coercion of the
+    # literal 'off' -- which killed the whole composed process at startup.
+    assert "DeclareLaunchArgument('preprocess', default_value='auto')" in launch
+    assert "default_value='off'" not in launch, \
+        "launch coerces the literal 'off' to boolean False"
 
 
 # --------------------------------------------------------------------------- #
@@ -221,4 +225,8 @@ def test_preprocessing_stays_OFF_by_default():
     it on would silently halve detection on clear water."""
     src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
            / 'detector_node.py').read_text()
-    assert "self.declare_parameter('preprocess',          'off')" in src
+    # 'auto' is the SENTINEL for "not set", so a profile can decide. The
+    # effective default is still off -- `make_preprocessor('off')` is what a
+    # profile-less run resolves to.
+    assert "self.declare_parameter('preprocess',          'auto')" in src
+    assert "_p('preprocess', 'off')" in src
