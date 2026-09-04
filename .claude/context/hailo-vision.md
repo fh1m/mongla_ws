@@ -235,3 +235,157 @@ and needs a gate/rescue/repair prop in frame.
 
 0.15 stands on the distribution plus the baked floor. Re-run this against a
 real prop before treating it as tuned.
+
+---
+
+# Round 32 — the GIL, the SRAM, and the wire format
+
+Round 29 asked whether async inference is FASTER and answered no (§5, and that
+still stands: 98.2 Hz either way on our multi-context graph). This round asked
+a different question and the answer changed the whole pipeline.
+
+## 10. THE BLOCKING API HOLDS THE GIL FOR ITS ENTIRE INFERENCE
+
+`tools/gil_probe.py` — a sampler thread `time.sleep(1 ms)` in a loop, recording
+how LATE it woke, with two controls, because a gap number without controls
+cannot separate the subject from a badly-scheduling machine:
+
+```
+  CONTROL sleep 10 ms (releases the GIL)   woke late 0.05 ms   >4 ms:  0.0 %
+  CONTROL pure-Python spin (holds it)                5.11 ms   >4 ms: 99.9 %
+  InferVStreams.infer()                              9.21 ms   >4 ms: 99.6 %
+  InferModel run_async + job.wait()                  0.05 ms   >4 ms:  0.0 %
+```
+
+The blocking call is **worse than a pure-Python spin**: CPython's spin yields
+every 5 ms switch interval, and a C extension that never releases never yields
+at all. So during every inference, in that process, **nothing else Python runs**
+— not the camera's capture pump, not an rclpy executor thread, not a param
+callback. 70+ times a second.
+
+**This is what made composition look harmful.** With camera and detector in one
+process the stage profile read:
+
+```
+  capture -> pump store    4.19 ms
+  waiting in the slot     13.82 ms   <- 49 % of the budget
+    of which our decode    1.93 ms
+  inference               10.22 ms
+  CAPTURE -> DETECTIONS   28.06 ms   period 12.16 ms
+```
+
+11.9 ms of that slot wait is the pump being frozen, so the consumer always took
+a frame from *before* the current inference began. After switching to async:
+
+```
+  waiting in the slot      4.29 ms
+  CAPTURE -> DETECTIONS   18.01 ms   (-36 %)
+  pump captured (15 s)      2360 -> 4016   (the camera's full 268 Hz)
+  pump skipped              1670 -> 22
+```
+
+**The rule, generally: any C extension you call at 70 Hz must be checked for GIL
+behaviour before anything else in the process is blamed.** Two hypotheses died
+here first — "the pump serves a stale driver backlog" (it does fall behind;
+skipping to the newest moved the result 0.04 ms, because a full V4L2 queue is a
+FOSSIL RECORD and skipping through fossils still yields a fossil) and "the
+kernel is dropping frames" (that was our own skip counted as a drop: 1688
+apparent, 7 real).
+
+## 11. `configure()` COSTS CHIP SRAM; `activate()` DOES NOT
+
+The single most expensive mistake available on this chip, and it is silent
+until it is catastrophic.
+
+* `InferModel.configure()` → allocates the network group into the Hailo-8's
+  **on-chip SRAM**. Expensive, scarce.
+* `ConfiguredInferModel.activate()` → makes an already-resident group the
+  running one. Cheap; this is the camera-swap operation.
+
+Calling `configure()` per swap fills the chip after a few dozen switches:
+
+```
+  CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL
+  HAILO_OUT_OF_FW_MEMORY (71)
+```
+
+…and then **every** inference fails forever in a tight retry loop — measured on
+the vehicle as 98 % CPU, zero detections, and the image topic starved from 36 Hz
+to 1.6. A single-detector profile never sees it, because it never swaps.
+
+Two configured groups resident at once is fine — it is what the blocking path
+always did (one `VDevice.configure` per detector at construction).
+
+**Why SRAM is this tight here:** our HEFs are **multi-context**. `parse-hef`
+says `Multi Context - Number of contexts: 3`, and the firmware string is
+`4.24.0 (release,app,extended context switch buffer)`. A multi-context graph
+does not fit on-chip at once; the firmware pages contexts through SRAM during
+inference. That is also §3's ceiling mechanism seen from the other side.
+
+## 12. THE TWO APIs RETURN DIFFERENT WIRE FORMATS
+
+`InferVStreams` → a dict keyed by vstream name, holding a ragged per-class
+object array. `InferModel` → writes into the buffer **you** bound, flat float32:
+
+```
+  [ count_0, (y1 x1 y2 x2 score) * count_0,
+    count_1, (y1 x1 y2 x2 score) * count_1, ... ]
+```
+
+**PACKED, not fixed-stride** — and the buffer is sized for the worst case, which
+makes fixed-stride look right. `parse-hef` states it exactly:
+
+```
+  HAILO NMS BY CLASS(number of classes: 3,
+                     maximum bounding boxes per class: 100,
+                     maximum frame size: 6012)
+```
+
+6012 bytes = 1503 floats = `3 * (1 + 100 * 5)`. The arithmetic is perfect for a
+fixed stride and the layout is not one. Reading it that way returns **nothing
+for every class after the first** — 22 detections where there were 56 — without
+raising, and with every surviving box in exactly the right place.
+
+`tools/hailo_api_equivalence.py` runs both APIs over the same frames and
+compares detections. It caught this; a smoke test would not have, nor would any
+check that only looked at class 0. Keep the blocking path
+(`DUBURI_HAILO_FORCE_BLOCKING=1`) alive for exactly this comparison.
+
+Also from `parse-hef`, worth knowing without re-deriving: `Score threshold:
+0.050` (the baked floor — runtime `conf` can only tighten), `IoU threshold:
+0.70`, input `UINT8 NHWC(640x640x3)`.
+
+## 13. PCIe IS NOT A LEVER ON THIS BOARD — SETTLED
+
+Round 29's research flagged that PCIe generation matters for **multi-context**
+HEFs (Hailo staff: 281 vs 355 FPS Gen2 vs Gen3; YOLOv7 9 vs 25), and ours are
+multi-context. So it was worth checking. It is already maxed:
+
+```
+  LnkCap: Speed 8GT/s, Width x4
+  LnkSta: Speed 8GT/s, Width x1 (downgraded)
+```
+
+**8GT/s is Gen 3** — no `dtparam=pciex1_gen=3` needed, and none is set. The x1
+width is the Pi 5's physical connector against a card capable of x4; it is not
+configurable. Do not spend a reboot on this.
+
+## 14. WHERE WE ACTUALLY ARE, AND WHAT IS LEFT
+
+Chip ceiling, measured with `hailortcli benchmark`:
+
+```
+  FPS (hw_only) = 97.92        Latency (hw) = 8.34 ms
+```
+
+Ours: `infer()` takes **9.85 ms**, i.e. **1.51 ms of host work** on top of the
+chip (letterbox, the buffer copy, the NMS decode). Full ROS stack, both cameras,
+one paused, composed: **77.3 Hz**, 79 % of the chip's ceiling.
+
+**A lever considered and rejected on the arithmetic: pipelining the decode.**
+Now that the GIL is free, the camera *could* decode the next frame during
+inference, taking the period from 11.76 ms toward 9.85 (≈101 Hz). It would make
+detections OLDER: the decoded frame would wait a whole inference before its own
+inference began, adding ~9.85 ms to age to buy ~20 % of rate. **Control pays
+latency, not throughput** (§6). Decoding fresh at idle is the right design and
+this is why.
