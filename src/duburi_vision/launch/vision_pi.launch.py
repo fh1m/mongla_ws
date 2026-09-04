@@ -102,8 +102,23 @@ def generate_launch_description():
         # composed process dies at declare_parameter with
         # InvalidParameterTypeException. 'none' means the same thing to
         # `make_preprocessor` and survives the round trip as a string.
-        DeclareLaunchArgument('preprocess', default_value='none'),
-        DeclareLaunchArgument('preprocess_clip', default_value='3.0'),
+        # ONE WORD for the water, instead of four interacting knobs. Every
+        # value in a profile is measured; `detection/profiles.py` names the
+        # measurement beside each. An explicit knob still overrides it.
+        #
+        #   vision:=murky   green, low visibility
+        #   vision:=clear   good visibility
+        #   vision:=close   alignment / docking / firing
+        #   vision:=fast    maximum pipeline rate (default)
+        DeclareLaunchArgument('vision', default_value='fast'),
+        # 'auto' = not set -> the profile decides. A concrete value here
+        # would override every profile, which is how `vision:=murky`
+        # once logged that it had applied while changing nothing.
+        DeclareLaunchArgument('preprocess', default_value='auto'),
+        # -1 = not set -> the profile decides. An int, not a bool, because a
+        # bool has no third state and a profile could then never turn it on.
+        DeclareLaunchArgument('range_crop', default_value='-1'),
+        DeclareLaunchArgument('preprocess_clip', default_value='0.0'),
         DeclareLaunchArgument('imgsz',     default_value='640'),
         DeclareLaunchArgument(
             'paused', default_value='false',
@@ -221,7 +236,9 @@ def generate_launch_description():
             'dwn_conf':       LaunchConfiguration('conf'),
             'imgsz':          LaunchConfiguration('imgsz'),
             'max_det':        LaunchConfiguration('max_det'),
+            'vision_profile':  LaunchConfiguration('vision'),
             'preprocess':      LaunchConfiguration('preprocess'),
+            'range_crop':      LaunchConfiguration('range_crop'),
             'preprocess_clip': LaunchConfiguration('preprocess_clip'),
             'paused':         LaunchConfiguration('paused'),
             # The Hailo backend ignores it (`**_ignored`), but the value has to

@@ -180,4 +180,5 @@ def test_it_is_OFF_by_default():
     without being asked."""
     src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
            / 'detector_node.py').read_text()
-    assert "self.declare_parameter('range_crop',          False)" in src
+    assert "self.declare_parameter('range_crop',          -1)" in src
+    assert "if int(_p('range_crop', 0)) > 0" in src

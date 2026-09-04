@@ -65,6 +65,7 @@ from duburi_vision.detection.detector  import Detector
 from duburi_vision.detection.messages  import detections_to_array
 from duburi_vision.detection.preprocess import make_preprocessor
 from duburi_vision.detection.rangecrop  import RangeCrop
+from duburi_vision.detection.profiles   import resolve as resolve_profile
 
 # Throttle for the always-on operator alignment line (seconds). Matches the
 # control-side vision throttle so the rate feels consistent between the detector
@@ -76,6 +77,30 @@ ALIGN_LOG_THROTTLE_S = 0.5
 # subscribing instead. Long enough that a slow camera open does not
 # trip it, short enough to be invisible at startup.
 _DIRECT_FALLBACK_S = 2.0
+
+# "NOT SET BY THE OPERATOR". A launch file passes every parameter, so the
+# only way to tell a deliberate choice from a filled-in default is a value
+# that means nothing on its own. Each is outside the setting's real range.
+_UNSET = {
+    # `conf` is DELIBERATELY ABSENT. It also feeds the tracker's confidence
+    # clamp through the launch (`detector_conf`), and a sentinel there would
+    # silently disable the clamp -- which measured as the tracker emitting
+    # NOTHING on real water. A profile therefore cannot lower `conf` below an
+    # explicit launch value; set both, or set neither.
+    'preprocess': 'auto',     # 'off'/'clahe' are the real values
+    'preprocess_clip': 0.0,   # a real clip limit is > 0
+    'range_crop': -1,         # an int, because a bool cannot carry a third state
+}
+
+
+def _is_unset(name, value) -> bool:
+    """True when `value` is the documented sentinel for `name`."""
+    s = _UNSET.get(name)
+    if s is None:
+        return False
+    if isinstance(s, str):
+        return str(value).strip().lower() == s
+    return value == s
 
 
 def _parse_models_param(s: str) -> Dict[str, str]:
@@ -214,15 +239,23 @@ class DetectorNode(Node):
         #
         # Off by default because it is 3.78 ms on the Pi (77 Hz -> ~46), which
         # is a real trade the operator should make deliberately.
-        self.declare_parameter('preprocess',          'off')
-        self.declare_parameter('preprocess_clip',     3.0)
+        self.declare_parameter('preprocess',          'auto')
+        self.declare_parameter('preprocess_clip',     0.0)
         # RANGE CROP. Feed the detector a centre crop while the target is far,
         # so it occupies more of the 640x640 the chip sees. Measured on real
         # labelled data: recall at 4x the training distance goes 65.9 % ->
         # 100 %, and at 6.7x, 20.2 % -> 67.4 %. It releases automatically on
         # approach because a fixed crop LOSES close targets (69 % at 1x).
         # `imgsz` cannot do this on the Hailo -- it is baked into the HEF.
-        self.declare_parameter('range_crop',          False)
+        # An INT, not a bool: 0/1 are the operator's answer and -1 is
+        # 'not set', which a bool cannot express -- and without a third
+        # state a profile can never turn this on.
+        self.declare_parameter('range_crop',          -1)
+        # ONE WORD instead of four knobs. `vision:=murky` on competition day
+        # beats getting conf/preprocess/clip/crop right under a run clock.
+        # A profile supplies DEFAULTS ONLY -- an explicit parameter still
+        # wins, so debugging keeps the individual knobs.
+        self.declare_parameter('vision_profile',      '')
 
         self._cam_name = str(self.get_parameter('camera').value).strip() or 'cam'
         ns_in  = str(self.get_parameter('image_topic').value).strip() \
@@ -236,6 +269,46 @@ class DetectorNode(Node):
         )
 
         device   = str(self.get_parameter('device').value)
+        # Resolve the profile FIRST, then let explicit parameters override it.
+        # `_p()` below returns the operator's value when they set one and the
+        # profile's when they did not, so `vision:=murky preprocess:=off` is
+        # a coherent request rather than a contradiction.
+        prof_name = str(self.get_parameter('vision_profile').value or '').strip()
+        prof = {}
+        if prof_name:
+            try:
+                prof, why = resolve_profile(prof_name)
+                self.get_logger().info(
+                    f"[DET  ] vision profile {prof_name!r}: {why}")
+                self.get_logger().info(f"[DET  ] -> {prof}")
+            except ValueError as exc:
+                self.get_logger().error(f'[DET  ] {exc}')
+                raise
+
+        def _p(name, default):
+            """Explicit parameter wins; else the profile; else the default.
+
+            "EXPLICIT" IS DECIDED BY A SENTINEL, NOT BY COMPARING TO THE
+            DEFAULT, and the difference is not academic. A launch file always
+            passes every parameter -- `preprocess:='none'`, `range_crop:=False`
+            -- so a comparison against the declared default sees the launch's
+            own defaults as deliberate operator choices and the profile never
+            applies. Measured on the vehicle: `vision:=murky` logged that it
+            had applied while `range_crop` read False and `conf` read 0.15.
+
+            So a knob is "unset" when it holds its documented sentinel:
+            `preprocess:'auto'`, `range_crop:-1`, `conf:0.0`. Anything else is
+            a real request and wins.
+            """
+            v = self.get_parameter(name).value
+            sentinel = _UNSET.get(name)
+            if sentinel is not None and _is_unset(name, v):
+                return prof.get(name, default)
+            if not prof:
+                return v
+            return v if not _is_unset(name, v) else prof.get(name, default)
+
+        # NOT routed through `_p`: see the note on `_UNSET`.
         conf     = float(self.get_parameter('conf').value)
         iou      = float(self.get_parameter('iou').value)
         imgsz    = int(self.get_parameter('imgsz').value)
@@ -367,8 +440,8 @@ class DetectorNode(Node):
         # loop can skip the call entirely rather than paying for an identity.
         try:
             self._pre = make_preprocessor(
-                str(self.get_parameter('preprocess').value),
-                float(self.get_parameter('preprocess_clip').value))
+                _p('preprocess', 'off'),
+                float(_p('preprocess_clip', 3.0)) or 3.0)
         except ValueError as exc:
             self.get_logger().error(f'[DET  ] {exc}')
             self._pre = None
@@ -380,7 +453,7 @@ class DetectorNode(Node):
                 f"blurry footage")
 
         self._crop = (RangeCrop()
-                      if bool(self.get_parameter('range_crop').value)
+                      if int(_p('range_crop', 0)) > 0
                       else None)
         if self._crop is not None:
             self.get_logger().info(
