@@ -218,3 +218,69 @@ why `ctrl_conf` and not `range_gain_floor` is the lever.
 0.53 *before* the box began wandering. A confidence **trend** is an early
 warning the control loop does not currently watch — it reads only an absolute
 floor. Worth a look when there is water to validate against.
+
+---
+
+## 7. Confidence-adaptive measurement noise — measured, live and on real data
+
+The lever §6 pointed at, built and verified. `kalman_adaptive_noise`, **ON by
+default**.
+
+NSA (GIAOTracker → StrongSORT) scales the Kalman measurement noise by the
+detection score. **The published formula is nearly inert for us**, and our own
+distributions say why:
+
+| | conf p10 → p90 | R factor | dynamic range |
+|---|---|---|---|
+| MOT benchmark | 0.55 → 0.95 | 0.450 → 0.050 | **9.00×** |
+| our underwater | 0.167 → 0.439 | 0.833 → 0.561 | **1.48×** |
+
+Underwater scores are low because the water is hard, not because every box is
+bad. `c` only means something *relative to what this detector produces*, so
+`ConfidenceModel.normalise()` maps the detector's own p10..p90 onto [0,1]
+first — **16.0× dynamic range** — and the percentiles are **observed at
+runtime**, never baked. (Thresholds fitted to one water is exactly what
+`underwater.recommend()` did before it was deleted for calling a third venue
+wrong.)
+
+### Archive: five competition clips
+
+Deviation of the smoothed track from the raw box, **split by confidence** —
+because a plain "smoother output" score is gameable, and infinite smoothing
+wins it while lagging for ever.
+
+| clip | fixed R | adaptive | lag on high-conf frames |
+|---|---|---|---|
+| `bin` | **0.96×** | 1.42× | 0.0397 → 0.0220 |
+| `octagon_Bottom` | 1.48× | **3.27×** | 0.0248 → 0.0104 |
+| `bin_front_3` | 1.84× | **3.36×** | 0.0312 → 0.0183 |
+| `torp_down_1` | **0.64×** | 1.46× | 0.0116 → 0.0049 |
+| `oct_front_1` | 1.74× | **3.38×** | 0.0119 → 0.0055 |
+
+### Live vehicle: Pi + Hailo, person target, both arms 80 s
+
+| | adaptive OFF | adaptive ON |
+|---|---|---|
+| deviation, high-conf (lag) | 0.00668 | **0.00190** |
+| deviation, low-conf (rejection) | 0.00522 | **0.01020** |
+| **selectivity** | **0.78×** | **5.37×** |
+
+**6.9× better on the live stack**, and the direction of both halves is right:
+it follows a good box 3.5× more closely *and* rejects a bad one 2× harder. Not
+more smoothing — more **discrimination**.
+
+### The bar
+
+**Selectivity must exceed 1.0.** Below it the filter is *inverted* — following
+doubtful boxes more closely than confident ones — which is what the shipped
+fixed-R filter was doing on the live rig (0.78×) and on two of five archive
+clips (0.96×, 0.64×). That inversion is the failure this fixes, and it was
+invisible until the deviation was split by confidence.
+
+### Caveats, stated
+
+The two live arms are human-executed walks, so sample counts (1,367 vs 2,991)
+and confidence quartiles (0.628/0.864 vs 0.770/0.890) differ. The effect —
+0.78 → 5.37 — is far larger than that variation can account for, and it agrees
+in direction and rough magnitude with the archive result measured on entirely
+different data, hardware and targets. **In-water validation is still owed.**
