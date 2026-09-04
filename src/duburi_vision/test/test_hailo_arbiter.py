@@ -104,12 +104,129 @@ class _Pipe:
         return {'out': np.array([[[]]], dtype=object)}
 
 
+# --------------------------------------------------------------------------- #
+#  The ASYNC path (InferModel / run_async), which is what ships
+# --------------------------------------------------------------------------- #
+class _Job:
+    """`run_async` returns a job; `wait()` blocks until the chip is done.
+
+    `wait` is `time.sleep`, and that is not laziness -- it is the property
+    under test. The whole reason this API replaced the blocking one is that
+    its wait RELEASES THE GIL (measured: another Python thread woke 0.05 ms
+    late, against 9.21 ms for `InferVStreams.infer`). A stub that spun would
+    model the API we removed.
+    """
+
+    def __init__(self, name):
+        self.name = name
+
+    def wait(self, _ms):
+        assert CHIP.active == self.name, (
+            f'inferred on {self.name} while {CHIP.active} is active')
+        time.sleep(0.002)
+        assert CHIP.active == self.name, (
+            f'{CHIP.active} took the chip while {self.name} was mid-infer '
+            f'-- on hardware this is a use-after-free on the stream')
+
+
+class _Bindings:
+    def __init__(self):
+        self._in = types.SimpleNamespace(set_buffer=lambda b: None)
+        self._out = types.SimpleNamespace(set_buffer=lambda b: None)
+
+    def input(self):
+        return self._in
+
+    def output(self):
+        return self._out
+
+
+class _Cim:
+    """ConfiguredInferModel. `configure()` builds it, `activate()` arms it --
+    two calls, and omitting the second raises HAILO_STREAM_NOT_ACTIVATED on
+    the real device rather than anything that names the missing step."""
+
+    def __init__(self, name):
+        self.name = name
+        self._armed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def activate(self):
+        time.sleep(0.002)          # the real swap is ~4.15 ms; see _Act
+        assert CHIP.active is None, (
+            f'{self.name} activated while {CHIP.active} still holds the chip '
+            f'-- on hardware this is a segfault')
+        CHIP.active = self.name
+        self._armed = True
+
+    def deactivate(self):
+        CHIP.active = None
+        CHIP.releases += 1
+        self._armed = False
+
+    def create_bindings(self):
+        return _Bindings()
+
+    def wait_for_async_ready(self, timeout_ms=0):
+        assert self._armed, 'HAILO_STREAM_NOT_ACTIVATED: activate() was skipped'
+
+    def run_async(self, _bindings):
+        assert self._armed, 'HAILO_STREAM_NOT_ACTIVATED: activate() was skipped'
+        return _Job(self.name)
+
+
+class _InferModel:
+    _CAP = 5          # boxes per class in the stub; the real HEF uses 100
+
+    def __init__(self, name, nclasses):
+        self.name = name
+        self._nclasses = nclasses
+
+    def input(self):
+        return types.SimpleNamespace(set_format_type=lambda t: None)
+
+    def output(self):
+        # MEASURED ON THE CHIP, not assumed. A HailoRT NMS output bound
+        # through InferModel is a FLAT float32 buffer:
+        #
+        #     [ count_0, (y1 x1 y2 x2 score) * CAP, count_1, ... ]
+        #
+        # with a fixed per-class stride. The real model reports (1503,) for
+        # 3 classes = 3 * (1 + 100 * 5). This stub is the same layout with
+        # CAP=5, so the decoder's stride arithmetic is exercised rather than
+        # bypassed.
+        #
+        # The first version of this stub said (3, 5, 5) -- the shape I
+        # expected -- and hardware answered (1503,). A fake that models the
+        # API you imagined tests the code you imagined.
+        return types.SimpleNamespace(
+            set_format_type=lambda t: None,
+            shape=(self._nclasses * (1 + self._CAP * 5),))
+
+    def configure(self):
+        return _Cim(self.name)
+
+
 class _VDevice:
     def __init__(self, *_a, **_k):
         CHIP.devices += 1
 
     def configure(self, hef, _cfg):
         return [_Ng(hef.stem)]
+
+    def create_infer_model(self, path):
+        # Sized from the SAME sidecar the detector reads. A stub that invents
+        # its own class count tests a mismatch that never ships and hides the
+        # stride bug that does.
+        import yaml
+        y = Path(path).with_suffix('.yaml')
+        n = len(yaml.safe_load(y.read_text())['names']) if y.exists() else 1
+        return _InferModel(Path(path).stem, n)
 
     def release(self):
         raise AssertionError('the shared device must never be released by a '
@@ -291,7 +408,8 @@ def test_competition_is_reported_rather_than_left_to_be_discovered(hailo, tmp_pa
     a = hailo.HailoDetector(
         model_path=_model(tmp_path, 'fwd', ['gate']), class_allowlist=None,
         warmup=False, logger=types.SimpleNamespace(
-            info=lambda s: None, warn=warned.append))
+            info=lambda s: None, warn=warned.append,
+            error=warned.append))
     b = hailo.HailoDetector(model_path=_model(tmp_path, 'dwn', ['fire']),
                             class_allowlist=None, warmup=False)
     for _ in range(hailo._SWAP_WARN_AT * 2):

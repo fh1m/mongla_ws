@@ -94,14 +94,25 @@ class _Fake(M.V4L2MailboxCamera):
         self._stop = threading.Event()
         self._served = -1
         self._captured = self._dropped_by_driver = 0
+        self._skipped = 0
+        self._store_age_sum = 0.0
+        self._store_age_max = 0.0
         self._last_seq = None
         self._consec_fail, self._last_ok, self._idx = 0, time.monotonic(), 0
         self._pump = threading.Thread(target=lambda: None)
 
-    def deliver(self, seq, cap_t):
-        """What the pump does when the kernel hands over a buffer."""
+    def deliver(self, seq, cap_t, store_t=None):
+        """What the pump does when the kernel hands over a buffer.
+
+        The slot carries the STORE time as well as the capture time. Both are
+        needed downstream: capture age is what every freshness gate reads, and
+        the difference between them is what separates "the source was late"
+        from "the consumer was busy" -- indistinguishable in one number, and
+        the reason two hypotheses died before it existed.
+        """
         with self._lock:
-            self._slot = (b'x', cap_t, seq)
+            self._slot = (b'x', cap_t,
+                          seq, time.monotonic() if store_t is None else store_t)
 
     def close(self):
         self._stop.set()
@@ -212,3 +223,35 @@ def test_info_reports_the_NEGOTIATED_size():
     c = _Fake(w=640, h=400)
     c._requested = (640, 360, 60)
     assert c.info()['width'] == 640 and c.info()['height'] == 400
+
+
+def test_the_slot_carries_the_store_time_as_well_as_the_capture_time():
+    """`stamp_store` is what splits the pump's lateness from the consumer's.
+
+    With only `stamp_monotonic` the two are one number, and that number was
+    read wrong twice: once as "the pump falls behind and serves a backlog"
+    (it does fall behind; skipping to the newest moved the result 0.04 ms)
+    and once as "the kernel is dropping frames" (it was our own skip counted
+    as a drop). The split showed pump-side 4.19 ms against 13.82 ms of slot
+    wait, which named the GIL immediately.
+    """
+    c = _Fake()
+    cap = time.monotonic() - 0.050
+    store = time.monotonic() - 0.010
+    c.deliver(1, cap, store_t=store)
+    _frame, meta = c.read()
+    assert meta.fresh is True
+    assert meta.stamp_monotonic == pytest.approx(cap, abs=1e-6)
+    assert meta.stamp_store == pytest.approx(store, abs=1e-6)
+    assert meta.stamp_store > meta.stamp_monotonic
+
+
+def test_skipping_to_the_newest_is_COUNTED():
+    """The pump discards older queued buffers to catch up. Those discards are
+    invisible unless counted -- and worse, they leave a sequence gap that
+    looks exactly like a kernel drop. Counting them the same way once
+    reported `dropped_by_driver=1688` for a pump that was dropping 7."""
+    c = _Fake()
+    assert c.info()['skipped_to_newest'] == 0
+    c._skipped = 3
+    assert c.info()['skipped_to_newest'] == 3
