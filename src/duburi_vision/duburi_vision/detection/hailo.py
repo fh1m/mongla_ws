@@ -23,12 +23,36 @@ Four things differ from `.pt` / `.engine`, and each is silent if missed
    exactly this reason: it is free (97.7 FPS either way) and it leaves the
    operating point a runtime decision.
 
-3. **Run at conf 0.12-0.15, not the CUDA path's 0.45.** Round 24 measured INT8
+3. **Run at conf 0.10-0.15, not the CUDA path's 0.45.**
+
+   MEASURED ON REAL COMPETITION FOOTAGE (2026-09-04), which the round-24
+   figure below was not -- that one was a score DISTRIBUTION with the camera
+   pointed at a room. 1830 frames of the RoboSub 2025 gate approach, through
+   the model trained on that footage, tracker clamped to follow the floor:
+
+       floor   presence   boxes/frame   multi-box frames   centre spread
+       0.25      17.0 %       1.08            7.6 %           0.0351
+       0.15      45.1 %       1.12           11.3 %           0.0493
+       0.10      53.6 %       1.20           18.0 %           0.0483
+       0.05      56.1 %       1.45           35.4 %           0.0522
+       0.02        --         1.86           58.4 %           0.0563
+
+   0.15 -> 0.10 buys 8.5 points of presence and the extra boxes are the SAME
+   target: the centre spread does not grow (0.0493 -> 0.0483) and jitter
+   actually falls (p95 0.0055 -> 0.0052). Below 0.10 it inverts -- at 0.05,
+   35 % of frames carry more than one box and jitter jumps 53 %, which on a
+   vision-servoed hull is steering at the wrong thing.
+
+   **0.10 is the floor this evidence supports.** Not shipped as the default
+   because it has not been through water with a live control loop; set it
+   deliberately (`conf:=0.10`) and watch `lock_on` behaviour.
+
+4. **The round-24 note, kept because it is still the INT8 story.** Round 24 measured INT8
    costing ~0.08 of confidence at the 0.20 operating point while NOT moving the
    box centre (2.14-2.65 px against a 2.72 px fp32-vs-fp32 noise floor). The
    detections are there, they score lower.
 
-4. **NMS runs on the HOST, inside HailoRT.** The DFC puts the YOLOv8 head --
+5. **NMS runs on the HOST, inside HailoRT.** The DFC puts the YOLOv8 head --
    which YOLO11 shares -- only in `CPU_META_ARCHS`. It is cheap here (0.04 ms)
    because we have 3 classes, not 80: class count costs ~2 ms from 3 -> 80,
    detection count costs nothing.

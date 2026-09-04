@@ -167,9 +167,8 @@ now.
   `rotation_flow_px()` already computes the image shift. Not yet connected.
   **Recorded so it is not re-derived: an IMM filter bank is the wrong tool** —
   our targets are static props and all apparent motion is ours.
-- **Low-confidence second association.** `hailo.py:569` discards the 0.05–0.15
-  boxes the chip already computed. ByteTrack's finding is that those are the
-  occluded and motion-blurred ones, worth +1–10 IDF1 across nine trackers.
+- ~~**Low-confidence second association.**~~ **MEASURED — see §7.** The
+  answer is a floor of **0.10**, not 0.05, and the reason is in the data.
 - **Camera exposure.** Both cameras are on auto with
   `exposure_dynamic_framerate=1`, so in dark water the driver buys brightness
   with blur *and* a lower frame rate. Blur ≈ angular rate × exposure.
@@ -179,3 +178,43 @@ now.
 - **The remaining 25 s gap** on the gate approach is genuine absence — the
   camera is not pointed at the prop. No threshold recovers that; it is mission
   geometry.
+
+
+## 7. The confidence floor, settled on evidence
+
+ByteTrack's finding is that low-score boxes are the occluded and
+motion-blurred ones — the AUV case — and that associating them is worth +1 to
++10 IDF1. Our detector discards everything under 0.15 before the tracker sees
+it. So: how far down is it worth going?
+
+1830 frames of the gate approach, tracker clamped to follow the floor:
+
+| floor | presence | boxes/frame | multi-box frames | centre spread | jitter p95 |
+|---|---|---|---|---|---|
+| 0.25 | 17.0 % | 1.08 | 7.6 % | 0.0351 | 0.0064 |
+| 0.15 | 45.1 % | 1.12 | 11.3 % | 0.0493 | 0.0055 |
+| **0.10** | **53.6 %** | 1.20 | 18.0 % | **0.0483** | **0.0052** |
+| 0.05 | 56.1 % | 1.45 | 35.4 % | 0.0522 | 0.0084 |
+| 0.02 | — | 1.86 | 58.4 % | 0.0563 | — |
+
+**0.15 → 0.10 is free**: 8.5 points of presence, and the extra boxes are the
+*same target* — centre spread does not grow (0.0493 → 0.0483) and jitter
+actually falls. Below 0.10 it inverts: at 0.05, 35 % of frames carry more than
+one box and jitter jumps 53 %, which on a vision-servoed hull means steering at
+the wrong thing.
+
+**Presence alone could not have answered this** — a false positive is "seen"
+too. The discriminator is whether the extra boxes cluster on the target
+(spread flat) or scatter across the frame (spread grows), which needs no
+per-frame ground truth.
+
+Recorded at the point of use in `detection/hailo.py`. Not made the default:
+it has not been through water with a live control loop.
+
+### A rig error worth recording
+
+The first run of this sweep read *flat* below 0.15 — because the detection
+cache had been built at conf 0.15, so the lower floors had nothing extra to
+find. The tool answered the question it was asked and the question was wrong.
+Rebuilt at the HEF's baked 0.02 floor, the real shape appeared. **A cache is
+only as permissive as the run that made it.**
