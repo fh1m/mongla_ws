@@ -135,6 +135,73 @@ def evaluate(model, root, conf, imgsz, k, iou_thresh=0.3, preprocess=None):
                 n=len(pairs), scores=scores)
 
 
+def conf_sweep(model, root, imgsz, k, thresholds, floor=0.02,
+               iou_thresh=0.3, preprocess=None):
+    """PRECISION and recall vs confidence, from ONE inference pass.
+
+    WHY THIS EXISTS. The shipped floor went 0.15 -> 0.10 on measured
+    PRESENCE, jitter and multi-box rate. Presence cannot see a false
+    positive -- it counts frames with a box, and a wrong box is a box. So
+    the one cost of lowering a confidence floor is the one quantity that
+    decision never measured, on a vehicle where a false gate steers the
+    hull at a wall.
+
+    `evaluate()` above has computed tp/fp/fn the whole time. This just asks
+    it the conf question.
+
+    ONE PASS, RE-THRESHOLDED. Inference runs once at `floor` and every
+    higher threshold is applied to those boxes offline. A detector's boxes
+    at conf c are exactly its boxes at conf < c filtered to score >= c
+    (NMS is per-class and score-ordered, so suppression does not change),
+    which makes this identical to N passes and ~N times faster.
+
+    The inverse of this is the round-33 cache bug: a cache BUILT at 0.15
+    was read below 0.15 and reported flat, because the boxes were never
+    there. Build permissive, read tighter -- never the reverse."""
+    import cv2
+    pairs = _pairs(root, k)
+    per_frame = []
+    for img_p, lbl_p in pairs:
+        img = cv2.imread(img_p)
+        if img is None:
+            continue
+        h, w = img.shape[:2]
+        gts = _labels(lbl_p, w, h)
+        src = preprocess(img) if preprocess else img
+        r = model.predict(src, conf=floor, imgsz=imgsz, verbose=False)[0]
+        dets = [(tuple(float(v) for v in b.xyxy[0]), float(b.conf[0]))
+                for b in r.boxes]
+        per_frame.append((gts, dets))
+
+    rows = []
+    for c in thresholds:
+        tp = fp = fn = 0
+        for gts, dets in per_frame:
+            kept = [d for d, sc in dets if sc >= c]
+            used = set()
+            for g in gts:
+                best, bi = 0.0, -1
+                for i2, d in enumerate(kept):
+                    if i2 in used:
+                        continue
+                    v = _iou(g, d)
+                    if v > best:
+                        best, bi = v, i2
+                if best >= iou_thresh:
+                    tp += 1
+                    used.add(bi)
+                else:
+                    fn += 1
+            fp += len(kept) - len(used)
+        rec = tp / (tp + fn) if (tp + fn) else float('nan')
+        prec = tp / (tp + fp) if (tp + fp) else float('nan')
+        f1 = (2 * prec * rec / (prec + rec)
+              if (prec + rec) and prec == prec and rec == rec else 0.0)
+        rows.append(dict(conf=c, recall=rec, precision=prec, f1=f1,
+                         tp=tp, fp=fp, fn=fn))
+    return rows, len(per_frame)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--model')
@@ -144,6 +211,8 @@ def main():
     ap.add_argument('--imgsz', type=int, default=640)
     ap.add_argument('--samples', type=int, default=120)
     ap.add_argument('--clahe', action='store_true')
+    ap.add_argument('--sweep', action='store_true',
+                    help='precision AND recall vs conf, one pass')
     a = ap.parse_args()
 
     from ultralytics import YOLO
@@ -171,6 +240,24 @@ def main():
                 r = evaluate(m, d, a.conf, a.imgsz, a.samples, preprocess=pre)
                 row += f'{100 * r["recall"]:11.1f}%'
             print(row, flush=True)
+        print()
+        return 0
+
+    if a.sweep:
+        THRESH = [0.05, 0.08, 0.10, 0.12, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50]
+        m = YOLO(a.model)
+        rows, n = conf_sweep(m, a.data, a.imgsz, a.samples, THRESH,
+                             preprocess=pre)
+        print(f'\n  {os.path.basename(os.path.dirname(os.path.dirname(a.model)))}'
+              f'  on  {os.path.basename(a.data)}   ({n} labelled images)')
+        print(f'  {"conf":>6}{"recall":>9}{"precis":>9}{"F1":>8}'
+              f'{"tp":>7}{"fp":>7}{"fn":>7}')
+        best = max(rows, key=lambda r: r['f1'])
+        for r in rows:
+            mark = '  <- F1 knee' if r is best else ''
+            print(f'  {r["conf"]:6.2f}{100 * r["recall"]:8.1f}%'
+                  f'{100 * r["precision"]:8.1f}%{r["f1"]:8.3f}'
+                  f'{r["tp"]:7d}{r["fp"]:7d}{r["fn"]:7d}{mark}')
         print()
         return 0
 
