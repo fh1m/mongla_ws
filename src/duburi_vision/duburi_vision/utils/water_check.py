@@ -32,33 +32,12 @@ import numpy as np
 # the honest answer is "measure it both ways" -- a threshold that pretends to
 # separate two samples into a universal rule would be the overfit this file
 # exists to warn about.
-BLUR_MURKY = 600.0        # below this, blur is in the range CLAHE helped
-SAT_MURKY = 90.0          # above this, saturation is in the range CLAHE helped
 
 
-def stats(frames):
-    bl, br, ct, sa = [], [], [], []
-    for f in frames:
-        g = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
-        hsv = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
-        bl.append(cv2.Laplacian(g, cv2.CV_64F).var())
-        br.append(float(g.mean()))
-        ct.append(float(g.std()))
-        sa.append(float(hsv[:, :, 1].mean()))
-    return (st.median(bl), st.median(br), st.median(ct), st.median(sa))
-
-
-def verdict(blur, sat):
-    murky = blur < BLUR_MURKY and sat > SAT_MURKY
-    clear = blur > BLUR_MURKY * 1.5 and sat < SAT_MURKY * 0.5
-    if murky:
-        return ('CLAHE ON', 'blurry and saturated -- the regime where it '
-                            'measured +42 points of presence')
-    if clear:
-        return ('CLAHE OFF', 'sharp and desaturated -- the regime where it '
-                             'measured -64 points')
-    return ('MEASURE BOTH', 'between the two measured regimes; run a mission '
-                            'leg each way rather than guessing')
+# The statistics and the rule live in `duburi_vision.underwater`, imported by
+# the dataset survey and the preprocessing decision as well. Three copies of
+# "how blurry is this frame" is how two of them come to disagree.
+from duburi_vision.underwater import analyse_frames, recommend   # noqa: E402
 
 
 def main():
@@ -103,14 +82,18 @@ def main():
         print(f'\n  only {len(frames)} frames from {src} -- cannot judge\n')
         return 1
 
-    blur, bright, contrast, sat = stats(frames)
-    call, why = verdict(blur, sat)
+    st = analyse_frames(frames)
+    blur, bright, contrast, sat = (st.sharpness, st.brightness,
+                                   st.contrast, st.saturation)
+    call, why = recommend(st)
     print(f'\n  {src}  ({len(frames)} frames)\n')
     print(f'    blur (Laplacian var) {blur:8.1f}   '
           f'(gate 315 -> CLAHE helped | bin 1241 -> CLAHE hurt)')
     print(f'    saturation           {sat:8.1f}   '
           f'(gate 160 -> CLAHE helped | bin  28 -> CLAHE hurt)')
     print(f'    contrast             {contrast:8.1f}')
+    print(f'    colour cast (B-R)    {st.cast:+8.1f}   '
+          f'(green/murky water is strongly positive)')
     print(f'    brightness           {bright:8.1f}')
     print(f'\n    -> {call}: {why}\n')
     return 0
