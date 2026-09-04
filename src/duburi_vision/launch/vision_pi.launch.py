@@ -128,6 +128,12 @@ def generate_launch_description():
         DeclareLaunchArgument('viewer',    default_value='false'),
         DeclareLaunchArgument('tracking',  default_value='true'),
         DeclareLaunchArgument('tracker_type', default_value='ocsort'),
+        # Exposed so the A/B is RUNNABLE. `kalman_adaptive_noise` is read at
+        # node construction, so `ros2 param set` cannot flip it afterwards --
+        # and an arg the launch file does not declare is SILENTLY DROPPED, so
+        # `:=false` read back as True and both arms of the A/B were identical.
+        # Third appearance of that trap; the fix is to declare the argument.
+        DeclareLaunchArgument('kalman_adaptive_noise', default_value='true'),
         # PER CAMERA, because they do not run at the same rate. Every coast
         # window is sized from this, so one shared value guarantees one of the
         # two trackers has a wrong coast -- and a tracker with a truncated
@@ -268,6 +274,8 @@ def generate_launch_description():
             ros_arguments=_QUIET,
             parameters=[{'camera': camera_name,
                          'tracker_type': LaunchConfiguration('tracker_type'),
+                         'kalman_adaptive_noise':
+                             LaunchConfiguration('kalman_adaptive_noise'),
                          'frame_rate': LaunchConfiguration(rate_arg),
                          # Clamp the tracker's gates to the detector's
                          # floor: above it NO track is created and
