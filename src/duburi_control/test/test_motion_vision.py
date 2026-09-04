@@ -15,7 +15,7 @@ import pytest
 from duburi_control.motion_vision import (
     align_loop, move_loop, _fill, _clamp, _present, _freshness, _range_gain,
     _coast_authority, _authority,
-    VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S,
+    VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S, VISION_FRESH_ZERO_MAX_S,
     VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
     FWD_BAND,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA,
@@ -654,7 +654,11 @@ def test_align_lateral_zero_when_blind():
     # Sample older than the zero threshold (but < _STALE_LIMIT_S so still "present")
     # -> lateral authority is fully decayed: never blind-drive on a dead frame.
     pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ex=1.0, age_s=VISION_FRESH_ZERO_S + 0.05)), pix=pix,
+    # Past the CEILING, not the floor: the zero threshold is derived from
+    # the sensor now (see `_fresh_bounds`), so only an age beyond
+    # VISION_FRESH_ZERO_MAX_S is blind for EVERY camera. The property under
+    # test -- a blind sample must not drive -- is unchanged.
+    _align(_FakeVision(_sample(ex=1.0, age_s=VISION_FRESH_ZERO_MAX_S + 0.05)), pix=pix,
            axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.2)
     laterals = [c.get('lateral', 1500) for c in pix.rc]
     assert laterals and all(l == 1500 for l in laterals), (
@@ -1200,7 +1204,8 @@ def test_align_forward_decays_with_authority():
     # ~neutral even though the bbox is far -- forward shares lat's freshness gate,
     # so a slow/blind frame can't blind-drive the standoff approach.
     out, pix, _ = _align(
-        _FakeVision(_sample(ex=0.0, h_frac=0.1, age_s=VISION_FRESH_ZERO_S)),
+        # Past the ceiling -- blind under any derived threshold. See above.
+        _FakeVision(_sample(ex=0.0, h_frac=0.1, age_s=VISION_FRESH_ZERO_MAX_S + 0.05)),
         axes={'lat'}, fwd_fill=0.5, fwd_mode='height', duration=0.3)
     assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
         "a stale sample must not drive forward (freshness-decayed to neutral)"
