@@ -197,19 +197,21 @@ def test_the_water_check_reproduces_both_MEASURED_verdicts():
     thresholds ever stop reproducing them, the rule has drifted from the data
     it came from.
     """
-    from duburi_vision.utils.water_check import verdict
+    from duburi_vision.underwater import WaterStats, recommend
 
-    assert verdict(315.2, 159.9)[0] == 'CLAHE ON'      # the gate clip
-    assert verdict(1240.6, 27.9)[0] == 'CLAHE OFF'     # the bin clip
+    gate = WaterStats(315.2, 27.7, 159.9, 91.0, 170.0, frames=300)
+    binw = WaterStats(1240.6, 36.1, 27.9, 3.0, 174.0, frames=300)
+    assert recommend(gate)[0] == 'CLAHE ON'
+    assert recommend(binw)[0] == 'CLAHE OFF'
 
 
 def test_water_between_the_two_regimes_says_MEASURE_rather_than_guessing():
     """Two samples do not make a universal threshold. The honest answer in
     between is 'run a leg each way', not a confident call from a rule fitted
     to n=2."""
-    from duburi_vision.utils.water_check import verdict
+    from duburi_vision.underwater import WaterStats, recommend
 
-    call, why = verdict(800.0, 100.0)
+    call, why = recommend(WaterStats(750.0, 32.0, 70.0, 40.0, 170.0, frames=100))
     assert call == 'MEASURE BOTH', (call, why)
 
 
