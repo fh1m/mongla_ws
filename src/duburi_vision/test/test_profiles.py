@@ -47,12 +47,19 @@ def test_an_empty_name_is_the_documented_default_not_an_error():
     assert settings == PROFILES[DEFAULT][0]
 
 
-def test_murky_turns_CLAHE_ON_and_clear_turns_it_OFF():
-    """THE measurement this whole profile system carries: +42 points on
-    blurry saturated water, -64 on sharp desaturated water. If these two ever
-    agree, the profiles have stopped encoding the finding."""
-    assert resolve('murky')[0]['preprocess'] == 'clahe'
-    assert resolve('clear')[0]['preprocess'] == 'off'
+def test_murky_and_clear_differ_by_the_CROP_not_by_preprocessing():
+    """RETRACTED and replaced. This asserted `murky` turns CLAHE on, which
+    was the profile system's original headline. It does not reproduce: on
+    raw detection rate CLAHE was never positive in 17 measured
+    configurations and took the gate from 30.4 % to 1.2 %.
+
+    What still separates the profiles is real and re-measured -- the range
+    crop and the confidence floor -- so the assertion moves onto those
+    rather than being deleted, or nothing pins the profiles apart."""
+    murky, clear, close = (resolve(n)[0] for n in ('murky', 'clear', 'close'))
+    assert murky['preprocess'] == clear['preprocess'] == 'off'
+    assert murky['range_crop'] is True and close['range_crop'] is False
+    assert murky['conf'] == 0.10 and close['conf'] == 0.15
 
 
 def test_close_work_turns_the_crop_OFF():
@@ -182,3 +189,19 @@ def test_the_composed_launcher_declares_the_SAME_TYPES_as_the_node():
             f'{key}: launcher default {val!r} and node default '
             f'{node_default} are different rclpy TYPES -- the composed '
             f'process will die at declare_parameter')
+
+
+def test_no_profile_enables_preprocessing():
+    """RETRACTION GUARD. `murky` shipped `preprocess='clahe'` on a +42 claim
+    that does not reproduce: re-measured on raw detection rate across 17
+    configurations -- 4 props, 3 venues, a 39x sharpness range -- CLAHE was
+    never positive, and on the very footage the claim came from it took the
+    gate from 30.4 % to 1.2 % across five independent frame samples.
+
+    `preprocess:=clahe` stays available as an explicit operator choice. What
+    must not come back is a profile turning it on for them."""
+    from duburi_vision.detection.profiles import PROFILES
+    for name, (settings, _why) in PROFILES.items():
+        assert settings.get('preprocess') == 'off', (
+            f'profile {name!r} enables preprocessing: '
+            f'{settings.get("preprocess")!r}')

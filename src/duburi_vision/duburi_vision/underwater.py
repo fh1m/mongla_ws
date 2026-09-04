@@ -110,34 +110,24 @@ def analyse_frames(frames: Iterable) -> WaterStats:
 # Deliberately a WIDE undecided band. Two samples do not make a universal
 # threshold, and a rule that pretends otherwise is the overfit this module
 # exists to avoid. Widening the band is the honest way to hold n=2.
-SHARP_MURKY = 600.0
-SAT_MURKY = 90.0
-SHARP_CLEAR = 900.0
-SAT_CLEAR = 45.0
 
-ON = 'CLAHE ON'
-OFF = 'CLAHE OFF'
-UNKNOWN = 'MEASURE BOTH'
-
-
-def recommend(stats: WaterStats) -> tuple:
-    """(verdict, why). `UNKNOWN` is a real answer, not a failure.
-
-    Between the two measured regimes the honest output is "run a leg each
-    way", because the data does not reach there. Saying ON or OFF anyway
-    would be inventing confidence, which is exactly how a measurement becomes
-    a superstition.
-    """
-    if stats.frames == 0 or stats.sharpness != stats.sharpness:
-        return (UNKNOWN, 'no frames')
-    murky = stats.sharpness < SHARP_MURKY and stats.saturation > SAT_MURKY
-    clear = stats.sharpness > SHARP_CLEAR and stats.saturation < SAT_CLEAR
-    if murky:
-        return (ON, 'blurry and saturated -- the regime where CLAHE measured '
-                    '+42 points of presence')
-    if clear:
-        return (OFF, 'sharp and desaturated -- the regime where CLAHE '
-                     'measured -64 points')
-    return (UNKNOWN,
-            'between the two measured regimes -- run a leg each way rather '
-            'than guessing')
+# --------------------------------------------------------------------------- #
+#  There is deliberately NO recommend() here any more
+# --------------------------------------------------------------------------- #
+# This module used to map these stats onto a CLAHE verdict, on thresholds fitted
+# to two clips. A third venue (Mirpur -- sharpness 33, saturation 148, cast +92,
+# the murkiest water in the archive) is exactly what those thresholds call
+# `CLAHE ON`, and CLAHE measurably does not help there. Re-measured on raw
+# detection rate across 17 configurations -- 4 props, 3 venues, a 39x sharpness
+# range, five independent frame samples of the clip the original claim came
+# from -- it was NEVER positive, and on the gate it took 30.4 % to 1.2 %.
+#
+# So the mapping is deleted rather than inverted. What survives is the
+# CHARACTERISATION above, which reproduced across all three venues: it tells
+# you which water you are in, which is a fact about the pool. What preprocessing
+# to do about it is not something two clips ever knew.
+#
+# The mechanism, stated because it generalises past CLAHE: the models were
+# trained on UNPROCESSED underwater frames. Any preprocessing that makes an
+# image look better to a person moves it away from the distribution the
+# detector learned. A contrast fix is a domain shift wearing a helpful face.

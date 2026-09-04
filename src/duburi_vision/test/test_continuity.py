@@ -94,19 +94,39 @@ def test_the_ladder_answers_which_rung_covers_the_losses():
 
 def test_every_ladder_rung_is_a_real_constant():
     """If a rung drifts from the code the report silently answers about a
-    threshold nobody ships."""
-    from duburi_control.motion_vision import VISION_FRESH_ZERO_S
+    threshold nobody ships.
+
+    READ FROM SOURCE, NEVER IMPORTED. This test used to `from
+    duburi_control.motion_vision import VISION_FRESH_ZERO_S`, and in a git
+    worktree that import resolves to the MAIN workspace's `install/` tree --
+    a different commit. It duly reported 0.4 against a source that says
+    0.20, which reads exactly like a drift bug in this file and is not one.
+    Same family as the drift suite silently skipping 24 tests in a worktree,
+    and as the vehicle workspace having no `.git`: the test was right about
+    the numbers disagreeing and wrong about which two things it compared.
+
+    Reading the file beside us makes the check answer about the branch we
+    are on, which is the only branch this worktree can ship."""
     import re
-    src = (Path(__file__).resolve().parents[2] / 'duburi_manager'
-           / 'duburi_manager' / 'vision_tunables.py').read_text()
+    root = Path(__file__).resolve().parents[2]
+
+    def _const(rel, name):
+        src = (root / rel).read_text()
+        m = re.search(rf'^{name}\s*=\s*([0-9.]+)', src, re.M)
+        assert m, f'{name} not found in {rel}'
+        return float(m.group(1))
 
     def _deck(name):
+        src = (root / 'duburi_manager' / 'duburi_manager'
+               / 'vision_tunables.py').read_text()
         m = re.search(rf"'vision\.{name}':\s*([0-9.]+)", src)
         assert m, f'{name} not found in vision_tunables.py'
         return float(m.group(1))
 
+    fresh_zero = _const('duburi_control/duburi_control/motion_vision.py',
+                        'VISION_FRESH_ZERO_S')
     values = [v for _n, v in LADDER]
-    for expect, what in ((VISION_FRESH_ZERO_S, 'freshness zero'),
+    for expect, what in ((fresh_zero, 'freshness zero'),
                          (_deck('coast_s'), 'coast_s'),
                          (_deck('lost_grace_s'), 'lost_grace_s')):
         assert any(abs(v - expect) < 1e-9 for v in values), (
