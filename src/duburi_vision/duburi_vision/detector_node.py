@@ -373,6 +373,12 @@ class DetectorNode(Node):
         self._last_log      = time.monotonic()
         self._last_align_log = 0.0
         self.create_timer(2.0, self._log_health)
+        # Slow and at INFO, unlike `_log_health`, because this is an
+        # OPERATIONAL property and not a debugging one: the chip has ~45 % of
+        # the Orin's TOPS, so the pipeline's contract is that every inference
+        # lands on the newest frame available. 0.1 Hz is invisible in a log
+        # and enough to notice a drift.
+        self.create_timer(10.0, self._log_efficiency)
 
         self._device_str = device
         self._deadband   = float(self.get_parameter('alignment_deadband').value)
@@ -394,6 +400,18 @@ class DetectorNode(Node):
         # goes idle instead of on the publisher's clock -- which is the whole
         # latency argument for composing them.
         self._want = threading.Event()
+        # COMPUTE-WASTE ACCOUNTING. The chip has ~45 % of the Orin's TOPS, so
+        # an inference spent on a frame that was already superseded is compute
+        # we cannot afford. These make that measurable instead of assumed:
+        #   _evicted    a decoded frame replaced in the slot before it was
+        #               ever inferred -- a wasted DECODE (~1.9 ms of a core)
+        #   _stale_sum  age of the frame at the instant inference STARTS,
+        #               which is the floor set by capture + decode and the
+        #               number to watch if it ever grows
+        self._evicted = 0
+        self._infers = 0
+        self._stale_sum = 0.0
+        self._stale_max = 0.0
         threading.Thread(target=self._infer_loop, daemon=True).start()
 
         registry_info = (
@@ -494,6 +512,12 @@ class DetectorNode(Node):
         while not self._infer_q.empty():
             try:
                 self._infer_q.get_nowait()
+                # Something was waiting and is now discarded. Under the
+                # composed design this should be ~0: the camera only decodes
+                # when the worker is idle, so nothing should ever queue behind
+                # an unconsumed frame. A rising count means we are decoding
+                # frames the chip never looks at.
+                self._evicted += 1
             except _queue.Empty:
                 break
         self._infer_q.put_nowait(item)
@@ -527,6 +551,18 @@ class DetectorNode(Node):
                     continue
 
             t0 = time.monotonic()
+            # Age of this frame at the instant the chip starts on it. The
+            # floor is capture->available plus the decode; anything beyond
+            # that is the chip being fed something it should not be.
+            try:
+                cap = header.stamp.sec + header.stamp.nanosec * 1e-9
+                age = time.time() - cap
+                if 0.0 <= age < 5.0:
+                    self._infers += 1
+                    self._stale_sum += age
+                    self._stale_max = max(self._stale_max, age)
+            except AttributeError:
+                pass
             det = self._det  # atomic ref read under CPython GIL
             if det is None:
                 continue  # model still loading — drop frame, keep queue drained
@@ -721,6 +757,41 @@ class DetectorNode(Node):
         self.get_logger().info(
             f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
             f"'{primary.class_name}' bearing (live, off-centre)")
+
+    def _log_efficiency(self):
+        """Is the chip only ever looking at the freshest frame?
+
+        `stale` is the frame's age when inference STARTS. Its floor is
+        capture->available plus the decode -- about 6 ms on this hardware --
+        and it is the number that grows first if anything upstream starts
+        queueing.
+
+        `wasted` counts frames decoded and then discarded before the chip saw
+        them. Under the composed design it should be ZERO: the camera decodes
+        only when the inference worker is idle, so nothing can queue behind an
+        unconsumed frame. A non-zero value is ~1.9 ms of a core thrown away
+        per frame, which on a 27 TOPS budget is exactly what we are trying not
+        to do.
+        """
+        n = self._infers
+        if not n:
+            return
+        mean_ms = 1000.0 * self._stale_sum / n
+        waste = self._evicted
+        line = (f'[DET  ] chip efficiency: {n} inferences, frame age at '
+                f'infer-start {mean_ms:5.1f} ms mean / '
+                f'{1000.0 * self._stale_max:5.1f} max, '
+                f'{waste} decoded-but-never-inferred')
+        if waste:
+            self.get_logger().warn(
+                line + ' <- WASTED DECODES: frames are queueing behind the '
+                       'worker, which should be impossible on the direct feed')
+        else:
+            self.get_logger().info(line)
+        self._infers = 0
+        self._evicted = 0
+        self._stale_sum = 0.0
+        self._stale_max = 0.0
 
     def _log_health(self):
         now = time.monotonic()

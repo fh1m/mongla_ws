@@ -212,11 +212,17 @@ def test_submit_replaces_rather_than_queues():
     import queue as _q
     det = object.__new__(DN.DetectorNode)
     det._infer_q = _q.SimpleQueue()
+    det._evicted = 0
+    det._fed_direct = False
     det.submit_frame('old', 'h1')
     det.submit_frame('new', 'h2')
     item = det._infer_q.get_nowait()
     assert item.frame == 'new'
     assert det._infer_q.empty(), 'the old frame is still queued behind it'
+    # And the discard is COUNTED. A decoded frame the chip never sees is
+    # ~1.9 ms of a core thrown away, and on a 27 TOPS budget that has to be
+    # visible rather than inferred.
+    assert det._evicted == 1
 
 
 def test_a_composed_detector_does_not_also_subscribe():
@@ -346,6 +352,7 @@ def test_submit_frame_records_that_the_direct_path_is_alive():
     import queue as _q
     det = object.__new__(DN.DetectorNode)
     det._infer_q = _q.SimpleQueue()
+    det._evicted = 0
     det._fed_direct = False
     det.submit_frame('f', 'h')
     assert det._fed_direct is True
