@@ -102,6 +102,10 @@ class VisionState:
         self._latest_array: Optional[Detection2DArray] = None
         self._latest_stamp: float = 0.0           # monotonic seconds
         self._stamp_warned: bool  = False        # one-shot, see _capture_monotonic
+        # Set on every detections message. A control loop waits on this
+        # instead of sleeping a fixed tick, so it acts the moment a new
+        # observation exists rather than at the next scheduled poll.
+        self._new_sample = threading.Event()
         self._image_size:  tuple  = default_image_size
         # CameraInfo K/D, kept rather than discarded -- see _on_info.
         self._K = None
@@ -155,6 +159,9 @@ class VisionState:
             self._latest_array = msg
             self._latest_stamp = stamp
             self._det_msgs += 1
+        # Outside the lock: waking a waiter must not make it block on the very
+        # lock it is about to need.
+        self._new_sample.set()
 
     def _capture_monotonic(self, msg) -> float:
         """The instant the FRAME WAS CAPTURED, on the monotonic clock.
@@ -255,6 +262,31 @@ class VisionState:
     def info_seen(self) -> bool:
         with self._lock:
             return self._info_seen
+
+    def wait_for_sample(self, timeout: float) -> bool:
+        """Block until a new detections message lands, or `timeout` elapses.
+
+        THIS REPLACES A FIXED-RATE SLEEP IN THE CONTROL LOOP, and the reason
+        is the same one that moved `camera_node` off a timer: a fixed-rate
+        poll against an asynchronous producer waits, on average, half a period
+        for data that had already arrived.
+
+        Measured here: detections land at ~77 Hz (13 ms apart) and the srot
+        control loop ticked at 50 Hz (20 ms). Every command was therefore
+        computed from an observation up to 13 ms older than the one available,
+        ~6.5 ms on average -- a third of the whole detection age, spent
+        waiting for a clock.
+
+        Returns True if woken by a new sample, False on timeout. The timeout
+        is what keeps the loop's TIME-based work alive -- freshness decay,
+        hold timing, the arrival brake, the overall deadline -- when no
+        detections are arriving at all, so the loop's floor rate is unchanged
+        and only its ceiling moves.
+        """
+        got = self._new_sample.wait(timeout)
+        if got:
+            self._new_sample.clear()
+        return got
 
     def is_fresh(self, stale_after: float) -> bool:
         with self._lock:

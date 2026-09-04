@@ -461,6 +461,34 @@ def _is_srot(fc) -> bool:
     return getattr(fc, 'name', '') == 'srot'
 
 
+def _tick(vision_state, fc) -> None:
+    """Wait for the next observation, or the tick timeout -- whichever first.
+
+    THE LOOP USED TO SLEEP A FIXED PERIOD. Against an asynchronous producer
+    that costs, on average, half a period of pure waiting for data that has
+    already arrived: detections land ~77 Hz (13 ms) and the srot loop ticked
+    at 50 Hz (20 ms), so every command was computed from an observation up to
+    13 ms staler than the one available -- about a third of the entire
+    detection age, and the same defect that a fixed-rate timer caused in
+    `camera_node`, one layer down.
+
+    The timeout is the FLOOR, not the rate: it keeps the loop's time-based
+    work running -- freshness decay, hold timing, the arrival brake, the
+    deadline -- when nothing is being detected at all. So the loop can only
+    get faster, never slower, and the lost/searching path behaves exactly as
+    it did.
+
+    Falls back to a plain sleep when there is no VisionState (unit tests, the
+    non-vision callers), so nothing depends on the wake-up existing.
+    """
+    period = 1.0 / _loop_hz(fc)
+    waiter = getattr(vision_state, 'wait_for_sample', None)
+    if waiter is None:
+        time.sleep(period)
+        return
+    waiter(period)
+
+
 def _loop_hz(fc) -> float:
     """Tick rate for THIS backend. See motion_rates for why they differ."""
     return VISION_LOOP_HZ_SROT if _is_srot(fc) else LOOP_HZ
@@ -819,7 +847,13 @@ def align_loop(*,
     fill_deficit = 0.0  # downward fill->depth: (target_fill - fill), carried into the 5 Hz step
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
     loop_hz     = _loop_hz(pixhawk)          # backend-dependent; see motion_rates
-    dt          = 1.0 / loop_hz              # fixed tick (loop sleeps this each pass)
+    # Nominal tick. Used to SEED the measured dt below and as its ceiling;
+    # the loop no longer sleeps a fixed period (see `_tick`), so treating this
+    # as the real interval would misstate both the lock gate and the integral
+    # term the moment the loop starts running at detection rate.
+    dt          = 1.0 / loop_hz
+    _dt_nominal = dt
+    _last_pass  = time.monotonic()
     # Seeded at the control period -- the shortest gap possible, so the gate
     # starts at its tightest and widens to the real detection interval once one
     # has been observed. Erring tight before acquisition is safe: there is no
@@ -861,6 +895,18 @@ def align_loop(*,
     try:
         while True:
             now     = time.monotonic()
+            # MEASURED, not assumed. The loop wakes on a new detection now, so
+            # the interval is the detection interval when targets are visible
+            # and the tick timeout when they are not. `dt` feeds the
+            # continuity-lock gate and the lateral integral; holding it at the
+            # nominal period would overstate both by up to 1.5x once the loop
+            # starts running at 77 Hz instead of 50.
+            #
+            # Clamped: a debugger pause or a scheduling stall must not inject a
+            # huge dt into an integrator. The floor keeps a burst of two
+            # detections in the same millisecond from collapsing it to zero.
+            dt = min(max(now - _last_pass, 1e-3), _dt_nominal * 4.0)
+            _last_pass = now
             elapsed = now - started
             if abort_fn and abort_fn():
                 return Outcome(ABORTED, "aborted", last_err_px, last_fill, elapsed,
@@ -911,7 +957,7 @@ def align_loop(*,
                         log.debug(f"[VIS  ] align LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                time.sleep(1.0 / _loop_hz(pixhawk))
+                _tick(vision_state, pixhawk)
                 continue
 
             saw_target = True
@@ -1217,7 +1263,7 @@ def align_loop(*,
                     f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
                     f"'{target_class}' -> err {worst:.0f}/{eff_err:.0f}px")
                 last_log = now
-            time.sleep(1.0 / _loop_hz(pixhawk))
+            _tick(vision_state, pixhawk)
     finally:
         try:
             writers.neutral()
@@ -1373,7 +1419,7 @@ def move_loop(*,
                     return Outcome(ALIGNED, "passed through", last_lat_err,
                                    last_fill, elapsed, end_x_px, end_y_px)
                 _drive(gain, 0.0)   # no detection -> no lateral, just drive on
-                time.sleep(1.0 / _loop_hz(pixhawk))
+                _tick(vision_state, pixhawk)
                 continue
 
             if not present:
@@ -1397,7 +1443,7 @@ def move_loop(*,
                         log.debug(f"[VIS  ] move LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                time.sleep(1.0 / _loop_hz(pixhawk))
+                _tick(vision_state, pixhawk)
                 continue
 
             seen_once    = True
@@ -1431,7 +1477,7 @@ def move_loop(*,
                     log.info(f"[ move PASS-THROUGH fill={fill * 100:.0f}% "
                              f"lat={x_off:+.0f}px ] ['{target_class}'] -> clear gate")
                     last_log = now
-                time.sleep(1.0 / _loop_hz(pixhawk))
+                _tick(vision_state, pixhawk)
                 continue
 
             if fill >= fwd_fill:
@@ -1468,7 +1514,7 @@ def move_loop(*,
                     f"[ move fill={fill * 100:.0f}% -> {fwd_fill * 100:.0f}% "
                     f"lat={x_off:+.0f}px ] ['{target_class}']{hold_tag}")
                 last_log = now
-            time.sleep(1.0 / _loop_hz(pixhawk))
+            _tick(vision_state, pixhawk)
     finally:
         try:
             writers.neutral()
