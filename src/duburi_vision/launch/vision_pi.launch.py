@@ -93,6 +93,17 @@ def generate_launch_description():
             description='INT8 operating point. NOT the CUDA path\'s 0.35-0.45 '
                         '-- see the module docstring.'),
         DeclareLaunchArgument('max_det',   default_value='100'),
+        # UNDERWATER CONTRAST PREPROCESSING -- 'clahe' or 'off'.
+        # Measured on real RoboSub 2025 footage: target presence 10.7 % ->
+        # 56.2 % on the blurry gate approach, no cost on footage that already
+        # works. 3.78 ms/frame on the Pi (77 Hz -> ~46), which is why it is
+        # opt-in rather than default.
+        # NOT 'off' -- launch coerces that literal to boolean False and the
+        # composed process dies at declare_parameter with
+        # InvalidParameterTypeException. 'none' means the same thing to
+        # `make_preprocessor` and survives the round trip as a string.
+        DeclareLaunchArgument('preprocess', default_value='none'),
+        DeclareLaunchArgument('preprocess_clip', default_value='3.0'),
         DeclareLaunchArgument('imgsz',     default_value='640'),
         DeclareLaunchArgument(
             'paused', default_value='false',
@@ -210,6 +221,8 @@ def generate_launch_description():
             'dwn_conf':       LaunchConfiguration('conf'),
             'imgsz':          LaunchConfiguration('imgsz'),
             'max_det':        LaunchConfiguration('max_det'),
+            'preprocess':      LaunchConfiguration('preprocess'),
+            'preprocess_clip': LaunchConfiguration('preprocess_clip'),
             'paused':         LaunchConfiguration('paused'),
             # The Hailo backend ignores it (`**_ignored`), but the value has to
             # be SOMETHING that is not 'cuda:0': `gpu.select_device` raises on a
