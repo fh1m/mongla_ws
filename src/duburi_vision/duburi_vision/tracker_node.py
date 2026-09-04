@@ -70,7 +70,7 @@ from duburi_vision.tracking.tracker   import TrackedDetection
 
 def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
                    iou_threshold, track_activation_threshold,
-                   high_conf_det_threshold, log=None):
+                   high_conf_det_threshold, detector_conf=0.0, log=None):
     """Build the tracker backend by name.
 
     'ocsort'/'bytetrack' use the Roboflow `trackers` library;
@@ -89,7 +89,8 @@ def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
             tracker_type=ttype, track_buffer=track_buffer, frame_rate=frame_rate,
             min_hits=min_hits, iou_threshold=iou_threshold,
             track_activation_threshold=track_activation_threshold,
-            high_conf_det_threshold=high_conf_det_threshold)
+            high_conf_det_threshold=high_conf_det_threshold,
+            detector_conf=detector_conf)
     except ImportError as exc:
         if log is not None:
             log.warn(f"[TRK  ] roboflow trackers unavailable ({exc}); "
@@ -167,6 +168,10 @@ class TrackerNode(Node):
         self.declare_parameter('iou_threshold',               0.2)
         self.declare_parameter('track_activation_threshold',  0.40)
         self.declare_parameter('high_conf_det_threshold',     0.6)
+        # The conf the DETECTOR publishes at. The tracker's gates are clamped
+        # to it, because a box the detector chose to emit must be allowed to
+        # start a track. 0.0 = not told (old behaviour).
+        self.declare_parameter('detector_conf',               0.0)
         self.declare_parameter('classes',                     '')
         self.declare_parameter('enable_kalman',               True)
         self.declare_parameter('kalman_process_noise',        0.1)
@@ -211,11 +216,23 @@ class TrackerNode(Node):
         max_pred         = max(1, math.ceil(max_pred_s * frame_rate))
         self._last_classes = str(self.get_parameter('classes').value)
 
+        # The DETECTOR's floor, so the tracker's confidence gates can be
+        # clamped to it. They were 4x above it and the tracker emitted nothing
+        # on real footage -- see `RoboflowTracker.__init__`. Read from the
+        # parameter the launch sets on the detector; 0 means "not told", which
+        # leaves the old behaviour rather than guessing.
+        detector_conf = float(self.get_parameter('detector_conf').value)
         self._tracker = _build_tracker(
             tracker_type, track_buffer=track_buffer, frame_rate=frame_rate,
             min_hits=min_hits, iou_threshold=iou_threshold,
             track_activation_threshold=act_thresh, high_conf_det_threshold=high_conf,
-            log=self.get_logger())
+            detector_conf=detector_conf, log=self.get_logger())
+        if detector_conf > 0.0 and high_conf > detector_conf:
+            self.get_logger().warn(
+                f'[TRK  ] high_conf_det_threshold {high_conf:.2f} is above the '
+                f'detector floor {detector_conf:.2f} -- clamped. Above it, NO '
+                f'track is ever created and /tracks stays empty while looking '
+                f'healthy.')
         self._kalman = TrackKalmanSmoother(
             process_noise=proc_noise,
             measurement_noise=meas_noise,

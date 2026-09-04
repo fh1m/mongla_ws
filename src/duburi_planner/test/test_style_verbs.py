@@ -88,6 +88,12 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         src._serial = FakeSerial()
         src._thread = threading.Thread(target=src._reader_loop, daemon=True)
         src._thread.start()
+        # STOP IT AT TEARDOWN. These threads are daemons, so a leaked one runs
+        # on into the NEXT test, still consuming its own closure's `idx` and
+        # competing for the GIL. That made this class order-dependent: the
+        # drain test passed in a full run and failed in isolation, which is
+        # the wrong way round and means a green suite proved nothing about it.
+        self.addCleanup(src._stop.set)
         return src, FakeSerial
 
     def test_parses_pitch_and_roll_from_json(self):
@@ -121,7 +127,17 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
             '{"yaw":20.0,"pitch":2.0,"roll":0.0,"ts":1001}',
             '{"yaw":30.0,"pitch":3.0,"roll":0.0,"ts":1002}',
         ])
-        time.sleep(0.15)
+        # DETERMINISTIC, not timed. The first version slept and hoped the
+        # reader thread had not yet consumed a line: `readline()` takes line 1
+        # and `in_waiting` then reports only what REMAINS, so whether a skip
+        # occurs depended on thread scheduling. It passed in a loaded full-suite
+        # run and failed every time in isolation -- the wrong way round, and a
+        # test that is right by luck is not a test.
+        deadline = time.monotonic() + 2.0
+        while src._latest_yaw is None and time.monotonic() < deadline:
+            time.sleep(0.005)
+        while src._stale_lines == 0 and time.monotonic() < deadline:
+            time.sleep(0.005)
         src._stop.set()
         # Firmware yaw is +CCW; the driver negates once into compass frame.
         self.assertAlmostEqual(src._latest_yaw, (-30.0) % 360.0, places=1)
