@@ -432,17 +432,38 @@ class HailoDetector(Detector):
             _ACTIVE = self
             self._swaps += 1
             return self._pipe
-        self._cim = self._model.configure()
-        self._cim.__enter__()
+        # CONFIGURE ONCE, ACTIVATE MANY. These are NOT the same cost and
+        # conflating them fills the chip.
+        #
+        # `configure()` allocates the network group into the Hailo-8's
+        # ON-CHIP SRAM. `activate()` merely makes an already-resident group
+        # the running one. Calling configure on every swap -- which is what
+        # this did first -- allocates a fresh group each time and the old ones
+        # are not reclaimed fast enough, so after a few dozen camera switches
+        # the firmware answers:
+        #
+        #     CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL
+        #     HAILO_OUT_OF_FW_MEMORY (71)
+        #
+        # ...and then EVERY inference fails, forever, in a tight loop: 98 %
+        # CPU, no detections, and an image topic starved to 1.6 Hz. It was
+        # invisible in the single-detector profiler because that never swaps.
+        #
+        # Two configured groups are resident at once here, which is exactly
+        # what the blocking path did (one `VDevice.configure` per detector in
+        # __init__) and is known to fit.
+        if self._cim is None:
+            self._cim = self._model.configure()
+            self._cim.__enter__()
+            # Buffers allocated ONCE and reused. `set_buffer` binds the array,
+            # so a fresh allocation per frame would be 640x640x3 of churn
+            # inside the hot loop, plus a rebind.
+            self._in_buf = np.zeros((self._size, self._size, 3), np.uint8)
+            self._out_buf = np.zeros(self._out_shape, np.float32)
+            self._bindings = self._cim.create_bindings()
+            self._bindings.input().set_buffer(self._in_buf)
+            self._bindings.output().set_buffer(self._out_buf)
         self._cim.activate()
-        # Buffers allocated ONCE and reused. `set_buffer` binds the array, so
-        # a fresh allocation per frame would be 640x640x3 of churn inside the
-        # hot loop, plus a rebind.
-        self._in_buf = np.zeros((self._size, self._size, 3), np.uint8)
-        self._out_buf = np.zeros(self._out_shape, np.float32)
-        self._bindings = self._cim.create_bindings()
-        self._bindings.input().set_buffer(self._in_buf)
-        self._bindings.output().set_buffer(self._out_buf)
         _ACTIVE = self
         self._swaps += 1
         if self._swaps == _SWAP_WARN_AT and self._log:
@@ -467,15 +488,14 @@ class HailoDetector(Detector):
             except Exception:
                 pass
         self._pipe = self._activation = None
+        # DEACTIVATE ONLY. The ConfiguredInferModel stays -- it is the SRAM
+        # allocation, and tearing it down on every swap is what filled the
+        # chip. It is released in `close()`, when the detector is done.
         if self._cim is not None:
-            for call in (self._cim.deactivate,
-                         lambda: self._cim.__exit__(None, None, None)):
-                try:
-                    call()
-                except Exception:
-                    pass
-        self._cim = self._bindings = None
-        self._in_buf = self._out_buf = None
+            try:
+                self._cim.deactivate()
+            except Exception:
+                pass
 
     def infer(self, frame_bgr: np.ndarray) -> List[Detection]:
         if not self._ready or frame_bgr is None:
@@ -634,6 +654,14 @@ class HailoDetector(Detector):
         self._ready = False
         with _DEVICE_LOCK:
             self._release_locked()
+            # The one place the SRAM allocation is actually handed back.
+            if self._cim is not None:
+                try:
+                    self._cim.__exit__(None, None, None)
+                except Exception:
+                    pass
+                self._cim = self._bindings = None
+                self._in_buf = self._out_buf = None
             if _ACTIVE is self:
                 _ACTIVE = None
 
