@@ -175,9 +175,9 @@ now.
 - **Retraining with blur augmentation.** Out of scope this round by decision.
   §3 says the models are good and the footage is hard, so this is the
   source-level fix and the archived runs give a clean baseline to beat.
-- **The remaining 25 s gap** on the gate approach is genuine absence — the
-  camera is not pointed at the prop. No threshold recovers that; it is mission
-  geometry.
+- ~~**The remaining 25 s gap is genuine absence.**~~ **RETRACTED — §8.** It was
+  not. CLAHE finds the target through most of it and the longest gap collapses
+  to 2.7 s.
 
 
 ## 7. The confidence floor, settled on evidence
@@ -218,3 +218,34 @@ cache had been built at conf 0.15, so the lower floors had nothing extra to
 find. The tool answered the question it was asked and the question was wrong.
 Rebuilt at the HEF's baked 0.02 floor, the real shape appeared. **A cache is
 only as permissive as the run that made it.**
+
+
+## 8. All three changes together — and a retraction
+
+The individual measurements each answered one question. Composed, on the same
+1830 frames of the gate approach, they answer the one that matters:
+
+| arm | presence | p90 gap | longest gap |
+|---|---|---|---|
+| **A** shipped (conf 0.15, no clamp) | **0.0 %** | — | — |
+| **B** + tracker clamp | 45.1 % | 25 000 ms | 25.0 s |
+| **C** + conf 0.10 | 53.6 % | 24 938 ms | 24.9 s |
+| **D** + CLAHE | **95.4 %** | **2 656 ms** | **2.7 s** |
+
+**Zero to 95.4 % presence** on the footage where the lock was previously
+impossible, and the worst single loss goes from a 25 s blackout to 2.7 s —
+inside the Kalman predict window, and only just outside `coast_s`.
+
+**I called that 25 s gap "genuine absence — the camera is not pointed at the
+prop", and that was wrong.** It appeared in every earlier arm, which made it
+look structural. CLAHE finds the target through most of it: the prop was in
+frame the whole time, in water too washed-out for the model to see it. The
+statement is retracted rather than edited away, because the reasoning behind
+it — "a gap that survives every threshold must be geometry" — is plausible,
+and is the kind of thing that would otherwise be re-derived.
+
+That also revises the round's own headline. The tracker clamp is the fix that
+makes the coast layer *exist*; **CLAHE is the one that makes the lock hold.**
+Neither is sufficient alone: at arm C the tracker is working and still loses
+the target for 25 s; CLAHE without the clamp would feed a tracker that emits
+nothing.
