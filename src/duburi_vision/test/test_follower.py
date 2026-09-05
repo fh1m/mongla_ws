@@ -85,13 +85,31 @@ def test_it_refuses_before_it_has_been_seeded():
 
 
 def test_a_featureless_box_seeds_NOTHING_rather_than_pretending():
-    """A flat region has nothing to track. Seeding anyway would produce a box
-    that translates by whatever noise the flow returns."""
+    """A flat region has nothing to track."""
     flat = np.full((240, 320), 128, np.uint8)
     f = Follower()
     assert f.reset(flat, (100, 80, 200, 180)) == 0
     assert not f.active
     assert f.step(flat).ok is False
+
+
+def test_TOO_FEW_features_is_refused_even_though_some_were_found():
+    """The min-points threshold, exercised for real.
+
+    The previous version of this test used a FLAT region, where
+    `goodFeaturesToTrack` returns None -- so it passed via the None branch and
+    was VACUOUS: deleting the `len(p) < min_points` check left it green.
+    Verified by injection, which is the only reason it was caught.
+
+    A region with two or three corners is the case that matters: features ARE
+    found, and there are not enough of them to estimate a translation. That is
+    the difference between "nothing to track" and "not enough to trust"."""
+    img = np.full((240, 320), 128, np.uint8)
+    cv2.rectangle(img, (150, 110), (158, 118), 240, -1)   # ~one corner cluster
+    f = Follower(min_points=MIN_POINTS)
+    n = f.reset(img, (140, 100, 175, 135))
+    assert n == 0, f'seeded {n} points from a near-featureless box'
+    assert not f.active
 
 
 def test_an_unrelated_frame_is_REFUSED_not_followed():
