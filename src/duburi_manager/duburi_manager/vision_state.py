@@ -130,6 +130,8 @@ class VisionState:
         # two ends of each link cannot drift apart. They already did once: this
         # class asked for RELIABLE on a BEST_EFFORT image topic and received
         # nothing for ever, silently.
+        self._lock_array = None
+        self._lock_stamp = 0.0
         self._sub_det   = node.create_subscription(
             Detection2DArray, f'{ns}/detections',   self._on_detections,
             qos.DETECTIONS)
@@ -139,6 +141,13 @@ class VisionState:
         # silently never engages (degrades to raw-/detections behaviour).
         self._sub_trk   = node.create_subscription(
             Detection2DArray, f'{ns}/tracks',        self._on_tracks,
+            qos.DETECTIONS)
+        # LADDER source. Same shape as the coast subscription above: cheap to
+        # subscribe, only CONSULTED when `lock_s > 0`, and if `lock_node` is not
+        # running it simply never delivers and the ladder never engages. A
+        # mission that does not opt in behaves exactly as before.
+        self._sub_lock  = node.create_subscription(
+            Detection2DArray, f'{ns}/lock',          self._on_lock,
             qos.DETECTIONS)
         self._sub_info  = node.create_subscription(
             CameraInfo,       f'{ns}/camera_info',   self._on_info,
@@ -316,12 +325,52 @@ class VisionState:
                 best_detection = detection
         return best_detection
 
+    def _on_lock(self, msg) -> None:
+        """Latest ladder output. Kept whole; the rung name and confidence ride
+        in `class_id`/`score`, so nothing here needs to know how many rungs
+        exist."""
+        with self._lock:
+            self._lock_array = msg
+            self._lock_stamp = self._capture_monotonic(msg)
+
+    def _lock_sample(self, image_width: float, image_height: float):
+        """A Sample from the ladder, or None.
+
+        The ladder has ALREADY applied its own decay -- `score` is rung trust
+        times time-since-the-last-real-detection -- so this must not decay it
+        again. Double-decaying would make the fallback die roughly twice as
+        fast as designed, which is the same arithmetic error that made the
+        uplink's coasted target expire inside 0.4 s.
+        """
+        with self._lock:
+            arr = self._lock_array
+            stamp = self._lock_stamp
+        if arr is None or not arr.detections:
+            return None
+        d = arr.detections[0]
+        if not d.results:
+            return None
+        score = _hypothesis_score(d)
+        if score <= 0.0:
+            return None
+        b = d.bbox
+        cx, cy = b.center.position.x, b.center.position.y
+        return Sample(
+            ex=(cx - image_width * 0.5) / (image_width * 0.5),
+            ey=(cy - image_height * 0.5) / (image_height * 0.5),
+            h_frac=float(b.size_y) / max(image_height, 1.0),
+            w_frac=float(b.size_x) / max(image_width, 1.0),
+            age_s=max(0.0, time.monotonic() - stamp) if stamp else 0.0,
+            class_id=_hypothesis_class_id(d), score=score,
+            vis_range=0.0, track_id=-1, coasted=True)
+
     def bbox_error(self, class_name: str = '', *,
                    near: Optional[Tuple[float, float]] = None,
                    gate_norm: float = 0.0,
                    min_score: float = 0.0,
                    locked_id: int = -1,
-                   coast_s: float = 0.0) -> Optional[Sample]:
+                   coast_s: float = 0.0,
+                   lock_s: float = 0.0) -> Optional[Sample]:
         """Pick a matching detection and return a normalized Sample.
 
         Default (``near=None`` or ``gate_norm<=0``): the LARGEST-area matching
@@ -394,8 +443,16 @@ class VisionState:
             # No live detection this tick. Coast the locked target's predicted
             # box (opt-in) before declaring a loss -- the gap-bridging path.
             if coast_s > 0.0 and locked_id >= 0:
-                return self._coast_sample(class_name, locked_id, coast_s,
-                                          tracks_array, image_width, image_height)
+                cs = self._coast_sample(class_name, locked_id, coast_s,
+                                        tracks_array, image_width, image_height)
+                if cs is not None:
+                    return cs
+            # LAST rung before declaring nothing: the ladder (follower /
+            # anchor). Opt-in, and it CANNOT fabricate -- `lock_node` publishes
+            # nothing once its own authority reaches zero, so an absent message
+            # is the loss being declared on schedule rather than hidden.
+            if lock_s > 0.0:
+                return self._lock_sample(image_width, image_height)
             return None
 
         vis_range = (float(vis_range_vals[best_index])

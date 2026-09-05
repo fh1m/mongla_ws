@@ -79,6 +79,14 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # MUST be < lost_grace_s and < the tracker buffer in wall-time. Opt-in,
     # pool-validated before enabling -- see precision-alignment.md / known-issues.
     'vision.coast_s':              0.8,
+    # lock_s: consult the LADDER (`lock_node`: follower + XFeat anchor) as the
+    # last rung before declaring loss. 0 = OFF (default) and off is exactly the
+    # previous behaviour. It cannot fabricate: `lock_node` publishes nothing
+    # once its own authority reaches zero, so an absent message is the loss
+    # being declared on schedule rather than hidden. The value is a FLAG, not a
+    # horizon -- the horizon lives in the node, derived from the measured gap
+    # distribution (full authority to 0.70 s, zero at 2.50 s).
+    'vision.lock_s':               0.0,
     # --- downward-camera / depth-bound tunables (moved off per-align kwargs) ---
     # surge_sign: polarity of the DOWNWARD Ch5 SURGE axis (image-Y -> fore/aft) for
     # the bottom-cam mount. This hull needs -1 (a target AHEAD must drive FORWARD);
@@ -123,6 +131,7 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'ki_lat':              'vision.ki_lat',
         'ctrl_conf':           'vision.ctrl_conf',
         'coast_s':             'vision.coast_s',
+        'lock_s':              'vision.lock_s',
         'surge_sign':          'vision.surge_sign',
         'max_depth_m':         'vision.max_depth_m',
         'depth_ceiling_m':     'vision.depth_ceiling',

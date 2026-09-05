@@ -701,6 +701,7 @@ def align_loop(*,
                ki_lat: float = 0.0,
                i_lat_max: float = VISION_I_LAT_MAX,
                coast_s: float = 0.0,
+               lock_s: float = 0.0,
                fwd_fill: float = 0.0,
                fwd_mode: str = 'area',
                kp_forward: float = KP_FORWARD_DEFAULT,
@@ -1040,7 +1041,7 @@ def align_loop(*,
             near = (locked_ex, locked_ey) if locked_ex is not None else None
             sample = vision_state.bbox_error(
                 target_class, near=near, gate_norm=gate_norm, min_score=ctrl_conf,
-                locked_id=locked_id, coast_s=coast_s)
+                locked_id=locked_id, coast_s=coast_s, lock_s=lock_s)
             if not _present(sample):
                 stable = 0
                 lat_i = 0.0   # bleed integral windup while blind
@@ -1420,6 +1421,7 @@ def move_loop(*,
               release_yaw: bool = False,
               range_gain_floor: float = 1.0,
               coast_s: float = 0.0,
+              lock_s: float = 0.0,
               report_fn=None,
               writers=None,
               log=None,
@@ -1530,7 +1532,8 @@ def move_loop(*,
             # moves coast normally.
             eff_coast = 0.0 if passthrough else coast_s
             sample  = vision_state.bbox_error(
-                target_class, locked_id=locked_id, coast_s=eff_coast)
+                target_class, locked_id=locked_id, coast_s=eff_coast,
+                lock_s=lock_s)
             present = _present(sample)
             if present and not sample.coasted and sample.track_id >= 0:
                 locked_id = sample.track_id   # follow this id when a gap coasts
