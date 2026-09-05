@@ -149,3 +149,61 @@ def test_confidence_is_zero_when_not_ok():
     assert AnchorPose(ok=False, inliers=900).confidence == 0.0
     assert AnchorPose(ok=True, inliers=100).confidence == pytest.approx(1.0)
     assert 0.0 < AnchorPose(ok=True, inliers=20).confidence < 1.0
+
+
+# --------------------------------------------------------------------------- #
+#  Target vs scene -- the distinction that surprises everyone
+# --------------------------------------------------------------------------- #
+def test_an_ROI_snap_keeps_ONLY_the_keypoints_inside_the_box():
+    """Locking the whole frame means hundreds of background keypoints outvote
+    the subject, so the homography reports what the ROOM is doing -- on a
+    static camera the lock correctly sits still while someone walks through it.
+    That is right for station-keeping and useless for following a prop.
+
+    An ROI snap keys the reference on the target's box instead. This is what a
+    torpedo run needs: lock the BOARD, not the pool wall behind it."""
+    be = _Backend(n=400)
+    a = Anchor(be)
+    whole = a.snap(np.zeros((240, 320), np.uint8))
+    part = a.snap(np.zeros((240, 320), np.uint8), roi=(0, 0, 160, 120))
+    assert whole == 400
+    assert 0 < part < whole                    # a real subset, not all or none
+
+
+def test_ROI_keypoints_keep_FULL_FRAME_coordinates():
+    """Cropping the IMAGE would shift the origin and silently move every pose
+    the anchor reports. Filtering keypoints leaves every sign and scale
+    downstream identical, so `pose_from_homography` never needs to know which
+    mode was used."""
+    be = _Backend(n=400)
+    a = Anchor(be)
+    a.snap(np.zeros((240, 320), np.uint8), roi=(100, 80, 200, 160))
+    k = a._ref_kpts
+    assert len(k) > 0
+    # inside the ROI in FULL-frame terms -- not re-based to the crop
+    assert k[:, 0].min() >= 100 - 1e-6 and k[:, 0].max() <= 200 + 1e-6
+    assert k[:, 1].min() >= 80 - 1e-6 and k[:, 1].max() <= 160 + 1e-6
+
+
+def test_the_ROI_is_scaled_from_the_CALLERS_resolution():
+    """The backend works at its own size; the box arrives in the caller's. Not
+    scaling it would silently select the wrong region -- and a wrong region
+    still produces keypoints, a homography and a confident pose."""
+    be = _Backend(n=400)
+    a = Anchor(be)
+    # a 640x480 caller asking for its own left half must select the backend's
+    # left half, not a 320-wide slab of a 320-wide image (i.e. everything)
+    n_half = a.snap(np.zeros((480, 640), np.uint8), roi=(0, 0, 320, 480))
+    n_all = a.snap(np.zeros((480, 640), np.uint8), roi=(0, 0, 640, 480))
+    assert n_half < n_all
+
+
+def test_a_locked_pose_carries_the_reference_FOOTPRINT():
+    """A point says the lock moved; the quad says what it is locked onto -- and
+    a footprint leaving the frame is the earliest warning that the reference is
+    about to become unusable, which a centre offset cannot express."""
+    a = Anchor(_Backend(n=200))
+    a.snap(np.zeros((240, 320), np.uint8))
+    p = a.locate(np.zeros((240, 320), np.uint8))
+    assert p.ok and p.corners is not None
+    assert np.asarray(p.corners).shape == (4, 2)

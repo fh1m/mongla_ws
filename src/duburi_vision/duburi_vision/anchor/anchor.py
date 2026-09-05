@@ -67,6 +67,12 @@ class AnchorPose:
     scale: float = float('nan')   # >1 = reference appears LARGER, i.e. closer
     inliers: int = 0
     matches: int = 0
+    # Where the reference's four corners land in the live frame, (4,2) or None.
+    # Carried because a point tells you the lock MOVED and a quad tells you what
+    # it is locked ONTO -- and because a footprint leaving the frame is the
+    # earliest warning that the reference is about to become unusable, which a
+    # centre offset alone cannot express.
+    corners: object = None
 
     @property
     def confidence(self) -> float:
@@ -74,6 +80,13 @@ class AnchorPose:
         if not self.ok:
             return 0.0
         return min(1.0, self.inliers / 100.0)
+
+
+def reference_corners(H: np.ndarray, w: int, h: int) -> np.ndarray:
+    """The reference's four corners pushed through H -> (4,2) in live pixels."""
+    import cv2
+    quad = np.array([[[0, 0]], [[w, 0]], [[w, h]], [[0, h]]], np.float32)
+    return cv2.perspectiveTransform(quad, H).reshape(-1, 2)
 
 
 def pose_from_homography(H: np.ndarray, w: int, h: int) -> tuple:
@@ -118,17 +131,48 @@ class Anchor:
         self._ref_shape = (0, 0)
 
     # -- reference ---------------------------------------------------------- #
-    def snap(self, gray: np.ndarray) -> int:
+    def snap(self, gray: np.ndarray, roi=None) -> int:
         """Store this view as the reference. Returns the keypoint count.
 
+        `roi` = (x1, y1, x2, y2) in the ORIGINAL frame's pixels. Pass it to
+        lock the TARGET; omit it to lock the SCENE. The difference is not
+        cosmetic and it is the first thing that surprises anyone watching:
+
+          whole frame -- hundreds of background keypoints outvote the subject,
+                         so the homography reports what the ROOM is doing. On a
+                         static camera the lock correctly sits still even as
+                         someone walks through it. That is the right answer for
+                         station-keeping and for ego-motion, and the wrong one
+                         for following a prop.
+          roi         -- only keypoints inside the box become the reference, so
+                         the homography follows the target. This is what a
+                         torpedo run needs: lock the BOARD, not the pool wall
+                         behind it.
+
+        Keypoints keep FULL-FRAME coordinates either way, so every sign and
+        scale downstream is identical and `pose_from_homography` does not need
+        to know which mode was used. Cropping the image instead would shift the
+        origin and silently move every pose the anchor reports.
+
         The count is returned rather than a bool because it is a real health
-        signal: measured across our archive, a workable reference carries
-        ~1000 keypoints and a hopeless one carries single digits (ORB found
-        SEVEN in a whole Mirpur frame). A caller that snaps a near-empty
-        reference should know immediately, not discover it when the lock
-        silently never engages.
+        signal: a workable reference carries ~1000 keypoints and a hopeless one
+        carries single digits (ORB found SEVEN in a whole Mirpur frame). A
+        caller that snaps a near-empty reference should learn it now, not when
+        the lock silently never engages.
         """
         k, d = self._be.detect(gray)
+        if roi is not None and len(k):
+            # The backend works at its own resolution; the ROI arrives in the
+            # caller's. Scale the box, never the keypoints.
+            fh, fw = gray.shape[:2]
+            sx = self._be.w / float(fw)
+            sy = self._be.h / float(fh)
+            x1, y1, x2, y2 = (float(v) for v in roi)
+            x1, x2 = sorted((x1 * sx, x2 * sx))
+            y1, y2 = sorted((y1 * sy, y2 * sy))
+            m = ((k[:, 0] >= x1) & (k[:, 0] <= x2)
+                 & (k[:, 1] >= y1) & (k[:, 1] <= y2))
+            k, d = k[m], d[m]
         self._ref_kpts, self._ref_desc = k, d
         self._ref_shape = (self._be.h, self._be.w)
         return int(len(k))
@@ -173,4 +217,5 @@ class Anchor:
         h, w = self._ref_shape
         tx, ty, theta, scale = pose_from_homography(H, w, h)
         return AnchorPose(ok=True, tx=tx, ty=ty, theta=theta, scale=scale,
-                          inliers=inl, matches=int(len(i0)))
+                          inliers=inl, matches=int(len(i0)),
+                          corners=reference_corners(H, w, h))
