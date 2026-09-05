@@ -18,7 +18,13 @@ from duburi_manager.vision_state import VisionState
 
 
 class _Log:
+    # `warn` AND `warning`: rclpy's logger has both and this code calls `warn`.
+    # The gap was pre-existing and invisible while the only warning path was
+    # the clock-skew branch, which no test reached. It surfaced the moment an
+    # absent or zero stamp started warning too -- which it should, because an
+    # unstamped stream silently makes every freshness gate measure arrival age.
     def info(self, *_a, **_k): pass
+    def warn(self, *_a, **_k): pass
     def warning(self, *_a, **_k): pass
     def debug(self, *_a, **_k): pass
     def error(self, *_a, **_k): pass

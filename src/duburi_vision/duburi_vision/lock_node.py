@@ -40,11 +40,33 @@ from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 
 from duburi_vision import qos as _qos
+from duburi_vision.stamps import capture_monotonic
 from duburi_vision.detection.detector import Detection
 from duburi_vision.detection.messages import detections_to_array
 from duburi_vision.tracking.follower import Follower
 from duburi_vision.tracking.lock_state import (
     FULL_AUTHORITY_S, ZERO_AUTHORITY_S, Rung, arbitrate)
+
+
+def header_for(rung, *, detection, frame, anchor):
+    """The stamp of the frame the WINNING RUNG actually observed.
+
+    Each rung answers from a different instant. The follower ran on this frame;
+    the anchor ran on whichever frame it last evaluated, up to its own period
+    ago (0.333 s at 3 Hz); the detector finished on whichever frame it last
+    got through. Publishing all three under the newest header makes every rung
+    claim the freshness of the fastest one -- and it does so ONLY on the lower
+    rungs, so it looks correct exactly while a detection is present and lies
+    exactly when the ladder is doing its job.
+
+    Falls back to the current frame when a rung has no header yet: a stamp that
+    is merely too NEW makes the consumer act with less authority than it could,
+    which is the safe direction. There is no correct answer to hand it, and
+    `None` would suppress the publish entirely.
+    """
+    return {Rung.DETECTION: detection,
+            Rung.FOLLOW: frame,
+            Rung.ANCHOR: anchor}.get(rung, frame) or frame
 
 
 class LockNode(Node):
@@ -85,6 +107,9 @@ class LockNode(Node):
         self._lock = threading.Lock()
         self._gray = None
         self._header = None
+        self._det_header = None
+        self._anchor_header = None
+        self._stamp_warned = False
         self._det_box = None
         self._det_conf = 0.0
         self._det_t = 0.0
@@ -173,12 +198,25 @@ class LockNode(Node):
                                 b.center.position.y - hh,
                                 b.center.position.x + hw,
                                 b.center.position.y + hh))
+        # THE DECAY CLOCK. `_det_t` is what `arbitrate` measures authority
+        # against, so it must be when the frame was SEEN, not when the message
+        # landed here. Arrival time under-reports every gap by the whole
+        # capture->inference->transport chain -- measured at 32 ms median,
+        # 48 p95 -- always in the flattering direction, so the ladder holds
+        # full authority slightly past the point the measurement justifies.
+        t, why = capture_monotonic(msg.header)
+        if why and not self._stamp_warned:
+            self._stamp_warned = True
+            self.get_logger().warn(
+                f'[LOCK ] detection {why} -- the authority decay is measuring '
+                f'age since ARRIVAL, not since capture. Check use_sim_time.')
         with self._lock:
             if best is None:
                 self._det_box, self._det_conf = None, 0.0
             else:
                 self._det_conf, self._det_box = best
-                self._det_t = time.monotonic()
+                self._det_t = t
+                self._det_header = msg.header
 
     # -- the ladder --------------------------------------------------------- #
     def _loop(self):
@@ -189,6 +227,7 @@ class LockNode(Node):
             with self._lock:
                 gray = self._gray
                 header = self._header
+                det_header = self._det_header
                 det_box, det_conf, det_t = (self._det_box, self._det_conf,
                                             self._det_t)
             if gray is None:
@@ -214,6 +253,15 @@ class LockNode(Node):
                       and now >= self._anchor_next):
                     self._anchor_next = now + self._anchor_period
                     self._anchor_pose = self._anchor.locate(gray)
+                    # The frame this pose was fitted to. The anchor runs at
+                    # 3 Hz while this loop runs at frame rate, so between
+                    # evaluations the pose below is REUSED -- up to 333 ms old
+                    # -- and publishing it under the current frame's stamp
+                    # would report a third of a second of staleness as ~18 ms.
+                    # That defeats the freshness machinery precisely on the
+                    # rung it exists to protect, and only on that rung, so it
+                    # looks correct whenever a detection is present.
+                    self._anchor_header = header
                 p = self._anchor_pose
                 if p is not None and p.ok and p.corners is not None:
                     q = np.asarray(p.corners, np.float32)
@@ -227,9 +275,18 @@ class LockNode(Node):
                            anchor=ab, anchor_conf=ac or 0.0,
                            full_s=self._full, zero_s=self._zero)
             self._n_by_rung[st.rung] = self._n_by_rung.get(st.rung, 0) + 1
-            self._publish(st, header)
+            self._publish(st, header_for(st.rung, detection=det_header,
+                                         frame=header,
+                                         anchor=self._anchor_header))
 
     def _publish(self, st, header):
+        """`header` is the frame the WINNING RUNG observed, not the newest one.
+
+        Each rung answers from a different instant -- the follower from this
+        frame, the anchor from whichever frame it last ran on, the detector
+        from whichever frame it last finished. One shared stamp would make all
+        three claim the freshest of them.
+        """
         dets = []
         if st.have_target:
             x1, y1, x2, y2 = st.xyxy
