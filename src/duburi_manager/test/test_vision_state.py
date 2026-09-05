@@ -340,3 +340,34 @@ def test_close_tears_down_every_subscription():
     assert len(destroyed) == 4, (
         f'{len(destroyed)} of 4 subscriptions torn down -- teardown is '
         f'partial again')
+
+
+def test_the_COAST_gap_is_measured_from_capture_not_from_the_query():
+    """`_last_real` is the sighting a coast measures its gap from -- the same
+    authority machinery as the ladder's decay. It was stamped with
+    `time.monotonic()` at the moment the CONTROL LOOP asked, which is short by
+    the pipeline latency plus up to a loop period, always in the direction that
+    makes a coast look younger than it is. Two lines below it, `age_s` was
+    already using the capture instant.
+
+    Drives the shipping `bbox_error()` rather than poking the dict, because the
+    write only happens on the live-detection path with coast enabled.
+    """
+    vs = _bare_vstate()
+    vs._image_size = (640, 480)
+    vs._info_seen = True
+    captured = time.time() - 0.200
+    vs._on_detections(_msg_stamped_wall(captured, [_det(320, 240, 40, 40)]))
+    vs._latest_tracks = SimpleNamespace(
+        detections=[SimpleNamespace(
+            bbox=SimpleNamespace(center=SimpleNamespace(x=320.0, y=240.0),
+                                 size_x=40.0, size_y=40.0),
+            results=[SimpleNamespace(hypothesis=SimpleNamespace(
+                class_id='7', score=0.9))],
+            id='7')])
+    s = vs.bbox_error('hole', coast_s=0.8)
+    assert s is not None and s.track_id >= 0, 'no track matched -- test is vacuous'
+    stamp, _score = vs._last_real[s.track_id]
+    lag = time.monotonic() - stamp
+    assert lag == pytest.approx(0.200, abs=0.04), (
+        f'sighting recorded {lag * 1000:.0f} ms ago for a 200 ms-old frame')
