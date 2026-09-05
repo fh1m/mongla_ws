@@ -36,10 +36,10 @@ import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 
+from duburi_vision import qos as _qos
 from duburi_vision.detection.detector import Detection
 from duburi_vision.detection.messages import detections_to_array
 from duburi_vision.tracking.follower import Follower
@@ -86,11 +86,16 @@ class LockNode(Node):
         if bool(self.get_parameter('anchor').value):
             self._build_anchor()
 
-        self._pub = self.create_publisher(Detection2DArray, f'{ns}/lock', 10)
+        self._pub = self.create_publisher(Detection2DArray, f'{ns}/lock',
+                                          _qos.DETECTIONS)
+        # Shared profiles, never a hand-rolled QoS: a RELIABLE/BEST_EFFORT
+        # mismatch is answered by rclpy with one WARN and then silence --
+        # clean launch, healthy nodes, zero frames. `duburi_vision.qos` owns
+        # these topics and a contract test enforces it.
         self.create_subscription(Detection2DArray, f'{ns}/detections',
-                                 self._on_det, qos_profile_sensor_data)
+                                 self._on_det, _qos.DETECTIONS)
         self.create_subscription(Image, f'{ns}/image_raw',
-                                 self._on_img, qos_profile_sensor_data)
+                                 self._on_img, _qos.IMAGE)
         threading.Thread(target=self._loop, daemon=True).start()
         self.create_timer(5.0, self._log_health)
         self._n_by_rung = {r: 0 for r in Rung}
