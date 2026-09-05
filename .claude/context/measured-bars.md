@@ -379,3 +379,59 @@ Pi still 72.8 % idle.
 **The bar:** the anchor backend is **XFeat at 320×240**. Any replacement must be
 benched on the **Mirpur** clips, not on a public leaderboard — that is where ORB
 scored 7 keypoints and EdgePoint2 lost.
+
+
+---
+
+## 9. Plane tilt from the anchor homography — correct, and only COARSE on real water
+
+`anchor/geometry.plane_geometry()` recovers the matched plane's orientation —
+the torpedo shot's actual precondition, which a centred bbox cannot express.
+
+### Synthetic ground truth: exact
+
+| condition | result |
+|---|---|
+| every tilt 0–65°, noise-free | recovered to **< 0.5°** |
+| + 1.55 px matcher noise, ≥ 27 px baseline | p50 **2.2°**, p90 **5.5°** |
+| + hull rotation 2° between frames | p90 **6.7°** (5° of rotation → 18°) |
+| pure camera rotation (no translation) | **refused** at 1/3/8° — verified |
+
+### Real archive footage (`torpedo_shark_up_1`): coarse only
+
+| | |
+|---|---|
+| per-frame tilt | p90 frame-to-frame swing **39°** (XFeat) / **47°** (ORB) |
+| 31-frame rolling median | p90 swing **1.3°** — *looks* excellent |
+| **two independent snaps of the same board** | **disagree 4.7° median, 17.5° p90** |
+
+**The third row is the bar.** Smoothing buys stability and not accuracy: the
+per-reference error is a *bias*, not zero-mean noise, so a rolling median
+produces a confident, smooth, wrong angle. Reading only the second row would
+have shipped exactly that. **The two-snap control is what caught it, and any
+future attempt to rehabilitate this number must reproduce that control.**
+
+**Verdict: usable as a coarse "is the board grossly off-square" indicator;
+NOT a firing precondition. Not wired to control.**
+
+### Eight causes tested and eliminated — do not re-derive
+
+| hypothesis | measurement | verdict |
+|---|---|---|
+| insufficient baseline | real median 19–60 px vs a 12 px bar | not it (bar added anyway, justified separately) |
+| scene is not planar | inlier reprojection RMS **1.55 px** | the homography fits |
+| wrong camera matrix | p90 35–78° across a **6× focal sweep**, no minimum | not it |
+| matcher noise | synthetic at 1.55 px predicts 2–5° | does not reach 39° |
+| RANSAC re-choosing the plane | inlier overlap 0.48; |Δtilt| 14.0 (low) vs 11.5 (high) | ~2.5°, minor |
+| hull rotation | 6.7° at 2°, 18° at 5° | insufficient |
+| matcher quality | XFeat 38.9 vs ORB 46.9 p90 | barely different |
+| ROI plane isolation | **worse** — 58–73° p90 | fewer keypoints, worse conditioning |
+
+### The baseline bar, separately justified
+
+Tilt is unobservable without translation (`H = K R K⁻¹` carries no plane term).
+Measured at 0.5 px noise: p90 error 42.1° at 0.84 px displacement, 13.6° at
+6.71, **5.6° at 11.75**, 1.9° at 26.9. `MIN_BASELINE_PX = 12.0`; `baseline_px`
+is reported so a firing gate can demand 17 (p90 3°). This is a **precision**
+bar — the dangerous degenerate case, pure rotation, is refused by the
+decomposition itself.
