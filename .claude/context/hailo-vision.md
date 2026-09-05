@@ -389,3 +389,73 @@ detections OLDER: the decoded frame would wait a whole inference before its own
 inference began, adding ~9.85 ms to age to buy ~20 % of rate. **Control pays
 latency, not throughput** (§6). Decoding fresh at idle is the right design and
 this is why.
+
+---
+
+## The accelerator disappearing after an apt upgrade (2026-09-05)
+
+**Symptom:** `lspci` shows `Hailo-8 AI Processor (rev 01)`, `hailo_platform`
+imports, `hailortcli` is on `PATH` — and there is no `/dev/hailo0`, no module in
+`lsmod`, and `modinfo hailo_pci` says *"Module not found"*. Vision fails at
+`VDevice()`, not at import, which is why it does not look like a missing driver.
+
+**Cause:** the module was built by hand on 2026-08-29 and dropped into
+`/usr/lib/modules/6.8.0-1063-raspi/kernel/drivers/misc/`. The Pi has since
+booted **6.8.0-1064-raspi**. Two tells, both quick:
+
+```bash
+uname -r                                     # 6.8.0-1064-raspi
+find /lib/modules -name 'hailo*'             # ...1063.../hailo_pci.ko  <- stale
+dpkg -S <that path>                          # "no path found" -> hand-placed
+ls /usr/lib/modules/<ver>/kernel/drivers/misc/ | head   # everything else is .ko.zst
+```
+
+A hand-placed module is **unowned and uncompressed** in a directory of
+`.ko.zst`. An `apt` kernel bump takes it away silently, and it reads as "the
+Hailo broke".
+
+**Fix — DKMS, never another hand-built `.ko`.** Upstream ships `install_dkms`
+with `AUTOINSTALL=yes`, which rebuilds on every future kernel.
+
+```bash
+git clone --depth 1 -b v4.24.0 https://github.com/hailo-ai/hailort-drivers.git ~/hailort_drivers
+# assemble the layout the Kbuild expects (see the trap below), then:
+sudo make -C <stage>/hailort/drivers/linux/pcie install_dkms
+sudo install -m 0644 ~/hailort_drivers/linux/pcie/51-hailo-udev.rules /etc/udev/rules.d/
+sudo modprobe hailo_pci
+```
+
+**⛔ The trap that makes `install_dkms` fail on a standalone clone.** The
+driver's `Kbuild` hardcodes `COMMON_INCLUDE_DIRECTORY=../../../../common/include`
+— it expects to live at `<hailort_root>/hailort/drivers/linux/pcie`. From a bare
+`hailort-drivers` clone that path escapes the repo, and `install_dkms` dies on
+`cp: cannot stat '../../../../common/include'`.
+
+**The standalone build still SUCCEEDS**, because a missing `-I` path is not an
+error — so you get a module that compiles and an install target that does not,
+which is a confusing pair of symptoms. Assemble the tree instead of patching
+upstream: `common/include` from the HailoRT source (`~/hailort_src`), plus the
+clone's `common/` and `linux/` under `hailort/drivers/`. The HailoRT tarball's
+own `hailort/drivers/` holds only `common` and `win` — it does **not** ship the
+Linux driver, which is why the separate repo exists.
+
+**The udev rule is not optional.** Without `51-hailo-udev.rules`, `/dev/hailo0`
+is root-only and every ROS node fails to open it. With it: `crw-rw-rw-`.
+
+**Verified, in this order — each step rules out a different failure:**
+
+| check | good answer |
+|---|---|
+| `dkms status` | `hailo_pci/4.24.0, 6.8.0-1064-raspi, aarch64: installed` |
+| `ls -la /dev/hailo0` | `crw-rw-rw-` (0666 — the udev rule took) |
+| `hailortcli fw-control identify` | FW `4.24.0`, **`Device Architecture: HAILO8`** |
+| `modinfo hailo_pci \| grep alias` | `pci:v00001E60d00002864...` — udev autoloads at boot, so no `modules-load.d` entry is needed (the existing `/etc/modules-load.d/hailo_pci.conf` is **empty** and does nothing) |
+| **our own stack** | `HailoDetector(model_path=…).infer()` → **94.7 Hz, 10.56 ms/frame** |
+
+The last row is the one that matters: a loaded module and a live `hailortcli`
+both pass while the Python path is broken. Construct the real detector.
+
+**Two diagnostic notes.** `dmesg` on this Pi is `dmesg_restrict=1`, so an empty
+hailo grep as a normal user is **no evidence either way** — a wrong inference I
+made and had to withdraw. And `hailortcli fw-control identify` exits **0** with
+no output when there is no device, so its exit code is not a probe.
