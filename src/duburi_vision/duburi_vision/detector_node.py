@@ -195,6 +195,16 @@ class DetectorNode(Node):
         self.declare_parameter('device',              'cuda:0')
         self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
         self.declare_parameter('conf',                0.35)
+        # BYTE association floor: PUBLISH down to this, while `conf` stays the
+        # floor the control loop steers on (`vision.ctrl_conf`). 0.0 = OFF, and
+        # off is byte-for-byte the previous behaviour.
+        #
+        # Measured on real footage, publish floor the ONLY variable: presence on
+        # hard clips 8.3 -> 34.8 %, and NO change on clips already at 100 %. The
+        # low-score boxes are the occluded and motion-blurred ones (ByteTrack),
+        # which is exactly the AUV case -- our own underwater score p50 is 0.258
+        # against a shipped 0.25 floor, so we were discarding the median.
+        self.declare_parameter('assoc_conf',          0.0)
         # Per-model confidence overrides: CSV 'name=conf' (e.g.
         # 'torpedo_blood_hole=0.55,gate_rescue_repair=0.35'). Applies on top of
         # the uniform `conf` above, targeting individual registry entries, and
@@ -354,6 +364,7 @@ class DetectorNode(Node):
                     n = futures[fut]
                     try:
                         name_out, det = fut.result()
+                        self._apply_assoc_conf(det)
                         self._registry[name_out] = det
                         stem = _model_stem(model_map[name_out])
                         # Collision (two keys, same stem) => last wins + warn, so
@@ -562,6 +573,7 @@ class DetectorNode(Node):
         pending = self._pending_allowlist
         if pending is not allowlist:
             det.update_allowlist(pending)
+        self._apply_assoc_conf(det)
         self._det = det  # atomic publish under CPython GIL — _infer_loop sees it next tick
         # Re-apply a per-model conf override that was set before the model landed
         # (startup or an early live set_conf): _apply_model_conf ran against a None
@@ -804,6 +816,19 @@ class DetectorNode(Node):
             det.update_conf(conf)
             self.get_logger().info(f"[DET  ] model_conf {name!r} → {conf:.3f}")
 
+    def _apply_assoc_conf(self, det) -> None:
+        """Push the BYTE publish floor onto a freshly built detector.
+
+        Called at EVERY construction site (registry, single, async) rather than
+        once at startup: a model loaded later would otherwise silently keep the
+        default floor, which is the shape of bug this package has shipped three
+        times (device_path into **_, the unloaded YAML table, ros2 param set on
+        a construction-time param).
+        """
+        a = float(self.get_parameter('assoc_conf').value)
+        if a > 0.0 and hasattr(det, 'update_assoc_conf'):
+            det.update_assoc_conf(a)
+
     def _resolve_model_key(self, name: str) -> Optional[str]:
         """Map a set_model()/active_model argument to a registry key.
 
@@ -878,6 +903,18 @@ class DetectorNode(Node):
                             else ([self._det] if self._det is not None else [])):
                     det.update_conf(new_conf)
                 self.get_logger().info(f"[DET  ] conf → {new_conf:.3f}")
+
+            elif p.name == 'assoc_conf':
+                a = float(p.value)
+                for det in (self._registry.values() if self._registry
+                            else ([self._det] if self._det is not None else [])):
+                    if hasattr(det, 'update_assoc_conf'):
+                        det.update_assoc_conf(a if a > 0.0 else 1.0)
+                self.get_logger().info(
+                    f"[DET  ] assoc_conf → {a:.3f}"
+                    + ("  (OFF)" if a <= 0.0 else
+                       "  -- boxes below the control floor now reach the tracker "
+                       "for ASSOCIATION only"))
 
             elif p.name == 'model_conf':
                 # Per-model override (CSV 'name=conf'); targets individual
