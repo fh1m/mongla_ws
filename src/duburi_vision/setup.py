@@ -37,6 +37,7 @@ setup(
             'detector_node       = duburi_vision.detector_node:main',
             'detector_dual_node  = duburi_vision.detector_dual_node:main',
             'tracker_node        = duburi_vision.tracker_node:main',
+            'lock_node           = duburi_vision.lock_node:main',
             'vision_node         = duburi_vision.vision_node:main',
             'vision_check        = duburi_vision.utils.check_pipeline:main',
             'water_check         = duburi_vision.utils.water_check:main',
