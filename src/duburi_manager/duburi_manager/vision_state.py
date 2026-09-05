@@ -464,7 +464,15 @@ class VisionState:
                 image_width, image_height)
             if track_id >= 0:
                 with self._lock:
-                    self._last_real[track_id] = (time.monotonic(), score)
+                    # `sampled_at_monotonic`, NOT `time.monotonic()`. This is
+                    # the sighting time a later coast measures its gap from --
+                    # the same authority machinery as the ladder's decay -- so
+                    # it must be when the frame was CAPTURED, not when the
+                    # control loop got round to asking. Query time is short by
+                    # the pipeline latency plus up to a loop period, always in
+                    # the direction that makes a coast look younger than it is.
+                    # Two lines below, `age_s` already uses the right value.
+                    self._last_real[track_id] = (sampled_at_monotonic, score)
                     self._evict_last_real()
 
         return Sample(ex=horizontal_error, ey=vertical_error,
