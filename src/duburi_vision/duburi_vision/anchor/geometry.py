@@ -60,6 +60,31 @@ import numpy as np
 # antiparallel to it.
 _AXIS = np.array([0.0, 0.0, -1.0])
 
+# Minimum median inlier displacement, in pixels, before a tilt is worth having.
+#
+# THE TILT IS UNOBSERVABLE WITHOUT TRANSLATIONAL BASELINE -- with none, H is
+# K R K^-1 and carries no plane term at all. That is not a threshold anyone can
+# reason to, so it was measured: synthetic planes at 10/25/40 deg, 0.5 px of
+# matcher noise, 40 trials each.
+#
+#     median displacement    |tilt err| p50    p90
+#            0.84 px             24.11        42.12
+#            2.13                13.34        34.03
+#            6.71                 3.51        13.57
+#           11.75                 1.78         5.59   <- p90 first under 10 deg
+#           17.34                 1.23         3.14
+#           26.93                 0.76         1.87
+#
+# 12 px is where a coarse "are we square" answer becomes worth acting on. A
+# FIRING gate should demand more -- `baseline_px` is reported so a caller can
+# ask for 17 (p90 3 deg) rather than inheriting the coarse bar.
+#
+# This is a PRECISION bar, not a safety one: the degenerate case that would
+# produce a confident wrong answer -- pure camera rotation, which yields large
+# displacement and zero plane information -- is already refused by the
+# decomposition itself (verified at 1, 3 and 8 deg of yaw, all ok=False).
+MIN_BASELINE_PX = 12.0
+
 
 def _normalised(H, K):
     """H scaled so the EUCLIDEAN homography has unit middle singular value.
@@ -92,6 +117,7 @@ class PlaneGeometry:
     pitch_deg: float = float('nan')   # + = plane's near edge is BELOW
     normal: Optional[Tuple[float, float, float]] = None
     ambiguous: bool = False           # more than one solution survived the filter
+    baseline_px: float = 0.0          # median inlier displacement -- see the bar
 
     @property
     def square_within(self) -> float:
@@ -99,7 +125,8 @@ class PlaneGeometry:
         return abs(self.tilt_deg)
 
 
-def plane_geometry(H, K, ref_pts, live_pts) -> PlaneGeometry:
+def plane_geometry(H, K, ref_pts, live_pts,
+                   min_baseline_px: float = MIN_BASELINE_PX) -> PlaneGeometry:
     """Plane orientation from a homography and a calibrated camera.
 
     `ref_pts` / `live_pts` are the RANSAC inliers `AnchorPose` already carries,
@@ -117,6 +144,12 @@ def plane_geometry(H, K, ref_pts, live_pts) -> PlaneGeometry:
     live = np.asarray(live_pts, np.float32).reshape(-1, 1, 2)
     if len(ref) < 4 or len(ref) != len(live):
         return PlaneGeometry(ok=False)
+    baseline = float(np.median(np.linalg.norm(
+        live.reshape(-1, 2) - ref.reshape(-1, 2), axis=1)))
+    if baseline < float(min_baseline_px):
+        # Answering here is how the real-footage run produced 47 deg of
+        # frame-to-frame swing on a hull that was not moving that way.
+        return PlaneGeometry(ok=False, baseline_px=baseline)
     Kd = np.asarray(K, np.float64)
     Hn = _normalised(np.asarray(H, np.float64), Kd)
     if Hn is None:
@@ -157,4 +190,4 @@ def plane_geometry(H, K, ref_pts, live_pts) -> PlaneGeometry:
     pitch = math.degrees(math.atan2(n[1], abs(n[2]) if n[2] else 1e-9))
     return PlaneGeometry(ok=True, tilt_deg=tilt, yaw_deg=yaw, pitch_deg=pitch,
                          normal=(float(n[0]), float(n[1]), float(n[2])),
-                         ambiguous=len(idxs) > 1)
+                         ambiguous=len(idxs) > 1, baseline_px=baseline)
