@@ -71,6 +71,40 @@ footage rather than against the next rung up.
 | `MANUAL_CONTROL` resend | ≥ 10 Hz | authority ramps to zero between `MANUAL_FRESH_MS` 1000 and `MANUAL_DECAY_MS` 1500 | ≥ 10 Hz |
 | `DEPTH_P` | 0.5 (read from board) | board answers 0.5; a stale 3.0 fallback **failed open by 6×** on the arming guard | must be READ, never assumed |
 | `FW_BEHAVIOUR_REV` | ≥ 10 required | board reports **14** | ≥ 10 |
+| board clock jitter | — | `time_boot_ms` period **100.000 ms, sd 0.000, p2p 0.000** over 200 samples | — |
+| host arrival jitter | — | **sd 4.741 ms, p2p 30.85 ms** for the same 200 samples | ≤ 1 % of any liveness bar |
+
+### Arrival vs capture on the srot link — measured, and the round-37 plan was WRONG
+
+The plan listed "srot telemetry still stamps on arrival" beside the vision
+defects. It is **not** the same defect, and the board settles it: emission is
+**exact** (100.000 ms, sd 0.000), so **every millisecond of the 30.85 ms
+arrival spread is OURS** — USB, kernel scheduling, Python — not the link.
+
+That splits cleanly by consumer, which is the part worth keeping:
+
+* **Every current consumer is a LIVENESS test** — `link_alive` /
+  `_LINK_STALE_S` 3.0 s, `_named_value(max_age_s)`, `get_batteries(max_age_s)`.
+  For liveness, **arrival is the correct clock**: the question is "did anything
+  reach me recently", not "when was this measured". Worse, a board-side stamp
+  would be actively wrong here, because `time_boot_ms` **resets on reboot** —
+  which is precisely what `check_for_reboot()` detects by watching it go
+  backwards — so a liveness test built on it would break at the one moment it
+  matters. **No change made. The claim is retracted.**
+* **A future estimator fusing `ATTITUDE` is a different question.** 30.85 ms of
+  jitter at 0.65 m/s cruise is ~2 cm of position uncertainty per sample, and it
+  is *noise*, not a constant bias, so it does not calibrate out. The board
+  already hands us a perfect capture instant for free and we discard it — so
+  when item 4 lands, carry `time_boot_ms` (with a reboot-aware offset) rather
+  than re-deriving this.
+
+**A correction to round 26's record, which said `ATTITUDE` host inter-arrival
+was `sd 0.07 ms`.** Measured here on the vehicle Pi: host **sd 4.741 ms**, 68×
+larger, while the BOARD's own period is sd 0.000. A figure that small cannot be
+host arrival on this path; it is the board's period. Flagged rather than
+silently overwritten — it was taken on a different host, and the distinction it
+missed (board clock vs host arrival) is exactly the one this section exists to
+draw.
 
 ## 5. Known gaps — measured, and open
 
