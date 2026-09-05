@@ -73,6 +73,16 @@ class AnchorPose:
     # earliest warning that the reference is about to become unusable, which a
     # centre offset alone cannot express.
     corners: object = None
+    # The surviving correspondences: (N,2) in the REFERENCE and (N,2) in the
+    # LIVE frame, RANSAC inliers only. Carried for display and for diagnosis.
+    #
+    # An inlier COUNT says the match is good; it cannot say good *at what*. Two
+    # hundred inliers spread over the pool wall and two hundred on the torpedo
+    # board are the same number and completely different situations, and only
+    # drawing the correspondences tells them apart. This is the view every
+    # image-matching paper ships for exactly that reason.
+    ref_pts: object = None
+    live_pts: object = None
 
     @property
     def confidence(self) -> float:
@@ -82,14 +92,26 @@ class AnchorPose:
         return min(1.0, self.inliers / 100.0)
 
 
-def reference_corners(H: np.ndarray, w: int, h: int) -> np.ndarray:
-    """The reference's four corners pushed through H -> (4,2) in live pixels."""
+def reference_corners(H: np.ndarray, w: int, h: int, roi=None) -> np.ndarray:
+    """The reference REGION's four corners pushed through H -> (4,2) live px.
+
+    `roi` is the region the reference was snapped from, in backend pixels. It is
+    NOT optional detail: with a whole-frame quad, an ROI-snapped anchor reports
+    a footprint covering the entire image, and anything deriving a target box
+    from it -- `lock_node` does -- publishes the whole frame as the target
+    position. That is a confident, useless answer, and it looks completely
+    normal until you draw it.
+    """
     import cv2
-    quad = np.array([[[0, 0]], [[w, 0]], [[w, h]], [[0, h]]], np.float32)
+    if roi is not None:
+        x1, y1, x2, y2 = (float(v) for v in roi)
+    else:
+        x1, y1, x2, y2 = 0.0, 0.0, float(w), float(h)
+    quad = np.array([[[x1, y1]], [[x2, y1]], [[x2, y2]], [[x1, y2]]], np.float32)
     return cv2.perspectiveTransform(quad, H).reshape(-1, 2)
 
 
-def pose_from_homography(H: np.ndarray, w: int, h: int) -> tuple:
+def pose_from_homography(H: np.ndarray, w: int, h: int, roi=None) -> tuple:
     """(tx, ty, theta, scale) for the reference CENTRE pushed through H.
 
     The centre is used rather than a corner because it is the point the control
@@ -98,9 +120,17 @@ def pose_from_homography(H: np.ndarray, w: int, h: int) -> tuple:
     fast when the match is marginal, and does so without any change in inlier
     count to warn you.
     """
-    c = np.array([[[w * 0.5, h * 0.5]]], np.float32)
     import cv2
-    p = cv2.perspectiveTransform(c, H)[0, 0]
+    if roi is not None:
+        x1, y1, x2, y2 = (float(v) for v in roi)
+        rcx, rcy = (x1 + x2) * 0.5, (y1 + y2) * 0.5
+    else:
+        rcx, rcy = w * 0.5, h * 0.5
+    p = cv2.perspectiveTransform(np.array([[[rcx, rcy]]], np.float32), H)[0, 0]
+    # Offset is always measured from the FRAME centre -- that is what the
+    # control loop steers on -- but the point pushed through H is the
+    # REGION's centre, so an ROI lock reports where the TARGET is rather than
+    # where the middle of the old view went.
     tx = float(p[0] - w * 0.5)
     ty = float(p[1] - h * 0.5)
     # Rotation and scale from the linear part. sqrt(det) is used for scale
@@ -175,10 +205,28 @@ class Anchor:
             k, d = k[m], d[m]
         self._ref_kpts, self._ref_desc = k, d
         self._ref_shape = (self._be.h, self._be.w)
+        self._ref_gray = gray.copy()
+        # Stored in BACKEND pixels (already scaled above), which is the frame
+        # `locate()` and the homography both work in.
+        self._ref_roi = (float(x1), float(y1), float(x2), float(y2)) \
+            if roi is not None else None
         return int(len(k))
+
+    @property
+    def reference_image(self):
+        """The snapped frame, for display. Kept so an operator can SEE what the
+        lock is matching against -- a number of inliers says the match is good
+        and cannot say good *at what*."""
+        return getattr(self, '_ref_gray', None)
+
+    @property
+    def reference_roi(self):
+        return getattr(self, '_ref_roi', None)
 
     def clear(self) -> None:
         self._ref_kpts = self._ref_desc = None
+        self._ref_gray = None
+        self._ref_roi = None
 
     @property
     def has_reference(self) -> bool:
@@ -215,7 +263,11 @@ class Anchor:
             # it anyway; refusing is the honest answer.
             return AnchorPose(ok=False, inliers=inl, matches=int(len(i0)))
         h, w = self._ref_shape
-        tx, ty, theta, scale = pose_from_homography(H, w, h)
+        roi = getattr(self, '_ref_roi', None)
+        tx, ty, theta, scale = pose_from_homography(H, w, h, roi)
+        keep = mask.ravel().astype(bool)
         return AnchorPose(ok=True, tx=tx, ty=ty, theta=theta, scale=scale,
                           inliers=inl, matches=int(len(i0)),
-                          corners=reference_corners(H, w, h))
+                          corners=reference_corners(H, w, h, roi),
+                          ref_pts=src.reshape(-1, 2)[keep],
+                          live_pts=dst.reshape(-1, 2)[keep])
