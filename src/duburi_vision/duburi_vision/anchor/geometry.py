@@ -30,6 +30,36 @@ different distances, and the apparent scale genuinely differs across the image
 The honest response is not a cleverer scalar. It is to report the tilt, so a
 caller knows when the scalar means anything -- which is what this module is for.
 
+⛔ WHAT IT IS GOOD FOR, MEASURED ON REAL FOOTAGE -- READ THIS BEFORE WIRING IT.
+
+Exact against synthetic ground truth (every tilt 0-65 deg, at real matcher
+noise of 1.55 px, with hull rotation up to 2 deg). On a real archive torpedo
+approach it is **coarse, not precise**, and the honest bound is:
+
+    per-frame tilt            p90 frame-to-frame swing 39 deg  -- unusable raw
+    31-frame rolling median   p90 frame-to-frame swing  1.3 deg -- looks perfect
+    TWO INDEPENDENT SNAPS     disagree by 4.7 deg median, 17.5 p90
+
+**The third line is the one that matters.** Smoothing produces a stable number
+that is still reference-dependent: the errors are NOT zero-mean, so aggregating
+buys smoothness and not accuracy. Two snaps of the same physical board, both
+smoothed, still disagree by 17.5 deg at p90. Anyone reading only the second
+line would ship a confident, smooth, wrong tilt -- which is why the two-snap
+control exists and why it is quoted here beside the flattering number.
+
+So: usable as a COARSE indicator (is the board grossly off-square?), NOT as a
+firing precondition, which needs a few degrees. Not wired to control.
+
+Eight causes were tested and eliminated on the way, recorded so they are not
+re-derived: baseline (gated; real median 19-60 px, far above the bar),
+planarity (the homography FITS -- 1.55 px inlier RMS), the camera matrix (no
+minimum across a 6x focal sweep), matcher noise (synthetic at 1.55 px predicts
+2-5 deg, not 39), RANSAC plane switching (inlier-set overlap 0.48, but it moves
+the tilt only 14.0 vs 11.5 deg), hull rotation (6.7 deg at 2 deg of rotation,
+18 at 5), matcher quality (XFeat p90 38.9 vs ORB 46.9 -- barely different), and
+plane isolation by ROI (WORSE: 58-73 deg p90, because a tighter ROI means fewer
+keypoints and worse conditioning).
+
 ⛔ THE CORRESPONDENCES ARE REQUIRED, AND THIS IS THE WHOLE DESIGN.
 `decomposeHomographyMat` returns FOUR solutions. Two of them face the camera,
 so the obvious rule -- "take the normal with n_z < 0" -- picks between them by
