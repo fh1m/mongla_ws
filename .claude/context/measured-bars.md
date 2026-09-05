@@ -284,3 +284,64 @@ and confidence quartiles (0.628/0.864 vs 0.770/0.890) differ. The effect —
 0.78 → 5.37 — is far larger than that variation can account for, and it agrees
 in direction and rough magnitude with the archive result measured on entirely
 different data, hardware and targets. **In-water validation is still owed.**
+
+---
+
+## 8. The feature backend for the anchor rung — benched, not chosen
+
+Round 36. The anchor rung (hold a target with **no bbox at all**) needs a local
+feature. Three candidates, benched on **our own footage** with one protocol:
+snap a reference at 40 % of the clip, match **frame-to-reference** at +1/3/5/8 s,
+`USAC_MAGSAC` homography, count inliers. A homography needs ~15+ to be trusted.
+
+### ORB is not viable — and this RETRACTS "the anchor dies in murky water"
+
+| clip | ORB ref kp | ORB ok | **XFeat ok** |
+|---|---|---|---|
+| Mirpur torpedo (murky) | **71** | 0/4 | **4/4** (350→100) |
+| Mirpur torpedo_1 | **7** | 0/4 | **4/4** (301→130) |
+| Mirpur gate | 111 | 3/4 | **4/4** (753→682) |
+| octagon (low texture) | 1205 | 1/4 | **3/4** |
+| torpedo (clear control) | 1260 | 4/4 | 4/4 |
+
+An earlier note in this file concluded the anchor **"dies in murky water"** and
+proposed a keypoint-count gate on that basis. **That was an ORB limitation, not a
+water limitation** — the same frames give XFeat 4096 keypoints and 100–350
+inliers. The conclusion is withdrawn; the *gate* survives as a runtime health
+check, but it is not a reason to distrust the rung.
+
+### EdgePoint2's published advantage does not transfer to our domain
+
+EdgePoint2 (2025) is documented as **2× faster than XFeat with competitive
+IMC2022 results**. At 320×240, top_k 1024, on our clips:
+
+| clip | XFeat | EP2-S64 | EP2-M64 |
+|---|---|---|---|
+| Mirpur torpedo | **4/4** (86–155) | 3/4 (7–33) | 2/4 |
+| Mirpur torpedo_1 | **4/4** (65–190) | 1/4 | 2/4 |
+| Mirpur gate | **4/4** (222–260) | 4/4 (90–142) | 4/4 |
+| octagon | **2/4** | 1/4 | 1/4 |
+| torpedo (clear) | **4/4** (445) | 4/4 (246) | 4/4 |
+
+XFeat carries **2–5× more inliers** and wins or ties every case. IMC2022 is clear
+natural imagery; **turbid underwater is a different domain and the ranking does
+not survive the move.** Recorded because "2× faster and competitive" is exactly
+the kind of claim that gets adopted without a domain check.
+
+### It fits the vehicle — measured on the Pi
+
+ONNX-exported (2.7 MB), `onnxruntime` CPU, with the vision stack running:
+
+| resolution | 1 thread | 3 threads |
+|---|---|---|
+| 640×480 | 145.6 ms (6.9 Hz) | 88.0 ms (11.4 Hz) |
+| **320×240** | **33.1 ms (30.2 Hz)** | 18.2 ms (55.1 Hz) |
+
+And 320×240 **keeps the lock**: every murky clip still 4/4 (56–260 inliers), only
+the already-marginal octagon drops 3/4 → 2/4. So the slow rung runs at 30 Hz on
+**one core** while the fast rung (LK, 8.0 ms) runs at 125 Hz on another, with the
+Pi still 72.8 % idle.
+
+**The bar:** the anchor backend is **XFeat at 320×240**. Any replacement must be
+benched on the **Mirpur** clips, not on a public leaderboard — that is where ORB
+scored 7 keypoints and EdgePoint2 lost.
