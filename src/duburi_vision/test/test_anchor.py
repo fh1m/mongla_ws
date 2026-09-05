@@ -102,6 +102,22 @@ class _Backend:
         return np.arange(n), np.arange(n)
 
 
+class _MatchingBackend(_Backend):
+    """`_Backend` matches by INDEX, which is only correct when the reference is
+    the whole frame -- an ROI reference is a subset, so index i on each side is
+    a different point and the homography is fitted to nonsense. That is a
+    property of the fake, not of the anchor, and it is exactly the kind of
+    harness error that reads as a code defect. This one matches on the
+    descriptors, the way the real backend does."""
+
+    def match(self, d0, d1, min_cossim=0.82):
+        sim = d0 @ d1.T
+        j = sim.argmax(axis=1)
+        i = np.arange(len(d0))
+        keep = sim[i, j] >= min_cossim
+        return i[keep], j[keep]
+
+
 def test_no_reference_means_no_pose():
     a = Anchor(_Backend())
     assert not a.has_reference
@@ -207,3 +223,50 @@ def test_a_locked_pose_carries_the_reference_FOOTPRINT():
     p = a.locate(np.zeros((240, 320), np.uint8))
     assert p.ok and p.corners is not None
     assert np.asarray(p.corners).shape == (4, 2)
+
+
+# --------------------------------------------------------------------------- #
+#  The ROI has to reach the FOOTPRINT and the POSE, not just the keypoints
+# --------------------------------------------------------------------------- #
+def test_an_ROI_anchor_reports_the_ROIs_footprint_not_the_whole_frame():
+    """The bug this guards: `reference_corners` was fitted with a whole-frame
+    quad regardless of the ROI, so an ROI-snapped anchor reported a footprint
+    covering the ENTIRE image -- and `lock_node` derives its published target
+    box from that quad. The result is a confident, useless answer that looks
+    completely normal until you draw it."""
+    a = Anchor(_MatchingBackend(n=2000))
+    a.snap(np.zeros((240, 320), np.uint8), roi=(100, 80, 200, 160))
+    p = a.locate(np.zeros((240, 320), np.uint8))
+    assert p.ok
+    q = np.asarray(p.corners)
+    assert q[:, 0].min() == pytest.approx(100, abs=2)
+    assert q[:, 0].max() == pytest.approx(200, abs=2)
+    assert q[:, 1].min() == pytest.approx(80, abs=2)
+    assert q[:, 1].max() == pytest.approx(160, abs=2)
+
+
+def test_an_ROI_pose_measures_the_TARGETS_offset_not_the_views():
+    """Same fix, the half that steers. The point pushed through H is the
+    REGION's centre; the offset is still measured from the FRAME centre. An
+    off-centre ROI on an unmoved scene therefore reports a real offset -- which
+    is what a lock on a prop sitting to one side must say. Whole-frame maths
+    reports 0.0 and the hull holds a target it is not pointed at."""
+    a = Anchor(_MatchingBackend(n=2000))
+    a.snap(np.zeros((240, 320), np.uint8), roi=(100, 80, 200, 160))
+    p = a.locate(np.zeros((240, 320), np.uint8))
+    assert p.ok
+    # ROI centre 150,120 against frame centre 160,120
+    assert p.tx == pytest.approx(-10.0, abs=2.0)
+    assert p.ty == pytest.approx(0.0, abs=2.0)
+
+
+def test_a_locked_pose_carries_the_surviving_CORRESPONDENCES():
+    """An inlier count says the match is good; it cannot say good *at what*.
+    Two hundred inliers on the pool wall and two hundred on the torpedo board
+    are the same number and completely different situations."""
+    a = Anchor(_Backend(n=200))
+    a.snap(np.zeros((240, 320), np.uint8))
+    p = a.locate(np.zeros((240, 320), np.uint8))
+    assert p.ok
+    assert np.asarray(p.ref_pts).shape == np.asarray(p.live_pts).shape
+    assert len(p.ref_pts) == p.inliers, 'inliers only, not every putative match'
