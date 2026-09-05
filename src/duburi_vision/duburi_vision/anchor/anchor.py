@@ -83,6 +83,11 @@ class AnchorPose:
     # image-matching paper ships for exactly that reason.
     ref_pts: object = None
     live_pts: object = None
+    # Plane orientation, when the camera is calibrated -- see `anchor/geometry`.
+    # None when no K was supplied; `ok=False` when the decomposition refused.
+    # A bbox centre says the board is IN FRONT; only this says we are SQUARE to
+    # it, which is what a torpedo shot actually requires.
+    plane: object = None
 
     @property
     def confidence(self) -> float:
@@ -152,7 +157,12 @@ class Anchor:
     """
 
     def __init__(self, backend, *, min_inliers: int = MIN_INLIERS,
-                 min_cossim: float = MIN_COSSIM):
+                 min_cossim: float = MIN_COSSIM, k=None):
+        # `k` is the 3x3 camera matrix AT THE BACKEND'S RESOLUTION, because
+        # that is the frame the homography is fitted in. Passing the full-res K
+        # scales every recovered angle silently -- there is no error, just a
+        # wrong tilt. None simply leaves `AnchorPose.plane` unset.
+        self._k = None if k is None else np.asarray(k, np.float64)
         self._be = backend
         self._min_inliers = int(min_inliers)
         self._min_cossim = float(min_cossim)
@@ -266,8 +276,14 @@ class Anchor:
         roi = getattr(self, '_ref_roi', None)
         tx, ty, theta, scale = pose_from_homography(H, w, h, roi)
         keep = mask.ravel().astype(bool)
+        rp, lp = src.reshape(-1, 2)[keep], dst.reshape(-1, 2)[keep]
+        plane = None
+        if self._k is not None:
+            from .geometry import plane_geometry
+            # 0.04 ms against the rung's 33 ms -- 0.1 %, measured, so there is
+            # no rate to trade against having it.
+            plane = plane_geometry(H, self._k, rp, lp)
         return AnchorPose(ok=True, tx=tx, ty=ty, theta=theta, scale=scale,
                           inliers=inl, matches=int(len(i0)),
                           corners=reference_corners(H, w, h, roi),
-                          ref_pts=src.reshape(-1, 2)[keep],
-                          live_pts=dst.reshape(-1, 2)[keep])
+                          ref_pts=rp, live_pts=lp, plane=plane)
