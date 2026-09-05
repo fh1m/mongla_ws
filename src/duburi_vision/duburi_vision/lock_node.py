@@ -57,7 +57,21 @@ class LockNode(Node):
         self.declare_parameter('follow', True)
         self.declare_parameter('anchor', False)
         self.declare_parameter('anchor_model', '')
-        self.declare_parameter('anchor_hz', 8.0)
+        # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
+        # cost is LATENCY rather than throughput -- detection rate is unchanged
+        # at every setting, but the anchor's 33 ms bursts delay the image
+        # pipeline:
+        #
+        #     ladder OFF          det 49.3 Hz   frame age 16.1 ms   idle 82.4 %
+        #     follower only       det 50.6 Hz             18.7 ms        75.3 %
+        #     + anchor @ 8 Hz     det 50.7 Hz             22.8 ms        65.5 %
+        #     + anchor @ 3 Hz     det 50.6 Hz             18.4 ms        66.8 %
+        #
+        # 8 Hz costs +42 % of frame age for NO extra coverage: the anchor is the
+        # long-horizon rung, called on when the follower has already given up,
+        # and the p99 gap it exists to cover is 2.418 s. 3 Hz samples that
+        # seven times over.
+        self.declare_parameter('anchor_hz', 3.0)
         self.declare_parameter('full_authority_s', FULL_AUTHORITY_S)
         self.declare_parameter('zero_authority_s', ZERO_AUTHORITY_S)
 
