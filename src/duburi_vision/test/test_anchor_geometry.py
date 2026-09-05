@@ -27,12 +27,17 @@ _REF = np.stack([_RNG.uniform(500, 740, 80),
                  _RNG.uniform(280, 470, 80)], 1).astype(np.float32)
 
 
-def _scene(tilt_deg=0.0, axis='x', approach_m=0.5, d=2.0):
+def _scene(tilt_deg=0.0, axis='x', approach_m=1.0, d=2.0):
     """H for a plane tilted `tilt_deg`, camera closing `approach_m`.
 
     `X_live = R X_ref + t`, so a camera moving TOWARD the plane gives a
     NEGATIVE t_z -- getting that sign backwards silently inverts the apparent
     scale, and it cost a round to notice.
+
+    The default approach is 1.0 m rather than 0.5 because a steeply tilted
+    plane moves LESS in the image for the same approach -- at 65 deg, 0.5 m
+    yields only 10.2 px and falls under the baseline bar. The scene has to
+    clear the bar for a test about tilt recovery to be about tilt recovery.
     """
     import cv2
     th = math.radians(tilt_deg)
@@ -161,3 +166,47 @@ def test_the_anchor_carries_the_plane_only_when_it_is_CALIBRATED():
     b.snap(np.zeros((240, 320), np.uint8))
     p = b.locate(np.zeros((240, 320), np.uint8))
     assert p.plane is not None and hasattr(p.plane, 'tilt_deg')
+
+
+
+# --------------------------------------------------------------------------- #
+#  The baseline bar
+# --------------------------------------------------------------------------- #
+def test_a_tilt_with_no_BASELINE_is_refused_not_guessed():
+    """The finding from real footage. The plane term only exists when the
+    camera TRANSLATES; with none, H is K R K^-1 and carries no plane at all.
+    Answering anyway produced 47 deg of frame-to-frame swing on an archive clip
+    -- a hull that was not moving that way."""
+    H, ref, live = _scene(tilt_deg=25.0, approach_m=0.01)
+    g = plane_geometry(H, K, ref, live)
+    assert g.ok is False
+    assert g.baseline_px > 0.0, 'the measured baseline must be reported anyway'
+
+
+def test_the_bar_is_where_the_measurement_put_it():
+    """12 px is not a guess: at 11.75 px the p90 tilt error first falls under
+    10 deg (24.1/42.1 at 0.84 px, 1.8/5.6 at 11.75). A caller wanting a firing
+    gate reads `baseline_px` and demands more."""
+    from duburi_vision.anchor.geometry import MIN_BASELINE_PX
+    assert MIN_BASELINE_PX == 12.0
+    H, ref, live = _scene(tilt_deg=25.0)
+    loose = plane_geometry(H, K, ref, live, min_baseline_px=0.0)
+    assert loose.ok and loose.baseline_px > 12.0
+    assert not plane_geometry(H, K, ref, live,
+                              min_baseline_px=loose.baseline_px + 1.0).ok
+
+
+def test_PURE_ROTATION_is_refused_by_the_decomposition_itself():
+    """A camera that only rotates produces LARGE displacement and zero plane
+    information -- so a baseline gate alone would pass it. It must be refused
+    for the right reason, which is that the decomposition degenerates."""
+    import math as _m
+    a = _m.radians(3.0)
+    Ry = np.array([[_m.cos(a), 0, _m.sin(a)], [0, 1, 0], [-_m.sin(a), 0, _m.cos(a)]])
+    H = K @ Ry @ _KI
+    H = H / H[2, 2]
+    import cv2
+    live = cv2.perspectiveTransform(_REF.reshape(-1, 1, 2), H).reshape(-1, 2)
+    disp = float(np.median(np.linalg.norm(live - _REF, axis=1)))
+    assert disp > 40.0, 'the point of this test is a LARGE displacement'
+    assert not plane_geometry(H, K, _REF, live).ok
