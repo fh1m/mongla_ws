@@ -495,3 +495,89 @@ floor already does that job.
 per frame; at 30 fps the same motion moves ~7 px. SNR is set by displacement,
 so the reference frame is held until ≥28 ms has passed. Frame rate buys
 latency, not accuracy, here.
+
+
+---
+
+## 11. The inertial data the board actually gives — measured, not assumed
+
+The estimator's architecture turns on one question, so it was checked on the
+live board rather than inferred from the firmware docs.
+
+### Rates: 5× available for free, no firmware change
+
+`SET_MESSAGE_INTERVAL` works on this firmware:
+
+| message | before | after |
+|---|---|---|
+| `SCALED_IMU2` | 10.0 Hz | **51.6 Hz** |
+| `ATTITUDE` | 10.0 Hz | **51.6 Hz** |
+| `SCALED_PRESSURE2` | 5.0 Hz | **51.6 Hz** |
+
+⛔ **A 100 Hz request ACKed `ACCEPTED` and delivered 50** — the firmware's
+`RATE_MIN_MS = 20` floor. The ACK is a claim; the arrival rate is the fact.
+Same shape as `REQUEST_MESSAGE` accepting all 190 ids and emitting 7.
+
+### What the inertial sensor is good for, and what it is not
+
+Static, flat, 250 samples at 10 Hz:
+
+| | |
+|---|---|
+| accel quantisation | **1 mg** (int16 mg on the wire) |
+| accel bias (`xacc`) | **−17 mg = 0.167 m/s²** |
+| gyro noise | sd **8–15 mrad/s** = 0.46–0.87 °/s |
+| ATTITUDE roll/pitch stability | **0.10–0.16°** over 25 s |
+| ATTITUDE yaw drift | 0.458° over 25 s |
+
+**Integrating that accelerometer is hopeless, and the number says so:**
+
+| integrated | phantom velocity | phantom position |
+|---|---|---|
+| 1 s | 0.17 m/s | 0.08 m |
+| 5 s | 0.83 m/s | 2.08 m |
+| 10 s | 1.67 m/s | **8.34 m** |
+| 30 s | 5.00 m/s | **75.05 m** |
+
+A 20 kg hull cruising at 0.65 m/s is buried by its own accelerometer inside
+five seconds. **Velocity must be OBSERVED, never propagated** — which is what
+RD-VIO (Applied Ocean Research 2023) and DeepVL (ICRA 2025) both conclude for
+underwater vehicles, and what `nav_estimator.py` is built on.
+
+**The gyro sets the floor on flow de-rotation.** At h = 0.5 m, f = 514 px,
+dt = 33 ms, the measured gyro noise costs:
+
+| axis | sd | de-rotation error | velocity error |
+|---|---|---|---|
+| xgyro | 0.46 °/s | 0.14 px | **4.0 mm/s** |
+| ygyro | 0.49 °/s | 0.15 px | 4.2 mm/s |
+| zgyro | 0.87 °/s | 0.26 px | 7.6 mm/s |
+
+Our measured static velocity noise floor is ~15 mm/s (the 0.5 px flow floor),
+so the gyro is the same order: **de-rotation cannot be better than its gyro**,
+and buying a quieter flow measurement past this point buys nothing.
+
+### Why scale survives a constant-velocity cruise
+
+Monocular scale is unobservable without accelerometer excitation, and a transit
+at constant velocity has none. Adding a **range** measurement removes scale
+from the observability nullspace (Delaune & Bayard, *Range-Visual-Inertial
+Odometry: Scale Observability Without Excitation*, RA-L 2021 — the approach
+flown on NASA's Ingenuity). Our range is the altitude above the floor. That is
+the theoretical reason a cruising velocity estimate is possible here at all,
+and it is why the altitude input is not optional.
+
+### Dead-reckoning budget — seconds of blind flight
+
+From a converged filter (velocity fixed to ~0.02 m/s), time until position
+sigma passes each bound:
+
+| `q_vel` | 10 cm | 25 cm | 50 cm | 100 cm |
+|---|---|---|---|---|
+| **0.35** (default) | 0.5 s | 0.9 s | 1.5 s | 2.3 s |
+| 0.15 | 0.9 s | 1.6 s | 2.5 s | 4.1 s |
+| 0.05 | 1.8 s | 3.3 s | 5.3 s | 8.4 s |
+
+**`q_vel` must be fitted in water from NIS** — a bench cannot produce the
+accelerations that decide it, and lowering it without that measurement buys
+coast time by asserting the hull is calmer than it is.
