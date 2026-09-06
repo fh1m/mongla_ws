@@ -36,8 +36,16 @@ import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection2DArray
+
+try:                                   # noqa: SIM105
+    from duburi_interfaces.msg import TargetPose
+except ImportError:                    # message not built in this workspace
+    # The LADDER must survive it. A pose is an addition to what this node does,
+    # not a precondition, so an unbuilt interface costs the 6-DoF topic and
+    # nothing else -- the follower and anchor rungs still publish `/lock`.
+    TargetPose = None
 
 from duburi_vision import qos as _qos
 from duburi_vision.stamps import capture_monotonic
@@ -110,6 +118,24 @@ class LockNode(Node):
         self._det_header = None
         self._anchor_header = None
         self._stamp_warned = False
+        # 6-DoF: needs K at the BACKEND's resolution (the frame H is fitted in)
+        # and the target's true width. Both absent by default -- no width means
+        # no metric answer, and guessing one would make every range wrong by a
+        # constant nobody could see.
+        self._K = None
+        self._target_w_m = float(
+            self.declare_parameter('target_width_m', 0.0).value or 0.0)
+        self._pub_pose = (
+            self.create_publisher(TargetPose, f'{ns}/target_pose',
+                                  _qos.DETECTIONS)
+            if TargetPose is not None else None)
+        if TargetPose is None:
+            self.get_logger().warn(
+                '[LOCK ] duburi_interfaces/TargetPose not built -- the 6-DoF '
+                'target pose will not be published (the ladder is unaffected). '
+                'Rebuild duburi_interfaces to enable it.')
+        self.create_subscription(CameraInfo, f'{ns}/camera_info',
+                                 self._on_info, 10)
         self._det_box = None
         self._det_conf = 0.0
         self._det_t = 0.0
@@ -176,6 +202,64 @@ class LockNode(Node):
             self._gray = g
             self._header = msg.header
         self._fresh.set()
+
+    def _on_info(self, msg):
+        """K, scaled to the anchor backend's resolution.
+
+        The homography and the correspondences live in backend pixels, so a
+        full-resolution K would scale every recovered angle -- silently, with
+        no error and a plausible number. Same trap as the anchor's ROI.
+        """
+        k = list(msg.k)
+        if len(k) < 9 or k[0] <= 0.0 or self._anchor is None:
+            return
+        sx = self._anchor._be.w / float(msg.width or 1)
+        sy = self._anchor._be.h / float(msg.height or 1)
+        self._K = np.array([[k[0] * sx, 0.0, k[2] * sx],
+                            [0.0, k[4] * sy, k[5] * sy],
+                            [0.0, 0.0, 1.0]], np.float64)
+
+    def _publish_pose(self, pose, header):
+        """6-DoF from the anchor's inliers, when calibrated and sized.
+
+        Published on its OWN topic, never folded into `/lock`: the ladder's box
+        is what the control loop steers on, and a pose is a different claim
+        with a different failure mode. Absence of this message means no pose --
+        there is no "invalid" flag to misread.
+        """
+        if self._pub_pose is None:
+            return
+        from duburi_vision.anchor.pose import target_pose
+        m = TargetPose()
+        if header is not None:
+            m.header = header
+        if (self._K is None or self._target_w_m <= 0.0 or pose is None
+                or not pose.ok):
+            m.ok = False
+            m.reason = ('no camera_info' if self._K is None else
+                        'target_width_m unset' if self._target_w_m <= 0.0
+                        else 'no anchor')
+            self._pub_pose.publish(m)
+            return
+        roi = self._anchor.reference_roi
+        wh = ((roi[2] - roi[0], roi[3] - roi[1]) if roi
+              else (self._anchor._be.w, self._anchor._be.h))
+        tp = target_pose(pose.ref_pts, pose.live_pts, self._K,
+                         width_m=self._target_w_m, ref_size_px=wh)
+        m.ok = bool(tp.ok)
+        m.reason = tp.reason
+        m.n_points = int(min(tp.n_points, 65535))
+        m.reproj_px = float(tp.reproj_px if tp.reproj_px == tp.reproj_px else 0.0)
+        m.ambiguity = float(tp.ambiguity if tp.ambiguity == tp.ambiguity else 0.0)
+        if tp.ok:
+            m.yaw_deg, m.pitch_deg, m.roll_deg = (float(tp.yaw_deg),
+                                                  float(tp.pitch_deg),
+                                                  float(tp.roll_deg))
+            m.range_m = float(tp.range_m)
+            m.yaw_spread_deg = float(tp.yaw_spread_deg)
+            m.pitch_spread_deg = float(tp.pitch_spread_deg)
+            m.off_axis_deg = float(tp.off_axis_deg)
+        self._pub_pose.publish(m)
 
     def _on_det(self, msg):
         best = None
@@ -278,6 +362,11 @@ class LockNode(Node):
             self._publish(st, header_for(st.rung, detection=det_header,
                                          frame=header,
                                          anchor=self._anchor_header))
+            # The pose rides the ANCHOR's header: it is derived from that
+            # frame's correspondences, not from whichever frame just arrived.
+            if self._anchor is not None:
+                self._publish_pose(self._anchor_pose,
+                                   self._anchor_header or header)
 
     def _publish(self, st, header):
         """`header` is the frame the WINNING RUNG observed, not the newest one.

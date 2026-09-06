@@ -371,3 +371,47 @@ def test_the_COAST_gap_is_measured_from_capture_not_from_the_query():
     lag = time.monotonic() - stamp
     assert lag == pytest.approx(0.200, abs=0.04), (
         f'sighting recorded {lag * 1000:.0f} ms ago for a 200 ms-old frame')
+
+
+# --------------------------------------------------------------------------- #
+#  The squareness gate the fire path asks
+# --------------------------------------------------------------------------- #
+def _pose_msg(off_axis, yaw_spread=0.0, pitch_spread=0.0, ok=True, wall=None):
+    return SimpleNamespace(
+        header=_msg_stamped_wall(time.time() if wall is None else wall).header,
+        ok=ok, reason='', off_axis_deg=off_axis, yaw_spread_deg=yaw_spread,
+        pitch_spread_deg=pitch_spread, yaw_deg=off_axis, pitch_deg=0.0,
+        roll_deg=0.0, range_m=1.5, reproj_px=1.0, ambiguity=0.2, n_points=80)
+
+
+def test_square_within_uses_the_WORSE_flip_branch():
+    """Both branches are legitimate answers. Reading the point estimate alone
+    fires on the lucky one, which is the exact failure the whole 6-DoF path
+    exists to prevent: a 3 deg estimate with a 20 deg interval is not square."""
+    vs = _bare_vstate()
+    vs._on_target_pose(_pose_msg(off_axis=3.0, yaw_spread=20.0))
+    assert vs.square_within(5.0) is False
+    vs._on_target_pose(_pose_msg(off_axis=3.0, yaw_spread=1.0))
+    assert vs.square_within(5.0) is True
+
+
+def test_NO_POSE_is_NOT_SQUARE():
+    """An absent lock_node, an uncalibrated camera and an unset target width
+    all land here. For a firing gate the fail-safe direction is refuse."""
+    assert _bare_vstate().square_within(90.0) is False
+
+
+def test_a_REFUSED_pose_is_not_square_however_small_its_numbers():
+    vs = _bare_vstate()
+    vs._on_target_pose(_pose_msg(off_axis=0.0, ok=False))
+    assert vs.square_within(45.0) is False
+
+
+def test_a_STALE_pose_is_not_square():
+    """The pose ages on the CAPTURE clock like everything else. A hull that has
+    moved since the last pose is not known to be square any more."""
+    vs = _bare_vstate()
+    vs._on_target_pose(_pose_msg(off_axis=0.5, wall=time.time() - 3.0))
+    assert vs.square_within(5.0, max_age_s=1.0) is False
+    assert vs.square_within(5.0, max_age_s=0.0) is True, \
+        'max_age_s=0 must mean "do not age-check", not "always stale"'

@@ -1631,3 +1631,82 @@ def test_downward_surge_brakes_on_arrival():
     _, _, writers = _align(_FakeVision(seq), axes={'lat', 'depth'}, downward=True,
                            align_stable_frames=3, err_px=10.0, duration=0.6)
     assert writers.forwards, 'downward arrival must brake the Ch5 surge coast'
+
+
+# --------------------------------------------------------------------------- #
+#  The squareness gate -- 6-DoF pose in front of the trigger
+# --------------------------------------------------------------------------- #
+def test_the_squareness_gate_is_OFF_by_default():
+    """Off must be byte-for-byte the previous behaviour. A gate that switched
+    itself on would silently stop every existing torpedo mission firing."""
+    calls = []
+    out, _pix, _w = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3,
+                           duration=2.0, on_locked=lambda: calls.append(1),
+                           fire_t=0.0)
+    assert out.code == ALIGNED and len(calls) == 1
+
+
+def test_a_NOT_SQUARE_target_HOLDS_the_shot():
+    """A round leaves along the hull's axis: centred is not aligned. Fired
+    30 deg off-normal it misses an opening it was perfectly centred on."""
+    calls = []
+    out, _pix, _w = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3,
+                           duration=2.0, on_locked=lambda: calls.append(1),
+                           fire_t=0.0, require_square_deg=5.0,
+                           square_fn=lambda tol: False)
+    assert out.code == ALIGNED, 'the gate must hold the SHOT, not the align'
+    assert calls == [], 'fired at a target that is not square'
+
+
+def test_a_SQUARE_target_still_fires():
+    calls = []
+    _out, _pix, _w = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3,
+                            duration=2.0, on_locked=lambda: calls.append(1),
+                            fire_t=0.0, require_square_deg=5.0,
+                            square_fn=lambda tol: True)
+    assert len(calls) == 1
+
+
+def test_NO_POSE_means_NO_FIRE():
+    """An absent lock_node, an uncalibrated camera or an unset target width all
+    arrive here as a falsey answer. For a firing gate the fail-safe direction
+    is DO NOT FIRE -- the opposite choice fires on no information at all."""
+    calls = []
+    _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3, duration=2.0,
+           on_locked=lambda: calls.append(1), fire_t=0.0,
+           require_square_deg=5.0, square_fn=None)
+    assert calls == []
+
+
+def test_a_RAISING_gate_refuses_rather_than_killing_the_loop():
+    """The fire path must never take the control loop down with it, and a gate
+    that threw must not be read as permission."""
+    calls = []
+    def boom(_tol):
+        raise RuntimeError('pose node died')
+    out, _pix, _w = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3,
+                           duration=2.0, on_locked=lambda: calls.append(1),
+                           fire_t=0.0, require_square_deg=5.0, square_fn=boom)
+    assert out.code == ALIGNED and calls == []
+
+
+def test_a_HELD_shot_still_fires_once_the_hull_squares_up():
+    """A refusal is 'not yet', not 'never': the gate must not consume the shot.
+    Otherwise a hull that squares up during the hold has already lost it."""
+    calls = []
+    state = {'n': 0}
+    def gate(_tol):
+        state['n'] += 1
+        return state['n'] > 3          # square only after a few ticks
+    _align(_FakeVision(_sample(ex=0.1)), hold_s=0.6, duration=2.0,
+           on_locked=lambda: calls.append(1), fire_t=0.0,
+           require_square_deg=5.0, square_fn=gate)
+    assert len(calls) == 1, f'expected the delayed shot, got {len(calls)}'
+
+
+def test_the_gate_is_asked_with_the_operators_tolerance():
+    seen = []
+    _align(_FakeVision(_sample(ex=0.1)), hold_s=0.3, duration=2.0,
+           on_locked=lambda: None, fire_t=0.0, require_square_deg=7.0,
+           square_fn=lambda tol: seen.append(tol) or True)
+    assert seen and all(t == 7.0 for t in seen)
