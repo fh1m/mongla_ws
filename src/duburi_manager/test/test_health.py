@@ -149,3 +149,69 @@ def test_a_dead_board_link_is_FAILED_and_a_broken_check_is_UNKNOWN():
     def boom():
         raise IOError('port gone')
     assert R.board_link(SimpleNamespace(link_alive=boom)).state is State.UNKNOWN
+
+
+# --------------------------------------------------------------------------- #
+#  The wiring: something must actually POLL it
+# --------------------------------------------------------------------------- #
+def _manager_stub(fc=None, det_hz=None):
+    """The manager's health methods on a bare object.
+
+    The methods under test are the SHIPPING ones, taken off the class, so they
+    cannot drift from what runs -- the same reason `test_detector_recovery`
+    stopped testing the handler in isolation.
+    """
+    from duburi_manager.auv_manager_node import AUVManagerNode as N
+    m = SimpleNamespace()
+    m.fc = fc or SimpleNamespace()
+    m.vision = SimpleNamespace(stats=lambda: {'det_hz': det_hz}) if det_hz is not None else None
+    m._health = HealthBoard()
+    m._health_last = None
+    lines = []
+    m.get_logger = lambda: SimpleNamespace(
+        info=lambda s: lines.append(('info', s)),
+        warn=lambda s: lines.append(('warn', s)),
+        error=lambda s: lines.append(('error', s)))
+    m.lines = lines
+    m._register_health = N._register_health.__get__(m)
+    m._detection_rate_hz = N._detection_rate_hz.__get__(m)
+    m._health_tick = N._health_tick.__get__(m)
+    return m
+
+
+def test_a_backend_MISSING_a_method_is_UNKNOWN_not_a_crash():
+    """The manager runs against two backends and a sim. A health board that
+    takes down the node it is watching is worse than no board."""
+    m = _manager_stub(fc=SimpleNamespace())      # no link_alive, no ESCs
+    m._register_health()
+    states = {k: v.state for k, v in m._health.poll().items()}
+    assert set(states) >= {'board_link', 'barometer', 'thrusters', 'detector'}
+    assert all(s is not State.OK for s in states.values())
+
+
+def test_the_tick_speaks_only_when_the_STATE_CHANGES():
+    """A board that logs every second is a board nobody reads."""
+    m = _manager_stub(fc=SimpleNamespace(link_alive=lambda: True))
+    m._register_health()
+    m._health_tick()
+    n1 = len(m.lines)
+    m._health_tick(); m._health_tick()
+    assert len(m.lines) == n1, 'logged an unchanged state'
+
+
+def test_a_DEAD_DETECTOR_reaches_the_board():
+    """THE D16 SIGNAL. A detector that aborts keeps every topic and every
+    process; only the RATE changes, and nothing was watching it."""
+    m = _manager_stub(fc=SimpleNamespace(link_alive=lambda: True), det_hz=0.0)
+    m._register_health()
+    m._health.poll()
+    assert m._health.get('detector').state is State.FAILED
+    m._health_tick()
+    assert any('detector' in s for _k, s in m.lines), m.lines
+
+
+def test_a_HEALTHY_detector_does_not_trip_it():
+    m = _manager_stub(fc=SimpleNamespace(link_alive=lambda: True), det_hz=42.0)
+    m._register_health()
+    m._health.poll()
+    assert m._health.get('detector').state is State.OK
