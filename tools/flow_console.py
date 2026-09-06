@@ -81,6 +81,7 @@ SIM_RESET = threading.Event()
 # itself, and append the result to a file.
 RUNS_PATH = '/tmp/flow_runs.json'
 ARM = {'phase': None, 'truth': 0.30, 'state': 'idle'}
+SCORE_NOW = threading.Event()
 RUNS = []
 
 
@@ -355,7 +356,17 @@ def worker(args):
                 moved_recently = float('inf')
             travelled = math.hypot(x - cap_x0, y - cap_y0)
 
-            if travelled >= args.min_capture_m and moved_recently < args.still_m:
+            # THE OPERATOR ENDS THE RUN. No stillness heuristic beats the
+            # person who just stopped sliding, and three of them have now been
+            # wrong here in a row -- each one closing the capture mid-slide and
+            # reporting a correct sensor as short. Auto-stop is kept as a
+            # convenience with settings loose enough for a slow hand
+            # (2 s below 6 mm), but the button is the ground truth for WHEN.
+            forced = SCORE_NOW.is_set()
+            if forced:
+                SCORE_NOW.clear()
+            if travelled >= args.min_capture_m and (
+                    forced or moved_recently < args.still_m):
                 dx, dy = x - cap_x0, y - cap_y0
                 ph = ARM['phase']
                 truth = float(ARM['truth'])
@@ -490,6 +501,9 @@ button:active{transform:translateY(1px)}
 .rb.on{background:#33290f;border-color:#8a6a1e;color:#ffc861}
 .rb.ok{background:#10331f;border-color:#2c6b45;color:#5ee2a0}
 .armed{margin-top:10px;font-size:12px;color:#ffc861;min-height:16px}
+.score{margin-top:8px;margin-bottom:0;background:#1d2a1f;border-color:#2c6b45;
+ color:#5ee2a0}
+.score:hover{background:#24371f;border-color:#3d8a5b}
 #rtab{margin-top:8px}
 #rtab td{border-top:1px solid #161b23;padding:5px 0;font-size:11px}
 .good{color:#5ee2a0}.bad{color:#ff8080}.meh{color:#ffc861}
@@ -517,6 +531,7 @@ h2{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#4e5666;
     <button class=rb onclick="arm('back')" id=b_back>Back</button>
     <button class=rb onclick="arm('lat')" id=b_lat>Lateral</button>
    </div>
+   <button class=score onclick="fetch('/score')" id=bscore>I have stopped &mdash; score it</button>
    <div id=armed class=armed></div>
    <table id=rtab></table>
    <div class=rfoot>
@@ -592,8 +607,9 @@ async function runs(){
     if(d.runs.some(r=>r.phase===p)) b.className='rb ok';
   });
   $('armed').textContent = st==='armed'
-    ? 'ARMED for '+ph.toUpperCase()+' — slide 30 cm now, then stop.'
+    ? 'ARMED for '+ph.toUpperCase()+' — slide, then press score.'
     : (st==='done' ? 'captured. arm the next axis.' : '');
+  $('bscore').style.opacity = st==='armed' ? '1' : '0.35';
  }catch(e){}
  setTimeout(runs,400);
 }
@@ -680,6 +696,9 @@ class H(BaseHTTPRequestHandler):
             SIM_RESET.set()
             RESET.set()
             return self._json({'ok': True, 'phase': ARM['phase']})
+        if self.path.startswith('/score'):
+            SCORE_NOW.set()
+            return self._json({'ok': True})
         if self.path.startswith('/disarm'):
             ARM['state'] = 'idle'
             return self._json({'ok': True})
@@ -724,8 +743,8 @@ def main():
     p.add_argument('--rot-max', type=float, default=0.80)
     p.add_argument('--max-disp', type=float, default=5.0)
     p.add_argument('--move-thresh', type=float, default=0.03)
-    p.add_argument('--still-s', type=float, default=0.9)
-    p.add_argument('--still-m', type=float, default=0.015,
+    p.add_argument('--still-s', type=float, default=2.0)
+    p.add_argument('--still-m', type=float, default=0.006,
                    help='position change over still_s that counts as stopped')
     p.add_argument('--min-capture-m', type=float, default=0.08,
                    help='a move smaller than this is a nudge, not a run')
