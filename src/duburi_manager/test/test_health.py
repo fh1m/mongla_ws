@@ -217,3 +217,16 @@ def test_a_HEALTHY_detector_does_not_trip_it():
     m._register_health()
     m._health.poll()
     assert m._health.get('detector').state is State.OK
+
+
+def test_the_gyro_is_actually_REQUESTED_from_the_board():
+    """Flow de-rotation needs raw gyro, and SCALED_IMU2 was missing from the
+    srot rate table entirely -- so it ran at the board's 10 Hz default while
+    the camera ran at 30+, sharing one omega across three frames. Rotational
+    flow does not depend on range, so a wrong omega is subtracted at full
+    strength before the translation is ever scaled."""
+    from pymavlink import mavutil
+    from duburi_manager.auv_manager_node import SROT_MESSAGE_RATES
+    mid = mavutil.mavlink.MAVLINK_MSG_ID_SCALED_IMU2
+    assert mid in SROT_MESSAGE_RATES, 'the estimator has no gyro'
+    assert SROT_MESSAGE_RATES[mid] >= 50, 'gyro below the camera rate'
