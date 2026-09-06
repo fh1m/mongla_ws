@@ -277,6 +277,15 @@ def run(args):
         print(f'    truth     : {args.truth * 100:.1f} cm')
         print(f'    ERROR     : {err * 100:+.2f} cm  '
               f'({100.0 * abs(d) / args.truth:.1f} % of truth)')
+        # THE HEIGHT THE OPTICS IMPLY, given the tape. Velocity scales
+        # linearly with h, so any scale error lands here -- and this turns an
+        # unexplained percentage into a number you can check with the same
+        # tape. If this disagrees with the measured lens-to-floor by more than
+        # the tape's own accuracy, the height is the thing to fix, not a gain.
+        if abs(d) > 1e-6:
+            implied = h * args.truth / abs(d)
+            print(f'    implied h : {implied:.3f} m  (you measured '
+                  f'{h:.3f} m -- they should agree)')
     print(f'    path      : {res["path"] * 100:.2f} cm   '
           f'(vs |displacement| {abs(d) * 100:.2f})')
     print(f'    intervals : {res["used"]} used / {res["refused"]} refused '
