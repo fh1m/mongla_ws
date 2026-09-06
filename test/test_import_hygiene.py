@@ -17,6 +17,7 @@ The root `conftest.py` fixes it. These assert the fix is in force, because a
 path fix that stops working fails exactly the way the original bug did: green,
 and about the wrong file.
 """
+import importlib.util
 import pathlib
 import sys
 
@@ -36,10 +37,24 @@ def test_there_are_source_packages_to_check():
     assert SOURCE_PACKAGES, f'no python source packages under {SRC}'
 
 
+def _resolved(name: str) -> pathlib.Path:
+    """WHERE would `import <name>` land -- without running it.
+
+    `__import__` would answer the same question, but by executing the package,
+    and these are ROS packages: `duburi_vision/__init__` reaches rclpy. On a
+    box where ROS is not sourced that turns a PATH question into an unrelated
+    ModuleNotFoundError, which is exactly what it did on the Pi -- reporting a
+    shadowing failure that was really a missing environment. `find_spec` does
+    the resolution and stops."""
+    spec = importlib.util.find_spec(name)
+    assert spec is not None, f'{name} does not resolve at all'
+    assert spec.origin, f'{name} resolved to a namespace package: {spec}'
+    return pathlib.Path(spec.origin).resolve()
+
+
 @pytest.mark.parametrize('name', SOURCE_PACKAGES)
 def test_the_package_imports_from_THIS_checkout(name):
-    mod = __import__(name)
-    where = pathlib.Path(getattr(mod, '__file__', '') or '').resolve()
+    where = _resolved(name)
     assert ROOT in where.parents, (
         f'{name} imported from {where}, which is OUTSIDE this checkout '
         f'({ROOT}). A colcon install tree is shadowing the source -- the '
@@ -50,8 +65,7 @@ def test_the_package_imports_from_THIS_checkout(name):
 def test_the_package_is_not_served_from_an_install_tree(name):
     """Stricter and separately useful: even inside this checkout, `install/`
     and `build/` are colcon artefacts and go stale the moment source moves."""
-    mod = __import__(name)
-    where = str(pathlib.Path(getattr(mod, '__file__', '') or '').resolve())
+    where = str(_resolved(name))
     assert '/install/' not in where and '/build/' not in where, where
 
 
@@ -61,10 +75,11 @@ def test_duburi_interfaces_is_still_reachable():
     it must keep coming from the install tree. A conftest that purged it
     would break `from duburi_interfaces.msg import DuburiState` in every node
     test, which is why the rule is 'shadow only what we have source for'."""
-    pytest.importorskip(
-        'duburi_interfaces',
-        reason='workspace not built here; nothing to shadow either')
-    from duburi_interfaces.msg import DuburiState  # noqa: F401
+    spec = importlib.util.find_spec('duburi_interfaces')
+    if spec is None:
+        pytest.skip('workspace not built here; nothing to shadow either')
+    # Resolved, and deliberately NOT from source -- there is none.
+    assert spec.origin, spec
 
 
 def test_no_install_shadow_survives_on_sys_path():
