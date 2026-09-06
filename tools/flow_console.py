@@ -247,8 +247,7 @@ def worker(args):
 
         if anchor is None or anchor_pts is None or len(anchor_pts) < _MIN_TRACKS:
             anchor, anchor_t = gray, t
-            anchor_pts = cv2.goodFeaturesToTrack(gray, mask=None,
-                                                 **_FEATURE_PARAMS)
+            anchor_pts = _fm.detect_corners(gray, want=args.want_points)
             _publish(vis, anchor_pts, None, STATE)
             continue
 
@@ -266,8 +265,7 @@ def worker(args):
         draw = (anchor_pts, nxt, status)
         if flow is None:
             anchor, anchor_t = gray, t
-            anchor_pts = cv2.goodFeaturesToTrack(gray, mask=None,
-                                                 **_FEATURE_PARAMS)
+            anchor_pts = _fm.detect_corners(gray, want=args.want_points)
             refused += 1
             reason = 'LK lost the anchor'
             _publish(vis, anchor_pts, None, STATE)
@@ -300,7 +298,7 @@ def worker(args):
             if r:
                 pr, rr = r
         anchor, anchor_t = gray, t
-        anchor_pts = cv2.goodFeaturesToTrack(gray, mask=None, **_FEATURE_PARAMS)
+        anchor_pts = _fm.detect_corners(gray, want=args.want_points)
 
         v = _fv.flow_velocity(flow[0], flow[1], dt, f_px=f_px, height_m=h,
                               pitch_rate=-pr, roll_rate=-rr,
@@ -704,6 +702,7 @@ def main():
     p.add_argument('--sim-slide', type=float, default=0.0,
                    help='self-test: synthesise this slide, metres')
     p.add_argument('--sim-speed', type=float, default=0.15)
+    p.add_argument('--want-points', type=int, default=80)
     a = p.parse_args()
     _load_runs()
     threading.Thread(target=worker, args=(a,), daemon=True).start()
