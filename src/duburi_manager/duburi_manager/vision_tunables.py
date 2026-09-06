@@ -104,6 +104,14 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # when max_depth_m >= 0 as a fail-safe against an unbounded dive).
     'vision.max_depth_m':          0.0,
     'vision.depth_ceiling':        0.0,
+
+    # AIM GATE. How far the TARGET'S FACE may be tilted from square to our shot
+    # axis and still allow the payload to fire, in degrees. 0.0 = OFF, which is
+    # byte-identical to the pre-gate behaviour, so no existing mission changes.
+    # A sensible pool starting point is 5-8 deg: measured pose accuracy is
+    # ~1.4 deg p90 at our matcher noise, and the flip interval it reports is
+    # added on top before the comparison.
+    'vision.fire_max_tilt_deg':    0.0,
     # NOTE: settle_px is deliberately NOT a deck param. It is a PER-CALL kwarg on
     # vision.align (settle=) because, unlike the knobs above, it also gates the
     # mid-hold fire (both ride the stable-frame counter) -- a global value would
@@ -135,6 +143,7 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'surge_sign':          'vision.surge_sign',
         'max_depth_m':         'vision.max_depth_m',
         'depth_ceiling_m':     'vision.depth_ceiling',
+        'fire_max_tilt_deg':   'vision.fire_max_tilt_deg',
     },
     'vision_move': {
         'kp_forward':      'vision.kp_forward',
