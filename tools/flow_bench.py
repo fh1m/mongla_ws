@@ -256,8 +256,22 @@ def run(args):
     res = measure(cap, gyro, args, f_px, h, seconds=args.window, live=True)
     print('\n>>> DONE')
 
-    d = res['dist']
-    print(f'\n    measured  : {d * 100:+.2f} cm')
+    # Prefer the auto-detected move over the whole window: everything before
+    # the slide and after it is noise being integrated, and reporting it as
+    # travel would flatter or spoil the result for reasons unrelated to the
+    # sensor.
+    if res['move_found']:
+        d = res['move_y'] if args.phase == 'lat' else res['move_x']
+        other = res['move_x'] if args.phase == 'lat' else res['move_y']
+        print(f'\n    MOTION DETECTED for {res["move_s"]:.2f} s')
+        print(f'    measured  : {d * 100:+.2f} cm   '
+              f'(cross-axis {other * 100:+.2f} cm)')
+        print(f'    whole window: x={res["dist_x"] * 100:+.2f} '
+              f'y={res["dist_y"] * 100:+.2f} cm')
+    else:
+        d = res['dist']
+        print(f'\n    !!! NO MOTION DETECTED above {args.move_thresh} m/s')
+        print(f'    measured  : {d * 100:+.2f} cm  (whole window)')
     if args.truth:
         err = abs(d) - args.truth
         print(f'    truth     : {args.truth * 100:.1f} cm')
@@ -640,10 +654,15 @@ def measure(cap, gyro, args, f_px, h, seconds, live=False):
     dist_x = dist_y = 0.0
     path = 0.0
     yaw_img_hist = []
+    move_t0 = move_last = None
+    mx0 = my0 = mx1 = my1 = 0.0
+    move_done = False
     t_start = time.monotonic()
     last_report = t_start
 
     while time.monotonic() - t_start < seconds:
+        if move_done and args.auto_stop:
+            break
         ok, frame = cap.read()
         if not ok:
             continue
@@ -723,6 +742,22 @@ def measure(cap, gyro, args, f_px, h, seconds, live=False):
 
         used += 1
         yaw_img_hist.append(yaw_img)
+        # AUTO-WINDOW. The operator should not have to slide on a stopwatch:
+        # a rushed start is a real acceleration the sensor sees, and a
+        # human racing a countdown is a worse error source than the sensor.
+        # So the window is generous and the MOVE is found in the data --
+        # motion begins when speed first exceeds the threshold and ends when
+        # it has stayed below it for `still_s`.
+        spd = math.hypot(v.vx, v.vy)
+        if spd >= args.move_thresh:
+            if move_t0 is None:
+                move_t0 = t
+                mx0, my0 = dist_x, dist_y
+            move_last = t
+            mx1, my1 = dist_x, dist_y
+        elif move_t0 is not None and move_last is not None \
+                and (t - move_last) >= args.still_s and not move_done:
+            move_done = True
         sigma = max(1e-3, (h / (f_px * dt)) * (disp if disp else 1.0)
                     / math.sqrt(max(1, n_ok)))
         yaw = math.radians(gyro.yaw_deg) if gyro else 0.0
@@ -746,6 +781,9 @@ def measure(cap, gyro, args, f_px, h, seconds, live=False):
                 nav_fixes=st.n_fixes, nav_rejected=st.n_rejected,
                 used=used, refused=refused, reasons=reasons, dur=dur,
                 frames=frames, skipped=0, fallback=fallback,
+                move_x=mx1 - mx0, move_y=my1 - my0,
+                move_s=(move_last - move_t0) if (move_t0 and move_last) else 0.0,
+                move_found=move_t0 is not None,
                 px_med=float(np.median(px)) if px else 0.0,
                 px_p90=float(np.percentile(px, 90)) if px else 0.0,
                 yaw_img_rms=float(np.sqrt(np.mean(np.square(yaw_img_hist))))
@@ -766,7 +804,7 @@ def main():
     p.add_argument('--fps', type=int, default=210)
     p.add_argument('--decimate', type=int, default=7,
                    help='process every Nth frame; sets the flow baseline')
-    p.add_argument('--window', type=float, default=8.0)
+    p.add_argument('--window', type=float, default=20.0)
     p.add_argument('--medium', choices=('air', 'water'), default='air')
     p.add_argument('--port', default='/dev/ttyUSB0')
     p.add_argument('--no-gyro', action='store_true')
@@ -781,6 +819,12 @@ def main():
     p.add_argument('--ransac-px', type=float, default=2.0)
     p.add_argument('--no-planar', action='store_true')
     p.add_argument('--max-baseline', type=float, default=0.75)
+    p.add_argument('--move-thresh', type=float, default=0.03,
+                   help='m/s that counts as moving')
+    p.add_argument('--still-s', type=float, default=0.8,
+                   help='stillness that ends the move')
+    p.add_argument('--auto-stop', action='store_true',
+                   help='end the run as soon as the move ends')
     p.add_argument('--fb-px', type=float, default=1.0,
                    help='forward-backward reject threshold px; 0=off')
     run(p.parse_args())
