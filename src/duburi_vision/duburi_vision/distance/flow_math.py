@@ -259,6 +259,95 @@ class PlanarMotion:
         self.residual_px, self.reason = residual_px, reason
 
 
+class Intrinsics:
+    """fx, fy, cx, cy and distortion, at the resolution actually in use.
+
+    ⛔ THREE THINGS THE FLOW PATH WAS GETTING WRONG BY ASSUMING, and the
+    vehicle's own runs are what exposed them. Three real 30 cm slides:
+
+        lateral   30.13 cm   ratio 1.0044
+        forward   31.09 cm   ratio 1.0363
+        back      31.04 cm   ratio 1.0345
+
+    Forward and back over-read by 3.5 % while lateral over-read by 0.4 %. A
+    height error CANNOT do that -- height scales both axes identically -- so
+    something axis-dependent was wrong, and there were three candidates, all
+    of them real:
+
+    1. ONE FOCAL LENGTH FOR BOTH AXES. Pixels are not square here: fx 513.94,
+       fy 516.93 at 640 px. The axis riding image-y reads 0.58 % high.
+    2. THE PRINCIPAL POINT ASSUMED TO BE THE FRAME CENTRE. It is (308.7,
+       186.5) at 640x360, not (320, 180) -- 11.4 px out in x. The rigid fit
+       evaluates its translation AT that point, so under any rotation the
+       error is a lever arm about the wrong pivot.
+    3. NO UNDISTORTION AT ALL, with k2 = 0.098 and k3 = -0.207. Distortion
+       scales displacement by a factor that depends on RADIUS, and a 640x360
+       frame is 1.8x wider than tall -- so the horizontal axis samples a
+       radial range the vertical one never reaches. That asymmetry is
+       structural: it appears as a different scale per axis, which is exactly
+       the shape of the error measured.
+
+    Loaded from the same calibration JSON `camera_node` uses, and scaled to
+    the working resolution, because a calibration taken at 1280x720 and
+    applied at 640x360 without scaling is off by exactly 2x -- silently.
+    """
+
+    __slots__ = ('fx', 'fy', 'cx', 'cy', 'dist', 'width', 'height')
+
+    def __init__(self, fx, fy, cx, cy, dist=None, width=0, height=0):
+        self.fx, self.fy = float(fx), float(fy)
+        self.cx, self.cy = float(cx), float(cy)
+        self.dist = None if dist is None else np.asarray(dist,
+                                                         dtype=np.float64).reshape(-1)
+        self.width, self.height = int(width), int(height)
+
+    @classmethod
+    def from_json(cls, path, width: int, height: int) -> "Intrinsics":
+        import json
+        d = json.load(open(path))
+        k = d.get('camera_matrix') or d.get('K')
+        k = np.asarray(k, dtype=np.float64).reshape(3, 3)
+        cw = int(d.get('image_width') or width)
+        ch = int(d.get('image_height') or height)
+        # Scale to the resolution in use. Separately per axis: cropping and
+        # scaling are not the same operation and only the caller knows which
+        # happened, but a pure resize is by far the common case and getting
+        # the factor wrong is a clean 2x error nobody sees.
+        sx, sy = width / float(cw), height / float(ch)
+        dist = d.get('distortion_coefficients') or d.get('D')
+        if dist is not None:
+            dist = np.asarray(dist, dtype=np.float64).reshape(-1)
+        return cls(k[0, 0] * sx, k[1, 1] * sy, k[0, 2] * sx, k[1, 2] * sy,
+                   dist, width, height)
+
+    @property
+    def K(self):
+        return np.array([[self.fx, 0.0, self.cx],
+                         [0.0, self.fy, self.cy],
+                         [0.0, 0.0, 1.0]], dtype=np.float64)
+
+    def undistort_points(self, pts):
+        """Map distorted pixel coordinates to ideal pinhole ones.
+
+        Returns points in the SAME pixel frame (P=K), so everything
+        downstream -- the rigid fit, the principal point, the focal lengths --
+        keeps working in pixels and only the lens is removed.
+        """
+        import cv2
+        if self.dist is None or pts is None or len(pts) == 0:
+            return pts
+        p = np.asarray(pts, dtype=np.float32).reshape(-1, 1, 2)
+        out = cv2.undistortPoints(p, self.K, self.dist, P=self.K)
+        return out.reshape(np.asarray(pts).shape).astype(np.float32)
+
+    def __repr__(self):
+        d = 'none' if self.dist is None else np.array2string(
+            self.dist, precision=4, separator=',')
+        return (f'Intrinsics(fx={self.fx:.2f} fy={self.fy:.2f} '
+                f'cx={self.cx:.1f} cy={self.cy:.1f} {self.width}x{self.height} '
+                f'dist={d})')
+
+
 def phase_correlate_motion(prev_gray, cur_gray, dt: float, *,
                            hann=None, with_rotation: bool = True,
                            min_response: float = 0.05) -> "PlanarMotion":

@@ -114,6 +114,7 @@ class FlowVelocity:
 
 def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
                   f_px: float,
+                  fy_px: Optional[float] = None,
                   height_m: Optional[float],
                   pitch_rate: float = 0.0,
                   roll_rate: float = 0.0,
@@ -130,12 +131,24 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
     downward camera, or a known-size target's range for a forward one. They are
     the same quantity in this equation.
 
+    ⛔ `fy_px` IS NOT A REFINEMENT. Pixels are not square on this sensor:
+    calibration gives fx 513.94 and fy 516.93 at 640 px, a ratio of 1.0058.
+    The two image axes therefore convert to metres with DIFFERENT constants,
+    and using one for both makes the axis that rides image-y read 0.58 % high.
+    Measured on the vehicle, three real 30 cm slides: forward and back over-read
+    by 3.5 % while lateral over-read by 0.4 % -- an axis asymmetry that a height
+    error cannot produce, because height is isotropic. This is part of it.
+
+    Defaults to `f_px` so an existing caller is unchanged, but a caller with a
+    real calibration should pass both.
+
     Refuses rather than returning a number it cannot stand behind.
     """
     if dt <= 0.0:
         return FlowVelocity(ok=False, reason='non-positive dt')
     if f_px <= 0.0:
         return FlowVelocity(ok=False, reason='no focal length (uncalibrated)')
+    fy = float(fy_px) if fy_px and fy_px > 0.0 else float(f_px)
     if height_m is None or height_m <= 0.0:
         # A default height would turn an unknown SCALE into a confident wrong
         # speed -- the error would be a clean multiplier, invisible in every
@@ -145,7 +158,7 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
     # Rotation-induced shift over the SAME interval. Range-independent, which
     # is why it is removed here rather than after the scaling.
     rot_x = f_px * roll_rate * dt
-    rot_y = f_px * pitch_rate * dt
+    rot_y = fy * pitch_rate * dt
     net_x, net_y = dx_px - rot_x, dy_px - rot_y
 
     total = math.hypot(dx_px, dy_px)
@@ -186,7 +199,9 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
                                 reason=f'incoherent flow (dispersion '
                                        f'{ratio:.2f}x the motion)')
 
-    scale = height_m / (f_px * dt)
-    return FlowVelocity(ok=True, vx=net_y * scale, vy=net_x * scale,
+    # Per-axis scale: image-x converts through fx, image-y through fy.
+    sx = height_m / (f_px * dt)
+    sy = height_m / (fy * dt)
+    return FlowVelocity(ok=True, vx=net_y * sy, vy=net_x * sx,
                         rot_fraction=frac, net_flow_px=net,
                         dispersion_ratio=ratio, height_m=height_m)

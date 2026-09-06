@@ -1,6 +1,7 @@
 """Pure-math tests for the downward optical-flow distance core (no ROS/cv2)."""
 
 import math
+import pathlib
 
 import numpy as np
 import pytest
@@ -8,7 +9,7 @@ import pytest
 from duburi_vision.distance.flow_math import (
     height_above_floor, rotation_flow_px, axis_unit, project, robust_flow,
     interp_rate, integrate_rate, solve_planar_motion, DistanceAccumulator,
-    HeightFromDivergence,
+    HeightFromDivergence, Intrinsics,
 )
 
 
@@ -367,3 +368,68 @@ class TestHeightFromDivergence:
         h = HeightFromDivergence()
         assert h.add(scale_rate=0.10, vz_ms=0.25) == pytest.approx(2.5)
         assert h.add(scale_rate=-0.10, vz_ms=0.25) is None
+
+
+# --------------------------------------------------------------------------- #
+#  Intrinsics -- fx != fy, the principal point is not the centre, lenses distort
+# --------------------------------------------------------------------------- #
+class TestIntrinsics:
+    """Three assumptions the flow path made, all wrong, all axis-dependent --
+    which is why they surfaced as a 3.08 % asymmetry between forward/back
+    (ratio 1.0354) and lateral (1.0044) on real 30 cm slides. A height error
+    cannot do that; height scales both axes identically."""
+
+    CAL = (pathlib.Path(__file__).resolve().parents[1] / 'config' /
+           'calibration' / 'pi_forward_1280x720.json')
+
+    def _i(self, w=640, h=360):
+        return Intrinsics.from_json(str(self.CAL), w, h)
+
+    def test_the_calibration_scales_to_the_working_resolution(self):
+        """Calibrated at 1280x720, run at 640x360. Applying it unscaled is a
+        clean factor-of-two error that nothing would report."""
+        full = self._i(1280, 720)
+        half = self._i(640, 360)
+        assert half.fx == pytest.approx(full.fx / 2, rel=1e-9)
+        assert half.cy == pytest.approx(full.cy / 2, rel=1e-9)
+
+    def test_the_pixels_are_not_square(self):
+        """fy/fx = 1.0058, so the axis riding image-y reads 0.58 % high when
+        one focal length is used for both."""
+        i = self._i()
+        assert i.fy != i.fx
+        assert i.fy / i.fx == pytest.approx(1.0058, abs=0.001)
+
+    def test_the_principal_point_is_NOT_the_frame_centre(self):
+        """It is 11.4 px out in x. The rigid fit evaluates its translation AT
+        this point, so under rotation the error is a lever arm about the wrong
+        pivot."""
+        i = self._i()
+        assert abs(i.cx - 320.0) > 5.0, i.cx
+        assert i.cx == pytest.approx(308.7, abs=1.0)
+
+    def test_undistortion_leaves_the_centre_alone(self):
+        """The sanity check that the model is being applied the right way
+        round: distortion is zero at the principal point by construction."""
+        i = self._i()
+        p = np.array([[i.cx, i.cy]], dtype=np.float32)
+        out = i.undistort_points(p)
+        assert np.hypot(out[0][0] - i.cx, out[0][1] - i.cy) < 0.05
+
+    def test_distortion_is_ASYMMETRIC_between_the_axes(self):
+        """The mechanism behind the measured asymmetry. A 640x360 frame is
+        1.8x wider than tall, so the horizontal axis samples a radial range
+        the vertical one never reaches -- measured 3.37 px of correction at
+        the x edge against 1.62 px at the y edge."""
+        i = self._i()
+        xe = np.array([[630.0, i.cy]], dtype=np.float32)
+        ye = np.array([[i.cx, 355.0]], dtype=np.float32)
+        ux, uy = i.undistort_points(xe), i.undistort_points(ye)
+        shift_x = abs(ux[0][0] - 630.0)
+        shift_y = abs(uy[0][1] - 355.0)
+        assert shift_x > 1.5 * shift_y, (shift_x, shift_y)
+
+    def test_a_missing_distortion_model_is_a_no_op_not_a_crash(self):
+        i = Intrinsics(500.0, 500.0, 320.0, 180.0, dist=None)
+        p = np.array([[100.0, 100.0]], dtype=np.float32)
+        assert np.allclose(i.undistort_points(p), p)

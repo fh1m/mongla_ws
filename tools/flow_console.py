@@ -143,6 +143,18 @@ def worker(args):
 
     f_px = F_WATER if args.medium == 'water' else F_AIR
     h = args.height
+    intr = None
+    if args.calibration:
+        try:
+            intr = _fm.Intrinsics.from_json(args.calibration, args.width,
+                                            args.height_px)
+            if args.medium == 'water':
+                k = F_WATER / intr.fx
+                intr.fx *= k; intr.fy *= k
+            f_px = intr.fx
+            print(f'  {intr}')
+        except Exception as exc:
+            print(f'  calibration unreadable ({exc}); single f, frame centre')
     cap = cv2.VideoCapture(args.device, cv2.CAP_V4L2)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
@@ -287,8 +299,14 @@ def worker(args):
         disp = _fm.flow_dispersion(anchor_pts, nxt, status)
         yaw_img = 0.0
         inliers, resid = n_ok, disp or 0.0
-        pm = _fm.solve_planar_motion(anchor_pts, nxt, status, dt,
-                                     cx=W / 2.0, cy=H / 2.0,
+        a_p, n_p = anchor_pts, nxt
+        cxx, cyy = W / 2.0, H / 2.0
+        if intr is not None and not args.no_undistort:
+            a_p = intr.undistort_points(anchor_pts)
+            n_p = intr.undistort_points(nxt)
+            cxx, cyy = intr.cx, intr.cy
+        pm = _fm.solve_planar_motion(a_p, n_p, status, dt,
+                                     cx=cxx, cy=cyy,
                                      ransac_px=args.ransac_px)
         if pm.ok:
             flow = (pm.dx_px, pm.dy_px)
@@ -306,7 +324,9 @@ def worker(args):
         anchor, anchor_t = gray, t
         anchor_pts = _fm.detect_corners(gray, want=args.want_points)
 
-        v = _fv.flow_velocity(flow[0], flow[1], dt, f_px=f_px, height_m=h,
+        v = _fv.flow_velocity(flow[0], flow[1], dt, f_px=f_px,
+                              fy_px=(intr.fy if intr is not None else None),
+                              height_m=h,
                               pitch_rate=-pr, roll_rate=-rr,
                               dispersion_px=disp,
                               min_net_flow_px=args.min_flow,
@@ -754,6 +774,9 @@ def main():
                    help='self-test: synthesise this slide, metres')
     p.add_argument('--sim-speed', type=float, default=0.15)
     p.add_argument('--want-points', type=int, default=80)
+    p.add_argument('--calibration',
+                   default='src/duburi_vision/config/calibration/pi_forward_1280x720.json')
+    p.add_argument('--no-undistort', action='store_true')
     a = p.parse_args()
     _load_runs()
     threading.Thread(target=worker, args=(a,), daemon=True).start()

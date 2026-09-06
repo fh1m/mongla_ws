@@ -55,7 +55,7 @@ from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision.distance.flow_math import (
-    DistanceAccumulator, HeightFromDivergence, detect_corners,
+    DistanceAccumulator, HeightFromDivergence, Intrinsics, detect_corners,
     flow_dispersion, forward_backward_error,
     height_above_floor, integrate_rate, interp_rate, robust_flow,
     solve_planar_motion,
@@ -165,6 +165,12 @@ class FlowVelocityNode(Node):
         # calibrated once against the gyro and then monitored, never assumed.
         self.declare_parameter('yaw_image_sign', -1.0)
         self.declare_parameter('yaw_cross_check_tol', 0.25)
+        # THE CALIBRATION, not a focal length. fx != fy, the principal point is
+        # not the frame centre, and the lens distorts -- and all three are
+        # axis-dependent, which is why they showed up as a 3 % asymmetry
+        # between forward/back and lateral on real 30 cm slides.
+        self.declare_parameter('calibration', '')
+        self.declare_parameter('undistort', True)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -188,6 +194,25 @@ class FlowVelocityNode(Node):
         self._fb_px = float(self.get_parameter('fb_reject_px').value)
         self._yaw_sign = float(self.get_parameter('yaw_image_sign').value)
         self._yaw_tol = float(self.get_parameter('yaw_cross_check_tol').value)
+        self._undistort = bool(self.get_parameter('undistort').value)
+        self._intr = None
+        cal = str(self.get_parameter('calibration').value or '').strip()
+        if cal:
+            try:
+                self._intr = Intrinsics.from_json(cal, 640, 360)
+                # The MEASURED water focal length still governs the medium; the
+                # calibration supplies the ASPECT and the lens, which are
+                # properties of the sensor and do not change with the water.
+                if self._medium == 'water':
+                    k = f_water / self._intr.fx
+                    self._intr.fx *= k
+                    self._intr.fy *= k
+                self._f_px = self._intr.fx
+            except Exception as exc:
+                self.get_logger().error(
+                    f'[FLOW ] calibration {cal!r} unreadable ({exc}); falling '
+                    f'back to a single focal length and the frame centre, '
+                    f'which measured a 3 % axis asymmetry on the bench')
         self._n_median_fallback = 0
         self._n_yaw_disagree = 0
         self._last_yaw_img = 0.0
@@ -261,6 +286,8 @@ class FlowVelocityNode(Node):
         self._worker.start()
 
         ok, why = self._scale_ready()
+        if self._intr is not None:
+            self.get_logger().info(f'[FLOW ] {self._intr}')
         self.get_logger().info(
             f'[FLOW ] camera={cam!r} medium={self._medium!r} '
             f'f={self._f_px:.1f}px (air {f_air:.1f} / water {f_water:.1f})  '
@@ -471,8 +498,19 @@ class FlowVelocityNode(Node):
         # phantom translation under rotation without ever saying so.
         if self._use_planar:
             h_, w_ = gray.shape[:2]
-            pm = solve_planar_motion(self._anchor_pts, nxt, status, dt,
-                                     cx=w_ / 2.0, cy=h_ / 2.0,
+            a_pts, n_pts = self._anchor_pts, nxt
+            if self._intr is not None and self._undistort:
+                # Remove the lens BEFORE fitting. Distortion scales a
+                # displacement by a factor that depends on RADIUS, and a
+                # 640x360 frame is 1.8x wider than tall -- so the horizontal
+                # axis samples a radial range the vertical one never reaches.
+                # Measured shift at the frame edge: 3.37 px in x, 1.62 px in y.
+                a_pts = self._intr.undistort_points(self._anchor_pts)
+                n_pts = self._intr.undistort_points(nxt)
+            cx_ = self._intr.cx if self._intr is not None else w_ / 2.0
+            cy_ = self._intr.cy if self._intr is not None else h_ / 2.0
+            pm = solve_planar_motion(a_pts, n_pts, status, dt,
+                                     cx=cx_, cy=cy_,
                                      ransac_px=self._ransac_px)
             if pm.ok:
                 flow = (pm.dx_px, pm.dy_px)
@@ -528,7 +566,9 @@ class FlowVelocityNode(Node):
         # The gains carry the sign, so the residual is measured minus fitted.
         v = flow_velocity(
             flow[0], flow[1], dt,
-            f_px=self._f_px, height_m=h,
+            f_px=self._f_px,
+            fy_px=(self._intr.fy if self._intr is not None else None),
+            height_m=h,
             pitch_rate=-self._gy * pitch_rate,
             roll_rate=-self._gx * roll_rate,
             dispersion_px=disp,
