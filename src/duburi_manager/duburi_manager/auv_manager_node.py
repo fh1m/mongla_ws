@@ -113,6 +113,17 @@ MESSAGE_RATES = {
 # depend on, and it refuses a request to disable HEARTBEAT.
 SROT_MESSAGE_RATES = {
     mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE:       50,   # Hz -- the host-loop ceiling
+    # RAW GYRO for flow de-rotation, and it was ABSENT from this table, so it
+    # ran at the board's 10 Hz default while the camera ran at 30+. Measured on
+    # the board: SET_MESSAGE_INTERVAL takes it 10.0 -> 51.6 Hz with no firmware
+    # change. It matters because rotational flow is `f * omega * dt` and does
+    # NOT depend on range, so it must be subtracted before the translation is
+    # scaled -- with a gyro sample shared across three camera frames, that
+    # subtraction is using the wrong omega for two of them.
+    #
+    # ⛔ A 100 Hz request ACKs ACCEPTED and delivers 50: the firmware's
+    # RATE_MIN_MS = 20 floor. The ACK is a claim; the arrival rate is the fact.
+    mavutil.mavlink.MAVLINK_MSG_ID_SCALED_IMU2:    50,   # Hz -- gyro, de-rotation
     mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD:        10,   # depth
     mavutil.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS:  1,
     # 291 via srot_protocol, NOT mavutil.mavlink.MAVLINK_MSG_ID_ESC_STATUS -- that
