@@ -54,6 +54,9 @@ from std_msgs.msg import Float32, Float32MultiArray, String, UInt8
 from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
 from duburi_interfaces.msg import DuburiState
+from duburi_vision.distance.flow_timing import (
+    TimeOffset, exposure_offset_s, interval_midpoint,
+)
 from duburi_vision.distance.flow_math import (
     DistanceAccumulator, HeightFromDivergence, Intrinsics, detect_corners,
     flow_dispersion, forward_backward_error,
@@ -171,6 +174,12 @@ class FlowVelocityNode(Node):
         # between forward/back and lateral on real 30 cm slides.
         self.declare_parameter('calibration', '')
         self.declare_parameter('undistort', True)
+        # TIMING. Each of these is larger than the residual the estimator
+        # removes, so they are corrected deterministically first.
+        self.declare_parameter('exposure_us', 0.0)      # V4L2 100us units
+        self.declare_parameter('stamp_at_midpoint', True)
+        self.declare_parameter('estimate_time_offset', True)
+        self.declare_parameter('time_offset_s', 0.0)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -196,6 +205,13 @@ class FlowVelocityNode(Node):
         self._yaw_tol = float(self.get_parameter('yaw_cross_check_tol').value)
         self._undistort = bool(self.get_parameter('undistort').value)
         self._intr = None
+        self._exposure_units = float(self.get_parameter('exposure_us').value)
+        self._mid = bool(self.get_parameter('stamp_at_midpoint').value)
+        self._td_estimate = bool(self.get_parameter('estimate_time_offset').value)
+        self._td = float(self.get_parameter('time_offset_s').value)
+        self._td_est = TimeOffset(max_lag_s=0.20)
+        self._td_last_fit = 0.0
+        self._td_n = 0
         cal = str(self.get_parameter('calibration').value or '').strip()
         if cal:
             try:
@@ -553,7 +569,13 @@ class FlowVelocityNode(Node):
         # adaptive baseline dt reaches ~0.5 s at 2 cm/s, and de-rotation
         # subtracts `f * omega * dt`, so a midpoint that lands on the peak of
         # a swing scales that error by the whole interval.
-        rates = integrate_rate(self._rate_buf, t - dt, t)
+        # ⛔ THE INTERVAL IS SHIFTED BY td BEFORE THE GYRO IS READ. td > 0
+        # means the image timestamps are LATE, so an image stamped t shows the
+        # world at t - td, and the gyro that belongs with it is the gyro from
+        # then. Getting this sign wrong steers de-rotation the wrong way and
+        # DOUBLES the residual rather than removing it, while returning an
+        # entirely plausible number.
+        rates = integrate_rate(self._rate_buf, t - dt - self._td, t - self._td)
         pitch_rate = roll_rate = 0.0
         if rates is not None:
             pitch_rate, roll_rate = rates
@@ -671,6 +693,29 @@ class FlowVelocityNode(Node):
         # Only meaningful when something is actually rotating: below the gyro's
         # own noise the ratio of two near-zero numbers is noise, the same trap
         # that made a motionless bench read "rotation-dominated".
+        # Feed the TIME-OFFSET estimator from the same two series. They are
+        # already computed, already known to measure one quantity, and trace
+        # correlation wants exactly this -- so td costs nothing extra.
+        if self._td_estimate:
+            self._td_est.add_image_yaw(t - dt * 0.5, img_yaw)
+            self._td_est.add_gyro_yaw(t - dt * 0.5, gyro_yaw)
+            now = time.monotonic()
+            if now - self._td_last_fit >= 5.0:
+                self._td_last_fit = now
+                got = self._td_est.estimate()
+                if got is not None and self._td_est.quality >= 0.5:
+                    self._td_n += 1
+                    # Slew rather than jump: the offset is a property of the
+                    # link, not of one window, and a step would move every
+                    # subsequent velocity's stamp discontinuously.
+                    self._td = 0.7 * self._td + 0.3 * got
+                    if self._td_n % 6 == 1:
+                        self.get_logger().info(
+                            f'[FLOW ] camera<->gyro time offset '
+                            f'{self._td * 1000:+.2f} ms (this window '
+                            f'{got * 1000:+.2f}, quality '
+                            f'{self._td_est.quality:.2f})')
+
         if abs(gyro_yaw) < 0.05 and abs(img_yaw) < 0.05:
             return
         denom = max(abs(gyro_yaw), abs(img_yaw), 1e-6)
@@ -714,8 +759,34 @@ class FlowVelocityNode(Node):
         self._maybe_log()
 
     # ── outputs ─────────────────────────────────────────────────────────────
+    def _stamp_for(self, t_end: float, dt: float) -> float:
+        """When this velocity actually happened, in host time.
+
+        ⛔ THREE CORRECTIONS, and the first is the biggest error in the whole
+        pipeline:
+
+        1. THE MIDPOINT. Flow measures DISPLACEMENT over an interval, so
+           dividing by dt gives the AVERAGE velocity across it -- which belongs
+           at the middle. PX4 defines its own flow delay parameter exactly so:
+           "to the middle of the optical flow integration interval". Our
+           baseline is ADAPTIVE and stretches to 0.75 s when the hull is slow,
+           so stamping at the END is wrong by up to 375 ms, and worst precisely
+           during station-keeping.
+
+        2. HALF THE EXPOSURE. The standard image timestamp is mid-exposure.
+           Ours reads 15.7 ms on AUTO exposure -- 7.85 ms, larger on its own
+           than the 6 ms tolerance, and it MOVES with the light.
+
+        3. td. Whatever fixed lag remains, from `TimeOffset`.
+        """
+        t = interval_midpoint(t_end - dt, t_end) if self._mid else t_end
+        t -= exposure_offset_s(self._exposure_units)
+        t -= self._td
+        return t
+
     def _publish_velocity(self, v, t, n_used, disp, h, dt, quality) -> None:
         m = TwistWithCovarianceStamped()
+        t = self._stamp_for(t, dt)
         m.header.stamp.sec = int(t)
         m.header.stamp.nanosec = int((t - int(t)) * 1e9)
         m.header.frame_id = f'{self._cam}_cam'

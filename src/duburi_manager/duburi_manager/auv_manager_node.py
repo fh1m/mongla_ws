@@ -760,6 +760,14 @@ class AUVManagerNode(Node):
         self._Vector3Stamped = Vector3Stamped
         self.imu_rates_publisher = self.create_publisher(
             Vector3Stamped, '/duburi/imu_rates', 10)
+        # Board-clock -> host-clock mapping for the IMU stamp. See
+        # _imu_rates_tick: the board's own interval has sd 0.00 ms where
+        # arrival has sd 6.67, so the sender's clock is the better time base.
+        from duburi_vision.distance.flow_timing import ClockMap
+        self._imu_clock = ClockMap(window_s=20.0, min_pairs=40)
+        self._imu_clock_fit_t = 0.0
+        self._imu_clock_ok = False
+        self._imu_clock_warned = False
 
         # Per-thruster RPM, srot only. The bench runbook's step 1 asks for this and
         # it did not exist: SrotFC.telemetry() decoded RPM but had no production
@@ -1325,17 +1333,67 @@ class AUVManagerNode(Node):
         self.state_publisher.publish(msg)
 
     def _imu_rates_tick(self):
-        """Publish body-frame angular rates (Pixhawk ATTITUDE) at 50 Hz.
+        """Publish body-frame angular rates (ATTITUDE) at 50 Hz.
 
-        x=pitch_rate, y=roll_rate, z=yaw_rate (rad/s). The vision distance node
-        buffers these + interpolates to each flow frame-pair for rotation-comp.
-        Skips when ATTITUDE hasn't arrived (no ATTITUDE stream / pre-connect).
+        x=pitch_rate, y=roll_rate, z=yaw_rate (rad/s). The flow node buffers
+        these and interpolates to each frame-pair for rotation compensation.
+        Skips when ATTITUDE hasn't arrived (no stream / pre-connect).
+
+        ⛔ THE STAMP IS THE SENDER'S CAPTURE TIME, NOT `now()`. This tick is a
+        50 Hz timer polling a cache, so it is ASYNCHRONOUS to arrival: stamping
+        `now()` added a uniform 0-20 ms of quantisation on top of transport
+        delay, and de-rotation subtracts `f*omega*dt`, so that lands directly
+        in the flow residual -- 5 ms is 1.6 px at 0.64 rad/s, and Qin & Shen
+        put the whole tolerance at 6 ms.
+
+        Measured on this vehicle: the BOARD's ATTITUDE interval is 20.00 ms
+        with sd 0.00 while host ARRIVAL is 20.00 ms with sd 6.67 and p2p 35.12.
+        All of the jitter is transport. `ClockMap` maps the board's own
+        `time_boot_ms` onto host time from one-way pairs, fitted on the LOWER
+        ENVELOPE because transport delay is strictly non-negative -- a fit
+        through the middle of the cloud measures the mean delay, not the
+        offset. The board does not implement MAVLink TIMESYNC (0 of 12
+        requests answered, measured), so this is the available route.
+
+        Falls back to arrival time, loudly, when the mapping is not yet
+        established -- an unmapped board clock is not a host clock, and
+        publishing it as one would be worse than the jitter it replaces.
         """
         rates = self.pixhawk.get_angular_rates()
         if rates is None:
             return
+
+        stamp_s = None
+        board_ms = rates.get('board_ms')
+        recv_s = rates.get('host_recv_s')
+        if board_ms is not None:
+            board_s = board_ms * 1e-3
+            if recv_s is not None:
+                self._imu_clock.add(board_s, recv_s)
+            now = time.monotonic()
+            if now - self._imu_clock_fit_t >= 2.0:
+                self._imu_clock_fit_t = now
+                self._imu_clock.fit()
+            if self._imu_clock.ready:
+                stamp_s = self._imu_clock.to_host(board_s)
+            elif not self._imu_clock_warned:
+                self._imu_clock_warned = True
+                self.get_logger().info(
+                    '[SENS ] imu_rates: board clock not mapped yet, stamping '
+                    'on arrival (adds ~6.7 ms sd of transport jitter). '
+                    'Mapping needs a few seconds of ATTITUDE.')
+
+        if stamp_s is None:
+            stamp_s = recv_s if recv_s is not None else time.time()
+        elif not self._imu_clock_ok:
+            self._imu_clock_ok = True
+            self.get_logger().info(
+                f'[SENS ] imu_rates now stamped on the BOARD clock: '
+                f'{self._imu_clock}')
+
         m = self._Vector3Stamped()
-        m.header.stamp    = self.get_clock().now().to_msg()
+        m.header.stamp.sec = int(stamp_s)
+        m.header.stamp.nanosec = int((stamp_s - int(stamp_s)) * 1e9)
         m.header.frame_id = 'duburi'
         m.vector.x = rates['pitch_rate']
         m.vector.y = rates['roll_rate']
