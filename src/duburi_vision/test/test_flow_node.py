@@ -208,3 +208,62 @@ class TestBucketedCorners:
             assert (xy[:, 1] < 180).any() and (xy[:, 1] >= 180).any()
         finally:
             n.destroy_node()
+
+
+class TestTimingCorrections:
+    """The three deterministic terms, in the node. Each is LARGER than the
+    0.218 ms residual the estimator removes, which is why they are corrected
+    rather than absorbed."""
+
+    def test_the_stamp_lands_at_the_interval_MIDPOINT(self):
+        """Flow gives displacement over an interval, so the velocity is the
+        AVERAGE across it. PX4 defines its flow delay 'to the middle of the
+        optical flow integration interval'. Our adaptive baseline reaches
+        0.75 s, so stamping at the end is wrong by up to 375 ms."""
+        n = _make(pool_depth_m=4.0, exposure_us=0.0, estimate_time_offset=False)
+        try:
+            assert n._stamp_for(100.0, 0.5) == pytest.approx(99.75)
+            assert n._stamp_for(100.0, 0.02) == pytest.approx(99.99)
+        finally:
+            n.destroy_node()
+
+    def test_half_the_exposure_is_subtracted(self):
+        """Mid-exposure is the convention. Ours is 15.7 ms on AUTO -- 7.85 ms,
+        bigger on its own than Qin & Shen's 6 ms tolerance."""
+        n = _make(pool_depth_m=4.0, exposure_us=157.0,
+                  stamp_at_midpoint=False, estimate_time_offset=False)
+        try:
+            assert n._stamp_for(100.0, 0.02) == pytest.approx(100.0 - 0.00785)
+        finally:
+            n.destroy_node()
+
+    def test_the_time_offset_shifts_the_stamp_the_RIGHT_WAY(self):
+        """td > 0 means the image is LATE, so the corrected stamp is EARLIER.
+        The opposite sign steers de-rotation backwards and doubles the
+        residual while looking entirely plausible."""
+        n = _make(pool_depth_m=4.0, exposure_us=0.0, stamp_at_midpoint=False,
+                  estimate_time_offset=False, time_offset_s=0.030)
+        try:
+            assert n._stamp_for(100.0, 0.02) == pytest.approx(99.970)
+        finally:
+            n.destroy_node()
+
+    def test_all_three_compose(self):
+        n = _make(pool_depth_m=4.0, exposure_us=157.0, stamp_at_midpoint=True,
+                  estimate_time_offset=False, time_offset_s=0.010)
+        try:
+            # midpoint 99.75, minus 7.85 ms exposure, minus 10 ms offset
+            assert n._stamp_for(100.0, 0.5) == pytest.approx(
+                99.75 - 0.00785 - 0.010)
+        finally:
+            n.destroy_node()
+
+    def test_the_corrections_can_be_switched_OFF_for_an_A_B(self):
+        """A timing change must be measurable against the old behaviour, or
+        'it got better' is an assertion rather than a result."""
+        n = _make(pool_depth_m=4.0, exposure_us=0.0, stamp_at_midpoint=False,
+                  estimate_time_offset=False, time_offset_s=0.0)
+        try:
+            assert n._stamp_for(100.0, 0.5) == pytest.approx(100.0)
+        finally:
+            n.destroy_node()

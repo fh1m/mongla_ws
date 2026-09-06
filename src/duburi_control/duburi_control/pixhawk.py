@@ -650,11 +650,19 @@ class Pixhawk:
             return None
         ts  = getattr(msg, '_timestamp', None)
         age = 0.0 if ts is None else max(0.0, time.time() - ts)
+        # `board_ms` is the AUTOPILOT'S OWN capture time (ATTITUDE.time_boot_ms).
+        # Both backends now return it so the flow pipeline can time-base on the
+        # sender's clock instead of on arrival -- measured on the srot board,
+        # the sender's interval has sd 0.00 ms where arrival has sd 6.67 and
+        # p2p 35.12. None when absent, never 0: absence is not the boot instant.
+        boot = getattr(msg, 'time_boot_ms', None)
         return {
             'roll_rate':  float(msg.rollspeed),
             'pitch_rate': float(msg.pitchspeed),
             'yaw_rate':   float(msg.yawspeed),
             'age_s':      age,
+            'board_ms':   None if boot is None else int(boot),
+            'host_recv_s': float(ts) if ts is not None else None,
         }
 
     def get_battery(self):

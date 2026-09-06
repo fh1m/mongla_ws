@@ -1567,15 +1567,39 @@ class SrotFC(FlightController):
     def get_angular_rates(self):
         """Body-frame angular rates (rad/s) from ATTITUDE, matching Pixhawk's contract:
         {'roll_rate','pitch_rate','yaw_rate','age_s'} or None. The manager's
-        _imu_rates_tick reads the *_rate keys, so they MUST match exactly."""
+        _imu_rates_tick reads the *_rate keys, so they MUST match exactly.
+
+        Also returns `board_ms` -- ATTITUDE.time_boot_ms, THE BOARD'S OWN
+        CAPTURE TIME.
+
+        ⛔ WHY THAT FIELD MATTERS AND WHY IT WAS BEING WASTED. Measured on this
+        vehicle at 50 Hz: the BOARD's interval is 20.00 ms with sd 0.00, and
+        the HOST's arrival interval is 20.00 ms with sd 6.67 and p2p 35.12.
+        The board's clock is exact; every bit of that jitter is transport
+        (ESP32 UART FIFO thresholding plus USB-serial scheduling). Anything
+        that stamps on arrival inherits all of it, and de-rotation subtracts
+        `f*omega*dt`, so 5 ms costs 1.6 px at 0.64 rad/s.
+
+        This field was already parsed and read by exactly one caller -- the
+        unplanned-reboot detector -- and thrown away everywhere else. It is the
+        jitter-free time base the flow pipeline needs; `flow_timing.ClockMap`
+        maps it onto host time (the board does not implement MAVLink TIMESYNC:
+        0 of 12 requests answered, measured).
+
+        `board_ms` is None when the field is absent, never 0 -- absence is not
+        the boot instant.
+        """
         att = self._cache('ATTITUDE')
         if att is None:
             return None
         age = time.time() - getattr(att, '_timestamp', 0.0) if getattr(att, '_timestamp', 0.0) else 0.0
+        boot = getattr(att, 'time_boot_ms', None)
         return {'roll_rate': float(getattr(att, 'rollspeed', 0.0)),
                 'pitch_rate': float(getattr(att, 'pitchspeed', 0.0)),
                 'yaw_rate': float(getattr(att, 'yawspeed', 0.0)),
-                'age_s': age}
+                'age_s': age,
+                'board_ms': None if boot is None else int(boot),
+                'host_recv_s': float(getattr(att, '_timestamp', 0.0)) or None}
 
     def heartbeat_age(self):
         hb = self._vehicle_hb()
