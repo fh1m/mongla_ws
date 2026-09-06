@@ -53,7 +53,8 @@ from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision.distance.flow_math import (
-    DistanceAccumulator, flow_dispersion, forward_backward_error,
+    DistanceAccumulator, detect_corners, flow_dispersion,
+    forward_backward_error,
     height_above_floor, integrate_rate, interp_rate, robust_flow,
     solve_planar_motion,
 )
@@ -123,6 +124,7 @@ class FlowVelocityNode(Node):
         self.declare_parameter('min_net_flow_px', 0.5)
         self.declare_parameter('max_dispersion_ratio', 5.0)
         self.declare_parameter('grid_buckets', 4)
+        self.declare_parameter('want_points', 80)
         # ADAPTIVE KEYFRAME BASELINE. Emit a velocity once this much image
         # displacement has accumulated against the anchor, rather than once
         # per frame. See `_track` for why, and measured-bars for the numbers.
@@ -158,6 +160,7 @@ class FlowVelocityNode(Node):
         self._min_flow = float(self.get_parameter('min_net_flow_px').value)
         self._max_disp = float(self.get_parameter('max_dispersion_ratio').value)
         self._buckets = max(1, int(self.get_parameter('grid_buckets').value))
+        self._want_pts = int(self.get_parameter('want_points').value)
         self._target_px = float(self.get_parameter('target_px').value)
         self._max_px = float(self.get_parameter('max_px').value)
         self._max_baseline = float(self.get_parameter('max_baseline_s').value)
@@ -338,36 +341,19 @@ class FlowVelocityNode(Node):
                 self.get_logger().error(f'[FLOW ] worker: {exc!r}')
 
     def _bucketed_corners(self, gray):
-        """Shi-Tomasi corners spread over a grid, not clustered.
+        """Corners for the anchor: spread over a grid, quality bar adaptive.
 
-        A pool floor is a repetitive lattice, and corners that all land on one
-        patch of it make a rotation and a translation look alike -- the two are
-        separated by how the flow field VARIES across the frame, so a clustered
-        set throws that away. Documented to improve ego-motion accuracy and to
-        help precisely with repetitive patterns.
+        See `flow_math.detect_corners`. A fixed Shi-Tomasi threshold is a fixed
+        assumption about the floor, and it fails quietly on the smooth ones --
+        measured 150 points on a textured surface and 19 on a plain one, with
+        no refusal from either, because 19 still clears the fit's 8-point
+        minimum while making its residual far less meaningful.
         """
-        h, w = gray.shape[:2]
-        n = self._buckets
-        if n <= 1:
-            return cv2.goodFeaturesToTrack(gray, mask=None, **_FEATURE_PARAMS)
-        per = max(4, _FEATURE_PARAMS['maxCorners'] // (n * n))
-        params = dict(_FEATURE_PARAMS, maxCorners=per)
-        out = []
-        for iy in range(n):
-            for ix in range(n):
-                y0, y1 = iy * h // n, (iy + 1) * h // n
-                x0, x1 = ix * w // n, (ix + 1) * w // n
-                sub = gray[y0:y1, x0:x1]
-                if sub.size == 0:
-                    continue
-                pts = cv2.goodFeaturesToTrack(sub, mask=None, **params)
-                if pts is None:
-                    continue
-                pts = pts.reshape(-1, 2) + np.array([x0, y0], dtype=np.float32)
-                out.append(pts)
-        if not out:
-            return None
-        return np.concatenate(out).reshape(-1, 1, 2).astype(np.float32)
+        return detect_corners(gray, want=self._want_pts,
+                              max_corners=_FEATURE_PARAMS['maxCorners'],
+                              min_distance=_FEATURE_PARAMS['minDistance'],
+                              block=_FEATURE_PARAMS['blockSize'],
+                              buckets=self._buckets)
 
     def _process(self, gray, t, seq) -> None:
         """Track against the ANCHOR; emit a velocity when it is worth one.

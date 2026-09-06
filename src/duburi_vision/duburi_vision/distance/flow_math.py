@@ -131,6 +131,83 @@ def interp_rate(buffer: Sequence[Tuple[float, float, float]],
     return buffer[-1][1], buffer[-1][2]
 
 
+def detect_corners(gray, *, want: int = 80, max_corners: int = 200,
+                   min_distance: int = 8, block: int = 7,
+                   quality_ladder=(0.01, 0.004, 0.0015),
+                   buckets: int = 4):
+    """Corners, spread over a grid, with the quality bar LOWERED until there
+    are enough of them.
+
+    ⛔ A FIXED `qualityLevel` IS A FIXED ASSUMPTION ABOUT THE FLOOR, and it is
+    the wrong one for the surface we actually fly over. Shi-Tomasi's threshold
+    is RELATIVE to the strongest corner in the frame, so 0.01 keeps only
+    features within 100x of the best one -- fine over gravel or a tiled grout
+    line, and starving over smooth concrete or a painted pool bottom.
+    Measured on this bench: a textured surface gave 150-160 points and a plain
+    one gave 19, with the same code and the same camera. Nineteen is above the
+    8-point minimum the rigid fit needs, so nothing REFUSES -- the fit just
+    gets progressively less over-determined and its residual less meaningful,
+    which is degradation without a warning.
+
+    So the bar descends until the frame yields `want` points. A weak corner is
+    a worse feature than a strong one, but forward-backward rejection and the
+    RANSAC fit both cull the ones that do not survive, and having more
+    candidates strictly improves what those two have to work with.
+
+    Grid bucketing on top, because a plain floor with ONE bright mark produces
+    every corner in one spot, and a clustered set cannot distinguish a
+    rotation from a translation -- the two are separated by how the flow field
+    VARIES across the frame.
+
+    ⚠ THE LADDER IS A TRADE, MEASURED, NOT A FREE WIN. On this bench, static
+    frames, forward-backward error as the score:
+
+        quality   corners   fb p50   fb p90   survive <=1px
+        0.05         66      0.114    2.24      47  (71 %)
+        0.01        132      0.287    9.81      63  (48 %)
+        0.0015      300      0.698   32.85      82  (27 %)
+
+    Descending the ladder yields MORE absolute survivors (47 -> 82) at a much
+    lower survival RATE, and it costs 300 LK tracks instead of 66. It is worth
+    it here because the Pi has cores to spare and because forward-backward and
+    RANSAC both cull what does not hold up -- but a weak corner IS a worse
+    feature, and anyone reading a high corner count as a healthy image will be
+    wrong. Count survivors, never candidates.
+
+    The old 0.0006 rung is REMOVED: it returned results identical to 0.0015
+    (both saturate `max_corners`), so it was pure cost.
+    """
+    import cv2
+    h, w = gray.shape[:2]
+    n = max(1, int(buckets))
+    per = max(4, int(max_corners) // (n * n))
+    best = None
+    for q in quality_ladder:
+        out = []
+        for iy in range(n):
+            for ix in range(n):
+                y0, y1 = iy * h // n, (iy + 1) * h // n
+                x0, x1 = ix * w // n, (ix + 1) * w // n
+                sub = gray[y0:y1, x0:x1]
+                if sub.size == 0:
+                    continue
+                pts = cv2.goodFeaturesToTrack(
+                    sub, maxCorners=per, qualityLevel=q,
+                    minDistance=min_distance, blockSize=block)
+                if pts is None:
+                    continue
+                out.append(pts.reshape(-1, 2)
+                           + np.array([x0, y0], dtype=np.float32))
+        got = np.concatenate(out) if out else None
+        if got is not None and (best is None or len(got) > len(best)):
+            best = got
+        if got is not None and len(got) >= want:
+            break
+    if best is None:
+        return None
+    return best.reshape(-1, 1, 2).astype(np.float32)
+
+
 def forward_backward_error(prev_gray, next_gray, prev_pts, next_pts,
                            lk_params) -> Optional["np.ndarray"]:
     """Per-point round-trip error in px: track forward, then track back.
