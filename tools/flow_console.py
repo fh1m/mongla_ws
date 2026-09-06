@@ -351,14 +351,28 @@ def worker(args):
                 truth = float(ARM['truth'])
                 primary = dy if ph == 'lat' else dx
                 cross = dx if ph == 'lat' else dy
+                # ⛔ SCORE THE MAGNITUDE, REPORT THE AXES. The first real
+                # capture put 16.5 cm on the CROSS axis and 0.2 cm on the named
+                # one -- the rig moved and the sensor measured it correctly,
+                # but the operator's "forward" and the camera's image axes are
+                # related by however the camera is clocked on the mount, which
+                # is a fact about the bracket and not about the sensor.
+                # Scoring the named axis alone reported a good measurement as a
+                # 99 % failure. The magnitude is convention-free; the
+                # components then say which way it actually went, which is what
+                # calibrates the mount.
+                mag = math.hypot(dx, dy)
                 rec = {
                     'phase': ph, 'truth_m': truth,
                     'measured_m': primary, 'cross_m': cross,
-                    'abs_m': abs(primary),
-                    'error_m': abs(primary) - truth,
-                    'pct': 100.0 * abs(primary) / truth if truth else 0.0,
-                    'implied_h_m': (h * truth / abs(primary))
-                    if abs(primary) > 1e-6 else None,
+                    'dx_m': dx, 'dy_m': dy,
+                    'abs_m': mag,
+                    'axis_deg': math.degrees(math.atan2(dy, dx)),
+                    'on_named_axis_pct': (100.0 * abs(primary) / mag
+                                          if mag > 1e-6 else 0.0),
+                    'error_m': mag - truth,
+                    'pct': 100.0 * mag / truth if truth else 0.0,
+                    'implied_h_m': (h * truth / mag) if mag > 1e-6 else None,
                     'span_s': cap_last - cap_t0,
                     'points_med': float(np.median(cap_pts)) if cap_pts else 0,
                     'resid_med': float(np.median(cap_resid)) if cap_resid else 0.0,
@@ -549,10 +563,12 @@ function arm(p){armedPhase=p;fetch('/arm?phase='+p+'&truth='+TRUTH);}
 function fmt(r){
  const e=r.error_m*100, pct=r.pct;
  const cls = Math.abs(e)<=1.0?'good':(Math.abs(e)<=2.5?'meh':'bad');
+ const dx=(r.dx_m!==undefined?r.dx_m:0)*100, dy=(r.dy_m!==undefined?r.dy_m:0)*100;
  return '<tr><td style="text-transform:uppercase;letter-spacing:.1em">'
   +r.phase+'</td><td>'+(r.abs_m*100).toFixed(1)+' cm</td>'
   +'<td class="'+cls+'">'+(e>=0?'+':'')+e.toFixed(1)+' cm</td>'
   +'<td class="'+cls+'">'+pct.toFixed(1)+'%</td>'
+  +'<td style="color:#5a6474">'+dx.toFixed(0)+','+dy.toFixed(0)+'</td>'
   +'<td style="color:#5a6474">h&rarr;'
   +(r.implied_h_m?r.implied_h_m.toFixed(2):'-')+'</td></tr>';
 }
@@ -560,8 +576,8 @@ async function runs(){
  try{
   const d=await (await fetch('/runs')).json();
   $('rtab').innerHTML = d.runs.length
-   ? '<tr style="color:#4e5666"><td>axis</td><td>measured</td><td>error</td>'
-     +'<td>of truth</td><td>implied</td></tr>'+d.runs.map(fmt).join('')
+   ? '<tr style="color:#4e5666"><td>run</td><td>distance</td><td>error</td>'
+     +'<td>of truth</td><td>dx,dy cm</td><td>implied</td></tr>'+d.runs.map(fmt).join('')
    : '';
   const st=d.arm.state, ph=d.arm.phase;
   ['fwd','back','lat'].forEach(p=>{
