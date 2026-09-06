@@ -165,3 +165,28 @@ class DistanceAccumulator:
     def stop(self) -> float:
         self.active = False
         return self.distance_m
+
+
+def flow_dispersion(prev_pts, next_pts, status) -> Optional[float]:
+    """Median distance of each point's displacement from the median one, in px.
+
+    The COHERENCE measure `flow_velocity` gates on. Over a flat surface at
+    constant range a translation moves every point by nearly the same vector --
+    that is what a translation IS in this geometry -- so this is small for real
+    motion and comparable to the motion itself for noise. Measured on a bench
+    camera: 0.096-0.127 px while still, 7.7 px on the intervals that produced
+    spurious metre-per-second readings.
+
+    Returns None when there is nothing to measure, never 0.0: an absent
+    dispersion means "unknown", and 0.0 would read as perfect coherence.
+    """
+    if prev_pts is None or next_pts is None or status is None:
+        return None
+    st = np.asarray(status).reshape(-1).astype(bool)
+    p0 = np.asarray(prev_pts, dtype=np.float64).reshape(-1, 2)[st]
+    p1 = np.asarray(next_pts, dtype=np.float64).reshape(-1, 2)[st]
+    if len(p0) < 3:
+        return None
+    d = p1 - p0
+    med = np.median(d, axis=0)
+    return float(np.median(np.hypot(d[:, 0] - med[0], d[:, 1] - med[1])))
