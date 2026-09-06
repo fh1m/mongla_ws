@@ -10,7 +10,29 @@ centred bbox cannot express it. This returns the correction directly:
     reproj_px                        how well the solution explains the pixels
     ambiguity                        how much to believe any of it
 
-WHY `solvePnP(SOLVEPNP_IPPE)` AND NOT `decomposeHomographyMat`. The homography
+⛔ TWO SOLVERS, AND NEITHER REPLACES THE OTHER -- measured on our own data
+rather than taken from a citation. IPPE is from 2014; SQPnP (Terzakis &
+Lourakis, ECCV 2020) is newer and, on constructed ground truth with our patch
+size and our tilt range, better at the tail:
+
+    pixel noise   IPPE p90 yaw   SQPnP p90   IPPE range   SQPnP range
+       0.50 px        1.47 deg     0.94 deg      0.8 mm       0.6 mm
+       1.55 px        3.38         1.40         2.7 mm       2.1 mm   <- ours
+       3.00 px        6.27         3.96         5.4 mm       4.3 mm
+
+At the noise our real matches actually carry, SQPnP's p90 is **2.4x better**,
+for 0.098 ms against 0.072. But SQPnP returns ONE solution -- the global
+optimum -- and the flip interval is the whole safety story here. IPPE always
+returns BOTH branches.
+
+So: **IPPE supplies the interval, SQPnP the point estimate.** Verified that
+SQPnP's answer lands inside IPPE's interval at every tilt tested (0/5/10/20/35
+deg, 5 of 5), which is what makes combining them legitimate rather than two
+numbers stapled together. `SOLVEPNP_ITERATIVE` then refines, seeded from
+SQPnP -- it is the best of the four at high noise (p90 2.76 deg at 3 px) and
+5x slower, which is affordable once, on one seed, at 3 Hz.
+
+WHY PnP AT ALL AND NOT `decomposeHomographyMat`. The homography
 route (`anchor/geometry.py`) recovers the plane's orientation up to scale and
 was measured COARSE on real footage -- reference-dependent by 4.7 deg median,
 17.5 p90, which is unusable for a firing gate. Three things change here:
@@ -179,29 +201,58 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
                           pitch_spread_deg=pitch_spread,
                           reason='reprojection too large')
 
+    Kd = np.asarray(K, np.float64)
+
+    def rms(rv, tv):
+        """OUR reprojection RMS, computed the same way for every candidate.
+
+        `solvePnPGeneric`'s own reportedError is NOT an RMS -- measured, it
+        gives 1.3862 where the true RMS is 1.9604 for the same pose. Comparing
+        a locally computed RMS against it is comparing two different
+        quantities, and it silently made a better solver always lose. The
+        reported errors are still used for the ambiguity RATIO, where both
+        sides are the same quantity and the comparison is legitimate.
+        """
+        proj, _ = cv2.projectPoints(obj, rv, tv, Kd, D)
+        return float(np.sqrt(np.mean(np.sum(
+            (proj.reshape(-1, 2) - live) ** 2, axis=1))))
+
     rvec, tvec = np.asarray(rvecs[best], np.float64), np.asarray(tvecs[best], np.float64)
-    # Refine the analytic solution with an iterative solve seeded from it --
-    # IPPE is the initialisation the literature recommends for exactly this.
+    best_rms = rms(rvec, tvec)
+    # THE POINT ESTIMATE comes from SQPnP, which is measurably better at the
+    # tail than IPPE's branch (see the table above). IPPE's job was the
+    # interval, and it has already done it.
+    try:
+        oks, rs, ts = cv2.solvePnP(obj, live, np.asarray(K, np.float64), D,
+                                   flags=cv2.SOLVEPNP_SQPNP)
+        if oks:
+            # Like for like: both measured with `rms`, never against OpenCV's
+            # reportedError. A global optimum of the wrong cost is still wrong,
+            # and the reprojection is the only thing here that can tell.
+            rs_err = rms(rs, ts)
+            if rs_err <= best_rms * 1.02:
+                rvec, tvec, best_rms = rs, ts, rs_err
+    except cv2.error:
+        pass
+    # Then one iterative polish from that seed -- best of the four at high
+    # noise, and 5x slower, which is affordable once at 3 Hz.
     try:
         okr, rvec2, tvec2 = cv2.solvePnP(
             obj, live, np.asarray(K, np.float64), D, rvec.copy(), tvec.copy(),
             useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE)
         if okr:
-            proj, _ = cv2.projectPoints(obj, rvec2, tvec2,
-                                        np.asarray(K, np.float64), D)
-            r2 = float(np.sqrt(np.mean(np.sum(
-                (proj.reshape(-1, 2) - live) ** 2, axis=1))))
-            # Only keep the refinement if it actually improved the fit. An
-            # iterative solver seeded near a flip can walk to the other branch.
-            if r2 <= e[0]:
-                rvec, tvec, e[0] = rvec2, tvec2, r2
+            # Keep the polish only if it improved the fit: an iterative solver
+            # seeded near a flip can walk to the other branch.
+            r2 = rms(rvec2, tvec2)
+            if r2 <= best_rms:
+                rvec, tvec, best_rms = rvec2, tvec2, r2
     except cv2.error:
         pass
 
     yaw, pitch, roll = _angles(rvec)
     rng = float(np.linalg.norm(tvec))
     return TargetPose(ok=True, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll,
-                      range_m=rng, reproj_px=float(e[0]), ambiguity=ratio,
+                      range_m=rng, reproj_px=float(best_rms), ambiguity=ratio,
                       yaw_spread_deg=yaw_spread, pitch_spread_deg=pitch_spread,
                       n_points=len(ref))
 
