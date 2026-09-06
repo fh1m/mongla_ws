@@ -347,42 +347,53 @@ def worker(args):
             elif (cap_t0 is not None and cap_last is not None
                   and (t - cap_last) >= args.still_s):
                 dx, dy = x - cap_x0, y - cap_y0
-                ph = ARM['phase']
-                truth = float(ARM['truth'])
-                primary = dy if ph == 'lat' else dx
-                cross = dx if ph == 'lat' else dy
-                # ⛔ SCORE THE MAGNITUDE, REPORT THE AXES. The first real
-                # capture put 16.5 cm on the CROSS axis and 0.2 cm on the named
-                # one -- the rig moved and the sensor measured it correctly,
-                # but the operator's "forward" and the camera's image axes are
-                # related by however the camera is clocked on the mount, which
-                # is a fact about the bracket and not about the sensor.
-                # Scoring the named axis alone reported a good measurement as a
-                # 99 % failure. The magnitude is convention-free; the
-                # components then say which way it actually went, which is what
-                # calibrates the mount.
-                mag = math.hypot(dx, dy)
-                rec = {
-                    'phase': ph, 'truth_m': truth,
-                    'measured_m': primary, 'cross_m': cross,
-                    'dx_m': dx, 'dy_m': dy,
-                    'abs_m': mag,
-                    'axis_deg': math.degrees(math.atan2(dy, dx)),
-                    'on_named_axis_pct': (100.0 * abs(primary) / mag
-                                          if mag > 1e-6 else 0.0),
-                    'error_m': mag - truth,
-                    'pct': 100.0 * mag / truth if truth else 0.0,
-                    'implied_h_m': (h * truth / mag) if mag > 1e-6 else None,
-                    'span_s': cap_last - cap_t0,
-                    'points_med': float(np.median(cap_pts)) if cap_pts else 0,
-                    'resid_med': float(np.median(cap_resid)) if cap_resid else 0.0,
-                    'used': used, 'refused': refused, 'fallback': fallback,
-                    'h_m': h, 'when': time.strftime('%H:%M:%S'),
-                }
-                RUNS.append(rec)
-                _save_runs()
-                ARM['state'] = 'done'
-                cap_t0 = cap_last = None
+                # ⛔ A NUDGE MUST NOT CONSUME THE ARM. Observed live: the
+                # operator armed, touched the rig, and that contact alone
+                # cleared the motion threshold and then stood still long
+                # enough to close the capture -- so the run was scored on the
+                # nudge and the real 30 cm slide that followed was never
+                # recorded, while the console showed it tracking perfectly to
+                # 29.9 cm. The capture window has to survive the act of
+                # reaching for the thing being measured.
+                if math.hypot(dx, dy) < args.min_capture_m:
+                    cap_t0 = cap_last = None      # keep waiting, stay armed
+                else:
+                  ph = ARM['phase']
+                  truth = float(ARM['truth'])
+                  primary = dy if ph == 'lat' else dx
+                  cross = dx if ph == 'lat' else dy
+                  # ⛔ SCORE THE MAGNITUDE, REPORT THE AXES. The first real
+                  # capture put 16.5 cm on the CROSS axis and 0.2 cm on the named
+                  # one -- the rig moved and the sensor measured it correctly,
+                  # but the operator's "forward" and the camera's image axes are
+                  # related by however the camera is clocked on the mount, which
+                  # is a fact about the bracket and not about the sensor.
+                  # Scoring the named axis alone reported a good measurement as a
+                  # 99 % failure. The magnitude is convention-free; the
+                  # components then say which way it actually went, which is what
+                  # calibrates the mount.
+                  mag = math.hypot(dx, dy)
+                  rec = {
+                      'phase': ph, 'truth_m': truth,
+                      'measured_m': primary, 'cross_m': cross,
+                      'dx_m': dx, 'dy_m': dy,
+                      'abs_m': mag,
+                      'axis_deg': math.degrees(math.atan2(dy, dx)),
+                      'on_named_axis_pct': (100.0 * abs(primary) / mag
+                                            if mag > 1e-6 else 0.0),
+                      'error_m': mag - truth,
+                      'pct': 100.0 * mag / truth if truth else 0.0,
+                      'implied_h_m': (h * truth / mag) if mag > 1e-6 else None,
+                      'span_s': cap_last - cap_t0,
+                      'points_med': float(np.median(cap_pts)) if cap_pts else 0,
+                      'resid_med': float(np.median(cap_resid)) if cap_resid else 0.0,
+                      'used': used, 'refused': refused, 'fallback': fallback,
+                      'h_m': h, 'when': time.strftime('%H:%M:%S'),
+                  }
+                  RUNS.append(rec)
+                  _save_runs()
+                  ARM['state'] = 'done'
+                  cap_t0 = cap_last = None
 
         gy = 0.0
         if gyro is not None and gyro.yaw_buf:
@@ -718,7 +729,9 @@ def main():
     p.add_argument('--rot-max', type=float, default=0.80)
     p.add_argument('--max-disp', type=float, default=5.0)
     p.add_argument('--move-thresh', type=float, default=0.03)
-    p.add_argument('--still-s', type=float, default=0.7)
+    p.add_argument('--still-s', type=float, default=0.9)
+    p.add_argument('--min-capture-m', type=float, default=0.08,
+                   help='a move smaller than this is a nudge, not a run')
     p.add_argument('--sim-slide', type=float, default=0.0,
                    help='self-test: synthesise this slide, metres')
     p.add_argument('--sim-speed', type=float, default=0.15)
