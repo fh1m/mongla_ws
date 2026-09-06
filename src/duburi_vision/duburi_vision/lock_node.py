@@ -118,6 +118,7 @@ class LockNode(Node):
         self._det_header = None
         self._anchor_header = None
         self._stamp_warned = False
+        self._pose_was_ok = None
         # 6-DoF: needs K at the BACKEND's resolution (the frame H is fitted in)
         # and the target's true width. Both absent by default -- no width means
         # no metric answer, and guessing one would make every range wrong by a
@@ -318,6 +319,7 @@ class LockNode(Node):
                 continue
             now = time.monotonic()
 
+            anchor_ran = False
             fb = fc = None
             if self._follower is not None:
                 if det_box is not None:
@@ -337,6 +339,7 @@ class LockNode(Node):
                       and now >= self._anchor_next):
                     self._anchor_next = now + self._anchor_period
                     self._anchor_pose = self._anchor.locate(gray)
+                    anchor_ran = True
                     # The frame this pose was fitted to. The anchor runs at
                     # 3 Hz while this loop runs at frame rate, so between
                     # evaluations the pose below is REUSED -- up to 333 ms old
@@ -364,9 +367,20 @@ class LockNode(Node):
                                          anchor=self._anchor_header))
             # The pose rides the ANCHOR's header: it is derived from that
             # frame's correspondences, not from whichever frame just arrived.
+            #
+            # Published only when the anchor actually RE-EVALUATED, or when its
+            # ok/not-ok state changed. The loop runs at frame rate and the
+            # anchor at `anchor_hz` (3), so publishing every tick sent ~32
+            # duplicates for every real evaluation -- measured at 96.5 Hz on
+            # the vehicle for a 3 Hz quantity. Each message now corresponds to
+            # one evaluation, which is also what makes its stamp meaningful.
             if self._anchor is not None:
-                self._publish_pose(self._anchor_pose,
-                                   self._anchor_header or header)
+                ok_now = bool(self._anchor_pose is not None
+                              and self._anchor_pose.ok)
+                if anchor_ran or ok_now != self._pose_was_ok:
+                    self._pose_was_ok = ok_now
+                    self._publish_pose(self._anchor_pose,
+                                       self._anchor_header or header)
 
     def _publish(self, st, header):
         """`header` is the frame the WINNING RUNG observed, not the newest one.
