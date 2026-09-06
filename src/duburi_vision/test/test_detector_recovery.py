@@ -167,3 +167,49 @@ def test_a_SUCCESSFUL_inference_in_the_LOOP_resets_the_counter(monkeypatch):
     except Exception:
         pass
     assert n._infer_fails == 0, 'a success did not clear the failure run'
+
+
+# --------------------------------------------------------------------------- #
+#  D16's twin: no model at all
+# --------------------------------------------------------------------------- #
+def test_a_FAILED_MODEL_LOAD_exits_instead_of_running_as_a_no_op(monkeypatch):
+    """Observed on the vehicle: `Failed to open device file /dev/hailo0 with
+    error 6` after a restart race. The old code logged FATAL and RETURNED,
+    leaving `_det` None -- so the loop dropped every frame at `if det is None:
+    continue`, silently, forever, while params answered and the stats line
+    still printed. Identical signature to D16, one layer earlier."""
+    n = D.DetectorNode.__new__(D.DetectorNode)
+    n._log = _Log()
+    n.get_logger = lambda: n._log
+    n._det = None
+    n._pending_allowlist = None
+    codes = []
+
+    def fake_exit(c):
+        # The real `os._exit` NEVER RETURNS. A fake that returns lets execution
+        # run on into code that assumed it had stopped -- which is how this
+        # test first failed with an UnboundLocalError instead of passing.
+        codes.append(c)
+        raise SystemExit(c)
+
+    monkeypatch.setattr(D.os, '_exit', fake_exit)
+    monkeypatch.setattr(D, 'make_detector',
+                        lambda **_k: (_ for _ in ()).throw(RuntimeError('hailo0 busy')))
+    with pytest.raises(SystemExit):
+        n._load_single_model_async(model_path='x.hef', device='', conf=0.3,
+                                   iou=0.5, imgsz=640, half=False, max_det=10,
+                                   allowlist=None)
+    assert codes == [2], 'a model-less detector kept claiming to be up'
+    assert any(k == 'fatal' for k, _ in n._log.lines)
+
+
+def test_the_inference_counter_does_not_count_frames_it_never_inferred():
+    """It reported "300 inferences" during a run in which zero inferences
+    happened -- the single reason the dead detector looked busy. A counter
+    named for something it does not count is worse than no counter."""
+    src = (Path(__file__).resolve().parents[1]
+           / 'duburi_vision' / 'detector_node.py').read_text()
+    i = src.index('self._infers += 1')
+    guard = src[max(0, i - 260):i]
+    assert 'self._det is not None' in guard, \
+        'the inference counter is not gated on having a detector'

@@ -119,6 +119,7 @@ class LockNode(Node):
         self._anchor_header = None
         self._stamp_warned = False
         self._pose_was_ok = None
+        self._pose_pub_t = 0.0
         # 6-DoF: needs K at the BACKEND's resolution (the frame H is fitted in)
         # and the target's true width. Both absent by default -- no width means
         # no metric answer, and guessing one would make every range wrong by a
@@ -377,8 +378,18 @@ class LockNode(Node):
             if self._anchor is not None:
                 ok_now = bool(self._anchor_pose is not None
                               and self._anchor_pose.ok)
-                if anchor_ran or ok_now != self._pose_was_ok:
+                # ...OR on a slow heartbeat. Without one this went SILENT:
+                # with no reference snapped the anchor never re-evaluates, so
+                # `anchor_ran` stays False and the state never changes, and
+                # after the first message nothing was published again. A
+                # consumer then cannot tell "no target" from "lock_node is not
+                # running", and the health board cannot age what it never sees.
+                # Absence of a TARGET is carried by `ok=False`, not by absence
+                # of the message.
+                due = (now - self._pose_pub_t) >= self._anchor_period
+                if anchor_ran or due or ok_now != self._pose_was_ok:
                     self._pose_was_ok = ok_now
+                    self._pose_pub_t = now
                     self._publish_pose(self._anchor_pose,
                                        self._anchor_header or header)
 
