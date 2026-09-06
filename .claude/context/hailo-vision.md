@@ -459,3 +459,55 @@ both pass while the Python path is broken. Construct the real detector.
 hailo grep as a normal user is **no evidence either way** — a wrong inference I
 made and had to withdraw. And `hailortcli fw-control identify` exits **0** with
 no output when there is no device, so its exit code is not a probe.
+
+---
+
+## The chip dropping off the PCIe bus (2026-09-06)
+
+**Symptom, and it does not look like a hardware fault.** Every detector init
+fails with `Failure in hailort driver ioctl`. `lspci` still lists the Hailo-8.
+`hailortcli scan` still lists the device. Nothing holds `/dev/hailo0`
+(`fuser` is empty). A `modprobe -r hailo_pci && modprobe hailo_pci` "succeeds"
+— and afterwards there is **no `/dev/hailo0` at all**.
+
+**The kernel says what is actually wrong**, and `dmesg` is the only place it is
+written (`dmesg_restrict=1`, so read it with sudo):
+
+```
+hailo 0000:01:00.0: Failed writing fw control to pcie
+hailo 0000:01:00.0: hailo_nnc_driver_down, timeout waiting for shutdown response
+hailo 0000:01:00.0: Device disconnected while opening device      <- repeatedly
+```
+
+The device stopped answering on PCIe. `lspci` still shows it because that reads
+cached config space, not a live device — which is why every userspace check
+says "present" while every open fails.
+
+**Recovery, without rebooting the Pi:** remove the device from the bus and
+rescan, then reload the driver.
+
+```bash
+sudo modprobe -r hailo_pci
+echo 1 | sudo tee /sys/bus/pci/devices/0000:01:00.0/remove
+echo 1 | sudo tee /sys/bus/pci/rescan
+sudo modprobe hailo_pci
+hailortcli fw-control identify        # expect HAILO8, FW 4.24.0
+```
+
+Verified: `NNC Firmware loaded successfully`, `FW loaded, took 147 ms`,
+`/dev/hailo0` back, and the full stack returned to 29.1 Hz detections.
+
+**Likely cause, stated as a suspicion rather than a finding:** repeated
+`kill -9` of processes holding the device. The driver logs
+`timeout waiting for shutdown response` immediately before the disconnects,
+which is what an ungraceful teardown of the NNC would produce. **Prefer SIGTERM
+and let the node close its `VDevice`**; the restart scripts here use `kill -9`
+and should not.
+
+**Why this was expensive to diagnose, and the lesson:** the failure presented
+as a ROS problem. `/detections` published nothing while `/image_raw` and
+`/lock` ran at 30 Hz, QoS matched RELIABLE/VOLATILE on both sides, publisher
+and subscriber were matched, `ros2 param get` answered, and a bare RELIABLE
+pub/sub between two fresh processes worked. Six layers all said healthy. The
+device had been gone the whole time, and the only honest signal — the detector
+init failure — was one FATAL line at the top of a log full of INFO.
