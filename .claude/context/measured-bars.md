@@ -599,9 +599,15 @@ it, so the ±5 cm uncertainty is a **±7 % floor** under every scale number here
 |---|---|
 | excitation | gx 0.637, gy 0.534 rad/s (separate runs) |
 | `cond(MᵀM)` | **27.7**, well-conditioned |
-| image dx | `gx −1.150` (cross +0.058, −0.085), **held-out R² 0.982** |
-| image dy | `gy −1.095` (cross −0.064, +0.020), **held-out R² 0.990** |
-| false velocity, pure rotation | **411.2 → 40.8 mm/s (−90 %)** |
+| image dx | `gx −1.150` (cross +0.058, −0.085), R² 0.982 (see caveat) |
+| image dy | `gy −1.095` (cross −0.064, +0.020), R² 0.990 (see caveat) |
+| false velocity, pure rotation | **575.7 → 57.1 mm/s (−90 %)** |
+
+**Read `cond`, not R², as the evidence the fit is identifiable.** The held-out
+split is even/odd intervals, so train and test are adjacent 30 ms frames —
+near-duplicates during a 1 Hz swing. R² 0.99 therefore partly measures
+interpolation, not generalisation across motion. **`cond(MᵀM)` = 27.7 is the
+load-bearing number**; the R² values are supporting, not decisive.
 
 **Three earlier attempts failed and all failed the same way.** Swinging by hand
 rotates about two axes at once; correlated regressors leave the *split* between
@@ -611,12 +617,36 @@ disagreed by 2x and swapped which one was well-explained between runs (dx 0.641
 fit the pooled data.** Least squares never refuses: with no excitation it
 returns plausible +-1 coefficients and no error.
 
-**The gains are −1.12, not −1.00, and that is the PIVOT not the camera.**
-Rotation about the lens gives exactly `f·ω·dt`; rotating about a hand ~8 cm away
-adds `ω × r`, so the gain is `f·(1 + r/h)` = 1.11 at r = 8 cm, h = 0.70 m.
-**On the vehicle the lever arm is the camera's offset from the hull's centre of
-rotation** — a different, known number. The bench validates the method and the
-axis mapping; the gain must be re-derived from the vehicle's geometry.
+**⚠ The gains are −1.12, not −1.00, and the cause is OPEN.** Rotation about
+the lens gives exactly `f·ω·dt`, so a 12 % excess needs an owner. Recorded here
+because it is a real 12 % and the wrong explanation is easy to reach for:
+
+- **A pivot lever arm was my first answer and its sign was WRONG.** With the
+  hand *above* a downward-looking lens, the lens swings opposite to the tilt, so
+  translation OPPOSES rotational flow: `f·(1 − r/h)`, a gain **below** 1.0. Only
+  a pivot *below* the lens gives a gain above 1, which is possible depending on
+  the grip but was not measured. **The r ≈ 8 cm first written here was reverse-
+  fitted to cancel the residual, not derived. Retracted.**
+- **The gain is a direct measurement of `f`** (no height term), giving
+  `f_eff` = 591 px from dx and 563 from dy — **57.6° HFOV, not 63.8°**. Two axes
+  agreeing is not noise. But round 25's calibration is the stronger evidence:
+  25 views, `calibrateCameraRO`, k-fold held-out, and an external tape check
+  that confirmed a *stated prediction* (23.2 predicted vs 23.0 measured).
+- **A `dt` bias would do it too** — flow is `f·ω·dt`, so timestamps 12 % short
+  inflate the gain identically. Not separable from the above without more data.
+
+**Height cannot reconcile it**: the rotation gain has no height term, so `f` is
+over-determined at 514 (calibration) vs 577 (gain), and a height error cannot
+move either. Phase 3 then ties them together — `v ∝ h/f` — and is consistent
+with **(f 514, h 0.70)** or **(f 577, h 0.78)**, so a careful lens-to-floor
+measurement is the cheapest discriminator available.
+
+Independent evidence the gain is too large: the 0.638 rad/s run's rotation
+fraction reached **p90 156 %** — fitted rotational flow exceeding total observed
+flow, which is what an overshooting correction looks like.
+
+**For the vehicle**: the axis mapping and the method carry over; **this gain
+does not**, whatever its cause. Re-derive it on the hull.
 
 ### The working envelope — de-rotation has a rotation-rate ceiling
 
@@ -647,12 +677,19 @@ the travel and is not comparable to 50 cm.
 
 | quantity | was | is |
 |---|---|---|
-| **flow noise floor** | ~15 mm/s | **0.41 mm/s** median, p90 0.89, max 1.70 |
+| **flow noise floor** | ~15 mm/s | **0.57 mm/s** median, p90 1.25, max 2.38 |
 | **flow scale** | 41.6 cm vs 50 (83 %) | **51.7 cm vs 50 (103.4 %)** |
 
 The old floor was **a rig being handled** — two independent untouched runs gave
-0.33 and 0.41 mm/s. The old scale gap was **a height error**, 50 cm assumed
-against a 70 cm lens height; there is no systematic scale bias left to explain.
+0.46 and 0.57 mm/s at h = 0.70. The old scale gap was **a height error**, 50 cm
+assumed against a ~70 cm lens height. 103.4 % is **consistent with no systematic
+bias within the ±7 % height uncertainty** — it does not establish that there is
+none, and the focal-length question above is exactly such a candidate.
+
+**Phases 1 and 2 were recorded before height became a parameter and ran at
+`HEIGHT_M = 0.50`.** Every velocity from them is restated here at 0.70 (×1.4).
+The mapping coefficients are unaffected — that fit has no height term — and so
+is the −90 % ratio.
 Static flow is 0.01–0.02 px, so `MIN_NET_FLOW_PX = 0.5` correctly refuses every
 static interval — verified against real numbers rather than assumed.
 
