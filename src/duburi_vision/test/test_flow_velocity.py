@@ -121,20 +121,21 @@ def test_the_forward_camera_uses_the_SAME_equation_with_RANGE():
 
 
 def test_INCOHERENT_flow_is_refused_however_LARGE_it_is():
-    """The gate the magnitude floor cannot supply, and the numbers are from a
-    static camera 0.77 m above a floor where truth is exactly zero: 21 of 690
-    intervals cleared the 0.5 px floor and produced velocities up to
-    1193 mm/s. Their dispersion/magnitude ratio was 1.03 median, 0.84 MINIMUM
-    -- the points disagreed as much as they moved, which is not a translation.
+    """A SANITY bound, not the noise discriminator -- see the constant.
+
+    Set at 0.5 on contaminated evidence (the camera had been knocked), it
+    discarded 60 % of a real 50 cm slide. Real motion runs to a ratio p90 of
+    1.02-3.76 because a downward camera is never exactly fronto-parallel to the
+    floor. 5.0 now rejects only wildly incoherent flow.
     """
     dx, dy = _render(vx=0.5, h=1.5)          # a large, real-looking flow
     coherent = flow_velocity(dx, dy, DT, f_px=F, height_m=1.5,
                              dispersion_px=0.2)
     assert coherent.ok, coherent.reason
     incoherent = flow_velocity(dx, dy, DT, f_px=F, height_m=1.5,
-                               dispersion_px=abs(dy) * 0.9)
+                               dispersion_px=abs(dy) * 9.0)
     assert not incoherent.ok and 'incoherent' in incoherent.reason
-    assert incoherent.dispersion_ratio > 0.5
+    assert incoherent.dispersion_ratio > 5.0
 
 
 def test_dispersion_is_OPTIONAL_so_existing_callers_are_unchanged():
@@ -173,3 +174,18 @@ def test_flow_dispersion_returns_NONE_not_ZERO_when_unmeasurable():
     assert flow_dispersion(None, None, None) is None
     p = np.zeros((2, 2))
     assert flow_dispersion(p, p, np.ones(2)) is None
+
+
+def test_the_coherence_gate_PASSES_realistic_motion():
+    """The regression that matters: measured moving intervals run to a
+    dispersion/magnitude ratio p90 of ~3.8, and a gate that rejects those
+    silently deletes displacement from the integral -- 60 % of a 50 cm slide
+    when this was 0.5."""
+    from duburi_vision.distance.flow_velocity import MAX_DISPERSION_RATIO
+    assert MAX_DISPERSION_RATIO >= 3.8
+    dx, dy = _render(vx=0.4, h=0.5)
+    mag = math.hypot(dx, dy)
+    for ratio in (0.4, 0.9, 1.5, 3.5):
+        r = flow_velocity(dx, dy, DT, f_px=F, height_m=0.5,
+                          dispersion_px=mag * ratio)
+        assert r.ok, f'rejected real motion at dispersion ratio {ratio}'

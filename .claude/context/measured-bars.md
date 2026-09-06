@@ -435,3 +435,63 @@ Measured at 0.5 px noise: p90 error 42.1° at 0.84 px displacement, 13.6° at
 is reported so a firing gate can demand 17 (p90 3°). This is a **precision**
 bar — the dangerous degenerate case, pure rotation, is refused by the
 decomposition itself.
+
+
+---
+
+## 10. Optical-flow velocity — measured on the bench, global-shutter camera
+
+The velocity OBSERVATION the estimator was blocked on. `flow_velocity()`:
+`v = h * (flow_px/dt - f*omega) / f`, where the asymmetry is the whole design —
+translation scales with `1/h`, rotation does not, so rotation is subtracted
+**before** scaling.
+
+### Static, camera 0.77 m above a floor — truth is exactly zero
+
+| | |
+|---|---|
+| intervals | **727** |
+| peak raw flow | **0.069 px** |
+| velocities reported | **0** |
+
+Zero false positives from the magnitude floor alone. This is the bar: an
+unmeasurable interval must not be reported as 0 m/s, because zero is a
+*measurement* and a filter fed a confident zero will believe it.
+
+### Moving, 50 cm one-way slide at 0.50 m, global shutter @ 210 fps
+
+| dispersion gate | intervals | net cm | path cm |
+|---|---|---|---|
+| 0.5 (as first shipped) | 104 | −12.3 | 15.9 |
+| 1.0 | 212 | −17.4 | 27.5 |
+| 2.0 | 304 | −25.2 | 35.6 |
+| 3.0 | 346 | −28.1 | 38.7 |
+| **off** | 396 | **−30.9** | **41.6** |
+
+**Cross-axis leakage 2.3–3.5 %** across runs: a straight slide put ~97 % of the
+displacement on one axis, which nothing in the pipeline enforces — it falls out
+of the projection being right, and is the check that would catch a scrambled
+axis mapping before water.
+
+**Scale: 41.6 cm path measured against 50 cm true = 83 %.** Not yet closed. The
+leading candidates, in order: the 0.5 m was taped to the housing rather than
+the sensor (a 5 cm error is 10 %), and slow ramp-in/ramp-out below the
+14.7 mm/s floor is displacement the integral never sees. **Do not treat the
+velocity as calibrated until this is closed** — the error is a clean multiplier
+and will be invisible downstream.
+
+### ⛔ A gate justified on contaminated evidence
+
+`MAX_DISPERSION_RATIO` was set to 0.5 to exclude 21 large-flow intervals from a
+"static" run. The operator had knocked the camera during it — those were REAL
+MOTION, and they sit inside the distribution real motion has (ratio median
+0.40–0.89, p90 1.02–3.76, because a downward camera is never exactly
+fronto-parallel and tilt makes range vary across the image). At 0.5 the gate
+discarded **60 % of a real 50 cm slide**. Now 5.0, and explicitly a sanity
+bound rather than the noise discriminator — the static run shows the magnitude
+floor already does that job.
+
+**Baseline is not frame rate.** At 210 fps a 0.2 m/s slide moves the image ~1 px
+per frame; at 30 fps the same motion moves ~7 px. SNR is set by displacement,
+so the reference frame is held until ≥28 ms has passed. Frame rate buys
+latency, not accuracy, here.
