@@ -142,3 +142,34 @@ def test_dispersion_is_OPTIONAL_so_existing_callers_are_unchanged():
     rather than being refused for not supplying something it does not have."""
     dx, dy = _render(vx=0.5, h=1.5)
     assert flow_velocity(dx, dy, DT, f_px=F, height_m=1.5).ok
+
+
+# --------------------------------------------------------------------------- #
+#  The dispersion measure itself
+# --------------------------------------------------------------------------- #
+def test_flow_dispersion_is_small_for_a_COHERENT_translation():
+    import numpy as np
+    from duburi_vision.distance.flow_math import flow_dispersion
+    p0 = np.random.default_rng(0).uniform(0, 300, (40, 2))
+    p1 = p0 + np.array([4.0, -2.0])                 # every point moves alike
+    st = np.ones(40)
+    assert flow_dispersion(p0, p1, st) < 1e-9
+
+
+def test_flow_dispersion_is_LARGE_for_scattered_motion():
+    import numpy as np
+    from duburi_vision.distance.flow_math import flow_dispersion
+    rng = np.random.default_rng(1)
+    p0 = rng.uniform(0, 300, (40, 2))
+    p1 = p0 + rng.normal(0, 6.0, (40, 2))           # no common motion
+    assert flow_dispersion(p0, p1, np.ones(40)) > 3.0
+
+
+def test_flow_dispersion_returns_NONE_not_ZERO_when_unmeasurable():
+    """0.0 would read as PERFECT coherence and sail through the gate. Absence
+    must be absence -- the same rule the health surface is built on."""
+    import numpy as np
+    from duburi_vision.distance.flow_math import flow_dispersion
+    assert flow_dispersion(None, None, None) is None
+    p = np.zeros((2, 2))
+    assert flow_dispersion(p, p, np.ones(2)) is None
