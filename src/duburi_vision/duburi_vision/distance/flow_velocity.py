@@ -56,30 +56,43 @@ MIN_NET_FLOW_PX = 0.5
 
 # COHERENCE. Maximum ratio of per-point flow DISPERSION to flow MAGNITUDE.
 #
-# Over a flat surface at constant range, a translation moves every point by
-# nearly the same vector -- that is what a translation IS in this geometry. So
-# points that DISAGREE as much as they move are not observing a translation,
-# whatever their median says.
+# ⛔ A SANITY BOUND, NOT A NOISE DISCRIMINATOR -- and this constant started life
+# at 0.5 on evidence that turned out to be contaminated. Recorded in full,
+# because the mistake is more instructive than the number.
 #
-# Measured on a camera 0.77 m above a floor, over 690 intervals:
+# THE ORIGINAL REASONING: over a flat surface at constant range a translation
+# moves every point by nearly the same vector, so points that disagree as much
+# as they move cannot be observing one. A run on a "static" camera showed 21
+# intervals with large flow and a dispersion/magnitude ratio of 0.84-1.03, and
+# 0.5 was set to exclude them.
 #
-#   669 quiet intervals   dispersion median 0.127 px
-#    21 with large flow   dispersion median 7.712 px, and a
-#                         dispersion/magnitude ratio of 1.03 median, 0.84 MIN
+# WHAT WAS WRONG: the operator had knocked the camera during that run. Those 21
+# intervals were REAL MOTION, and they sit squarely inside the distribution
+# real motion actually has -- measured over four controlled slides, moving
+# intervals run to a ratio median of 0.40-0.89 with a p90 of 1.02-3.76. The
+# assumption fails because a downward camera is never exactly fronto-parallel
+# to the floor: a small tilt makes range vary across the image, so a genuine
+# translation produces genuine dispersion.
 #
-# ⛔ HONEST CAVEAT ON THAT RUN: the operator reported afterwards that the
-# camera was knocked during it, so those 21 intervals are NOT established as
-# pure noise -- some may be real motion. What the ratio does establish is that
-# they were INCOHERENT: the points disagreed as much as they moved, which a
-# translation over a flat floor cannot produce. The gate is justified on that
-# geometry, not on the assumption that the camera was still.
+# WHAT IT COST, measured on a 50 cm one-way slide at 0.50 m:
 #
-# A subsequent genuinely static run -- 727 intervals, peak flow 0.069 px --
-# reported ZERO velocities, which is the correct answer and the baseline that
-# matters. Note it never exercised this gate: nothing came near the 0.5 px
-# floor. The coherence gate is verified by construction and by the ratio
-# separation, and it still owes a POSITIVE test on real motion.
-MAX_DISPERSION_RATIO = 0.5
+#     gate   intervals   net cm   path cm
+#     0.5       104       -12.3     15.9     <- the shipped value
+#     1.0       212       -17.4     27.5
+#     2.0       304       -25.2     35.6
+#     3.0       346       -28.1     38.7
+#     off       396       -30.9     41.6
+#
+# The gate was discarding SIXTY PER CENT of the real displacement, and every
+# rejected interval is displacement the integral never sees.
+#
+# AND IT WAS NEVER LOAD-BEARING: on a genuinely static camera -- 727 intervals,
+# peak flow 0.069 px -- the MAGNITUDE floor alone produced zero false
+# velocities without this gate doing anything at all. So 5.0 is kept purely as
+# insurance against wildly incoherent flow (a moving object crossing the view,
+# a non-planar scene), which costs 3.5 % of intervals, rather than as the thing
+# separating signal from noise. That job belongs to `MIN_NET_FLOW_PX`.
+MAX_DISPERSION_RATIO = 5.0
 
 
 @dataclass
