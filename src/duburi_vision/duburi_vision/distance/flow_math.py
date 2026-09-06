@@ -144,9 +144,13 @@ class DistanceAccumulator:
         self.active = False
         self.distance_m = 0.0
         self._axis: Tuple[float, float] = (0.0, 1.0)
+        self._axis_yaw = 0.0
+        self._lateral = False
 
     def start(self, axis_yaw_rad: float, lateral: bool) -> None:
         self._axis = axis_unit(axis_yaw_rad, lateral)
+        self._axis_yaw = float(axis_yaw_rad)
+        self._lateral = bool(lateral)
         self.distance_m = 0.0
         self.active = True
 
@@ -161,6 +165,40 @@ class DistanceAccumulator:
         if not self.active or height_m is None or f_px <= 1e-6:
             return
         self.distance_m += project(flow_trans_px, self._axis) * height_m / f_px
+
+    def add_body_velocity(self, vx: float, vy: float, yaw_rad: float,
+                          dt: float) -> None:
+        """Fold one interval of BODY-frame velocity onto the latched axis.
+
+        Prefer this over `add()` when you already have metric velocity. The
+        pixel path exists because the old node only ever had pixels; going
+        velocity -> pixels -> metres to reuse it means re-deriving an axis
+        convention on every call, and the first attempt at exactly that
+        SWAPPED THE AXES: `flow_velocity` returns `vx` from the image's y
+        component, so the obvious tuple is reversed and the error is a plausible
+        number rather than a crash.
+
+        `vx` is body forward, `vy` body right, `yaw_rad` the CURRENT heading.
+        The axis was latched at start(), so a hull that yaws mid-move still
+        accumulates along the direction it set out on -- which is the whole
+        reason the axis is latched rather than taken from the current heading.
+
+        Derivation, so the trig is checkable rather than trusted. Rotating body
+        into world and projecting onto the latched direction `a`:
+
+            v_n = vx*cos(y) - vy*sin(y)      v_e = vx*sin(y) + vy*cos(y)
+            proj = v_n*cos(a) + v_e*sin(a)
+                 = vx*cos(y-a) - vy*sin(y-a)
+
+        so only the heading ERROR since the latch matters, and at e=0 this is
+        exactly vx (axial) -- the sanity check worth keeping in mind.
+        """
+        if not self.active or dt <= 0.0:
+            return
+        e = float(yaw_rad) - self._axis_yaw
+        if self._lateral:
+            e -= math.pi / 2.0
+        self.distance_m += (vx * math.cos(e) - vy * math.sin(e)) * dt
 
     def stop(self) -> float:
         self.active = False

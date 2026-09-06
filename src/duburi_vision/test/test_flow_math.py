@@ -109,3 +109,64 @@ def test_accumulator_inactive_is_noop_and_reset():
     assert acc.distance_m > 0.0
     acc.start(0.0, False)                        # re-start zeroes it
     assert acc.distance_m == 0.0
+
+
+# --------------------------------------------------------------------------- #
+#  add_body_velocity -- metric velocity onto the latched axis
+# --------------------------------------------------------------------------- #
+class TestAddBodyVelocity:
+    """The pixel round-trip this replaces got the axes BACKWARDS on the first
+    attempt, and produced a plausible number rather than an error.
+    `flow_velocity` returns `vx` from the image's *y* component, so the obvious
+    tuple is reversed -- the same axis-swap class that cost four bench runs."""
+
+    def test_on_heading_the_axial_axis_is_exactly_forward_speed(self):
+        acc = DistanceAccumulator()
+        acc.start(axis_yaw_rad=0.0, lateral=False)
+        acc.add_body_velocity(vx=0.5, vy=0.0, yaw_rad=0.0, dt=2.0)
+        assert acc.distance_m == pytest.approx(1.0)
+
+    def test_the_latch_is_a_HEADING_not_a_frame(self):
+        """Latched at 90 deg and driving forward at 90 deg is still pure axial
+        travel -- only the error SINCE the latch matters."""
+        acc = DistanceAccumulator()
+        acc.start(axis_yaw_rad=math.radians(90.0), lateral=False)
+        acc.add_body_velocity(vx=0.5, vy=0.0, yaw_rad=math.radians(90.0), dt=2.0)
+        assert acc.distance_m == pytest.approx(1.0)
+
+    def test_a_90_degree_heading_error_contributes_NOTHING_axially(self):
+        """Forward motion perpendicular to the latched axis is not progress
+        along it. If this ever reads 1.0, the projection has been dropped and
+        the accumulator is measuring path length, not displacement."""
+        acc = DistanceAccumulator()
+        acc.start(axis_yaw_rad=0.0, lateral=False)
+        acc.add_body_velocity(vx=0.5, vy=0.0, yaw_rad=math.radians(90.0), dt=2.0)
+        assert acc.distance_m == pytest.approx(0.0, abs=1e-9)
+
+    def test_lateral_latch_reads_body_right(self):
+        acc = DistanceAccumulator()
+        acc.start(axis_yaw_rad=0.0, lateral=True)
+        acc.add_body_velocity(vx=0.0, vy=0.5, yaw_rad=0.0, dt=2.0)
+        assert acc.distance_m == pytest.approx(1.0)
+
+    def test_reversing_reduces_the_total(self):
+        """Displacement, not distance travelled: out and back is zero."""
+        acc = DistanceAccumulator()
+        acc.start(axis_yaw_rad=0.0, lateral=False)
+        acc.add_body_velocity(0.5, 0.0, 0.0, 2.0)
+        acc.add_body_velocity(-0.5, 0.0, 0.0, 2.0)
+        assert acc.distance_m == pytest.approx(0.0, abs=1e-9)
+
+    def test_it_is_inert_until_started(self):
+        """An accumulator that folds before start() silently books travel from
+        whenever the node happened to boot."""
+        acc = DistanceAccumulator()
+        acc.add_body_velocity(10.0, 0.0, 0.0, 1.0)
+        assert acc.distance_m == 0.0
+
+    def test_a_nonpositive_dt_folds_nothing(self):
+        acc = DistanceAccumulator()
+        acc.start(0.0, False)
+        acc.add_body_velocity(1.0, 0.0, 0.0, 0.0)
+        acc.add_body_velocity(1.0, 0.0, 0.0, -1.0)
+        assert acc.distance_m == 0.0
