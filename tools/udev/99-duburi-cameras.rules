@@ -31,7 +31,44 @@
 SUBSYSTEM!="video4linux", GOTO="duburi_cam_end"
 ATTR{index}!="0", GOTO="duburi_cam_end"
 
-ENV{ID_PATH}=="platform-xhci-hcd.1-usb-0:2:1.0", SYMLINK+="duburi_cam_forward"
-ENV{ID_PATH}=="platform-xhci-hcd.0-usb-0:1:1.0", SYMLINK+="duburi_cam_downward"
+# ⛔ BOTH LINES WERE WRONG, and they failed in two different ways.
+#
+# MEASURED on the vehicle 2026-09-07 (`udevadm info -n /dev/videoN`):
+#
+#   Sonix "USB_2.0_Camera"    ID_PATH=platform-xhci-hcd.1-usb-0:1:1.0
+#   Fantech_Luminous_C30      ID_PATH=platform-xhci-hcd.0-usb-0:1:1.0
+#
+# 1. The old `forward` line named `hcd.1-usb-0:2:1.0`, which MATCHES NO
+#    DEVICE. So udev never created that symlink and the one on the box was
+#    hand-made and stale -- it survived only because nothing checked.
+# 2. The old `downward` line matched the Fantech, but the FANTECH IS THE
+#    FORWARD CAMERA. The global-shutter Sonix is the BOTTOM one.
+#
+# So the two cameras were SWAPPED IN SOFTWARE: `pi_forward` opened the bottom
+# camera and `pi_downward` opened the forward one, while every node, launch
+# file and mission looked entirely correct.
+#
+# That is not a cosmetic swap. The bottom camera is the optical-flow velocity
+# sensor (our DVL substitute). A GLOBAL shutter is what makes that work -- a
+# rolling shutter skews the frame while the hull moves and corrupts the very
+# displacement flow is measuring -- and the Sonix is also the only one of the
+# two that exceeds 30 Hz. Measured: Sonix MJPG 640x360 210.17 Hz, Fantech a
+# flat 15.00 Hz in EVERY format and resolution.
+#
+# MATCH ON THE MODEL, NOT THE PORT, WHILE THE TWO UNITS ARE DIFFERENT MODELS.
+# The by-port scheme below is the right answer only for two IDENTICAL cameras
+# (the vehicle's future pair of Blue Robotics units, whose serials are not
+# unique). Today the models differ, so the model is both more specific and
+# port-independent: moving a camera to another socket keeps it correct instead
+# of silently renaming it.
+ENV{ID_MODEL}=="Fantech_Luminous_C30", SYMLINK+="duburi_cam_forward"
+ENV{ID_MODEL}=="USB_2.0_Camera",       SYMLINK+="duburi_cam_downward"
+
+# When the two identical Blue Robotics cameras land, the model stops
+# discriminating and these take over. Re-derive each ID_PATH on the real build
+# (`udevadm info -n /dev/videoN | grep ID_PATH=`) -- do NOT copy these values,
+# one of them was wrong for exactly that reason.
+#ENV{ID_PATH}=="platform-xhci-hcd.0-usb-0:1:1.0", SYMLINK+="duburi_cam_forward"
+#ENV{ID_PATH}=="platform-xhci-hcd.1-usb-0:1:1.0", SYMLINK+="duburi_cam_downward"
 
 LABEL="duburi_cam_end"

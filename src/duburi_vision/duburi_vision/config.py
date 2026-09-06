@@ -41,35 +41,54 @@ CAMERA_PROFILES = {
     # 'forward' profile the ROS graph published 29.2 Hz, camera-capped.
     # 210 is a property of the MICRODIA global-shutter unit on this bench, not
     # of the Pi and not of the vehicle's cameras.
+    # ⛔ THESE TWO WERE SWAPPED, and the fps figures belonged to each other.
+    # The global-shutter Sonix is the BOTTOM camera and the Fantech is the
+    # FORWARD one; the udev rules bound the names the other way round (one of
+    # them to a port that matched no device at all), so `pi_forward` opened
+    # the bottom camera. Corrected in tools/udev/99-duburi-cameras.rules.
+    #
+    # `fps` and `fourcc` are MEASURED on the vehicle, not requested. Both were
+    # previously absent or wrong, and `fourcc` could not be expressed at all:
+    # the builder hardcoded MJPG, so a camera that is faster in another format
+    # was unconfigurable.
     'pi_forward': {
-        # `v4l2`, not `webcam`: a keep-up thread and a one-deep mailbox instead
-        # of OpenCV's queue. Measured after a 400 ms consumer stall, against
-        # the kernel's own capture timestamps: a plain read() hands you a
-        # 396 ms-old frame, the standard "drain the queue" recipe 348 ms, this
-        # 17 ms. The driver keeps the OLDEST frames when its buffers fill, so
-        # draining empties a fossil record -- cameras/v4l2_mailbox.py.
+        # The FANTECH. A flat 15.00 Hz in every format, every resolution and
+        # every requested rate -- MJPG, YUYV, 640x360, 640x480, asking for 30,
+        # 90 or 210 all return 15.00. The descriptor advertises 30; the camera
+        # does not deliver it. So this is the CAMERA's ceiling, and the old
+        # ledger entry blaming a loose USB plug ("stuck at 7.50 Hz, needs a
+        # replug") is retracted -- a replug cannot move a limit this flat.
+        # 15 Hz is the detection rate on the forward camera until the hardware
+        # changes; nothing in software will raise it.
         'source':      'v4l2',
-                # `/dev/duburi_cam_*`, from tools/udev/99-duburi-cameras.rules.
-        # NOT `/dev/v4l/by-path/...`: those ID_PATH values are correct --
-        # udevadm reports exactly them -- but Raspberry Pi OS creates only
-        # `by-id` for USB video and never `by-path`. So this named a symlink
-        # the distro does not make, fell through to the integer index, and
-        # BOTH profiles resolved to /dev/video0: whichever node started
-        # first won and the other died EBUSY. The rule also earned itself
-        # immediately -- video0 was the Sonix before a reboot and the
-        # Fantech after, so the raw index had already swapped the cameras.
         'device_path': '/dev/duburi_cam_forward',
         'width':       640,
         'height':      360,
-        'fps':         210,
+        'fps':         15,
+        'fourcc':      'MJPG',
         'frame_id':    'forward_cam',
     },
     'pi_downward': {
+        # The SONIX GLOBAL SHUTTER -- the optical-flow velocity sensor, which
+        # is why it is the one that matters most here. Measured: MJPG 640x360
+        # 210.17 Hz, 640x400 210.21, YUYV a flat 35.26. So MJPG is not a
+        # preference, it is 6x, and the format has to be per-camera because
+        # the forward unit is indifferent to it.
+        #
+        # A global shutter is the right sensor for flow for a reason no frame
+        # rate captures: a rolling shutter skews the image while the hull
+        # moves, which corrupts the displacement flow exists to measure.
+        #
+        # 640x400 also runs at 210 and gives 40 more rows of floor texture at
+        # no cost. Kept at 360 because every calibration and bench number we
+        # hold was taken there; switching is a measured upgrade, not a free
+        # one (fx is unchanged at the same width, cy is not).
         'source':      'v4l2',
-                'device_path': '/dev/duburi_cam_downward',
+        'device_path': '/dev/duburi_cam_downward',
         'width':       640,
         'height':      360,
-        'fps':         90,
+        'fps':         210,
+        'fourcc':      'MJPG',
         'frame_id':    'downward_cam',
     },
 

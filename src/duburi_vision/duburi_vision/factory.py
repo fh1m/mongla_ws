@@ -8,7 +8,7 @@ changes. Mirrors `duburi_sensors.factory.make_yaw_source` exactly.
 
 def _build_webcam(*, device=None, device_path=None, width=640, height=480,
                   fps=30, frame_id='laptop_cam', name='laptop', logger=None,
-                  **_):
+                  fourcc='MJPG', **_):
     # `device_path` WAS SILENTLY IGNORED. Every profile that names one -- the
     # two Pi cameras and both vehicle cameras -- passed it in as a kwarg, it
     # landed in `**_`, and the builder used `device`, which those profiles do
@@ -22,7 +22,7 @@ def _build_webcam(*, device=None, device_path=None, width=640, height=480,
     from .cameras.webcam import WebcamCamera
     return WebcamCamera(
         device=device, width=width, height=height, fps=fps,
-        frame_id=frame_id, name=name, logger=logger)
+        frame_id=frame_id, name=name, logger=logger, fourcc=fourcc)
 
 
 def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
@@ -50,7 +50,7 @@ def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
                 f'by-id symlink) for the mailbox.')
         return _build_webcam(device=device, width=width, height=height,
                              fps=fps, frame_id=frame_id, name=name,
-                             logger=logger)
+                             logger=logger, fourcc=fourcc)
     from .cameras.v4l2_mailbox import V4L2MailboxCamera
     try:
         return V4L2MailboxCamera(
@@ -64,7 +64,8 @@ def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
                 f'measured 396 ms of staleness after a 400 ms consumer stall, '
                 f'against 17 ms on the mailbox.')
         return _build_webcam(device=dev, width=width, height=height, fps=fps,
-                             frame_id=frame_id, name=name, logger=logger)
+                             frame_id=frame_id, name=name, logger=logger,
+                             fourcc=fourcc)
 
 
 def _build_ros_topic(*, node=None, topic=None, frame_id='ros_cam', name='ros_topic',
