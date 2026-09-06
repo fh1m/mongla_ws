@@ -546,7 +546,7 @@ a node restart alone does nothing.
 
 ---
 
-## D16 — a Hailo stream abort leaves the detector a ZOMBIE (open, 2026-09-06)
+## D16 — a Hailo stream abort leaves the detector a ZOMBIE (FIXED, 2026-09-06)
 
 **Observed on the vehicle.** Restarting the stack while a previous detector
 still held the `VDevice` put the chip into `HAILO_STREAM_ABORT(63)`. The
@@ -571,12 +571,28 @@ continuing to exist.
 **Recovery today is a manual restart**, and the stack does come back cleanly
 (299 inferences/interval, frame age 42.2 ms mean).
 
-**The fix, not yet made.** After N consecutive inference failures the detector
-should either re-open the `VDevice` or **exit**, so a supervisor restarts it. A
-node that cannot do its job must stop claiming to be up. The new health surface
-(`duburi_manager/health.py`) is what would surface it — `detector(rate_hz)`
-returns FAILED on a zero rate — but nothing is polling it yet, and the detector
-itself still needs the recovery path.
+**FIXED.** Three tiers in `detector_node._on_infer_failure`, because the
+failures are not one thing:
+
+1. **isolated** failures are tolerated — a bad frame is a bad frame, and
+   killing the node for one is worse than the fault;
+2. **15 consecutive** means the DEVICE is gone, not the frame → rebuild the
+   detector through the same construction path that built it (dropping the old
+   one first: on the Hailo path the device is held by the object, and a second
+   `VDevice` while the first lives is `HAILO_OUT_OF_PHYSICAL_DEVICES`);
+3. **45 consecutive**, i.e. the rebuild did not help → `os._exit(1)` so a
+   supervisor restarts the process.
+
+Thresholds are in FRAMES, not seconds, so they behave the same at 3 Hz and at
+80. Any success resets the counter, so a chip that recovers by itself never
+reaches tier 2.
+
+**A test lesson worth keeping.** The first test set drove `_on_infer_failure`
+directly and passed while two injected defects went undetected — deleting the
+LOOP's call to it, and deleting the success reset. The escalation was tested
+and the WIRING was not, which is the same shape as a guard that greps the
+source. Tests that run `_infer_loop` itself now cover both, and all four
+injections are caught.
 
 **Related:** the same restart also logged
 `detector init FAILED: Failure in hailort driver ioctl` on the first attempt

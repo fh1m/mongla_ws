@@ -49,6 +49,15 @@ import queue as _queue
 import sys
 import threading
 import time
+
+# Consecutive inference failures before the detector is rebuilt, and before the
+# process gives up and exits. Not one number: an ISOLATED failure is a bad
+# frame and dropping it is right, while a RUN of them is the device. Sized in
+# frames rather than seconds so it behaves the same at 3 Hz and at 80 -- 15
+# frames is 0.2 s at 80 Hz and 5 s at 3 Hz, and in both cases it is well past
+# "one unlucky frame". See known-issues D16.
+_INFER_FAIL_REBUILD = 15
+_INFER_FAIL_EXIT = 45
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from typing import Dict, NamedTuple, Optional
@@ -543,6 +552,7 @@ class DetectorNode(Node):
         self._infers = 0
         self._stale_sum = 0.0
         self._stale_max = 0.0
+        self._infer_fails = 0
         threading.Thread(target=self._infer_loop, daemon=True).start()
 
         registry_info = (
@@ -560,6 +570,11 @@ class DetectorNode(Node):
 
     def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, max_det, allowlist):
         """Background thread: load the detector, then go live. Node subscribes before this runs."""
+        # Kept so a recovery can rebuild through THIS path rather than a second
+        # copy of the construction that would drift from it.
+        self._build_kwargs = dict(model_path=model_path, device=device,
+                                  conf=conf, iou=iou, imgsz=imgsz, half=half,
+                                  max_det=max_det, allowlist=allowlist)
         try:
             det = make_detector(
                 model_path=model_path,
@@ -654,6 +669,76 @@ class DetectorNode(Node):
                 break
         self._infer_q.put_nowait(item)
 
+    def _on_infer_failure(self, exc) -> None:
+        """A node that cannot do its job must stop claiming to be up.
+
+        ⛔ WHAT THIS REPLACES (known-issues D16). The old handler logged and
+        continued, forever. Observed on the vehicle: a `HAILO_STREAM_ABORT(63)`
+        left this node ALIVE -- process up, topics up, subscriptions up, `pgrep`
+        satisfied -- logging a failure on every frame and publishing zero
+        detections indefinitely. Every liveness check we own passed. Only the
+        detection RATE showed it, and nothing was watching the rate.
+
+        Three tiers, because the failures are not one thing:
+
+          1. ISOLATED failures are tolerated. A single bad frame, a transient
+             decode fault -- dropping it and carrying on is right, and killing
+             the node for one would be worse than the fault.
+          2. CONSECUTIVE failures mean the DEVICE is gone, not the frame. Try
+             to rebuild the detector through the same path that built it.
+          3. If rebuilding does not help either, EXIT non-zero so a supervisor
+             restarts the process. Staying up is the failure mode, not the
+             recovery.
+
+        The counter resets on any success, so a chip that recovers by itself
+        never reaches tier 2.
+        """
+        self._infer_fails = getattr(self, '_infer_fails', 0) + 1
+        n = self._infer_fails
+        if n < _INFER_FAIL_REBUILD:
+            self.get_logger().error(
+                f'[DET  ] inference failed ({n}/{_INFER_FAIL_REBUILD}): {exc!r}')
+            return
+        if n == _INFER_FAIL_REBUILD:
+            self.get_logger().error(
+                f'[DET  ] {n} consecutive inference failures -- the DEVICE is '
+                f'gone, not the frame. Rebuilding the detector. Last: {exc!r}')
+            self._rebuild_detector()
+            return
+        if n >= _INFER_FAIL_EXIT:
+            self.get_logger().fatal(
+                f'[DET  ] {n} consecutive inference failures and a rebuild did '
+                f'not help. EXITING so a supervisor can restart this process: a '
+                f'node that cannot infer must not keep claiming to be up. '
+                f'Last: {exc!r}')
+            os._exit(1)          # noqa: SLF001 -- rclpy shutdown cannot be
+            #                       trusted from a worker thread mid-fault, and
+            #                       the point is to stop, loudly and now.
+
+    def _rebuild_detector(self) -> None:
+        """Re-run the construction that produced the detector in the first
+        place. Drops the old one first: on the Hailo path the device is held
+        by the object, and a second VDevice while the first lives is
+        `HAILO_OUT_OF_PHYSICAL_DEVICES`."""
+        kw = getattr(self, '_build_kwargs', None)
+        if not kw:
+            self.get_logger().error('[DET  ] cannot rebuild: no build kwargs '
+                                    '(registry mode) -- will exit instead')
+            return
+        old, self._det = self._det, None
+        try:
+            del old
+        except Exception:                       # noqa: BLE001
+            pass
+        try:
+            self._load_single_model_async(**kw)
+            if self._det is not None:
+                self.get_logger().warn('[DET  ] detector REBUILT after '
+                                       'consecutive inference failures')
+                self._infer_fails = 0
+        except Exception as exc:                # noqa: BLE001
+            self.get_logger().error(f'[DET  ] rebuild failed: {exc!r}')
+
     def _infer_loop(self):
         """Worker thread: decode + infer + publish (never touches the ROS executor)."""
         while rclpy.ok():
@@ -716,8 +801,9 @@ class DetectorNode(Node):
                 infer_frame, crop_state = self._crop.apply(frame)
             try:
                 detections = det.infer(infer_frame)
+                self._infer_fails = 0
             except Exception as exc:
-                self.get_logger().error(f"[DET  ] inference failed: {exc!r}")
+                self._on_infer_failure(exc)
                 continue
             if crop_state is not None and crop_state.active and detections:
                 # BACK TO FULL-FRAME COORDINATES. Everything downstream -- the
