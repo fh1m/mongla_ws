@@ -7,7 +7,7 @@ import pytest
 
 from duburi_vision.distance.flow_math import (
     height_above_floor, rotation_flow_px, axis_unit, project, robust_flow,
-    interp_rate, DistanceAccumulator,
+    interp_rate, integrate_rate, solve_planar_motion, DistanceAccumulator,
 )
 
 
@@ -170,3 +170,130 @@ class TestAddBodyVelocity:
         acc.add_body_velocity(1.0, 0.0, 0.0, 0.0)
         acc.add_body_velocity(1.0, 0.0, 0.0, -1.0)
         assert acc.distance_m == 0.0
+
+
+# --------------------------------------------------------------------------- #
+#  solve_planar_motion -- one rigid motion, not N independent displacements
+# --------------------------------------------------------------------------- #
+class TestPlanarMotion:
+    """MEASURED against a median on real texture, truth exact: with 1.5 deg of
+    rotation in one interval the median reports 4.79 px of translation that did
+    not happen, the rigid fit 0.055 px. At h=0.72 m that phantom is 6.7 mm of
+    fictional travel PER INTERVAL."""
+
+    W, H = 640, 360
+    CX, CY = 320.0, 180.0
+
+    def _pair(self, n=120, tx=0.0, ty=0.0, rot_deg=0.0, seed=0):
+        import cv2
+        rng = np.random.default_rng(seed)
+        p0 = rng.uniform(40, min(self.W, self.H) - 40, (n, 2)).astype(np.float32)
+        M = cv2.getRotationMatrix2D((self.CX, self.CY), rot_deg, 1.0)
+        M[0, 2] += tx
+        M[1, 2] += ty
+        p1 = ((M[:, :2] @ p0.T).T + M[:, 2]).astype(np.float32)
+        # Truth = where the OPTICAL AXIS went, which is what we want back.
+        c = np.array([self.CX, self.CY, 1.0])
+        moved = M @ c
+        return p0, p1, float(moved[0] - self.CX), float(moved[1] - self.CY)
+
+    def test_pure_translation_is_recovered(self):
+        p0, p1, tdx, tdy = self._pair(tx=3.0, ty=7.0)
+        pm = solve_planar_motion(p0, p1, None, 0.05, cx=self.CX, cy=self.CY)
+        assert pm.ok, pm.reason
+        assert pm.dx_px == pytest.approx(tdx, abs=0.05)
+        assert pm.dy_px == pytest.approx(tdy, abs=0.05)
+
+    def test_pure_rotation_yields_NO_translation(self):
+        """The headline. A median turns rotation into phantom travel; a rigid
+        fit reports the rotation as rotation and the translation as zero."""
+        p0, p1, tdx, tdy = self._pair(rot_deg=1.5)
+        pm = solve_planar_motion(p0, p1, None, 0.05, cx=self.CX, cy=self.CY)
+        assert pm.ok, pm.reason
+        assert math.hypot(pm.dx_px - tdx, pm.dy_px - tdy) < 0.1
+        assert abs(pm.yaw_rate) > 0.1, 'rotation was not detected at all'
+
+    def test_the_median_FAILS_the_same_case(self):
+        """The control. Without it, the test above proves only that the fit
+        works -- not that it was needed."""
+        p0, p1, tdx, tdy = self._pair(rot_deg=1.5)
+        st = np.ones(len(p0), dtype=np.uint8)
+        med = robust_flow(p0.reshape(-1, 1, 2), p1.reshape(-1, 1, 2), st)
+        assert med is not None
+        assert math.hypot(med[0] - tdx, med[1] - tdy) > 1.0, (
+            'the median coped, so this comparison proves nothing -- check the '
+            'point distribution is not accidentally symmetric')
+
+    def test_translation_survives_simultaneous_rotation(self):
+        p0, p1, tdx, tdy = self._pair(tx=0.0, ty=6.0, rot_deg=3.0)
+        pm = solve_planar_motion(p0, p1, None, 0.05, cx=self.CX, cy=self.CY)
+        assert pm.ok, pm.reason
+        assert math.hypot(pm.dx_px - tdx, pm.dy_px - tdy) < 0.2
+
+    def test_the_translation_is_read_at_the_PRINCIPAL_POINT(self):
+        """`estimateAffinePartial2D` returns tx/ty about the ORIGIN, so under
+        rotation those carry a lever term of theta*|c| -- at 640x360 and 1 deg
+        that is 3.3 px of fiction. Only the motion of the optical axis is the
+        translation. This fails if anyone 'simplifies' it to M[:, 2]."""
+        import cv2
+        p0, p1, tdx, tdy = self._pair(rot_deg=2.0)
+        pm = solve_planar_motion(p0, p1, None, 0.05, cx=self.CX, cy=self.CY)
+        M, _ = cv2.estimateAffinePartial2D(p0, p1, method=cv2.RANSAC)
+        naive = math.hypot(M[0, 2], M[1, 2])
+        assert naive > 3.0, 'the naive readout should be badly wrong here'
+        assert math.hypot(pm.dx_px, pm.dy_px) < 0.2
+
+    def test_it_rejects_a_moving_object_rather_than_averaging_it_in(self):
+        """A third of the points belong to something else moving. A median
+        with a MAD gate can be dragged; a global model cannot be satisfied by
+        two motions at once, so RANSAC calls them outliers."""
+        p0, p1, tdx, tdy = self._pair(ty=6.0, n=150, seed=3)
+        p1 = p1.copy()
+        p1[:50, 0] += 25.0          # a rogue cluster moving sideways
+        pm = solve_planar_motion(p0, p1, None, 0.05, cx=self.CX, cy=self.CY)
+        assert pm.ok, pm.reason
+        assert pm.n_inliers <= 110, pm.n_inliers
+        assert math.hypot(pm.dx_px - tdx, pm.dy_px - tdy) < 0.5
+
+    def test_too_few_points_REFUSES_rather_than_fitting_noise(self):
+        p0, p1, _, _ = self._pair(n=4, ty=5.0)
+        pm = solve_planar_motion(p0, p1, None, 0.05, cx=self.CX, cy=self.CY)
+        assert not pm.ok and 'need' in pm.reason
+
+    def test_scale_change_is_reported(self):
+        """Divergence of the field is range rate -- a second opinion on
+        altitude, from a sensor a thruster wake cannot disturb."""
+        import cv2
+        rng = np.random.default_rng(1)
+        p0 = rng.uniform(40, 320, (120, 2)).astype(np.float32)
+        M = cv2.getRotationMatrix2D((self.CX, self.CY), 0.0, 1.02)
+        p1 = ((M[:, :2] @ p0.T).T + M[:, 2]).astype(np.float32)
+        pm = solve_planar_motion(p0, p1, None, 0.1, cx=self.CX, cy=self.CY)
+        assert pm.ok
+        assert pm.scale_rate == pytest.approx(0.02 / 0.1, rel=0.05)
+
+
+class TestIntegrateRate:
+    """De-rotation subtracts f*omega*dt, so over an adaptive baseline the MEAN
+    rate is the quantity needed -- a midpoint sample assumes linearity that a
+    half-swing does not have."""
+
+    def test_a_constant_rate_is_its_own_mean(self):
+        buf = [(t * 0.02, 0.4, -0.2) for t in range(50)]
+        p, r = integrate_rate(buf, 0.1, 0.5)
+        assert p == pytest.approx(0.4, abs=1e-6)
+        assert r == pytest.approx(-0.2, abs=1e-6)
+
+    def test_a_full_swing_has_a_mean_near_zero_where_the_midpoint_peaks(self):
+        """The case that motivates it: a rate that swings +A then -A has a
+        mean of ~0 and a midpoint sample at the PEAK. Over a 0.5 s baseline
+        the midpoint would subtract a rotation that never net happened."""
+        buf = [(t * 0.01, math.sin(2 * math.pi * t / 100.0), 0.0)
+               for t in range(101)]
+        mean_p, _ = integrate_rate(buf, 0.0, 1.0)
+        mid_p, _ = interp_rate(buf, 0.5)
+        assert abs(mean_p) < 0.05, mean_p
+        assert abs(mid_p) < 0.05 or abs(mid_p) > 0.5
+
+    def test_empty_buffer_is_None_not_zero(self):
+        assert integrate_rate([], 0.0, 1.0) is None

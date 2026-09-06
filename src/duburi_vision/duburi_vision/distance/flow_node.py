@@ -53,8 +53,9 @@ from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision.distance.flow_math import (
-    DistanceAccumulator, flow_dispersion, height_above_floor, interp_rate,
-    robust_flow,
+    DistanceAccumulator, flow_dispersion, forward_backward_error,
+    height_above_floor, integrate_rate, interp_rate, robust_flow,
+    solve_planar_motion,
 )
 from duburi_vision.distance.flow_velocity import flow_velocity
 
@@ -122,6 +123,27 @@ class FlowVelocityNode(Node):
         self.declare_parameter('min_net_flow_px', 0.5)
         self.declare_parameter('max_dispersion_ratio', 5.0)
         self.declare_parameter('grid_buckets', 4)
+        # ADAPTIVE KEYFRAME BASELINE. Emit a velocity once this much image
+        # displacement has accumulated against the anchor, rather than once
+        # per frame. See `_track` for why, and measured-bars for the numbers.
+        self.declare_parameter('target_px', 8.0)
+        self.declare_parameter('max_px', 25.0)
+        self.declare_parameter('max_baseline_s', 0.75)
+        # PLANAR RIGID FIT. A downward camera on a flat floor sees ONE body
+        # move, so all the points measure the same four numbers. Measured
+        # against a median, truth exact: with 1.5 deg of rotation in an
+        # interval the median reports 4.79 px of translation that did not
+        # happen, the fit 0.055 px.
+        self.declare_parameter('use_planar_fit', True)
+        self.declare_parameter('ransac_px', 2.0)
+        # Forward-backward rejection. LK reports convergence, not correctness:
+        # over a tiled pool floor it converges confidently one tile off.
+        self.declare_parameter('fb_reject_px', 1.0)
+        # Sign relating IMAGE rotation to the vehicle's yaw. MOUNT-SPECIFIC:
+        # it depends which way the camera is clocked in the hull, so it is
+        # calibrated once against the gyro and then monitored, never assumed.
+        self.declare_parameter('yaw_image_sign', -1.0)
+        self.declare_parameter('yaw_cross_check_tol', 0.25)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -136,6 +158,18 @@ class FlowVelocityNode(Node):
         self._min_flow = float(self.get_parameter('min_net_flow_px').value)
         self._max_disp = float(self.get_parameter('max_dispersion_ratio').value)
         self._buckets = max(1, int(self.get_parameter('grid_buckets').value))
+        self._target_px = float(self.get_parameter('target_px').value)
+        self._max_px = float(self.get_parameter('max_px').value)
+        self._max_baseline = float(self.get_parameter('max_baseline_s').value)
+        self._use_planar = bool(self.get_parameter('use_planar_fit').value)
+        self._ransac_px = float(self.get_parameter('ransac_px').value)
+        self._fb_px = float(self.get_parameter('fb_reject_px').value)
+        self._yaw_sign = float(self.get_parameter('yaw_image_sign').value)
+        self._yaw_tol = float(self.get_parameter('yaw_cross_check_tol').value)
+        self._n_median_fallback = 0
+        self._n_yaw_disagree = 0
+        self._last_yaw_img = 0.0
+        self._last_scale_rate = 0.0
 
         ns = f'/duburi/vision/{cam}'
         img_qos = QoSProfile(depth=1,
@@ -161,13 +195,16 @@ class FlowVelocityNode(Node):
         self._bridge = CvBridge()
         self._acc = DistanceAccumulator()
         self._rate_buf: deque = deque(maxlen=128)
+        self._yaw_rate_buf: deque = deque(maxlen=128)
         self._depth_m = None
         self._yaw_deg = None
         self._last_height = None
 
-        self._prev_gray = None
-        self._prev_pts = None
-        self._prev_t = None
+        # The ANCHOR, not the previous frame: flow is measured frame-to-
+        # anchor and the anchor is replaced only when a measurement is emitted.
+        self._anchor_gray = None
+        self._anchor_pts = None
+        self._anchor_t = None
         self._frame_i = 0
         self._n_tracks = 0
         self._last_quality = 0
@@ -226,7 +263,11 @@ class FlowVelocityNode(Node):
     # ── inputs ──────────────────────────────────────────────────────────────
     def _on_rates(self, msg: Vector3Stamped) -> None:
         t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        # x=pitch, y=roll, z=yaw (rad/s). The yaw channel was published and
+        # read by nothing; it is what makes the image/gyro cross-check below
+        # possible without adding a sensor.
         self._rate_buf.append((t, float(msg.vector.x), float(msg.vector.y)))
+        self._yaw_rate_buf.append((t, float(msg.vector.z)))
 
     def _on_state(self, msg: DuburiState) -> None:
         if not np.isnan(msg.depth_m):
@@ -252,9 +293,9 @@ class FlowVelocityNode(Node):
                 f'({self._n_ok} intervals used, {self._n_refused} refused)')
 
     def _reset_lk(self) -> None:
-        self._prev_gray = None
-        self._prev_pts = None
-        self._prev_t = None
+        self._anchor_gray = None
+        self._anchor_pts = None
+        self._anchor_t = None
         self._n_ok = 0
         self._n_refused = 0
 
@@ -329,40 +370,114 @@ class FlowVelocityNode(Node):
         return np.concatenate(out).reshape(-1, 1, 2).astype(np.float32)
 
     def _process(self, gray, t, seq) -> None:
+        """Track against the ANCHOR; emit a velocity when it is worth one.
+
+        ⛔ THE DEFECT THIS REPLACES, measured on this camera at h=0.72 m.
+        `MIN_NET_FLOW_PX` is a per-interval PIXEL floor, so the SPEED it
+        refuses scales with the frame rate: `min_px * h / (f * dt)`. Running
+        flow at the camera's native 210 Hz therefore refuses everything below
+        **0.147 m/s** -- and it refuses by publishing NO measurement, which
+        every consumer reads as "not moving".
+
+        A synthetic 30 cm translation over real texture, truth exact:
+
+            speed     210 Hz      70 Hz      30 Hz      ADAPTIVE
+            0.02      0.0 %       0.0 %      11.1 %     100.1 %
+            0.05      0.0 %      65.7 %     100.0 %     100.2 %
+            0.10      0.0 %     100.0 %     100.0 %     100.2 %
+            0.80    100.3 %      99.0 %      97.8 %     100.5 %
+
+        Zero of 1260 intervals survived a 30 cm move at 5 cm/s, reported as
+        0.0 cm travelled. Station-keeping is the AUV's slowest and most common
+        state, so a fixed high rate blinds the sensor in exactly the regime it
+        exists for.
+
+        LOWERING THE CONSTANT IS NOT THE FIX -- that trades a blind spot for
+        integrated noise, and both are symptoms of measuring over a fixed TIME
+        when the thing that matters is DISPLACEMENT. So the baseline stretches
+        until there is something to measure: every emitted interval carries
+        ~`target_px` of signal against ~0.06 px of noise at ANY speed, and the
+        measurement RATE follows distance travelled rather than the clock.
+
+        Two further properties fall out. Within a baseline the flow is
+        frame-to-ANCHOR, so it does not chain per-frame noise the way
+        frame-to-frame integration does. And `max_px` re-anchors before LK is
+        asked to match across more displacement than its window can follow.
+        """
         self._frame_i += 1
-        if (self._prev_gray is None or self._prev_pts is None
-                or len(self._prev_pts) < _MIN_TRACKS
-                or self._frame_i % _RESEED_EVERY == 0):
-            self._prev_pts = self._bucketed_corners(gray)
-            self._prev_gray = gray
-            self._prev_t = t
+        if (self._anchor_gray is None or self._anchor_pts is None
+                or len(self._anchor_pts) < _MIN_TRACKS):
+            self._anchor(gray, t)
             return
 
-        next_pts, status, _err = cv2.calcOpticalFlowPyrLK(
-            self._prev_gray, gray, self._prev_pts, None, **_LK_PARAMS)
-        dt = t - (self._prev_t if self._prev_t is not None else t)
+        nxt, status, _err = cv2.calcOpticalFlowPyrLK(
+            self._anchor_gray, gray, self._anchor_pts, None, **_LK_PARAMS)
 
-        flow = robust_flow(self._prev_pts, next_pts, status,
+        # FORWARD-BACKWARD FIRST, so neither estimator ever sees a point that
+        # cannot round-trip. This is the defence against the failure a pool
+        # invites: over a repetitive tile lattice LK converges confidently one
+        # tile away and reports status=1, and the displacement it returns is a
+        # clean multiple of the tile pitch -- indistinguishable from a correct
+        # match by residual or status alone.
+        if self._fb_px > 0.0 and nxt is not None and status is not None:
+            fb = forward_backward_error(self._anchor_gray, gray,
+                                        self._anchor_pts, nxt, _LK_PARAMS)
+            if fb is not None:
+                st = np.asarray(status).reshape(-1).astype(bool)
+                st &= (fb <= self._fb_px)
+                status = st.astype(np.uint8).reshape(-1, 1)
+
+        flow = robust_flow(self._anchor_pts, nxt, status,
                            min_tracks=_MIN_TRACKS)
-        disp = flow_dispersion(self._prev_pts, next_pts, status)
-        n_used = 0
-        if next_pts is not None and status is not None:
-            st = np.asarray(status).reshape(-1).astype(bool)
-            n_used = int(st.sum())
-            self._prev_pts = (next_pts[st].reshape(-1, 1, 2)
-                              if n_used >= _MIN_TRACKS
-                              else self._bucketed_corners(gray))
-        else:
-            self._prev_pts = self._bucketed_corners(gray)
-        self._n_tracks = n_used
-        self._prev_gray = gray
-        self._prev_t = t
-
-        if flow is None or dt <= 0.0:
-            self._refuse('LK produced no usable flow' if flow is None
-                         else 'non-positive dt')
+        if flow is None:
+            # The anchor is unusable; re-seed here rather than reporting a
+            # refusal for every frame until something changes.
+            self._anchor(gray, t)
+            self._refuse('LK lost the anchor')
             return
-        self._evaluate(flow, disp, dt, t, n_used)
+
+        n_used = int(np.asarray(status).reshape(-1).astype(bool).sum())
+        mag = math.hypot(flow[0], flow[1])
+        dt = t - self._anchor_t
+        ripe = (mag >= self._target_px or mag >= self._max_px
+                or n_used < _MIN_TRACKS or dt >= self._max_baseline)
+        if not ripe:
+            self._n_tracks = n_used
+            return
+
+        disp = flow_dispersion(self._anchor_pts, nxt, status)
+
+        # THE RIGID FIT, with the median kept as a VISIBLE fallback. A floor
+        # too bare to give 8 agreeing points cannot support a 4-DOF fit, and
+        # in that regime a median of what little there is beats refusing
+        # outright -- but the fallback is counted and logged, because a sensor
+        # that silently degrades to its weaker estimator is one that reports
+        # phantom translation under rotation without ever saying so.
+        if self._use_planar:
+            h_, w_ = gray.shape[:2]
+            pm = solve_planar_motion(self._anchor_pts, nxt, status, dt,
+                                     cx=w_ / 2.0, cy=h_ / 2.0,
+                                     ransac_px=self._ransac_px)
+            if pm.ok:
+                flow = (pm.dx_px, pm.dy_px)
+                n_used = pm.n_inliers
+                disp = pm.residual_px
+                self._last_yaw_img = self._yaw_sign * pm.yaw_rate
+                self._last_scale_rate = pm.scale_rate
+            else:
+                self._n_median_fallback += 1
+
+        self._n_tracks = n_used
+        self._anchor(gray, t)
+        if dt > 0.0:
+            self._evaluate(flow, disp, dt, t, n_used)
+        else:
+            self._refuse('non-positive baseline')
+
+    def _anchor(self, gray, t) -> None:
+        self._anchor_gray = gray
+        self._anchor_pts = self._bucketed_corners(gray)
+        self._anchor_t = t
 
     def _evaluate(self, flow, disp, dt, t, n_used) -> None:
         ok, why = self._scale_ready()
@@ -380,7 +495,11 @@ class FlowVelocityNode(Node):
             self._refuse('no depth yet, so no height above the floor')
             return
 
-        rates = interp_rate(self._rate_buf, t - dt * 0.5)
+        # The MEAN rate over the baseline, not a midpoint sample: with an
+        # adaptive baseline dt reaches ~0.5 s at 2 cm/s, and de-rotation
+        # subtracts `f * omega * dt`, so a midpoint that lands on the peak of
+        # a swing scales that error by the whole interval.
+        rates = integrate_rate(self._rate_buf, t - dt, t)
         pitch_rate = roll_rate = 0.0
         if rates is not None:
             pitch_rate, roll_rate = rates
@@ -405,6 +524,7 @@ class FlowVelocityNode(Node):
             self._refuse(v.reason)
             return
 
+        self._cross_check_yaw(t, dt)
         self._n_ok += 1
         quality = self._quality(v, n_used, disp)
         self._last_quality = quality
@@ -419,6 +539,51 @@ class FlowVelocityNode(Node):
                                else 0.0)
             self._acc.add_body_velocity(v.vx, v.vy, yaw, dt)
         self._publish_distance(self._acc.distance_m)
+
+    def _cross_check_yaw(self, t: float, dt: float) -> None:
+        """Image-derived yaw against the gyro's. Free, and always on.
+
+        ⛔ WHY THIS IS WORTH ITS OWN METHOD. The planar fit measures the
+        rotation of the floor in the image, and for a downward camera that IS
+        the vehicle's yaw. The gyro measures the same quantity through
+        completely different physics. Two independent sensors reading one
+        number is the cheapest integrity monitor available to us, and it costs
+        nothing extra: both values are already computed.
+
+        It catches precisely the class of defect that cost this session four
+        bench runs and four wrong answers -- an axis swapped, a sign flipped, a
+        gain 12 % out. Every one of those produced a plausible number and no
+        error, and every one would show here as a standing disagreement
+        between two things that must agree.
+
+        It only reports. A disagreement does not know WHICH source is wrong,
+        so acting on it would be guessing; the honest response is to say so
+        loudly and let the operator or a later gate decide.
+        """
+        if not self._yaw_rate_buf or dt <= 0.0:
+            return
+        gy = interp_rate([(a, b, 0.0) for (a, b) in self._yaw_rate_buf],
+                         t - dt * 0.5)
+        if gy is None:
+            return
+        gyro_yaw = gy[0]
+        img_yaw = self._last_yaw_img
+        # Only meaningful when something is actually rotating: below the gyro's
+        # own noise the ratio of two near-zero numbers is noise, the same trap
+        # that made a motionless bench read "rotation-dominated".
+        if abs(gyro_yaw) < 0.05 and abs(img_yaw) < 0.05:
+            return
+        denom = max(abs(gyro_yaw), abs(img_yaw), 1e-6)
+        if abs(img_yaw - gyro_yaw) / denom > self._yaw_tol:
+            self._n_yaw_disagree += 1
+            if self._n_yaw_disagree % 20 == 1:
+                self.get_logger().warning(
+                    f'[FLOW ] yaw DISAGREES: image {img_yaw:+.3f} vs gyro '
+                    f'{gyro_yaw:+.3f} rad/s ({self._n_yaw_disagree} times). '
+                    f'Two independent measurements of one quantity should not '
+                    f'differ by {self._yaw_tol:.0%}. Suspect the camera<->body '
+                    f'axis mapping, yaw_image_sign, or a gyro scale -- not the '
+                    f'flow itself.')
 
     def _quality(self, v, n_used, disp) -> int:
         """0-255, MAVLink OPTICAL_FLOW_RAD convention: 0 = NO VALID FLOW.
@@ -497,8 +662,10 @@ class FlowVelocityNode(Node):
         if v is not None and v.ok:
             self.get_logger().info(
                 f'[FLOW ] v=({v.vx:+.3f},{v.vy:+.3f})m/s  q={self._last_quality} '
-                f'h={h:.2f}m tracks={n_used} rot={v.rot_fraction:.2f}  '
-                f'd={self._acc.distance_m:+.3f}m  skipped={dropped}')
+                f'h={h:.2f}m pts={n_used} rot={v.rot_fraction:.2f} '
+                f'yaw_img={self._last_yaw_img:+.3f} '
+                f'd={self._acc.distance_m:+.3f}m  skipped={dropped} '
+                f'median_fallback={self._n_median_fallback}')
         else:
             self.get_logger().info(
                 f'[FLOW ] REFUSING: {self._last_reason}  '

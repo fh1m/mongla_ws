@@ -131,6 +131,198 @@ def interp_rate(buffer: Sequence[Tuple[float, float, float]],
     return buffer[-1][1], buffer[-1][2]
 
 
+def forward_backward_error(prev_gray, next_gray, prev_pts, next_pts,
+                           lk_params) -> Optional["np.ndarray"]:
+    """Per-point round-trip error in px: track forward, then track back.
+
+    ⛔ LK DOES NOT REPORT ITS OWN FAILURES HONESTLY. `status=1` means the
+    solver converged, not that it converged on the RIGHT patch. Over a
+    repetitive texture -- a tiled pool floor is the worst case we will
+    actually fly over -- it converges confidently one tile away, and the
+    displacement it returns is a clean multiple of the tile pitch. Nothing in
+    the residual or the status flag distinguishes that from a correct match.
+
+    Tracking the result BACK to the original frame does distinguish it: a
+    correct correspondence returns to where it started, a one-tile-off match
+    returns one tile away. This is the standard forward-backward (bidirectional)
+    check and it is the cheapest real defence against the exact failure a pool
+    invites.
+
+    Returns per-point |p0 - p0_roundtrip|, or None if it cannot be computed.
+    """
+    import cv2
+    if prev_pts is None or next_pts is None:
+        return None
+    back, st_b, _ = cv2.calcOpticalFlowPyrLK(next_gray, prev_gray,
+                                             next_pts, None, **lk_params)
+    if back is None:
+        return None
+    p0 = np.asarray(prev_pts, dtype=np.float64).reshape(-1, 2)
+    pb = np.asarray(back, dtype=np.float64).reshape(-1, 2)
+    err = np.hypot(p0[:, 0] - pb[:, 0], p0[:, 1] - pb[:, 1])
+    if st_b is not None:
+        lost = ~np.asarray(st_b).reshape(-1).astype(bool)
+        err[lost] = np.inf          # never silently pass an unmatched point
+    return err
+
+
+class PlanarMotion:
+    """Translation at the principal point, image rotation, and scale change."""
+
+    __slots__ = ('dx_px', 'dy_px', 'yaw_rate', 'scale_rate', 'n_inliers',
+                 'n_points', 'residual_px', 'ok', 'reason')
+
+    def __init__(self, ok=False, dx_px=0.0, dy_px=0.0, yaw_rate=0.0,
+                 scale_rate=0.0, n_inliers=0, n_points=0, residual_px=0.0,
+                 reason=''):
+        self.ok, self.dx_px, self.dy_px = ok, dx_px, dy_px
+        self.yaw_rate, self.scale_rate = yaw_rate, scale_rate
+        self.n_inliers, self.n_points = n_inliers, n_points
+        self.residual_px, self.reason = residual_px, reason
+
+
+def solve_planar_motion(prev_pts, next_pts, status, dt: float, *,
+                        cx: float, cy: float,
+                        min_points: int = 8,
+                        ransac_px: float = 2.0) -> PlanarMotion:
+    """Fit ONE rigid motion to all the correspondences at once.
+
+    ⛔ WHY THIS BEATS A MEDIAN, and it is not "the papers do it". A camera
+    pointed at a plane does not see N independent displacements -- it sees ONE
+    body moving, so the flow field is a single similarity transform and every
+    point is a measurement of the same four numbers. A component-wise median
+    models only the translation and discards the rest:
+
+      * IMAGE ROTATION is thrown away. For a downward camera that IS the
+        vehicle's yaw about the optical axis, so the field carries an
+        independent yaw rate -- free, and derived from a sensor that fails for
+        completely different reasons than the gyro. Cross-checking the two is
+        an always-on detector for the axis/sign class of bug that cost this
+        session four bench runs, and it needs no extra hardware.
+      * SCALE CHANGE is thrown away. Divergence of the field is range rate: a
+        second opinion on altitude, against a barometer that a wake or a
+        thruster transient can disturb.
+      * THE GLOBAL CONSTRAINT is thrown away, and this is the one that matters
+        in a pool. A median is a per-point vote, so if half the points lock one
+        tile off over a repetitive floor the median follows them. A single
+        transform cannot be satisfied by a mixture of correct and one-tile-off
+        matches -- they are geometrically inconsistent -- so RANSAC rejects
+        them as outliers instead of averaging them in.
+
+    ⚠ RANSAC, NOT `USAC_MAGSAC` -- and this CORRECTS a recorded plan note.
+    The note said MAGSAC was "already in OpenCV 4.6 on the Pi, a free upgrade".
+    It is, for `findHomography` and `findFundamentalMat`. It is NOT accepted by
+    `estimateAffinePartial2D`, which raises "Unknown or unsupported robust
+    estimation method"; measured on the vehicle, only RANSAC and LMEDS are
+    supported here. The loss is small and worth stating: MAGSAC's advantage is
+    insensitivity to the inlier threshold, which matters most for an 8-DOF
+    homography fitted to a marginal point set. This model is 4 DOF and is
+    over-determined by ~100 points, so the threshold is far less critical.
+
+    A SIMILARITY (4 DOF) IS ALSO THE RIGHT MODEL, not merely the available one.
+    A full homography has 8 and would happily spend the extra four on fitting
+    noise as a phantom tilt; a camera looking straight down at a flat floor
+    genuinely has only translation, rotation and scale to offer.
+
+    ⚠ THE TRANSLATION IS EVALUATED AT THE PRINCIPAL POINT, not read out of the
+    matrix. `estimateAffinePartial2D` returns tx/ty about the ORIGIN (the
+    top-left corner), so under any rotation those include a lever term of
+    `theta * |c|` -- at 640x360 and a 1 deg rotation that is 3.3 px of pure
+    fiction added to the translation, silently. Only the motion of the optical
+    axis is the translation we want.
+    """
+    import cv2
+    if prev_pts is None or next_pts is None or dt <= 0.0:
+        return PlanarMotion(reason='no correspondences')
+    st = (np.asarray(status).reshape(-1).astype(bool) if status is not None
+          else np.ones(len(np.asarray(prev_pts).reshape(-1, 2)), dtype=bool))
+    p0 = np.asarray(prev_pts, dtype=np.float32).reshape(-1, 2)[st]
+    p1 = np.asarray(next_pts, dtype=np.float32).reshape(-1, 2)[st]
+    n = p0.shape[0]
+    if n < min_points:
+        return PlanarMotion(n_points=n,
+                            reason=f'only {n} tracked points, need {min_points}')
+
+    M, inl = cv2.estimateAffinePartial2D(
+        p0, p1, method=cv2.RANSAC, ransacReprojThreshold=ransac_px,
+        maxIters=2000, confidence=0.995)
+    if M is None:
+        return PlanarMotion(n_points=n, reason='no consistent rigid motion')
+    inliers = int(inl.sum()) if inl is not None else n
+    if inliers < min_points:
+        return PlanarMotion(n_points=n, n_inliers=inliers,
+                            reason=f'only {inliers}/{n} points agree on one '
+                                   f'motion')
+
+    a, b = float(M[0, 0]), float(M[1, 0])
+    scale = math.hypot(a, b)
+    theta = math.atan2(b, a)
+
+    # Translation OF THE OPTICAL AXIS. See the docstring: reading M[:,2] is a
+    # silent lever-arm error under any rotation.
+    c = np.array([cx, cy, 1.0])
+    moved = M @ c
+    dx = float(moved[0] - cx)
+    dy = float(moved[1] - cy)
+
+    # Residual of the surviving points: how well one rigid motion explains
+    # them. This is the honest quality signal -- it is large when the scene is
+    # not planar, when something is moving in view, or when the fit is riding
+    # a lattice ambiguity.
+    keep = inl.reshape(-1).astype(bool) if inl is not None else slice(None)
+    pin, pout = p0[keep], p1[keep]
+    pred = (M[:, :2] @ pin.T).T + M[:, 2]
+    resid = float(np.median(np.hypot(pred[:, 0] - pout[:, 0],
+                                     pred[:, 1] - pout[:, 1])))
+    return PlanarMotion(ok=True, dx_px=dx, dy_px=dy,
+                        yaw_rate=theta / dt, scale_rate=(scale - 1.0) / dt,
+                        n_inliers=inliers, n_points=n, residual_px=resid)
+
+
+def integrate_rate(buffer: Sequence[Tuple[float, float, float]],
+                   t0: float, t1: float) -> Optional[Tuple[float, float]]:
+    """Mean (pitch_rate, roll_rate) over [t0, t1], trapezoidally integrated.
+
+    ⛔ WHY NOT `interp_rate` AT THE MIDPOINT. Sampling the middle of an
+    interval assumes the rate is linear across it, which is fine over one
+    frame period and wrong over an adaptive keyframe baseline: at 2 cm/s the
+    baseline stretches to ~0.5 s, and a hull that yaws through half a swing in
+    that time has a midpoint rate near its PEAK while its mean is near zero.
+    De-rotation subtracts `f * omega * dt`, so the error is proportional to the
+    whole baseline -- exactly the regime where it is largest.
+
+    The mean is what the correction actually needs: the total rotational shift
+    over the interval is the INTEGRAL of the rate, and `mean * dt` is that
+    integral by definition.
+
+    Returns None on an empty buffer; clamps to the ends outside the range.
+    """
+    if not buffer:
+        return None
+    if t1 <= t0:
+        return interp_rate(buffer, t0)
+    inside = [(t, p, r) for (t, p, r) in buffer if t0 <= t <= t1]
+    # Anchor both ends so a baseline shorter than the sample interval, or one
+    # straddling a gap, still integrates over its true span.
+    ends = []
+    for t in (t0, t1):
+        got = interp_rate(buffer, t)
+        if got is not None:
+            ends.append((t, got[0], got[1]))
+    pts = sorted(set(inside + ends), key=lambda x: x[0])
+    if len(pts) < 2:
+        return interp_rate(buffer, 0.5 * (t0 + t1))
+    area_p = area_r = 0.0
+    for (ta, pa, ra), (tb, pb, rb) in zip(pts, pts[1:]):
+        dt = tb - ta
+        area_p += 0.5 * (pa + pb) * dt
+        area_r += 0.5 * (ra + rb) * dt
+    span = pts[-1][0] - pts[0][0]
+    if span <= 1e-9:
+        return pts[0][1], pts[0][2]
+    return area_p / span, area_r / span
+
+
 class DistanceAccumulator:
     """Integrate axis-projected metric displacement between start() and stop().
 
