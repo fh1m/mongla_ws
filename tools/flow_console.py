@@ -56,7 +56,7 @@ _ne = _load('_fc_nav', 'src/duburi_manager/duburi_manager/estimator/nav_estimato
 
 _FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
                        blockSize=7)
-_LK_PARAMS = dict(winSize=(21, 21), maxLevel=3,
+_LK_PARAMS = dict(winSize=(31, 31), maxLevel=3,
                   criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
                             30, 0.01))
 _MIN_TRACKS = 6
@@ -253,14 +253,6 @@ def worker(args):
 
         nxt, status, _ = cv2.calcOpticalFlowPyrLK(anchor, gray, anchor_pts,
                                                   None, **_LK_PARAMS)
-        if args.fb_px > 0 and nxt is not None and status is not None:
-            fb = _fm.forward_backward_error(anchor, gray, anchor_pts, nxt,
-                                            _LK_PARAMS)
-            if fb is not None:
-                st = np.asarray(status).reshape(-1).astype(bool)
-                st &= (fb <= args.fb_px)
-                status = st.astype(np.uint8).reshape(-1, 1)
-
         flow = _fm.robust_flow(anchor_pts, nxt, status, min_tracks=_MIN_TRACKS)
         draw = (anchor_pts, nxt, status)
         if flow is None:
@@ -277,6 +269,18 @@ def worker(args):
         if mag < args.target_px and n_ok >= _MIN_TRACKS and dt < args.max_baseline:
             _publish(vis, anchor_pts, draw, STATE)
             continue
+
+        # Forward-backward only now: it is a second full LK pass and the
+        # ripeness check above does not need it. Cull immediately before the
+        # estimate.
+        if args.fb_px > 0 and nxt is not None and status is not None:
+            fb = _fm.forward_backward_error(anchor, gray, anchor_pts, nxt,
+                                            _LK_PARAMS)
+            if fb is not None:
+                st = np.asarray(status).reshape(-1).astype(bool)
+                st &= (fb <= args.fb_px)
+                status = st.astype(np.uint8).reshape(-1, 1)
+                n_ok = int(st.sum())
 
         disp = _fm.flow_dispersion(anchor_pts, nxt, status)
         yaw_img = 0.0
@@ -693,7 +697,7 @@ def main():
     p.add_argument('--target-px', type=float, default=8.0)
     p.add_argument('--max-baseline', type=float, default=0.75)
     p.add_argument('--ransac-px', type=float, default=2.0)
-    p.add_argument('--fb-px', type=float, default=1.0)
+    p.add_argument('--fb-px', type=float, default=2.0)
     p.add_argument('--min-flow', type=float, default=0.5)
     p.add_argument('--rot-max', type=float, default=0.80)
     p.add_argument('--max-disp', type=float, default=5.0)

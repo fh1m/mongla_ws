@@ -66,7 +66,24 @@ from duburi_vision.distance.flow_velocity import flow_velocity
 # alike, and a pool floor is exactly the repetitive lattice where that bites.
 _FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
                        blockSize=7)
-_LK_PARAMS = dict(winSize=(21, 21), maxLevel=3,
+# WINDOW 31, MEASURED. On this camera over a real ~16-frame baseline, with
+# 172 candidate corners:
+#
+#     window   fb<=1px   RANSAC inliers   residual   ms
+#       15       128          127          0.54     3.7
+#       21       146          140          0.40     5.0
+#       31       153          150          0.40     6.8
+#       41       164          165          0.29     8.8
+#
+# A bigger window carries more texture, which is what makes a match unique on
+# a blurry or low-contrast floor -- and blur is what we measured this camera to
+# have (sharpness 70 against 321 and 1180 on archived competition clips). 41
+# is the best of the four and 31 is taken instead only because LK runs on
+# every arriving frame for the ripeness check: at ~90 fps that is 0.6 of a core
+# at 31 and 0.8 at 41. Revisit if the frame path ever gets cheaper.
+#
+# maxLevel 4 measured IDENTICAL to 3 on every window, so it stays at 3.
+_LK_PARAMS = dict(winSize=(31, 31), maxLevel=3,
                   criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
                             30, 0.01))
 _MIN_TRACKS = 6
@@ -140,7 +157,7 @@ class FlowVelocityNode(Node):
         self.declare_parameter('ransac_px', 2.0)
         # Forward-backward rejection. LK reports convergence, not correctness:
         # over a tiled pool floor it converges confidently one tile off.
-        self.declare_parameter('fb_reject_px', 1.0)
+        self.declare_parameter('fb_reject_px', 2.0)
         # Sign relating IMAGE rotation to the vehicle's yaw. MOUNT-SPECIFIC:
         # it depends which way the camera is clocked in the hull, so it is
         # calibrated once against the gyro and then monitored, never assumed.
@@ -399,20 +416,6 @@ class FlowVelocityNode(Node):
         nxt, status, _err = cv2.calcOpticalFlowPyrLK(
             self._anchor_gray, gray, self._anchor_pts, None, **_LK_PARAMS)
 
-        # FORWARD-BACKWARD FIRST, so neither estimator ever sees a point that
-        # cannot round-trip. This is the defence against the failure a pool
-        # invites: over a repetitive tile lattice LK converges confidently one
-        # tile away and reports status=1, and the displacement it returns is a
-        # clean multiple of the tile pitch -- indistinguishable from a correct
-        # match by residual or status alone.
-        if self._fb_px > 0.0 and nxt is not None and status is not None:
-            fb = forward_backward_error(self._anchor_gray, gray,
-                                        self._anchor_pts, nxt, _LK_PARAMS)
-            if fb is not None:
-                st = np.asarray(status).reshape(-1).astype(bool)
-                st &= (fb <= self._fb_px)
-                status = st.astype(np.uint8).reshape(-1, 1)
-
         flow = robust_flow(self._anchor_pts, nxt, status,
                            min_tracks=_MIN_TRACKS)
         if flow is None:
@@ -430,6 +433,26 @@ class FlowVelocityNode(Node):
         if not ripe:
             self._n_tracks = n_used
             return
+
+        # FORWARD-BACKWARD, and ONLY NOW. It is a second full LK pass, so
+        # running it on every arriving frame doubles the cost of the frame
+        # path to decide something the ripeness check does not need -- the
+        # ripeness check only asks "has enough displacement accumulated", and
+        # a mistracked point cannot fake that at the scale that matters.
+        # Culling belongs immediately before the estimate, which is here.
+        #
+        # It is the defence against the failure a pool invites: over a
+        # repetitive tile lattice LK converges confidently one tile away and
+        # reports status=1, returning a clean multiple of the tile pitch --
+        # indistinguishable from a correct match by residual or status alone.
+        if self._fb_px > 0.0 and nxt is not None and status is not None:
+            fb = forward_backward_error(self._anchor_gray, gray,
+                                        self._anchor_pts, nxt, _LK_PARAMS)
+            if fb is not None:
+                st = np.asarray(status).reshape(-1).astype(bool)
+                st &= (fb <= self._fb_px)
+                status = st.astype(np.uint8).reshape(-1, 1)
+                n_used = int(st.sum())
 
         disp = flow_dispersion(self._anchor_pts, nxt, status)
 

@@ -258,6 +258,138 @@ class PlanarMotion:
         self.residual_px, self.reason = residual_px, reason
 
 
+def phase_correlate_motion(prev_gray, cur_gray, dt: float, *,
+                           hann=None, with_rotation: bool = True,
+                           min_response: float = 0.05) -> "PlanarMotion":
+    """Whole-image motion with NO FEATURES. Fourier-Mellin.
+
+    ⛔ WHY THIS EXISTS ALONGSIDE THE FEATURE PATH. Lucas-Kanade needs corners,
+    and corners are the first thing a real floor stops providing: measured on
+    this camera, a textured surface gave 150 usable points and a plain one
+    gave 19, and the image itself is blurry (sharpness 70 against 321 and 1180
+    on archived competition footage). Feature-based flow degrades exactly where
+    an AUV spends its time -- smooth concrete, silt, flat paint, dim water.
+
+    Phase correlation does not look for anything. It correlates the whole
+    frame in the Fourier domain and reads the shift off the response peak, so
+    it has nothing to lose when the texture thins out. It is also
+    ILLUMINATION-ROBUST BY CONSTRUCTION: the cross-power spectrum is
+    normalised by magnitude, so only PHASE survives, and phase is what encodes
+    position. A brightness or contrast change moves magnitude, not phase --
+    which matters underwater, where a light sweeps and the water column
+    attenuates.
+
+    ROTATION AND SCALE COME FROM THE SAME TOOL, via the classic Fourier-Mellin
+    construction (Correlation Flow, ICRA 2018, uses the same idea and reports
+    robustness to motion blur that feature methods lack):
+
+      * the MAGNITUDE of an FFT is translation-invariant, so it carries only
+        rotation and scale;
+      * resampling that magnitude into LOG-POLAR coordinates turns a rotation
+        into a shift along the angle axis and a scale into a shift along the
+        log-radius axis;
+      * so a second phase correlation on the log-polar images reads both off
+        as translations -- the one thing phase correlation does well.
+
+    Returns the same `PlanarMotion` as `solve_planar_motion`, so the two are
+    interchangeable and can be compared on one footing.
+
+    ⚠ ITS FAILURE MODE IS DIFFERENT AND MUST BE GATED DIFFERENTLY. There are no
+    inliers to count, so `n_inliers` is meaningless here; the honest quality
+    signal is the correlation RESPONSE, which falls when the two frames do not
+    share content. It also assumes ONE global motion, so an object moving
+    through view biases it rather than being rejected -- where RANSAC on the
+    feature path would throw it out.
+
+    ⛔ MEASURED AND NOT SHIPPED ON. Built because the plan called for it as the
+    low-texture fallback, then benched against the feature path on this
+    camera's own imagery with exact synthetic truth. It lost on every count:
+
+        case                      LK err   LK pts   PHASE err   LK ms  PC ms
+        translation 8 px          0.014     171      0.012      12.1   84.8
+        translation 3 px          0.008     175      0.013      11.1   79.1
+        translation 0.5 px        0.015     177      0.057      11.1   78.4
+        trans 8 px + rot 2 deg    0.019     165      6.029      11.8   82.1
+        pure rotation 2 deg       0.007     168      6.001      11.7   78.4
+        blur+noise, trans 8 px    0.011     182      0.021        -      -
+        blur+noise, trans 3 px    0.005     192      0.032        -      -
+
+    Seven times slower, and it BREAKS UNDER ROTATION: translational phase
+    correlation has no rotation term, so 2 degrees puts 6 px into the
+    translation -- the same phantom-travel failure the median has, from a
+    different cause. The log-polar stage recovers the rotation but does not
+    correct the translation estimate for it.
+
+    And the premise was wrong. It was built for a "low texture" regime that
+    this camera does not have: the feature path returns 165-192 inliers on the
+    same frames, INCLUDING deliberately blurred and noised ones. An earlier
+    reading of 9 points was a transient, not the steady state, and the real fix
+    was the LK window (21 -> 31) and the round-trip threshold (1 -> 2 px).
+
+    KEPT, DEFAULT OFF, because the argument for it remains sound where it is
+    actually true -- a frame yielding under 8 corners cannot support a 4-DOF
+    fit, and this needs none. It should be reached for on evidence of that
+    regime, never on the assumption of it.
+    """
+    import cv2
+    if prev_gray is None or cur_gray is None or dt <= 0.0:
+        return PlanarMotion(reason='no frames')
+    a = np.float32(prev_gray)
+    b = np.float32(cur_gray)
+    if a.shape != b.shape:
+        return PlanarMotion(reason='frame size changed')
+    if hann is None:
+        # Without a window the frame edges are a step discontinuity and the
+        # FFT reads them as strong structure, which anchors the peak at zero.
+        hann = cv2.createHanningWindow((a.shape[1], a.shape[0]), cv2.CV_32F)
+    (sx, sy), response = cv2.phaseCorrelate(a, b, hann)
+    if response < min_response:
+        return PlanarMotion(reason=f'weak correlation peak ({response:.3f})')
+
+    yaw_rate = scale_rate = 0.0
+    if with_rotation:
+        try:
+            yaw_rate, scale_rate = _log_polar_rotation(a, b, dt)
+        except Exception:
+            yaw_rate = scale_rate = 0.0
+
+    return PlanarMotion(ok=True, dx_px=float(sx), dy_px=float(sy),
+                        yaw_rate=yaw_rate, scale_rate=scale_rate,
+                        n_inliers=0, n_points=0,
+                        residual_px=float(1.0 - response),
+                        reason='phase')
+
+
+def _log_polar_rotation(a, b, dt: float):
+    """Rotation and scale from log-polar phase correlation of FFT magnitudes."""
+    import cv2
+
+    def spectrum(img):
+        f = np.fft.fftshift(np.abs(np.fft.fft2(img)))
+        # Log compresses the enormous DC-to-high-frequency range so the peak
+        # is not decided by the DC term alone.
+        return np.log1p(f).astype(np.float32)
+
+    sa, sb = spectrum(a), spectrum(b)
+    h, w = sa.shape
+    centre = (w / 2.0, h / 2.0)
+    m = w / math.log(max(w / 2.0, 2.0))
+    flags = cv2.INTER_LINEAR + cv2.WARP_FILL_OUTLIERS + cv2.WARP_POLAR_LOG
+    pa = cv2.warpPolar(sa, (w, h), centre, w / 2.0, flags)
+    pb = cv2.warpPolar(sb, (w, h), centre, w / 2.0, flags)
+    hann = cv2.createHanningWindow((w, h), cv2.CV_32F)
+    (dlog, dang), _resp = cv2.phaseCorrelate(pa, pb, hann)
+    # angle axis spans 360 deg over `h` rows; the FFT magnitude of a real
+    # image is symmetric, so the recoverable range is 180 deg.
+    theta = -(dang / h) * 2.0 * math.pi
+    if theta > math.pi:
+        theta -= 2.0 * math.pi
+    elif theta < -math.pi:
+        theta += 2.0 * math.pi
+    scale = math.exp(dlog / m) if m > 0 else 1.0
+    return theta / dt, (scale - 1.0) / dt
+
+
 def solve_planar_motion(prev_pts, next_pts, status, dt: float, *,
                         cx: float, cy: float,
                         min_points: int = 8,
