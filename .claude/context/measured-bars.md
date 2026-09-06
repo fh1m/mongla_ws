@@ -581,3 +581,98 @@ sigma passes each bound:
 **`q_vel` must be fitted in water from NIS** — a bench cannot produce the
 accelerations that decide it, and lowering it without that measurement buys
 coast time by asserting the hull is calmer than it is.
+
+---
+
+## 12. De-rotation, calibrated on the rigid camera+IMU rig
+
+The srot board carries the downward global-shutter camera on a rigid mount, so
+for the first time the gyro and the camera share a body. Four phases, each run
+separately with the operator prompted between them.
+
+**Height is LENS to floor, 0.70 m ("70ish").** Velocity scales linearly with
+it, so the ±5 cm uncertainty is a **±7 % floor** under every scale number here.
+
+### The mapping — one axis at a time, or it is not identifiable
+
+| | value |
+|---|---|
+| excitation | gx 0.637, gy 0.534 rad/s (separate runs) |
+| `cond(MᵀM)` | **27.7**, well-conditioned |
+| image dx | `gx −1.150` (cross +0.058, −0.085), **held-out R² 0.982** |
+| image dy | `gy −1.095` (cross −0.064, +0.020), **held-out R² 0.990** |
+| false velocity, pure rotation | **411.2 → 40.8 mm/s (−90 %)** |
+
+**Three earlier attempts failed and all failed the same way.** Swinging by hand
+rotates about two axes at once; correlated regressors leave the *split* between
+`gx` and `gy` undetermined even though the fit looks fine, so the two gains
+disagreed by 2x and swapped which one was well-explained between runs (dx 0.641
+/ dy 0.936, then dx 0.785 / dy 0.497). **Excite one axis, then the other, then
+fit the pooled data.** Least squares never refuses: with no excitation it
+returns plausible +-1 coefficients and no error.
+
+**The gains are −1.12, not −1.00, and that is the PIVOT not the camera.**
+Rotation about the lens gives exactly `f·ω·dt`; rotating about a hand ~8 cm away
+adds `ω × r`, so the gain is `f·(1 + r/h)` = 1.11 at r = 8 cm, h = 0.70 m.
+**On the vehicle the lever arm is the camera's offset from the hull's centre of
+rotation** — a different, known number. The bench validates the method and the
+axis mapping; the gain must be re-derived from the vehicle's geometry.
+
+### The working envelope — de-rotation has a rotation-rate ceiling
+
+| gyro rms | raw | de-rotated | verdict |
+|---|---|---|---|
+| 0.090 rad/s (pure translation) | 51.7 cm | 52.8 cm | benign, +2 % |
+| **0.638 rad/s** | 69.3 cm (139 %) | **42.7 cm (85.5 %)** | **halves the error** |
+| 1.128 rad/s | 30.6 cm (61 %) | 20.7 cm (41 %) | **makes it worse** |
+
+Truth 50 cm in all three. The correction is `f·ω·Δt`, so **a camera↔gyro
+time-sync error leaves uncorrected flow proportional to ω**: 5 ms costs 1.6 px
+at 0.64 rad/s and 2.9 px at 1.13. **The residual is time-sync-limited, not
+mapping-limited** — which is where to look for the next improvement.
+
+### ⚠ `ROT_FRACTION_MAX = 0.80` is miscalibrated
+
+`flow_velocity.py` refused **533/670** intervals of the 0.638 rad/s run
+(rotation fraction median 99 %) — accepting 16 % — while de-rotation on that
+same data returned **85.5 % of truth against raw's 139 %**. The threshold was
+set before a validated axis mapping existed. **Do not raise it blind**: the
+1.128 rad/s row shows a genuine ceiling. A residual-based criterion is the
+better shape than a fraction-based one.
+
+Do not read the "gated net 5.1 cm" figure as evidence: it integrates 16 % of
+the travel and is not comparable to 50 cm.
+
+### Numbers that replaced earlier ones
+
+| quantity | was | is |
+|---|---|---|
+| **flow noise floor** | ~15 mm/s | **0.41 mm/s** median, p90 0.89, max 1.70 |
+| **flow scale** | 41.6 cm vs 50 (83 %) | **51.7 cm vs 50 (103.4 %)** |
+
+The old floor was **a rig being handled** — two independent untouched runs gave
+0.33 and 0.41 mm/s. The old scale gap was **a height error**, 50 cm assumed
+against a 70 cm lens height; there is no systematic scale bias left to explain.
+Static flow is 0.01–0.02 px, so `MIN_NET_FLOW_PX = 0.5` correctly refuses every
+static interval — verified against real numbers rather than assumed.
+
+### Instrument traps, each of which returned a plausible number
+
+- **A covered lens is not an error.** `goodFeaturesToTrack` still finds corners
+  in sensor noise and LK still returns motion: a capped camera produced "11 px
+  of flow" at 33 % survival, which was very nearly diagnosed as an optical-flow
+  search-window problem. **Retracted** — with the cap off, 16 px of flow tracks
+  at 93 %. Every phase now prints brightness / texture / corner count and
+  refuses to run below a floor.
+- **A motionless bench reports gyro rates of EXACTLY 0.0** — the firmware
+  quantises sub-threshold rates away. This looked like a frozen `SCALED_IMU2`
+  and was briefly recorded as a third permanent-zero field alongside
+  `VFR_HUD.throttle`. **Retracted**: it reads 0.04–0.09 rad/s the moment
+  anything moves. A preflight guard requiring *variance* would have refused
+  phase 1, whose whole point is that nothing moves.
+- **Gyro bias cannot be measured from a static interval on this board** — any
+  real bias sits below the quantisation that reports zero.
+- **An unattended protocol measures an untouched rig.** One full four-phase run
+  was spent on a rig nobody was told to move. Prompt the operator, one phase
+  per invocation, and print live feedback so they can correct mid-run.
+- `SCALED_IMU2` is `ATTITUDE`'s rates × 1000 — same data, so use `ATTITUDE`.
