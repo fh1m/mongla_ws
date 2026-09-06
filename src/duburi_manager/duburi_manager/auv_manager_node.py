@@ -65,6 +65,8 @@ from duburi_vision  import wait_vision_state_ready                       # noqa:
 
 from . import srot_format as _sfmt                                          # noqa: E402
 from . import srot_changes as _schg                                        # noqa: E402
+from . import health as _health
+from . import health_reporters as _hr
 from .connection_config import (                                             # noqa: E402
     DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
     resolve_srot_profile,
@@ -774,6 +776,13 @@ class AUVManagerNode(Node):
             self.esc_rpm_publisher = self.create_publisher(
                 Int32MultiArray, '/duburi/esc_rpm', 10)
 
+        # HEALTH. 1 Hz, and it only speaks when the vehicle's overall state
+        # CHANGES -- a board that logs every second is a board nobody reads,
+        # and the transition is the event worth seeing.
+        self._health = _health.HealthBoard()
+        self._register_health()
+        self._health_last = None
+        self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
         self.create_timer(0.5,  self.heartbeat_tick,   callback_group=self.timer_group)
         self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
         # Fast tick: 20 Hz HUD compass + depth (AHRS2 pinned to 50 Hz).
@@ -1126,6 +1135,59 @@ class AUVManagerNode(Node):
     # ================================================================== #
     #  Timers                                                             #
     # ================================================================== #
+
+    def _register_health(self) -> None:
+        """Translate what each subsystem already knows into one vocabulary.
+
+        Every reporter is wrapped so a missing method is UNKNOWN rather than an
+        AttributeError: the manager runs against two backends and a sim, and a
+        health board that crashes the node it is watching is worse than no
+        board at all.
+        """
+        fc = self.fc
+
+        def named(name):
+            fn = getattr(fc, '_named_value', None)
+            return fn(name) if fn else None
+
+        self._health.register('board_link', lambda: _hr.board_link(fc))
+        self._health.register('barometer', lambda: _hr.barometer(named))
+        self._health.register('heading_ref', lambda: _hr.heading_reference(named))
+        self._health.register('thrusters', lambda: _hr.thrusters(
+            getattr(fc, 'esc_status_rpm', lambda: [])(),
+            int(getattr(fc, 'esc_msgs', 0) or 0)))
+        self._health.register('detector', lambda: _hr.detector(
+            self._detection_rate_hz()))
+
+    def _detection_rate_hz(self):
+        """Detections per second, or None if we are not subscribed at all.
+
+        THE SIGNAL D16 NEEDED. A detector that aborts stays alive with every
+        topic present; the rate is the only thing that changes, and nothing was
+        watching it.
+        """
+        vs = getattr(self, 'vision', None)
+        st = getattr(vs, 'stats', None) if vs else None
+        if st is None:
+            return None
+        try:
+            return float(st().get('det_hz'))
+        except Exception:                       # noqa: BLE001
+            return None
+
+    def _health_tick(self) -> None:
+        self._health.poll()
+        worst = self._health.worst()
+        if worst is self._health_last:
+            return
+        self._health_last = worst
+        if worst is _health.State.OK:
+            self.get_logger().info('[HLTH ] all subsystems OK')
+            return
+        bad = '; '.join(str(h) for h in self._health.not_ok())
+        log = (self.get_logger().warn
+               if worst is _health.State.DEGRADED else self.get_logger().error)
+        log(f'[HLTH ] {worst.name}: {bad}')
 
     def heartbeat_tick(self):
         self.pixhawk.send_heartbeat()
