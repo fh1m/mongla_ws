@@ -54,6 +54,27 @@ ROT_FRACTION_MAX = 0.80
 # indistinguishable from the matcher's own noise (~1.5 px on our footage).
 MIN_NET_FLOW_PX = 0.5
 
+# COHERENCE. Maximum ratio of per-point flow DISPERSION to flow MAGNITUDE.
+#
+# Over a flat surface at constant range, a translation moves every point by
+# nearly the same vector -- that is what a translation IS in this geometry. So
+# points that DISAGREE as much as they move are not observing a translation,
+# whatever their median says.
+#
+# Measured on a static camera 0.77 m above a floor, where the true velocity is
+# exactly zero, over 690 intervals:
+#
+#   669 quiet intervals   dispersion median 0.127 px
+#    21 that cleared the  dispersion median 7.712 px, and a
+#       0.5 px floor      dispersion/magnitude ratio of 1.03 median, 0.84 MIN
+#
+# Those 21 produced velocities up to 1193 mm/s on a camera that never moved --
+# 5 % of intervals, each one large enough to wreck a filter. The magnitude
+# floor cannot catch them (they are genuinely large); their incoherence is what
+# gives them away. 0.5 sits well under the 0.84 minimum observed for noise and
+# far above what a real translation produces.
+MAX_DISPERSION_RATIO = 0.5
+
 
 @dataclass
 class FlowVelocity:
@@ -62,6 +83,7 @@ class FlowVelocity:
     vx: float = float('nan')        # m/s, + = body forward (image +y sense)
     vy: float = float('nan')        # m/s, + = body right
     rot_fraction: float = 0.0       # |rotational flow| / |total flow|
+    dispersion_ratio: float = 0.0   # per-point disagreement / flow magnitude
     net_flow_px: float = 0.0        # what is left after de-rotation
     height_m: float = 0.0
     reason: str = ''
@@ -76,8 +98,11 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
                   height_m: Optional[float],
                   pitch_rate: float = 0.0,
                   roll_rate: float = 0.0,
+                  dispersion_px: Optional[float] = None,
                   rot_fraction_max: float = ROT_FRACTION_MAX,
-                  min_net_flow_px: float = MIN_NET_FLOW_PX) -> FlowVelocity:
+                  min_net_flow_px: float = MIN_NET_FLOW_PX,
+                  max_dispersion_ratio: float = MAX_DISPERSION_RATIO
+                  ) -> FlowVelocity:
     """Body velocity from a de-rotated flow measurement.
 
     `dx_px`/`dy_px` are the TOTAL image shift over `dt`, `pitch_rate`/
@@ -120,6 +145,19 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
                             height_m=height_m,
                             reason=f'net flow {net:.2f}px below the noise floor')
 
+    # COHERENCE, and it is the gate the magnitude floor cannot supply. See
+    # MAX_DISPERSION_RATIO: on a static camera the spurious intervals were
+    # large AND incoherent, which is the only thing distinguishing them.
+    ratio = 0.0
+    if dispersion_px is not None:
+        ratio = float(dispersion_px) / max(net, 1e-9)
+        if ratio > max_dispersion_ratio:
+            return FlowVelocity(ok=False, rot_fraction=frac, net_flow_px=net,
+                                dispersion_ratio=ratio, height_m=height_m,
+                                reason=f'incoherent flow (dispersion '
+                                       f'{ratio:.2f}x the motion)')
+
     scale = height_m / (f_px * dt)
     return FlowVelocity(ok=True, vx=net_y * scale, vy=net_x * scale,
-                        rot_fraction=frac, net_flow_px=net, height_m=height_m)
+                        rot_fraction=frac, net_flow_px=net,
+                        dispersion_ratio=ratio, height_m=height_m)

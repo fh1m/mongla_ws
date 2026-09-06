@@ -118,3 +118,27 @@ def test_the_forward_camera_uses_the_SAME_equation_with_RANGE():
     dx, dy = _render(vx=0.25, h=3.0)
     r = flow_velocity(dx, dy, DT, f_px=F, height_m=3.0)
     assert r.ok and r.vx == pytest.approx(0.25, abs=1e-6)
+
+
+def test_INCOHERENT_flow_is_refused_however_LARGE_it_is():
+    """The gate the magnitude floor cannot supply, and the numbers are from a
+    static camera 0.77 m above a floor where truth is exactly zero: 21 of 690
+    intervals cleared the 0.5 px floor and produced velocities up to
+    1193 mm/s. Their dispersion/magnitude ratio was 1.03 median, 0.84 MINIMUM
+    -- the points disagreed as much as they moved, which is not a translation.
+    """
+    dx, dy = _render(vx=0.5, h=1.5)          # a large, real-looking flow
+    coherent = flow_velocity(dx, dy, DT, f_px=F, height_m=1.5,
+                             dispersion_px=0.2)
+    assert coherent.ok, coherent.reason
+    incoherent = flow_velocity(dx, dy, DT, f_px=F, height_m=1.5,
+                               dispersion_px=abs(dy) * 0.9)
+    assert not incoherent.ok and 'incoherent' in incoherent.reason
+    assert incoherent.dispersion_ratio > 0.5
+
+
+def test_dispersion_is_OPTIONAL_so_existing_callers_are_unchanged():
+    """A caller that cannot measure dispersion still gets the other guards,
+    rather than being refused for not supplying something it does not have."""
+    dx, dy = _render(vx=0.5, h=1.5)
+    assert flow_velocity(dx, dy, DT, f_px=F, height_m=1.5).ok
