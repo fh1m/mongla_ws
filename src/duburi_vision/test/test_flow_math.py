@@ -8,6 +8,7 @@ import pytest
 from duburi_vision.distance.flow_math import (
     height_above_floor, rotation_flow_px, axis_unit, project, robust_flow,
     interp_rate, integrate_rate, solve_planar_motion, DistanceAccumulator,
+    HeightFromDivergence,
 )
 
 
@@ -297,3 +298,72 @@ class TestIntegrateRate:
 
     def test_empty_buffer_is_None_not_zero(self):
         assert integrate_rate([], 0.0, 1.0) is None
+
+
+# --------------------------------------------------------------------------- #
+#  HeightFromDivergence -- height from the image, checked by the barometer
+# --------------------------------------------------------------------------- #
+class TestHeightFromDivergence:
+    """Height is a CLEAN MULTIPLIER on every velocity this sensor produces,
+    and today it comes from a pool depth someone typed in. The flow field's
+    divergence plus the barometer's vertical speed measure it directly."""
+
+    def test_it_recovers_a_known_height(self):
+        h = HeightFromDivergence()
+        true_h, vz = 2.5, 0.20
+        for _ in range(10):
+            h.add(scale_rate=vz / true_h, vz_ms=vz)
+        assert h.height_m == pytest.approx(true_h, rel=1e-6)
+
+    def test_it_says_NOTHING_in_level_flight(self):
+        """The critical gate. With no depth change the divergence is zero and
+        `vz / scale_rate` is 0/0 -- noise wearing a number. A height invented
+        here would silently rescale every distance in the mission."""
+        h = HeightFromDivergence()
+        for _ in range(50):
+            assert h.add(scale_rate=0.0005, vz_ms=0.0008) is None
+        assert h.height_m is None
+
+    def test_it_withholds_an_answer_until_it_has_evidence(self):
+        h = HeightFromDivergence()
+        for _ in range(4):
+            h.add(scale_rate=0.08, vz_ms=0.2)
+        assert h.height_m is None, 'answered on four samples'
+        h.add(scale_rate=0.08, vz_ms=0.2)
+        assert h.height_m is not None
+
+    def test_a_single_wild_sample_does_not_move_the_answer(self):
+        """Median, not mean: one bad interval on a passing fish or a glint
+        should not rescale the mission."""
+        h = HeightFromDivergence()
+        for _ in range(20):
+            h.add(scale_rate=0.1, vz_ms=0.25)      # 2.5 m
+        h.add(scale_rate=0.01, vz_ms=0.25)          # 25 m, absurd
+        assert h.height_m == pytest.approx(2.5, rel=0.05)
+
+    def test_absurd_heights_are_refused_not_stored(self):
+        h = HeightFromDivergence(max_h=12.0)
+        assert h.add(scale_rate=0.001, vz_ms=0.5) is None   # 500 m
+        assert h.n_samples == 0
+
+    def test_it_flags_a_wrong_pool_depth(self):
+        """The point of the whole thing: a typed pool depth that is 30 % out
+        should be caught before it becomes a scale error in the mission."""
+        h = HeightFromDivergence()
+        for _ in range(10):
+            h.add(scale_rate=0.2 / 2.0, vz_ms=0.2)          # truly 2.0 m
+        assert h.disagreement(2.0) == pytest.approx(0.0, abs=1e-6)
+        assert h.disagreement(2.6) == pytest.approx(0.3, abs=0.01)
+
+    def test_disagreement_is_None_when_it_has_no_opinion(self):
+        """Absence is not agreement."""
+        h = HeightFromDivergence()
+        assert h.disagreement(2.0) is None
+
+    def test_the_sign_convention_holds_descending(self):
+        """vz positive DOWNWARD, and descending grows the image. If either
+        sign flips, the height comes out negative and is refused -- which is
+        the safe direction, but the test pins the intent."""
+        h = HeightFromDivergence()
+        assert h.add(scale_rate=0.10, vz_ms=0.25) == pytest.approx(2.5)
+        assert h.add(scale_rate=-0.10, vz_ms=0.25) is None

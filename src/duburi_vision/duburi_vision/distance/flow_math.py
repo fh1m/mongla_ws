@@ -17,6 +17,7 @@ out of scope. Do not generalize the projection to accumulate both components.
 from __future__ import annotations
 
 import math
+from collections import deque
 from typing import Optional, Sequence, Tuple
 
 import numpy as np
@@ -530,6 +531,102 @@ def integrate_rate(buffer: Sequence[Tuple[float, float, float]],
     if span <= 1e-9:
         return pts[0][1], pts[0][2]
     return area_p / span, area_r / span
+
+
+class HeightFromDivergence:
+    """Height above the floor from the image, WITHOUT a hand-typed pool depth.
+
+    ⛔ THE ERROR THIS ATTACKS IS THE BIGGEST ONE WE HAVE. Flow velocity is
+    `v = h * flow / (f * dt)`, so height is a CLEAN MULTIPLIER on every number
+    the sensor produces. Today it comes from `pool_depth_m - |depth|`, and
+    `pool_depth_m` is typed in by a human who paced out a pool. A 7 % error
+    there is a 7 % error in every distance, invisible in every plot, and
+    integrated by everything downstream. The whole reason `flow_node` REFUSES
+    without it is that there is no safe default.
+
+    THE OBSERVATION NOBODY WAS USING. The planar fit already returns
+    `scale_rate` -- the divergence of the flow field, which for a downward
+    camera is the rate the floor grows in the image. Geometrically:
+
+        scale_rate = -vz / h            (descending -> closer -> scale grows)
+
+    and the barometer measures `vz` directly and independently. So:
+
+        h = -vz / scale_rate
+
+    That is a height measured by the CAMERA, cross-checked against a
+    barometer, with no pool depth in it at all. Both quantities are already
+    computed and one of them was being discarded.
+
+    ⚠ IT IS ONLY OBSERVABLE WHILE THE VEHICLE CHANGES DEPTH. In level flight
+    `scale_rate` is zero and this says nothing -- dividing by it would turn
+    noise into a confident height. So it gates hard on both terms being
+    meaningfully non-zero, accumulates a robust median rather than trusting any
+    single estimate, and reports how many samples it is standing on. A descent
+    at the start of a dive is enough to calibrate the height for the whole run,
+    which is exactly when an AUV descends anyway.
+
+    This does not replace the barometer path; it CHECKS it. A disagreement
+    means the typed pool depth is wrong, which is the failure that would
+    otherwise be discovered as a scale error in the mission.
+    """
+
+    __slots__ = ('_samples', '_min_scale_rate', '_min_vz', '_max_h', '_n_gated')
+
+    def __init__(self, *, min_scale_rate: float = 0.02, min_vz: float = 0.03,
+                 max_h: float = 12.0, keep: int = 64):
+        self._samples = deque(maxlen=int(keep))
+        self._min_scale_rate = float(min_scale_rate)
+        self._min_vz = float(min_vz)
+        self._max_h = float(max_h)
+        self._n_gated = 0
+
+    def add(self, scale_rate: float, vz_ms: float) -> Optional[float]:
+        """One (divergence, vertical speed) pair. Returns the height it implies.
+
+        `vz_ms` is POSITIVE DOWNWARD (descending), matching the sign convention
+        that makes a descent grow the image.
+        """
+        if not (math.isfinite(scale_rate) and math.isfinite(vz_ms)):
+            return None
+        # Both terms must be real motion. Near zero this is 0/0 and the answer
+        # is noise wearing a number -- the same trap as a rotation fraction
+        # computed on a motionless bench.
+        if abs(scale_rate) < self._min_scale_rate or abs(vz_ms) < self._min_vz:
+            self._n_gated += 1
+            return None
+        h = vz_ms / scale_rate
+        if not (0.05 < h < self._max_h):
+            self._n_gated += 1
+            return None
+        self._samples.append(h)
+        return h
+
+    @property
+    def height_m(self) -> Optional[float]:
+        """Robust height, or None until there is enough evidence."""
+        if len(self._samples) < 5:
+            return None
+        return float(np.median(self._samples))
+
+    @property
+    def n_samples(self) -> int:
+        return len(self._samples)
+
+    def disagreement(self, height_m: Optional[float]) -> Optional[float]:
+        """How wrong the OTHER height is, as a fraction of the measured one.
+
+        The denominator is the measured height deliberately. This is asked as
+        "how far off is the typed pool depth", and the honest reference for
+        that is the quantity that was measured rather than the quantity under
+        suspicion -- dividing by the suspect value flatters a large error and
+        exaggerates a small one. Returns None when there is no opinion yet:
+        absence of a measurement is not agreement.
+        """
+        mine = self.height_m
+        if mine is None or height_m is None or mine <= 0.0:
+            return None
+        return abs(mine - height_m) / mine
 
 
 class DistanceAccumulator:
