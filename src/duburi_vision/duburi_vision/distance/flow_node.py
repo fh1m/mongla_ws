@@ -180,6 +180,15 @@ class FlowVelocityNode(Node):
         self.declare_parameter('stamp_at_midpoint', True)
         self.declare_parameter('estimate_time_offset', True)
         self.declare_parameter('time_offset_s', 0.0)
+        # A BOUND ON td, because it is no longer only a diagnostic. Once td
+        # shifts every velocity stamp, a spurious correlation peak actively
+        # CORRUPTS the output instead of logging a warning -- and the slew
+        # makes a wrong value persist across windows. The plausible range is
+        # bounded by physics we have measured: transport jitter p2p 35 ms,
+        # half-exposure 7.85 ms, and one adaptive baseline 750 ms. Anything
+        # past 150 ms is not a link delay, it is a bad peak.
+        self.declare_parameter('time_offset_max_s', 0.15)
+        self.declare_parameter('time_offset_min_quality', 0.5)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -212,6 +221,10 @@ class FlowVelocityNode(Node):
         self._td_est = TimeOffset(max_lag_s=0.20)
         self._td_last_fit = 0.0
         self._td_n = 0
+        self._td_max = abs(float(self.get_parameter('time_offset_max_s').value))
+        self._td_min_q = float(
+            self.get_parameter('time_offset_min_quality').value)
+        self._td_rejected = 0
         cal = str(self.get_parameter('calibration').value or '').strip()
         if cal:
             try:
@@ -421,6 +434,38 @@ class FlowVelocityNode(Node):
                               min_distance=_FEATURE_PARAMS['minDistance'],
                               block=_FEATURE_PARAMS['blockSize'],
                               buckets=self._buckets)
+
+    def _accept_td(self, got, quality):
+        """Decide whether an estimated camera<->gyro offset may be used.
+
+        td stopped being a diagnostic the moment it began shifting every
+        velocity stamp: a spurious correlation peak now CORRUPTS the output
+        instead of logging a warning, and the slew makes a wrong value
+        persist across windows. Two things must hold.
+
+        Quality, because the peak must actually be a peak. And a bound,
+        because the plausible range is bounded by physics we have measured:
+        transport jitter p2p 35 ms, half-exposure 7.85 ms, one adaptive
+        baseline 750 ms. Past 150 ms it is a correlation artefact, not a
+        link delay -- and we have no in-water measurement of the true value
+        to sanity-check a large one against.
+
+        Returns the offset to slew toward, or None to hold the current td.
+        """
+        if got is None:
+            return None
+        if abs(got) > self._td_max:
+            self._td_rejected += 1
+            if self._td_rejected % 10 == 1:
+                self.get_logger().warning(
+                    f'[FLOW ] REFUSING a time offset of {got * 1000:+.1f} ms '
+                    f'-- beyond the {self._td_max * 1000:.0f} ms bound, so it '
+                    f'is a correlation artefact, not a link delay. td stays '
+                    f'at {self._td * 1000:+.2f} ms.')
+            return None
+        if quality < self._td_min_q:
+            return None
+        return got
 
     def _process(self, gray, t, seq) -> None:
         """Track against the ANCHOR; emit a velocity when it is worth one.
@@ -702,8 +747,9 @@ class FlowVelocityNode(Node):
             now = time.monotonic()
             if now - self._td_last_fit >= 5.0:
                 self._td_last_fit = now
-                got = self._td_est.estimate()
-                if got is not None and self._td_est.quality >= 0.5:
+                got = self._accept_td(
+                    self._td_est.estimate(), self._td_est.quality)
+                if got is not None:
                     self._td_n += 1
                     # Slew rather than jump: the offset is a property of the
                     # link, not of one window, and a step would move every
