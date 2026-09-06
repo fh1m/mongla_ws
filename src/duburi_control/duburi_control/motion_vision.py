@@ -714,6 +714,8 @@ def align_loop(*,
                on_locked=None,
                fire_t: float = 0.0,
                fire_pass: bool = False,
+               require_square_deg: float = 0.0,
+               square_fn=None,
                report_fn=None,
                writers=None,
                log=None,
@@ -933,6 +935,7 @@ def align_loop(*,
     lost_since: Optional[float] = None
     aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
     fired       = False  # on_locked fired once at fire_t into the hold (payload mid-hold)
+    _sq_warned  = [False]  # one line per command, not one per tick
     last_log    = 0.0
     last_depth  = 0.0
     depth_ctrl  = 0.0    # depth axis error carried from axis-calc into the 5 Hz step
@@ -1333,7 +1336,30 @@ def align_loop(*,
                 # one) can never fire even while `stable` stands held at threshold
                 # through a mid-hold freeze. A torpedo leaves on a real live sighting.
                 fire_fresh = is_new_frame and not sample.coasted
+                # SQUARENESS GATE (opt-in; 0.0 = off = byte-identical to before).
+                # A round leaves along the hull's axis, so a centred box is not
+                # enough -- fired 30 deg off-normal it misses an opening it was
+                # perfectly centred on. `square_fn` must account for the planar
+                # FLIP AMBIGUITY (both branches inside tolerance), and it
+                # answers False when there is no pose at all: for a firing gate
+                # the fail-safe direction is DO NOT FIRE.
+                #
+                # Deliberately does NOT set `fired`: a refusal here is "not
+                # yet", so a hull that squares up later in the hold still gets
+                # its shot.
+                square_ok = True
+                if require_square_deg > 0.0 and fire_fresh and not fired:
+                    try:
+                        square_ok = bool(square_fn and square_fn(require_square_deg))
+                    except Exception as exc:   # noqa: BLE001
+                        log.error(f"[VIS  ] square_fn raised {exc!r} -- refusing")
+                        square_ok = False
+                    if not square_ok and not _sq_warned[0]:
+                        _sq_warned[0] = True
+                        log.info(f"[VIS  ] fire HELD: target not square within "
+                                 f"{require_square_deg:.0f} deg (or no pose)")
                 if on_locked is not None and not fired and fire_fresh and \
+                        square_ok and \
                         (now - aligned_at) >= fire_t:
                     fired = True
                     try:

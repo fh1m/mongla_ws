@@ -129,6 +129,8 @@ class VisionState:
         # nothing for ever, silently.
         self._lock_array = None
         self._lock_stamp = 0.0
+        self._pose = None            # latest TargetPose msg
+        self._pose_stamp = 0.0       # its CAPTURE instant
         self._sub_det   = node.create_subscription(
             Detection2DArray, f'{ns}/detections',   self._on_detections,
             qos.DETECTIONS)
@@ -146,6 +148,16 @@ class VisionState:
         self._sub_lock  = node.create_subscription(
             Detection2DArray, f'{ns}/lock',          self._on_lock,
             qos.DETECTIONS)
+        # 6-DoF target pose. Cheap to subscribe, only consulted by a caller
+        # that asks -- an absent lock_node simply never delivers and every
+        # squareness gate then refuses, which is the safe direction.
+        try:
+            from duburi_interfaces.msg import TargetPose as _TargetPose
+            self._sub_pose = node.create_subscription(
+                _TargetPose, f'{ns}/target_pose', self._on_target_pose,
+                qos.DETECTIONS)
+        except ImportError:
+            self._sub_pose = None
         self._sub_info  = node.create_subscription(
             CameraInfo,       f'{ns}/camera_info',   self._on_info,
             qos.CAMERA_INFO)
@@ -308,6 +320,41 @@ class VisionState:
         with self._lock:
             self._lock_array = msg
             self._lock_stamp = self._capture_monotonic(msg)
+
+    def _on_target_pose(self, msg) -> None:
+        with self._lock:
+            self._pose = msg
+            self._pose_stamp = self._capture_monotonic(msg)
+
+    def target_pose(self, max_age_s: float = 1.0):
+        """The latest 6-DoF target pose, or None if absent/stale/refused."""
+        with self._lock:
+            m, t = self._pose, self._pose_stamp
+        if m is None or not m.ok:
+            return None
+        if max_age_s > 0.0 and (time.monotonic() - t) > max_age_s:
+            return None
+        return m
+
+    def square_within(self, tol_deg: float, max_age_s: float = 1.0) -> bool:
+        """Is the target square to us within `tol_deg`, ALLOWING for the flip?
+
+        THE GATE. Both flip branches are legitimate answers, so squareness only
+        counts if the WORSE of them is inside tolerance -- reading the point
+        estimate alone fires on the lucky branch, which is the exact failure
+        this whole path exists to prevent.
+
+        NO POSE MEANS NOT SQUARE. An absent `lock_node`, an uncalibrated
+        camera, an unset `target_width_m` or a refused decomposition all return
+        False. For a firing gate the fail-safe direction is "do not fire", and
+        this is the only place that choice is made.
+        """
+        m = self.target_pose(max_age_s)
+        if m is None:
+            return False
+        worst = float(m.off_axis_deg) + max(float(m.yaw_spread_deg),
+                                            float(m.pitch_spread_deg))
+        return worst <= float(tol_deg)
 
     def _lock_sample(self, image_width: float, image_height: float):
         """A Sample from the ladder, or None.
