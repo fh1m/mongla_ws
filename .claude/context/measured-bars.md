@@ -713,3 +713,73 @@ static interval — verified against real numbers rather than assumed.
   was spent on a rig nobody was told to move. Prompt the operator, one phase
   per invocation, and print live feedback so they can correct mid-run.
 - `SCALED_IMU2` is `ATTITUDE`'s rates × 1000 — same data, so use `ATTITUDE`.
+
+
+## 13. The bottom camera AS A DVL — verified live against a tape, 2026-09-07
+
+**Three axes, 30 cm each, real physical slides on the bench rig at
+h = 0.72 m lens-to-floor, in air, `f = 513.94` px.**
+
+| axis | measured | error | of truth | angle | implied h | pts | resid |
+|---|---|---|---|---|---|---|---|
+| lateral | **30.13 cm** | **+0.13** | 100.4 % | +88.4° | 0.72 m | 39 | 0.57 px |
+| forward | **31.09 cm** | **+1.09** | 103.6 % | +12.9° | 0.69 m | 22 | 0.58 px |
+| back | **31.04 cm** | **+1.04** | 103.5 % | −178.5° | 0.70 m | 24 | 0.62 px |
+
+**Max error 1.09 cm on 30 cm — 3.6 %.** Nortek quote **0.5–1 %** for DVL
+bottom-track; Ferrera et al. (Sensors 2019) report **0.89–1.88 %** ATE RMSE
+for monocular VO in real turbid water. We are the same order as published
+monocular VO and short of a real DVL, **in air, on a hand slide whose own
+precision is roughly ±1 cm** — the operator's tape and hand are inside our
+error bar, so this is an upper bound on the sensor's error, not a measurement
+of it.
+
+**The implied heights are the strongest single result.** Height is recovered
+from `h · truth / measured`, and the three runs give **0.72 / 0.69 / 0.70 m**
+against the 0.72 m measured with a tape. The scale chain closes independently.
+
+**Cross-axis leakage is small and the angles are clean**: +88.4° for a lateral
+slide, −178.5° for a back slide. The forward run's +12.9° is the operator's
+line, not the sensor's — the same rig scored −171.8° on a deliberately
+diagonal slide and reported its magnitude correctly.
+
+**Synthetic control, same console, same optics, exact truth:** 29.98 / 29.99 /
+30.02 cm, max error **0.02 cm**. The gap between 0.02 cm synthetic and 1.09 cm
+physical is the hand, the tape and the height — not the algorithm.
+
+### ⚠ THREE INSTRUMENT DEFECTS, ALL REPORTING A CORRECT SENSOR AS SHORT
+
+Recorded because the pattern is the lesson, not any one bug. In every case the
+console's own live trace showed the slide tracked correctly while the CAPTURE
+threw the measurement away:
+
+1. **The end-of-move check lived inside `if v.ok:`** and could never fire — a
+   move ends with the rig stopping, a stopped rig produces refusals, so the
+   stillness that defines the end was exactly the condition under which the
+   check was skipped. Traced 29.89 cm, logged nothing.
+2. **The capture started at first-motion**, discarding the slow acceleration
+   and deceleration — a systematic under-count. Traced 30.3 and 30.5 cm,
+   scored 19.6 / 26.3 / 21.6.
+3. **Stillness was judged on instantaneous velocity**, and a REFUSED interval
+   read as zero speed — so a burst of refusals mid-slide looked like stopping.
+   Traced 24.9 and 30.0 cm, scored 12.1 and 8.5.
+
+All three are the same mistake in different clothes: **treating "I could not
+measure" as "it did not move."** The fix that ended it was not a better
+heuristic — it was a button. The operator knows when they stopped; no window
+short enough to be responsive can distinguish a slow hand from a still rig.
+
+### What ships behind these numbers
+
+- **adaptive keyframe baseline** — emit a velocity per ~8 px of accumulated
+  displacement, not per frame. At the camera's native 210 Hz a fixed floor
+  refuses everything below **0.147 m/s**; adaptive holds **99.9–100.5 %**
+  across a 40× speed range (2 → 80 cm/s).
+- **planar rigid fit** (`estimateAffinePartial2D`, RANSAC) instead of a median.
+  Under 1.5° of rotation a median reports **4.79 px of translation that never
+  happened**; the fit, 0.055 px.
+- **forward-backward rejection at 2 px**, run only when an interval is ripe.
+  Independently the same threshold Ferrera et al. use.
+- **LK window 31** (measured 128→164 surviving points across 15→41).
+- **de-rotation from the MEAN gyro rate** over the baseline, not a midpoint.
+- **`f_water = 741`** in water vs `f_air = 513.94` — measured, ratio 1.44.
