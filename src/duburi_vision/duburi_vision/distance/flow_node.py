@@ -41,6 +41,8 @@ import threading
 import time
 from collections import deque
 
+from typing import Optional
+
 import cv2
 import numpy as np
 import rclpy
@@ -53,8 +55,8 @@ from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
 from duburi_interfaces.msg import DuburiState
 from duburi_vision.distance.flow_math import (
-    DistanceAccumulator, detect_corners, flow_dispersion,
-    forward_backward_error,
+    DistanceAccumulator, HeightFromDivergence, detect_corners,
+    flow_dispersion, forward_backward_error,
     height_above_floor, integrate_rate, interp_rate, robust_flow,
     solve_planar_motion,
 )
@@ -190,6 +192,10 @@ class FlowVelocityNode(Node):
         self._n_yaw_disagree = 0
         self._last_yaw_img = 0.0
         self._last_scale_rate = 0.0
+        # Height measured by the CAMERA, checked against the barometer path.
+        self._h_optical = HeightFromDivergence()
+        self._depth_hist = deque(maxlen=16)
+        self._n_h_warn = 0
 
         ns = f'/duburi/vision/{cam}'
         img_qos = QoSProfile(depth=1,
@@ -292,6 +298,7 @@ class FlowVelocityNode(Node):
     def _on_state(self, msg: DuburiState) -> None:
         if not np.isnan(msg.depth_m):
             self._depth_m = float(msg.depth_m)
+            self._depth_hist.append((time.monotonic(), self._depth_m))
         if not np.isnan(msg.yaw_deg):
             self._yaw_deg = float(msg.yaw_deg)
 
@@ -534,6 +541,7 @@ class FlowVelocityNode(Node):
             return
 
         self._cross_check_yaw(t, dt)
+        self._cross_check_height()
         self._n_ok += 1
         quality = self._quality(v, n_used, disp)
         self._last_quality = quality
@@ -548,6 +556,49 @@ class FlowVelocityNode(Node):
                                else 0.0)
             self._acc.add_body_velocity(v.vx, v.vy, yaw, dt)
         self._publish_distance(self._acc.distance_m)
+
+    def _vz_down(self) -> Optional[float]:
+        """Vertical speed, POSITIVE DOWNWARD, from the depth series.
+
+        Depth is negative below the surface here, so descending makes it more
+        negative and `-d(depth)/dt` is positive going down -- which is the sign
+        that makes a descent GROW the image, matching the divergence.
+        """
+        if len(self._depth_hist) < 4:
+            return None
+        (t0, d0), (t1, d1) = self._depth_hist[0], self._depth_hist[-1]
+        span = t1 - t0
+        if span < 0.2:
+            return None
+        return -(d1 - d0) / span
+
+    def _cross_check_height(self) -> None:
+        """Height from the image, against the height from a typed pool depth.
+
+        The divergence of the flow field is `-vz / h`, and the barometer gives
+        `vz` independently -- so the camera can measure its own altitude, with
+        no `pool_depth_m` in it. That matters because height is a clean
+        multiplier on every velocity this node emits and `pool_depth_m` is the
+        one input nobody measures carefully.
+
+        Reports only. A disagreement does not say WHICH is wrong, and acting on
+        it would be guessing.
+        """
+        vz = self._vz_down()
+        if vz is None or abs(self._last_scale_rate) < 1e-9:
+            return
+        self._h_optical.add(self._last_scale_rate, vz)
+        d = self._h_optical.disagreement(self._last_height)
+        if d is not None and d > 0.20:
+            self._n_h_warn += 1
+            if self._n_h_warn % 20 == 1:
+                self.get_logger().warning(
+                    f'[FLOW ] HEIGHT DISAGREES by {d:.0%}: the image says '
+                    f'{self._h_optical.height_m:.2f} m (from {self._h_optical.n_samples} '
+                    f'samples of flow divergence vs barometer rate), the '
+                    f'pool_depth path says {self._last_height:.2f} m. Height '
+                    f'multiplies EVERY velocity here -- check pool_depth_m '
+                    f'before trusting any distance.')
 
     def _cross_check_yaw(self, t: float, dt: float) -> None:
         """Image-derived yaw against the gyro's. Free, and always on.
