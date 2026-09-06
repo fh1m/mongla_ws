@@ -267,3 +267,41 @@ class TestTimingCorrections:
             assert n._stamp_for(100.0, 0.5) == pytest.approx(100.0)
         finally:
             n.destroy_node()
+
+    def test_an_out_of_range_time_offset_is_REFUSED(self):
+        """td is no longer only a diagnostic: it shifts every velocity stamp,
+        so a spurious correlation peak corrupts the output instead of logging
+        a warning -- and the slew makes a wrong value persist. The plausible
+        range is bounded by measured physics: 35 ms of transport p2p, 7.85 ms
+        of half-exposure, 750 ms for one adaptive baseline. Past 150 ms it is
+        a bad peak, not a link delay.
+
+        Drives the DECISION rather than reading the constant -- a test that
+        greps a threshold stays green through a change to what is done with
+        it, which is exactly how the _srot_drive guard failed."""
+        n = _make(pool_depth_m=4.0)
+        try:
+            good_q = n._td_min_q + 0.1
+
+            # In range and confident: accepted, unchanged.
+            assert n._accept_td(0.010, good_q) == pytest.approx(0.010)
+            assert n._accept_td(-0.010, good_q) == pytest.approx(-0.010)
+
+            # Just inside the bound is still accepted -- the bound must not
+            # be so tight that a real link delay is thrown away.
+            edge = n._td_max * 0.99
+            assert n._accept_td(edge, good_q) == pytest.approx(edge)
+
+            # Past the bound: REFUSED, however confident the peak looks.
+            assert n._accept_td(n._td_max * 1.01, good_q) is None
+            assert n._accept_td(-n._td_max * 1.01, good_q) is None
+            assert n._accept_td(0.400, 1.0) is None
+            assert n._td_rejected == 3
+
+            # Low quality is refused independently of range.
+            assert n._accept_td(0.010, n._td_min_q - 0.01) is None
+
+            # No estimate is not an estimate of zero.
+            assert n._accept_td(None, 1.0) is None
+        finally:
+            n.destroy_node()
