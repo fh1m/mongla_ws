@@ -582,8 +582,24 @@ class DetectorNode(Node):
                 half=half, max_det=max_det, class_allowlist=allowlist,
                 logger=self.get_logger())
         except Exception as exc:
-            self.get_logger().fatal(f"[DET  ] detector init FAILED: {exc}")
-            return
+            # ⛔ D16's TWIN, AT INIT. Returning here left `self._det` None and
+            # the infer loop then dropped every frame at `if det is None:
+            # continue` -- silently, forever, while the node answered param
+            # queries and logged "chip efficiency". Observed on the vehicle:
+            # `Failed to open device file /dev/hailo0 with error 6` after a
+            # restart race, and the stack looked healthy from every angle
+            # except the detection rate.
+            #
+            # A node that has no model cannot detect anything, so it must not
+            # keep claiming to be up. Exit and let a supervisor restart it --
+            # which also resolves the common cause, a previous process still
+            # holding the device.
+            self.get_logger().fatal(
+                f"[DET  ] detector init FAILED: {exc}. EXITING: without a model "
+                f"this node would drop every frame silently while looking "
+                f"healthy. A supervisor restart also clears a device still "
+                f"held by a previous process.")
+            os._exit(2)
         # Apply any allowlist change that arrived during load via a param callback.
         pending = self._pending_allowlist
         if pending is not allowlist:
@@ -774,7 +790,12 @@ class DetectorNode(Node):
             try:
                 cap = header.stamp.sec + header.stamp.nanosec * 1e-9
                 age = time.time() - cap
-                if 0.0 <= age < 5.0:
+                # Gated on HAVING a detector: this counter is reported as
+                # "inferences", and with `_det` None the loop drops the frame a
+                # few lines below. It reported "300 inferences" during a run in
+                # which zero inferences happened, which is worse than no
+                # counter -- it was the reason a dead detector looked busy.
+                if 0.0 <= age < 5.0 and self._det is not None:
                     self._infers += 1
                     self._stale_sum += age
                     self._stale_max = max(self._stale_max, age)
