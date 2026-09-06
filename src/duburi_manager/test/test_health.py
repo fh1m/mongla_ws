@@ -204,9 +204,11 @@ def test_a_DEAD_DETECTOR_reaches_the_board():
     process; only the RATE changes, and nothing was watching it."""
     m = _manager_stub(fc=SimpleNamespace(link_alive=lambda: True), det_hz=0.0)
     m._register_health()
-    m._health.poll()
-    assert m._health.get('detector').state is State.FAILED
+    # NO explicit poll: the TICK must do it. Calling poll() here first is what
+    # let an injected "the tick never polls" defect pass -- the test was doing
+    # the work it was meant to be checking.
     m._health_tick()
+    assert m._health.get('detector').state is State.FAILED
     assert any('detector' in s for _k, s in m.lines), m.lines
 
 
