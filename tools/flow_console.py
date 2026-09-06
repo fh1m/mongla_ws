@@ -365,8 +365,8 @@ def worker(args):
             forced = SCORE_NOW.is_set()
             if forced:
                 SCORE_NOW.clear()
-            if travelled >= args.min_capture_m and (
-                    forced or moved_recently < args.still_m):
+            auto = (args.auto_stop and moved_recently < args.still_m)
+            if travelled >= args.min_capture_m and (forced or auto):
                 dx, dy = x - cap_x0, y - cap_y0
                 ph = ARM['phase']
                 truth = float(ARM['truth'])
@@ -746,6 +746,8 @@ def main():
     p.add_argument('--still-s', type=float, default=2.0)
     p.add_argument('--still-m', type=float, default=0.006,
                    help='position change over still_s that counts as stopped')
+    p.add_argument('--auto-stop', action='store_true',
+                   help='also end a run on stillness; OFF because every\n                        stillness rule tried so far closed mid-slide')
     p.add_argument('--min-capture-m', type=float, default=0.08,
                    help='a move smaller than this is a nudge, not a run')
     p.add_argument('--sim-slide', type=float, default=0.0,
