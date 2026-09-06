@@ -543,3 +543,42 @@ a node restart alone does nothing.
 * **The single commit** (`xelisce`, 2025-05-23, "hard code variables into file fix, passed all tests"): adds 9 unused declarations to `libraries/AP_DDS/AP_DDS_Client.cpp`. No semantic ArduSub change. No new mode, no new failsafe, no new MAVLink behaviour.
 * **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`ardusub-canon.md`](./ardusub-canon.md).
 * **Re-evaluate when:** the fork's `xelisce` author (or `BumblebeeAS` org) ships a second semantic commit. Until then, do not spend an evening "evaluating" this again.
+
+---
+
+## D16 — a Hailo stream abort leaves the detector a ZOMBIE (open, 2026-09-06)
+
+**Observed on the vehicle.** Restarting the stack while a previous detector
+still held the `VDevice` put the chip into `HAILO_STREAM_ABORT(63)`. The
+detector node then:
+
+* stayed **alive** — `pgrep` sees it, the node is listed, its subscriptions are
+  up;
+* logged `inference failed: HailoRTStreamAborted` on **every frame**, forever;
+* published **zero detections**, indefinitely, with no escalation.
+
+```
+[ERROR] [DET  ] inference failed: HailoRTStreamAborted('Stream was aborted')
+[HailoRT] [error] ... pipeline status is HAILO_STREAM_ABORT(63).
+```
+
+**Why it matters more than the error itself.** Every liveness check we have
+passes: the process exists, the topics exist, the graph looks correct. Only the
+detection RATE reveals it, and nothing was watching the rate. This is the
+"absence is not zero" family again — a subsystem that has stopped working while
+continuing to exist.
+
+**Recovery today is a manual restart**, and the stack does come back cleanly
+(299 inferences/interval, frame age 42.2 ms mean).
+
+**The fix, not yet made.** After N consecutive inference failures the detector
+should either re-open the `VDevice` or **exit**, so a supervisor restarts it. A
+node that cannot do its job must stop claiming to be up. The new health surface
+(`duburi_manager/health.py`) is what would surface it — `detector(rate_hz)`
+returns FAILED on a zero rate — but nothing is polling it yet, and the detector
+itself still needs the recovery path.
+
+**Related:** the same restart also logged
+`detector init FAILED: Failure in hailort driver ioctl` on the first attempt
+and succeeded on the retry, so VDevice contention is transient but real. One
+process, one `VDevice` (`detection/hailo.py:158-176`) is still the rule.
