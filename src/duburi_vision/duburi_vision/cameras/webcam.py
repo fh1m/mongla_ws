@@ -24,7 +24,8 @@ class WebcamCamera(Camera):
     source_kind = 'webcam'
 
     def __init__(self, device=0, width=640, height=480, fps=30,
-                 frame_id='laptop_cam', name='laptop', logger=None):
+                 frame_id='laptop_cam', name='laptop', logger=None,
+                 fourcc='MJPG'):
         self.name      = str(name)
         self._device   = device
         self._frame_id = str(frame_id)
@@ -42,9 +43,17 @@ class WebcamCamera(Camera):
                 f"device_path:=/dev/duburi_cam_<forward|downward> (or a raw "
                 f"/dev/v4l/by-path/...). Otherwise check /dev/video* perms / index.")
 
-        # Force MJPEG before resolution/fps — V4L2 locks format first.
-        # Without this most USB webcams deliver YUYV (~1-2 fps on USB 2.0).
-        self._cap.set(cv2.CAP_PROP_FOURCC,       cv2.VideoWriter_fourcc(*'MJPG'))
+        # Set the format before resolution/fps -- V4L2 locks format first.
+        #
+        # MJPG is the default because most USB webcams otherwise deliver YUYV
+        # at ~1-2 fps on USB 2.0. But it is a PARAMETER, not a constant, and
+        # the reason is measured: FORMAT IS PER-CAMERA. On this vehicle the
+        # Sonix global shutter does 210.17 Hz in MJPG against a flat 35.26 in
+        # YUYV -- 6x -- while the Fantech returns exactly 15.00 Hz in both.
+        # Hardcoding MJPG here made a faster-in-YUYV camera unconfigurable,
+        # and the profile could not say otherwise because this argument did
+        # not exist.
+        self._cap.set(cv2.CAP_PROP_FOURCC,       cv2.VideoWriter_fourcc(*str(fourcc)))
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self._cap.set(cv2.CAP_PROP_FPS,          fps)
@@ -59,8 +68,13 @@ class WebcamCamera(Camera):
         if self._log:
             self._log.info(
                 f'[CAM  ] webcam {device!r} opened: requested {width}x{height}@{fps} '
-                f'-> got {self._actual_w}x{self._actual_h}@{self._actual_fps:.1f}  '
-                f'fourcc={fourcc_str}')
+                f'{fourcc} -> got {self._actual_w}x{self._actual_h}@'
+                f'{self._actual_fps:.1f} fourcc={fourcc_str}')
+            if fourcc_str.strip() and fourcc_str != str(fourcc):
+                self._log.warn(
+                    f'[CAM  ] {device!r} ignored fourcc={fourcc} and gave '
+                    f'{fourcc_str}. The driver fell back; frame rate below is '
+                    f'the fallback format\'s, not the one requested.')
             # A camera that quietly delivers a fraction of what was asked is the
             # most expensive kind of silent underperformance here, because
             # nothing downstream looks broken -- the pipeline is simply slower

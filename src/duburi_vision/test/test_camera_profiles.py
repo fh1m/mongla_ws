@@ -139,3 +139,87 @@ def test_the_pi_profiles_name_a_symlink_this_OS_creates(name):
     dev = CAMERA_PROFILES[name]['device_path']
     assert dev.startswith('/dev/duburi_cam_'), dev
     assert 'by-path' not in dev
+
+
+# --------------------------------------------------------------------------- #
+#  fourcc: format is PER-CAMERA, and it used to be unconfigurable
+# --------------------------------------------------------------------------- #
+def test_fourcc_in_a_profile_reaches_the_builder():
+    """`fourcc` did not exist as a profile key and both builders hardcoded
+    MJPG -- `_build_webcam` did not even accept the kwarg, so it landed in
+    `**_`, and `WebcamCamera` set MJPG unconditionally. A camera that is
+    faster in another format could therefore not be configured at all.
+
+    That is not hypothetical. Measured on the vehicle: the Sonix global
+    shutter does 210.17 Hz in MJPG against a flat 35.26 in YUYV, while the
+    Fantech returns exactly 15.00 Hz in both. Format is worth 6x on one camera
+    and nothing on the other, which is precisely why it cannot be a constant.
+
+    Asserted through `make_camera_from_profile` rather than on the signature,
+    so a builder that accepts the kwarg and then drops it still fails."""
+    import duburi_vision.factory as F
+
+    seen = {}
+
+    class _Spy:
+        def __init__(self, **kw):
+            seen.update(kw)
+
+        def info(self):
+            return {}
+
+    import duburi_vision.cameras.v4l2_mailbox as vm
+    orig = vm.V4L2MailboxCamera
+    vm.V4L2MailboxCamera = _Spy
+    try:
+        F.make_camera_from_profile(
+            {'source': 'v4l2', 'device_path': '/dev/duburi_cam_downward',
+             'width': 640, 'height': 360, 'fps': 210, 'fourcc': 'YUYV',
+             'name': 'd'})
+    finally:
+        vm.V4L2MailboxCamera = orig
+    assert seen.get('fourcc') == 'YUYV', seen
+
+
+def test_the_webcam_fallback_carries_the_format_too():
+    """The v4l2 source falls back to OpenCV when the mailbox declines a
+    device. If that fallback drops `fourcc`, a profile asking for YUYV
+    silently gets MJPG -- the failure is invisible because frames still
+    arrive, just at the other format's frame rate."""
+    import duburi_vision.factory as F
+
+    seen = {}
+
+    class _Spy:
+        def __init__(self, **kw):
+            seen.update(kw)
+
+        def info(self):
+            return {}
+
+    import duburi_vision.cameras.webcam as wc
+    orig = wc.WebcamCamera
+    wc.WebcamCamera = _Spy
+    try:
+        # An int index is not a /dev path, so _build_v4l2 takes the fallback.
+        F.make_camera_from_profile(
+            {'source': 'v4l2', 'device': 0, 'width': 640, 'height': 360,
+             'fps': 30, 'fourcc': 'YUYV', 'name': 'f'})
+    finally:
+        wc.WebcamCamera = orig
+    assert seen.get('fourcc') == 'YUYV', seen
+
+
+@pytest.mark.parametrize('name,expect_fps', (('pi_forward', 15),
+                                             ('pi_downward', 210)))
+def test_the_pi_profiles_carry_the_MEASURED_rate(name, expect_fps):
+    """Pinned to hardware, because both numbers were wrong and wrong in the
+    direction that hides: the profiles asked for 210 and 90, and the cameras
+    deliver 210 and 15.
+
+    The two were also SWAPPED. The global-shutter Sonix is the BOTTOM camera
+    (210 Hz, and the optical-flow velocity sensor) and the Fantech is the
+    FORWARD one (a flat 15.00 Hz in every format, resolution and requested
+    rate, while its own descriptor advertises 30). Asking pi_downward for 90
+    was asking the wrong camera for a rate neither of them has."""
+    assert CAMERA_PROFILES[name]['fps'] == expect_fps
