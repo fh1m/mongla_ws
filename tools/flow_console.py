@@ -339,7 +339,23 @@ def worker(args):
             if spd >= args.move_thresh:
                 if cap_t0 is None:
                     cap_t0 = t
-                    cap_x0, cap_y0 = x - v.vx * dt, y - v.vy * dt
+                    # ⛔ MEASURE FROM THE ARM POINT, NOT FROM FIRST-MOTION.
+                    # Starting at the first sample above the move threshold
+                    # discards the slow acceleration at the start of a slide
+                    # and, symmetrically, the deceleration at the end -- a
+                    # SYSTEMATIC UNDER-COUNT, always in the flattering-looking
+                    # direction of "the sensor reads short".
+                    #
+                    # Measured live against a 30 cm tape: the console's own
+                    # trace tracked 30.3 and 30.5 cm while the capture scored
+                    # the same slides at 19.6, 26.3 and 21.6 cm. The sensor was
+                    # right and the WINDOW was wrong by up to a third.
+                    #
+                    # Arming zeroes the accumulator and a still rig accumulates
+                    # nothing -- measured 0.00 cm over 5 s, every interval
+                    # correctly refused -- so the position at arm is exactly
+                    # zero and the whole slide lies between it and the stop.
+                    cap_x0, cap_y0 = 0.0, 0.0
                     cap_pts, cap_resid = [], []
                 cap_last = t
                 cap_pts.append(n_ok)
