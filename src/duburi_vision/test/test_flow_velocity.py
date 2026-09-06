@@ -189,3 +189,31 @@ def test_the_coherence_gate_PASSES_realistic_motion():
         r = flow_velocity(dx, dy, DT, f_px=F, height_m=0.5,
                           dispersion_px=mag * ratio)
         assert r.ok, f'rejected real motion at dispersion ratio {ratio}'
+
+
+def test_a_motionless_camera_is_not_reported_as_rotation_dominated():
+    """The reason an operator reads has to point at the real cause.
+
+    Measured on the bench console: a rig with roll/pitch rates of 0.006 rad/s
+    and 0.15 px of flow was refused as 'rotation-dominated (1.83 of the flow)'.
+    Both quantities were noise, so their ratio meant nothing -- but it sent the
+    operator looking for a rotation fault that did not exist.
+    """
+    v = flow_velocity(0.10, 0.05, 0.03, f_px=513.94, height_m=0.72,
+                      roll_rate=-0.006, pitch_rate=-0.002)
+    assert not v.ok
+    assert 'no measurable flow' in v.reason, v.reason
+    assert 'rotation-dominated' not in v.reason
+
+
+def test_real_rotation_is_still_reported_as_rotation():
+    """The negative control: the reorder must not mask a genuine rotation.
+
+    Large total flow, nearly all of it explained by the body rates.
+    """
+    dt, f = 0.03, 513.94
+    rot_px = f * 1.2 * dt                      # ~18 px from a 1.2 rad/s roll
+    v = flow_velocity(rot_px, 0.0, dt, f_px=f, height_m=0.72,
+                      roll_rate=1.2, pitch_rate=0.0)
+    assert not v.ok
+    assert 'rotation-dominated' in v.reason, v.reason

@@ -153,6 +153,16 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
     net = math.hypot(net_x, net_y)
     frac = (rot / total) if total > 1e-9 else 0.0
 
+    # ORDER MATTERS, and it is about the OPERATOR, not the decision: with a
+    # motionless camera `total` is ~0.1 px of noise, `rot/total` is a ratio of
+    # two noise quantities, and it read 1.83 on a bench console -- reporting
+    # "rotation-dominated" on a rig whose measured rates were 0.006 rad/s.
+    # Ask whether anything moved BEFORE asking whether it was rotation. Every
+    # interval refused before is still refused; only the reason changes.
+    if total < min_net_flow_px:
+        return FlowVelocity(ok=False, net_flow_px=net, height_m=height_m,
+                            reason=f'no measurable flow ({total:.2f}px total, '
+                                   f'below the {min_net_flow_px}px noise floor)')
     if frac > rot_fraction_max:
         return FlowVelocity(ok=False, rot_fraction=frac, net_flow_px=net,
                             height_m=height_m,
