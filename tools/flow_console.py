@@ -169,6 +169,7 @@ def worker(args):
     anchor = anchor_pts = None
     anchor_t = None
     cap_t0 = cap_last = None
+    pos_hist = deque()
     cap_x0 = cap_y0 = 0.0
     cap_pts = []
     cap_resid = []
@@ -327,89 +328,67 @@ def worker(args):
 
         # ---- armed capture: find the move, score it, log it ----------------
         #
-        # ⛔ THIS MUST RUN ON EVERY INTERVAL, NOT ONLY SUCCESSFUL ONES. The
-        # first version lived inside `if v.ok:` and could never fire: a move
-        # ENDS with the rig stopping, a stopped rig produces refusals ("no
-        # measurable flow"), and so the stillness that defines the end of the
-        # move was exactly the condition under which the check was skipped.
-        # The synthetic self-test caught it -- it measured 29.89 cm of a
-        # 30.00 cm slide and logged nothing at all.
+        # ⛔ STILLNESS IS JUDGED ON POSITION, NOT ON INSTANTANEOUS VELOCITY,
+        # and the reason is the absence-is-not-zero rule applied to my own
+        # code. The first version read `speed = hypot(vx,vy) if v.ok else 0`,
+        # so a REFUSED interval counted as zero speed -- and a burst of
+        # refusals in the middle of a slide therefore looked exactly like the
+        # rig stopping. Measured live: a capture closed at 12 cm while the
+        # console's own trace carried on to 24.9 cm.
+        #
+        # A refusal means "I could not measure", never "it did not move". The
+        # position accumulator already encodes the distinction correctly: a
+        # refused interval contributes nothing to it, so a genuinely still rig
+        # and a temporarily unmeasurable one both leave the position ALONE.
+        # Asking whether the position has changed is therefore the question
+        # that survives both cases, and it is also the quantity the operator
+        # is watching.
         if ARM['state'] == 'armed':
-            spd = math.hypot(v.vx, v.vy) if v.ok else 0.0
-            if spd >= args.move_thresh:
-                if cap_t0 is None:
-                    cap_t0 = t
-                    # ⛔ MEASURE FROM THE ARM POINT, NOT FROM FIRST-MOTION.
-                    # Starting at the first sample above the move threshold
-                    # discards the slow acceleration at the start of a slide
-                    # and, symmetrically, the deceleration at the end -- a
-                    # SYSTEMATIC UNDER-COUNT, always in the flattering-looking
-                    # direction of "the sensor reads short".
-                    #
-                    # Measured live against a 30 cm tape: the console's own
-                    # trace tracked 30.3 and 30.5 cm while the capture scored
-                    # the same slides at 19.6, 26.3 and 21.6 cm. The sensor was
-                    # right and the WINDOW was wrong by up to a third.
-                    #
-                    # Arming zeroes the accumulator and a still rig accumulates
-                    # nothing -- measured 0.00 cm over 5 s, every interval
-                    # correctly refused -- so the position at arm is exactly
-                    # zero and the whole slide lies between it and the stop.
-                    cap_x0, cap_y0 = 0.0, 0.0
-                    cap_pts, cap_resid = [], []
-                cap_last = t
-                cap_pts.append(n_ok)
-                cap_resid.append(resid)
-            elif (cap_t0 is not None and cap_last is not None
-                  and (t - cap_last) >= args.still_s):
+            pos_hist.append((t, x, y))
+            while pos_hist and t - pos_hist[0][0] > args.still_s:
+                pos_hist.popleft()
+            moved_recently = args.still_s
+            if len(pos_hist) >= 2:
+                _, x0h, y0h = pos_hist[0]
+                moved_recently = math.hypot(x - x0h, y - y0h)
+            else:
+                moved_recently = float('inf')
+            travelled = math.hypot(x - cap_x0, y - cap_y0)
+
+            if travelled >= args.min_capture_m and moved_recently < args.still_m:
                 dx, dy = x - cap_x0, y - cap_y0
-                # ⛔ A NUDGE MUST NOT CONSUME THE ARM. Observed live: the
-                # operator armed, touched the rig, and that contact alone
-                # cleared the motion threshold and then stood still long
-                # enough to close the capture -- so the run was scored on the
-                # nudge and the real 30 cm slide that followed was never
-                # recorded, while the console showed it tracking perfectly to
-                # 29.9 cm. The capture window has to survive the act of
-                # reaching for the thing being measured.
-                if math.hypot(dx, dy) < args.min_capture_m:
-                    cap_t0 = cap_last = None      # keep waiting, stay armed
-                else:
-                  ph = ARM['phase']
-                  truth = float(ARM['truth'])
-                  primary = dy if ph == 'lat' else dx
-                  cross = dx if ph == 'lat' else dy
-                  # ⛔ SCORE THE MAGNITUDE, REPORT THE AXES. The first real
-                  # capture put 16.5 cm on the CROSS axis and 0.2 cm on the named
-                  # one -- the rig moved and the sensor measured it correctly,
-                  # but the operator's "forward" and the camera's image axes are
-                  # related by however the camera is clocked on the mount, which
-                  # is a fact about the bracket and not about the sensor.
-                  # Scoring the named axis alone reported a good measurement as a
-                  # 99 % failure. The magnitude is convention-free; the
-                  # components then say which way it actually went, which is what
-                  # calibrates the mount.
-                  mag = math.hypot(dx, dy)
-                  rec = {
-                      'phase': ph, 'truth_m': truth,
-                      'measured_m': primary, 'cross_m': cross,
-                      'dx_m': dx, 'dy_m': dy,
-                      'abs_m': mag,
-                      'axis_deg': math.degrees(math.atan2(dy, dx)),
-                      'on_named_axis_pct': (100.0 * abs(primary) / mag
-                                            if mag > 1e-6 else 0.0),
-                      'error_m': mag - truth,
-                      'pct': 100.0 * mag / truth if truth else 0.0,
-                      'implied_h_m': (h * truth / mag) if mag > 1e-6 else None,
-                      'span_s': cap_last - cap_t0,
-                      'points_med': float(np.median(cap_pts)) if cap_pts else 0,
-                      'resid_med': float(np.median(cap_resid)) if cap_resid else 0.0,
-                      'used': used, 'refused': refused, 'fallback': fallback,
-                      'h_m': h, 'when': time.strftime('%H:%M:%S'),
-                  }
-                  RUNS.append(rec)
-                  _save_runs()
-                  ARM['state'] = 'done'
-                  cap_t0 = cap_last = None
+                ph = ARM['phase']
+                truth = float(ARM['truth'])
+                primary = dy if ph == 'lat' else dx
+                cross = dx if ph == 'lat' else dy
+                mag = math.hypot(dx, dy)
+                rec = {
+                    'phase': ph, 'truth_m': truth,
+                    'measured_m': primary, 'cross_m': cross,
+                    'dx_m': dx, 'dy_m': dy, 'abs_m': mag,
+                    'axis_deg': math.degrees(math.atan2(dy, dx)),
+                    'on_named_axis_pct': (100.0 * abs(primary) / mag
+                                          if mag > 1e-6 else 0.0),
+                    'error_m': mag - truth,
+                    'pct': 100.0 * mag / truth if truth else 0.0,
+                    'implied_h_m': (h * truth / mag) if mag > 1e-6 else None,
+                    'span_s': t - (cap_t0 or t),
+                    'points_med': float(np.median(cap_pts)) if cap_pts else 0,
+                    'resid_med': float(np.median(cap_resid)) if cap_resid else 0.0,
+                    'used': used, 'refused': refused, 'fallback': fallback,
+                    'h_m': h, 'when': time.strftime('%H:%M:%S'),
+                }
+                RUNS.append(rec)
+                _save_runs()
+                ARM['state'] = 'done'
+                cap_t0 = None
+                pos_hist.clear()
+            else:
+                if cap_t0 is None and travelled > 0.005:
+                    cap_t0 = t
+                if v.ok:
+                    cap_pts.append(n_ok)
+                    cap_resid.append(resid)
 
         gy = 0.0
         if gyro is not None and gyro.yaw_buf:
@@ -746,6 +725,8 @@ def main():
     p.add_argument('--max-disp', type=float, default=5.0)
     p.add_argument('--move-thresh', type=float, default=0.03)
     p.add_argument('--still-s', type=float, default=0.9)
+    p.add_argument('--still-m', type=float, default=0.015,
+                   help='position change over still_s that counts as stopped')
     p.add_argument('--min-capture-m', type=float, default=0.08,
                    help='a move smaller than this is a nudge, not a run')
     p.add_argument('--sim-slide', type=float, default=0.0,
