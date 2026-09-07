@@ -120,7 +120,17 @@ class AB(Node):
         m = DuburiState()
         m.header.stamp = self.get_clock().now().to_msg()
         m.depth_m = 0.0
-        m.yaw_deg = 0.0
+        # ⛔ YAW MUST BE NaN, NOT ZERO. The manager also publishes
+        # /duburi/state, with the board's real heading (~180 deg here). The
+        # node keeps whichever arrived last, and `DistanceAccumulator`
+        # projects with `e = yaw - axis_yaw`: with two publishers disagreeing
+        # by 180 deg, `cos(e)` FLIPS SIGN between intervals and the
+        # contributions cancel. That is what made 30 cm slides read 0.6-5 cm
+        # with an unstable sign, and it is entirely an artefact of this tool.
+        # The node skips a NaN field, so NaN means "I have no opinion, keep
+        # the board's" -- which is the only honest thing for a fake state
+        # message to say about a quantity it does not measure.
+        m.yaw_deg = float('nan')
         self._state.publish(m)
 
     def send(self, what):
