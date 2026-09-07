@@ -71,3 +71,35 @@ def test_the_direction_convention_is_pinned():
     m = _load()
     assert m.sign_verdict(0.0, +1.0)[0] == 'PASS'
     assert m.sign_verdict(0.0, -1.0)[0] == 'FAIL'
+
+
+def test_an_uncalibrated_OFFSET_does_not_break_the_test():
+    """The Bar30 is uncalibrated above water and read +1.21 m on the bench
+    (DEPTH_CMD +0.555). That is FINE: this test measures a DELTA, so a constant
+    zero offset cancels and calibration is irrelevant to the SIGN."""
+    m = _load()
+    # Same press, three very different zero offsets -> same verdict.
+    for base in (-0.05, +0.20, +0.555):
+        v, _ = m.sign_verdict(base, base + 0.40)
+        assert v == 'PASS', f'offset {base} should not change the verdict'
+
+
+def test_a_SATURATED_baseline_cannot_pass_and_says_why():
+    """⛔ The hole the operator's warning exposed. DEPTH_CMD clamps at +/-1, so a
+    baseline at the rail has nowhere to move in the ascend direction -- a press
+    produces no delta and a CORRECT board would read INCONCLUSIVE, or FAIL on a
+    noise sample. It must be reported as its own state."""
+    m = _load()
+    v, txt = m.sign_verdict(+0.97, +1.00)
+    assert v == 'INCONCLUSIVE'
+    assert 'clamp' in txt and 'calibrate_depth' in txt
+    # And it must not be mistaken for a genuine inversion.
+    v2, _ = m.sign_verdict(+0.999, +0.998)
+    assert v2 == 'INCONCLUSIVE', 'a clamped baseline must not read as FAIL'
+
+
+def test_the_live_bench_baseline_still_has_room():
+    """+1.21 m of uncalibrated depth -> DEPTH_CMD +0.555, which is 0.445 from the
+    clamp = 0.89 m of equivalent extra depth. A thumb gives far more than that."""
+    m = _load()
+    assert m.sign_verdict(+0.555, +0.555 + 0.30)[0] == 'PASS'
