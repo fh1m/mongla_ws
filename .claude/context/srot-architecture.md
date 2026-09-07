@@ -568,20 +568,48 @@ owns the port and we read what it publishes), 22 Hz:
 **Magnitude ≈ 0.4 °/min — better than the firmware's own stated 0.5–3 °/min**, and
 at the good end of the BNO08X datasheet figure.
 
-### ⛔ But the two runs disagree in SIGN
+### ⚠ The two runs differ in SIGN — but that is NOT yet established as real
 
-−0.386 then +0.36. This is gyro bias that varies between sessions (temperature,
-time since power-on), not a fixed offset. The consequence is the one that matters
-for mission design:
+−0.386 then +0.36. The tempting reading is session-varying gyro bias. **We are not
+entitled to that claim yet, and an earlier version of this section made it.**
 
-**It cannot be calibrated out once.** A stored per-board correction would be
-right on the run it was measured and wrong on the next. Heading has to be
-*re-referenced* from something external, or the error has to be budgeted for.
+The problem is the estimator, not the data. A straight-line fit to a series whose
+dominant component is **not** a line returns a slope, always, and the wander here
+is 2–9° peak-to-peak against a total drift of a few degrees. Two such estimates
+differing does not demonstrate that the underlying bias changed sign.
 
-Budget for a 15-minute run: **≈ 5–6° of accumulated heading error, sign
-unpredictable**, plus several degrees of low-frequency wander (9.16° peak-to-peak
-on a **stationary** board over 8 minutes — that is an alignment error budget in
-its own right, before the vehicle has moved).
+The reasoning first written here — *"halves measure wander and quarters measure
+bias"* — is **retracted as backwards.** A shorter window does not separate bias
+from wander; it has less lever arm, so a wander-induced slope contributes *more*
+variance per window, not less. Four quarters agreeing to 0.151 °/min, with no
+error bar on any of them, is unremarkable rather than confirmatory.
+
+**The discriminating test** is consecutive captures in one session with the board
+untouched: if the per-run slope changes sign across captures minutes apart, the
+instability is real; if it does not, run A vs run B was estimator noise.
+
+**What is robust regardless of how that resolves, and is what mission design
+should use:**
+
+- **magnitude ≈ 0.4 °/min**, better than the firmware's own stated 0.5–3;
+- **it cannot be corrected from a stored per-board constant** — the reference is
+  captured once at boot and never revisited (§5), so whatever the bias is on a
+  given run, nothing on the vehicle is measuring or removing it;
+- **≈ 5–6 ° of accumulated heading error over a 15-minute run**, plus wander.
+
+Sign stability: **OPEN.**
+
+### ⛔ 9.16° peak-to-peak of wander on a STATIONARY board
+
+Recorded separately because it is arguably the more actionable of the two numbers
+and is easy to lose behind the drift figure. Over 8 minutes, motionless on a
+bench, heading wandered **9.16° peak-to-peak** (2.05° over 98 s in the shorter
+run). That is **larger than most alignment tolerances in our stack, and it is
+present before the vehicle has moved** — it competes directly with the mixer's
+±45° attractor (§3b) as an explanation for why terminal alignment is hard.
+
+Not yet separated: sensor vs room. Two captures an hour apart, or one with the
+board on foam, would distinguish thermal from mechanical.
 
 ### Method note, because the first attempt at run B was garbage
 

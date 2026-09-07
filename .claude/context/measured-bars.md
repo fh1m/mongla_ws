@@ -1907,3 +1907,44 @@ delivering** (second board unpowered or absent), not that the feature is off.
 `canArm()` returns true immediately (`arming.cpp:13`), skipping every check
 including the leak and battery refusals. It was referenced nowhere on our side
 until this round.
+
+---
+
+## 26. The actuator quantum — the bar every control gain is really tuned against
+
+Round 40. Source-derived from `mixer::oneToDshot`, **verified by transcribing the
+firmware's own `thstExpo()`/`oneToDshot()` into C, compiling, and comparing — all
+10 DShot integers match exactly.** Live parameters read off the vehicle's board.
+
+| quantity | shipped | measured | bar | evidence |
+|---|---|---|---|---|
+| per-motor demand deadband | — | `t < 0.005` → DShot 1048 (motor stopped) | commands below it are a **silent no-op** | `mixer.cpp` `oneToDshot` |
+| smallest non-zero output | `MOT_SPIN_MIN = 0.15` (live) | **DShot 1210 = 16.13 % of band** | the actuator is a **relay**, not continuous | ditto |
+| host stick at the cliff | — | **0.714 % of full stick** | do not emit below this | live `PILOT_EXPO 0.30`, `GAIN 1.0` |
+| smallest yaw RATE | `PILOT_YAW_RATE = 160` (live, 3.6× default) | **3.20 °/s** | below 2.856 % stick STABILIZE **holds** instead of turning | `attitude_control.cpp` |
+| worst mixed-axis direction error | — | **25.6°**, with a **38° jump** for a 0.2 % command change | **never command lat+yaw together in the terminal phase** | `.claude/context/srot-architecture.md` §3b |
+
+**What this bar invalidates:** `vision.range_gain_floor` was measured as
+ineffective in round 35 and shipped OFF. It could not have worked — the
+quantisation is **downstream of every gain we own**. Do not re-attempt a
+host-side gain softener against this actuator; the lever is duty or axis
+selection, not amplitude. Filed upstream as `srot-control-board#13`.
+
+## 27. Heading, on a STATIONARY board
+
+Round 40, `/duburi/state` at 22 Hz, board still on the bench.
+
+| quantity | measured | bar |
+|---|---|---|
+| yaw bias drift | **≈ 0.4 °/min** (−0.386 over 98 s; +0.36 over 480 s) | ≈ **5-6 ° over a 15-min run**, and **not correctable from a stored constant** — the mag reference is captured once at boot and never revisited |
+| **yaw wander, motionless** | **9.16 ° peak-to-peak / 8 min** (2.05 ° / 98 s) | **larger than most alignment tolerances in this stack, present before the vehicle moves** |
+| sign stability | **OPEN** | two estimates differ in sign; a straight-line fit to a series dominated by wander is not evidence the bias flipped. Consecutive same-session captures pending |
+
+⛔ **Method rule, earned twice now.** A first 480 s capture reported "+38.4 °/min"
+and was contaminated — the hull had been moved (274 ° of yaw change, +63 °/min in
+one quarter, ≈0 in the other three). The split/quarters check caught it; a single
+slope would have been reported, exactly as in round 26's bogus +51.9 °/min.
+**And the follow-on reasoning "halves measure wander, quarters measure bias" is
+RETRACTED as backwards** — a shorter window has less lever arm, so wander
+contributes *more* variance per window. Never trust a heuristic over an
+uncharacterised estimator.
