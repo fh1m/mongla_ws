@@ -482,3 +482,91 @@ class TestRectifyDisabledFallback:
                     pytest.approx(n._intr.fy / n._intr.fx, rel=1e-9))
         finally:
             n.destroy_node()
+
+
+class TestRefusalKeepsTheAnchor:
+    """A refused interval must be able to KEEP the anchor, or travel is lost.
+
+    ⛔ The bug this guards. `_process` advanced the anchor unconditionally,
+    before `_evaluate` had said whether the interval was usable. So a refusal
+    -- rotation-dominated, no gyro sample, flow under the noise floor --
+    discarded the displacement that interval covered instead of deferring it
+    to the next one.
+
+    That loss is not uniform, which is what makes it bite: REFUSALS ARE
+    CORRELATED WITH MOTION. A lost LK anchor and a rotation-dominated
+    interval both happen during the FAST part of a move, which is where the
+    distance is, while slow and still intervals are the ones that get
+    accepted and carry almost none. Measured on the vehicle: ~30 % of
+    intervals refused, and 30 cm slides reading 2-5 cm.
+
+    Driven through the real node, and asserted on the ANCHOR TIMESTAMP rather
+    than on a distance -- a distance test here would pass on a node that
+    re-anchors every frame, since a stationary bench accumulates ~0 either
+    way.
+    """
+
+    @staticmethod
+    def _drive(node, gray, n=3):
+        """Feed frames that are RIPE but get refused.
+
+        The frames must actually MOVE. Identical frames produce no
+        displacement, so the interval never becomes ripe and `_process`
+        returns before the anchor logic is reached at all -- a first version
+        of this test drove that path and reported the default as broken. The
+        refusal comes from `_depth_m = None` (no height), which is decided
+        inside `_evaluate`, i.e. after ripeness.
+        """
+        import cv2
+        node._depth_m = None            # guarantees a refusal in _evaluate
+        node._anchor(gray, 0.0)
+        first = node._anchor_t
+        h, w = gray.shape[:2]
+        for i in range(1, n + 1):
+            M = np.float32([[1, 0, 14 * i], [0, 1, 0]])   # well past the 8 px bar
+            node._process(cv2.warpAffine(gray, M, (w, h)), i * 0.05, i)
+        return first, node._anchor_t
+
+    def test_refusal_keeps_the_anchor_when_asked(self):
+        n = _make(pool_depth_m=4.0, reanchor_on_refusal=False)
+        try:
+            gray = (np.random.default_rng(7)
+                    .integers(0, 255, (360, 640), dtype=np.uint8))
+            first, last = self._drive(n, gray)
+            assert last == first, (
+                'the anchor advanced through a refused interval, so the '
+                'travel it covered was discarded rather than deferred')
+        finally:
+            n.destroy_node()
+
+    def test_default_still_reanchors(self):
+        """The old behaviour is the DEFAULT until the A/B says otherwise --
+        this changes what every distance means, so it does not flip quietly."""
+        n = _make(pool_depth_m=4.0)
+        try:
+            assert n._reanchor_on_refusal is True
+            gray = (np.random.default_rng(9)
+                    .integers(0, 255, (360, 640), dtype=np.uint8))
+            first, last = self._drive(n, gray)
+            assert last > first, 'default must keep the shipped behaviour'
+        finally:
+            n.destroy_node()
+
+    def test_a_held_anchor_is_still_BOUNDED(self):
+        """Holding the anchor must not hold it forever: `max_baseline_s`
+        forces a re-anchor even while refusing, so a persistently
+        unmeasurable scene cannot pin a stale frame indefinitely."""
+        n = _make(pool_depth_m=4.0, reanchor_on_refusal=False,
+                  max_baseline_s=0.10)
+        try:
+            gray = (np.random.default_rng(11)
+                    .integers(0, 255, (360, 640), dtype=np.uint8))
+            n._depth_m = None
+            n._anchor(gray, 0.0)
+            first = n._anchor_t
+            n._process(gray, 0.50, 1)      # dt well past max_baseline_s
+            assert n._anchor_t > first, (
+                'a refusal past max_baseline_s must still re-anchor, or the '
+                'node can hold one stale frame for the rest of the mission')
+        finally:
+            n.destroy_node()
