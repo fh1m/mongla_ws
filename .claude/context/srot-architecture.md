@@ -383,22 +383,36 @@ Read back over MAVLink with the manager stopped, 2026-09-07 (MEASURED):
 against a full-scale that is 3.6× the firmware default.** Any yaw gain reasoning
 that assumed 45 °/s is wrong by that factor.
 
-### ⚠ `MOT_n_DIRECTION` has CHANGED since round 26 and we were not told
+### `MOT_n_DIRECTION` changed since round 26 — CONFIRMED DELIBERATE
 
 | | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 |
 |---|---|---|---|---|---|---|---|---|
 | round 26 banner (`CFG r14 … DIR=`) | −1 | 1 | 1 | 1 | **1** | **1** | **1** | **−1** |
 | live, 2026-09-07 | −1 | 1 | 1 | 1 | **−1** | **−1** | **−1** | **1** |
 
-Four of eight flipped — the entire **vertical** group (M5-M8) inverted. Somebody
-ran `MOTOR_DETECT` or set directions by hand between those dates.
+**The operator confirms this was deliberate, from one of the first srot water
+tests.** The entire vertical group (M5-M8) was inverted.
 
-**Recorded, not chased.** But two consequences follow immediately: any vertical
-behaviour we characterised before this change is stale, and this is precisely
-the non-uniform flip pattern `FRAME_REVERSE`'s own comment warns about — except
-here it is uniform *within* the vertical group, so the mixer's roll/pitch/throttle
-patterns survive. **It is a whole-group inversion, which is the benign case.**
-Worth confirming with the operator that it was deliberate.
+Two things follow, and the second is the useful one:
+
+1. **Any vertical-axis behaviour characterised before that change is stale.**
+2. **It is a whole-group inversion, which is the benign case** — and that is not
+   luck, it is the distinction `FRAME_REVERSE`'s own comment is about. A
+   *non-uniform* flip destroys the mixer's per-axis patterns (their worked
+   example: the yaw column `[+1,−1,−1,+1]` becoming `[+1,+1,+1,−1]`, "three
+   thrusters pushing the same way, which is not a torque at all"). A uniform flip
+   *within* the vertical group leaves roll, pitch and throttle patterns intact and
+   simply reverses the group's sense — which is exactly what a genuinely
+   back-to-front vertical set needs.
+
+So this is `MOT_n_DIRECTION` used for its real job — "compensating individual
+thrusters that are physically wired backwards" — rather than as a substitute for
+`FRAME_REVERSE`. Worth recording as a case where the firmware's separation of the
+two mechanisms did its job in the water.
+
+**And it is evidence the vertical group is now correct in the one place that
+counts**, which slightly raises confidence in the depth path — though not in the
+depth *loop's sign*, which is a separate question (§6c) and still unvalidated.
 
 ---
 
