@@ -55,5 +55,13 @@
   "captured": "2026-09-07",
   "camera": "Fantech Luminous C30 (USB 1d6c:0103, forward) -- 2K/25fps spec, delivers 15.0 fps at every mode",
   "captured_note": "Captured through the guided AprilCal flow after the tilt metric was fixed (the old one read 0 at 55 deg) and the shutter was pinned manual 5 ms (auto chose 200 ms). Marketing claims 106 deg FOV; measured HFOV is 73.88 deg.",
-  "medium": "air"
+  "medium": "air",
+  "card": "Fantech Luminous C30: Fantech L",
+  "bus": "usb-xhci-hcd.0-1",
+  "usb_vid": "1d6c",
+  "usb_pid": "0103",
+  "usb_serial": "YGR80PU1200F23081120",
+  "identity_source": "operator asserted at apply time",
+  "applied_from": "pi_forward_1280x720.json",
+  "applied_on": "2026-09-07 15:31"
 }
