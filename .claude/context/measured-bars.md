@@ -1302,3 +1302,55 @@ frames off a topic, so extra instances watch the same camera and share one
 B >> A means de-rotation is destroying travel; C >> A means the signs are
 wrong; all alike means rotation is not the cause and the loss is elsewhere.
 
+## 19. De-rotation measured THREE WAYS on the vehicle: OFF wins. 2026-09-07
+
+Three 30 cm lateral slides, three gain settings, **every arm on the same
+slide** (extra `flow_node` instances read the same image topic and share one
+`distance_control`, so the operator's hand is common-mode rather than a
+variable).
+
+| arm | slide 1 | slide 2 | slide 3 | median | spread |
+|---|---|---|---|---|---|
+| A shipped `(-1,-1)` | 109.4 % | 131.2 % | 103.0 % | **109.4 %** | 30.89–39.37 (**8.5 cm**) |
+| **B off `(0,0)`** | 106.0 % | 105.0 % | 97.4 % | **105.0 %** | 29.23–31.80 (**2.6 cm**) |
+| C flipped `(+1,+1)` | 94.6 % | 102.0 % | 87.5 % | **94.6 %** | 26.25–30.61 (4.4 cm) |
+
+**A over-reads on every slide, C under-reads on every slide, B sits between
+and is 3x more consistent than A.** That brackets the true gain strictly
+between −1 and +1 and near zero: the rotation coupling on this mount is far
+weaker than the shipped ±1 assumes.
+
+The prediction going in was "C beats A because the sign is wrong". Half
+right — C's median error is −5.4 cm against A's +9.4 cm, so **the sign is
+indeed wrong** — but the prediction missed that **B beats both**, which the
+sign hypothesis alone does not explain. A wrong sign would make C good, not
+make zero good.
+
+### ⛔ DO NOT READ THIS AS "TURN DE-ROTATION OFF"
+
+This slide is **translation-dominated**. §12 measured de-rotation *halving*
+the error at 0.638 rad/s (139 % → 85.5 % of truth), and that regime is a
+yawing vehicle, which is most of a mission. What this measures is that **the
+shipped GAINS are wrong for this mount**, which §12 predicted in as many
+words — *"the axis mapping and the method carry over; this gain does not,
+whatever its cause. Re-derive it on the hull."* — and which nobody had done.
+
+The gains need **deriving, not deleting**. `tools/flow_derot_calibrate.py`
+does it from tilt-only motion with an excitation gate and held-out scoring,
+because fitting them from a SLIDE gives 1.90 / 1.63 — numbers fitted partly
+to the operator's wrist.
+
+### The rig that made this readable
+
+A hand slide is repeatable to about ±1 cm and the arms differ by less, so
+sequential runs cannot separate them. Measuring every arm **on one slide** is
+what turns an unresolvable comparison into a clean one, and it is only
+possible because `flow_node` reads frames off a topic.
+
+Two instrument defects had to be fixed first, and both produced plausible
+tables rather than errors: three duplicate copies of every arm (`ros2 run`
+execs the node as a child, so `terminate()` killed only the wrapper), and a
+fake `yaw_deg = 0.0` fighting the manager's 180° so the projection sign
+flipped every interval. **The first A/B, which said all three arms were
+alike, was measured through both and is withdrawn.**
+
