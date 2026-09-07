@@ -1161,10 +1161,82 @@ data file also needs `rm -rf build/<pkg> install/<pkg>` first: colcon caches
 the file list and fails with `can't copy ...: doesn't exist` naming the file
 you deliberately removed.
 
-## 18. The launch path reads 11 % of truth, and de-rotation is the suspect. 2026-09-07
+## 18. The launch path reads 106.5 % of truth. Four wrong causes first. 2026-09-07
 
-**IN PROGRESS — the cause is not yet settled. Recorded now so the wrong half
-is not carried forward as fact.**
+**RESOLVED. The sensor was right the whole time; the INSTRUMENT was wrong.**
+The section below is kept as written, hypothesis by hypothesis, because the
+four dead ends are the useful part.
+
+### The answer, measured through the launch
+
+    truth 30.00 cm   measured 31.94 cm   err +1.94 cm   106.5 %
+    64 intervals, 16 refused (25 %)
+    vx (axial, image-Y)    +4.35 cm
+    vy (lateral, image-X) +23.94 cm
+    path length |v|        51.72 cm
+
+**§13's result reproduces on the SHIPPED path for the first time** — every
+number in §13 came from `flow_console.py` passing the calibration by hand.
+`water-owed.md` items 22 and 23's dry half are closed by this.
+
+Read honestly: the projected 31.94 exceeds the raw `vy` integral of 23.94
+because the board's heading drifts during a hand slide, so some `vx` leaks
+into the projection. Path length 51.72 > 30 because `|v|` never cancels —
+a wandering hand and noise both inflate it, and it is an upper bound on
+motion, never a distance. The +1.94 cm sits just outside a hand slide's own
+±1 cm, and `h = 0.72` is a tape figure the optics dispute (§13 implied
+0.7025, which would scale this to 31.05).
+
+### ⛔ THE CAUSE: two `/duburi/state` publishers, disagreeing by 180°
+
+`flow_launch_check` publishes a synthetic `/duburi/state` so the node has a
+height on a bench with no barometer, and it filled in `yaw_deg = 0.0`. The
+MANAGER publishes the same topic with the board's real heading, ~180° here.
+The node keeps whichever arrived last.
+
+`DistanceAccumulator` folds `vx·cos(e) − vy·sin(e)` with `e = yaw −
+axis_yaw`. A 180° alternation flips `cos(e)` between +1 and −1 **every
+interval**, so successive contributions subtract. That is the entire story:
++0.64, +0.81, −1.73, −2.99 cm for 30 cm, the unstable sign, and why three
+de-rotation arms measured alike — none of them were the variable.
+
+**Zero is not "unset"; it is a confident claim of due north.** The node
+skips NaN, so NaN is the only honest thing a fake state message can say
+about a quantity it does not measure. Absence is not zero — and this time I
+wrote the zero myself.
+
+### The four causes that were wrong, in order
+
+| hypothesis | how it died |
+|---|---|
+| **the gyro is noisy at rest** — sd 0.083 rad/s, 17 px of phantom shift per baseline | the operator was MOVING THE RIG during the capture. At genuine rest: **sd 0.0010–0.0015 rad/s, 0.204 px** at a 0.4 s baseline. 55× smaller. Only the operator saying so caught it |
+| **the gyro axis mapping is swapped** | measured: `dx←roll −0.770`, `dy←pitch −0.348` are the strongest pairings, which IS the node's convention. Ruled out — and the SLOPES from the same data (978 px/rad vs f=514) are unusable, because hand motion rotates and translates together |
+| **de-rotation gains are wrong** | three gain settings on ONE slide, all alike — though this A/B ran on the broken tool, so the refutation is re-measured rather than trusted |
+| **the projection axis** | real but partial: lateral read 10 % where axial read 2 %. A slide on image-X lands entirely in `vy`, so AXIAL reads ~0 **by construction** — indistinguishable from a dead sensor |
+
+### What survives as real code findings
+
+1. **A refused interval discarded the travel it covered.** `_process`
+   advanced the anchor before `_evaluate` had said whether the interval was
+   usable, and refusals are CORRELATED WITH MOTION — they cluster in the fast
+   part of a move, where the distance is. Fixed behind
+   `reanchor_on_refusal` (default unchanged), three tests verified to bite.
+2. **The gyro axis mapping is confirmed correct**, which had never been
+   checked since the IMU became the srot board.
+
+### The method note, because it is the fourth time this round
+
+Every one of the four wrong causes was a statement about the HARNESS
+wearing the clothes of a statement about the vehicle. In one session the
+instrument published `start` to nobody (QoS), hid the refusal reason, ran
+three duplicate copies of every A/B arm, and finally fought the manager for
+a field it had no business setting. **The sensor was correct throughout.**
+
+---
+
+## 18b. The original in-progress entry, kept
+
+**Superseded by §18 above; retained because the reasoning is the record.**
 
 Four hand slides against a 30 cm truth, through the launch, with the manager
 supplying gyro:

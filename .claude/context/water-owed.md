@@ -297,7 +297,7 @@ degraded. Telling them apart at 2 a.m. is the reason they are separate lines.
 | 19 | `PILOT_EXPO` accounted for in terminal alignment | 4 |
 | 20 | return leg — **run `return_check.py` BEFORE the session** | 5 |
 | 21 | **calibrate the FANTECH forward camera** — never done; it is the camera the vision uplink AIMS with, and it was publishing the downward camera's intrinsics until 2026-09-07 (`measured-bars.md` §17 — LATENT, since the uplink is default-off, so this is 'wrong the moment it is switched on', not 'wrong every mission'). Needs a printed board and 25 views; **does not need water** | §17 |
-| 22 | re-verify the 30 cm result **through the launch**, not through `flow_console --calibration <path>`. Every §13 number came from a tool that passed the path by hand, and the launch wired the calibration to the wrong camera | §17 |
+| 22 | ✅ **DONE 2026-09-07 — 31.94 cm on a 30 cm truth, 106.5 %, through the launch** (`measured-bars.md` §18). The four wrong causes on the way were all instrument faults, not sensor faults. ~~re-verify the 30 cm result **through the launch**~~, not through `flow_console --calibration <path>`. Every §13 number came from a tool that passed the path by hand, and the launch wired the calibration to the wrong camera | §17 |
 
 ## 5c. THE DRY DVL CHECK NEEDS THREE PROCESSES, NOT ONE — measured 2026-09-07
 
@@ -328,4 +328,4 @@ reading **−0.68 cm over 10 s** — correctly near zero, which is the negative
 control for the whole chain. A moving measurement is the operator's slide.
 
 
-| 23 | **one dry slide with `medium:=air` through the launch** — the regression check on the rectifier refactor. `port=RECTIFIED` is verified to come up and the maths is verified against a pinhole, but the rectified path has produced **no measured velocity at all**; every §13 number predates the refactor. Needs light and one hand slide, **no water, no rig** | §13 |
+| 23 | ✅ **DONE 2026-09-07 by the same slide** — the launch path in `medium:=air` produces a correct measurement. ⚠ the RECTIFIED water path still has no measured velocity; that half stays water-only. ~~one dry slide with `medium:=air` through the launch~~ — the regression check on the rectifier refactor. `port=RECTIFIED` is verified to come up and the maths is verified against a pinhole, but the rectified path has produced **no measured velocity at all**; every §13 number predates the refactor. Needs light and one hand slide, **no water, no rig** | §13 |
