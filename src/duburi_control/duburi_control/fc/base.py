@@ -149,6 +149,24 @@ class Telemetry:
     depth_out:        float = math.nan
     esc_temp_c:       tuple = field(default_factory=tuple)
     mag_accuracy:     float = math.nan
+    # WHY the barometer is (un)healthy, not merely that depth vanished. The board
+    # publishes this UNGATED on purpose -- "its whole job is to explain a withdrawal,
+    # so gating it on the health it reports would hide it exactly when it matters"
+    # (fw mav_stream.cpp:876). Enum, from bar30.h:33 -- and note 3 is the state a bare
+    # board sits in, which we once read as a health SCORE:
+    #   0 healthy | 1 jitter | 2 read failures | 3 not initialised
+    # NaN = the board has not said, which is distinct from 0 = healthy.
+    baro_health:      float = math.nan
+    # ⛔ TRI-STATE. Has the board heard the companion its GCS failsafe is SCOPED TO
+    # (FS_GCS_SYSID/FS_GCS_COMPID, default 255/191 = us) since boot?
+    #   None  = the board has not said (older firmware, or no telemetry yet)
+    #   False = configured companion NEVER seen -> our heartbeat is not matching, so
+    #           the GCS failsafe is not being satisfied by us
+    #   True  = seen
+    # False while we are connected and heartbeating is a real pre-dive finding: it
+    # means the failsafe scoping is wrong, and the vehicle's protection against a dead
+    # companion is not actually watching the companion.
+    companion_seen:   Optional[bool] = None
     # ⛔ TRI-STATE, AND THE THIRD STATE IS THE POINT. None = the board cannot
     # know. The thruster kill switch is a rotary knob on the SECOND board and
     # its state reaches the control board only over ESP-NOW; on link loss the

@@ -123,10 +123,13 @@ _DEPTH_LOOP_IDLE_MODES = frozenset({'MANUAL', 'STABILIZE', 'ACRO', 'MOTOR_DETECT
                                     'MOTOR_TUNE', 'AUTOTUNE'})
 
 _NAMED_GROUPS = (
+    # 'BARO_HEALT' is the TRUNCATED wire name -- NAMED_VALUE_FLOAT.name is 10 chars
+    # and the board does not shorten its own string. See sp.NAME_BARO_HEALTH.
     ('depth loop', ('DEPTH_CMD', 'DEPTH_ERR', 'DEPTH_OUT', 'MIX_VERT', 'MIX_VSGN',
-                    'BARO_P2P')),
+                    'BARO_P2P', 'BARO_HEALT')),
     ('move',       ('MV_STATE', 'MV_TYPE', 'MV_PROG', 'STUNT_PRG')),
-    ('vehicle',    ('GAIN', 'KILL', 'LEAK', 'WTEMP', 'CURR', 'MAGACC', 'ATUNE')),
+    ('vehicle',    ('GAIN', 'KILL', 'LEAK', 'WTEMP', 'CURR', 'MAGACC', 'ATUNE',
+                    'COMP_SEEN')),
     ('firmware',   ('HEAP', 'STK_MAV', 'STK_SEN', 'STK_CTL', 'STK_UI',
                     'STK_LORA', 'STK_DSH')),
 )
@@ -468,8 +471,31 @@ def render(snap: Snapshot, conn) -> list[str]:
              f'   {DIM}(VFR_HUD -- must match above){RESET}'
              f'      MAGACC {_f(n.get("MAGACC"), "{:.0f}")}')
 
+    # COMP_SEEN answers the one question a pre-dive check cannot answer any other
+    # way: is the board's GCS failsafe actually WATCHING US? It is scoped by
+    # FS_GCS_SYSID/FS_GCS_COMPID (default 255/191 = the companion), and if our
+    # heartbeat does not match, the failsafe is satisfied by nobody -- or by Bondor
+    # alone, which means a dead companion never surfaces the hull. 0 while we are
+    # connected and heartbeating is a real finding, not a cosmetic one.
+    _cs = n.get('COMP_SEEN')
+    if _cs is None:
+        _cs_txt = f'{DIM}not reported (firmware predates COMP_SEEN){RESET}'
+    elif _cs >= 0.5:
+        _cs_txt = f'{GRN}YES{RESET}  {DIM}-- GCS failsafe is scoped to us and satisfied{RESET}'
+    else:
+        _cs_txt = (f'{RED}NO{RESET}  -- the board has NEVER heard the companion it is '
+                   f'scoped to. Check FS_GCS_SYSID/FS_GCS_COMPID against our '
+                   f'sysid/compid; the GCS failsafe is not watching us.')
+    L.append(f'  companion seen  {_cs_txt}')
+
     # ---- depth + environment ---------------------------------------------- #
     L.append(f'\n{BOLD}== depth / environment =={RESET}')
+    # WHY the baro is unhealthy, not just that depth withdrew. 0 is the GOOD code,
+    # so an absent reading must never be rendered as 0.
+    _bh = n.get('BARO_HEALT')
+    _bh_col = GRN if _bh == 0 else (DIM if _bh is None else RED)
+    L.append(f'  baro health     {_bh_col}{sp.baro_health_text(_bh)}{RESET}'
+             f'   {DIM}(BARO_HEALTH; 0=healthy, 3=not initialised){RESET}')
     lvl, msg = baro_verdict(snap.press_samples)
     col = {'OK': GRN, 'WARN': YEL, 'FAIL': RED}[lvl]
     L.append(f'  barometer       {col}{lvl}{RESET}  {msg}')

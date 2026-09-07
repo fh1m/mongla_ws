@@ -1722,6 +1722,18 @@ class SrotFC(FlightController):
             val = self._named_value(name)
             if val is not None:
                 setattr(t, attr, val)
+        # BARO_HEALTH is truncated to 'BARO_HEALT' on the wire: NAMED_VALUE_FLOAT's
+        # name field is 10 chars and the board does not shorten it itself. Reading the
+        # untruncated name finds nothing, silently -- which is exactly how this value
+        # was once read as a health SCORE rather than a fault CODE (3 = not initialised,
+        # not "very healthy").
+        baro_h = self._named_value(sp.NAME_BARO_HEALTH)
+        if baro_h is not None:
+            t.baro_health = baro_h
+        # Tri-state: absent stays None, so "the board never said" is not "never seen".
+        comp = self._named_value('COMP_SEEN')
+        if comp is not None:
+            t.companion_seen = comp >= 0.5
         # ⛔ KILL = 0 IS NOT "CLEAR". The kill switch is a rotary knob on the
         # SECOND board and its state crosses to this one over ESP-NOW; on link
         # loss the firmware reports kill=false on purpose --

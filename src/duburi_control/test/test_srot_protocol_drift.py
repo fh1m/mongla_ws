@@ -548,6 +548,44 @@ def test_bondor_mirrors_the_same_payload_function_enum():
             f'Bondor has {fw_suffix}={m.group(1)}, we have {getattr(sp, host_attr)}')
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason='srot-ground-station#3 -- Bondor is at 2, we require 10. STRICT so that when '
+           'they fix it this test XPASSes and forces us to retire the xfail, rather than '
+           'the divergence quietly resolving and nobody updating the mirror.',
+)
+def test_bondor_warns_at_least_as_early_as_we_refuse():
+    """Bondor's pre-dive banner must not be more permissive than our arming gate.
+
+    Bondor cannot refuse a command -- it is the pilot's console, not an autonomy gate --
+    so its ONE job on this constant is to show the operator what is in the hull. If its
+    threshold sits below ours, there is a band of firmware revisions that we refuse to
+    arm against and it displays as fine, and nobody sees the problem until the hull is
+    in the water.
+
+    The band is not hypothetical. Rev 10 is the yaw-sense fix: below it, `ATTITUDE.yaw`
+    is INVERTED, STABILIZE spins the hull, and absolute MOVE_TURN targets mean the
+    opposite of what they say (firmware config.h rev-10 note, measured in water
+    2026-08-07). With Bondor at 2, every revision from 2..13 shows green.
+
+    We referee a constant we do not own for the same reason the payload-function test
+    above does: Bondor's own gate is `npm run typecheck`, which cannot see either of the
+    other two repos.
+    """
+    gs = _FW.parent / 'srot-ground-station' / 'bondor' / 'src' / 'shared' / 'protocol.ts'
+    if not gs.is_file():
+        pytest.skip('Bondor repo not checked out beside this workspace')
+    text = gs.read_text(errors='ignore')
+    m = re.search(r'FW_BEHAVIOUR_REV_REQUIRED\s*=\s*(\d+)', text)
+    if not m:
+        pytest.skip('Bondor does not define FW_BEHAVIOUR_REV_REQUIRED')
+    assert int(m.group(1)) >= sp.FW_BEHAVIOUR_REV_REQUIRED, (
+        f'Bondor warns below rev {m.group(1)} but we refuse to arm below '
+        f'{sp.FW_BEHAVIOUR_REV_REQUIRED}: revisions {m.group(1)}..'
+        f'{sp.FW_BEHAVIOUR_REV_REQUIRED - 1} display as fine and are refused by us. '
+        f'Rev 10 in that band inverts yaw sense.')
+
+
 def test_frame_reverse_still_defaults_off():
     """The one class of firmware change this whole file is blind to: a PARAM DEFAULT.
 

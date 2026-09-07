@@ -658,6 +658,40 @@ MSG_ID_ESC_STATUS = 291
 BATTERY_ID_MAIN     = 0   # PM1, electronics rail -> DuburiState.battery_voltage
 BATTERY_ID_THRUSTER = 1   # PM2, thruster pack, via ESP-NOW
 
+# ⛔ NAMED_VALUE_FLOAT's `name` field is 10 CHARS and the board does not shorten its
+# own strings -- so "BARO_HEALTH" arrives as "BARO_HEALT", truncated silently. Looking
+# up the full name finds nothing and returns None, which is indistinguishable from
+# "the board did not send it". This is the same 10-char trap that produced our worst
+# misreading of this signal: BARO_HEALT was read as a health SCORE, so `3` looked
+# excellent when it means NOT INITIALISED.
+NAME_BARO_HEALTH = 'BARO_HEALT'
+
+# bar30.h:33. A fault CODE, not a score -- larger is worse, and 0 is the good one.
+BARO_HEALTH_TEXT = {
+    0: 'healthy',
+    1: 'jitter (peak-to-peak over BARO_JIT_MAX)',
+    2: 'read failures',
+    3: 'not initialised',
+}
+
+
+def baro_health_text(value):
+    """Human text for a BARO_HEALTH code. None/NaN -> 'not reported'.
+
+    Never invents a reading: an unknown code is reported as unknown rather than
+    mapped to the nearest known one.
+    """
+    if value is None:
+        return 'not reported'
+    try:
+        if value != value:            # NaN
+            return 'not reported'
+        code = int(round(float(value)))
+    except (TypeError, ValueError):
+        return 'not reported'
+    return BARO_HEALTH_TEXT.get(code, f'unknown code {code}')
+
+
 # ---------------------------------------------------------------------- #
 #  LEAK: why we still read NAMED_VALUE_FLOAT and not SYS_STATUS           #
 # ---------------------------------------------------------------------- #
