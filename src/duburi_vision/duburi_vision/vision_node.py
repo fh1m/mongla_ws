@@ -38,7 +38,7 @@ from duburi_vision import (
     make_camera, make_camera_from_profile,
     get_profile, draw,
 )
-from duburi_vision.detection.yolo     import YoloDetector
+from duburi_vision.detection.factory  import make_detector
 from duburi_vision.detection.detector import largest
 
 
@@ -72,7 +72,7 @@ class VisionNode(Node):
         )
 
         try:
-            self._det = YoloDetector(
+            self._det = make_detector(
                 model_path=str(self.get_parameter('model_path').value),
                 device=str(self.get_parameter('device').value),
                 conf=float(self.get_parameter('conf').value),
@@ -83,7 +83,7 @@ class VisionNode(Node):
                 logger=self.get_logger(),
             )
         except Exception as exc:
-            self.get_logger().fatal(f"[VIS  ] YoloDetector init FAILED: {exc}")
+            self.get_logger().fatal(f"[VIS  ] detector init FAILED: {exc}")
             raise
 
         self._device_str = str(self.get_parameter('device').value)

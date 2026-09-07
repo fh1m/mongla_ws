@@ -85,7 +85,7 @@ operator web lab, so the whole stack can be exercised without water.
   pixel-native, `gain` = max-speed cap, misses non-fatal, search/recovery via a `fallback`.
 - **✅ YASMIN FSM layer:** `state_machines/` with `VehicleProfile` dual-vehicle auto-detect —
   one plan builder, DVL-distance for Duburi 4.5 and timed for Dubomini 2.0.
-- **✅ ESP32-serial payload:** `PayloadDriver` + `fire` verb (1/2=torpedo, 3/4=dropper).
+- **✅ Payload:** `fire` verb. On srot it is the board's PCA9685 over MAVLink and the argument is the **board channel** (1..16); the board's `SERVO{n}_ROLE` decides whether it fires. Legacy Pixhawk path keeps `PayloadDriver` (ESP32 serial).
 - **✅ Competition missions:** 5 task chunks + combinator + FSM launchers. Gate model
   (`gate_rescue_repair`) ships today; slalom / bin / torpedo `.pt` pending (YAMLs committed).
 - **🟦 Phase 2:** Dubomini control path · inter-vehicle comms (IVC) · stepper grabber ·
@@ -139,24 +139,243 @@ torch wheel + `ultralytics`,
 
 > Every session, source ROS + the workspace, then run the preflight first:
 > ```bash
-> ros2 run duburi_manager bringup_check     # network · UDP 14550 · Pixhawk USB · DVL · BNO085 · mode hint
+> ros2 run duburi_manager connect                # ★ SROT: open the serial link, show the WHOLE vehicle
+> ros2 run duburi_manager bringup_check --srot   # SROT gate: FW rev · barometer sanity · depth loop · GAIN
+> ros2 run duburi_manager bringup_check          # Pixhawk vehicle: network · UDP 14550 · Pixhawk USB · DVL · BNO085
 > ```
-> Exit 0 = nothing failed (WARNs are OK in sim/desk).
+> Exit 0 = nothing failed (WARNs are OK in sim/desk). **`--srot` is the flag for this
+> branch's default vehicle** — without it you get probes for a Pi, a UDP router and a
+> Pixhawk that a SROT vehicle does not have.
+
+## ⚠ Which vehicle are you on?
+
+This tree runs **two** flight-controller backends, and **`pixhawk` is the default** --
+it is the configuration that placed 8th at RoboSub 2025. The srot vehicle passes
+`flight_controller:=srot`. Almost every command below changes shape between them,
+so start here.
+
+| | `flight_controller:=pixhawk` *(default)* | `flight_controller:=srot` |
+|---|---|---|
+| Autopilot | Pixhawk 2.4.8 + ArduSub 4.x | **SROT board**, firmware **Hengla v0.2.0** |
+| Link | BlueOS → UDP 14550 | **one USB-C cable @115200** |
+| In between | Raspberry Pi + BlueOS + MAVLink router | *nothing* |
+| Sensors | on the Pixhawk + a USB IMU | **all on the board** (BNO085, Bar30) |
+| Control loops | ArduSub 400 Hz + Python outer loops | **on the board, 500 Hz** |
+
+`PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identical to history — pass
+`flight_controller:=pixhawk` and everything in the old docs still applies.
+
+### Vocabulary transition — what changed from the Pixhawk era
+
+Every one of these is a command that still *runs* but now means something different, or
+nothing at all. This is the table to read before reusing anything from your shell history.
+
+| Pixhawk-era | SROT-era | Why |
+|---|---|---|
+| `mode:=pool` (UDP 14550 profiles) | *(omit it)* — the USB device autodetects | no Pi, no BlueOS, no UDP router |
+| `yaw_source:=dvl` / `:=bno085` | **`yaw_source:=mavlink_ahrs`** | the BNO085 is **on the board**; the USB IMU is off the hull |
+| `ALT_HOLD` | **`DEPTH_HOLD`** (`ALT_HOLD` still aliases to it) | different name, same capability |
+| `RC_CHANNELS_OVERRIDE` Ch4/5/6 | `MAV_CMD_SROT_MOVE` (31000), or one `MANUAL_CONTROL` | no per-channel release on srot |
+| `lock_heading` | *(automatic)* — the board holds the heading each leg starts with | refused on srot; the board does it in `attitude::holdYaw` |
+| `move_forward_dist` &c. | *(unavailable)* | DVL not fitted / never validated — [`vehicle-spec.md`](.claude/context/vehicle-spec.md) "DVL status" |
+| `set_depth` | `set_depth` → an on-board DIVE — **behind the depth gate below** | the board's depth loop has never run closed |
+| `arc`, `style_yaw`, `vision_align`, `vision_move` | *(refused, clearly)* | genuine gaps — see `srot_fc.UNSUPPORTED_VERBS` |
 
 ## Quick start (three flows)
 
+**⚡ Drive the SROT vehicle (control only)** — one USB-C cable, no Pi, no BlueOS:
+
+```bash
+ros2 run duburi_manager connect                       # 2 batteries · depth loop · ESC rpm/temp · health
+ros2 run duburi_manager bringup_check --srot          # FW rev >= 2, barometer sane, depth loop settled
+ros2 launch duburi_manager bringup.launch.py flight_controller:=srot   # main defaults to pixhawk
+# ...then in another terminal:
+ros2 run duburi_planner duburi arm
+ros2 run duburi_planner duburi move_forward --duration 5 --gain 40
+ros2 run duburi_planner duburi stop
+ros2 run duburi_planner duburi disarm
+```
+
+> ### ⛔ Before the vehicle goes in water — the depth gate
+>
+> **The board's depth loop has never run closed.** The sign was inverted until 2026-07-30
+> (SURFACE drove the vehicle *down*) and the Bar30 was not fitted while that code was written.
+>
+> **This gates `move_forward` too, not just diving.** `SROT_MOVE` auto-enters `AUTO`, and
+> `AUTO` holds depth underneath **every** primitive (`task_control_loop.cpp:236`) — there is
+> no depth-free path through it. A horizontal-only mission still runs that loop, and a
+> vertical runaway mid-leg looks exactly like a buoyancy problem.
+>
+> Two checks, **props off, on the bench**:
+> ```bash
+> ros2 run duburi_planner duburi set_mode --target_name DEPTH_HOLD
+> ```
+> 1. Raise and lower the sub by hand — the verticals must push **back toward** the latched
+>    depth. Pushing *away* means the sign is still inverted: **stop**.
+> 2. Trip the leak input at depth — the demand must be **ascend**.
+>
+> A successful in-air `move_forward` is **not** partial validation of this.
+
+> ### First power-on with firmware rev 3 — three ways the vehicle refuses to move
+>
+> Rev 3 (2026-08-02) made the board **fail loudly instead of flying on bad data**. That is
+> the right trade, but it means a healthy-looking vehicle can now decline to move for
+> reasons that never existed before. All three are visible from the bench:
+>
+> | Symptom on the deck | Cause | Check before you get wet |
+> |---|---|---|
+> | Arms fine, **every move verb DENIED**, nothing obviously wrong | Bar30 PROM failed CRC, or its sample is stale → the board refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and `SROT_MOVE` enters `AUTO` | `bringup_check --srot` → **`Bar30 health`** must read PASS |
+> | Disarms itself, or refuses to arm, on a good pack | The thruster-pack voltage was reading **0 V** until `PM2_SRC=2` — the low-battery failsafe was **inert and is now live**, and its threshold has never been exercised | Compare `FS_BAT_VOLTAGE` (13.2) against your real pack in Bondor |
+> | Manual piloting feels half-powered | `GAIN` boots from `JS_GAIN_DEFAULT`, which reads **0.5** on this board — `MANUAL_CONTROL` has been at half authority all along | `bringup_check --srot` reports GAIN; the manager also re-writes it at startup |
+>
+> Depth and water temperature are **suppressed**, not faked, when the baro is unhealthy —
+> so an absent reading is now information. `VFR_HUD.alt` is the one exception: it keeps
+> streaming a number regardless, which is exactly why the `Bar30 health` line reads the
+> `SYS_STATUS` health bit instead of trusting the depth value.
+
+### Reading the board — `ros2 run duburi_manager connect`
+
+The Pixhawk + Pi stack had a dozen windows onto the vehicle (BlueOS web UI, QGC, MAVProxy).
+The SROT board has **one USB cable and no web UI**, so this is that surface: point it at the
+serial path and it prints everything the board says.
+
+```bash
+ros2 run duburi_manager connect                     # autodetect the port, one snapshot
+ros2 run duburi_manager connect --path /dev/ttyUSB0 # explicit device, like the Pixhawk days
+ros2 run duburi_manager connect --watch             # ★ live DASHBOARD + change log
+ros2 run duburi_manager connect --json              # machine-readable, for logs and CI
+ros2 run duburi_manager connect --no-roles          # skip the 16 PCA9685 param reads
+```
+
+**`--watch` is a fixed-position dashboard, not a scrolling dump**, with a **change log**
+underneath it: one line whenever a value crosses a threshold, a mode flips, a failsafe fires,
+or a field goes **absent ↔ present**. The panel answers *"what is the board doing now"*; the
+log answers *"what changed while I wasn't looking"*. That last category matters because the
+board **suppresses** values it cannot stand behind — a barometer that stops being reported is
+the board telling you something, and a log that only watches numbers move would never mention
+it.
+
+The same change log runs inside `duburi_manager start` as `[SROT ] ~ …` lines, so a mission
+recording carries it too.
+
+It needs **no ROS graph, no manager, and not even a fully-built workspace** — it is usually
+the first thing you run. `connect` never grades and always exits 0; `bringup_check --srot` is
+the pass/fail gate. Use `connect` to look, `bringup_check` to decide.
+
+**What the SROT board sends that the Pixhawk never did:**
+
+| Group | Values | Why it is new |
+|---|---|---|
+| **Two batteries** | `BATTERY_STATUS` id 0 = **PM1 electronics**, id 1 = **PM2 thruster pack** | the thruster pack is invisible to the flight controller and arrives over **ESP-NOW** from the 2nd board — it is absent, not zero, when that link drops |
+| **Per-thruster telemetry** | RPM, temperature, voltage, current ×8 | bidirectional DShot via the RP2350 Pico co-processor — needs **Bluejay** on the ESCs |
+| **Depth-loop internals** | `DEPTH_CMD`, `DEPTH_ERR`, `DEPTH_OUT`, `MIX_VERT`, `MIX_VSGN` | lets you read the depth controller **disarmed**, before it can move anything |
+| **Move state** | `MV_STATE`, `MV_TYPE`, `MV_PROG` | on-board motion primitives report their own phase and progress |
+| **Sensor honesty** | `MAGACC`, `LEAK`, `KILL`, `WTEMP`, `SYS_STATUS` health bits | since rev 3 the board **withholds** values it cannot stand behind |
+| **Firmware health** | free heap, per-task stack high-water ×6, load, drop rate | an ESP32 running FreeRTOS can run out of stack; you want to see it coming |
+
+> ### Heading is **0..360**, everywhere
+>
+> The board's OLED, `VFR_HUD.heading`, `/duburi/state` and every tool here show the **same
+> number** — a compass heading in `0..360`. `ATTITUDE.yaw` is on the wire as signed radians
+> (`±π`), and rendering that raw once printed `yaw -162.23°` beside the board's `heading 197°`:
+> the same angle, disagreeing by exactly 360, on adjacent lines. **Roll and pitch stay signed** —
+> a 3° list to port is not a 357° list. `connect` prints its own heading next to the board's
+> `VFR_HUD` copy precisely so a future drift is visible in one glance.
+
+> **A missing value is `--`, never `0.0`.** From rev 4 the board *suppresses* `WTEMP` and
+> `SCALED_PRESSURE2` when the barometer is unhealthy, and sends `0` in
+> `SCALED_IMU2.temperature` as MAVLink's "not provided". Rendering absence as zero recreates
+> the exact bug that suppression was added to fix — a Bar30 read during a PROM reset race once
+> published `−51 °C` and `+2.87 m` in air with nothing marking them wrong.
+
+> **20+ scalars share one `NAMED_VALUE_FLOAT` msgid** and are sent as a burst, while pymavlink
+> caches one message *per msgid*. Anything that samples that cache sees only the last name in
+> the burst. Both `connect` and the manager's reader thread de-multiplex by name — and
+> `BATTERY_STATUS` needs the identical treatment by instance id, or the reading alternates
+> between two packs an order of magnitude apart.
+
+> ### Bare-board bench — what *should* read `--`
+>
+> With the board alone (no thrusters, no Bar30, no 2nd board), most of the vehicle is
+> legitimately **absent**, and the tools say so rather than inventing zeros:
+>
+> | Reads `--` | Because |
+> |---|---|
+> | `depth`, `water temp`, barometer | no Bar30. ⚠ `VFR_HUD.alt` keeps streaming `-0.000` regardless — it is **not** gated on baro health (`mav_stream.cpp:258`), so `connect` cross-checks the `SYS_STATUS` health bit instead of trusting the value's presence |
+> | `Vservo`, `battery 1` | `Vservo` **is** PM2 — the thruster pack, which reaches the board over ESP-NOW from the 2nd board |
+> | ESC temps, `rpm` | no Pico co-processor and no ESCs. An ESC reporting 0 °C is implausible, so an all-zero temp row means nothing is attached |
+> | `DEPTH_OUT`, `DEPTH_ERR` | the depth loop does not run without a barometer |
+>
+> `Vcc` shows `5.00 V (nominal, not measured)` — the firmware packs a **hardcoded `5000`**
+> (`mav_stream.cpp:328`), so nobody debugs a 5 V rail off a constant. And `battery 0` on an
+> unwired PM1 pin floats: the change log caught it oscillating **1.20 ↔ 5.96 V**, which is what
+> a floating ADC looks like, not a pack.
+
+The manager logs the same data periodically once running — `srot_telemetry_period_s:=2.0`
+(set `0` to silence it). It also **refuses to arm while the depth controller is saturated**
+(`|DEPTH_OUT| ≥ 0.90`), because the mixer's throttle column is `-1` on all four verticals, so
+that state becomes full vertical thrust the instant the outputs go live. Override with
+`allow_saturated_depth_arm:=true` — deliberately its own flag, not the firmware-revision one,
+since accepting an unknown firmware and accepting uncommanded heave are different decisions:
+
+```
+[SROT ] BAT main  1.35V | thruster 14.74V | DEPTH +2.96m err -3.03m out -1.00 | WTEMP 21.6C | MAGACC 1 | LEAK dry | KILL clear
+[SROT ] RPM      0     0     0     0     0     0     0     0
+```
+
+### Payload — `duburi_ws` drives switch channels only
+
+The SROT board's PCA9685 has 16 channels, and **each channel's role is a firmware
+parameter set in Bondor** (`SERVO{n}_ROLE`, where `n` = PCA channel + 1):
+
+| Role | Meaning | Who drives it |
+|---|---|---|
+| `1` — **SERVO (PWM)** | the on-board **manipulator arm** | the board. **`duburi_ws` must not touch these** |
+| `2` — **SWITCH (MOSFET/relay)** | torpedo / dropper solenoids | `duburi_ws`, via `fire()` |
+
+**Measured on the vehicle:** channels **1–8 are SERVO**, **9–16 are SWITCH**.
+
+So the fire map is just numbers — `<duburi_channel>:<pca_channel>`:
+
+```bash
+ros2 launch duburi_manager bringup.launch.py payload_channels:="9:torpedo_1, 11:dropper_1"
+#   ^ labels for the log ONLY -- fire(N) always addresses BOARD channel N
+#                                              torpedo 1/2 ^^^^  ^^^^^  dropper 3/4
+```
+
+**`fire()` reads the role off the board and refuses anything that is not a switch**, naming
+the channel and the role it actually has. It **fails closed on an unreadable role** — a param
+read that timed out is not evidence a channel is safe to drive, and payload actuation is never
+urgent enough to justify guessing.
+
+> **Why the host does not store the role.** The old map encoded `relay:`/`servo:` host-side,
+> which duplicates board state and goes stale **silently** the moment someone re-roles a
+> channel in Bondor. The failure mode of a stale copy is driving the manipulator arm during a
+> drop. The channel *number* is the only thing that needs to cross repos. (The legacy
+> `1:relay:0` / `2:servo:3` forms still parse, so existing launch files keep working.)
+
+`connect` prints the live role map, and the manager logs it at bring-up:
+
+```
+== payload (PCA9685) ==   role is a FIRMWARE param, set in Bondor
+  SWITCH (duburi_ws may fire)   [9, 10, 11, 12, 13, 14, 15, 16]
+  SERVO  (on-board arm, ignored)  [1, 2, 3, 4, 5, 6, 7, 8]
+```
+
+**Drive in sim** — Gazebo + ArduSub SITL, no real AUV (this is the **pixhawk** backend):
+
 **Drive in sim** — bare ArduSub SITL, no Gazebo, no pool geometry. Enough to
 exercise arming, depth and the motion verbs:
-
 ```bash
 # T1 — ArduSub SITL
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
     --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
-# T2 — manager (auto-detects sim via UDP 14550)
-ros2 run duburi_manager start
+# T2 — manager. SITL is ArduSub, so ask for the pixhawk backend explicitly
+#      (this branch defaults to srot, which would look for a USB board)
+ros2 run duburi_manager start --ros-args -p flight_controller:=pixhawk
 # T3 — drive
 ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_depth --target -0.5
+ros2 run duburi_planner duburi set_depth --target -0.5   # ⛔ srot: behind the depth gate
 ros2 run duburi_planner duburi move_forward --duration 3 --gain 60
 ros2 run duburi_planner duburi disarm
 ```
@@ -187,6 +406,24 @@ ros2 run duburi_planner mission pool_day_practice     # ★ Gate→Slalom→Torp
 
 End-to-end in-water session. Everything runs on the Jetson unless noted.
 
+**SROT vehicle (default).** One cable replaces the entire network stack:
+
+```mermaid
+flowchart LR
+  subgraph BOARD[SROT board · Hengla v0.2.0 · 500 Hz]
+    IMU[BNO085 · I2C0] --- ESP[ESP32 flight core]
+    BAR[Bar30 depth · I2C0] --- ESP
+    PCA[PCA9685 payload · I2C1] --- ESP
+    ESP -->|1 Mbaud UART| PICO[RP2350 · 8x ESC + RPM]
+  end
+  BOARD -->|USB-C · MAVLink · 115200| JET[Jetson Orin · GPU/vision only]
+  FCAM[Forward cam] -->|USB| JET
+  DCAM[Downward cam] -->|USB| JET
+  BOARD -.->|LoRa| BON[Bondor GCS · parallel, NOT in the control path]
+```
+
+<details><summary>Pixhawk vehicle (<code>flight_controller:=pixhawk</code>) — the previous topology</summary>
+
 ```mermaid
 flowchart LR
   PIX[Pixhawk + ArduSub] -->|USB| RPI[Raspberry Pi · BlueOS · 192.168.2.1]
@@ -198,25 +435,37 @@ flowchart LR
   DVL[Nucleus DVL · .201] -->|TCP 9000| JET
   JET -->|auv_manager + vision + mission| PIX
 ```
+</details>
 
-**1 · Power & network** — power the AUV; BlueOS (`192.168.2.1`) routes Pixhawk MAVLink to the
-Jetson (`192.168.2.69:14550`) as a UDP client (`inspector` endpoint).
+**1 · Power & connect** — power the AUV and plug the board's USB-C into the Jetson. That is
+the whole link: no BlueOS, no UDP, no `192.168.2.x`. The port autodetects; override with
+`mav_device:=/dev/serial/by-id/<yours>`.
+*(Pixhawk backend: BlueOS at `192.168.2.1` routes MAVLink to `192.168.2.69:14550`.)*
 
-**2 · Plug payload sensors** — BNO085 (VID/PID `303a:1001`) and ESP32 payload (CH340,
-`1a86:7523`) auto-detect by VID/PID; the forward + downward cameras are USB.
+**2 · Plug the cameras** — forward + downward, USB. **No BNO085 or payload board to plug in**
+on srot: both are on the control board.
 
 **3 · Preflight**
 ```bash
-ros2 run duburi_manager bringup_check          # network · UDP · Pixhawk · DVL · BNO085
+ros2 run duburi_manager connect                # everything the board sends (see "Reading the board")
+ros2 run duburi_manager bringup_check --srot   # serial · FW rev · barometer · depth loop · GAIN
 ls /dev/video*                                 # confirm camera device indices
 ```
+> **The line that matters is `FW behaviour rev`.** Below **2**, the board's `MOVE_STOP`
+> applies zero braking thrust and this host no longer carries a brake — `stop` and every
+> abort would silently fail to decelerate the hull. It FAILs here and `arm()` refuses.
+> Fixing it means a reflash that **wipes the tune and `CAL_*`**: export from Bondor first,
+> then `pio run -t erase && pio run -t upload`, re-import, and re-write `JS_GAIN_DEFAULT=1.0`.
 
-**4 · Manager + sensors** — DVL + BNO085 heading is the most stable pool combo:
+**4 · Manager** — `srot` + `mavlink_ahrs` are already the defaults:
 ```bash
-ros2 launch duburi_manager bringup.launch.py mode:=pool yaw_source:=bno085_dvl
-# expect the MONGLA · DUBURI AUV MANAGER banner, a [STATE] line within ~2 s,
-# and [DVL] connected (dvl_auto_connect:=true)
+ros2 launch duburi_manager bringup.launch.py
+# expect: MONGLA · DUBURI AUV MANAGER banner, [NET] flight_controller = srot,
+#         a [STATE] line within ~2 s, and [SROT] firmware behaviour rev 3
+# payload: fire(N) = BOARD channel N. Which channels are fireable is read from the
+#   board at bring-up -- see the "[PAYLOAD] board roles: FIREABLE (switch) [...]" line.
 ```
+*(Pixhawk backend: `bringup.launch.py flight_controller:=pixhawk mode:=pool yaw_source:=bno085_dvl`.)*
 
 **5 · Vision** — both cameras (detectors start paused; missions resume per task):
 ```bash
@@ -626,7 +875,7 @@ Full flags: `ros2 run duburi_planner duburi <cmd> --help`.
 | `move_lateral_dist` | DVL closed-loop lateral (+ right, − left) | `duburi move_lateral_dist --distance_m 1.0 --gain 36` |
 | `vision_align` | Centre target on lat/yaw/depth at signed px offsets | `duburi vision_align --target_class gate --axes yaw,lat --duration 15` |
 | `vision_move` | Drive forward until bbox fills `fwd_fill`% | `duburi vision_move --target_class gate --fwd_fill 80 --mode area` |
-| `fire` | Fire ESP32 payload channel (1/2=torpedo, 3/4=dropper) | `duburi fire --fire_channel 3` |
+| `fire` | Activate payload BOARD channel 1..16 (board refuses PWM/arm channels) | `duburi fire --fire_channel 9` |
 | `stop` / `pause` | Active RC-neutral hold / release override N s | `duburi pause --duration 2` |
 | `mission_reset` | Stop heading lock + clear abort + RC neutral | `duburi mission_reset` |
 | `surface` | Emergency ascend to 0 m (bypasses the busy gate) | `duburi surface` |
@@ -696,7 +945,7 @@ Each blocks until complete. `gain` is % thrust (0–100); `settle` adds a post-m
 | `duburi.lock_heading(degrees=0, timeout=300)` / `duburi.release_heading()` | Background Ch4 yaw-hold (0 = current heading) |
 | `duburi.move_forward_dist(metres, gain=60, tolerance=0.1)` | **DVL** closed-loop (also `move_back_dist` / `move_lateral_dist`, lock stays active) |
 | `duburi.style_roll(gain=60, flips=1, headroom=1.0)` / `duburi.style_yaw(flips=1, deg_per_step=90)` | Style 360° manoeuvres |
-| `duburi.fire(channel)` | ESP32 payload (1/2=torpedo, 3/4=dropper); `duburi.payload_ready` to check |
+| `duburi.fire(channel)` | Payload BOARD channel 1..16 (no host map; board role decides); `duburi.payload_ready` to check |
 | `duburi.pause(seconds)` / `duburi.stop()` / `duburi.surface()` | Release override / active hold / emergency ascend |
 | `duburi.head()` | Live heading (float) at call time |
 | `duburi.countdown(seconds=10)` | Tether-removal countdown banner |

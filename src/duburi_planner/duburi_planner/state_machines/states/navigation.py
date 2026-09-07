@@ -2,7 +2,12 @@
 
 MoveForwardState / MoveBackState / MoveLateralState are the plug-and-play
 core: pass both distance_m AND duration; each state picks the right verb
-based on profile.has_dvl.  Same plan builder → correct FSM for both vehicles.
+based on profile.has_distance_moves.  Same plan builder → correct FSM for
+both vehicles AND both flight-controller backends.
+
+`has_distance_moves`, not `has_dvl`: a DVL alone is not enough, because it is
+host-side only and the srot backend refuses the streamed `move_*_dist` path.
+Authoring BOTH distance_m and duration is what makes a plan portable.
 """
 from __future__ import annotations
 
@@ -98,6 +103,28 @@ class LockHeadingState(DuburiState):
 
 # ── MOVEMENT (plug-and-play DVL / timed) ─────────────────────────────────────
 
+def _warn_no_distance_move(state, verb: str) -> None:
+    """Say loudly that a distance step could not run and nothing moved.
+
+    Reached when a plan authored `distance_m` only, on a backend without distance
+    moves. Before this the state returned SUCCEED having commanded nothing -- a
+    mission step that silently does not happen, which is the worst way to fail.
+
+    Deliberately does NOT substitute a time estimate from the distance: guessing a
+    duration is the mission author's call, not this state's.
+    """
+    profile = state.profile
+    msg = (f'[FSM  ] {verb}: distance_m requested but this backend has no distance '
+           f'moves (flight_controller={profile.flight_controller}, '
+           f'has_dvl={profile.has_dvl}) and no duration= fallback was authored -- '
+           f'NOTHING MOVED.')
+    log = getattr(state.duburi, 'log', None)
+    if log is not None and hasattr(log, 'error'):
+        log.error(msg)
+    else:
+        print(msg)
+
+
 class MoveForwardState(DuburiState):
     """Forward move: DVL distance if profile.has_dvl, else timed.
 
@@ -119,10 +146,21 @@ class MoveForwardState(DuburiState):
         self._gain       = gain
 
     def _run(self, bb: Blackboard) -> str:
-        if self._distance_m is not None and self.profile.has_dvl:
+        # has_distance_moves, NOT has_dvl: the DVL is host-side only and the srot
+        # backend hard-refuses move_forward_dist. Gating on has_dvl dispatched a
+        # verb that cannot run -- and because this was an `elif`, the refusal did
+        # not fall through to the timed leg either, so the state just failed.
+        if self._distance_m is not None and self.profile.has_distance_moves:
             self.duburi.move_forward_dist(self._distance_m, gain=self._gain)
         elif self._duration is not None:
             self.duburi.move_forward(self._duration, gain=self._gain)
+        elif self._distance_m is not None:
+            # Asked for a distance on a backend that cannot do one, with no timed
+            # fallback authored. Previously this returned SUCCEED having moved
+            # nothing -- a mission step that silently does not happen. Say so.
+            # (Deliberately NOT substituting a time estimate: guessing a duration
+            # from a distance is the mission author's call, not this state's.)
+            _warn_no_distance_move(self, 'move_forward_dist')
         return SUCCEED
 
 
@@ -143,10 +181,21 @@ class MoveBackState(DuburiState):
         self._gain       = gain
 
     def _run(self, bb: Blackboard) -> str:
-        if self._distance_m is not None and self.profile.has_dvl:
+        # has_distance_moves, NOT has_dvl: the DVL is host-side only and the srot
+        # backend hard-refuses move_back_dist. Gating on has_dvl dispatched a
+        # verb that cannot run -- and because this was an `elif`, the refusal did
+        # not fall through to the timed leg either, so the state just failed.
+        if self._distance_m is not None and self.profile.has_distance_moves:
             self.duburi.move_back_dist(self._distance_m, gain=self._gain)
         elif self._duration is not None:
             self.duburi.move_back(self._duration, gain=self._gain)
+        elif self._distance_m is not None:
+            # Asked for a distance on a backend that cannot do one, with no timed
+            # fallback authored. Previously this returned SUCCEED having moved
+            # nothing -- a mission step that silently does not happen. Say so.
+            # (Deliberately NOT substituting a time estimate: guessing a duration
+            # from a distance is the mission author's call, not this state's.)
+            _warn_no_distance_move(self, 'move_back_dist')
         return SUCCEED
 
 
@@ -167,11 +216,22 @@ class MoveLateralState(DuburiState):
         self._gain       = gain
 
     def _run(self, bb: Blackboard) -> str:
-        if self._distance_m is not None and self.profile.has_dvl:
+        # has_distance_moves, NOT has_dvl: the DVL is host-side only and the srot
+        # backend hard-refuses move_lateral_dist. Gating on has_dvl dispatched a
+        # verb that cannot run -- and because this was an `elif`, the refusal did
+        # not fall through to the timed leg either, so the state just failed.
+        if self._distance_m is not None and self.profile.has_distance_moves:
             self.duburi.move_lateral_dist(self._distance_m, gain=self._gain)
         elif self._duration is not None:
             # positive distance_m = right; mirror for raw timed move
             self.duburi.move_right(self._duration, gain=self._gain)
+        elif self._distance_m is not None:
+            # Asked for a distance on a backend that cannot do one, with no timed
+            # fallback authored. Previously this returned SUCCEED having moved
+            # nothing -- a mission step that silently does not happen. Say so.
+            # (Deliberately NOT substituting a time estimate: guessing a duration
+            # from a distance is the mission author's call, not this state's.)
+            _warn_no_distance_move(self, 'move_lateral_dist')
         return SUCCEED
 
 

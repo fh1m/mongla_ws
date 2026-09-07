@@ -34,7 +34,8 @@ COMMANDS = {
         'defaults': {'timeout': 20.0},
     },
     'set_mode': {
-        'help':     'Switch ArduSub flight mode (MANUAL, ALT_HOLD, STABILIZE, ...).',
+        'help':     'Switch flight mode. srot: STABILIZE|DEPTH_HOLD|SURFACE|MANUAL|ACRO '
+                    '(ALT_HOLD aliases to DEPTH_HOLD). pixhawk: MANUAL|ALT_HOLD|STABILIZE|...',
         'fields':   ['target_name', 'timeout'],
         'defaults': {'timeout': 8.0},
     },
@@ -345,10 +346,12 @@ COMMANDS = {
                      'range_gain_floor': 1.0, 'coast_s': 0.0},
     },
     'fire': {
-        'help':     'Fire ESP32 payload channel. 1/2 = torpedo, 3/4 = dropper. '
-                    'Requires payload_port to be connected (auto-detected at startup).',
+        'help':     'Activate payload BOARD channel N (1..16) -- the same n as '
+                    'SERVO{n}_ROLE, no host-side map. The board decides: a SWITCH '
+                    'channel fires, a PWM/SERVO channel is REFUSED (it is the '
+                    'on-board arm). `duburi_manager connect` lists which is which.',
         'fields':   ['fire_channel'],
-        'defaults': {'fire_channel': 1.0},
+        'defaults': {'fire_channel': 0.0},
     },
 }
 

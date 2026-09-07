@@ -6,14 +6,66 @@ changes. Mirrors `duburi_sensors.factory.make_yaw_source` exactly.
 """
 
 
-def _build_webcam(*, device=None, width=640, height=480, fps=30,
-                  frame_id='laptop_cam', name='laptop', logger=None, **_):
+def _build_webcam(*, device=None, device_path=None, width=640, height=480,
+                  fps=30, frame_id='laptop_cam', name='laptop', logger=None,
+                  fourcc='MJPG', **_):
+    # `device_path` WAS SILENTLY IGNORED. Every profile that names one -- the
+    # two Pi cameras and both vehicle cameras -- passed it in as a kwarg, it
+    # landed in `**_`, and the builder used `device`, which those profiles do
+    # not set. So they all resolved to index 0: whichever camera_node started
+    # first got it and the second died EBUSY, with the operator's own launch
+    # arg being the only thing that had ever made them work.
+    if device_path:
+        device = device_path
     if device is None:
         device = 0
     from .cameras.webcam import WebcamCamera
     return WebcamCamera(
         device=device, width=width, height=height, fps=fps,
-        frame_id=frame_id, name=name, logger=logger)
+        frame_id=frame_id, name=name, logger=logger, fourcc=fourcc)
+
+
+def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
+                fps=60, frame_id='cam', name='cam', logger=None,
+                fourcc='MJPG', **_):
+    """The low-latency path: a keep-up thread and a one-deep mailbox.
+
+    Falls back to `webcam` when the device is not a real V4L2 node -- an int
+    index, a file, anything the ioctls will refuse. That keeps `source='v4l2'`
+    safe to put in a shared profile: a dev box with a different camera stack
+    gets OpenCV instead of a stack trace.
+    """
+    # A profile's `device_path` is the device. See `_build_webcam`.
+    if device_path:
+        device = device_path
+    if device is None:
+        device = '/dev/video0'
+    dev = str(device)
+    if not dev.startswith('/dev/'):
+        if logger:
+            logger.warning(
+                f'[CAM  ] v4l2 needs a device PATH, got {device!r} -- falling '
+                f'back to the OpenCV webcam source. Latency will be '
+                f'queue-bound; pass a /dev/... path (ideally a by-path or '
+                f'by-id symlink) for the mailbox.')
+        return _build_webcam(device=device, width=width, height=height,
+                             fps=fps, frame_id=frame_id, name=name,
+                             logger=logger, fourcc=fourcc)
+    from .cameras.v4l2_mailbox import V4L2MailboxCamera
+    try:
+        return V4L2MailboxCamera(
+            device=dev, width=width, height=height, fps=fps,
+            frame_id=frame_id, name=name, logger=logger, fourcc=fourcc)
+    except OSError as exc:
+        if logger:
+            logger.warning(
+                f'[CAM  ] v4l2 mailbox failed on {dev!r} ({exc}); falling back '
+                f'to the OpenCV webcam source. Frames will be queue-bound: '
+                f'measured 396 ms of staleness after a 400 ms consumer stall, '
+                f'against 17 ms on the mailbox.')
+        return _build_webcam(device=dev, width=width, height=height, fps=fps,
+                             frame_id=frame_id, name=name, logger=logger,
+                             fourcc=fourcc)
 
 
 def _build_ros_topic(*, node=None, topic=None, frame_id='ros_cam', name='ros_topic',
@@ -67,6 +119,7 @@ def _build_video_file(*, path='', loop=True, width=0, height=0, fps=0,
 # error from make_camera. Same UX as duburi_sensors.factory.
 BUILDERS = {
     'webcam':      _build_webcam,
+    'v4l2':        _build_v4l2,
     'ros_topic':   _build_ros_topic,
     'video_file':  _build_video_file,
     'jetson':      _build_jetson_stub,

@@ -54,10 +54,17 @@ VISION_DUAL_LAUNCH = REPO / 'src/duburi_vision/launch/vision_dual.launch.py'
 # is why this test exists: without it, a typo'd or branch-only argument is a
 # no-op with no log line anywhere.
 #
-#   flight_controller -- declared on `srot` (selects SROT-USB vs Pixhawk/ArduSub).
-#     On `main` there is no such argument and the Pixhawk path is the only path,
-#     so passing it is inert and harmless. Keep it in stack.launch.py so the same
-#     sim drives both branches.
+#   flight_controller -- selects SROT-USB vs Pixhawk/ArduSub.
+#     ⛔ UPDATED BY THE srot -> main MERGE (2026-09-07). This used to read "on
+#     `main` there is no such argument ... so passing it is inert and harmless".
+#     That is no longer true: the argument IS declared here now, and the sim's
+#     `flight_controller:=pixhawk` is LOAD-BEARING rather than inert -- it is what
+#     keeps SITL on the ArduSub path. The default is `pixhawk` anyway (the RoboSub
+#     2025 configuration), so the sim would work either way, but it passes the
+#     value explicitly and should keep doing so.
+#     It stays in this exempt set because the check below is about arguments a
+#     launch file may legitimately not declare, and it is still passed by
+#     stack.launch.py on both branches.
 BRANCH_SPECIFIC_MANAGER_ARGS = {'flight_controller'}
 
 

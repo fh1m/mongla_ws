@@ -46,6 +46,7 @@ from typing import Dict, Optional, Set
 
 from .pixhawk import Pixhawk
 from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
+from .motion_rates import VISION_LOOP_HZ_SROT
 from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
 from .motion_rates import LOG_THROTTLE_S
 from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep
@@ -166,7 +167,43 @@ VISION_I_LAT_MAX = 15.0   # |lateral integral| clamp, % thrust
 # spurious box can't steal the aim. Enabled per-call via lock_on; the gate width
 # is a constant (re-tune in code if a target legitimately moves faster than this
 # between ticks). Acquisition (no prior centre) stays largest-area.
-VISION_LOCK_GATE_NORM = 0.30   # max normalized centre jump to stay locked
+VISION_LOCK_GATE_NORM = 0.30   # max normalized centre jump per tick AT 20 Hz
+
+# The DETECTION rate the gate above was tuned at. It is a per-frame jump limit,
+# so it is really a VELOCITY -- and leaving it a constant while the rate
+# changed silently loosened it: 0.30 of the frame between detections is 6.0
+# frame-widths/s at 20 Hz and 29.4 at the Hailo path's 98 Hz, so the same
+# number let a target move 5x faster before the lock let go. The gate exists to
+# stop a second hole or a spurious box stealing the aim on a close-in shot, and
+# a lock that admits anything within 30 % of the frame is barely a lock.
+VISION_LOCK_GATE_HZ = 20.0
+
+# Never scale below this. At a high loop rate the dt-scaled gate becomes very
+# small, and a gate tighter than the detector's own per-frame centre jitter
+# would drop the lock on noise -- the failure mode is the mirror of the one
+# above and just as bad. 0.05 of a 640 px frame is 32 px, comfortably above the
+# few-px jitter measured on this detector.
+VISION_LOCK_GATE_MIN = 0.05
+
+
+def _lock_gate(dt_s: float) -> float:
+    """The continuity-lock gate for a gap of `dt_s` between accepted centres.
+
+    THE CLOCK IS THE DETECTION INTERVAL, NOT THE CONTROL TICK, and getting that
+    wrong is a defect I shipped and had to correct. The gate limits how far the
+    box may jump between ACCEPTED CENTRES -- and a centre only changes when a
+    new detection lands. Scaling by the control period made it 1.7x TIGHTER
+    than tuned at 50 Hz control over a 30 Hz camera, which drops the lock on a
+    real target instead of holding it: the exact failure the floor below exists
+    to prevent, reintroduced by the fix for the opposite one.
+
+    Pure and side-effect-free so it unit-tests without ROS. At the tuned 20 Hz
+    interval it returns exactly VISION_LOCK_GATE_NORM.
+    """
+    if not dt_s or dt_s <= 0.0:
+        return VISION_LOCK_GATE_NORM
+    scaled = VISION_LOCK_GATE_NORM * (float(dt_s) * VISION_LOCK_GATE_HZ)
+    return max(VISION_LOCK_GATE_MIN, min(VISION_LOCK_GATE_NORM, scaled))
 
 # --- Minimum achievable deadband ------------------------------------------- #
 # A 20 kg hull on open-loop Ch6 thrust against a bbox that itself jitters a few
@@ -190,8 +227,61 @@ MIN_ALIGN_ERR_PX = 5.0
 # refresh before VISION_FRESH_FULL_S so the factor stays 1.0 -- zero behaviour
 # change; the decay only engages when detections are slow or drop out. ZERO_S is
 # below _STALE_LIMIT_S so the command zeroes BEFORE "target lost" declares.
-VISION_FRESH_FULL_S = 0.10   # full authority while the sample is this fresh (~1 frame)
-VISION_FRESH_ZERO_S = 0.40   # linearly decayed to zero by this age (driving blind)
+#
+# NOTHING HERE IS TIED TO A PARTICULAR CAMERA. The thresholds are DERIVED at
+# runtime from two quantities the loop observes: the pipeline latency and the
+# detection interval. A competition can put any sensor in front of us and this
+# has to keep meaning the same thing.
+#
+# Why derivation is necessary rather than tidy -- measured on the vehicle,
+# both detectors alone, same instrument:
+#
+#                      forward        downward
+#     detections       77.1 Hz         30.1 Hz
+#     sample age med   22.10 ms        46.51 ms
+#             max      32.88 ms        56.42 ms
+#     interval med     13.44 ms        32.41 ms
+#
+# `sample.age_s` is time since CAPTURE, so it carries the whole pipeline. A
+# threshold must therefore cover the PIPELINE (or the loop never reaches full
+# authority at all) plus enough INTERVALS to ride out a missed detection (or
+# it decays during normal operation). Neither term is optional and neither is
+# a constant across cameras.
+#
+# At the old fixed 0.10/0.40 the forward path held FULL authority through
+# seven consecutive missed detections and drove blind at partial authority for
+# 400 ms -- 26 cm at 0.65 m/s. Simply tightening the constant would have put
+# the DOWNWARD path permanently below full authority, since its max age
+# (56.4 ms) already exceeds a 50 ms threshold.
+#
+# The floors and the CEILING are safety rails, not tuning:
+#   * floors    keep a degenerate observation (one sample, a zero interval)
+#               from producing a threshold tighter than the pipeline
+#   * ceilings  bound the derivation, and this is the part that matters.
+#
+# THE FULL CEILING EXISTS BECAUSE DERIVATION ALONE IS UNSAFE. Feed this a
+# pipeline that is ALWAYS 300 ms late and it concludes "300 ms is normal here"
+# and grants full authority -- which is exactly wrong. An observation 300 ms
+# old is 20 cm of travel at this hull's 0.65 m/s cruise, whatever the reason
+# it is old. So full authority is capped at 100 ms (~6.5 cm) no matter what
+# the sensor claims about itself; a genuinely slow camera runs at REDUCED
+# authority, which is the safe answer, and `_warn_low_fps` already surfaces it
+# to the operator rather than leaving it as a mystery sluggishness.
+#
+# The zero ceiling bounds blind driving the same way: a 5 Hz sensor would
+# otherwise derive a zero-authority age above `lost_grace_s`, and the ladder
+# "authority reaches zero BEFORE loss is declared" is what makes a dropout a
+# glide instead of a lurch.
+#
+# Net effect versus the fixed 0.10/0.40 this replaces: never LOOSER than
+# before (full <= 0.10 always), and considerably tighter on a fast camera.
+VISION_FRESH_FULL_S  = 0.05   # floor for full authority
+VISION_FRESH_ZERO_S  = 0.20   # floor for zero authority (driving blind)
+VISION_FRESH_FULL_MAX_S = 0.10  # CEILING on full authority -- see below
+VISION_FRESH_ZERO_MAX_S = 0.80  # CEILING on blind driving; under lost_grace_s (1.0)
+_FRESH_PIPE_K = 1.3    # margin on the observed pipeline latency
+_FRESH_FULL_K = 1.5    # ...plus this many detection intervals -> full
+_FRESH_ZERO_K = 8.0    # ...plus this many -> zero
 
 # Distinct-detection gate for the align stable-frame counter. The counter must
 # advance on new DETECTIONS, not 20 Hz control-loop ticks: otherwise, at a low
@@ -205,6 +295,26 @@ VISION_FRESH_ZERO_S = 0.40   # linearly decayed to zero by this age (driving bli
 # or above loop rate (age_s ~ 0 every tick) makes every tick a new frame, so
 # behaviour is unchanged there (and the age_s=0 test doubles stay valid).
 _FRAME_EPS_S = 0.005   # min monotonic gap to count a sample as a new detection
+
+# ...AND the counter must also span real TIME, which counting frames alone
+# stopped guaranteeing when perception got fast.
+#
+# `align_stable_frames = 3` was chosen against a 20 Hz detector, where three
+# distinct frames span two inter-frame gaps = 0.10 s. The Hailo path runs
+# 55-98 Hz, where the same three frames span 0.02-0.05 s. Three detections
+# 20 ms apart are very nearly ONE moment: the hull cannot have settled in it,
+# and a detector's centre noise is correlated across it -- so the gate that
+# exists to stop a single lucky frame declaring ALIGNED (and ARMING THE FIRE)
+# was measuring almost nothing. The frame count alone was FPS-independent in
+# name only; it is the dwell that has to be.
+#
+# Requiring both a frame count and a dwell keeps each doing the job it can:
+# frames rule out a re-read, time rules out a burst. At 20 Hz this is satisfied
+# on the same tick the third frame lands, so the ArduSub path is unchanged
+# except when the detector jitters, where it can cost one extra frame (~10 ms)
+# -- the right price for not firing a torpedo on 20 ms of evidence. At 3-4 Hz
+# three frames already span 0.75-1.0 s and this never binds.
+_ALIGN_STABLE_MIN_S = 0.10
 
 # A detection older than this (seconds) counts as "no target this tick".
 # bbox_error() returns None when the class is absent; this only catches a
@@ -259,20 +369,68 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-def _freshness(age_s: float) -> float:
+def _fresh_bounds(interval_s: float = 0.0, pipe_age_s: float = 0.0):
+    """(full, zero) authority thresholds for the sensor actually attached.
+
+    Derived, never configured: `pipe_age_s` is the latency the pipeline is
+    observed to have (capture -> the loop seeing it) and `interval_s` the gap
+    between detections. Both are measured by the caller.
+
+    Pure and total. With nothing observed yet -- the first frame, or a caller
+    that tracks neither -- it returns the floors, which is the behaviour that
+    shipped before and is safe for a fast camera.
+
+    Invariants it guarantees for ANY input, including hostile ones:
+      * full < zero, so the ramp is never inverted or zero-width
+      * full <= VISION_FRESH_FULL_MAX_S, in ABSOLUTE time -- a slow pipeline
+        does not make old data safe to steer on
+      * zero <= VISION_FRESH_ZERO_MAX_S, so blind driving is bounded on a
+        slow sensor and always ends before `lost_grace_s` declares loss
+      * both >= their floors, so a degenerate measurement cannot produce a
+        threshold tighter than the pipeline itself
+    """
+    if interval_s <= 0.0 and pipe_age_s <= 0.0:
+        return VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S
+    interval_s = max(0.0, interval_s)
+    # THE OBSERVED PIPELINE IS TRUSTED ONLY UP TO THE SAFETY CAP. Beyond it
+    # the pipeline is degraded, and a degraded pipeline must not be allowed to
+    # EXTEND the window we are willing to steer in -- that is the derivation
+    # arguing itself into more trust the worse things get. Measured effect: a
+    # pipeline stuck at 350 ms stretched the zero-authority age to 800 ms and
+    # a 350 ms-old sample still commanded 64 % thrust.
+    base = _FRESH_PIPE_K * min(max(0.0, pipe_age_s), VISION_FRESH_FULL_MAX_S)
+    full = max(VISION_FRESH_FULL_S, base + _FRESH_FULL_K * interval_s)
+    # Capped in ABSOLUTE time, not relative to the sensor. A slow pipeline
+    # does not make old data safe to steer on.
+    full = min(full, VISION_FRESH_FULL_MAX_S)
+    zero = max(VISION_FRESH_ZERO_S, base + _FRESH_ZERO_K * interval_s)
+    zero = min(zero, VISION_FRESH_ZERO_MAX_S)
+    # The ceiling can drag `zero` below `full` on a very slow sensor. Keep a
+    # real ramp rather than a step: a step means the command goes from full
+    # authority to nothing between two ticks.
+    full = min(full, zero * 0.5)
+    return full, zero
+
+
+def _freshness(age_s: float, interval_s: float = 0.0,
+               pipe_age_s: float = 0.0) -> float:
     """Translational-command authority [0,1] as a function of sample age.
 
-    1.0 while the sample is fresher than VISION_FRESH_FULL_S, then linearly to
-    0.0 by VISION_FRESH_ZERO_S (driving blind -> stop). Pure + side-effect-free
+    1.0 while the sample is fresher than the FULL threshold, then linearly to
+    0.0 by the ZERO threshold (driving blind -> stop). Both scale with the
+    observed detection interval; see `_fresh_bounds`. Pure + side-effect-free
     so it unit-tests without ROS. Caps per-frame over-drive at low FPS while
     leaving healthy FPS untouched (frames refresh before decay engages).
+
+    `interval_s` defaults to 0 so every existing caller and test keeps the
+    unscaled behaviour; the loop passes the interval it measures.
     """
-    if age_s <= VISION_FRESH_FULL_S:
+    full, zero = _fresh_bounds(interval_s, pipe_age_s)
+    if age_s <= full:
         return 1.0
-    if age_s >= VISION_FRESH_ZERO_S:
+    if age_s >= zero:
         return 0.0
-    span = VISION_FRESH_ZERO_S - VISION_FRESH_FULL_S
-    return (VISION_FRESH_ZERO_S - age_s) / span
+    return (zero - age_s) / (zero - full)
 
 
 def _coast_authority(coast_age_s: float, coast_s: float) -> float:
@@ -295,7 +453,8 @@ def _coast_authority(coast_age_s: float, coast_s: float) -> float:
     return (coast_s - coast_age_s) / coast_s
 
 
-def _authority(sample, coast_s: float) -> float:
+def _authority(sample, coast_s: float, interval_s: float = 0.0,
+               pipe_age_s: float = 0.0) -> float:
     """Per-tick translational authority for `sample`.
 
     Live box  -> ``_freshness(age)``       (per-frame staleness at low FPS).
@@ -305,7 +464,7 @@ def _authority(sample, coast_s: float) -> float:
     """
     if getattr(sample, 'coasted', False):
         return _coast_authority(sample.age_s, coast_s)
-    return _freshness(sample.age_s)
+    return _freshness(sample.age_s, interval_s, pipe_age_s)
 
 
 # Below this authority, a LIVE bbox is stale enough that freshness-decay is
@@ -399,6 +558,75 @@ def _present(sample) -> bool:
     return sample is not None and sample.age_s <= _STALE_LIMIT_S
 
 
+def _is_srot(fc) -> bool:
+    """True when the actuation backend is the srot board rather than ArduSub."""
+    return getattr(fc, 'name', '') == 'srot'
+
+
+def _tick(vision_state, fc) -> None:
+    """Wait for the next observation, or the tick timeout -- whichever first.
+
+    THE LOOP USED TO SLEEP A FIXED PERIOD. Against an asynchronous producer
+    that costs, on average, half a period of pure waiting for data that has
+    already arrived: detections land ~77 Hz (13 ms) and the srot loop ticked
+    at 50 Hz (20 ms), so every command was computed from an observation up to
+    13 ms staler than the one available -- about a third of the entire
+    detection age, and the same defect that a fixed-rate timer caused in
+    `camera_node`, one layer down.
+
+    The timeout is the FLOOR, not the rate: it keeps the loop's time-based
+    work running -- freshness decay, hold timing, the arrival brake, the
+    deadline -- when nothing is being detected at all. So the loop can only
+    get faster, never slower, and the lost/searching path behaves exactly as
+    it did.
+
+    Falls back to a plain sleep when there is no VisionState (unit tests, the
+    non-vision callers), so nothing depends on the wake-up existing.
+    """
+    period = 1.0 / _loop_hz(fc)
+    waiter = getattr(vision_state, 'wait_for_sample', None)
+    if waiter is None:
+        time.sleep(period)
+        return
+    waiter(period)
+
+
+def _loop_hz(fc) -> float:
+    """Tick rate for THIS backend. See motion_rates for why they differ."""
+    return VISION_LOOP_HZ_SROT if _is_srot(fc) else LOOP_HZ
+
+
+def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float) -> None:
+    """Write one MANUAL_CONTROL frame for the srot board.
+
+    WHY THIS IS NOT `PixhawkFC.manual()` FOR BOTH BACKENDS. The HAL's `manual()`
+    exists on both, but the ArduSub one maps onto `send_rc_override` with all
+    four channels written -- it cannot express the two RELEASE semantics this
+    loop depends on:
+
+      * `release_yaw` releases Ch4 (65535) so the background `HeadingLock` owns
+        yaw. Writing yaw=1500 instead races the lock's own stream, which is the
+        fight the `_drive` docstrings below already warn about.
+      * `throttle_ch = 65535` releases Ch3 so ArduSub's ALT_HOLD owns depth.
+
+    So the ArduSub path is left EXACTLY as it was -- it is the configuration
+    that placed 8th at RoboSub 2025 -- and srot gets its own branch.
+
+    On srot both releases have a different and simpler answer: there is no host
+    heading lock (`lock_heading` is refused on this backend), the board holds
+    attitude and heading itself at 500 Hz in STABILIZE, and MANUAL_CONTROL has
+    no "release" -- every frame carries all four axes. So `release_yaw` becomes
+    "command zero yaw and let the board hold", which is the same intent through
+    a better mechanism.
+
+    `up` is always 0. The depth axis needs `set_target_depth`, which SrotFC does
+    not implement; `vision_verbs` refuses a depth-axis align on this backend
+    rather than letting it silently do nothing.
+    """
+    fc.manual(fwd=fwd_pct / 100.0, lat=lat_pct / 100.0,
+              up=0.0, yaw=yaw_pct / 100.0)
+
+
 def _read_depth(pixhawk) -> float:
     att = pixhawk.get_attitude()
     return float(att['depth']) if att else 0.0
@@ -473,6 +701,7 @@ def align_loop(*,
                ki_lat: float = 0.0,
                i_lat_max: float = VISION_I_LAT_MAX,
                coast_s: float = 0.0,
+               lock_s: float = 0.0,
                fwd_fill: float = 0.0,
                fwd_mode: str = 'area',
                kp_forward: float = KP_FORWARD_DEFAULT,
@@ -485,6 +714,8 @@ def align_loop(*,
                on_locked=None,
                fire_t: float = 0.0,
                fire_pass: bool = False,
+               fire_max_tilt_deg: float = 0.0,
+               tilt_gate_fn=None,
                report_fn=None,
                writers=None,
                log=None,
@@ -667,7 +898,11 @@ def align_loop(*,
         ``fwd_pct`` is the optional forward range-hold command (Ch5); it is 0
         unless the forward standoff axis is active (``fwd_fill`` > 0).
         """
-        if release_yaw:
+        if _is_srot(pixhawk):
+            # release_yaw -> command 0 yaw; the board holds heading at 500 Hz.
+            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct,
+                        yaw_pct=0.0 if release_yaw else yaw_pct)
+        elif release_yaw:
             pixhawk.send_rc_translation(
                 throttle=throttle_ch, forward=Pixhawk.percent_to_pwm(fwd_pct),
                 lateral=Pixhawk.percent_to_pwm(lat_pct))
@@ -700,6 +935,7 @@ def align_loop(*,
     lost_since: Optional[float] = None
     aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
     fired       = False  # on_locked fired once at fire_t into the hold (payload mid-hold)
+    _sq_warned  = [False]  # one line per command, not one per tick
     last_log    = 0.0
     last_depth  = 0.0
     depth_ctrl  = 0.0    # depth axis error carried from axis-calc into the 5 Hz step
@@ -708,6 +944,7 @@ def align_loop(*,
     last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
     prev_worst: Optional[float] = None   # settle gate: worst error last NEW frame (for |Δworst|)
     last_frame_at = float('-inf')        # arrival time of the last COUNTED detection frame
+    stable_since  = float('inf')         # arrival of the FIRST frame of the current in-band run
     last_live_at  = float('-inf')        # monotonic of the last LIVE (non-coasted) sighting -> fire_pass gate
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
@@ -715,8 +952,31 @@ def align_loop(*,
     surge_ema   = 0.0   # downward: trailing EMA of the signed Ch5 surge command -> brake proxy
     fill_deficit = 0.0  # downward fill->depth: (target_fill - fill), carried into the 5 Hz step
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
-    dt          = 1.0 / LOOP_HZ              # fixed tick (loop sleeps this each pass)
-    gate_norm   = VISION_LOCK_GATE_NORM if lock_on else 0.0
+    loop_hz     = _loop_hz(pixhawk)          # backend-dependent; see motion_rates
+    # Nominal tick. Used to SEED the measured dt below and as its ceiling;
+    # the loop no longer sleeps a fixed period (see `_tick`), so treating this
+    # as the real interval would misstate both the lock gate and the integral
+    # term the moment the loop starts running at detection rate.
+    dt          = 1.0 / loop_hz
+    _dt_nominal = dt
+    _last_pass  = time.monotonic()
+    # Observed detection interval, EMA. The freshness thresholds scale with
+    # it, because "~1 frame" is 13 ms on the forward camera and 32 ms on the
+    # downward one and a fixed constant cannot be both. 0 until two distinct
+    # frames have been seen, which yields the floors -- the unscaled
+    # behaviour -- rather than a wild guess from one sample.
+    det_interval = 0.0
+    # Observed pipeline latency: the sample's age at the instant it FIRST
+    # appears, i.e. capture -> the loop seeing it. EMA'd, and only sampled on
+    # a genuinely new frame -- a re-read's age has grown by however long the
+    # loop took and would inflate it without bound.
+    pipe_age = 0.0
+    # Seeded at the control period -- the shortest gap possible, so the gate
+    # starts at its tightest and widens to the real detection interval once one
+    # has been observed. Erring tight before acquisition is safe: there is no
+    # lock to drop yet.
+    gate_norm   = _lock_gate(dt) if lock_on else 0.0
+    last_accept_t: Optional[float] = None
     locked_ex: Optional[float] = None        # last-accepted centre -> continuity lock
     locked_ey: Optional[float] = None
     locked_id   = -1     # tracker id of the locked target -> coast follows this id
@@ -752,6 +1012,18 @@ def align_loop(*,
     try:
         while True:
             now     = time.monotonic()
+            # MEASURED, not assumed. The loop wakes on a new detection now, so
+            # the interval is the detection interval when targets are visible
+            # and the tick timeout when they are not. `dt` feeds the
+            # continuity-lock gate and the lateral integral; holding it at the
+            # nominal period would overstate both by up to 1.5x once the loop
+            # starts running at 77 Hz instead of 50.
+            #
+            # Clamped: a debugger pause or a scheduling stall must not inject a
+            # huge dt into an integrator. The floor keeps a burst of two
+            # detections in the same millisecond from collapsing it to zero.
+            dt = min(max(now - _last_pass, 1e-3), _dt_nominal * 4.0)
+            _last_pass = now
             elapsed = now - started
             if abort_fn and abort_fn():
                 return Outcome(ABORTED, "aborted", last_err_px, last_fill, elapsed,
@@ -772,7 +1044,7 @@ def align_loop(*,
             near = (locked_ex, locked_ey) if locked_ex is not None else None
             sample = vision_state.bbox_error(
                 target_class, near=near, gate_norm=gate_norm, min_score=ctrl_conf,
-                locked_id=locked_id, coast_s=coast_s)
+                locked_id=locked_id, coast_s=coast_s, lock_s=lock_s)
             if not _present(sample):
                 stable = 0
                 lat_i = 0.0   # bleed integral windup while blind
@@ -802,7 +1074,7 @@ def align_loop(*,
                         log.debug(f"[VIS  ] align LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                time.sleep(1.0 / LOOP_HZ)
+                _tick(vision_state, pixhawk)
                 continue
 
             saw_target = True
@@ -931,7 +1203,7 @@ def align_loop(*,
             # (yaw/depth excluded -- ArduSub bleeds Ch4, holds depth). At healthy
             # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
             # coast curve instead (gap decay), not freshness -- see _authority.
-            fresh = _authority(sample, coast_s)
+            fresh = _authority(sample, coast_s, det_interval, pipe_age)
             _warn_low_fps(log, fresh, sample)   # F3: surface FPS-starvation, don't stall silently
             lat_pct *= fresh
             fwd_pct *= fresh   # forward shares the freshness/coast decay (never braked)
@@ -1001,7 +1273,32 @@ def align_loop(*,
             sampled_at   = now - sample.age_s
             is_new_frame = sampled_at > last_frame_at + _FRAME_EPS_S
             if is_new_frame:
+                if lock_on:
+                    # Widen (or tighten) the gate to the interval actually
+                    # observed between accepted frames, floored at the control
+                    # period so a duplicate timestamp cannot collapse it to 0.
+                    if last_accept_t is not None:
+                        gate_norm = _lock_gate(
+                            max(dt, sampled_at - last_accept_t))
+                    last_accept_t = sampled_at
+                pipe_age = (sample.age_s if pipe_age <= 0.0
+                            else pipe_age + 0.2 * (sample.age_s - pipe_age))
+                if last_frame_at > 0.0:
+                    gap = sampled_at - last_frame_at
+                    # Ignore absurd gaps: a dropout is not a slower camera,
+                    # and letting one widen the interval would loosen the
+                    # freshness thresholds exactly when the target is lost.
+                    if 0.0 < gap <= 0.5:
+                        det_interval = (gap if det_interval <= 0.0
+                                        else det_interval + 0.2 * (gap - det_interval))
                 last_frame_at = sampled_at
+                if stable == 0:
+                    # Start of a fresh in-band run. Stamped on the FRAME's own
+                    # arrival, not on `now`: `now` is a control tick and at
+                    # 50 Hz control over a 15 Hz camera the two differ by most
+                    # of a frame period, which would credit the dwell with time
+                    # the target was not actually in band.
+                    stable_since = sampled_at
                 # Settle gate compares against the previous NEW frame's error
                 # (re-reads are numerically identical and would trivially pass),
                 # so |Δworst| is a real cross-frame error velocity.
@@ -1009,7 +1306,10 @@ def align_loop(*,
                            or abs(worst - prev_worst) <= settle_px)
                 prev_worst = worst
                 stable = stable + 1 if (all(in_band) and settled) else 0
-            if stable >= align_stable_frames:
+            # Both gates, for the reasons at _ALIGN_STABLE_MIN_S: enough
+            # distinct frames AND enough elapsed time across them.
+            if (stable >= align_stable_frames
+                    and last_frame_at - stable_since >= _ALIGN_STABLE_MIN_S):
                 # First confirmed-centred tick opens the hold window. With
                 # hold_s>0 we keep the loop ALIVE and correcting for hold_s --
                 # the ACTIVE station-keep the operator needs to hold steady
@@ -1036,7 +1336,33 @@ def align_loop(*,
                 # one) can never fire even while `stable` stands held at threshold
                 # through a mid-hold freeze. A torpedo leaves on a real live sighting.
                 fire_fresh = is_new_frame and not sample.coasted
+                # AIM GATE (opt-in; 0.0 = off = byte-identical to before).
+                # `fire_max_tilt_deg` is how far the TARGET'S FACE may be
+                # tilted from square to our shot axis and still allow a shot --
+                # not a vehicle attitude, and not a pixel error.
+                # A round leaves along the hull's axis, so a centred box is not
+                # enough -- fired 30 deg off-normal it misses an opening it was
+                # perfectly centred on. `tilt_gate_fn` must account for the planar
+                # FLIP AMBIGUITY (both branches inside tolerance), and it
+                # answers False when there is no pose at all: for a firing gate
+                # the fail-safe direction is DO NOT FIRE.
+                #
+                # Deliberately does NOT set `fired`: a refusal here is "not
+                # yet", so a hull that squares up later in the hold still gets
+                # its shot.
+                square_ok = True
+                if fire_max_tilt_deg > 0.0 and fire_fresh and not fired:
+                    try:
+                        square_ok = bool(tilt_gate_fn and tilt_gate_fn(fire_max_tilt_deg))
+                    except Exception as exc:   # noqa: BLE001
+                        log.error(f"[VIS  ] tilt_gate_fn raised {exc!r} -- refusing")
+                        square_ok = False
+                    if not square_ok and not _sq_warned[0]:
+                        _sq_warned[0] = True
+                        log.info(f"[VIS  ] fire HELD: target not square within "
+                                 f"{fire_max_tilt_deg:.0f} deg (or no pose)")
                 if on_locked is not None and not fired and fire_fresh and \
+                        square_ok and \
                         (now - aligned_at) >= fire_t:
                     fired = True
                     try:
@@ -1090,7 +1416,7 @@ def align_loop(*,
                     f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
                     f"'{target_class}' -> err {worst:.0f}/{eff_err:.0f}px")
                 last_log = now
-            time.sleep(1.0 / LOOP_HZ)
+            _tick(vision_state, pixhawk)
     finally:
         try:
             writers.neutral()
@@ -1124,6 +1450,7 @@ def move_loop(*,
               release_yaw: bool = False,
               range_gain_floor: float = 1.0,
               coast_s: float = 0.0,
+              lock_s: float = 0.0,
               report_fn=None,
               writers=None,
               log=None,
@@ -1166,6 +1493,10 @@ def move_loop(*,
     g_lat = gain if gain_lat is None else gain_lat
 
     def _drive(fwd_pct: float, lat_pct: float) -> None:
+        if _is_srot(pixhawk):
+            # move never commands yaw on either backend.
+            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0)
+            return
         if release_yaw:
             pixhawk.send_rc_translation(
                 forward=Pixhawk.percent_to_pwm(fwd_pct),
@@ -1200,6 +1531,13 @@ def move_loop(*,
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
+    # Observed detection interval, EMA -- the freshness thresholds scale with
+    # it (see `_fresh_bounds`). `move_loop` has no distinct-frame machinery of
+    # its own, so it derives arrivals from the sample's own capture time,
+    # which is constant across re-reads of one detection.
+    det_interval  = 0.0
+    last_seen_at  = 0.0
+    pipe_age      = 0.0
     try:
         while True:
             now     = time.monotonic()
@@ -1223,7 +1561,8 @@ def move_loop(*,
             # moves coast normally.
             eff_coast = 0.0 if passthrough else coast_s
             sample  = vision_state.bbox_error(
-                target_class, locked_id=locked_id, coast_s=eff_coast)
+                target_class, locked_id=locked_id, coast_s=eff_coast,
+                lock_s=lock_s)
             present = _present(sample)
             if present and not sample.coasted and sample.track_id >= 0:
                 locked_id = sample.track_id   # follow this id when a gap coasts
@@ -1242,7 +1581,7 @@ def move_loop(*,
                     return Outcome(ALIGNED, "passed through", last_lat_err,
                                    last_fill, elapsed, end_x_px, end_y_px)
                 _drive(gain, 0.0)   # no detection -> no lateral, just drive on
-                time.sleep(1.0 / LOOP_HZ)
+                _tick(vision_state, pixhawk)
                 continue
 
             if not present:
@@ -1266,7 +1605,7 @@ def move_loop(*,
                         log.debug(f"[VIS  ] move LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                time.sleep(1.0 / LOOP_HZ)
+                _tick(vision_state, pixhawk)
                 continue
 
             seen_once    = True
@@ -1274,7 +1613,23 @@ def move_loop(*,
             commit_until = None
             fill = _fill(sample, mode)
             last_fill = fill
-            fresh = _authority(sample, coast_s)   # FPS staleness (live) or coast decay
+            sampled_at = now - sample.age_s
+            if sampled_at > last_seen_at + _FRAME_EPS_S or last_seen_at <= 0.0:
+                # A NEW frame: its age is the pipeline latency. A re-read's is
+                # not -- it has grown by however long this loop took.
+                pipe_age = (sample.age_s if pipe_age <= 0.0
+                            else pipe_age + 0.2 * (sample.age_s - pipe_age))
+            if last_seen_at > 0.0 and sampled_at > last_seen_at + _FRAME_EPS_S:
+                gap = sampled_at - last_seen_at
+                # A dropout is not a slower camera. Letting one widen the
+                # interval would loosen the freshness thresholds exactly when
+                # the target has been lost.
+                if gap <= 0.5:
+                    det_interval = (gap if det_interval <= 0.0
+                                    else det_interval + 0.2 * (gap - det_interval))
+            if sampled_at > last_seen_at:
+                last_seen_at = sampled_at
+            fresh = _authority(sample, coast_s, det_interval, pipe_age)  # FPS staleness / coast decay
             _warn_low_fps(log, fresh, sample)     # F3: surface FPS-starvation, don't stall silently
 
             x_off = sample.ex * half_w         # signed horizontal offset (operator px)
@@ -1300,7 +1655,7 @@ def move_loop(*,
                     log.info(f"[ move PASS-THROUGH fill={fill * 100:.0f}% "
                              f"lat={x_off:+.0f}px ] ['{target_class}'] -> clear gate")
                     last_log = now
-                time.sleep(1.0 / LOOP_HZ)
+                _tick(vision_state, pixhawk)
                 continue
 
             if fill >= fwd_fill:
@@ -1337,7 +1692,7 @@ def move_loop(*,
                     f"[ move fill={fill * 100:.0f}% -> {fwd_fill * 100:.0f}% "
                     f"lat={x_off:+.0f}px ] ['{target_class}']{hold_tag}")
                 last_log = now
-            time.sleep(1.0 / LOOP_HZ)
+            _tick(vision_state, pixhawk)
     finally:
         try:
             writers.neutral()

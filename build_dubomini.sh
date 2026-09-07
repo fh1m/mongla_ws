@@ -8,10 +8,11 @@
 # the generated types and on duburi_control's COMMANDS registry.
 #
 # ── Device-local models + missions sync (kept OUT of git) ────────────────────
-# The competition YOLO weights (*.pt/*.engine/*.onnx) and the personal test
+# The competition YOLO weights (*.pt/*.engine/*.onnx/*.hef) and the personal test
 # missions (rakib_*) change too fast to live in git and are big/private, so the
 # source-of-truth for them lives OUTSIDE the repo on the Jetson:
-#     ~/models    -> src/duburi_vision/models/
+#     ~/models    -> src/duburi_vision/models/   (put the Pi's .hef here too --
+#                    the sync copies every regular file, so nothing to change)
 #     ~/missions  -> src/duburi_planner/duburi_planner/missions/
 # Every build mirrors those folders INTO the tree first, so a fresh `git clone`
 # gets them back on the next `./build_dubomini.sh` with nothing to copy by hand.

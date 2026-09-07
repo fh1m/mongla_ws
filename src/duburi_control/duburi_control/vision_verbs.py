@@ -21,6 +21,9 @@ import threading
 import time
 from contextlib import nullcontext
 
+from .errors import MovementError
+from .fc import srot_protocol as sp
+
 from .motion_vision import (
     align_loop, move_loop,
     KP_LAT_DEFAULT, KP_YAW_DEFAULT, KP_DEPTH_DEFAULT, KP_FORWARD_DEFAULT,
@@ -39,11 +42,17 @@ def _parse_axes(csv: str):
 
 
 def _parse_channels(csv: str):
-    """``'1,2'`` -> ``[1, 2]``. Whitespace tolerant; ignores junk; clamps 1-4.
+    """``'9,10'`` -> ``[9, 10]``. Whitespace tolerant; ignores junk.
 
-    Payload channels are 1=torpedo_1, 2=torpedo_2, 3=dropper_1, 4=dropper_2;
-    anything out of 1-4 (or non-numeric) is dropped. Preserves order so a
-    mission fires them one-by-one in the order given.
+    These are BOARD channels (1..16) -- `DO_SET_SERVO param1`, the same n as
+    `SERVO{n}_ROLE` -- not host-side indices. Preserves order so a mission fires
+    them one-by-one in the order given.
+
+    ⚠ The range was 1-4 while a host-side fire map existed. Left at 1-4 after the
+    map was removed it would silently DROP every real payload channel on the
+    default role layout (switches are 9-16 there), i.e. `fire=[9,10]` would parse
+    to `[]` and the mission would sail past the target having fired nothing, with
+    no error anywhere.
     """
     out = []
     for token in (csv or '').split(','):
@@ -54,9 +63,81 @@ def _parse_channels(csv: str):
             ch = int(float(token))
         except ValueError:
             continue
-        if 1 <= ch <= 4:
+        if 1 <= ch <= sp.PCA9685_NUM_CH:
             out.append(ch)
     return out
+
+
+def _srot_backend(fc) -> bool:
+    """True when actuation goes to the srot board rather than ArduSub."""
+    return getattr(fc, 'name', '') == 'srot'
+
+
+# Modes in which a streamed MANUAL_CONTROL actually reaches the thrusters.
+#
+# STABILIZE ONLY: the board holds attitude and heading at 500 Hz and lat/yaw/fwd
+# servo on top. MANUAL is deliberately NOT here.
+#
+# (The two sentences above used to be preceded by their own contradiction -- the
+# pre-correction text "MANUAL works too ... and is allowed" was left in place
+# when the rule was reversed, so the first thing a reader met was the opposite
+# of the code directly below. Deleted rather than annotated: a comment block
+# that argues with itself is worse than either version alone.)
+#
+# MANUAL passes translation through, which is why the first version of this
+# check accepted it. That reasoning was wrong, and the firmware's own contract
+# says so plainly: "MANUAL (mode 19) is raw passthrough with no stabilization
+# at all -- no heading hold, no attitude hold. It is the escape hatch, not a
+# driving mode. Fly STABILIZE." (JETSON_COMMS.md §6.)
+#
+# For a vision loop that is worse than it sounds. `MANUAL_CONTROL` carries no
+# roll or pitch field, so in MANUAL those demands sit at zero and NOTHING
+# corrects an attitude disturbance -- the hull is free to drift off level and
+# stay there. The bounding box then moves for reasons that have nothing to do
+# with the vehicle's position, and the loop chases them. Every gain in
+# `precision-alignment.md` assumes the board is holding attitude underneath.
+_SROT_VISION_MODES = ('STABILIZE',)
+
+# The mode that made this check necessary. SURFACE is a FAILSAFE DESTINATION,
+# and the firmware deliberately zeroes translation and yaw in it:
+#
+#   "TRANSLATION AND YAW ARE ZEROED. SURFACE is a failsafe destination --
+#    reached on leak, low thruster battery, or GCS loss ... A vehicle that has
+#    lost its operator should not still be driving somewhere."
+#       -- srot task_control_loop.cpp, FlightMode::SURFACE
+#
+# That is correct firmware behaviour. The bug was ours: `vision_align` asserted
+# "STABILIZE is the mode here" in a COMMENT and never set it, so an align in
+# SURFACE ran the whole loop, streamed MANUAL_CONTROL at 50 Hz, and reported
+# success while the board discarded every frame. Same silent-success shape as
+# the pre-rev-13 disarmed SROT_MOVE, which the firmware team fixed precisely
+# because a consumer would advance a mission on a dead hull.
+
+
+def _require_srot_vision_mode(fc, log, verb: str) -> None:
+    """Put the board in a mode where MANUAL_CONTROL actually moves it.
+
+    Sets STABILIZE if it is not already in an acceptable mode, then VERIFIES
+    the change took. Verification is the point: `set_mode` is best-effort on
+    this wire (the firmware's `onSetMode` discards its own return value and
+    sends no ACK), so a request that is silently refused looks identical to one
+    that worked.
+    """
+    mode = (fc.get_mode() or '').upper()
+    if mode in _SROT_VISION_MODES:
+        return
+    if log is not None:
+        log.info(f'[CMD  ] {verb}: board is in {mode or "?"} -- '
+                 f'switching to STABILIZE so MANUAL_CONTROL reaches the thrusters')
+    fc.set_mode('STABILIZE')
+    mode = (fc.get_mode() or '').upper()
+    if mode not in _SROT_VISION_MODES:
+        raise MovementError(
+            f'{verb}: the board is in {mode or "an unknown mode"} and would not '
+            f'accept STABILIZE. In SURFACE the firmware zeroes translation and '
+            f'yaw, so this verb would run, report success, and move nothing. '
+            f'Refusing. (A board in SURFACE is usually there because a failsafe '
+            f'put it there -- check LEAK, thruster battery, and the GCS link.)')
 
 
 class VisionVerbs:
@@ -79,7 +160,8 @@ class VisionVerbs:
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
                      settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
                      hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
-                     depth_ceiling_m=0.0, fire_gap=0.0):
+                     depth_ceiling_m=0.0, fire_gap=0.0,
+                     fire_max_tilt_deg=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
@@ -138,6 +220,12 @@ class VisionVerbs:
 
         with self._command_scope('vision_align'):
             self._send_neutral_and_settle()
+            # Backend precondition FIRST, before resolving the camera. A board
+            # in SURFACE will discard everything this verb sends, so there is
+            # no point subscribing to a vision state (which can block waiting
+            # for the first CameraInfo) only to refuse afterwards.
+            if _srot_backend(self.pixhawk):
+                _require_srot_vision_mode(self.pixhawk, self.log, 'vision_align')
             vstate = self._resolve_vision_state(camera)
             is_downward   = camera in ('downward', 'sim_bottom')
             depth_sign    = -1 if is_downward else +1
@@ -147,7 +235,22 @@ class VisionVerbs:
             # axis or downward fill->depth), AND on any downward align -- there the
             # 'depth' axis drives Ch5 surge while ArduSub must still hold the mission
             # depth on Ch3 (or we'd sink/surface uncommanded).
-            if touches_depth or is_downward or float(fwd_fill) > 0.0:
+            # SROT: ALT_HOLD is an ArduSub mode this board does not have, and
+            # the depth axis needs `set_target_depth` (SET_POSITION_TARGET),
+            # which SrotFC does not implement. REFUSE rather than run an align
+            # whose depth axis silently does nothing -- a mission that believes
+            # it is descending onto a bin and is not is the dangerous version.
+            # STABILIZE is the mode here: the board holds attitude and heading
+            # at 500 Hz and lat/yaw/fwd servo on top of it.
+            if _srot_backend(self.pixhawk):
+                if touches_depth or is_downward:
+                    raise MovementError(
+                        "vision_align: the 'depth' axis (and any downward align) "
+                        "is not supported on the SROT backend -- it needs a "
+                        "streamed depth setpoint, which this board does not take. "
+                        "Use lat/yaw/fwd, or drive depth with a separate "
+                        "set_depth once the depth loop is water-verified.")
+            elif touches_depth or is_downward or float(fwd_fill) > 0.0:
                 self._ensure_alt_hold('vision_align')
 
             stable = int(align_stable_frames) or 3
@@ -206,6 +309,11 @@ class VisionVerbs:
                         fwd_mode=str(mode) or 'area',
                         kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
                         settle_px=float(settle_px),
+                        fire_max_tilt_deg=float(fire_max_tilt_deg),
+                        # Bound to THIS camera's state: the pose is per-camera
+                        # and a downward align must not be gated on what the
+                        # forward camera can see.
+                        tilt_gate_fn=getattr(vstate, 'square_within', None),
                         depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
                         downward=is_downward,
                         # SIGN-ONLY: coerce to exactly +1/-1 (rosidl-0 -> +1) so it can
@@ -278,7 +386,16 @@ class VisionVerbs:
                         time.sleep(min(0.1, gap_s - waited))
                         waited += 0.1
                 try:
-                    self._fire_payload(ch)
+                    res = self._fire_payload(ch)
+                    # The shot is the whole point of the hold, so a refusal must be
+                    # loud. This used to be discarded: a channel the board calls the
+                    # ARM was refused deep in the driver and the mission sailed on
+                    # believing it had fired.
+                    if getattr(res, 'ok', bool(res)):
+                        self.log.info(f'[FIRE ] ch={ch} {res.code_name}: {res.reason}')
+                    else:
+                        self.log.error(f'[FIRE ] ch={ch} NOT FIRED -- '
+                                       f'{res.code_name}: {res.reason}')
                 except Exception as exc:   # noqa: BLE001 -- thread must not crash silently
                     self.log.error(f'[FIRE ] ch={ch} raised {exc!r}')
 
@@ -320,12 +437,17 @@ class VisionVerbs:
         passthrough = float(fwd_fill) <= 0.0
         with self._command_scope('vision_move'):
             self._send_neutral_and_settle()
+            if _srot_backend(self.pixhawk):
+                _require_srot_vision_mode(self.pixhawk, self.log, 'vision_move')
             vstate = self._resolve_vision_state(camera)
             # move_loop drives forward but never commands depth -- it relies
             # on ArduSub's onboard depth hold. Ensure ALT_HOLD so the approach
             # holds depth even when a mission jumps straight to vision_move
             # without a prior set_depth (from MANUAL the setpoint is dropped).
-            self._ensure_alt_hold('vision_move')
+            # SROT holds depth on-board (or not at all, in STABILIZE); there
+            # is no ALT_HOLD to ensure and no host depth stream to start.
+            if not _srot_backend(self.pixhawk):
+                self._ensure_alt_hold('vision_move')
             self.log.info(
                 f'[CMD  ] vision_move camera={camera!r} class={target_class!r} '
                 f'{"PASS-THROUGH" if passthrough else "fwd_fill=%.0f%%" % float(fwd_fill)} '

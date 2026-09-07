@@ -68,8 +68,8 @@
 | Companion             | Raspberry Pi running BlueOS                                  |
 | Main SBC              | Nvidia Jetson Orin Nano (all ROS2 nodes live here)           |
 | Depth sensor          | Bar30 (read via ArduSub `AHRS2.altitude`)                    |
-| External IMU          | **ESP32-C3 + BNO085** over USB CDC, opt-in via `yaw_source`  |
-| DVL                   | Nortek Nucleus1000 @ `192.168.2.201` — **stub only**         |
+| External IMU          | ⚠️ **REMOVED 2026-08-01** — the BNO085 is on the SROT board (I2C0, fused at 500 Hz); read it via `yaw_source:=mavlink_ahrs`. The ESP32-C3 USB board is no longer fitted. |
+| DVL                   | Nortek Nucleus1000 @ `192.168.2.201` — **not fitted, never validated in water**; treat distance as unavailable (`vehicle-spec.md` "DVL status") |
 | Cameras               | Blue Robotics Low-Light HD USB (forward + downward)          |
 | Tether                | FathomX power-over-Ethernet                                  |
 | Power                 | Dual LiPo (propulsion + compute on isolated rails)           |
@@ -86,8 +86,8 @@
 ```
 [Onboard Ethernet Switch]
        ├── Jetson Orin Nano  → 192.168.2.69   (static, ROS2 host, UDP 14550 listener)
-       ├── Raspberry Pi 4B   → 192.168.2.1    (BlueOS — MAVLink router, web UI)
-       │      Gateway         → 192.168.2.2
+       ├── Raspberry Pi 4B   → 192.168.2.2    (BlueOS — MAVLink router, web UI; also the gateway)
+       ├── Topside / dev box → 192.168.2.1    (ground station on the internal switch)
        ├── DVL Nucleus1000   → 192.168.2.201  (driver TODO)
        └── Pixhawk 2.4.8     → via BlueOS over USB
 
@@ -96,10 +96,194 @@ MAVLink endpoint (configured in BlueOS web UI):
   IP: 192.168.2.69 (Jetson)  |  Port: 14550
 
 Ground Station → Remote Desktop / SSH to Jetson (192.168.2.69)
-              → BlueOS UI via http://192.168.2.1
+              → BlueOS UI via http://192.168.2.2
 ```
 
+> ⚠ **`.1` and `.2` were swapped in this table until 2026-08-03.** Measured on the
+> vehicle: the Pi answers on **192.168.2.2** (Raspberry Pi MAC OUI, full BlueOS 1.4.2
+> service set) and **192.168.2.1 is the topside box** — which is Blue Robotics' own
+> convention. `NETWORK` in `connection_config.py` is corrected to match.
+
 Connection strings live in `src/duburi_manager/duburi_manager/connection_config.py` under `PROFILES`. Default for every profile is `udpin:0.0.0.0:14550` (Jetson is the listener; BlueOS pushes to it).
+
+---
+
+## 2b. ⚠ Flight-controller backends — READ BEFORE §2, §3, §5, §6
+
+**Everything else in this file describes the Pixhawk/ArduSub/BlueOS path.** Since the 2027
+season there is a second backend, and on the **`srot` branch it is the DEFAULT**.
+
+| `flight_controller:=` | Autopilot | Transport | Where it's default |
+|---|---|---|---|
+| `pixhawk` | Pixhawk 2.4.8 + ArduSub 4.x | BlueOS → UDP 14550 | `main` |
+| **`srot`** | **SROT board, firmware Hengla** | **direct USB Type-C @115200** (no Pi, no BlueOS, no UDP) | **`srot` branch** |
+
+Both sit behind the `FlightController` HAL in `src/duburi_control/duburi_control/fc/`
+(`base.py` ABC, `pixhawk_fc.py`, `srot_fc.py`, `srot_protocol.py` = the one copy of the wire
+constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identical to history.
+
+> **⚠ Transitional third case (verified on hardware 2026-08-03): SROT *through* BlueOS over
+> UDP.** While the hull is still wired Pi-first, the board hangs off the **Pi's USB** and
+> reaches us as UDP via a BlueOS **Bridget** raw serial↔UDP bridge — so "srot = no Pi, no
+> BlueOS, no UDP" is the *designed* case, not the only one. No code change was needed
+> (`resolve_srot_profile()` takes any conn string; `SrotFC` is transport-agnostic):
+> `-p mav_device:=udpin:0.0.0.0:14550`, and `--srot-device=` on `bringup_check`.
+> **Link quality is measurably worse than direct serial (~8–9 % `BAD_DATA` across three
+> fixed-rate runs, vs zero on USB-C — and the lost frames are `NAMED_VALUE_FLOAT` /
+> `VFR_HUD` / `ATTITUDE` / `BATTERY_STATUS`, not the already-undecodable `ESC_STATUS(291)`).
+> So this is a bench/bring-up rig — put the board back on the Jetson's USB-C for water.**
+> Bridget also targets one `ip:port`, so **Bondor cannot share the link** without a router.
+> Full setup + the measurement: [`srot-integration.md`](.claude/context/srot-integration.md)
+> "Transitional rig".
+
+**Claims below that are Pixhawk-only and WRONG on srot:**
+- §2 network topology, BlueOS, UDP 14550, gateway `192.168.2.2` — srot is one USB cable.
+- §3 the `mode`/profile table — `resolve_srot_profile()` bypasses `PROFILES` entirely.
+- §4.2 telemetry rates — the pinning **does** apply on srot, via its own
+  `SROT_MESSAGE_RATES` table (no AHRS2, no RC_CHANNELS). *(Corrected 2026-08-01: this used
+  to say "SROT has no 511". Firmware behaviour rev 2 implements 511 and 510, and
+  `ATTITUDE` measures ~11 → ~55 Hz. The board clamps any request to a 20 ms floor and
+  refuses a HEARTBEAT disable with `DENIED`.)*
+- §5 `set_mode("ALT_HOLD")`, `send_rc_override`, `send_rc_yaw_only`, `set_target_depth` —
+  **none exist on SROT.** Modes are STABILIZE/ACRO/DEPTH_HOLD/SURFACE/MANUAL/AUTO;
+  actuation is one `MANUAL_CONTROL` frame (all 4 axes, no per-channel release) or an
+  on-board `MAV_CMD_SROT_MOVE`(31000) primitive.
+- §5 depth via `AHRS2.altitude` — srot reads `VFR_HUD.alt` (same sign: **negative below
+  surface**).
+- §6 "ArduSub's onboard 400 Hz stabilizer owns the inner loop" + the BNO→EKF3 mocap feed —
+  SROT runs its own 500 Hz loop and fuses the BNO on-board; the mocap timer is skipped.
+- §6 the whole per-axis `RC_CHANNELS_OVERRIDE` Ch4/Ch5/Ch6 table.
+- §13.7 payload "NOT through the Pixhawk" — on srot the payload **is** MAVLink
+  `DO_SET_SERVO`/`DO_SET_RELAY` to the board's PCA9685; there is no separate USB ESP32.
+
+**Verb support on srot is partial.** `vision_align`/`vision_move`, `move_*_dist`,
+`lock_heading`, `arc`, `style_yaw` are **refused** with a clear message
+(`srot_fc.UNSUPPORTED_VERBS`) — they are not ported yet. *(`move_back` was un-refused
+2026-08-01: `MOVE_BACK = 1` was always valid on the wire and the refusal was only a missing
+`_build_params` branch. `move_*_dist` stay refused permanently — DVL distance is
+unavailable, see `vehicle-spec.md` "DVL status".)*
+
+**⛔ The board's depth loop has never run closed** (fw `AUDIT.md` R1: the sign was inverted
+until 2026-07-30 and the Bar30 wasn't fitted). Two bench checks gate **every AUTO move, `move_forward`
+included** (not just dive verbs — see the depth-gate note below) —
+`.claude/context/srot-integration.md`.
+
+**⚠ There is now a firmware-version interlock, and it is a hull-safety one.** The board
+reports `SROT_FW_BEHAVIOUR_REV` in `AUTOPILOT_VERSION.middleware_sw_version` (request msgid
+148); `SrotFC.check_behaviour_rev()` runs at connect **and inside `arm()`** and **refuses to
+arm below rev 2**. Reason: rev 2 made `MOVE_STOP` brake on-board, so the host-side
+reverse-leg brake was removed — on pre-rev-2 firmware `stop` and every abort would simply
+not decelerate 20 kg of hull, with nothing in any log. `0` means "older than 2026-08-01",
+not "unknown", and fails closed; a board that answers *nothing* warns hard but is allowed
+through. Override: `allow_fw_behaviour_mismatch:=true`.
+
+**Firmware is at behaviour rev 7 (`d6f1da5`, flashed 2026-08-07); the host floor stays at 2
+deliberately** (every rev since has been additive *for the host*, and raising it would strand a
+working rev-2 board). ⚠ **Rev 7 ships `FRAME_REVERSE`** — a param, default 0 but **set to 1 on
+our hull**, that negates all six axis demands before the mixer. It fixes "every axis is
+backwards" at the axis layer instead of via `MOT_n_DIRECTION`, which means the `[-1] × 8` motor
+directions we restored on 2026-08-06 are **no longer the intended configuration** and would
+cancel it. **Read the params before arming** — the check is in
+[`srot-integration.md`](.claude/context/srot-integration.md) "Rev 7: FRAME_REVERSE changes what
+MOT_n_DIRECTION should be". Rev 3's theme (still live) is that
+the board **refuses to report data it cannot stand behind**, which creates one brand-new deck
+symptom: an unhealthy/stale Bar30 now refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and since
+`SROT_MOVE` enters `AUTO`, **every move verb is denied** — it arms and then simply will not
+move. `bringup_check --srot` reads that off `SYS_STATUS` (`_baro_health_verdict`). ⚠ `VFR_HUD`
+is *not* gated on baro health and is where we read depth, so **never infer sensor health from
+the presence of a depth value**. LEAK moved to `SYS_STATUS` extended health, which **pymavlink
+cannot decode** (13 fields, no extensions — the `ESC_STATUS(291)` trap again), so LEAK is still
+read from `NAMED_VALUE_FLOAT` — via a per-name table fed by the manager's reader thread,
+because all seven names burst inside one 500 ms tick and pymavlink's single slot keeps only the
+last (`GAIN`). Details: [`srot-integration.md`](.claude/context/srot-integration.md).
+
+**✅ RESOLVED 2026-08-03 — the Bar30 connector was refitted and the fault is gone.** Re-measured
+on the vehicle: `press_abs` 978.8..987.7 mbar (**sd 1.97**, was a 557 mbar spread), water temp
+31.68..31.71 °C (**0.03**, was 6..30), depth **−0.05..+0.07 m in air** (was +0.9..+6.8), and
+`DEPTH_OUT` **0.000** (was pinned −1.00). `bringup_check --srot` grades barometer variance and
+the disarmed depth loop PASS. The arming-spin-up hazard described below is therefore **cleared**.
+**⛔ But that is the barometer, not the loop.** On rev 4, `DEPTH_CMD` read −0.329 while
+`DEPTH_OUT`/`DEPTH_ERR` read *exactly* 0.000 across 90+ samples — a live controller cannot
+produce zero error against a −0.33 m command, so the loop was not running while disarmed.
+**Re-measured on rev 5 (2026-08-06) they are FROZEN NON-ZERO instead** — `DEPTH_OUT` −0.115
+and `DEPTH_ERR` −0.029, zero variance over 74 samples, while `DEPTH_CMD` moved. A loop
+tracking a moving command cannot hold a constant error to three decimals, so both readings
+say the same thing for opposite reasons. `check_depth_loop_settled` only ever proved
+`|DEPTH_OUT| < 0.90` — which −0.115 also passes; it is an anti-saturation guard, not a proof
+the loop works. **The depth loop has still never run closed**, it gates every AUTO move including
+`move_forward`, and the two armed bench checks remain the gate. Do not read "Bar30 fixed" as
+"depth verified". The original finding is kept below for the diagnostic pattern:
+
+**⛔ BENCH-MEASURED 2026-08-02 (superseded — see above).** The Bar30 was
+producing **noise**: 317..874 mbar on a still bench (sea level ~1013), water temp 6..30 °C,
+depth reading +0.9..+6.8 m **in air**. It was not an offset or a drift but per-sample garbage —
+a connector/I2C fault. **The board reported the barometer HEALTHY throughout**, because the
+firmware's plausibility band is applied per sample and every reading is individually inside it;
+a per-sample band cannot see variance. That phantom depth **saturates the depth controller**
+(`DEPTH_OUT` pinned at −1.00, `DEPTH_ERR` −3..−7 m while disarmed), and since `mixer.cpp` is
+block-diagonal with a −1 throttle column on all four verticals and 0 on all four horizontals,
+arming turns that into **full vertical thrust with the horizontals idle** — which is exactly
+the firmware team's unexplained arming spin-up. A level-cal/attitude explanation was
+**refuted** on the same probe (roll −0.81°, pitch +1.77°). Guards added: `bringup_check --srot`
+grades barometer variance and the disarmed depth loop; `SrotFC.check_depth_loop_settled`
+refuses to arm while `|DEPTH_OUT| ≥ 0.90`. Detail:
+[`srot-integration.md`](.claude/context/srot-integration.md) and
+`Mongla_others/srot-control-board/BENCH_FINDINGS_FROM_DUBURI_WS_2026-08-02.md`.
+
+**★ Reading the board: `ros2 run duburi_manager connect`** — opens the SROT serial link and
+prints everything it sends (both batteries — PM1 electronics + PM2 thruster pack over ESP-NOW;
+per-ESC RPM/temp; `DEPTH_CMD/ERR/OUT`, `MIX_VERT/VSGN`; `MAGACC`, `LEAK`, `KILL`, `WTEMP`;
+heap and per-task stacks). `--watch` for live, `--json` for machine-readable. Needs no ROS
+graph and not even a fully-built workspace. **`connect` reports and always exits 0;
+`bringup_check --srot` grades and gates** — use the first to look, the second to decide.
+**Absence renders `--`, never `0.0`**: from rev 3 the board suppresses values it cannot stand
+behind, and rendering that as zero recreates the bug the suppression fixed. The manager logs
+the same block periodically (`srot_telemetry_period_s`, default 2 s, `0` disables).
+⚠ **`BATTERY_STATUS` is instanced and pymavlink caches per msgid** — sampling that slot
+alternates between PM1 (~1.35 V) and PM2 (~14.7 V). De-multiplex by `id`, as
+`SrotFC.note_battery` does.
+
+**★ The architecture change itself — read this first:**
+[`.claude/context/auv-architecture-2026.md`](.claude/context/auv-architecture-2026.md).
+Written by the board side: no Pixhawk, no Pi, no BlueOS, no UDP, no separate IMU board;
+every sensor on the control board, one USB-C cable to the Jetson, Jetson = GPU/vision only.
+
+Full detail, verb table, workarounds and bench runbook:
+[`.claude/context/srot-integration.md`](.claude/context/srot-integration.md).
+Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEEDBACK.md`
+(the Round 6 reply at the end answers their three open decisions). Their reply to us:
+`Mongla_others/srot-control-board/FIRMWARE_CHANGELOG_FOR_DUBURI.md`.
+What we sent the three sibling agents on 2026-08-01 (what we changed, what we need back, and
+the bench measurements we owe them): `DUBURI_WS_HANDOFF_2026-08-01.md` in **each** of
+`srot-control-board` / `srot-ground-station` / `srot-esc-flasher`. The firmware agent's
+**executable run sheet** is `srot-control-board/TASKS_FROM_DUBURI_WS.md` — their work lands as
+a PR back into this branch, and **that PR merging is the last gate before water**.
+
+**We are on MAVLink compid 191** (`MAV_COMP_ID_ONBOARD_COMPUTER`), srot path only, so the
+firmware can key `FS_GCS_SYSID`/`FS_GCS_COMPID` on the companion specifically. Until it does, a
+dead Jetson with Bondor connected holds the GCS failsafe open and the vehicle station-keeps
+instead of surfacing. Safe in both directions — the board counts any heartbeat whose id is not
+its own (fw `mav_commands.cpp:687`).
+
+**⛔ The depth gate is wider than "dive verbs".** `SROT_MOVE` auto-enters `AUTO`, and the `AUTO`
+branch closes the depth loop under **every** primitive (fw `task_control_loop.cpp:236-237`) —
+there is no depth-free path through it. So a plain `move_forward` runs the loop that has never
+run closed. Both bench checks gate **every AUTO move**, not just `set_depth`/vision-depth, and
+an **in-air** `move_forward` is not partial validation (at ~0 m target and measurement agree).
+
+**Cross-repo rules (start here before touching anything shared):**
+[`.claude/context/cross-repo-contract.md`](.claude/context/cross-repo-contract.md) — the
+co-owned wire invariants, mirrored verbatim as `AGENTS.md` in each sibling repo. The one
+non-negotiable: **`srot_protocol.py` is our single copy of the wire constants, and
+`test_srot_protocol_drift.py` reads the firmware headers directly to prove it hasn't drifted.**
+
+**The vision↔control split (designed, NOT built):**
+[`.claude/context/vision-control-split.md`](.claude/context/vision-control-split.md) +
+the firmware spec `Mongla_others/srot-control-board/VISION_API.md`. Target architecture is
+**Jetson = perception only, SROT = every control loop**: we stream one `LANDING_TARGET` (149)
+per frame as a **bearing in radians** (not pixels — so the board's gains have units and survive
+a lens change) and the board closes the loop at 500 Hz. Until the firmware implements it,
+`vision_align`/`vision_move` stay **refused** on srot and the 20 Hz host loop is unchanged.
 
 ---
 
@@ -962,7 +1146,7 @@ There is exactly **one** node that touches `pymavlink` in the live mission path:
 | `pixhawk.send_rc_override(yaw=pwm)` | Ch4 yaw-rate; ArduSub treats Ch4≠1500 as a pilot yaw-rate command (bypasses its compass-driven heading hold). `send_rc_yaw_only(pwm)` writes only Ch4 (heading-lock path). |
 | `pixhawk.set_target_depth(-1.5)` | Negative = below surface; requires ALT_HOLD |
 | `pixhawk.get_attitude()` | `{'yaw': deg, 'depth': m, ...}` — AHRS2-backed, cached |
-| `duburi.fire(n)` | Fire payload channel n via ESP32 serial (1/2=torpedo, 3/4=dropper); `duburi.payload_ready()` to check |
+| `duburi.fire(n)` | Activate payload **BOARD channel n** (1..16 — the same n as `SERVO{n}_ROLE`; **no host-side map**). On srot the board's role decides: a SWITCH channel fires, a **PWM channel is REFUSED** (it is the on-board arm). Returns a typed outcome (`FIRED` / `REJECTED_ARM_CHANNEL` / `DENIED` / `NO_ACK` / `BUSY` / `NOT_READY`) in `final_value`. `ros2 run duburi_manager connect` lists which channels are fireable |
 | `duburi.mission_reset()` | **Call at start of every `run()`.** Stops heading lock, clears `_abort_event`, sends RC neutral, **and re-zeroes the barometer (auto `calibrate_depth`, disarmed-gated)** so depth starts true. Safe before arm (`_UNARM_SAFE`). Prevents state carry-over across back-to-back pool runs. |
 | `duburi.calibrate_depth()` | Re-zero the Bar30 at the **surface** (baro ground-pressure, QGC "Calibrate Pressure") so `depth` reads 0 before a dive — fixes the +0.01..0.1 m pre-dive drift. DISARMED-only (surface proxy); reads fresh depth **before/after** and verifies the re-zero took (`[BARO ] pre→post`); >0.30 m pre = refused. Auto-run by `mission_reset`; standalone `ros2 run duburi_planner duburi calibrate_depth`. `MAV_CMD_PREFLIGHT_CALIBRATION` p3=1 → `AP::baro().calibrate()`, ~2.5 s settle, **no reboot**. |
 
@@ -1084,7 +1268,7 @@ Engine: `motion_vision.align_loop` / `move_loop`. Source of truth for signatures
 
 | DSL method | Action verb | What it does |
 |---|---|---|
-| `vision.align(target, lat=, yaw=, depth=, fwd=, fwd_mode=, err=, duration=, gain=, lat_gain=, yaw_gain=, depth_step=, brake=, hold=, fire=, fire_t=, fire_gap=, lock_on=, settle=, fire_pass=, hold_heading=, surge_sign=, max_depth_m=, depth_ceiling=, camera=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one of lat/yaw/depth. `hold=`s turns it into an **active station-keep**: keeps correcting on-target for `hold` s (fights water inertia for a torpedo/dropper shot) before exiting; counts against `duration` (budget `duration ≥ approach + hold`). **`fwd=`** (% fill, `fwd_mode=`area/width/height) adds a **forward range-hold axis**: align ALSO drives forward to that standoff fill and HOLDS it, so **one verb** does forward-standoff + lat/depth centering + station-keep + mid-hold fire (the unified **torpedo standoff shot**). The forward term is **one-sided** (drives forward while too far, neutral at/past standoff — never reverses, no reverse-kick/ramming), and the fire is gated on reaching the standoff too; `fwd` unset = no forward axis (lat/yaw/depth-only, e.g. a coarse board centre). **Depth axis** has no `%` cap — its rate is **`depth_step=`** (m/update, 0.02 slow .. 0.10 coarse); depth steps the ArduSub setpoint at 5 Hz and **freezes inside the deadband** so there's no z-wobble. **`fire=`** (int or list, 1/2=torpedo 3/4=dropper) + **`fire_t=`** (s into the hold) fire the payload **mid-hold while still correcting** — gated on alignment (no off-target shot) **and on `is_new_frame`** (fires on the tick a new LIVE box lands — FPS-robust, never a tracker-coasted/predicted box or a frozen detector's re-read stale frame), non-blocking, needs `fire_t < hold`. **`fire=[a,b]` fires a LIST** spaced **`fire_gap=`** s apart (default `FIRE_GAP_S=1.0`) — the solenoid launcher misfires if two go together; single-channel unaffected. **`camera='downward'`** (bottom cam) **rotates the frame AND remaps the kwargs** so `fwd` is always fore/aft and `depth` always the real depth axis: `lat`→Ch6 strafe (same as forward), **`fwd`→Ch5 SURGE** fore/aft (signed px, image-Y, `0`=centre), **`depth`→DEPTH DESCENT** (a fill %, measured by `fwd_mode`; `depth_step` logic, one-sided-deeper). So the forward-cam `depth`/`fwd` meanings **swap** on downward: a bin drop reads `align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height', …)` (lat+fwd centre over the bin, depth=30% descends). Centring axes on downward are `lat`+`fwd`; `depth` is the optional approach (a `depth`-only call raises). Physically identical to the old `lat/depth/fwd` downward form — pure kwarg remap, `align_loop`+wire+**Ch5 sign** all unchanged (a previously-verified `surge_sign` stays valid; the DISARMED check just confirms you're driving surge with the new `fwd=` kwarg). **`surge_sign=`** (+1/-1) flips fore/aft for the mount (**verify DISARMED**); **`max_depth_m=`** (deep floor, must be <0 for the descent) + **`depth_ceiling=`** (shallow surface-guard — alignment can't surface the hull) bound the descent. Auto-switches the live detector + HUD to downward. **Full axis-flip table: [`downward-camera.md`](.claude/context/downward-camera.md)**; hardware: [`dual-camera-setup.md`](.claude/context/dual-camera-setup.md). **`fire_pass=True`** fires anyway at command end if the strict lock never fired, provided the target was seen live+recently (guaranteed partial-points shot). **`hold_heading=True`** widens the heading-lock deadband for the hold (yaw-released path) so the launcher heading holds steady (no terminal yaw jitter). See [`vision-results.md`](.claude/context/vision-results.md) §4. **`lock_on=True`** = continuity lock: steer to the box **nearest the last centre** (not the largest) so a 2nd hole / spurious box can't steal the aim on a close-in shot — see [`precision-alignment.md`](.claude/context/precision-alignment.md). |
+| `vision.align(target, lat=, yaw=, depth=, fwd=, fwd_mode=, err=, duration=, gain=, lat_gain=, yaw_gain=, depth_step=, brake=, hold=, fire=, fire_t=, fire_gap=, lock_on=, settle=, fire_pass=, hold_heading=, surge_sign=, max_depth_m=, depth_ceiling=, camera=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one of lat/yaw/depth. `hold=`s turns it into an **active station-keep**: keeps correcting on-target for `hold` s (fights water inertia for a torpedo/dropper shot) before exiting; counts against `duration` (budget `duration ≥ approach + hold`). **`fwd=`** (% fill, `fwd_mode=`area/width/height) adds a **forward range-hold axis**: align ALSO drives forward to that standoff fill and HOLDS it, so **one verb** does forward-standoff + lat/depth centering + station-keep + mid-hold fire (the unified **torpedo standoff shot**). The forward term is **one-sided** (drives forward while too far, neutral at/past standoff — never reverses, no reverse-kick/ramming), and the fire is gated on reaching the standoff too; `fwd` unset = no forward axis (lat/yaw/depth-only, e.g. a coarse board centre). **Depth axis** has no `%` cap — its rate is **`depth_step=`** (m/update, 0.02 slow .. 0.10 coarse); depth steps the ArduSub setpoint at 5 Hz and **freezes inside the deadband** so there's no z-wobble. **`fire=`** (int or list, **BOARD channels 1..16** — see `duburi.fire`) + **`fire_t=`** (s into the hold) fire the payload **mid-hold while still correcting** — gated on alignment (no off-target shot) **and on `is_new_frame`** (fires on the tick a new LIVE box lands — FPS-robust, never a tracker-coasted/predicted box or a frozen detector's re-read stale frame), non-blocking, needs `fire_t < hold`. **`fire=[a,b]` fires a LIST** spaced **`fire_gap=`** s apart (default `FIRE_GAP_S=1.0`) — the solenoid launcher misfires if two go together; single-channel unaffected. **`camera='downward'`** (bottom cam) **rotates the frame AND remaps the kwargs** so `fwd` is always fore/aft and `depth` always the real depth axis: `lat`→Ch6 strafe (same as forward), **`fwd`→Ch5 SURGE** fore/aft (signed px, image-Y, `0`=centre), **`depth`→DEPTH DESCENT** (a fill %, measured by `fwd_mode`; `depth_step` logic, one-sided-deeper). So the forward-cam `depth`/`fwd` meanings **swap** on downward: a bin drop reads `align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height', …)` (lat+fwd centre over the bin, depth=30% descends). Centring axes on downward are `lat`+`fwd`; `depth` is the optional approach (a `depth`-only call raises). Physically identical to the old `lat/depth/fwd` downward form — pure kwarg remap, `align_loop`+wire+**Ch5 sign** all unchanged (a previously-verified `surge_sign` stays valid; the DISARMED check just confirms you're driving surge with the new `fwd=` kwarg). **`surge_sign=`** (+1/-1) flips fore/aft for the mount (**verify DISARMED**); **`max_depth_m=`** (deep floor, must be <0 for the descent) + **`depth_ceiling=`** (shallow surface-guard — alignment can't surface the hull) bound the descent. Auto-switches the live detector + HUD to downward. **Full axis-flip table: [`downward-camera.md`](.claude/context/downward-camera.md)**; hardware: [`dual-camera-setup.md`](.claude/context/dual-camera-setup.md). **`fire_pass=True`** fires anyway at command end if the strict lock never fired, provided the target was seen live+recently (guaranteed partial-points shot). **`hold_heading=True`** widens the heading-lock deadband for the hold (yaw-released path) so the launcher heading holds steady (no terminal yaw jitter). See [`vision-results.md`](.claude/context/vision-results.md) §4. **`lock_on=True`** = continuity lock: steer to the box **nearest the last centre** (not the largest) so a 2nd hole / spurious box can't steal the aim on a close-in shot — see [`precision-alignment.md`](.claude/context/precision-alignment.md). |
 | `vision.move(target, fwd=, mode=, maintain=, hold=, err=, duration=, gain=, lat_gain=, brake=, fallback=)` | `vision_move` | Drive forward until bbox fills `fwd`% (`mode`=area/width/height). `maintain`=±px lateral offset; never re-centres yaw/depth. |
 
 - **`gain` is a hard max-speed cap** (% thrust), not a target speed — the AUV never exceeds it.

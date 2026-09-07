@@ -111,6 +111,17 @@ float32 max_depth_m        # vision_align downward fwd_fill->depth: deepest allo
                            #   0 = off (no deep bound; only the shallow _MIN_DEPTH_M applies).
 float32 depth_ceiling_m    # vision_align: SHALLOWEST allowed depth setpoint (negative m) on ANY depth
                            #   motion -- the surface guard so ratio/alignment math can't lift the hull out
+float32 fire_max_tilt_deg  # vision_align: HOLD the payload shot unless the target's face is
+                           # square to our shot axis within this many degrees. A round leaves
+                           # along the hull's axis, so a centred box is not enough -- fired
+                           # 30 deg off-normal it misses an opening it was perfectly centred
+                           # on. Measured against the target's 6-DoF pose (lock_node's
+                           # target_pose topic), allowing for the planar FLIP AMBIGUITY: the
+                           # WORSE of the two pose branches must be inside tolerance.
+                           # 0 (default) = no gate, byte-identical to before. NO POSE MEANS
+                           # NOT SQUARE -- an absent lock_node, an uncalibrated camera or an
+                           # unset target_width_m all HOLD the shot, because for a firing
+                           # gate the fail-safe direction is do not fire.
                            #   of the water. 0 = default (_MIN_DEPTH_M, -0.2 m). Bin mission sets ~ -0.4.
 float32 fire_gap           # vision_align: seconds BETWEEN channels when firing a LIST (fire=[1,4]) -- the
                            #   solenoid launcher misfires if two go together. 0 = back-to-back (single-shot

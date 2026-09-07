@@ -81,6 +81,8 @@ from contextlib import contextmanager
 from duburi_interfaces.action import Move
 
 from .vision_verbs import VisionVerbs
+from .fc.base      import (FireResult, FIRE_FIRED, FIRE_DENIED, FIRE_NOT_READY,
+                           FIRE_THRUSTER_FAULT)
 from .errors        import ModeChangeError, NotArmedError
 from .heading_lock  import HeadingLock
 from .motion_writers import make_writers, _interruptible_sleep
@@ -132,7 +134,19 @@ _LOCK_PASSIVE_VERBS = frozenset({'lock_heading', 'unlock_heading', 'stop',
 # ALT_HOLD is the smallest mode that does both: holds depth at whatever
 # the sub is at when the mode is engaged, and accepts the lock thread's
 # Ch4 rate-override as the heading-hold rate target.
-YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED')
+#
+# DEPTH_HOLD is the SROT board's name for the same capability. `SrotFC.set_mode`
+# aliases ALT_HOLD -> DEPTH_HOLD, but `get_mode()` reports the board's own name,
+# so without this entry the gates never recognise the mode they just engaged and
+# re-command it on every single yaw/depth verb. Including it here is safe for
+# ArduSub too: DEPTH_HOLD is not an ArduSub mode string, so it can never match a
+# Pixhawk `get_mode()` and cannot mask a genuinely wrong mode there.
+#
+# NOTE for the srot backend: today every verb that reaches these gates is either
+# collapsed onto the board or in UNSUPPORTED_VERBS, so the gates are dead code
+# (pinned by `test_no_facade_mode_gate_is_reachable_on_srot`). This entry is what
+# stops them misfiring the moment a vision or distance verb is un-refused.
+YAW_OK_MODES = ('ALT_HOLD', 'POSHOLD', 'GUIDED', 'DEPTH_HOLD')
 
 
 # style_roll tuning. RoboSub rule: surfacing during a run ends the run, so
@@ -351,10 +365,17 @@ class Duburi(VisionVerbs):
     # ================================================================== #
 
     def fire(self, fire_channel: float):
-        """Fire ESP32 payload channel (1/2 = torpedo, 3/4 = dropper).
+        """Activate payload BOARD channel `fire_channel`.
+
+        On the SROT backend the number is the board's own channel (1..16) --
+        `DO_SET_SERVO param1`, the same n as `SERVO{n}_ROLE`. There is no host-side
+        mapping table: whether that channel is a payload switch or the on-board arm
+        is read from the board, and a channel the board calls PWM/arm is refused.
 
         ``fire_channel`` is float from Move.Goal (0.0 = unset/stub).
-        Returns a command result so the generic COMMANDS dispatcher works.
+        Returns a command result so the generic COMMANDS dispatcher works; the
+        outcome code lands in ``final_value`` so a mission can tell "fired" from
+        "that channel is the arm" from "the link is down".
 
         Also callable internally as ``self._fire_payload(channel)`` for a
         mission's "align then fire" pattern (no command scope needed since
@@ -362,16 +383,65 @@ class Duburi(VisionVerbs):
         """
         ch = int(fire_channel)
         with self._command_scope('fire'):
-            ok = self._fire_payload(ch)
-        _name = {1: 'torpedo_1', 2: 'torpedo_2', 3: 'dropper_1', 4: 'dropper_2'}.get(ch, '?')
-        return self._make_result(ok, f'fire: ch={ch} ({_name}) {"FIRED" if ok else "stub/fail"}')
+            res = self._fire_payload(ch)
+        label = ''
+        if self._payload is not None and hasattr(self._payload, 'label'):
+            label = self._payload.label(ch)
+        who = f'ch={ch}' + (f' ({label})' if label else '')
+        return self._make_result(res.ok, f'fire: {who} {res.code_name}: {res.reason}',
+                                 final_value=float(res.code))
 
-    def _fire_payload(self, channel: int) -> bool:
-        """Raw payload fire — no command scope. Use inside vision verbs."""
+    def _thruster_fault(self):
+        """The reason to REFUSE a shot, or None to allow it.
+
+        ⛔ REFUSE ONLY ON A KNOWN-BAD THRUSTER. `thruster_health()` returns
+        None -- UNKNOWN -- whenever the board has not announced presence, which
+        is every disarmed session and every hull whose ESCs are not Bluejay
+        flashed. Refusing on UNKNOWN would make `fire()` a silent no-op at
+        competition: the same shape as the SURFACE-mode bug, pointed at the
+        payload. UNKNOWN is logged loudly and allowed through; a torpedo that
+        might miss beats a torpedo that never leaves the tube.
+
+        A thruster that reported and then STOPPED, or one turning the wrong
+        way, is different in kind: the hull cannot hold a firing solution, and
+        the round is spent either way. That is what this refuses.
+        """
+        probe = getattr(self.pixhawk, 'thruster_health', None)
+        if probe is None:
+            return None
+        try:
+            ok_flag, reason = probe()
+        except Exception as exc:                       # a probe fault is not a hull fault
+            self.log.warning(f'[FIRE ] thruster health unreadable ({exc}) -- allowing')
+            return None
+        if ok_flag is False:
+            return reason
+        if ok_flag is None:
+            self.log.warning(f'[FIRE ] thruster health UNKNOWN -- firing anyway: {reason}')
+        return None
+
+    def _fire_payload(self, channel: int):
+        """Raw payload fire -> FireResult. No command scope; use inside vision verbs.
+
+        Always returns a FireResult, never a bool, so every caller can say WHY a shot
+        did not happen. `FireResult.__bool__` is `.ok`, so pre-existing truthiness
+        checks keep working.
+        """
+        fault = self._thruster_fault()
+        if fault is not None:
+            self.log.error(f'[FIRE ] REFUSED ch={channel} -- {fault}')
+            return FireResult(FIRE_THRUSTER_FAULT, int(channel), fault)
         if self._payload is None or not self._payload.is_ready:
             self.log.warning(f'[FIRE ] payload not ready ch={channel} -- stub only')
-            return False
-        return self._payload.fire(channel)
+            return FireResult(FIRE_NOT_READY, int(channel),
+                              'payload driver absent or link down')
+        res = self._payload.fire(channel)
+        # The legacy USB PayloadDriver still returns a bare bool; normalise so the
+        # two backends present one type to everything above this line.
+        if isinstance(res, bool):
+            return FireResult(FIRE_FIRED if res else FIRE_DENIED, int(channel),
+                              'legacy USB payload driver')
+        return res
 
     @property
     def payload_ready(self) -> bool:

@@ -7,10 +7,22 @@ tracker_node:
     # bytetrack (Roboflow two-stage) | legacy_bytetrack (supervision fallback).
     tracker_type: ocsort
 
-    # Detection publish rate (Hz). Roboflow scales the lost-track buffer by
-    # frame_rate (real coast window ≈ int(frame_rate/30 * track_buffer) frames)
-    # and OC-SORT uses it for its velocity model. Set to the detector's real FPS.
+    # Detection publish rate (Hz). EVERY coast window is sized from this, so a
+    # wrong value makes the whole ladder wrong -- silently, because a tracker
+    # with a truncated coast still publishes tracks and looks healthy. The node
+    # MEASURES the real arrival rate and warns once if it disagrees by more
+    # than frame_rate_warn_ratio, naming the real coast in seconds.
+    #
+    # 20 is the Jetson/ArduSub figure and is DELIBERATELY LEFT as the default:
+    # this file is the fallback, and the two vehicles disagree with each other
+    # AND with themselves. Measured on the Pi: forward 55 Hz, downward 15 Hz.
+    # vision_pi.launch.py sets it per camera, which is the only place it can be
+    # right, because one number cannot serve two cameras at different rates.
     frame_rate: 20.0
+
+    # How far the measured rate may drift from the above before the node says
+    # so. 1.5 is loose enough that ordinary jitter is quiet.
+    frame_rate_warn_ratio: 1.5
 
     # ---- Association params ------------------------------------------------- #
     # Frames to hold a lost track alive before dropping it (scaled by frame_rate
@@ -19,7 +31,15 @@ tracker_node:
     track_buffer: 150
 
     # Consecutive detection frames before a new track is published.
-    # 3 = require 3 consecutive frames before publishing (suppresses turbidity false detections).
+    # 3 = require 3 consecutive frames before publishing (suppresses turbidity
+    # false detections).
+    #
+    # ⚠ IN FRAMES, so it is a DWELL that shrinks as perception speeds up: 0.10 s
+    # at the 20 Hz this was chosen at, 0.07 s at the Pi's measured 30. Same
+    # shape as the coast window and the align dwell -- currently benign at
+    # these rates (a turbidity false positive does not persist 70 ms), and
+    # recorded here so it is re-derived rather than rediscovered if the
+    # detector gets materially faster.
     min_hits: 3
 
     # ByteTrack only: score threshold above which a NEW track id is spawned.
@@ -46,10 +66,15 @@ tracker_node:
     # raw detections → suppresses per-frame centre jitter from detector noise.
     kalman_measurement_noise: 2.0
 
-    # After this many consecutive Kalman-predicted frames (no real detection),
-    # the smoother suppresses the track from /tracks. This is the 4th rung of
-    # the control coast ladder (_freshness < coast_s < lost_grace_s < buffer):
-    # it MUST exceed the control loop's vision.coast_s in FRAMES, or a coasted
-    # target vanishes off /tracks before coast_s elapses and the coast truncates
-    # early. 30 frames = 1.5 s at 20 Hz, headroom over a typical coast_s~0.8 s.
-    max_predict_frames: 30
+    # How long the smoother keeps predicting with no real detection before it
+    # suppresses the track from /tracks. The 4th rung of the control coast
+    # ladder (_freshness < coast_s < lost_grace_s < THIS): it MUST exceed the
+    # control loop's vision.coast_s, or a coasted target vanishes off /tracks
+    # before coast_s elapses and the coast truncates early.
+    #
+    # SECONDS, not frames -- it was `max_predict_frames: 30`, which is 1.5 s at
+    # 20 Hz and 0.31 s at the Hailo path's 98 Hz, i.e. UNDER a typical
+    # coast_s of 0.8 s. Perception got 5x faster and this rung silently stopped
+    # covering the one it exists to cover. The node converts to frames with
+    # `frame_rate` above.
+    max_predict_s: 1.5

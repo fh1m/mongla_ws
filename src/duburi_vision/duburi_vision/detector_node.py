@@ -49,24 +49,67 @@ import queue as _queue
 import sys
 import threading
 import time
+
+# Consecutive inference failures before the detector is rebuilt, and before the
+# process gives up and exits. Not one number: an ISOLATED failure is a bad
+# frame and dropping it is right, while a RUN of them is the device. Sized in
+# frames rather than seconds so it behaves the same at 3 Hz and at 80 -- 15
+# frames is 0.2 s at 80 Hz and 5 s at 3 Hz, and in both cases it is well past
+# "one unlucky frame". See known-issues D16.
+_INFER_FAIL_REBUILD = 15
+_INFER_FAIL_EXIT = 45
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Optional
+from dataclasses import replace
+from typing import Dict, NamedTuple, Optional
 
 import rclpy
 from rclpy.node import Node
-
 from sensor_msgs.msg import Image
 from cv_bridge        import CvBridge
 
-from duburi_vision import draw
+from duburi_vision import draw, qos
 from duburi_vision.detection.detector  import largest
-from duburi_vision.detection.yolo      import YoloDetector
+from duburi_vision.detection.factory   import make_detector
+from duburi_vision.detection.detector  import Detector
 from duburi_vision.detection.messages  import detections_to_array
+from duburi_vision.detection.preprocess import make_preprocessor
+from duburi_vision.detection.rangecrop  import RangeCrop
+from duburi_vision.detection.profiles   import resolve as resolve_profile
 
 # Throttle for the always-on operator alignment line (seconds). Matches the
 # control-side vision throttle so the rate feels consistent between the detector
 # status line and the manager's mission logs.
 ALIGN_LOG_THROTTLE_S = 0.5
+
+# How long a `direct_feed` detector waits for its first frame by
+# reference before deciding there is no camera in its process and
+# subscribing instead. Long enough that a slow camera open does not
+# trip it, short enough to be invisible at startup.
+_DIRECT_FALLBACK_S = 2.0
+
+# "NOT SET BY THE OPERATOR". A launch file passes every parameter, so the
+# only way to tell a deliberate choice from a filled-in default is a value
+# that means nothing on its own. Each is outside the setting's real range.
+_UNSET = {
+    # `conf` is DELIBERATELY ABSENT. It also feeds the tracker's confidence
+    # clamp through the launch (`detector_conf`), and a sentinel there would
+    # silently disable the clamp -- which measured as the tracker emitting
+    # NOTHING on real water. A profile therefore cannot lower `conf` below an
+    # explicit launch value; set both, or set neither.
+    'preprocess': 'auto',     # 'off'/'clahe' are the real values
+    'preprocess_clip': 0.0,   # a real clip limit is > 0
+    'range_crop': -1,         # an int, because a bool cannot carry a third state
+}
+
+
+def _is_unset(name, value) -> bool:
+    """True when `value` is the documented sentinel for `name`."""
+    s = _UNSET.get(name)
+    if s is None:
+        return False
+    if isinstance(s, str):
+        return str(value).strip().lower() == s
+    return value == s
 
 
 def _parse_models_param(s: str) -> Dict[str, str]:
@@ -124,9 +167,34 @@ def _parse_model_conf(s: str) -> Dict[str, float]:
     return result
 
 
+class _DirectFrame(NamedTuple):
+    """A decoded frame handed straight across in one process.
+
+    A tuple rather than a bare ndarray so the HEADER travels with the pixels.
+    They are separable only by accident: the header carries the CAPTURE time,
+    and every freshness gate downstream -- `_freshness`, the coast ladder, the
+    mid-hold torpedo fire -- reads it.
+    """
+    frame: object
+    header: object
+
+
 class DetectorNode(Node):
-    def __init__(self):
-        super().__init__('duburi_detector')
+    def __init__(self, node_name: str = 'duburi_detector', *,
+                 parameter_overrides=None):
+        """`node_name` and `parameter_overrides` exist so TWO of these can live
+        in one process, which is not a nicety on the Pi -- it is the only way
+        the two-camera path runs at all.
+
+        The Hailo chip allows one VDevice per PROCESS: a second detector
+        process gets HAILO_OUT_OF_PHYSICAL_DEVICES (74). Launch's own `name=`
+        and `parameters=` are process-wide remappings (`__node:=`, `__params:=`)
+        and cannot address two nodes in one process, so the name and the
+        parameter set have to arrive as arguments instead. Defaults keep the
+        single-node executable byte-identical in behaviour.
+        """
+        super().__init__(node_name,
+                         parameter_overrides=list(parameter_overrides or []))
 
         self.declare_parameter('camera',              'laptop')
         self.declare_parameter('image_topic',         '')
@@ -136,10 +204,20 @@ class DetectorNode(Node):
         self.declare_parameter('device',              'cuda:0')
         self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
         self.declare_parameter('conf',                0.35)
+        # BYTE association floor: PUBLISH down to this, while `conf` stays the
+        # floor the control loop steers on (`vision.ctrl_conf`). 0.0 = OFF, and
+        # off is byte-for-byte the previous behaviour.
+        #
+        # Measured on real footage, publish floor the ONLY variable: presence on
+        # hard clips 8.3 -> 34.8 %, and NO change on clips already at 100 %. The
+        # low-score boxes are the occluded and motion-blurred ones (ByteTrack),
+        # which is exactly the AUV case -- our own underwater score p50 is 0.258
+        # against a shipped 0.25 floor, so we were discarding the median.
+        self.declare_parameter('assoc_conf',          0.0)
         # Per-model confidence overrides: CSV 'name=conf' (e.g.
         # 'torpedo_blood_hole=0.55,gate_rescue_repair=0.35'). Applies on top of
         # the uniform `conf` above, targeting individual registry entries, and
-        # PERSISTS across active_model switches (each YoloDetector holds its own
+        # PERSISTS across active_model switches (each detector holds its own
         # threshold). Empty = every model uses `conf`. Live-tunable.
         self.declare_parameter('model_conf',          '')
         self.declare_parameter('iou',                 0.5)
@@ -150,6 +228,53 @@ class DetectorNode(Node):
         self.declare_parameter('debug_image_hz',      5.0)
         self.declare_parameter('alignment_deadband',  0.05)
         self.declare_parameter('paused',              False)
+        # ON BY DEFAULT, WITH A FALLBACK, because "off" and "on" both have a
+        # silent failure mode and only one of them is recoverable.
+        #
+        # Direct feed is the arrangement the vehicle runs: the camera in this
+        # process hands frames over by reference. Defaulting it OFF meant the
+        # composed launcher had to remember to switch it on, and forgetting
+        # left the detector subscribing AND being fed -- the same picture
+        # decoded and inferred twice, with the slower copy winning half the
+        # time.
+        #
+        # Defaulting it ON has the opposite risk: a STANDALONE `detector_node`
+        # (vision.launch.py, the Jetson, sim, replay) has no camera in its
+        # process, so it would sit forever receiving nothing, silently. That
+        # is the exact class of bug this round has been removing.
+        #
+        # So it is on, and it SELF-CORRECTS: if no frame arrives by reference
+        # within `_DIRECT_FALLBACK_S`, the node subscribes to the topic and
+        # says so loudly. A misconfiguration costs one warning and two
+        # seconds, never a dead detector.
+        self.declare_parameter('direct_feed',         True)
+        # UNDERWATER CONTRAST PREPROCESSING. 'clahe' or 'off'.
+        #
+        # Measured on real RoboSub 2025 footage: on the gate approach -- 3.7x
+        # blurrier than the bin clip at the same brightness -- it takes target
+        # presence from 10.7 % to 56.2 % and the mean score from 0.226 to
+        # 0.410. On footage that already works it costs nothing: bin stays
+        # 100 %, octagon stays 100 % with a HIGHER mean score.
+        #
+        # Off by default because it is 3.78 ms on the Pi (77 Hz -> ~46), which
+        # is a real trade the operator should make deliberately.
+        self.declare_parameter('preprocess',          'auto')
+        self.declare_parameter('preprocess_clip',     0.0)
+        # RANGE CROP. Feed the detector a centre crop while the target is far,
+        # so it occupies more of the 640x640 the chip sees. Measured on real
+        # labelled data: recall at 4x the training distance goes 65.9 % ->
+        # 100 %, and at 6.7x, 20.2 % -> 67.4 %. It releases automatically on
+        # approach because a fixed crop LOSES close targets (69 % at 1x).
+        # `imgsz` cannot do this on the Hailo -- it is baked into the HEF.
+        # An INT, not a bool: 0/1 are the operator's answer and -1 is
+        # 'not set', which a bool cannot express -- and without a third
+        # state a profile can never turn this on.
+        self.declare_parameter('range_crop',          -1)
+        # ONE WORD instead of four knobs. `vision:=murky` on competition day
+        # beats getting conf/preprocess/clip/crop right under a run clock.
+        # A profile supplies DEFAULTS ONLY -- an explicit parameter still
+        # wins, so debugging keeps the individual knobs.
+        self.declare_parameter('vision_profile',      '')
 
         self._cam_name = str(self.get_parameter('camera').value).strip() or 'cam'
         ns_in  = str(self.get_parameter('image_topic').value).strip() \
@@ -163,6 +288,46 @@ class DetectorNode(Node):
         )
 
         device   = str(self.get_parameter('device').value)
+        # Resolve the profile FIRST, then let explicit parameters override it.
+        # `_p()` below returns the operator's value when they set one and the
+        # profile's when they did not, so `vision:=murky preprocess:=off` is
+        # a coherent request rather than a contradiction.
+        prof_name = str(self.get_parameter('vision_profile').value or '').strip()
+        prof = {}
+        if prof_name:
+            try:
+                prof, why = resolve_profile(prof_name)
+                self.get_logger().info(
+                    f"[DET  ] vision profile {prof_name!r}: {why}")
+                self.get_logger().info(f"[DET  ] -> {prof}")
+            except ValueError as exc:
+                self.get_logger().error(f'[DET  ] {exc}')
+                raise
+
+        def _p(name, default):
+            """Explicit parameter wins; else the profile; else the default.
+
+            "EXPLICIT" IS DECIDED BY A SENTINEL, NOT BY COMPARING TO THE
+            DEFAULT, and the difference is not academic. A launch file always
+            passes every parameter -- `preprocess:='none'`, `range_crop:=False`
+            -- so a comparison against the declared default sees the launch's
+            own defaults as deliberate operator choices and the profile never
+            applies. Measured on the vehicle: `vision:=murky` logged that it
+            had applied while `range_crop` read False and `conf` read 0.15.
+
+            So a knob is "unset" when it holds its documented sentinel:
+            `preprocess:'auto'`, `range_crop:-1`, `conf:0.0`. Anything else is
+            a real request and wins.
+            """
+            v = self.get_parameter(name).value
+            sentinel = _UNSET.get(name)
+            if sentinel is not None and _is_unset(name, v):
+                return prof.get(name, default)
+            if not prof:
+                return v
+            return v if not _is_unset(name, v) else prof.get(name, default)
+
+        # NOT routed through `_p`: see the note on `_UNSET`.
         conf     = float(self.get_parameter('conf').value)
         iou      = float(self.get_parameter('iou').value)
         imgsz    = int(self.get_parameter('imgsz').value)
@@ -172,7 +337,7 @@ class DetectorNode(Node):
         # ── Registry (multi-model) ─────────────────────────────────────
         models_str   = str(self.get_parameter('models').value).strip()
         active_model = str(self.get_parameter('active_model').value).strip()
-        self._registry: Dict[str, YoloDetector] = {}
+        self._registry: Dict[str, Detector] = {}
         # stem -> registry-key index so set_model() accepts the STEM as well as the
         # launch key (missions/ClassRef switch by stem). Empty in single-model mode.
         self._stem_to_key: Dict[str, str] = {}
@@ -191,7 +356,10 @@ class DetectorNode(Node):
             log = self.get_logger()
 
             def _load_one(name: str, stem: str):
-                det = YoloDetector(
+                # The backend follows the extension the resolver found on THIS
+                # machine: .hef on the Pi + AI HAT+, .engine on the Jetson, .pt
+                # anywhere. Missions pass stems, so nothing above this changes.
+                det = make_detector(
                     model_path=stem,
                     device=device, conf=conf, iou=iou, imgsz=imgsz,
                     half=half, max_det=max_det, class_allowlist=allowlist,
@@ -205,6 +373,7 @@ class DetectorNode(Node):
                     n = futures[fut]
                     try:
                         name_out, det = fut.result()
+                        self._apply_assoc_conf(det)
                         self._registry[name_out] = det
                         stem = _model_stem(model_map[name_out])
                         # Collision (two keys, same stem) => last wins + warn, so
@@ -240,7 +409,7 @@ class DetectorNode(Node):
             # Registry is non-empty from here. active_model may be a KEY or a STEM.
             active_key = self._resolve_model_key(active_model) if active_model else None
             if active_key is not None:
-                self._det: YoloDetector = self._registry[active_key]
+                self._det: Detector = self._registry[active_key]
                 self._active_name: Optional[str] = active_key
             else:
                 first = next(iter(self._registry))
@@ -259,7 +428,7 @@ class DetectorNode(Node):
             # Single-model mode: load async so ROS subscriber starts immediately.
             # Frames received before the model is ready are silently dropped.
             self._active_name = None
-            self._det: Optional[YoloDetector] = None
+            self._det: Optional[Detector] = None
             # Canonical name of the one loaded model, known synchronously from the
             # launch arg. set_model(<this stem>) is then a no-op SUCCESS (already
             # active) instead of a hard "no registry" reject -- so a ClassRef or
@@ -277,12 +446,63 @@ class DetectorNode(Node):
         from vision_msgs.msg import Detection2DArray
         from std_msgs.msg import String
         self._bridge       = CvBridge()
-        self._sub          = self.create_subscription(Image, ns_in, self._on_image, 5)
-        self._pub_det      = self.create_publisher(Detection2DArray, f'{ns_out}/detections', 10)
-        self._pub_classes  = self.create_publisher(String, f'{ns_out}/classes_filter', 10)
+        # Depth 1 BEST_EFFORT: the publisher's mailbox is only a mailbox if
+        # the subscriber is one too. A depth-5 RELIABLE queue here (which is
+        # what an int `5` means, and also what `qos_profile_sensor_data` gives)
+        # asks the middleware to hold and retransmit frames for a consumer that
+        # is going to throw all but the newest away in `_on_image` anyway --
+        # buying latency and CPU for nothing.
+        # DIRECT FEED. When a composed process hands frames straight in (see
+        # `vision_stack_node`), subscribing as well would decode and infer the
+        # same picture twice -- and the topic copy is the SLOWER of the two,
+        # so it would also be the one the detector acted on half the time.
+        # Built once. `make_preprocessor` returns None for 'off' so the hot
+        # loop can skip the call entirely rather than paying for an identity.
+        try:
+            self._pre = make_preprocessor(
+                _p('preprocess', 'off'),
+                float(_p('preprocess_clip', 3.0)) or 3.0)
+        except ValueError as exc:
+            self.get_logger().error(f'[DET  ] {exc}')
+            self._pre = None
+        if self._pre is not None:
+            self.get_logger().info(
+                f"[DET  ] preprocessing ON "
+                f"(clahe clip={float(self.get_parameter('preprocess_clip').value)}) "
+                f"-- ~3.8 ms/frame, measured 10.7 % -> 56.2 % presence on "
+                f"blurry footage")
+
+        self._crop = (RangeCrop()
+                      if int(_p('range_crop', 0)) > 0
+                      else None)
+        if self._crop is not None:
+            self.get_logger().info(
+                '[DET  ] range crop ON -- centre 50 % while the target is '
+                'small, full frame on approach. Recall at 4x range 66 % -> '
+                '100 %, at the cost of half the field of view while active.')
+
+        self._direct  = bool(self.get_parameter('direct_feed').value)
+        self._ns_in   = ns_in
+        self._fed_direct = False
+        self._sub = None if self._direct else self.create_subscription(
+            Image, ns_in, self._on_image, qos.IMAGE)
+        if self._direct:
+            # The self-correction. A one-shot timer, not a permanent one: once
+            # it has either seen a direct frame or subscribed, there is
+            # nothing left to decide.
+            self._fallback_timer = self.create_timer(
+                _DIRECT_FALLBACK_S, self._check_direct_feed)
+        self._pub_det      = self.create_publisher(
+            Detection2DArray, f'{ns_out}/detections', qos.DETECTIONS)
+        # LATCHED: the HUD and the console both join AFTER the detector and
+        # must still learn the allowlist. This topic being VOLATILE is exactly
+        # why the console polls `get_parameters` for `classes` instead.
+        self._pub_classes  = self.create_publisher(
+            String, f'{ns_out}/classes_filter', qos.LATCHED)
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)
         if self._publish_dbg:
-            self._pub_dbg = self.create_publisher(Image, f'{ns_out}/image_debug', 5)
+            self._pub_dbg = self.create_publisher(
+                Image, f'{ns_out}/image_debug', qos.DEBUG_IMAGE)
             dbg_hz = max(float(self.get_parameter('debug_image_hz').value), 0.5)
             self._dbg_min_dt = 1.0 / dbg_hz
             self._last_dbg = 0.0
@@ -293,6 +513,12 @@ class DetectorNode(Node):
         self._last_log      = time.monotonic()
         self._last_align_log = 0.0
         self.create_timer(2.0, self._log_health)
+        # Slow and at INFO, unlike `_log_health`, because this is an
+        # OPERATIONAL property and not a debugging one: the chip has ~45 % of
+        # the Orin's TOPS, so the pipeline's contract is that every inference
+        # lands on the newest frame available. 0.1 Hz is invisible in a log
+        # and enough to notice a drift.
+        self.create_timer(10.0, self._log_efficiency)
 
         self._device_str = device
         self._deadband   = float(self.get_parameter('alignment_deadband').value)
@@ -308,6 +534,25 @@ class DetectorNode(Node):
         # Inference runs on a background thread so the ROS executor stays free
         # for param callbacks (live class/model switches) during long inferences.
         self._infer_q: _queue.SimpleQueue = _queue.SimpleQueue()
+        # Set while the worker is BLOCKED waiting for a frame, i.e. exactly
+        # when a new one would be consumed immediately. A composed camera reads
+        # this to decide when to decode, so the detector is fed the instant it
+        # goes idle instead of on the publisher's clock -- which is the whole
+        # latency argument for composing them.
+        self._want = threading.Event()
+        # COMPUTE-WASTE ACCOUNTING. The chip has ~45 % of the Orin's TOPS, so
+        # an inference spent on a frame that was already superseded is compute
+        # we cannot afford. These make that measurable instead of assumed:
+        #   _evicted    a decoded frame replaced in the slot before it was
+        #               ever inferred -- a wasted DECODE (~1.9 ms of a core)
+        #   _stale_sum  age of the frame at the instant inference STARTS,
+        #               which is the floor set by capture + decode and the
+        #               number to watch if it ever grows
+        self._evicted = 0
+        self._infers = 0
+        self._stale_sum = 0.0
+        self._stale_max = 0.0
+        self._infer_fails = 0
         threading.Thread(target=self._infer_loop, daemon=True).start()
 
         registry_info = (
@@ -324,20 +569,42 @@ class DetectorNode(Node):
         self._publish_classes(classes_param)
 
     def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, max_det, allowlist):
-        """Background thread: load YoloDetector, then go live. Node subscribes before this runs."""
+        """Background thread: load the detector, then go live. Node subscribes before this runs."""
+        # Kept so a recovery can rebuild through THIS path rather than a second
+        # copy of the construction that would drift from it.
+        self._build_kwargs = dict(model_path=model_path, device=device,
+                                  conf=conf, iou=iou, imgsz=imgsz, half=half,
+                                  max_det=max_det, allowlist=allowlist)
         try:
-            det = YoloDetector(
+            det = make_detector(
                 model_path=model_path,
                 device=device, conf=conf, iou=iou, imgsz=imgsz,
                 half=half, max_det=max_det, class_allowlist=allowlist,
                 logger=self.get_logger())
         except Exception as exc:
-            self.get_logger().fatal(f"[DET  ] YoloDetector init FAILED: {exc}")
-            return
+            # ⛔ D16's TWIN, AT INIT. Returning here left `self._det` None and
+            # the infer loop then dropped every frame at `if det is None:
+            # continue` -- silently, forever, while the node answered param
+            # queries and logged "chip efficiency". Observed on the vehicle:
+            # `Failed to open device file /dev/hailo0 with error 6` after a
+            # restart race, and the stack looked healthy from every angle
+            # except the detection rate.
+            #
+            # A node that has no model cannot detect anything, so it must not
+            # keep claiming to be up. Exit and let a supervisor restart it --
+            # which also resolves the common cause, a previous process still
+            # holding the device.
+            self.get_logger().fatal(
+                f"[DET  ] detector init FAILED: {exc}. EXITING: without a model "
+                f"this node would drop every frame silently while looking "
+                f"healthy. A supervisor restart also clears a device still "
+                f"held by a previous process.")
+            os._exit(2)
         # Apply any allowlist change that arrived during load via a param callback.
         pending = self._pending_allowlist
         if pending is not allowlist:
             det.update_allowlist(pending)
+        self._apply_assoc_conf(det)
         self._det = det  # atomic publish under CPython GIL — _infer_loop sees it next tick
         # Re-apply a per-model conf override that was set before the model landed
         # (startup or an early live set_conf): _apply_model_conf ran against a None
@@ -355,39 +622,235 @@ class DetectorNode(Node):
 
     def _on_image(self, msg: Image):
         # Single-slot: drop stale frame, enqueue latest only.
+        self._offer(msg)
+
+    # ------------------------------------------------------------------ #
+    #  Direct in-process feed (composed process)                         #
+    # ------------------------------------------------------------------ #
+    def wants_frame(self) -> bool:
+        """True when the worker is idle and would consume a frame NOW.
+
+        A composed camera gates its DECODE on this. `paused` is included
+        because a paused detector consumes frames only to discard them, and on
+        the vehicle the unused camera is paused for most of a mission -- so
+        this is also what stops it decoding 15 fps of pictures nobody reads.
+        """
+        return (self._want.is_set()
+                and not self.get_parameter('paused').value)
+
+    def _check_direct_feed(self) -> None:
+        """Subscribe after all, if nothing was handed to us by reference.
+
+        A detector with `direct_feed` on and no composed camera receives
+        NOTHING, for ever, with no error -- the failure mode this whole round
+        has been about. Two seconds of silence is enough to be sure, and
+        cheap enough that a slow-starting camera does not trip it.
+        """
+        self._fallback_timer.cancel()
+        if self._fed_direct or self._sub is not None:
+            return
+        self.get_logger().warn(
+            f'[DET  ] direct_feed is ON but no frame arrived by reference in '
+            f'{_DIRECT_FALLBACK_S:.0f}s -- there is no camera in this '
+            f'process. Subscribing to {self._ns_in} instead. This works, but '
+            f'it pays the encode+serialise+transport this setting exists to '
+            f'skip; run the composed launcher, or set direct_feed:=false to '
+            f'silence this.')
+        self._direct = False
+        self._sub = self.create_subscription(
+            Image, self._ns_in, self._on_image, qos.IMAGE)
+
+    def submit_frame(self, frame_bgr, header) -> None:
+        """Hand over an ALREADY-DECODED frame plus the header that describes it.
+
+        The header must be the one built from the frame's own capture time.
+        Passing the frame without it would leave `detections` stamped with
+        whatever the detector felt like, which is the defect the round-30 and
+        round-32 stamp fixes removed at the two layers either side of this one.
+        """
+        self._fed_direct = True
+        self._offer(_DirectFrame(frame_bgr, header))
+
+    def _offer(self, item) -> None:
         while not self._infer_q.empty():
             try:
                 self._infer_q.get_nowait()
+                # Something was waiting and is now discarded. Under the
+                # composed design this should be ~0: the camera only decodes
+                # when the worker is idle, so nothing should ever queue behind
+                # an unconsumed frame. A rising count means we are decoding
+                # frames the chip never looks at.
+                self._evicted += 1
             except _queue.Empty:
                 break
-        self._infer_q.put_nowait(msg)
+        self._infer_q.put_nowait(item)
+
+    def _on_infer_failure(self, exc) -> None:
+        """A node that cannot do its job must stop claiming to be up.
+
+        ⛔ WHAT THIS REPLACES (known-issues D16). The old handler logged and
+        continued, forever. Observed on the vehicle: a `HAILO_STREAM_ABORT(63)`
+        left this node ALIVE -- process up, topics up, subscriptions up, `pgrep`
+        satisfied -- logging a failure on every frame and publishing zero
+        detections indefinitely. Every liveness check we own passed. Only the
+        detection RATE showed it, and nothing was watching the rate.
+
+        Three tiers, because the failures are not one thing:
+
+          1. ISOLATED failures are tolerated. A single bad frame, a transient
+             decode fault -- dropping it and carrying on is right, and killing
+             the node for one would be worse than the fault.
+          2. CONSECUTIVE failures mean the DEVICE is gone, not the frame. Try
+             to rebuild the detector through the same path that built it.
+          3. If rebuilding does not help either, EXIT non-zero so a supervisor
+             restarts the process. Staying up is the failure mode, not the
+             recovery.
+
+        The counter resets on any success, so a chip that recovers by itself
+        never reaches tier 2.
+        """
+        self._infer_fails = getattr(self, '_infer_fails', 0) + 1
+        n = self._infer_fails
+        if n < _INFER_FAIL_REBUILD:
+            self.get_logger().error(
+                f'[DET  ] inference failed ({n}/{_INFER_FAIL_REBUILD}): {exc!r}')
+            return
+        if n == _INFER_FAIL_REBUILD:
+            self.get_logger().error(
+                f'[DET  ] {n} consecutive inference failures -- the DEVICE is '
+                f'gone, not the frame. Rebuilding the detector. Last: {exc!r}')
+            self._rebuild_detector()
+            return
+        if n >= _INFER_FAIL_EXIT:
+            self.get_logger().fatal(
+                f'[DET  ] {n} consecutive inference failures and a rebuild did '
+                f'not help. EXITING so a supervisor can restart this process: a '
+                f'node that cannot infer must not keep claiming to be up. '
+                f'Last: {exc!r}')
+            os._exit(1)          # noqa: SLF001 -- rclpy shutdown cannot be
+            #                       trusted from a worker thread mid-fault, and
+            #                       the point is to stop, loudly and now.
+
+    def _rebuild_detector(self) -> None:
+        """Re-run the construction that produced the detector in the first
+        place. Drops the old one first: on the Hailo path the device is held
+        by the object, and a second VDevice while the first lives is
+        `HAILO_OUT_OF_PHYSICAL_DEVICES`."""
+        kw = getattr(self, '_build_kwargs', None)
+        if not kw:
+            self.get_logger().error('[DET  ] cannot rebuild: no build kwargs '
+                                    '(registry mode) -- will exit instead')
+            return
+        old, self._det = self._det, None
+        try:
+            del old
+        except Exception:                       # noqa: BLE001
+            pass
+        try:
+            self._load_single_model_async(**kw)
+            if self._det is not None:
+                self.get_logger().warn('[DET  ] detector REBUILT after '
+                                       'consecutive inference failures')
+                self._infer_fails = 0
+        except Exception as exc:                # noqa: BLE001
+            self.get_logger().error(f'[DET  ] rebuild failed: {exc!r}')
 
     def _infer_loop(self):
         """Worker thread: decode + infer + publish (never touches the ROS executor)."""
         while rclpy.ok():
             try:
-                msg = self._infer_q.get(timeout=0.5)
+                self._want.set()
+                item = self._infer_q.get(timeout=0.5)
             except _queue.Empty:
                 continue
+            finally:
+                self._want.clear()
 
             if self.get_parameter('paused').value:
                 continue  # frame consumed from queue; skip decode + infer
 
-            try:
-                frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            except Exception as exc:
-                self.get_logger().warning(f"[DET  ] cv_bridge decode failed: {exc!r}")
-                continue
+            if isinstance(item, _DirectFrame):
+                # Already decoded, in this process, by the camera that captured
+                # it. No serialise, no transport, no second copy.
+                frame, header = item.frame, item.header
+            else:
+                header = item.header
+                try:
+                    frame = self._bridge.imgmsg_to_cv2(
+                        item, desired_encoding='bgr8')
+                except Exception as exc:
+                    self.get_logger().warning(
+                        f"[DET  ] cv_bridge decode failed: {exc!r}")
+                    continue
 
             t0 = time.monotonic()
+            # Age of this frame at the instant the chip starts on it. The
+            # floor is capture->available plus the decode; anything beyond
+            # that is the chip being fed something it should not be.
+            try:
+                cap = header.stamp.sec + header.stamp.nanosec * 1e-9
+                age = time.time() - cap
+                # Gated on HAVING a detector: this counter is reported as
+                # "inferences", and with `_det` None the loop drops the frame a
+                # few lines below. It reported "300 inferences" during a run in
+                # which zero inferences happened, which is worse than no
+                # counter -- it was the reason a dead detector looked busy.
+                if 0.0 <= age < 5.0 and self._det is not None:
+                    self._infers += 1
+                    self._stale_sum += age
+                    self._stale_max = max(self._stale_max, age)
+            except AttributeError:
+                pass
+            if self._pre is not None:
+                try:
+                    frame = self._pre(frame)
+                except Exception as exc:
+                    # Never let a preprocessing fault stop detection: a
+                    # degraded frame beats no frame.
+                    self.get_logger().warning(
+                        f'[DET  ] preprocess failed, using the raw frame: '
+                        f'{exc!r}')
+                    self._pre = None
             det = self._det  # atomic ref read under CPython GIL
             if det is None:
                 continue  # model still loading — drop frame, keep queue drained
+            # RANGE CROP, decided from the PREVIOUS frame's target size --
+            # the only size available before inferring this one.
+            crop_state = None
+            infer_frame = frame
+            if self._crop is not None:
+                infer_frame, crop_state = self._crop.apply(frame)
             try:
-                detections = det.infer(frame)
+                detections = det.infer(infer_frame)
+                self._infer_fails = 0
             except Exception as exc:
-                self.get_logger().error(f"[DET  ] inference failed: {exc!r}")
+                self._on_infer_failure(exc)
                 continue
+            if crop_state is not None and crop_state.active and detections:
+                # BACK TO FULL-FRAME COORDINATES. Everything downstream -- the
+                # pixel error, the bearing, the HUD -- is full-frame, and a
+                # missed offset does not raise: it steers at a point displaced
+                # by the crop origin, which reads as a calibration fault.
+                detections = [
+                    replace(d, xyxy=crop_state.to_full(d.xyxy))
+                    for d in detections]
+            if self._crop is not None:
+                # Feed back the largest target's area as a fraction of the
+                # frame the DETECTOR ACTUALLY SAW -- cropped or not. That is
+                # the quantity the exit threshold is defined against: while
+                # cropped, a target filling the crop is close even though it
+                # is a small fraction of the full frame.
+                big = largest(detections)
+                frac = None
+                if big is not None:
+                    area = ((big.xyxy[2] - big.xyxy[0])
+                            * (big.xyxy[3] - big.xyxy[1]))
+                    if crop_state is not None and crop_state.active:
+                        seen = crop_state.w * crop_state.h
+                    else:
+                        seen = frame.shape[1] * frame.shape[0]
+                    frac = area / float(max(seen, 1))
+                self._crop.observe(frac, time.monotonic())
             dt = time.monotonic() - t0
 
             self._frames        += 1
@@ -397,7 +860,7 @@ class DetectorNode(Node):
                 self._with_target += 1
                 self._log_alignment(primary, frame)
 
-            det_msg = detections_to_array(detections, msg.header)
+            det_msg = detections_to_array(detections, header)
             if not rclpy.ok():
                 return
             try:
@@ -419,7 +882,7 @@ class DetectorNode(Node):
                         source=self._cam_name, fps=fps,
                         healthy=True, deadband=self._deadband, primary=primary)
                     dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
-                    dbg.header = msg.header
+                    dbg.header = header
                     self._pub_dbg.publish(dbg)
                     self._last_dbg = time.monotonic()
                 except Exception as exc:
@@ -430,7 +893,7 @@ class DetectorNode(Node):
         """Apply per-model conf overrides (CSV 'name=conf') to the registry.
 
         Each named entry gets its own threshold, persisting across active_model
-        switches (the override lives on the YoloDetector). In single-model mode a
+        switches (the override lives on the detector). In single-model mode a
         pair naming the loaded model (or its stem) applies to it. Unknown names
         are warned, not fatal -- a live-tuned param must never crash the node.
         """
@@ -459,6 +922,19 @@ class DetectorNode(Node):
                 continue
             det.update_conf(conf)
             self.get_logger().info(f"[DET  ] model_conf {name!r} → {conf:.3f}")
+
+    def _apply_assoc_conf(self, det) -> None:
+        """Push the BYTE publish floor onto a freshly built detector.
+
+        Called at EVERY construction site (registry, single, async) rather than
+        once at startup: a model loaded later would otherwise silently keep the
+        default floor, which is the shape of bug this package has shipped three
+        times (device_path into **_, the unloaded YAML table, ros2 param set on
+        a construction-time param).
+        """
+        a = float(self.get_parameter('assoc_conf').value)
+        if a > 0.0 and hasattr(det, 'update_assoc_conf'):
+            det.update_assoc_conf(a)
 
     def _resolve_model_key(self, name: str) -> Optional[str]:
         """Map a set_model()/active_model argument to a registry key.
@@ -535,6 +1011,18 @@ class DetectorNode(Node):
                     det.update_conf(new_conf)
                 self.get_logger().info(f"[DET  ] conf → {new_conf:.3f}")
 
+            elif p.name == 'assoc_conf':
+                a = float(p.value)
+                for det in (self._registry.values() if self._registry
+                            else ([self._det] if self._det is not None else [])):
+                    if hasattr(det, 'update_assoc_conf'):
+                        det.update_assoc_conf(a if a > 0.0 else 1.0)
+                self.get_logger().info(
+                    f"[DET  ] assoc_conf → {a:.3f}"
+                    + ("  (OFF)" if a <= 0.0 else
+                       "  -- boxes below the control floor now reach the tracker "
+                       "for ASSOCIATION only"))
+
             elif p.name == 'model_conf':
                 # Per-model override (CSV 'name=conf'); targets individual
                 # registry entries and persists across active_model switches.
@@ -574,6 +1062,41 @@ class DetectorNode(Node):
         self.get_logger().info(
             f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
             f"'{primary.class_name}' bearing (live, off-centre)")
+
+    def _log_efficiency(self):
+        """Is the chip only ever looking at the freshest frame?
+
+        `stale` is the frame's age when inference STARTS. Its floor is
+        capture->available plus the decode -- about 6 ms on this hardware --
+        and it is the number that grows first if anything upstream starts
+        queueing.
+
+        `wasted` counts frames decoded and then discarded before the chip saw
+        them. Under the composed design it should be ZERO: the camera decodes
+        only when the inference worker is idle, so nothing can queue behind an
+        unconsumed frame. A non-zero value is ~1.9 ms of a core thrown away
+        per frame, which on a 27 TOPS budget is exactly what we are trying not
+        to do.
+        """
+        n = self._infers
+        if not n:
+            return
+        mean_ms = 1000.0 * self._stale_sum / n
+        waste = self._evicted
+        line = (f'[DET  ] chip efficiency: {n} inferences, frame age at '
+                f'infer-start {mean_ms:5.1f} ms mean / '
+                f'{1000.0 * self._stale_max:5.1f} max, '
+                f'{waste} decoded-but-never-inferred')
+        if waste:
+            self.get_logger().warn(
+                line + ' <- WASTED DECODES: frames are queueing behind the '
+                       'worker, which should be impossible on the direct feed')
+        else:
+            self.get_logger().info(line)
+        self._infers = 0
+        self._evicted = 0
+        self._stale_sum = 0.0
+        self._stale_max = 0.0
 
     def _log_health(self):
         now = time.monotonic()

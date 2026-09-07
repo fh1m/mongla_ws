@@ -18,7 +18,13 @@ from duburi_manager.vision_state import VisionState
 
 
 class _Log:
+    # `warn` AND `warning`: rclpy's logger has both and this code calls `warn`.
+    # The gap was pre-existing and invisible while the only warning path was
+    # the clock-skew branch, which no test reached. It surfaced the moment an
+    # absent or zero stamp started warning too -- which it should, because an
+    # unstamped stream silently makes every freshness gate measure arrival age.
     def info(self, *_a, **_k): pass
+    def warn(self, *_a, **_k): pass
     def warning(self, *_a, **_k): pass
     def debug(self, *_a, **_k): pass
     def error(self, *_a, **_k): pass
@@ -159,3 +165,253 @@ def test_coast_requires_a_prior_lock():
     vs = _with_tracks(_vstate([]), [_trk(560, 240, 50, 50, tid=7, score=0.0)])
     vs._last_real[7] = (time.monotonic() - 0.2, 0.9)
     assert vs.bbox_error('hole', locked_id=-1, coast_s=0.8) is None
+
+
+# =========================================================================== #
+#  age_s means AGE SINCE CAPTURE, not age since the message landed
+# =========================================================================== #
+"""`_on_detections` used to stamp `time.monotonic()` on arrival, so every
+consumer of `age_s` -- `_freshness`, the coast ladder, `is_new_frame` (which
+gates the mid-hold torpedo FIRE), `align_stable_frames` -- measured age since
+ARRIVAL. The whole capture -> inference -> transport chain, ~32 ms median and
+48 p95 measured on the Pi, was invisible to the loop that exists to react to
+it. `detector_node` had been passing the capture stamp through correctly the
+whole time; the control host resampled it against a local clock.
+"""
+
+
+class _CapturingLog(_Log):
+    def __init__(self):
+        self.warnings = []
+
+    def warn(self, msg):
+        self.warnings.append(msg)
+
+    def warning(self, msg):
+        self.warnings.append(msg)
+
+
+def _msg_stamped_wall(t_wall, dets=()):
+    """A Detection2DArray-shaped object whose header carries a wall stamp."""
+    sec = int(t_wall)
+    return SimpleNamespace(
+        header=SimpleNamespace(
+            stamp=SimpleNamespace(sec=sec,
+                                  nanosec=int((t_wall - sec) * 1e9))),
+        detections=list(dets))
+
+
+def _bare_vstate(log=None):
+    vs = VisionState(_FakeNode(), camera='t', default_image_size=(640, 480))
+    if log is not None:
+        vs._log = log
+    return vs
+
+
+def test_age_reflects_the_capture_instant_not_the_arrival():
+    """THE FIX. A frame captured 250 ms ago must report ~250 ms of age even
+    though the message arrives now -- that delay is exactly what the freshness
+    decay exists to respond to."""
+    vs = _bare_vstate()
+    vs._on_detections(_msg_stamped_wall(time.time() - 0.25))
+    age = time.monotonic() - vs._latest_stamp
+    assert 0.24 < age < 0.30, f'age {age * 1000:.1f} ms -- the delay was lost'
+
+
+def test_a_fresh_frame_still_reads_as_fresh():
+    """The other half: the fix must not manufacture age out of nothing."""
+    vs = _bare_vstate()
+    vs._on_detections(_msg_stamped_wall(time.time()))
+    assert (time.monotonic() - vs._latest_stamp) < 0.02
+
+
+def test_a_stamp_slightly_in_the_future_never_yields_a_negative_age():
+    """Two hosts' `time.time()` differ by sub-millisecond jitter. A negative
+    age would read to the control loop as impossibly fresh and, worse, sail
+    through every freshness gate it has."""
+    vs = _bare_vstate()
+    vs._on_detections(_msg_stamped_wall(time.time() + 0.002))
+    assert time.monotonic() - vs._latest_stamp >= 0.0
+
+
+def test_an_absurd_stamp_falls_back_to_arrival_and_says_so_ONCE():
+    """`use_sim_time`, an NTP step, or a publisher still stamping `now()` --
+    all produce a stamp we cannot interpret. Arrival time is then the honest
+    answer (the pre-fix behaviour) and it must be announced, not silently
+    substituted. Once: a per-message warning at 36 Hz is a DoS on the log."""
+    log = _CapturingLog()
+    vs = _bare_vstate(log)
+    for _ in range(5):
+        vs._on_detections(_msg_stamped_wall(time.time() - 3600.0))
+    assert len(log.warnings) == 1, log.warnings
+    assert (time.monotonic() - vs._latest_stamp) < 0.02, \
+        'fallback must use arrival time, not the absurd stamp'
+
+
+def test_a_missing_stamp_falls_back_rather_than_raising():
+    """A publisher with no header at all must not take down the callback."""
+    vs = _bare_vstate()
+    vs._on_detections(SimpleNamespace(detections=[]))
+    assert (time.monotonic() - vs._latest_stamp) < 0.02
+
+
+def test_a_zero_stamp_is_treated_as_absent():
+    """An unset builtin_interfaces/Time is 0, which as a wall clock is 1970 --
+    it must read as 'no stamp', not as 56 years of age."""
+    vs = _bare_vstate()
+    vs._on_detections(_msg_stamped_wall(0.0))
+    assert (time.monotonic() - vs._latest_stamp) < 0.02
+
+
+def test_stamps_stay_ordered_so_is_new_frame_still_works():
+    """`motion_vision` derives `is_new_frame` from this value increasing.
+    Capture stamps increase per frame just as arrival times did, and the fix
+    makes the check mean what its docstring already claimed -- a distinct
+    FRAME rather than a distinct MESSAGE."""
+    vs = _bare_vstate()
+    base = time.time() - 0.20
+    seen = []
+    for i in range(4):
+        vs._on_detections(_msg_stamped_wall(base + i * 0.028))
+        seen.append(vs._latest_stamp)
+    assert seen == sorted(seen) and len(set(seen)) == 4
+
+
+# =========================================================================== #
+#  The coast registry must be bounded, and teardown must be complete
+# =========================================================================== #
+def test_last_real_is_bounded():
+    """`_last_real` was written and never pruned.
+
+    Two consequences, and the second is the dangerous one: unbounded growth
+    over a mission, and a RECYCLED tracker id inheriting the previous
+    object's sighting timestamp -- so a coast could start from a sighting
+    belonging to something else, at that object's score. Both tracker
+    backends prune their own registries against exactly this hazard; this
+    dict did not.
+    """
+    vs = _bare_vstate()
+    cap = VisionState._LAST_REAL_MAX
+    old = time.monotonic() - VisionState._LAST_REAL_HORIZON_S - 1.0
+    for i in range(cap * 2):
+        vs._last_real[i] = (old, 0.5)
+    vs._last_real[999] = (time.monotonic(), 0.9)     # one fresh entry
+    vs._evict_last_real()
+    assert len(vs._last_real) <= cap, len(vs._last_real)
+    assert 999 in vs._last_real, 'the FRESH sighting must survive eviction'
+
+
+def test_eviction_keeps_the_newest_when_all_are_live():
+    """Many live ids is id churn, not staleness. Trim to the newest and warn
+    rather than growing in silence."""
+    warned = []
+    vs = _bare_vstate(_CapturingLog())
+    vs._log.warn = warned.append
+    now = time.monotonic()
+    cap = VisionState._LAST_REAL_MAX
+    for i in range(cap + 50):
+        vs._last_real[i] = (now - (cap + 50 - i) * 0.001, 0.5)
+    vs._evict_last_real()
+    assert len(vs._last_real) == cap
+    assert (cap + 49) in vs._last_real, 'the newest must be kept'
+    assert warned, 'trimming live ids must be announced'
+
+
+def test_eviction_is_a_no_op_below_the_cap():
+    """The common case must not pay for the rare one."""
+    vs = _bare_vstate()
+    vs._last_real[1] = (time.monotonic() - 1e6, 0.5)     # ancient, but alone
+    vs._evict_last_real()
+    assert 1 in vs._last_real, 'a lone old entry is not a leak'
+
+
+def test_close_tears_down_every_subscription():
+    """One `try` around all five meant the first failure skipped the rest --
+    and it failed every time, on `_sub_img`, a leftover from when this class
+    subscribed to `image_raw`. `_sub_vr` was therefore never destroyed."""
+    destroyed = []
+
+    class _Node(_FakeNode):
+        def destroy_subscription(self, sub):
+            destroyed.append(sub)
+
+    vs = VisionState(_Node(), camera='t', default_image_size=(640, 480))
+    vs.close()
+    assert len(destroyed) == 4, (
+        f'{len(destroyed)} of 4 subscriptions torn down -- teardown is '
+        f'partial again')
+
+
+def test_the_COAST_gap_is_measured_from_capture_not_from_the_query():
+    """`_last_real` is the sighting a coast measures its gap from -- the same
+    authority machinery as the ladder's decay. It was stamped with
+    `time.monotonic()` at the moment the CONTROL LOOP asked, which is short by
+    the pipeline latency plus up to a loop period, always in the direction that
+    makes a coast look younger than it is. Two lines below it, `age_s` was
+    already using the capture instant.
+
+    Drives the shipping `bbox_error()` rather than poking the dict, because the
+    write only happens on the live-detection path with coast enabled.
+    """
+    vs = _bare_vstate()
+    vs._image_size = (640, 480)
+    vs._info_seen = True
+    captured = time.time() - 0.200
+    vs._on_detections(_msg_stamped_wall(captured, [_det(320, 240, 40, 40)]))
+    vs._latest_tracks = SimpleNamespace(
+        detections=[SimpleNamespace(
+            bbox=SimpleNamespace(center=SimpleNamespace(x=320.0, y=240.0),
+                                 size_x=40.0, size_y=40.0),
+            results=[SimpleNamespace(hypothesis=SimpleNamespace(
+                class_id='7', score=0.9))],
+            id='7')])
+    s = vs.bbox_error('hole', coast_s=0.8)
+    assert s is not None and s.track_id >= 0, 'no track matched -- test is vacuous'
+    stamp, _score = vs._last_real[s.track_id]
+    lag = time.monotonic() - stamp
+    assert lag == pytest.approx(0.200, abs=0.04), (
+        f'sighting recorded {lag * 1000:.0f} ms ago for a 200 ms-old frame')
+
+
+# --------------------------------------------------------------------------- #
+#  The squareness gate the fire path asks
+# --------------------------------------------------------------------------- #
+def _pose_msg(off_axis, yaw_spread=0.0, pitch_spread=0.0, ok=True, wall=None):
+    return SimpleNamespace(
+        header=_msg_stamped_wall(time.time() if wall is None else wall).header,
+        ok=ok, reason='', off_axis_deg=off_axis, yaw_spread_deg=yaw_spread,
+        pitch_spread_deg=pitch_spread, yaw_deg=off_axis, pitch_deg=0.0,
+        roll_deg=0.0, range_m=1.5, reproj_px=1.0, ambiguity=0.2, n_points=80)
+
+
+def test_square_within_uses_the_WORSE_flip_branch():
+    """Both branches are legitimate answers. Reading the point estimate alone
+    fires on the lucky one, which is the exact failure the whole 6-DoF path
+    exists to prevent: a 3 deg estimate with a 20 deg interval is not square."""
+    vs = _bare_vstate()
+    vs._on_target_pose(_pose_msg(off_axis=3.0, yaw_spread=20.0))
+    assert vs.square_within(5.0) is False
+    vs._on_target_pose(_pose_msg(off_axis=3.0, yaw_spread=1.0))
+    assert vs.square_within(5.0) is True
+
+
+def test_NO_POSE_is_NOT_SQUARE():
+    """An absent lock_node, an uncalibrated camera and an unset target width
+    all land here. For a firing gate the fail-safe direction is refuse."""
+    assert _bare_vstate().square_within(90.0) is False
+
+
+def test_a_REFUSED_pose_is_not_square_however_small_its_numbers():
+    vs = _bare_vstate()
+    vs._on_target_pose(_pose_msg(off_axis=0.0, ok=False))
+    assert vs.square_within(45.0) is False
+
+
+def test_a_STALE_pose_is_not_square():
+    """The pose ages on the CAPTURE clock like everything else. A hull that has
+    moved since the last pose is not known to be square any more."""
+    vs = _bare_vstate()
+    vs._on_target_pose(_pose_msg(off_axis=0.5, wall=time.time() - 3.0))
+    assert vs.square_within(5.0, max_age_s=1.0) is False
+    assert vs.square_within(5.0, max_age_s=0.0) is True, \
+        'max_age_s=0 must mean "do not age-check", not "always stale"'
