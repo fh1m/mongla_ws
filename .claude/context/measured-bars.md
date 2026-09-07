@@ -783,3 +783,67 @@ short enough to be responsive can distinguish a slow hand from a still rig.
 - **LK window 31** (measured 128→164 surviving points across 15→41).
 - **de-rotation from the MEAN gyro rate** over the baseline, not a midpoint.
 - **`f_water = 741`** in water vs `f_air = 513.94` — measured, ratio 1.44.
+
+---
+
+## 14. Board-clock stamping — measured on the vehicle, 2026-09-07
+
+The timing round wired four corrections and unit-tested all of them. This is
+the first one **measured end to end on the real link**, and it is the one that
+needed no rig movement: the hull sat still, the board streamed, and both
+stamps came off **one capture** so the two arms cannot differ by link load.
+
+`ATTITUDE` at 50 Hz on `/dev/ttyUSB0`, 4400 frames over 88 s, through the
+**shipped** cadence — `ClockMap(window_s=20, min_pairs=40)`, add every sample,
+refit every 2.0 s — mirroring `auv_manager_node._imu_rates_tick` rather than a
+parallel implementation of it.
+
+**Every sample is held out**: it is scored against the fit in force when it
+arrived, *before* being added to the map. Scoring a fit on its own training
+data is how the round-25 `calibrateCameraRO` comparison came out invalid.
+
+| stamp error vs the board's own clock, de-meaned | sd | p99 | worst |
+|---|---|---|---|
+| **arrival** (`time.monotonic()` at drain) | **6.402 ms** | 26.10 | **34.48 ms** |
+| **mapped** (`ClockMap.to_host(board_ms)`) | **0.528 ms** | 0.87 | **1.22 ms** |
+
+**12.1× on sd, 28× on the worst single stamp.** Against Qin & Shen's 6 ms
+tolerance the arrival stamp was **OUTSIDE it before counting any offset at
+all**; the mapped stamp is 11× inside it. The board's own interval is
+**exactly 20.000 ms, sd 0.000** across all 4400 frames — its 500 Hz FreeRTOS
+loop has no jitter to give, so every millisecond of the 6.4 was transport.
+
+### ⛔ The number this REPLACES, and why the first one was wrong
+
+A first run held the fit out for 65 s and reported **sd 0.334 ms** — better,
+and misleading. `to_host()` is **affine**, so once fitted it adds no
+randomness whatsoever: every mapped stamp error is `skew_err · elapsed +
+offset_err`, a straight ramp. At the fitted +18 ppm over 65 s that ramp is
+1.17 ms p2p, which is *exactly* the 1.158 measured. **That run measured how
+stale the fit was, not how much jitter was removed.** The live path never runs
+65 s on one fit. The 0.528 ms above is the operational figure, and it is
+larger than the flattering one — which is the direction that makes it real.
+
+Two harness bugs came first and both returned plausible numbers rather than
+errors: `add()` takes **board SECONDS** and was fed milliseconds, and `fit()`
+was never called, so `to_host()` was the identity. The output was a clean
+1000× — the same units-and-no-error signature as the `.tlog` little-endian
+round trip that made every time wrong by decades.
+
+### Recorded, not a defect
+
+The fitted skew wanders **−88.5 … +107.5 ppm (sd 31.0)** window to window —
+the lower-envelope slope absorbs some noise. It costs nothing at this refit
+rate (31 ppm × 2 s = **0.062 ms**) and the fit residual is **0.192 ms**, but
+the skew term is not stably estimated and should not be quoted as a crystal
+measurement.
+
+### What this does NOT cover
+
+The three other corrections — interval midpoint, half-exposure, and the `td`
+estimate — are wired and unit-tested and **still unmeasured on hardware**.
+`td` in particular has no in-water value: every number for it is
+injected-offset recovery, which is why it is now bounded (`time_offset_max_s`
+0.15) rather than trusted. Measuring the real `td` needs the rig **gently
+oscillated about the optical axis** — a *changing* rate, since Li & Mourikis
+show constant velocity is degenerate — and is a few seconds of hand movement.
