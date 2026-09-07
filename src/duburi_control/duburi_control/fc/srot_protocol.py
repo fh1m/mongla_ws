@@ -782,6 +782,46 @@ MOTOR_DETECT_TOKEN = 'RUN MOTOR DETECT IN WATER'
 # what it saw rather than assuming failure.
 MOTOR_DETECT_TIMEOUT_S = 60.0
 
+# --------------------------------------------------------------------------- #
+#  AUTOTUNE (21) and MOTOR_TUNE (22) -- the other two in-water procedures       #
+# --------------------------------------------------------------------------- #
+# Separate tokens, because these are NOT the same risk as MOTOR_DETECT. Detect
+# pulses each thruster for 500 ms; AUTOTUNE runs a RELAY on the attitude loops
+# for ~a minute at full authority and then REWRITES EVERY PID, and MOTOR_TUNE
+# spins one motor at a time through a throttle ramp. A single shared token would
+# let an operator who meant one reach the others.
+AUTOTUNE_TOKEN   = 'RUN AUTOTUNE IN WATER'
+MOTOR_TUNE_TOKEN = 'RUN MOTOR TUNE IN WATER'
+
+# ~1 minute quoted by the firmware header (rate loops -> angle loops -> depth),
+# doubled: the phases are terminated by limit-cycle CONSENSUS, not by a clock,
+# so a marginal plant legitimately takes longer. The refusal on timeout reports
+# what it saw.
+AUTOTUNE_TIMEOUT_S   = 150.0
+# 8 motors x (ramp + level holds + relay), and it averages across motors.
+MOTOR_TUNE_TIMEOUT_S = 300.0
+
+# ⛔ MOTOR_TUNE IS GATED ON A PARAM THAT DEFAULTS TO ZERO.
+# `mt_active = (mode == MOTOR_TUNE) && (g_params.mtune_en > 0.5f) && armed`
+# (fw task_control_loop.cpp:509), and `DEF_MTUNE_EN = 0.0f`
+# (fw config.h:588). So SET_MODE alone enters the mode and the tuner never
+# starts -- the mode sits there doing nothing, which is the silent-no-op shape
+# that has already cost us a round (vision verbs in SURFACE).
+MOTOR_TUNE_ENABLE_PARAM = 'MTUNE_EN'
+
+# The PIDs AUTOTUNE rewrites, read before and after so the caller is told what
+# actually moved rather than "finished".
+AUTOTUNE_PID_PARAMS = (
+    'RATE_RLL_P', 'RATE_RLL_I', 'RATE_RLL_D',
+    'RATE_PIT_P', 'RATE_PIT_I', 'RATE_PIT_D',
+    'RATE_YAW_P', 'RATE_YAW_I', 'RATE_YAW_D',
+    'ANG_RLL_P',  'ANG_PIT_P',  'ANG_YAW_P',
+    'DEPTH_P',    'DEPTH_I',    'DEPTH_D',
+)
+
+# What MOTOR_TUNE writes: the throttle->RPM plant fit, averaged across motors.
+MOTOR_TUNE_PARAMS = ('RPM_KP', 'RPM_KI', 'FF_A', 'IDLE', 'MOT_SPIN_MIN')
+
 # The per-motor sign MOTOR_DETECT writes. It MULTIPLIES with MOT_n_DIRECTION;
 # neither display shows the product, which is exactly how the 2026-08-07
 # confusion happened (fw mav_stream.cpp:457).

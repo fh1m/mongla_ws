@@ -1232,6 +1232,221 @@ class SrotFC(FlightController):
                  if 'otorDetect' in t or 'otor detect' in t]
         return ('\n  ' + '\n  '.join(lines)) if lines else ''
 
+    # ------------------------------------------------------------------ #
+    #  AUTOTUNE (21) and MOTOR_TUNE (22)                                   #
+    # ------------------------------------------------------------------ #
+
+    def _wait_for_tune_end(self, label, timeout, mark, abort_fn):
+        """Poll until the board's own completion signal, or refuse.
+
+        BOTH tunes finish DISARMED in STABILIZE -- which is NOT the end state
+        MOTOR_DETECT uses (MANUAL, disarmed). Modelling these on detect and
+        watching for MANUAL would wait out the full timeout on a run that
+        succeeded, then report failure.
+          MOTOR_TUNE  fw task_control_loop.cpp:830-833
+          AUTOTUNE    fw task_control_loop.cpp:846-853
+        """
+        deadline = time.monotonic() + max(1.0, float(timeout))
+        while time.monotonic() < deadline:
+            if abort_fn is not None and abort_fn():
+                # Leaving the mode is what stops the tuner -- the firmware calls
+                # abort() on the falling edge (task_control_loop.cpp:532,540).
+                # Disarm too: a mode change alone leaves thrusters live.
+                self.set_mode('STABILIZE')
+                self.disarm()
+                return False, f'{label} aborted -- left the mode and disarmed'
+            hb = self._vehicle_hb()
+            mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
+            if mode == 'STABILIZE' and not self.is_armed():
+                return True, ''
+            time.sleep(_POLL_S)
+        return False, (f'{label} did not finish in {timeout:.0f}s '
+                       f'(mode {sp.mode_name(getattr(self._vehicle_hb(), "custom_mode", -1))}, '
+                       f'armed {self.is_armed()})' + self._tune_texts(mark))
+
+    def _tune_texts(self, since: float) -> str:
+        """The board's own tune lines, verbatim. Ours is derived; theirs is source."""
+        want = ('utotune', 'otor tune', 'MTune', 'Disarmed:')
+        lines = [t for _, _, t in self.statustext_log(since=since)
+                 if any(w in t for w in want)]
+        return ('\n  ' + '\n  '.join(lines)) if lines else ''
+
+    def autotune(self, confirm=None, *, timeout: float = sp.AUTOTUNE_TIMEOUT_S,
+                 abort_fn=None) -> tuple:
+        """Run the board's relay AUTOTUNE (mode 21). Returns (ok, reason).
+
+        Astrom-Hagglund relay tuning of the rate loops, then the angle-P loops,
+        then depth-hold -- and it WRITES AND PERSISTS EVERY ONE OF THOSE PIDs.
+        The firmware's own warning is 'AUTOTUNE started - thrusters WILL drive'.
+
+        ⛔ WE ENTER BY SET_MODE, DELIBERATELY, AND NOT BY THE `ATUNE` PARAM.
+        There are three trigger paths -- SET_MODE 21, `MAV_CMD_USER_5`, and
+        `PARAM_SET ATUNE >= 1` -- and the latter two set `autotune_active`
+        with no reference to arming. It LATCHES: the firmware comment at
+        task_control_loop.cpp:513-519 records that setting ATUNE while disarmed
+        left it set, and 'the next arm started a full-authority relay tune in
+        whatever mode the pilot happened to be in, with the GCS and OLED still
+        showing MANUAL'. They mitigated it by reflecting the trigger into the
+        mode; we avoid arming the latch at all.
+
+        WE DO NOT CHECK FOR WATER, AND SAY SO RATHER THAN PRETENDING TO. There
+        is no wet sensor. Run in air and the relay never establishes a limit
+        cycle -- the hull cannot rotate freely -- so it consumes its phases and
+        writes gains fitted to nothing.
+
+        The end state is DISARMED in STABILIZE and that is DESIGNED, not a
+        fault (fw task_control_loop.cpp:846-853).
+        """
+        if confirm != sp.AUTOTUNE_TOKEN:
+            return False, ('autotune NOT run -- confirmation required.\n\n'
+                           + self.autotune_briefing())
+        if not self.is_armed():
+            # The firmware gate is `(in.autotune || mode == AUTOTUNE) && in.armed`
+            # (task_control_loop.cpp:508). Disarmed, the mode is accepted and the
+            # tuner never starts -- a silent no-op.
+            return False, ('autotune requires ARMED -- the board accepts the mode '
+                           'and never starts the tuner while disarmed')
+
+        before = {n: self.get_param(n) for n in sp.AUTOTUNE_PID_PARAMS}
+        mark = time.time()
+        ok, why = self.set_mode('AUTOTUNE')
+        if not ok:
+            return False, f'could not enter AUTOTUNE: {why}'
+
+        ok, why = self._wait_for_tune_end('autotune', timeout, mark, abort_fn)
+        if not ok:
+            return False, why
+
+        after = {n: self.get_param(n) for n in sp.AUTOTUNE_PID_PARAMS}
+        moved = [n for n in sp.AUTOTUNE_PID_PARAMS
+                 if before.get(n) is not None and after.get(n) is not None
+                 and abs(after[n] - before[n]) > 1e-6]
+        # A tune that moved NOTHING is not success. The depth phase is SKIPPED
+        # without a healthy depth sensor (autotune.h:20-23), and a relay that
+        # never established a limit cycle writes nothing either -- so an empty
+        # list is reported as the ambiguity it is, with the board's own lines.
+        return True, ('autotune finished -- DISARMED in STABILIZE (designed). '
+                      + (f'PIDs changed: {", ".join(moved)}' if moved else
+                         'NO PID CHANGED -- either the depth phase was skipped '
+                         '(no healthy baro) or no phase established a limit '
+                         'cycle. Read the board lines below before trusting it.')
+                      + self._tune_texts(mark))
+
+    def autotune_briefing(self, timeout: float = 2.0) -> str:
+        """What an autotune run would overwrite on this hull, read LIVE."""
+        rows = []
+        for n in sp.AUTOTUNE_PID_PARAMS:
+            v = self.get_param(n, timeout=timeout)
+            rows.append(f'  {n:<12} {"--" if v is None else f"{v:.4f}"}')
+        return ('AUTOTUNE will drive all thrusters at full authority for up to\n'
+                f'{sp.AUTOTUNE_TIMEOUT_S:.0f}s and then OVERWRITE and PERSIST these:\n'
+                + '\n'.join(rows)
+                + '\n\nRequires: ARMED, IN WATER, free to rotate. There is no wet\n'
+                  'sensor on this vehicle -- nothing verified that for you.\n'
+                  'Without a healthy barometer the depth phase is SKIPPED.\n'
+                  f'\nTo proceed pass confirm={sp.AUTOTUNE_TOKEN!r}')
+
+    def motor_tune(self, confirm=None, *, timeout: float = sp.MOTOR_TUNE_TIMEOUT_S,
+                   abort_fn=None) -> tuple:
+        """Run the board's MOTOR_TUNE (mode 22). Returns (ok, reason).
+
+        Per-thruster RPM-controller tuning: ramp to find idle, hold levels to fit
+        the feedforward slope FF_A, then relay-tune the PI on the throttle->RPM
+        plant. Averaged across motors, written to RPM_KP/KI/FF_A/IDLE +
+        MOT_SPIN_MIN, persisted, and pushed to the Pico.
+
+        ⛔ TWO PRECONDITIONS THAT EACH FAIL SILENTLY.
+
+        1. `MTUNE_EN` must be > 0.5 and it DEFAULTS TO ZERO (fw config.h:588
+           `DEF_MTUNE_EN = 0.0f`). The gate is
+           `(mode == MOTOR_TUNE) && (mtune_en > 0.5f) && armed`
+           (task_control_loop.cpp:509) -- so SET_MODE alone enters the mode and
+           the tuner never runs. This method reads the param and REFUSES rather
+           than sitting in a mode that does nothing. It does not set it for you:
+           enabling a motor-spinning mode is an operator decision.
+
+        2. It fits on PER-MOTOR RPM TELEMETRY, which on this vehicle has never
+           been non-zero -- 958 recorded ESC_STATUS frames, every rpm exactly 0,
+           because telemetry needs Bluejay-flashed ESCs with bidirectional
+           DShot. With no RPM the plant fit has no plant. We WARN rather than
+           refuse on UNKNOWN (the same asymmetry as the pre-fire gate: `None`
+           is this hull's permanent state and refusing on it would make the
+           method unreachable forever), and REFUSE on a known-bad thruster.
+
+        The end state is DISARMED in STABILIZE and that is DESIGNED
+        (fw task_control_loop.cpp:830-833).
+        """
+        if confirm != sp.MOTOR_TUNE_TOKEN:
+            return False, ('motor tune NOT run -- confirmation required.\n\n'
+                           + self.motor_tune_briefing())
+
+        en = self.get_param(sp.MOTOR_TUNE_ENABLE_PARAM)
+        if en is None:
+            return False, (f'could not read {sp.MOTOR_TUNE_ENABLE_PARAM} -- refusing '
+                           'rather than entering a mode that may silently do nothing')
+        if en <= 0.5:
+            return False, (f'{sp.MOTOR_TUNE_ENABLE_PARAM} = {en:.1f}: MOTOR_TUNE is '
+                           'DISABLED on this board, and the mode would be accepted '
+                           'while the tuner never started. Set it to 1 deliberately '
+                           '-- it is the interlock on a mode that spins motors.')
+        if not self.is_armed():
+            return False, ('motor tune requires ARMED -- the board accepts the mode '
+                           'and never starts the tuner while disarmed')
+
+        health, why = self.thruster_health()
+        if health is False:
+            return False, f'motor tune refused -- {why}'
+        warn = ''
+        if health is None:
+            warn = ('\n  ⚠ thruster telemetry UNKNOWN -- this tune FITS on per-motor '
+                    'RPM. If the ESCs are not Bluejay-flashed it will spin motors '
+                    'and fit nothing.')
+
+        before = {n: self.get_param(n) for n in sp.MOTOR_TUNE_PARAMS}
+        mark = time.time()
+        ok, why = self.set_mode('MOTOR_TUNE')
+        if not ok:
+            return False, f'could not enter MOTOR_TUNE: {why}'
+
+        ok, why = self._wait_for_tune_end('motor tune', timeout, mark, abort_fn)
+        if not ok:
+            return False, why + warn
+
+        after = {n: self.get_param(n) for n in sp.MOTOR_TUNE_PARAMS}
+        moved = [n for n in sp.MOTOR_TUNE_PARAMS
+                 if before.get(n) is not None and after.get(n) is not None
+                 and abs(after[n] - before[n]) > 1e-6]
+        return True, ('motor tune finished -- DISARMED in STABILIZE (designed). '
+                      + (f'changed: {", ".join(moved)}' if moved else
+                         'NOTHING CHANGED -- with zero RPM telemetry that is the '
+                         'expected outcome, not a success')
+                      + warn + self._tune_texts(mark))
+
+    def motor_tune_briefing(self, timeout: float = 2.0) -> str:
+        """The two silent preconditions and the live RPM, quoted back."""
+        en = self.get_param(sp.MOTOR_TUNE_ENABLE_PARAM, timeout=timeout)
+        rpm = self.esc_status_rpm()
+        health, hwhy = self.thruster_health()
+        rows = []
+        for n in sp.MOTOR_TUNE_PARAMS:
+            v = self.get_param(n, timeout=timeout)
+            rows.append(f'  {n:<14} {"--" if v is None else f"{v:.4f}"}')
+        return ('MOTOR_TUNE spins ONE THRUSTER AT A TIME through a throttle ramp\n'
+                'and then OVERWRITES and PERSISTS these:\n'
+                + '\n'.join(rows)
+                + f'\n\n  {sp.MOTOR_TUNE_ENABLE_PARAM:<14} '
+                + ('--  (unreadable)' if en is None else
+                   f'{en:.1f}  ' + ('OK' if en > 0.5 else
+                                    '⛔ DISABLED -- the mode would do NOTHING'))
+                + '\n  live signed RPM  '
+                + ('-- (no ESC telemetry at all)' if rpm is None else str(list(rpm)))
+                + f'\n  thruster health  {hwhy}'
+                + ('\n  ⚠ this tune FITS ON RPM. All-zero means it has no plant.'
+                   if health is not True else '')
+                + '\n\nRequires: ARMED, IN WATER, props on. There is no wet sensor\n'
+                  'on this vehicle -- nothing verified that for you.\n'
+                  f'\nTo proceed pass confirm={sp.MOTOR_TUNE_TOKEN!r}')
+
     def thruster_health(self):
         """(ok, reason) -- is every thruster reporting and turning as commanded?
 
