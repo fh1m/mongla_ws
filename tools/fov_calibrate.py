@@ -19,7 +19,13 @@ Usage:
 import glob, json, os, sys, time
 import numpy as np, cv2
 
-COLS, ROWS = 9, 6                 # INNER corners of a 10x7-square board
+# INNER corners. ⛔ THIS MUST MATCH THE BOARD AND `fov_solve.py`, which
+# defaults to 8x6 -- the grid the shipped downward calibration was actually
+# measured on (`pi_downward_1280x720.json: grid [8, 6]`). This file said 9x6,
+# so `capture` would have found NOTHING with the board we own and reported it
+# as "no board in view" -- an operator sent to re-print a board that is
+# already correct. Override with --grid CxR.
+COLS, ROWS = 8, 6
 CRIT = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
 
@@ -29,6 +35,15 @@ def find(gray):
     if ok:
         c = cv2.cornerSubPix(gray, c, (11, 11), (-1, -1), CRIT)
     return ok, c
+
+
+def _grid_from_argv():
+    """--grid CxR, shared by capture and solve so the two cannot disagree."""
+    global COLS, ROWS
+    for i, a in enumerate(sys.argv):
+        if a == '--grid' and i + 1 < len(sys.argv):
+            COLS, ROWS = (int(x) for x in sys.argv[i + 1].lower().split('x'))
+    return COLS, ROWS
 
 
 def capture(dev, outdir, want=25):
@@ -128,6 +143,7 @@ def solve(outdir, square=0.025):
 
 
 if __name__ == '__main__':
+    _grid_from_argv()
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     if sys.argv[1] == 'capture':
