@@ -287,7 +287,7 @@ degraded. Telling them apart at 2 a.m. is the reason they are separate lines.
 | 9 | pool-floor feature yield + **refusal** on plain floor | 1d |
 | 10 | `ROT_FRACTION_MAX` re-derived as a residual criterion | 1e |
 | 11 | real `td` measured, or `estimate_time_offset:=false` | 2 |
-| 12 | half-exposure tracked as light changes | 2 |
+| 12 | ✅ **CLOSED 2026-09-07** (§23) — auto exposure chose a **200 ms shutter** (66 px of blur at 0.64 rad/s); `webcam.py` now pins a manual shutter with a `f·ω·t` blur cap. Gain measured INERT. Next: drive the cap from the LIVE gyro rather than a static max rate | §23 |
 | 13 | adaptive Kalman R in water | 3a |
 | 14 | conf floor: recall **and** precision on real props | 3b |
 | 15 | `ConfidenceTrend` — does confidence lead error? | 3c |

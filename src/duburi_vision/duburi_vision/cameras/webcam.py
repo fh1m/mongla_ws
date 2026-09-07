@@ -15,9 +15,35 @@ import time
 from typing import Optional, Tuple
 
 import cv2
+import subprocess
+
 import numpy as np
 
 from .camera import Camera, FrameMeta
+
+
+def blur_capped_exposure(exposure_us, max_blur_px, f_px, max_rate_rad_s):
+    """Clamp a requested shutter to what the expected rotation allows.
+
+    Blur from rotation is `f_px * omega * t_exp`, so the longest shutter that
+    keeps it under `max_blur_px` is `max_blur_px / (f_px * omega)`. Returned
+    in units of 0.1 ms, which is what V4L2's `exposure_time_absolute` wants.
+
+    Module-level and pure ON PURPOSE: the arithmetic is the part that is easy
+    to get silently wrong, and a test must be able to drive THIS function
+    rather than a restatement of it. A first version of the test reimplemented
+    the rule and consequently passed while the shipped cap was broken --
+    exactly the defect that survived ten green tests in round 33.
+
+    It only ever TIGHTENS. A cap that could also lengthen the shutter would
+    introduce blur nobody asked for, under a name that promises the opposite.
+    """
+    exp = int(exposure_us)
+    if max_blur_px > 0 and f_px > 0 and max_rate_rad_s > 0:
+        cap = int(1e4 * max_blur_px / (f_px * max_rate_rad_s))
+        if cap < exp:
+            exp = max(1, cap)
+    return exp
 
 
 class WebcamCamera(Camera):
@@ -25,7 +51,8 @@ class WebcamCamera(Camera):
 
     def __init__(self, device=0, width=640, height=480, fps=30,
                  frame_id='laptop_cam', name='laptop', logger=None,
-                 fourcc='MJPG'):
+                 fourcc='MJPG', exposure_us=0, brightness=None,
+                 max_blur_px=0.0, f_px=0.0, max_rate_rad_s=0.0):
         self.name      = str(name)
         self._device   = device
         self._frame_id = str(frame_id)
@@ -58,6 +85,8 @@ class WebcamCamera(Camera):
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self._cap.set(cv2.CAP_PROP_FPS,          fps)
         self._cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)        # avoid stale frames
+        self._set_exposure(exposure_us, brightness, max_blur_px, f_px,
+                           max_rate_rad_s)
 
         self._actual_w   = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or width)
         self._actual_h   = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or height)
@@ -93,6 +122,62 @@ class WebcamCamera(Camera):
         self._idx          = 0
         self._last_ok      = 0.0
         self._consec_fail  = 0
+
+    def _set_exposure(self, exposure_us, brightness, max_blur_px, f_px,
+                      max_rate_rad_s):
+        """Pin the shutter, because AUTO CHOOSES BLUR.
+
+        ⛔ MEASURED ON THIS VEHICLE. Nothing here touched exposure, so both
+        cameras ran on whatever the driver picked. On the forward Fantech
+        that was Aperture Priority with `exposure_time_absolute = 2000` -- a
+        **200 ms shutter**. Frames came out at mean 26.6 with every hand
+        movement smeared; manual exp 50 (5 ms) with brightness 150 gave mean
+        135.0 at 6.5 % clipping. Same room, same lens, 40x shorter shutter.
+
+        A long shutter is not merely dim-looking: blur from rotation is
+        `f_px * omega * t_exp`, so at f = 514 and 0.64 rad/s a 200 ms
+        exposure smears **66 px**. No detector survives that, and the failure
+        presents as "the detector is bad" -- which is how it was reported.
+
+        `max_blur_px` inverts that relation into a CAP, which is the
+        motion-blur-aware half of Han et al. (IEEE/ASME T-Mech 2023): pick an
+        exposure for image quality, then clamp it to what the expected motion
+        allows. They estimate motion from optical flow; this takes the
+        vehicle's expected `max_rate_rad_s`, because a static bound needs no
+        feedback loop and so cannot lag the motion it is bounding.
+
+        ⚠ GAIN IS DELIBERATELY NOT OFFERED, and that is measured: on the
+        Fantech, gain 20 / 50 / 100 give identical frames. It is inert on
+        this unit, so exposing it would be a knob that does nothing -- this
+        package already has four of those on its record.
+
+        v4l2-ctl rather than cv2 properties, AFTER the format is set, because
+        the ordering is load-bearing: cv2 resets the controls when it
+        configures the stream, and `exposure_time_absolute` is silently
+        ignored while auto exposure is engaged.
+        """
+        if not exposure_us:
+            return                                    # 0 = leave on auto
+        exp = blur_capped_exposure(exposure_us, max_blur_px, f_px,
+                                   max_rate_rad_s)
+        dev = (self._device if isinstance(self._device, str)
+               else f'/dev/video{self._device}')
+        applied = []
+        for key, val in (('auto_exposure', 1),
+                         ('exposure_time_absolute', exp),
+                         ('brightness', brightness)):
+            if val is None:
+                continue
+            r = subprocess.run(['v4l2-ctl', '-d', dev, '-c', f'{key}={val}'],
+                               capture_output=True)
+            applied.append(f'{key}={val}'
+                           + ('' if r.returncode == 0 else ' FAILED'))
+        if self._log:
+            extra = (f'  (blur cap {max_blur_px:.1f}px at '
+                     f'{max_rate_rad_s:.2f}rad/s -> {exp})'
+                     if exp != int(exposure_us) else '')
+            self._log.info(f'[CAM  ] {self.name}: exposure pinned -- '
+                           + ', '.join(applied) + extra)
 
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         ok, frame = self._cap.read()
