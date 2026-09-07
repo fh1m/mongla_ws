@@ -121,12 +121,67 @@ _F_WATER_PX = 741.0
 # the method carry over; THIS GAIN DOES NOT, whatever its cause. Re-derive it
 # on the hull."
 #
-# So the canonical 1.0 is the defensible default and the bench values are
-# available as parameters. An unexplained 12 % correction applied to the wrong
-# rig is a bad correction, and a bad correction is worse than none -- this
-# session already watched de-rotation with an unvalidated mapping destroy
-# 35.7 cm of real travel.
-_GYRO_GAIN_DEFAULT = -1.0
+# ⛔ THE SIGN WAS WRONG, AND -1.0 WAS THE WORST AVAILABLE CHOICE. 2026-09-07.
+#
+# Re-derived on the hull, which is what the §12 note above asked for. Two
+# independent measurements, neither of which alone would have been enough:
+#
+#  1. ON HARDWARE, from tilt-only motion, one axis per run, fitted through the
+#     origin with k-fold held-out scoring: the coupling is S = -1.058 (roll)
+#     and -0.830 (pitch). Held-out rms 4.23 px against 14.42 for predicting
+#     zero, R2 0.913, fold sd 0.008.
+#  2. OFFLINE AND EXACT, driving this node with a synthetic rotation whose
+#     ground truth is chosen rather than measured, the residual is linear in
+#     (S + g) and vanishes at g = -S:
+#
+#         true S = -1        g -1: 96.13 cm   g 0: 48.13 cm   g +1: 0.13 cm
+#         true S = +1        g -1:  0.18 cm   g 0: 48.18 cm   g +1: 96.18 cm
+#
+# So g = -S, and with S = -1.058 the shipped -1.0 was not merely wrong, it
+# DOUBLED the error against applying no correction at all. That is the
+# "a bad correction is worse than none" rule biting the default itself.
+#
+# ⛔ AND THEN THE VALIDATION A/B REFUTED THE FITTED GAINS. Read this before
+# "fixing" the default back to the fitted numbers.
+#
+# Shipping 1.058/0.830 was the obvious next step and it is WRONG. Three
+# slides, three gains, every arm on the same slide:
+#
+#     A  (-1.000, -1.000)   median 122.3 %   |err| 22.3 %
+#     B  (+1.058, +0.830)   median  75.5 %   |err| 24.5 %   <- the fitted pair
+#     C  ( 0.000,  0.000)   median  90.1 %   |err|  9.9 %   <- best
+#
+# The fitted gains OVER-correct: they subtract too much and the distance
+# under-reads. A over-reads by as much in the other direction. The zero
+# crossing is near g = 0.
+#
+# THE RECONCILIATION IS PHYSICAL AND §12 ALREADY NAMED IT: the effective gain
+# depends on WHERE THE PIVOT IS -- `f * (1 - r/h)` -- so a gain fitted while
+# tilting about the lens does not transfer to a slide pivoting about the
+# operator's shoulder, and no single constant serves both. That is also the
+# most likely reason §12's -1.150 and this round's -1.058 coupling cannot be
+# reconciled: they were excited with different pivots.
+#
+# So the default is ZERO -- de-rotation OFF -- and that is a measured choice,
+# not a surrender:
+#   * it is the best of the three on the actual task (9.9 % vs 22.3 / 24.5);
+#   * it is the only value that CANNOT double the error, since the residual
+#     is (S + g) and g = 0 leaves exactly the uncorrected term;
+#   * -1.0 is measurably the WORST available value on this hull, so leaving
+#     it would have been the one indefensible option.
+#
+# ⚠ THIS IS NOT "de-rotation does not work". §12 measured it HALVING the
+# error at 0.638 rad/s, and that regime -- a yawing vehicle -- is most of a
+# mission, while every slide here is translation-dominated. Re-enabling it
+# needs a HIGH-ROTATION test on this hull, with the gain excited at the pivot
+# the vehicle actually rotates about. water-owed item 24.
+_GYRO_GAIN_X_DEFAULT = 0.0
+_GYRO_GAIN_Y_DEFAULT = 0.0
+_GYRO_GAIN_DEFAULT = 0.0          # back-compat for importers
+# The values measured on this mount, kept so they are not re-derived: the
+# coupling is S = -1.058 (roll) / -0.830 (pitch) about the LENS, and the node
+# cancels at g = -S (pinned by TestDeRotationSignConvention, exactly, offline).
+_GYRO_GAIN_LENS_PIVOT = (1.058, 0.830)
 
 
 class FlowVelocityNode(Node):
@@ -142,8 +197,8 @@ class FlowVelocityNode(Node):
         self.declare_parameter('medium', 'water')          # 'air' | 'water'
         self.declare_parameter('focal_air_px', _F_AIR_PX)
         self.declare_parameter('focal_water_px', _F_WATER_PX)
-        self.declare_parameter('gyro_gain_x', _GYRO_GAIN_DEFAULT)
-        self.declare_parameter('gyro_gain_y', _GYRO_GAIN_DEFAULT)
+        self.declare_parameter('gyro_gain_x', _GYRO_GAIN_X_DEFAULT)
+        self.declare_parameter('gyro_gain_y', _GYRO_GAIN_Y_DEFAULT)
         self.declare_parameter('rot_fraction_max', 0.80)
         # Correct the FLAT PORT instead of averaging over it. Default ON in
         # water: a single f_water is exact only at the radius it was fitted
