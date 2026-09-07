@@ -33,6 +33,9 @@ Usage (stop the vision launch first -- it holds the cameras):
 """
 import argparse
 import glob
+import re
+import signal
+import socket
 import json
 import os
 import subprocess
@@ -747,6 +750,98 @@ def make_handler(st, solve_argv, solve_dest):
     return H
 
 
+def reap_previous(port, wait_s=6.0):
+    """Kill any EARLIER instance of this tool, then wait for it to let go.
+
+    ⛔ ON COMPETITION GROUND YOU DO NOT GO PID HUNTING. A second `ros2 run
+    duburi_vision calibrate` used to die on `OSError: [Errno 98] Address
+    already in use`, and the fix -- find the process, work out that there are
+    TWO of them, kill both -- is exactly the wrong thing to be doing beside a
+    pool with a run slot ticking. Restarting a tool must just work.
+
+    TWO processes per instance, which is the trap: `ros2 run` execs the node
+    as a CHILD, so killing the wrapper leaves the child holding both the port
+    and the camera. That is the same defect that put three duplicate copies
+    of every A/B arm on this machine earlier today, met a third time.
+
+    Found two ways, because either alone has a hole: whoever holds the PORT
+    (catches an instance started under a different name), and whoever LOOKS
+    like this tool (catches one that has not bound yet, mid-startup).
+
+    ⚠ Never kills anything in our OWN process group -- that includes the
+    `ros2 run` wrapper that launched us, and killing it would take us with
+    it.
+    """
+    me = os.getpid()
+    try:
+        my_pg = os.getpgid(0)
+    except OSError:
+        my_pg = None
+    victims = set()
+
+    out = subprocess.run(['ss', '-lntpH', f'sport = :{port}'],
+                         capture_output=True, text=True)
+    for m in re.finditer(r'pid=(\d+)', out.stdout or ''):
+        victims.add(int(m.group(1)))
+
+    for cl in glob.glob('/proc/[0-9]*/cmdline'):
+        try:
+            pid = int(cl.split('/')[2])
+            cmd = open(cl, 'rb').read().replace(b'\x00', b' ').decode(
+                'utf-8', 'replace')
+        except Exception:
+            continue
+        if any(k in cmd for k in ('duburi_vision/calibrate',
+                                  'duburi_vision calibrate',
+                                  'calibration/guide.py',
+                                  'fov_calibrate_web')):
+            victims.add(pid)
+
+    kept = []
+    for v in list(victims):
+        if v == me:
+            continue
+        try:
+            if my_pg is not None and os.getpgid(v) == my_pg:
+                continue                       # our own wrapper -- leave it
+        except OSError:
+            pass
+        kept.append(v)
+    if not kept:
+        return []
+
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        alive = []
+        for v in kept:
+            try:
+                os.kill(v, sig)
+                alive.append(v)
+            except OSError:
+                pass
+        if not alive:
+            break
+        t0 = time.time()
+        while time.time() - t0 < wait_s / 2:
+            if not any(os.path.exists(f'/proc/{v}') for v in alive):
+                break
+            time.sleep(0.2)
+        if not any(os.path.exists(f'/proc/{v}') for v in alive):
+            break
+    # The port lingers briefly in TIME_WAIT even after the holder is gone.
+    t0 = time.time()
+    while time.time() - t0 < wait_s:
+        probe = socket.socket()
+        try:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(('0.0.0.0', port))
+            probe.close()
+            break
+        except OSError:
+            probe.close()
+            time.sleep(0.3)
+    return kept
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--device', type=int, default=3)
@@ -766,7 +861,18 @@ def main():
     ap.add_argument('--brightness', type=int, default=150)
     ap.add_argument('--applies-to', default='pi_forward')
     ap.add_argument('--install', default=None)
+    ap.add_argument('--no-reap', action='store_true',
+                    help='do NOT stop an earlier instance first. Only for '
+                         'deliberately running two at once; the default is '
+                         'to take over, because hunting a PID beside a pool '
+                         'is the wrong job at the wrong moment.')
     a = ap.parse_args()
+
+    if not a.no_reap:
+        killed = reap_previous(a.port)
+        if killed:
+            print(f'stopped {len(killed)} earlier instance(s): '
+                  f'{", ".join(str(k) for k in killed)}')
 
     cols, rows = (int(x) for x in a.grid.lower().split('x'))
     os.makedirs(a.out, exist_ok=True)
