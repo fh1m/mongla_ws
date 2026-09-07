@@ -16,30 +16,20 @@ novices using guided suggestion vs novices using plain OpenCV reached mean
 reprojection error 0.229 vs 0.728 px and WORST-case 1.651 vs 38.646 px, a
 23x difference on the number that breaks a bearing.
 
-Loads the tool BY PATH, never by package import -- these live in tools/ and
-importing this package from a worktree resolves against the main workspace's
-stale install tree.
+The solver now lives IN the package (`duburi_vision.calibration.solver`)
+rather than in `tools/`, because recalibrating a camera on competition ground
+is a mission capability -- so it installs, and it is covered here.
 """
-import importlib.util
-import pathlib
-
 import numpy as np
 import pytest
 
 cv2 = pytest.importorskip('cv2')
 
-_TOOL = (pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'fov_solve.py')
-
 
 @pytest.fixture(scope='module')
 def fs():
-    if not _TOOL.is_file():
-        pytest.skip('tools/fov_solve.py not present')
-    spec = importlib.util.spec_from_file_location('fov_solve_under_test',
-                                                  str(_TOOL))
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
+    from duburi_vision.calibration import solver
+    return solver
 
 
 def _K(fx, fy=None, cx=640.0, cy=360.0):
@@ -138,3 +128,39 @@ class TestNextBestPose:
         assert ere < np.mean(eres), (
             f'the suggestion ({ere:.3f}) is no better than an average '
             f'candidate ({np.mean(eres):.3f}) -- then it is not suggesting')
+
+
+class TestItShipsWithThePackage:
+    """Calibration must be REACHABLE on the vehicle, not just present.
+
+    ⛔ A capability that exists only as a file in `tools/` is not a
+    capability at a competition: `tools/` is not installed, so on a fresh
+    deploy the command simply is not there. This package has four recorded
+    instances of a config or a helper that reached nothing; an entry point
+    that quietly disappears would be a fifth, and it would be discovered on
+    the day a lens gets knocked.
+    """
+
+    @staticmethod
+    def _setup_py():
+        import pathlib
+        return (pathlib.Path(__file__).resolve().parents[1]
+                / 'setup.py').read_text()
+
+    def test_calibrate_is_a_console_script(self):
+        s = self._setup_py()
+        assert 'duburi_vision.calibration.guide:main' in s, (
+            'the guided capture is no longer an entry point -- '
+            '`ros2 run duburi_vision calibrate` would not exist on a fresh '
+            'install, and nobody finds that out until they need it')
+        assert 'duburi_vision.calibration.solver:main' in s
+
+    def test_the_calibration_package_is_INSTALLED(self):
+        """`find_packages` must pick the subpackage up. A module that is
+        imported in tests but not installed passes here and fails on the
+        vehicle -- which is the exact shape of the worktree/stale-install
+        trap this project has already been bitten by."""
+        s = self._setup_py()
+        assert 'find_packages' in s or 'duburi_vision.calibration' in s, (
+            'setup.py neither uses find_packages nor names the calibration '
+            'subpackage, so it will not be installed')
