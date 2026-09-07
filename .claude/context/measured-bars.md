@@ -1618,6 +1618,31 @@ vehicle's expected `max_rate_rad_s`, because a static bound cannot lag the
 motion it is bounding. **The live-gyro version is the obvious next step** —
 we publish body rates at 50 Hz and the flow node already consumes them.
 
+### ⚠ AND THE FRAME RATE IS THE CAMERA, NOT THE SOFTWARE
+
+Reported as "10 fps, detect 1568 ms" after the exposure fix, which looked
+like the fix had backfired. Two hypotheses, both mine, both refuted by
+measurement:
+
+| hypothesis | verdict |
+|---|---|
+| detection starves the capture thread across all 4 cores | **REFUTED** — A/B with `cv2.setNumThreads(2)`: **15.0 fps in BOTH arms**. Not shipped. |
+| the exposure fix slowed detection | **partly** — a bright scene has more edges than a dark one, so a no-board frame costs more. But measured here it is **113 ms**, not 1450; that figure is a busier scene, and it is scene-dependent either way. |
+
+**Raw capture, nothing else running at all: 15.0 fps** while the driver
+advertises `CAP_PROP_FPS = 30`. The Fantech's rate wanders — 30.3 / 15.0 /
+7.5 measured across sessions — and a **replug** is the known remedy. That is
+carried ledger item 9, and no tuning in our code moves it.
+
+**480 px is the optimum, not a compromise**, which also settles the "detect
+finer to see more" instinct:
+
+    280px 38.1 %   320px 42.9 %   400px 47.6 %
+    480px 76.2 %   560px 71.4 %  1280px 61.9 %
+
+It beats everything smaller and everything larger. `CALIB_CB_FAST_CHECK` is
+a wash (306.8 vs 307.4 ms, identical hit rate) and is not used.
+
 Closes `water-owed` item 12.
 
 **Method note.** The test for the cap first *reimplemented* the rule, and an

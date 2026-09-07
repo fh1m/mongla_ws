@@ -207,7 +207,36 @@ def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
 
 
 def detect_loop(st, det_w):
-    """Match the live pose against the current step, and take it when held."""
+    """Match the live pose against the current step, and take it when held.
+
+    ⛔ THREE MEASUREMENTS THAT SETTLE HOW THIS IS TUNED, so the next person
+    does not re-derive them:
+
+    **480 px is the optimum, not a compromise.** Hit rate on 21 real board
+    frames, with the per-frame cost:
+
+        280px  38.1 %   41.5 ms      480px  76.2 %   49.9 ms   <- shipped
+        320px  42.9 %   45.9 ms      560px  71.4 %   65.6 ms
+        400px  47.6 %   61.7 ms     1280px  61.9 %  223.5 ms
+
+    It beats everything smaller AND everything larger. Going finer to "see
+    more detail" halves the hit rate.
+
+    **Limiting OpenCV threads does nothing, MEASURED.** Detection at ~1.5 s
+    on a busy scene looked like it was starving the capture loop of all four
+    cores. A/B with `cv2.setNumThreads(2)`: **15.0 fps in both arms**. The
+    hypothesis was wrong and the change is not shipped.
+
+    **The frame rate is the CAMERA.** Raw capture with nothing else running
+    at all is **15.0 fps** while the driver advertises 30 -- the Fantech's
+    rate wanders (30.3 / 15.0 / 7.5 measured across sessions) and a replug is
+    the known remedy. Carried ledger item 9. No amount of tuning here moves
+    it.
+
+    **`CALIB_CB_FAST_CHECK` is a wash**: 306.8 vs 307.4 ms on no-board
+    frames at an identical 76.2 % hit rate. Not used -- a flag that buys
+    nothing still costs the next reader an explanation.
+    """
     held_since = None
     while True:
         with st.lock:
