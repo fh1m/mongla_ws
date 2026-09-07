@@ -103,7 +103,7 @@ Your own numbering, so it is checkable — the full per-item reply is
 | **§8** `ESC_STATUS` undecodable by pymavlink | **FIXED** — `ESC_TELEMETRY_1_TO_4`/`_5_TO_8` (11030/11031) emitted alongside |
 | **§9** Round-3 notes | **FIXED** |
 | **§10** documentation drift | **FIXED** |
-| **§11** the v3 architectural ask → `VISION_API.md` | **DEFERRED, deliberately** — spec'd, not built; blocked on FOV (below) |
+| **§11** the v3 architectural ask → `VISION_API.md` | **OUR HALF IS BUILT** (2026-09-07) — the FOV blocker is CLEARED (below); `send_landing_target` ships, default-off because the board still drops msgid 149. Theirs to implement. |
 
 Nine fixed, one open on your decision (§4), one deferred by agreement (§11).
 
@@ -157,15 +157,45 @@ Both are real, and neither is detectable by reading source. Check the number.
 Your split is right and `VISION_API.md` §8's staging is the correct order. One thing blocks it,
 and it is not code:
 
-**The camera FOV numbers do not exist anywhere in `duburi_ws`.** No HFOV/VFOV parameter, no
+> ⛔ **CLEARED 2026-09-07. This section describes a blocker that no longer
+> exists, and it was the named critical path for the whole vision split — so
+> a reader who trusts it defers work that is now unblocked.**
+>
+> Both cameras are calibrated, held-out validated, and the calibrations SHIP
+> in `src/duburi_vision/config/calibration/`:
+>
+> | | fx (at 1280×720) | HFOV air | HFOV water | views |
+> |---|---|---|---|---|
+> | forward (Fantech) | 851.23 | 73.88° | 53.59° | 23 |
+> | downward (global shutter) | 1027.87 | 63.82° | 46.72° | 25 |
+>
+> `±0.7°`, `calibrateCameraRO`, chosen by k-fold held-out reprojection error,
+> AprilCal Max ERE reported. **`camera_info` publishes a real `K` and `D` on
+> every frame** — measured off the wire on the vehicle: fx 425.61 at 640×360,
+> which is 851.23 correctly rescaled. `duburi_control/bearing.py` does the
+> pixel→radian conversion and agrees with an independent computation to
+> 0.003°.
+>
+> Recalibrating is now an AUV command — `ros2 run duburi_vision calibrate` —
+> with a guided browser tool, a library of saved calibrations, one-click
+> re-apply to a swapped camera, and an in-water mode. See
+> [`camera-and-calibration.md`](camera-and-calibration.md).
+>
+> **The one thing that is still assumed:** the *water* figures are derived
+> from the air ones by Snell, not measured. See `water-owed.md` §1a.
+>
+> Kept below, struck through, because §11 and the migration order both point
+> at it.
+
+~~**The camera FOV numbers do not exist anywhere in `duburi_ws`.** No HFOV/VFOV parameter, no
 calibration file, no checkerboard script; `K` and `D` are published **empty** on every frame.
 The single focal number in the repo, `camera_focal_px: 500.0`, is explicitly commented as a
-guess, and it is a guess made for a different purpose.
+guess, and it is a guess made for a different purpose.~~
 
-`LANDING_TARGET` carries **bearings in radians**. Pixels cannot become radians without a real
+~~`LANDING_TARGET` carries **bearings in radians**. Pixels cannot become radians without a real
 FOV. Until someone puts a checkerboard in front of both cameras at 640×480 and writes the two
 numbers down, the bearing conversion is unbuildable — and every downstream stage inherits the
-error. This is a bench task on your side. It is the critical path.
+error. This is a bench task on your side. It is the critical path.~~
 
 Two more vision points, both from reading your code:
 
@@ -212,7 +242,7 @@ nothing in this document changes that.
 
 1. Take this PR's fixes; check `FW_BEHAVIOUR_REV` before flying anything (**the double-brake
    window is real in both directions**).
-2. Measure both cameras' FOV at 640×480. Nothing vision-shaped moves until this exists.
+2. ~~Measure both cameras' FOV at 640×480. Nothing vision-shaped moves until this exists.~~ **DONE** — 73.88°/63.82° air, held-out validated, shipping in `config/calibration/` and live on `camera_info`.
 3. Run the bench runbook, including the two depth checks. Then, and only then, dives.
 4. Stop defaulting `yaw_source` to a duplicate IMU; A/B the board's attitude against
    `duburi_sensors` in the water before deleting anything.
@@ -222,6 +252,7 @@ nothing in this document changes that.
 
 - [`srot-integration.md`](srot-integration.md) — the verb table and the (now largely historical)
   workaround list
-- [`vision-control-split.md`](vision-control-split.md) — the split, and the FOV blocker
+- [`vision-control-split.md`](vision-control-split.md) — the split (its FOV blocker is cleared)
+- [`camera-and-calibration.md`](camera-and-calibration.md) — the calibration tool, the library, the in-water mode
 - `srot-control-board/`: `AUDIT.md` (R35–R44), `FIRMWARE_CHANGELOG_FOR_DUBURI.md`,
   `VISION_API.md`, `JETSON_COMMS.md`, `PARAMETERS.md`

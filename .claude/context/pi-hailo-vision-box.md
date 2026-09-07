@@ -76,11 +76,20 @@ into a **20 Hz** consumer — **the AI HAT is ~4x faster than the loop consuming
 it, so most of its speed is currently invisible.** That 20 Hz was chosen when
 perception was 3–4 Hz on a `.pt`.
 
-**Blocked on one bench measurement that blocks both main and srot:** camera FOV
+> ⛔ **CLEARED 2026-09-07 — third doc found asserting this blocker, and the
+> other two were corrected the same day.** Both cameras are calibrated and
+> the files SHIP: forward fx 851.23 / **73.88° air**, downward fx 1027.87 /
+> **63.82° air**, ±0.7°, `calibrateCameraRO`, held-out validated. `K` and `D`
+> publish on every frame (measured off the wire on the vehicle). The
+> backwards state below — the simulator having a calibrated FOV the vehicle
+> did not — is resolved in the vehicle's favour, and the sim's derived 57.7°
+> is a *different lens*, not a disagreement.
+
+~~**Blocked on one bench measurement that blocks both main and srot:** camera FOV
 does not exist anywhere in `duburi_ws` — no HFOV, no calibration, `K`/`D`
 published empty. Pixels cannot become radians without it. (`sim/.context/` has a
 derived in-water **57.7°**; *the simulator has a calibrated FOV the vehicle does
-not*, which is backwards.)
+not*, which is backwards.)~~
 
 ## What was installed, and the two traps that were live
 

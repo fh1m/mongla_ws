@@ -1023,9 +1023,25 @@ Rev 3 landed with the board **in the vehicle**, and its theme is that the firmwa
    and `:348` use the identical condition), so no closed-loop move ever runs on it. Read
    health from `SYS_STATUS`, never infer it from the presence of a depth value.
 
-**`FW_BEHAVIOUR_REV_REQUIRED` stays at 2, deliberately.** Rev 3's changes are additive for
+> ⛔ **CORRECTED 2026-09-07. `FW_BEHAVIOUR_REV_REQUIRED` IS 10, NOT 2**
+> (`srot_protocol.py:621`). The paragraph below was true when written and has
+> been false since round 26, which is the dangerous kind of stale: it names a
+> **safety floor**, and a reader who trusts it believes the host will fly a
+> rev-2 board that it will in fact refuse.
+>
+> The floor was raised because revs 3-10 are **not** all additive, which is
+> exactly what the original reasoning assumed: **rev 10 INVERTS YAW** and rev
+> 13 requires ARMED for `SROT_MOVE`. A rev-2 board would take our yaw commands
+> with the wrong sign. Raising the floor strands a vehicle that would
+> otherwise turn the wrong way, which is the safety gain the paragraph said
+> did not exist.
+>
+> Kept verbatim below, struck through, because the *reasoning* is the thing
+> that was wrong and deleting it hides that.
+
+~~**`FW_BEHAVIOUR_REV_REQUIRED` stays at 2, deliberately.** Rev 3's changes are additive for
 this host, so a rev-2 board still runs it correctly; raising the floor would strand a
-working vehicle for no safety gain.
+working vehicle for no safety gain.~~
 
 **LEAK moved to `SYS_STATUS` extended health — and we cannot read it.** pymavlink 2.4.49's
 `SYS_STATUS` has thirteen fields and no extensions, so the board's 40 bytes are parsed
@@ -1328,12 +1344,22 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   re-expressing the 20 Hz host loop as `manual()` streaming, the loop **moves to the board**.
   We stream one `LANDING_TARGET` (149) per frame as a **bearing in radians** and the board
   closes every axis at 500 Hz. Spec: `Mongla_others/srot-control-board/VISION_API.md`; our
-  side: [`vision-control-split.md`](vision-control-split.md). Until the firmware implements it,
-  `vision_align`/`vision_move` stay in `UNSUPPORTED_VERBS` and the host loop is unchanged.
+  side: [`vision-control-split.md`](vision-control-split.md).
+  > ⛔ **CORRECTED 2026-09-07.** The last sentence here said
+  > *"until the firmware implements it, `vision_align`/`vision_move` stay in
+  > `UNSUPPORTED_VERBS`"*. **They came OUT of that set on 2026-09-03**
+  > (`srot_fc.py:1943`) and actuate today via `MANUAL_CONTROL` in STABILIZE.
+  > The board half is still unbuilt, so the *plan* above is accurate — but
+  > the verbs are live, and a reader trusting this sentence would not test
+  > them. `lock_heading` is the one that genuinely stays refused, so no host
+  > lock races the board's own hold.
 - **NEXT:** the DVL-distance streamed path + `lock_heading` semantics; commit the Bondor
   `.params` export. `/duburi/esc_rpm` is **done** (was blocked on the firmware emitting
   11030/11031 — it now does). Once the board serves vision: **measure the two cameras' FOV at
-  640×480** → angle conversion → uplink → re-point the two verbs. That measurement is the
+  640×480** ~~→ angle conversion → uplink → re-point the two verbs~~ — **DONE
+  2026-09-07**: 73.88°/63.82° air, held-out validated, shipping in
+  `config/calibration/`; `bearing.py` converts; `send_landing_target` ships
+  default-off. That measurement was the
   critical path and it is a bench task, not a code task — see `auv-architecture-2026.md` §"The
   one thing blocking vision".
 - **Cross-repo rules:** [`cross-repo-contract.md`](cross-repo-contract.md) (mirrored as
