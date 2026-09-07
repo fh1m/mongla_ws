@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import glob
 import json
+import math
 import os
 import time
 import sys
@@ -213,8 +214,174 @@ def kfold(objp, ips, size, i_fixed, k):
             'std_fx': float(std['K'][0, 0]),
             'ro_train': ro['rms'], 'ro_hold': holdout_rms(ro, te),
             'ro_fx': float(ro['K'][0, 0]),
+            # Kept so the folds can serve as an empirical POSTERIOR SAMPLE
+            # over the calibration, which is what Max ERE needs.
+            'std_K': std['K'], 'std_D': std['D'],
+            'ro_K': ro['K'], 'ro_D': ro['D'],
         })
     return recs
+
+
+def max_ere(samples, w, h, grid=5, depth_m=1.0):
+    """AprilCal's MAX EXPECTED REPROJECTION ERROR (Richardson et al., IROS 2013).
+
+    ⛔ WHY THIS AND NOT REPROJECTION RMS. RMS is an average over the points
+    you happened to photograph, so it is quiet exactly where you have no
+    data -- and calib.io says the same thing in one line: "low reprojection
+    error does not equal a good camera calibration". This project has three
+    instances of it: fx of 835.7, 969.9 and 1011.2, each with a comfortable
+    residual.
+
+    Max ERE asks a different question -- **how much would two equally
+    plausible calibrations disagree about where a point lands?** Sample
+    calibrations from the posterior, project a grid of fixed 3D test points
+    through each, and take the WORST point's spread. It therefore reports the
+    part of the image the data has not constrained, which is the part that
+    silently ruins a bearing or a scale.
+
+    Our posterior sample is the k-fold fits. That is coarser than AprilCal's
+    (they sample the parameter covariance directly) and it is honest about
+    what it is: k draws, so treat it as a lower bound on the true spread
+    rather than a tight estimate.
+
+    AprilCal's reported bar, and the reason this is worth having: **6-8
+    images to reach < 1 px**, and with it novice users beat expert-free
+    OpenCV runs 23x on WORST-case reprojection error (1.651 px vs 38.646).
+    """
+    if len(samples) < 2:
+        return float('nan'), None
+    # A grid of 3D points spanning the field of view at a working distance,
+    # placed using the MEAN calibration so the grid is the same for all draws.
+    Km = np.mean([K for K, _ in samples], axis=0)
+    us = np.linspace(0.05 * w, 0.95 * w, grid)
+    vs = np.linspace(0.05 * h, 0.95 * h, grid)
+    pts3d = []
+    for v in vs:
+        for u in us:
+            x = (u - Km[0, 2]) / Km[0, 0] * depth_m
+            y = (v - Km[1, 2]) / Km[1, 1] * depth_m
+            pts3d.append((x, y, depth_m))
+    pts3d = np.array(pts3d, dtype=np.float64).reshape(-1, 1, 3)
+    rvec = np.zeros(3); tvec = np.zeros(3)
+    proj = []
+    for K, D in samples:
+        p, _ = cv2.projectPoints(pts3d, rvec, tvec, K, D)
+        proj.append(p.reshape(-1, 2))
+    proj = np.array(proj)                       # (samples, points, 2)
+    mean = proj.mean(axis=0)
+    ere = np.linalg.norm(proj - mean, axis=2).mean(axis=0)   # per point
+    i = int(np.argmax(ere))
+    return float(ere[i]), (float(pts3d[i, 0, 0]), float(pts3d[i, 0, 1]))
+
+
+def kfold_std(objp, ips, size, k=4):
+    """Standard-arm-only folds, as a posterior sample.
+
+    Separate from `kfold` because the suggestion loop runs this ~36 times and
+    does not need the RO arm at all -- and `calibrateCameraRO` additionally
+    REFUSES some synthetic-augmented sets (it returned a scalar where the
+    released object points belong), so including it made the suggester crash
+    on exactly the inputs it exists to evaluate.
+    """
+    n = len(ips)
+    order = np.arange(n)
+    np.random.default_rng(0).shuffle(order)
+    out = []
+    for test_idx in np.array_split(order, min(k, n)):
+        fit_idx = [j for j in order if j not in set(test_idx.tolist())]
+        if len(fit_idx) < 6:
+            continue
+        f = fit_standard(objp, [ips[j] for j in fit_idx], size)
+        out.append((f['K'], f['D']))
+    return out
+
+
+def pose_for(cell, tilt_deg, objp, K, w, h, grid=3):
+    """A board pose that lands in `cell` of the frame at `tilt_deg`.
+
+    Returns (rvec, tvec). Used to SYNTHESISE a candidate observation so its
+    value can be scored before the operator is asked to go and make it --
+    which is the whole idea of a next-best-pose suggestion.
+    """
+    gy, gx = cell
+    # Depth chosen so the board fills a reasonable share of the frame.
+    span = float(np.ptp(objp[:, 0])) or 0.2
+    Z = 1.15 * span * K[0, 0] / (0.45 * w)
+    u = (gx + 0.5) * w / grid
+    v = (gy + 0.5) * h / grid
+    tvec = np.array([(u - K[0, 2]) / K[0, 0] * Z,
+                     (v - K[1, 2]) / K[1, 1] * Z, Z], float)
+    # Tilt about the image-x axis, then a little about y, so the pose is not
+    # degenerate in one direction only.
+    t = math.radians(tilt_deg)
+    rvec = np.array([t * 0.85, t * 0.53, 0.0], float)
+    return rvec, tvec
+
+
+def synth_view(objp, K, D, rvec, tvec, w, h, noise_px=0.3, rng=None):
+    """Project the board at a pose, as a candidate observation.
+
+    Noise is added on purpose: a NOISELESS synthetic view makes the fit look
+    better than any real one ever will, and the suggestion would then be
+    scored against a view that cannot be captured.
+    """
+    rng = rng or np.random.default_rng(0)
+    p, _ = cv2.projectPoints(objp.reshape(-1, 1, 3), rvec, tvec, K, D)
+    p = p.reshape(-1, 2)
+    if (p[:, 0] < 0).any() or (p[:, 0] > w).any() or \
+       (p[:, 1] < 0).any() or (p[:, 1] > h).any():
+        return None                                  # would not fit in frame
+    p = p + rng.normal(0.0, noise_px, p.shape)
+    return p.reshape(-1, 1, 2).astype(np.float32)
+
+
+def suggest_next_pose(objp, ips, size, candidates, i_fixed=0, k=4):
+    """AprilCal's next-best-pose, scored by predicted Max ERE.
+
+    ⛔ THIS IS THE PART THAT MAKES A NOVICE'S CALIBRATION GOOD. Richardson et
+    al. (IROS 2013) measured novices using guided suggestion against novices
+    using plain OpenCV: mean reprojection error 0.229 vs 0.728 px, and
+    WORST-case 1.651 vs 38.646 px -- a 23x difference on the number that
+    actually breaks a bearing. Focal length spread 1.2 vs 9.0. Thirteen of
+    their sixteen subjects had never calibrated anything.
+
+    Method, following theirs but with our own posterior: for each candidate
+    pose, SYNTHESISE the observation it would produce under the current
+    calibration, add it to the set, refit, and recompute Max ERE. The
+    candidate with the lowest predicted Max ERE is the one to ask for. They
+    evaluate ~60 candidates; ours is the 9x4 cell/tilt grid, which keeps this
+    real-time on a Pi.
+
+    Returns (best_candidate, predicted_ere, table) or (None, nan, []) when
+    there is not yet enough data to fit at all.
+    """
+    w, h = size
+    if len(ips) < 6:
+        return None, float('nan'), []
+    base = fit_standard(objp, ips, size)
+    K, D = base['K'], base['D']
+    rng = np.random.default_rng(7)
+    table = []
+    for cand in candidates:
+        cell, tilt = cand
+        rvec, tvec = pose_for(cell, tilt, objp, K, w, h)
+        obs = synth_view(objp, K, D, rvec, tvec, w, h, rng=rng)
+        if obs is None:
+            continue
+        try:
+            samples = kfold_std(objp, list(ips) + [obs], size, k)
+            if len(samples) < 2:
+                continue
+            ere, _ = max_ere(samples, w, h)
+        except cv2.error:
+            continue
+        if not math.isfinite(ere):
+            continue
+        table.append((ere, cand))
+    if not table:
+        return None, float('nan'), []
+    table.sort(key=lambda t: t[0])
+    return table[0][1], table[0][0], table
 
 
 # --------------------------------------------------------------------------
@@ -291,6 +458,21 @@ def main() -> int:
           f" -- chosen on held-out error, not training RMS")
 
     # ---- 3. uncertainty from fold spread ----
+    # ---- Max ERE: what the calibration does NOT know, in pixels ----
+    kk = 'ro' if use_ro else 'std'
+    samples = [(r[kk + '_K'], r[kk + '_D']) for r in recs]
+    ere, worst = max_ere(samples, w, h)
+    print(f"\n-- Max ERE (AprilCal, IROS 2013) --")
+    print(f"  worst-case disagreement between equally plausible calibrations:"
+          f" {ere:.3f} px")
+    print(f"  bar: < 1.0 px  ->  {'PASS' if ere < 1.0 else 'NOT YET'}"
+          f"   (their result: 6-8 images reach this)")
+    if ere >= 1.0:
+        print(f"  the worst point is at ray ({worst[0]:+.2f}, {worst[1]:+.2f}) "
+              f"-- more views THERE constrain it fastest")
+    print(f"  ⚠ our posterior is {len(samples)} k-fold draws, not a sampled "
+          f"covariance, so read this as a LOWER bound on the spread")
+
     fxs = np.array([r['ro_fx' if use_ro else 'std_fx'] for r in recs])
     fx_sd = float(fxs.std(ddof=1)) if len(fxs) > 1 else float('nan')
     print(f"\n-- stability --")
@@ -377,6 +559,14 @@ def main() -> int:
         'holdout_rms_other_arm_px': float(sh.mean() if use_ro else rh.mean()),
         'train_rms_px': float(fit['rms']),
         'fx_fold_sd_px': fx_sd,
+        # AprilCal's Max Expected Reprojection Error -- the worst-case
+        # disagreement between equally plausible calibrations. Their bar is
+        # < 1 px, reached in 6-8 guided images.
+        'max_ere_px': float(ere),
+        'max_ere_bar_px': 1.0,
+        'max_ere_note': ('AprilCal (Richardson et al., IROS 2013). Posterior '
+                         'is k-fold draws, so this is a LOWER bound. RMS is '
+                         'quiet where there is no data; this is not.'),
         'views_used': len(ips), 'views_captured': len(files),
         'grid': [cols, rows], 'square_m': square,
         'board_bow_p2p_mm': float(1000 * (z.max() - z.min())),
