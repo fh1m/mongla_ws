@@ -64,8 +64,8 @@ from duburi_interfaces.msg import DuburiState
 # EVERY arm equally -- so "all three alike" was the bug, not a result.
 # Re-measured here on the fixed tool.
 ARMS = [
-    ('B_norot',   {'gyro_gain_x': 0.0, 'gyro_gain_y': 0.0}),
-    ('C_flipped', {'gyro_gain_x': 1.0, 'gyro_gain_y': 1.0}),
+    ('B_derived', {'gyro_gain_x': 1.058, 'gyro_gain_y': 0.830}),
+    ('C_off',     {'gyro_gain_x': 0.0,   'gyro_gain_y': 0.0}),
 ]
 
 

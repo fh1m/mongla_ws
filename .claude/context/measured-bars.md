@@ -1354,3 +1354,44 @@ fake `yaw_deg = 0.0` fighting the manager's 180° so the projection sign
 flipped every interval. **The first A/B, which said all three arms were
 alike, was measured through both and is withdrawn.**
 
+## 20. The de-rotation gains, re-derived on this mount. THE SIGN WAS WRONG. 2026-09-07
+
+§12 said the gains would not carry to the vehicle and asked for them to be
+re-derived on the hull. Done, from tilt-only motion, one axis per run,
+fitted through the origin with k-fold held-out scoring.
+
+| axis | parameter | **measured** | shipped | held-out rms | vs predicting zero | R² | fold sd |
+|---|---|---|---|---|---|---|---|
+| roll | `gyro_gain_x` | **+1.058** | −1.000 | 4.231 px | 14.418 px (**3.4×**) | 0.913 | 0.008 |
+| pitch | `gyro_gain_y` | **+0.830** | −1.000 | 4.854 px | 10.647 px (2.2×) | 0.789 | 0.031 |
+
+**The magnitude was never the problem — only the SIGN.** Both gains are near
+unity, which is what a correct focal length predicts; both are POSITIVE where
+the shipped pair is negative. The mount changed when the IMU became the srot
+board, and nothing had re-checked it.
+
+### This explains §19's A/B ordering exactly, which is the real confirmation
+
+Residual error scales with `|S + g|`, and `S ≈ −1.058`:
+
+| arm | `g` | `|S+g|` | measured |
+|---|---|---|---|
+| A shipped | −1 | **2.058** | 109.4 %, spread 8.5 cm — clearly worst |
+| B off | 0 | 1.058 | 105.0 %, spread 2.6 cm |
+| C flipped | +1 | **0.058** | 94.6 %, spread 4.4 cm |
+
+A is doubly wrong, B half wrong, C nearly right — which is why A stood out
+and B/C were close on a slide where rotation is small. Two independent
+experiments, one number.
+
+⚠ **A gain that FITS better is not yet a gain that MEASURES better.** These
+are fitted against image flow during a tilt; the thing that matters is
+distance error on a slide. Validation A/B: shipped vs derived vs off, and
+the default does not change until derived wins there. `water-owed` item 24.
+
+The excitation gates earned their place: 420 and 446 intervals, rotation
+spread 13.0 and 11.4 px sd. A fit from a SLIDE instead gave 1.90 / 1.63 —
+same sign, ~2× the magnitude, because translation loads onto the rotation
+regressor. Same number, measured two ways, differing by exactly the
+contamination the ledger rule warns about.
+
