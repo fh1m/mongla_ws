@@ -52,7 +52,18 @@ def _load_solver():
     way: ONE implementation, two callers. A second copy of the geometry is
     how the simulator's scorer came to grade a board that no longer existed.
     """
-    from . import solver
+    try:
+        from . import solver                      # installed package
+    except ImportError:
+        # Running the file directly (the tools/ shim): load the sibling by
+        # path rather than by package, so the calibration maths never needs
+        # a sourced ROS to run.
+        import importlib.util
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location(
+            'duburi_calib_solver', os.path.join(here, 'solver.py'))
+        solver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(solver)
     return solver
 
 

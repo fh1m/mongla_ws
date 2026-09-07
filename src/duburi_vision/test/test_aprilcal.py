@@ -164,3 +164,65 @@ class TestItShipsWithThePackage:
         assert 'find_packages' in s or 'duburi_vision.calibration' in s, (
             'setup.py neither uses find_packages nor names the calibration '
             'subpackage, so it will not be installed')
+
+
+class TestItRunsWithoutROS:
+    """The calibration maths must not need rclpy. It needs cv2 and numpy.
+
+    ⛔ THIS BROKE ON THE OPERATOR, mid-session, on the Solve button, with a
+    complete 24-frame capture already on disk. The `tools/` shim did
+    `from duburi_vision.calibration.solver import main` after putting the
+    source tree on sys.path, which drags in `duburi_vision/__init__.py` ->
+    `preflight` -> `rclpy`. Without a sourced ROS that is a
+    ModuleNotFoundError.
+
+    Needing ROS was an accident of the import path, never a requirement --
+    and calibration is exactly the job you may have to do on a laptop, in a
+    tent, from a folder of images, with no workspace sourced. The guard is
+    static so it holds even where rclpy happens to be importable.
+    """
+
+    @staticmethod
+    def _src(name):
+        import pathlib
+        return (pathlib.Path(__file__).resolve().parents[1] / 'duburi_vision'
+                / 'calibration' / name).read_text()
+
+    @pytest.mark.parametrize('name', ('solver.py', 'guide.py'))
+    def test_no_ros_imports_in_the_calibration_modules(self, name):
+        src = self._src(name)
+        for bad in ('import rclpy', 'from rclpy', 'rclpy.init',
+                    'from rcl_interfaces', 'import sensor_msgs'):
+            assert bad not in src, (
+                f'{name} imports ROS ({bad!r}). Calibration must run from a '
+                f'folder of images on any machine -- and this exact coupling '
+                f'already failed on the Solve button with a full capture set '
+                f'on disk.')
+
+    def test_the_shim_does_not_import_the_PACKAGE(self):
+        """The package `__init__` is what pulls ROS in, so the shim has to
+        load the module by path. A plain package import here reads as
+        correct and fails only where there is no ROS -- which is the one
+        place the shim exists to serve."""
+        import pathlib
+        for t in ('fov_solve.py', 'fov_calibrate_web.py'):
+            p = pathlib.Path(__file__).resolve().parents[3] / 'tools' / t
+            if not p.is_file():
+                continue
+            # Parse, do not grep: the docstring DESCRIBES the old import,
+            # and a substring check flagged the explanation as the defect.
+            import ast as _ast
+            tree = _ast.parse(p.read_text())
+            for node in _ast.walk(tree):
+                mod = None
+                if isinstance(node, _ast.ImportFrom):
+                    mod = node.module or ''
+                elif isinstance(node, _ast.Import):
+                    mod = ','.join(a.name for a in node.names)
+                if mod and mod.split('.')[0] == 'duburi_vision':
+                    pytest.fail(
+                        f'tools/{t} imports the package again ({mod}) -- that '
+                        f're-runs duburi_vision/__init__ and needs rclpy')
+            s = p.read_text()
+            assert 'spec_from_file_location' in s, (
+                f'tools/{t} no longer loads by path')
