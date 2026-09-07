@@ -1944,12 +1944,28 @@ in it is void, including the one it led with.
 | ❌ "the sign flips between sessions" | retracted earlier the same round (estimator noise) |
 | ❌ "quarters measure bias, halves measure wander" | retracted earlier the same round (backwards) |
 
-**Verified still (gyro-gated, 60 s, gyro rms 0.0030 rad/s, 99.8 % quiescent):**
+**Verified still** — three 480 s captures, gyro-gated:
 
-| quantity | measured |
-|---|---|
-| yaw p2p | **0.029 ° / 60 s** — ~200× smaller than the contaminated figure |
-| drift | **−0.014 °/min** |
+| capture | gyro max | quiet | drift | p2p | verdict |
+|---|---|---|---|---|---|
+| 1 | 0.0224 rad/s | 100.0 % | **+0.006 °/min** | **0.075°** | STILL |
+| 2 | **0.2154** | 99.8 % | −0.011 | 0.098° | **NOT STILL — excluded** |
+| 3 | 0.0376 | 99.9 % | **−0.009 °/min** | **0.078°** | STILL |
+
+**Bar: |yaw drift| < 0.01 °/min and < 0.08° p2p per 8 min, at rest.** That is
+~25× better than the contaminated figure and ~60× better than the firmware's own
+stated 0.5-3 °/min.
+
+**Capture 2 is the gate earning its keep** — 99.8 % quiet with a benign-looking
+drift, excluded on a single 0.215 rad/s excursion. On average it looked clean,
+which is exactly how the contaminated captures got published.
+
+⚠ **AT REST ONLY, and the distinction matters.** A stationary MEMS fusion can
+estimate and cancel its own gyro bias, and the BNO085's fusion is a black box to
+us — the stillness that makes this clean may be what enables a correction that
+will not operate under way. **Drift under motion is NOT established** and needs a
+pool run with periodic returns to a known heading. Do not use this bar to justify
+trusting an absolute heading late in a mission.
 
 ⛔ **THE RULE THIS COST US.** Three separate drift measurements in this project
 have been ruined by treating *"it is on a bench"* as evidence of stillness. The

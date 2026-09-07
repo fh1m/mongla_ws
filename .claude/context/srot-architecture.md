@@ -604,16 +604,56 @@ Also still retracted from earlier in this round: the claimed **sign flip**
 (estimator noise), and *"quarters measure bias, halves measure wander"*
 (backwards — a shorter window has less lever arm).
 
-### What replaces it
+### The verified numbers
 
-`tools/yaw_drift_check.py` — **records yaw and gyro together, fits the drift only
-over quiescent samples, reports what fraction qualified, and REFUSES to report a
-drift at all when no gyro is available.** A capture now grades itself STILL /
-NOT STILL / UNKNOWN from data rather than from an assumption about the room.
+`tools/yaw_drift_check.py` — records yaw and gyro together, fits only over
+quiescent samples, reports what fraction qualified, grades the capture, and
+**refuses to report a drift at all when no gyro is available.**
 
-Final quiescent numbers are being captured; the figures above from the 60 s run
-are the ones that survive, and they say the BNO085's 6-axis yaw is far quieter
-than either the datasheet range or anything this project has previously measured.
+Three 480 s captures, board left alone:
+
+| capture | gyro rms | gyro max | quiet | **drift** | **p2p** | verdict |
+|---|---|---|---|---|---|---|
+| 1 | 0.00198 rad/s | 0.0224 | 100.0 % | **+0.006 °/min** | **0.075°** | STILL |
+| 2 | 0.00338 | **0.2154** | 99.8 % | −0.011 | 0.098° | **NOT STILL** |
+| 3 | 0.00207 | 0.0376 | 99.9 % | **−0.009 °/min** | **0.078°** | STILL |
+
+**Capture 2 is the gate earning its keep.** 99.8 % of its samples were quiet and
+its drift (−0.011 °/min) looks perfectly benign — but one 0.215 rad/s excursion
+says the board was bumped, so it is excluded. On average it looked clean. That is
+exactly how the three contaminated captures got published.
+
+**From the two verified-still captures: |drift| < 0.01 °/min, and 0.075-0.078° of
+p2p wander over eight minutes.**
+
+| | claimed (contaminated) | **verified still** | factor |
+|---|---|---|---|
+| drift | +0.237 °/min | **< 0.01 °/min** | ~25× better |
+| wander p2p / 8 min | 6.36° | **0.077°** | **~80× better** |
+| firmware's own stated figure | 0.5-3 °/min | | ~60× better than the low end |
+
+### ⛔ This OVERTURNS §5's conclusion — but read the caveat before relying on it
+
+§5 said absolute heading is *"a decaying asset"* worth 7.5-45° of error over a
+15-minute run, on the firmware's stated 0.5-3 °/min. **At the measured rate that
+is under 0.15° over the same run.** On this bench, heading is not decaying in any
+way that matters.
+
+**The caveat, and it is a real one.** A stationary MEMS fusion can estimate and
+cancel its own gyro bias — a zero-rate update is standard, and the BNO085's
+fusion is a black box to us. **The very stillness that makes this measurement
+clean may also be what enables a correction that will not operate on a moving
+vehicle.** So:
+
+- **What is established:** the board's yaw is exceptionally stable *at rest*, and
+  the firmware's 0.5-3 °/min figure is far too pessimistic for this unit
+  stationary.
+- **What is NOT established:** the drift rate *under motion*, which is the number
+  a mission actually experiences and which a bench cannot produce.
+
+Treat §5's mechanism as intact (one-shot boot offset, mag never re-consulted, so
+nothing can self-correct) and its *magnitude* as **open pending a moving
+measurement** — a pool run with periodic returns to a known heading.
 
 ### The rule, stated so it is not lost again
 
