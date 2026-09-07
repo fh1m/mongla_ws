@@ -115,7 +115,44 @@ def band_of(t):
     return max(0, min(len(TILT_NAME) - 1, int(np.digitize(t, TILT_BINS) - 1)))
 
 
-def capture_loop(st, dev, width, height, jpeg_w):
+def set_camera(dev, exposure, brightness):
+    """Force a SHORT manual exposure. This is the motion-blur fix.
+
+    ⛔ MEASURED, AND IT IS NOT A PREFERENCE. The camera sits in Aperture
+    Priority auto by default, and in this room that chose
+    `exposure_time_absolute = 2000` -- a 200 ms shutter. Every hand movement
+    smears, the board stops being findable, and the operator concludes the
+    detector is bad. It is not: on 21 real frames captured under that
+    exposure, redetection was only 76 % at the BEST setting and 29-43 % with
+    every alternative detector tried.
+
+    Measured on this camera, manual, by shutter (mean brightness / clipped
+    pixels / Laplacian sharpness):
+
+        auto (exp 2000)                    26.6 mean          163 sharp
+        exp 50, brightness 150            135.0 mean  6.5 %   122 sharp
+        exp 50, brightness 255            220.2 mean 53.5 %    57 sharp
+
+    So exp 50 (5 ms) with brightness 150 is the operating point: bright
+    enough, barely clipping, sharp, and a shutter 40x shorter than auto
+    chose. `gain` is INERT on this unit -- 20, 50 and 100 give identical
+    frames -- so it is not offered as a knob.
+
+    Applied with v4l2-ctl rather than cv2 properties because the ordering
+    matters: `exposure_time_absolute` is ignored while auto is engaged, so
+    auto must be turned off FIRST.
+    """
+    ok = True
+    for k, v in (('auto_exposure', 1),
+                 ('exposure_time_absolute', exposure),
+                 ('brightness', brightness)):
+        r = subprocess.run(['v4l2-ctl', '-d', f'/dev/video{dev}',
+                            '-c', f'{k}={v}'], capture_output=True)
+        ok = ok and r.returncode == 0
+    return ok
+
+
+def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
     """Read and stream only. Detection lives in its own thread, deliberately."""
     cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
     if not cap.isOpened():
@@ -128,6 +165,13 @@ def capture_loop(st, dev, width, height, jpeg_w):
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # AFTER opening: cv2 resets the controls when it configures the stream,
+    # so setting them before this point is silently undone.
+    if exposure:
+        set_camera(dev, exposure, brightness)
+        time.sleep(0.5)
+        for _ in range(5):
+            cap.read()
     n, t0 = 0, time.time()
     while True:
         ok, f = cap.read()
@@ -193,7 +237,14 @@ def detect_loop(st, det_w):
         band = band_of(tilt_of(full, st.cols))
         gx = min(GRID - 1, int(cx / w * GRID))
         gy = min(GRID - 1, int(cy / h * GRID))
-        okc, okt = (gy, gx) == (ty, tx), band == tb
+        # ⛔ TILT IS "AT LEAST", NOT "EXACTLY". Demanding an exact band made
+        # the steps very fiddly to satisfy -- the operator reported being
+        # rejected repeatedly -- without buying anything: the script asks for
+        # increasing tilt as it goes, so accepting MORE tilt than asked still
+        # yields the spread the fit needs. The square-on steps stay exact,
+        # because for those "more" is precisely what must not be accepted.
+        okc = (gy, gx) == (ty, tx)
+        okt = (band == 0) if tb == 0 else (band >= tb)
         if okc and okt:
             held_since = held_since or time.time()
             prog = min(1.0, (time.time() - held_since) / HOLD_S)
@@ -211,7 +262,8 @@ def detect_loop(st, det_w):
             held_since = None
             prog = 0.0
             msg = ('move the board to the highlighted box' if not okc
-                   else ('tilt it MORE' if band < tb else 'tilt it LESS'))
+                   else ('tilt it MORE' if band < tb else
+                         'hold it FLATTER (square-on to the camera)'))
         with st.lock:
             st.corners, st.cell, st.band = full, (gy, gx), band
             st.hold, st.msg, st.det_ms = prog, msg, 1000 * dt
@@ -448,6 +500,11 @@ def main():
     ap.add_argument('--port', type=int, default=8099)
     ap.add_argument('--detect-width', type=int, default=480)
     ap.add_argument('--stream-width', type=int, default=800)
+    ap.add_argument('--exposure', type=int, default=50,
+                    help='manual shutter in units of 0.1 ms. 0 leaves the '
+                         'camera on auto, which measured a 200 ms shutter '
+                         'here and smeared every hand movement.')
+    ap.add_argument('--brightness', type=int, default=150)
     ap.add_argument('--applies-to', default='pi_forward')
     ap.add_argument('--install', default=None)
     a = ap.parse_args()
@@ -467,7 +524,8 @@ def main():
             '--applies-to', a.applies_to, '--install', install]
 
     threading.Thread(target=capture_loop,
-                     args=(st, a.device, a.width, a.height, a.stream_width),
+                     args=(st, a.device, a.width, a.height, a.stream_width,
+                           a.exposure, a.brightness),
                      daemon=True).start()
     threading.Thread(target=detect_loop, args=(st, a.detect_width),
                      daemon=True).start()
