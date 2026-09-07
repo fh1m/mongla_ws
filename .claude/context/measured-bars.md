@@ -1930,29 +1930,33 @@ quantisation is **downstream of every gain we own**. Do not re-attempt a
 host-side gain softener against this actuator; the lever is duty or axis
 selection, not amplitude. Filed upstream as `srot-control-board#13`.
 
-## 27. Heading, on a STATIONARY board
+## 27. Heading — ⛔ THE EARLIER ENTRY WAS CONTAMINATED
 
-Round 40. Five captures against `/duburi/state` at 22 Hz; the last three back to
-back in one session, board untouched.
+**Retracted.** The captures behind the previous version of this section were
+taken while the board was being handled — the operator confirmed it. Every number
+in it is void, including the one it led with.
 
-| quantity | measured | bar |
-|---|---|---|
-| yaw bias drift | **+0.237 °/min, sd 0.185 (n=3 consecutive)** — **1.3 σ from zero**, so not resolvable to better than a few tenths | ≤ ~0.4 °/min; better than the firmware's own stated 0.5-3 |
-| **yaw wander, motionless** | **6.36 ° p2p / 8 min, sd 0.54 — reproducible to 9 %** (5.93 / 6.18 / 6.97) | **the robust number. Larger than most alignment tolerances here, and present before the vehicle moves** |
-| 15-min mission budget | ≈ 3.5 ° drift + ≈ 6 ° wander | **≈ 10 ° of heading uncertainty**, none of it correctable from a stored constant — the mag reference is captured once at boot and never revisited |
+| claim | status |
+|---|---|
+| ❌ "6.36 ° p2p wander on a motionless board, reproducible to 9 %" | **RETRACTED** — board was not motionless |
+| ❌ "≈ 10 ° of heading uncertainty over a 15-min run" | **RETRACTED** — built on the above |
+| ❌ drift +0.027 / +0.377 / +0.306 °/min | **RETRACTED** — contaminated captures |
+| ❌ "the sign flips between sessions" | retracted earlier the same round (estimator noise) |
+| ❌ "quarters measure bias, halves measure wander" | retracted earlier the same round (backwards) |
 
-⛔ **RETRACTED within this round: "the sign flips between sessions."** That rested
-on one 98 s capture (−0.386) against one 480 s capture (+0.360). **All three
-consecutive captures are positive**, and the 98 s window was the noisiest. No sign
-flip in the data.
+**Verified still (gyro-gated, 60 s, gyro rms 0.0030 rad/s, 99.8 % quiescent):**
 
-⛔ **Also retracted: "quarters measure bias, halves measure wander."** Run B's
-quarter spread of 0.151 °/min was a fluke — the consecutive captures give 0.356,
-1.890, 1.231. A shorter window has *less* lever arm, so wander contributes **more**
-variance per window. **The rule: do not use an estimator you have not
-characterised to support a claim about a difference between two of its outputs.**
-Three consecutive captures cost 24 minutes and settled what argument could not.
+| quantity | measured |
+|---|---|
+| yaw p2p | **0.029 ° / 60 s** — ~200× smaller than the contaminated figure |
+| drift | **−0.014 °/min** |
 
-(An earlier 480 s attempt reported "+38.4 °/min" and was contaminated — the hull
-had been moved: 274 ° of yaw change, +63 °/min in one quarter, ≈0 in the other
-three. Same trap as round 26's bogus +51.9 °/min.)
+⛔ **THE RULE THIS COST US.** Three separate drift measurements in this project
+have been ruined by treating *"it is on a bench"* as evidence of stillness. The
+board publishes its own gyro at 50 Hz inside ATTITUDE and we already republish it
+as `/duburi/imu_rates` — **stillness was always measurable and was assumed
+instead.** `tools/yaw_drift_check.py` now gates on it and refuses to report a
+drift with no gyro available, because absence of a stillness check is not
+evidence of stillness.
+
+**An environmental assumption is a measurement you have not taken.**
