@@ -1652,3 +1652,53 @@ pure function and the test extracts it **by AST from the source file** — no
 package import, so no stale-install trap either. Three injections, three
 catches.
 
+
+---
+
+## §24. THE RETURN LEG IS VISUALLY UNSUPPORTED — and three measurements said three different things
+
+2026-09-07, on the vehicle, `gate_rescue_repair.hef` on the Hailo, against
+the 72 labelled back-side frames in `datasets/RETURN/backside`.
+
+| conf | preds | R@IoU.3 | R@IoU.5 | R@IoU.7 | classes |
+|---|---|---|---|---|---|
+| **FULL-FRAME null** | 72 | **100.0 %** | **15.3 %** | **1.4 %** | — |
+| 0.05 any class | 108 | 73.6 % | **9.7 %** | 2.8 % | repair 84, gate 24 |
+| 0.10 any class | 55 | 52.8 % | 4.2 % | 1.4 % | repair 53, gate 2 |
+| 0.25 any class | 23 | 26.4 % | 0.0 % | 0.0 % | repair 23 |
+| any conf, **`gate` class only** | ≤24 | **0.0 %** | **0.0 %** | **0.0 %** | — |
+
+**The verdict is the null row.** GT boxes average **41.9 % of the frame**, so a
+single box covering the whole image scores **100 %** at IoU 0.3 — the
+threshold at which the detector looked like it worked. At IoU 0.5 the null
+scores 15.3 % and the detector scores **9.7 %: worse than guessing "the whole
+frame"**. The `gate` class specifically is 0.0 % everywhere. The structure is
+not being localised; large sloppy `repair` boxes are.
+
+⛔ **Three measurements, three different answers, two of them mine.**
+
+1. `tools/return_check.py` reported **0.0 %** — right, but by accident. It
+   name-matches `gate_backward`, which no 2025 model has, so 0.0 % was
+   arithmetic. Worse, those `robosub_gate*` weights predict **nothing on the
+   FRONT side of this same season's gate data** (0 boxes at conf 0.10 on 6/6
+   frames), so they could not have answered the question either way.
+2. My class-agnostic re-test on the shipping model reported **73.6 %** and I
+   nearly reported the return leg as healthy.
+3. The **null baseline** settled it. It cost four lines and it is the only
+   row in the table that makes any of the others readable.
+
+**The rule, stated so it is not relearned:** when ground-truth boxes are a
+large fraction of the frame, IoU 0.3 is not a detection threshold, it is a
+coin toss in the detector's favour. **Always score the trivial model.**
+
+**What this does NOT say.** It does not say the return leg is dead. RoboSub
+scores **Return to Home at 300 points** for *"at the end of the run, while
+underwater, the AUV passes back through the start gate"* — there is no
+requirement to *see* the gate. That is a navigation result (heading + DVL
+legs), not a detection one, and it is worth stating before anyone trains a
+model for it.
+
+For comparison from the same scoring table: **Avoid Debris (slalom) is up to
+800 points** — 200 any + 400 correct + 200 correct-depth — and we hold
+**2,102 labelled slalom images and zero slalom model**, against 72 labelled
+back-side frames. Points per unit of work is not close.
