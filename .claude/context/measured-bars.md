@@ -942,3 +942,122 @@ class name" — which says nothing — into two different, actionable facts abou
 two different model families. **A metric that cannot distinguish "wrong
 vocabulary" from "sees nothing" should never have been the one carried in the
 ledger for three rounds.**
+
+---
+
+## 16. Gyro-aided LK: MEASURED AND REJECTED. Rotation ripeness instead. 2026-09-07
+
+ROUND 38 item 4 proposed feeding the gyro prediction to LK as an initial
+guess (pixel-aware gyro-aided KLT, IEEE TIM 2022), aimed at the measured
+ceiling in §12: at 1.128 rad/s de-rotation made a 50 cm slide **worse**
+(41 % of truth) where at 0.638 rad/s it recovered 85.5 %.
+
+It was built, benched on **real bottom-camera floor texture** warped by exact
+known motion, and **rejected on the numbers**.
+
+### It does nothing at our operating point
+
+Real frame, 30 ms baseline, forward-backward at 2 px, plain vs seeded:
+
+| gyro | rotation | plain surv | err | seeded surv | err |
+|---|---|---|---|---|---|
+| 0.638 rad/s | 1.1° | 180/192 | 0.017 px | 180/192 | 0.017 px |
+| 1.128 | 1.9° | 176/192 | 0.021 | 176/192 | 0.021 |
+| 3.000 | 5.2° | 165/192 | 0.052 | 165/192 | 0.052 |
+
+**Identical to three decimals** — because the displacement is already inside
+LK's basin. With `winSize 31` and `maxLevel 3` the basin is ~120 px; 5.2° of
+rotation moves a corner 33 px.
+
+The harness was proven capable of showing a difference before this was
+believed (round 28's lesson): the guess differs from the start point by
+**96.8 px mean / 177.6 px max**, and at 40° of rotation with the FB gate off
+it does move survival — 30 → 63 of 192 at maxLevel 3.
+
+### And where it looked like it helped, the points are WRONG
+
+Those recovered points **do not survive forward-backward validation**. With
+the 2 px FB gate applied, at 48.5° the seed takes survivors from **0 → 5 of
+192** — not enough to fit, and the "recovery" is bad matches. A seed that wins
+back points the quality gate then throws away has bought nothing.
+
+**So §12's 1.128 rad/s failure was NEVER an LK tracking failure.** LK tracks
+fine there (176/192, 0.021 px). The failure is in the de-rotation itself,
+which points at timing and mapping — the camera↔IMU work, not the tracker.
+That reattribution is the most useful thing this experiment produced.
+
+`predict_points` was deleted rather than left default-off. A helper nothing
+calls is not a fix.
+
+### What the data DID point at: rotation as a ripeness criterion
+
+Ripeness asked about displacement, track count and TIME. Never rotation. The
+baseline stretches when the hull moves **slowly** — station-keeping, the most
+common state — so a hull holding position while yawing accumulates the whole
+rotation inside one interval: **48.5° at 1.128 rad/s over the 0.75 s cap**,
+which leaves **0 of 192 points**.
+
+Survival and translation error vs accumulated rotation, real frames:
+
+| rotation | survival | err | residual |
+|---|---|---|---|
+| 3° | 82.5 % | 0.014 px | 0.166 px |
+| 6° | 74.7 % | 0.040 | 0.358 |
+| 8° | 60.5 % | 0.091 | 0.537 |
+| 10° | 51.1 % | 0.076 | 0.839 |
+| 12° | 37.4 % | 0.191 | 0.797 |
+| 20° | 12.4 % | 1.344 | — |
+
+Graceful to ~10°, then a knee. **`max_rotation_deg = 6.0`** sits inside the
+graceful region with margin.
+
+### ⛔ The reassuring argument that turned out to be FALSE
+
+The obvious objection is that rotation inflates the median, so
+displacement-ripeness fires anyway — round 38 measured a median inventing
+4.79 px under 1.5°. **Measured here, it does not.** With this node's grid
+bucketing the corners are spread symmetrically about the principal point, and
+the component-wise median of a pure rotation is then ~0: **2.28 px at 6°**
+against an 8 px floor. Grid bucketing, added to improve the fit, **removed an
+accidental protection nobody knew was load-bearing.**
+
+What remains without the cap is REACTIVE: tracks die, `n_used` falls below
+`_MIN_TRACKS`, ripeness fires having already spent the interval.
+
+### What the cap actually buys, stated honestly
+
+Simulated station-keep-while-yawing, 3 s runs through a real floor frame:
+
+| speed | yaw | old: recovered / emitted | new: recovered / emitted |
+|---|---|---|---|
+| 3 cm/s | 0.000 | 87.9 % / 7 | 87.9 % / 7 |
+| 3 | 0.638 | 98.7 % / 19 | 98.6 % / **23** |
+| 3 | 1.128 | 102.9 % / 41 | 102.1 % / **45** |
+| 10 | 0.638 | 99.9 % / 34 | 99.9 % / 34 |
+| 10 | 1.128 | 102.6 % / 59 | 102.8 % / **61** |
+
+**It buys MEASUREMENTS, not accuracy** — +10 to +21 % emitted intervals while
+yawing, distance recovery unchanged within 1 %, and exactly nothing when not
+yawing. Sold as that, not as an accuracy fix.
+
+### Two harness defects, both caught by controls rather than by reasoning
+
+- **A relative warp against an absolute anchor.** Frames were warped by their
+  offset from the *current anchor* while the anchor image sat at its own
+  absolute offset, so the displacement LK saw was not the one commanded. The
+  **zero-rotation control read 0.1 % of truth** instead of ~100 %, which is
+  the only reason it was caught. Fixed to an absolute timeline.
+- **The camera went BLACK mid-session** — mean pixel 0.00, and
+  `detect_corners` still returned 12–19 "corners" on it. The room lost light
+  at ~06:20 local with nobody present. One run (the median-inflation test on
+  real frames) was invalidated and re-derived from geometry, which needs no
+  camera. **Every frame-based measurement must assert its own frame is not
+  black**; a featureless frame produces confident numbers, which is the
+  covered-lens finding from §12 all over again.
+
+### Caveat on the whole section
+
+The valid runs had **Laplacian sharpness 50–58**. The archive's gate clip is
+321 and the bin clip 1180. This is dim, poorly-textured imagery, so the
+absolute survival percentages are pessimistic; the A/B comparisons between
+arms are not, because both arms saw the same frames.

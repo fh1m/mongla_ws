@@ -161,44 +161,6 @@ class RefractiveRectifier:
         return r_px / math.tan(tw)
 
 
-def predict_points(pts, cx: float, cy: float,
-                   dx: float, dy: float, theta: float):
-    """Where the gyro says these points went. LK's initial guess.
-
-    ⛔ WHY AN INITIAL GUESS AT ALL. LK is a local search: it converges when
-    the true displacement lies inside its window, and it FAILS -- quietly,
-    with status=1 -- when it does not. Measured on this rig, de-rotation
-    recovered 85.5 % of a 50 cm slide at 0.638 rad/s and made the answer
-    WORSE at 1.128, because by then the points had moved further than LK
-    could follow and it was correcting garbage. Seeding the search where the
-    gyro says the point went moves the problem back inside the basin
-    (pixel-aware gyro-aided KLT, IEEE TIM 2022).
-
-    THE YAW TERM IS NOT OPTIONAL, and this is the part a uniform shift gets
-    wrong. Roll and pitch sweep the whole image by `f*w*dt` -- one vector for
-    every point. Yaw about the optical axis ROTATES the image about the
-    principal point, so its contribution is `r*w_yaw*dt` PERPENDICULAR to the
-    radius: zero at the centre and largest at the corners. At 640x360 the
-    corner radius is ~370 px, so 1.0 rad/s over a 30 ms baseline moves a
-    corner point 11 px while the centre point does not move at all. A
-    prediction that ignores it seeds the corners 11 px wrong -- worse than no
-    guess, in exactly the region where the lever arm makes the fit most
-    sensitive.
-
-    Order matters and follows the physics: rotate about the principal point,
-    then translate. That is the same composition `PlanarMotion` reads back
-    out, so a prediction and a measurement are in the same frame.
-    """
-    p = np.asarray(pts, dtype=np.float32).reshape(-1, 2)
-    ct, st = math.cos(theta), math.sin(theta)
-    xr = p[:, 0] - cx
-    yr = p[:, 1] - cy
-    out = np.empty_like(p)
-    out[:, 0] = cx + ct * xr - st * yr + dx
-    out[:, 1] = cy + st * xr + ct * yr + dy
-    return out.reshape(-1, 1, 2)
-
-
 def axis_unit(axis_yaw_rad: float, lateral: bool = False) -> Tuple[float, float]:
     """Unit vector of the projection axis in the image plane.
 

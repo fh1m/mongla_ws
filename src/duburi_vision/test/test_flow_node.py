@@ -305,3 +305,75 @@ class TestTimingCorrections:
             assert n._accept_td(None, 1.0) is None
         finally:
             n.destroy_node()
+
+    def test_ACCUMULATED_ROTATION_ripens_the_anchor(self):
+        """Ripeness asked about displacement, track count and TIME -- never
+        rotation. The baseline stretches when the hull moves SLOWLY, which is
+        station-keeping, so a hull holding position while yawing accumulates
+        the whole rotation inside one interval: 48.5 deg at 1.128 rad/s over
+        the 0.75 s cap, which leaves 0 of 192 points on real floor texture.
+
+        Do NOT assume the median saves us. It was measured NOT to: with the
+        grid bucketing this node applies, corners are spread symmetrically
+        about the principal point and the component-wise median of a pure
+        rotation is ~0 -- 2.28 px at 6 deg, well under the 8 px floor. The
+        protection that does exist is REACTIVE (tracks die, n_used falls below
+        _MIN_TRACKS, ripeness fires) and costs the interval it fires on."""
+        n = _make(pool_depth_m=4.0)
+        try:
+            assert n._max_rot_rad == pytest.approx(math.radians(6.0))
+            n._anchor_t = 100.0
+            n._td = 0.0
+            # 1.0 rad/s: 6 deg = 0.1047 rad takes 0.1047 s.
+            n._yaw_rate_buf.clear()
+            for k in range(20):
+                n._yaw_rate_buf.append((100.0 + k * 0.02, 1.0))
+            assert n._rotation_since_anchor(100.05) < n._max_rot_rad
+            assert n._rotation_since_anchor(100.20) > n._max_rot_rad
+            # Sign must not matter -- yawing the other way is just as bad.
+            n._yaw_rate_buf.clear()
+            for k in range(20):
+                n._yaw_rate_buf.append((100.0 + k * 0.02, -1.0))
+            assert n._rotation_since_anchor(100.20) > n._max_rot_rad
+        finally:
+            n.destroy_node()
+
+    def test_no_gyro_does_not_STALL_the_anchor(self):
+        """Absence-is-not-zero has a limit. With no gyro sample the rotation
+        is unknown, and the honest choice is 0.0 -- the other ripeness
+        criteria still apply, so the worst case is the behaviour before this
+        criterion existed. Refusing instead would turn a missing IMU sample
+        into an anchor that never ripens."""
+        n = _make(pool_depth_m=4.0)
+        try:
+            n._yaw_rate_buf.clear()
+            n._anchor_t = 100.0
+            assert n._rotation_since_anchor(100.5) == 0.0
+        finally:
+            n.destroy_node()
+
+    def test_ripeness_ACTUALLY_USES_the_rotation(self):
+        """Drives the DECISION, not the helper. The first version of this
+        test asserted on _rotation_since_anchor alone, and deleting the
+        rotation term from the ripeness expression left it green -- the same
+        read-the-helper flaw the td guard had. An interval with no
+        displacement, plenty of tracks and a short baseline must ripen on
+        rotation ALONE, or the criterion is decorative."""
+        n = _make(pool_depth_m=4.0)
+        try:
+            below = n._max_rot_rad * 0.5
+            above = n._max_rot_rad * 1.5
+            # Nothing else ripe: no displacement, healthy tracks, short dt.
+            assert n._is_ripe(0.0, 80, 0.01, below) is False
+            assert n._is_ripe(0.0, 80, 0.01, above) is True
+            # And it must be counted, so a yawing hold is visible in the log
+            # rather than being an invisible change in behaviour.
+            before = n._n_rot_anchor
+            n._is_ripe(0.0, 80, 0.01, above)
+            assert n._n_rot_anchor == before + 1
+            # The other criteria must still work with rotation at zero.
+            assert n._is_ripe(n._target_px, 80, 0.01, 0.0) is True
+            assert n._is_ripe(0.0, 1, 0.01, 0.0) is True
+            assert n._is_ripe(0.0, 80, n._max_baseline, 0.0) is True
+        finally:
+            n.destroy_node()
