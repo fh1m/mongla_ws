@@ -226,3 +226,63 @@ class TestItRunsWithoutROS:
             s = p.read_text()
             assert 'spec_from_file_location' in s, (
                 f'tools/{t} no longer loads by path')
+
+
+class TestItTakesOverCleanly:
+    """A restart must just work, and must not shoot itself.
+
+    ⛔ ON COMPETITION GROUND YOU DO NOT GO PID HUNTING. A second launch died
+    on `OSError: [Errno 98] Address already in use`, and the remedy -- find
+    the process, notice there are TWO of them because `ros2 run` execs the
+    node as a child, kill both -- is the wrong job beside a pool with a run
+    slot ticking.
+
+    The dangerous half is self-preservation: the reaper matches on "looks
+    like this tool", and the process running it looks exactly like this tool.
+    So does the `ros2 run` wrapper that launched it, which shares its process
+    group and whose death takes the node with it.
+    """
+
+    @staticmethod
+    def _guide():
+        import importlib.util
+        import pathlib
+        p = (pathlib.Path(__file__).resolve().parents[1] / 'duburi_vision'
+             / 'calibration' / 'guide.py')
+        spec = importlib.util.spec_from_file_location('guide_under_test', p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_it_never_reaps_ITSELF(self):
+        """The whole safety property. If this regresses the tool kills itself
+        on startup and the failure looks like 'it just exits'."""
+        import os
+        g = self._guide()
+        # A free port: nothing holds it, so the only candidates are the
+        # name matches -- which include this very process.
+        killed = g.reap_previous(59_431, wait_s=0.5)
+        assert os.getpid() not in killed, 'the reaper targeted its own pid'
+
+    def test_it_spares_its_own_process_GROUP(self):
+        """`ros2 run` is the parent and shares the group; killing it kills
+        the node. The pid check alone does not cover that."""
+        import os
+        g = self._guide()
+        killed = g.reap_previous(59_432, wait_s=0.5)
+        my_pg = os.getpgid(0)
+        for k in killed:
+            try:
+                assert os.getpgid(k) != my_pg, (
+                    f'pid {k} shares our process group and was targeted')
+            except OSError:
+                pass
+
+    def test_the_opt_out_exists(self):
+        """Taking over is the DEFAULT, but running two deliberately has to
+        stay possible -- the A/B rig does exactly that with other nodes."""
+        import pathlib
+        s = (pathlib.Path(__file__).resolve().parents[1] / 'duburi_vision'
+             / 'calibration' / 'guide.py').read_text()
+        assert "'--no-reap'" in s
+        assert 'if not a.no_reap:' in s
