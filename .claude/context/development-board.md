@@ -130,7 +130,7 @@ runner DOES stop+disarm on any exception). Fixes landed:
 | 🟡 | `task_gate` / `pool_day_practice` rescue-align gained `fallback=creep_forward`; redundant arc neutral removed; DVL open-loop-fallback now WARNs (silently-wrong distance visible). |
 | — | **Dropped (non-bugs after verification):** the coast class-filter "fix" (the `and class_id` conjunct is intentional — lets a class-less predicted box coast on the already-matched track_id); per-mission try/finally on 5 non-primary missions (runner backstop + disarm-releases-lock already cover them). |
 
-**Torpedo 10/10 (2026-07-01, D12) — pool feedback: fire 6/10 → target 9-10/10.** main `bbf883a`, lock `868ee99`. Full detail: [`known-issues.md`](known-issues.md) D12.
+**Torpedo 10/10 (2026-07-01, D12) — pool feedback: fire 6/10 → target 9-10/10.** main `bbf883a`, lock `868ee99`. Full detail: [`BUGS.md`](BUGS.md) D12.
 | Sev | Fix |
 |-----|-----|
 | 🟠 | **Fire wouldn't leave despite a perfect lock** — D11's `age_s ≤ 0.10 s` fire gate is narrower than one frame period at 3-4 FPS, so an aligned hull kept missing the fire. Now gated on **`is_new_frame and not coasted`** (fire on the tick a new live box lands): FPS-robust AND strictly safer (a frozen detector produces no new frame → can't fire on a stale box even mid-hold-freeze). New `fire_pass=True` opt-in fires at command end if the strict lock never lands (partial-points shot). |
@@ -144,11 +144,10 @@ runner DOES stop+disarm on any exception). Fixes landed:
 
 ## 5. Bugs / known issues
 
-- Tracked historical bugs (all FIXED): [`known-issues.md`](known-issues.md).
-- Current cross-cutting findings (severity-tagged, file:line): [`robosub-2026-audit.md`](robosub-2026-audit.md) §3.
-- No open 🔴 in phase-1 code. Phase-2 risk is build-execution, not control quality.
-
----
+> **Moved.** All tracked code defects now live in one place:
+> **[`BUGS.md`](BUGS.md)** — B01–B23 by severity, J01–J03 JSF-AV design
+> findings, plus a coverage and verified-correct record.
+> Do not re-open a bug list here; this file is phase status and the doc map.
 
 ## 6. Doc map (where detail lives)
 
@@ -157,7 +156,7 @@ runner DOES stop+disarm on any exception). Fixes landed:
 | **this board** | live status / open work / fixes / bugs — start here |
 | [`robosub-2026-audit.md`](robosub-2026-audit.md) | full audit, TDR⇄code gap matrix (G1–G12), Decision Record, P0/P1/P2 |
 | [`robosub-2026-roadmap.md`](robosub-2026-roadmap.md) | phase schedule + Phase-2 committed tickets |
-| [`known-issues.md`](known-issues.md) | tracked bug history |
+| [`BUGS.md`](BUGS.md) | tracked bug history |
 | [`vehicle-spec.md`](vehicle-spec.md) | hardware + TDR-vs-impl delta (Dubomini, sensors, payload) |
 | [`mission-design.md`](mission-design.md) | YASMIN FSM design reference (now built) |
 | [`fsm-guide.md`](fsm-guide.md) | **FSM user guide** — fundamentals, VehicleProfile, state library, adding tasks, pool-day workflow |

@@ -4,7 +4,7 @@
 # desktop/CI keep getting patches; THIS file is the exact, on-device-verified
 # set that the vision stack actually runs on the AUV Jetson. Use it when a
 # fresh install or a stray `pip install` drifts the env and vision.launch.py
-# starts crashing. Full symptom catalogue: .claude/context/known-issues.md
+# starts crashing. Full symptom catalogue: .claude/context/BUGS.md
 # §E1–E4 (numpy ABI / headless OpenCV / broken trackers wheel / no $DISPLAY).
 #
 # Apply (does NOT touch torch/torchvision — keep the NVIDIA JetPack wheels):

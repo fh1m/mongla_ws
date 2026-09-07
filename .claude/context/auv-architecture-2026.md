@@ -182,7 +182,7 @@ and it is not code:
 > [`camera-and-calibration.md`](camera-and-calibration.md).
 >
 > **The one thing that is still assumed:** the *water* figures are derived
-> from the air ones by Snell, not measured. See `water-owed.md` §1a.
+> from the air ones by Snell, not measured. See `BUGS.md` §1a.
 >
 > Kept below, struck through, because §11 and the migration order both point
 > at it.

@@ -142,7 +142,7 @@ python3 -c "import rclpy, cv2, numpy; print('numpy', numpy.__version__, '| cv2',
 # want: numpy 1.26.4  |  cv2 4.x under /usr (NOT ~/.local)
 ```
 `cuda: True` (4a), numpy `1.26.4`, cv2 from `/usr`. If numpy is 2.x or cv2 is under `~/.local`, see
-[`known-issues.md`](../.claude/context/known-issues.md) §E1–E3.
+[`BUGS.md`](../.claude/context/jetson-and-env-traps.md) §E1–E3.
 
 ---
 

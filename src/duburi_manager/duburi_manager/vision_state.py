@@ -415,7 +415,7 @@ class VisionState:
         live detection ALWAYS wins (this method tries it first); coast never
         gates out or overrides a real box. ``coast_s=0`` (default) ⇒ behaviour
         is byte-identical to the no-coast path. See the prior-bug note in
-        known-issues.md (predicted boxes must not be conf-gated as the locked id).
+        BUGS.md (predicted boxes must not be conf-gated as the locked id).
 
         Returns None when no qualifying detection is cached, or before the
         first CameraInfo arrives (image size still (0,0)) so the control

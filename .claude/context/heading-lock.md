@@ -53,7 +53,7 @@ Each tick at `LOCK_STREAM_HZ` (50 Hz, matched to the BNO085 firmware rate):
    hull when it has to reject a sustained disturbance (e.g. the lateral
    strafe of a `vision_align`) -- the taper kills that wobble while still
    breaking T200 stiction for real corrections (see
-   [`known-issues.md`](./known-issues.md) D7). **The cure for align-yaw
+   [`BUGS.md`](./BUGS.md) D7). **The cure for align-yaw
    jitter is this taper, NOT releasing the lock** -- releasing it hands
    yaw to ArduSub's untrusted hull compass.
 4. `pixhawk.send_rc_yaw_only(percent_to_pwm(yaw_pct))` -- writes **only

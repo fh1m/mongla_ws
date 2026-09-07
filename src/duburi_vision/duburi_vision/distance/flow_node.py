@@ -174,7 +174,7 @@ _F_WATER_PX = 741.0
 # error at 0.638 rad/s, and that regime -- a yawing vehicle -- is most of a
 # mission, while every slide here is translation-dominated. Re-enabling it
 # needs a HIGH-ROTATION test on this hull, with the gain excited at the pivot
-# the vehicle actually rotates about. water-owed item 24.
+# the vehicle actually rotates about. BUGS.md §11 item 24.
 _GYRO_GAIN_X_DEFAULT = 0.0
 _GYRO_GAIN_Y_DEFAULT = 0.0
 _GYRO_GAIN_DEFAULT = 0.0          # back-compat for importers

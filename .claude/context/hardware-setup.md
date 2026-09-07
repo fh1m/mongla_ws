@@ -148,7 +148,7 @@ for the full design.
 
 > **Driver status: STUB.** `dvl_stub.py` exists in `duburi_sensors`
 > but raises `NotImplementedError` on instantiation. Tracked in
-> [`known-issues.md`](./known-issues.md).
+> [`BUGS.md`](./BUGS.md).
 
 When the driver lands:
 

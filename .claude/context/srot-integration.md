@@ -1,6 +1,6 @@
 # SROT control-board integration (branch `srot`)
 
-> ⛔ **PRE-DIVE: read [`srot-pre-dive-gates.md`](srot-pre-dive-gates.md) FIRST.** The axis
+> ⛔ **PRE-DIVE: read [`BUGS.md`](BUGS.md) FIRST.** The axis
 > configuration is currently **UNKNOWN** — `CAL_MDIR` is not `[+1]×8` as §8.2 assumed, and it
 > multiplies with `MOT_n_DIRECTION`. §8.2's "config is correct" conclusion is superseded.
 >

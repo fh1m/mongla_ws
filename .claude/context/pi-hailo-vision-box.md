@@ -93,7 +93,7 @@ not*, which is backwards.)~~
 
 ## What was installed, and the two traps that were live
 
-Both of `known-issues.md` §E1–E3's documented traps were **present on this Pi**
+Both of `BUGS.md` §E1–E3's documented traps were **present on this Pi**
 and breaking `cv_bridge`:
 
 ```

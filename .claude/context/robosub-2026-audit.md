@@ -19,7 +19,7 @@ P0.1 is **DECIDED** (see §6 + the Decision Record). Docs now read in three stat
 - **Severity:** 🔴 CRITICAL (wrong/unsafe in water) · 🟠 HIGH (bug or real gap) · 🟡 MEDIUM (maintainability/robustness) · 🔵 LOW (polish).
 - Each finding has a **file:line anchor** and a **fix sketch**. Pick one at a time → focused PR.
 - Findings already closed during this pass are marked **✅ FIXED THIS PASS**.
-- Companion docs: tracked-bug history is `known-issues.md`; task schedule is `robosub-2026-roadmap.md`; this file is the cross-cutting audit + the TDR reconciliation.
+- Companion docs: tracked code defects live in [`BUGS.md`](BUGS.md) (the single register); task schedule is `robosub-2026-roadmap.md`; this file is the cross-cutting audit + the TDR reconciliation.
 
 ---
 
@@ -186,7 +186,7 @@ The TDR is the *submitted, aspirational* document. The audit's job is to surface
 14. **Payload actuation** — ESP32-serial dropper/torpedo client (`drop_marker`/`fire_torpedo`), NOT Pixhawk AUX (see `project_payload_actuation` memory); **stepper grabber** via Actuation Board, `grab()` verb (G7, Octagon dep).
 
 ### Continuous
-14. Keep `known-issues.md` honest — it currently says "backlog empty"; the `vis_approach` crash postdated it. Add a "post-v4f audit" section pointing here.
+14. ~~Keep the bug tracker honest~~ — DONE 2026-09-08: `known-issues.md` was retired and all defects consolidated into [`BUGS.md`](BUGS.md).
 15. Watch the 800-line files (`duburi.py`, `auv_manager_node.py`).
 
 ---

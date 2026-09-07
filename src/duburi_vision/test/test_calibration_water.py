@@ -4,7 +4,7 @@
 once in AIR and correct the flat port's refraction analytically, which is
 what `RefractiveRectifier` already does. So an in-water calibration is not
 the primary method; it is the VALIDATION of that correction, and
-`water-owed` item 2 asks for exactly it ("confirm the measured f_water = 741
+`BUGS.md` §11 item 2 asks for exactly it ("confirm the measured f_water = 741
 against a tape in water").
 
 That makes the danger obvious: a validation artefact mistaken for the

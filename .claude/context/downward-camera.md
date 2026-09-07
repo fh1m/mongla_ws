@@ -43,7 +43,7 @@ DOWNWARD cam:  Ch6 strafe    Ch5 surge (signed px)    DESCENT to fill % (fwd_mod
   - downward cam: a **fill %** DESCENT target (descend until the bbox fills `depth`%,
     measured by `fwd_mode` = area/width/height). Unset = no descent (hold `set_depth`).
 
-> **Depth-hold on downward is now enforced (fix 2026-07-15, known-issues P4).** A downward
+> **Depth-hold on downward is now enforced (fix 2026-07-15, BUGS.md P4).** A downward
 > **surge-only** align (`lat` + `fwd`, no `depth` descent — the bin task) used to RELEASE Ch3
 > while streaming no setpoint, so the hull **sank to the floor ignoring `set_depth`**. The engine
 > now streams the **constant** `set_depth` target on every downward align (same mechanism as the

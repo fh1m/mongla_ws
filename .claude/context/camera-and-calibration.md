@@ -234,7 +234,7 @@ otherwise.** `f_water = 741` was not measured — it is `f_air = 514` put
 through Snell, so quoting it as a measured result and then "validating" the
 model against it is circular. An in-water calibration measures the
 air-plus-port-plus-water system directly, which makes it the first genuinely
-independent number for `f_water` rather than a nicety. `water-owed` §1a
+independent number for `f_water` rather than a nicety. `BUGS.md` §11 §1a
 carries the full correction.
 
 Three consequences, all implemented and tested:
@@ -243,7 +243,7 @@ Three consequences, all implemented and tested:
    `pi_forward_1280x720_water.json`. Air and water differ by **1.442×** on
    this hull — 63.8° air **measured**, 46.7° water **derived from it by
    Snell** (`sin(31.9°)/sin(23.36°)` = 1.3333, plain water; see the
-   correction in `water-owed.md` §1a, which previously described that
+   correction in `BUGS.md` §1a, which previously described that
    tangent ratio as a 44 % disagreement with the literature's 25–33 %
    *sine* ratio — it was never a disagreement). So a water file that
    overwrote the air one would be a silent 44 % scale error on every range

@@ -38,7 +38,7 @@ numpy>=1.24,<2.0
 # JetPack system cv2 is GUI-capable (GTK) and NumPy-1.x ABI; a pip
 # opencv-python(-headless) shadows it (headless has no window backend →
 # vision_display dies) AND pulls numpy>=2 (breaks cv_bridge). See
-# requirements-jetson.txt + known-issues §E2. On x86 dev boxes pip is fine.
+# requirements-jetson.txt + jetson-and-env-traps.md §E2. On x86 dev boxes pip is fine.
 opencv-python>=4.8; platform_machine == "x86_64"
 
 # ---- Vision: object detection (YOLO) ----------------------------------
@@ -54,7 +54,7 @@ ultralytics>=8.1.0
 # used by `duburi_vision.tracking.kalman` to smooth track bboxes.
 # *** JETSON: pin trackers==2.4.0 and install --no-deps. *** The 2.5.0
 # PyPI wheel is a broken dud with no module, and the numpy>=2 dep-pin is a
-# red herring — see requirements-jetson.txt + known-issues §E3.
+# red herring — see requirements-jetson.txt + jetson-and-env-traps.md §E3.
 trackers>=2.4.0,<2.5.0
 supervision>=0.18.0
 filterpy>=1.4.5

@@ -517,7 +517,7 @@ mission edit:
 | `vision.range_gain_floor` | `1.0` | **precision:** lat/depth kp multiplier as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
 | `vision.ki_lat` | `0.0` | **precision:** lateral integral gain; nulls a steady-current offset during the hold (`0`=off) |
 | `vision.ctrl_conf` | `0.0` | **precision:** control-side min detection score to accept a box (`0`=off) |
-| `vision.coast_s` | `0.0` | **gap-bridging coast (opt-in):** steer on the tracker's predicted box of the locked id for this many s after a detection drops (`0`=OFF). `< vision.lost_grace_s`. See [`known-issues.md`](known-issues.md) D10 |
+| `vision.coast_s` | `0.0` | **gap-bridging coast (opt-in):** steer on the tracker's predicted box of the locked id for this many s after a detection drops (`0`=OFF). `< vision.lost_grace_s`. See [`BUGS.md`](BUGS.md) D10 |
 
 ```bash
 ros2 param set /duburi_manager vision.kp_yaw 80.0

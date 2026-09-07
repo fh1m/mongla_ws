@@ -185,13 +185,13 @@ def _check_disk() -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# B. vision dependencies (the JetPack pitfalls, known-issues E1-E3)
+# B. vision dependencies (the JetPack pitfalls, jetson-and-env-traps.md E1-E3)
 # --------------------------------------------------------------------------- #
 def _check_vision_deps() -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
 
     # numpy<2 -- numpy 2 breaks the cv_bridge / cv2 ABI => every vision node
-    # dies with `_ARRAY_API not found` (known-issues E1).
+    # dies with `_ARRAY_API not found` (jetson-and-env-traps.md E1).
     try:
         import numpy
         ver = numpy.__version__
@@ -206,7 +206,7 @@ def _check_vision_deps() -> list[tuple[str, str, str]]:
         out.append((WARN, 'numpy import', f'{exc}'))
 
     # cv2 must be the SYSTEM build (GUI-capable); a pip opencv-python shadows
-    # it headless and kills vision_display (known-issues E2).
+    # it headless and kills vision_display (jetson-and-env-traps.md E2).
     try:
         import cv2
         path = getattr(cv2, '__file__', '')
@@ -228,7 +228,7 @@ def _check_vision_deps() -> list[tuple[str, str, str]]:
         if shadows:
             out.append((WARN, 'pip opencv installed',
                         f'{", ".join(shadows)} -- shadows system cv2; '
-                        'pip uninstall them (known-issues E2)'))
+                        'pip uninstall them (jetson-and-env-traps.md E2)'))
     except Exception:
         pass
 
@@ -258,7 +258,7 @@ def _pkg_present(md, name: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# C. serial drivers (payload CH340 + brltty trap, known-issues E5)
+# C. serial drivers (payload CH340 + brltty trap, jetson-and-env-traps.md E5)
 # --------------------------------------------------------------------------- #
 def _check_serial_drivers() -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
@@ -276,7 +276,7 @@ def _check_serial_drivers() -> list[tuple[str, str, str]]:
     else:
         out.append((WARN, 'ch341 driver MISSING',
                     'payload CH340 will have no /dev/ttyUSB* -- run '
-                    'tools/install_ch341_driver.sh (known-issues E5)'))
+                    'tools/install_ch341_driver.sh (jetson-and-env-traps.md E5)'))
 
     # brltty greedily grabs the CH340 (1a86:7523) as a braille display.
     try:
@@ -285,7 +285,7 @@ def _check_serial_drivers() -> list[tuple[str, str, str]]:
         if '\nii  brltty' in installed or installed.startswith('ii  brltty'):
             out.append((WARN, 'brltty installed',
                         'steals the payload CH340 via usbfs -- '
-                        'sudo apt-get purge -y brltty (known-issues E5)'))
+                        'sudo apt-get purge -y brltty (jetson-and-env-traps.md E5)'))
         else:
             out.append((PASS, 'brltty absent', 'payload CH340 not hijacked'))
     except (FileNotFoundError, OSError):

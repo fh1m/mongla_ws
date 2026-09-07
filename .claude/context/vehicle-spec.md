@@ -53,7 +53,7 @@ digit (`b'1'`..`b'4'`) over USB CDC; the ESP32 firmware pulls the matching
 GPIO to fire the relay/solenoid. On **srot** there is no ESP32: `fire(N)` is the
 board's own PCA9685 channel N (1..16), and the board's `SERVO{n}_ROLE` decides.
 The board is auto-detected at manager startup by USB VID/PID (CH340), and
-`duburi.payload_ready` reports connection state. See `known-issues.md` #4
+`duburi.payload_ready` reports connection state. See `BUGS.md` #4
 and the `project_payload_actuation` memory. (Stepper grabber needs an
 Actuation-Board step/dir interface — phase-2, not yet wired.)
 
@@ -250,5 +250,5 @@ inner loop.
 - [`sensors-pipeline.md`](./sensors-pipeline.md) — `duburi_sensors` design rules
 - [`ardusub-reference.md`](./ardusub-reference.md) — ArduSub quirks
 - [`sim-setup.md`](./sim-setup.md) — Gazebo + SITL bring-up
-- [`known-issues.md`](./known-issues.md) — tracked code bugs from the audit
+- [`BUGS.md`](./BUGS.md) — tracked code bugs from the audit
 - [TDR PDF](https://robonation.org/app/uploads/sites/4/2025/) — RoboSub 2025

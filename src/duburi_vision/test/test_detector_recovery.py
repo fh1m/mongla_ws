@@ -1,4 +1,4 @@
-"""known-issues D16: a node that cannot infer must stop claiming to be up.
+"""BUGS.md D16: a node that cannot infer must stop claiming to be up.
 
 Observed on the vehicle: a Hailo stream abort left the detector ALIVE --
 process up, topics up, subscriptions up -- logging a failure every frame and
