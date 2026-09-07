@@ -298,4 +298,34 @@ degraded. Telling them apart at 2 a.m. is the reason they are separate lines.
 | 20 | return leg — **run `return_check.py` BEFORE the session** | 5 |
 | 21 | **calibrate the FANTECH forward camera** — never done; it is the camera the vision uplink AIMS with, and it was publishing the downward camera's intrinsics until 2026-09-07 (`measured-bars.md` §17 — LATENT, since the uplink is default-off, so this is 'wrong the moment it is switched on', not 'wrong every mission'). Needs a printed board and 25 views; **does not need water** | §17 |
 | 22 | re-verify the 30 cm result **through the launch**, not through `flow_console --calibration <path>`. Every §13 number came from a tool that passed the path by hand, and the launch wired the calibration to the wrong camera | §17 |
+
+## 5c. THE DRY DVL CHECK NEEDS THREE PROCESSES, NOT ONE — measured 2026-09-07
+
+Found by running it. `vision_pi.launch.py flow:=true` alone gets you a node
+that comes up, prints a correct banner, and **refuses every interval**. The
+first two reasons it gives are misleading and the third is the real one:
+
+| symptom | actual cause |
+|---|---|
+| `no trackable texture (0/8 points survived)` | transient — the live scene measured **190 corners** on every frame seconds later. Do not chase texture on a single sample. |
+| `no depth yet, so no height above the floor` | no manager, and **no barometer is fitted on this bench anyway**. `flow_launch_check.py` publishes `/duburi/state` with depth 0 so height == the tape measure. The manager's own NaN depth is ignored by the node, so the two coexist. |
+| **`no gyro sample for this interval`** | **the real blocker.** The node will not measure without `/duburi/imu_rates`, which only `auv_manager_node` publishes (measured **exactly 50.0 Hz**, sd 1.9 ms). No manager, no DVL — on a dry bench and in a pool alike. |
+
+So the dry check is:
+
+    1  ros2 run duburi_manager start                    # gyro @ 50 Hz
+    2  ros2 launch duburi_vision vision_pi.launch.py \
+           flow:=true flow_medium:=air pool_depth_m:=<tape m>
+    3  python3 tools/flow_launch_check.py --height <tape m> --truth-cm 30
+
+**Do NOT pass `vision:=off`** — that value is coerced to boolean `False` and
+kills the composed process that owns BOTH cameras, so flow silently receives
+no frames while every node looks healthy. Round 33's launch-type coercion,
+met again.
+
+**Verified working, stationary rig, 2026-09-07:** 22 intervals, **0 refused**,
+reading **−0.68 cm over 10 s** — correctly near zero, which is the negative
+control for the whole chain. A moving measurement is the operator's slide.
+
+
 | 23 | **one dry slide with `medium:=air` through the launch** — the regression check on the rectifier refactor. `port=RECTIFIED` is verified to come up and the maths is verified against a pinhole, but the rectified path has produced **no measured velocity at all**; every §13 number predates the refactor. Needs light and one hand slide, **no water, no rig** | §13 |
