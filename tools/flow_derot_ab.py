@@ -55,7 +55,18 @@ from std_msgs.msg import Float32, String, UInt8
 
 from duburi_interfaces.msg import DuburiState
 
-ARMS = [('B_none', 0.0, 0.0), ('C_flipped', 1.0, 1.0)]
+# Arms are (name, {param: value}). Everything not named here is left at the
+# node's own default, so an arm differs from the reference in exactly one way.
+#
+# ⛔ THE FIRST DE-ROTATION A/B IS WITHDRAWN. It ran on a tool whose fake
+# /duburi/state published yaw_deg = 0.0 against the manager's ~180, which
+# flipped the projection sign every interval and cancelled the travel in
+# EVERY arm equally -- so "all three alike" was the bug, not a result.
+# Re-measured here on the fixed tool.
+ARMS = [
+    ('B_norot',      {'gyro_gain_x': 0.0, 'gyro_gain_y': 0.0}),
+    ('C_keepanchor', {'reanchor_on_refusal': False}),
+]
 
 
 def running_param(node_name, param):
@@ -92,7 +103,7 @@ class AB(Node):
             Float32, f'{ns}/distance_traveled',
             lambda m: self.dist.__setitem__('A_shipped', float(m.data)), 10)
         self._count(f'{ns}/flow_quality', 'A_shipped')
-        for name, _, _ in ARMS:
+        for name, _ in ARMS:
             self.create_subscription(
                 Float32, f'/ab/{name}/distance_traveled',
                 (lambda n: lambda m: self.dist.__setitem__(n, float(m.data)))(name),
@@ -139,16 +150,16 @@ class AB(Node):
         self._ctrl.publish(m)
 
 
-def spawn(name, gx, gy, cam, cal, height, medium):
+def spawn(name, params, cam, cal, height, medium):
     ns = f'/duburi/vision/{cam}'
     cmd = ['ros2', 'run', 'duburi_vision', 'flow_node', '--ros-args',
            '-r', f'__node:=duburi_flow_{name}',
            '-p', f'camera:={cam}',
            '-p', f'medium:={medium}',
            '-p', f'pool_depth_m:={height}',
-           '-p', f'gyro_gain_x:={gx}',
-           '-p', f'gyro_gain_y:={gy}',
            '-p', 'estimate_time_offset:=false']
+    for k, v in params.items():
+        cmd += ['-p', f'{k}:={v}']
     if cal:
         cmd += ['-p', f'calibration:={cal}']
     # Outputs remapped so the arms cannot overwrite each other's topics;
@@ -177,6 +188,10 @@ def main():
     ap.add_argument('--truth-cm', type=float, default=30.0)
     ap.add_argument('--medium', default='air')
     ap.add_argument('--node', default='/duburi_flow_velocity')
+    ap.add_argument('--lateral', action='store_true',
+                    help='project onto the lateral axis. The axis is NOT '
+                         'cosmetic: axial takes vx, lateral takes vy, and a '
+                         'slide on the wrong one reads ~0 by construction.')
     a = ap.parse_args()
 
     cal = running_param(a.node, 'calibration')
@@ -184,8 +199,8 @@ def main():
         cal = cal.strip().strip("'\"")
     print(f'calibration read off {a.node}: {cal or "(none)"}')
 
-    procs = [spawn(n, gx, gy, a.camera, cal, a.height, a.medium)
-             for n, gx, gy in ARMS]
+    procs = [spawn(n, pr, a.camera, cal, a.height, a.medium)
+             for n, pr in ARMS]
     rclpy.init()
     n = AB(a.camera, a.height)
     t = threading.Thread(target=rclpy.spin, args=(n,), daemon=True)
@@ -214,13 +229,13 @@ def main():
         input('\nRig at the START mark, ENTER to arm > ')
         n.dist.clear()
         n.reset_counts()
-        n.send('start')
+        n.send('start lateral' if a.lateral else 'start')
         # Sent twice: on a stationary trial arm A returned its PREVIOUS run's
         # total with zero intervals used, i.e. `stop` without a `start`
         # returns the stale accumulator. A second start a beat later costs
         # nothing and removes that race from the comparison.
         time.sleep(0.4)
-        n.send('start')
+        n.send('start lateral' if a.lateral else 'start')
         print('  ARMED -- slide to the END mark, then ENTER.')
         input('  > ')
         n.send('stop')
