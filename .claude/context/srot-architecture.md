@@ -627,3 +627,48 @@ half-fits are measuring wander and the quarter-fits are measuring bias. Our own
 script's verdict line called run B "INCONSISTENT" on the half test and was
 **wrong** — the correct reading is "consistent bias, plus wander". Recorded so the
 heuristic is not trusted over the numbers next time.
+
+---
+
+## 7. Repo ownership — they have written the rule down, and it matches our practice
+
+`srot-esc-flasher/AGENTS.md` (added `c30b843`, which our mirror was **stale on**
+until this round — the flasher was the one repo behind, exactly as suspected):
+
+> **We own, and commit directly to:** `srot-control-board`, `srot-ground-station`
+> (the LoRa bridge **and Bondor**), `srot-esc-flasher`.
+>
+> **We NEVER commit to `duburi_ws`.** Not to `main`, not to `srot`, not "just a
+> doc fix". … **That includes the mirrored constants in `fc/srot_protocol.py`
+> even though we are the source of truth for the values — being the authority on
+> a number is not the same as having write access to their tree.**
+>
+> **And the reverse.** If `duburi_ws` needs something changed in the firmware, in
+> Bondor or in the ESC flasher, they open a **pull request here**. They should not
+> push directly.
+
+Their stated reason is the right one and worth repeating: *"a PR makes a
+cross-repo change reviewable by the side that owns the consequences"*, and they
+name the defects that were only catchable that way — the `MOVE_STOP` brake
+double-applying, `SERVOn_FUNCTION` landing on both sides at once, a mirrored
+constant drifting.
+
+**This is exactly our standing practice** (we hold `push: true` on their repos and
+have never used it), so nothing changes — but it is now a written contract on both
+sides rather than a convention we happened to share, and it is worth knowing they
+consider a direct push *destructive of the review step*, not merely impolite.
+
+One nuance we should hold ourselves to: their rule says *pull request*, and we
+have filed some findings as **issues** (#13 here, `srot-ground-station#3`). That
+is deliberate and, we think, within the spirit — an issue is the right shape for a
+**design proposal or a report**, a PR for a **change**. Where we have a concrete
+patch we send a PR (#10 carries one); where the architectural decision is theirs
+we send an issue with a sketch and say so (#11, #13).
+
+### Mirror-currency check, run every srot round (item 9)
+
+| repo | local | origin/main | behind |
+|---|---|---|---|
+| `srot-control-board` | `f1d3ba9` | `f1d3ba9` | 0 |
+| `srot-ground-station` | `1adc14c` | `1adc14c` | 0 |
+| `srot-esc-flasher` | `c30b843` | `c30b843` | 0 (was **1 behind**) |
