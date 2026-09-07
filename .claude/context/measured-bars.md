@@ -1702,3 +1702,32 @@ For comparison from the same scoring table: **Avoid Debris (slalom) is up to
 800 points** — 200 any + 400 correct + 200 correct-depth — and we hold
 **2,102 labelled slalom images and zero slalom model**, against 72 labelled
 back-side frames. Points per unit of work is not close.
+
+### §24a. The slalom archive is 651 frames, not 2,102 — and its splits leak
+
+Recorded while deferring slalom (new footage will be collected in water),
+because the plan quotes 2,102 labelled images in three places and that is
+**3.2x too many**. Measured by MD5 over the image files:
+
+| set | labelled unique frames | overlap |
+|---|---|---|
+| `salom` | 651 | — |
+| `salom_distant` | 400 | **100 % inside `salom`** |
+| `salom_closeup` | 251 | **100 % inside `salom`** |
+| **union of all three** | **651** | `salom` IS distant + closeup merged |
+
+Two consequences:
+
+1. **The round-35 plan's held-out scheme was self-defeating** — *"train on
+   `salom`, validate on `salom_distant`/`salom_closeup` as held-out
+   sessions"*. Those are 100 % subsets of the training set, so it would have
+   validated on training data and produced an excellent, meaningless number.
+2. **`salom_distant`'s own `valid` and `test` are 100 % leaked from its
+   `train`** (16/16 and 66/66). `salom_closeup`'s are clean (0 overlap).
+
+Also: `images/` holds a `.npy` beside every `.png`, so a naive `ls | wc -l`
+doubles every count. That is where "2,102" came from -- 1,302 + 800 counted
+with the sidecars in.
+
+Nothing here changes the deferral. It changes what a future training round
+may claim about the data it has.
