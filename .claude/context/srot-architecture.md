@@ -160,15 +160,24 @@ MANUAL_CONTROL.y
 
 | host stick | axis demand | DShot band | **delivered thrust** |
 |---|---|---|---|
-| 0.71 % | 0.00497 | 0 % | **0 %** |
-| 0.72 % | 0.00504 | 16.3 % | **7.37 %** |
+| 0.71 % | 0.00497 | 0 % (DShot 1048) | **0 %** |
+| 0.72 % | 0.00504 | **16.13 %** (DShot 1210) | **7.37 %** |
 | 1 % | 0.0070 | 16.6 % | 7.62 % |
-| 2 % | 0.0140 | 18.2 % | 8.51 % |
-| 10 % | 0.0703 | 28.2 % | 15.1 % |
-| 50 % | 0.3875 | 61.6 % | 46.3 % |
+| 2 % | 0.0140 | 19.3 % | 8.51 % |
+| 10 % | 0.0703 | 32.5 % | 15.1 % |
+| 50 % | 0.3875 | 70.0 % | 46.3 % |
 
-**There is a cliff at 0.714 % of full stick, and crossing it delivers 7.37 % of
-full thrust instantly — a 10.3× step.** Between "nothing" and "7.4 % of every
+> **VERIFIED against the firmware's own arithmetic.** The band figures above began
+> as a Python reimplementation — our model of their model. Both `thstExpo()` and
+> `oneToDshot()` were then transcribed verbatim into C, compiled, and compared:
+> **all 10 DShot integers match exactly** (1048, 1048, 1210, 1221, 1242, 1298,
+> 1373, 1493, 1748, 2047). The battery-feedforward branch is inert here
+> (`MOT_BAT_V_MAX = 0` → `batteryScale()` returns 0). The **thrust** column is
+> still a model — it inverts their `thrust ≈ (1−e)·thr + e·thr²` comment and has
+> not been measured, and cannot be until thrusters exist.
+
+**There is a cliff at 0.714 % of full stick, and crossing it puts the motor at DShot 1210 — **16.13 % of the throttle band** —
+instantly.** Between "nothing" and "7.4 % of every
 thruster on the axis" there is no reachable value.
 
 > **IMPLIED, on stated assumptions — not measured.** Converting the band figure
@@ -543,3 +552,50 @@ correct loop) — P-only is deliberate.
 
 **This is a pre-water gate we can close on the bench today, and it is the highest-
 consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
+
+---
+
+## 5b. Heading drift, MEASURED on this board — and the sign is not stable
+
+Two still-bench runs against `/duburi/state` (no serial contention — the manager
+owns the port and we read what it publishes), 22 Hz:
+
+| run | duration | within-window drift | residual | p2p |
+|---|---|---|---|---|
+| A | 98 s | **−0.386 °/min** | 0.28° rms | 2.05° |
+| B | 480 s | **+0.36 °/min** (quarters +0.38 +0.45 +0.30 +0.35, spread **0.151**) | 1.09° rms | 9.16° |
+
+**Magnitude ≈ 0.4 °/min — better than the firmware's own stated 0.5–3 °/min**, and
+at the good end of the BNO08X datasheet figure.
+
+### ⛔ But the two runs disagree in SIGN
+
+−0.386 then +0.36. This is gyro bias that varies between sessions (temperature,
+time since power-on), not a fixed offset. The consequence is the one that matters
+for mission design:
+
+**It cannot be calibrated out once.** A stored per-board correction would be
+right on the run it was measured and wrong on the next. Heading has to be
+*re-referenced* from something external, or the error has to be budgeted for.
+
+Budget for a 15-minute run: **≈ 5–6° of accumulated heading error, sign
+unpredictable**, plus several degrees of low-frequency wander (9.16° peak-to-peak
+on a **stationary** board over 8 minutes — that is an alignment error budget in
+its own right, before the vehicle has moved).
+
+### Method note, because the first attempt at run B was garbage
+
+An earlier 480 s capture reported **+38.4 °/min** — and was contaminated: 274° of
+total yaw change, +63 °/min in quarter 2 and ≈0 in the other three. **The hull was
+moved.** This is exactly the round-26 trap (a "+51.9 °/min drift" that was the
+board being handled), and what caught it was the **split-half / quarters check**,
+not judgement. A single slope over a single window would have been reported.
+
+**And the quarters are the better estimator, not the halves.** In run B the
+quarters agree to 0.151 °/min while the halves disagree (+0.738 vs +0.084). That
+is not a contradiction: a fit over a longer window is far more sensitive to a
+slow *level* change between sub-windows than to the within-window slope, so the
+half-fits are measuring wander and the quarter-fits are measuring bias. Our own
+script's verdict line called run B "INCONSISTENT" on the half test and was
+**wrong** — the correct reading is "consistent bias, plus wander". Recorded so the
+heuristic is not trusted over the numbers next time.
