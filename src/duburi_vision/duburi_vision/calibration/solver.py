@@ -222,6 +222,51 @@ def kfold(objp, ips, size, i_fixed, k):
     return recs
 
 
+def fov_for_medium(v, medium):
+    """Put the MEASURED field of view on the side of the interface it was
+    measured on, and derive the other one.
+
+    `fov_from_K` assumes the board was in AIR and derives the water figure by
+    Snell. Calibrate through the port and that is backwards: the fit already
+    saw the refracted rays, so the fitted number IS the water figure and air
+    is the derivation. Running the air->water conversion on an in-water
+    measurement applies the refraction twice -- a ~1.33x error, in the
+    direction that still looks like a plausible camera.
+
+    Returns `(v, air_note)`; `air_note` is None in air, and in water it is
+    the string that has to travel with the file saying the air figures were
+    not measured.
+    """
+    if medium != 'water':
+        return v, None
+    v = dict(v)
+    hw, vw = v['hfov_air'], v['vfov_air']
+    v['hfov_water'], v['vfov_water'] = hw, vw
+    v['hfov_air'] = 2 * math.degrees(math.asin(min(
+        1.0, 1.333 * math.sin(math.radians(hw / 2)))))
+    v['vfov_air'] = 2 * math.degrees(math.asin(min(
+        1.0, 1.333 * math.sin(math.radians(vw / 2)))))
+    return v, ('DERIVED from the in-water measurement by inverse Snell, '
+               'not measured in air')
+
+
+def calibration_filename(applies_to, w, h, medium='air'):
+    """The one place a calibration's filename is decided.
+
+    ⛔ THE MEDIUM IS PART OF THE NAME. Air and water differ by ~1.44x on this
+    hull, so a water calibration that overwrote the air one would be a
+    silent 44 % scale error on every range and velocity downstream -- the
+    size that still looks plausible. Two files for one camera is the point:
+    they are different answers to different questions.
+
+    Shared by the solver (which writes them) and the guide (which decides
+    what `/calibration.json` serves), because a second copy of a naming rule
+    is how a calibration once outlived the camera it was named for.
+    """
+    suffix = '' if medium == 'air' else f'_{medium}'
+    return f'{applies_to}_{w}x{h}{suffix}.json'
+
+
 def max_ere(samples, w, h, grid=5, depth_m=1.0):
     """AprilCal's MAX EXPECTED REPROJECTION ERROR (Richardson et al., IROS 2013).
 
@@ -397,6 +442,7 @@ def main() -> int:
     install_dir = None      # write straight into the package's calibration dir
     camera_desc = ''
     identity_json = None    # {"usb_vid":..,"usb_pid":..,"card":..} of the unit
+    medium = 'air'          # the medium the BOARD WAS IN during capture
     for i, a in enumerate(args):
         if a == '--grid':
             cols, rows = (int(x) for x in args[i + 1].lower().split('x'))
@@ -414,6 +460,8 @@ def main() -> int:
             camera_desc = args[i + 1]
         elif a == '--identity':
             identity_json = args[i + 1]
+        elif a == '--medium':
+            medium = args[i + 1]
 
     files = sorted(glob.glob(os.path.join(outdir, '*.png')))
     ips, names, size = detect(files, cols, rows)
@@ -520,6 +568,14 @@ def main() -> int:
     # ---- 5. external sanity check ----
     fit = ro if use_ro else std
     v = fov_from_K(fit['K'], w, h)
+    # ⛔ CORRECT THE MEDIUM BEFORE ANYTHING PRINTS OR IS WRITTEN.
+    # `fov_from_K` assumes the board was in AIR and derives water by Snell.
+    # In water mode the FITTED figure IS the water one, so the roles swap and
+    # air becomes the derivation. Doing this after the ANSWER block -- which
+    # is where it lived first -- printed the two the wrong way round and then
+    # corrected itself three lines later, which is a number an operator reads
+    # and believes.
+    v, air_note = fov_for_medium(v, medium)
     if external:
         board_w, dist_z = external
         # widest observed board span in pixels, over the most frontal view
@@ -542,14 +598,20 @@ def main() -> int:
     hf_lo = 2 * np.degrees(np.arctan(w / (2 * (fx + fx_sd))))
     hf_hi = 2 * np.degrees(np.arctan(w / (2 * (fx - fx_sd))))
     print(f"\n{'='*66}\n  ANSWER  ({'RO' if use_ro else 'standard'}, "
-          f"{len(ips)} views, held-out validated)")
+          f"{len(ips)} views, held-out validated, "
+          f"board in {medium.upper()})")
     print(f"    fx {fit['K'][0,0]:.2f}   fy {fit['K'][1,1]:.2f}   "
           f"cx {fit['K'][0,2]:.2f}   cy {fit['K'][1,2]:.2f}")
-    print(f"    HFOV in air    {v['hfov_air']:.2f} deg   "
-          f"(fold spread {hf_lo:.2f} .. {hf_hi:.2f})")
-    print(f"    VFOV in air    {v['vfov_air']:.2f} deg")
-    print(f"    HFOV in water  {v['hfov_water']:.2f} deg   <- the number missions need")
-    print(f"    VFOV in water  {v['vfov_water']:.2f} deg")
+    meas, derv = ('water', 'air') if medium == 'water' else ('air', 'water')
+    print(f"    HFOV in {meas:<5} {v['hfov_' + meas]:.2f} deg   MEASURED"
+          f"   (fold spread {hf_lo:.2f} .. {hf_hi:.2f} in-{meas})")
+    print(f"    VFOV in {meas:<5} {v['vfov_' + meas]:.2f} deg   MEASURED")
+    print(f"    HFOV in {derv:<5} {v['hfov_' + derv]:.2f} deg   derived by "
+          f"Snell")
+    print(f"    VFOV in {derv:<5} {v['vfov_' + derv]:.2f} deg   derived by "
+          f"Snell")
+    print(f"    missions use the WATER figure: "
+          f"{v['hfov_water']:.2f} deg H")
     print('='*66)
 
     out = {
@@ -578,6 +640,18 @@ def main() -> int:
         # -- it silently logs HFOV=0.0 forever.
         **{f"{key.split('_')[0]}_deg_{key.split('_')[1]}": float(val)
            for key, val in v.items()},
+        # ⛔ THE MEDIUM IS NOT METADATA, IT IS PART OF THE ANSWER. An in-water
+        # calibration and an in-air one for the same lens differ by ~1.44x in
+        # effective focal length, so applying one where the other is expected
+        # is a 44 % scale error on every range and velocity -- silent, and
+        # exactly the size that still looks plausible. It is recorded so the
+        # two can never be confused, and consumers can refuse a mismatch.
+        #
+        # `hfov_deg_water` above is derived from the AIR measurement through
+        # Snell. When the capture was made IN water that derivation is wrong
+        # -- the measurement already IS the water number -- so the fields are
+        # relabelled rather than silently reinterpreted.
+        'medium': medium,
         'note': ('FOV is invariant to square size; board bow figure is not. '
                  'Water FOV is Snell through a flat port, n=1.333.'),
     }
@@ -611,6 +685,12 @@ def main() -> int:
             except Exception:
                 pass
 
+    if air_note:
+        out['air_fov_note'] = air_note
+        print(f"\n  MEDIUM = WATER: the fitted FOV is the WATER figure. The "
+              f"air numbers\n  are inverse-Snell derivations, not "
+              f"measurements.")
+
     path = os.path.join(outdir, 'calibration.json')
     with open(path, 'w') as fh:
         json.dump(out, fh, indent=2)
@@ -622,13 +702,23 @@ def main() -> int:
                   "without\n  `applies_to` fails test_calibration_binding "
                   "and cannot be wired.")
             return 1
-        name = f'{applies_to}_{w}x{h}.json'
+        # A missing --install directory used to raise FileNotFoundError
+        # AFTER the whole solve had run. Losing a good calibration to a
+        # missing folder is not an acceptable failure mode.
+        os.makedirs(install_dir, exist_ok=True)
+        name = calibration_filename(applies_to, w, h, medium)
         dest = os.path.join(install_dir, name)
         with open(dest, 'w') as fh:
             json.dump(out, fh, indent=2)
         print(f"installed {dest}")
-        print(f"  vision_pi.launch.py already names {name}, so it goes live "
-              f"on the next\n  colcon build -- no launch edit needed.")
+        if medium == 'air':
+            print(f"  vision_pi.launch.py already names {name}, so it goes "
+                  f"live on the next\n  colcon build -- no launch edit "
+                  f"needed.")
+        else:
+            print(f"  {name} is a {medium} calibration. The launch loads the "
+                  f"AIR file;\n  this one is a validation of the refraction "
+                  f"correction, not a\n  replacement for it.")
     return 0
 
 

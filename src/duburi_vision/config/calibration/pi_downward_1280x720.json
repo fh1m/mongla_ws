@@ -60,5 +60,6 @@
     "budget_pct": 2.4,
     "verdict": "CONSISTENT"
   },
-  "systematic_uncertainty_note": "A second independent calibration of this camera on a different (more bowed) board gave fx 1008.02 / HFOV water 47.42 deg -- 1.93 % away, which is 21x either run k-fold spread. Quote HFOV +/- 0.7 deg, not the +/-0.05 the fold spread implies: k-fold resamples within ONE capture and cannot see a bias shared by every view in it."
+  "systematic_uncertainty_note": "A second independent calibration of this camera on a different (more bowed) board gave fx 1008.02 / HFOV water 47.42 deg -- 1.93 % away, which is 21x either run k-fold spread. Quote HFOV +/- 0.7 deg, not the +/-0.05 the fold spread implies: k-fold resamples within ONE capture and cannot see a bias shared by every view in it.",
+  "medium": "air"
 }

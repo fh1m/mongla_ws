@@ -54,5 +54,6 @@
   "note": "FOV is invariant to square size; board bow figure is not. Water FOV is Snell through a flat port, n=1.333.",
   "captured": "2026-09-07",
   "camera": "Fantech Luminous C30 (USB 1d6c:0103, forward) -- 2K/25fps spec, delivers 15.0 fps at every mode",
-  "captured_note": "Captured through the guided AprilCal flow after the tilt metric was fixed (the old one read 0 at 55 deg) and the shutter was pinned manual 5 ms (auto chose 200 ms). Marketing claims 106 deg FOV; measured HFOV is 73.88 deg."
+  "captured_note": "Captured through the guided AprilCal flow after the tilt metric was fixed (the old one read 0 at 55 deg) and the shutter was pinned manual 5 ms (auto chose 200 ms). Marketing claims 106 deg FOV; measured HFOV is 73.88 deg.",
+  "medium": "air"
 }

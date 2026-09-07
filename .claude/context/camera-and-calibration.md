@@ -198,7 +198,101 @@ we measure **HFOV 73.1°**.
 
 ---
 
-## 8. Not yet done, and worth doing
+## 8. THE LIBRARY: every calibration is kept, and re-appliable
+
+`src/duburi_vision/config/calibration/` is the vehicle's permanent store.
+Every calibration this project has produced lives there, ships with the
+package, and is listed in the web tool under **Saved calibrations** with the
+fields an operator actually picks by — medium, resolution, fx, view count,
+Max ERE, the camera it was taken on, and when.
+
+**One click applies a saved calibration to a CONNECTED camera.** That is the
+whole point: a swapped camera on competition ground costs two minutes
+instead of ten with a printed board in a lit room. The apply button is only
+offered for cameras `/cameras` currently sees — applying to an absent device
+would write a file claiming a unit nobody can check.
+
+⛔ **APPLYING IS AN ASSERTION, AND THE FILE SAYS SO.** The operator is
+claiming "this is the same physical unit". The written file records
+`identity_source: operator asserted at apply time` plus `applied_from` and
+`applied_on`, and never pretends the calibration was captured on that
+camera. The day somebody asks why a calibration claims a camera it never
+saw, that field is the answer — and it is the difference between a shortcut
+and a forged provenance. An existing file at the destination is moved to
+`.bak-HHMMSS`, never overwritten: it cost somebody a board and ten minutes.
+
+## 9. CALIBRATING IN WATER — a validation, not the method
+
+`--medium air|water`, and a matching pair of buttons on the page.
+
+**The primary method is still AIR.** The Pinax model says calibrate once in
+air and correct the flat port's refraction analytically, which is what
+`RefractiveRectifier` already does.
+
+**But the correction itself has never been checked, and the record said
+otherwise.** `f_water = 741` was not measured — it is `f_air = 514` put
+through Snell, so quoting it as a measured result and then "validating" the
+model against it is circular. An in-water calibration measures the
+air-plus-port-plus-water system directly, which makes it the first genuinely
+independent number for `f_water` rather than a nicety. `water-owed` §1a
+carries the full correction.
+
+Three consequences, all implemented and tested:
+
+1. **The medium is in the filename.** `pi_forward_1280x720.json` vs
+   `pi_forward_1280x720_water.json`. Air and water differ by **1.442×** on
+   this hull — 63.8° air **measured**, 46.7° water **derived from it by
+   Snell** (`sin(31.9°)/sin(23.36°)` = 1.3333, plain water; see the
+   correction in `water-owed.md` §1a, which previously described that
+   tangent ratio as a 44 % disagreement with the literature's 25–33 %
+   *sine* ratio — it was never a disagreement). So a water file that
+   overwrote the air one would be a silent 44 % scale error on every range
+   and velocity downstream — the size that still looks plausible. The naming
+   rule has **one definition**, `solver.calibration_filename()`, shared by
+   the writer and the download route; a second copy is how a calibration
+   once outlived the camera it was named for.
+2. **In water the FITTED FOV is the WATER figure.** The solver measures
+   whatever medium the board was actually in. So in water mode
+   `hfov_deg_water` takes the measured value and the air figures become
+   inverse-Snell derivations, flagged `air_fov_note: DERIVED …`. Running the
+   air→water conversion on an already-in-water measurement would apply the
+   refraction twice.
+3. **The launch loads the AIR file.** The water one is evidence, not a
+   replacement, and the solver says so on install rather than implying the
+   file goes live.
+
+## 10. ⛔ THE WHOLE PAGE WAS INERT, AND EVERY TEST WAS GREEN
+
+Commit `1e27851` shipped a calibration page whose entire `<script>` block was
+a **JavaScript SyntaxError**. Not one line of it ran: no status polling, no
+camera list, no buttons. It renders as a page that has simply stopped
+updating, which is indistinguishable from a stalled camera thread — and it
+was published as "the web app now does the WHOLE calibration job".
+
+**The cause is specific to writing JS inside a Python string.** `PAGE` is a
+plain triple-quoted string, so:
+
+| in the Python source | what reaches the browser |
+|---|---|
+| `\'` | `'` — closing a JS string early |
+| `\n` | a real newline — inside a JS string literal |
+
+`sw(\''+c.device+'\')` therefore emitted `sw(''+c.device+'')`: two adjacent
+string literals, and the parser gives up on the **whole block**. You need
+`\\'` and `\\n` in the source.
+
+**The guard is one command and it would have caught it from the start:**
+`node --check` on the extracted script (`test_calibration_page.py`, verified
+against the exact 1e27851 defect). A second test asserts every route the page
+`fetch`es is a route the server serves — the page's per-poll `catch(e){}`
+turns a renamed route into the same "panel stopped updating" symptom.
+
+**The general lesson, and it is the one this project keeps relearning:** a
+server that returns 200 for every route proves the server works, not that the
+page works. Python tests cannot see inside a Python string. Anything that
+ships a language inside another language needs a parser for the inner one.
+
+## 11. Not yet done, and worth doing
 
 - **ChArUco.** OpenCV recommends it over a plain chessboard, and OpenCV 4.6
   on the Pi has the full legacy API (`CharucoBoard_create`,
