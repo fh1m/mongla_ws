@@ -36,6 +36,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 # Framework chatter off, our own nodes at info. Same convention as the other
 # launch files: a process default of `warn` with per-logger `info` pins.
@@ -177,6 +178,20 @@ def generate_launch_description():
             'dwn_calibration',
             default_value=_calib('pi_downward_1280x720.json')),
         DeclareLaunchArgument('fwd_calibration', default_value=''),
+        # THE DVL. flow_node existed only as a setup.py entry point -- in no
+        # launch file at all -- so the bottom-camera velocity sensor had to be
+        # started by hand, which on a pool deck means it does not get started.
+        # OFF by default because it needs `pool_depth_m`, which it REFUSES to
+        # guess: height is a clean multiplier on every velocity it emits.
+        DeclareLaunchArgument('flow', default_value='false'),
+        DeclareLaunchArgument(
+            'pool_depth_m', default_value='nan',
+            description='Water depth in metres. REQUIRED with flow:=true -- '
+                        'the node refuses to publish velocity without it.'),
+        DeclareLaunchArgument(
+            'flow_medium', default_value='water',
+            description="'water' engages the flat-port rectification; use "
+                        "'air' for a dry bench run."),
         # 0 = the profile's own rate (210), AND THAT REVERSES THE 60 THIS
         # SHIPPED WITH LAST ROUND. The cap was measured correctly and is now
         # wrong, because the mailbox changed what a captured frame costs.
@@ -307,6 +322,18 @@ def generate_launch_description():
         detectors,
         tracker('forward',  'fwd_frame_rate'),
         tracker('downward', 'dwn_frame_rate'),
+        Node(package='duburi_vision', executable='flow_node',
+             name='duburi_flow_velocity', output='screen',
+             parameters=[{
+                 'camera':       'downward',
+                 'medium':       LaunchConfiguration('flow_medium'),
+                 'pool_depth_m': ParameterValue(
+                     LaunchConfiguration('pool_depth_m'), value_type=float),
+                 # The SAME calibration the downward camera_node gets. Passing
+                 # them separately is how they came to disagree.
+                 'calibration':  LaunchConfiguration('dwn_calibration'),
+             }],
+             condition=IfCondition(LaunchConfiguration('flow'))),
         Node(package='duburi_vision', executable='vision_display',
              name='duburi_display', output='screen',
              parameters=[{'camera': 'forward'}],

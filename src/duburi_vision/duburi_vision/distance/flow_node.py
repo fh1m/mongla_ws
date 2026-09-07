@@ -46,6 +46,7 @@ from typing import Optional
 import cv2
 import numpy as np
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import (QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy)
@@ -1085,6 +1086,13 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
+        pass
+    except ExternalShutdownException:
+        # SIGTERM / SIGINT delivered through rcl rather than to Python. On
+        # ROS 2 Jazzy this is the NORMAL path when the launch or an operator
+        # stops the node, and letting it propagate prints a ten-frame stack
+        # trace on an ordinary Ctrl+C -- which on a pool deck at night reads
+        # as a crash in the sensor you are about to trust.
         pass
     finally:
         node.destroy_node()

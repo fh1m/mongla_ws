@@ -90,3 +90,26 @@ def test_the_downward_camera_IS_calibrated():
                'falls back to one focal length and the frame centre, which '
                'is measured to cost 3.08 % of axis asymmetry.')
     assert (_CAL_DIR / m.group(1)).exists()
+
+
+def test_the_flow_node_is_actually_LAUNCHABLE():
+    """flow_node -- the DVL -- existed only as a setup.py entry point and
+    appeared in NO launch file, so the bottom-camera velocity sensor had to
+    be started by hand. On a pool deck that means it does not get started.
+
+    It must also receive the SAME calibration the downward camera gets;
+    passing them from two places is how they came to disagree in the first
+    place (see the module docstring)."""
+    src = _LAUNCH.read_text()
+    assert "executable='flow_node'" in src, (
+        'flow_node is in no launch file -- the DVL cannot be brought up with '
+        'the rest of the vision stack.')
+    assert "'pool_depth_m'" in src, (
+        'flow_node is launched without pool_depth_m. It refuses to publish '
+        'velocity without it, so the node would come up and stay silent.')
+    # The calibration must be the downward one, by reference not by literal.
+    flow = src[src.index("executable='flow_node'"):]
+    flow = flow[:flow.index('condition=')]
+    assert "LaunchConfiguration('dwn_calibration')" in flow, (
+        'flow_node must take the SAME dwn_calibration the downward camera '
+        'takes, not its own copy of the path.')
