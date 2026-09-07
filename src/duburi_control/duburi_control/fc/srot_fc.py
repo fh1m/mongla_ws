@@ -959,7 +959,14 @@ class SrotFC(FlightController):
                 return MAVLink_unknown(msgId, msgbuf)
 
         -- a message object carrying the WHOLE FRAME, surfaced as UNKNOWN_291.
-        Verified against a recorded dive: 434 of 434 frames decode.
+        Verified against two recorded BENCH sessions: 958 of 958 frames decode,
+        CRC-valid, across both index blocks.
+
+        ⛔ THAT IS DECODABILITY, NOT DATA. Every one of those 958 frames carries
+        rpm EXACTLY 0 in all eight slots, because no ESC was attached -- the
+        board fills the whole block regardless. Read as "the telemetry is real"
+        this line would justify a health gate that reports OK on a hull with no
+        thrusters. No non-zero RPM has yet crossed this wire on this vehicle.
 
         Worth the trouble because ESC_STATUS.rpm is `int32` and SIGNED, while
         ESC_TELEMETRY_*.rpm is `uint16` magnitude only -- the firmware says so

@@ -15,10 +15,18 @@ won and the document says so.
 | [`pr-a-vision-api.md`](pr-a-vision-api.md) | the measured camera FOV that was blocking `LANDING_TARGET`; the pinhole bearing model; **the `31001` id allocated twice**; the missing `coasted`/gap-age fields | a doc fix and one decision |
 | [`pr-b-telemetry-budget.md`](pr-b-telemetry-budget.md) | populate `ControlState.out_*` (six lines; `VFR_HUD.throttle` is a measured permanent zero); enrich the SD `Record` by **+54 B/record = 0.116 %** of the card | small, costed |
 | [`pr-c-pico-esc-health.md`](pr-c-pico-esc-health.md) | the Pico decodes ESC voltage/current/temperature into `tval` and discards it; `mav_stream` then packs zeros into fields we already decode | a dual reflash |
+| [`pr-f-esc-presence-on-the-wire.md`](pr-f-esc-presence-on-the-wire.md) | `esc_present`/`esc_fault` are **already members of `Snap`**, in scope at the packing site, while `ESC_TELEMETRY.count` ships literal zeros — presence never reaches the wire, so our thruster health can only ever say UNKNOWN | **one line, ESP32 only, zero bandwidth** |
 | [`pr-d-protocol-honesty.md`](pr-d-protocol-honesty.md) | `REQUEST_MESSAGE` ACCEPTs all 190 ids and emits 7 (including ids `-1`/`-2`); no `TIMESYNC`; the SD log cannot be pulled over the link | one switch; ten lines for TIMESYNC |
 
 **Ranked, if only one lands:** PR A §3, the `31001` collision. It is the only
 item that is cheap now and irreversible later, and both claimants are ours.
+
+**Ranked, if only one CAPABILITY lands: PR F, and it now outranks PR C.**
+Measured 2026-09-07: 958 CRC-valid `ESC_STATUS` frames with no ESCs attached,
+every rpm exactly `0` — the board fills all eight slots regardless, so nothing
+on the present wire separates eight healthy thrusters from none. PR F is one
+line in a function that already holds the answer; PR C is a dual reflash for
+the richer half. Presence first, then instrumentation.
 
 **Filed as issues rather than PRs**, so severity stays legible — both are in
 [`pr-b-telemetry-budget.md`](pr-b-telemetry-budget.md) §5:

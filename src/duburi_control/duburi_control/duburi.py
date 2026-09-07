@@ -81,7 +81,8 @@ from contextlib import contextmanager
 from duburi_interfaces.action import Move
 
 from .vision_verbs import VisionVerbs
-from .fc.base      import FireResult, FIRE_FIRED, FIRE_DENIED, FIRE_NOT_READY
+from .fc.base      import (FireResult, FIRE_FIRED, FIRE_DENIED, FIRE_NOT_READY,
+                           FIRE_THRUSTER_FAULT)
 from .errors        import ModeChangeError, NotArmedError
 from .heading_lock  import HeadingLock
 from .motion_writers import make_writers, _interruptible_sleep
@@ -388,6 +389,35 @@ class Duburi(VisionVerbs):
         return self._make_result(res.ok, f'fire: {who} {res.code_name}: {res.reason}',
                                  final_value=float(res.code))
 
+    def _thruster_fault(self):
+        """The reason to REFUSE a shot, or None to allow it.
+
+        ⛔ REFUSE ONLY ON A KNOWN-BAD THRUSTER. `thruster_health()` returns
+        None -- UNKNOWN -- whenever the board has not announced presence, which
+        is every disarmed session and every hull whose ESCs are not Bluejay
+        flashed. Refusing on UNKNOWN would make `fire()` a silent no-op at
+        competition: the same shape as the SURFACE-mode bug, pointed at the
+        payload. UNKNOWN is logged loudly and allowed through; a torpedo that
+        might miss beats a torpedo that never leaves the tube.
+
+        A thruster that reported and then STOPPED, or one turning the wrong
+        way, is different in kind: the hull cannot hold a firing solution, and
+        the round is spent either way. That is what this refuses.
+        """
+        probe = getattr(self.pixhawk, 'thruster_health', None)
+        if probe is None:
+            return None
+        try:
+            ok_flag, reason = probe()
+        except Exception as exc:                       # a probe fault is not a hull fault
+            self.log.warning(f'[FIRE ] thruster health unreadable ({exc}) -- allowing')
+            return None
+        if ok_flag is False:
+            return reason
+        if ok_flag is None:
+            self.log.warning(f'[FIRE ] thruster health UNKNOWN -- firing anyway: {reason}')
+        return None
+
     def _fire_payload(self, channel: int):
         """Raw payload fire -> FireResult. No command scope; use inside vision verbs.
 
@@ -395,6 +425,10 @@ class Duburi(VisionVerbs):
         did not happen. `FireResult.__bool__` is `.ok`, so pre-existing truthiness
         checks keep working.
         """
+        fault = self._thruster_fault()
+        if fault is not None:
+            self.log.error(f'[FIRE ] REFUSED ch={channel} -- {fault}')
+            return FireResult(FIRE_THRUSTER_FAULT, int(channel), fault)
         if self._payload is None or not self._payload.is_ready:
             self.log.warning(f'[FIRE ] payload not ready ch={channel} -- stub only')
             return FireResult(FIRE_NOT_READY, int(channel),
