@@ -118,11 +118,23 @@ def capture_loop(st, dev, width, height, jpeg_w):
     """Grab and stream. NO DETECTION HERE -- that is the whole point.
 
     ⛔ THE FIRST VERSION RAN `findChessboardCorners` INLINE AND THE VIDEO WAS
-    UNUSABLE. The detector is slow, and its WORST case is the common one:
-    with no board in frame it searches exhaustively before failing, which at
-    1280x720 on this Pi is seconds per call. Every one of those seconds was
-    a frame the operator did not see, so the video froze exactly while they
-    were moving the board looking for a pose -- the moment they need it.
+    UNUSABLE. The detector's problem is the SHAPE of its cost, not its
+    average: with no board in frame it searches exhaustively before failing,
+    and that is the common case while the operator is moving the board
+    looking for a pose -- the one moment they need to see the video.
+
+    Measured on this Pi, no board present, by input size:
+
+        1280x720   142615 ms      <- what the inline version was exposed to
+         640x360     7238 ms
+         480x270     2254 ms      <- what this runs at
+
+    ⚠ Those are on RANDOM NOISE, which is the pathological case -- every
+    pixel looks like an edge and the quad search explodes. A real scene
+    measured 112 ms at 480 px, and the page holds 30.0 fps. So the table is
+    the CEILING the design was exposed to, not the operator's experience;
+    quoting 142 s as "what it was doing" would be wrong. What it establishes
+    is the ordering, which is ~63x between full-res and the downscale.
 
     So this thread only reads, overlays the LAST known result, and encodes.
     Detection runs beside it at whatever rate it manages, on a downscale.
