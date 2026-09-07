@@ -1126,3 +1126,21 @@ where a file comes from, the result is about the tool.
 vision uplink aims with. Until it is, `bearing.py` on the forward path is
 running on intrinsics that belong to another lens, or on none. Added to
 `water-owed.md`.
+
+**Verified through the launch on the vehicle, 2026-09-07** — which is the
+point of this entry, since every §13 number came from a tool passing the path
+by hand:
+
+```
+[FLOW ] camera='downward' medium='water' f=685.1px (air 513.9 / water 741.0)
+        port=RECTIFIED  pool_depth=1.60m
+[FLOW ] VELOCITY PATH DISABLED -- pool_depth_m was never set     (flow:=true alone)
+[FLOW ] REFUSING: no trackable texture (0/19 points survived)    (the dark room)
+```
+
+`flow_node` was **in no launch file at all** — the DVL had to be started by
+hand — and now runs as `vision_pi.launch.py flow:=true pool_depth_m:=<m>`,
+taking the same `dwn_calibration` the camera takes, by reference. A renamed
+data file also needs `rm -rf build/<pkg> install/<pkg>` first: colcon caches
+the file list and fails with `can't copy ...: doesn't exist` naming the file
+you deliberately removed.
