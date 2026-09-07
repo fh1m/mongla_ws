@@ -71,7 +71,27 @@ def test_the_launch_wires_each_calibration_to_a_camera_it_CLAIMS():
         if not fname:
             continue                      # '' = deliberately uncalibrated
         f = _CAL_DIR / fname
-        assert f.exists(), f'{side}_calibration names a missing file {fname}'
+        if not f.exists():
+            # ⛔ A NAMED-BUT-ABSENT FILE IS THE PENDING STATE, NOT A BUG.
+            # `_calib()` returns '' when the file is missing, so wiring a
+            # camera by NAME before it is calibrated is inert today and goes
+            # live the moment the file lands. That is deliberate: it removes
+            # the step -- "remember to edit the launch default afterwards" --
+            # between calibrating a camera and the calibration reaching it,
+            # which is the same class of gap that let the wrong file stay
+            # wired to the wrong camera for four days.
+            #
+            # The filename must still be well formed, or the wiring is a
+            # typo that will never activate and never complain.
+            assert re.fullmatch(r'pi_(forward|downward)_\d+x\d+\.json',
+                                fname), (
+                f'{side}_calibration names {fname!r}, which does not match '
+                f'the pi_<side>_<W>x<H>.json convention -- a wired name that '
+                f'no solve will ever produce is silently inert forever')
+            assert side_to_profile[side] in fname, (
+                f'{side}_calibration is wired to {fname!r}, which names the '
+                f'OTHER camera')
+            continue
         applies = json.loads(f.read_text()).get('applies_to') or []
         want = side_to_profile[side]
         assert want in applies, (

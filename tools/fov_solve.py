@@ -60,6 +60,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import time
 import sys
 
 import cv2
@@ -225,6 +226,9 @@ def main() -> int:
     outdir = args[0]
     cols, rows, square, k = 8, 6, 0.025, 5
     external = None
+    applies_to = None       # e.g. 'pi_forward' -- the camera PROFILE this describes
+    install_dir = None      # write straight into the package's calibration dir
+    camera_desc = ''
     for i, a in enumerate(args):
         if a == '--grid':
             cols, rows = (int(x) for x in args[i + 1].lower().split('x'))
@@ -234,6 +238,12 @@ def main() -> int:
             k = int(args[i + 1])
         elif a == '--external':
             external = (float(args[i + 1]), float(args[i + 2]))
+        elif a == '--applies-to':
+            applies_to = args[i + 1]
+        elif a == '--install':
+            install_dir = args[i + 1]
+        elif a == '--camera':
+            camera_desc = args[i + 1]
 
     files = sorted(glob.glob(os.path.join(outdir, '*.png')))
     ips, names, size = detect(files, cols, rows)
@@ -378,10 +388,43 @@ def main() -> int:
         'note': ('FOV is invariant to square size; board bow figure is not. '
                  'Water FOV is Snell through a flat port, n=1.333.'),
     }
+    # ⛔ `applies_to` IS NOT OPTIONAL METADATA -- IT IS THE GUARD.
+    # The one calibration this project held was named for the wrong camera
+    # and wired to the wrong camera for four days, in both directions, and
+    # nothing could catch it because the file did not say what it described.
+    # `test_calibration_binding.py` now refuses any calibration without this
+    # field, so a file emitted without it is not installable.
+    if applies_to:
+        out = {'applies_to': [applies_to],
+               'applies_to_note': (
+                   'The camera PROFILE this describes. Present because a '
+                   'calibration named for one camera was wired to the other, '
+                   'both ways, and no test could see it: a file that does not '
+                   'say what it describes cannot be checked against what it '
+                   'is wired to.'),
+               **out}
+        if camera_desc:
+            out['camera'] = camera_desc
+        out['captured'] = time.strftime('%Y-%m-%d')
+
     path = os.path.join(outdir, 'calibration.json')
     with open(path, 'w') as fh:
         json.dump(out, fh, indent=2)
     print(f"\nwrote {path}")
+
+    if install_dir:
+        if not applies_to:
+            print("  --install needs --applies-to: an installed calibration "
+                  "without\n  `applies_to` fails test_calibration_binding "
+                  "and cannot be wired.")
+            return 1
+        name = f'{applies_to}_{w}x{h}.json'
+        dest = os.path.join(install_dir, name)
+        with open(dest, 'w') as fh:
+            json.dump(out, fh, indent=2)
+        print(f"installed {dest}")
+        print(f"  vision_pi.launch.py already names {name}, so it goes live "
+              f"on the next\n  colcon build -- no launch edit needed.")
     return 0
 
 
