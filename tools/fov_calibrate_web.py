@@ -44,6 +44,22 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import cv2
 import numpy as np
 
+def _load_solver():
+    """Import fov_solve.py BY PATH so both tools share one implementation.
+
+    The alternative -- a second copy of the geometry here -- is how this
+    project's torpedo scorer came to grade a board that no longer existed.
+    One implementation, two callers.
+    """
+    import importlib.util
+    here = os.path.dirname(os.path.abspath(__file__))
+    spec = importlib.util.spec_from_file_location(
+        'fov_solve_lib', os.path.join(here, 'fov_solve.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
 FIND = cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE
 CRIT = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 GRID = 3
@@ -87,6 +103,8 @@ CELL_NAME = (('top-left', 'top-centre', 'top-right'),
 # and only 3 of 13 under target. That is the blur, quantified by the
 # library's own yardstick rather than by eye.
 MAX_SHARPNESS_PX = 3.0
+# AprilCal's stopping bar: they reach it in 6-8 guided images.
+ERE_BAR_PX = 1.0
 HOLD_S = 0.5          # the pose must persist this long before it is taken
 
 
@@ -131,6 +149,14 @@ class State:
         self.sharp = None              # OpenCV chessboard sharpness, px
         self.solve = 'idle'
         self.solve_out = ''
+        # AprilCal state: how uncertain the calibration still is, and where
+        # to point the operator next.
+        self.ere = None            # Max ERE, px
+        self.ere_pred = None       # predicted Max ERE after the suggestion
+        self.suggest = None        # (cell, tilt_deg) the solver wants next
+        self.assessed_n = 0
+        self.n_boards = 0
+        self.assess_err = None
 
 
 def tilt_of(corners, cols):
@@ -360,6 +386,48 @@ def detect_loop(st, det_w):
             st.hold, st.msg, st.det_ms = prog, msg, 1000 * dt
 
 
+def assess(st, cols, rows, square, size):
+    """Refit from what is captured, report Max ERE, and suggest the next pose.
+
+    ⛔ THIS IS THE APRILCAL LOOP, and it replaces "capture 24 poses because a
+    script says so" with "capture until the calibration stops being
+    uncertain". Their measured result is 6-8 images to under 1 px, so a fixed
+    24 is both slower than necessary and no guarantee.
+
+    Runs in a thread: a fit plus ~12 candidate evaluations is ~6 s on the Pi,
+    and the video must not stall for it.
+    """
+    fs = _load_solver()
+    objp = fs.board_points(cols, rows, square)
+    while True:
+        with st.lock:
+            files = sorted(glob.glob(os.path.join(st.outdir, 'cal_*.png')))
+            n_seen = st.assessed_n
+        if len(files) < 6 or len(files) == n_seen:
+            time.sleep(1.0)
+            continue
+        try:
+            ips, _, sz = fs.detect(files, cols, rows)
+            if len(ips) < 6:
+                raise ValueError('too few boards')
+            samples = fs.kfold_std(objp, ips, sz, 4)
+            ere, worst = fs.max_ere(samples, sz[0], sz[1])
+            cands = [((y, x), t) for y in range(GRID) for x in range(GRID)
+                     for t in (10, 25, 40)]
+            best, pred, _ = fs.suggest_next_pose(objp, ips, sz, cands)
+            with st.lock:
+                st.ere, st.ere_pred = ere, pred
+                st.assessed_n = len(files)
+                st.n_boards = len(ips)
+                if best is not None:
+                    st.suggest = best
+        except Exception as exc:
+            with st.lock:
+                st.assessed_n = len(files)
+                st.assess_err = str(exc)[:120]
+        time.sleep(0.5)
+
+
 def resume(st):
     """Continue from frames already on disk, so a restart is not destructive.
 
@@ -447,6 +515,10 @@ PAGE = """<!doctype html><meta charset=utf-8>
   <div class=chk><span class=dot id=ds></span><span id=ts></span></div>
   <div class=prog><i id=hold></i></div>
   <div class=msg id=msg></div>
+  <h2>Certainty <span class=sub>(AprilCal Max ERE)</span></h2>
+  <div class=bar><i id=eb></i></div>
+  <div class=sub id=et></div>
+  <div class=sub id=sg style="margin-top:6px"></div>
   <h2>Progress</h2>
   <div class=bar><i id=pb></i></div>
   <div class=sub id=pt></div>
@@ -482,10 +554,27 @@ async function tick(){
   $('hold').style.width=(100*s.hold)+'%';
   $('msg').textContent=s.err||s.msg;
   $('pb').style.width=(100*s.i/s.n)+'%';
-  $('pt').textContent=s.i+' of '+s.n+' poses captured';
-  const b=$('go'); b.disabled=(s.solve==='running')||!s.done;
+  $('pt').textContent=s.i+' of '+s.n+' poses captured ('+s.n_boards+' usable)';
+  // Certainty bar: full when Max ERE is under the bar. Log scale, because
+  // it starts in the tens of pixels and the last factor of two is the part
+  // that matters.
+  let pct=0, txt='need 6 usable views before this can be computed';
+  if (s.ere!==null && isFinite(s.ere)) {
+    pct = Math.max(0, Math.min(100, 100*(1 - Math.log10(Math.max(s.ere,s.ere_bar))
+                                          /Math.log10(40))));
+    txt = 'Max ERE '+s.ere.toFixed(2)+' px  (bar <'+s.ere_bar.toFixed(1)+')';
+    if (s.ere<=s.ere_bar) txt += '  — DONE, calibration is certain';
+  }
+  $('eb').style.width=pct+'%';
+  $('et').textContent=txt;
+  $('sg').textContent = s.suggest
+      ? 'solver suggests next: '+s.suggest+
+        (s.ere_pred? '  (predicts '+s.ere_pred.toFixed(1)+' px)':'')
+      : '';
+  const enough = (s.ere!==null && isFinite(s.ere) && s.ere<=s.ere_bar) || s.done;
+  const b=$('go'); b.disabled=(s.solve==='running')||!enough;
   b.textContent=s.solve==='running'?'solving...':
-    (!s.done?'finish the poses first':
+    (!enough?'keep capturing — not certain yet':
      (s.solve==='done'?'Re-run calibration':'Run calibration'));
   $('sv').textContent = s.solve==='done'?'installed — rebuild to use it':
     s.solve==='failed'?'solve failed, see below':'';
@@ -520,6 +609,11 @@ def make_handler(st, solve_argv, solve_dest):
                     'ok_tilt': bool(band == tb),
                     'hold': st.hold, 'msg': st.msg, 'err': st.err,
                     'sharp': st.sharp, 'sharp_max': MAX_SHARPNESS_PX,
+                    'ere': st.ere, 'ere_pred': st.ere_pred,
+                    'ere_bar': ERE_BAR_PX, 'n_boards': st.n_boards,
+                    'suggest': (f'{CELL_NAME[st.suggest[0][0]][st.suggest[0][1]]}'
+                                f' at ~{st.suggest[1]} deg'
+                                if st.suggest else None),
                     'fps': round(st.fps, 1), 'det_ms': round(st.det_ms, 1),
                     'solve': st.solve, 'solve_out': st.solve_out,
                 }
@@ -624,6 +718,9 @@ def main():
                            a.exposure, a.brightness),
                      daemon=True).start()
     threading.Thread(target=detect_loop, args=(st, a.detect_width),
+                     daemon=True).start()
+    threading.Thread(target=assess,
+                     args=(st, cols, rows, a.square, (a.width, a.height)),
                      daemon=True).start()
 
     srv = ThreadingHTTPServer(('0.0.0.0', a.port),
