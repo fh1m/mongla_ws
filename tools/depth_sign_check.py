@@ -55,6 +55,17 @@ PREVIEW_TARGET_M = 0.10
 # Below it we cannot tell a press from baro noise, and reporting a verdict from
 # noise is worse than reporting that the operator did not press hard enough.
 MIN_DELTA = 0.05
+# DEPTH_CMD is clamped to +/-1. A baseline already at the clamp has NO ROOM to
+# move in the ascend direction, so a press cannot produce a passing delta and a
+# perfectly correct board would read INCONCLUSIVE -- or, on a noise sample,
+# FAIL. That is not hypothetical: the Bar30 is uncalibrated above water and read
+# +1.21 m on the bench (DEPTH_CMD +0.555, still 0.445 of headroom). A larger
+# offset would sit at the rail.
+#
+# ⚠ The zero offset itself is HARMLESS here -- this test measures a DELTA, so a
+# constant offset cancels and calibration is irrelevant to the sign. Only
+# proximity to the clamp matters.
+SATURATION_HEADROOM = 0.10
 
 
 def sign_verdict(baseline, pressed):
@@ -71,6 +82,16 @@ def sign_verdict(baseline, pressed):
         return ('INCONCLUSIVE',
                 'DEPTH_CMD absent -- the board withdrew the barometer. Check BARO_HEALTH; '
                 'absence is a finding, not a pass.')
+    # A baseline at the clamp cannot move in the ascend direction. Report that as
+    # its own state rather than letting it masquerade as a weak or failing sign.
+    if baseline > 1.0 - SATURATION_HEADROOM:
+        return ('INCONCLUSIVE',
+                f'baseline DEPTH_CMD is {baseline:+.3f}, within {SATURATION_HEADROOM:.2f} of '
+                'the +1.0 clamp -- a press has nowhere to go, so this test cannot pass '
+                'even on a correct board. Re-zero the barometer first '
+                '(`ros2 run duburi_planner duburi calibrate_depth`, disarmed) and re-run. '
+                'NOTE the zero offset is otherwise harmless here: this test measures a '
+                'DELTA, so a constant offset cancels.')
     delta = pressed - baseline
     if abs(delta) < MIN_DELTA:
         return ('INCONCLUSIVE',
