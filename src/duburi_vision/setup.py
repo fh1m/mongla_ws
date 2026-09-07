@@ -46,6 +46,12 @@ setup(
             'vision_display      = duburi_vision.utils.display_node:main',
             'export_engine       = duburi_vision.utils.export_engine:main',
             'switch_camera       = duburi_vision.utils.switch_camera:main',
+            # Calibration is a MISSION capability: on competition ground a
+            # knocked lens or a swapped camera has to be recalibrated, and if
+            # it cannot be, the uplink aims with the wrong focal length and
+            # the DVL's velocity scale is wrong by the same factor.
+            'calibrate           = duburi_vision.calibration.guide:main',
+            'calibrate_solve     = duburi_vision.calibration.solver:main',
             'depth_estimation_node = duburi_vision.depth.depth_estimation_node:main',
             'distance_estimation_node = duburi_vision.distance.distance_estimation_node:main',
             'flow_node = duburi_vision.distance.flow_node:main',
