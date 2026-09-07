@@ -210,10 +210,6 @@ class FlowVelocityNode(Node):
         self.declare_parameter('min_net_flow_px', 0.5)
         self.declare_parameter('max_dispersion_ratio', 5.0)
         self.declare_parameter('grid_buckets', 4)
-        # Whether a REFUSED interval advances the anchor. True is the old
-        # behaviour and is kept as the default until the A/B says otherwise,
-        # because this changes what every distance means. See `_process`.
-        self.declare_parameter('reanchor_on_refusal', True)
         self.declare_parameter('want_points', 80)
         # ADAPTIVE KEYFRAME BASELINE. Emit a velocity once this much image
         # displacement has accumulated against the anchor, rather than once
@@ -279,8 +275,6 @@ class FlowVelocityNode(Node):
         self._min_flow = float(self.get_parameter('min_net_flow_px').value)
         self._max_disp = float(self.get_parameter('max_dispersion_ratio').value)
         self._buckets = max(1, int(self.get_parameter('grid_buckets').value))
-        self._reanchor_on_refusal = bool(
-            self.get_parameter('reanchor_on_refusal').value)
         self._want_pts = int(self.get_parameter('want_points').value)
         self._target_px = float(self.get_parameter('target_px').value)
         self._max_px = float(self.get_parameter('max_px').value)
@@ -816,54 +810,53 @@ class FlowVelocityNode(Node):
                 self._n_median_fallback += 1
 
         self._n_tracks = n_used
-        # ⛔ THE ANCHOR USED TO ADVANCE UNCONDITIONALLY, AND THAT DISCARDS
-        # TRAVEL. `_evaluate` can refuse an interval -- rotation-dominated,
-        # no gyro sample, flow under the noise floor -- and with the anchor
-        # already moved on, the displacement that interval covered is gone
-        # rather than deferred to the next one.
+        # ⛔ THE ANCHOR ADVANCES UNCONDITIONALLY, SO A REFUSAL DISCARDS THE
+        # TRAVEL IT COVERED -- and that is DELIBERATE, having been changed
+        # and changed back on measurement.
         #
-        # That is not a uniform loss, which is what makes it severe: REFUSALS
-        # ARE CORRELATED WITH MOTION. `rotation-dominated` and a lost LK
-        # anchor both happen during the FAST part of a move, which is exactly
-        # where the distance is; slow and still intervals are the ones that
-        # get accepted, and they carry almost none. So the accumulator keeps
-        # the zeros and drops the travel, and ~30 % of intervals refused
-        # measured as ~90 % of distance missing (30 cm slides reading 2-5 cm).
+        # The change looked obviously right: `_evaluate` can refuse an
+        # interval (rotation-dominated, no gyro, flow under the noise floor)
+        # and with the anchor already moved on, that displacement is gone
+        # rather than deferred. Worse, the loss is not a uniform sample --
+        # refusals CLUSTER IN MOTION, since a rotation-dominated interval and
+        # a lost LK anchor both happen in the fast part of a move, which is
+        # where the distance is. So it was put behind a parameter.
         #
-        # Refusals split in two, and only one of them should re-anchor:
-        #   * the old anchor is still USABLE (we tracked it fine, we just
-        #     declined to trust the result) -- keep it, and the next interval
-        #     measures the whole displacement since the last good frame;
-        #   * the old anchor is GONE (LK lost it, no texture) -- that path
-        #     re-anchors on its own, above, and must.
+        # Then it was measured, offline, against a chosen truth of 0.5604 m
+        # with forced rotation-dominated refusals:
         #
-        # Bounded either way: `max_baseline_s` forces ripeness, so a
-        # persistently unmeasurable scene still re-anchors instead of holding
-        # a stale frame forever.
-        used = False
+        #     refusals    advance    hold      verdict
+        #     none         0.5604   0.5604     equal
+        #     1 in 8       0.4437   0.1868     HOLDING IS WORSE
+        #     1 in 5       0.3736   0.0934     HOLDING IS WORSE
+        #     1 in 3       0.2102   0.0467     HOLDING IS WORSE
+        #
+        # Holding also RAISES the refusal count (5 -> 7, 8 -> 10), which is
+        # the mechanism: holding widens `dt`, the widened window still
+        # contains the disturbance that caused the refusal, so the next
+        # interval refuses too and it cascades. Deferring a measurement only
+        # pays if the next one is accepted, and a persistent cause guarantees
+        # it is not.
+        #
+        # So travel lost to a refusal is the PRICE of refusing, and the lever
+        # that matters is refusing less often -- not holding a stale anchor
+        # across it. Pinned by TestRefusalTravelIsThePriceOfRefusing.
+        self._anchor(gray, t)
         if dt > 0.0:
-            used = self._evaluate(flow, disp, dt, t, n_used)
+            self._evaluate(flow, disp, dt, t, n_used)
         else:
             self._refuse('non-positive baseline')
-        if used or self._reanchor_on_refusal or dt >= self._max_baseline:
-            self._anchor(gray, t)
 
     def _anchor(self, gray, t) -> None:
         self._anchor_gray = gray
         self._anchor_pts = self._bucketed_corners(gray)
         self._anchor_t = t
 
-    def _evaluate(self, flow, disp, dt, t, n_used) -> bool:
-        """Fold one interval. Returns True only if it was USED.
-
-        The return value decides whether the caller advances the anchor; see
-        the comment at the call site for why a refused interval must be able
-        to keep it.
-        """
+    def _evaluate(self, flow, disp, dt, t, n_used) -> None:
         ok, why = self._scale_ready()
         if not ok:
             self._refuse(why)
-            return False
+            return
 
         height = None
         if self._depth_m is not None:
@@ -873,7 +866,7 @@ class FlowVelocityNode(Node):
         h = self._last_height
         if h is None:
             self._refuse('no depth yet, so no height above the floor')
-            return False
+            return
 
         # The MEAN rate over the baseline, not a midpoint sample: with an
         # adaptive baseline dt reaches ~0.5 s at 2 cm/s, and de-rotation
@@ -893,7 +886,7 @@ class FlowVelocityNode(Node):
             # Uncompensated flow is not "slightly worse", it is a different
             # quantity: at 0.6 rad/s the rotational term alone is ~200 px.
             self._refuse('no gyro sample for this interval')
-            return False
+            return
 
         # The gains carry the sign, so the residual is measured minus fitted.
         v = flow_velocity(
@@ -915,7 +908,7 @@ class FlowVelocityNode(Node):
 
         if not v.ok:
             self._refuse(v.reason)
-            return False
+            return
 
         self._cross_check_yaw(t, dt)
         self._cross_check_height()
@@ -933,7 +926,6 @@ class FlowVelocityNode(Node):
                                else 0.0)
             self._acc.add_body_velocity(v.vx, v.vy, yaw, dt)
         self._publish_distance(self._acc.distance_m)
-        return True
 
     def _vz_down(self) -> Optional[float]:
         """Vertical speed, POSITIVE DOWNWARD, from the depth series.

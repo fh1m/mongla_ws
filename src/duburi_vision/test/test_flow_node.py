@@ -507,94 +507,6 @@ class TestRectifyDisabledFallback:
             n.destroy_node()
 
 
-class TestRefusalKeepsTheAnchor:
-    """A refused interval must be able to KEEP the anchor, or travel is lost.
-
-    ⛔ The bug this guards. `_process` advanced the anchor unconditionally,
-    before `_evaluate` had said whether the interval was usable. So a refusal
-    -- rotation-dominated, no gyro sample, flow under the noise floor --
-    discarded the displacement that interval covered instead of deferring it
-    to the next one.
-
-    That loss is not uniform, which is what makes it bite: REFUSALS ARE
-    CORRELATED WITH MOTION. A lost LK anchor and a rotation-dominated
-    interval both happen during the FAST part of a move, which is where the
-    distance is, while slow and still intervals are the ones that get
-    accepted and carry almost none. Measured on the vehicle: ~30 % of
-    intervals refused, and 30 cm slides reading 2-5 cm.
-
-    Driven through the real node, and asserted on the ANCHOR TIMESTAMP rather
-    than on a distance -- a distance test here would pass on a node that
-    re-anchors every frame, since a stationary bench accumulates ~0 either
-    way.
-    """
-
-    @staticmethod
-    def _drive(node, gray, n=3):
-        """Feed frames that are RIPE but get refused.
-
-        The frames must actually MOVE. Identical frames produce no
-        displacement, so the interval never becomes ripe and `_process`
-        returns before the anchor logic is reached at all -- a first version
-        of this test drove that path and reported the default as broken. The
-        refusal comes from `_depth_m = None` (no height), which is decided
-        inside `_evaluate`, i.e. after ripeness.
-        """
-        import cv2
-        node._depth_m = None            # guarantees a refusal in _evaluate
-        node._anchor(gray, 0.0)
-        first = node._anchor_t
-        h, w = gray.shape[:2]
-        for i in range(1, n + 1):
-            M = np.float32([[1, 0, 14 * i], [0, 1, 0]])   # well past the 8 px bar
-            node._process(cv2.warpAffine(gray, M, (w, h)), i * 0.05, i)
-        return first, node._anchor_t
-
-    def test_refusal_keeps_the_anchor_when_asked(self):
-        n = _make(pool_depth_m=4.0, reanchor_on_refusal=False)
-        try:
-            gray = (np.random.default_rng(7)
-                    .integers(0, 255, (360, 640), dtype=np.uint8))
-            first, last = self._drive(n, gray)
-            assert last == first, (
-                'the anchor advanced through a refused interval, so the '
-                'travel it covered was discarded rather than deferred')
-        finally:
-            n.destroy_node()
-
-    def test_default_still_reanchors(self):
-        """The old behaviour is the DEFAULT until the A/B says otherwise --
-        this changes what every distance means, so it does not flip quietly."""
-        n = _make(pool_depth_m=4.0)
-        try:
-            assert n._reanchor_on_refusal is True
-            gray = (np.random.default_rng(9)
-                    .integers(0, 255, (360, 640), dtype=np.uint8))
-            first, last = self._drive(n, gray)
-            assert last > first, 'default must keep the shipped behaviour'
-        finally:
-            n.destroy_node()
-
-    def test_a_held_anchor_is_still_BOUNDED(self):
-        """Holding the anchor must not hold it forever: `max_baseline_s`
-        forces a re-anchor even while refusing, so a persistently
-        unmeasurable scene cannot pin a stale frame indefinitely."""
-        n = _make(pool_depth_m=4.0, reanchor_on_refusal=False,
-                  max_baseline_s=0.10)
-        try:
-            gray = (np.random.default_rng(11)
-                    .integers(0, 255, (360, 640), dtype=np.uint8))
-            n._depth_m = None
-            n._anchor(gray, 0.0)
-            first = n._anchor_t
-            n._process(gray, 0.50, 1)      # dt well past max_baseline_s
-            assert n._anchor_t > first, (
-                'a refusal past max_baseline_s must still re-anchor, or the '
-                'node can hold one stale frame for the rest of the mission')
-        finally:
-            n.destroy_node()
-
-
 class TestDeRotationSignConvention:
     """WHICH SIGN of `gyro_gain` actually cancels a rotation, in the NODE.
 
@@ -702,3 +614,100 @@ class TestDeRotationSignConvention:
         assert cancelling < none, (
             f'with S = +1 the cancelling gain must be -1, but it left '
             f'{cancelling:.4f} m against {none:.4f} m uncorrected')
+
+
+class TestRefusalTravelIsThePriceOfRefusing:
+    """Holding the anchor across a refusal makes it WORSE. Measured, offline.
+
+    ⛔ A FIX OF MINE, REFUTED BY ITS OWN MEASUREMENT. `_process` advances the
+    anchor before `_evaluate` decides, so a refused interval discards the
+    travel it covered. I "fixed" that behind a `reanchor_on_refusal`
+    parameter, reasoning that refusals cluster in the fast part of a move and
+    so the lost travel is not a uniform sample. The reasoning was fine; the
+    measurement disagreed.
+
+    Truth 0.5604 m, forced rotation-dominated refusals:
+
+        refusals    advance    hold      verdict
+        none         0.5604   0.5604     equal
+        1 in 8       0.4437   0.1868     HOLDING IS WORSE
+        1 in 5       0.3736   0.0934     HOLDING IS WORSE
+        1 in 3       0.2102   0.0467     HOLDING IS WORSE
+
+    And holding RAISES the refusal count (5 -> 7, 8 -> 10), which is the
+    mechanism: holding widens `dt`, the widened window still contains the
+    disturbance that caused the refusal, so the next interval refuses too and
+    it cascades. Deferring only pays if the next measurement is accepted, and
+    a persistent cause guarantees it is not.
+
+    So the parameter is gone and this pins the shipped behaviour with the
+    numbers that chose it. The lever that matters is refusing LESS OFTEN.
+
+    Three refusal triggers were tried before one worked, and the first two
+    passed while exercising NOTHING -- withholding the gyro does nothing
+    because `integrate_rate` interpolates over a missing sample, and nulling
+    `_depth_m` does nothing because `_last_height` is cached. Both left every
+    arm at exactly truth. Hence the refusal-count assertion: a test about
+    refusals must prove refusals happened.
+    """
+
+    F = 513.94
+    H = 1.0
+    DT = 0.05
+    STEP_PX = 12.0            # per frame, well past the ~8 px ripeness bar
+
+    def _run(self, refuse_every):
+        n = _make(pool_depth_m=self.H, medium='air', undistort=False,
+                  estimate_time_offset=False,
+                  gyro_gain_x=1.0, gyro_gain_y=1.0)
+        try:
+            n._depth_m = 0.0
+            rng = np.random.default_rng(17)
+            g = rng.integers(0, 255, (360, 640), dtype=np.uint8)
+            n._acc.start(0.0, True)          # lateral axis <- image x
+            n._anchor(g, 0.0)
+            frames = 24
+            for i in range(1, frames + 1):
+                t = i * self.DT
+                refuse = bool(refuse_every) and i % refuse_every == 0
+                n._rate_buf.append((t, 0.0, 4.0 if refuse else 0.0))
+                n._yaw_rate_buf.append((t, 0.0))
+                M = np.float32([[1, 0, self.STEP_PX * i], [0, 1, 0]])
+                n._process(cv2.warpAffine(g, M, (640, 360),
+                                          borderMode=cv2.BORDER_REFLECT),
+                           t, i)
+            truth_m = frames * self.STEP_PX * self.H / self.F
+            return abs(n._acc.distance_m), truth_m, n._n_refused
+        finally:
+            n.destroy_node()
+
+    def test_with_no_refusals_the_node_measures_the_truth(self):
+        """The control, and the reason the numbers below mean anything: with
+        nothing refused this synthetic is recovered essentially exactly."""
+        got, truth, refused = self._run(refuse_every=0)
+        assert refused == 0
+        assert got == pytest.approx(truth, rel=0.05), (
+            f'{got:.4f} m against a chosen truth of {truth:.4f} m -- if the '
+            f'clean case is wrong, nothing else here is readable')
+
+    def test_a_refusal_costs_its_own_travel_and_that_is_ACCEPTED(self):
+        """Refusing loses the travel that interval covered. That is the
+        shipped behaviour, deliberately, because the alternative measured
+        worse -- see the class docstring."""
+        got, truth, refused = self._run(refuse_every=3)
+        assert refused > 0, 'no interval refused; the test proves nothing'
+        assert got < 0.9 * truth, (
+            f'with a third of intervals refused the distance should be '
+            f'clearly short, got {got:.4f} of {truth:.4f} m -- if this ever '
+            f'passes, refusals stopped costing travel and the class '
+            f'docstring is stale')
+
+    def test_more_refusals_cost_more_travel(self):
+        """Monotonic, which is what makes "the price of refusing" a
+        description rather than a slogan."""
+        a, truth, _ = self._run(refuse_every=8)
+        b, _, _ = self._run(refuse_every=5)
+        c, _, _ = self._run(refuse_every=3)
+        assert truth > a > b > c, (
+            f'distance should fall as refusals rise: {truth:.4f} > {a:.4f} > '
+            f'{b:.4f} > {c:.4f}')
