@@ -396,6 +396,7 @@ def main() -> int:
     applies_to = None       # e.g. 'pi_forward' -- the camera PROFILE this describes
     install_dir = None      # write straight into the package's calibration dir
     camera_desc = ''
+    identity_json = None    # {"usb_vid":..,"usb_pid":..,"card":..} of the unit
     for i, a in enumerate(args):
         if a == '--grid':
             cols, rows = (int(x) for x in args[i + 1].lower().split('x'))
@@ -411,6 +412,8 @@ def main() -> int:
             install_dir = args[i + 1]
         elif a == '--camera':
             camera_desc = args[i + 1]
+        elif a == '--identity':
+            identity_json = args[i + 1]
 
     files = sorted(glob.glob(os.path.join(outdir, '*.png')))
     ips, names, size = detect(files, cols, rows)
@@ -596,6 +599,17 @@ def main() -> int:
         if camera_desc:
             out['camera'] = camera_desc
         out['captured'] = time.strftime('%Y-%m-%d')
+        # ⛔ WHICH PHYSICAL UNIT THIS CAME FROM. `applies_to` fixed the wiring
+        # half of the wrong-camera bug; this fixes the provenance half. With
+        # it a swapped camera is DETECTABLE, and without it the best any tool
+        # can honestly say about a calibration is "unverified".
+        if identity_json:
+            try:
+                out.update({k: v for k, v in json.loads(identity_json).items()
+                            if k in ('usb_vid', 'usb_pid', 'usb_serial',
+                                     'card', 'bus')})
+            except Exception:
+                pass
 
     path = os.path.join(outdir, 'calibration.json')
     with open(path, 'w') as fh:

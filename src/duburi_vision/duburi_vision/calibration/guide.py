@@ -143,6 +143,7 @@ class State:
     def __init__(self, cols, rows, outdir, steps):
         self.lock = threading.Lock()
         self.cols, self.rows, self.outdir = cols, rows, outdir
+        self.square = None
         self.steps = steps
         self.i = 0                     # current step index
         self.frame = None
@@ -157,6 +158,9 @@ class State:
         self.band = None               # live: which tilt band
         self.hold = 0.0                # 0..1 progress of the hold timer
         self.sharp = None              # OpenCV chessboard sharpness, px
+        self.device = None
+        self.undistort = False     # preview the correction, live
+        self.K = self.D = None     # latest fit, for that preview
         self.solve = 'idle'
         self.solve_out = ''
         # AprilCal state: how uncertain the calibration still is, and where
@@ -263,7 +267,20 @@ def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
             corners = st.corners
             i = st.i
             worst = st.worst_px
-        vis = cv2.resize(f, (jpeg_w, int(jpeg_w * h / w)))
+            undist = st.undistort
+            K, D = st.K, st.D
+        shown = f
+        if undist and K is not None:
+            # ⛔ THE ONLY CHECK AN OPERATOR CAN MAKE WITH THEIR EYES. Every
+            # other number here is a statistic; this is the calibration doing
+            # its job. Straight edges in the world must come out straight --
+            # if the frame edges still bow, the distortion model is wrong and
+            # no reprojection RMS will say so.
+            try:
+                shown = cv2.undistort(f, K, D)
+            except Exception:
+                shown = f
+        vis = cv2.resize(shown, (jpeg_w, int(jpeg_w * h / w)))
         vh = vis.shape[0]
         sc = jpeg_w / w
         if corners is not None:
@@ -288,6 +305,9 @@ def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
                 cv2.line(vis, (wx + 8, wy), (wx + 22, wy), (60, 120, 255), 2)
                 cv2.putText(vis, 'least certain', (wx - 44, wy - 22),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.4, (60, 120, 255), 1)
+        if undist and K is not None:
+            cv2.putText(vis, 'UNDISTORTED', (10, 22),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 220, 60), 2)
         ok, jpg = cv2.imencode('.jpg', vis, [cv2.IMWRITE_JPEG_QUALITY, 70])
         n += 1
         if ok:
@@ -456,6 +476,7 @@ def assess(st, cols, rows, square, size):
             best, pred, _ = fs.suggest_next_pose(objp, ips, sz, cands)
             with st.lock:
                 st.ere, st.ere_pred = ere, pred
+                st.K, st.D = Kf, fit['D']
                 st.fx, st.fy = float(Kf[0, 0]), float(Kf[1, 1])
                 st.cx, st.cy = float(Kf[0, 2]), float(Kf[1, 2])
                 st.fx_sd = float(fxs.std(ddof=1)) if len(fxs) > 1 else None
@@ -547,6 +568,16 @@ PAGE = """<!doctype html><meta charset=utf-8>
  table#ans td:first-child{color:var(--dim);white-space:nowrap;padding-right:10px}
  table#ans td:last-child{text-align:right;font-variant-numeric:tabular-nums}
  .good{color:var(--ok)} .bad{color:var(--no)} .warn2{color:var(--warn)}
+ .cam{border:1px solid var(--line);border-radius:4px;padding:8px 10px;
+      margin-bottom:8px;font-size:12px}
+ .cam.act{border-color:var(--acc)}
+ .cam b{font-weight:600} .cam .d{color:var(--dim)}
+ .cam button{width:auto;padding:4px 10px;margin-top:6px;font-size:11px}
+ .btnrow{display:flex;gap:6px;margin-top:6px}
+ .btnrow button{margin-top:0}
+ .btnrow a{flex:1;text-decoration:none}
+ .btnrow input{flex:1;min-width:0;background:#161b22;border:1px solid var(--line);
+               color:var(--fg);border-radius:4px;padding:6px;font:inherit;font-size:12px}
  pre{background:#161b22;padding:10px;border-radius:4px;font-size:11px;
      max-height:34vh;overflow:auto;white-space:pre-wrap;margin-top:8px}
  h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
@@ -565,6 +596,8 @@ PAGE = """<!doctype html><meta charset=utf-8>
   <div class=chk><span class=dot id=ds></span><span id=ts></span></div>
   <div class=prog><i id=hold></i></div>
   <div class=msg id=msg></div>
+  <h2>Cameras on this vehicle</h2>
+  <div id=cams class=sub>scanning…</div>
   <h2>The answer so far</h2>
   <table id=ans><tr><td colspan=2 class=sub>needs 6 usable views</td></tr></table>
   <h2>Certainty <span class=sub>(AprilCal Max ERE)</span></h2>
@@ -575,8 +608,24 @@ PAGE = """<!doctype html><meta charset=utf-8>
   <div class=bar><i id=pb></i></div>
   <div class=sub id=pt></div>
   <button class=ghost id=skip>Skip this pose</button>
+  <div class=btnrow>
+    <button class=ghost id=undo>Delete last</button>
+    <button class=ghost id=undist>Undistorted view</button>
+  </div>
+  <h2>Board</h2>
+  <div class=btnrow>
+    <input id=gr size=6 title="inner corners, e.g. 8x6">
+    <input id=sq size=7 title="square size in metres">
+    <button class=ghost id=setb>Apply</button>
+  </div>
+  <div class=sub>a wrong grid detects NOTHING and looks like bad lighting</div>
   <h2>Finish</h2>
   <button id=go>Run calibration</button>
+  <div class=btnrow>
+    <a id=dl href="/calibration.json" download><button class=ghost
+       style="width:100%">Download result</button></a>
+    <button class=ghost id=rst>Reset all captures</button>
+  </div>
   <div class=sub id=sv style="margin-top:6px"></div>
   <pre id=out></pre>
  </aside>
@@ -649,16 +698,69 @@ async function tick(){
     s.solve==='failed'?'solve failed, see below':'';
   $('out').textContent=s.solve_out||'';
   $('skip').style.display=s.done?'none':'block';
+  $('undist').textContent = s.undistort?'Raw view':'Undistorted view';
+  $('undist').disabled = s.fx===null;
+  $('dl').style.pointerEvents = s.have_result?'auto':'none';
+  $('dl').style.opacity = s.have_result?1:0.4;
+  if(!$('gr').matches(':focus') && !$('gr').value) $('gr').value=s.grid;
+  if(!$('sq').matches(':focus') && !$('sq').value) $('sq').value=s.square||'';
  }catch(e){}
 }
 $('go').onclick=async()=>{await fetch('/solve',{method:'POST'});tick();};
+$('undo').onclick=async()=>{await fetch('/undo',{method:'POST'});tick();};
+$('undist').onclick=async()=>{await fetch('/undistort',{method:'POST'});tick();};
+$('rst').onclick=async()=>{
+  if(confirm('Delete every capture and start over?')){
+    await fetch('/reset',{method:'POST'});tick();}};
+$('setb').onclick=async()=>{
+  const g=$('gr').value.trim(), q=$('sq').value.trim();
+  if(!g&&!q) return;
+  $('msg').textContent='restarting with the new board…';
+  await fetch('/board?grid='+encodeURIComponent(g)+'&square='+encodeURIComponent(q),
+              {method:'POST'});
+  setTimeout(()=>location.reload(), 5000);};
 $('skip').onclick=async()=>{await fetch('/skip',{method:'POST'});tick();};
+async function cams(){
+ try{
+  const r=await (await fetch('/cameras')).json();
+  document.getElementById('cams').innerHTML = r.cameras.length ? r.cameras.map(c=>{
+    const active = String(c.device).endsWith(String(r.active));
+    const cal=c.calibration;
+    let line, cls;
+    if(!cal){ line='<span class=bad>NO CALIBRATION</span>'; cls='bad'; }
+    else if(c.match==='confirmed'){
+      line='<span class=good>calibrated</span> · fx '+cal.fx.toFixed(0)+
+           ' · HFOV '+cal.hfov_air.toFixed(1)+'° air / '+cal.hfov_water.toFixed(1)+'° water'+
+           (cal.max_ere_px?' · ERE '+cal.max_ere_px.toFixed(1)+'px':'')+
+           ' · '+(cal.captured||'?'); }
+    else { line='<span class=warn2>UNVERIFIED</span> — '+cal.file+
+           ' fits by name but records no camera identity, so it cannot be'+
+           ' proven to be this unit'; }
+    const prof = cal && cal.applies_to ? cal.applies_to[0]
+               : (String(c.card||'').toLowerCase().includes('fantech')
+                  ? 'pi_forward' : 'pi_downward');
+    return '<div class="cam'+(active?' act':'')+'">'+
+      '<b>'+(c.card||c.device)+'</b> <span class=d>'+c.device+
+      ' · usb '+(c.usb_vid||'?')+':'+(c.usb_pid||'?')+
+      (active?' · ACTIVE':'')+'</span><br>'+line+
+      (active?'':'<button onclick="sw(\''+c.device+'\',\''+prof+'\')">'+
+        (cal?'Re-calibrate':'Calibrate')+' this camera</button>')+'</div>';
+  }).join('') : '<span class=bad>no USB cameras found</span>';
+ }catch(e){}
+}
+async function sw(dev,prof){
+  const n=dev.replace(/\D+/g,'');
+  document.getElementById('cams').innerHTML='<span class=warn2>switching to '+dev+'…</span>';
+  await fetch('/switch?device='+n+'&applies_to='+prof,{method:'POST'});
+  setTimeout(()=>location.reload(), 5000);
+}
 setInterval(tick,300);tick();
+setInterval(cams,4000);cams();
 </script>
 """
 
 
-def make_handler(st, solve_argv, solve_dest):
+def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -678,6 +780,9 @@ def make_handler(st, solve_argv, solve_dest):
                     'ok_tilt': bool(band == tb),
                     'hold': st.hold, 'msg': st.msg, 'err': st.err,
                     'sharp': st.sharp, 'sharp_max': MAX_SHARPNESS_PX,
+                    'undistort': st.undistort, 'grid': f'{st.cols}x{st.rows}',
+                    'square': st.square,
+                    'have_result': os.path.exists(solve_dest),
                     'ere': st.ere, 'ere_pred': st.ere_pred,
                     'ere_bar': ERE_BAR_PX, 'n_boards': st.n_boards,
                     'fx': st.fx, 'fy': st.fy, 'cx': st.cx, 'cy': st.cy,
@@ -696,6 +801,32 @@ def make_handler(st, solve_argv, solve_dest):
                 b = PAGE.encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+            elif self.path == '/calibration.json':
+                # Download the installed calibration. A calibration is
+                # expensive to make and trivial to lose; it should be one
+                # click to keep a copy off the vehicle.
+                try:
+                    b = open(solve_dest, 'rb').read()
+                except Exception:
+                    self.send_response(404); self.end_headers(); return
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Disposition',
+                                 'attachment; filename="'
+                                 + os.path.basename(solve_dest) + '"')
+                self.send_header('Content-Length', str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+            elif self.path == '/cameras':
+                b = json.dumps({
+                    'cameras': list_cameras(cal_dir),
+                    'active': st.device,
+                }).encode()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(b)))
                 self.end_headers()
                 self.wfile.write(b)
@@ -728,6 +859,65 @@ def make_handler(st, solve_argv, solve_dest):
                 self.end_headers()
 
         def do_POST(self):
+            if self.path.startswith('/switch'):
+                # ⛔ RE-EXEC RATHER THAN RETARGET THE THREADS. The capture
+                # thread owns an open V4L2 handle and the detector owns an
+                # anchor; unwinding both live is a race for no gain. The
+                # process replaces itself with the same argv bar the camera,
+                # which reuses the reaper, the resume, and every check that
+                # runs at startup -- one code path, not two.
+                from urllib.parse import urlparse, parse_qs
+                q = parse_qs(urlparse(self.path).query)
+                dev = q.get('device', [None])[0]
+                prof = q.get('applies_to', [None])[0]
+                self.send_response(204)
+                self.end_headers()
+                if dev is not None:
+                    threading.Thread(target=restart, args=(dev, prof),
+                                     daemon=True).start()
+                return
+            if self.path == '/undistort':
+                with st.lock:
+                    st.undistort = not st.undistort
+                self.send_response(204); self.end_headers(); return
+            if self.path == '/undo':
+                # Drop the LAST capture. A view you know was bad -- a hand in
+                # frame, a wobble -- is worth deleting on the spot; leaving it
+                # in and hoping RANSAC eats it is how a quiet bias gets in.
+                with st.lock:
+                    fs_ = sorted(glob.glob(os.path.join(st.outdir,
+                                                        'cal_*.png')))
+                    if fs_:
+                        os.remove(fs_[-1])
+                        st.i = max(0, st.i - 1)
+                        st.assessed_n = -1        # force a refit
+                        st.msg = f'deleted {os.path.basename(fs_[-1])}'
+                self.send_response(204); self.end_headers(); return
+            if self.path == '/reset':
+                with st.lock:
+                    for f_ in glob.glob(os.path.join(st.outdir, 'cal_*.png')):
+                        os.remove(f_)
+                    st.i = 0
+                    st.ere = st.ere_pred = st.K = None
+                    st.assessed_n = -1
+                    st.n_boards = 0
+                    st.msg = 'reset -- all captures deleted'
+                self.send_response(204); self.end_headers(); return
+            if self.path.startswith('/board'):
+                # The board can differ on the day. A tool that hardcodes the
+                # grid is a tool that cannot be used with the board you
+                # actually brought -- and a WRONG grid detects nothing while
+                # looking like a lighting problem.
+                from urllib.parse import urlparse, parse_qs
+                q = parse_qs(urlparse(self.path).query)
+                self.send_response(204); self.end_headers()
+                threading.Thread(
+                    target=restart,
+                    kwargs={'device': None,
+                            'grid': q.get('grid', [None])[0],
+                            'square': q.get('square', [None])[0]},
+                    daemon=True).start()
+                return
             if self.path == '/skip':
                 with st.lock:
                     if st.i < len(st.steps):
@@ -748,6 +938,113 @@ def make_handler(st, solve_argv, solve_dest):
                 self.send_response(404)
                 self.end_headers()
     return H
+
+
+def camera_identity(dev):
+    """Who this camera actually IS -- card name and USB VID:PID.
+
+    ⛔ THIS IS THE FIELD THAT WOULD HAVE CAUGHT THE WRONG-CAMERA BUG. The one
+    calibration this project held was named for one camera, described a
+    second, and was wired to a third, for four days, and nothing could see it
+    because the file did not record what it was taken with. `applies_to`
+    fixed the wiring half; this fixes the provenance half -- a calibration
+    now says which physical unit produced it, so a swapped camera is
+    DETECTABLE rather than merely unlucky.
+    """
+    out = {'device': dev}
+    try:
+        r = subprocess.run(['v4l2-ctl', '-d', dev, '--info'],
+                           capture_output=True, text=True, timeout=5)
+        for line in (r.stdout or '').splitlines():
+            if 'Card type' in line:
+                out['card'] = line.split(':', 1)[1].strip()
+            elif 'Bus info' in line:
+                out['bus'] = line.split(':', 1)[1].strip()
+    except Exception:
+        pass
+    try:
+        real = os.path.realpath(dev)
+        node = os.path.basename(real)
+        base = f'/sys/class/video4linux/{node}/device/../'
+        for key, fn in (('usb_vid', 'idVendor'), ('usb_pid', 'idProduct'),
+                        ('usb_serial', 'serial')):
+            try:
+                out[key] = open(base + fn).read().strip()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return out
+
+
+def list_cameras(cal_dir):
+    """Every capture-capable camera, with the calibration it has (or lacks).
+
+    The competition-day question is not "what is my focal length", it is
+    "which of my cameras can I trust right now". This answers that in one
+    place: the units present, what each one is, whether a calibration exists
+    for it, and whether that calibration was taken on THIS unit.
+    """
+    cams = []
+    for dev in sorted(glob.glob('/dev/video*'),
+                      key=lambda d: int(''.join(c for c in d if c.isdigit()) or 0)):
+        try:
+            r = subprocess.run(['v4l2-ctl', '-d', dev, '--list-formats'],
+                               capture_output=True, text=True, timeout=5)
+            txt = r.stdout or ''
+            # Version-robust: this v4l2-ctl prints "[0]: 'MJPG' (...)" and no
+            # "Pixel Format" string at all, which an earlier check assumed --
+            # it found ZERO cameras on a machine with one plugged in. Require
+            # a capture type AND at least one enumerated format.
+            if 'Video Capture' not in txt or not re.search(r'\[\d+\]:', txt):
+                continue                     # metadata node, not a stream
+        except Exception:
+            continue
+        ident = camera_identity(dev)
+        # USB ONLY. The Pi exposes ~18 `pispbe` ISP pipeline nodes that
+        # enumerate formats and are not cameras; listing them buries the two
+        # devices that matter under a page of noise. A USB vendor id is the
+        # thing every real camera here has and no ISP node does.
+        if not ident.get('usb_vid'):
+            continue
+        entry = {**ident, 'calibration': None, 'match': None}
+        best, best_match = None, None
+        for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
+            try:
+                d = json.load(open(f))
+            except Exception:
+                continue
+            info = {
+                'file': os.path.basename(f),
+                'applies_to': d.get('applies_to'),
+                'captured': d.get('captured'),
+                'fx': (d.get('camera_matrix') or [[None]])[0][0],
+                'hfov_air': d.get('hfov_deg_air'),
+                'hfov_water': d.get('hfov_deg_water'),
+                'max_ere_px': d.get('max_ere_px'),
+                'views': d.get('views_used'),
+            }
+            # ⛔ THREE STATES, NOT TWO. "confirmed" needs the USB id recorded
+            # AT CAPTURE and matching now. "unverified" is a file that plausibly
+            # belongs but cannot prove it -- which is every calibration taken
+            # before identity was recorded, and is exactly the state the
+            # wrong-camera bug lived in for four days. Reporting it as
+            # "calibrated" would repeat that; reporting it as "none" would
+            # throw away a good calibration. So it gets its own word.
+            if d.get('usb_vid'):
+                if (d['usb_vid'] == ident.get('usb_vid') and
+                        d.get('usb_pid') == ident.get('usb_pid')):
+                    best, best_match = info, 'confirmed'
+                    break
+                continue                      # identity recorded and DIFFERENT
+            card = (ident.get('card') or '').split(':')[0].strip().lower()
+            blob = (str(d.get('camera') or '') + ' ' +
+                    ' '.join(d.get('applies_to') or [])).lower()
+            if card and card in blob and best is None:
+                best, best_match = info, 'unverified'
+        entry['calibration'], entry['match'] = best, best_match
+        cams.append(entry)
+    return cams
 
 
 def reap_previous(port, wait_s=6.0):
@@ -877,6 +1174,7 @@ def main():
     cols, rows = (int(x) for x in a.grid.lower().split('x'))
     os.makedirs(a.out, exist_ok=True)
     st = State(cols, rows, a.out, build_steps())
+    st.square = a.square
     resume(st)
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -886,7 +1184,8 @@ def main():
     dest = os.path.join(install, f'{a.applies_to}_{a.width}x{a.height}.json')
     argv = [sys.executable, os.path.join(here, 'fov_solve.py'), a.out,
             '--grid', a.grid, '--square', str(a.square),
-            '--applies-to', a.applies_to, '--install', install]
+            '--applies-to', a.applies_to, '--install', install,
+            '--identity', json.dumps(camera_identity(f'/dev/video{a.device}'))]
 
     threading.Thread(target=capture_loop,
                      args=(st, a.device, a.width, a.height, a.stream_width,
@@ -898,8 +1197,36 @@ def main():
                      args=(st, cols, rows, a.square, (a.width, a.height)),
                      daemon=True).start()
 
+    st.device = a.device
+
+    def restart(device=None, applies_to=None, grid=None, square=None):
+        """Re-exec on the chosen camera. One startup path, not two."""
+        new = [x for x in sys.argv]
+        def setarg(flag, val):
+            if val is None:
+                return
+            if flag in new:
+                new[new.index(flag) + 1] = str(val)
+            else:
+                new.extend([flag, str(val)])
+        setarg('--device', device)
+        setarg('--applies-to', applies_to)
+        setarg('--grid', grid)
+        setarg('--square', square)
+        # Each camera gets its OWN capture folder, or a switch would resume
+        # into another camera's frames -- which is the wrong-camera bug
+        # wearing a different hat.
+        if applies_to:
+            setarg('--out', os.path.expanduser(f'~/calib_{applies_to}'))
+        time.sleep(0.4)
+        # `sys.argv[0]` is a Python file either way -- a .py when run
+        # directly, and the console-script wrapper under `ros2 run` -- so one
+        # form covers both. The earlier version branched on the name and was
+        # wrong for the wrapper, which is the case that actually ships.
+        os.execv(sys.executable, [sys.executable] + new)
+
     srv = ThreadingHTTPServer(('0.0.0.0', a.port),
-                              make_handler(st, argv, dest))
+                              make_handler(st, argv, dest, install, restart))
     print(f'{len(st.steps)} guided poses -> {a.out}  (resuming at step '
           f'{st.i + 1})')
     print(f'open http://<this-host>:{a.port}/')
