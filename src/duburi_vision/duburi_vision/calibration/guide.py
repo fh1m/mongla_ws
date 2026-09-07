@@ -159,6 +159,10 @@ class State:
         self.hold = 0.0                # 0..1 progress of the hold timer
         self.sharp = None              # OpenCV chessboard sharpness, px
         self.device = None
+        # AIR or WATER. Recorded, shown, and part of the filename, because
+        # the two differ by ~1.44x and mixing them is a silent 44 % scale
+        # error on every range the vehicle computes.
+        self.medium = 'air'
         self.undistort = False     # preview the correction, live
         self.K = self.D = None     # latest fit, for that preview
         self.solve = 'idle'
@@ -568,7 +572,12 @@ PAGE = """<!doctype html><meta charset=utf-8>
  table#ans td:first-child{color:var(--dim);white-space:nowrap;padding-right:10px}
  table#ans td:last-child{text-align:right;font-variant-numeric:tabular-nums}
  .good{color:var(--ok)} .bad{color:var(--no)} .warn2{color:var(--warn)}
- .cam{border:1px solid var(--line);border-radius:4px;padding:8px 10px;
+ .med{font:700 15px/1.6 ui-monospace,monospace;letter-spacing:.16em;
+ padding:6px 10px;border-radius:6px;text-align:center;margin-bottom:8px}
+.med.air{background:#12331e;color:#7fe3a1;border:1px solid #2c6b41}
+.med.water{background:#0d2740;color:#79c6ff;border:1px solid #2b5f8c}
+.lib{border:1px solid #333;border-radius:6px;padding:7px 9px;margin:6px 0}
+.cam{border:1px solid var(--line);border-radius:4px;padding:8px 10px;
       margin-bottom:8px;font-size:12px}
  .cam.act{border-color:var(--acc)}
  .cam b{font-weight:600} .cam .d{color:var(--dim)}
@@ -596,8 +605,20 @@ PAGE = """<!doctype html><meta charset=utf-8>
   <div class=chk><span class=dot id=ds></span><span id=ts></span></div>
   <div class=prog><i id=hold></i></div>
   <div class=msg id=msg></div>
+  <h2>Medium</h2>
+  <div id=medbar class=med>AIR</div>
+  <div class=btnrow>
+    <button class=ghost id=mair>Calibrate in AIR</button>
+    <button class=ghost id=mwat>Calibrate in WATER</button>
+  </div>
+  <div class=sub>air and water differ by ~1.44&times; on this hull. The
+   medium is written into the file and onto its name, so the two can never
+   be confused. Calibrate in air unless you are validating.</div>
   <h2>Cameras on this vehicle</h2>
   <div id=cams class=sub>scanning…</div>
+  <h2>Saved calibrations</h2>
+  <div class=d id=libdir></div>
+  <div id=lib class=sub>scanning…</div>
   <h2>The answer so far</h2>
   <table id=ans><tr><td colspan=2 class=sub>needs 6 usable views</td></tr></table>
   <h2>Certainty <span class=sub>(AprilCal Max ERE)</span></h2>
@@ -698,6 +719,8 @@ async function tick(){
     s.solve==='failed'?'solve failed, see below':'';
   $('out').textContent=s.solve_out||'';
   $('skip').style.display=s.done?'none':'block';
+  const mb=$('medbar'); mb.textContent=(s.medium||'air').toUpperCase();
+  mb.className='med '+(s.medium||'air');
   $('undist').textContent = s.undistort?'Raw view':'Undistorted view';
   $('undist').disabled = s.fx===null;
   $('dl').style.pointerEvents = s.have_result?'auto':'none';
@@ -723,6 +746,7 @@ $('skip').onclick=async()=>{await fetch('/skip',{method:'POST'});tick();};
 async function cams(){
  try{
   const r=await (await fetch('/cameras')).json();
+  window._cams=r.cameras;
   document.getElementById('cams').innerHTML = r.cameras.length ? r.cameras.map(c=>{
     const active = String(c.device).endsWith(String(r.active));
     const cal=c.calibration;
@@ -743,19 +767,68 @@ async function cams(){
       '<b>'+(c.card||c.device)+'</b> <span class=d>'+c.device+
       ' · usb '+(c.usb_vid||'?')+':'+(c.usb_pid||'?')+
       (active?' · ACTIVE':'')+'</span><br>'+line+
-      (active?'':'<button onclick="sw(\''+c.device+'\',\''+prof+'\')">'+
+      (active?'':'<button onclick="sw(\\''+c.device+'\\',\\''+prof+'\\')">'+
         (cal?'Re-calibrate':'Calibrate')+' this camera</button>')+'</div>';
   }).join('') : '<span class=bad>no USB cameras found</span>';
  }catch(e){}
 }
+$('mair').onclick=()=>setmed('air');
+$('mwat').onclick=()=>setmed('water');
+async function setmed(m){
+  if(m==='water' && !confirm(
+     'Calibrate IN WATER?\\n\\nThe normal path is to calibrate in air once '+
+     'and correct refraction analytically. An in-water calibration is a '+
+     'VALIDATION of that correction. It is saved separately and never '+
+     'overwrites the air one.')) return;
+  $('msg').textContent='restarting in '+m+'…';
+  await fetch('/switch?medium='+m,{method:'POST'});
+  setTimeout(()=>location.reload(), 5000);
+}
+window._cams=[];
+async function lib(){
+ try{
+  const r=await (await fetch('/library')).json();
+  document.getElementById('lib').innerHTML = r.library.length ? r.library.map(c=>{
+    // Only offer to apply a calibration to a camera that is actually here.
+    // Applying to an absent device would write a file claiming a unit
+    // nobody can check.
+    const btns=(window._cams||[]).map(cam=>
+      '<button onclick="ap(\\''+c.file+'\\',\\''+cam.device+'\\',\\''+
+      ((c.applies_to&&c.applies_to[0])||'pi_forward')+'\\')">apply to '+
+      (cam.card||cam.device)+'</button>').join(' ');
+    return '<div class=lib><b>'+c.file+'</b> <span class=d>'+
+      (c.medium||'air').toUpperCase()+' · '+c.width+'x'+c.height+
+      (c.fx?' · fx '+c.fx.toFixed(0):'')+
+      (c.views?' · '+c.views+' views':'')+
+      (c.max_ere_px?' · ERE '+c.max_ere_px.toFixed(1)+'px':'')+
+      '</span><br><span class=sub>'+(c.camera||'no camera recorded')+
+      ' · '+(c.captured||'?')+'</span><br>'+btns+'</div>';
+  }).join('') : '<span class=sub>none saved yet</span>';
+  // Name the directory on the page. It is resolved by walking up for
+  // `src/duburi_vision/config/calibration`, and if that walk ever fails the
+  // fallback is a folder OUTSIDE the package -- which would look exactly
+  // like an empty library.
+  document.getElementById('libdir').textContent = r.dir;
+ }catch(e){}
+}
+async function ap(file,dev,prof){
+  if(!confirm('Apply '+file+' to '+dev+'?\\n\\nThis asserts they are the SAME '+
+    'physical camera. The file records that YOU asserted it, not that it '+
+    'was measured here.')) return;
+  await fetch('/apply?file='+encodeURIComponent(file)+'&device='+
+    encodeURIComponent(dev)+'&applies_to='+encodeURIComponent(prof),
+    {method:'POST'});
+  setTimeout(()=>{lib();cams();}, 500);
+}
 async function sw(dev,prof){
-  const n=dev.replace(/\D+/g,'');
+  const n=dev.replace(/\\D+/g,'');
   document.getElementById('cams').innerHTML='<span class=warn2>switching to '+dev+'…</span>';
   await fetch('/switch?device='+n+'&applies_to='+prof,{method:'POST'});
   setTimeout(()=>location.reload(), 5000);
 }
 setInterval(tick,300);tick();
 setInterval(cams,4000);cams();
+setInterval(lib,6000);lib();
 </script>
 """
 
@@ -780,7 +853,8 @@ def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
                     'ok_tilt': bool(band == tb),
                     'hold': st.hold, 'msg': st.msg, 'err': st.err,
                     'sharp': st.sharp, 'sharp_max': MAX_SHARPNESS_PX,
-                    'undistort': st.undistort, 'grid': f'{st.cols}x{st.rows}',
+                    'undistort': st.undistort, 'medium': st.medium,
+                    'grid': f'{st.cols}x{st.rows}',
                     'square': st.square,
                     'have_result': os.path.exists(solve_dest),
                     'ere': st.ere, 'ere_pred': st.ere_pred,
@@ -817,6 +891,14 @@ def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
                 self.send_header('Content-Disposition',
                                  'attachment; filename="'
                                  + os.path.basename(solve_dest) + '"')
+                self.send_header('Content-Length', str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+            elif self.path == '/library':
+                b = json.dumps({'library': library(cal_dir),
+                                'dir': cal_dir}).encode()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(b)))
                 self.end_headers()
                 self.wfile.write(b)
@@ -870,12 +952,33 @@ def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
                 q = parse_qs(urlparse(self.path).query)
                 dev = q.get('device', [None])[0]
                 prof = q.get('applies_to', [None])[0]
+                med = q.get('medium', [None])[0]
                 self.send_response(204)
                 self.end_headers()
-                if dev is not None:
-                    threading.Thread(target=restart, args=(dev, prof),
-                                     daemon=True).start()
+                # A medium change alone is a valid switch -- the camera does
+                # not move when the hull goes in the water, the refraction
+                # does.
+                if dev is not None or med is not None:
+                    threading.Thread(
+                        target=restart,
+                        kwargs={'device': dev, 'applies_to': prof,
+                                'medium': med},
+                        daemon=True).start()
                 return
+            if self.path.startswith('/apply'):
+                from urllib.parse import urlparse, parse_qs
+                q = parse_qs(urlparse(self.path).query)
+                name, err = apply_calibration(
+                    cal_dir, q.get('file', [''])[0],
+                    q.get('device', ['/dev/video0'])[0],
+                    q.get('applies_to', ['pi_forward'])[0])
+                with st.lock:
+                    st.msg = (
+                        f'applied -> {name}. The RUNNING vision node still '
+                        f'holds the old intrinsics -- colcon build and '
+                        f'relaunch before trusting a bearing.'
+                        if name else f'apply refused: {err}')
+                self.send_response(204); self.end_headers(); return
             if self.path == '/undistort':
                 with st.lock:
                     st.undistort = not st.undistort
@@ -1081,6 +1184,158 @@ def default_calibration_dir():
     return fallback
 
 
+def capture_dir(applies_to, medium):
+    """Where this camera's frames for THIS medium live.
+
+    ⛔ THE MEDIUM IS PART OF THE PATH, NOT JUST THE FILENAME. Switching to
+    water re-execs and `resume()` picks up whatever is in `--out`. With one
+    shared folder that is the AIR capture set, and Solve would install it as
+    `..._water.json`: a filename saying water over pixels taken in air --
+    the exact 1.44x confusion the whole medium flag exists to prevent,
+    arriving through the front door.
+
+    Same reasoning as the per-profile split that came before it: a switch
+    must not resume into another capture's frames.
+    """
+    suffix = '' if medium == 'air' else f'_{medium}'
+    return os.path.expanduser(f'~/calib_{applies_to}{suffix}')
+
+
+def restart_argv(argv, cur_profile, cur_medium, device=None,
+                 applies_to=None, grid=None, square=None, medium=None):
+    """The argv a re-exec should run with. Pure, so it can be driven.
+
+    ⛔ `--out` IS ALWAYS REWRITTEN, from BOTH the profile and the medium.
+    An earlier version rewrote it only when the profile changed, so a
+    medium-only switch re-execed pointing at the previous capture folder,
+    `resume()` picked up the AIR frames, and Solve installed them as
+    `..._water.json` -- a filename saying water over pixels taken in air,
+    which is the exact 1.44x confusion the medium flag exists to prevent.
+    Nothing in the naming or file-content tests can see that, because the
+    artifact is correct and the INPUT is wrong.
+    """
+    new = list(argv)
+
+    def setarg(flag, val):
+        if val is None:
+            return
+        if flag in new:
+            new[new.index(flag) + 1] = str(val)
+        else:
+            new.extend([flag, str(val)])
+
+    setarg('--device', device)
+    setarg('--applies-to', applies_to)
+    setarg('--grid', grid)
+    setarg('--square', square)
+    setarg('--medium', medium)
+    setarg('--out', capture_dir(applies_to or cur_profile,
+                                medium or cur_medium))
+    return new
+
+
+def _solver():
+    """The solver module, loaded BY PATH.
+
+    ⛔ NOT `from duburi_vision.calibration.solver import ...`. `tools/` loads
+    this file by path precisely so the calibration tool does not need a ROS
+    environment; a package import re-enters `duburi_vision/__init__.py`,
+    which imports `preflight`, which imports `rclpy` -- and the tool dies on
+    a dev box with `ModuleNotFoundError: rclpy`. This is the same trap the
+    shims were written to avoid, walked into from the other side.
+    """
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'solver.py')
+    spec = importlib.util.spec_from_file_location('_calib_solver', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def library(cal_dir):
+    """Every calibration this vehicle holds, with what it is good for.
+
+    A calibration costs an operator ten minutes and a board. Keeping them all
+    and being able to re-apply one is the difference between swapping a
+    camera in two minutes and recalibrating on competition ground.
+    """
+    out = []
+    for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
+        try:
+            d = json.load(open(f))
+        except Exception:
+            continue
+        K = d.get('camera_matrix') or [[None]]
+        out.append({
+            'file': os.path.basename(f),
+            'applies_to': d.get('applies_to'),
+            'medium': d.get('medium', 'air'),
+            'captured': d.get('captured'),
+            'camera': d.get('camera'),
+            'usb_vid': d.get('usb_vid'), 'usb_pid': d.get('usb_pid'),
+            'width': d.get('image_width'), 'height': d.get('image_height'),
+            'fx': K[0][0],
+            'hfov_air': d.get('hfov_deg_air'),
+            'hfov_water': d.get('hfov_deg_water'),
+            'views': d.get('views_used'),
+            'max_ere_px': d.get('max_ere_px'),
+            'holdout_rms_px': d.get('holdout_rms_px'),
+        })
+    return out
+
+
+def apply_calibration(cal_dir, src_file, dev, applies_to):
+    """Bind an existing calibration to a connected camera.
+
+    ⛔ APPLYING IS THE OPERATOR ASSERTING "this is the same physical unit",
+    and the file must say so rather than pretend it was measured here. So the
+    connected camera's identity is written in ALONGSIDE
+    `identity_source: operator asserted at apply time` -- never as though it
+    had been captured on this unit. The difference matters the day someone
+    asks why a calibration claims a camera it never saw.
+
+    Refuses to apply across MEDIA. An in-water calibration standing in for an
+    in-air one is a ~1.44x scale error on every range and velocity, which is
+    both silent and exactly the size that still looks plausible.
+    """
+    # A bad request must come back as a REFUSAL, not as a dropped
+    # connection. The first live test of this route passed a file that was
+    # not there and got an unhandled FileNotFoundError inside do_POST, which
+    # the browser sees as the page hanging -- a failure mode indis-
+    # tinguishable from the tool being broken.
+    src = os.path.join(cal_dir, os.path.basename(src_file or ''))
+    try:
+        d = json.load(open(src))
+    except Exception as e:
+        return None, f'{src_file!r}: {e}'
+    medium = d.get('medium', 'air')
+    ident = camera_identity(dev)
+    if not ident.get('usb_vid'):
+        return None, f'{dev}: no USB identity, refusing to bind blindly'
+    if not applies_to:
+        return None, 'no camera profile given'
+    d = dict(d)
+    d['applies_to'] = [applies_to]
+    # State the medium EXPLICITLY even when the source predates the field.
+    # A file that merely omits it is read as air by convention, and a
+    # convention is not evidence.
+    d['medium'] = medium
+    d.update({k: v for k, v in ident.items()
+              if k in ('usb_vid', 'usb_pid', 'usb_serial', 'card', 'bus')})
+    d['identity_source'] = 'operator asserted at apply time'
+    d['applied_from'] = os.path.basename(src_file)
+    d['applied_on'] = time.strftime('%Y-%m-%d %H:%M')
+    dest = os.path.join(cal_dir, _solver().calibration_filename(
+        applies_to, d.get('image_width'), d.get('image_height'), medium))
+    if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(src):
+        # Never overwrite a calibration without keeping the old one. It cost
+        # somebody a board and ten minutes.
+        os.replace(dest, dest + '.bak-' + time.strftime('%H%M%S'))
+    json.dump(d, open(dest, 'w'), indent=2)
+    return os.path.basename(dest), None
+
+
 def reap_previous(port, wait_s=6.0):
     """Kill any EARLIER instance of this tool, then wait for it to let go.
 
@@ -1176,7 +1431,9 @@ def reap_previous(port, wait_s=6.0):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--device', type=int, default=3)
-    ap.add_argument('--out', default=os.path.expanduser('~/fantech_cal'))
+    # Derived from the profile AND the medium unless given explicitly --
+    # see `capture_dir`.
+    ap.add_argument('--out', default=None)
     ap.add_argument('--grid', default='8x6',
                     help='INNER corners; must match the board AND fov_solve')
     ap.add_argument('--square', type=float, default=0.025)
@@ -1191,6 +1448,13 @@ def main():
                          'here and smeared every hand movement.')
     ap.add_argument('--brightness', type=int, default=150)
     ap.add_argument('--applies-to', default='pi_forward')
+    ap.add_argument('--medium', choices=('air', 'water'), default='air',
+                    help='the medium the board is being viewed THROUGH. '
+                         'Air and water differ by ~1.44x on this hull; the '
+                         'medium is recorded in the file, shown on the page '
+                         'and suffixed onto the filename so an in-water '
+                         'calibration can never be mistaken for an in-air '
+                         'one.')
     ap.add_argument('--install', default=None)
     ap.add_argument('--no-reap', action='store_true',
                     help='do NOT stop an earlier instance first. Only for '
@@ -1206,6 +1470,8 @@ def main():
                   f'{", ".join(str(k) for k in killed)}')
 
     cols, rows = (int(x) for x in a.grid.lower().split('x'))
+    if a.out is None:
+        a.out = capture_dir(a.applies_to, a.medium)
     os.makedirs(a.out, exist_ok=True)
     st = State(cols, rows, a.out, build_steps())
     st.square = a.square
@@ -1215,7 +1481,11 @@ def main():
     install = os.path.abspath(a.install or default_calibration_dir())
     os.makedirs(install, exist_ok=True)
     print(f'calibrations directory: {install}')
-    dest = os.path.join(install, f'{a.applies_to}_{a.width}x{a.height}.json')
+    st.medium = a.medium
+    # Same rule the solver installs by -- imported, not restated, so the
+    # Download button can never serve a different file than Solve wrote.
+    dest = os.path.join(install, _solver().calibration_filename(
+        a.applies_to, a.width, a.height, a.medium))
     # ⛔ `solver.py`, NOT `fov_solve.py`. The name changed when calibration
     # moved into the package and this path did not, so the Solve button would
     # have launched a file that does not exist -- a stale string surviving a
@@ -1224,6 +1494,7 @@ def main():
     argv = [sys.executable, os.path.join(here, 'solver.py'), a.out,
             '--grid', a.grid, '--square', str(a.square),
             '--applies-to', a.applies_to, '--install', install,
+            '--medium', a.medium,
             '--identity', json.dumps(camera_identity(f'/dev/video{a.device}'))]
 
     threading.Thread(target=capture_loop,
@@ -1238,25 +1509,11 @@ def main():
 
     st.device = a.device
 
-    def restart(device=None, applies_to=None, grid=None, square=None):
-        """Re-exec on the chosen camera. One startup path, not two."""
-        new = [x for x in sys.argv]
-        def setarg(flag, val):
-            if val is None:
-                return
-            if flag in new:
-                new[new.index(flag) + 1] = str(val)
-            else:
-                new.extend([flag, str(val)])
-        setarg('--device', device)
-        setarg('--applies-to', applies_to)
-        setarg('--grid', grid)
-        setarg('--square', square)
-        # Each camera gets its OWN capture folder, or a switch would resume
-        # into another camera's frames -- which is the wrong-camera bug
-        # wearing a different hat.
-        if applies_to:
-            setarg('--out', os.path.expanduser(f'~/calib_{applies_to}'))
+    def restart(device=None, applies_to=None, grid=None, square=None,
+                medium=None):
+        """Re-exec on the chosen camera/medium. One startup path, not two."""
+        new = restart_argv(sys.argv, a.applies_to, a.medium, device,
+                           applies_to, grid, square, medium)
         time.sleep(0.4)
         # `sys.argv[0]` is a Python file either way -- a .py when run
         # directly, and the console-script wrapper under `ros2 run` -- so one

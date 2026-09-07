@@ -50,19 +50,50 @@ axes (`measured-bars.md` §13). Every constant in that path was measured in air.
 
 ### 1a. `f_water = 741` — validate, do not re-calibrate
 
-`f_air = 513.94`, `f_water = 741.0`, ratio **1.44**, from the round-25
-held-out-validated FOV work (63.8° air / 46.7° water ±0.7°). The literature's
-flat-port figure is 25–33 %; ours is 44 %. **The measurement wins** — the
-literature only explains why they differ (port thickness and geometry).
+`f_air = 513.94`, `f_water = 741.0`, ratio **1.442**, from the round-25
+held-out-validated FOV work (63.8° air / 46.7° water ±0.7°).
+
+> ⛔ **CORRECTION (2026-09-07). Two claims in the previous version of this
+> paragraph were wrong, and they were wrong in the direction that made the
+> water number look better supported than it is.**
+>
+> 1. **"The literature says 25–33 %; ours is 44 % — the measurement wins."**
+>    There is no discrepancy. `f_water/f_air` is a ratio of **tangents**;
+>    the refractive index is a ratio of **sines**. Our own pair implies
+>    `sin(31.9°)/sin(23.36°)` = **1.3333** — plain Snell for water, to four
+>    decimals. The two numbers were never in conflict; they are different
+>    quantities.
+> 2. **`f_water` was never measured.** It is `f_air` put through that same
+>    Snell conversion (`fov_from_K` derives the water figure from the air
+>    fit). Predicting 46.71° from 63.8° and then citing 46.7° as a measured
+>    result is circular. Only the **air** half of that pair is a
+>    measurement.
+>
+> So the flat-port refraction model is, as of today, **assumed and
+> unvalidated** — which is exactly what makes the item below worth doing,
+> and it is a stronger reason than the one originally written here.
 
 - **Do:** a known-length slide **in water** at a known height, `medium:=water`.
 - **Bar:** measured distance within **±5 %** of tape. A systematic error near
-  **−31 %** means `f_air` is being used (`741/514 = 1.44`); near **+8 %** means
-  something defaulted to a 1.33 refractive guess.
-- **Do NOT** re-fit `f_water` from this run. It is a **validation**. If it
-  disagrees by more than the bar, that is a finding to investigate, not a
-  number to overwrite — a single in-water slide is far weaker evidence than
-  25 held-out calibration views.
+  **−31 %** means `f_air` is being used where `f_water` belongs
+  (`514/741 = 0.694`). There is no separate "1.33 guess" failure to look for:
+  our `f_water` **is** the 1.333 conversion, per the correction above.
+- **Do NOT** re-fit `f_water` from a single slide. If it disagrees by more
+  than the bar, that is a finding to investigate, not a number to overwrite
+  — one hand slide is far weaker evidence than 25 held-out views.
+- **⭐ An in-water CALIBRATION is the real answer, and it is now buildable
+  (2026-09-07).** `ros2 run duburi_vision calibrate --medium water`, or the
+  WATER button on the page. It fits the intrinsics through the port with the
+  board in the pool, so it measures the air-plus-port-plus-water system
+  *directly* rather than assuming the model — the first genuinely
+  independent number for `f_water`. It installs as
+  `<profile>_<w>x<h>_water.json`, **never overwrites the air file**, and the
+  launch keeps loading the air one.
+  **Reading the result:** if a ≥15-view in-water fit disagrees with the
+  Snell prediction by more than the ±0.7° air bar, believe the fit and
+  record the port's contribution — a real flat port is what the
+  literature's 25–33 % figures describe, and a thin-port ideal (our current
+  assumption) omits it.
 
 ### 1b. `pool_depth_m` — the parameter that multiplies everything
 
