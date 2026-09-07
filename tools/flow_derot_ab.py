@@ -40,6 +40,8 @@ Prerequisites are the three processes `water-owed.md` §5c lists: the manager
 vision launch with flow:=true, and this.
 """
 import argparse
+import os
+import signal
 import subprocess
 import sys
 import threading
@@ -145,8 +147,17 @@ def spawn(name, gx, gy, cam, cal, height, medium):
     for topic in ('distance_traveled', 'velocity', 'flow_quality',
                   'distance_debug'):
         cmd += ['-r', f'{ns}/{topic}:=/ab/{name}/{topic}']
+    # ⛔ OWN THE PROCESS GROUP. `ros2 run` is a launcher: it execs the node
+    # as a CHILD, so Popen.terminate() kills the wrapper and leaves the node
+    # running. Measured: after three invocations there were THREE live copies
+    # of every arm, all publishing to the same remapped topic, and the tool
+    # read whichever published last -- an A/B whose arms were each three
+    # nodes deep. `start_new_session` puts the wrapper and its child in one
+    # group so the whole group can be signalled. Same failure the sim's
+    # scoring `gz topic -e` had, which outlived every stop.
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
+                            stderr=subprocess.DEVNULL,
+                            start_new_session=True)
 
 
 def main():
@@ -172,13 +183,22 @@ def main():
     try:
         print('waiting for the extra arms to come up...')
         time.sleep(9)
+        want = 1 + len(ARMS)
         subs = n.count_subscribers(n._ctrl.topic_name)
-        print(f'  {subs} nodes listening on distance_control '
-              f'(want {1 + len(ARMS)})')
-        if subs < 1 + len(ARMS):
-            print('  not every arm is up -- the comparison would be partial. '
-                  'Check that\n  the launch is running and that flow_node '
-                  'starts by hand.')
+        print(f'  {subs} nodes listening on distance_control (want {want})')
+        # BOTH directions. Checking only for "too few" is how three duplicate
+        # copies of every arm went unnoticed through a whole measurement:
+        # extra nodes are not a harmless surplus, they publish to the same
+        # topic and the reader takes whichever was last.
+        if subs != want:
+            print(f'  WRONG NUMBER OF ARMS ({subs} != {want}).')
+            if subs > want:
+                print('  Orphaned flow_node processes are still running and '
+                      'publishing to\n  these same topics. Clear them first:'
+                      '\n\n    pkill -f "duburi_flow_[BC]_" \n')
+            else:
+                print('  Not every arm came up -- check the launch is '
+                      'running.')
             return 1
 
         input('\nRig at the START mark, ENTER to arm > ')
@@ -221,12 +241,33 @@ def main():
     finally:
         rclpy.shutdown()
         for p in procs:
-            p.terminate()
+            try:
+                os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+            except Exception:
+                pass
         for p in procs:
             try:
                 p.wait(timeout=5)
             except Exception:
-                p.kill()
+                try:
+                    os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+                except Exception:
+                    pass
+        # Belt and braces, VERIFIED NECESSARY: killing the process group
+        # still left one copy of each arm alive, so the node is reparented
+        # somewhere the group signal does not reach. Sweep by node name and
+        # then CHECK, because a cleanup that is merely attempted is how three
+        # duplicates accumulated in the first place.
+        subprocess.run(['pkill', '-f', 'duburi_flow_[BC]_'],
+                       capture_output=True)
+        time.sleep(1.0)
+        left = subprocess.run(['pgrep', '-f', 'duburi_flow_[BC]_'],
+                              capture_output=True, text=True)
+        if (left.stdout or '').strip():
+            print('\n  ⚠ ARMS STILL RUNNING after cleanup: '
+                  f'{len((left.stdout or "").split())} process(es).\n'
+                  '  They publish to the same topics, so the NEXT run would '
+                  'read them.\n  Clear with:  pkill -9 -f "duburi_flow_[BC]_"')
 
 
 if __name__ == '__main__':
