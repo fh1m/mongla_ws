@@ -1,41 +1,38 @@
 #!/usr/bin/env python3
-"""Guided camera calibration in a browser: live view, coverage, tilt spread.
+"""Step-by-step guided camera calibration in a browser.
 
-⛔ WHY GUIDED AND NOT JUST "GRAB 25 FRAMES". A calibration capture fails in a
-way that LOOKS LIKE SUCCESS. Too little tilt leaves focal length and distance
+⛔ WHY A SCRIPT OF POSES AND NOT A FREEFORM CAPTURE. A calibration fails in a
+way that LOOKS LIKE SUCCESS: too little tilt leaves focal length and distance
 confounded, and the fit then returns a LOW reprojection RMS with a WRONG
-focal length -- that is exactly how the downward camera produced fx = 835.7,
-969.9 and 1011.2 on three consecutive attempts, each with a confident-looking
-metric (`fov_solve.py`'s own docstring). OpenCV's docs say the same of
-printed targets.
+focal length. That is how this project's downward camera produced fx = 835.7,
+969.9 and 1011.2 on three consecutive tries, each with a confident metric.
 
-So the two things that actually make the system well-conditioned are driven
-explicitly, and the operator is told which one is missing:
+A freeform version of this tool was tried first, showing coverage and tilt as
+bars for the operator to fill. Watched live it reached **9/9 coverage with 15
+of 17 views FLAT** -- the operator naturally holds a board square-on, and the
+one axis that decides correctness is the one that goes unfilled. Bars report
+the problem; they do not prevent it.
 
-  * TILT SPREAD -- the board seen from genuinely different angles, not 25
-    fronto-parallel views. This is the one that decides whether the answer is
-    right, and the one a person naturally under-does.
-  * FRAME COVERAGE -- corners and edges as well as the middle, because that
-    is where the distortion coefficients get their only evidence.
+So the capture is a SCRIPT. Each step names one pose -- a frame region and a
+tilt -- checks the live detection against it, and only advances when it is
+actually met. Coverage and tilt spread are then guaranteed by construction,
+and the operator never has to work out what is missing.
 
-Both are shown live, as bars that must fill, so "am I done" is answerable
-without reading a number afterwards.
+Layout: streaming and detection run on separate threads, and detection works
+on a downscale. Inline full-resolution detection made the video unusable
+(with no board in frame the detector searches exhaustively before failing --
+142 s per call at 1280x720 on random noise, ~112 ms at 480 px on a real
+scene). The saved frame is full resolution and `fov_solve` re-detects it
+there, so the downscale costs nothing.
 
-It also refuses to auto-capture near-duplicate poses: 25 views of the same
-pose is one view with 24 witnesses, and it inflates confidence without adding
-information.
-
-⛔ ThreadingHTTPServer, NOT HTTPServer. An MJPEG handler never returns, so on
-a single-threaded server it starves every other route -- which silently broke
-a second endpoint during the FOV calibration round and looked like a hung
-page.
+ThreadingHTTPServer, not HTTPServer: an MJPEG handler never returns and would
+starve every other route.
 
 Usage (stop the vision launch first -- it holds the cameras):
     python3 tools/fov_calibrate_web.py --device 3 --out ~/fantech_cal
-then open the URL it prints, and run `fov_solve.py` on the folder when the
-bars are full. The page prints the exact command.
 """
 import argparse
+import glob
 import json
 import os
 import subprocess
@@ -49,109 +46,88 @@ import numpy as np
 
 FIND = cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE
 CRIT = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
-# Coverage is scored on a 3x3 grid of where the board's CENTRE landed, and
-# tilt on the board's apparent aspect (a fronto-parallel board is square-ish;
-# a tilted one is not). Both are crude on purpose -- they are guidance, and
-# `fov_solve` does the real conditioning check afterwards.
 GRID = 3
-TILT_BINS = (0.00, 0.12, 0.25, 0.40, 1.00)
+TILT_BINS = (0.00, 0.10, 0.22, 0.36, 1.00)
+TILT_NAME = ('square-on', 'slightly tilted', 'clearly tilted', 'steeply tilted')
+CELL_NAME = (('top-left', 'top-centre', 'top-right'),
+             ('middle-left', 'CENTRE', 'middle-right'),
+             ('bottom-left', 'bottom-centre', 'bottom-right'))
+HOLD_S = 0.5          # the pose must persist this long before it is taken
+
+
+def build_steps():
+    """The pose script. Coverage x tilt by construction, not by hope.
+
+    Ordered so the easy poses come first and the operator learns the
+    interaction before being asked for a steep corner. Every one of the nine
+    regions appears at two different tilts, then the extremes are swept: the
+    four corners steeply (where distortion has its only evidence) and the
+    centre square-on twice (which anchors the principal point).
+    """
+    cells = [(y, x) for y in range(GRID) for x in range(GRID)]
+    steps = []
+    for band in (1, 2):                       # slight, then clear
+        for (y, x) in cells:
+            steps.append((y, x, band))
+    for (y, x) in ((0, 0), (0, 2), (2, 0), (2, 2)):
+        steps.append((y, x, 3))               # corners, steep
+    steps.append((1, 1, 0))                   # centre, square-on
+    steps.append((1, 1, 0))
+    return steps
 
 
 class State:
-    def __init__(self, cols, rows, want, outdir):
+    def __init__(self, cols, rows, outdir, steps):
         self.lock = threading.Lock()
-        self.cols, self.rows, self.want = cols, rows, want
-        self.outdir = outdir
-        self.frame = None                  # latest annotated JPEG
-        self.raw = None                    # newest full-res frame
-        self.corners = None                # last detection, full-res coords
-        self.size = (0, 0)
+        self.cols, self.rows, self.outdir = cols, rows, outdir
+        self.steps = steps
+        self.i = 0                     # current step index
+        self.frame = None
+        self.raw = None
+        self.corners = None
+        self.taken = []                # (y, x, band) actually captured
+        self.msg = 'starting...'
+        self.err = None
         self.fps = 0.0
         self.det_ms = 0.0
-        self.kept = 0
-        self.cover = np.zeros((GRID, GRID), int)
-        self.tilt = np.zeros(len(TILT_BINS) - 1, int)
-        self.poses = []                    # (cx, cy, tilt) of accepted views
-        self.msg = 'starting...'
-        self.found = False
-        self.paused = False
-        self.err = None
-        self.solve = 'idle'        # idle | running | done | failed
+        self.cell = None               # live: which cell the board is in
+        self.band = None               # live: which tilt band
+        self.hold = 0.0                # 0..1 progress of the hold timer
+        self.solve = 'idle'
         self.solve_out = ''
 
 
-def tilt_of(corners, cols, rows):
-    """Crude foreshortening: how far the board is from fronto-parallel.
+def tilt_of(corners, cols):
+    """Foreshortening: how far the board is from square-on, scale-free.
 
-    Compares the two diagonals of the detected quad. A square-on board has
-    equal diagonals; tilt makes them differ. Scale-free, so it does not care
-    how far away the board is -- which is what we want, since distance is a
-    different axis of variety.
+    Compares the quad's two diagonals -- equal when square-on, unequal when
+    tilted. Scale-free on purpose, so it does not confuse "further away" with
+    "more tilted"; distance is a different axis and the script does not ask
+    for it.
     """
     c = corners.reshape(-1, 2)
-    tl, tr = c[0], c[cols - 1]
-    bl, br = c[-cols], c[-1]
-    d1 = np.linalg.norm(br - tl)
-    d2 = np.linalg.norm(bl - tr)
-    if max(d1, d2) < 1e-6:
-        return 0.0
-    return float(abs(d1 - d2) / max(d1, d2))
+    d1 = np.linalg.norm(c[-1] - c[0])
+    d2 = np.linalg.norm(c[-cols] - c[cols - 1])
+    return float(abs(d1 - d2) / max(d1, d2)) if max(d1, d2) > 1e-6 else 0.0
 
 
-def novel(poses, cx, cy, t, w, h):
-    """Reject a pose too close to one already captured.
-
-    25 views of the same pose is ONE view with 24 witnesses: it lowers the
-    apparent RMS and adds no information, which is the failure this whole
-    file exists to prevent.
-    """
-    for (px, py, pt) in poses:
-        near = (abs(px - cx) < 0.12 * w and abs(py - cy) < 0.12 * h
-                and abs(pt - t) < 0.06)
-        if near:
-            return False
-    return True
+def band_of(t):
+    return max(0, min(len(TILT_NAME) - 1, int(np.digitize(t, TILT_BINS) - 1)))
 
 
 def capture_loop(st, dev, width, height, jpeg_w):
-    """Grab and stream. NO DETECTION HERE -- that is the whole point.
-
-    ⛔ THE FIRST VERSION RAN `findChessboardCorners` INLINE AND THE VIDEO WAS
-    UNUSABLE. The detector's problem is the SHAPE of its cost, not its
-    average: with no board in frame it searches exhaustively before failing,
-    and that is the common case while the operator is moving the board
-    looking for a pose -- the one moment they need to see the video.
-
-    Measured on this Pi, no board present, by input size:
-
-        1280x720   142615 ms      <- what the inline version was exposed to
-         640x360     7238 ms
-         480x270     2254 ms      <- what this runs at
-
-    ⚠ Those are on RANDOM NOISE, which is the pathological case -- every
-    pixel looks like an edge and the quad search explodes. A real scene
-    measured 112 ms at 480 px, and the page holds 30.0 fps. So the table is
-    the CEILING the design was exposed to, not the operator's experience;
-    quoting 142 s as "what it was doing" would be wrong. What it establishes
-    is the ordering, which is ~63x between full-res and the downscale.
-
-    So this thread only reads, overlays the LAST known result, and encodes.
-    Detection runs beside it at whatever rate it manages, on a downscale.
-    """
+    """Read and stream only. Detection lives in its own thread, deliberately."""
     cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
     if not cap.isOpened():
         with st.lock:
-            st.err = (f'cannot open camera {dev}. The vision launch holds the '
-                      f'cameras -- stop it first.')
+            st.err = (f'cannot open camera {dev} -- the vision launch holds '
+                      f'the cameras, stop it first.')
         return
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    with st.lock:
-        st.size = (w, h)
     n, t0 = 0, time.time()
     while True:
         ok, f = cap.read()
@@ -159,21 +135,23 @@ def capture_loop(st, dev, width, height, jpeg_w):
             time.sleep(0.01)
             continue
         with st.lock:
-            st.raw = f                      # newest frame, for the detector
+            st.raw = f
             corners = st.corners
-            cover = st.cover.copy()
+            i = st.i
         vis = cv2.resize(f, (jpeg_w, int(jpeg_w * h / w)))
+        vh = vis.shape[0]
         sc = jpeg_w / w
         if corners is not None:
             cv2.drawChessboardCorners(vis, (st.cols, st.rows),
                                       (corners * sc).astype(np.float32), True)
-        for iy in range(GRID):
-            for ix in range(GRID):
-                x0, y0 = int(ix * jpeg_w / GRID), int(iy * jpeg_w * h / w / GRID)
-                x1 = int((ix + 1) * jpeg_w / GRID)
-                y1 = int((iy + 1) * jpeg_w * h / w / GRID)
-                col = (60, 190, 60) if cover[iy, ix] else (70, 70, 200)
-                cv2.rectangle(vis, (x0 + 2, y0 + 2), (x1 - 2, y1 - 2), col, 2)
+        # Only the TARGET region is drawn. Nine boxes was a puzzle to read;
+        # one box is an instruction.
+        if i < len(st.steps):
+            ty, tx, _ = st.steps[i]
+            x0, y0 = int(tx * jpeg_w / GRID), int(ty * vh / GRID)
+            x1, y1 = int((tx + 1) * jpeg_w / GRID), int((ty + 1) * vh / GRID)
+            cv2.rectangle(vis, (x0 + 3, y0 + 3), (x1 - 3, y1 - 3),
+                          (80, 220, 255), 3)
         ok, jpg = cv2.imencode('.jpg', vis, [cv2.IMWRITE_JPEG_QUALITY, 70])
         n += 1
         if ok:
@@ -185,20 +163,14 @@ def capture_loop(st, dev, width, height, jpeg_w):
 
 
 def detect_loop(st, det_w):
-    """Find the board, decide captures. Runs beside the video, not inside it.
-
-    Detection is done on a DOWNSCALE (default 480 px wide). That costs
-    nothing real: the frame SAVED to disk is full resolution and `fov_solve`
-    re-detects it there with sub-pixel refinement, so the only job here is
-    guidance and the capture decision -- neither of which needs precision.
-    """
-    last = 0.0
+    """Match the live pose against the current step, and take it when held."""
+    held_since = None
     while True:
         with st.lock:
             f = st.raw
-            done = st.kept >= st.want
-        if f is None:
-            time.sleep(0.02)
+            i = st.i
+        if f is None or i >= len(st.steps):
+            time.sleep(0.05)
             continue
         w, h = f.shape[1], f.shape[0]
         small = cv2.resize(f, (det_w, int(det_w * h / w)))
@@ -206,53 +178,65 @@ def detect_loop(st, det_w):
         t1 = time.time()
         found, c = cv2.findChessboardCorners(gray, (st.cols, st.rows), FIND)
         dt = time.time() - t1
-        msg = 'show the board'
-        if found:
-            c = cv2.cornerSubPix(gray, c, (7, 7), (-1, -1), CRIT)
-            full = c / (det_w / w)             # back to full-res coordinates
-            cc = full.reshape(-1, 2)
-            cx, cy = float(cc[:, 0].mean()), float(cc[:, 1].mean())
-            t = tilt_of(full, st.cols, st.rows)
-            gx = min(GRID - 1, int(cx / w * GRID))
-            gy = min(GRID - 1, int(cy / h * GRID))
-            tb = max(0, min(len(st.tilt) - 1,
-                            int(np.digitize(t, TILT_BINS) - 1)))
+        ty, tx, tb = st.steps[i]
+        if not found:
+            held_since = None
             with st.lock:
-                st.corners = full
-                fresh = novel(st.poses, cx, cy, t, w, h)
-            if done:
-                msg = 'enough views -- press Run calibration'
-            elif not fresh:
-                msg = 'too close to a view already taken -- move or tilt more'
-            elif time.time() - last < 0.6:
-                msg = 'hold still...'
-            else:
-                cv2.imwrite(os.path.join(st.outdir, f'cal_{st.kept:03d}.png'),
-                            f)
-                last = time.time()
+                st.corners, st.cell, st.band, st.hold = None, None, None, 0.0
+                st.msg = 'show the whole board to the camera'
+                st.det_ms = 1000 * dt
+            continue
+        c = cv2.cornerSubPix(gray, c, (7, 7), (-1, -1), CRIT)
+        full = c / (det_w / w)
+        cc = full.reshape(-1, 2)
+        cx, cy = float(cc[:, 0].mean()), float(cc[:, 1].mean())
+        band = band_of(tilt_of(full, st.cols))
+        gx = min(GRID - 1, int(cx / w * GRID))
+        gy = min(GRID - 1, int(cy / h * GRID))
+        okc, okt = (gy, gx) == (ty, tx), band == tb
+        if okc and okt:
+            held_since = held_since or time.time()
+            prog = min(1.0, (time.time() - held_since) / HOLD_S)
+            msg = 'hold it...'
+            if prog >= 1.0:
+                fn = os.path.join(st.outdir, f'cal_{i:03d}.png')
+                cv2.imwrite(fn, f)
+                held_since = None
+                prog = 0.0
                 with st.lock:
-                    st.kept += 1
-                    st.cover[gy, gx] += 1
-                    st.tilt[tb] += 1
-                    st.poses.append((cx, cy, t))
-                    msg = f'captured {st.kept}/{st.want}'
+                    st.taken.append((ty, tx, tb))
+                    st.i += 1
+                    msg = 'got it'
         else:
-            with st.lock:
-                st.corners = None
+            held_since = None
+            prog = 0.0
+            msg = ('move the board to the highlighted box' if not okc
+                   else ('tilt it MORE' if band < tb else 'tilt it LESS'))
         with st.lock:
-            st.msg = msg
-            st.found = found
-            st.det_ms = 1000 * dt
+            st.corners, st.cell, st.band = full, (gy, gx), band
+            st.hold, st.msg, st.det_ms = prog, msg, 1000 * dt
+
+
+def resume(st):
+    """Continue from frames already on disk, so a restart is not destructive.
+
+    The files ARE the state -- `cal_<step>.png` is named for the step that
+    produced it, so resuming is just "which step numbers exist". Without
+    this, a restart begins at step 0 and overwrites the operator's work one
+    frame at a time while the page counts up from zero, with no error.
+    """
+    done = {int(os.path.basename(p)[4:7])
+            for p in glob.glob(os.path.join(st.outdir, 'cal_*.png'))}
+    i = 0
+    while i in done:
+        i += 1
+    with st.lock:
+        st.i = i
+        if i:
+            st.msg = f'resumed at step {i + 1}'
 
 
 def run_solve(st, argv, dest):
-    """Run fov_solve as a subprocess and keep its output for the page.
-
-    A subprocess rather than an import: `fov_solve` is a script with its own
-    argv handling, and shelling out is both the leaner call and the same
-    command the operator would have typed -- so the page cannot drift from
-    the documented path.
-    """
     with st.lock:
         st.solve, st.solve_out = 'running', 'solving...'
     try:
@@ -264,110 +248,107 @@ def run_solve(st, argv, dest):
             st.solve_out = out[-4000:]
     except Exception as exc:
         with st.lock:
-            st.solve, st.solve_out = 'failed', f'{exc}'
+            st.solve, st.solve_out = 'failed', str(exc)
 
 
 PAGE = """<!doctype html><meta charset=utf-8>
 <title>Camera calibration</title>
 <style>
  :root{--bg:#0e1116;--fg:#e6edf3;--dim:#8b949e;--ok:#3fb950;--no:#f85149;
-       --line:#21262d;--acc:#58a6ff}
+       --line:#21262d;--acc:#58a6ff;--warn:#d29922}
  *{box-sizing:border-box}
  body{margin:0;background:var(--bg);color:var(--fg);
-      font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
- header{padding:14px 20px;border-bottom:1px solid var(--line);
-        display:flex;gap:18px;align-items:baseline}
- h1{font-size:15px;margin:0;letter-spacing:.08em;text-transform:uppercase}
+      font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+ header{padding:12px 20px;border-bottom:1px solid var(--line);display:flex;
+        gap:16px;align-items:baseline}
+ h1{font-size:14px;margin:0;letter-spacing:.09em;text-transform:uppercase}
  .sub{color:var(--dim);font-size:12px}
- main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:0;
-      align-items:start}
+ main{display:grid;grid-template-columns:minmax(0,1fr) 340px}
  .vid{padding:16px}
  img{width:100%;display:block;border:1px solid var(--line);border-radius:4px}
- aside{padding:16px;border-left:1px solid var(--line);min-height:70vh}
- .msg{padding:10px 12px;border-radius:4px;background:#161b22;
-      border-left:3px solid var(--acc);margin-bottom:18px;min-height:42px}
- h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--dim);margin:18px 0 8px}
- .bar{height:8px;background:#161b22;border-radius:4px;overflow:hidden;
-      margin:6px 0 2px}
- .bar i{display:block;height:100%;background:var(--ok);width:0}
- .row{display:flex;justify-content:space-between;font-size:12px;
-      color:var(--dim)}
- .tilt{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
- .tilt div{background:#161b22;border-radius:3px;padding:6px 0;text-align:center;
-           font-size:11px;color:var(--dim)}
- .tilt div.on{background:#132d1a;color:var(--ok)}
- code{display:block;background:#161b22;padding:10px;border-radius:4px;
-      font-size:12px;color:var(--acc);margin-top:8px;word-break:break-all}
- .warn{color:var(--no)}
+ aside{padding:18px;border-left:1px solid var(--line)}
+ .step{font-size:12px;color:var(--dim);letter-spacing:.1em;
+       text-transform:uppercase}
+ .todo{font-size:21px;line-height:1.35;margin:6px 0 14px}
+ .todo b{color:var(--acc)}
+ .chk{display:flex;gap:10px;align-items:center;margin:6px 0;font-size:13px}
+ .dot{width:9px;height:9px;border-radius:50%;background:#30363d;flex:none}
+ .dot.on{background:var(--ok)} .dot.off{background:var(--no)}
+ .msg{margin:14px 0;padding:9px 11px;border-radius:4px;background:#161b22;
+      border-left:3px solid var(--warn);font-size:13px;min-height:38px}
+ .bar{height:6px;background:#161b22;border-radius:3px;overflow:hidden;
+      margin:10px 0 4px}
+ .bar i{display:block;height:100%;background:var(--acc);width:0;
+        transition:width .12s linear}
+ .prog{height:6px;background:#161b22;border-radius:3px;overflow:hidden}
+ .prog i{display:block;height:100%;background:var(--ok);width:0}
  button{width:100%;padding:10px;border:0;border-radius:4px;background:var(--acc);
-        color:#04121f;font:inherit;font-weight:700;cursor:pointer}
+        color:#04121f;font:inherit;font-weight:700;cursor:pointer;margin-top:6px}
  button:disabled{background:#21262d;color:var(--dim);cursor:not-allowed}
+ button.ghost{background:#21262d;color:var(--dim);font-weight:400}
  pre{background:#161b22;padding:10px;border-radius:4px;font-size:11px;
-     max-height:38vh;overflow:auto;white-space:pre-wrap;color:var(--fg);
-     margin-top:8px}
+     max-height:34vh;overflow:auto;white-space:pre-wrap;margin-top:8px}
+ h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--dim);margin:20px 0 6px}
 </style>
-<header>
-  <h1>Calibration</h1>
-  <span class=sub id=hint>tilt spread decides whether the answer is RIGHT</span>
-  <span class=sub id=perf style="margin-left:auto"></span>
-</header>
+<header><h1>Calibration</h1>
+ <span class=sub>each step is checked before it counts</span>
+ <span class=sub id=perf style="margin-left:auto"></span></header>
 <main>
-  <div class=vid><img src="/video"></div>
-  <aside>
-    <div class=msg id=msg>...</div>
-    <h2>Views</h2>
-    <div class=bar><i id=kb></i></div>
-    <div class=row><span id=kept>0</span><span id=want></span></div>
-    <h2>Frame coverage</h2>
-    <div class=bar><i id=cb></i></div>
-    <div class=row><span id=cov>0/9 cells</span>
-      <span class=sub>edges carry the distortion</span></div>
-    <h2>Tilt variety</h2>
-    <div class=tilt id=tilt></div>
-    <div class=row style="margin-top:6px"><span class=sub id=tiltmsg></span></div>
-    <h2>Solve</h2>
-    <button id=go>Run calibration</button>
-    <div id=sv class=sub style="margin-top:8px"></div>
-    <pre id=out></pre>
-  </aside>
+ <div class=vid><img src="/video"></div>
+ <aside>
+  <div class=step id=stepno></div>
+  <div class=todo id=todo></div>
+  <div class=chk><span class=dot id=dc></span><span id=tc></span></div>
+  <div class=chk><span class=dot id=dt></span><span id=tt></span></div>
+  <div class=prog><i id=hold></i></div>
+  <div class=msg id=msg></div>
+  <h2>Progress</h2>
+  <div class=bar><i id=pb></i></div>
+  <div class=sub id=pt></div>
+  <button class=ghost id=skip>Skip this pose</button>
+  <h2>Finish</h2>
+  <button id=go>Run calibration</button>
+  <div class=sub id=sv style="margin-top:6px"></div>
+  <pre id=out></pre>
+ </aside>
 </main>
 <script>
+const $=i=>document.getElementById(i);
 async function tick(){
  try{
-  const r=await fetch('/status'); const s=await r.json();
-  document.getElementById('msg').textContent = s.err ? s.err : s.msg;
-  document.getElementById('msg').className = 'msg'+(s.err?' warn':'');
-  document.getElementById('kept').textContent = s.kept+' captured';
-  document.getElementById('want').textContent = 'need '+s.want;
-  document.getElementById('kb').style.width = (100*s.kept/s.want)+'%';
-  const cells=s.cover.flat().filter(v=>v>0).length;
-  document.getElementById('cov').textContent = cells+'/9 cells';
-  document.getElementById('cb').style.width = (100*cells/9)+'%';
-  const t=document.getElementById('tilt'); t.innerHTML='';
-  const names=['flat','slight','good','steep'];
-  s.tilt.forEach((v,i)=>{const d=document.createElement('div');
-    d.textContent=names[i]+' '+v; if(v>0)d.className='on'; t.appendChild(d);});
-  const empty=s.tilt.filter(v=>v===0).length;
-  document.getElementById('tiltmsg').textContent = empty
-    ? 'still missing '+empty+' tilt band(s) -- angle the board more'
-    : 'all tilt bands covered';
-  const b=document.getElementById('go');
-  b.disabled = s.solve==='running';
-  b.textContent = s.solve==='running' ? 'solving...'
-      : s.solve==='done' ? 'Re-run calibration' : 'Run calibration';
-  document.getElementById('sv').textContent =
-      s.solve==='done'   ? 'installed -- rebuild and the launch picks it up'
-    : s.solve==='failed' ? 'solve failed, see below'
-    : s.kept>=s.want ? 'ready' : 'you can solve early, but fill the bars first';
-  document.getElementById('out').textContent = s.solve_out||'';
-  document.getElementById('perf').textContent =
-      s.fps.toFixed(0)+' fps  ·  detect '+s.det_ms.toFixed(0)+' ms';
+  const s=await (await fetch('/status')).json();
+  $('perf').textContent=s.fps.toFixed(0)+' fps · detect '+s.det_ms.toFixed(0)+' ms';
+  if(s.done){
+    $('stepno').textContent='all poses captured';
+    $('todo').innerHTML='Press <b>Run calibration</b>.';
+    $('tc').textContent='';$('tt').textContent='';
+  }else{
+    $('stepno').textContent='Step '+(s.i+1)+' of '+s.n;
+    $('todo').innerHTML='Put the board in the <b>'+s.want_cell+
+      '</b> of the frame,<br>and hold it <b>'+s.want_tilt+'</b>.';
+    $('tc').textContent='position: '+(s.cell? s.cell : 'no board');
+    $('tt').textContent='tilt: '+(s.band!==null? s.band : '-');
+    $('dc').className='dot '+(s.ok_cell?'on':'off');
+    $('dt').className='dot '+(s.ok_tilt?'on':'off');
+  }
+  $('hold').style.width=(100*s.hold)+'%';
+  $('msg').textContent=s.err||s.msg;
+  $('pb').style.width=(100*s.i/s.n)+'%';
+  $('pt').textContent=s.i+' of '+s.n+' poses captured';
+  const b=$('go'); b.disabled=(s.solve==='running')||!s.done;
+  b.textContent=s.solve==='running'?'solving...':
+    (!s.done?'finish the poses first':
+     (s.solve==='done'?'Re-run calibration':'Run calibration'));
+  $('sv').textContent = s.solve==='done'?'installed — rebuild to use it':
+    s.solve==='failed'?'solve failed, see below':'';
+  $('out').textContent=s.solve_out||'';
+  $('skip').style.display=s.done?'none':'block';
  }catch(e){}
 }
-document.getElementById('go').onclick=async()=>{
-  await fetch('/solve',{method:'POST'}); tick();};
-setInterval(tick,500); tick();
+$('go').onclick=async()=>{await fetch('/solve',{method:'POST'});tick();};
+$('skip').onclick=async()=>{await fetch('/skip',{method:'POST'});tick();};
+setInterval(tick,300);tick();
 </script>
 """
 
@@ -377,43 +358,54 @@ def make_handler(st, solve_argv, solve_dest):
         def log_message(self, *a):
             pass
 
+        def _json(self):
+            with st.lock:
+                i, n = st.i, len(st.steps)
+                done = i >= n
+                ty, tx, tb = st.steps[min(i, n - 1)]
+                cell, band = st.cell, st.band
+                d = {
+                    'i': i, 'n': n, 'done': done,
+                    'want_cell': CELL_NAME[ty][tx], 'want_tilt': TILT_NAME[tb],
+                    'cell': CELL_NAME[cell[0]][cell[1]] if cell else None,
+                    'band': TILT_NAME[band] if band is not None else None,
+                    'ok_cell': bool(cell == (ty, tx)),
+                    'ok_tilt': bool(band == tb),
+                    'hold': st.hold, 'msg': st.msg, 'err': st.err,
+                    'fps': round(st.fps, 1), 'det_ms': round(st.det_ms, 1),
+                    'solve': st.solve, 'solve_out': st.solve_out,
+                }
+            return json.dumps(d).encode()
+
         def do_GET(self):
             if self.path == '/':
-                body = PAGE.encode()
+                b = PAGE.encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html; charset=utf-8')
-                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Content-Length', str(len(b)))
                 self.end_headers()
-                self.wfile.write(body)
+                self.wfile.write(b)
             elif self.path == '/status':
-                with st.lock:
-                    s = json.dumps({
-                        'kept': st.kept, 'want': st.want, 'msg': st.msg,
-                        'cover': st.cover.tolist(), 'tilt': st.tilt.tolist(),
-                        'err': st.err, 'solve': st.solve,
-                        'fps': round(st.fps, 1),
-                        'det_ms': round(st.det_ms, 1),
-                        'solve_out': st.solve_out}).encode()
+                b = self._json()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', str(len(s)))
+                self.send_header('Content-Length', str(len(b)))
                 self.end_headers()
-                self.wfile.write(s)
+                self.wfile.write(b)
             elif self.path == '/video':
                 self.send_response(200)
-                self.send_header(
-                    'Content-Type',
-                    'multipart/x-mixed-replace; boundary=f')
+                self.send_header('Content-Type',
+                                 'multipart/x-mixed-replace; boundary=f')
                 self.end_headers()
                 try:
                     while True:
                         with st.lock:
                             f = st.frame
                         if f:
-                            self.wfile.write(b'--f\r\nContent-Type: image/jpeg'
-                                             b'\r\nContent-Length: '
-                                             + str(len(f)).encode()
-                                             + b'\r\n\r\n' + f + b'\r\n')
+                            self.wfile.write(
+                                b'--f\r\nContent-Type: image/jpeg\r\n'
+                                b'Content-Length: ' + str(len(f)).encode()
+                                + b'\r\n\r\n' + f + b'\r\n')
                         time.sleep(0.02)
                 except Exception:
                     pass
@@ -422,18 +414,25 @@ def make_handler(st, solve_argv, solve_dest):
                 self.end_headers()
 
         def do_POST(self):
-            if self.path != '/solve':
+            if self.path == '/skip':
+                with st.lock:
+                    if st.i < len(st.steps):
+                        st.i += 1
+                        st.msg = 'skipped -- that pose is missing from the set'
+                self.send_response(204)
+                self.end_headers()
+            elif self.path == '/solve':
+                with st.lock:
+                    busy = st.solve == 'running'
+                if not busy:
+                    threading.Thread(target=run_solve,
+                                     args=(st, solve_argv, solve_dest),
+                                     daemon=True).start()
+                self.send_response(204)
+                self.end_headers()
+            else:
                 self.send_response(404)
                 self.end_headers()
-                return
-            with st.lock:
-                busy = st.solve == 'running'
-            if not busy:
-                threading.Thread(target=run_solve,
-                                 args=(st, solve_argv, solve_dest),
-                                 daemon=True).start()
-            self.send_response(204)
-            self.end_headers()
     return H
 
 
@@ -442,50 +441,43 @@ def main():
     ap.add_argument('--device', type=int, default=3)
     ap.add_argument('--out', default=os.path.expanduser('~/fantech_cal'))
     ap.add_argument('--grid', default='8x6',
-                    help='INNER corners, must match the board AND fov_solve')
+                    help='INNER corners; must match the board AND fov_solve')
     ap.add_argument('--square', type=float, default=0.025)
-    ap.add_argument('--views', type=int, default=25)
     ap.add_argument('--width', type=int, default=1280)
     ap.add_argument('--height', type=int, default=720)
     ap.add_argument('--port', type=int, default=8099)
-    ap.add_argument('--detect-width', type=int, default=480,
-                    help='detect on a downscale. The SAVED frame is full '
-                         'resolution and fov_solve re-detects it there, so '
-                         'this costs nothing but makes the video usable.')
+    ap.add_argument('--detect-width', type=int, default=480)
     ap.add_argument('--stream-width', type=int, default=800)
-    ap.add_argument('--applies-to', default='pi_forward',
-                    help='camera PROFILE this calibration describes')
-    ap.add_argument('--install', default=None,
-                    help='where the finished calibration is written; defaults '
-                         'to the package source tree so it is committable')
+    ap.add_argument('--applies-to', default='pi_forward')
+    ap.add_argument('--install', default=None)
     a = ap.parse_args()
 
     cols, rows = (int(x) for x in a.grid.lower().split('x'))
     os.makedirs(a.out, exist_ok=True)
-    st = State(cols, rows, a.views, a.out)
+    st = State(cols, rows, a.out, build_steps())
+    resume(st)
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    install = os.path.abspath(a.install or os.path.join(
+        here, '..', 'src', 'duburi_vision', 'config', 'calibration'))
+    os.makedirs(install, exist_ok=True)
+    dest = os.path.join(install, f'{a.applies_to}_{a.width}x{a.height}.json')
+    argv = [sys.executable, os.path.join(here, 'fov_solve.py'), a.out,
+            '--grid', a.grid, '--square', str(a.square),
+            '--applies-to', a.applies_to, '--install', install]
+
     threading.Thread(target=capture_loop,
                      args=(st, a.device, a.width, a.height, a.stream_width),
                      daemon=True).start()
     threading.Thread(target=detect_loop, args=(st, a.detect_width),
                      daemon=True).start()
 
-    here = os.path.dirname(os.path.abspath(__file__))
-    install = a.install or os.path.join(
-        here, '..', 'src', 'duburi_vision', 'config', 'calibration')
-    install = os.path.abspath(install)
-    os.makedirs(install, exist_ok=True)
-    solve_dest = os.path.join(install,
-                              f'{a.applies_to}_{a.width}x{a.height}.json')
-    solve_argv = [sys.executable, os.path.join(here, 'fov_solve.py'), a.out,
-                  '--grid', a.grid, '--square', str(a.square),
-                  '--applies-to', a.applies_to, '--install', install]
-    # ThreadingHTTPServer: the MJPEG handler never returns, so a
-    # single-threaded server would starve /status and the page would look hung.
     srv = ThreadingHTTPServer(('0.0.0.0', a.port),
-                              make_handler(st, solve_argv, solve_dest))
-    print(f'board {cols}x{rows} inner corners, {a.views} views -> {a.out}')
-    print(f'open  http://<this-host>:{a.port}/   (or http://localhost:{a.port}/)')
-    print(f'solve installs -> {solve_dest}')
+                              make_handler(st, argv, dest))
+    print(f'{len(st.steps)} guided poses -> {a.out}  (resuming at step '
+          f'{st.i + 1})')
+    print(f'open http://<this-host>:{a.port}/')
+    print(f'solve installs -> {dest}')
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
