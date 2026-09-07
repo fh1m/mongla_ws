@@ -286,3 +286,28 @@ class TestItTakesOverCleanly:
              / 'calibration' / 'guide.py').read_text()
         assert "'--no-reap'" in s
         assert 'if not a.no_reap:' in s
+
+
+class TestTheSolveButtonPointsAtSomethingReal:
+    """The solve subprocess path must exist.
+
+    ⛔ IT DID NOT. When calibration moved into the package, `fov_solve.py`
+    became `solver.py` and the argv that launches it kept the old name. A
+    stale string surviving a rename is invisible until someone presses the
+    button -- and the button is pressed at the END of a capture session, so
+    the cost is a whole calibration's worth of the operator's time. That is
+    the same defect class as the calibration file named for a camera it was
+    not taken with.
+    """
+
+    def test_the_solver_script_exists_where_guide_looks(self):
+        import pathlib
+        import re
+        cal = (pathlib.Path(__file__).resolve().parents[1] / 'duburi_vision'
+               / 'calibration')
+        src = (cal / 'guide.py').read_text()
+        m = re.search(r"os\.path\.join\(here,\s*'([^']+\.py)'\)", src)
+        assert m, 'guide.py no longer builds a solver path this test can read'
+        assert (cal / m.group(1)).is_file(), (
+            f'guide.py launches {m.group(1)!r}, which does not exist beside '
+            f'it -- the Solve button would fail after a full capture session')

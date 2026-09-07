@@ -1047,6 +1047,40 @@ def list_cameras(cal_dir):
     return cams
 
 
+def default_calibration_dir():
+    """Where calibrations live, found robustly.
+
+    ⛔ THIS WAS WRONG WHEN INSTALLED, AND IT FAILED QUIETLY. The path was
+    built as `<this file>/../../src/duburi_vision/config/calibration`, which
+    is right when the file sits in the source tree and nonsense when it sits
+    in `install/.../site-packages`. The consequences were both silent: the
+    download route 404'd, and the camera panel reported NO CALIBRATION for a
+    camera that has one -- reading exactly like a missing calibration rather
+    than a missing directory. Fifth instance of a config that reaches
+    nothing in this package.
+
+    The SOURCE tree is the target, not the install share: a calibration
+    written to `install/` is deleted by the next `colcon build`, and this
+    file is meant to be committed.
+    """
+    for start in (os.getcwd(), os.path.dirname(os.path.abspath(__file__))):
+        d = start
+        for _ in range(8):
+            cand = os.path.join(d, 'src', 'duburi_vision', 'config',
+                                'calibration')
+            if os.path.isdir(cand):
+                return cand
+            nd = os.path.dirname(d)
+            if nd == d:
+                break
+            d = nd
+    # Nothing found: a real directory the operator can find, never a path
+    # that only looks plausible.
+    fallback = os.path.expanduser('~/duburi_calibrations')
+    os.makedirs(fallback, exist_ok=True)
+    return fallback
+
+
 def reap_previous(port, wait_s=6.0):
     """Kill any EARLIER instance of this tool, then wait for it to let go.
 
@@ -1178,11 +1212,16 @@ def main():
     resume(st)
 
     here = os.path.dirname(os.path.abspath(__file__))
-    install = os.path.abspath(a.install or os.path.join(
-        here, '..', 'src', 'duburi_vision', 'config', 'calibration'))
+    install = os.path.abspath(a.install or default_calibration_dir())
     os.makedirs(install, exist_ok=True)
+    print(f'calibrations directory: {install}')
     dest = os.path.join(install, f'{a.applies_to}_{a.width}x{a.height}.json')
-    argv = [sys.executable, os.path.join(here, 'fov_solve.py'), a.out,
+    # ⛔ `solver.py`, NOT `fov_solve.py`. The name changed when calibration
+    # moved into the package and this path did not, so the Solve button would
+    # have launched a file that does not exist -- a stale string surviving a
+    # rename, which is the same defect class as the calibration filename that
+    # outlived the camera it was named for.
+    argv = [sys.executable, os.path.join(here, 'solver.py'), a.out,
             '--grid', a.grid, '--square', str(a.square),
             '--applies-to', a.applies_to, '--install', install,
             '--identity', json.dumps(camera_identity(f'/dev/video{a.device}'))]
