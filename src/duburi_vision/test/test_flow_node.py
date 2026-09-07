@@ -407,3 +407,78 @@ class TestTimingCorrections:
             assert '0/174' in reasons[-1]
         finally:
             n.destroy_node()
+
+
+_CAL = ('src/duburi_vision/config/calibration/pi_downward_1280x720.json')
+
+
+def _cal_path():
+    """The shipped calibration, found from the package root.
+
+    Read from the source tree, never from an import of the installed package:
+    a test that resolves through `install/` in a worktree reads the MAIN
+    workspace's stale tree, which is how the CLAHE retraction nearly went the
+    wrong way.
+    """
+    import pathlib
+    here = pathlib.Path(__file__).resolve()
+    for parent in here.parents:
+        p = parent / _CAL
+        if p.is_file():
+            return str(p)
+    pytest.skip(f'{_CAL} not found from {here}')
+
+
+class TestRectifyDisabledFallback:
+    """`refractive_rectify:=false` is the A/B arm -- and it is the arm carrying
+    the defect, so it needs a guard of its own.
+
+    It scales K by f_water/fx and measures with the scaled fx. That reproduces
+    the two water-only errors §14 measured (a single focal length is exact only
+    at one radius; undistortion then runs with a water-scaled K and applies
+    ~45 % of the lens correction). Those are stated in its own WARNING and are
+    the price of the comparison.
+
+    What must NOT drift is its INTERNAL consistency: both axes scaled by the
+    same factor, and the focal length it measures with being the one it
+    undistorts with. Half-fixing this arm -- scaling fx and not fy, say -- is
+    silent, and reintroduces exactly the anisotropy round 38 removed.
+    """
+
+    def test_both_axes_scale_together_and_f_px_matches_intrinsics(self):
+        cal = _cal_path()
+        import json
+        raw = json.load(open(cal))
+        k = raw['camera_matrix']
+        aspect_before = k[1][1] / k[0][0]
+
+        n = _make(calibration=cal, medium='water', refractive_rectify=False,
+                  pool_depth_m=4.0)
+        try:
+            assert n._refract is None, 'rectification must be off in this arm'
+            # The focal length it MEASURES with is the one it UNDISTORTS with.
+            assert n._f_px == pytest.approx(n._intr.fx)
+            # Both axes moved by the same factor: the fx != fy defect round 38
+            # fixed must not come back through this door.
+            assert n._intr.fy / n._intr.fx == pytest.approx(aspect_before,
+                                                            rel=1e-9)
+            # And it really did scale to water, not sit in air.
+            assert n._f_px == pytest.approx(_F_WATER_PX, rel=0.02)
+        finally:
+            n.destroy_node()
+
+    def test_rectified_arm_measures_with_the_rectified_pair(self):
+        """The control: with rectification ON, fy must come from the rectifier,
+        not from the air-side intrinsics. Passing air fy against rectified fx
+        is a 25 % axis mismatch -- the bug this pairing exists to prevent."""
+        n = _make(calibration=_cal_path(), medium='water',
+                  refractive_rectify=True, pool_depth_m=4.0)
+        try:
+            assert n._refract is not None
+            assert n._f_px == pytest.approx(n._refract.f_ref)
+            assert n._refract.f_ref_y != pytest.approx(n._intr.fy, rel=1e-3)
+            # Aspect is preserved THROUGH the rectifier.
+            assert (n._refract.f_ref_y / n._refract.f_ref ==
+                    pytest.approx(n._intr.fy / n._intr.fx, rel=1e-9))
+        finally:
+            n.destroy_node()

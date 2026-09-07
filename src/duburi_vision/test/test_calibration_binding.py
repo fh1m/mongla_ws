@@ -10,8 +10,9 @@ was named for the camera the system then believed it was looking at.
 Both halves were live and neither logged anything:
 
   - the FORWARD Fantech published CameraInfo with a 63.82 deg HFOV belonging
-    to a different lens, so every pixel->bearing on the srot vision uplink
-    used the wrong focal length;
+    to a different lens. That is LATENT rather than live: the only consumer
+    is the srot vision uplink, which is default-off, so nothing read the bad
+    numbers in a default run -- it is wrong the moment it is switched on;
   - the DOWNWARD camera -- the DVL, whose intrinsics round 38 measured a
     3.08 % axis asymmetry to correct -- got NO calibration at all, so
     flow_node fell back to a single focal length and the frame centre. That
@@ -113,3 +114,34 @@ def test_the_flow_node_is_actually_LAUNCHABLE():
     assert "LaunchConfiguration('dwn_calibration')" in flow, (
         'flow_node must take the SAME dwn_calibration the downward camera '
         'takes, not its own copy of the path.')
+
+
+def test_every_tool_naming_a_calibration_names_one_that_EXISTS():
+    """The launch is guarded above. Seven tools hardcode the path too.
+
+    `flow_console.py` is the instrument that produced the 30 cm result, and
+    the srot_* tools each carry their own copy of the filename -- some as
+    absolute paths. This round's rename was propagated to them by `sed`;
+    nothing stops the next one from breaking them silently, and a tool that
+    cannot find its calibration falls back to a single focal length and the
+    frame centre, which is the exact 3.08 %-asymmetry state round 38 fixed.
+
+    Matches the basename only: the tools disagree about the prefix (repo
+    relative, ~, and /home/... all appear) and that is not what this guards.
+    """
+    tools = _PKG.parents[1] / 'tools'
+    if not tools.is_dir():
+        pytest.skip('tools/ not present')
+    missing = []
+    seen = 0
+    for py in sorted(tools.glob('*.py')):
+        for name in re.findall(r"calibration/([A-Za-z0-9_.-]+\.json)",
+                               py.read_text()):
+            seen += 1
+            if not (_CAL_DIR / name).is_file():
+                missing.append(f'{py.name} -> {name}')
+    assert seen, 'no tool names a calibration -- has the path shape changed?'
+    assert not missing, (
+        'tools name calibration files that do not exist:\n  ' +
+        '\n  '.join(missing) +
+        f'\navailable: {sorted(p.name for p in _CAL_DIR.glob("*.json"))}')

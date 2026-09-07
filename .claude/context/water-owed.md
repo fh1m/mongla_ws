@@ -296,5 +296,6 @@ degraded. Telling them apart at 2 a.m. is the reason they are separate lines.
 | 18 | `kp_lat` / `kp_yaw` / `ki_lat` with GAIN read from the board | 4 |
 | 19 | `PILOT_EXPO` accounted for in terminal alignment | 4 |
 | 20 | return leg — **run `return_check.py` BEFORE the session** | 5 |
-| 21 | **calibrate the FANTECH forward camera** — never done; it is the camera the vision uplink AIMS with, and it was running on the downward camera's intrinsics until 2026-09-07 (`measured-bars.md` §17). Needs a printed board and 25 views; **does not need water** | §17 |
+| 21 | **calibrate the FANTECH forward camera** — never done; it is the camera the vision uplink AIMS with, and it was publishing the downward camera's intrinsics until 2026-09-07 (`measured-bars.md` §17 — LATENT, since the uplink is default-off, so this is 'wrong the moment it is switched on', not 'wrong every mission'). Needs a printed board and 25 views; **does not need water** | §17 |
 | 22 | re-verify the 30 cm result **through the launch**, not through `flow_console --calibration <path>`. Every §13 number came from a tool that passed the path by hand, and the launch wired the calibration to the wrong camera | §17 |
+| 23 | **one dry slide with `medium:=air` through the launch** — the regression check on the rectifier refactor. `port=RECTIFIED` is verified to come up and the maths is verified against a pinhole, but the rectified path has produced **no measured velocity at all**; every §13 number predates the refactor. Needs light and one hand slide, **no water, no rig** | §13 |

@@ -786,6 +786,22 @@ short enough to be responsive can distinguish a slow hand from a still rig.
 
 ---
 
+### ⛔ WHAT IS AND IS NOT VERIFIED ABOUT THE RECTIFIED PATH
+
+Every velocity number above -- the 30 cm result, the 0.000 % synthetic
+recovery -- was taken with **`medium='air'`** or through simulated physics.
+`port=RECTIFIED` has been verified to **come up and be selected** on the
+vehicle (§17), and the rectifier's maths is verified against a true pinhole
+and against the n=1 identity. **The rectified water path has produced NO
+MEASURED VELOCITY AT ALL**, because the room went dark before a slide could
+be run through it.
+
+So the refactor is verified as **arithmetic**, not as a **sensor**. The
+regression check that closes this needs no water and no rig movement beyond
+one hand slide: `medium:=air` through the launch, confirming ~30 cm still
+comes out of the code path that now contains the rectifier. It is item 23 in
+`water-owed.md`, and it is blocked only on light.
+
 ## 14. Board-clock stamping — measured on the vehicle, 2026-09-07
 
 The timing round wired four corrections and unit-tested all of them. This is
@@ -1089,7 +1105,7 @@ system then believed it was looking at, and the name outlived the fix.
 
 | | consequence |
 |---|---|
-| **forward** (Fantech) | published `CameraInfo` with **fx 1027.87 / HFOV 63.82°** belonging to a different lens. Every pixel→bearing for the srot vision uplink used the wrong focal length — and `bearing.py` exists precisely because a **26 px** principal-point offset is a **+1.264°** aiming bias at frame centre. Wrong intrinsics make that correction wrong too. |
+| **forward** (Fantech) | published `CameraInfo` with **fx 1027.87 / HFOV 63.82°** belonging to a different lens. **LATENT, not live — correcting this entry's first version, which said "every pixel→bearing for the srot vision uplink used the wrong focal length."** That overstates it: the sole consumer of `vision_state.calibration()` is `_vision_uplink_tick`, and the uplink is **default-off** (`vision_uplink_camera` defaults to `''`, so the timer is never even created). What actually shipped wrong is the **`CameraInfo` on the forward topic**; nothing consumed it in a default run. The severity is "wrong the moment the uplink is switched on", not "wrong on every mission" — and `bearing.py` exists precisely because a **26 px** principal-point offset is a **+1.264°** aiming bias at frame centre, so wrong intrinsics would make that correction wrong too. |
 | **downward** (the DVL) | got **no calibration at all**, so `flow_node` fell back to one focal length and the frame centre — which is exactly the state round 38 measured a **3.08 % axis asymmetry** in and fixed. **The fix was verified in a console tool that passed the path by hand and never reached the launch.** |
 
 So the headline 30 cm result was real, and the code path that produced it is
