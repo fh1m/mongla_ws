@@ -75,11 +75,14 @@ def _srot_backend(fc) -> bool:
 
 # Modes in which a streamed MANUAL_CONTROL actually reaches the thrusters.
 #
-# STABILIZE is the intended one: the board holds attitude and heading at 500 Hz
-# and lat/yaw/fwd servo on top. MANUAL works too -- raw passthrough, no
-# stabilisation -- and is allowed rather than forced away from, because an
-# operator who deliberately chose it should not be overridden mid-verb.
-# STABILIZE ONLY -- and MANUAL is deliberately NOT here.
+# STABILIZE ONLY: the board holds attitude and heading at 500 Hz and lat/yaw/fwd
+# servo on top. MANUAL is deliberately NOT here.
+#
+# (The two sentences above used to be preceded by their own contradiction -- the
+# pre-correction text "MANUAL works too ... and is allowed" was left in place
+# when the rule was reversed, so the first thing a reader met was the opposite
+# of the code directly below. Deleted rather than annotated: a comment block
+# that argues with itself is worse than either version alone.)
 #
 # MANUAL passes translation through, which is why the first version of this
 # check accepted it. That reasoning was wrong, and the firmware's own contract
