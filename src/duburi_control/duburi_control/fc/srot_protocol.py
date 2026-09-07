@@ -783,6 +783,70 @@ MOTOR_DETECT_TOKEN = 'RUN MOTOR DETECT IN WATER'
 MOTOR_DETECT_TIMEOUT_S = 60.0
 
 # --------------------------------------------------------------------------- #
+#  The safety gates: board params that SILENTLY disable behaviour               #
+# --------------------------------------------------------------------------- #
+# Twenty-one board parameters default to zero, and several of them gate safety
+# behaviour rather than a convenience. A disabled gate is invisible: nothing
+# errors, nothing logs, the feature simply never happens -- which is the exact
+# defect class that has already cost this project a round three times (the
+# vision verbs in SURFACE, the disarmed SROT_MOVE, MTUNE_EN).
+#
+# Each entry: (param, expected, severity, what it gates)
+#   `expected` is what the value must be for the feature to be LIVE.
+#   Severity 'CRIT' = a safety behaviour is off; 'WARN' = behaviour differs from
+#   what a mission author would assume.
+#
+# ⛔ THIS TABLE IS NOT A SET OF DEFAULTS TO WRITE. It is what to READ and report.
+# Enabling a motor-spinning mode or a failsafe threshold is an operator decision
+# on a specific hull, and a host that quietly set them would be worse than one
+# that never looked.
+SAFETY_GATES = (
+    # LEAK_EN gates BOTH the leak failsafe and the leak pre-arm refusal
+    # (fw arming.cpp:37). Measured 0 on this vehicle's board 2026-09-03: as
+    # configured, a leak neither blocks arming nor surfaces the hull.
+    ('LEAK_EN',       1.0, 'CRIT', 'leak failsafe AND the leak pre-arm refusal'),
+    # ESPNOW_EN gates the whole 2nd-board link: the THRUSTER pack voltage, the
+    # kill-switch state, the mixer's voltage linearisation and the low-thruster-
+    # battery failsafe all go dark together (fw second_board/main.cpp:29-31).
+    ('ESPNOW_EN',     1.0, 'CRIT', '2nd-board link: thruster volts, kill state, '
+                                   'mixer compensation, battery failsafe'),
+    # ⛔ ARMING_CHECK == 0 makes canArm() return true immediately
+    # (fw arming.cpp:13-14) -- EVERY board-side pre-arm check is skipped,
+    # including the leak and battery refusals above.
+    ('ARMING_CHECK',  1.0, 'CRIT', 'ALL board-side pre-arm checks'),
+    ('FS_BAT_ENABLE', 1.0, 'CRIT', 'low-thruster-battery failsafe'),
+    ('FS_GCS_ENABLE', 1.0, 'CRIT', 'GCS-loss failsafe (host silence -> surface)'),
+    # Not safety, but it changes how far a timed leg travels: without a pack
+    # voltage the mixer cannot linearise thrust, so distance is battery-state
+    # dependent. Needs ESPNOW_EN too -- the data has to arrive first.
+    ('MOT_BAT_V_MAX', None, 'WARN', 'thrust linearisation (a timed leg is '
+                                    'pack-state dependent without it)'),
+    ('THR_TRIM_EN',   1.0, 'WARN', 'per-motor thrust normalisation from RPM'),
+)
+
+
+def safety_gate_findings(values):
+    """[(severity, param, text)] for every gate that is OFF or UNREADABLE.
+
+    Pure: takes {param: float|None} and returns findings, so the whole table is
+    testable with no board attached. `None` means the parameter could not be
+    read, which is reported as its own finding -- absence is not a pass.
+    """
+    out = []
+    for name, expected, sev, gates in SAFETY_GATES:
+        v = values.get(name)
+        if v is None:
+            out.append((sev, name, f'UNREADABLE -- gates {gates}'))
+        elif expected is None:                 # "must be set to something > 0"
+            if v <= 0.0:
+                out.append((sev, name, f'is 0 -- {gates}'))
+        elif v < expected - 1e-6:
+            out.append((sev, name, f'is {v:g}, wanted {expected:g} -- '
+                                   f'DISABLED: {gates}'))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 #  AUTOTUNE (21) and MOTOR_TUNE (22) -- the other two in-water procedures       #
 # --------------------------------------------------------------------------- #
 # Separate tokens, because these are NOT the same risk as MOTOR_DETECT. Detect
