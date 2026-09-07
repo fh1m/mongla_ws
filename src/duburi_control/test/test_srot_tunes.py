@@ -270,6 +270,44 @@ def test_motor_tune_that_changed_nothing_is_not_success():
     assert ok is True and 'NOTHING CHANGED' in why
 
 
+def test_the_tune_REPORTS_PROGRESS_instead_of_going_silent():
+    """⛔ A gap in our own first version, found by reading the firmware.
+
+    The board publishes STUNT_PRG and the live limit-cycle measurement
+    AT_N / AT_AMP / AT_TU / AT_OKPCT, added for a stated reason: "so a run can
+    be watched from the GCS instead of only explained after it aborts"
+    (fw control/autotune.h:34). Our first `autotune()` read NONE of it and sat
+    silent for up to 150 s while all eight thrusters ran at full authority.
+    """
+    class _Log:
+        def __init__(self):
+            self.lines = []
+
+        def info(self, m):
+            self.lines.append(m)
+
+        def warning(self, m):
+            self.lines.append(m)
+
+    m = _Master(params=dict(_PIDS), finish_after=200,      # long enough to report
+                run_mode=sp.MODE_AUTOTUNE, writes={'RATE_RLL_P': 2.0})
+    fc = SrotFC(m, log=_Log())
+    fc.is_armed = lambda: m.armed
+    fc.statustext_log = lambda since=0: []
+    m.params.update({'STUNT_PRG': 42.0, 'AT_N': 7.0, 'AT_TU': 1.25,
+                     'AT_OKPCT': 80.0, 'AT_AMP': 0.031})
+    fc._named_cache = {k: (v, 9e18) for k, v in
+                       (('STUNT_PRG', 42.0), ('AT_N', 7.0), ('AT_TU', 1.25),
+                        ('AT_OKPCT', 80.0), ('AT_AMP', 0.031))}
+
+    fc.autotune(sp.AUTOTUNE_TOKEN, timeout=7.0)
+    tune_lines = [l for l in fc._log.lines if '[TUNE ]' in l]
+    assert tune_lines, 'a multi-minute full-authority tune must not run silent'
+    assert '42%' in tune_lines[0], tune_lines[0]
+    assert 'Tu 1.25s' in tune_lines[0] and 'consensus 80%' in tune_lines[0], \
+        'the limit-cycle detail is what separates "gathering" from "stuck"'
+
+
 def test_no_run_here_relies_on_a_PRODUCTION_timeout():
     """A regression in the completion check must FAIL FAST, not hang.
 

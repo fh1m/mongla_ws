@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 # ---- move() terminal codes ------------------------------------------- #
@@ -148,7 +149,16 @@ class Telemetry:
     depth_out:        float = math.nan
     esc_temp_c:       tuple = field(default_factory=tuple)
     mag_accuracy:     float = math.nan
-    kill_switch:      bool  = False
+    # ⛔ TRI-STATE, AND THE THIRD STATE IS THE POINT. None = the board cannot
+    # know. The thruster kill switch is a rotary knob on the SECOND board and
+    # its state reaches the control board only over ESP-NOW; on link loss the
+    # firmware reports kill=false, justified in its own comment as
+    # "link lost -> don't assert kill (display-only)". That is correct for a
+    # display and WRONG for anything that gates: `KILL = 0` on the wire means
+    # "power is live" OR "nobody is telling us", and a bool cannot hold the
+    # difference. `srot_fc` only asserts True/False when the 2nd-board link is
+    # proven alive by BATTERY_STATUS instance 1 being present.
+    kill_switch:      Optional[bool] = None
 
 
 class FlightController:

@@ -130,6 +130,20 @@ def test_A_TALKING_BOARD_WITH_NO_ESCS_IS_NOT_EIGHT_HAPPY_THRUSTERS():
     assert R.thrusters(None).state is State.UNKNOWN, 'no backend method = UNKNOWN'
 
 
+def test_a_kill_switch_NOBODY_CAN_SEE_is_not_CLEAR():
+    """⛔ UNKNOWN is not OK, and here it is not FAILED either.
+
+    The switch lives on the 2nd board and reaches us over ESP-NOW; the firmware
+    reports kill=false on link loss on purpose, so `KILL = 0` on the wire means
+    "live" OR "nobody is telling us". A bench vehicle with no second board is a
+    legitimate configuration, not a fault -- but it is emphatically not OK,
+    because nothing is watching the switch that can stop the hull dead.
+    """
+    assert R.thruster_power(None).state is State.UNKNOWN
+    assert R.thruster_power(True).state is State.FAILED
+    assert R.thruster_power(False).state is State.OK
+
+
 def test_UNKNOWN_thrusters_never_decays_into_OK():
     """UNKNOWN is the CORRECT answer on this hull today, not a defect to fix.
 

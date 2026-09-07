@@ -1794,3 +1794,87 @@ ESP32 only, no bandwidth. It outranks PR C.
 `esc_status_rpm`'s docstring cited "a recorded dive: 434 of 434 frames decode"
 as if it evidenced real telemetry. It was a **bench** session with no thrusters,
 and it evidences decodability only. Now says so.
+
+---
+
+## §26. THE SECOND BOARD, AND `KILL = 0` MEANING TWO THINGS. 2026-09-07
+
+Read the firmware for what duburi_ws is not using. The answer was a whole board.
+
+### The second board exists and owns two things we care about
+
+`src/second_board/main.cpp` (never read before this round): an ESP32 that lives
+with the **thruster** battery. A rotary AS5600 knob drives a MOSFET that makes
+or breaks propulsion power, and it reports the **thruster pack voltage** to the
+control board over ESP-NOW. The control board's own ADC measures the
+**electronics** pack — a different battery.
+
+| quantity | where it is | do we consume it |
+|---|---|---|
+| thruster pack voltage | `BATTERY_STATUS` **instance 1** | **yes** — `Telemetry.thruster_voltage` |
+| electronics pack | `BATTERY_STATUS` instance 0, `SYS_STATUS` | yes |
+| kill-switch state | `NAMED_VALUE_FLOAT "KILL"` | read, displayed, **gated nothing** |
+| ESP-NOW link liveness | **presence of `BATTERY_STATUS` id 1** | not used until now |
+
+**A PR was drafted and then withdrawn before sending**: I was about to ask them
+to put the thruster pack on the wire. It is already there, on instance 1, and we
+already demux by id. "What is already there that we are not using" beat "what do
+we need them to add" for the second round running.
+
+### ⛔ `KILL = 0` MEANS "LIVE" **OR** "NOBODY IS TELLING US"
+
+```cpp
+kill = f ? s_kill : false;   // link lost -> don't assert kill (display-only)
+                             //   fw src/drivers/espnow_link.cpp:49
+```
+
+It is **not** display-only: it is packed onto MAVLink (`mav_stream.cpp:846`) and
+re-emitted by the ground station from the LoRa flags. `state_types.h:124` still
+says `(display-only)`, which is what makes the behaviour look right on review.
+
+**Consequence, and nothing refused it on either side** — the firmware's own
+`canArm()` checks IMU, leak and pack voltage and never looks at the kill state.
+On a hull whose knob is outside its ON windows: arming succeeds, every motion
+verb runs its full profile against unpowered ESCs, the payload fires, and the
+mission completes on a motionless vehicle.
+
+**Observed live, in one status row of our own log:**
+
+    BAT main  1.39V | thruster -- | ... | LEAK dry | KILL clear
+                      ^^^^^^^^^^^                    ^^^^^^^^^^
+                      no instance 1 => no ESP-NOW link at all
+                                                     yet we asserted "clear"
+
+### The fix, ours, no firmware change
+
+`BATTERY_STATUS` id 1 is **suppressed rather than zeroed** when ESP-NOW is stale
+(`if (s.pm2_present) sendBattery(1, ...)`), so its presence **is** the link
+liveness. `Telemetry.kill_switch` is now `Optional[bool]`; the status line reads
+`KILL UNKNOWN (no 2nd-board link)`; `arm()` refuses on **known**-engaged only.
+
+**The asymmetry is the same one the pre-fire gate needed** and for the same
+reason: a bench vehicle with no second board is ordinary, so refusing on UNKNOWN
+would make `arm()` unreachable there.
+
+**PR #12** asks them to apply their own rule (`SCALED_PRESSURE2` is suppressed,
+*"Absence is the signal"*) to `KILL`. One line; `s.pm2_present` is a member of
+the same `Snap`, 25 lines above. The **LoRa path has no proxy at all** —
+`LT_FLAG_THR_LINK` is the *Pico* link, not ESP-NOW, and the GCS never reads it.
+
+### Config defaults that silently disable features
+
+21 board params default to zero. Load-bearing ones: `LEAK_EN`, `ESPNOW_EN`,
+`MOT_BAT_V_MAX`, `THR_TRIM_EN`, `MTUNE_EN`, all the feedforward/drag terms.
+And **`ARMING_CHECK` (default 1) is referenced nowhere on our side** — set to 0
+it makes the firmware skip *every* pre-arm check, including the leak refusal,
+and nothing here would notice.
+
+### A gap in our own work, one hour old
+
+`autotune()` polled mode and armed for up to 150 s **in silence** while eight
+thrusters ran at full authority. The board publishes `STUNT_PRG` and the live
+limit-cycle measurement `AT_N`/`AT_AMP`/`AT_TU`/`AT_OKPCT` for exactly this —
+*"so a run can be watched from the GCS instead of only explained after it
+aborts"* (`autotune.h:34`). Now surfaced every 5 s; `AT_TU`/`AT_OKPCT` read 0
+while collecting, so "gathering" and "stuck" are distinguishable here and
+nowhere else.

@@ -114,6 +114,28 @@ def thrusters(health) -> Health:
     return ok('thrusters', reason)
 
 
+def thruster_power(kill) -> Health:
+    """The 2nd-board rotary kill switch. Three states, because the wire has three.
+
+    ⛔ UNKNOWN IS NOT OK HERE, AND IT IS NOT FAILED EITHER. The switch lives on
+    the second board and reaches this one over ESP-NOW; the firmware reports
+    kill=false on link loss on purpose (`espnow_link.cpp:49`, justified as
+    "display-only" -- but it is not, it goes onto the wire as NAMED_VALUE_FLOAT
+    "KILL"). So a missing second board is indistinguishable from a live one
+    unless BATTERY_STATUS instance 1 is also present, which is what `srot_fc`
+    uses to fold the third state back in.
+
+    Reported UNKNOWN rather than FAILED because a bench vehicle with no second
+    board is a legitimate configuration, not a fault -- but it is emphatically
+    not OK, because nothing is watching the switch that can stop the hull dead.
+    """
+    if kill is None:
+        return unknown('thruster_power', 'no 2nd-board link -- kill state unseen')
+    if kill:
+        return failed('thruster_power', 'kill switch ENGAGED -- thruster power CUT')
+    return ok('thruster_power', 'thruster power live')
+
+
 def detector(rate_hz: Optional[float], min_hz: float = 5.0) -> Health:
     if rate_hz is None:
         return unknown('detector', 'no detections topic')
