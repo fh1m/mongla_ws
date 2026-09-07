@@ -775,7 +775,7 @@ def main():
     p.add_argument('--sim-speed', type=float, default=0.15)
     p.add_argument('--want-points', type=int, default=80)
     p.add_argument('--calibration',
-                   default='src/duburi_vision/config/calibration/pi_forward_1280x720.json')
+                   default='src/duburi_vision/config/calibration/pi_downward_1280x720.json')
     p.add_argument('--no-undistort', action='store_true')
     a = p.parse_args()
     _load_runs()

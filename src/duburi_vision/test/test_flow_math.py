@@ -380,7 +380,7 @@ class TestIntrinsics:
     cannot do that; height scales both axes identically."""
 
     CAL = (pathlib.Path(__file__).resolve().parents[1] / 'config' /
-           'calibration' / 'pi_forward_1280x720.json')
+           'calibration' / 'pi_downward_1280x720.json')
 
     def _i(self, w=640, h=360):
         return Intrinsics.from_json(str(self.CAL), w, h)

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from duburi_vision.anchor.geometry import plane_geometry     # noqa: E402
 
-# The measured forward camera (`pi_forward_1280x720.json`).
+# The measured forward camera (`pi_downward_1280x720.json`).
 K = np.array([[1027.873, 0.0, 617.323],
               [0.0, 1033.857, 373.022],
               [0.0, 0.0, 1.0]])

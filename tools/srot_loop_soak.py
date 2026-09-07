@@ -19,7 +19,7 @@ from duburi_control.motion_rates import VISION_LOOP_HZ_SROT
 from duburi_vision.detection.factory import make_detector
 
 W,H=640,360
-c=json.load(open(os.path.expanduser('~/duburi_ws/src/duburi_vision/config/calibration/pi_forward_1280x720.json')))
+c=json.load(open(os.path.expanduser('~/duburi_ws/src/duburi_vision/config/calibration/pi_downward_1280x720.json')))
 Kc,D=c['camera_matrix'],c['distortion_coefficients']
 sx,sy=W/c['image_width'],H/c['image_height']
 K=[Kc[0][0]*sx,0,Kc[0][2]*sx,0,Kc[1][1]*sy,Kc[1][2]*sy,0,0,1]

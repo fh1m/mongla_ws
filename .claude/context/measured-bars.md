@@ -1061,3 +1061,68 @@ The valid runs had **Laplacian sharpness 50–58**. The archive's gate clip is
 321 and the bin clip 1180. This is dim, poorly-textured imagery, so the
 absolute survival percentages are pessimistic; the A/B comparisons between
 arms are not, because both arms saw the same frames.
+
+---
+
+## 17. The calibration was wired to the WRONG CAMERA, both ways. 2026-09-07
+
+Found while checking that the flat-port rectification (§14 above) would
+actually reach the running system — because "a config change that reaches
+nothing" is already on this package's record three times, and the round-32
+plan wrote down *"assume a fourth."* This is the fourth.
+
+### What was live
+
+`vision_pi.launch.py` shipped:
+
+    fwd_calibration  default  pi_forward_1280x720.json
+    dwn_calibration  default  ''
+
+The file's own metadata says
+**`camera: pi_test_global_shutter (Microdia USB, bench test unit)`** — USB
+vendor **0c45**, which is the **Sonix** unit, which is the **DOWNWARD**
+camera. It was captured **2026-09-03**, four days before `f347827` found the
+udev rules had the two cameras **swapped**. It was named for the camera the
+system then believed it was looking at, and the name outlived the fix.
+
+**Both halves were wrong and neither logged anything:**
+
+| | consequence |
+|---|---|
+| **forward** (Fantech) | published `CameraInfo` with **fx 1027.87 / HFOV 63.82°** belonging to a different lens. Every pixel→bearing for the srot vision uplink used the wrong focal length — and `bearing.py` exists precisely because a **26 px** principal-point offset is a **+1.264°** aiming bias at frame centre. Wrong intrinsics make that correction wrong too. |
+| **downward** (the DVL) | got **no calibration at all**, so `flow_node` fell back to one focal length and the frame centre — which is exactly the state round 38 measured a **3.08 % axis asymmetry** in and fixed. **The fix was verified in a console tool that passed the path by hand and never reached the launch.** |
+
+So the headline 30 cm result was real, and the code path that produced it is
+not the one the vehicle would have run.
+
+### The fix, and the guard
+
+File renamed `pi_downward_1280x720.json`, the two launch arguments swapped,
+and the Fantech marked **uncalibrated** explicitly rather than by an empty
+default that reads as an oversight.
+
+The durable part: the JSON now carries **`applies_to: ["pi_downward"]`** as
+its first key, `Intrinsics.from_json` stops **discarding** that field (it did,
+which is why nothing could ever have caught this), and
+`test_calibration_binding.py` parses the launch's own defaults and fails if a
+calibration is wired to a profile it does not claim. It **reads the files and
+never imports them** — a test that imports in a worktree resolves against the
+main workspace's stale `install/`, which is how the CLAHE retraction nearly
+went the wrong way.
+
+Verified by restoring the original defect exactly: **2 of 3 tests fail.**
+Also bites on a missing `applies_to` and on one naming the wrong camera.
+
+### The lesson, stated generally
+
+**A verification that passes a path by hand does not verify the launch.** Every
+number in §13 was produced by `flow_console.py --calibration <path>`; the
+launch was never in that loop. When a result and a deployment disagree about
+where a file comes from, the result is about the tool.
+
+### Still open, and it is not small
+
+**The Fantech forward camera has never been calibrated.** It is the camera the
+vision uplink aims with. Until it is, `bearing.py` on the forward path is
+running on intrinsics that belong to another lens, or on none. Added to
+`water-owed.md`.
