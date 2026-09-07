@@ -164,6 +164,9 @@ class State:
         self.assessed_n = 0
         self.n_boards = 0
         self.assess_err = None
+        self.fx = self.fy = self.cx = self.cy = None
+        self.fx_sd = self.hfov_air = self.hfov_water = None
+        self.worst_px = None
 
 
 def tilt_of(corners, cols):
@@ -256,6 +259,7 @@ def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
             st.raw = f
             corners = st.corners
             i = st.i
+            worst = st.worst_px
         vis = cv2.resize(f, (jpeg_w, int(jpeg_w * h / w)))
         vh = vis.shape[0]
         sc = jpeg_w / w
@@ -270,6 +274,17 @@ def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
             x1, y1 = int((tx + 1) * jpeg_w / GRID), int((ty + 1) * vh / GRID)
             cv2.rectangle(vis, (x0 + 3, y0 + 3), (x1 - 3, y1 - 3),
                           (80, 220, 255), 3)
+        # The least-certain point, drawn. Max ERE says WHERE the model is
+        # weakest; a number in a sidebar is a fact, a target on the video is
+        # an instruction.
+        if worst is not None:
+            wx, wy = int(worst[0] * sc), int(worst[1] * sc)
+            if 0 <= wx < jpeg_w and 0 <= wy < vh:
+                cv2.circle(vis, (wx, wy), 16, (60, 120, 255), 2)
+                cv2.line(vis, (wx - 22, wy), (wx - 8, wy), (60, 120, 255), 2)
+                cv2.line(vis, (wx + 8, wy), (wx + 22, wy), (60, 120, 255), 2)
+                cv2.putText(vis, 'least certain', (wx - 44, wy - 22),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (60, 120, 255), 1)
         ok, jpg = cv2.imencode('.jpg', vis, [cv2.IMWRITE_JPEG_QUALITY, 70])
         n += 1
         if ok:
@@ -419,11 +434,31 @@ def assess(st, cols, rows, square, size):
                 raise ValueError('too few boards')
             samples = fs.kfold_std(objp, ips, sz, 4)
             ere, worst = fs.max_ere(samples, sz[0], sz[1])
+            # Live intrinsics + the conditioning checks, so the operator can
+            # see the answer FORM rather than waiting for a verdict at the
+            # end. A calibration that is going wrong is visible early: fx
+            # wandering between folds is the tell.
+            fit = fs.fit_standard(objp, ips, sz)
+            Kf = fit['K']
+            fxs = np.array([K[0, 0] for K, _ in samples])
+            v = fs.fov_from_K(Kf, sz[0], sz[1])
+            # Where the model is least certain, as a PIXEL, so it can be
+            # drawn. A metric you can point at is an instruction.
+            wpx = None
+            if worst is not None:
+                wpx = (float(worst[0] * Kf[0, 0] + Kf[0, 2]),
+                       float(worst[1] * Kf[1, 1] + Kf[1, 2]))
             cands = [((y, x), t) for y in range(GRID) for x in range(GRID)
                      for t in (10, 25, 40)]
             best, pred, _ = fs.suggest_next_pose(objp, ips, sz, cands)
             with st.lock:
                 st.ere, st.ere_pred = ere, pred
+                st.fx, st.fy = float(Kf[0, 0]), float(Kf[1, 1])
+                st.cx, st.cy = float(Kf[0, 2]), float(Kf[1, 2])
+                st.fx_sd = float(fxs.std(ddof=1)) if len(fxs) > 1 else None
+                st.hfov_air = float(v['hfov_air'])
+                st.hfov_water = float(v['hfov_water'])
+                st.worst_px = wpx
                 st.assessed_n = len(files)
                 st.n_boards = len(ips)
                 if best is not None:
@@ -504,6 +539,11 @@ PAGE = """<!doctype html><meta charset=utf-8>
         color:#04121f;font:inherit;font-weight:700;cursor:pointer;margin-top:6px}
  button:disabled{background:#21262d;color:var(--dim);cursor:not-allowed}
  button.ghost{background:#21262d;color:var(--dim);font-weight:400}
+ table#ans{width:100%;border-collapse:collapse;font-size:12px}
+ table#ans td{padding:2px 0;vertical-align:top}
+ table#ans td:first-child{color:var(--dim);white-space:nowrap;padding-right:10px}
+ table#ans td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+ .good{color:var(--ok)} .bad{color:var(--no)} .warn2{color:var(--warn)}
  pre{background:#161b22;padding:10px;border-radius:4px;font-size:11px;
      max-height:34vh;overflow:auto;white-space:pre-wrap;margin-top:8px}
  h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
@@ -522,6 +562,8 @@ PAGE = """<!doctype html><meta charset=utf-8>
   <div class=chk><span class=dot id=ds></span><span id=ts></span></div>
   <div class=prog><i id=hold></i></div>
   <div class=msg id=msg></div>
+  <h2>The answer so far</h2>
+  <table id=ans><tr><td colspan=2 class=sub>needs 6 usable views</td></tr></table>
   <h2>Certainty <span class=sub>(AprilCal Max ERE)</span></h2>
   <div class=bar><i id=eb></i></div>
   <div class=sub id=et></div>
@@ -574,6 +616,23 @@ async function tick(){
   }
   $('eb').style.width=pct+'%';
   $('et').textContent=txt;
+  // The answer as it forms, with a verdict per line, so a calibration that
+  // is going wrong is visible EARLY rather than at the end.
+  const rows=[];
+  if (s.fx!==null){
+    const sdpct = s.fx_sd!==null ? 100*s.fx_sd/s.fx : null;
+    const cls = sdpct===null ? '' : (sdpct<0.5?'good':(sdpct<1.5?'warn2':'bad'));
+    rows.push(['focal fx / fy', s.fx.toFixed(1)+' / '+s.fy.toFixed(1)+' px','']);
+    rows.push(['centre cx / cy', s.cx.toFixed(0)+' / '+s.cy.toFixed(0)+' px','']);
+    if (sdpct!==null)
+      rows.push(['fx spread across folds', sdpct.toFixed(2)+' %', cls]);
+    rows.push(['HFOV in air', s.hfov_air.toFixed(2)+'°','']);
+    rows.push(['HFOV in water', s.hfov_water.toFixed(2)+'°','good']);
+    rows.push(['usable views', s.n_boards, s.n_boards>=10?'good':'warn2']);
+  }
+  $('ans').innerHTML = rows.length
+    ? rows.map(r=>'<tr><td>'+r[0]+'</td><td class="'+r[2]+'">'+r[1]+'</td></tr>').join('')
+    : '<tr><td colspan=2 class=sub>needs 6 usable views</td></tr>';
   $('sg').textContent = s.suggest
       ? 'solver suggests next: '+s.suggest+
         (s.ere_pred? '  (predicts '+s.ere_pred.toFixed(1)+' px)':'')
@@ -618,6 +677,9 @@ def make_handler(st, solve_argv, solve_dest):
                     'sharp': st.sharp, 'sharp_max': MAX_SHARPNESS_PX,
                     'ere': st.ere, 'ere_pred': st.ere_pred,
                     'ere_bar': ERE_BAR_PX, 'n_boards': st.n_boards,
+                    'fx': st.fx, 'fy': st.fy, 'cx': st.cx, 'cy': st.cy,
+                    'fx_sd': st.fx_sd, 'hfov_air': st.hfov_air,
+                    'hfov_water': st.hfov_water,
                     'suggest': (f'{CELL_NAME[st.suggest[0][0]][st.suggest[0][1]]}'
                                 f' at ~{st.suggest[1]} deg'
                                 if st.suggest else None),
