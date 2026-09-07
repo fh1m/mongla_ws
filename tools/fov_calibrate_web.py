@@ -64,6 +64,11 @@ class State:
         self.cols, self.rows, self.want = cols, rows, want
         self.outdir = outdir
         self.frame = None                  # latest annotated JPEG
+        self.raw = None                    # newest full-res frame
+        self.corners = None                # last detection, full-res coords
+        self.size = (0, 0)
+        self.fps = 0.0
+        self.det_ms = 0.0
         self.kept = 0
         self.cover = np.zeros((GRID, GRID), int)
         self.tilt = np.zeros(len(TILT_BINS) - 1, int)
@@ -109,77 +114,123 @@ def novel(poses, cx, cy, t, w, h):
     return True
 
 
-def capture_loop(st, dev, width, height):
+def capture_loop(st, dev, width, height, jpeg_w):
+    """Grab and stream. NO DETECTION HERE -- that is the whole point.
+
+    ⛔ THE FIRST VERSION RAN `findChessboardCorners` INLINE AND THE VIDEO WAS
+    UNUSABLE. The detector is slow, and its WORST case is the common one:
+    with no board in frame it searches exhaustively before failing, which at
+    1280x720 on this Pi is seconds per call. Every one of those seconds was
+    a frame the operator did not see, so the video froze exactly while they
+    were moving the board looking for a pose -- the moment they need it.
+
+    So this thread only reads, overlays the LAST known result, and encodes.
+    Detection runs beside it at whatever rate it manages, on a downscale.
+    """
     cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
     if not cap.isOpened():
         with st.lock:
             st.err = (f'cannot open camera {dev}. The vision launch holds the '
-                      f'cameras -- stop it first (Ctrl-C in its terminal).')
+                      f'cameras -- stop it first.')
         return
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    last = 0.0
+    with st.lock:
+        st.size = (w, h)
+    n, t0 = 0, time.time()
     while True:
         ok, f = cap.read()
         if not ok:
+            time.sleep(0.01)
+            continue
+        with st.lock:
+            st.raw = f                      # newest frame, for the detector
+            corners = st.corners
+            cover = st.cover.copy()
+        vis = cv2.resize(f, (jpeg_w, int(jpeg_w * h / w)))
+        sc = jpeg_w / w
+        if corners is not None:
+            cv2.drawChessboardCorners(vis, (st.cols, st.rows),
+                                      (corners * sc).astype(np.float32), True)
+        for iy in range(GRID):
+            for ix in range(GRID):
+                x0, y0 = int(ix * jpeg_w / GRID), int(iy * jpeg_w * h / w / GRID)
+                x1 = int((ix + 1) * jpeg_w / GRID)
+                y1 = int((iy + 1) * jpeg_w * h / w / GRID)
+                col = (60, 190, 60) if cover[iy, ix] else (70, 70, 200)
+                cv2.rectangle(vis, (x0 + 2, y0 + 2), (x1 - 2, y1 - 2), col, 2)
+        ok, jpg = cv2.imencode('.jpg', vis, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        n += 1
+        if ok:
+            with st.lock:
+                st.frame = jpg.tobytes()
+                if time.time() - t0 >= 1.0:
+                    st.fps = n / (time.time() - t0)
+                    n, t0 = 0, time.time()
+
+
+def detect_loop(st, det_w):
+    """Find the board, decide captures. Runs beside the video, not inside it.
+
+    Detection is done on a DOWNSCALE (default 480 px wide). That costs
+    nothing real: the frame SAVED to disk is full resolution and `fov_solve`
+    re-detects it there with sub-pixel refinement, so the only job here is
+    guidance and the capture decision -- neither of which needs precision.
+    """
+    last = 0.0
+    while True:
+        with st.lock:
+            f = st.raw
+            done = st.kept >= st.want
+        if f is None:
             time.sleep(0.02)
             continue
-        gray = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
-        found, corners = cv2.findChessboardCorners(
-            gray, (st.cols, st.rows), FIND)
-        vis = f.copy()
+        w, h = f.shape[1], f.shape[0]
+        small = cv2.resize(f, (det_w, int(det_w * h / w)))
+        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+        t1 = time.time()
+        found, c = cv2.findChessboardCorners(gray, (st.cols, st.rows), FIND)
+        dt = time.time() - t1
         msg = 'show the board'
         if found:
-            corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), CRIT)
-            cv2.drawChessboardCorners(vis, (st.cols, st.rows), corners, True)
-            c = corners.reshape(-1, 2)
-            cx, cy = float(c[:, 0].mean()), float(c[:, 1].mean())
-            t = tilt_of(corners, st.cols, st.rows)
+            c = cv2.cornerSubPix(gray, c, (7, 7), (-1, -1), CRIT)
+            full = c / (det_w / w)             # back to full-res coordinates
+            cc = full.reshape(-1, 2)
+            cx, cy = float(cc[:, 0].mean()), float(cc[:, 1].mean())
+            t = tilt_of(full, st.cols, st.rows)
             gx = min(GRID - 1, int(cx / w * GRID))
             gy = min(GRID - 1, int(cy / h * GRID))
-            tb = int(np.digitize(t, TILT_BINS) - 1)
-            tb = max(0, min(len(st.tilt) - 1, tb))
+            tb = max(0, min(len(st.tilt) - 1,
+                            int(np.digitize(t, TILT_BINS) - 1)))
             with st.lock:
+                st.corners = full
                 fresh = novel(st.poses, cx, cy, t, w, h)
-                done = st.kept >= st.want
-                paused = st.paused
             if done:
-                msg = 'enough views -- run the solve command below'
-            elif paused:
-                msg = 'paused'
+                msg = 'enough views -- press Run calibration'
             elif not fresh:
                 msg = 'too close to a view already taken -- move or tilt more'
-            elif time.time() - last < 0.8:
+            elif time.time() - last < 0.6:
                 msg = 'hold still...'
             else:
-                fn = os.path.join(st.outdir, f'cal_{st.kept:03d}.png')
-                cv2.imwrite(fn, f)
+                cv2.imwrite(os.path.join(st.outdir, f'cal_{st.kept:03d}.png'),
+                            f)
                 last = time.time()
                 with st.lock:
                     st.kept += 1
                     st.cover[gy, gx] += 1
                     st.tilt[tb] += 1
                     st.poses.append((cx, cy, t))
-                msg = f'captured {st.kept}/{st.want}'
-        # Draw the coverage grid so the operator sees WHERE to go next.
-        with st.lock:
-            cover = st.cover.copy()
-        for iy in range(GRID):
-            for ix in range(GRID):
-                x0, y0 = ix * w // GRID, iy * h // GRID
-                x1, y1 = (ix + 1) * w // GRID, (iy + 1) * h // GRID
-                col = (60, 190, 60) if cover[iy, ix] else (70, 70, 200)
-                cv2.rectangle(vis, (x0 + 2, y0 + 2), (x1 - 2, y1 - 2), col, 2)
-        small = cv2.resize(vis, (960, int(960 * h / w)))
-        ok, jpg = cv2.imencode('.jpg', small, [cv2.IMWRITE_JPEG_QUALITY, 75])
-        if ok:
+                    msg = f'captured {st.kept}/{st.want}'
+        else:
             with st.lock:
-                st.frame = jpg.tobytes()
-                st.msg = msg
-                st.found = found
+                st.corners = None
+        with st.lock:
+            st.msg = msg
+            st.found = found
+            st.det_ms = 1000 * dt
 
 
 def run_solve(st, argv, dest):
@@ -247,6 +298,7 @@ PAGE = """<!doctype html><meta charset=utf-8>
 <header>
   <h1>Calibration</h1>
   <span class=sub id=hint>tilt spread decides whether the answer is RIGHT</span>
+  <span class=sub id=perf style="margin-left:auto"></span>
 </header>
 <main>
   <div class=vid><img src="/video"></div>
@@ -297,6 +349,8 @@ async function tick(){
     : s.solve==='failed' ? 'solve failed, see below'
     : s.kept>=s.want ? 'ready' : 'you can solve early, but fill the bars first';
   document.getElementById('out').textContent = s.solve_out||'';
+  document.getElementById('perf').textContent =
+      s.fps.toFixed(0)+' fps  ·  detect '+s.det_ms.toFixed(0)+' ms';
  }catch(e){}
 }
 document.getElementById('go').onclick=async()=>{
@@ -325,6 +379,8 @@ def make_handler(st, solve_argv, solve_dest):
                         'kept': st.kept, 'want': st.want, 'msg': st.msg,
                         'cover': st.cover.tolist(), 'tilt': st.tilt.tolist(),
                         'err': st.err, 'solve': st.solve,
+                        'fps': round(st.fps, 1),
+                        'det_ms': round(st.det_ms, 1),
                         'solve_out': st.solve_out}).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -346,7 +402,7 @@ def make_handler(st, solve_argv, solve_dest):
                                              b'\r\nContent-Length: '
                                              + str(len(f)).encode()
                                              + b'\r\n\r\n' + f + b'\r\n')
-                        time.sleep(0.05)
+                        time.sleep(0.02)
                 except Exception:
                     pass
             else:
@@ -380,6 +436,11 @@ def main():
     ap.add_argument('--width', type=int, default=1280)
     ap.add_argument('--height', type=int, default=720)
     ap.add_argument('--port', type=int, default=8099)
+    ap.add_argument('--detect-width', type=int, default=480,
+                    help='detect on a downscale. The SAVED frame is full '
+                         'resolution and fov_solve re-detects it there, so '
+                         'this costs nothing but makes the video usable.')
+    ap.add_argument('--stream-width', type=int, default=800)
     ap.add_argument('--applies-to', default='pi_forward',
                     help='camera PROFILE this calibration describes')
     ap.add_argument('--install', default=None,
@@ -391,7 +452,9 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     st = State(cols, rows, a.views, a.out)
     threading.Thread(target=capture_loop,
-                     args=(st, a.device, a.width, a.height),
+                     args=(st, a.device, a.width, a.height, a.stream_width),
+                     daemon=True).start()
+    threading.Thread(target=detect_loop, args=(st, a.detect_width),
                      daemon=True).start()
 
     here = os.path.dirname(os.path.abspath(__file__))
