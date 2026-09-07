@@ -53,6 +53,9 @@ from duburi_control.fc import srot_protocol as sp            # noqa: E402
 from duburi_control.fc.port_guard import PortGuard           # noqa: E402
 from duburi_control.fc.srot_fc import SrotFC                 # noqa: E402
 from duburi_vision.detection.factory import make_detector    # noqa: E402
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _where import where   # never print a hardcoded IP
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--class', dest='klass', default='person')
@@ -774,7 +777,7 @@ class Handler(BaseHTTPRequestHandler):
 
 threading.Thread(target=worker, daemon=True).start()
 threading.Thread(target=renderer, daemon=True).start()
-print(f'  open http://10.42.0.28:{A.port}   class={A.klass} gain={A.gain}%',
+print(where(A.port) + f'   class={A.klass} gain={A.gain}%',
       flush=True)
 try:
     ThreadingHTTPServer(('0.0.0.0', A.port), Handler).serve_forever()

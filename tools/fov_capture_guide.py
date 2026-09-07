@@ -16,6 +16,9 @@ to accept a pose it already has, so the 25 views are 25 DIFFERENT views.
 import os, sys, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import numpy as np, cv2
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _where import where   # never print a hardcoded IP
 cv2.setNumThreads(2)
 
 DEV     = int(sys.argv[1])
@@ -322,7 +325,7 @@ class H(BaseHTTPRequestHandler):
 t = threading.Thread(target=worker, daemon=True); t.start()
 srv = HTTPServer(('0.0.0.0', PORT), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
-print(f"  open  http://10.42.0.28:{PORT}  in a browser on the laptop")
+print(where(PORT) + "  in a browser on the laptop")
 print(f"  capturing to {OUTDIR}, {len(PLAN)} guided poses\n")
 try:
     while state['run']:

@@ -51,6 +51,7 @@ from duburi_control.fc.srot_fc import SrotFC                    # noqa: E402
 from duburi_vision.detection.factory import make_detector       # noqa: E402
 from srot_console_server import (                               # noqa: E402
     SERIAL_CAPACITY_BPS, BoardTelemetry, HostStats)
+from _where import where                                        # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--class', dest='klass', default='person')
@@ -342,7 +343,7 @@ class Handler(BaseHTTPRequestHandler):
 
 threading.Thread(target=control, daemon=True).start()
 threading.Thread(target=render, daemon=True).start()
-print(f'  console  http://10.42.0.28:{A.port}   class={A.klass} gain={A.gain}%',
+print(where(A.port) + f'   class={A.klass} gain={A.gain}%',
       flush=True)
 try:
     ThreadingHTTPServer(('0.0.0.0', A.port), Handler).serve_forever()
