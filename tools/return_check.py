@@ -1,5 +1,23 @@
-"""A2 -- RETURN: 2,882 raw frames + 302 labelled, never opened.
-Return-gate is a SCORING task and the least-measured thing in the archive.
+"""A2 -- RETURN: 2,882 raw frames + 302 labelled.
+
+⛔ THIS TOOL'S ORIGINAL ANSWER (0.0 %) WAS RIGHT BY ACCIDENT AND IS NOT
+EVIDENCE. Two defects, both of which produce a confident number:
+
+1. It NAME-MATCHES `gate_backward`, a class no 2025 model has, so 0.0 % is
+   arithmetic rather than a measurement.
+2. The `robosub_gate*` weights it tests predict **nothing on the FRONT side
+   of this same season's gate data** either -- 0 boxes at conf 0.10 on 6/6
+   frames. Weights that see nothing anywhere cannot answer a question about
+   one viewpoint.
+
+The measurement that DOES answer it is class-agnostic, on the SHIPPING
+detector, WITH a null baseline -- see `.claude/context/measured-bars.md`
+§24. Result: at IoU 0.5 the shipping model scores 9.7 % against a
+whole-frame null model's 15.3 %, and the `gate` class specifically is 0.0 %
+at every threshold. The structure is not localised.
+
+The water statistics below are still useful and are kept. The model section
+now runs the honest scorer.
 """
 import sys, glob, random, contextlib, io, os, cv2
 sys.path.insert(0,'tools'); sys.path.insert(0,'src/duburi_vision')
@@ -23,6 +41,8 @@ for tag,d in (('final_fun/RETURN    ',f'{R}/final_fun/RETURN'),
           f'  contr {a.contrast:5.1f}  bright {a.brightness:5.1f}  cast {a.cast:+6.1f}')
 
 print('\n  === A2. RETURN -- is there a model that reads it? ===')
+print('  ⛔ the name-matched sweep below CANNOT answer this -- see the module')
+print('     docstring. It is kept only to show what it actually measures.')
 cands=[d for d in os.listdir(M) if os.path.isdir(f'{M}/{d}/weights')]
 gate=[d for d in cands if 'gate' in d]
 print(f'  no "return" model exists; testing the {len(gate)} GATE models '
@@ -40,3 +60,6 @@ for mn in sorted(gate):
     print(f'  {mn:<30} n={n:3d}  R {100*r["recall"]:5.1f}%  P {100*r["precision"]:5.1f}%')
     if best is None or r['recall']>best[1]: best=(mn,r['recall'])
 if best: print(f'\n  best on RETURN: {best[0]}  R {100*best[1]:.1f}%')
+print('\n  ^ 0.0 % here means "no model declares a gate_backward class",')
+print('    NOT "no model sees the gate". The real answer is measured-bars')
+print('    §24: class-agnostic, on the shipping HEF, against a null model.')
