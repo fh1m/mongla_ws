@@ -555,6 +555,160 @@ consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
 
 ---
 
+## 5b. Heading, MEASURED — and the drift is NOT the number that matters
+
+Five still-bench captures against `/duburi/state` at 22 Hz, board untouched. The
+last three were run **back to back in one session** specifically to settle a
+claim an earlier version of this section made and got wrong.
+
+| capture | window | full-run slope | quarter spread | **p2p wander** |
+|---|---|---|---|---|
+| A | 98 s | **−0.386 °/min** | — | 2.05° |
+| B | 480 s | +0.360 | 0.151 | 9.16° |
+| C1 | 480 s | **+0.027** | 0.356 | 5.93° |
+| C2 | 480 s | **+0.377** | 1.890 | 6.18° |
+| C3 | 480 s | **+0.306** | 1.231 | 6.97° |
+
+### ⛔ RETRACTED: the sign does not flip. That was estimator noise.
+
+An earlier commit in this round claimed session-varying bias on the strength of
+A (−0.386) against B (+0.360), and the memory entry said so. **The three
+consecutive captures are all POSITIVE** (+0.027, +0.377, +0.306), and run A was
+the *shortest* window and therefore the noisiest. There is no sign flip in the
+data.
+
+Mean of the three consecutive: **+0.237 °/min, sd 0.185** — that is **1.3 σ from
+zero with n = 3.** The drift is not resolvable to better than a few tenths of a
+degree per minute by this method over eight minutes.
+
+**Also retracted, now by data as well as by argument:** the claim that "the
+quarters are the better estimator". Run B's quarters agreed to 0.151 °/min and
+that was a **fluke** — the consecutive captures give quarter spreads of 0.356,
+1.890 and 1.231. A shorter window has *less* lever arm, so a wander-induced slope
+contributes **more** variance per window, not less. Four numbers agreeing once,
+with no error bar on any of them, was never evidence.
+
+**What survives:** the drift magnitude is **≤ ~0.4 °/min and may be much
+smaller** — comfortably better than the firmware's own stated 0.5–3 °/min.
+
+### The robust number is the WANDER, and it is reproducible
+
+| | p2p over 8 min |
+|---|---|
+| C1 / C2 / C3 | 5.93° / 6.18° / 6.97° |
+| mean | **6.36°, sd 0.54 — reproducible to 9 %** |
+
+**≈ 6–7 ° of heading wander on a motionless board, every time.** Unlike the drift
+this reproduces cleanly across captures, and it is **larger than most alignment
+tolerances in this stack while being present before the vehicle has moved.** It
+competes directly with the mixer's ±45° attractor (§3b) as an explanation for why
+terminal alignment is hard.
+
+Not yet separated: sensor vs room (thermal vs mechanical). Two captures an hour
+apart, or one with the board on foam, would distinguish them.
+
+### The mission budget
+
+Over a 15-minute run: **≈ 3.5° of drift + ≈ 6° of wander ≈ 10° of heading
+uncertainty**, and none of it is correctable from a stored per-board constant —
+the mag reference is captured once at boot and never revisited (§5). Treat
+absolute heading accordingly: prefer relative turns and vision-referenced
+headings, and be suspicious of any mission step that turns to an absolute heading
+minutes in.
+
+### Method notes, both earned the hard way this round
+
+**A first 480 s capture reported "+38.4 °/min" and was contaminated** — 274° of
+total yaw change, +63 °/min in one quarter and ≈0 in the other three: the hull had
+been moved. The split/quarters check caught it; a single slope would have been
+reported, exactly as in round 26's bogus +51.9 °/min.
+
+**And then the same check misled me in the other direction** by making a fluke
+look like a confirmation. The lesson is not "use quarters" — it is that **an
+estimator you have not characterised should not be used to support a claim about
+a difference between two of its outputs.** Three consecutive captures cost 24
+minutes of wall clock and settled it; the argument would not have.
+
+## 6. The two other deadbands we are driving into
+
+§3 and §3b are about the mixer. There are two more quantisers *upstream* of it,
+both in `attitude_control.cpp` / `depth_control.cpp` (READ), and both swallow our
+vision corrections whole.
+
+### 6a. The yaw stick deadband: below 2.86 %, STABILIZE HOLDS instead of turning
+
+`attitude::stabilize()` branches on the **expo'd** yaw stick:
+
+```
+yaw_stick = applyExpo(stick_yaw, PILOT_EXPO)
+if (|yaw_stick| > 0.02)  → rate command: des_yaw_rate = yaw_stick · PILOT_YAW_RATE
+else                     → HOLD: des_yaw_rate = wrapPi(s_yaw_target − meas_yaw) · ANG_YAW_P
+```
+
+With `PILOT_EXPO = 0.30`, `|yaw_stick| > 0.02` needs **|stick| > 2.856 %**
+(MEASURED, solved numerically from the live expo).
+
+So:
+
+- **A yaw command below 2.86 % of stick does not turn the vehicle at all.** It
+  takes the ELSE branch, and the board *actively drives back* to the heading it
+  captured. Our loop believes it commanded a small yaw; the vehicle holds.
+- With `PILOT_YAW_RATE = 160` (live), the **smallest commandable yaw rate is
+  0.02 × 160 = 3.20 °/s.** There is nothing between "hold" and "3.2 °/s".
+
+For terminal alignment on a torpedo hole, where the residual bearing error is a
+fraction of a degree, **the entire useful range is inside the deadband.**
+
+**The good news, and it is genuinely good:** the ELSE branch is a real
+heading-hold closed on the mag-free yaw with `ANG_YAW_P = 6.0`. So dropping the
+vision `yaw` axis at the hole does not surrender heading — it hands it to a
+controller that holds it properly. `precision-alignment.md` already recommends
+this; **it is now justified by the firmware rather than by observed wobble.**
+
+### 6b. The depth stick deadband is 5 %
+
+`depth::update()` moves the depth target only when `|stick_throttle| > 0.05`
+(`STICK_DEADBAND`, READ). Below that the target does not move at all. Our
+`depth_step` logic steps the *setpoint* host-side, which is the right shape — but
+any attempt to trim depth by holding a small throttle offset does nothing.
+
+### 6c. ⚠ The depth loop has NEVER RUN CLOSED — and its sign was inverted
+
+`depth_control.cpp` carries this, verbatim (READ):
+
+> *"AUDIT R1 has stood since the beginning: this loop has NEVER run closed,
+> because the Bar30 was not fitted during development."*
+
+The sign **was inverted** and is fixed: the old code ran the PID in depth while
+its output lives in altitude, so it "commanded the opposite of what it wanted, on
+every axis of the depth loop." The fix is well-argued and cross-checked against
+three independent sources. **But it is unvalidated.**
+
+**The SURFACE failsafe depends on this sign.** A leak, a low thruster battery or a
+GCS loss all route to `SURFACE`, which calls `depth::update()`. If the sign were
+still wrong, the emergency ascent drives the vehicle *down*.
+
+**They built us the tool to check it without water, and we have never used it.**
+`depth::preview()` runs the same error expression through a *separate*
+proportional-only instance and publishes it as **`DEPTH_CMD`**, readable
+**disarmed, with nothing spinning**:
+
+```
+thumb over the Bar30 port (pressurise = "deeper")
+  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   ✓ correct
+  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend ✓ correct
+  demand moves AWAY from target  → STILL INVERTED — DO NOT DIVE
+```
+
+They even record why the first version of `preview()` was useless (a full PID fed
+a constant error winds its integrator to the rail and reports "inverted" for a
+correct loop) — P-only is deliberate.
+
+**This is a pre-water gate we can close on the bench today, and it is the highest-
+consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
+
+---
+
 ## 5b. Heading drift, MEASURED on this board — and the sign is not stable
 
 Two still-bench runs against `/duburi/state` (no serial contention — the manager

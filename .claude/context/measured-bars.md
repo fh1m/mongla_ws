@@ -1932,19 +1932,27 @@ selection, not amplitude. Filed upstream as `srot-control-board#13`.
 
 ## 27. Heading, on a STATIONARY board
 
-Round 40, `/duburi/state` at 22 Hz, board still on the bench.
+Round 40. Five captures against `/duburi/state` at 22 Hz; the last three back to
+back in one session, board untouched.
 
 | quantity | measured | bar |
 |---|---|---|
-| yaw bias drift | **≈ 0.4 °/min** (−0.386 over 98 s; +0.36 over 480 s) | ≈ **5-6 ° over a 15-min run**, and **not correctable from a stored constant** — the mag reference is captured once at boot and never revisited |
-| **yaw wander, motionless** | **9.16 ° peak-to-peak / 8 min** (2.05 ° / 98 s) | **larger than most alignment tolerances in this stack, present before the vehicle moves** |
-| sign stability | **OPEN** | two estimates differ in sign; a straight-line fit to a series dominated by wander is not evidence the bias flipped. Consecutive same-session captures pending |
+| yaw bias drift | **+0.237 °/min, sd 0.185 (n=3 consecutive)** — **1.3 σ from zero**, so not resolvable to better than a few tenths | ≤ ~0.4 °/min; better than the firmware's own stated 0.5-3 |
+| **yaw wander, motionless** | **6.36 ° p2p / 8 min, sd 0.54 — reproducible to 9 %** (5.93 / 6.18 / 6.97) | **the robust number. Larger than most alignment tolerances here, and present before the vehicle moves** |
+| 15-min mission budget | ≈ 3.5 ° drift + ≈ 6 ° wander | **≈ 10 ° of heading uncertainty**, none of it correctable from a stored constant — the mag reference is captured once at boot and never revisited |
 
-⛔ **Method rule, earned twice now.** A first 480 s capture reported "+38.4 °/min"
-and was contaminated — the hull had been moved (274 ° of yaw change, +63 °/min in
-one quarter, ≈0 in the other three). The split/quarters check caught it; a single
-slope would have been reported, exactly as in round 26's bogus +51.9 °/min.
-**And the follow-on reasoning "halves measure wander, quarters measure bias" is
-RETRACTED as backwards** — a shorter window has less lever arm, so wander
-contributes *more* variance per window. Never trust a heuristic over an
-uncharacterised estimator.
+⛔ **RETRACTED within this round: "the sign flips between sessions."** That rested
+on one 98 s capture (−0.386) against one 480 s capture (+0.360). **All three
+consecutive captures are positive**, and the 98 s window was the noisiest. No sign
+flip in the data.
+
+⛔ **Also retracted: "quarters measure bias, halves measure wander."** Run B's
+quarter spread of 0.151 °/min was a fluke — the consecutive captures give 0.356,
+1.890, 1.231. A shorter window has *less* lever arm, so wander contributes **more**
+variance per window. **The rule: do not use an estimator you have not
+characterised to support a claim about a difference between two of its outputs.**
+Three consecutive captures cost 24 minutes and settled what argument could not.
+
+(An earlier 480 s attempt reported "+38.4 °/min" and was contaminated — the hull
+had been moved: 274 ° of yaw change, +63 °/min in one quarter, ≈0 in the other
+three. Same trap as round 26's bogus +51.9 °/min.)
