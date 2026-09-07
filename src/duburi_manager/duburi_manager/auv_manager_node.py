@@ -45,12 +45,31 @@ from duburi_interfaces.msg import DuburiState                            # noqa:
 from duburi_control import (                                            # noqa: E402
     COMMANDS, Duburi, Heartbeat, Pixhawk, fields_for, tracing,
 )
+from duburi_control.fc import make_flight_controller
+from duburi_control.fc.port_guard import PortGuard                     # noqa: E402
+from duburi_control.bearing import bearing_from_normalised   # noqa: E402
+from duburi_control.fc.srot_protocol import (                            # noqa: E402
+    MSG_ID_ESC_STATUS as SROT_MSG_ID_ESC_STATUS,
+    SOURCE_SYSID as SROT_SOURCE_SYSID,
+    SOURCE_COMPID as SROT_SOURCE_COMPID,
+    uplink_class_num as srot_uplink_class_num,
+)
+from duburi_control.fc.srot_fc import MOVE_VERBS as SROT_MOVE_VERBS       # noqa: E402
+from duburi_control.fc.srot_fc import (                                   # noqa: E402
+    UNSUPPORTED_VERBS as SROT_UNSUPPORTED_VERBS)
+from duburi_control.duburi import _UNARM_SAFE as DUBURI_UNARM_SAFE        # noqa: E402
+from duburi_control.tracing import command_scope                          # noqa: E402
 from duburi_control.payload import PayloadDriver                         # noqa: E402
 from duburi_sensors import make_yaw_source                               # noqa: E402
 from duburi_vision  import wait_vision_state_ready                       # noqa: E402
 
+from . import srot_format as _sfmt                                          # noqa: E402
+from . import srot_changes as _schg                                        # noqa: E402
+from . import health as _health
+from . import health_reporters as _hr
 from .connection_config import (                                             # noqa: E402
     DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
+    resolve_srot_profile,
 )
 from .dispatch_policy   import goal_acceptance                           # noqa: E402
 from .vision_state     import VisionState                                # noqa: E402
@@ -66,6 +85,8 @@ SEPARATOR = '=' * 52
 # How much a value must change before the [STATE] log line reprints.
 YAW_CHANGE_THRESH   = 5.0    # degrees
 DEPTH_CHANGE_THRESH = 0.08   # metres
+# |DEPTH_OUT| at/above this while disarmed => arming would command full heave.
+_SROT_DEPTH_OUT_WARN = 0.90
 BAT_CHANGE_THRESH   = 0.2    # volts
 FORCE_PRINT_SECONDS = 30.0   # always reprint even if nothing changed
 
@@ -79,6 +100,63 @@ MESSAGE_RATES = {
     mavutil.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS:  1,
     mavutil.mavlink.MAVLINK_MSG_ID_RC_CHANNELS:     5,
 }
+
+# SROT streams a different set, so it gets its own table rather than reusing the
+# ArduSub one:
+#   * no AHRS2 -- attitude is ATTITUDE, depth is VFR_HUD
+#   * no RC input at all (there is no radio on the vehicle), so RC_CHANNELS is moot
+#   * ESC_TELEMETRY_1_TO_4/5_TO_8 carry the RPM (ESC_STATUS msgid 291 is absent from
+#     every pymavlink dialect -- see SrotFC.telemetry)
+#
+# Available since firmware behaviour rev 2. The board clamps any request to a 20 ms
+# floor so a companion cannot starve the PARAM_VALUE / COMMAND_ACK traffic missions
+# depend on, and it refuses a request to disable HEARTBEAT.
+SROT_MESSAGE_RATES = {
+    mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE:       50,   # Hz -- the host-loop ceiling
+    # RAW GYRO for flow de-rotation, and it was ABSENT from this table, so it
+    # ran at the board's 10 Hz default while the camera ran at 30+. Measured on
+    # the board: SET_MESSAGE_INTERVAL takes it 10.0 -> 51.6 Hz with no firmware
+    # change. It matters because rotational flow is `f * omega * dt` and does
+    # NOT depend on range, so it must be subtracted before the translation is
+    # scaled -- with a gyro sample shared across three camera frames, that
+    # subtraction is using the wrong omega for two of them.
+    #
+    # ⛔ A 100 Hz request ACKs ACCEPTED and delivers 50: the firmware's
+    # RATE_MIN_MS = 20 floor. The ACK is a claim; the arrival rate is the fact.
+    mavutil.mavlink.MAVLINK_MSG_ID_SCALED_IMU2:    50,   # Hz -- gyro, de-rotation
+    mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD:        10,   # depth
+    mavutil.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS:  1,
+    # 291 via srot_protocol, NOT mavutil.mavlink.MAVLINK_MSG_ID_ESC_STATUS -- that
+    # symbol does not exist (291 was removed from the dialect) and naming it here
+    # raises AttributeError at import. One rate on 291 paces ESC_TELEMETRY_* too.
+    SROT_MSG_ID_ESC_STATUS:                         5,
+}
+
+
+def _parse_payload_channels(spec: str, log=None) -> dict:
+    """"9:torpedo_1, 11:dropper_1" -> {9: 'torpedo_1', 11: 'dropper_1'}.
+
+    Labels only. These never decide WHERE a fire goes -- `fire(N)` is always board
+    channel N -- so a malformed or stale entry is a cosmetic problem, and the right
+    response is to drop it with a warning rather than refuse to start. That is the
+    opposite of how the routing map this replaces had to be treated, and it is the
+    point of the redesign: nothing here can misdirect an actuation.
+    """
+    out: dict = {}
+    for entry in (spec or '').split(','):
+        entry = entry.strip()
+        if not entry:
+            continue
+        ch, sep, name = entry.partition(':')
+        try:
+            if not sep or not name.strip():
+                raise ValueError('expected <board_channel>:<name>')
+            out[int(ch)] = name.strip()
+        except ValueError as exc:
+            if log is not None:
+                log.warn(f'[PAYLOAD] payload_channels: ignoring {entry!r} ({exc}). '
+                         f'Labels only -- fire() is unaffected.')
+    return out
 
 
 class FeedbackPump:
@@ -141,6 +219,21 @@ class FeedbackPump:
             self._stop.wait(timeout=0.4)
 
 
+def _kill_text(kill) -> str:
+    """Three states, because the wire has three.
+
+    `KILL clear` was printed whenever the value was not True -- including when
+    the board had no ESP-NOW link to the second board and therefore could not
+    see the switch at all. That is a FALSE SAFETY STATEMENT on the one line an
+    operator reads before arming, and it was observed live: a session logged
+    `thruster --` (no BATTERY_STATUS instance 1, so no link) next to
+    `KILL clear` in the same row.
+    """
+    if kill is None:
+        return 'UNKNOWN (no 2nd-board link)'
+    return 'ENGAGED' if kill else 'clear'
+
+
 class AUVManagerNode(Node):
     def __init__(self):
         super().__init__('duburi_manager')
@@ -174,6 +267,41 @@ class AUVManagerNode(Node):
         # Pool default True. The sim launch sets it False: ArduSub SITL's
         # barometer ACKs PREFLIGHT_CALIBRATION and then stops tracking depth.
         self.declare_parameter('baro_calibration',     True)
+        # LANDING_TARGET vision uplink (VISION_API.md). OFF by default: the
+        # board parses msgid 149 and silently DROPS it today, so this is a
+        # producer built ahead of its consumer. '' = disabled; set to a camera
+        # name ('forward') to stream that camera's selected target.
+        # Raw MAVLink replay log (.tlog). '' = off; a tag ('gate_am') names the
+        # file, which lands beside the scorecards in DUBURI_RUN_DIR. Everything
+        # the live console shows is derived from this stream, so the log is the
+        # stream itself rather than a second copy of the derived numbers.
+        self.declare_parameter('record', '')
+        self.declare_parameter('vision_uplink_camera', '')
+        self.declare_parameter('vision_uplink_class', '')
+        self.declare_parameter('vision_uplink_hz', 25.0)
+        # payload_channels: OPTIONAL per-instance labels, "<board_channel>:<name>",
+        # e.g. "9:torpedo_1, 10:torpedo_2, 11:dropper_1".
+        #
+        # It does NOT route anything. `fire(N)` always addresses board channel N
+        # (= DO_SET_SERVO param1 = the n in SERVO{n}_ROLE); these names only make
+        # logs and the preflight readable. A stale label can mislabel a log line;
+        # it cannot send a shot to the wrong channel, which is exactly why the
+        # routing map it replaces is gone.
+        #
+        # ⚠ MOSTLY SUPERSEDED by SERVO{n}_FUNCTION on the board, which duburi_ws now
+        # reads at bring-up (SrotPayload.preflight_roles). Prefer setting Function in
+        # Bondor: it is stored in the board's NVS, so the payload map travels with the
+        # hull instead of living in a launch file that goes stale on a re-wire.
+        # This param survives only for names the board's fixed enum cannot express --
+        # "torpedo_1" vs "torpedo_2", which share one FUNCTION. When both are present
+        # and disagree, the override is used AND a warning names both.
+        self.declare_parameter('payload_channels',     '')
+        # payload_fire_map: REMOVED. Kept declared ONLY so a launch file still
+        # setting it fails loudly -- see _preflight_payload. Silently ignoring it
+        # would be the dangerous option, because its channel numbers (1..4, a
+        # host-side index) now mean something completely different (1..16, the
+        # board channel), and on the default role layout channel 1 is the ARM.
+        self.declare_parameter('payload_fire_map',     '')
         self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
         self.declare_parameter('nucleus_dvl_port',     9000)
         self.declare_parameter('nucleus_dvl_password', 'nortek')
@@ -182,6 +310,38 @@ class AUVManagerNode(Node):
         self.declare_parameter('dvl_retry_s',       5.0)
         # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
         self.declare_parameter('debug',            False)
+        # flight_controller: which autopilot backend the HAL builds.
+        #   'pixhawk' (DEFAULT) -- the ArduSub/BlueOS path. This is the
+        #        configuration that placed 8th at RoboSub 2025 and it stays the
+        #        default here for exactly that reason.
+        #   'srot'   -- the custom SROT board over direct USB Type-C serial (no
+        #        BlueOS). Pass flight_controller:=srot on the srot vehicle.
+        #
+        # ⛔ THE DEFAULT WAS 'srot' ON THE srot BRANCH AND IS DELIBERATELY FLIPPED
+        # HERE. That comment used to read "default on this branch", which stopped
+        # being true the moment the branch merged. Leaving it would have silently
+        # re-pointed `bringup.launch.py mode:=pool` -- the pool command in every
+        # doc -- at a backend the competition hull does not have.
+        #
+        # Both directions fail LOUDLY (no heartbeat) rather than silently, so the
+        # tiebreaker is which one preserves the tested configuration. Flipping it
+        # back is this one line, deliberately.
+        self.declare_parameter('flight_controller', 'pixhawk')
+        # allow_fw_behaviour_mismatch: proceed against firmware older than
+        # srot_protocol.FW_BEHAVIOUR_REV_REQUIRED. OFF by default and it should stay
+        # off. On pre-rev-2 firmware MOVE_STOP COASTS -- it applies zero braking thrust
+        # -- and the host-side reverse-leg brake that used to cover that has been
+        # removed, so `stop` and every abort would simply not decelerate 20 kg of hull,
+        # with nothing in any log to say why. Setting this true is accepting that.
+        self.declare_parameter('allow_fw_behaviour_mismatch', False)
+        # Verbose SROT telemetry block period (s); 0 disables. Default 2.0 --
+        # the first water test wants a continuous trace to correlate against
+        # what the vehicle physically did.
+        self.declare_parameter('srot_telemetry_period_s', 2.0)
+        # Arm anyway when the depth controller is saturated. Its OWN flag rather
+        # than reusing allow_fw_behaviour_mismatch: accepting an unknown firmware
+        # revision and accepting full uncommanded heave are different decisions.
+        self.declare_parameter('allow_saturated_depth_arm', False)
         declare_vision_params(self)
 
         requested_mode      = str(self.get_parameter('mode').value)
@@ -192,12 +352,16 @@ class AUVManagerNode(Node):
         self._bno_port      = str(self.get_parameter('bno085_port').value)
         self._bno_baud      = int(self.get_parameter('bno085_baud').value)
         self._payload_port  = str(self.get_parameter('payload_port').value)
+        self._payload_fire_map = str(self.get_parameter('payload_fire_map').value)
+        self._payload_channels = str(self.get_parameter('payload_channels').value)
         self._dvl_host      = str(self.get_parameter('nucleus_dvl_host').value)
         self._dvl_port      = int(self.get_parameter('nucleus_dvl_port').value)
         self._dvl_passwd    = str(self.get_parameter('nucleus_dvl_password').value)
         self._dvl_auto      = bool(self.get_parameter('dvl_auto_connect').value)
         self._dvl_retry_s   = float(self.get_parameter('dvl_retry_s').value)
         self._debug         = bool(self.get_parameter('debug').value)
+        self._fc_kind       = str(self.get_parameter('flight_controller').value).strip().lower()
+        self._is_srot       = (self._fc_kind == 'srot')
 
         # Wire MAVLink tracing on as early as possible — mutates contextvar in
         # main thread; daemons spawned later still see the default (False).
@@ -212,20 +376,129 @@ class AUVManagerNode(Node):
                     f'tag will still apply but [MAV ] lines may not print')
 
         self._mode_name = resolve_mode(requested_mode, logger=self.get_logger())
-        self._profile   = resolve_profile(
-            self._mode_name, mav_device=mav_device, logger=self.get_logger())
+        if self._is_srot:
+            # SROT connects over direct USB Type-C serial -- bypass the BlueOS/UDP
+            # profile machinery entirely (mode still labels the yaw-source hints).
+            self._profile = resolve_srot_profile(
+                mav_device, logger=self.get_logger())
+        else:
+            self._profile = resolve_profile(
+                self._mode_name, mav_device=mav_device, logger=self.get_logger())
 
     def _setup_mavlink(self) -> None:
         """Open MAVLink connection, wait for heartbeat, pin telemetry rates."""
         self.get_logger().info(
             f'Connecting ({self._mode_name}) -> {self._profile["conn"]} ...')
         baud_kw = {'baud': self._profile['baud']} if self._profile['baud'] else {}
+        # Identify as an ONBOARD COMPUTER (191) on srot, not as "some GCS" (pymavlink's
+        # default 190). The board's LoRa bridge synthesises its filler heartbeat as
+        # 255/190 -- the same identity we were using -- so the firmware could not tell
+        # the companion from the ground station. Consequence: a DEAD JETSON with Bondor
+        # still connected holds the GCS failsafe open, and the vehicle station-keeps
+        # when it should surface. A distinct compid is what lets the firmware key
+        # FS_GCS_SYSID/FS_GCS_COMPID on us specifically (their JETSON_FEEDBACK §4).
+        #
+        # Safe to ship before that firmware lands: the board counts ANY heartbeat whose
+        # id is not its own (`msg.compid != MAV_COMPONENT_ID || msg.sysid !=
+        # MAV_SYSTEM_ID`, fw mav_commands.cpp:687), so 191 keeps the failsafe fed
+        # exactly as 190 did.
+        #
+        # srot ONLY -- the pixhawk path keeps pymavlink's defaults so it stays
+        # byte-identical to history, which is the whole promise of that backend.
+        if self._is_srot:
+            baud_kw['source_system'] = SROT_SOURCE_SYSID
+            baud_kw['source_component'] = SROT_SOURCE_COMPID
+        # Claim the port BEFORE opening it. On srot every open reboots the flight
+        # controller (fc/port_guard.py has the measurements), so a second process
+        # touching this device mid-mission is a silent disarm-and-reinit. The
+        # kernel does not lock a tty; this does. A non-serial endpoint is a no-op.
+        self._port_guard = PortGuard(self._profile['conn'], log=self.get_logger())
+        self._port_guard.acquire()
         self.master  = mavutil.mavlink_connection(self._profile['conn'], **baud_kw)
         self.master.wait_heartbeat()
-        self.pixhawk = Pixhawk(self.master, log=self.get_logger())
-        # Pin rates so ArduSub streams at the rates we need (default ~4 Hz).
-        for msg_id, hz in MESSAGE_RATES.items():
-            self.pixhawk.set_message_rate(msg_id, hz)
+        # Build the backend behind the FlightController HAL. PixhawkFC is-a Pixhawk,
+        # so `self.pixhawk` stays a valid alias for every existing direct call; SrotFC
+        # exposes the same read surface. `flight_controller=pixhawk` is unchanged.
+        self.fc = make_flight_controller(
+            self._fc_kind, master=self.master, log=self.get_logger())
+        self.pixhawk = self.fc
+        self.get_logger().info(f'[NET  ] flight_controller = {self.fc.name}')
+        if self._is_srot:
+            self.fc.allow_saturated_depth_arm = bool(
+                self.get_parameter('allow_saturated_depth_arm').value)
+            self.fc.allow_fw_behaviour_mismatch = bool(
+                self.get_parameter('allow_fw_behaviour_mismatch').value)
+            # The two round-trip READS -- behaviour rev and JS_GAIN_DEFAULT -- used to
+            # run here and could never succeed. Both land their reply in
+            # `master.messages`, which only fills while SOMETHING DRAINS THE LINK, and
+            # the reader thread does not start until `_setup_reader_and_warmup()`.
+            # Nothing between `wait_heartbeat()` and that point calls recv_*, so the
+            # replies were parsed by no one: `check_behaviour_rev` burned its 3x2 s of
+            # retries and reported FW_BEHAVIOUR_REV_UNKNOWN on every single startup.
+            #
+            # That is worse than a missing read. Its warning says the firmware may be
+            # pre-rev-2, i.e. that MOVE_STOP COASTS with no host brake -- so the one
+            # bring-up check meant to catch an un-brakeable hull cried wolf every time,
+            # and an operator who believed it would ground a perfectly good board.
+            # (The ARM-time call in `SrotFC.arm()` was always fine: by then the reader
+            # is running. Only the bring-up copy was broken -- on serial too, this is
+            # not a UDP/BlueOS artefact.)
+            #
+            # They now run from `_srot_preflight_reads()`, straight after the reader
+            # starts. Rate pinning stays here: `set_message_rate` is fire-and-forget
+            # and reads no reply, so it works with nobody draining.
+            # Pin rates. This used to be skipped: "SROT rates are fixed on-board (no
+            # SET_MESSAGE_INTERVAL)". Firmware behaviour rev 2 implements 511 and 510,
+            # so ATTITUDE is no longer stuck at the board's 10 Hz default -- which was
+            # the ceiling on every host loop, and left _imu_rates_tick republishing a
+            # 10 Hz stream at 50 Hz (5x oversampling into the flow rotation-comp).
+            for msg_id, hz in SROT_MESSAGE_RATES.items():
+                self.pixhawk.set_message_rate(msg_id, hz)
+        else:
+            # Pin rates so ArduSub streams at the rates we need (default ~4 Hz).
+            for msg_id, hz in MESSAGE_RATES.items():
+                self.pixhawk.set_message_rate(msg_id, hz)
+
+    def _start_recorder(self) -> None:
+        """Open the raw .tlog if `record:=<tag>` was given, else leave it None.
+
+        Set before the reader thread starts, because the reader is the sink: a
+        recorder attached later would silently miss the startup burst, which is
+        where the board's banner, its behaviour revision and the first
+        NAMED_VALUE_FLOAT sweep live -- exactly the part of a run you go back to
+        the log for.
+
+        Best-effort. A log that cannot be opened must not stop the vehicle from
+        flying, so it degrades to no recording with a loud line rather than
+        raising out of bring-up.
+        """
+        self._recorder = None
+        tag = (self.get_parameter('record').value or '').strip()
+        if not tag:
+            return
+        try:
+            from duburi_manager.srot_recorder import SrotRecorder, default_path
+            self._recorder = SrotRecorder(
+                default_path(tag), log=self.get_logger()).start()
+            # BOTH DIRECTIONS, or the log has no decisions in it.
+            #
+            # The reader thread only ever sees what ARRIVES, so a log fed from
+            # it alone holds COMMAND_ACK and no COMMAND_LONG -- measured on the
+            # first live capture: 5 acks, 0 commands. That is the same
+            # impoverishment the board's own SD log has, and the reason this
+            # log exists at all is to hold what the host DECIDED: the verbs it
+            # issued, the MANUAL_CONTROL it streamed, the heartbeats that keep
+            # the failsafe quiet.
+            #
+            # `send_callback` is pymavlink's own hook, called after every send
+            # with the packed message, so this needs no wrapper around the
+            # transport and no change at any of the seven send sites.
+            self.master.mav.set_send_callback(
+                lambda msg, *_a, **_k: self._recorder.write(msg))
+        except Exception as exc:              # noqa: BLE001
+            self._recorder = None
+            self.get_logger().error(
+                f'[REC  ] recording DISABLED -- could not open the log: {exc!r}')
 
     def _setup_reader_and_warmup(self) -> None:
         """Start the MAVLink reader thread, then wait for AHRS2 + autopilot HB.
@@ -241,9 +514,13 @@ class AUVManagerNode(Node):
         self._fast_armed  = False
         self._fast_mode   = ''
         self._fast_batt_v = math.nan
+        self._start_recorder()          # BEFORE the reader -- it is the sink
         self.reader_thread = threading.Thread(
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
+        # Only NOW can a round-trip read see its reply -- see _setup_mavlink.
+        if self._is_srot:
+            self._srot_preflight_reads()
 
         # Warmup: wait for both AHRS2 and a valid autopilot heartbeat.
         _deadline = time.monotonic() + 4.0
@@ -258,9 +535,50 @@ class AUVManagerNode(Node):
                 'BNO085 calibration may still fail. '
                 'Check MAVLink link and ArduSub telemetry rate config.')
 
+    def _srot_preflight_reads(self) -> None:
+        """SROT bring-up reads that need a reply. Call AFTER the reader thread starts.
+
+        Both of these poll `master.messages`, which only fills while the reader is
+        draining the link -- running them any earlier reports a failure that says
+        more about our own startup order than about the board. See _setup_mavlink.
+
+        Still before anything that could move: arming is an operator action and
+        `SrotFC.arm()` re-checks the rev itself, so this is the early warning, not
+        the gate.
+        """
+        fw_ok, fw_reason = self.fc.check_behaviour_rev()
+        if not fw_ok:
+            self.get_logger().error(f'[NET  ] {fw_reason}')
+        # Set the pilot gain to full so autonomous MANUAL_CONTROL isn't halved.
+        if not self.fc.set_default_gain():
+            self.get_logger().warning(
+                '[NET  ] could not confirm JS_GAIN_DEFAULT=1.0 -- MANUAL_CONTROL '
+                'may be scaled; check the board is reachable + not mid param-download')
+        # DEPTH_P, so the arming guard can convert DEPTH_CMD back into metres of depth
+        # error. Read once here rather than inside arm(): a param round-trip on the
+        # arming path adds a failure mode to the one call that must not acquire new
+        # ones. Absent -> the guard uses the firmware default and says so.
+        self.fc.read_depth_p()
+        # YAW_REF (fw rev 9). Only LOCKED means ATTITUDE.yaw is a magnetic heading;
+        # anything else and an absolute `turn` is aiming at a boot-relative number.
+        yr_ok, yr_reason = self.fc.check_yaw_reference()
+        (self.get_logger().info if yr_ok else self.get_logger().warning)(
+            f'[SROT ] {yr_reason}')
+
     def _setup_yaw_source(self) -> None:
         """Instantiate yaw source, print startup banner, start DVL auto-connect."""
         _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
+        # The BNO085 moved onto the SROT board (I2C0) and the separate ESP32-C3 +
+        # BNO085 USB board was removed from the hull. Selecting a source that reads
+        # it will fail in make_yaw_source with a bare SerialException about a missing
+        # port, which reads like a loose cable rather than "that board is gone". Say
+        # the true thing first; the raise below still stops startup.
+        if self._is_srot and self._yaw_src_name in ('bno085', 'bno085_dvl', 'dvl_bno'):
+            self.get_logger().error(
+                f'[SENS ] yaw_source={self._yaw_src_name!r} reads the USB ESP32-C3 + '
+                f'BNO085 board, which is NOT FITTED on the srot vehicle -- the BNO085 '
+                f'is on the control board now. Use yaw_source:=mavlink_ahrs (the '
+                f'board\'s own fused ATTITUDE, same sensor, 500 Hz).')
         try:
             self.yaw_source = make_yaw_source(
                 self._yaw_src_name,
@@ -298,6 +616,15 @@ class AUVManagerNode(Node):
         self.get_logger().info(SEPARATOR)
         self.get_logger().info(
             f' MONGLA · DUBURI AUV MANAGER  |  mode: {self._mode_name}')
+        if self._is_srot:
+            self.get_logger().info(
+                ' Autopilot: SROT board  ·  firmware: Hengla  ·  link: USB serial')
+        else:
+            self.get_logger().info(
+                ' Autopilot: Pixhawk / ArduSub  ·  link: BlueOS/UDP')
+        self.get_logger().info(
+            f' Connection: {self._profile["conn"]}'
+            + (f' @ {self._profile["baud"]}' if self._profile.get('baud') else ''))
         if self._debug:
             self.get_logger().info(
                 ' DEBUG TRACE: ON  -- per-command [MAV <fn> cmd=<verb>] '
@@ -329,13 +656,53 @@ class AUVManagerNode(Node):
                 daemon=True, name='dvl_auto_connect').start()
 
     def _preflight_payload(self) -> None:
-        """Start payload board connect in a background thread.
+        """Prepare the payload driver.
 
-        Runs concurrently with the BNO085 probe in _setup_yaw_source().
-        VID/PID discovery (1a86:7523) means no port overlap is possible
-        with the BNO (303a:1001), so exclusion is not needed.
-        Join happens at the top of _setup_heartbeat_and_payload().
+        SROT: the payload is INTEGRATED into the board (PCA9685 over MAVLink,
+        DO_SET_SERVO/DO_SET_RELAY) -- there is NO separate USB ESP32. Critically,
+        that old board was a CH340 (1a86:7523), the SAME chip as the SROT board, so
+        running the USB auto-detect here would grab the SROT serial port. Build the
+        MAVLink-backed SrotPayload instead; no USB scan, no thread.
+
+        Pixhawk: the historical USB PayloadDriver, connected in a background thread
+        (concurrent with the BNO085 probe; joined in _setup_heartbeat_and_payload).
         """
+        if self._is_srot:
+            from duburi_control.fc.srot_fc import SrotPayload
+            # A launch file still passing the removed routing param must STOP, not be
+            # quietly ignored: its numbers were host-side indices 1..4, and the same
+            # numbers now address board channels 1..4 -- which on the default role
+            # layout are the on-board ARM. Failing closed here is the whole migration.
+            if self._payload_fire_map.strip():
+                self._payload = None
+                self._payload_thread = None
+                self.get_logger().error(
+                    '[PAYLOAD] REFUSING TO ARM THE PAYLOAD: `payload_fire_map` is set '
+                    f'({self._payload_fire_map!r}) but that parameter was REMOVED. '
+                    'fire(N) now addresses BOARD channel N directly (N = DO_SET_SERVO '
+                    'param1 = the n in SERVO{n}_ROLE), so the old 1..4 channel numbers '
+                    'now point at completely different hardware -- on the default role '
+                    'layout, at the manipulator arm. Delete payload_fire_map and pass '
+                    'the real board channels to fire(); use payload_channels:="9:torpedo_1, '
+                    '11:dropper_1" if you want names in the logs. Payload DISABLED.')
+                return
+            names = _parse_payload_channels(self._payload_channels, self.get_logger())
+            self._payload = SrotPayload(self.fc, log=self.get_logger(), names=names)
+            self._payload_thread = None
+            self.get_logger().info(
+                '[PAYLOAD] SROT: PCA9685 over MAVLink (DO_SET_SERVO), no separate USB '
+                'board. fire(N) addresses BOARD channel N; which channels are fireable '
+                'is read from the board (SERVO{n}_ROLE), never assumed.')
+            # Read every channel role off the board NOW, so a mission aimed at the
+            # arm is caught on the deck rather than mid-drop. This is also what
+            # tells the operator which channels are actually fireable today.
+            try:
+                self._payload.preflight_roles()
+            except Exception as exc:                # noqa: BLE001 -- advisory only
+                self.get_logger().warn(
+                    f'[PAYLOAD] could not read channel roles: {exc!r} -- fire() '
+                    f'FAILS CLOSED on any channel whose role it cannot read')
+            return
         self._payload = PayloadDriver()
         _pl_port = None if self._payload_port in ('auto', '') else self._payload_port
         self._payload_thread = threading.Thread(
@@ -351,20 +718,26 @@ class AUVManagerNode(Node):
     def _setup_heartbeat_and_payload(self) -> None:
         """Start heartbeat, join payload connect thread, build Duburi facade."""
         self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
-        self.heartbeat.start()
+        # The Heartbeat streams NEUTRAL RC at 5 Hz (ArduSub FS_PILOT_INPUT guard).
+        # On SROT that fights an on-board AUTO move, and the mandatory >=1 Hz MAVLink
+        # HEARTBEAT is already sent by heartbeat_tick (2 Hz) -> do NOT stream it.
+        if not self._is_srot:
+            self.heartbeat.start()
 
-        # Payload connect ran in parallel with BNO probe — join now.
-        self._payload_thread.join(timeout=5.0)
-        if self._payload_thread.is_alive():
-            # Thread still running after timeout — treat as not connected.
-            self.get_logger().warning(
-                '[PAYLOAD] connect timed out — fire() calls will log-stub only')
-        elif self._payload.is_ready:
-            self.get_logger().info(
-                f'[PAYLOAD] verified + connected on {self._payload.port_path}')
-        else:
-            self.get_logger().info(
-                '[PAYLOAD] not found — fire() calls will log-stub only')
+        # Payload connect ran in parallel with BNO probe — join now (USB path only;
+        # SROT's MAVLink payload has no thread).
+        if self._payload_thread is not None:
+            self._payload_thread.join(timeout=5.0)
+            if self._payload_thread.is_alive():
+                # Thread still running after timeout — treat as not connected.
+                self.get_logger().warning(
+                    '[PAYLOAD] connect timed out — fire() calls will log-stub only')
+            elif self._payload.is_ready:
+                self.get_logger().info(
+                    f'[PAYLOAD] verified + connected on {self._payload.port_path}')
+            else:
+                self.get_logger().info(
+                    '[PAYLOAD] not found — fire() calls will log-stub only')
 
         # Lazy DistanceState bridge for calc_distance (built on first use so
         # single-camera / no-distance runs never create the service clients).
@@ -420,7 +793,48 @@ class AUVManagerNode(Node):
         self._Vector3Stamped = Vector3Stamped
         self.imu_rates_publisher = self.create_publisher(
             Vector3Stamped, '/duburi/imu_rates', 10)
+        # Board-clock -> host-clock mapping for the IMU stamp. See
+        # _imu_rates_tick: the board's own interval has sd 0.00 ms where
+        # arrival has sd 6.67, so the sender's clock is the better time base.
+        from duburi_vision.distance.flow_timing import ClockMap
+        self._imu_clock = ClockMap(window_s=20.0, min_pairs=40)
+        self._imu_clock_fit_t = 0.0
+        self._imu_clock_ok = False
+        self._imu_clock_warned = False
 
+        # Per-thruster RPM, srot only. The bench runbook's step 1 asks for this and
+        # it did not exist: SrotFC.telemetry() decoded RPM but had no production
+        # caller, so `leak`, `water_temp_c` and `rpm` never reached ROS at all.
+        #
+        # It was also unreachable until firmware behaviour rev 2. ESC_STATUS (291)
+        # was removed from upstream `common`, and pymavlink SILENTLY discards any
+        # msgid missing from its CRC-extra table -- so the board could stream RPM
+        # perfectly while the host read nothing, indistinguishable from an ESC
+        # fault. Rev 2 emits ESC_TELEMETRY_1_TO_4 / _5_TO_8, which do decode, and
+        # SrotFC.telemetry() already had the fallback written and waiting.
+        #
+        # int32 rather than uint16: the board sends magnitude (the ESC_TELEMETRY
+        # field is unsigned) and direction lives in the commanded value, so a
+        # consumer must not read these as signed velocity.
+        self.esc_rpm_publisher = None
+        self._leak_latched = False
+        self._srot_block_last = 0.0
+        self._srot_prev_fields = None
+        self._srot_block_period = float(
+            self.get_parameter('srot_telemetry_period_s').value)
+        if self._is_srot:
+            from std_msgs.msg import Int32MultiArray
+            self._Int32MultiArray = Int32MultiArray
+            self.esc_rpm_publisher = self.create_publisher(
+                Int32MultiArray, '/duburi/esc_rpm', 10)
+
+        # HEALTH. 1 Hz, and it only speaks when the vehicle's overall state
+        # CHANGES -- a board that logs every second is a board nobody reads,
+        # and the transition is the event worth seeing.
+        self._health = _health.HealthBoard()
+        self._register_health()
+        self._health_last = None
+        self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
         self.create_timer(0.5,  self.heartbeat_tick,   callback_group=self.timer_group)
         self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
         # Fast tick: 20 Hz HUD compass + depth (AHRS2 pinned to 50 Hz).
@@ -431,7 +845,18 @@ class AUVManagerNode(Node):
         # rotation-comp is ~1:1 with the signal, so publish at full rate.
         self.create_timer(0.02, self._imu_rates_tick, callback_group=self.fast_group)
 
-        if self._bno_mocap_active:
+        uplink_cam = str(self.get_parameter('vision_uplink_camera').value).strip()
+        if uplink_cam and self._is_srot:
+            hz = max(1.0, float(self.get_parameter('vision_uplink_hz').value))
+            self.create_timer(1.0 / hz, self._vision_uplink_tick,
+                              callback_group=self.timer_group)
+            self.get_logger().info(
+                f'[VIS  ] LANDING_TARGET uplink: {uplink_cam} @ {hz:.0f} Hz '
+                f'(the board does not consume msgid 149 yet -- producer only)')
+
+        # BNO->EKF3 mocap injection is an ArduSub/BlueOS feature; SROT fuses the
+        # BNO on-board, so there is no external EKF to feed (skip on the srot path).
+        if self._bno_mocap_active and not self._is_srot:
             self.create_timer(0.05, self._mocap_tick, callback_group=self.timer_group)
             self.get_logger().info('[SENS ] ATT_POS_MOCAP yaw injection active (20 Hz).')
             self._verify_extnav_params()
@@ -518,9 +943,49 @@ class AUVManagerNode(Node):
     # ================================================================== #
 
     def reader_loop(self):
+        # SROT multiplexes LEAK/WTEMP/STUNT_PRG/ATUNE/KILL/CURR/GAIN onto NAMED_VALUE_FLOAT
+        # and sends all seven back-to-back in one 500 ms tick, while pymavlink keeps exactly
+        # ONE message per msgid. So by the time anything reads the slot the burst has already
+        # drained through it and only the last name -- GAIN -- is left, until the next burst.
+        # Sampling the slot therefore does not miss LEAK occasionally; it misses it always.
+        # This loop is the only place that sees the names in between, so it is the only place
+        # the de-multiplexing can happen. Pixhawk has no such hook and is untouched.
+        #
+        # BATTERY_STATUS has the identical problem one layer down: the board sends
+        # instance 0 (PM1 electronics) and instance 1 (PM2 thruster pack) at 2 Hz each,
+        # and pymavlink keys its cache by MSGID, not instance -- so the slot alternates
+        # between two voltages an order of magnitude apart (measured: 1.35 V / 14.74 V).
+        note = getattr(self.fc, 'note_named_value', None)
+        note_batt = getattr(self.fc, 'note_battery', None)
+        # STATUSTEXT has the identical problem and is worse to miss: the board
+        # sends ~13 announcements as a BURST at boot, so a poller sees the last
+        # one and loses the rest -- including "Params reset to build defaults",
+        # which silently puts the pilot gain back to half authority and disables
+        # the leak failsafe. It is also the ONLY place per-thruster telemetry
+        # presence reaches the wire, and that line is sent once, at first arm.
+        note_text = getattr(self.fc, 'note_statustext', None)
+        _DEMUX = {'NAMED_VALUE_FLOAT': note, 'BATTERY_STATUS': note_batt,
+                  'STATUSTEXT': note_text}
         while True:
-            while self.master.recv_match(blocking=False) is not None:
-                pass
+            while True:
+                msg = self.master.recv_match(blocking=False)
+                if msg is None:
+                    break
+                # Record BEFORE the demux, and before any type filter: the
+                # log's job is to hold what arrived, including messages nothing
+                # on this side consumes. ESC_STATUS (291) is the live example --
+                # pymavlink drops it, so it is absent from every decoded view
+                # and present in every raw byte.
+                #
+                # `write()` queues and returns; the disk is another thread's
+                # problem. This loop is the only thing draining the link and the
+                # only place the NAMED_VALUE_FLOAT burst can be de-multiplexed,
+                # so it must not wait on anything.
+                if self._recorder is not None:
+                    self._recorder.write(msg)
+                fn = _DEMUX.get(msg.get_type())
+                if fn is not None:
+                    fn(msg)
             text = self.pixhawk.get_statustext()
             if text and text != self.last_statustext:
                 self.last_statustext = text
@@ -576,13 +1041,32 @@ class AUVManagerNode(Node):
             with FeedbackPump(self.pixhawk, goal_handle,
                               yaw_provider=self._effective_yaw_deg,
                               vision_provider=self.duburi.vision_telemetry):
-                method = getattr(self.duburi, cmd)
                 # Re-snapshot params for every goal so freshly-set
                 # `vision.*` values land on the very next command.
                 runtime = runtime_defaults_for_command(
                     cmd, snapshot_from_node(self))
                 kwargs = fields_for(cmd, request, runtime_defaults=runtime)
-                result = method(**kwargs)
+                if self._is_srot and cmd in SROT_UNSUPPORTED_VERBS:
+                    # Refuse BEFORE dispatch. Left to fall through, these reach
+                    # Pixhawk-only primitives and fail in ways worse than a clean
+                    # refusal -- lock_heading in particular would report success
+                    # while holding nothing. See srot_fc.UNSUPPORTED_VERBS.
+                    result = Move.Result()
+                    result.success = False
+                    result.message = (
+                        f'{cmd}: not supported on the SROT backend yet '
+                        f'(needs the MANUAL_CONTROL-streamed port)')
+                    result.final_value = 0.0
+                    result.error_value = 0.0
+                elif self._is_srot and cmd in SROT_MOVE_VERBS:
+                    # Collapse verb on the SROT backend: one on-board SROT_MOVE +
+                    # its four-terminal ACK relay, instead of the host motion loop.
+                    result = self._run_srot_move(cmd, kwargs, goal_handle)
+                elif self._is_srot and cmd == 'surface':
+                    result = self._run_srot_surface(kwargs)
+                else:
+                    method = getattr(self.duburi, cmd)
+                    result = method(**kwargs)
 
             if result.success:
                 goal_handle.succeed()
@@ -624,9 +1108,139 @@ class AUVManagerNode(Node):
         finally:
             self.command_active = False
 
+    def _run_srot_surface(self, kwargs):
+        """Emergency surface on the SROT backend: engage the board's SURFACE mode.
+
+        The facade's `surface` is `set_depth(0)`, which goes through
+        `_ensure_alt_hold` -> ALT_HOLD, an ArduSub mode the board does not have.
+        So on srot the verb raised ModeChangeError and did NOTHING -- a safety verb
+        that bypasses the busy gate specifically so it can always run, then didn't.
+
+        SURFACE (mode 9) is the board's own ascend-and-hold failsafe state: it
+        drives depth::setTarget(0) through the depth PID, or an open-loop ascent
+        (DEPTH_LOST_ASCENT) when there is no depth sensor -- which is exactly the
+        behaviour wanted when things have gone wrong. It is also the ONE mode the
+        board never blocks for a missing Bar30.
+
+        Braked first: the board keeps running the active movement primitive until
+        something displaces it, and SURFACE alone does not abort a move.
+        """
+        timeout = float(kwargs.get('timeout', 60.0) or 60.0)
+        self.duburi._abort_event.clear()
+        self.fc.stop_motion()                     # brake + cancel any running leg
+        ok, reason = self.fc.set_mode('SURFACE')
+
+        out = Move.Result()
+        out.success = bool(ok)
+        out.message = (f'surface: SURFACE engaged (ascending, <= {timeout:.0f}s)'
+                       if ok else f'surface: could not engage SURFACE -- {reason}')
+        att = self.fc.get_attitude()
+        out.final_value = float(att['depth']) if att else 0.0
+        out.error_value = 0.0
+        if not ok:
+            self.get_logger().error(f'[ACT  ] surface FAILED: {reason}')
+        return out
+
+    def _run_srot_move(self, cmd, kwargs, goal_handle):
+        """Dispatch a collapse verb to the SROT board as one SROT_MOVE.
+
+        Builds a Move.Result from the backend's MoveResult (never raises), streams
+        ~3 Hz progress as action feedback, and passes the cooperative abort hook so
+        a goal cancel brakes the board.
+
+        Takes `duburi.lock` and applies the same disarmed gate as the facade's
+        `_command_scope`. This path bypasses the facade entirely, so without these
+        it was the ONLY dispatch route with no host-side arm check and no
+        serialisation -- and the board's own pre-arm checks just IMU-healthy plus
+        not-calibrating (fw arming.cpp:11-31), not depth, ESCs, leak or battery.
+        The other two things `_command_scope` does are moot here: the neutral-RC
+        heartbeat is never started on srot, and a deferred heading lock cannot
+        exist because lock_heading is refused on this backend.
+        """
+        with self.duburi.lock, command_scope(cmd):
+            self.duburi._abort_event.clear()
+            if cmd not in DUBURI_UNARM_SAFE and not self.fc.is_armed():
+                out = Move.Result()
+                out.success = False
+                out.message = f'{cmd}: AUV is disarmed -- call arm() first'
+                out.final_value = 0.0
+                out.error_value = 0.0
+                return out
+
+            def _on_progress(frac):
+                fb = Move.Feedback()
+                fb.phase         = cmd
+                fb.current_value = float(frac)
+                fb.status_line   = f'{cmd} {frac * 100:.0f}%'
+                goal_handle.publish_feedback(fb)
+
+            res = self.fc.move(cmd, on_progress=_on_progress,
+                               abort_fn=self.duburi._abort_fn, **kwargs)
+            out = Move.Result()
+            out.success = res.ok
+            out.message = res.reason
+            att = self.fc.get_attitude()
+            out.final_value = float(att['depth']) if att else 0.0
+            out.error_value = 0.0
+            return out
+
     # ================================================================== #
     #  Timers                                                             #
     # ================================================================== #
+
+    def _register_health(self) -> None:
+        """Translate what each subsystem already knows into one vocabulary.
+
+        Every reporter is wrapped so a missing method is UNKNOWN rather than an
+        AttributeError: the manager runs against two backends and a sim, and a
+        health board that crashes the node it is watching is worse than no
+        board at all.
+        """
+        fc = self.fc
+
+        def named(name):
+            fn = getattr(fc, '_named_value', None)
+            return fn(name) if fn else None
+
+        self._health.register('board_link', lambda: _hr.board_link(fc))
+        self._health.register('barometer', lambda: _hr.barometer(named))
+        self._health.register('heading_ref', lambda: _hr.heading_reference(named))
+        self._health.register('thrusters', lambda: _hr.thrusters(
+            getattr(fc, 'thruster_health', lambda: None)()))
+        self._health.register('thruster_power', lambda: _hr.thruster_power(
+            getattr(fc.telemetry(), 'kill_switch', None)))
+        self._health.register('detector', lambda: _hr.detector(
+            self._detection_rate_hz()))
+
+    def _detection_rate_hz(self):
+        """Detections per second, or None if we are not subscribed at all.
+
+        THE SIGNAL D16 NEEDED. A detector that aborts stays alive with every
+        topic present; the rate is the only thing that changes, and nothing was
+        watching it.
+        """
+        vs = getattr(self, 'vision', None)
+        st = getattr(vs, 'stats', None) if vs else None
+        if st is None:
+            return None
+        try:
+            return float(st().get('det_hz'))
+        except Exception:                       # noqa: BLE001
+            return None
+
+    def _health_tick(self) -> None:
+        self._health.poll()
+        worst = self._health.worst()
+        if worst is self._health_last:
+            return
+        self._health_last = worst
+        if worst is _health.State.OK:
+            self.get_logger().info('[HLTH ] all subsystems OK')
+            return
+        bad = '; '.join(str(h) for h in self._health.not_ok())
+        log = (self.get_logger().warn
+               if worst is _health.State.DEGRADED else self.get_logger().error)
+        log(f'[HLTH ] {worst.name}: {bad}')
 
     def heartbeat_tick(self):
         self.pixhawk.send_heartbeat()
@@ -667,6 +1281,64 @@ class AUVManagerNode(Node):
             log.info('[SENS ] EKF external-nav yaw confirmed '
                      '(VISO_TYPE=1, EK3_SRC1_YAW=6).')
 
+    def _vision_uplink_tick(self) -> None:
+        """Send ONE LANDING_TARGET for the currently selected target, or nothing.
+
+        SENDING NOTHING IS THE LOSS SIGNAL. `VISION_API.md` §1 has no "lost"
+        flag -- a detector that sees nothing simply stops sending, and the board
+        ages the last bearing out. So this must not re-send a stale sample to
+        "hold" a target: that is indistinguishable from a live one on the wire
+        and defeats the board's staleness timer, which is the whole safety
+        mechanism on this path. Hence the early returns rather than a cached
+        last-good value.
+        """
+        cam = str(self.get_parameter('vision_uplink_camera').value).strip()
+        if not cam:
+            return
+        vstate = self._vision_state_for(cam)
+        if vstate is None:
+            return
+        want = str(self.get_parameter('vision_uplink_class').value).strip()
+        sample = vstate.bbox_error(want)
+        if sample is None:
+            return
+        w, h = vstate.image_size()
+        K, D = vstate.calibration()
+        b = bearing_from_normalised(
+            sample.ex, sample.ey, sample.w_frac, sample.h_frac,
+            width=w, height=h, K=K, D=D)
+        if b is None:
+            # No calibration and no FOV: refuse rather than invent a bearing.
+            # An uncalibrated guess on this wire is a confident wrong heading.
+            if not getattr(self, '_uplink_warned', False):
+                self._uplink_warned = True
+                self.get_logger().warn(
+                    f'[VIS  ] uplink idle: {cam} has no usable CameraInfo.k and no '
+                    f'FOV, so a pixel offset cannot become a bearing. Set the '
+                    f'camera_node `calibration` param.')
+            return
+        if not b.calibrated and not getattr(self, '_uplink_fov_warned', False):
+            self._uplink_fov_warned = True
+            self.get_logger().warn(
+                '[VIS  ] uplink using the FOV fallback, not the calibration: '
+                'bearings carry the linear-approximation error (up to ~2.5 deg '
+                'on our measured lens, and ~1.3 deg at frame centre from the '
+                'off-axis principal point).')
+        try:
+            # The frozen class map, not the detector's own index: `class_id` is
+            # a property of whichever model is loaded and means something
+            # different for every one. Our two senders disagreed about this
+            # field -- this tick sent a hardcoded 0 while the uplink check sent
+            # `d.class_id` -- so neither was a wire contract.
+            self.fc.send_landing_target(
+                b,
+                target_num=srot_uplink_class_num(
+                    getattr(sample, 'class_name', '') or want),
+                coasted=bool(getattr(sample, 'coasted', False)),
+                gap_age_s=float(getattr(sample, 'age_s', 0.0) or 0.0))
+        except Exception as exc:                      # noqa: BLE001
+            self.get_logger().warn(f'[VIS  ] landing_target send failed: {exc}')
+
     def _mocap_tick(self) -> None:
         """Stream BNO085 yaw to ArduSub EKF3 at 20 Hz via ATT_POS_MOCAP."""
         yaw = self.yaw_source.read_yaw()
@@ -695,17 +1367,67 @@ class AUVManagerNode(Node):
         self.state_publisher.publish(msg)
 
     def _imu_rates_tick(self):
-        """Publish body-frame angular rates (Pixhawk ATTITUDE) at 50 Hz.
+        """Publish body-frame angular rates (ATTITUDE) at 50 Hz.
 
-        x=pitch_rate, y=roll_rate, z=yaw_rate (rad/s). The vision distance node
-        buffers these + interpolates to each flow frame-pair for rotation-comp.
-        Skips when ATTITUDE hasn't arrived (no ATTITUDE stream / pre-connect).
+        x=pitch_rate, y=roll_rate, z=yaw_rate (rad/s). The flow node buffers
+        these and interpolates to each frame-pair for rotation compensation.
+        Skips when ATTITUDE hasn't arrived (no stream / pre-connect).
+
+        ⛔ THE STAMP IS THE SENDER'S CAPTURE TIME, NOT `now()`. This tick is a
+        50 Hz timer polling a cache, so it is ASYNCHRONOUS to arrival: stamping
+        `now()` added a uniform 0-20 ms of quantisation on top of transport
+        delay, and de-rotation subtracts `f*omega*dt`, so that lands directly
+        in the flow residual -- 5 ms is 1.6 px at 0.64 rad/s, and Qin & Shen
+        put the whole tolerance at 6 ms.
+
+        Measured on this vehicle: the BOARD's ATTITUDE interval is 20.00 ms
+        with sd 0.00 while host ARRIVAL is 20.00 ms with sd 6.67 and p2p 35.12.
+        All of the jitter is transport. `ClockMap` maps the board's own
+        `time_boot_ms` onto host time from one-way pairs, fitted on the LOWER
+        ENVELOPE because transport delay is strictly non-negative -- a fit
+        through the middle of the cloud measures the mean delay, not the
+        offset. The board does not implement MAVLink TIMESYNC (0 of 12
+        requests answered, measured), so this is the available route.
+
+        Falls back to arrival time, loudly, when the mapping is not yet
+        established -- an unmapped board clock is not a host clock, and
+        publishing it as one would be worse than the jitter it replaces.
         """
         rates = self.pixhawk.get_angular_rates()
         if rates is None:
             return
+
+        stamp_s = None
+        board_ms = rates.get('board_ms')
+        recv_s = rates.get('host_recv_s')
+        if board_ms is not None:
+            board_s = board_ms * 1e-3
+            if recv_s is not None:
+                self._imu_clock.add(board_s, recv_s)
+            now = time.monotonic()
+            if now - self._imu_clock_fit_t >= 2.0:
+                self._imu_clock_fit_t = now
+                self._imu_clock.fit()
+            if self._imu_clock.ready:
+                stamp_s = self._imu_clock.to_host(board_s)
+            elif not self._imu_clock_warned:
+                self._imu_clock_warned = True
+                self.get_logger().info(
+                    '[SENS ] imu_rates: board clock not mapped yet, stamping '
+                    'on arrival (adds ~6.7 ms sd of transport jitter). '
+                    'Mapping needs a few seconds of ATTITUDE.')
+
+        if stamp_s is None:
+            stamp_s = recv_s if recv_s is not None else time.time()
+        elif not self._imu_clock_ok:
+            self._imu_clock_ok = True
+            self.get_logger().info(
+                f'[SENS ] imu_rates now stamped on the BOARD clock: '
+                f'{self._imu_clock}')
+
         m = self._Vector3Stamped()
-        m.header.stamp    = self.get_clock().now().to_msg()
+        m.header.stamp.sec = int(stamp_s)
+        m.header.stamp.nanosec = int((stamp_s - int(stamp_s)) * 1e9)
         m.header.frame_id = 'duburi'
         m.vector.x = rates['pitch_rate']
         m.vector.y = rates['roll_rate']
@@ -752,6 +1474,176 @@ class AUVManagerNode(Node):
         self._maybe_print_state(attitude, battery, mode, armed, yaw_deg, yaw_label)
         self._maybe_print_rc(rc)
         self._publish_state(attitude, battery, mode, armed, yaw_deg)
+        self._publish_srot_telemetry()
+
+    def _publish_srot_telemetry(self):
+        """Surface the parts of SrotFC.telemetry() that nothing else reads.
+
+        `telemetry()` was fully implemented and had no production caller -- the
+        manager reads the vehicle through the Pixhawk-compat surface
+        (get_attitude/get_battery/...), which has no RPM or leak. So the decode
+        work, including the ESC_TELEMETRY fallback, went nowhere.
+        """
+        # Gate on the BACKEND, not on the RPM publisher: the [SROT ] block and the
+        # leak latch below have nothing to do with /duburi/esc_rpm, and tying them to
+        # it meant a manager without that publisher silently lost all of them.
+        if not self._is_srot:
+            return
+
+        # An unplanned FC restart, checked here for the same reason `telemetry()`
+        # is: `check_for_reboot()` was fully implemented, documented and unit
+        # tested, and called by NOTHING outside its own test. A detector nobody
+        # runs is not a detector.
+        #
+        # It matters most exactly where it was missing. After a reboot the board
+        # is DISARMED, in its boot mode, with every setpoint cleared and stream
+        # rates back to compiled defaults -- while the mission carries on issuing
+        # verbs to a vehicle that is no longer the one it configured. Each verb
+        # then fails in its own way, none of them naming the cause.
+        #
+        # So the active command is ABORTED rather than merely logged: a mission
+        # step that continues here is steering nothing, and the fail-safe default
+        # is to stop and let the operator see why.
+        if self.fc.check_for_reboot():          # logs the cause itself
+            if self.command_active:
+                self.get_logger().error(
+                    '[ACT  ] aborting the active command -- the board restarted '
+                    'under it, so it is disarmed and no longer configured')
+                self.duburi.request_abort()
+
+        try:
+            tel = self.fc.telemetry()
+        except Exception as exc:                      # noqa: BLE001 -- telemetry is best-effort
+            self.get_logger().debug(f'[TELEM] srot telemetry read failed: {exc!r}')
+            return
+
+        # ⛔ ABSENCE, NOT ZEROS. `tel.rpm` is a tuple of eight, so `if tel.rpm`
+        # is TRUE even when every slot is 0 -- and the board fills all eight
+        # slots whether or not an ESC is attached (measured: 958 CRC-valid
+        # frames, no ESCs, every rpm exactly 0). This topic was therefore
+        # publishing eight fabricated zeros at 2 Hz on a hull with no thrusters.
+        #
+        # The discriminator is NOT "are the values zero" -- an idle armed hull
+        # with real ESCs also reads zero, and that is genuine data. It is
+        # whether the board has ANNOUNCED presence, which is the same source of
+        # truth the thrusters health reporter grades. Unannounced publishes
+        # nothing, so a consumer sees no message rather than a confident zero.
+        present, _lost = getattr(self.fc, 'esc_presence', lambda: (None, set()))()
+        if tel.rpm and present and self.esc_rpm_publisher is not None:
+            msg = self._Int32MultiArray()
+            msg.data = [int(r) for r in tel.rpm]
+            self.esc_rpm_publisher.publish(msg)
+
+        # LEAK is edge-latched, not spammed: the board streams it as a
+        # NAMED_VALUE_FLOAT and this tick runs at 2 Hz, so an un-latched log would
+        # repeat every 500 ms for the rest of the dive.
+        #
+        # Read it as ADVISORY. SROT multiplexes MV_STATE / LEAK / WTEMP / GAIN onto
+        # one msgid and pymavlink's cache keeps only the newest message of a type,
+        # so any single poll has roughly a 1-in-N chance of being the one we want --
+        # a missed leak here is expected and is NOT a safety mechanism. The board's
+        # own leak failsafe surfaces the vehicle regardless; this is for the
+        # operator. (Raised upstream: LEAK wants its own message or a SYS_STATUS
+        # sensor-health bit.)
+        self._maybe_print_srot_block(tel)
+
+        if tel.leak and not self._leak_latched:
+            self._leak_latched = True
+            self.get_logger().error(
+                '[TELEM] LEAK reported by the board -- it surfaces on its own '
+                'failsafe; abort the mission and recover the vehicle')
+        elif not tel.leak:
+            self._leak_latched = False
+
+    @staticmethod
+    def _tel(value, fmt='{:.2f}', suffix=''):
+        """Render a telemetry numeric, or `--` when absent. NEVER renders absence as 0.
+
+        Delegates to `srot_format` so this log block, `connect`, its dashboard and
+        `--json` all format identically. They drifted once already -- the board shows a
+        0..360 heading and one path was printing the raw signed value.
+        """
+        return _sfmt.fmt(value, fmt, suffix)
+
+    def _log_srot_changes(self, tel):
+        """One line per meaningful CHANGE, alongside the periodic block.
+
+        The periodic block is a continuous trace you correlate against what the vehicle
+        did; this is the opposite view -- what changed while nobody was watching. A mode
+        flip or a sensor going absent is a single line here instead of something you have
+        to spot by diffing two identical-looking blocks a minute apart.
+
+        Absent <-> present transitions are included on purpose: the board SUPPRESSES
+        values it cannot stand behind, so a barometer that stops being reported is the
+        board telling you something, and a change log that only watches numbers move
+        would never mention it.
+        """
+        fields = {
+            'armed': tel.armed,
+            'mode': tel.mode or None,
+            'heading_deg': tel.yaw_deg if not math.isnan(tel.yaw_deg) else None,
+            'depth_m': tel.depth_m if not math.isnan(tel.depth_m) else None,
+            'battery_v': tel.battery_voltage,
+            'thruster_v': tel.thruster_voltage,
+            'water_temp_c': tel.water_temp_c,
+            'depth_out': tel.depth_out,
+            'depth_err_m': tel.depth_err_m,
+            'mag_accuracy': tel.mag_accuracy,
+            'leak': tel.leak,
+            'kill': tel.kill_switch,
+        }
+        for lvl, _field, msg in _schg.diff(self._srot_prev_fields, fields):
+            line = f'[SROT ] ~ {msg}'
+            if lvl == 'CRIT':
+                self.get_logger().error(line)
+            elif lvl == 'WARN':
+                self.get_logger().warn(line)
+            else:
+                self.get_logger().info(line)
+        self._srot_prev_fields = fields
+
+    def _maybe_print_srot_block(self, tel):
+        """The verbose SROT telemetry block -- everything Pixhawk never had.
+
+        Rate-limited by `srot_telemetry_period_s` (0 disables). This is deliberately
+        periodic rather than on-change: for the first water test the operator wants a
+        continuous trace they can correlate against what the vehicle physically did,
+        and an on-change filter hides "nothing is changing", which for a depth loop is
+        itself the interesting observation.
+        """
+        if self._srot_block_period <= 0:
+            return
+        now = time.time()
+        if now - self._srot_block_last < self._srot_block_period:
+            return
+        self._srot_block_last = now
+
+        self._log_srot_changes(tel)
+
+        rpm = _sfmt.rpm_row(tel.rpm)
+        etemp = _sfmt.esc_temp_row(tel.esc_temp_c)
+        self.get_logger().info(
+            f'[SROT ] BAT main {self._tel(tel.battery_voltage, "{:5.2f}", "V")} | '
+            f'thruster {self._tel(tel.thruster_voltage, "{:5.2f}", "V")} | '
+            f'DEPTH {self._tel(tel.depth_m, "{:+.2f}", "m")} '
+            f'err {self._tel(tel.depth_err_m, "{:+.2f}", "m")} '
+            f'out {self._tel(tel.depth_out, "{:+.2f}")} | '
+            f'WTEMP {self._tel(tel.water_temp_c, "{:.1f}", "C")} | '
+            f'MAGACC {self._tel(tel.mag_accuracy, "{:.0f}")} | '
+            f'LEAK {"WET" if tel.leak else "dry"} | '
+            f'KILL {_kill_text(tel.kill_switch)}')
+        self.get_logger().info(f'[SROT ] RPM  {rpm}')
+        if tel.esc_temp_c:
+            self.get_logger().info(f'[SROT ] ESC°C{etemp}')
+
+        # A depth loop saturated while DISARMED is the pre-arm tell that arming would
+        # command full vertical thrust (mixer throttle column = -1 on all 4 verticals).
+        if (not tel.armed and not math.isnan(tel.depth_out)
+                and abs(tel.depth_out) >= _SROT_DEPTH_OUT_WARN):
+            self.get_logger().error(
+                f'[SROT ] DEPTH LOOP SATURATED while disarmed (out='
+                f'{tel.depth_out:+.2f}, err={self._tel(tel.depth_err_m, "{:+.2f}", "m")}) '
+                f'-- arming would command FULL vertical thrust. Check the barometer.')
 
     def _maybe_print_state(self, attitude, battery, mode, armed, yaw_deg, yaw_label):
         now  = time.time()
@@ -777,8 +1669,13 @@ class AUVManagerNode(Node):
             yaw_str = f'{yaw_deg:6.1f} ({yaw_label})'
         else:
             yaw_str = '   N/A'
-        depth_str = f'{attitude["depth"]:+6.2f}m' if attitude else '   N/A'
-        bat_str   = f'{battery["voltage"]:5.1f}V'  if battery else '  N/A'
+        # Through the shared formatter: a NaN depth is ABSENT (the board suppresses
+        # what it cannot stand behind), and `+nanm` on an operator's screen is neither
+        # a reading nor a legible way to say "no barometer".
+        depth_str = (_sfmt.fmt(attitude['depth'], '{:+6.2f}', 'm') if attitude
+                     else '   N/A')
+        bat_str   = (_sfmt.fmt(battery['voltage'], '{:5.1f}', 'V') if battery
+                     else '  N/A')
         self.get_logger().info(
             f'[STATE] {arm_str} | {mode:<10} | '
             f'YAW:{yaw_str} | DEPTH:{depth_str} | BAT:{bat_str}')
@@ -864,6 +1761,12 @@ def _emergency_stop(node) -> None:
     else:
         print(f'  {"disarm":<22s} \033[33m[--]\033[0m  ({reason})', file=sys.stderr)
 
+    # LAST of the vehicle steps, so the shutdown itself is in the log. How a run
+    # ended -- whether the disarm was acknowledged, what the board said while it
+    # happened -- is the part you go back to the log for, and a recorder closed
+    # at the top of this function records everything except that.
+    _step('close replay log',   lambda: node._recorder.stop()
+                                        if getattr(node, '_recorder', None) else None)
     _step('close yaw source',   lambda: node.yaw_source.close())
     for cam, vstate in list(node._vision_states.items()):
         _step(f'close vision[{cam}]', lambda v=vstate: v.close())

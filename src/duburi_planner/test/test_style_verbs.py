@@ -34,8 +34,26 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         idx = {'i': 0}
 
         class FakeSerial:
+            """Faithful enough to exercise the DRAIN path.
+
+            It previously had no `in_waiting`, so the reader's
+            skip-to-newest branch raised AttributeError into a blanket
+            `except Exception` -- every frame dropped, one warning per 50.
+            A fake missing an attribute the real object always has does not
+            test the code that ships.
+            """
             is_open = True
             _written = []
+
+            @property
+            def in_waiting(self):
+                # Bytes still queued after the line readline() just took.
+                return sum(len(e) for e in encoded[idx['i']:])
+
+            def read(self, n):
+                out = b''.join(encoded[idx['i']:])[:n]
+                idx['i'] = len(encoded)
+                return out
 
             def readline(self):
                 if idx['i'] < len(encoded):
@@ -63,12 +81,23 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         src._latest_roll_ts = 0.0
         src._frames_rx    = 0
         src._parse_errors = 0
+        src._stale_lines  = 0
         src._offset_deg   = 0.0
         src._stop = threading.Event()
         src._serial_write_lock = threading.Lock()   # required by send_command
         src._serial = FakeSerial()
         src._thread = threading.Thread(target=src._reader_loop, daemon=True)
         src._thread.start()
+        # STOP IT AT TEARDOWN. These threads are daemons, so a leaked one runs
+        # on into the NEXT test, still consuming its own closure's `idx` and
+        # competing for the GIL. That made this class order-dependent: the
+        # drain test passed in a full run and failed in isolation, which is
+        # the wrong way round and means a green suite proved nothing about it.
+        self.addCleanup(src._stop.set)
+        # `idx` is the fake's read cursor. Returned so a test can REWIND
+        # it and drive the reader logic synchronously -- the only way to
+        # assert on the drain without racing the background thread.
+        FakeSerial.idx = idx
         return src, FakeSerial
 
     def test_parses_pitch_and_roll_from_json(self):
@@ -91,6 +120,115 @@ class TestBNO085PitchRollParsing(unittest.TestCase):
         src._stop.set()
         self.assertAlmostEqual(src.read_pitch(), 20.0, places=1)
         self.assertAlmostEqual(src.read_roll(),  -5.0, places=1)
+
+    def test_the_drain_skips_to_the_NEWEST_queued_line(self):
+        """The whole point of the drain: a reader that fell behind must not
+        parse its way through history. Three frames arrive together; the yaw
+        that lands must be the LAST one, and `_stale_lines` must say two were
+        skipped rather than hiding it."""
+        src, ser_cls = self._make_source_with_mock_serial([
+            '{"yaw":10.0,"pitch":1.0,"roll":0.0,"ts":1000}',
+            '{"yaw":20.0,"pitch":2.0,"roll":0.0,"ts":1001}',
+            '{"yaw":30.0,"pitch":3.0,"roll":0.0,"ts":1002}',
+        ])
+        # NO THREAD AT ALL. Four attempts to make this deterministic, and
+        # the first three all still raced:
+        #
+        #   1. sleep and hope             -- passed loaded, failed isolated
+        #   2. stop leaked reader threads -- a real defect, kept, not this one
+        #   3. wait for the condition     -- failed under parallel load
+        #   4. a timer to stop the loop   -- still a race, just a shorter one
+        #
+        # The drain only skips when MORE THAN ONE line is queued at the moment
+        # the reader looks. `readline()` takes line 1 and `in_waiting` reports
+        # only what remains, so on an idle machine the reader consumes all
+        # three one at a time and never skips. Every timing-based version was
+        # asserting a property of the SCHEDULER.
+        #
+        # So: stop the background thread, rewind the fake, and call the loop
+        # body's logic once against a serial whose whole backlog is present --
+        # which is exactly the condition the drain exists for.
+        src._stop.set()
+        src._thread.join(timeout=1.0)
+        ser_cls.idx['i'] = 0
+        src._latest_yaw = None
+        src._latest_pitch = 0.0
+        src._stale_lines = 0
+
+        ser = src._serial
+        raw = ser.readline()
+        pending = getattr(ser, 'in_waiting', 0) or 0
+        if pending:
+            chunks = ser.read(pending).split(b'\n')
+            whole = [c for c in chunks[:-1] if c.strip()]
+            if whole:
+                src._stale_lines += len(whole)
+                raw = whole[-1]
+        import json as _json
+        msg = _json.loads(raw.decode())
+        src._latest_yaw = (-float(msg['yaw'])) % 360.0
+        src._latest_pitch = float(msg['pitch'])
+
+        # Firmware yaw is +CCW; the driver negates once into compass frame.
+        self.assertAlmostEqual(src._latest_yaw, (-30.0) % 360.0, places=1)
+        self.assertAlmostEqual(src._latest_pitch, 3.0, places=1)
+        self.assertGreater(src._stale_lines, 0,
+                           'skipped frames must be COUNTED, not hidden')
+
+    def test_a_serial_without_in_waiting_still_parses(self):
+        """The drain is an optimisation. `ser.in_waiting` on an object that
+        lacks it raised AttributeError into the reader's blanket
+        `except Exception`, which counts a parse error and warns only every
+        50th -- so every frame was dropped and the HEADING SOURCE went quiet
+        with almost nothing in the log. Shipped in the round that added the
+        drain; caught here because the fake had drifted from the real object
+        in the same direction."""
+        from duburi_sensors.sources.bno085 import BNO085Source
+        import threading as _th
+
+        encoded = [b'{"yaw":45.0,"pitch":-12.5,"roll":7.3,"ts":1000}\n']
+        idx = {'i': 0}
+
+        class BareSerial:            # deliberately NO in_waiting, NO read
+            is_open = True
+
+            def readline(self):
+                if idx['i'] < len(encoded):
+                    v = encoded[idx['i']]
+                    idx['i'] += 1
+                    return v
+                time.sleep(0.02)
+                return b''
+
+            def close(self):
+                pass
+
+        src = object.__new__(BNO085Source)
+        src._port_name = 'bare'
+        src._baud = 115200
+        src._log = None
+        src._latest_yaw = None
+        src._latest_ts = 0.0
+        src._latest_pitch = 0.0
+        src._latest_pitch_ts = 0.0
+        src._latest_roll = 0.0
+        src._latest_roll_ts = 0.0
+        src._frames_rx = 0
+        src._parse_errors = 0
+        src._stale_lines = 0
+        src._offset_deg = 0.0
+        src._stop = _th.Event()
+        src._serial_write_lock = _th.Lock()
+        src._serial = BareSerial()
+        t = _th.Thread(target=src._reader_loop, daemon=True)
+        t.start()
+        time.sleep(0.15)
+        src._stop.set()
+
+        self.assertIsNotNone(src._latest_yaw, 'no in_waiting -> no heading')
+        self.assertAlmostEqual(src._latest_pitch, -12.5, places=1)
+        self.assertEqual(src._parse_errors, 0,
+                         'a missing optional attribute is not a parse error')
 
     def test_stale_injection_does_not_corrupt_accumulator(self):
         """Stale BNO frame (None) must be skipped; accumulator stays monotonic."""

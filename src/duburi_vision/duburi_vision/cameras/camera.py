@@ -51,6 +51,12 @@ class FrameMeta:
     width:           int   = 0
     height:          int   = 0
     fresh:           bool  = False     # True iff a NEW frame was returned this call
+    # When the SOURCE published this frame internally (v4l2 mailbox only; 0.0
+    # elsewhere). Diagnostic. It is what separates "the source was late" from
+    # "the consumer was busy" -- indistinguishable in `stamp_monotonic` alone,
+    # and telling them apart is the difference between adding buffers and
+    # moving work off a thread.
+    stamp_store:     float = 0.0
 
 
 class Camera:

@@ -104,16 +104,32 @@ def _resolve_model_path(name: str) -> str:
     To use an absolute path: pass ``/path/to/model.pt`` or set
     ``model:=/abs/path.pt`` in the launch arg / models registry.
     """
-    if os.sep in name or name.endswith('.pt') or name.endswith('.engine'):
+    if (os.sep in name or name.endswith('.pt') or name.endswith('.engine')
+            or name.endswith('.hef')):
         return name
 
     # Prefer a TensorRT .engine over the .pt when one sits beside it: on the
     # Jetson the engine is 3-6x faster. Engines are device + TRT-version locked
     # (built on the Jetson via `ros2 run duburi_vision export_engine`), so on a
     # dev box without one we transparently fall back to the .pt.
+    # DUBURI_HEF_DIR FIRST, when it is set. `tools/pi_env.sh` has exported it
+    # since the Pi was set up and NOTHING read it, so the export was a lie: a
+    # HEF that lived only there resolved to nothing, or worse to a stale .pt of
+    # the same stem sitting in the source tree. Env beats tree because a
+    # compiled artifact is a property of THIS machine, and a machine that has
+    # one has been told where.
+    hef_dir = os.environ.get('DUBURI_HEF_DIR', '').strip()
+    if hef_dir:
+        cand = Path(os.path.expanduser(hef_dir)) / f'{name}.hef'
+        if cand.exists():
+            return str(cand)
+
     src_models = _find_src_models_dir()
     if src_models is not None:
-        for ext in ('.engine', '.pt'):
+        # .hef first: on the Pi + AI HAT+ it is the compiled artifact for THIS
+        # machine, the same role .engine plays on the Jetson. A device only ever
+        # has one of the three, so the order is just "prefer what was compiled".
+        for ext in ('.hef', '.engine', '.pt'):
             cand = src_models / f'{name}{ext}'
             if cand.exists():
                 return str(cand)
@@ -123,7 +139,7 @@ def _resolve_model_path(name: str) -> str:
         from ament_index_python.packages import get_package_share_directory
         share = get_package_share_directory('duburi_vision')
         share_models_dir = str(Path(share) / 'models')
-        for ext in ('.engine', '.pt'):
+        for ext in ('.hef', '.engine', '.pt'):
             cand = Path(share) / 'models' / f'{name}{ext}'
             if cand.exists():
                 return str(cand)

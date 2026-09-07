@@ -28,6 +28,56 @@ duburi_vision:
       fps:      30
       frame_id: laptop_cam
 
+    # ── Raspberry Pi 5 + AI HAT+ ────────────────────────────────────────────
+    # MEASURED on the vehicle 2026-09-07, not requested and not assumed.
+    #
+    # ⛔ THE TWO PI PROFILES USED TO BE SWAPPED. The global-shutter Sonix is
+    # the BOTTOM camera and the Fantech is the FORWARD one; the udev rules
+    # bound the names the other way (and the `forward` rule named a USB port
+    # that matched no device at all, so that symlink was hand-made and stale).
+    # `pi_forward` therefore opened the bottom camera while every node, launch
+    # file and mission looked correct. See tools/udev/99-duburi-cameras.rules.
+    #
+    #   Sonix   MJPG 640x360 210.17 Hz | 640x400 210.21 | YUYV flat 35.26
+    #   Fantech flat 15.00 Hz in EVERY format, resolution and requested rate
+    #
+    # `fourcc` is a profile field because FORMAT IS PER-CAMERA: it is worth 6x
+    # on the Sonix and nothing at all on the Fantech. It could not be
+    # expressed before -- the builder hardcoded MJPG.
+    #
+    # device_path, not device: an index is not port-stable and the two units
+    # have already swapped across a reboot.
+    pi_forward:
+      # The FANTECH -- forward, detection. 15.00 Hz is the CAMERA's ceiling:
+      # flat across MJPG/YUYV, 640x360/640x480, and requests of 30/90/210,
+      # while the descriptor advertises 30. The old ledger entry blaming a
+      # loose plug ("7.50 Hz, needs a replug") is RETRACTED; a replug cannot
+      # move a limit this flat. Nothing in software raises this.
+      source:      v4l2
+      device_path: /dev/duburi_cam_forward
+      width:       640
+      height:      360
+      fps:         15
+      fourcc:      MJPG
+      frame_id:    forward_cam
+
+    # The SONIX GLOBAL SHUTTER -- bottom, and the optical-flow velocity sensor
+    # that stands in for the DVL. Global shutter is the right sensor for that
+    # for a reason no frame rate shows: a rolling shutter skews the frame while
+    # the hull moves, corrupting the very displacement flow measures.
+    #
+    # 640x400 also runs at 210 and gives 40 more rows of floor texture for
+    # free. Kept at 360 because every calibration and bench number we hold was
+    # taken there -- fx is unchanged at the same width, cy is not.
+    pi_downward:
+      source:      v4l2
+      device_path: /dev/duburi_cam_downward
+      width:       640
+      height:      360
+      fps:         210
+      fourcc:      MJPG
+      frame_id:    downward_cam
+
     # Vehicle — Blue Robotics Low-Light HD USB on Jetson Orin Nano.
     # Bench override: -p device:=N at launch (no file edit needed).
     forward:
@@ -42,7 +92,7 @@ duburi_vision:
     # Default /dev/video4 on bench; confirm with: v4l2-ctl --list-devices
     downward:
       source:   webcam
-      device:   4
+      device:   2
       width:    640
       height:   480
       fps:      30

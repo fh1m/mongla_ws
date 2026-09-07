@@ -1,0 +1,67 @@
+{
+  "applies_to": [
+    "pi_forward"
+  ],
+  "applies_to_note": "The camera PROFILE this describes. Present because a calibration named for one camera was wired to the other, both ways, and no test could see it: a file that does not say what it describes cannot be checked against what it is wired to.",
+  "image_width": 1280,
+  "image_height": 720,
+  "camera_matrix": [
+    [
+      851.229247822033,
+      0.0,
+      675.4240274916939
+    ],
+    [
+      0.0,
+      858.1500868681502,
+      290.28097757044964
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "distortion_coefficients": [
+    -0.3632796548915215,
+    0.14351802518584825,
+    0.006606500142520591,
+    -0.0012827340105286895,
+    -0.035179984264415196
+  ],
+  "method": "calibrateCameraRO",
+  "chosen_by": "k-fold held-out reprojection error",
+  "holdout_rms_px": 0.4239006396351105,
+  "holdout_rms_other_arm_px": 0.7109302034315885,
+  "train_rms_px": 0.3724772278002142,
+  "fx_fold_sd_px": 3.7420692102680175,
+  "max_ere_px": 14.471884976973929,
+  "max_ere_bar_px": 1.0,
+  "max_ere_note": "AprilCal (Richardson et al., IROS 2013). Posterior is k-fold draws, so this is a LOWER bound. RMS is quiet where there is no data; this is not.",
+  "views_used": 23,
+  "views_captured": 24,
+  "grid": [
+    8,
+    6
+  ],
+  "square_m": 0.025,
+  "board_bow_p2p_mm": 2.8178913053125143,
+  "hfov_deg_air": 73.8756342126635,
+  "vfov_deg_air": 45.516784113375905,
+  "dfov_deg_air": 81.33472015865752,
+  "hfov_deg_water": 53.5930803147799,
+  "vfov_deg_water": 33.74070744492285,
+  "note": "FOV is invariant to square size; board bow figure is not. Water FOV is Snell through a flat port, n=1.333.",
+  "captured": "2026-09-07",
+  "camera": "Fantech Luminous C30 (USB 1d6c:0103, forward) -- 2K/25fps spec, delivers 15.0 fps at every mode",
+  "captured_note": "Captured through the guided AprilCal flow after the tilt metric was fixed (the old one read 0 at 55 deg) and the shutter was pinned manual 5 ms (auto chose 200 ms). Marketing claims 106 deg FOV; measured HFOV is 73.88 deg.",
+  "medium": "air",
+  "card": "Fantech Luminous C30: Fantech L",
+  "bus": "usb-xhci-hcd.0-1",
+  "usb_vid": "1d6c",
+  "usb_pid": "0103",
+  "usb_serial": "YGR80PU1200F23081120",
+  "identity_source": "operator asserted at apply time",
+  "applied_from": "pi_forward_1280x720.json",
+  "applied_on": "2026-09-07 15:31"
+}

@@ -1,0 +1,90 @@
+/* Mongla console -- instrument panel, not a dashboard template.
+   Direction: a real ROV console read in a dark room. Depth from layered
+   surfaces and inner shadow rather than drop shadows; one accent per MEANING
+   (blue = sensed, green = commanded, amber = caution, red = fault) so a colour
+   never has to be looked up. Monospace for every number that changes, because
+   proportional digits jitter and a jittering readout reads as a jittering
+   signal. */
+:root{
+  --bg:#06080b; --panel:#0d1117; --panel2:#0a0e13; --line:#1a212b;
+  --ink:#c8d3e1; --dim:#5a6878; --faint:#333d4a;
+  --sense:#4aa8ff;    /* measured by a sensor            */
+  --cmd:#39d98a;      /* commanded by us                 */
+  --warn:#ffb443;
+  --fault:#ff5b6e;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --r:9px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:
+  radial-gradient(1400px 800px at 15% -15%,#0f1620 0%,var(--bg) 55%);
+  color:var(--ink);font:13px/1.45 system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+
+header{display:flex;align-items:center;gap:18px;padding:11px 18px;
+  border-bottom:1px solid var(--line);background:rgba(6,8,11,.85);
+  position:sticky;top:0;z-index:9;backdrop-filter:blur(8px)}
+header h1{margin:0;font-size:13px;letter-spacing:.2em;font-weight:700;
+  text-transform:uppercase}
+header .path{color:var(--dim);font:10px var(--mono);letter-spacing:.1em}
+header .spacer{flex:1}
+.pill{font:10px var(--mono);letter-spacing:.07em;padding:3px 9px;border-radius:99px;
+  border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill.ok{color:var(--cmd);border-color:#1d5a38;background:#0d2419}
+.pill.bad{color:var(--fault);border-color:#5a1d24;background:#261115}
+.pill.warn{color:var(--warn);border-color:#5a4318;background:#241c0d}
+
+.grid{display:grid;gap:11px;padding:11px 14px 26px;
+  grid-template-columns:repeat(12,1fr)}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel2));
+  border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+  box-shadow:inset 0 1px 0 #ffffff08, 0 14px 34px -22px #000}
+.card>h2{margin:0;padding:8px 12px;font:600 9.5px system-ui;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card>h2 em{font-style:normal;font-family:var(--mono);letter-spacing:.04em;
+  text-transform:none;font-size:10px}
+.body{padding:11px 12px}
+canvas{display:block;width:100%}
+img.cam{display:block;width:100%}
+
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}
+.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}
+.c12{grid-column:span 12}
+@media(max-width:1250px){.c3,.c4,.c5{grid-column:span 6}
+  .c7,.c8{grid-column:span 12}}
+
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 11px;
+  font:11.5px var(--mono)}
+.kv .k{color:var(--dim)}
+.kv .v{text-align:right}
+.big{font:700 27px var(--mono);letter-spacing:-.02em;line-height:1.1}
+.unit{font:10px var(--mono);color:var(--dim);margin-left:3px}
+.sub{font:10px var(--mono);color:var(--dim)}
+
+/* health matrix: presence is the message, so an ABSENT cell must look
+   different from a zero one -- hatched, not just grey. */
+.mat{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cell{border:1px solid var(--line);border-radius:6px;padding:6px 7px;
+  background:#0a0e14}
+.cell .n{font:9px var(--mono);color:var(--dim);letter-spacing:.07em}
+.cell .d{font:600 14px var(--mono);margin-top:2px}
+.cell.ok .d{color:var(--cmd)} .cell.bad .d{color:var(--fault)}
+.cell.warn .d{color:var(--warn)} .cell.info .d{color:var(--ink)}
+.cell.absent{background:repeating-linear-gradient(45deg,#0a0e14,#0a0e14 5px,
+  #0d131a 5px,#0d131a 10px)}
+.cell.absent .d{color:var(--faint)}
+
+.legend{display:flex;flex-wrap:wrap;gap:12px;padding:0 12px 10px;
+  font:9.5px var(--mono);color:var(--dim)}
+.sw{display:inline-block;width:8px;height:8px;border-radius:2px;
+  margin-right:5px;vertical-align:-1px}
+
+.btns{display:flex;gap:8px;padding:10px 12px 12px}
+button{flex:1;font:600 12px system-ui;letter-spacing:.1em;text-transform:uppercase;
+  padding:12px;border:1px solid var(--line);border-radius:7px;cursor:pointer;
+  background:#111820;color:var(--ink);transition:.13s}
+button:hover{transform:translateY(-1px);border-color:#26303c}
+button.go{background:#0e2a1c;border-color:#1d5a38;color:var(--cmd)}
+button.stop{background:#280f13;border-color:#5a1d24;color:var(--fault)}

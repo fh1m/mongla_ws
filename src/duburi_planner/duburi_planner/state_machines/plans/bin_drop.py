@@ -120,7 +120,8 @@ def build_bin_drop_fsm(
     sm.add_state('FIRE_DROPPER',
                  FireState(duburi, profile,
                            channel=p['fire_channel'], confirm_pause_s=2.0),
-                 transitions={SUCCEED: 'SWITCH_FORWARD', ABORT: 'SURFACE'})
+                 transitions={SUCCEED: 'SWITCH_FORWARD', FAILED: 'SWITCH_FORWARD',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('SWITCH_FORWARD',
                  SetDetectorState(duburi, profile, camera=p['camera_forward']),

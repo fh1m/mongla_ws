@@ -7,7 +7,9 @@ from yasmin import Blackboard
 
 from ..core.base_state import DuburiState
 from ..core.blackboard import BK
-from ..core.outcomes import SUCCEED
+from duburi_control.fc.base import FIRE_NO_ACK, FIRE_NOT_READY
+
+from ..core.outcomes import SUCCEED, FAILED
 
 
 class CountdownState(DuburiState):
@@ -50,24 +52,48 @@ class LogScoreState(DuburiState):
 
 
 class FireState(DuburiState):
-    """Fire payload channel via ESP32 serial (duburi.fire(channel)).
+    """Activate a payload BOARD channel (duburi.fire(channel)).
 
-    channel: 1/2 = torpedo, 3/4 = dropper.
+    channel: the board's own PCA9685 channel, 1..16 -- the same n as SERVO{n}_ROLE.
+    There is no host-side mapping; the board decides whether that channel is a
+    payload switch or the on-board arm, and an arm channel is refused.
     confirm_pause_s: dwell after firing to confirm actuation.
+
+    Returns FAILED when the shot did not go out, so a plan can branch (retry
+    another channel, skip the task, keep its remaining time). This used to return
+    SUCCEED unconditionally, which meant a refused shot was indistinguishable from
+    a hit.
+
+    The single exception is NO_ACK -- see `_run`.
     """
     TIMEOUT_S = 8.0
 
     def __init__(
         self, duburi, profile, channel: int, confirm_pause_s: float = 2.0
     ) -> None:
-        super().__init__(duburi, profile, [SUCCEED])
+        super().__init__(duburi, profile, [SUCCEED, FAILED])
         self._channel       = channel
         self._confirm_pause = confirm_pause_s
 
     def _run(self, bb: Blackboard) -> str:
-        self.duburi.fire(self._channel)
+        res = self.duburi.fire(self._channel)
         self.duburi.pause(self._confirm_pause)
-        return SUCCEED
+        if getattr(res, 'success', bool(res)):
+            return SUCCEED
+        # NO_ACK is the one failure that is not evidence of a failure: the command
+        # very likely went out and only the acknowledgement was lost. Over the
+        # BlueOS bridge that is measurably ~8-9% of frames, so failing the state on
+        # it would abandon a task over link jitter. Every other code -- the shot was
+        # refused, denied, or never attempted -- is a real miss and says so.
+        #
+        # This branches on `final_value` (the FireResult code) rather than
+        # `success`, because `success` is `.ok`, and `.ok` is deliberately False for
+        # NO_ACK: "we do not know" must not read as "it fired" to anything that only
+        # sees a boolean.
+        code = int(getattr(res, 'final_value', FIRE_NOT_READY))
+        if code == FIRE_NO_ACK:
+            return SUCCEED
+        return FAILED
 
 
 class StyleRollState(DuburiState):

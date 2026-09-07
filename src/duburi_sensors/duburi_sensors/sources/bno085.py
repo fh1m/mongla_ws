@@ -131,6 +131,11 @@ class BNO085Source:
 
         self._stop = threading.Event()
         self._serial_write_lock = threading.Lock()
+        # Lines that had already arrived when we got to the previous one, i.e.
+        # how much history this reader has skipped. Non-zero means the thread
+        # is not being scheduled promptly and every value it stamps is older
+        # than it claims -- see `_reader_loop`.
+        self._stale_lines = 0
         # Open with dtr=False first to avoid triggering the ESP32-C3 auto-reset
         # circuit (dev boards wire DTR→EN via RC, causing a reset on port open).
         # After settling, assert dtr=True so the HWCDC starts streaming.
@@ -293,25 +298,83 @@ class BNO085Source:
         if self._log:
             self._log.info(
                 f'[SENS ] BNO085 stopped — frames:{self._frames_rx} '
-                f'errors:{self._parse_errors}')
+                f'errors:{self._parse_errors} skipped:{self._stale_lines}')
 
     def __repr__(self) -> str:
         fresh = (time.monotonic() - self._latest_ts) if self._latest_yaw is not None else None
         age   = f'{fresh*1e3:.0f}ms' if fresh is not None else 'NEVER'
         cal   = f'offset={self._offset_deg:+.2f}°' if self._offset_deg is not None else 'RAW'
         return (f'<BNO085Source port={self._port_name} baud={self._baud} '
-                f'frames={self._frames_rx} age={age} {cal}>')
+                f'frames={self._frames_rx} skipped={self._stale_lines} '
+                f'age={age} {cal}>')
 
     # ------------------------------------------------------------------ #
     #  Reader thread                                                      #
     # ------------------------------------------------------------------ #
     def _reader_loop(self) -> None:
+        """Drain to the NEWEST line, the way the V4L2 pump drains to the newest
+        buffer -- and count how far behind we were, because the lag is
+        otherwise invisible.
+
+        A tty is FIFO. `readline()` alone returns the OLDEST buffered line, and
+        `now = time.monotonic()` below stamps it as if it had just arrived, so
+        a reader that falls behind reports history as fresh. That is the same
+        defect `camera_node` had (`header.stamp = now()` at publish), on the
+        sensor the heading loop closes on.
+
+        THIS IS DEFENCE IN DEPTH, NOT A FIX FOR A MEASURED BUG, and the
+        difference is worth stating because the search for one went wrong in an
+        instructive way.
+
+        A slow CONSUMER does not starve this reader: measured on a PTY at
+        100 Hz, it stays at 0.3 ms of lag, because it runs freely while the
+        consumer sleeps. GIL contention does, and dramatically -- with
+        CPU-bound PYTHON threads beside it the same reader went to 108 ms of
+        lag at 50 Hz with one competitor and 2429 ms at 1.4 Hz with three.
+
+        SO THE OBVIOUS CONCLUSION WAS DRAWN AND THEN MEASURED AGAINST REALITY,
+        WHERE IT DID NOT HOLD. Our hot threads are not CPU-bound Python: the
+        V4L2 pump blocks in `ioctl`, the decode is inside OpenCV, and this
+        reader blocks in `serial` -- all of which RELEASE the GIL. Against the
+        real srot board with 225 Hz of real JPEG decoding beside it, the
+        MAVLink drain's inter-arrival p95 was 108.70 ms versus 109.75 ms with
+        the load removed: no starvation at all. And shortening the GIL slice to
+        recover the synthetic figure made the tail WORSE (p95 130.61 ms), since
+        more switches on threads that already yield is pure overhead. That
+        change was reverted.
+
+        What survives is this drain and its counter. If the reader ever does
+        fall behind -- a GC pause, a page fault, another process on the core --
+        it skips history in one bulk read instead of parsing through it, and
+        `_stale_lines` says so. That observability is the point: through the
+        whole synthetic table above the tty backlog stayed at 132 bytes, so
+        watching `in_waiting` would NOT have caught it, and a value stamped at
+        parse time reports history as fresh with nothing in any log.
+        """
         ser = self._serial
         while not self._stop.is_set():
             try:
                 raw = ser.readline()
                 if not raw:
                     continue
+                # Skip to the newest COMPLETE line. `in_waiting` then one bulk
+                # read costs a single syscall for the whole backlog; the last
+                # fragment is a partial line and is deliberately dropped -- the
+                # next `readline()` completes it.
+                #
+                # `getattr`, not `ser.in_waiting`: the drain is an OPTIMISATION,
+                # and a serial-like object without the attribute must fall back
+                # to plain readline() rather than raise. It raised into the
+                # blanket `except Exception` below, which counts a parse error
+                # and warns only every 50th -- so every frame was silently
+                # dropped and the heading source went quiet with almost no log.
+                pending = getattr(ser, 'in_waiting', 0) or 0
+                if pending:
+                    chunks = ser.read(pending).split(b'\n')
+                    whole = [c for c in chunks[:-1] if c.strip()]
+                    if whole:
+                        self._stale_lines += len(whole)
+                        raw = whole[-1]
                 line = raw.decode('utf-8', errors='ignore').strip()
                 if not line or line[0] != '{':
                     continue

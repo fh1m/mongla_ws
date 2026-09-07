@@ -14,8 +14,14 @@ Why this lives in `duburi_manager`, not `duburi_vision`:
 
 Topics consumed (one camera example, `camera='laptop'`):
   /duburi/vision/laptop/detections   vision_msgs/Detection2DArray
+  /duburi/vision/laptop/tracks       vision_msgs/Detection2DArray  (coast only)
   /duburi/vision/laptop/camera_info  sensor_msgs/CameraInfo
-  /duburi/vision/laptop/image_raw    sensor_msgs/Image     (counted only)
+  /duburi/vision/laptop/vis_range    std_msgs/Float32MultiArray
+
+NOT consumed: `image_raw`. The control host does not decode pixels, and a
+subscription costs a full-frame deserialisation per message on the machine
+that has to answer a 50 Hz loop. Anything that needs frames -- the HUD, the
+console, a recorder -- subscribes on its own.
 
 Public surface (called from the control loop, never spinning):
   largest(class_name)        -> Detection2D | None
@@ -41,10 +47,12 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from rclpy.node import Node
-from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
 
 from std_msgs.msg import Float32MultiArray
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo
+
+from duburi_vision import qos
+from duburi_vision.stamps import capture_monotonic
 from vision_msgs.msg import Detection2D, Detection2DArray
 
 
@@ -69,6 +77,8 @@ class Sample:
     coasted:   bool  = False       # True = tracker-predicted box during a detection gap (no live box)
 
 
+
+
 class VisionState:
     """One camera's worth of subscribed-and-cached vision state.
 
@@ -88,43 +98,124 @@ class VisionState:
         self._lock          = threading.Lock()
         self._latest_array: Optional[Detection2DArray] = None
         self._latest_stamp: float = 0.0           # monotonic seconds
+        self._evict_warned: bool  = False
+        self._stamp_warned: bool  = False        # one-shot, see _capture_monotonic
+        # Set on every detections message. A control loop waits on this
+        # instead of sleeping a fixed tick, so it acts the moment a new
+        # observation exists rather than at the next scheduled poll.
+        self._new_sample = threading.Event()
         self._image_size:  tuple  = default_image_size
+        # CameraInfo K/D, kept rather than discarded -- see _on_info.
+        self._K = None
+        self._D = None
         self._vis_range_vals: list = []            # parallel to _latest_array.detections
         self._info_seen:   bool   = False
-        self._frames:      int    = 0             # image_raw counter (diag only)
+        # Detection message counter. This used to count `image_raw`, which
+        # meant the CONTROL HOST subscribed to the full 691 kB frame stream
+        # to maintain a diagnostic integer -- and it did not even work: the
+        # subscription was RELIABLE against a BEST_EFFORT publisher, so it
+        # received NOTHING and the counter sat at 0 for ever. See the class
+        # docstring; `preflight.wait_vision_state_ready` gated on it.
+        self._det_msgs:    int    = 0
         # Coast layer (opt-in, used only when bbox_error(coast_s>0)): the /tracks
         # topic is the coast SOURCE; /detections stays the authoritative primary.
         self._latest_tracks: Optional[Detection2DArray] = None
         self._last_real: dict = {}                # track_id -> (monotonic_t, score) of last REAL detection
 
         ns = f'/duburi/vision/{camera}'
-        qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RELIABLE)
+        # From duburi_vision.qos -- the same objects the PUBLISHERS use, so the
+        # two ends of each link cannot drift apart. They already did once: this
+        # class asked for RELIABLE on a BEST_EFFORT image topic and received
+        # nothing for ever, silently.
+        self._lock_array = None
+        self._lock_stamp = 0.0
+        self._pose = None            # latest TargetPose msg
+        self._pose_stamp = 0.0       # its CAPTURE instant
         self._sub_det   = node.create_subscription(
-            Detection2DArray, f'{ns}/detections',   self._on_detections, qos)
+            Detection2DArray, f'{ns}/detections',   self._on_detections,
+            qos.DETECTIONS)
         # Coast source. Cheap to subscribe; only CONSULTED when coast_s>0, so a
         # mission that never sets vision.coast_s behaves exactly as before. If
         # the tracker node isn't running, this simply never delivers and coast
         # silently never engages (degrades to raw-/detections behaviour).
         self._sub_trk   = node.create_subscription(
-            Detection2DArray, f'{ns}/tracks',        self._on_tracks,     qos)
+            Detection2DArray, f'{ns}/tracks',        self._on_tracks,
+            qos.DETECTIONS)
+        # LADDER source. Same shape as the coast subscription above: cheap to
+        # subscribe, only CONSULTED when `lock_s > 0`, and if `lock_node` is not
+        # running it simply never delivers and the ladder never engages. A
+        # mission that does not opt in behaves exactly as before.
+        self._sub_lock  = node.create_subscription(
+            Detection2DArray, f'{ns}/lock',          self._on_lock,
+            qos.DETECTIONS)
+        # 6-DoF target pose. Cheap to subscribe, only consulted by a caller
+        # that asks -- an absent lock_node simply never delivers and every
+        # squareness gate then refuses, which is the safe direction.
+        try:
+            from duburi_interfaces.msg import TargetPose as _TargetPose
+            self._sub_pose = node.create_subscription(
+                _TargetPose, f'{ns}/target_pose', self._on_target_pose,
+                qos.DETECTIONS)
+        except ImportError:
+            self._sub_pose = None
         self._sub_info  = node.create_subscription(
-            CameraInfo,       f'{ns}/camera_info',   self._on_info,       qos)
-        self._sub_img   = node.create_subscription(
-            Image,            f'{ns}/image_raw',     self._on_image,      qos)
+            CameraInfo,       f'{ns}/camera_info',   self._on_info,
+            qos.CAMERA_INFO)
         self._sub_vr    = node.create_subscription(
             Float32MultiArray, f'{ns}/vis_range',    self._on_vis_range,  10)
 
         self._log.info(
             f"[VST  ] subscribed camera={camera!r} -> "
-            f"{ns}/detections (+camera_info, +image_raw counter, +vis_range)")
+            f"{ns}/detections (+tracks, +camera_info, +vis_range). "
+            f"NOT image_raw -- the control host has no use for pixels.")
 
     # ------------------------------------------------------------------ #
     #  Subscriber callbacks                                              #
     # ------------------------------------------------------------------ #
     def _on_detections(self, msg: Detection2DArray) -> None:
+        stamp = self._capture_monotonic(msg)
         with self._lock:
             self._latest_array = msg
-            self._latest_stamp = time.monotonic()
+            self._latest_stamp = stamp
+            self._det_msgs += 1
+        # Outside the lock: waking a waiter must not make it block on the very
+        # lock it is about to need.
+        self._new_sample.set()
+
+    def _capture_monotonic(self, msg) -> float:
+        """The instant the FRAME WAS CAPTURED, on the monotonic clock.
+
+        This used to be `time.monotonic()` at message arrival, and everything
+        downstream that believes it reads FRAME AGE was in fact reading AGE
+        SINCE THE MESSAGE LANDED:
+
+          _freshness       decays the lateral command by it
+          the coast ladder 0.10 / 0.40 / 0.80 / 1.00 s are measured in it
+          is_new_frame     gates the mid-hold torpedo FIRE on it
+          align_stable_frames counts distinct values of it
+
+        None of them could see the capture->inference->transport chain, so the
+        whole measured latency -- ~32 ms median, 48 p95 -- was invisible to the
+        loop that exists to react to it. `motion_vision` even says "sampled_at
+        is the frame's arrival time" in a comment; the consequence was never
+        drawn. Same defect as `camera_node` stamping `now()` at publish, one
+        layer downstream: a carried truth resampled against a local clock.
+
+        The conversion and its fail-safe live in `duburi_vision.stamps`, so the
+        detector, the ladder and this all read one implementation -- a second
+        copy of the bound is the hazard, not the arithmetic.
+        """
+        # `getattr`, not `msg.header`: a publisher with no header at all must
+        # not take down the subscription callback. Caught by the test for it.
+        t, why = capture_monotonic(getattr(msg, 'header', None))
+        if why and not self._stamp_warned:
+            self._stamp_warned = True
+            self._log.warn(
+                f'[VST  ] detection {why} -- falling back to arrival time, so '
+                f'freshness and the coast ladder measure age since arrival '
+                f'(the pre-fix behaviour) rather than a wrong number. Check '
+                f'use_sim_time and the clock on the vision host.')
+        return t
 
     def _on_tracks(self, msg: Detection2DArray) -> None:
         with self._lock:
@@ -135,11 +226,25 @@ class VisionState:
             with self._lock:
                 self._image_size = (int(msg.width), int(msg.height))
                 self._info_seen  = True
+                # K and D were being received and thrown away. They are what
+                # turns a pixel error into a BEARING -- i.e. what gives a
+                # control gain units of thrust-per-radian instead of
+                # thrust-per-whatever-this-camera-happens-to-be. camera_node
+                # rescales K to the streamed resolution before publishing, so
+                # this is already correct for the frames the detector saw.
+                self._K = list(msg.k) if len(msg.k) >= 9 else None
+                self._D = list(msg.d) if msg.d is not None else None
 
-    def _on_image(self, _msg: Image) -> None:
-        # Only used as a "is producer alive" pulse; we don't decode here.
+    def calibration(self):
+        """(K, D) as published, or (None, None).
+
+        `CameraInfo.k` is all zeros until a calibration file is loaded, so a
+        caller must test fx > 0 rather than `k is not None`. `bearing.py` does
+        exactly that, falls back to an FOV, and reports which it used.
+        """
         with self._lock:
-            self._frames += 1
+            return (list(self._K) if self._K else None,
+                    list(self._D) if self._D else None)
 
     def _on_vis_range(self, msg: Float32MultiArray) -> None:
         with self._lock:
@@ -155,6 +260,31 @@ class VisionState:
     def info_seen(self) -> bool:
         with self._lock:
             return self._info_seen
+
+    def wait_for_sample(self, timeout: float) -> bool:
+        """Block until a new detections message lands, or `timeout` elapses.
+
+        THIS REPLACES A FIXED-RATE SLEEP IN THE CONTROL LOOP, and the reason
+        is the same one that moved `camera_node` off a timer: a fixed-rate
+        poll against an asynchronous producer waits, on average, half a period
+        for data that had already arrived.
+
+        Measured here: detections land at ~77 Hz (13 ms apart) and the srot
+        control loop ticked at 50 Hz (20 ms). Every command was therefore
+        computed from an observation up to 13 ms older than the one available,
+        ~6.5 ms on average -- a third of the whole detection age, spent
+        waiting for a clock.
+
+        Returns True if woken by a new sample, False on timeout. The timeout
+        is what keeps the loop's TIME-based work alive -- freshness decay,
+        hold timing, the arrival brake, the overall deadline -- when no
+        detections are arriving at all, so the loop's floor rate is unchanged
+        and only its ceiling moves.
+        """
+        got = self._new_sample.wait(timeout)
+        if got:
+            self._new_sample.clear()
+        return got
 
     def is_fresh(self, stale_after: float) -> bool:
         with self._lock:
@@ -183,12 +313,87 @@ class VisionState:
                 best_detection = detection
         return best_detection
 
+    def _on_lock(self, msg) -> None:
+        """Latest ladder output. Kept whole; the rung name and confidence ride
+        in `class_id`/`score`, so nothing here needs to know how many rungs
+        exist."""
+        with self._lock:
+            self._lock_array = msg
+            self._lock_stamp = self._capture_monotonic(msg)
+
+    def _on_target_pose(self, msg) -> None:
+        with self._lock:
+            self._pose = msg
+            self._pose_stamp = self._capture_monotonic(msg)
+
+    def target_pose(self, max_age_s: float = 1.0):
+        """The latest 6-DoF target pose, or None if absent/stale/refused."""
+        with self._lock:
+            m, t = self._pose, self._pose_stamp
+        if m is None or not m.ok:
+            return None
+        if max_age_s > 0.0 and (time.monotonic() - t) > max_age_s:
+            return None
+        return m
+
+    def square_within(self, tol_deg: float, max_age_s: float = 1.0) -> bool:
+        """Is the target square to us within `tol_deg`, ALLOWING for the flip?
+
+        THE GATE. Both flip branches are legitimate answers, so squareness only
+        counts if the WORSE of them is inside tolerance -- reading the point
+        estimate alone fires on the lucky branch, which is the exact failure
+        this whole path exists to prevent.
+
+        NO POSE MEANS NOT SQUARE. An absent `lock_node`, an uncalibrated
+        camera, an unset `target_width_m` or a refused decomposition all return
+        False. For a firing gate the fail-safe direction is "do not fire", and
+        this is the only place that choice is made.
+        """
+        m = self.target_pose(max_age_s)
+        if m is None:
+            return False
+        worst = float(m.off_axis_deg) + max(float(m.yaw_spread_deg),
+                                            float(m.pitch_spread_deg))
+        return worst <= float(tol_deg)
+
+    def _lock_sample(self, image_width: float, image_height: float):
+        """A Sample from the ladder, or None.
+
+        The ladder has ALREADY applied its own decay -- `score` is rung trust
+        times time-since-the-last-real-detection -- so this must not decay it
+        again. Double-decaying would make the fallback die roughly twice as
+        fast as designed, which is the same arithmetic error that made the
+        uplink's coasted target expire inside 0.4 s.
+        """
+        with self._lock:
+            arr = self._lock_array
+            stamp = self._lock_stamp
+        if arr is None or not arr.detections:
+            return None
+        d = arr.detections[0]
+        if not d.results:
+            return None
+        score = _hypothesis_score(d)
+        if score <= 0.0:
+            return None
+        b = d.bbox
+        cx, cy = b.center.position.x, b.center.position.y
+        return Sample(
+            ex=(cx - image_width * 0.5) / (image_width * 0.5),
+            ey=(cy - image_height * 0.5) / (image_height * 0.5),
+            h_frac=float(b.size_y) / max(image_height, 1.0),
+            w_frac=float(b.size_x) / max(image_width, 1.0),
+            age_s=max(0.0, time.monotonic() - stamp) if stamp else 0.0,
+            class_id=_hypothesis_class_id(d), score=score,
+            vis_range=0.0, track_id=-1, coasted=True)
+
     def bbox_error(self, class_name: str = '', *,
                    near: Optional[Tuple[float, float]] = None,
                    gate_norm: float = 0.0,
                    min_score: float = 0.0,
                    locked_id: int = -1,
-                   coast_s: float = 0.0) -> Optional[Sample]:
+                   coast_s: float = 0.0,
+                   lock_s: float = 0.0) -> Optional[Sample]:
         """Pick a matching detection and return a normalized Sample.
 
         Default (``near=None`` or ``gate_norm<=0``): the LARGEST-area matching
@@ -261,8 +466,16 @@ class VisionState:
             # No live detection this tick. Coast the locked target's predicted
             # box (opt-in) before declaring a loss -- the gap-bridging path.
             if coast_s > 0.0 and locked_id >= 0:
-                return self._coast_sample(class_name, locked_id, coast_s,
-                                          tracks_array, image_width, image_height)
+                cs = self._coast_sample(class_name, locked_id, coast_s,
+                                        tracks_array, image_width, image_height)
+                if cs is not None:
+                    return cs
+            # LAST rung before declaring nothing: the ladder (follower /
+            # anchor). Opt-in, and it CANNOT fabricate -- `lock_node` publishes
+            # nothing once its own authority reaches zero, so an absent message
+            # is the loss being declared on schedule rather than hidden.
+            if lock_s > 0.0:
+                return self._lock_sample(image_width, image_height)
             return None
 
         vis_range = (float(vis_range_vals[best_index])
@@ -298,7 +511,16 @@ class VisionState:
                 image_width, image_height)
             if track_id >= 0:
                 with self._lock:
-                    self._last_real[track_id] = (time.monotonic(), score)
+                    # `sampled_at_monotonic`, NOT `time.monotonic()`. This is
+                    # the sighting time a later coast measures its gap from --
+                    # the same authority machinery as the ladder's decay -- so
+                    # it must be when the frame was CAPTURED, not when the
+                    # control loop got round to asking. Query time is short by
+                    # the pipeline latency plus up to a loop period, always in
+                    # the direction that makes a coast look younger than it is.
+                    # Two lines below, `age_s` already uses the right value.
+                    self._last_real[track_id] = (sampled_at_monotonic, score)
+                    self._evict_last_real()
 
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
@@ -309,6 +531,43 @@ class VisionState:
     # ------------------------------------------------------------------ #
     #  Coast layer helpers (used only when bbox_error(coast_s>0))         #
     # ------------------------------------------------------------------ #
+    # Bounds on `_last_real`. An entry only needs to outlive the longest
+    # coast a caller can ask for, and `_present` rejects anything past
+    # `_STALE_LIMIT_S` (1.0 s) anyway -- 30 s is enormous margin and exists
+    # purely to bound memory.
+    _LAST_REAL_HORIZON_S = 30.0
+    _LAST_REAL_MAX = 256
+
+    def _evict_last_real(self) -> None:
+        """Drop sightings too old to start a coast. CALLER HOLDS THE LOCK.
+
+        `_last_real` was written and never pruned. Two consequences, and the
+        second is the dangerous one: it grew without bound over a mission, and
+        a RECYCLED tracker id inherited the previous object's sighting
+        timestamp -- so a coast could begin from a sighting that belonged to
+        something else, at that object's score.
+
+        Both tracker backends prune their own registries against exactly this
+        hazard (`roboflow_tracker.py:202-211`, `bytetrack.py:138-148`); this
+        dict did not.
+        """
+        if len(self._last_real) <= self._LAST_REAL_MAX:
+            return
+        cutoff = time.monotonic() - self._LAST_REAL_HORIZON_S
+        for tid in [k for k, (t, _s) in self._last_real.items() if t < cutoff]:
+            self._last_real.pop(tid, None)
+        # Still oversized means many LIVE ids, not stale ones. Keep the newest
+        # and SAY SO, rather than growing in silence.
+        if len(self._last_real) > self._LAST_REAL_MAX:
+            newest = sorted(self._last_real.items(),
+                            key=lambda kv: kv[1][0], reverse=True)
+            self._last_real = dict(newest[:self._LAST_REAL_MAX])
+            if not self._evict_warned:
+                self._evict_warned = True
+                self._log.warn(
+                    f'[VST  ] {self._LAST_REAL_MAX}+ live track ids -- the '
+                    f'coast registry is being trimmed. Expect id churn.')
+
     _MATCH_GATE_NORM = 0.20   # max normalized centre distance to call a /tracks box "the same"
 
     def _match_track_id(self, ex: float, ey: float, tracks_array,
@@ -391,7 +650,7 @@ class VisionState:
                 'camera':       self._camera,
                 'image_size':   self._image_size,
                 'info_seen':    self._info_seen,
-                'image_frames': self._frames,
+                'det_msgs':     self._det_msgs,
                 'last_age_s':   (time.monotonic() - self._latest_stamp
                                  if self._latest_array is not None
                                  else float('inf')),
@@ -401,14 +660,22 @@ class VisionState:
     #  Lifecycle                                                          #
     # ------------------------------------------------------------------ #
     def close(self) -> None:
-        try:
-            self._node.destroy_subscription(self._sub_det)
-            self._node.destroy_subscription(self._sub_trk)
-            self._node.destroy_subscription(self._sub_info)
-            self._node.destroy_subscription(self._sub_img)
-            self._node.destroy_subscription(self._sub_vr)
-        except Exception as exc:
-            self._log.debug(f"[VST  ] close() ignored: {exc!r}")
+        """Tear down every subscription, INDEPENDENTLY.
+
+        One `try` around all five meant the first failure skipped the rest --
+        and it was failing every time: `_sub_img` is a leftover from when this
+        class subscribed to `image_raw`, the attribute no longer exists, and
+        the AttributeError landed in the bare `except`. So `_sub_vr` was never
+        destroyed and nothing said so.
+        """
+        for name in ('_sub_det', '_sub_trk', '_sub_info', '_sub_vr'):
+            sub = getattr(self, name, None)
+            if sub is None:
+                continue
+            try:
+                self._node.destroy_subscription(sub)
+            except Exception as exc:
+                self._log.debug(f"[VST  ] close() {name}: {exc!r}")
 
 
 # ---------------------------------------------------------------------- #

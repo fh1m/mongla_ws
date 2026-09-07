@@ -678,7 +678,17 @@ class DuburiMission:
         return self._send('pause', duration=float(seconds))
 
     def fire(self, channel: int):
-        """Fire payload channel via ESP32 serial. 1/2 = torpedo, 3/4 = dropper."""
+        """Activate payload BOARD channel `channel` (1..16).
+
+        On srot this is the board's own PCA9685 channel -- the same n as
+        `SERVO{n}_ROLE` -- with no host-side map. The board's role config decides:
+        a SWITCH channel fires, a PWM channel is REFUSED (it is the on-board arm).
+        `ros2 run duburi_manager connect` lists which channels are fireable.
+
+        `result.final_value` carries the outcome code (`FIRE_*` in
+        `duburi_control.fc.base`), so a mission can tell "refused, that channel is
+        the arm" from "the link is down" instead of just seeing success=False.
+        """
         return self._send('fire', fire_channel=float(channel))
 
     # ================================================================== #

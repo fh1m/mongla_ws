@@ -290,7 +290,8 @@ def build_full_competition_fsm(
     sm.add_state('FIRE_BIN',
                  FireState(duburi, profile,
                            channel=p['bin_fire_channel'], confirm_pause_s=2.0),
-                 transitions={SUCCEED: 'SWITCH_FWD_B', ABORT: 'SURFACE'})
+                 transitions={SUCCEED: 'SWITCH_FWD_B', FAILED: 'SWITCH_FWD_B',
+                              ABORT: 'SURFACE'})
 
     sm.add_state('SWITCH_FWD_B',
                  SetDetectorState(duburi, profile, camera='forward'),
@@ -363,7 +364,8 @@ def build_full_competition_fsm(
         sm.add_state('FIRE_T',
                      FireState(duburi, profile,
                                channel=p['torpedo_fire_channel'], confirm_pause_s=2.0),
-                     transitions={SUCCEED: 'PAUSE_T', ABORT: 'SURFACE'})
+                     transitions={SUCCEED: 'PAUSE_T', FAILED: 'PAUSE_T',
+                                  ABORT: 'SURFACE'})
 
         sm.add_state('PAUSE_T',
                      PauseState(duburi, profile, seconds=2.0),

@@ -22,9 +22,17 @@ Each check prints PASS / WARN / FAIL.  Exit code is 0 when no FAIL (WARNs
 are advisory).  Pass ``--strict`` to make any WARN also exit non-zero (a
 hard pre-mission gate).  ``--skip-mavlink`` skips the UDP 14550 probe.
 
+``--srot`` switches sections D/E/F/I to the **SROT control board** (direct USB
+serial, firmware Hengla): it probes the serial port, the vehicle HEARTBEAT,
+armed state, depth telemetry and GAIN, and skips BlueOS / UDP 14550 / Pixhawk
+USB / the payload CH340 entirely -- on a SROT vehicle none of those exist, so
+they would pass or fail for the wrong reasons, and the payload scan would grab
+the board's own port (same CH340 VID/PID).
+
 Usage:
     ros2 run duburi_manager bringup_check
     ros2 run duburi_manager bringup_check --strict
+    ros2 run duburi_manager bringup_check --srot        # SROT-based vehicle
 """
 
 from __future__ import annotations
@@ -34,6 +42,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 from glob import glob
 
 from .connection_config import NETWORK, resolve_mode
@@ -597,10 +606,492 @@ def _check_jetson_power() -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
+# A still bench barometer is stable to well under 1 mbar; this is deliberately loose
+# so ordinary weather/HVAC drift over a few seconds cannot trip it.
+_BARO_JITTER_MBAR = 15.0
+_BARO_SANE_LO, _BARO_SANE_HI = 800.0, 1100.0
+# |DEPTH_OUT| at/above this while disarmed = the loop is already demanding full heave.
+_DEPTH_OUT_LIMIT = 0.90
+
+
+def _behaviour_rev_verdict(rev: int | None, required: int) -> tuple[str, str, str]:
+    """Grade the board's SROT_FW_BEHAVIOUR_REV. Pure, so it is testable without a board.
+
+    Deliberately ASYMMETRIC, and the asymmetry is the design:
+
+      * a board that ANSWERS with a too-old rev is making a definite statement --
+        `stop` will coast -- so this is a FAIL and the preflight should stop.
+      * a board that answers NOTHING is far more likely a dropped frame or a
+        firmware without REQUEST_MESSAGE than a genuine old board, and failing a
+        whole preflight on a comms hiccup is its own hazard. WARN loudly instead.
+
+    `0` is not "unknown": it is what firmware older than 2026-08-01 reports,
+    because that build never populated the field. It fails closed like any other
+    too-old revision.
+    """
+    if rev is None:
+        return (WARN, 'FW behaviour rev unknown',
+                f'board did not answer AUTOPILOT_VERSION; host needs >= {required}. '
+                f'If this firmware predates 2026-08-01, MOVE_STOP COASTS and there is '
+                f'no host brake -- stop/abort will NOT decelerate')
+    if rev < required:
+        return (FAIL, 'FW behaviour rev too old',
+                f'board reports {rev}, host requires >= {required}. MOVE_STOP coasts '
+                f'and the host brake was removed -- stop/abort would not decelerate '
+                f'the hull. Flash rev >= {required} (erase+upload; export params first)')
+    return (PASS, 'FW behaviour rev', f'{rev} (>= {required} required)')
+
+
+def _read_param(conn, name: str, tries: int = 3, timeout_s: float = 1.2):
+    """One PARAM_REQUEST_READ by name, with retries. None if it never answers.
+
+    SEQUENTIAL ONLY -- never pipeline two of these. pymavlink keeps a single slot per
+    msgid, so a second request in flight overwrites the first and the first then times
+    out looking exactly like a dropped frame. Retries are for the bridge, which loses
+    ~8-9% of frames; on direct USB one pass is enough.
+
+    The name match strips trailing NULs: a 16-char param_id arrives unterminated.
+    """
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    for _ in range(tries):
+        conn.mav.param_request_read_send(
+            sp.VEHICLE_SYSID, sp.VEHICLE_COMPID, name.encode(), -1)
+        end = time.time() + timeout_s
+        while time.time() < end:
+            msg = conn.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.4)
+            if msg is None:
+                continue
+            pid = msg.param_id
+            if isinstance(pid, bytes):
+                pid = pid.decode(errors='ignore')
+            if pid.strip('\x00').strip() == name:
+                return float(msg.param_value)
+    return None
+
+
+def _gcs_failsafe_verdict(enable: float | None,
+                          compid: float | None) -> tuple[str, str, str]:
+    """Is the GCS-loss failsafe scoped to US, or wildcarded into bench mode?
+
+    MEASURED 2026-08-07: the vehicle read FS_GCS_ENABLE=1, FS_GCS_COMPID=0 and this
+    preflight returned 0 FAIL. That is the reason this function exists.
+
+    `0` is the wildcard -- the board then counts ANY heartbeat that is not its own, so
+    Bondor on the bench keeps the failsafe satisfied. In the water that means a dead
+    Jetson is indistinguishable from a live GCS: the failsafe never fires, and a hull
+    with nobody driving it station-keeps instead of surfacing. `191`
+    (MAV_COMP_ID_ONBOARD_COMPUTER) is our compid and scopes it to the companion.
+
+    It regresses silently and repeatedly. Bondor's bench mode wildcards it at runtime,
+    which is fine -- until someone presses Save, and then a bench escape hatch is in the
+    flight vehicle's NVS with nothing in any log. It was corrected to 191 on 2026-08-06
+    and read back 0 the next day.
+
+    srot-integration.md has said "check this value before every water session" since
+    then. A prose instruction is not a gate; this is. Same class of blind spot as
+    FRAME_REVERSE: state that lives in NVS, invisible to the tool meant to catch it.
+    """
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    if enable is None or compid is None:
+        return (WARN, 'GCS failsafe scope unknown',
+                'could not read FS_GCS_ENABLE/FS_GCS_COMPID -- check bench mode by hand')
+    if enable < 0.5:
+        return (WARN, 'GCS failsafe DISABLED',
+                'FS_GCS_ENABLE=0 -- losing the companion will not surface the vehicle')
+    ours = sp.SOURCE_COMPID
+    if int(compid) == ours:
+        return (PASS, 'GCS failsafe scope', f'FS_GCS_COMPID={ours} (scoped to us)')
+    if int(compid) == 0:
+        return (FAIL, 'GCS failsafe WILDCARDED (bench mode)',
+                f'FS_GCS_COMPID=0 saved to flash -- any station satisfies the failsafe, '
+                f'so a dead Jetson will NOT surface the hull. Set it to {ours} and save '
+                f'(on fw rev >= 7 wait for the "Params saved to flash" statustext, not '
+                f'the ACK -- the NVS write is deferred)')
+    return (WARN, 'GCS failsafe scoped elsewhere',
+            f'FS_GCS_COMPID={int(compid)}, we are {ours} -- our heartbeat does not feed it')
+
+
+def _baro_health_verdict(health: int | None, present: int | None) -> tuple[str, str, str]:
+    """Grade the Bar30 from SYS_STATUS's health bitfield. Pure, testable without a board.
+
+    WHY THIS IS A PREFLIGHT LINE AND NOT A CURIOSITY. Since fw behaviour rev 3 the board
+    validates the Bar30's calibration PROM (CRC-4) and refuses DEPTH_HOLD / AUTO / PATTERN
+    when the baro is unhealthy or its sample is stale. `SROT_MOVE` auto-enters AUTO. So an
+    unhealthy Bar30 means EVERY move verb is refused -- `move_forward` included -- and on
+    the deck that presents as "arm succeeded, the vehicle just will not move", with the
+    reason arriving only as a STATUSTEXT nobody was watching.
+
+    Read it here, where the answer is cheap, rather than at the water's edge.
+
+    Unlike depth/WTEMP -- which the board SUPPRESSES when unhealthy, and which ride
+    messages pymavlink truncates or multiplexes -- these two bits are in SYS_STATUS's
+    BASE fields, so they are the one part of rev 3's health reporting we can actually read
+    (contrast srot_protocol.SYS_STATUS_HAS_EXTENDED_HEALTH, which is where LEAK went).
+    """
+    from pymavlink import mavutil
+    bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+    if health is None or present is None:
+        return (WARN, 'baro health unknown',
+                'no SYS_STATUS; if the Bar30 is unhealthy the board refuses AUTO and '
+                'EVERY move verb is denied, move_forward included')
+    if not present & bit:
+        return (WARN, 'baro not present', 'board reports no absolute-pressure sensor -- '
+                                          'DEPTH_HOLD/AUTO refused, so no move verb runs')
+    if not health & bit:
+        return (FAIL, 'Bar30 unhealthy',
+                'PROM CRC failed or the sample is stale. The board refuses DEPTH_HOLD/AUTO/'
+                'PATTERN, and SROT_MOVE enters AUTO -- so every move verb is DENIED. '
+                'Check the Bar30 wiring/I2C and power-cycle; the PROM is read at boot')
+    return (PASS, 'Bar30 health', 'healthy (AUTO/DEPTH_HOLD available)')
+
+
+def _baro_noise_verdict(press: list[float]) -> tuple[str, str, str]:
+    """Grade the barometer on VARIANCE, not just plausibility. Pure and testable.
+
+    The firmware validates every Bar30 sample against a deliberately wide band
+    (~[300, 40000] mbar) so a judgement call cannot ground the vehicle by accident.
+    That catches a dead or wildly corrupt sensor. It is structurally blind to the
+    failure this hull actually has:
+
+        MEASURED 2026-08-02, bench, still: 30 samples spanning 321..740 mbar, with
+        water temperature swinging 6..30 C over the same window.
+
+    Every one of those readings is inside the band, so `SCALED_PRESSURE2` keeps
+    streaming and `SYS_STATUS` reports the barometer HEALTHY -- while the depth
+    derived from it wanders metres and the depth controller saturates against it.
+    A per-sample band cannot see that; peak-to-peak over a window can.
+
+    This is why the check lives here and not only in the firmware: it needs several
+    samples, and a pre-arm check on the board sees one.
+    """
+    if not press:
+        return (WARN, 'no SCALED_PRESSURE2',
+                'suppressed (fw rev 3+ withholds it when the baro is unhealthy/stale) '
+                'or the Bar30 is not fitted -- depth is NOT trustworthy either way')
+    spread = max(press) - min(press)
+    mean = sum(press) / len(press)
+    if spread > _BARO_JITTER_MBAR:
+        return (FAIL, 'barometer NOISE',
+                f'{len(press)} samples span {spread:.1f} mbar ({min(press):.0f}..'
+                f'{max(press):.0f}); a still bench baro is stable to <1 mbar. Each '
+                f'sample is inside the firmware plausibility band, so the board still '
+                f'reports it HEALTHY -- reseat the Bar30 connector / check I2C. Depth '
+                f'and the depth loop are fiction until this is fixed')
+    if not (_BARO_SANE_LO <= mean <= _BARO_SANE_HI):
+        return (FAIL, 'barometer out of range',
+                f'{mean:.0f} mbar, expected {_BARO_SANE_LO:.0f}..{_BARO_SANE_HI:.0f} '
+                f'(sea level ~1013). Depth derived from this is wrong by metres')
+    return (PASS, 'barometer', f'{mean:.1f} mbar, spread {spread:.2f} mbar')
+
+
+def _depth_loop_verdict(depth_cmd: float | None,
+                        depth_p: float | None = None) -> tuple[str, str, str]:
+    """Grade the DISARMED depth chain from DEPTH_CMD. Pure and testable.
+
+    ⚠ THIS USED TO READ `DEPTH_OUT` AND THAT STOPPED WORKING AT fw REV 8, silently.
+    Rev 8 suppresses DEPTH_OUT while the controller is not running -- the honest-absence
+    fix we asked for -- and this probe only ever runs disarmed, when it never runs. So
+    the old code hit its `None` -> WARN branch every time on a perfectly healthy board,
+    and the one line standing between a phantom barometer and full vertical thrust
+    became advisory noise.
+
+    `DEPTH_CMD` is `depth::preview(depth, 0.10)`: computed on demand, so live while
+    disarmed, same +/-1.0 clamp, and proportional-only -- it reflects the CURRENT baro
+    sample rather than accumulated windup, which is exactly the question here.
+
+    The 2026-08-02 phantom depth (-3..-6.7 m at the surface) pins it at -1.00. A healthy
+    surface reading (~0.03 m) gives ~-0.22. The threshold is carried in METRES and
+    converted through DEPTH_P, because comparing a clamped output against a fixed number
+    silently means a different physical depth once anyone retunes the gain.
+    """
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    if depth_cmd is None:
+        return (WARN, 'depth preview absent',
+                'no DEPTH_CMD -- the board has declared the barometer unhealthy/stale, '
+                'so it will refuse DEPTH_HOLD/AUTO and every move verb with it')
+    gain = depth_p or sp.DEPTH_P_DEFAULT
+    # Saturation first -- while clamped the true depth is beyond the clamp, so the
+    # recovery below would report a benign value for exactly the case this exists to
+    # catch (the 2026-08-02 phantom baro pinned DEPTH_CMD at -1.00).
+    if abs(depth_cmd) >= sp.DEPTH_CMD_SATURATED:
+        return (FAIL, 'barometer IMPLAUSIBLE',
+                f'DEPTH_CMD={depth_cmd:+.2f} is SATURATED -- the board is seeing a '
+                'depth it cannot express. ' + 'Arming would command FULL vertical thrust (mixer throttle column is -1 on all four verticals) with the horizontals idle. DO NOT ARM. If the barometer VARIANCE line above is PASS this is a large zero offset, not a dead sensor -- run `ros2 run duburi_planner duburi calibrate_depth` and re-check')
+    # Unsaturated: recover the board's own depth. The preview's fixed 0.10 m target is
+    # baked into DEPTH_CMD, so subtracting it turns "error against a target" into "how
+    # far is the barometer from zero" -- which is the question, and which stops a
+    # healthy in-air board from spending a third of the budget on a constant.
+    depth_m = depth_cmd / gain + sp.DEPTH_PREVIEW_TARGET_M
+    if abs(depth_m) >= sp.DEPTH_ERR_ARM_LIMIT_M:
+        return (FAIL, 'barometer IMPLAUSIBLE',
+                f'board reads {depth_m:+.2f} m of depth at the surface (limit '
+                f'{sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, DEPTH_CMD={depth_cmd:+.2f}, '
+                f'DEPTH_P={gain:g}). Arming would command FULL vertical thrust '
+                '(mixer throttle column is -1 on all four verticals) with the '
+                'horizontals idle. DO NOT ARM')
+    if abs(depth_m) > sp.DEPTH_OFFSET_WARN_M:
+        return (WARN, 'barometer offset at the surface',
+                f'{depth_m:+.2f} m while disarmed in air -- run '
+                '`ros2 run duburi_planner duburi calibrate_depth` before diving')
+    return (PASS, 'barometer at surface',
+            f'{depth_m:+.2f} m (DEPTH_CMD={depth_cmd:+.2f})')
+
+
+def _yaw_ref_verdict(raw: float | None) -> tuple[str, str, str]:
+    """Is ATTITUDE.yaw a magnetic heading, or relative to wherever the BNO booted?
+
+    Only LOCKED means absolute. Anything else and an absolute `turn` aims at a number
+    that means nothing -- and does it silently: the move completes normally, on the
+    wrong bearing. MAGACC is NOT a proxy (see SrotFC.check_yaw_reference).
+    """
+    import duburi_control.fc.srot_protocol as sp      # noqa: F811
+    if raw is None:
+        return (WARN, 'yaw reference unknown',
+                'no YAW_REF -- firmware older than rev 9. Prefer relative turns')
+    state = int(raw)
+    if state == sp.YAW_REF_LOCKED:
+        return (PASS, 'yaw reference', 'LOCKED -- heading is absolute, `turn` is safe')
+    return (WARN, 'yaw reference NOT locked',
+            f'{state} = {sp.YAW_REF_NAMES.get(state, "unrecognised")}. ATTITUDE.yaw is '
+            'boot-relative, so an absolute `turn` will aim at a meaningless heading -- '
+            'prefer relative turns')
+
+
+def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
+    """(conn, probe_state) for the SROT board. `probe_state` is '', 'mavlink',
+    'busy' or 'silent' -- '' when the operator named the endpoint explicitly.
+
+    Split out so the section header, the checks and the closing startup hint all
+    describe the SAME transport from ONE resolution. Calling the resolver in each
+    place re-probes UDP (2 s each) and lets them disagree, which is how this tool
+    ended up printing "no MAVLink on UDP" three lines above a healthy heartbeat
+    read over exactly that link.
+    """
+    if device:
+        return device, ''
+    try:
+        from .connection_config import (find_srot_serial, probe_udp_mavlink,
+                                        SROT_UDP_CONN, NETWORK)
+    except Exception:                              # noqa: BLE001
+        return device or '/dev/ttyUSB0', ''
+    path = find_srot_serial()
+    if path is not None:
+        return path, ''
+    return SROT_UDP_CONN, probe_udp_mavlink(NETWORK['mav_port'], 2.0)
+
+
+def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
+    """SROT board: port/endpoint, vehicle heartbeat, GAIN, depth sign.
+
+    Replaces the BlueOS/UDP-14550/Pixhawk-USB probes, which on a direct-USB SROT
+    vehicle pass or fail for entirely the wrong reasons.
+
+    `device` accepts any pymavlink connection string for the transitional setup where
+    the board hangs off a Pi and reaches us as UDP through a BlueOS/Bridget bridge.
+    Without it this section can only ever FAIL on such a rig -- `find_srot_serial()`
+    looks for a local CH340 that is, correctly, plugged into the Pi instead. That is
+    the tool that decides whether to go in the water reporting "no board" about a
+    board that is streaming fine.
+    """
+    out: list[tuple[str, str, str]] = []
+    try:
+        from .connection_config import find_srot_serial, SROT_BAUD, resolve_srot_profile
+    except Exception as exc:                       # noqa: BLE001
+        return [(FAIL, 'connection_config import', str(exc))]
+
+    # `device` is normally supplied by _resolve_srot_for_check so the whole section
+    # agrees on one transport; the fallback keeps this callable on its own.
+    port = device or resolve_srot_profile()['conn']
+    is_serial = port.startswith('/dev/')
+    baud_kw = {'baud': SROT_BAUD} if is_serial else {}
+    if is_serial:
+        out.append((PASS, 'SROT serial port', f'{port} @ {SROT_BAUD}'))
+    else:
+        out.append((PASS, 'SROT endpoint (bridged)', port))
+
+    if skip_mav:
+        out.append((WARN, 'SROT MAVLink probe skipped', '--skip-mavlink'))
+        return out
+
+    try:
+        from pymavlink import mavutil
+        # NOT `from duburi_control.fc import srot_protocol`: that runs
+        # duburi_control/__init__.py, which imports Duburi -> duburi_interfaces, so it
+        # needs a fully-built, fully-sourced workspace. This whole tool exists to
+        # diagnose a workspace that ISN'T, and section A already reports a missing
+        # duburi_interfaces properly -- having the board section die of the same cause
+        # would add a second, misleading FAIL and hide the actual board readings.
+        from .srot_connect import _load_srot_protocol
+        sp = _load_srot_protocol()
+        if sp is None:
+            out.append((FAIL, 'srot_protocol unavailable',
+                        'cannot decode modes/ACKs -- rebuild: ./build_dubomini.sh'))
+            return out
+    except Exception as exc:                       # noqa: BLE001
+        out.append((FAIL, 'pymavlink/srot_protocol import', str(exc)))
+        return out
+
+    # A preflight that reboots the flight controller is not a preflight. Opening
+    # this port asserts DTR and resets the ESP32 (measured -- fc/port_guard.py),
+    # so running bringup_check against a live manager silently disarms the
+    # vehicle and wipes its configured stream rates. Report it as a WARN section
+    # rather than doing it.
+    from duburi_control.fc.port_guard import PortGuard, PortBusy
+    _guard = PortGuard(port)
+    try:
+        _guard.acquire()
+    except PortBusy as exc:
+        out.append((WARN, 'srot serial port',
+                    f'{port} is already in use -- skipped. Opening it would REBOOT '
+                    f'the board. {str(exc).splitlines()[0]}'))
+        return out
+
+    conn = None
+    try:
+        conn = mavutil.mavlink_connection(port, **baud_kw)
+        deadline = time.time() + 6.0
+        hb = None
+        while time.time() < deadline:
+            msg = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
+            if msg is None:
+                break
+            # Ignore our own / any GCS heartbeat -- only the vehicle counts.
+            if getattr(msg, 'autopilot', 0) != mavutil.mavlink.MAV_AUTOPILOT_INVALID:
+                hb = msg
+                break
+        if hb is None:
+            out.append((FAIL, 'no vehicle HEARTBEAT', f'{port}: board powered? correct port?'))
+            return out
+        mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
+        armed = bool(getattr(hb, 'base_mode', 0)
+                     & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
+        out.append((PASS, 'SROT heartbeat', f'mode={mode}'))
+        # Pre-mission gate: nothing should be armed before the operator says so.
+        out.append((FAIL if armed else PASS, 'armed state',
+                    'ARMED -- disarm before bench/pool work' if armed else 'disarmed'))
+
+        # ---- firmware behaviour revision -- the hull-safety gate ------------ #
+        # THE most consequential line in this section, and the reason it is here
+        # rather than only inside arm(): below rev 2 the board's MOVE_STOP applies
+        # zero braking thrust, and this host no longer carries the reverse-leg
+        # brake that used to cover it. `stop` and every abort would simply not
+        # decelerate the hull, silently. Finding that out on the bench is the
+        # whole point -- SrotFC.arm() also refuses, but that is the pool deck.
+        conn.mav.command_long_send(
+            sp.VEHICLE_SYSID, sp.VEHICLE_COMPID,
+            mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE, 0,
+            float(sp.MSG_ID_AUTOPILOT_VERSION), 0, 0, 0, 0, 0, 0)
+        av = conn.recv_match(type='AUTOPILOT_VERSION', blocking=True, timeout=3.0)
+        rev = None if av is None else int(getattr(av, 'middleware_sw_version', 0))
+        out.append(_behaviour_rev_verdict(rev, sp.FW_BEHAVIOUR_REV_REQUIRED))
+
+        # Collect a couple of seconds of telemetry for the value checks.
+        end = time.time() + 2.5
+        while time.time() < end:
+            conn.recv_match(blocking=True, timeout=0.5)
+
+        vhud = conn.messages.get('VFR_HUD')
+        if vhud is None:
+            out.append((WARN, 'no VFR_HUD', 'depth unavailable (Bar30 fitted?)'))
+        else:
+            depth = float(vhud.alt)
+            # NEGATIVE below the surface is the stack-wide convention. A positive
+            # reading out of water is normal (~0); a positive one submerged means the
+            # sign regressed and every depth guard is silently disabled.
+            out.append((PASS, 'depth telemetry', f'{depth:+.2f} m (negative = submerged)'))
+
+        # VFR_HUD.alt keeps streaming even when the board has declared the baro dead, so
+        # the line above cannot tell you the reading is trustworthy. This one can.
+        sysst = conn.messages.get('SYS_STATUS')
+        out.append(_baro_health_verdict(
+            None if sysst is None else int(getattr(sysst, 'onboard_control_sensors_health', 0)),
+            None if sysst is None else int(getattr(sysst, 'onboard_control_sensors_present', 0))))
+
+        # Barometer + depth loop. Both need SEVERAL samples (the failure mode is
+        # variance, not a bad single reading), so gather a window before judging.
+        press, named = [], {}
+        end = time.time() + 6.0
+        while time.time() < end:
+            msg = conn.recv_match(blocking=True, timeout=0.5)
+            if msg is None:
+                continue
+            mt = msg.get_type()
+            if mt == 'SCALED_PRESSURE2':
+                press.append(float(msg.press_abs))
+            elif mt == 'NAMED_VALUE_FLOAT':
+                # 20+ scalars share this msgid and burst together, so the cache holds
+                # only whichever landed last -- read them as they arrive.
+                nm = msg.name
+                nm = nm.decode() if isinstance(nm, bytes) else str(nm)
+                nm = nm.strip('\x00').strip()
+                named[nm] = float(msg.value)
+        out.append(_baro_noise_verdict(press))
+        out.append(_depth_loop_verdict(named.get('DEPTH_CMD'),
+                                       _read_param(conn, 'DEPTH_P')))
+        out.append(_yaw_ref_verdict(named.get('YAW_REF')))
+
+        # GAIN halves MANUAL_CONTROL until it is 1.0, and fw R14 means a PARAM_SET may
+        # never have persisted on a board flashed before 8cb4203.
+        gain = named.get('GAIN')
+        if gain is None:
+            out.append((WARN, 'GAIN not seen', 'could not confirm MANUAL_CONTROL authority'))
+        elif gain < 0.99:
+            out.append((WARN, 'GAIN below 1.0',
+                        f'{gain:.2f} -- MANUAL_CONTROL is scaled by this; '
+                        f'params may not have persisted (fw R14)'))
+        else:
+            out.append((PASS, 'GAIN', f'{gain:.2f}'))
+
+        # Bench mode, saved to flash. See _gcs_failsafe_verdict for why this is graded
+        # rather than left to the "check it before every session" line in the docs.
+        out.append(_gcs_failsafe_verdict(_read_param(conn, 'FS_GCS_ENABLE'),
+                                         _read_param(conn, 'FS_GCS_COMPID')))
+    except Exception as exc:                       # noqa: BLE001
+        out.append((FAIL, 'SROT MAVLink probe raised', str(exc)))
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:                      # noqa: BLE001
+                pass
+        # Release AFTER the close, not before: between them the device is still
+        # open, and handing the claim over early is exactly the window where a
+        # waiting process opens it and reboots the board.
+        _guard.release()
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    # `--help` used to fall through and run the FULL hardware probe -- an operator
+    # asking what the flags are instead got a 12-section scan of the vehicle.
+    if '-h' in argv or '--help' in argv:
+        print('usage: bringup_check [--srot] [--srot-device=<conn>] [--strict]\n'
+              '                     [--skip-mavlink]\n'
+              '\n'
+              '  --srot           SROT control board over direct USB serial (this\n'
+              '                   branch\'s default vehicle). Replaces the network /\n'
+              '                   UDP-14550 / Pixhawk-USB probes, which on a SROT\n'
+              '                   vehicle pass or fail for entirely the wrong reasons.\n'
+              '  --srot-device=   board is not on THIS host: any pymavlink conn\n'
+              '                   string, e.g. udpin:0.0.0.0:14550 when the SROT is\n'
+              '                   on the Pi behind a BlueOS/Bridget serial->UDP\n'
+              '                   bridge. Without it this section FAILs "no board"\n'
+              '                   on a rig whose board is streaming fine.\n'
+              '  --strict         any WARN exits non-zero (hard pre-mission gate)\n'
+              '  --skip-mavlink   skip the autopilot probe (no board/link attached)\n'
+              '\n'
+              'Exit 0 = nothing FAILed. On --srot the line that gates the water is\n'
+              '"FW behaviour rev": below 2 the board coasts on stop and arm() refuses.')
+        return 0
     strict = '--strict' in argv
     skip_mav = '--skip-mavlink' in argv
+    # The SROT vehicle has no Pi, no BlueOS, no UDP and no Pixhawk: sections D/E/F
+    # would report on infrastructure that is not supposed to exist.
+    srot = '--srot' in argv
+    # Transitional rig: board on the Pi, reaching us as UDP via a BlueOS bridge.
+    srot_device = next((a.split('=', 1)[1] for a in argv
+                        if a.startswith('--srot-device=')), '')
 
     failures = 0
     warnings = 0
@@ -638,52 +1129,115 @@ def main(argv: list[str] | None = None) -> int:
     for st, lbl, det in _check_serial_drivers():
         emit(st, lbl, det)
 
-    # ---- D. network ------------------------------------------------- #
-    section('D. Network reachability')
-    if _ping(NETWORK['blueos_ip']):
-        emit(PASS, 'BlueOS', NETWORK['blueos_ip'])
-    else:
-        emit(WARN, 'BlueOS unreachable',
-             f"{NETWORK['blueos_ip']}  (expected in pool/desk mode)")
-    if _ping(NETWORK['jetson_ip']):
-        emit(PASS, 'Jetson', NETWORK['jetson_ip'])
-    else:
-        emit(WARN, 'Jetson unreachable',
-             f"{NETWORK['jetson_ip']}  (skip if you ARE the Jetson)")
-
-    # ---- E. MAVLink / autopilot ------------------------------------ #
-    section('E. MAVLink / autopilot')
-    if skip_mav:
-        emit(WARN, 'MAVLink probe skipped', '--skip-mavlink')
-    else:
-        for st, lbl, det in _check_mavlink():
+    if srot:
+        # ---- D-F (SROT): the board, however it is attached ---------------- #
+        # Resolve ONCE here so the section header, the checks and the closing
+        # startup hint all describe the SAME transport. Resolving in more than one
+        # place re-probes UDP (2 s each) and lets them disagree.
+        srot_conn, srot_state = _resolve_srot_for_check(srot_device)
+        section('D-F. SROT control board'
+                + (' (bridged over UDP)' if not srot_conn.startswith('/dev/')
+                   else ' (direct USB serial)'))
+        if srot_state == 'silent':
+            emit(WARN, 'SROT auto-detect',
+                 'no USB serial and no MAVLink on UDP -- falling back to '
+                 f'{srot_conn}. Plug in the Type-C cable, bring up the BlueOS '
+                 'bridge, or pass --srot-device=<conn>')
+        elif srot_state == 'busy':
+            emit(WARN, 'SROT auto-detect',
+                 f'UDP port already held by another process -- could not probe. '
+                 f'Using {srot_conn}. A leftover `duburi_manager start` is the '
+                 f'usual cause: ss -lunp | grep 14550')
+        for st, lbl, det in _check_srot(skip_mav, srot_conn):
             emit(st, lbl, det)
-
-    # ---- F. Pixhawk USB -------------------------------------------- #
-    section('F. Pixhawk USB (desk mode)')
-    pix = _pixhawk_devices()
-    if pix:
-        emit(PASS, 'Pixhawk USB CDC', pix[0])
     else:
-        emit(PASS, 'no Pixhawk USB device', 'ok for UDP/BlueOS pool mode')
+        # ---- D. network ------------------------------------------------- #
+        section('D. Network reachability')
+        if _ping(NETWORK['blueos_ip']):
+            emit(PASS, 'BlueOS', NETWORK['blueos_ip'])
+        else:
+            emit(WARN, 'BlueOS unreachable',
+                 f"{NETWORK['blueos_ip']}  (expected in pool/desk mode)")
+        if _ping(NETWORK['jetson_ip']):
+            emit(PASS, 'Jetson', NETWORK['jetson_ip'])
+        else:
+            emit(WARN, 'Jetson unreachable',
+                 f"{NETWORK['jetson_ip']}  (skip if you ARE the Jetson)")
 
-    # ---- G. BNO085 -------------------------------------------------- #
-    section('G. Yaw source (BNO085)')
-    st, det = _check_bno085_auto()
-    emit(st, 'BNO085 auto-detect', det)
-    if st == PASS:
-        _line('NOTE', 'EKF ext-nav yaw needs', 'VISO_TYPE=1, EK3_SRC1_YAW=6 '
-              '(2 MB fmuv3); manager re-checks at startup')
+        # ---- E. MAVLink / autopilot ------------------------------------ #
+        section('E. MAVLink / autopilot')
+        if skip_mav:
+            emit(WARN, 'MAVLink probe skipped', '--skip-mavlink')
+        else:
+            for st, lbl, det in _check_mavlink():
+                emit(st, lbl, det)
+
+        # ---- F. Pixhawk USB -------------------------------------------- #
+        section('F. Pixhawk USB (desk mode)')
+        pix = _pixhawk_devices()
+        if pix:
+            emit(PASS, 'Pixhawk USB CDC', pix[0])
+        else:
+            emit(PASS, 'no Pixhawk USB device', 'ok for UDP/BlueOS pool mode')
+
+    # ---- G. yaw source ---------------------------------------------- #
+    # Both G and H probe hardware that is NOT FITTED on a srot vehicle. Left
+    # ungated they emit two WARNs the operator can do nothing about -- and one of
+    # them ("Plug the ESP32-C3 in") instructs them to reinstall a board that was
+    # deliberately removed. Unactionable WARNs are not free: they train an operator
+    # to skim the WARN column, which is where the firmware-rev gate lives.
+    if srot:
+        section('G. Yaw source (BNO085 on the control board)')
+        emit(PASS, 'BNO085 rides the MAVLink link',
+             'on the board (I2C0), fused at 500 Hz -> ATTITUDE; '
+             'use yaw_source:=mavlink_ahrs')
+        _line('NOTE', 'USB ESP32-C3 + BNO085', 'REMOVED from the hull -- '
+              'yaw_source:=bno085 would open a device that is not there')
+    else:
+        section('G. Yaw source (BNO085)')
+        st, det = _check_bno085_auto()
+        emit(st, 'BNO085 auto-detect', det)
+        if st == PASS:
+            _line('NOTE', 'EKF ext-nav yaw needs', 'VISO_TYPE=1, EK3_SRC1_YAW=6 '
+                  '(2 MB fmuv3); manager re-checks at startup')
 
     # ---- H. DVL ----------------------------------------------------- #
-    section('H. DVL (Nortek Nucleus 1000)')
-    st, det = _check_dvl(NETWORK['dvl_ip'], NETWORK['dvl_port'])
-    emit(st, 'Nucleus 1000', det)
+    if srot:
+        section('H. DVL (Nortek Nucleus 1000)')
+        _line('NOTE', 'DVL not fitted', 'never validated in water and not on the '
+              'SROT wire; move_*_dist stay refused (vehicle-spec.md "DVL status")')
+    else:
+        section('H. DVL (Nortek Nucleus 1000)')
+        st, det = _check_dvl(NETWORK['dvl_ip'], NETWORK['dvl_port'])
+        emit(st, 'Nucleus 1000', det)
 
     # ---- I. payload ------------------------------------------------- #
-    section('I. Payload board (CH340)')
-    st, det = _check_payload()
-    emit(st, 'payload serial link', det)
+    if srot:
+        # The payload is the board's own PCA9685 over MAVLink -- there is no separate
+        # USB board to probe, and probing would be actively harmful: the old payload
+        # ESP32 is the SAME CH340 VID/PID as the SROT board, so the scan opens the
+        # board's own port and fights the MAVLink link.
+        section('I. Payload (SROT PCA9685 over MAVLink)')
+        emit(PASS, 'payload transport', 'PCA9685 over MAVLink; no separate USB board')
+        # The transport being up is NOT the payload working, and the old PASS on this
+        # line is what hid the dead fire() path: link up, line green, nothing able
+        # to actuate.
+        #
+        # NOTE, not WARN, and the distinction is load-bearing: whether a channel is
+        # fireable is a board ROLE read over a live MAVLink link by the running node,
+        # which a standalone preflight has no session for. An unconditional WARN would
+        # make `--strict` -- the hard pre-mission gate -- exit non-zero on EVERY srot
+        # run for a condition nobody can clear from here. A gate that always fails is
+        # a gate people stop running. Say the true thing and point at the answer.
+        _line('NOTE', 'payload channels',
+              'fire(N) addresses BOARD channel N directly (no map). Which channels '
+              'are fireable is read from the board at bring-up -- confirm the '
+              'manager logs "[PAYLOAD] board roles: FIREABLE (switch) [...]" and '
+              'that your intended channel is in that list')
+    else:
+        section('I. Payload board (CH340)')
+        st, det = _check_payload()
+        emit(st, 'payload serial link', det)
 
     # ---- J. cameras ------------------------------------------------- #
     section('J. Cameras (forward + downward)')
@@ -702,9 +1256,27 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---- resolved mode + launch hint ------------------------------- #
     section('Manager startup hint')
-    chosen = resolve_mode('auto', logger=None)
-    emit(PASS, f'auto-detected mode={chosen!r}',
-         'picked by mode=auto (the default)')
+    if srot:
+        # `mode` selects among the UDP-14550 PROFILES, which resolve_srot_profile()
+        # bypasses entirely -- there is no BlueOS to listen to. Printing
+        # "auto-detected mode='sim'" on a real SROT vehicle is worse than printing
+        # nothing: it looks like the preflight thinks this is a simulation.
+        # Still true when bridged: `mode` picks among the UDP PROFILES, and
+        # resolve_srot_profile() bypasses those whether the transport is a device
+        # or an endpoint. But the operator must pass the SAME endpoint to the
+        # manager, so print the command rather than the word "serial".
+        if srot_conn.startswith('/dev/'):
+            emit(PASS, 'connection',
+                 f'direct USB serial ({srot_conn}) -- auto-detected; `mode` does '
+                 f'not apply on srot')
+        else:
+            emit(PASS, 'connection',
+                 f'bridged over UDP ({srot_conn}) -- the manager auto-detects the '
+                 f'same endpoint; `mode` does not apply on srot')
+    else:
+        chosen = resolve_mode('auto', logger=None)
+        emit(PASS, f'auto-detected mode={chosen!r}',
+             'picked by mode=auto (the default)')
 
     # ---- summary --------------------------------------------------- #
     print()
@@ -717,16 +1289,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f'  0 FAIL, {warnings} WARN -- review above before pool day.')
         rc = 1 if strict else 0
         print('  Launch with:')
-        _print_launch_hint()
+        _print_launch_hint(srot)
     else:
         print('  All checks PASS. Launch with:')
-        _print_launch_hint()
+        _print_launch_hint(srot)
         rc = 0
     print('=' * 72)
     return rc
 
 
-def _print_launch_hint() -> None:
+def _print_launch_hint(srot: bool = False) -> None:
+    if srot:
+        # Deliberately NOT the pixhawk hint: it recommends move_forward_dist, which is
+        # permanently refused on srot (no DVL fitted, never validated), and a bare
+        # `start` whose defaults are right but whose profile talk is meaningless here.
+        print('    ros2 launch duburi_manager bringup.launch.py   '
+              '# srot + mavlink_ahrs are the defaults')
+        print('      # fire(N) = BOARD channel N -- see the [PAYLOAD] roles line;'
+              ' nothing else needs setting')
+        print('    ros2 run duburi_planner duburi arm')
+        print('    ros2 run duburi_planner duburi move_forward --duration 5 --gain 40')
+        print('    ros2 run duburi_planner duburi stop')
+        print()
+        print('  ⛔ BEFORE WATER -- the depth loop has never run closed, and it runs')
+        print('     under EVERY AUTO move (move_forward included), not just set_depth:')
+        print('    ros2 run duburi_planner duburi set_mode --target_name DEPTH_HOLD')
+        print('      1. hand-raise/lower the sub -> verticals must push BACK toward depth')
+        print('      2. trip the leak input at depth -> the demand must be ASCEND')
+        return
     print('    ros2 run duburi_manager start              '
           '# mode=auto picks the right profile')
     print('    ros2 launch duburi_vision vision.launch.py camera:=forward  '

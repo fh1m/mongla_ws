@@ -86,7 +86,47 @@ class RoboflowTracker(Tracker):
                  min_hits: int = 2,
                  iou_threshold: float = 0.3,
                  track_activation_threshold: float = 0.25,
-                 high_conf_det_threshold: float = 0.6):
+                 high_conf_det_threshold: float = 0.6,
+                 detector_conf: float = 0.0):
+        """`detector_conf` is the floor the DETECTOR is publishing at.
+
+        THE TRACKER'S CONFIDENCE GATES MUST NOT EXCEED IT, and until this was
+        measured they did, by 4x, which meant the tracker emitted NOTHING on
+        real underwater footage.
+
+        `high_conf_det_threshold` gates TRACK CREATION: below it, no track is
+        ever started, so there is nothing to coast on and `/tracks` is empty.
+        The shipped 0.6 was inherited from pedestrian benchmarks where scores
+        run high. Measured on real RoboSub 2025 footage with the model trained
+        on it -- 319 detections over the gate approach:
+
+            score p10 0.167  p50 0.258  p90 0.439  max 0.640
+            fraction at or above 0.6:  0.6 %
+
+            high_conf_det_threshold   tracker presence
+                    0.60                  0.0 %     <- SHIPPED
+                    0.40                 13.9 %
+                    0.25                 17.0 %
+                    0.15                 45.1 %
+
+        The detector's own presence on that footage is 15.5 %. At 0.15 the
+        coast layer nearly TRIPLES it -- that is the gap-bridging working. At
+        0.6 the entire tracking stack, the Kalman smoother, `vision.coast_s`
+        and the continuity lock were dead: no tracks, nothing to coast, and
+        no error anywhere, because a tracker with no tracks still publishes an
+        empty array and looks healthy.
+
+        Clamping to `detector_conf` is structural, not tuning. A detection the
+        DETECTOR chose to publish must be allowed to start a track; anything
+        else silently discards work the chip already did. The caller passes
+        the detector's live `conf`, so the two move together and cannot drift
+        apart again.
+        """
+        if detector_conf > 0.0:
+            high_conf_det_threshold = min(high_conf_det_threshold,
+                                          float(detector_conf))
+            track_activation_threshold = min(track_activation_threshold,
+                                             float(detector_conf))
         try:
             import supervision as sv
             import trackers as tr

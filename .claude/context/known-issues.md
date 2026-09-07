@@ -543,3 +543,58 @@ a node restart alone does nothing.
 * **The single commit** (`xelisce`, 2025-05-23, "hard code variables into file fix, passed all tests"): adds 9 unused declarations to `libraries/AP_DDS/AP_DDS_Client.cpp`. No semantic ArduSub change. No new mode, no new failsafe, no new MAVLink behaviour.
 * **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`ardusub-canon.md`](./ardusub-canon.md).
 * **Re-evaluate when:** the fork's `xelisce` author (or `BumblebeeAS` org) ships a second semantic commit. Until then, do not spend an evening "evaluating" this again.
+
+---
+
+## D16 — a Hailo stream abort leaves the detector a ZOMBIE (FIXED, 2026-09-06)
+
+**Observed on the vehicle.** Restarting the stack while a previous detector
+still held the `VDevice` put the chip into `HAILO_STREAM_ABORT(63)`. The
+detector node then:
+
+* stayed **alive** — `pgrep` sees it, the node is listed, its subscriptions are
+  up;
+* logged `inference failed: HailoRTStreamAborted` on **every frame**, forever;
+* published **zero detections**, indefinitely, with no escalation.
+
+```
+[ERROR] [DET  ] inference failed: HailoRTStreamAborted('Stream was aborted')
+[HailoRT] [error] ... pipeline status is HAILO_STREAM_ABORT(63).
+```
+
+**Why it matters more than the error itself.** Every liveness check we have
+passes: the process exists, the topics exist, the graph looks correct. Only the
+detection RATE reveals it, and nothing was watching the rate. This is the
+"absence is not zero" family again — a subsystem that has stopped working while
+continuing to exist.
+
+**Recovery today is a manual restart**, and the stack does come back cleanly
+(299 inferences/interval, frame age 42.2 ms mean).
+
+**FIXED.** Three tiers in `detector_node._on_infer_failure`, because the
+failures are not one thing:
+
+1. **isolated** failures are tolerated — a bad frame is a bad frame, and
+   killing the node for one is worse than the fault;
+2. **15 consecutive** means the DEVICE is gone, not the frame → rebuild the
+   detector through the same construction path that built it (dropping the old
+   one first: on the Hailo path the device is held by the object, and a second
+   `VDevice` while the first lives is `HAILO_OUT_OF_PHYSICAL_DEVICES`);
+3. **45 consecutive**, i.e. the rebuild did not help → `os._exit(1)` so a
+   supervisor restarts the process.
+
+Thresholds are in FRAMES, not seconds, so they behave the same at 3 Hz and at
+80. Any success resets the counter, so a chip that recovers by itself never
+reaches tier 2.
+
+**A test lesson worth keeping.** The first test set drove `_on_infer_failure`
+directly and passed while two injected defects went undetected — deleting the
+LOOP's call to it, and deleting the success reset. The escalation was tested
+and the WIRING was not, which is the same shape as a guard that greps the
+source. Tests that run `_infer_loop` itself now cover both, and all four
+injections are caught.
+
+**Related:** the same restart also logged
+`detector init FAILED: Failure in hailort driver ioctl` on the first attempt
+and succeeded on the retry, so VDevice contention is transient but real. One
+process, one `VDevice` (`detection/hailo.py:158-176`) is still the rule.
