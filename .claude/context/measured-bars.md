@@ -1160,3 +1160,73 @@ taking the same `dwn_calibration` the camera takes, by reference. A renamed
 data file also needs `rm -rf build/<pkg> install/<pkg>` first: colcon caches
 the file list and fails with `can't copy ...: doesn't exist` naming the file
 you deliberately removed.
+
+## 18. The launch path reads 11 % of truth, and de-rotation is the suspect. 2026-09-07
+
+**IN PROGRESS — the cause is not yet settled. Recorded now so the wrong half
+is not carried forward as fact.**
+
+Four hand slides against a 30 cm truth, through the launch, with the manager
+supplying gyro:
+
+    -8.17 cm    +3.98 cm    +3.38 cm      (one earlier run refused everything)
+
+Short by ~87 %, and one with the sign wrong. §13's 30 cm result came from
+`flow_console.py`, which passed the calibration by hand; this is the first
+time the LAUNCH path has been slid, and it does not reproduce §13.
+
+### The suspect, named by the node's own refusal
+
+    REFUSING: rotation-dominated (1.43 of the flow)
+
+`rot_fraction > 1` means the de-rotation term subtracted was LARGER than the
+total flow measured. That is this project's own recorded failure mode: *"a
+bad correction is worse than none -- de-rotation with an unvalidated mapping
+destroyed 35.7 cm of real travel."* The §12 gains were calibrated on a rig
+where camera and IMU were rigidly coupled in a known orientation; **the IMU
+is now the SROT BOARD** and nothing had re-checked its orientation relative
+to this camera.
+
+### ⛔ RETRACTED WITHIN THE HOUR: "the gyro is noisy at rest"
+
+I measured `/duburi/imu_rates` for 30 s and reported pitch sd **0.083 rad/s**,
+which at a 0.4 s baseline is **17 px** of phantom shift against an 8 px
+keyframe threshold -- a complete explanation, and wrong. **The operator was
+moving the rig during that capture.** Those were real rotations. The number
+says nothing about noise and is withdrawn. A "rest" measurement that nobody
+confirmed was at rest is not a measurement, and the only reason it did not
+survive is that the operator said so.
+
+### What DOES survive: the axis mapping is not swapped
+
+Image flow (LK, consecutive frames) against each gyro axis, 514 intervals:
+
+| | gx/pitch | gy/roll | gz/yaw |
+|---|---|---|---|
+| **dx** | +0.643 | **-0.770** | -0.080 |
+| **dy** | **-0.348** | +0.232 | +0.125 |
+
+The strongest pairings are `dx <- roll` and `dy <- pitch`, which IS the
+node's convention. So the mapping is right and a swap is ruled out.
+
+**The SLOPES from the same data are NOT usable, and the reason is a rule
+already in the ledger.** They came out at 978 px/rad against `f_x = 513.9`
+(1.90x) and 844 against `f_y = 516.9` (1.63x). Hand motion rotates and
+translates together, so translation loads onto the rotation regressor:
+*"excite one axis at a time -- correlated regressors leave the split
+undetermined while the fit looks healthy."* A 1.9x gain fitted from that
+would be fitted to the operator's wrist.
+
+### The experiment that settles it
+
+`tools/flow_derot_ab.py` -- three de-rotation settings measured on ONE slide,
+because a hand slide is not repeatable to better than ~1 cm and sequential
+arms cannot resolve a difference smaller than the operator. `flow_node` reads
+frames off a topic, so extra instances watch the same camera and share one
+`distance_control`; every arm sees the identical motion.
+
+    A  shipped   (-1, -1)      B  none  (0, 0)      C  flipped  (+1, +1)
+
+B >> A means de-rotation is destroying travel; C >> A means the signs are
+wrong; all alike means rotation is not the cause and the loss is elsewhere.
+
