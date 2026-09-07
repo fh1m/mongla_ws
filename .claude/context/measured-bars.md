@@ -1731,3 +1731,66 @@ with the sidecars in.
 
 Nothing here changes the deferral. It changes what a future training round
 may claim about the data it has.
+
+---
+
+## §25. THRUSTER TELEMETRY: 958 frames, every one exactly zero. 2026-09-07
+
+The question was "how good and how real is the thruster data". It is
+**decodable and real as a frame, and empty as a measurement.**
+
+| quantity | measured | how |
+|---|---|---|
+| `ESC_STATUS` (291) frames recorded | **958** across two bench sessions | `~/duburi_runs/*.tlog` |
+| CRC-valid | **958 / 958** | the SHIPPED `_decode_esc_status`, `crc_extra = 10` |
+| index blocks present | `0` and `4` — all eight slots | both sessions |
+| distinct signed rpm values seen | **`{0}`** | every slot, every frame |
+| non-zero rpm ever observed | **NONE** | — |
+| ESC voltage / current / temperature | **literal zeros at the firmware source** | `mav_stream.cpp:176-200` |
+
+**The bar this sets, and it is a negative one:** *no non-zero thruster value has
+ever crossed this wire on this vehicle.* Any result built on ESC telemetry is
+untested against real data until thrusters are attached.
+
+### The trap it exposes, which nearly became a shipped defect
+
+The board emits **all eight slots whether or not an ESC is attached.** So on a
+hull with no thrusters:
+
+- frames are arriving → a message-count gate says **healthy**
+- `len(rpm) == 8` → a completeness gate says **healthy**
+- every value is `0` → indistinguishable from a still, armed, healthy hull
+
+`health_reporters.thrusters` was gated on `esc_msgs`, a driver attribute that
+**does not exist**, so `getattr(fc, 'esc_msgs', 0)` returned 0 forever and the
+answer was a permanent UNKNOWN. **UNKNOWN was the CORRECT answer**; the defect
+was arriving at it through a typo rather than a measurement. The obvious repair
+— supply the missing counter — would have converted a correct UNKNOWN into a
+**permanent false OK on the pre-fire safety gate**, on a vehicle with no
+thrusters at all. `test_health.py` asserted that false OK and passed.
+
+The reporter now grades `fc.thruster_health()` — the driver's presence verdict,
+built on the board's first-arm announcement — and a message count is not an
+input to it.
+
+### The asymmetry the gate must keep
+
+    ok is False -> REFUSE the shot   (reported, then stopped, or turning backwards)
+    ok is None  -> ALLOW, log loudly (nothing announced — most sessions)
+
+Refusing on `None` is the tempting symmetric rule and it is worse than the bug
+it fixes: `None` is this hull's permanent state, so `fire()` would become a
+silent no-op at competition — the SURFACE-mode shape, pointed at the payload.
+Pinned by `test_prefire_thruster_gate.py`, verified by injection.
+
+### What would make the data real
+
+**PR F** — `esc_present`/`esc_fault` are already members of `Snap`, in scope at
+the packing site, while `ESC_TELEMETRY.count` ships literal zeros. One line,
+ESP32 only, no bandwidth. It outranks PR C.
+
+### Also corrected
+
+`esc_status_rpm`'s docstring cited "a recorded dive: 434 of 434 frames decode"
+as if it evidenced real telemetry. It was a **bench** session with no thrusters,
+and it evidences decodability only. Now says so.

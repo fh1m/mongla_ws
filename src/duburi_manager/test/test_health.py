@@ -111,13 +111,32 @@ def test_a_DISABLED_leak_sensor_is_a_FAILURE_not_a_dry_hull():
     assert R.leak_sensor(None, None).state is State.UNKNOWN
 
 
-def test_NO_ESC_TELEMETRY_is_not_EIGHT_HAPPY_THRUSTERS():
-    """An empty RPM list is the same shape whether the bus is silent or the
-    hull is still. Gated on the message count, or the pre-fire thruster check
-    passes on a bus that is not talking."""
-    assert R.thrusters([], esc_msgs=0).state is State.UNKNOWN
-    assert R.thrusters([0] * 8, esc_msgs=40).state is State.OK
-    assert R.thrusters([0] * 5, esc_msgs=40).state is State.DEGRADED
+def test_A_TALKING_BOARD_WITH_NO_ESCS_IS_NOT_EIGHT_HAPPY_THRUSTERS():
+    """The regression this reporter exists to prevent, in one line.
+
+    MEASURED: 958 CRC-valid ESC_STATUS frames across two recorded sessions
+    with NOTHING plugged in -- both index blocks, every rpm exactly 0. So the
+    board fills all eight slots regardless, and any gate built on "frames are
+    arriving" or "len(rpm) == 8" reports OK for a vehicle with no thrusters.
+
+    The previous version of this test asserted exactly that false OK
+    (`thrusters([0] * 8, esc_msgs=40) is OK`) and passed. It was testing the
+    bug. The reporter now grades the driver's presence verdict instead, and a
+    count of ESC messages is not an input to it at all.
+    """
+    assert R.thrusters((None, 'not announced')).state is State.UNKNOWN
+    assert R.thrusters((False, 'thruster 3 LOST')).state is State.FAILED
+    assert R.thrusters((True, 'all 8 thrusters reporting')).state is State.OK
+    assert R.thrusters(None).state is State.UNKNOWN, 'no backend method = UNKNOWN'
+
+
+def test_UNKNOWN_thrusters_never_decays_into_OK():
+    """UNKNOWN is the CORRECT answer on this hull today, not a defect to fix.
+
+    The tempting repair -- count ESC messages and call it OK -- is the one the
+    measurement above forbids. Pinned so nobody re-derives it.
+    """
+    assert R.thrusters((None, 'anything at all')).state is not State.OK
 
 
 def test_a_lower_LADDER_RUNG_is_DEGRADED_not_FAILED():

@@ -1173,8 +1173,7 @@ class AUVManagerNode(Node):
         self._health.register('barometer', lambda: _hr.barometer(named))
         self._health.register('heading_ref', lambda: _hr.heading_reference(named))
         self._health.register('thrusters', lambda: _hr.thrusters(
-            getattr(fc, 'esc_status_rpm', lambda: [])(),
-            int(getattr(fc, 'esc_msgs', 0) or 0)))
+            getattr(fc, 'thruster_health', lambda: None)()))
         self._health.register('detector', lambda: _hr.detector(
             self._detection_rate_hz()))
 
@@ -1483,7 +1482,19 @@ class AUVManagerNode(Node):
             self.get_logger().debug(f'[TELEM] srot telemetry read failed: {exc!r}')
             return
 
-        if tel.rpm and self.esc_rpm_publisher is not None:
+        # ⛔ ABSENCE, NOT ZEROS. `tel.rpm` is a tuple of eight, so `if tel.rpm`
+        # is TRUE even when every slot is 0 -- and the board fills all eight
+        # slots whether or not an ESC is attached (measured: 958 CRC-valid
+        # frames, no ESCs, every rpm exactly 0). This topic was therefore
+        # publishing eight fabricated zeros at 2 Hz on a hull with no thrusters.
+        #
+        # The discriminator is NOT "are the values zero" -- an idle armed hull
+        # with real ESCs also reads zero, and that is genuine data. It is
+        # whether the board has ANNOUNCED presence, which is the same source of
+        # truth the thrusters health reporter grades. Unannounced publishes
+        # nothing, so a consumer sees no message rather than a confident zero.
+        present, _lost = getattr(self.fc, 'esc_presence', lambda: (None, set()))()
+        if tel.rpm and present and self.esc_rpm_publisher is not None:
             msg = self._Int32MultiArray()
             msg.data = [int(r) for r in tel.rpm]
             self.esc_rpm_publisher.publish(msg)

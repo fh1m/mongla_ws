@@ -75,11 +75,13 @@ FIRE_DENIED      = 3   # board answered DENIED/FAILED (channel out of range, non
 FIRE_NO_ACK      = 4   # no COMMAND_ACK inside the budget -- outcome UNKNOWN
 FIRE_NOT_READY   = 5   # link down, no payload driver, or the role could not be read
 FIRE_BUSY        = 6   # another fire is mid-pulse, or the board's state lock was busy
+FIRE_THRUSTER_FAULT = 7  # a thruster is KNOWN bad -- the hull cannot hold the shot
 
 _FIRE_CODE_NAME = {FIRE_FIRED: 'FIRED', FIRE_REJECTED_ARM: 'REJECTED_ARM_CHANNEL',
                    FIRE_DISABLED: 'DISABLED_CHANNEL', FIRE_DENIED: 'DENIED',
                    FIRE_NO_ACK: 'NO_ACK', FIRE_NOT_READY: 'NOT_READY',
-                   FIRE_BUSY: 'BUSY'}
+                   FIRE_BUSY: 'BUSY',
+                   FIRE_THRUSTER_FAULT: 'THRUSTER_FAULT'}
 
 
 @dataclass

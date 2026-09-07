@@ -88,20 +88,30 @@ def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health
         ok('leak', 'enabled and dry')
 
 
-def thrusters(rpm, esc_msgs: int, expected: int = 8) -> Health:
-    """⛔ An empty RPM list means "no telemetry", NOT "all thrusters idle".
+def thrusters(health) -> Health:
+    """Grade the DRIVER's own presence verdict. Never a message count.
 
-    Gated on `esc_msgs`: without it a silent ESC bus and a perfectly still
-    vehicle are the same list, and the gate that refuses a torpedo run with a
-    dead thruster would pass on a bus that is not talking at all.
+    ⛔ THE OBVIOUS GATE IS A FALSE OK. The board streams `ESC_STATUS` for all
+    eight slots whether or not an ESC is attached -- measured, 958 CRC-valid
+    frames across two recorded sessions with NOTHING plugged in, every rpm
+    exactly 0. So "frames are arriving" and "len(rpm) == 8" are both TRUE on a
+    vehicle with no thrusters, and gating on them would report OK to the
+    pre-fire gate this reporter exists to feed. A count of messages measures
+    the LINK; it says nothing about what is on the end of it.
+
+    `health` is `fc.thruster_health()` -- `(ok, reason)`, built on the board's
+    first-arm presence announcement -- or None when the backend has no such
+    method. `ok is None` is UNKNOWN and must stay UNKNOWN: on this hull today
+    that is the CORRECT answer, not a defect to engineer away.
     """
-    if not esc_msgs:
-        return unknown('thrusters', 'no ESC telemetry received')
-    vals = list(rpm or ())
-    if len(vals) < expected:
-        return degraded('thrusters',
-                        f'only {len(vals)}/{expected} ESCs reporting')
-    return ok('thrusters', f'{len(vals)} ESCs reporting')
+    if health is None:
+        return unknown('thrusters', 'backend reports no thruster health')
+    ok_flag, reason = health
+    if ok_flag is None:
+        return unknown('thrusters', reason)
+    if ok_flag is False:
+        return failed('thrusters', reason)
+    return ok('thrusters', reason)
 
 
 def detector(rate_hz: Optional[float], min_hz: float = 5.0) -> Health:
