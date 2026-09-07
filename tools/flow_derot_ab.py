@@ -35,7 +35,7 @@ Arm A is the launch's node and stays the reference. Arms B and C are
 diagnostic instances and take the calibration explicitly -- read off the
 RUNNING node rather than hardcoded, so they cannot disagree with it.
 
-Prerequisites are the three processes `water-owed.md` §5c lists: the manager
+Prerequisites are the three processes `BUGS.md` §5c lists: the manager
 (for /duburi/imu_rates at 50 Hz -- without it every interval refuses), the
 vision launch with flow:=true, and this.
 """

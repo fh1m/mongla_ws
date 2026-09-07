@@ -14,7 +14,7 @@ with `--compare <file>`.
 ⚠ A SUCCESSFUL MOTOR_DETECT MAKES `FRAME_REVERSE = 1` WRONG. Detect converges every
 thruster to agree with its mixer column; `FRAME_REVERSE` then negates all six demands
 and re-inverts the corrected frame. After a SUCCESS, `FRAME_REVERSE` must go to 0 in
-the same session (`srot-pre-dive-gates.md` gate 1).
+the same session (`BUGS.md` gate 1).
 
 Read-only. Writes nothing to the board.
 """

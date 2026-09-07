@@ -77,7 +77,7 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # coast_s after the real detection drops, at decaying authority, so a brief
     # occlusion doesn't lose a torpedo-hole lock or drift the hull off a pipe.
     # MUST be < lost_grace_s and < the tracker buffer in wall-time. Opt-in,
-    # pool-validated before enabling -- see precision-alignment.md / known-issues.
+    # pool-validated before enabling -- see precision-alignment.md / BUGS.md.
     'vision.coast_s':              0.8,
     # lock_s: consult the LADDER (`lock_node`: follower + XFeat anchor) as the
     # last rung before declaring loss. 0 = OFF (default) and off is exactly the

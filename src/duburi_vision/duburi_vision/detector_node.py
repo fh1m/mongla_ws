@@ -55,7 +55,7 @@ import time
 # frame and dropping it is right, while a RUN of them is the device. Sized in
 # frames rather than seconds so it behaves the same at 3 Hz and at 80 -- 15
 # frames is 0.2 s at 80 Hz and 5 s at 3 Hz, and in both cases it is well past
-# "one unlucky frame". See known-issues D16.
+# "one unlucky frame". See BUGS.md D16.
 _INFER_FAIL_REBUILD = 15
 _INFER_FAIL_EXIT = 45
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -688,7 +688,7 @@ class DetectorNode(Node):
     def _on_infer_failure(self, exc) -> None:
         """A node that cannot do its job must stop claiming to be up.
 
-        ⛔ WHAT THIS REPLACES (known-issues D16). The old handler logged and
+        ⛔ WHAT THIS REPLACES (BUGS.md D16). The old handler logged and
         continued, forever. Observed on the vehicle: a `HAILO_STREAM_ABORT(63)`
         left this node ALIVE -- process up, topics up, subscriptions up, `pgrep`
         satisfied -- logging a failure on every frame and publishing zero

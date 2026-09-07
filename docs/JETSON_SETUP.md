@@ -116,7 +116,7 @@ python3 -c "import cv2; print(cv2.__version__, cv2.__file__)"   # want /usr/... 
 ```
 
 Full symptom catalogue + one-shot recovery:
-[`.claude/context/known-issues.md`](../.claude/context/known-issues.md) §E1–E4.
+[`.claude/context/BUGS.md`](../.claude/context/jetson-and-env-traps.md) §E1–E4.
 
 ---
 
@@ -247,7 +247,7 @@ headless SSH shell has no `$DISPLAY`, which is the
 
 ### Option A — show it on the Jetson's own display (zero install, default)
 The Jetson runs a GNOME/Xorg session on display **`:1`**. The `~/.zshrc` guard
-(known-issues §E4) auto-sets `DISPLAY=:1` in a headless shell, so a **fresh**
+(jetson-and-env-traps.md §E4) auto-sets `DISPLAY=:1` in a headless shell, so a **fresh**
 VSCode terminal just works and the HUD opens on the Jetson's screen — view it on a
 monitor plugged into the **Jetson**, or over your existing remote-desktop/VNC. All
 editing + launching still happen in VSCode (the latency win). If it still errors,

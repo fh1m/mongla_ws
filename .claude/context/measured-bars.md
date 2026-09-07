@@ -800,7 +800,7 @@ So the refactor is verified as **arithmetic**, not as a **sensor**. The
 regression check that closes this needs no water and no rig movement beyond
 one hand slide: `medium:=air` through the launch, confirming ~30 cm still
 comes out of the code path that now contains the rectifier. It is item 23 in
-`water-owed.md`, and it is blocked only on light.
+`BUGS.md`, and it is blocked only on light.
 
 ## 14. Board-clock stamping — measured on the vehicle, 2026-09-07
 
@@ -1141,7 +1141,7 @@ where a file comes from, the result is about the tool.
 **The Fantech forward camera has never been calibrated.** It is the camera the
 vision uplink aims with. Until it is, `bearing.py` on the forward path is
 running on intrinsics that belong to another lens, or on none. Added to
-`water-owed.md`.
+`BUGS.md`.
 
 **Verified through the launch on the vehicle, 2026-09-07** — which is the
 point of this entry, since every §13 number came from a tool passing the path
@@ -1177,7 +1177,7 @@ four dead ends are the useful part.
 
 **§13's result reproduces on the SHIPPED path for the first time** — every
 number in §13 came from `flow_console.py` passing the calibration by hand.
-`water-owed.md` items 22 and 23's dry half are closed by this.
+`BUGS.md` items 22 and 23's dry half are closed by this.
 
 **⚠ AMENDED once there were more slides.** That 106.5 % is ONE slide, taken
 with the then-default gyro gains of `(-1, -1)`. Three later slides put that
@@ -1425,7 +1425,7 @@ experiments, one number.
 ⚠ **A gain that FITS better is not yet a gain that MEASURES better.** These
 are fitted against image flow during a tilt; the thing that matters is
 distance error on a slide. Validation A/B: shipped vs derived vs off, and
-the default does not change until derived wins there. `water-owed` item 24.
+the default does not change until derived wins there. `BUGS.md` §11 item 24.
 
 The excitation gates earned their place: 420 and 446 intervals, rotation
 spread 13.0 and 11.4 px sd. A fit from a SLIDE instead gave 1.90 / 1.63 —
@@ -1474,7 +1474,7 @@ reconciled — **different pivots, not different physics.**
 §12 measured it **halving** the error at 0.638 rad/s, and that regime — a
 yawing vehicle — is most of a mission, while every slide here is
 translation-dominated. Re-enabling needs a **high-rotation test on this
-hull, excited at the pivot the vehicle actually turns about**. `water-owed`
+hull, excited at the pivot the vehicle actually turns about**. `BUGS.md` §11
 item 24.
 
 ### ⛔ THE EXPERIMENT'S OWN ERROR FLOOR IS ~8 %, SO 9.9 % RESOLVES ALMOST NOTHING
@@ -1493,7 +1493,7 @@ from a 3 %-accurate one** — it can only rank the arms against each other,
 which is exactly what it was built to do and all it should be quoted for.
 
 Getting a real accuracy number needs the relative hand error to shrink:
-**2–3 m legs**, which is `water-owed` item 8 and a pool. Comparing against
+**2–3 m legs**, which is `BUGS.md` §11 item 8 and a pool. Comparing against
 Nortek's 0.5–1 % or Ferrera's 0.89–1.88 % ATE on the strength of a 30 cm
 hand slide would be comparing our ruler to their sensor.
 
@@ -1643,7 +1643,7 @@ finer to see more" instinct:
 It beats everything smaller and everything larger. `CALIB_CB_FAST_CHECK` is
 a wash (306.8 vs 307.4 ms, identical hit rate) and is not used.
 
-Closes `water-owed` item 12.
+Closes `BUGS.md` §11 item 12.
 
 **Method note.** The test for the cap first *reimplemented* the rule, and an
 injected defect (a cap that lengthens as well as shortens) left it GREEN.

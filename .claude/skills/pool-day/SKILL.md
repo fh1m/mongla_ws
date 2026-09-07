@@ -41,6 +41,6 @@ surface any failure with the specific fix. **Never arm thrusters from this skill
 
 ## Rules
 
-- If any step fails, halt and report the fix from `pool-day.md` / `known-issues.md`.
+- If any step fails, halt and report the fix from `pool-day.md` / `BUGS.md`.
 - Confirm `armed: false` before anyone is near the thrusters.
 - This skill is read-only on the vehicle — it never arms, never sends movement.

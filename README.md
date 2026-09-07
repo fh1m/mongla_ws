@@ -1064,7 +1064,7 @@ ros2 param set /duburi_detector_forward active_model flare       # hot model swa
 | `range_gain_floor` | 1.0 | **precision:** soften lat/depth gain as the bbox fills close-in (`1.0`=off, `~0.3`=gentle) |
 | `ki_lat` | 0.0 | **precision:** lateral integral; nulls a steady-current offset during the hold (`0`=off) |
 | `ctrl_conf` | 0.0 | **precision:** control-side min detection score to accept a box (`0`=off) |
-| `coast_s` | 0.0 | **gap-bridging coast (opt-in):** steer on the tracker's predicted box of the locked id for `coast_s` s after a detection drops (`0`=OFF). Keeps a torpedo/gate lock through a brief flicker. A live detection always overrides; `< lost_grace_s`. See [`known-issues.md`](.claude/context/known-issues.md) D10 |
+| `coast_s` | 0.0 | **gap-bridging coast (opt-in):** steer on the tracker's predicted box of the locked id for `coast_s` s after a detection drops (`0`=OFF). Keeps a torpedo/gate lock through a brief flicker. A live detection always overrides; `< lost_grace_s`. See [`BUGS.md`](.claude/context/BUGS.md) D10 |
 
 Defaults: [`vision_tunables.py`](src/duburi_manager/duburi_manager/vision_tunables.py). Pool-day
 phase constants (depths, headings, fill %, gains) live in
@@ -1202,7 +1202,7 @@ Deep design notes live in [`.claude/context/`](.claude/context/) — start with 
   [`fsm-guide.md`](.claude/context/fsm-guide.md)
 - **Status:** [`robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md) ·
   [`robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md) ·
-  [`known-issues.md`](.claude/context/known-issues.md)
+  [`BUGS.md`](.claude/context/BUGS.md)
 - **Simulator:** [`sim/README.md`](sim/README.md) — operator cold start ·
   [`sim/.context/CONTRACT.md`](sim/.context/CONTRACT.md) — the surface autonomy relies on ·
   [`sim/.context/WORLD_EDITING.md`](sim/.context/WORLD_EDITING.md) — courses and props ·

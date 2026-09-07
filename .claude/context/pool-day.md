@@ -396,4 +396,4 @@ ros2 run duburi_planner duburi stop && ros2 run duburi_planner duburi disarm
 - Gate+flare mission source: [`src/duburi_planner/duburi_planner/missions/gate_flare_prequal.py`](../../src/duburi_planner/duburi_planner/missions/gate_flare_prequal.py)
 - Model README: [`src/duburi_vision/models/README.md`](../../src/duburi_vision/models/README.md)
 - DVL reference (Nucleus 1000, POSHOLD, unused capabilities): [`dvl-reference.md`](./dvl-reference.md)
-- Known bugs: [`known-issues.md`](./known-issues.md)
+- Known bugs: [`BUGS.md`](./BUGS.md)

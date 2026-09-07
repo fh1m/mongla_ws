@@ -126,7 +126,7 @@ a box visible on the operator HUD is a box the controller acts on. It **also**
 subscribes `/tracks` as the **coast source**, but consults it ONLY when
 `coast_s>0` AND no live detection matches this tick: it then steers on the
 tracker's coasted (Kalman-predicted) box of the **locked target id**, at decaying
-authority, for up to `coast_s` (the gap-bridging path — see `known-issues.md`
+authority, for up to `coast_s` (the gap-bridging path — see `BUGS.md`
 D10). **`coast_s=0` (default) ⇒ control reads raw `/detections` exactly as
 before** — a live box always overrides a coast, and a coasted box is conf-exempt
 only for the locked id. There is **no** `--tracking` flag and **no**

@@ -139,3 +139,44 @@ def test_accumulator_skips_leading_garbage():
     a = _frame(ID_AHRS, _ahrs_data(1.0, 1.0, 1.0))
     out = PacketAccumulator().feed(b'\x00\x11\x22' + bytes(a))
     assert len(out) == 1 and out[0]['id'] == ID_AHRS
+
+
+# --- BUGS.md B02 / B03: resync on a FALSE sync byte ---------------------------
+# The three accumulator tests above all feed garbage containing no 0xA5, so they
+# exercise only the find(0xA5) skip. Both real defects need a 0xA5 *inside* the
+# garbage -- the only case where the wire's length field is trusted. These two
+# pin the reproductions from the 2026-09-08 audit. They are xfail because this
+# was a find-only pass: the tests document the bugs, they do not fix them.
+
+@pytest.mark.xfail(reason='BUGS.md B02: zero-length packet spins feed() forever',
+                   run=False, strict=True)
+def test_b02_zero_length_packet_does_not_hang():
+    """A 0xA5 with size_header=0 and size_data=0 makes total=0, so feed()
+    deletes nothing and loops on a byte-identical buffer, forever.
+
+    run=False: this HANGS rather than failing, so pytest must not execute it
+    until the guard exists. Reproduce by hand with a timeout:
+        timeout 10 python3 -c "...feed(bytes([0xa5,0,0xb4,0x20,0,0,0,0,0,0]))"
+        -> exit 124
+    """
+    evil = bytes([0xA5, 0x00, ID_BOTTOMTRACK, _FAMILY_NUCLEUS,
+                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x22])
+    assert PacketAccumulator().feed(evil) == []
+
+
+@pytest.mark.xfail(reason='BUGS.md B03: a false sync byte consumes the next real packet',
+                   strict=True)
+def test_b03_false_sync_does_not_eat_the_following_packet():
+    """On a checksum failure the accumulator has already consumed `total`
+    bytes, so a spurious 0xA5 with a plausible length field discards whatever
+    real packets began inside that span.
+
+    Measured: 2 valid packets fed, 1 recovered.
+    """
+    good = bytes(_frame(ID_AHRS, _ahrs_data(1.0, 2.0, 123.0)))
+    # size_header=10, size_data=0x0040 -- plausible, but the checksums are junk
+    false_sync = bytes([_SYNC, _HDR, 0x99, _FAMILY_NUCLEUS, 0x40, 0x00]) + bytes(4)
+
+    out = PacketAccumulator().feed(false_sync + good + good)
+
+    assert len(out) == 2, f'false sync ate a real packet: recovered {len(out)}/2'
