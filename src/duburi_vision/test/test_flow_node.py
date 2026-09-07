@@ -129,17 +129,40 @@ class TestMediumSelectsFocalLength:
 
 
 class TestGyroGainDefault:
-    def test_the_default_gain_is_the_CANONICAL_one(self):
-        """The bench rig measured -1.150/-1.095 and cut false velocity under
-        pure rotation by 90 %. But rotation about the lens gives exactly
-        f*omega*dt, so the 12 % excess needs an owner and has none -- a lever
-        arm came out with the WRONG SIGN, an f of 577 contradicts a stronger
-        calibration, and a dt bias is indistinguishable. measured-bars section
-        12: "the axis mapping and the method carry over; THIS GAIN DOES NOT."
+    def test_de_rotation_is_OFF_by_default_and_that_is_measured(self):
+        """The default is 0.0, chosen by measurement on the vehicle.
 
-        A bad correction is worse than none: an unvalidated mapping already
-        destroyed 35.7 cm of real travel this session."""
-        assert _GYRO_GAIN_DEFAULT == -1.0
+        Three 30 cm slides, three gains, every arm on the SAME slide:
+
+            (-1.000, -1.000)   median 122.3 %   |err| 22.3 %
+            (+1.058, +0.830)   median  75.5 %   |err| 24.5 %
+            ( 0.000,  0.000)   median  90.1 %   |err|  9.9 %   <- best
+
+        The pair fitted on this mount OVER-corrects on a slide, and the old
+        -1.0 over-reads by as much the other way; the zero crossing is near
+        g = 0. §12 named the reason in advance -- the effective gain depends
+        on WHERE THE PIVOT IS, `f*(1 - r/h)`, so a gain excited by tilting
+        about the lens does not transfer to a slide pivoting about the
+        operator's shoulder.
+
+        Zero is also the only value that cannot DOUBLE the error: the
+        residual is `(S + g)`, so g = 0 leaves exactly the uncorrected term
+        whatever the sign of S. -1.0 was measurably the worst available
+        value on this hull.
+
+        ⚠ NOT "de-rotation does not work" -- §12 measured it halving the
+        error at 0.638 rad/s, which is a yawing vehicle and most of a
+        mission. Re-enabling needs a high-rotation test at the pivot the
+        vehicle actually turns about."""
+        assert _GYRO_GAIN_DEFAULT == 0.0
+
+    def test_the_lens_pivot_gains_are_kept_so_nobody_re_derives_them(self):
+        """The measurement survives even though it is not the default: the
+        coupling about the LENS is S = -1.058 / -0.830, and the node cancels
+        at g = -S. Deleting these would mean re-running the tilt calibration
+        to learn something already known."""
+        from duburi_vision.distance.flow_node import _GYRO_GAIN_LENS_PIVOT
+        assert _GYRO_GAIN_LENS_PIVOT == pytest.approx((1.058, 0.830))
 
     def test_the_bench_gain_is_still_settable(self):
         n = _make(pool_depth_m=4.0, gyro_gain_x=-1.150, gyro_gain_y=-1.095)
@@ -570,3 +593,112 @@ class TestRefusalKeepsTheAnchor:
                 'node can hold one stale frame for the rest of the mission')
         finally:
             n.destroy_node()
+
+
+class TestDeRotationSignConvention:
+    """WHICH SIGN of `gyro_gain` actually cancels a rotation, in the NODE.
+
+    ⛔ WHY THIS IS A TEST AND NOT A FIELD MEASUREMENT. Two measurements on the
+    same board and the same camera disagreed about this:
+
+      * §12 fitted `-1.150` and measured it WORKING -- false velocity under
+        pure rotation fell 575.7 -> 57.1 mm/s (-90 %);
+      * `tools/flow_derot_calibrate.py` fitted `+1.058`, held-out rms 4.23 px
+        against 14.42 for predicting zero, and a three-arm A/B ranked the
+        shipped `-1` as clearly worst.
+
+    Both are real measurements, so they cannot share a convention, and a hand
+    slide cannot arbitrate: it is repeatable to ~1 cm and the arms differ by
+    less. The convention question, though, is not empirical at all -- it is a
+    property of the code, so it can be settled EXACTLY, offline, with a
+    rotation whose ground truth is chosen rather than measured.
+
+    Verified separately (and NOT assumed): `solve_planar_motion` reports the
+    same sign as an LK median for a warped scene, both directions, so the
+    seam is not in the flow path.
+
+    The physical convention being pinned: a positive ROLL on `vector.y`
+    produces an image x-shift of `S * f * omega * dt`. On hardware `S` was
+    measured at about -1.058. The correct gain is whichever value makes the
+    node's residual velocity vanish for that `S`.
+    """
+
+    F = 513.94
+    DT = 0.05
+    OMEGA = 0.40
+
+    def _run(self, gain, s_true):
+        """Roll PLUS a translation, and return the residual on the roll axis.
+
+        A PURE rotation cannot be used: `rot_fraction` is then ~1 and the node
+        refuses every interval by design -- the first version of this test
+        did exactly that and every arm returned 0.0000 m, which reads as
+        'all gains equal' rather than 'nothing was measured'. Absence is not
+        zero, in a test this time.
+
+        So the frame also translates along image-Y, which is the AXIAL axis
+        and does not enter the lateral accumulator. The interval is then
+        inside the node's working envelope, and the lateral reading is pure
+        rotational residual -- exactly the quantity the gain controls.
+        """
+        n = _make(pool_depth_m=1.0, medium='air', undistort=False,
+                  estimate_time_offset=False,
+                  gyro_gain_x=gain, gyro_gain_y=gain)
+        try:
+            n._depth_m = 0.0
+            rng = np.random.default_rng(5)
+            g = rng.integers(0, 255, (360, 640), dtype=np.uint8)
+            shift = s_true * self.F * self.OMEGA * self.DT
+            n._acc.start(0.0, True)          # lateral: accumulates vy
+            n._anchor(g, 0.0)
+            for i in range(1, 25):
+                t = i * self.DT
+                n._rate_buf.append((t, 0.0, self.OMEGA))   # (t, pitch, roll)
+                n._yaw_rate_buf.append((t, 0.0))
+                # x: the rotational flow under test.  y: a translation big
+                # enough to keep rot_fraction inside the envelope.
+                M = np.float32([[1, 0, shift * i],
+                                [0, 1, 3.0 * abs(shift) * i]])
+                n._process(cv2.warpAffine(g, M, (640, 360),
+                                          borderMode=cv2.BORDER_REFLECT), t, i)
+            return abs(n._acc.distance_m)
+        finally:
+            n.destroy_node()
+
+    def test_the_cancelling_gain_is_minus_S(self):
+        """The arithmetic says the residual is `(S + g)`, so `g = -S` cancels.
+
+        Asserted as a RANKING, not a threshold: the cancelling gain must beat
+        both the zero gain and the opposite-sign gain. A threshold here would
+        encode this bench's pixel scale and break for a reason unrelated to
+        the convention.
+        """
+        s_true = -1.0
+        cancelling = self._run(-s_true, s_true)     # g = +1
+        none = self._run(0.0, s_true)
+        opposite = self._run(s_true, s_true)        # g = -1, doubly wrong
+
+        assert cancelling < none, (
+            f'g = -S ({-s_true:+.1f}) left MORE residual ({cancelling:.4f} m) '
+            f'than applying no correction at all ({none:.4f} m) -- then the '
+            f'node does not cancel at -S and the arithmetic in '
+            f'flow_derot_calibrate is wrong about this codebase')
+        assert cancelling < opposite, (
+            f'g = -S ({cancelling:.4f} m) is no better than the opposite sign '
+            f'({opposite:.4f} m)')
+        # And the opposite sign must be the WORST -- it doubles the term.
+        assert opposite > none, (
+            'the opposite-sign gain did not do worse than no correction, so '
+            'the correction is not being applied in the direction assumed')
+
+    def test_the_symmetric_case_flips_with_S(self):
+        """The mirror image: if the true coupling were +1, the cancelling
+        gain must be -1. This is what makes the test about the CONVENTION
+        rather than about the number +1 -- a node hardcoded to prefer +1
+        would pass the first test and fail this one."""
+        s_true = +1.0
+        cancelling = self._run(-s_true, s_true)     # g = -1
+        none = self._run(0.0, s_true)
+        assert cancelling < none, (
+            f'with S = +1 the cancelling gain must be -1, but it left '
+            f'{cancelling:.4f} m against {none:.4f} m uncorrected')

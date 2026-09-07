@@ -1421,3 +1421,52 @@ same sign, ~2× the magnitude, because translation loads onto the rotation
 regressor. Same number, measured two ways, differing by exactly the
 contamination the ledger rule warns about.
 
+## 21. The fitted gains were REFUTED by the validation A/B. Default is 0. 2026-09-07
+
+§20 derived `+1.058 / +0.830` and said the A/B, not the fit, was the
+authority. The A/B was run, and it refuted them. Recording the refutation
+with the same weight as the derivation, because shipping the fitted pair was
+the obvious next step and it would have been wrong.
+
+Three 30 cm slides, three gains, **every arm on the same slide**:
+
+| arm | slide 1 | slide 2 | slide 3 | median | median \|err\| |
+|---|---|---|---|---|---|
+| A shipped `(-1, -1)` | 122.3 % | 143.5 % | 99.4 % | 122.3 % | 22.3 % |
+| B **fitted** `(+1.058, +0.830)` | 100.2 % | 70.0 % | 75.5 % | 75.5 % | 24.5 % |
+| **C off `(0, 0)`** | 107.4 % | 90.1 % | 84.1 % | **90.1 %** | **9.9 %** |
+
+**The fitted pair OVER-corrects** — it subtracts too much and the distance
+under-reads — while the shipped `-1` over-reads by about as much the other
+way. The zero crossing sits near `g = 0`.
+
+### Why the fit and the A/B can both be right — §12 named it in advance
+
+The effective gain depends on **where the pivot is**: `f·(1 − r/h)`. The
+calibration excites rotation by tilting about the **lens**; the operator's
+slide pivots about a **shoulder**. No single constant serves both, so a gain
+fitted on one does not transfer to the other. That is also the most likely
+reason §12's `−1.150` and this round's `−1.058` coupling cannot be
+reconciled — **different pivots, not different physics.**
+
+### What ships, and why zero is a measured choice rather than a surrender
+
+- it is the best of the three on the actual task (9.9 % against 22.3 / 24.5);
+- it is the **only value that cannot double the error** — the residual is
+  `(S + g)`, so `g = 0` leaves exactly the uncorrected term whatever `S` is;
+- `−1.0` was measurably the **worst available value** on this hull, so
+  leaving it untouched was the one indefensible option.
+
+### ⚠ This is NOT "de-rotation does not work"
+
+§12 measured it **halving** the error at 0.638 rad/s, and that regime — a
+yawing vehicle — is most of a mission, while every slide here is
+translation-dominated. Re-enabling needs a **high-rotation test on this
+hull, excited at the pivot the vehicle actually turns about**. `water-owed`
+item 24.
+
+The lens-pivot coupling is kept in the source as `_GYRO_GAIN_LENS_PIVOT` so
+nobody re-runs the tilt calibration to learn something already measured, and
+`TestDeRotationSignConvention` pins `g = -S` in code, exactly and offline, so
+the convention cannot drift silently again.
+
