@@ -60,7 +60,8 @@ from duburi_vision.distance.flow_timing import (
 from duburi_vision.distance.flow_math import (
     DistanceAccumulator, HeightFromDivergence, Intrinsics, detect_corners,
     flow_dispersion, forward_backward_error,
-    height_above_floor, integrate_rate, interp_rate, robust_flow,
+    RefractiveRectifier, height_above_floor, integrate_rate, interp_rate,
+    predict_points, robust_flow,
     solve_planar_motion,
 )
 from duburi_vision.distance.flow_velocity import flow_velocity
@@ -143,6 +144,18 @@ class FlowVelocityNode(Node):
         self.declare_parameter('gyro_gain_x', _GYRO_GAIN_DEFAULT)
         self.declare_parameter('gyro_gain_y', _GYRO_GAIN_DEFAULT)
         self.declare_parameter('rot_fraction_max', 0.80)
+        # Seed LK where the gyro says the points went. Default OFF until it
+        # is A/B'd on this rig: a guess outside the basin is WORSE than no
+        # guess, and 'a bad correction is worse than none' is already in the
+        # record at the cost of 35.7 cm of real travel.
+        self.declare_parameter('gyro_aided_lk', False)
+        # Correct the FLAT PORT instead of averaging over it. Default ON in
+        # water: a single f_water is exact only at the radius it was fitted
+        # at, and the residual is a 1-2.8 % ANISOTROPIC scale error -- larger
+        # than the whole error budget for a pool leg. Verified to recover the
+        # true velocity to 0.000 % against forward-simulated port physics.
+        self.declare_parameter('refractive_rectify', True)
+        self.declare_parameter('water_refractive_index', 1.333)
         self.declare_parameter('min_net_flow_px', 0.5)
         self.declare_parameter('max_dispersion_ratio', 5.0)
         self.declare_parameter('grid_buckets', 4)
@@ -211,6 +224,18 @@ class FlowVelocityNode(Node):
         self._ransac_px = float(self.get_parameter('ransac_px').value)
         self._fb_px = float(self.get_parameter('fb_reject_px').value)
         self._yaw_sign = float(self.get_parameter('yaw_image_sign').value)
+        self._gyro_lk = bool(self.get_parameter('gyro_aided_lk').value)
+        self._n_water = float(
+            self.get_parameter('water_refractive_index').value)
+        self._want_refract = bool(
+            self.get_parameter('refractive_rectify').value)
+        self._refract = None
+        # The focal length the GYRO GUESS uses. It stays in RAW pixel space
+        # because that is where LK runs, so it must NOT switch to f_ref: the
+        # guess is an initial condition, refined by LK, and at the frame edge
+        # -- where the predicted shift is largest and the guess matters most
+        # -- the raw water focal length is the better approximation.
+        self._f_guess_px = self._f_px
         self._yaw_tol = float(self.get_parameter('yaw_cross_check_tol').value)
         self._undistort = bool(self.get_parameter('undistort').value)
         self._intr = None
@@ -229,14 +254,44 @@ class FlowVelocityNode(Node):
         if cal:
             try:
                 self._intr = Intrinsics.from_json(cal, 640, 360)
-                # The MEASURED water focal length still governs the medium; the
-                # calibration supplies the ASPECT and the lens, which are
-                # properties of the sensor and do not change with the water.
-                if self._medium == 'water':
+                self._f_guess_px = self._f_px
+                if self._medium != 'water':
+                    self._f_px = self._intr.fx
+                elif self._want_refract:
+                    # ⛔ THE INTRINSICS STAY IN AIR, DELIBERATELY. The lens and
+                    # its distortion coefficients are AIR-SIDE properties,
+                    # calibrated with the camera dry; the water is in front of
+                    # the port, not inside the lens. Scaling K to f_water
+                    # before undistortPoints -- which the previous code did --
+                    # divides by an fx 1.44x too large, so the radial model is
+                    # evaluated at 1/1.44 of the true normalised radius and
+                    # applies only **45 % of the needed correction**, leaving
+                    # up to 4.16 px at the frame edge. That is half an
+                    # adaptive baseline of pure error, and it exists ONLY in
+                    # water mode, which has never run.
+                    #
+                    # Correct order: undistort the LENS in air, rectify the
+                    # PORT, then measure with f_ref.
+                    self._refract = RefractiveRectifier(
+                        self._intr.fx, self._intr.fy,
+                        self._intr.cx, self._intr.cy, n=self._n_water)
+                    self._f_px = self._refract.f_ref
+                    self._f_guess_px = f_water
+                else:
+                    # Rectification off: keep the old single-focal-length
+                    # behaviour so the two paths can be A/B'd, and say what it
+                    # costs rather than leaving it to be discovered.
                     k = f_water / self._intr.fx
                     self._intr.fx *= k
                     self._intr.fy *= k
-                self._f_px = self._intr.fx
+                    self._f_px = self._intr.fx
+                    self._f_guess_px = self._f_px
+                    self.get_logger().warning(
+                        '[FLOW ] refractive_rectify=false in WATER: a single '
+                        'focal length is exact only at the radius it was '
+                        'fitted at (1-2.8 % anisotropic scale error), and '
+                        'undistortion runs with a water-scaled K that applies '
+                        '~45 % of the lens correction. Both measured.')
             except Exception as exc:
                 self.get_logger().error(
                     f'[FLOW ] calibration {cal!r} unreadable ({exc}); falling '
@@ -320,6 +375,7 @@ class FlowVelocityNode(Node):
         self.get_logger().info(
             f'[FLOW ] camera={cam!r} medium={self._medium!r} '
             f'f={self._f_px:.1f}px (air {f_air:.1f} / water {f_water:.1f})  '
+            f'port={"RECTIFIED" if self._refract is not None else "single-f"}  '
             f'pool_depth={self._pool_depth:.2f}m  '
             f'gyro_gain=({self._gx:+.3f},{self._gy:+.3f})')
         if not ok:
@@ -435,6 +491,52 @@ class FlowVelocityNode(Node):
                               block=_FEATURE_PARAMS['blockSize'],
                               buckets=self._buckets)
 
+    def _gyro_guess(self, dt: float, t_end: float):
+        """Predict the anchor points forward with the gyro. LK's initial guess.
+
+        Uses the SAME calibrated mapping and the SAME td shift as de-rotation
+        -- `gyro_gain_x/y` and `yaw_image_sign`. That is deliberate: if the
+        mapping is right, both the guess and the correction are right; if it
+        is wrong, both are wrong TOGETHER and the yaw cross-check already
+        flags it. A second, independently-signed copy of the mapping would be
+        a second thing to get wrong silently, which is how the sim scorer came
+        to grade a board that no longer existed.
+
+        Returns None -- meaning "no guess, search from zero" -- whenever the
+        rates are not available for this exact interval. Absence is not a
+        prediction of zero motion: at 0.6 rad/s a missing sample would seed
+        every point ~200 px away from where it actually went.
+        """
+        if dt <= 0.0 or self._anchor_pts is None:
+            return None
+        rates = integrate_rate(self._rate_buf,
+                               t_end - dt - self._td, t_end - self._td)
+        if rates is None:
+            return None
+        pitch_rate, roll_rate = rates
+        # Same sign convention as the flow_velocity call below: the gains
+        # carry the sign, and the shift is what the ROTATION did to the image.
+        dx = self._f_guess_px * (self._gx * roll_rate) * dt
+        dy = self._f_guess_px * (self._gy * pitch_rate) * dt
+
+        theta = 0.0
+        if self._yaw_rate_buf:
+            gz = interp_rate([(a, b, 0.0) for (a, b) in self._yaw_rate_buf],
+                             t_end - dt * 0.5 - self._td)
+            if gz is not None:
+                theta = self._yaw_sign * gz[0] * dt
+
+        if self._intr is not None:
+            cx, cy = self._intr.cx, self._intr.cy
+        else:
+            # The frame's own centre, not a remembered width: the principal
+            # point is 11.4 px off centre on this camera (measured), so this
+            # fallback is already approximate -- it must at least be
+            # approximate about the RIGHT frame.
+            h_px, w_px = self._anchor_gray.shape[:2]
+            cx, cy = w_px * 0.5, h_px * 0.5
+        return predict_points(self._anchor_pts, cx, cy, dx, dy, theta)
+
     def _accept_td(self, got, quality):
         """Decide whether an estimated camera<->gyro offset may be used.
 
@@ -508,8 +610,14 @@ class FlowVelocityNode(Node):
             self._anchor(gray, t)
             return
 
+        guess, lk_flags = None, {}
+        if self._gyro_lk:
+            guess = self._gyro_guess(t - self._anchor_t, t)
+            if guess is not None:
+                lk_flags = {'flags': cv2.OPTFLOW_USE_INITIAL_FLOW}
         nxt, status, _err = cv2.calcOpticalFlowPyrLK(
-            self._anchor_gray, gray, self._anchor_pts, None, **_LK_PARAMS)
+            self._anchor_gray, gray, self._anchor_pts, guess,
+            **_LK_PARAMS, **lk_flags)
 
         flow = robust_flow(self._anchor_pts, nxt, status,
                            min_tracks=_MIN_TRACKS)
@@ -570,6 +678,15 @@ class FlowVelocityNode(Node):
                 n_pts = self._intr.undistort_points(nxt)
             cx_ = self._intr.cx if self._intr is not None else w_ / 2.0
             cy_ = self._intr.cy if self._intr is not None else h_ / 2.0
+            if self._refract is not None:
+                # Rectify AFTER undistortion and BEFORE the fit. Order is
+                # forced: undistort removes the LENS (an air-side property),
+                # rectify removes the PORT (a water-side one), and the port
+                # sees rays the lens has already been accounted for. The
+                # principal point is a fixed point of the rectification, so
+                # cx_/cy_ carry through unchanged.
+                a_pts = self._refract.rectify(a_pts)
+                n_pts = self._refract.rectify(n_pts)
             pm = solve_planar_motion(a_pts, n_pts, status, dt,
                                      cx=cx_, cy=cy_,
                                      ransac_px=self._ransac_px)
@@ -634,7 +751,12 @@ class FlowVelocityNode(Node):
         v = flow_velocity(
             flow[0], flow[1], dt,
             f_px=self._f_px,
-            fy_px=(self._intr.fy if self._intr is not None else None),
+            # After rectification BOTH focal lengths live in the rectified
+            # frame. Passing the air-side fy against a rectified fx would
+            # scale the two image axes by different models -- 516.93 vs
+            # 685.08 -- which is a 25 % axis error, not a subtle one.
+            fy_px=(self._refract.f_ref_y if self._refract is not None
+                   else (self._intr.fy if self._intr is not None else None)),
             height_m=h,
             pitch_rate=-self._gy * pitch_rate,
             roll_rate=-self._gx * roll_rate,

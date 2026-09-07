@@ -433,3 +433,100 @@ class TestIntrinsics:
         i = Intrinsics(500.0, 500.0, 320.0, 180.0, dist=None)
         p = np.array([[100.0, 100.0]], dtype=np.float32)
         assert np.allclose(i.undistort_points(p), p)
+
+
+class TestRefractiveRectifier:
+    """A flat port is not a pinhole, and one focal length cannot hide it."""
+
+    FX, FY, CX, CY, N = 513.94, 516.93, 308.7, 186.5, 1.333
+
+    def _rec(self):
+        from duburi_vision.distance.flow_math import RefractiveRectifier
+        return RefractiveRectifier(self.FX, self.FY, self.CX, self.CY, n=self.N)
+
+    def test_the_principal_point_is_a_FIXED_POINT(self):
+        """Rectification must not move the centre. If it did, every downstream
+        consumer of cx/cy -- the planar fit reads its translation AT the
+        principal point -- would silently be reading it somewhere else."""
+        r = self._rec()
+        out = r.rectify(np.array([[self.CX, self.CY]], dtype=np.float64))
+        assert out[0][0] == pytest.approx(self.CX, abs=1e-9)
+        assert out[0][1] == pytest.approx(self.CY, abs=1e-9)
+
+    def test_the_local_focal_length_GROWS_with_field_angle(self):
+        """The defect itself. If this is flat, there is nothing to correct and
+        the whole class is dead weight."""
+        r = self._rec()
+        f0, f200, f320 = (r.local_focal_px(x) for x in (0.0, 200.0, 320.0))
+        assert f0 < f200 < f320                     # monotone
+        assert f0 == pytest.approx(self.FX * self.N, rel=1e-6)   # paraxial
+        # The measured spread that justifies shipping this: >10 % corner-centre
+        f_corner = r.local_focal_px(math.hypot(320.0, 180.0))
+        assert (f_corner / f0 - 1.0) > 0.10
+
+    def test_it_INVERTS_the_port_exactly(self):
+        """Forward-simulate the physics, rectify, and require a TRUE pinhole:
+        a point on a plane at height h must land at f_ref * (R/h). This is the
+        property the velocity conversion depends on, so assert THAT, not an
+        intermediate angle."""
+        r = self._rec()
+        h = 0.72
+        # Stay inside the frame. A water ray past the critical angle
+        # asin(1/n) = 48.6 deg cannot refract into air at all -- that is
+        # physics, not a bug, and this camera's half-FOV in water is 23.4 deg,
+        # so the frame never reaches it. R/h = tan(23.4 deg) = 0.433 at the
+        # edge; 0.9/0.72 = 1.25 was off the sensor entirely.
+        for R in (0.05, 0.1, 0.2, 0.30):
+            tw = math.atan2(R, h)
+            ta = math.asin(math.sin(tw) * self.N)     # water -> air
+            u = self.CX + self.FX * math.tan(ta)      # lands on the sensor
+            got = r.rectify(np.array([[u, self.CY]], dtype=np.float64))[0][0]
+            want = self.CX + r.f_ref * (R / h)   # a TRUE pinhole at f_ref
+            assert got == pytest.approx(want, rel=1e-9)
+
+    def test_a_wrong_index_shows_up_as_SCALE(self):
+        """n is a physical constant, not a tuning knob -- but if someone sets
+        it wrong the failure must be a clean scale error, not a shape change,
+        because a scale error is what the pool tape can catch."""
+        from duburi_vision.distance.flow_math import RefractiveRectifier
+        a = self._rec()
+        b = RefractiveRectifier(self.FX, self.FY, self.CX, self.CY, n=1.0)
+        # n = 1 is "no water": the rectifier must reduce to the identity.
+        pts = np.array([[100.0, 90.0], [500.0, 300.0]])
+        assert np.allclose(b.rectify(pts), pts, atol=1e-9)
+        assert not np.allclose(a.rectify(pts), pts, atol=1e-3)
+
+
+class TestPredictPoints:
+    """The gyro's guess for LK."""
+
+    def test_pure_yaw_ROTATES_about_the_principal_point(self):
+        """The term a uniform shift gets wrong: yaw moves a corner and leaves
+        the centre alone. If this test passes with dx=dy=0 and a centre point
+        that MOVES, the prediction is not a rotation."""
+        from duburi_vision.distance.flow_math import predict_points
+        cx, cy, th = 320.0, 180.0, math.radians(5.0)
+        pts = np.array([[cx, cy], [cx + 300.0, cy]], dtype=np.float32)
+        out = np.asarray(predict_points(pts, cx, cy, 0.0, 0.0, th)).reshape(-1, 2)
+        assert out[0][0] == pytest.approx(cx) and out[0][1] == pytest.approx(cy)
+        moved = math.hypot(out[1][0] - pts[1][0], out[1][1] - pts[1][1])
+        assert moved == pytest.approx(2 * 300.0 * math.sin(th / 2), rel=1e-4)
+
+    def test_pure_translation_moves_EVERY_point_the_same(self):
+        from duburi_vision.distance.flow_math import predict_points
+        pts = np.array([[10.0, 20.0], [600.0, 340.0]], dtype=np.float32)
+        out = np.asarray(predict_points(pts, 320.0, 180.0, 7.0, -3.0, 0.0))
+        out = out.reshape(-1, 2)
+        assert np.allclose(out - pts, np.array([7.0, -3.0]), atol=1e-4)
+
+    def test_rotation_is_applied_BEFORE_translation(self):
+        """Order is not cosmetic: translate-then-rotate rotates the
+        translation too, and the two compositions differ by theta*|t|."""
+        from duburi_vision.distance.flow_math import predict_points
+        cx, cy, th, dx = 320.0, 180.0, math.radians(10.0), 40.0
+        p = np.array([[cx, cy]], dtype=np.float32)
+        out = np.asarray(predict_points(p, cx, cy, dx, 0.0, th)).reshape(-1, 2)
+        # A point AT the centre: rotation does nothing, so it must land at
+        # exactly cx+dx. Under the other order it would land at cx+dx*cos(th).
+        assert out[0][0] == pytest.approx(cx + dx, abs=1e-4)
+        assert out[0][1] == pytest.approx(cy, abs=1e-4)

@@ -56,6 +56,149 @@ def rotation_flow_px(f_px: float, pitch_rate: float, roll_rate: float,
     return dx, dy
 
 
+class RefractiveRectifier:
+    """Undo a FLAT PORT, so one focal length is exact instead of a compromise.
+
+    ⛔ THE DEFECT THIS FIXES, and it is invisible in air. `f_water = 741` was
+    measured from the in-water FOV and is therefore exact AT THE FRAME EDGE.
+    A flat port is not a pinhole: the ray from a point at water angle `tw`
+    leaves the port at air angle `ta` with `sin ta = n * sin tw`, and lands at
+    `r = f_air * tan(ta)`. The LOCAL effective focal length `r / tan(tw)`
+    therefore grows with field angle. Computed for this camera:
+
+        r=0 px    f_eff 685.1     -7.5 % vs the shipped 741
+        r=200     f_eff 707.4     -4.5 %
+        r=320     f_eff ~741       0.0 %   <- where it was calibrated
+        r=367     f_eff 757.7     +2.3 %
+
+    **10.6 % centre-to-corner.** Velocity is `flow_px * h / (f * dt)`, so a
+    wrong `f` is a clean multiplier: a centre point scaled by the edge-fitted
+    741 reads **7.5 % LOW**, and the size of the error depends on where the
+    corners happened to land that interval. That is worse than a fixed bias --
+    it is a bias that moves with the texture.
+
+    THE SAME ARITHMETIC ALSO EXPLAINS 1.44 vs THE TEXTBOOK 1.33. The refractive
+    index scales SINES; a focal length is about TANGENTS. At a 63.8 deg air
+    FOV the tangent ratio is 1.4416 while the sine ratio is 1.333 by
+    definition, and our measured water FOV matches Snell's prediction to
+    **0.004 deg**. The old note calling the discrepancy "expected -- port
+    thickness and geometry" is RETRACTED: it is neither, it is paraxial versus
+    wide-angle, and a 1.33 default would have been 7.5 % wrong.
+
+    THE FIX (Luczynski et al., Pinax model, Ocean Eng. 2017): calibrate in AIR
+    once, then correct refraction analytically. Map each point to the angle it
+    actually came from and re-project it through one chosen focal length:
+
+        x_n = (u - cx) / fx          normalised, so fx != fy is handled
+        ta  = atan(|x_n|)            air-side ray angle
+        tw  = asin(sin(ta) / n)      Snell, into the water
+        x_n' = x_n * tan(tw) / |x_n| rectified: now a TRUE pinhole at f_ref
+
+    After this a single `f_ref` is exact everywhere, and the planar fit runs
+    on coordinates where equal ground displacement means equal pixel
+    displacement wherever it happens in the frame.
+
+    ⛔ WHAT THIS DOES **NOT** MODEL, stated so it is not assumed away. A flat
+    port is strictly an AXIAL camera: rays do not pass through one centre,
+    they are displaced by the port glass, and the residual depends on OBJECT
+    DISTANCE. This correction is the single-viewpoint limit, valid while the
+    object distance greatly exceeds the port offset -- ~0.7-2 m of water
+    against ~1 cm of port here, so the neglected term is second order against
+    the 10.6 % first-order one it removes. Pinax handles the rest by fixing a
+    virtual pinhole at a chosen distance; if the pool numbers still show a
+    height-dependent scale, that is the next term, not a mystery.
+    """
+
+    __slots__ = ('fx', 'fy', 'cx', 'cy', 'n', 'f_ref', 'f_ref_y')
+
+    def __init__(self, fx: float, fy: float, cx: float, cy: float,
+                 n: float = 1.333, f_ref: Optional[float] = None):
+        self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
+        self.n = float(n)
+        # Default: the PARAXIAL water focal length, f_air * n. Chosen so the
+        # frame centre is a fixed point of the rectification -- a point at the
+        # principal point does not move, which makes the transform inspectable.
+        self.f_ref = float(f_ref) if f_ref else float(fx) * self.n
+        # ⛔ THE ASPECT MUST SURVIVE. Writing both output axes through one
+        # f_ref silently rescales y by fx/fy -- 513.94/516.93 = 0.9942, a
+        # 0.58 % error on the vertical axis. That is precisely the fx!=fy
+        # defect round 38 measured as part of a 3.08 % axis asymmetry and
+        # fixed; re-introducing it inside the fix for a DIFFERENT axis bug is
+        # exactly how a correction becomes a regression. Caught by asserting
+        # that n = 1 is the identity, which it is not unless this line exists.
+        self.f_ref_y = self.f_ref * (float(fy) / float(fx))
+
+    def rectify(self, pts):
+        """Image points -> water-linear points. Same shape in, same shape out."""
+        p = np.asarray(pts, dtype=np.float64).reshape(-1, 2)
+        xn = (p[:, 0] - self.cx) / self.fx
+        yn = (p[:, 1] - self.cy) / self.fy
+        rn = np.hypot(xn, yn)                       # = tan(air ray angle)
+        ta = np.arctan(rn)
+        # sin(ta)/n <= 1 always for n > 1 -- no total internal reflection on
+        # this side of the interface, so no clipping is needed for physics.
+        tw = np.arcsin(np.sin(ta) / self.n)
+        # scale = tan(tw)/tan(ta); the limit at rn -> 0 is 1/n, not 0/0.
+        with np.errstate(invalid='ignore', divide='ignore'):
+            scale = np.where(rn > 1e-12, np.tan(tw) / np.maximum(rn, 1e-12),
+                             1.0 / self.n)
+        out = np.empty_like(p)
+        out[:, 0] = self.f_ref * xn * scale + self.cx
+        out[:, 1] = self.f_ref_y * yn * scale + self.cy
+        return out.reshape(np.asarray(pts).shape)
+
+    def local_focal_px(self, r_px: float) -> float:
+        """Effective focal length for a point at image radius `r_px`.
+
+        Diagnostic: this is the number a single-`f` model gets wrong, and
+        printing it beside the configured `f` is how the error becomes
+        visible instead of arriving as an unexplained scale factor.
+        """
+        if r_px <= 0.0:
+            return self.fx * self.n
+        ta = math.atan(r_px / self.fx)
+        tw = math.asin(min(1.0, math.sin(ta) / self.n))
+        return r_px / math.tan(tw)
+
+
+def predict_points(pts, cx: float, cy: float,
+                   dx: float, dy: float, theta: float):
+    """Where the gyro says these points went. LK's initial guess.
+
+    ⛔ WHY AN INITIAL GUESS AT ALL. LK is a local search: it converges when
+    the true displacement lies inside its window, and it FAILS -- quietly,
+    with status=1 -- when it does not. Measured on this rig, de-rotation
+    recovered 85.5 % of a 50 cm slide at 0.638 rad/s and made the answer
+    WORSE at 1.128, because by then the points had moved further than LK
+    could follow and it was correcting garbage. Seeding the search where the
+    gyro says the point went moves the problem back inside the basin
+    (pixel-aware gyro-aided KLT, IEEE TIM 2022).
+
+    THE YAW TERM IS NOT OPTIONAL, and this is the part a uniform shift gets
+    wrong. Roll and pitch sweep the whole image by `f*w*dt` -- one vector for
+    every point. Yaw about the optical axis ROTATES the image about the
+    principal point, so its contribution is `r*w_yaw*dt` PERPENDICULAR to the
+    radius: zero at the centre and largest at the corners. At 640x360 the
+    corner radius is ~370 px, so 1.0 rad/s over a 30 ms baseline moves a
+    corner point 11 px while the centre point does not move at all. A
+    prediction that ignores it seeds the corners 11 px wrong -- worse than no
+    guess, in exactly the region where the lever arm makes the fit most
+    sensitive.
+
+    Order matters and follows the physics: rotate about the principal point,
+    then translate. That is the same composition `PlanarMotion` reads back
+    out, so a prediction and a measurement are in the same frame.
+    """
+    p = np.asarray(pts, dtype=np.float32).reshape(-1, 2)
+    ct, st = math.cos(theta), math.sin(theta)
+    xr = p[:, 0] - cx
+    yr = p[:, 1] - cy
+    out = np.empty_like(p)
+    out[:, 0] = cx + ct * xr - st * yr + dx
+    out[:, 1] = cy + st * xr + ct * yr + dy
+    return out.reshape(-1, 1, 2)
+
+
 def axis_unit(axis_yaw_rad: float, lateral: bool = False) -> Tuple[float, float]:
     """Unit vector of the projection axis in the image plane.
 
