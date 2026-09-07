@@ -555,6 +555,152 @@ consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
 
 ---
 
+## 5b. Heading — ⛔ EVERY NUMBER IN THIS SECTION WAS CONTAMINATED. Corrected.
+
+**The operator told us the board was NOT still during the captures I reported as
+"motionless". They were right, and it invalidates the headline this section
+carried an hour ago.**
+
+### What went wrong, and it is the same mistake three times now
+
+Every drift measurement in this project's history has used *"the board is on a
+bench"* as evidence that the board was **still**. That is not evidence. It has
+now been wrong three times:
+
+1. round 26's **"+51.9 °/min"** — the hull was being handled;
+2. this round's **"+38.4 °/min"** — 274° of yaw change, caught by the split check;
+3. this round's **three "consecutive, board untouched" captures** — *not* caught
+   by anything, because they looked calm on average, and which I published as
+   *"6.36 ° p2p wander on a motionless board, reproducible to 9 %"*.
+
+**The board has been publishing the answer at 50 Hz the whole time.** ATTITUDE
+carries the gyro (`mav_stream.cpp:226` packs `s.gx/gy/gz`) and we already
+republish it as `/duburi/imu_rates`. Stillness was always **measurable** and I
+assumed it instead.
+
+### The measured difference, once stillness was verified
+
+A 60 s capture with the gyro gate live, board genuinely quiescent:
+
+| | contaminated captures | **verified still** |
+|---|---|---|
+| gyro rms | not measured | **0.0030 rad/s**, 99.8 % of samples < 0.02 |
+| **yaw p2p** | 5.93 / 6.18 / 6.97° per 8 min | **0.029 ° per 60 s** |
+| drift | +0.027 / +0.377 / +0.306 °/min | **−0.014 °/min** |
+
+**Roughly 200× less wander.** The "reproducible wander" was the board being
+touched, and its 9 % reproducibility was the reproducibility of somebody working
+near the bench — not a sensor property.
+
+### RETRACTED, in full
+
+- ❌ *"6.36 ° p2p of heading wander on a motionless board, reproducible to 9 %."*
+  The board was not motionless. Verified-still p2p is **0.029 ° / 60 s**.
+- ❌ *"≈ 10 ° of heading uncertainty over a 15-minute run."* Built on the above.
+- ❌ The drift figures from those captures (+0.027 / +0.377 / +0.306) — all taken
+  while the board was being disturbed.
+
+Also still retracted from earlier in this round: the claimed **sign flip**
+(estimator noise), and *"quarters measure bias, halves measure wander"*
+(backwards — a shorter window has less lever arm).
+
+### What replaces it
+
+`tools/yaw_drift_check.py` — **records yaw and gyro together, fits the drift only
+over quiescent samples, reports what fraction qualified, and REFUSES to report a
+drift at all when no gyro is available.** A capture now grades itself STILL /
+NOT STILL / UNKNOWN from data rather than from an assumption about the room.
+
+Final quiescent numbers are being captured; the figures above from the 60 s run
+are the ones that survive, and they say the BNO085's 6-axis yaw is far quieter
+than either the datasheet range or anything this project has previously measured.
+
+### The rule, stated so it is not lost again
+
+**An environmental assumption is a measurement you have not taken.** If the
+hardware can report the condition your result depends on, gate on it — and if it
+cannot, say the result is conditional rather than reporting it flat.
+
+## 6. The two other deadbands we are driving into
+
+§3 and §3b are about the mixer. There are two more quantisers *upstream* of it,
+both in `attitude_control.cpp` / `depth_control.cpp` (READ), and both swallow our
+vision corrections whole.
+
+### 6a. The yaw stick deadband: below 2.86 %, STABILIZE HOLDS instead of turning
+
+`attitude::stabilize()` branches on the **expo'd** yaw stick:
+
+```
+yaw_stick = applyExpo(stick_yaw, PILOT_EXPO)
+if (|yaw_stick| > 0.02)  → rate command: des_yaw_rate = yaw_stick · PILOT_YAW_RATE
+else                     → HOLD: des_yaw_rate = wrapPi(s_yaw_target − meas_yaw) · ANG_YAW_P
+```
+
+With `PILOT_EXPO = 0.30`, `|yaw_stick| > 0.02` needs **|stick| > 2.856 %**
+(MEASURED, solved numerically from the live expo).
+
+So:
+
+- **A yaw command below 2.86 % of stick does not turn the vehicle at all.** It
+  takes the ELSE branch, and the board *actively drives back* to the heading it
+  captured. Our loop believes it commanded a small yaw; the vehicle holds.
+- With `PILOT_YAW_RATE = 160` (live), the **smallest commandable yaw rate is
+  0.02 × 160 = 3.20 °/s.** There is nothing between "hold" and "3.2 °/s".
+
+For terminal alignment on a torpedo hole, where the residual bearing error is a
+fraction of a degree, **the entire useful range is inside the deadband.**
+
+**The good news, and it is genuinely good:** the ELSE branch is a real
+heading-hold closed on the mag-free yaw with `ANG_YAW_P = 6.0`. So dropping the
+vision `yaw` axis at the hole does not surrender heading — it hands it to a
+controller that holds it properly. `precision-alignment.md` already recommends
+this; **it is now justified by the firmware rather than by observed wobble.**
+
+### 6b. The depth stick deadband is 5 %
+
+`depth::update()` moves the depth target only when `|stick_throttle| > 0.05`
+(`STICK_DEADBAND`, READ). Below that the target does not move at all. Our
+`depth_step` logic steps the *setpoint* host-side, which is the right shape — but
+any attempt to trim depth by holding a small throttle offset does nothing.
+
+### 6c. ⚠ The depth loop has NEVER RUN CLOSED — and its sign was inverted
+
+`depth_control.cpp` carries this, verbatim (READ):
+
+> *"AUDIT R1 has stood since the beginning: this loop has NEVER run closed,
+> because the Bar30 was not fitted during development."*
+
+The sign **was inverted** and is fixed: the old code ran the PID in depth while
+its output lives in altitude, so it "commanded the opposite of what it wanted, on
+every axis of the depth loop." The fix is well-argued and cross-checked against
+three independent sources. **But it is unvalidated.**
+
+**The SURFACE failsafe depends on this sign.** A leak, a low thruster battery or a
+GCS loss all route to `SURFACE`, which calls `depth::update()`. If the sign were
+still wrong, the emergency ascent drives the vehicle *down*.
+
+**They built us the tool to check it without water, and we have never used it.**
+`depth::preview()` runs the same error expression through a *separate*
+proportional-only instance and publishes it as **`DEPTH_CMD`**, readable
+**disarmed, with nothing spinning**:
+
+```
+thumb over the Bar30 port (pressurise = "deeper")
+  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   ✓ correct
+  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend ✓ correct
+  demand moves AWAY from target  → STILL INVERTED — DO NOT DIVE
+```
+
+They even record why the first version of `preview()` was useless (a full PID fed
+a constant error winds its integrator to the rail and reports "inverted" for a
+correct loop) — P-only is deliberate.
+
+**This is a pre-water gate we can close on the bench today, and it is the highest-
+consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
+
+---
+
 ## 5b. Heading, MEASURED — and the drift is NOT the number that matters
 
 Five still-bench captures against `/duburi/state` at 22 Hz, board untouched. The
