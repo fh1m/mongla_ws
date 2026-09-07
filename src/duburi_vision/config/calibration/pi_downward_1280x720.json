@@ -1,4 +1,8 @@
 {
+  "applies_to": [
+    "pi_downward"
+  ],
+  "applies_to_note": "Which camera PROFILE this calibration describes. It exists because the file was previously named pi_forward_1280x720.json and wired to the FORWARD camera, while its own metadata says pi_test_global_shutter (Microdia/Sonix, USB 0c45) -- the DOWNWARD unit. It was captured 2026-09-03, four days before the udev rules were found to have the two cameras swapped, so it was named for the camera the system then believed it was looking at. Both halves were live: the forward camera published a CameraInfo belonging to another lens, and the DVL camera got none. test_calibration_binding.py now fails if a launch wires a calibration to a profile it does not list here.",
   "image_width": 1280,
   "image_height": 720,
   "camera_matrix": [

@@ -66,7 +66,7 @@ A = ap.parse_args()
 W, H = 640, 360
 DEADBAND_DEG = 2.5
 CAL = os.path.expanduser('~/duburi_ws/src/duburi_vision/config/'
-                         'calibration/pi_forward_1280x720.json')
+                         'calibration/pi_downward_1280x720.json')
 
 K = D = None
 try:

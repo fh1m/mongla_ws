@@ -18,7 +18,7 @@ from duburi_control.bearing import bearing_from_pixels
 from duburi_vision.detection.factory import make_detector
 import json
 
-cal = json.load(open('/home/fh1m/duburi_ws/src/duburi_vision/config/calibration/pi_forward_1280x720.json'))
+cal = json.load(open('/home/fh1m/duburi_ws/src/duburi_vision/config/calibration/pi_downward_1280x720.json'))
 Kc, D = cal['camera_matrix'], cal['distortion_coefficients']
 CW, CH = cal['image_width'], cal['image_height']
 

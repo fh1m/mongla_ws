@@ -24,7 +24,7 @@ We have the full calibration (srot `8049de9`), so we can use the pinhole truth::
 
     angle_x = atan((u - cx) / fx)          # after undistortion
 
-Measured against our own `pi_forward_1280x720.json` (fx 1027.87, cx 617.32,
+Measured against our own `pi_downward_1280x720.json` (fx 1027.87, cx 617.32,
 HFOV 63.82 deg):
 
     ex     linear      exact      diff

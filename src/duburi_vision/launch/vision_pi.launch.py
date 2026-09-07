@@ -154,10 +154,29 @@ def generate_launch_description():
         # loaded Pi, so every rate quoted from it is a floor, not a figure.
         DeclareLaunchArgument('fwd_frame_rate', default_value='49.0'),
         DeclareLaunchArgument('dwn_frame_rate', default_value='15.0'),
+        # ⛔ THESE WERE THE WRONG WAY ROUND, and both halves were live.
+        # The only calibration we hold declares itself, in its own metadata,
+        # as `pi_test_global_shutter (Microdia USB)` -- USB vendor 0c45,
+        # which is the SONIX unit, which is the DOWNWARD camera. It was
+        # committed on 2026-09-03, FOUR DAYS BEFORE the udev rules were found
+        # to have the two cameras swapped, so it was named for the camera the
+        # system then believed it was looking at.
+        #
+        # The consequence ran both ways. The FORWARD Fantech published
+        # CameraInfo with a 63.82 deg HFOV that belongs to a different lens,
+        # so every pixel->bearing on the srot vision uplink was computed with
+        # the wrong focal length. And the DOWNWARD camera -- the DVL, the one
+        # whose intrinsics round 38 measured a 3.08 % axis asymmetry to fix --
+        # got NO calibration at all, so `flow_node` fell back to one focal
+        # length and the frame centre. The fix was verified in a tool that
+        # passed the path by hand and never reached the launch.
+        #
+        # The Fantech is UNCALIBRATED and that is now said, not implied by an
+        # empty default that looks like an oversight.
         DeclareLaunchArgument(
-            'fwd_calibration',
-            default_value=_calib('pi_forward_1280x720.json')),
-        DeclareLaunchArgument('dwn_calibration', default_value=''),
+            'dwn_calibration',
+            default_value=_calib('pi_downward_1280x720.json')),
+        DeclareLaunchArgument('fwd_calibration', default_value=''),
         # 0 = the profile's own rate (210), AND THAT REVERSES THE 60 THIS
         # SHIPPED WITH LAST ROUND. The cap was measured correctly and is now
         # wrong, because the mailbox changed what a captured frame costs.

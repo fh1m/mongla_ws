@@ -397,7 +397,8 @@ class Intrinsics:
     applied at 640x360 without scaling is off by exactly 2x -- silently.
     """
 
-    __slots__ = ('fx', 'fy', 'cx', 'cy', 'dist', 'width', 'height')
+    __slots__ = ('fx', 'fy', 'cx', 'cy', 'dist', 'width', 'height',
+                 'applies_to')
 
     def __init__(self, fx, fy, cx, cy, dist=None, width=0, height=0):
         self.fx, self.fy = float(fx), float(fy)
@@ -405,6 +406,7 @@ class Intrinsics:
         self.dist = None if dist is None else np.asarray(dist,
                                                          dtype=np.float64).reshape(-1)
         self.width, self.height = int(width), int(height)
+        self.applies_to = ()      # camera profiles this file describes
 
     @classmethod
     def from_json(cls, path, width: int, height: int) -> "Intrinsics":
@@ -422,8 +424,12 @@ class Intrinsics:
         dist = d.get('distortion_coefficients') or d.get('D')
         if dist is not None:
             dist = np.asarray(dist, dtype=np.float64).reshape(-1)
-        return cls(k[0, 0] * sx, k[1, 1] * sy, k[0, 2] * sx, k[1, 2] * sy,
-                   dist, width, height)
+        out = cls(k[0, 0] * sx, k[1, 1] * sy, k[0, 2] * sx, k[1, 2] * sy,
+                  dist, width, height)
+        # Carry the binding through. It was DISCARDED before, which is why
+        # nothing could catch a calibration wired to the wrong camera.
+        out.applies_to = tuple(d.get('applies_to') or ())
+        return out
 
     @property
     def K(self):

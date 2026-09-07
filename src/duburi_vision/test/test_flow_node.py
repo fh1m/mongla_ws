@@ -12,7 +12,10 @@ green tests because the one test that could have caught it reimplemented the
 node's loop and tested a copy without the bug.
 """
 import math
+from unittest import mock
 
+import cv2
+import numpy as np
 import pytest
 
 rclpy = pytest.importorskip('rclpy')
@@ -375,5 +378,32 @@ class TestTimingCorrections:
             assert n._is_ripe(n._target_px, 80, 0.01, 0.0) is True
             assert n._is_ripe(0.0, 1, 0.01, 0.0) is True
             assert n._is_ripe(0.0, 80, n._max_baseline, 0.0) is True
+        finally:
+            n.destroy_node()
+
+    def test_a_TEXTURELESS_frame_is_named_as_such(self):
+        """Verified against a genuinely black camera: 174 corners detected on
+        sensor noise, 0 survived. The node refuses -- correct -- but calling
+        that 'LK lost the anchor' sends an operator after the algorithm when
+        the answer is that the water is dark. Survival fraction separates the
+        two for free, with no threshold to calibrate."""
+        n = _make(pool_depth_m=4.0)
+        try:
+            reasons = []
+            n._refuse = lambda why: reasons.append(why)
+            gray = np.zeros((360, 640), dtype=np.uint8)
+            n._anchor_pts = np.zeros((174, 1, 2), dtype=np.float32)
+            n._anchor_gray = gray
+            n._anchor_t = 0.0
+            n._frame_i = 5
+            # 0 of 174 survived: the scene, not the tracker.
+            with mock.patch.object(cv2, 'calcOpticalFlowPyrLK',
+                                   return_value=(n._anchor_pts.copy(),
+                                                 np.zeros((174, 1), np.uint8),
+                                                 None)):
+                n._process(gray, 1.0, 0)
+            assert reasons, 'expected a refusal'
+            assert 'no trackable texture' in reasons[-1]
+            assert '0/174' in reasons[-1]
         finally:
             n.destroy_node()

@@ -636,8 +636,30 @@ class FlowVelocityNode(Node):
         if flow is None:
             # The anchor is unusable; re-seed here rather than reporting a
             # refusal for every frame until something changes.
+            #
+            # SAY WHICH FAILURE IT IS. "LK lost the anchor" reads as a
+            # tracking bug and sends an operator after the algorithm; on a
+            # dark or textureless floor -- the normal case in murky water --
+            # the truth is that there was nothing to track. The two are
+            # distinguishable for free by SURVIVAL FRACTION, with no
+            # threshold to calibrate: losing a few tracks is tracking,
+            # losing essentially all of them at once is the scene.
+            #
+            # Verified against a genuinely black camera (room dark, mean
+            # pixel 0.64): 174 "corners" were detected on sensor noise and
+            # 0 of 174 survived. The node refused, which is the right answer
+            # -- shot noise is not stable frame to frame, so it cannot
+            # produce the confident ZERO that a static fixed-pattern would.
+            n_in = len(self._anchor_pts) if self._anchor_pts is not None else 0
+            n_st = (int(np.asarray(status).reshape(-1).astype(bool).sum())
+                    if status is not None else 0)
             self._anchor(gray, t)
-            self._refuse('LK lost the anchor')
+            if n_in >= _MIN_TRACKS and n_st <= max(1, n_in // 20):
+                self._refuse(
+                    f'no trackable texture ({n_st}/{n_in} points survived) '
+                    f'-- dark or featureless floor, not a tracking fault')
+            else:
+                self._refuse(f'LK lost the anchor ({n_st}/{n_in} survived)')
             return
 
         n_used = int(np.asarray(status).reshape(-1).astype(bool).sum())

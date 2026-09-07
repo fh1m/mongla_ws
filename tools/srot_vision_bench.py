@@ -64,7 +64,7 @@ ap.add_argument('--dev', default='/dev/ttyUSB0')
 ap.add_argument('--conf', type=float, default=0.35)
 ap.add_argument('--hz', type=float, default=50.0)
 ap.add_argument('--cal', default=os.path.expanduser(
-    '~/duburi_ws/src/duburi_vision/config/calibration/pi_forward_1280x720.json'))
+    '~/duburi_ws/src/duburi_vision/config/calibration/pi_downward_1280x720.json'))
 A = ap.parse_args()
 
 W, H = 640, 360
