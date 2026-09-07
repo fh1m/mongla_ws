@@ -86,7 +86,7 @@ def build_map(w, h_px, fx, fy, cx, cy, n, height_m, dx_m, dy_m):
 
 
 def grab(device, w, h, warm=12):
-    cap = cv2.VideoCapture(device)
+    cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
     if not cap.isOpened():
         sys.exit(f'cannot open {device}')
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
@@ -125,7 +125,22 @@ def run_arm(label, gray, cal, medium, rectify, n_warp, steps, step_m, height):
         Parameter('pool_depth_m', value=float(height)),
         Parameter('estimate_time_offset', value=False),
     ]
-    node = FlowVelocityNode(parameter_overrides=overrides)
+    # The node takes no parameter_overrides kwarg, so inject them the way
+    # test_flow_node does: patch Node.__init__ for the one construction. That
+    # keeps this driving the SHIPPED constructor rather than a variant of it.
+    import rclpy.node
+    orig_init = rclpy.node.Node.__init__
+
+    def patched(self, name, **kw):
+        kw['parameter_overrides'] = list(kw.get('parameter_overrides', [])) \
+            + overrides
+        orig_init(self, name, **kw)
+
+    rclpy.node.Node.__init__ = patched
+    try:
+        node = FlowVelocityNode()
+    finally:
+        rclpy.node.Node.__init__ = orig_init
     try:
         # Height comes from pool_depth - depth; depth 0 puts the floor at
         # `height` below, which is what the warp assumed.
