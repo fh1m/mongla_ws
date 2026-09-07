@@ -121,3 +121,62 @@ def test_the_fov_blocker_is_not_still_asserted_as_open():
     assert not bad, (
         'the FOV is measured and shipping, but a doc still calls it open:\n  '
         + '\n  '.join(bad))
+
+
+# ---------------------------------------------------------------- harmony
+HARMONY = CTX / 'system-harmony.md'
+
+
+def test_system_harmony_exists_and_states_the_four_rules():
+    """It was carried as an open item for two rounds; guard that it stays."""
+    assert HARMONY.exists()
+    t = HARMONY.read_text()
+    for claim in ('TIME IS THE SUBSTRATE',
+                  'OUT OF THE EXECUTOR',
+                  'UNKNOWN IS NOT OK',
+                  'SETTLED NEGATIVES'):
+        assert claim in t, claim
+
+
+def test_the_health_states_it_documents_are_the_states_that_SHIP():
+    """⛔ The ladder's ORDER is the design, not decoration.
+
+    `UNKNOWN` ranking below `DEGRADED` is what makes "nothing is watching"
+    worse than "watching, and bad" -- the rule that caught `BARO_HEALTH = 3`
+    being read as a health score when 3 means NOT INITIALISED. A doc that
+    describes a different order describes a different safety posture.
+    """
+    src = (ROOT / 'duburi_manager' / 'duburi_manager' / 'health.py').read_text()
+    order = re.findall(r'^\s+(OK|DEGRADED|UNKNOWN|FAILED)\s*=\s*(\d+)',
+                       src, re.M)
+    assert order, 'health.py states not found'
+    ranks = {k: int(v) for k, v in order}
+    assert ranks['UNKNOWN'] > ranks['DEGRADED'], (
+        'UNKNOWN must rank WORSE than DEGRADED -- see system-harmony.md §3')
+    t = HARMONY.read_text()
+    for state in ranks:
+        assert state in t, f'{state} is shipped but system-harmony.md omits it'
+
+
+def test_the_documented_loop_rate_matches_the_shipped_one():
+    """§4's budget is only useful if its rows track the code."""
+    rates = (ROOT / 'duburi_control' / 'duburi_control'
+             / 'motion_rates.py').read_text()
+    m = re.search(r'^VISION_LOOP_HZ_SROT\s*=\s*([0-9.]+)', rates, re.M)
+    assert m, 'VISION_LOOP_HZ_SROT not found'
+    shipped = float(m.group(1))
+    # ⛔ NOT a bare `str(shipped) in text` -- "35" appears in a dozen
+    # unrelated numbers, so that form passed with the constant changed from
+    # 50 to 35, which is the exact drift it was written to catch. Read the
+    # control-loop ROW and compare the number IN it.
+    row = None
+    for line in HARMONY.read_text().splitlines():
+        if line.startswith('|') and 'control loop, srot' in line:
+            row = line
+            break
+    assert row, 'system-harmony.md §4 has no control-loop row'
+    nums = [float(x) for x in re.findall(r'([0-9]+\.?[0-9]*) Hz', row)]
+    assert nums, f'no Hz figure in the control-loop row: {row}'
+    assert any(abs(n - shipped) <= 0.5 for n in nums), (
+        f'VISION_LOOP_HZ_SROT is {shipped}; system-harmony.md §4 says '
+        f'{nums} -- the budget has drifted from the code.\n  {row.strip()}')
