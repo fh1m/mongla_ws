@@ -64,8 +64,8 @@ from duburi_interfaces.msg import DuburiState
 # EVERY arm equally -- so "all three alike" was the bug, not a result.
 # Re-measured here on the fixed tool.
 ARMS = [
-    ('B_norot',      {'gyro_gain_x': 0.0, 'gyro_gain_y': 0.0}),
-    ('C_keepanchor', {'reanchor_on_refusal': False}),
+    ('B_norot',   {'gyro_gain_x': 0.0, 'gyro_gain_y': 0.0}),
+    ('C_flipped', {'gyro_gain_x': 1.0, 'gyro_gain_y': 1.0}),
 ]
 
 
@@ -181,6 +181,76 @@ def spawn(name, params, cam, cal, height, medium):
                             start_new_session=True)
 
 
+def _one(n, a, trial):
+    """One slide, every arm, from one `distance_control` message."""
+    input(f'\n[slide {trial}] Rig at the START mark, ENTER to arm > ')
+    n.dist.clear()
+    n.reset_counts()
+    n.send('start lateral' if a.lateral else 'start')
+    # Sent twice: on a stationary trial an arm returned its PREVIOUS run's
+    # total with zero intervals used -- `stop` without a `start` returns the
+    # stale accumulator. A second start a beat later removes that race.
+    time.sleep(0.4)
+    n.send('start lateral' if a.lateral else 'start')
+    print('  ARMED -- slide to the END mark, then ENTER.')
+    input('  > ')
+    n.send('stop')
+    time.sleep(1.5)
+
+    out = {}
+    print(f'\n  truth {a.truth_cm:.1f} cm, slide {trial}, all arms\n')
+    for k in ['A_shipped'] + [x[0] for x in ARMS]:
+        v = n.dist.get(k)
+        used, tot = n.q_ok.get(k, 0), n.q_all.get(k, 0)
+        if v is None:
+            print(f'    {k:12s}  no distance published')
+            out[k] = None
+            continue
+        if not used:
+            # No number at all. A stale accumulator formatted as centimetres
+            # is indistinguishable from a measurement, and this arm made none.
+            print(f'    {k:12s}  --  NO USED INTERVALS ({tot} seen). '
+                  f'Any distance here is STALE.')
+            out[k] = None
+            continue
+        got = v * 100.0
+        out[k] = v
+        print(f'    {k:12s}  {got:+8.2f} cm   {100*got/a.truth_cm:+7.1f} %'
+              f'   err {got - a.truth_cm:+7.2f} cm'
+              f'   [{used}/{tot} intervals used]')
+    return out
+
+
+def _cleanup(procs):
+    for p in procs:
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+        except Exception:
+            pass
+    for p in procs:
+        try:
+            p.wait(timeout=5)
+        except Exception:
+            try:
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+            except Exception:
+                pass
+    # Belt and braces, VERIFIED NECESSARY: killing the process group still
+    # left one copy of each arm alive, because `ros2 run` execs the node as a
+    # child that gets reparented. Sweep by name and then CHECK -- a cleanup
+    # that is merely attempted is how three duplicates of every arm
+    # accumulated and silently contaminated a whole measurement.
+    subprocess.run(['pkill', '-f', 'duburi_flow_[BC]_'], capture_output=True)
+    time.sleep(1.0)
+    left = subprocess.run(['pgrep', '-f', 'duburi_flow_[BC]_'],
+                          capture_output=True, text=True)
+    if (left.stdout or '').strip():
+        print(f'\n  ARMS STILL RUNNING: '
+              f'{len((left.stdout or "").split())} process(es). They publish '
+              f'to the same\n  topics, so the NEXT run would read them. '
+              f'Clear: pkill -9 -f "duburi_flow_[BC]_"')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--camera', default='downward')
@@ -188,10 +258,15 @@ def main():
     ap.add_argument('--truth-cm', type=float, default=30.0)
     ap.add_argument('--medium', default='air')
     ap.add_argument('--node', default='/duburi_flow_velocity')
+    ap.add_argument('--repeat', type=int, default=1,
+                    help='slides in one session. Arms are spawned ONCE and '
+                         'reused, so a repeat costs only the slide -- and a '
+                         'single hand slide cannot separate arms that differ '
+                         'by less than the operator does.')
     ap.add_argument('--lateral', action='store_true',
-                    help='project onto the lateral axis. The axis is NOT '
-                         'cosmetic: axial takes vx, lateral takes vy, and a '
-                         'slide on the wrong one reads ~0 by construction.')
+                    help='project onto the lateral axis. NOT cosmetic: axial '
+                         'takes vx, lateral takes vy, and a slide on the '
+                         'wrong one reads ~0 by construction.')
     a = ap.parse_args()
 
     cal = running_param(a.node, 'calibration')
@@ -213,86 +288,39 @@ def main():
         print(f'  {subs} nodes listening on distance_control (want {want})')
         # BOTH directions. Checking only for "too few" is how three duplicate
         # copies of every arm went unnoticed through a whole measurement:
-        # extra nodes are not a harmless surplus, they publish to the same
-        # topic and the reader takes whichever was last.
+        # extra nodes are not a harmless surplus, they are competing
+        # publishers and the reader takes whichever was last.
         if subs != want:
             print(f'  WRONG NUMBER OF ARMS ({subs} != {want}).')
             if subs > want:
-                print('  Orphaned flow_node processes are still running and '
-                      'publishing to\n  these same topics. Clear them first:'
-                      '\n\n    pkill -f "duburi_flow_[BC]_" \n')
+                print('  Orphaned flow_node processes are still publishing to '
+                      'these topics.\n  Clear them: '
+                      'pkill -f "duburi_flow_[BC]_"')
             else:
-                print('  Not every arm came up -- check the launch is '
-                      'running.')
+                print('  Not every arm came up -- is the launch running?')
             return 1
 
-        input('\nRig at the START mark, ENTER to arm > ')
-        n.dist.clear()
-        n.reset_counts()
-        n.send('start lateral' if a.lateral else 'start')
-        # Sent twice: on a stationary trial arm A returned its PREVIOUS run's
-        # total with zero intervals used, i.e. `stop` without a `start`
-        # returns the stale accumulator. A second start a beat later costs
-        # nothing and removes that race from the comparison.
-        time.sleep(0.4)
-        n.send('start lateral' if a.lateral else 'start')
-        print('  ARMED -- slide to the END mark, then ENTER.')
-        input('  > ')
-        n.send('stop')
-        time.sleep(1.5)
+        runs = [_one(n, a, i) for i in range(1, a.repeat + 1)]
 
-        print(f'\n  truth {a.truth_cm:.1f} cm, one slide, all arms\n')
-        order = ['A_shipped'] + [x[0] for x in ARMS]
-        for k in order:
-            v = n.dist.get(k)
-            if v is None:
-                print(f'    {k:12s}  no distance published')
-                continue
-            got = v * 100.0
-            used, tot = n.q_ok.get(k, 0), n.q_all.get(k, 0)
-            if not used:
-                # Print no number at all. A stale accumulator formatted as
-                # centimetres is indistinguishable from a measurement, and
-                # this arm produced none.
-                print(f'    {k:12s}  --  NO USED INTERVALS ({tot} seen). '
-                      f'Any distance here is STALE, not a measurement.')
-                continue
-            print(f'    {k:12s}  {got:+8.2f} cm   {100*got/a.truth_cm:+7.1f} %'
-                  f'   err {got - a.truth_cm:+7.2f} cm'
-                  f'   [{used}/{tot} intervals used]')
-        print('\n  A hand slide is good to about +/-1 cm, so read the SPREAD '
-              'between\n  arms, not any one arm\'s absolute error.')
+        if len(runs) > 1:
+            print('\n  --- across slides ---')
+            for k in ['A_shipped'] + [x[0] for x in ARMS]:
+                vals = sorted(abs(r[k]) * 100 for r in runs
+                              if r.get(k) is not None)
+                if not vals:
+                    print(f'    {k:12s}  no valid slide')
+                    continue
+                med = vals[len(vals) // 2]
+                print(f'    {k:12s}  median {med:6.2f} cm  '
+                      f'{100*med/a.truth_cm:6.1f} %   n={len(vals)}  '
+                      f'spread {vals[0]:.2f}..{vals[-1]:.2f}')
+            print('\n  Compare arms WITHIN a slide; trust only a difference '
+                  'that survives\n  ACROSS slides. The hand is the biggest '
+                  'term in this experiment.')
         return 0
     finally:
         rclpy.shutdown()
-        for p in procs:
-            try:
-                os.killpg(os.getpgid(p.pid), signal.SIGTERM)
-            except Exception:
-                pass
-        for p in procs:
-            try:
-                p.wait(timeout=5)
-            except Exception:
-                try:
-                    os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-                except Exception:
-                    pass
-        # Belt and braces, VERIFIED NECESSARY: killing the process group
-        # still left one copy of each arm alive, so the node is reparented
-        # somewhere the group signal does not reach. Sweep by node name and
-        # then CHECK, because a cleanup that is merely attempted is how three
-        # duplicates accumulated in the first place.
-        subprocess.run(['pkill', '-f', 'duburi_flow_[BC]_'],
-                       capture_output=True)
-        time.sleep(1.0)
-        left = subprocess.run(['pgrep', '-f', 'duburi_flow_[BC]_'],
-                              capture_output=True, text=True)
-        if (left.stdout or '').strip():
-            print('\n  ⚠ ARMS STILL RUNNING after cleanup: '
-                  f'{len((left.stdout or "").split())} process(es).\n'
-                  '  They publish to the same topics, so the NEXT run would '
-                  'read them.\n  Clear with:  pkill -9 -f "duburi_flow_[BC]_"')
+        _cleanup(procs)
 
 
 if __name__ == '__main__':
