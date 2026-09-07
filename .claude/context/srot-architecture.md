@@ -672,3 +672,57 @@ we send an issue with a sketch and say so (#11, #13).
 | `srot-control-board` | `f1d3ba9` | `f1d3ba9` | 0 |
 | `srot-ground-station` | `1adc14c` | `1adc14c` | 0 |
 | `srot-esc-flasher` | `c30b843` | `c30b843` | 0 (was **1 behind**) |
+
+---
+
+## 8. The ESC chain — and how to decide whether our 958/958 zeros are expected
+
+From `srot-esc-flasher/docs/ESC_FLASHING.md` (READ), which our mirror was stale on.
+
+**Stock BLHeli_S does not support bidirectional DShot at all.** The ESCs must be
+flashed with **Bluejay** (BB21, v0.21.0 `_H_` builds), and then:
+
+- there is **no "bidirectional DShot" setting in Bluejay** — it negotiates the
+  mode from the *inverted* DShot signal the Pico sends;
+- **3D mode is mandatory**, because `levelToDshotRaw()` emits 3D bands;
+- DShot300, signal → Pico GP6…GP13, common ground.
+
+### ⛔ The test that decides our open question, and it needs no motors
+
+> *"You do **not** need motors attached. Bidirectional DShot telemetry comes from
+> the ESC's own MCU in response to every frame, so a powered ESC with just signal
+> + ground answers and shows **detected** with **RPM 0**."*
+
+So **"ESC present, RPM 0" and "no ESC" are distinguishable**, and the Pico's own
+USB serial @115200 says which stage failed, per motor:
+
+```
+link=1 armed=0 bidir=1 rpm_mode=0 loop=1 | M1[rpm=0 pres=1 e=812 d=0 c=0 n=3] ...
+```
+
+| field | meaning if wrong |
+|---|---|
+| `bidir=0` | Pico is in plain DShot — **no telemetry exists** |
+| `e=` | eRPM frames decoded; non-zero ⇒ the whole path works |
+| `d=` | Extended DShot Telemetry frames — ESC alive, not reporting RPM this frame |
+| `c=` | replies arriving but failing checksum ⇒ signal integrity / grounding |
+| only `n=` rising | nothing coming back ⇒ wiring, common ground, or ESC unpowered |
+
+**This closes a question we could not close from our side.** We have 958 CRC-valid
+`ESC_STATUS` frames with every rpm exactly 0 and no way to tell "no ESCs attached"
+(our belief — they are on a new hull) from "attached and broken". It is now a
+decidable bench test, and it is a prerequisite for both PR #10 (presence on the
+wire) and issue #13 (the hysteretic floor) being anything other than inert here.
+
+### ⚠ One instruction in that guide is harmful — filed as `srot-esc-flasher#2`
+
+Step 4 tells the operator to set **`RPM_LOOP = 1`** and states that it "already
+defaults to 1". The firmware defaults it to **0** and argues at length for that:
+closing a shaft-speed loop inside the attitude path made the vehicle oscillate
+(*"a 1 degree disturbance produced spin-up / stop / spin-up cycling… that is not a
+tuning problem, it is the architecture"*), and `PARAM_DEFAULTS_VER` was bumped to
+4 specifically to remove it. `RPM_MAX` (doc 4000, firmware 3600) and `RPM_FF_A`
+(doc 0.00025, firmware 0.000278) are stale in the same bullet.
+
+**Our board reads `RPM_LOOP = 0` live**, so nothing is wrong today — but anyone
+setting up the new hull's ESCs from that document would set it.
