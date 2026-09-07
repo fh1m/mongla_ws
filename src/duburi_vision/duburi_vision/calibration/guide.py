@@ -1153,25 +1153,51 @@ def list_cameras(cal_dir):
 def default_calibration_dir():
     """Where calibrations live, found robustly.
 
-    ⛔ THIS WAS WRONG WHEN INSTALLED, AND IT FAILED QUIETLY. The path was
-    built as `<this file>/../../src/duburi_vision/config/calibration`, which
-    is right when the file sits in the source tree and nonsense when it sits
-    in `install/.../site-packages`. The consequences were both silent: the
-    download route 404'd, and the camera panel reported NO CALIBRATION for a
-    camera that has one -- reading exactly like a missing calibration rather
-    than a missing directory. Fifth instance of a config that reaches
-    nothing in this package.
+    ⛔ THIS WAS WRONG WHEN INSTALLED, TWICE, AND FAILED QUIETLY BOTH TIMES.
 
-    The SOURCE tree is the target, not the install share: a calibration
-    written to `install/` is deleted by the next `colcon build`, and this
-    file is meant to be committed.
+    First version built `<this file>/../../src/duburi_vision/config/
+    calibration`, which is right in the source tree and nonsense in
+    `install/.../site-packages`. Download 404'd and the camera panel read NO
+    CALIBRATION for a camera that has one.
+
+    Second version walked upward looking for `src/duburi_vision/config/
+    calibration` -- and under `ros2 run` on the vehicle it resolved to
+
+        <ws>/build/duburi_vision/duburi_vision/src/duburi_vision/config/calibration
+
+    an EMPTY directory **the tool had created itself** on an earlier run
+    whose cwd happened to sit there. `main()` does `os.makedirs` on whatever
+    this returns, so a resolver that creates the directory it searches for
+    will find its own mistake forever after, and every symptom (empty
+    library, 404 download, cameras showing NO CALIBRATION) points at missing
+    calibrations rather than at a wrong path.
+
+    So: **a candidate inside a generated tree is never valid.** `build/` and
+    `install/` are wiped and rebuilt; a calibration written there is deleted
+    by the next `colcon build` and can never be committed, which is the one
+    thing this file must not allow. The source tree is the target.
     """
-    for start in (os.getcwd(), os.path.dirname(os.path.abspath(__file__))):
+    def usable(cand):
+        # Reject anything under a generated tree, however plausible.
+        parts = os.path.abspath(cand).split(os.sep)
+        return (os.path.isdir(cand)
+                and 'build' not in parts and 'install' not in parts)
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    starts = [os.getcwd(), here]
+    # Under `ros2 run` this file lives inside <ws>/build/... or
+    # <ws>/install/...; the workspace root is the parent of that, so name it
+    # directly rather than hoping the upward walk survives the decoys.
+    parts = here.split(os.sep)
+    for gen in ('build', 'install'):
+        if gen in parts:
+            starts.insert(0, os.sep.join(parts[:parts.index(gen)]))
+    for start in starts:
         d = start
         for _ in range(8):
             cand = os.path.join(d, 'src', 'duburi_vision', 'config',
                                 'calibration')
-            if os.path.isdir(cand):
+            if usable(cand):
                 return cand
             nd = os.path.dirname(d)
             if nd == d:
@@ -1525,7 +1551,20 @@ def main():
                               make_handler(st, argv, dest, install, restart))
     print(f'{len(st.steps)} guided poses -> {a.out}  (resuming at step '
           f'{st.i + 1})')
-    print(f'open http://<this-host>:{a.port}/')
+    # Never a hardcoded IP: the vehicle's address changes with the link,
+    # and a printed URL that quietly stopped being true reads to an operator
+    # as "the server did not start". The mDNS name is the stable one.
+    hosts = [socket.gethostname().split('.')[0] + '.local']
+    try:
+        hosts += [ip for ip in subprocess.run(
+            ['hostname', '-I'], capture_output=True, text=True,
+            timeout=2).stdout.split()
+            if ':' not in ip and not ip.startswith(('127.', '169.254.'))
+            and not (ip.split('.')[0] == '172'
+                     and 16 <= int(ip.split('.')[1]) <= 31)]
+    except Exception:
+        pass
+    print('open  ' + '   or   '.join(f'http://{h}:{a.port}/' for h in hosts))
     print(f'solve installs -> {dest}')
     try:
         srv.serve_forever()

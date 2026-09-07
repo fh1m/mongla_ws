@@ -173,3 +173,56 @@ def test_the_guide_never_imports_its_own_PACKAGE(g):
     assert not bad, (
         f'guide.py imports the package ({bad}) -- that drags in rclpy and '
         'breaks the ROS-free tools/ entry point. Load by path instead.')
+
+
+def _fake_ws(root):
+    """A colcon workspace shaped like the vehicle's, decoy and all."""
+    real = os.path.join(root, 'src', 'duburi_vision', 'config', 'calibration')
+    os.makedirs(real)
+    # The decoy the tool created for itself on the Pi: an EMPTY
+    # src/duburi_vision/config/calibration INSIDE the build tree, sitting
+    # nearer to __file__ than the real one.
+    pkg = os.path.join(root, 'build', 'duburi_vision', 'duburi_vision')
+    os.makedirs(os.path.join(pkg, 'src', 'duburi_vision', 'config',
+                             'calibration'))
+    os.makedirs(os.path.join(pkg, 'calibration'))
+    return real, os.path.join(pkg, 'calibration')
+
+
+def test_the_calibration_dir_is_never_inside_a_GENERATED_tree(
+        g, tmp_path, monkeypatch):
+    """⛔ Reproduces the failure measured on the vehicle, 2026-09-07.
+
+    Under `ros2 run` the resolver returned
+    `<ws>/build/duburi_vision/duburi_vision/src/duburi_vision/config/
+    calibration` -- an empty directory the tool had created ITSELF on an
+    earlier run, because `main()` does `os.makedirs` on whatever this
+    returns. Every symptom (library empty, /calibration.json 404, cameras
+    reading NO CALIBRATION) pointed at missing calibrations rather than a
+    wrong path.
+
+    `build/` and `install/` are wiped by the next `colcon build`, so a
+    calibration written there is lost and can never be committed.
+    """
+    root = str(tmp_path / 'duburi_ws')
+    real, guide_home = _fake_ws(root)
+    monkeypatch.setattr(g, '__file__', os.path.join(guide_home, 'guide.py'))
+    monkeypatch.chdir(tmp_path)
+    got = g.default_calibration_dir()
+    assert os.path.realpath(got) == os.path.realpath(real), got
+    parts = os.path.abspath(got).split(os.sep)
+    assert 'build' not in parts and 'install' not in parts
+
+
+def test_the_installed_layout_finds_the_source_tree(g, tmp_path, monkeypatch):
+    """The `install/.../site-packages` layout, which is what `ros2 run` uses."""
+    root = str(tmp_path / 'duburi_ws')
+    real, _ = _fake_ws(root)
+    home = os.path.join(root, 'install', 'duburi_vision', 'lib',
+                        'python3.12', 'site-packages', 'duburi_vision',
+                        'calibration')
+    os.makedirs(home)
+    monkeypatch.setattr(g, '__file__', os.path.join(home, 'guide.py'))
+    monkeypatch.chdir(tmp_path)
+    assert os.path.realpath(g.default_calibration_dir()) == \
+        os.path.realpath(real)

@@ -18,6 +18,9 @@ running, and shows them live so none of them is a guess:
 import sys, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import numpy as np, cv2
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _where import where   # never print a hardcoded IP
 cv2.setNumThreads(2)
 
 DEV = int(sys.argv[1]); PORT = 8089
@@ -128,5 +131,5 @@ class H(BaseHTTPRequestHandler):
         except Exception: pass
 
 threading.Thread(target=worker, daemon=True).start()
-print(f"  open  http://10.42.0.28:{PORT}", flush=True)
+print(where(PORT), flush=True)
 HTTPServer(('0.0.0.0', PORT), H).serve_forever()

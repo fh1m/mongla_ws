@@ -29,6 +29,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import cv2
 import numpy as np
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _where import where   # never print a hardcoded IP
 
 cv2.setNumThreads(2)
 
@@ -173,7 +176,7 @@ class H(BaseHTTPRequestHandler):
 
 
 threading.Thread(target=worker, daemon=True).start()
-print(f"  open http://10.42.0.28:{PORT}   -> aim, then press SHOOT", flush=True)
+print(where(PORT) + "   -> aim, then press SHOOT", flush=True)
 # ThreadingHTTPServer, NOT HTTPServer: the MJPEG handler never returns (it
 # streams in a while-loop forever), so a single-threaded server can never
 # accept a second connection and /shoot hangs with no error anywhere.

@@ -381,7 +381,7 @@ believed.
 
 ```bash
 git bundle create /tmp/u.bundle <pi-HEAD>..srot          # dev box
-scp /tmp/u.bundle fh1m@10.42.0.28:/tmp/                  # dev box
+scp /tmp/u.bundle fh1m@mongla.local:/tmp/               # dev box (mDNS: the IP moves)
 git fetch /tmp/u.bundle srot:refs/remotes/origin/srot -f # Pi
 git merge --ff-only origin/srot                          # Pi
 ```
