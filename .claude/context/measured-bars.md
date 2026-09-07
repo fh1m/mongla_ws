@@ -1878,3 +1878,32 @@ limit-cycle measurement `AT_N`/`AT_AMP`/`AT_TU`/`AT_OKPCT` for exactly this —
 aborts"* (`autotune.h:34`). Now surfaced every 5 s; `AT_TU`/`AT_OKPCT` read 0
 while collecting, so "gathering" and "stuck" are distinguishable here and
 nowhere else.
+
+### The safety-gate audit, run against the real board 2026-09-07
+
+`sp.SAFETY_GATES` + `safety_gate_findings()` (pure, so the table is testable
+with no board) + a `== safety config ==` section in `srot_connect`. Measured on
+the vehicle's own board the first time it ran:
+
+| param | live | verdict |
+|---|---|---|
+| `LEAK_EN` | **0** | **CRIT** — leak failsafe AND the leak pre-arm refusal, both off |
+| `ESPNOW_EN` | 1 | OK |
+| `ARMING_CHECK` | 1 | OK |
+| `FS_BAT_ENABLE` | 1 | OK |
+| `FS_GCS_ENABLE` | 1 | OK |
+| `MOT_BAT_V_MAX` | **0** | WARN — a timed leg is pack-state dependent |
+| `THR_TRIM_EN` | **0** | WARN — no per-motor thrust normalisation |
+
+**This converts two carried ledger items from remembered to machine-checked.**
+`LEAK_EN = 0` had been written down since 2026-09-03 and nothing looked at it
+each session.
+
+And it separates two states that read identically before: `ESPNOW_EN = 1` with
+`KILL UNKNOWN` and `thruster --` means the link is **enabled but not
+delivering** (second board unpowered or absent), not that the feature is off.
+
+`ARMING_CHECK` is the one to watch — default 1, and at 0 the firmware's
+`canArm()` returns true immediately (`arming.cpp:13`), skipping every check
+including the leak and battery refusals. It was referenced nowhere on our side
+until this round.

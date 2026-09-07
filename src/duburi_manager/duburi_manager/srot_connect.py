@@ -313,6 +313,38 @@ def read_roles(conn, timeout: float = 0.6) -> dict:
     return roles
 
 
+def read_safety_gates(conn, timeout: float = 0.6) -> dict:
+    """{param: float|None} for every gate in `sp.SAFETY_GATES`.
+
+    Same one-at-a-time PARAM_VALUE dance as `read_roles` and for the same
+    reason: PARAM_VALUE is a single pymavlink slot, so a burst request would
+    leave most of them unread. A parameter that never answers stays None --
+    reported as UNREADABLE, never as a pass.
+    """
+    if sp is None:
+        return {}
+    out = {}
+    for name, _exp, _sev, _gates in sp.SAFETY_GATES:
+        out[name] = None
+        for _attempt in range(3):
+            conn.mav.param_request_read_send(conn.target_system,
+                                             conn.target_component,
+                                             name.encode(), -1)
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                pv = conn.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.3)
+                if pv is None:
+                    continue
+                pid = pv.param_id
+                pid = pid.decode() if isinstance(pid, bytes) else str(pid)
+                if pid.strip('\x00') == name:
+                    out[name] = float(pv.param_value)
+                    break
+            if out[name] is not None:
+                break
+    return out
+
+
 def watch_fields(snap: Snapshot) -> dict:
     """The subset of a Snapshot the change log watches, in display units.
 
@@ -532,6 +564,31 @@ def render(snap: Snapshot, conn) -> list[str]:
     if sysst is not None:
         L.append(f'  load            {sysst.load / 10.0:.1f}%     '
                  f'drop rate {sysst.drop_rate_comm / 100.0:.2f}%')
+
+    # ---- safety config ----------------------------------------------------- #
+    # A DISABLED GATE IS INVISIBLE. Twenty-one board params default to zero and
+    # several of them gate safety behaviour; nothing errors when one is off, the
+    # feature simply never happens. This section is the only place that looks.
+    L.append(f'\n{BOLD}== safety config =={RESET}   '
+             f'{DIM}params that silently disable behaviour{RESET}')
+    try:
+        gates = read_safety_gates(conn)
+    except Exception as exc:                     # a probe fault is not a verdict
+        gates = {}
+        L.append(f'  {YEL}could not read parameters ({exc}){RESET}')
+    if gates:
+        findings = sp.safety_gate_findings(gates)
+        for name, _exp, _sev, _g in sp.SAFETY_GATES:
+            v = gates.get(name)
+            shown = '--' if v is None else f'{v:g}'
+            bad = next((f for f in findings if f[1] == name), None)
+            if bad is None:
+                L.append(f'  {GRN}OK{RESET}   {name:<14} {shown}')
+            else:
+                col = RED if bad[0] == 'CRIT' else YEL
+                L.append(f'  {col}{bad[0]:<4}{RESET} {name:<14} {shown}   {col}{bad[2]}{RESET}')
+        if not findings:
+            L.append(f'  {GRN}every gate live{RESET}')
 
     # ---- link ------------------------------------------------------------- #
     L.append(f'\n{BOLD}== link =={RESET}  {DIM}{snap.window_s:.1f}s window{RESET}')
