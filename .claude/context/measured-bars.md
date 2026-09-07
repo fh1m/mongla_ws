@@ -1179,6 +1179,16 @@ four dead ends are the useful part.
 number in §13 came from `flow_console.py` passing the calibration by hand.
 `water-owed.md` items 22 and 23's dry half are closed by this.
 
+**⚠ AMENDED once there were more slides.** That 106.5 % is ONE slide, taken
+with the then-default gyro gains of `(-1, -1)`. Three later slides put that
+configuration at a median of **122.3 %**, so 106.5 % was the favourable end
+of its own spread — a single hand slide is not a bar. The configuration that
+now ships (gains `0`, §21) medians **90.1 %** over three slides.
+
+So the honest headline is: **the launch path measures a 30 cm slide to within
+roughly ±10 % on the shipped configuration**, with a hand slide's own ±1 cm
+and the ±7 % height uncertainty (§12) inside that. Not 106.5 %.
+
 Read honestly: the projected 31.94 exceeds the raw `vy` integral of 23.94
 because the board's heading drifts during a hand slide, so some `vx` leaks
 into the projection. Path length 51.72 > 30 because `|v|` never cancels —
