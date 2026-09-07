@@ -847,3 +847,98 @@ injected-offset recovery, which is why it is now bounded (`time_offset_max_s`
 0.15) rather than trusted. Measuring the real `td` needs the rig **gently
 oscillated about the optical axis** — a *changing* rate, since Li & Mourikis
 show constant velocity is degenerate — and is a few seconds of hand movement.
+
+---
+
+## 15. The return leg — RETRACTING "0.0 %", in both directions, 2026-09-07
+
+The carried ledger has said for three rounds: *"every 2025 gate model scores
+**0.0 %** on the **302 labelled** back-side images; production
+`gate_rescue_repair` declares gate/rescue/repair — no back-side class. One
+command decides whether a phase-1 scoring task is silently dead."*
+
+It was finally run. **Three separate claims in that sentence are wrong**, and
+the correction goes in *both* directions — the situation is better than
+recorded for the production model and much worse for the fix.
+
+### The suspicion that prompted the re-test, and it was half right
+
+The labels carry ONE class, `gate_backward`, which no production gate model
+declares. **A score computed by class-name match is 0.0 % by construction** —
+it measures the vocabulary, not the optics, and would read 0.0 % even if the
+model boxed the gate perfectly. Same shape as the sim scorer grading a board
+whose opening list it had wrong: the number was real and about the wrong
+thing.
+
+So the test was re-run **class-agnostically** — does the detector fire *any*
+box, and does it overlap the label — at three confidences on the 72 labelled
+frames.
+
+| model | classes | conf | fired any box | IoU ≥ 0.5 | median IoU |
+|---|---|---|---|---|---|
+| **`gate_rescue_repair`** (PRODUCTION) | gate/rescue/repair | 0.10 | 52.8 % | **41.7 %** | 0.008 |
+| | | 0.25 | 29.2 % | **26.4 %** | 0.000 |
+| | | 0.40 | 18.1 % | 13.9 % | 0.000 |
+| `robosub_gate` (2025, SAUVC family) | shark/shaw_fish | 0.10 | **0.0 %** | 0.0 % | 0.000 |
+| `backside` specialist | gate_backward | 0.25 | 88.9 % | 88.9 % | 0.945 |
+
+### Correction 1 — the production model is NOT blind. It is unreliable.
+
+**41.7 % at conf 0.10**, held out (it was never trained on back-side frames),
+firing its ordinary `gate` class on a gate seen from behind. That is genuine
+generalisation and the ledger's 0.0 % erased it.
+
+**But at the SHIPPED operating point it is ~26 %.** The Hailo path runs
+`conf 0.15` and INT8 scores ~0.08 lower than fp32 (round 24), so the
+fp32-equivalent bar is ≈0.23 — the 0.25 row. **A scoring task that works one
+run in four is not a working scoring task.**
+
+The `median IoU 0.008` beside `41.7 % at IoU ≥ 0.5` is not a contradiction —
+it is **bimodal**. When it fires it locks well; more than half the time it
+fires nothing. The median lands in the empty half. **Quoting the median alone
+would have said "blind"; quoting the hit-rate alone would have said "fine".**
+
+**Only the older SAUVC-family models score a true 0.0 %** — `robosub_gate`
+fires *no box at all* at conf 0.10. So "every 2025 gate model" was wrong; the
+right sentence names which family.
+
+### Correction 2 — the specialist's 88.9 % is MEMORISATION. Do not deploy on it.
+
+A trained back-side model exists in the archive (`yolov11_n_backside_100`,
+5.2 MB, Aug 2025) and scores 98.6 % at conf 0.10, median IoU **0.948**.
+
+**Its `data.yaml` says `val: train`.** It was validated on its own training
+data, and the 72 labelled frames scored above **are that training set**. The
+number is memorisation and carries **no** information about generalisation.
+This is §6's saturated-validation trap exactly — mAP50 0.995 across all 25
+archived runs, ranking nothing.
+
+What it *does* prove: the class is learnable and the labels are consistent.
+What it does **not** prove: that it would see a back-side gate at the pool.
+
+### Correction 3 — it is 302 images and **72 labels**, not 302 labelled
+
+The other 230 are unlabelled, which is also why this is the scarcest asset in
+the archive for the one task nobody has measured.
+
+### What actually follows
+
+1. **The return leg is not dead — it is a coin flip**, and that is worse than
+   dead in one respect: dead fails loudly, 26 % fails on the day.
+2. **Deploying the specialist on its 88.9 % would be deploying a number that
+   does not exist.** It needs a held-out *session* split — never a random
+   split, since these frames are consecutive video and neighbouring frames are
+   near-duplicates.
+3. **Cheapest real fix**: label more of the 230, retrain with a held-out
+   session, and evaluate the merged 4-class model against the production 3-class
+   one on frames neither has seen.
+4. **For the pool**: point the forward camera at the gate from the far side and
+   record. Whatever we do about the model, we currently have 72 labelled
+   back-side frames from one session and that is not enough to decide anything.
+
+**Method note.** The class-agnostic re-test was worth running even though the
+naming-artifact hypothesis turned out only half right: it converted "0.0 % by
+class name" — which says nothing — into two different, actionable facts about
+two different model families. **A metric that cannot distinguish "wrong
+vocabulary" from "sees nothing" should never have been the one carried in the
+ledger for three rounds.**
