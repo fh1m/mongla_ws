@@ -38,6 +38,8 @@ bars are full. The page prints the exact command.
 import argparse
 import json
 import os
+import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -70,6 +72,8 @@ class State:
         self.found = False
         self.paused = False
         self.err = None
+        self.solve = 'idle'        # idle | running | done | failed
+        self.solve_out = ''
 
 
 def tilt_of(corners, cols, rows):
@@ -178,6 +182,28 @@ def capture_loop(st, dev, width, height):
                 st.found = found
 
 
+def run_solve(st, argv, dest):
+    """Run fov_solve as a subprocess and keep its output for the page.
+
+    A subprocess rather than an import: `fov_solve` is a script with its own
+    argv handling, and shelling out is both the leaner call and the same
+    command the operator would have typed -- so the page cannot drift from
+    the documented path.
+    """
+    with st.lock:
+        st.solve, st.solve_out = 'running', 'solving...'
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=900)
+        out = (r.stdout or '') + (r.stderr or '')
+        ok = r.returncode == 0 and os.path.exists(dest)
+        with st.lock:
+            st.solve = 'done' if ok else 'failed'
+            st.solve_out = out[-4000:]
+    except Exception as exc:
+        with st.lock:
+            st.solve, st.solve_out = 'failed', f'{exc}'
+
+
 PAGE = """<!doctype html><meta charset=utf-8>
 <title>Camera calibration</title>
 <style>
@@ -211,6 +237,12 @@ PAGE = """<!doctype html><meta charset=utf-8>
  code{display:block;background:#161b22;padding:10px;border-radius:4px;
       font-size:12px;color:var(--acc);margin-top:8px;word-break:break-all}
  .warn{color:var(--no)}
+ button{width:100%;padding:10px;border:0;border-radius:4px;background:var(--acc);
+        color:#04121f;font:inherit;font-weight:700;cursor:pointer}
+ button:disabled{background:#21262d;color:var(--dim);cursor:not-allowed}
+ pre{background:#161b22;padding:10px;border-radius:4px;font-size:11px;
+     max-height:38vh;overflow:auto;white-space:pre-wrap;color:var(--fg);
+     margin-top:8px}
 </style>
 <header>
   <h1>Calibration</h1>
@@ -230,8 +262,10 @@ PAGE = """<!doctype html><meta charset=utf-8>
     <h2>Tilt variety</h2>
     <div class=tilt id=tilt></div>
     <div class=row style="margin-top:6px"><span class=sub id=tiltmsg></span></div>
-    <h2>When the bars are full</h2>
-    <code id=cmd></code>
+    <h2>Solve</h2>
+    <button id=go>Run calibration</button>
+    <div id=sv class=sub style="margin-top:8px"></div>
+    <pre id=out></pre>
   </aside>
 </main>
 <script>
@@ -254,15 +288,25 @@ async function tick(){
   document.getElementById('tiltmsg').textContent = empty
     ? 'still missing '+empty+' tilt band(s) -- angle the board more'
     : 'all tilt bands covered';
-  document.getElementById('cmd').textContent = s.cmd;
+  const b=document.getElementById('go');
+  b.disabled = s.solve==='running';
+  b.textContent = s.solve==='running' ? 'solving...'
+      : s.solve==='done' ? 'Re-run calibration' : 'Run calibration';
+  document.getElementById('sv').textContent =
+      s.solve==='done'   ? 'installed -- rebuild and the launch picks it up'
+    : s.solve==='failed' ? 'solve failed, see below'
+    : s.kept>=s.want ? 'ready' : 'you can solve early, but fill the bars first';
+  document.getElementById('out').textContent = s.solve_out||'';
  }catch(e){}
 }
+document.getElementById('go').onclick=async()=>{
+  await fetch('/solve',{method:'POST'}); tick();};
 setInterval(tick,500); tick();
 </script>
 """
 
 
-def make_handler(st, cmd):
+def make_handler(st, solve_argv, solve_dest):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -280,7 +324,8 @@ def make_handler(st, cmd):
                     s = json.dumps({
                         'kept': st.kept, 'want': st.want, 'msg': st.msg,
                         'cover': st.cover.tolist(), 'tilt': st.tilt.tolist(),
-                        'err': st.err, 'cmd': cmd}).encode()
+                        'err': st.err, 'solve': st.solve,
+                        'solve_out': st.solve_out}).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(s)))
@@ -307,6 +352,20 @@ def make_handler(st, cmd):
             else:
                 self.send_response(404)
                 self.end_headers()
+
+        def do_POST(self):
+            if self.path != '/solve':
+                self.send_response(404)
+                self.end_headers()
+                return
+            with st.lock:
+                busy = st.solve == 'running'
+            if not busy:
+                threading.Thread(target=run_solve,
+                                 args=(st, solve_argv, solve_dest),
+                                 daemon=True).start()
+            self.send_response(204)
+            self.end_headers()
     return H
 
 
@@ -321,6 +380,11 @@ def main():
     ap.add_argument('--width', type=int, default=1280)
     ap.add_argument('--height', type=int, default=720)
     ap.add_argument('--port', type=int, default=8099)
+    ap.add_argument('--applies-to', default='pi_forward',
+                    help='camera PROFILE this calibration describes')
+    ap.add_argument('--install', default=None,
+                    help='where the finished calibration is written; defaults '
+                         'to the package source tree so it is committable')
     a = ap.parse_args()
 
     cols, rows = (int(x) for x in a.grid.lower().split('x'))
@@ -330,14 +394,23 @@ def main():
                      args=(st, a.device, a.width, a.height),
                      daemon=True).start()
 
-    cmd = (f'python3 tools/fov_solve.py {a.out} '
-           f'--grid {a.grid} --square {a.square}')
+    here = os.path.dirname(os.path.abspath(__file__))
+    install = a.install or os.path.join(
+        here, '..', 'src', 'duburi_vision', 'config', 'calibration')
+    install = os.path.abspath(install)
+    os.makedirs(install, exist_ok=True)
+    solve_dest = os.path.join(install,
+                              f'{a.applies_to}_{a.width}x{a.height}.json')
+    solve_argv = [sys.executable, os.path.join(here, 'fov_solve.py'), a.out,
+                  '--grid', a.grid, '--square', str(a.square),
+                  '--applies-to', a.applies_to, '--install', install]
     # ThreadingHTTPServer: the MJPEG handler never returns, so a
     # single-threaded server would starve /status and the page would look hung.
-    srv = ThreadingHTTPServer(('0.0.0.0', a.port), make_handler(st, cmd))
+    srv = ThreadingHTTPServer(('0.0.0.0', a.port),
+                              make_handler(st, solve_argv, solve_dest))
     print(f'board {cols}x{rows} inner corners, {a.views} views -> {a.out}')
     print(f'open  http://<this-host>:{a.port}/   (or http://localhost:{a.port}/)')
-    print(f'then  {cmd}')
+    print(f'solve installs -> {solve_dest}')
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

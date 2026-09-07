@@ -172,12 +172,21 @@ def generate_launch_description():
         # length and the frame centre. The fix was verified in a tool that
         # passed the path by hand and never reached the launch.
         #
-        # The Fantech is UNCALIBRATED and that is now said, not implied by an
-        # empty default that looks like an oversight.
+        # The Fantech is UNCALIBRATED and that is said, not implied by an
+        # empty default that looks like an oversight -- but it is now WIRED
+        # BY NAME rather than hardcoded to ''. `_calib` returns '' when the
+        # file is absent, so this is the uncalibrated state today AND becomes
+        # live the moment `fov_solve.py --install` writes the file. Nobody has
+        # to remember to come back and change a launch default, which is the
+        # step that would otherwise be forgotten between calibrating the
+        # camera and the calibration actually reaching it -- the exact class
+        # of gap that produced the wrong-camera bug above.
         DeclareLaunchArgument(
             'dwn_calibration',
             default_value=_calib('pi_downward_1280x720.json')),
-        DeclareLaunchArgument('fwd_calibration', default_value=''),
+        DeclareLaunchArgument(
+            'fwd_calibration',
+            default_value=_calib('pi_forward_1280x720.json')),
         # THE DVL. flow_node existed only as a setup.py entry point -- in no
         # launch file at all -- so the bottom-camera velocity sensor had to be
         # started by hand, which on a pool deck means it does not get started.
