@@ -47,11 +47,46 @@ import numpy as np
 FIND = cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE
 CRIT = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 GRID = 3
-TILT_BINS = (0.00, 0.10, 0.22, 0.36, 1.00)
-TILT_NAME = ('square-on', 'slightly tilted', 'clearly tilted', 'steeply tilted')
+# ⛔ TILT BANDS ARE ROS'S SKEW, AND THE OLD METRIC WAS BROKEN.
+#
+# The first version compared the board's two DIAGONALS. That is zero for the
+# motion an operator actually makes: tilting about a horizontal or vertical
+# axis projects a rectangle to a SYMMETRIC TRAPEZOID, whose diagonals are
+# equal by symmetry. Measured on synthetic ground truth:
+#
+#     tilt     old diagonal metric      ROS skew
+#      15 deg        0.0000              0.054
+#      30 deg        0.0000              0.115
+#      55 deg        0.0000              0.284
+#
+# EXACTLY ZERO at 55 degrees. The operator reported being unable to reach
+# "steeply tilted" no matter how far they tilted, and they were right -- the
+# band was unreachable by construction, not by technique.
+#
+# The replacement is the measure `ros-perception/image_pipeline`'s
+# `camera_calibration` has used for years: how far a corner of the projected
+# quad departs from 90 degrees,
+#     skew = min(1, 2*|pi/2 - angle(up_left, up_right, down_right)|)
+# which is sensitive to exactly the symmetric tilt the diagonals cannot see.
+#
+# The band edges come from that mapping, and the top band stops at ~45 deg
+# ON PURPOSE. calib.io's guidance is explicit: use up to +/-45 degrees,
+# because "tilting more is usually not a good idea as feature localization
+# accuracy suffers and can become biased". Asking for "as steep as you can"
+# is asking for a worse calibration.
+#
+#     skew  0.03 = 10 deg    0.075 = 20 deg    0.13 = 33 deg    0.20 = 45 deg
+TILT_BINS = (0.00, 0.03, 0.075, 0.13, 1.00)
+TILT_NAME = ('square-on', 'slightly tilted (~15 deg)',
+             'clearly tilted (~25 deg)', 'steeply tilted (~40 deg)')
 CELL_NAME = (('top-left', 'top-centre', 'top-right'),
              ('middle-left', 'CENTRE', 'middle-right'),
              ('bottom-left', 'bottom-centre', 'bottom-right'))
+# OpenCV's own chessboard sharpness metric; its documented target is < 3 px.
+# Measured on 21 frames captured under the old auto-exposure: median 7.30 px,
+# and only 3 of 13 under target. That is the blur, quantified by the
+# library's own yardstick rather than by eye.
+MAX_SHARPNESS_PX = 3.0
 HOLD_S = 0.5          # the pose must persist this long before it is taken
 
 
@@ -93,22 +128,28 @@ class State:
         self.cell = None               # live: which cell the board is in
         self.band = None               # live: which tilt band
         self.hold = 0.0                # 0..1 progress of the hold timer
+        self.sharp = None              # OpenCV chessboard sharpness, px
         self.solve = 'idle'
         self.solve_out = ''
 
 
 def tilt_of(corners, cols):
-    """Foreshortening: how far the board is from square-on, scale-free.
+    """Foreshortening as ROS `camera_calibration` measures it.
 
-    Compares the quad's two diagonals -- equal when square-on, unequal when
-    tilted. Scale-free on purpose, so it does not confuse "further away" with
-    "more tilted"; distance is a different axis and the script does not ask
-    for it.
+    How far the corner at `up_right` departs from a right angle. Scale-free,
+    so it does not confuse "further away" with "more tilted", and -- unlike
+    the diagonal comparison this replaces -- it responds to tilt about a
+    horizontal or vertical axis, which is the tilt a person actually makes.
     """
     c = corners.reshape(-1, 2)
-    d1 = np.linalg.norm(c[-1] - c[0])
-    d2 = np.linalg.norm(c[-cols] - c[cols - 1])
-    return float(abs(d1 - d2) / max(d1, d2)) if max(d1, d2) > 1e-6 else 0.0
+    up_left, up_right, down_right = c[0], c[cols - 1], c[-1]
+    ab = up_left - up_right
+    cb = down_right - up_right
+    na, nc = np.linalg.norm(ab), np.linalg.norm(cb)
+    if na < 1e-6 or nc < 1e-6:
+        return 0.0
+    ang = np.arccos(np.clip(float(np.dot(ab, cb)) / (na * nc), -1.0, 1.0))
+    return float(min(1.0, 2.0 * abs(np.pi / 2.0 - ang)))
 
 
 def band_of(t):
@@ -274,7 +315,28 @@ def detect_loop(st, det_w):
         # because for those "more" is precisely what must not be accepted.
         okc = (gy, gx) == (ty, tx)
         okt = (band == 0) if tb == 0 else (band >= tb)
+        # ⛔ SHARPNESS IS A CAPTURE GATE, not something to discover in the
+        # solve. Measured on 21 frames taken under the old auto-exposure:
+        # median 7.30 px against OpenCV's documented < 3 px target, only 3
+        # of 13 in spec. A blurred view is not a cheap view -- it biases the
+        # corner positions the whole calibration is built from, and nothing
+        # downstream can tell it apart from a good one.
+        sharp = None
         if okc and okt:
+            try:
+                sharp = float(cv2.estimateChessboardSharpness(
+                    gray, (st.cols, st.rows), c)[0])
+            except Exception:
+                sharp = None
+        oks = sharp is None or sharp <= MAX_SHARPNESS_PX
+        with st.lock:
+            st.sharp = sharp
+        if okc and okt and not oks:
+            held_since = None
+            prog = 0.0
+            msg = (f'too blurred ({sharp:.1f} px, want <{MAX_SHARPNESS_PX:.0f})'
+                   f' -- hold still, or add light')
+        elif okc and okt:
             held_since = held_since or time.time()
             prog = min(1.0, (time.time() - held_since) / HOLD_S)
             msg = 'hold it...'
@@ -382,6 +444,7 @@ PAGE = """<!doctype html><meta charset=utf-8>
   <div class=todo id=todo></div>
   <div class=chk><span class=dot id=dc></span><span id=tc></span></div>
   <div class=chk><span class=dot id=dt></span><span id=tt></span></div>
+  <div class=chk><span class=dot id=ds></span><span id=ts></span></div>
   <div class=prog><i id=hold></i></div>
   <div class=msg id=msg></div>
   <h2>Progress</h2>
@@ -403,13 +466,16 @@ async function tick(){
   if(s.done){
     $('stepno').textContent='all poses captured';
     $('todo').innerHTML='Press <b>Run calibration</b>.';
-    $('tc').textContent='';$('tt').textContent='';
+    $('tc').textContent='';$('tt').textContent='';$('ts').textContent='';
   }else{
     $('stepno').textContent='Step '+(s.i+1)+' of '+s.n;
     $('todo').innerHTML='Put the board in the <b>'+s.want_cell+
       '</b> of the frame,<br>and hold it <b>'+s.want_tilt+'</b>.';
     $('tc').textContent='position: '+(s.cell? s.cell : 'no board');
     $('tt').textContent='tilt: '+(s.band!==null? s.band : '-');
+    $('ts').textContent = s.sharp===null ? 'sharpness: -'
+        : 'sharpness: '+s.sharp.toFixed(1)+' px (want <'+s.sharp_max+')';
+    $('ds').className='dot '+(s.sharp===null?'':(s.sharp<=s.sharp_max?'on':'off'));
     $('dc').className='dot '+(s.ok_cell?'on':'off');
     $('dt').className='dot '+(s.ok_tilt?'on':'off');
   }
@@ -453,6 +519,7 @@ def make_handler(st, solve_argv, solve_dest):
                     'ok_cell': bool(cell == (ty, tx)),
                     'ok_tilt': bool(band == tb),
                     'hold': st.hold, 'msg': st.msg, 'err': st.err,
+                    'sharp': st.sharp, 'sharp_max': MAX_SHARPNESS_PX,
                     'fps': round(st.fps, 1), 'det_ms': round(st.det_ms, 1),
                     'solve': st.solve, 'solve_out': st.solve_out,
                 }
