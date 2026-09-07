@@ -61,7 +61,7 @@ from duburi_vision.distance.flow_math import (
     DistanceAccumulator, HeightFromDivergence, Intrinsics, detect_corners,
     flow_dispersion, forward_backward_error,
     RefractiveRectifier, height_above_floor, integrate_rate, interp_rate,
-    predict_points, robust_flow,
+    robust_flow,
     solve_planar_motion,
 )
 from duburi_vision.distance.flow_velocity import flow_velocity
@@ -144,11 +144,6 @@ class FlowVelocityNode(Node):
         self.declare_parameter('gyro_gain_x', _GYRO_GAIN_DEFAULT)
         self.declare_parameter('gyro_gain_y', _GYRO_GAIN_DEFAULT)
         self.declare_parameter('rot_fraction_max', 0.80)
-        # Seed LK where the gyro says the points went. Default OFF until it
-        # is A/B'd on this rig: a guess outside the basin is WORSE than no
-        # guess, and 'a bad correction is worse than none' is already in the
-        # record at the cost of 35.7 cm of real travel.
-        self.declare_parameter('gyro_aided_lk', False)
         # Correct the FLAT PORT instead of averaging over it. Default ON in
         # water: a single f_water is exact only at the radius it was fitted
         # at, and the residual is a 1-2.8 % ANISOTROPIC scale error -- larger
@@ -166,6 +161,9 @@ class FlowVelocityNode(Node):
         self.declare_parameter('target_px', 8.0)
         self.declare_parameter('max_px', 25.0)
         self.declare_parameter('max_baseline_s', 0.75)
+        # RE-ANCHOR ON ACCUMULATED ROTATION, not only on displacement and
+        # time. Measured on this camera's own floor texture (see below).
+        self.declare_parameter('max_rotation_deg', 6.0)
         # PLANAR RIGID FIT. A downward camera on a flat floor sees ONE body
         # move, so all the points measure the same four numbers. Measured
         # against a median, truth exact: with 1.5 deg of rotation in an
@@ -220,11 +218,13 @@ class FlowVelocityNode(Node):
         self._target_px = float(self.get_parameter('target_px').value)
         self._max_px = float(self.get_parameter('max_px').value)
         self._max_baseline = float(self.get_parameter('max_baseline_s').value)
+        self._max_rot_rad = math.radians(
+            float(self.get_parameter('max_rotation_deg').value))
+        self._n_rot_anchor = 0
         self._use_planar = bool(self.get_parameter('use_planar_fit').value)
         self._ransac_px = float(self.get_parameter('ransac_px').value)
         self._fb_px = float(self.get_parameter('fb_reject_px').value)
         self._yaw_sign = float(self.get_parameter('yaw_image_sign').value)
-        self._gyro_lk = bool(self.get_parameter('gyro_aided_lk').value)
         self._n_water = float(
             self.get_parameter('water_refractive_index').value)
         self._want_refract = bool(
@@ -491,51 +491,69 @@ class FlowVelocityNode(Node):
                               block=_FEATURE_PARAMS['blockSize'],
                               buckets=self._buckets)
 
-    def _gyro_guess(self, dt: float, t_end: float):
-        """Predict the anchor points forward with the gyro. LK's initial guess.
+    def _is_ripe(self, mag: float, n_used: int, dt: float,
+                 rot_rad: float) -> bool:
+        """Has this baseline accumulated enough to be worth estimating from?
 
-        Uses the SAME calibrated mapping and the SAME td shift as de-rotation
-        -- `gyro_gain_x/y` and `yaw_image_sign`. That is deliberate: if the
-        mapping is right, both the guess and the correction are right; if it
-        is wrong, both are wrong TOGETHER and the yaw cross-check already
-        flags it. A second, independently-signed copy of the mapping would be
-        a second thing to get wrong silently, which is how the sim scorer came
-        to grade a board that no longer existed.
+        Five ways an interval becomes ripe, and the last one is new:
+          - `target_px` of displacement: the signal we actually want
+          - `max_px`: re-anchor before LK is asked to cross its own window
+          - too few tracks: the anchor is dying, take what is left
+          - `max_baseline_s`: a hard ceiling so a still hull still reports
+          - **accumulated rotation**: see below
 
-        Returns None -- meaning "no guess, search from zero" -- whenever the
-        rates are not available for this exact interval. Absence is not a
-        prediction of zero motion: at 0.6 rad/s a missing sample would seed
-        every point ~200 px away from where it actually went.
+        ⛔ ROTATION IS NOT COVERED BY THE OTHERS, and assuming it was is the
+        mistake this method exists to prevent. The tempting argument is that
+        rotation inflates the median so displacement-ripeness fires anyway --
+        round 38 measured a median inventing 4.79 px under 1.5 deg. **That
+        does not hold here**: with this node's grid bucketing the corners are
+        spread symmetrically about the principal point, and the
+        component-wise median of a pure rotation is then ~0 -- measured
+        **2.28 px at 6 deg**, against an 8 px floor. The protection that
+        remains is REACTIVE: tracks die, `n_used` falls under `_MIN_TRACKS`,
+        and ripeness fires having already spent the interval.
+
+        Measured A/B over a simulated station-keep-while-yawing on real floor
+        texture, 3 s runs: distance recovered is unchanged (98.7 -> 98.6 %,
+        102.9 -> 102.1 %) and the MEASUREMENT RATE rises where it matters --
+        19 -> 23 and 41 -> 45 emitted intervals at 0.638 and 1.128 rad/s,
+        and exactly unchanged (7 -> 7, 34 -> 34) when not yawing. So this
+        buys measurements during a yawing hold, not accuracy, and it is
+        written down that way rather than sold as an accuracy fix.
         """
-        if dt <= 0.0 or self._anchor_pts is None:
-            return None
-        rates = integrate_rate(self._rate_buf,
-                               t_end - dt - self._td, t_end - self._td)
-        if rates is None:
-            return None
-        pitch_rate, roll_rate = rates
-        # Same sign convention as the flow_velocity call below: the gains
-        # carry the sign, and the shift is what the ROTATION did to the image.
-        dx = self._f_guess_px * (self._gx * roll_rate) * dt
-        dy = self._f_guess_px * (self._gy * pitch_rate) * dt
+        if mag >= self._target_px or mag >= self._max_px:
+            return True
+        if n_used < _MIN_TRACKS or dt >= self._max_baseline:
+            return True
+        if rot_rad >= self._max_rot_rad:
+            self._n_rot_anchor += 1
+            return True
+        return False
 
-        theta = 0.0
-        if self._yaw_rate_buf:
-            gz = interp_rate([(a, b, 0.0) for (a, b) in self._yaw_rate_buf],
-                             t_end - dt * 0.5 - self._td)
-            if gz is not None:
-                theta = self._yaw_sign * gz[0] * dt
+    def _rotation_since_anchor(self, t_now: float) -> float:
+        """|image rotation| accumulated since the anchor, from the gyro.
 
-        if self._intr is not None:
-            cx, cy = self._intr.cx, self._intr.cy
-        else:
-            # The frame's own centre, not a remembered width: the principal
-            # point is 11.4 px off centre on this camera (measured), so this
-            # fallback is already approximate -- it must at least be
-            # approximate about the RIGHT frame.
-            h_px, w_px = self._anchor_gray.shape[:2]
-            cx, cy = w_px * 0.5, h_px * 0.5
-        return predict_points(self._anchor_pts, cx, cy, dx, dy, theta)
+        Yaw about the optical axis is what rotates a DOWNWARD image, so the
+        yaw channel is the one that matters here -- the same channel the
+        image/gyro cross-check already uses, and it was published and read by
+        nothing before that.
+
+        Returns 0.0 when there is no gyro for the interval. That is
+        deliberate and is NOT an absence-is-zero mistake: with no rotation
+        estimate the other ripeness criteria still apply, so the worst case is
+        the behaviour we had before this criterion existed. Refusing here
+        instead would turn a missing IMU sample into a stalled anchor.
+        """
+        if not self._yaw_rate_buf:
+            return 0.0
+        dt = t_now - self._anchor_t
+        if dt <= 0.0:
+            return 0.0
+        gz = interp_rate([(a, b, 0.0) for (a, b) in self._yaw_rate_buf],
+                         t_now - dt * 0.5 - self._td)
+        if gz is None:
+            return 0.0
+        return abs(gz[0]) * dt
 
     def _accept_td(self, got, quality):
         """Decide whether an estimated camera<->gyro offset may be used.
@@ -610,14 +628,8 @@ class FlowVelocityNode(Node):
             self._anchor(gray, t)
             return
 
-        guess, lk_flags = None, {}
-        if self._gyro_lk:
-            guess = self._gyro_guess(t - self._anchor_t, t)
-            if guess is not None:
-                lk_flags = {'flags': cv2.OPTFLOW_USE_INITIAL_FLOW}
         nxt, status, _err = cv2.calcOpticalFlowPyrLK(
-            self._anchor_gray, gray, self._anchor_pts, guess,
-            **_LK_PARAMS, **lk_flags)
+            self._anchor_gray, gray, self._anchor_pts, None, **_LK_PARAMS)
 
         flow = robust_flow(self._anchor_pts, nxt, status,
                            min_tracks=_MIN_TRACKS)
@@ -631,8 +643,32 @@ class FlowVelocityNode(Node):
         n_used = int(np.asarray(status).reshape(-1).astype(bool).sum())
         mag = math.hypot(flow[0], flow[1])
         dt = t - self._anchor_t
-        ripe = (mag >= self._target_px or mag >= self._max_px
-                or n_used < _MIN_TRACKS or dt >= self._max_baseline)
+        # ⛔ ROTATION IS A RIPENESS CRITERION, and its absence was a hole.
+        # Ripeness asked about DISPLACEMENT, track count and TIME -- never
+        # rotation. The baseline stretches when the hull moves SLOWLY, which
+        # is station-keeping, our most common state; so a hull holding
+        # position while yawing accumulates the whole rotation inside ONE
+        # interval. At 1.128 rad/s over the 0.75 s cap that is 48.5 deg, and
+        # measured on this camera's own floor texture it leaves **0 of 192
+        # points**. The node then refuses -- honest, and a blind sensor
+        # exactly where the vehicle spends most of its time.
+        #
+        # Measured survival and translation error vs accumulated rotation
+        # (real frames, forward-backward at 2 px applied):
+        #     3 deg  82.5 %  0.014 px      10 deg  51.1 %  0.076 px
+        #     6 deg  74.7 %  0.040 px      12 deg  37.4 %  0.191 px
+        #     8 deg  60.5 %  0.091 px      20 deg  12.4 %  1.344 px
+        # Graceful to ~10 deg, then a knee. 6 deg sits inside the graceful
+        # region with margin, and re-anchoring costs one corner detection.
+        #
+        # SEEDING LK WITH THE GYRO WAS TRIED FIRST AND MEASURED TO DO NOTHING:
+        # at our rates the displacement is already inside LK's basin (identical
+        # results to three decimals), and at large rotation the extra points a
+        # seed recovers FAIL forward-backward -- 0 -> 5 of 192 at 48 deg. The
+        # points it wins back are not correct matches. Re-anchoring earlier is
+        # the fix; a better initial guess is not.
+        rot = self._rotation_since_anchor(t)
+        ripe = self._is_ripe(mag, n_used, dt, rot)
         if not ripe:
             self._n_tracks = n_used
             return

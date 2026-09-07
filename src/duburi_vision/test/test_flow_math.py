@@ -496,37 +496,3 @@ class TestRefractiveRectifier:
         assert np.allclose(b.rectify(pts), pts, atol=1e-9)
         assert not np.allclose(a.rectify(pts), pts, atol=1e-3)
 
-
-class TestPredictPoints:
-    """The gyro's guess for LK."""
-
-    def test_pure_yaw_ROTATES_about_the_principal_point(self):
-        """The term a uniform shift gets wrong: yaw moves a corner and leaves
-        the centre alone. If this test passes with dx=dy=0 and a centre point
-        that MOVES, the prediction is not a rotation."""
-        from duburi_vision.distance.flow_math import predict_points
-        cx, cy, th = 320.0, 180.0, math.radians(5.0)
-        pts = np.array([[cx, cy], [cx + 300.0, cy]], dtype=np.float32)
-        out = np.asarray(predict_points(pts, cx, cy, 0.0, 0.0, th)).reshape(-1, 2)
-        assert out[0][0] == pytest.approx(cx) and out[0][1] == pytest.approx(cy)
-        moved = math.hypot(out[1][0] - pts[1][0], out[1][1] - pts[1][1])
-        assert moved == pytest.approx(2 * 300.0 * math.sin(th / 2), rel=1e-4)
-
-    def test_pure_translation_moves_EVERY_point_the_same(self):
-        from duburi_vision.distance.flow_math import predict_points
-        pts = np.array([[10.0, 20.0], [600.0, 340.0]], dtype=np.float32)
-        out = np.asarray(predict_points(pts, 320.0, 180.0, 7.0, -3.0, 0.0))
-        out = out.reshape(-1, 2)
-        assert np.allclose(out - pts, np.array([7.0, -3.0]), atol=1e-4)
-
-    def test_rotation_is_applied_BEFORE_translation(self):
-        """Order is not cosmetic: translate-then-rotate rotates the
-        translation too, and the two compositions differ by theta*|t|."""
-        from duburi_vision.distance.flow_math import predict_points
-        cx, cy, th, dx = 320.0, 180.0, math.radians(10.0), 40.0
-        p = np.array([[cx, cy]], dtype=np.float32)
-        out = np.asarray(predict_points(p, cx, cy, dx, 0.0, th)).reshape(-1, 2)
-        # A point AT the centre: rotation does nothing, so it must land at
-        # exactly cx+dx. Under the other order it would land at cx+dx*cos(th).
-        assert out[0][0] == pytest.approx(cx + dx, abs=1e-4)
-        assert out[0][1] == pytest.approx(cy, abs=1e-4)
