@@ -1226,13 +1226,15 @@ wrote the zero myself.
 
 ### What survives as real code findings
 
-1. **A refused interval discarded the travel it covered.** `_process`
-   advanced the anchor before `_evaluate` had said whether the interval was
-   usable, and refusals are CORRELATED WITH MOTION — they cluster in the fast
-   part of a move, where the distance is. Fixed behind
-   `reanchor_on_refusal` (default unchanged), three tests verified to bite.
+1. ~~**A refused interval discarded the travel it covered.**~~ — **WITHDRAWN
+   the same day, see §22.** The observation is true and refusals really do
+   cluster in the fast part of a move, but the fix for it (holding the anchor
+   across a refusal) measured **worse at every refusal rate** and *raised*
+   the refusal count, because the widened window still contains the
+   disturbance and it cascades. Parameter deleted, behaviour reverted.
 2. **The gyro axis mapping is confirmed correct**, which had never been
-   checked since the IMU became the srot board.
+   checked since the IMU became the srot board. **This is the only finding
+   from this section that survived.**
 
 ### The method note, because it is the fourth time this round
 
