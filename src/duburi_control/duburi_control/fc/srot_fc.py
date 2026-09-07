@@ -484,7 +484,41 @@ class SrotFC(FlightController):
         ok, reason = self.check_depth_loop_settled()
         if not ok:
             return False, reason
+        ok, reason = self.check_thruster_power()
+        if not ok:
+            return False, reason
         return self._arm_disarm(True, timeout, abort)
+
+    def check_thruster_power(self):
+        """(ok, reason). Refuse to arm when thruster power is KNOWN to be cut.
+
+        The thruster pack is switched by a rotary knob on the SECOND board (an
+        AS5600 magnetic encoder driving a MOSFET). Outside its two ON windows the
+        propulsion battery is physically disconnected -- the ESCs are unpowered
+        and the hull cannot move at all.
+
+        Nothing refuses this today, on either side: the firmware's own `canArm()`
+        checks IMU, leak and pack voltage and never looks at the kill state. So
+        arming succeeds, every motion verb runs its full profile against dead
+        thrusters, the payload fires, and the mission advances to completion on a
+        motionless vehicle -- the silent-success shape that has already cost this
+        project a round in SURFACE mode and a disarmed `SROT_MOVE`.
+
+        ⛔ REFUSES ONLY ON KNOWN-ENGAGED, and that asymmetry is deliberate.
+        `kill_switch is None` means the second board is not talking (unpowered,
+        out of range, `ESPNOW_EN = 0`, or simply not built), which is a perfectly
+        ordinary bench configuration. Refusing on unknown would make `arm()`
+        unreachable on every vehicle without a second board -- the same trap as
+        refusing a torpedo on UNKNOWN thruster health.
+        """
+        try:
+            kill = self.telemetry().kill_switch
+        except Exception as exc:                  # a probe fault is not a hull fault
+            return True, f'thruster power unreadable ({exc}) -- allowing'
+        if kill is True:
+            return False, ('thruster power is CUT at the 2nd-board rotary switch -- '
+                           'arming would run the whole mission against dead thrusters')
+        return True, ''
 
     def check_depth_loop_settled(self):
         """(ok, reason). Refuse to arm while the depth controller is already saturated.
@@ -1236,6 +1270,33 @@ class SrotFC(FlightController):
     #  AUTOTUNE (21) and MOTOR_TUNE (22)                                   #
     # ------------------------------------------------------------------ #
 
+    def tune_progress(self):
+        """Live tune telemetry: (percent, detail) -- or (None, '') when silent.
+
+        The board publishes `STUNT_PRG` (reused for the autotune percentage,
+        fw task_control_loop.cpp:847) and, during an autotune, the live
+        limit-cycle measurement `AT_N` / `AT_AMP` / `AT_TU` / `AT_OKPCT`. They
+        added those for a stated reason:
+
+            "so a run can be watched from the GCS instead of only explained
+             after it aborts"                      (fw control/autotune.h:34)
+
+        Nothing on our side read any of it. The first version of `autotune()`
+        polled mode and armed for up to 150 s in TOTAL SILENCE -- exactly the
+        failure that comment exists to prevent, on a routine that is driving all
+        eight thrusters at full authority. `AT_TU` and `AT_OKPCT` read 0 while
+        collecting and settle when a phase converges, so "gathering" and "stuck"
+        are distinguishable here and nowhere else.
+        """
+        pct = self._named_value('STUNT_PRG')
+        bits = []
+        for name, fmt in (('AT_N', '{:.0f} half-cycles'), ('AT_AMP', 'amp {:.3f}'),
+                          ('AT_TU', 'Tu {:.2f}s'), ('AT_OKPCT', 'consensus {:.0f}%')):
+            v = self._named_value(name)
+            if v is not None:
+                bits.append(fmt.format(v))
+        return pct, ', '.join(bits)
+
     def _wait_for_tune_end(self, label, timeout, mark, abort_fn):
         """Poll until the board's own completion signal, or refuse.
 
@@ -1247,7 +1308,18 @@ class SrotFC(FlightController):
           AUTOTUNE    fw task_control_loop.cpp:846-853
         """
         deadline = time.monotonic() + max(1.0, float(timeout))
+        last_report = 0.0
         while time.monotonic() < deadline:
+            # Say what the tune is doing instead of sitting silent for minutes.
+            # Throttled: this loop polls at _POLL_S and the values move slowly.
+            now_m = time.monotonic()
+            if now_m - last_report >= 5.0:
+                last_report = now_m
+                pct, detail = self.tune_progress()
+                if pct is not None or detail:
+                    shown = '--' if pct is None else f'{pct:.0f}%'
+                    self._log_info(f'[TUNE ] {label} {shown}'
+                                   + (f' | {detail}' if detail else ''))
             if abort_fn is not None and abort_fn():
                 # Leaving the mode is what stops the tuner -- the firmware calls
                 # abort() on the falling edge (task_control_loop.cpp:532,540).
@@ -1650,9 +1722,28 @@ class SrotFC(FlightController):
             val = self._named_value(name)
             if val is not None:
                 setattr(t, attr, val)
-        kill = self._named_value('KILL')
-        if kill is not None:
-            t.kill_switch = kill >= 0.5
+        # ⛔ KILL = 0 IS NOT "CLEAR". The kill switch is a rotary knob on the
+        # SECOND board and its state crosses to this one over ESP-NOW; on link
+        # loss the firmware reports kill=false on purpose --
+        # `kill = f ? s_kill : false;  // link lost -> don't assert kill
+        # (display-only)` (espnow_link.cpp:49). But it is NOT display-only: it
+        # is packed into NAMED_VALUE_FLOAT "KILL" and read here.
+        #
+        # So a bare `KILL >= 0.5` reads "power is live" for a vehicle whose
+        # second board is unpowered, out of range, or simply not built -- and
+        # the operator's status line says `KILL clear` while nothing on the
+        # vehicle can see the switch at all.
+        #
+        # BATTERY_STATUS instance 1 is the disambiguator and costs nothing: the
+        # board SUPPRESSES it rather than zeroing it when the ESP-NOW link is
+        # stale (`if (s.pm2_present) sendBattery(1, ...)`, and pm2_present is
+        # gated on ESPNOW_STALE_MS). Its presence therefore IS the link
+        # liveness, already demuxed by id in `get_batteries()`.
+        if thr is None:
+            t.kill_switch = None            # no 2nd-board link -> nobody knows
+        else:
+            kill = self._named_value('KILL')
+            t.kill_switch = None if kill is None else (kill >= 0.5)
         return t
 
     # ------------------------------------------------------------------ #

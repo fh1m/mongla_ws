@@ -16,6 +16,8 @@ won and the document says so.
 | [`pr-b-telemetry-budget.md`](pr-b-telemetry-budget.md) | populate `ControlState.out_*` (six lines; `VFR_HUD.throttle` is a measured permanent zero); enrich the SD `Record` by **+54 B/record = 0.116 %** of the card | small, costed |
 | [`pr-c-pico-esc-health.md`](pr-c-pico-esc-health.md) | the Pico decodes ESC voltage/current/temperature into `tval` and discards it; `mav_stream` then packs zeros into fields we already decode | a dual reflash |
 | [`pr-f-esc-presence-on-the-wire.md`](pr-f-esc-presence-on-the-wire.md) | `esc_present`/`esc_fault` are **already members of `Snap`**, in scope at the packing site, while `ESC_TELEMETRY.count` ships literal zeros — presence never reaches the wire, so our thruster health can only ever say UNKNOWN | **one line, ESP32 only, zero bandwidth** |
+| [`pr-h-kill-is-ambiguous.md`](pr-h-kill-is-ambiguous.md) | `KILL = 0` means "power live" OR "no 2nd-board link" and nothing tells them apart; **nothing refuses a cut kill switch on either side**, so a killed hull arms, runs every verb and fires the payload motionless | **one line, ESP32 only** — their own suppression rule, already applied twice in the same function |
+| [`pr-g-optical-flow-ingest.md`](pr-g-optical-flow-ingest.md) | accept `OPTICAL_FLOW_RAD` (106) — the bottom camera is a bottom-track velocity sensor now (30 cm ±1.09 cm) and the board has **no velocity ingest of any kind** | a handler + one state field |
 | [`pr-d-protocol-honesty.md`](pr-d-protocol-honesty.md) | `REQUEST_MESSAGE` ACCEPTs all 190 ids and emits 7 (including ids `-1`/`-2`); no `TIMESYNC`; the SD log cannot be pulled over the link | one switch; ten lines for TIMESYNC |
 
 **Ranked, if only one lands:** PR A §3, the `31001` collision. It is the only

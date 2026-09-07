@@ -219,6 +219,21 @@ class FeedbackPump:
             self._stop.wait(timeout=0.4)
 
 
+def _kill_text(kill) -> str:
+    """Three states, because the wire has three.
+
+    `KILL clear` was printed whenever the value was not True -- including when
+    the board had no ESP-NOW link to the second board and therefore could not
+    see the switch at all. That is a FALSE SAFETY STATEMENT on the one line an
+    operator reads before arming, and it was observed live: a session logged
+    `thruster --` (no BATTERY_STATUS instance 1, so no link) next to
+    `KILL clear` in the same row.
+    """
+    if kill is None:
+        return 'UNKNOWN (no 2nd-board link)'
+    return 'ENGAGED' if kill else 'clear'
+
+
 class AUVManagerNode(Node):
     def __init__(self):
         super().__init__('duburi_manager')
@@ -1174,6 +1189,8 @@ class AUVManagerNode(Node):
         self._health.register('heading_ref', lambda: _hr.heading_reference(named))
         self._health.register('thrusters', lambda: _hr.thrusters(
             getattr(fc, 'thruster_health', lambda: None)()))
+        self._health.register('thruster_power', lambda: _hr.thruster_power(
+            getattr(fc.telemetry(), 'kill_switch', None)))
         self._health.register('detector', lambda: _hr.detector(
             self._detection_rate_hz()))
 
@@ -1596,7 +1613,7 @@ class AUVManagerNode(Node):
             f'WTEMP {self._tel(tel.water_temp_c, "{:.1f}", "C")} | '
             f'MAGACC {self._tel(tel.mag_accuracy, "{:.0f}")} | '
             f'LEAK {"WET" if tel.leak else "dry"} | '
-            f'KILL {"ENGAGED" if tel.kill_switch else "clear"}')
+            f'KILL {_kill_text(tel.kill_switch)}')
         self.get_logger().info(f'[SROT ] RPM  {rpm}')
         if tel.esc_temp_c:
             self.get_logger().info(f'[SROT ] ESC°C{etemp}')
