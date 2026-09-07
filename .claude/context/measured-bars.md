@@ -1500,3 +1500,48 @@ nobody re-runs the tilt calibration to learn something already measured, and
 `TestDeRotationSignConvention` pins `g = -S` in code, exactly and offline, so
 the convention cannot drift silently again.
 
+## 22. My own "refused intervals lose travel" fix — MEASURED AND WITHDRAWN. 2026-09-07
+
+§18 recorded this as one of the two real code findings that survived the
+instrument debacle. It does not survive its own measurement.
+
+`_process` advances the anchor before `_evaluate` decides, so a refused
+interval discards the travel it covered. The fix — hold the anchor across a
+refusal so the next interval measures the whole displacement — was put behind
+`reanchor_on_refusal`, **default unchanged**, precisely so it could be tested
+before it shipped. Tested offline against a chosen truth of 0.5604 m, with
+forced rotation-dominated refusals:
+
+| refusals | advance (shipped) | hold (the "fix") | verdict |
+|---|---|---|---|
+| none | 0.5604 | 0.5604 | equal |
+| 1 in 8 | **0.4437** | 0.1868 | holding is worse |
+| 1 in 5 | **0.3736** | 0.0934 | holding is worse |
+| 1 in 3 | **0.2102** | 0.0467 | holding is worse |
+
+**Holding is worse at every rate, and it RAISES the refusal count** (5 → 7,
+8 → 10). That is the mechanism: holding widens `dt`, the widened window
+still contains the disturbance that caused the refusal, so the next interval
+refuses too and it **cascades**. Deferring a measurement only pays if the
+next one is accepted, and a persistent cause guarantees it is not.
+
+**So the parameter is deleted and the behaviour reverted.** Travel lost to a
+refusal is the *price* of refusing; the lever that matters is refusing less
+often. `TestRefusalTravelIsThePriceOfRefusing` pins it with these numbers.
+
+### Two method notes, both of which nearly cost the result
+
+**The reasoning was good and still wrong.** "Refusals cluster in motion, so
+the lost travel is not a uniform sample" is true, and it does not follow that
+holding the anchor recovers it. This is the second time in one session that a
+mechanism was correctly identified and the fix for it measured backwards —
+the first being the de-rotation gains (§21).
+
+**Three refusal triggers were tried and the first two exercised NOTHING while
+passing.** Withholding the gyro does nothing, because `integrate_rate`
+interpolates across a missing sample; nulling `_depth_m` does nothing,
+because `_last_height` is cached. Both left every arm at exactly truth — a
+vacuous test agreeing with its own premise. The refusal-count assertion is
+now mandatory: **a test about what happens during refusals has to prove
+refusals happened.**
+
