@@ -212,6 +212,47 @@ scarcest asset in the archive for the one scoring task nobody has measured.
 
 ---
 
+## 5b. The commands, verified on the vehicle 2026-09-07
+
+Not written from the launch file — **run on the Pi and the output pasted
+below**, because the whole of §17 in `measured-bars.md` is about a
+configuration that was correct in a tool and wrong in the launch.
+
+```bash
+# The DVL. flow:=true is OFF by default and pool_depth_m has NO default.
+ros2 launch duburi_vision vision_pi.launch.py flow:=true pool_depth_m:=1.6
+```
+
+Expected banner, and check every field of it:
+
+```
+[FLOW ] camera='downward' medium='water' f=685.1px (air 513.9 / water 741.0)
+        port=RECTIFIED  pool_depth=1.60m  gyro_gain=(-1.000,-1.000)
+```
+
+- **`port=RECTIFIED`** — the flat-port correction is live. `single-f` means the
+  calibration did not load, and you are carrying a 1–2.8 % anisotropic scale
+  error (§14).
+- **`f=685.1px`** — the rectified reference focal length. Seeing **741** means
+  `port=single-f`.
+- **`pool_depth=1.60m`** — what you measured with a tape. `nan` prints
+  `VELOCITY PATH DISABLED` and nothing is published.
+
+Both refusal paths were exercised live and both are worth recognising:
+
+```
+[FLOW ] VELOCITY PATH DISABLED -- pool_depth_m was never set.
+[FLOW ] REFUSING: no trackable texture (0/19 points survived)
+        -- dark or featureless floor, not a tracking fault
+[FLOW ] REFUSING: LK lost the anchor (2/12 survived)
+```
+
+The middle one is the murky-water message and it is **not a bug report**: it
+means the floor gave nothing to track. The last one means tracking started and
+degraded. Telling them apart at 2 a.m. is the reason they are separate lines.
+
+---
+
 ## 6. Session logistics — so the data survives
 
 - **`.tlog` recorder on for every run** (round 27). It captures both
