@@ -191,9 +191,24 @@ Production `gate_rescue_repair` declares `gate / rescue / repair` — **no
 back-side class**. `tools/return_check.py` is written and **unrun**; the
 weights are on the Pi.
 
-**This does not need water — it needs one command on the Pi**, and it decides
-whether a phase-1 scoring task is silently dead. Do it before the session so
-the pool time is not spent discovering it.
+> **RUN 2026-09-07 — and the finding above is wrong in three places.** See
+> `measured-bars.md` §15. Short version: the production model is **not blind**
+> (41.7 % at conf 0.10, held out) but is **~26 % at the shipped operating
+> point** — a coin flip, which fails on the day rather than loudly. Only the
+> older SAUVC-family models score a true 0.0 %. It is **302 images and 72
+> labels**, not 302 labelled. And the archived back-side specialist's 88.9 %
+> is **memorisation** — its `data.yaml` says `val: train`, so it was scored on
+> its own training set and that number must not be deployed on.
+
+**What the pool owes this item:** point the forward camera at the gate **from
+the far side** and record a full pass. We have 72 labelled back-side frames
+from one session; that is not enough to decide anything, and it is the
+scarcest asset in the archive for the one scoring task nobody has measured.
+
+- **Bar:** enough frames from a **second** session to build a held-out split.
+  Never a random split — these are consecutive video frames and neighbours are
+  near-duplicates, which is exactly how the specialist came to score 98.6 % on
+  nothing.
 
 ---
 
