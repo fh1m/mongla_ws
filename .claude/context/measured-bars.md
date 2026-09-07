@@ -1475,6 +1475,26 @@ translation-dominated. Re-enabling needs a **high-rotation test on this
 hull, excited at the pivot the vehicle actually turns about**. `water-owed`
 item 24.
 
+### ⛔ THE EXPERIMENT'S OWN ERROR FLOOR IS ~8 %, SO 9.9 % RESOLVES ALMOST NOTHING
+
+Stated so the winning arm is not over-read. On a 30 cm hand slide:
+
+| term | size |
+|---|---|
+| hand slide repeatability | ±1 cm = **±3.3 %** |
+| height uncertainty, §12's ±5 cm on 0.70 m | **±7 %** (velocity is linear in h) |
+| combined, in quadrature | **~7.7 %** |
+
+The best arm measured **9.9 %**. That is barely outside the floor of the
+instrument measuring it, so **this test cannot tell a 10 %-accurate sensor
+from a 3 %-accurate one** — it can only rank the arms against each other,
+which is exactly what it was built to do and all it should be quoted for.
+
+Getting a real accuracy number needs the relative hand error to shrink:
+**2–3 m legs**, which is `water-owed` item 8 and a pool. Comparing against
+Nortek's 0.5–1 % or Ferrera's 0.89–1.88 % ATE on the strength of a 30 cm
+hand slide would be comparing our ruler to their sensor.
+
 The lens-pivot coupling is kept in the source as `_GYRO_GAIN_LENS_PIVOT` so
 nobody re-runs the tilt calibration to learn something already measured, and
 `TestDeRotationSignConvention` pins `g = -S` in code, exactly and offline, so
