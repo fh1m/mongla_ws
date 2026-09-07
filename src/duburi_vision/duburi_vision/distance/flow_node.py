@@ -209,6 +209,11 @@ class FlowVelocityNode(Node):
         f_air = float(self.get_parameter('focal_air_px').value)
         f_water = float(self.get_parameter('focal_water_px').value)
         self._f_px = f_water if self._medium == 'water' else f_air
+        # The gyro's ONLY remaining consumer is de-rotation inside
+        # flow_velocity (`pitch_rate`/`roll_rate` below). It used to also seed
+        # LK's initial guess; that was measured and REJECTED (nothing survived
+        # the 2 px forward-backward gate), so these gains no longer influence
+        # tracking at all -- only the rotational term subtracted afterwards.
         self._gx = float(self.get_parameter('gyro_gain_x').value)
         self._gy = float(self.get_parameter('gyro_gain_y').value)
         self._rot_max = float(self.get_parameter('rot_fraction_max').value)
@@ -231,12 +236,6 @@ class FlowVelocityNode(Node):
         self._want_refract = bool(
             self.get_parameter('refractive_rectify').value)
         self._refract = None
-        # The focal length the GYRO GUESS uses. It stays in RAW pixel space
-        # because that is where LK runs, so it must NOT switch to f_ref: the
-        # guess is an initial condition, refined by LK, and at the frame edge
-        # -- where the predicted shift is largest and the guess matters most
-        # -- the raw water focal length is the better approximation.
-        self._f_guess_px = self._f_px
         self._yaw_tol = float(self.get_parameter('yaw_cross_check_tol').value)
         self._undistort = bool(self.get_parameter('undistort').value)
         self._intr = None
@@ -255,7 +254,6 @@ class FlowVelocityNode(Node):
         if cal:
             try:
                 self._intr = Intrinsics.from_json(cal, 640, 360)
-                self._f_guess_px = self._f_px
                 if self._medium != 'water':
                     self._f_px = self._intr.fx
                 elif self._want_refract:
@@ -277,7 +275,6 @@ class FlowVelocityNode(Node):
                         self._intr.fx, self._intr.fy,
                         self._intr.cx, self._intr.cy, n=self._n_water)
                     self._f_px = self._refract.f_ref
-                    self._f_guess_px = f_water
                 else:
                     # Rectification off: keep the old single-focal-length
                     # behaviour so the two paths can be A/B'd, and say what it
@@ -286,7 +283,6 @@ class FlowVelocityNode(Node):
                     self._intr.fx *= k
                     self._intr.fy *= k
                     self._f_px = self._intr.fx
-                    self._f_guess_px = self._f_px
                     self.get_logger().warning(
                         '[FLOW ] refractive_rectify=false in WATER: a single '
                         'focal length is exact only at the radius it was '
@@ -1063,12 +1059,21 @@ class FlowVelocityNode(Node):
                 f'h={h:.2f}m pts={n_used} rot={v.rot_fraction:.2f} '
                 f'yaw_img={self._last_yaw_img:+.3f} '
                 f'd={self._acc.distance_m:+.3f}m  skipped={dropped} '
-                f'median_fallback={self._n_median_fallback}')
+                f'median_fallback={self._n_median_fallback} '
+                # Both were counted and never surfaced. rot_anchor is how
+                # often rotation ripeness fired -- the ONLY way to tell at the
+                # pool whether the cap is doing anything (it buys intervals,
+                # not accuracy, so it is invisible in the distance). td_rej is
+                # how often a time-offset fit was refused; a rising count with
+                # a flat td means the estimator is running and never trusted.
+                f'rot_anchor={self._n_rot_anchor} '
+                f'td_rej={self._td_rejected}')
         else:
             self.get_logger().info(
                 f'[FLOW ] REFUSING: {self._last_reason}  '
                 f'(q=0, {self._n_refused} refused / {self._n_ok} used)  '
-                f'skipped={dropped}')
+                f'skipped={dropped} rot_anchor={self._n_rot_anchor} '
+                f'td_rej={self._td_rejected}')
 
     def destroy_node(self):
         self._stop.set()
