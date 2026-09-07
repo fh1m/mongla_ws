@@ -1367,8 +1367,34 @@ fitted through the origin with k-fold held-out scoring.
 
 **The magnitude was never the problem — only the SIGN.** Both gains are near
 unity, which is what a correct focal length predicts; both are POSITIVE where
-the shipped pair is negative. The mount changed when the IMU became the srot
-board, and nothing had re-checked it.
+the shipped pair is negative.
+
+### ⛔ CORRECTION, made before this was acted on: I explained the flip wrongly
+
+This entry first said "the mount changed when the IMU became the srot board".
+**§12's own opening refutes that**: *"The srot board carries the downward
+global-shutter camera on a rigid mount"* — **same board, same camera**. The
+mount did not change, and I should have read the section I was citing.
+
+**So there is a real, unresolved contradiction, and it is stated rather than
+smoothed:**
+
+- §12 fitted `gx −1.150 / gy −1.095` and MEASURED them working: false
+  velocity under pure rotation fell **575.7 → 57.1 mm/s (−90 %)**.
+- Today's fit gives `+1.058 / +0.830` on the same hardware, and today's A/B
+  ranks the shipped **−1** as clearly WORST.
+
+Both are measurements; they cannot both describe the same convention. The
+likely seam is that this tool fits the coupling against **its own
+consecutive-frame LK median**, while the node measures with an
+**anchor-based planar rigid fit**, a mean rate over the baseline, and a `td`
+shift — every one of them added after §12. A sign that flips anywhere in
+that chain moves the fitted gain and not the physics.
+
+**Therefore the fit is NOT authority here; the A/B is.** It is the only test
+that runs the node's own pipeline end to end and scores it against a tape.
+Until it decides, the default stays at `−1.0` and both candidate values are
+parameters. Recorded so nobody reads `+1.058` as settled.
 
 ### This explains §19's A/B ordering exactly, which is the real confirmation
 
