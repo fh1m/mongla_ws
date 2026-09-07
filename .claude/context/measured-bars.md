@@ -1547,3 +1547,83 @@ vacuous test agreeing with its own premise. The refusal-count assertion is
 now mandatory: **a test about what happens during refusals has to prove
 refusals happened.**
 
+## 23. Motion blur: the shutter, not the detector. Measured + SOTA. 2026-09-07
+
+Reported as two problems — "barely finds the board" and "lots of motion
+blur". One cause.
+
+### Measured on the forward Fantech, same room, same lens
+
+| setting | mean | clipped | sharpness |
+|---|---|---|---|
+| **auto (what shipped)** — Aperture Priority, `exposure_time_absolute = 2000` | **26.6** | — | 163 |
+| manual exp 50 (5 ms), brightness 150 | **135.0** | 6.5 % | 122 |
+| manual exp 50, brightness 255 | 220.2 | 53.5 % | 57 |
+
+**Auto chose a 200 ms shutter.** Blur from rotation is `f·ω·t_exp`, so at
+f = 514 and 0.64 rad/s that smears **66 px**. No detector recovers from
+that, and the failure presents as *"the detector is bad"*.
+
+**`gain` is INERT on this unit** — 20 / 50 / 100 give identical frames. Only
+exposure and brightness do anything, so gain is not exposed as a knob.
+
+**It is the camera, not the room:** the downward camera reads mean 179 in the
+same room.
+
+### The detector was already the right one — measured, on 21 real frames
+
+| | hit rate | ms/frame |
+|---|---|---|
+| **`findChessboardCorners` 480 px** | **76.2 %** | 50 |
+| `findChessboardCorners` 640 px | 57.1 % | 89 |
+| `findChessboardCorners` full 1280 | 61.9 % | 224 |
+| `findChessboardCornersSB` 480 px | 38.1 % | 43 |
+| SB `EXHAUSTIVE|ACCURACY` 640 px | 42.9 % | 148 |
+
+Full resolution is **worse** than the downscale, and SB is **half as good** —
+confirming the earlier "SB rejected" note with numbers on our own data. The
+76 % ceiling is what a 200 ms shutter leaves behind. **The fix was upstream
+of the detector**, which is the whole lesson: the obvious move was to change
+the detector, and it would have bought nothing.
+
+### What the field does (searched, cited)
+
+- **Zhang, Forster & Scaramuzza, ICRA 2017** — choose exposure by maximising
+  a *gradient-based image quality metric*; beats both the camera's built-in
+  auto and any fixed exposure.
+- **Han et al., IEEE/ASME T-Mech 2023, "Camera Attributes Control for VO with
+  Motion Blur Awareness"** — the one that matches our problem exactly:
+  quality = weighted gradient + entropy, then **estimate scene motion by
+  optical flow and compute the maximum exposure that avoids blur**, and set
+  exposure to the smaller of the two. **This is the design we adopted.**
+- **DRL-AE (arXiv 2404.01636)** — RL, joint exposure+gain: **+38 % SIFT
+  features** (1306 vs 946), converges in **3–5 frames vs 10–30** for built-in
+  auto. Notably it **does not** handle motion blur, and says so.
+- **Deblurring is the wrong lever here** — inertial-aided deblurring is real
+  and real-time, but blind deconvolution "fails frequently for larger blur"
+  and assumes *spatially-invariant* blur, which rotation violates. When the
+  shutter can be shortened, shorten it. Recorded as a settled negative.
+
+### What shipped
+
+`webcam.py` never touched exposure, so BOTH mission cameras ran on the
+driver's auto. It now pins a manual shutter, and `max_blur_px` inverts
+`f·ω·t` into a **cap**:
+
+    t_max = max_blur_px / (f_px · ω_max)
+    → 1 px at f 514, ω 0.638 rad/s = 3.05 ms
+
+Our departure from Han et al.: they estimate ω from optical flow; we take the
+vehicle's expected `max_rate_rad_s`, because a static bound cannot lag the
+motion it is bounding. **The live-gyro version is the obvious next step** —
+we publish body rates at 50 Hz and the flow node already consumes them.
+
+Closes `water-owed` item 12.
+
+**Method note.** The test for the cap first *reimplemented* the rule, and an
+injected defect (a cap that lengthens as well as shortens) left it GREEN.
+That is round 33's failure verbatim. The arithmetic is now a module-level
+pure function and the test extracts it **by AST from the source file** — no
+package import, so no stale-install trap either. Three injections, three
+catches.
+
