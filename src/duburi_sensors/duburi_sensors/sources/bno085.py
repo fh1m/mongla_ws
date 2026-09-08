@@ -139,6 +139,25 @@ class BNO085Source:
         # Open with dtr=False first to avoid triggering the ESP32-C3 auto-reset
         # circuit (dev boards wire DTR→EN via RC, causing a reset on port open).
         # After settling, assert dtr=True so the HWCDC starts streaming.
+        # B48: CLAIM THE PORT BEFORE OPENING IT. An explicit `bno085_port` is an
+        # operator-supplied path and bypasses every VID/PID filter the
+        # auto-detect path applies, so a stale sensors.yaml or one typo opens
+        # whatever is at that path. On this hull that is the SROT flight
+        # controller (/dev/ttyUSB0), and opening it REBOOTS it -- mid-mission if
+        # the manager is up, and without the manager ever learning why its board
+        # disarmed. dtr/rts=False prevent the esptool reset; they do not prevent
+        # the reboot an open itself causes.
+        #
+        # No-op for a non-/dev path, so the sim's PTY is untouched, and it raises
+        # PortBusy naming the holder rather than silently taking the device.
+        self._guard = None
+        try:
+            from duburi_control.fc.port_guard import PortGuard
+            self._guard = PortGuard(port, log=logger)
+            self._guard.acquire()
+        except ImportError:
+            pass                                # duburi_control not on the path
+
         _ser = serial.Serial()
         _ser.port     = port
         _ser.baudrate = baud
@@ -314,6 +333,12 @@ class BNO085Source:
         except Exception as exc:
             if self._log:
                 self._log.debug(f'[SENS ] BNO085 serial close ignored: {exc!r}')
+        if getattr(self, '_guard', None) is not None:   # B48: release the claim
+            try:
+                self._guard.release()
+            except Exception as exc:
+                if self._log:
+                    self._log.debug(f'[SENS ] BNO085 port unlock ignored: {exc!r}')
         if self._log:
             self._log.info(
                 f'[SENS ] BNO085 stopped — frames:{self._frames_rx} '

@@ -197,6 +197,20 @@ class PayloadDriver:
             # DTR is NOT asserted at all: HWCDC's DTR gate only applies to the
             # device→host direction.  The host→device path (our fire byte) works
             # regardless of DTR state, so we never need dtr=True here.
+            # B48: claim before opening. `connect(port=...)` takes an
+            # operator-supplied path that bypasses the VID/PID scan entirely, and
+            # the board shares the payload's VID/PID anyway (B47) -- so this is
+            # the last line of defence against opening the flight controller,
+            # which reboots it. No-op for a non-/dev path; raises PortBusy naming
+            # the holder rather than taking a device someone else has.
+            self._guard = None
+            try:
+                from duburi_control.fc.port_guard import PortGuard
+                self._guard = PortGuard(resolved)
+                self._guard.acquire()
+            except ImportError:
+                pass
+
             _p = _serial_mod.Serial()  # type: ignore[union-attr]
             _p.port         = resolved
             _p.baudrate     = baud
@@ -307,6 +321,12 @@ class PayloadDriver:
             self._port = None
             _LOG.info('[PAYLOAD] disconnected %s', self._port_path)
             self._port_path = ''
+        if getattr(self, '_guard', None) is not None:   # B48: release the claim
+            try:
+                self._guard.release()
+            except Exception:
+                pass
+            self._guard = None
 
     @property
     def is_ready(self) -> bool:
