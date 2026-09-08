@@ -381,7 +381,15 @@ class DuburiMission:
         t0     = _time.monotonic()
         result = self.client.send(cmd, **fields)
         elapsed = _time.monotonic() - t0
-        self.log.info(_format_outcome(cmd, result))
+        # LEVEL BY OUTCOME. Every verb used to log at INFO, so a failure and a
+        # success were visually identical in a pool scrollback and differed only
+        # in the message text -- with the commonest failure (a move stall) buried
+        # among the successes. The operator's eye is the last line of defence
+        # during a run; give it something to catch.
+        ok = bool(getattr(result, 'success', False))
+        (self.log.info if ok else self.log.warning)(
+            _format_outcome(cmd, result) if ok
+            else '!! ' + _format_outcome(cmd, result).lstrip())
         self._scoreboard.append({
             'cmd':     cmd,
             'success': bool(getattr(result, 'success', False)),

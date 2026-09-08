@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 19 of 36 fixed (2026-09-08).**
+> **STATUS: 21 of 38 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1423,6 +1423,64 @@ just do not drop the pointer that makes it useful at 2am.
 **Deliberately not "fixed":** `verb 'X' has no SROT_MOVE mapping` stays terse. It
 is a programming error, not an operator one, and the traceback already names the
 caller.
+
+### B38 — a failure looked exactly like a success in the operator's log  ✅ FIXED 2026-09-08
+
+Asked for directly: *"give warning for — no terminal ACK within 8s (stall)"*.
+
+The stall — the commonest real failure on this link — was **never logged**. It
+braked the hull and returned `MoveResult(TIMEOUT, ...)`; whether anyone saw it
+depended entirely on the consumer. And the consumer was
+`DuburiMission._send()`, which logged **every** outcome through one formatter at
+`info`. So the moment the vehicle stopped responding produced a line visually
+identical to the nineteen successful lines above it.
+
+Two changes:
+- `SrotFC` **WARNs at the instant of the stall**, so it is visible regardless of
+  consumer, and says the hull was braked (nobody should have to wonder).
+- `_send()` levels the line by outcome: `info` on success, **`warning` with a
+  `!!` marker** on failure.
+
+### B39 — a stall meant SLOWNESS, not silence, and braked healthy moves  ✅ FIXED 2026-09-08
+
+Found by research, against the protocol we speak. [MAVLink command
+protocol](https://mavlink.io/en/services/command.html):
+
+> *"The GCS should have a **much increased timeout** after receiving an ACK with
+> `MAV_RESULT_IN_PROGRESS`."*
+
+`_relay_move_ack` armed **one** deadline before the loop and never extended it.
+The `IN_PROGRESS` branch only forwarded progress to the caller. So a move that was
+demonstrably alive — the board reporting rising progress every tick — was declared
+stalled and **braked** the moment it exceeded ~2× its predicted time.
+
+Braking a healthy manoeuvre mid-leg is worse than waiting for it: the leg is lost
+and the mission continues from somewhere unplanned. It would bite exactly where
+prediction is weakest — a dive fighting buoyancy, a long brake phase, a board
+merely slower than `MOVE_DEPTH_RATE` assumes.
+
+**Fix:** the deadline is a **silence window** refreshed by genuine progress, under
+an absolute ceiling (`_STALL_HARD_MULT = 4`) so a board reporting progress for
+ever still terminates. Measured after: a move alive for **4.0 s against a 1.4 s
+budget succeeds** (would have been braked); silence still stalls at the budget;
+endless progress is stopped at the cap.
+
+⛔ **THE STALE-ACK TRAP, AND A TEST OF MINE THAT DID NOT BITE.** `_cache()`
+returns the *same* `COMMAND_ACK` object every poll until a new one lands, so
+refreshing on every *sighting* would let ONE stale IN_PROGRESS hold the deadline
+open for ever — turning the backstop into a hang. The refresh therefore lives
+inside the `prog != last_prog` branch.
+
+My first test for that asserted only the returned **code**, and **the broken
+version passed it**: the deadline was indeed held open for ever, but the hard cap
+then terminated the run with the same `TIMEOUT` code, ~4× later. The cap masked
+the bug. The test now asserts *when* the stall happened — the only thing that
+tells "stalled on silence" apart from "ran to the ceiling". Verified failing on
+both the un-extended and the over-extended implementations.
+
+That is the second time this round a test checked the wrong quantity (B35's range
+check was the first). Assert the property you actually care about, not a
+consequence that has more than one cause.
 
 ## 8. Provenance
 
