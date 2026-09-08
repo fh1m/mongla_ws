@@ -15,7 +15,7 @@ from yasmin import Blackboard
 
 from ..core.base_state import DuburiState
 from ..core.blackboard import BK
-from ..core.outcomes import SUCCEED
+from ..core.outcomes import ABORT, SUCCEED
 
 
 # ── ARM ──────────────────────────────────────────────────────────────────────
@@ -253,21 +253,44 @@ class TurnState(DuburiState):
 # ── SURFACE (safe exit) ───────────────────────────────────────────────────────
 
 class SurfaceState(DuburiState):
-    """Emergency/planned surface: stop thrusters, ascend to 0m, disarm."""
+    """Emergency/planned surface: stop thrusters, ascend to 0m, disarm.
+
+    ⛔ THE ASCENT'S FAILURE IS REPORTED (J02). This used to wrap
+    `set_depth(0.0)` in a bare `except: pass` and then `return SUCCEED`
+    unconditionally -- a failed ascent reported as a successful surface, from the
+    one state whose entire purpose is to get the hull to the surface. On the
+    emergency path that is the worst possible lie: the FSM proceeds believing the
+    vehicle is up.
+
+    Everything still ATTEMPTED regardless, in order, each isolated -- a failed
+    release must not prevent the stop, and a failed ascent must not prevent the
+    disarm. Only the OUTCOME changes: ABORT when the ascent did not happen.
+    """
     TIMEOUT_S = 90.0
 
     def __init__(self, duburi, profile) -> None:
-        super().__init__(duburi, profile, [SUCCEED])
+        super().__init__(duburi, profile, [SUCCEED, ABORT])
 
     def _run(self, bb: Blackboard) -> str:
+        ok, why = True, ''
         try:
             self.duburi.release_heading()
-        except Exception:
-            pass
+        except Exception as exc:              # noqa: BLE001 -- best-effort
+            self.duburi.log.warning(f'[FSM  ] surface: release_heading failed: {exc}')
         self.duburi.stop()
+
         try:
-            self.duburi.set_depth(0.0, timeout=60)
-        except Exception:
-            pass
-        self.duburi.disarm()
+            res = self.duburi.set_depth(0.0, timeout=60)
+            if res is not None and not bool(getattr(res, 'success', True)):
+                ok, why = False, str(getattr(res, 'message', 'set_depth reported failure'))
+        except Exception as exc:              # noqa: BLE001 -- still disarm below
+            ok, why = False, f'{type(exc).__name__}: {exc}'
+
+        self.duburi.disarm()                  # ALWAYS, ascent or not
+
+        if not ok:
+            self.duburi.log.error(
+                f'[FSM  ] !! SURFACE DID NOT COMPLETE -- the hull may still be '
+                f'submerged. Disarmed anyway. Reason: {why}')
+            return ABORT
         return SUCCEED

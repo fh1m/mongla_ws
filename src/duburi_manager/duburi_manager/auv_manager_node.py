@@ -553,6 +553,12 @@ class AUVManagerNode(Node):
         fw_ok, fw_reason = self.fc.check_behaviour_rev()
         if not fw_ok:
             self.get_logger().error(f'[NET  ] {fw_reason}')
+        # B34: the host clamps every move to its OWN copy of MOVE_CRUISE_MAX.
+        # Say so when the board disagrees, or raising the board's cap silently
+        # does nothing to autonomous moves.
+        cm_ok, cm_reason = self.fc.check_move_cruise_max()
+        (self.get_logger().info if cm_ok else self.get_logger().warning)(
+            f'[SROT ] {cm_reason}')
         # Set the pilot gain to full so autonomous MANUAL_CONTROL isn't halved.
         if not self.fc.set_default_gain():
             self.get_logger().warning(

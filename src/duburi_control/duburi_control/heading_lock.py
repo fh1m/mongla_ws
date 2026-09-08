@@ -110,6 +110,18 @@ LOCK_APPROACH_BAND_DEG = 6.0
 # the shot. Pool-tunable. Must stay < LOCK_APPROACH_BAND_DEG.
 LOCK_HOLD_DEADBAND_DEG = 3.0
 
+# B15: the "must stay <" above was a COMMENT, and nothing enforced it. Raise the
+# deadband to or past the band and `span` goes <= 0; the runtime guard below then
+# returns the full LOCK_SPEED_MIN_PCT everywhere, which silently reinstates the
+# hard min-PWM floor -- i.e. exactly the relay limit-cycle the taper was added to
+# remove (the align-yaw jitter). No error, no log, just a hull that hunts again.
+# A module-level check makes a bad tune impossible to load rather than subtle to
+# fly.
+assert 0.0 <= LOCK_HOLD_DEADBAND_DEG < LOCK_APPROACH_BAND_DEG, (
+    f'LOCK_HOLD_DEADBAND_DEG ({LOCK_HOLD_DEADBAND_DEG}) must be >= 0 and strictly '
+    f'less than LOCK_APPROACH_BAND_DEG ({LOCK_APPROACH_BAND_DEG}) -- otherwise the '
+    f'approach taper collapses to a hard floor and the heading lock limit-cycles')
+
 
 def _lock_floor(abs_error_deg: float,
                 deadband_deg: float = LOCK_DEADBAND_DEG) -> float:
@@ -127,6 +139,8 @@ def _lock_floor(abs_error_deg: float,
         return LOCK_SPEED_MIN_PCT
     span = LOCK_APPROACH_BAND_DEG - deadband_deg
     if span <= 0.0:
+        # Unreachable with the module constants (asserted at import), but a
+        # caller may pass its own deadband. Full floor, i.e. no taper.
         return LOCK_SPEED_MIN_PCT
     frac = (abs_error_deg - deadband_deg) / span   # 1.0 at band edge -> 0 at deadband
     return LOCK_SPEED_MIN_PCT * max(0.0, frac)

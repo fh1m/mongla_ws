@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 28 of 40 fixed (2026-09-08).**
+> **STATUS: 32 of 40 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -142,7 +142,7 @@ validation.
 > unvalidated packet is used to advance the stream.** Trusting it forward eats
 > packets; trusting a zero-length version of it never terminates.
 
-### B04 — an uncalibrated BNO reports healthy and steers as if Earth-referenced
+### B04 — an uncalibrated BNO reports healthy and steers as if Earth-referenced  ✅ FIXED 2026-09-08
 **`duburi_sensors/sources/bno085.py:181, 243, 284`**
 
 Calibration locks `offset = (pixhawk_yaw − bno_raw) % 360`. On failure the code
@@ -350,7 +350,7 @@ tests, all green, none touching the resync rule they exist to protect. The fix
 for B02/B03 is worthless without a test that feeds a false sync byte — the two
 exact inputs reproduced above.
 
-### B15 — `LOCK_HOLD_DEADBAND_DEG < LOCK_APPROACH_BAND_DEG` is documented, unenforced
+### B15 — `LOCK_HOLD_DEADBAND_DEG < LOCK_APPROACH_BAND_DEG` is documented, unenforced  ✅ FIXED 2026-09-08
 **`duburi_control/heading_lock.py`**
 
 The constant is annotated *"Must stay < `LOCK_APPROACH_BAND_DEG`"*. Nothing
@@ -548,7 +548,7 @@ primitive one module over already pays for the counter. The next verb that
 composes two suspending verbs reopens it with no error and no log. Violates
 *"clear interfaces"*.
 
-### J02 — `SurfaceState` swallows the failure of the one call it exists to make
+### J02 — `SurfaceState` swallows the failure of the one call it exists to make  ✅ FIXED 2026-09-08
 `duburi_planner/state_machines/states/navigation.py`
 
 ```python
@@ -1165,7 +1165,7 @@ docstring, bounded in practice, and moot on srot where `*_dist` is refused.
 | `vision_dsl.py` | ⛔ **B33**. `NaN` defaults and the `saw_target` guard are otherwise correct |
 | `cli.py`, `model_context.py` | ✅ |
 
-### B34 — raising the board's speed cap silently does nothing to autonomous moves
+### B34 — raising the board's speed cap silently does nothing to autonomous moves  ✅ FIXED 2026-09-08
 
 **`srot_protocol.sanitize_speed` / `MOVE_CRUISE_MAX`.**
 
