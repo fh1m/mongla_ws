@@ -197,7 +197,14 @@ def _manager_stub(fc=None, det_hz=None):
     from duburi_manager.auv_manager_node import AUVManagerNode as N
     m = SimpleNamespace()
     m.fc = fc or SimpleNamespace()
-    m.vision = SimpleNamespace(stats=lambda: {'det_hz': det_hz}) if det_hz is not None else None
+    # ⛔ THIS USED TO SET `m.vision`, AND PRODUCTION NEVER HAS SUCH AN ATTRIBUTE.
+    # The stub manufactured it, so the D16 detector tests below were green against
+    # a lookup the real node could not perform: `_detection_rate_hz` read
+    # `getattr(self, 'vision', None)`, always missed, and the `detector` reporter
+    # could only ever say UNKNOWN on a live vehicle. Mirror the real structure --
+    # VisionStates live in the `_vision_states` pool, keyed by camera.
+    m._vision_states = ({'forward': SimpleNamespace(stats=lambda: {'det_hz': det_hz})}
+                        if det_hz is not None else {})
     m._health = HealthBoard()
     m._health_last = None
     lines = []
@@ -207,6 +214,7 @@ def _manager_stub(fc=None, det_hz=None):
         error=lambda s: lines.append(('error', s)))
     m.lines = lines
     m._register_health = N._register_health.__get__(m)
+    m._live_vision_state = N._live_vision_state.__get__(m)
     m._detection_rate_hz = N._detection_rate_hz.__get__(m)
     m._health_tick = N._health_tick.__get__(m)
     return m
@@ -263,3 +271,76 @@ def test_the_gyro_is_actually_REQUESTED_from_the_board():
     mid = mavutil.mavlink.MAVLINK_MSG_ID_SCALED_IMU2
     assert mid in SROT_MESSAGE_RATES, 'the estimator has no gyro'
     assert SROT_MESSAGE_RATES[mid] >= 50, 'gyro below the camera rate'
+
+
+# --------------------------------------------------------------------------- #
+#  B01 -- the reporters that were DEFINED and never REGISTERED
+#
+#  Nine reporters existed; six were registered. The three that were not
+#  included `leak_sensor` -- the one written for a flooding hull, which returns
+#  FAILED for the exact `LEAK_EN = 0` state this board was measured in. It had
+#  never executed. These pin the wiring, not the reporters' own logic (which
+#  was always correct and is covered above).
+# --------------------------------------------------------------------------- #
+def _registered_names():
+    """Reporter names `_register_health` actually wires, without booting ROS.
+
+    Reads the source rather than constructing the node: the node needs rclpy,
+    a link and a HAL. The registration list is a literal, so the source IS the
+    fact under test.
+    """
+    import ast
+    src = (Path(__file__).resolve().parents[1]
+           / 'duburi_manager' / 'auv_manager_node.py').read_text()
+    names = set()
+    for node in ast.walk(ast.parse(src)):
+        if (isinstance(node, ast.Call)
+                and getattr(node.func, 'attr', None) == 'register'
+                and node.args and isinstance(node.args[0], ast.Constant)):
+            names.add(node.args[0].value)
+    return names
+
+
+def test_the_leak_reporter_is_registered():
+    """B01. It grades a flooding hull and it was never wired in."""
+    assert 'leak' in _registered_names(), (
+        'leak_sensor is defined in health_reporters.py but not registered -- '
+        'it can never run, and it is the reporter for a flooding hull')
+
+
+def test_every_defined_reporter_is_registered_or_explained():
+    """A reporter that exists but is not wired is dead code that LOOKS live.
+
+    `target_lock` is the one deliberate exception: it needs the ladder's decayed
+    authority, which nothing currently exposes, and inventing it from the /lock
+    confidence would publish a made-up number in a health line.
+    """
+    import inspect
+    from duburi_manager import health_reporters as _R
+    # Health CONSTRUCTORS (ok/failed/degraded/unknown) live in health.py and are
+    # re-exported here; they are not reporters. Reporters are the module's own.
+    constructors = {'ok', 'failed', 'degraded', 'unknown'}
+    defined = {n for n, f in inspect.getmembers(_R, inspect.isfunction)
+               if not n.startswith('_')
+               and n not in constructors
+               and getattr(f, '__module__', '') == _R.__name__}
+    registered = _registered_names()
+    # name-in-source mapping: reporters are registered under short keys
+    aliases = {'heading_reference': 'heading_ref', 'leak_sensor': 'leak'}
+    missing = {d for d in defined
+               if aliases.get(d, d) not in registered} - {'target_lock'}
+    assert not missing, f'defined but never registered (and unexplained): {sorted(missing)}'
+
+
+def test_leak_sensor_separates_NOT_WATCHING_from_DRY():
+    """The distinction the whole finding is about.
+
+    `LEAK_EN = 0` reads dry either way, so "no leak" and "nobody is looking"
+    must not collapse into the same verdict.
+    """
+    assert R.leak_sensor(False, None).state is State.FAILED   # nothing watching
+    assert R.leak_sensor(True, False).state is State.OK        # watching, dry
+    assert R.leak_sensor(True, True).state is State.FAILED     # watching, wet
+    assert R.leak_sensor(None, None).state is State.UNKNOWN    # no reading
+    # and the not-watching case must SAY so, not just fail
+    assert 'NOTHING IS WATCHING' in R.leak_sensor(False, None).evidence
