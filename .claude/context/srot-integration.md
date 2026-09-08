@@ -866,9 +866,9 @@ fc/srot_fc.py      SROT backend (MANUAL_CONTROL, SROT_MOVE + ACK relay, telemetr
 fc/pixhawk_fc.py   ArduSub backend (IS-A Pixhawk + intent methods) — unchanged behaviour
 fc/factory.py      make_flight_controller('pixhawk'|'srot', master, log)
 ```
-ROS param **`flight_controller`** (`pixhawk`|`srot`). **On this branch the launch default is
-`srot`** — this paragraph used to say `pixhawk` while the transport section below said `srot`;
-the launch files are the tiebreaker and they say `srot`. Both backends coexist on the same
+ROS param **`flight_controller`** (`srot`|`pixhawk`). **The launch and node default is
+`srot`** (set 2026-09-08, when main became the SROT vehicle; it was briefly `pixhawk` between
+the srot→main merge and that date, and the `pixhawk` branch now preserves that tree). Both backends coexist on the same
 vehicle for A/B (`:=pixhawk` for the ArduSub/BlueOS path). The ABC exposes intent:
 `arm/disarm/set_mode/manual(fwd,lat,up,yaw)/move(verb,*,on_progress,abort_fn)/telemetry/
 send_gcs_heartbeat`. `manual()` is the streamed servo primitive (vision + DVL loops);
@@ -1331,7 +1331,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
 
 ## Status (branch `srot`)
 - **DONE:** the HAL foundation (`14eb27a`) + integration doc (`6f3aea5`) + **the manager
-  wiring** (`7f3d6e8` + review fixes): `flight_controller:=srot` was the **default on the srot branch**; after the main merge the default is **`pixhawk`** (the RoboSub 2025 configuration) and the srot vehicle passes `flight_controller:=srot`. It connects
+  wiring** (`7f3d6e8` + review fixes): `flight_controller:=srot` was the **default on the srot branch**; the main merge briefly made it `pixhawk`, and on 2026-09-08 it went back to **`srot`** as main became the SROT vehicle (the RoboSub 2025 configuration is preserved on the `pixhawk` branch). It connects
   over **direct USB serial**, banner shows `SROT board · firmware Hengla · USB serial`, the
   collapse verbs route through `fc.move()` + the 4-terminal ACK relay, telemetry populates
   `/duburi/state`. Build clean; ~670 tests green. mavlink-reviewer + advisor signed off (arc

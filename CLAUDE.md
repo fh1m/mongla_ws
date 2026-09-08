@@ -117,13 +117,19 @@ Connection strings live in `src/duburi_manager/duburi_manager/connection_config.
 
 ## 2b. ⚠ Flight-controller backends — READ BEFORE §2, §3, §5, §6
 
-**Everything else in this file describes the Pixhawk/ArduSub/BlueOS path.** Since the 2027
-season there is a second backend, and on the **`srot` branch it is the DEFAULT**.
+**Everything else in this file describes the Pixhawk/ArduSub/BlueOS path, and that is no
+longer the default.** Since the 2027 season there is a second backend, and as of 2026-09-08
+**`srot` is the DEFAULT on `main`** — the hull is the SROT board running Hengla.
 
 | `flight_controller:=` | Autopilot | Transport | Where it's default |
 |---|---|---|---|
-| `pixhawk` | Pixhawk 2.4.8 + ArduSub 4.x | BlueOS → UDP 14550 | `main` |
-| **`srot`** | **SROT board, firmware Hengla** | **direct USB Type-C @115200** (no Pi, no BlueOS, no UDP) | **`srot` branch** |
+| **`srot`** | **SROT board, firmware Hengla** | **direct USB Type-C @115200** (no Pi, no BlueOS, no UDP) | **`main` (default), `srot` branch** |
+| `pixhawk` | Pixhawk 2.4.8 + ArduSub 4.x | BlueOS → UDP 14550 | **`pixhawk` branch**; on `main` pass it explicitly (the sim does) |
+
+> **The RoboSub 2025 8th-place configuration lives on the `pixhawk` branch** (`b483722`, the
+> tree exactly as it stood before the srot→main merge). It is a preserved snapshot, not a
+> working branch — go there to read or resurrect that configuration rather than reconstructing
+> it from parameters on `main`.
 
 Both sit behind the `FlightController` HAL in `src/duburi_control/duburi_control/fc/`
 (`base.py` ABC, `pixhawk_fc.py`, `srot_fc.py`, `srot_protocol.py` = the one copy of the wire

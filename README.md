@@ -149,18 +149,19 @@ torch wheel + `ultralytics`,
 
 ## ⚠ Which vehicle are you on?
 
-This tree runs **two** flight-controller backends, and **`pixhawk` is the default** --
-it is the configuration that placed 8th at RoboSub 2025. The srot vehicle passes
-`flight_controller:=srot`. Almost every command below changes shape between them,
-so start here.
+This tree runs **two** flight-controller backends, and **`srot` is the default** --
+it is the vehicle. The ArduSub/BlueOS path is still fully supported: pass
+`flight_controller:=pixhawk` (the sim does exactly that). The configuration that
+placed 8th at RoboSub 2025 is preserved whole on the **`pixhawk` branch**.
+Almost every command below changes shape between the two, so start here.
 
-| | `flight_controller:=pixhawk` *(default)* | `flight_controller:=srot` |
+| | `flight_controller:=srot` *(default)* | `flight_controller:=pixhawk` |
 |---|---|---|
-| Autopilot | Pixhawk 2.4.8 + ArduSub 4.x | **SROT board**, firmware **Hengla v0.2.0** |
-| Link | BlueOS → UDP 14550 | **one USB-C cable @115200** |
-| In between | Raspberry Pi + BlueOS + MAVLink router | *nothing* |
-| Sensors | on the Pixhawk + a USB IMU | **all on the board** (BNO085, Bar30) |
-| Control loops | ArduSub 400 Hz + Python outer loops | **on the board, 500 Hz** |
+| Autopilot | **SROT board**, firmware **Hengla v0.2.0** | Pixhawk 2.4.8 + ArduSub 4.x |
+| Link | **one USB-C cable @115200** | BlueOS → UDP 14550 |
+| In between | *nothing* | Raspberry Pi + BlueOS + MAVLink router |
+| Sensors | **all on the board** (BNO085, Bar30) | on the Pixhawk + a USB IMU |
+| Control loops | **on the board, 500 Hz** | ArduSub 400 Hz + Python outer loops |
 
 `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identical to history — pass
 `flight_controller:=pixhawk` and everything in the old docs still applies.
@@ -188,7 +189,7 @@ nothing at all. This is the table to read before reusing anything from your shel
 ```bash
 ros2 run duburi_manager connect                       # 2 batteries · depth loop · ESC rpm/temp · health
 ros2 run duburi_manager bringup_check --srot          # FW rev >= 2, barometer sane, depth loop settled
-ros2 launch duburi_manager bringup.launch.py flight_controller:=srot   # main defaults to pixhawk
+ros2 launch duburi_manager bringup.launch.py                          # srot is the default now
 # ...then in another terminal:
 ros2 run duburi_planner duburi arm
 ros2 run duburi_planner duburi move_forward --duration 5 --gain 40

@@ -59,9 +59,11 @@ VISION_DUAL_LAUNCH = REPO / 'src/duburi_vision/launch/vision_dual.launch.py'
 #     `main` there is no such argument ... so passing it is inert and harmless".
 #     That is no longer true: the argument IS declared here now, and the sim's
 #     `flight_controller:=pixhawk` is LOAD-BEARING rather than inert -- it is what
-#     keeps SITL on the ArduSub path. The default is `pixhawk` anyway (the RoboSub
-#     2025 configuration), so the sim would work either way, but it passes the
-#     value explicitly and should keep doing so.
+#     keeps SITL on the ArduSub path. ⛔ AND SINCE 2026-09-08 IT IS THE ONLY THING
+#     KEEPING IT THERE: the manager default flipped to `srot`, so the sim would
+#     NOT work either way any more. This used to say "the default is `pixhawk`
+#     anyway ... so the sim would work either way" -- that safety net is gone, and
+#     `stack.launch.py` passing the value explicitly is now load-bearing.
 #     It stays in this exempt set because the check below is about arguments a
 #     launch file may legitimately not declare, and it is still passed by
 #     stack.launch.py on both branches.
