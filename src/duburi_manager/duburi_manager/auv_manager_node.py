@@ -311,22 +311,26 @@ class AUVManagerNode(Node):
         # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
         self.declare_parameter('debug',            False)
         # flight_controller: which autopilot backend the HAL builds.
-        #   'pixhawk' (DEFAULT) -- the ArduSub/BlueOS path. This is the
-        #        configuration that placed 8th at RoboSub 2025 and it stays the
-        #        default here for exactly that reason.
-        #   'srot'   -- the custom SROT board over direct USB Type-C serial (no
-        #        BlueOS). Pass flight_controller:=srot on the srot vehicle.
+        #   'srot' (DEFAULT) -- the SROT board running Hengla, over direct USB
+        #        Type-C serial. No Pixhawk, no Pi, no BlueOS, no UDP. This is
+        #        the vehicle.
+        #   'pixhawk' -- the ArduSub/BlueOS path. Still fully supported; pass
+        #        flight_controller:=pixhawk for it (the sim does exactly that).
         #
-        # ⛔ THE DEFAULT WAS 'srot' ON THE srot BRANCH AND IS DELIBERATELY FLIPPED
-        # HERE. That comment used to read "default on this branch", which stopped
-        # being true the moment the branch merged. Leaving it would have silently
-        # re-pointed `bringup.launch.py mode:=pool` -- the pool command in every
-        # doc -- at a backend the competition hull does not have.
+        # ⛔ THE DEFAULT FLIPPED TO 'srot' ON 2026-09-08, AND THE REASON IT WAS
+        # 'pixhawk' UNTIL THEN IS WORTH KEEPING. The srot->main merge landed
+        # "without changing what main does", so the default stayed on the
+        # configuration that placed 8th at RoboSub 2025. That tiebreaker has
+        # expired: the hull now IS the SROT board, and a default naming a
+        # backend the vehicle does not have is the stale claim, not the safe one.
         #
-        # Both directions fail LOUDLY (no heartbeat) rather than silently, so the
-        # tiebreaker is which one preserves the tested configuration. Flipping it
-        # back is this one line, deliberately.
-        self.declare_parameter('flight_controller', 'pixhawk')
+        # The 8th-place configuration is not gone -- it is preserved whole on the
+        # `pixhawk` branch (b483722, the pre-merge tree), which is where to look
+        # for it rather than reconstructing it from this parameter.
+        #
+        # Both directions still fail LOUDLY (no heartbeat) rather than silently.
+        # Flipping it back is this one line, deliberately.
+        self.declare_parameter('flight_controller', 'srot')
         # allow_fw_behaviour_mismatch: proceed against firmware older than
         # srot_protocol.FW_BEHAVIOUR_REV_REQUIRED. OFF by default and it should stay
         # off. On pre-rev-2 firmware MOVE_STOP COASTS -- it applies zero braking thrust

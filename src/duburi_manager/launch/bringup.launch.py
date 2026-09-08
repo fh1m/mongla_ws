@@ -70,14 +70,15 @@ def generate_launch_description():
         # pool-day command could not configure a SROT vehicle at all: the operator
         # had to drop to `ros2 run duburi_manager start --ros-args -p ...`, which
         # is a different command from the one every doc gives.
-        # Default 'pixhawk': this launch is the pool command in every doc, and
-        # main is the configuration that placed 8th at RoboSub 2025. The srot
-        # vehicle passes flight_controller:=srot. See the node's declaration for
-        # why the srot branch's 'srot' default is deliberately not carried over.
-        DeclareLaunchArgument('flight_controller', default_value='pixhawk',
-                              description='Autopilot backend: pixhawk|srot '
-                                          '(pixhawk = the ArduSub/BlueOS path, '
-                                          'the RoboSub 2025 configuration)'),
+        # Default 'srot': this launch is the pool command in every doc, and the
+        # hull is the SROT board running Hengla. The ArduSub/BlueOS path is still
+        # here -- pass flight_controller:=pixhawk, which is what the sim does --
+        # and the 8th-place configuration is preserved whole on the `pixhawk`
+        # branch. See the node's declaration for the full reasoning.
+        DeclareLaunchArgument('flight_controller', default_value='srot',
+                              description='Autopilot backend: srot|pixhawk '
+                                          '(srot = the SROT/Hengla board over USB '
+                                          'serial; pixhawk = the ArduSub/BlueOS path)'),
         DeclareLaunchArgument('mav_device', default_value='',
                               description="SROT serial device, '' = autodetect. A path "
                                           '(/dev/serial/by-id/...) or any pymavlink '
