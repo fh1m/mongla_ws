@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 16 of 33 fixed (2026-09-08).**
+> **STATUS: 17 of 34 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1243,6 +1243,112 @@ false clean bill: `srot_fc.py` (2,683), `duburi.py` (1,568), `auv_manager_node.p
 `display_node`) — roughly 17k lines. Every one of them HAS been swept by both
 tools above and by `fc_surface_audit` / `srot_reachability`. That is coverage by
 mechanism, not by eye, and the difference is exactly what let B33 hide.
+
+### B35 — the depth validator is bypassed by the value it exists to reject  ✅ FIXED 2026-09-08
+### ⚠ THIS ENTRY'S ORIGINAL HEADLINE WAS WRONG AND IS RETRACTED IN FULL
+
+**What I first wrote:** *"NaN walks through the verb table onto the wire"*, and
+*"the host relies on the far side's guard"*. **Both are false.** `SrotFC.move()`
+has always refused a non-finite frame host-side —
+
+```python
+if not _finite(p1, p2, p3, p4, p5):
+    return MoveResult(DENIED, f'{verb}: non-finite parameter -- refused host-side')
+```
+
+— and `test_move_denied_on_nonfinite_param` has always asserted that the goal
+never reaches the wire. I found that only because my "fix" collided with the
+existing `_finite` and broke the test that proves it. **The suite told me my
+finding was overstated.** Recorded at length because the failure mode of an audit
+is confident overclaiming, and that is worth more to a future round than a
+tidy entry.
+
+**What is actually true, and still worth fixing:**
+
+1. **`_depth_to_dive` is defeated by NaN and by `-inf`.** It exists solely to
+   reject a bad depth target, and its own comparison lets both through:
+   ```python
+   if target > 0.0:      # NaN > 0.0 is False. So is -inf > 0.0.
+       raise ValueError(...)
+   return -target        # -(-inf) = +inf  ->  dive to infinite depth
+   ```
+   `+inf` IS caught, which is exactly why reading it looks fine. The frame was
+   then stopped one layer up by `move()` — so the outcome was a correct refusal
+   with a **vague** reason, not an unsafe command.
+2. **A non-finite `gain` was silently coerced to speed 0.0**, which passes the
+   finite check. The board accepts a valid "move at speed 0", the hull does not
+   move, and the mission believes it did — *absence rendered as a number*, the
+   register's own recurring defect. Now refused.
+3. The converters passed NaN through (`manual()`'s `_safe()` was the only thing
+   catching it). Now each fails to its own neutral.
+
+**The principle this settled — refuse vs. coerce, by context.** A STREAMING path
+cannot raise once per 20 Hz tick, so `sanitize_speed`/`unit_to_mc` fail safe
+silently (0 = no motion, 500 = hold depth). A ONE-SHOT verb must refuse loudly:
+silence there is a mission that thinks it moved. Both are "fail safe"; only one is
+right per context, and conflating them is how a coerced zero becomes a phantom
+manoeuvre.
+
+⛔ **MY FIRST FIX WAS DANGEROUS AND MY OWN TEST PASSED IT.** I made `_clamp` map
+NaN → `lo`. For `unit_to_mc` that is `-1.0` → **−1000: full reverse thrust**;
+for `unit_to_mc_z`, full descend. A *range* assertion accepts −1000 happily, so
+the range-only hammer reported **zero violations** on a change that commands
+maximum thrust from a missing number. **A range check tests the interval, not the
+meaning.** The tests now assert NEUTRALITY per converter, and `_clamp` carries a
+comment forbidding the "fix" I attempted.
+
+**Net value of this entry:** one real bypass (`_depth_to_dive`), one real silent
+coercion (`gain`), better error messages that name the field, defence in depth on
+the converters — and two lessons that cost more than the bug: an audit can
+overclaim, and a test can pass a dangerous change.
+
+## 7g. First principles: why this stack is shaped the way it is
+
+Written after reading it as a whole, because the next round should inherit the
+*reasoning*, not just the defect list.
+
+**1. The vehicle is a two-computer system, and the split is the design.** The Pi
+does perception and planning (not real-time); the SROT board closes every control
+loop at 500 Hz (hard real-time). The wire between them carries **intent**, not
+actuation — `MAV_CMD_SROT_MOVE` for a whole leg, `MANUAL_CONTROL` for a servo
+tick. That is why `FlightController` exposes `move()` and `manual()` rather than
+channels, and it is the right boundary: it survives the autopilot changing
+underneath it, which is exactly what happened when the Pixhawk left.
+*Cost of the choice:* every defect now has TWO homes, and the interesting ones
+live in the seam — B28 (the board stays in AUTO), B30 (a writer the backend
+lacks), B31 (authority differs by ×0.727), B34 (a cap the host copied), B35 (a
+value the far side rejects for us). **The seam is where to look first.**
+
+**2. "Absence is the signal" is the load-bearing invariant.** Firmware rev 3
+refuses to report data it cannot stand behind; the host renders `--`, never
+`0.0`. Nearly every defect on this register is a violation of it wearing a
+different costume: B05 (`or 0.0`), B10 (a stale latch), B25 (a reporter that
+never reports), B35 (NaN treated as a number by comparison). The reason it keeps
+recurring is that **the safe default and the arithmetic default are different
+values**, and the language supplies the second one for free.
+
+**3. Guards must fail closed, and must be *ours*.** The register's best work is
+the fail-closed choices: `check_behaviour_rev` refusing to arm below rev 2,
+`square_within` returning False without a pose, `_fresh_bounds` capping trust in
+ABSOLUTE time so a degraded pipeline cannot argue itself into more authority.
+The recurring failure is the mirror image: a guard whose protection is
+*incidental* — B23's freshness clock standing in for an exception handler, B35's
+firmware check standing in for host validation. A guard you did not write is a
+guard that can be removed without telling you.
+
+**4. Two copies of one fact is the root cause, not the symptom.** B22 (a
+refractive index in six places), B30 (`_is_srot` about to become two), B33 (a sign
+convention in a doc and a docstring), B34 (a cap in the host and the board).
+Every one was fixed by deleting a copy, not by synchronising them. Where a second
+copy is unavoidable — the wire constants — the answer is a drift test that reads
+the *firmware's own headers*, which is the pattern worth extending.
+
+**5. A test that doubles what it tests proves nothing (B32), and a test that
+checks the wrong quantity is worse (B35's range check).** Both passed while the
+thing they existed to catch was broken. The discipline that works here is:
+inject the defect and watch the test fail. Every fix on this register from
+2026-09-08 onward was verified that way, and twice it caught a test that could
+not bite.
 
 ## 8. Provenance
 

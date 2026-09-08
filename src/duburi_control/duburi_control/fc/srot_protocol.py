@@ -285,30 +285,58 @@ MC_Z_NEUTRAL = 500    # z centre = hold depth
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
+    """Clamp to [lo, hi]. NaN passes THROUGH -- callers must handle it.
+
+    ⛔ DO NOT "fix" this by clamping NaN to `lo`. Comparisons against NaN are all
+    False, so NaN does fall through both branches -- but `lo` is only the safe
+    answer where lo happens to BE the neutral value. For `unit_to_mc` lo is
+    -1.0, i.e. FULL REVERSE THRUST, and for `unit_to_mc_z` it is full descend.
+    That fix was written and caught here during B35 precisely because a
+    range check accepts -1000 happily. Each converter names its OWN neutral.
+    """
     return lo if v < lo else hi if v > hi else v
 
 
 def unit_to_mc(u: float) -> int:
-    """-1..1 -> -1000..1000 for MANUAL_CONTROL x/y/r (clamped)."""
-    return int(round(_clamp(float(u), -1.0, 1.0) * MC_AXIS_MAX))
+    """-1..1 -> -1000..1000 for MANUAL_CONTROL x/y/r (clamped). NaN -> 0 (NEUTRAL).
+
+    Neutral, not the clamp floor: -1000 is full reverse on this axis (B35)."""
+    u = float(u)
+    if u != u:                     # NaN
+        return 0
+    return int(round(_clamp(u, -1.0, 1.0) * MC_AXIS_MAX))
 
 
 def unit_to_mc_z(u: float) -> int:
     """-1..1 (up positive) -> 0..1000 with 500 neutral for MANUAL_CONTROL z (clamped).
 
     +1 (full ascend) -> 1000, 0 (hold) -> 500, -1 (full descend) -> 0. Matches the
-    board's convention that z>500 ascends (heave positive = UP)."""
-    return int(round(MC_Z_NEUTRAL + _clamp(float(u), -1.0, 1.0) * (MC_Z_MAX - MC_Z_NEUTRAL)))
+    board's convention that z>500 ascends (heave positive = UP).
+
+    NaN -> MC_Z_NEUTRAL (500 = hold depth). NOT the clamp floor, which is full
+    descend (B35)."""
+    u = float(u)
+    if u != u:                     # NaN
+        return MC_Z_NEUTRAL
+    return int(round(MC_Z_NEUTRAL + _clamp(u, -1.0, 1.0) * (MC_Z_MAX - MC_Z_NEUTRAL)))
 
 
 def pct_to_mc(p: float) -> int:
-    """-100..100 % -> -1000..1000 (the old percent API -> MANUAL_CONTROL axis)."""
-    return int(round(_clamp(float(p), -100.0, 100.0) * 10))
+    """-100..100 % -> -1000..1000 (the old percent API -> MANUAL_CONTROL axis).
+
+    NaN -> 0 (neutral), for the same reason as `unit_to_mc` (B35)."""
+    p = float(p)
+    if p != p:
+        return 0
+    return int(round(_clamp(p, -100.0, 100.0) * 10))
 
 
 def pct_to_mc_z(p: float) -> int:
-    """-100..100 % (up positive) -> 0..1000, 500 neutral."""
-    return int(round(MC_Z_NEUTRAL + _clamp(float(p), -100.0, 100.0) * 5))
+    """-100..100 % (up positive) -> 0..1000, 500 neutral. NaN -> 500 (B35)."""
+    p = float(p)
+    if p != p:
+        return MC_Z_NEUTRAL
+    return int(round(MC_Z_NEUTRAL + _clamp(p, -100.0, 100.0) * 5))
 
 
 # ---------------------------------------------------------------------- #
@@ -720,8 +748,17 @@ MAV_SYS_STATUS_SENSOR_LEAK     = 0x02
 
 
 def sanitize_speed(speed: float) -> float:
-    """Clamp a 0..1 move speed to [0, MOVE_CRUISE_MAX] (the board clamps too)."""
-    return _clamp(float(speed), 0.0, MOVE_CRUISE_MAX)
+    """Clamp a 0..1 move speed to [0, MOVE_CRUISE_MAX] (the board clamps too).
+
+    NaN FAILS SAFE TO ZERO. `_clamp` is written with comparisons, and every
+    comparison against NaN is False, so a NaN fell straight through the clamp
+    and onto the wire as p3 (B35). Zero is the fail-safe direction here: no
+    motion. `inf` needs no special case -- it compares True and clamps.
+    """
+    speed = float(speed)
+    if speed != speed:            # NaN: the one value that is not equal to itself
+        return 0.0
+    return _clamp(speed, 0.0, MOVE_CRUISE_MAX)
 
 
 # ---------------------------------------------------------------------- #
