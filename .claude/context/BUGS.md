@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 33 of 40 fixed (2026-09-08).**
+> **STATUS: 34 of 41 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1596,6 +1596,45 @@ the published warning that *"the mavlink_connection object is not thread safe"*:
 `auv_manager_node` is documented and enforced as **the only thread calling
 `recv_match()`**, and every write goes through `_tx_lock` because pymavlink shares
 one sequence counter.
+
+### B42 — Ctrl-C during a move did not brake the hull on srot  ⛔ SAFETY  ✅ FIXED 2026-09-08
+
+**`auv_manager_node._emergency_stop`.** Found with a new lens: *what is specific
+to a **ROS 2 autonomous vehicle** that has not been examined?* — executor topology,
+QoS compatibility, and the shutdown path.
+
+CLAUDE.md safety rule 1 is non-negotiable: *"Ctrl-C on the manager triggers
+`Duburi.stop()` + `disarm()`."* The step that was supposed to stop the thrusters
+was `pixhawk.send_neutral()`. On srot that is a **zero `MANUAL_CONTROL` frame** —
+and a `SROT_MOVE` leaves the board in `AUTO`, where the firmware overwrites every
+pilot axis from the movement primitive and the frame is **discarded** (B28).
+
+Ctrl-C arrives most often *during* a move. So the one step that exists to halt the
+hull was a no-op in exactly the case it exists for, leaving `disarm()` as the only
+thing stopping it: **motors cut mid-leg instead of a commanded brake**, and nothing
+at all if the disarm is the step that fails (its `[--]` path is real and printed).
+
+`stop_motion()` — MOVE_STOP, honoured in AUTO, decelerating on-board since fw
+rev 2 — was already used on the srot surface path (`:1175`) and simply not here.
+Now called first, feature-detected because `PixhawkFC` has no `stop_motion`.
+
+**Two verified negatives from the same lens**, recorded so they are not re-audited:
+- **Executor topology is sound.** The action server is `Reentrant` and separate
+  from the timers, so a long move cannot block the 2 Hz heartbeat that feeds the
+  board's GCS failsafe. The heartbeat's own `MutuallyExclusive` group holds only
+  non-blocking callbacks, and every `_tx_lock` hold is 2–15 lines with no sleep,
+  loop or round-trip — no starvation path.
+- **QoS is compatible everywhere.** 26 publishers, 54 subscribers, 13 topics with
+  both ends in-tree: **zero** BEST_EFFORT-pub/RELIABLE-sub pairs, the mismatch
+  that silently delivers nothing. `camera_info` is belt-and-braces —
+  `TRANSIENT_LOCAL` on both ends *and* republished per frame, so a late-joining
+  manager cannot miss it. `tools/qos_audit.py`.
+
+⚠ **My first test for this failed on correct code.** It compared `src.index('stop_motion')`
+with `src.index('send_neutral')` — and the explanatory comment above the fix
+mentions `send_neutral` first, so it was comparing a comment against a call. Now
+it parses the AST and compares actual call order. Third time this audit that a
+test of mine measured the wrong quantity.
 
 ## 8. Provenance
 
