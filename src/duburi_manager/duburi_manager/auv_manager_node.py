@@ -1845,6 +1845,23 @@ def _emergency_stop(node) -> None:
     _step('stop heading lock',  lambda: node.duburi._heading_lock.stop()
                                         if node.duburi._heading_lock else None)
     _step('stop heartbeat',     lambda: node.heartbeat.stop())
+
+    # ⛔ BRAKE A RUNNING LEG FIRST, AND ON SROT `send_neutral` CANNOT DO IT (B42).
+    #
+    # Ctrl-C most often arrives DURING a move. A SROT_MOVE leaves the board in
+    # AUTO, and in AUTO the firmware overwrites every pilot axis from the
+    # movement primitive -- so the zero MANUAL_CONTROL frame `send_neutral()`
+    # sends is DISCARDED (B28). The emergency stop's one "stop the thrusters"
+    # step was therefore a no-op on the current backend for the exact case it
+    # exists to cover, leaving `disarm()` as the only thing halting the hull:
+    # motors off mid-leg rather than a commanded brake, and nothing at all if
+    # the disarm is the step that fails.
+    #
+    # MOVE_STOP is the board's own brake, it is honoured in AUTO, and from fw
+    # rev 2 it decelerates on-board. Pixhawk has no `stop_motion`, so this is
+    # guarded rather than assumed.
+    if hasattr(node.fc, 'stop_motion'):
+        _step('brake running move', lambda: node.fc.stop_motion())
     _step('send neutral RC',    lambda: node.pixhawk.send_neutral())
 
     ok, reason = None, 'not attempted'
