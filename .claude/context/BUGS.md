@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 32 of 40 fixed (2026-09-08).**
+> **STATUS: 33 of 40 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -321,7 +321,7 @@ Recorded separately from B07 because the fix is the same and the severity is
 not. The same file also polls `get_attitude()` every 20 Hz tick purely to feed a
 throttled log line.
 
-### B13 — `motion_yaw` derivative term has no `dt`
+### B13 — `motion_yaw` derivative term has no `dt`  ✅ FIXED 2026-09-08
 **`duburi_control/motion_yaw.py`**
 
 ```python
