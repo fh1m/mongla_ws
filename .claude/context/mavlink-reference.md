@@ -83,7 +83,13 @@ MAV_CMD_DO_MOUNT_CONTROL = 205
 # 1100 µs = full reverse/min
 # 1500 µs = neutral/stop
 # 1900 µs = full forward/max
-# 65535   = "do not override" (release to RC input)
+# 65535   = "IGNORE THIS FIELD" on Ch1-8 -- NOT "release to RC input".
+#           ⛔ CORRECTED 2026-09-08 from ArduPilot source. GCS_Common.cpp
+#           handle_rc_channels_override(): for i<8 it SKIPS set_override()
+#           entirely when the value is UINT16_MAX, so the channel KEEPS its
+#           previous override AND its timestamp is not refreshed. It expires
+#           only after RC_OVERRIDE_TIME (default 3.0 s). Releasing is a
+#           DIFFERENT value: 0, or UINT16_MAX-1 on Ch9+. See BUGS.md B24.
 
 # Our channel mapping:
 CHANNEL = {

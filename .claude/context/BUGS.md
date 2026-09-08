@@ -8,8 +8,14 @@
 >
 > Produced by the system-wide audit of 2026-09-08, post the `srot`→`main` merge
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
-> four sibling repos. **Find-only pass — nothing in this document has been
-> fixed.**
+> three sibling repos.
+>
+> **STATUS: 7 of 26 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
+> the SROT-path batch — plus B25/B26 found while fixing them. Each landed with a
+> test verified to fail without the fix. The remaining open items are listed
+> below at their original severity; the ArduSub-path ones (B06, B07, B08, B12,
+> B13, B15, B17) are deliberately deferred, because the vehicle is the SROT
+> board running Hengla and that code is preserved on the `pixhawk` branch.
 
 ## How to read this
 
@@ -35,7 +41,7 @@ logic right?" would have passed all three.
 
 ## 1. CRITICAL
 
-### B01 — the LEAK health reporter is never registered
+### B01 — the LEAK health reporter is never registered  ✅ FIXED 2026-09-08 (`6fada73`)
 **`duburi_manager/health_reporters.py:72` · `auv_manager_node.py:1191`**
 
 Nine reporters are defined; six are registered. `leak_sensor`, `target_lock`
@@ -54,7 +60,7 @@ six reads identically to `OK` from nine.
 **Fix shape:** register the three missing reporters. Then decide separately
 whether `LEAK_EN=0` should block arming — that is a policy call, not a wiring one.
 
-### B02 — 12 bytes of noise hang the DVL reader thread forever `REPRODUCED`
+### B02 — 12 bytes of noise hang the DVL reader thread forever `REPRODUCED`  ✅ FIXED 2026-09-08 (`0c1099a`)
 **`duburi_sensors/sources/nucleus_parser.py` · `PacketAccumulator.feed`**
 
 `size_header` and `size_data` are taken off the wire with no lower bound. When
@@ -92,7 +98,7 @@ already does.
 
 ## 2. HIGH
 
-### B03 — a false sync byte silently eats the next real packet `REPRODUCED`
+### B03 — a false sync byte silently eats the next real packet `REPRODUCED`  ✅ FIXED 2026-09-08 (`0c1099a`)
 **`nucleus_parser.py` · same function as B02**
 
 On a checksum failure the accumulator has *already* consumed `total` bytes
@@ -148,7 +154,7 @@ single negation to compass convention `(-yaw) % 360` at line 388, applied
 exactly once at ingestion; the modular arithmetic across wrap in both
 directions; `_fresh_raw_yaw` returning `None` past `_STALE_S`.
 
-### B05 — a caller coerces `None` to `0.0` and thereby defeats the guard written to catch it
+### B05 — a caller coerces `None` to `0.0` and thereby defeats the guard written to catch it  ✅ FIXED 2026-09-08 (`d2df03d`)
 **`duburi_vision/distance/distance_estimation_node.py:208` · `flow_math.py:855`**
 
 The accumulator refuses a degenerate frame on purpose:
@@ -201,10 +207,13 @@ docstring already names the consequence ("would … make translation verbs relea
 Ch4 to a thread that no longer exists") and then fixes it only for *subsequent*
 commands, not the one in flight.
 
-**Open question, deliberately not asserted:** what ArduSub actually does with a
-released Ch4 and no receiver fitted cannot be established from the Python. That
-needs a source citation or a bench read. The mechanism above stands regardless
-of how that resolves.
+**⛔ SETTLED 2026-09-08, and it is WORSE than the above — see B24.** Ch4 = 65535
+does not release the channel on Ch1–8; it means "ignore this field", so ArduSub
+**retains the dead lock's last yaw-rate command** and does not refresh its
+timestamp. The override stays live for `RC_OVERRIDE_TIME` (default **3.0 s**).
+So it is not "nothing writes Ch4" — the hull keeps yawing at a dead controller's
+last command for up to three seconds. The fix must actively write `1500`;
+"releasing" it is exactly what does not work. Still deferred: ArduSub path.
 
 ### B07 — `arc()` steers on a fabricated heading reference
 **`duburi_control/motion_forward.py:129`**
@@ -238,7 +247,7 @@ power."*
 
 ## 3. MEDIUM
 
-### B09 — Kalman `Q` is not rescaled with `dt` while `F` is
+### B09 — Kalman `Q` is not rescaled with `dt` while `F` is  ✅ FIXED 2026-09-08
 **`duburi_vision/tracking/kalman.py`**
 
 `_update_F(dt)` correctly rewrites `F[0,2] = F[1,3] = dt` for a variable frame
@@ -254,7 +263,7 @@ detection is missing — the case the smoother exists to handle — so the predi
 box is trusted more than it has earned. `_update_F` shows the author knew `dt`
 was variable; `Q` was not carried through the same reasoning.
 
-### B10 — `_last_height` is an unbounded latch with no freshness
+### B10 — `_last_height` is an unbounded latch with no freshness  ✅ FIXED 2026-09-08 (`d2df03d`)
 **`distance_estimation_node.py:207`**
 
 Once set, `_last_height` is never invalidated — no timestamp, no staleness
@@ -337,7 +346,7 @@ takes no calibration-resolution parameter. A calibration captured at a different
 resolution than the live stream therefore yields bearings wrong by exactly that
 ratio — the failure the comment names.
 
-### B21 — a preflight check that can silently vanish from the report
+### B21 — a preflight check that can silently vanish from the report  ✅ FIXED 2026-09-08
 **`duburi_manager/bringup_check.py:363`**
 
 ```python
@@ -637,6 +646,56 @@ nobody re-derives them:
   Filed only as "not drift-tested", not as drift.
 
 ---
+
+## 7c. Findings from the fix pass (2026-09-08)
+
+Three defects surfaced while fixing the audit's own list. Recorded here rather
+than folded silently into the fixes.
+
+### B24 — `65535` on Ch1–8 does NOT release the channel  ⛔ two context docs were wrong
+Settled from primary source (`stuff/ardupilot`, ArduPilot 4.7.0-beta3),
+`libraries/GCS_MAVLink/GCS_Common.cpp:4213-4218`:
+
+```c
+for (uint8_t i=0; i<8; i++) {
+    // Per MAVLink spec a value of UINT16_MAX means to ignore this field.
+    if (override_data[i] != UINT16_MAX) { RC_Channels::set_override(i, override_data[i], tnow); }
+}
+```
+
+For channels 1–8, `UINT16_MAX` means **"ignore this field"** — `set_override` is
+not called at all, so the channel **keeps its previous override value** and its
+`last_override_time` is **not refreshed**. `RC_Channel::has_override()` stays
+true until `RC_OVERRIDE_TIME` elapses — default **3.0 s**
+(`RC_Channels_VarInfo.h:90`). Releasing is a different value: `0` clears the
+override; on Ch9+ `UINT16_MAX-1` means "return to RC".
+
+`mavlink-reference.md` and `ardusub-canon.md` both claimed 65535 released the
+channel to RC input. Both corrected.
+
+**This makes B06 worse than recorded.** When the heading lock dies mid-command
+the loop keeps asserting `Ch4 = 65535`, so ArduSub retains the dead thread's
+last yaw-rate command and the hull keeps yawing at it for up to three seconds —
+rather than "nothing writes Ch4", as B06 says. The fix must actively write
+`1500`, not "release". B06's text is updated; the fix stays deferred (ArduSub
+path). Caveat: verified against the 4.7.0-beta3 checkout; re-confirm against the
+`Sub-4.5` branch we fly before acting on the pixhawk path.
+
+### B25 — the `detector` health reporter could never report  ✅ FIXED (`6fada73`)
+`detector` **was** registered, and `_detection_rate_hz` read
+`getattr(self, 'vision', None)`. Nothing on `AUVManagerNode` ever assigns
+`self.vision` — VisionStates live in the `_vision_states` pool, keyed by camera.
+The defensive `getattr` returned a plausible `None` instead of raising, so the
+reporter degraded silently into one that cannot report, and the D16 signal it
+exists to carry (an aborted detector keeps every topic; only the *rate* changes)
+never fired on a live vehicle.
+
+### B26 — and its tests were green, because the stub invented the attribute  ✅ FIXED (`6fada73`)
+`test_health._manager_stub` set `m.vision = SimpleNamespace(stats=...)` — an
+attribute production does not have. Two D16 tests passed against a lookup the
+real node could not perform. **A test fixture that manufactures production state
+can validate a path that does not exist.** The stub now mirrors the real
+`_vision_states` pool.
 
 ## 8. Provenance
 
