@@ -97,7 +97,12 @@ STALE_HOLD_S          = 0.5    # if yaw_source goes silent longer than this,
 #     error shrinks. Uses 1/YAW_RATE_HZ as dt, so units are %/deg/sample.
 YAW_KP            = 1.2    # proportional gain (%/deg)
 YAW_KI            = 0.03   # integral gain (%/deg·sample); 0 to disable
-YAW_KD            = 0.5    # derivative gain (%/deg change)
+YAW_KD            = 0.5    # derivative gain (%/deg change per tick at _YAW_DT_REF)
+
+# The loop period the gains above were POOL-TUNED at. Both the D and the I term
+# are scaled by the ratio of the live dt to this, so the numbers are unchanged at
+# the shipped rate and rate-INDEPENDENT if it ever moves. (B13)
+_YAW_DT_REF = 1.0 / YAW_RATE_HZ
 YAW_KI_MAX        = 8.0    # anti-windup: clamp accumulated integral output
 
 # ---- Glide-only tunables ---------------------------------------------
@@ -136,21 +141,41 @@ class _YawPID:
 
     def __init__(self):
         self._i_acc   = 0.0
-        self._last_e  = 0.0
+        # None, not 0.0: on the FIRST tick there is no previous error, and
+        # pretending it was 0 manufactures a derivative of the full error --
+        # 0.5 x 90 = 45% for a 90 deg turn. The clamp masked that; it did not
+        # prevent it. The first tick now contributes no D at all. (B13)
+        self._last_e  = None
 
-    def update(self, error_deg: float) -> float:
+    def update(self, error_deg: float, dt: float | None = None) -> float:
+        # B13: `dt` was absent from BOTH the D and the I term, so YAW_KD and
+        # YAW_KI were per-TICK, not per-second -- silently coupled to
+        # YAW_RATE_HZ. Changing the loop rate retuned the controller without
+        # anyone touching a gain.
+        #
+        # The gains are POOL-TUNED at YAW_RATE_HZ, so they are anchored to that
+        # rate rather than rewritten: at dt == _YAW_DT_REF both expressions below
+        # reduce EXACTLY to what shipped (verified numerically), while a rate
+        # change now preserves behaviour instead of altering it. Same approach as
+        # the B09 Kalman-Q fix, for the same reason.
+        dt = _YAW_DT_REF if (dt is None or dt <= 0.0) else float(dt)
+
         if abs(error_deg) <= YAW_TOL_DEG:
             self._i_acc = 0.0
             self._last_e = error_deg
             return 0.0
 
         # Reset integrator when error sign flips (overshoot crossed target)
-        if math.copysign(1, error_deg) != math.copysign(1, self._last_e):
+        if self._last_e is not None and \
+           math.copysign(1, error_deg) != math.copysign(1, self._last_e):
             self._i_acc = 0.0
 
-        d_term = YAW_KD * (error_deg - self._last_e)
+        if self._last_e is None:
+            d_term = 0.0                      # no previous sample -> no derivative
+        else:
+            d_term = YAW_KD * (error_deg - self._last_e) * (_YAW_DT_REF / dt)
         self._i_acc = max(-YAW_KI_MAX, min(YAW_KI_MAX,
-                          self._i_acc + YAW_KI * error_deg))
+                          self._i_acc + YAW_KI * error_deg * (dt / _YAW_DT_REF)))
 
         raw = YAW_KP * error_deg + self._i_acc + d_term
         # Cap, then apply the TAPERED floor (full only outside the approach band).
