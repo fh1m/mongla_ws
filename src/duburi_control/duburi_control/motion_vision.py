@@ -49,7 +49,7 @@ from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
 from .motion_rates import VISION_LOOP_HZ_SROT
 from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
 from .motion_rates import LOG_THROTTLE_S
-from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep
+from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep, is_srot
 
 
 # ---- Outcome codes (copied to Move.Result.final_value) --------------- #
@@ -558,9 +558,9 @@ def _present(sample) -> bool:
     return sample is not None and sample.age_s <= _STALE_LIMIT_S
 
 
-def _is_srot(fc) -> bool:
-    """True when the actuation backend is the srot board rather than ArduSub."""
-    return getattr(fc, 'name', '') == 'srot'
+# `_is_srot` now lives in `motion_writers.is_srot` -- `make_writers` has to
+# branch on it too (B30), and a second copy is how the two would disagree.
+_is_srot = is_srot
 
 
 def _tick(vision_state, fc) -> None:

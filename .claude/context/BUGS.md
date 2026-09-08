@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 12 of 28 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
+> **STATUS: 13 of 29 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
 > the SROT-path batch — plus B25/B26 found while fixing them. Each landed with a
 > test verified to fail without the fix. The remaining open items are listed
 > below at their original severity; the ArduSub-path ones (B06, B07, B08, B12,
@@ -442,6 +442,18 @@ guarded and one not.
 thruster resolution today, but a rounding rule that differs by sign.
 `round()` makes it symmetric.
 
+⚠ **REACHABILITY CORRECTED 2026-09-08 — this is NOT ArduSub-only.** A sanity pass
+classified B18 as pixhawk-path on the strength of a grep of `percent_to_pwm`
+callers. That grep was piped through `head` and truncated at 10 lines, hiding all
+**10** call sites in `motion_vision.py`. The srot vision path reaches it:
+
+    VisionVerbs.vision_align -> motion_vision.align_loop -> Pixhawk.percent_to_pwm
+
+so the one-LSB negative-side bias applies on the vehicle's live vision axes, not
+only on the preserved ArduSub path. Severity is unchanged (still below thruster
+resolution — and see B30 for what the *same* truncated grep was hiding, which was
+not benign). Classify with `tools/srot_reachability.py`, never by grep.
+
 ### B19 — `CompositeBnoDvlSource.close()` leaks the second source
 **`composite_bno_dvl.py`** — `self._bno.close()` then `self._dvl.close()`, unsequenced.
 An exception from the first (a serial handle already gone; the `ENOTTY`-on-PTY
@@ -868,6 +880,66 @@ and a genuinely confusing one to chase.
 **A `finally:` gated on a value that is always `None` is not cleanup.** The guard
 was presumably defensive; defensiveness is what disabled the restore. Fixed with
 `monkeypatch.setattr`, which owns the restore and cannot be gated away.
+
+### B30 — the vision arrival brake calls a method SrotFC does not have  ⛔ SROT-PATH, LIVE, DEFAULT-ON  ✅ FIXED 2026-09-08
+
+**`motion_writers.make_writers` → `motion_vision._brake_axis`.** REPRODUCED:
+
+```
+AttributeError: 'SrotFC' object has no attribute 'send_rc_override'
+```
+
+`make_writers` built every `Writers` around `send_rc_override` /
+`send_rc_translation`, and **SrotFC implements neither**. On srot the one path
+that calls `writers.forward` / `writers.lateral` is `_brake_axis`, the vision
+**arrival brake** — which is **on by default** (`brake=not bool(brake_off)`,
+`brake_off=False`). So a plain `vision_align(lat=0)` raised on arrival, on the
+vehicle's primary vision verb.
+
+**Three things hid it, and each is worth keeping:**
+
+1. **Three of the four writers worked.** `neutral` maps to `send_neutral`, which
+   SrotFC *does* have, so the bundle looked healthy.
+2. **It is intermittent by momentum.** `_brake_axis` returns early when
+   `abs(ema_pct) < VISION_BRAKE_MIN_PCT` (6 %), so a gently-converged lock never
+   reaches the call and a fast snap-in does. It fails on the approach that has
+   inertia — the hardest shape to catch on a bench, and the one that matters in
+   water.
+3. **The facade drift tests could not see it.** They scan `duburi.py` /
+   `vision_verbs.py` for `self.pixhawk.<attr>`. These calls live in
+   `motion_writers`, inside a lambda, reached through a `Writers` field.
+
+**Blast radius, stated precisely.** LIVE: `forward`/`lateral` via the arrival
+brake. LATENT: `depth_keepalive` (used only by `style_roll` and `set_depth`, both
+in `MOVE_VERBS` and therefore collapsed onto the board) and every
+`release_yaw=True` variant (srot never has a heading lock, so `_lock_active()` is
+always False).
+
+**Fix.** `make_writers` is backend-aware: on srot it returns writers that convert
+the pwm argument back through the exact inverse of `percent_to_pwm` and actuate
+via `manual()`. Callers still pass pwm and still do not care which backend they
+are on. `_is_srot` moved down into `motion_writers` as the single definition
+(`is_srot`) so `make_writers` can branch on it — two copies of "which backend am
+I on" is how the split goes wrong in one file and not the other, which is
+literally what this bug was.
+
+Verified: ema +40 % → capped to `VISION_BRAKE_CAP_PCT` 30 → −30 % → pwm 1380 →
+−30 % → −0.30 units → `MANUAL_CONTROL` lateral −300, surge and yaw 0. The pwm
+round trip is exact across the band. 12 tests, **9 fail** without the fix.
+
+⚠ **HOW IT WAS FOUND, because the method matters more than the bug.** A sanity
+check asked whether all active srot bugs were closed. The answer was assembled by
+hand-tracing call sites, and the classification of B12 came within one grep of
+being wrong. Redoing it *mechanically* — a call-graph reachability walk from the
+real srot entry verbs — immediately contradicted the hand answer on B18, and
+chasing that contradiction produced B30.
+
+**The root cause of the mis-classification was a truncated command.** The
+evidence for "B18 is ArduSub-only" was
+`grep -rn percent_to_pwm src/ | grep -v test | head` — and `head` cut the output
+at 10 lines, hiding all **10** `motion_vision.py` call sites. A truncated view
+presented as a complete one: the register's own recurring defect class, applied to
+the method used to maintain the register.
 
 ## 8. Provenance
 
