@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 40 of 47 fixed (2026-09-08).**
+> **STATUS: 41 of 48 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -2012,6 +2012,84 @@ grep would look for still present — fails
 `udpin:` (not a device), and its module docstring already warns about pointing
 it at a live link; `_discovery` filters on `303a:1001` and cannot enumerate a
 CH340 — both are verified negatives, not oversights.
+
+---
+
+### B49 — six config files nobody loads, one of them still carrying a corrected error  ✅ FIXED 2026-09-08
+
+The same question a fifth time — *does this file's own claim about itself
+hold?* — asked of `config/`.
+
+**Seven YAMLs live there. No launch file in this repo loads any of them** (every
+launch searched for a yaml reference; none). Every value in them is inert, and
+each file disagrees with the `declare_parameter` default that actually runs:
+
+```
+tracker.yaml   track_buffer 150 [60]   min_hits 3 [1]
+               kalman_process_noise 0.05 [0.1]   kalman_measurement_noise 2.0 [1.0]
+detector.yaml  model_path gate_flare_medium_100ep [yolov11n]   conf 0.45 [0.35]
+sensors.yaml   yaw_source dvl [mavlink_ahrs]
+```
+
+This is not a documentation nit — it is a **measured** operator failure, and the
+codebase already recorded it happening once, in `test_camera_profiles.py`:
+
+> *"switching the Pi cameras to the low-latency source by editing the YAML
+> changed NOTHING. The launch came up on the old source, published frames, ran
+> detections, and logged no error — the only symptom was a latency measurement
+> that did not move."*
+
+That lesson was learned for `cameras.yaml` **and nowhere else**.
+
+**`tracker.yaml` is the sharpest edge:** it is written in exact `--params-file`
+shape (`tracker_node: / ros__parameters:`) — the form an operator hands to
+`ros2 run --params-file` expecting it to work. **`sensors.yaml` is next:**
+`setup.py` *installs* it to `share/duburi_sensors/config/`, precisely where a
+live config would sit, and it still names the **unfitted DVL** as the yaw
+source — the likely origin of the same wrong claim corrected in two documents in
+B46.
+
+**`modes.yaml` was carrying a fact this project corrected thirteen months ago.**
+It said `Raspberry Pi (BlueOS) 192.168.2.1`. Measured on the vehicle 2026-08-03
+and fixed in `connection_config.py` (`blueos_ip: '192.168.2.2'`) and CLAUDE.md
+then: the **Pi answers on .2**, and **.1 is the topside box**. The stale copy
+survived in the file an operator opens for network information. A stale copy of a
+*corrected* fact is worse than no copy — it reads as confirmation. Corrected.
+
+**Fix: one property, not a second copy of every value.** A reader must be able to
+tell whether editing the file does anything. Three honest ways to satisfy that,
+and `test_config_files_say_whether_they_are_loaded.py` accepts all three: a
+launch loads it; it carries a `NOT LOADED AT RUNTIME` header that says where to
+set the value instead; or it documents that the operator loads it explicitly with
+`--params-file` (`vision_tunables.yaml` — opt-in, not dead). Mirroring every
+value in two places is the disease, not the cure.
+
+Verified by injection: a new unmarked config yaml → 1 failed; the `.1`/`.2` swap
+restored → 1 failed; `sensors.yaml`'s marker removed → 2 failed; restored → 7
+passed.
+
+> **The guard caught its own author, twice, which is the point.**
+> `test_there_are_config_yamls_to_check` exists because a glob that matches
+> nothing passes every other test in the file silently — and it fired
+> immediately: my `parents[3]` pointed at the workspace, not `src`, so four
+> tests were passing **vacuously**. Fixing it then found **7** config files
+> where my hand-written list had **4**: `distance.yaml`, `modes.yaml` and
+> `vision_tunables.yaml` were missed by reading and found by the tool.
+
+> **Two verified negatives from this sweep, recorded so they are not re-walked.**
+> (1) `vision_tunables.yaml` first looked malformed — its params nested one level
+> deep rather than dotted. **Retracted before it was written up:** ROS 2 flattens
+> nested YAML into dotted names, so the file is correct. Re-checked with that
+> flattening, 7 params parse and **none disagrees** with the code; the other 9
+> are simply absent and fall back to the identical code default. Not a defect.
+> (2) `tracker.yaml` says `kalman_process_noise: 0.05` while the node ships
+> `0.1`, and `test_kalman_revival.py` cites the YAML value as "the tuned
+> operating point" for the B09 fix — which reads like the vehicle running an
+> untuned filter. `git log -S` shows the node was **never** 0.05, so the YAML
+> value has never run; and executing `_q_for_dt` at both values shows the anchor
+> is **scale-free** (`Q[2,2] == process_noise` at `_DT_REF_S` for 0.05 *and*
+> 0.1). So B09 is correctly anchored at what actually runs and **no control
+> value was changed on a guess** — only the citation was wrong.
 
 ## 8. Provenance
 

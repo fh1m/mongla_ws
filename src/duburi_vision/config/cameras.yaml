@@ -1,3 +1,15 @@
+# ============================================================================
+#  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
+#
+#  This is the file that already burned us once: switching the Pi cameras to the
+#  low-latency source by editing it changed NOTHING -- the launch came up on the
+#  old source, published frames, ran detections, and logged no error. The only
+#  symptom was a latency number that did not move.
+#
+#  The loaded copy is `CAMERA_PROFILES` in `duburi_vision/config.py`;
+#  `test_camera_profiles.py` is the mechanism that keeps the two in step. Set a
+#  value for real with a launch arg or `--ros-args -p <name>:=<value>`.
+# ============================================================================
 # duburi_vision -- named camera profiles (mirrors CAMERA_PROFILES in
 # duburi_vision/config.py). Edit either; keep them in sync.
 #
