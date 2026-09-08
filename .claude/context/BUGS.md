@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 23 of 40 fixed (2026-09-08).**
+> **STATUS: 28 of 40 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -298,7 +298,7 @@ Operator-facing companion: `f'height={height or 0.0:.2f}m'` prints an unknown
 height as `height=0.00m`, and the debug topic does the same. Three `or 0.0` in
 one file, each turning "unknown" into a number a human reads as measured.
 
-### B11 — `CompositeBnoDvlSource.is_healthy` contradicts its own docstring
+### B11 — `CompositeBnoDvlSource.is_healthy` contradicts its own docstring  ✅ FIXED 2026-09-08
 **`duburi_sensors/sources/composite_bno_dvl.py:17 vs :59`**
 
 Docstring: `is_healthy() -> BNO healthy AND DVL streaming`.
@@ -336,7 +336,7 @@ not prevented); the timeout path reports the **entry** heading as current;
 `frames_locked` is not reset across a stale gap; and `yaw_glide`'s total time is
 `duration + timeout`, up to 6 s + timeout.
 
-### B14 — the parser's tests cover the one garbage case that cannot fail
+### B14 — the parser's tests cover the one garbage case that cannot fail  ✅ FIXED 2026-09-08
 **`duburi_sensors/test/test_nucleus_parser.py`**
 
 `test_accumulator_skips_leading_garbage` feeds `b'\x00\x11\x22'` before a good
@@ -449,7 +449,7 @@ the shipped index all still passed. Only a round trip at a *different* index
 
 ## 4. LOW
 
-### B17 — `HeadingLock.stop()` joins an unstarted thread
+### B17 — `HeadingLock.stop()` joins an unstarted thread  ✅ FIXED 2026-09-08 — **REPRODUCED**
 **`heading_lock.py`** — `self._thread.join()` with no guard, while
 `Heartbeat.stop()` one module over carries an explicit `is_alive()` check *with
 a comment naming the crash it prevents* (`"cannot join thread before it is
@@ -479,14 +479,14 @@ not benign). Classify with `tools/srot_reachability.py`, never by grep.
 symmetric about 1500 (banker's rounding about an even number: 1499.5 and 1500.5
 both give 1500). Endpoints and the clamp are pinned unchanged by test.
 
-### B19 — `CompositeBnoDvlSource.close()` leaks the second source
+### B19 — `CompositeBnoDvlSource.close()` leaks the second source  ✅ FIXED 2026-09-08 — **REPRODUCED**
 **`composite_bno_dvl.py`** — `self._bno.close()` then `self._dvl.close()`, unsequenced.
 An exception from the first (a serial handle already gone; the `ENOTTY`-on-PTY
 case CLAUDE.md records) skips the DVL close entirely, leaving the TCP socket and
 its reader thread alive. Shutdown is exactly where a first close is most likely
 to raise.
 
-### B20 — parser guards the exception that cannot happen
+### B20 — parser guards the exception that cannot happen  ✅ FIXED 2026-09-08 — **REPRODUCED**
 **`nucleus_parser.py`** — both payload decoders sit inside
 `except (StructError, IndexError)`, but Python slicing never raises
 `IndexError`: `raw[96:100]` on a short buffer returns a short slice and the

@@ -205,7 +205,14 @@ class HeadingLock:
 
     def stop(self):
         self._stop_event.set()
-        self._thread.join(timeout=1.0)
+        # `join()` on a thread that was never started raises RuntimeError (B17).
+        # stop() is reached from abort/cleanup paths, which is exactly where a
+        # lock may have been constructed and not started -- a deferred lock whose
+        # first armed command never arrived, or an aborted mission_reset. Raising
+        # out of cleanup skips the Ch4 release below and whatever the caller
+        # meant to do next.
+        if self._thread.is_alive() or self._thread.ident is not None:
+            self._thread.join(timeout=1.0)
         # Release Ch4 so the yaw channel is not left driving after stop().
         # send_neutral() in the manager's shutdown hook handles this too,
         # but being explicit avoids a brief hang if stop() is called from
