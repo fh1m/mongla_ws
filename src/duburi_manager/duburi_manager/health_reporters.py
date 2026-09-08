@@ -52,6 +52,36 @@ def board_link(fc) -> Health:
         failed('board_link', 'no heartbeat within the stale window')
 
 
+def mavlink_reader(is_alive, fault_count, last_fault) -> Health:
+    """Is the HOST's MAVLink reader thread still running? (B40)
+
+    ⛔ THIS EXISTS TO STOP ONE SPECIFIC MISDIAGNOSIS. `reader_loop` is a bare
+    `threading.Thread` target and the only thing draining the link. If it dies,
+    `master.messages` stops updating, every reading ages out, and `board_link`
+    above reports "no heartbeat within the stale window" -- i.e. a host-side
+    software fault is indistinguishable from a dead cable. At the pool, with the
+    hull in the water, that sends someone to re-seat a USB-C connector while the
+    real cause sits in this process.
+
+    So this is deliberately reported SEPARATELY from `board_link`, and its
+    message says which side is at fault. A dead reader is FAILED; faults it
+    survived are DEGRADED, because the telemetry they interrupted was real.
+    """
+    try:
+        alive = bool(is_alive())
+        faults = int(fault_count())
+    except Exception as exc:                     # noqa: BLE001
+        return unknown('mavlink_reader', f'{type(exc).__name__}: {exc}')
+    if not alive:
+        return failed('mavlink_reader',
+                      'READER THREAD IS DEAD -- this is a HOST fault, not the '
+                      'link. Do not go looking at the cable; restart the manager')
+    if faults:
+        return degraded('mavlink_reader',
+                        f'{faults} fault(s) survived; last: {last_fault()}')
+    return ok('mavlink_reader', 'draining the link')
+
+
 def barometer(named_value) -> Health:
     """`named_value` is a callable name -> float|None (None = not reporting)."""
     v = named_value('BARO_HEALTH')
