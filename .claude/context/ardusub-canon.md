@@ -316,10 +316,22 @@ ArduSub priority for control input (highest first):
 4. Physical RC receiver (we don't have one)
 
 We always sit at level 1. This means the `RC_CHANNELS_OVERRIDE`
-packet is authoritative for whichever channels we set. **Channels
-we leave at 65535 (`UINT16_MAX`) are released back to the next
-priority level** -- effectively giving them up entirely (since we
-have no physical RC).
+packet is authoritative for whichever channels we set.
+
+⛔ **CORRECTED 2026-09-08, from ArduPilot source.** This used to say
+"channels we leave at 65535 (`UINT16_MAX`) are released back to the
+next priority level". **That is false for Ch1-8.**
+`GCS_Common.cpp:handle_rc_channels_override()` loops `i<8` and skips
+`set_override()` altogether when the value is `UINT16_MAX` -- the
+MAVLink spec's "ignore this field". The channel therefore KEEPS its
+previous override value, and its `last_override_time` is NOT
+refreshed, so it stays live until `RC_OVERRIDE_TIME` (default 3.0 s)
+expires. Releasing a channel is a different value: `0` clears the
+override, and on Ch9+ `UINT16_MAX-1` means "return to RC".
+
+The practical consequence is BUGS.md B24/B06: a writer that stops
+writing does not hand the channel back -- its last command is latched
+for up to three seconds.
 
 This is a sharp tool. If we send `[65535]*8` we have just told
 ArduSub "I'm not driving any stick" -- in MANUAL the AUV freewheels
