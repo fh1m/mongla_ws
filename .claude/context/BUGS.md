@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 36 of 43 fixed (2026-09-08).**
+> **STATUS: 38 of 45 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1699,6 +1699,175 @@ Three remain unguarded and are deliberately left: `xfeat_onnx.work` and
 `srot_recorder._drain` is a detector false positive — its handler is one call
 down, in `_safe_flush`.
 
+---
+
+### B45 — the deck default silently overrode the spec default, and every doc described the wrong hull  ✅ FIXED 2026-09-08
+
+**Found by asking a different question:** not "is this value right?" but "does
+this file's own claim about itself hold?" `vision_tunables` says of itself:
+
+> *"Mirrors the spec defaults in `duburi_control/commands.py` exactly so nothing
+> changes if the operator never sets a param."*
+
+That claim is load-bearing, because `fields_for` substitutes in the order
+**goal → runtime_defaults → spec defaults**: a `vision.*` param the operator has
+never touched still **wins** over the hardcoded spec default. So a drift between
+the two tables is not a documentation nit — it changes what the hull does, on
+the pool-day path, while `ros2 param list` shows exactly the value the docs tell
+you you would have to set yourself.
+
+Checked by execution rather than by reading — sixteen mapped fields, both
+commands:
+
+```
+5 mismatches
+  vision_align  coast_s     spec=0.0   param=0.8
+  vision_move   coast_s     spec=0.0   param=0.8
+  vision_align  surge_sign  spec=0.0   param=-1.0     <- deliberate, documented
+  vision_align  lock_s / fire_max_tilt_deg  <no spec default>, param 0.0  <- harmless
+```
+
+Then end to end through the real dispatch, with the operator having set nothing:
+
+```
+coast_s reaching align_loop with NO operator action : 0.8
+spec default (what the docs describe)              : 0.0
+```
+
+**`vision.coast_s` — the gap-bridging coast — has been ON at 0.8 s, while five
+documents, the spec default and its own adjacent comment all said `0.0` / OFF /
+opt-in.** The list: this register's own D10 entry (which additionally said
+*"Pool-gated: validate with `coast_s=0` first"*), `CLAUDE.md`,
+`command-reference.md`, `client-and-dsl-api.md`, `precision-alignment.md`.
+
+`git log -S` names the moment. The feature landed in `44ca302`, titled
+**"opt-in control coast through detection gaps (vision.coast_s, default OFF)"**.
+It was changed to `0.8` in `6c28ad8` — *"silence engine task-guess warning +
+document Jetson dep pitfalls"* — a commit about a log line and Jetson
+dependency notes, whose stat touches `known-issues.md`, `.gitignore`, five model
+YAMLs, `yolo.py` and this one line. Every document written afterwards kept
+describing the old default.
+
+**Resolution — the value stays, the descriptions move.** The operator states
+0.8 has been run in water, so it is the flying configuration and reverting it
+would have been the actual regression. The spec defaults in `COMMANDS` are now
+`0.8` for both verbs, and all five documents say so. This changes **no
+behaviour**: `auv_manager_node:1110` is the only `fields_for` caller and it
+always passes `runtime_defaults`, so the spec `0.0` never reached the hull — it
+was documentation-in-code that said the wrong thing. Recorded honestly: the
+water result is the operator's statement; no measurement of it exists in this
+repo.
+
+**The real fix is that the drift was invisible.**
+`test_vision_tunables_mirror_the_spec.py` pins it: every mapped field's deck
+default must equal its spec default (`surge_sign` is the one documented
+exception, and the test says not to extend that set); the shipped `coast_s`
+must survive the real `runtime_defaults_for_command` → `fields_for` path, not
+just match in the table; the knob must still reach `0` (a default is not a
+lock); and both remaining rungs of the documented timeout ladder are checked
+against shipped values rather than prose — `coast_s < lost_grace_s`, and
+`tracker.yaml: max_predict_s ≥ coast_s`. That last one is a cross-package
+constraint that has bitten this stack before and that nothing else checks.
+
+Verified by injecting each of the four defects and watching the right test fail
+(spec drift → 1 failed; deck value lost → 2; tracker buffer too short → 1;
+coast past `lost_grace_s` → 4), then restored → 5 passed.
+
+> **The harness lied first, and that is the durable lesson.** The initial
+> injection sweep reported failures *after* the file was restored. Cause: the
+> `sed` edits landed within the same second and left the file size unchanged,
+> so CPython reused a stale `__pycache__` `.pyc` — Python's cache key is
+> (mtime, size). A verification harness can produce confident wrong results the
+> same way the code under test can. Clear `__pycache__` between injection steps,
+> and when an injection result does not make sense, check the harness before
+> concluding anything about the code.
+
+---
+
+### B46 — the docs described a pool bring-up on a sensor that is not fitted  ✅ FIXED 2026-09-08
+
+B45's lens, applied to the other default table: **does this file's own claim
+about itself hold?** CLAUDE.md §8 says
+
+> *"The node's own `declare_parameter` defaults differ for two: `mode=auto` and
+> `yaw_source=mavlink_ahrs` … the launch file overrides to `pool`/`dvl` for pool
+> use."*
+
+Extracted both tables and compared them rather than reading the prose — ten
+params are declared in both `bringup.launch.py` and `auv_manager_node`, and
+**exactly one differs**:
+
+```
+1 DIFFER between launch default and node default:
+  mode                     launch='pool'   node='auto'   (DEFAULT_MODE)
+```
+
+`yaw_source` is `mavlink_ahrs` on **both** paths. The launch file even carries a
+comment saying so — *"Default is mavlink_ahrs since the SROT board became the
+flight controller"* — which is the correct decision; only the documentation
+never followed it.
+
+**Why this is not a typo.** The DVL is **not fitted and was never validated in
+water** (`vehicle-spec.md` "DVL status"). Two documents — CLAUDE.md's param
+table and `ros2-conventions.md`'s — told an operator that
+`ros2 launch duburi_manager bringup.launch.py` brings the vehicle up with its
+heading source set to a sensor that is not on the hull. Someone trusting that
+would not pass `yaw_source:=bno085`, and would spend pool time diagnosing a
+heading source they believed was selected and never was. Same shape as B45: the
+code was right, every description of it was wrong, and nothing compared them.
+
+Corrected in `CLAUDE.md` (note + table row) and `ros2-conventions.md` (note +
+table row), each stating what it used to say and why it mattered.
+
+**Pinned by `test_launch_and_node_defaults_agree.py`**, which parses both files
+and asserts (a) no shared param differs unless it is listed as deliberate with
+its two values — `mode` is the only entry, and the docstring says adding one is
+a review decision, not a way to make the test pass; (b) a listed difference has
+not silently gone away, which is the direction that bit us — when it resolves,
+the entry must be dropped, and that forces someone to the prose describing it;
+and (c) `yaw_source` is the same on both paths, named explicitly because a
+future launch defaulting to a DVL-backed heading must be a decision rather than
+an inheritance.
+
+Verified by injection, both directions: launch `yaw_source` back to `dvl` → 2
+failed; the `mode` difference resolved to `auto` → 1 failed; restored → 3
+passed.
+
+> **The harness lied a second time, differently.** The first `mode` injection
+> reported a clean pass — because the `sed` pattern did not match the file's
+> alignment whitespace (`'mode',       default_value=`), so nothing was ever
+> injected and a *green* result read as "the guard is weak". Every injection now
+> asserts that the substitution applied before running the test. B45's stale
+> `.pyc` and this are the same failure wearing different clothes: **a
+> verification harness needs its own verification, and its silence is not
+> evidence.**
+
+---
+
+### OPEN — one unidentified suite failure, seen once, not reproduced  ⚠ 2026-09-08
+
+Recorded because "it went away" is not a diagnosis.
+
+On the B45/B46 batch, one full-suite run reported **`1 failed, 1987 passed`**.
+Five subsequent full runs — one immediately after, then three back to back
+under `-p no:cacheprovider`, all on the same tree — reported **`1988 passed,
+0 failed`**. Same test count each time, so it is one test flaking, not a
+collection difference.
+
+**I cannot name it, and the reason is my own harness again:** the run was piped
+through `tail -3`, which keeps the summary line and discards every `FAILED`
+line above it. The information existed and was thrown away at the moment it was
+produced. **Never pipe a suite run through `tail -N` — write the full output to
+a file and read the summary out of that.**
+
+What is known: the failure did not recur in four further runs, and the batch it
+appeared in is green. What is NOT known: which test, and whether it is
+timing-sensitive. The wall-clock-dependent files are the place to start —
+`test_heartbeat.py` (14 real sleeps), `test_heading_lock.py` (11),
+`test_style_verbs.py` (6 sleeps / 4 threads), `test_hailo_arbiter.py` (5).
+A flaky test on a vehicle stack is a real defect: it trains the operator to
+re-run instead of read.
+
 ## 8. Provenance
 
 Scratch working notes for this audit ran to 41 numbered findings (`F001`–`F041`)
@@ -1758,8 +1927,8 @@ Environment traps E1–E5 moved to [`jetson-and-env-traps.md`](jetson-and-env-tr
 ### D10. Control coast through detection gaps — re-enabled SAFELY (opt-in) — **2026-06-30**
 - **Files:** `vision_state.py`, `motion_vision.py`, `vision_verbs.py`, `vision_tunables.py`, `tracker_node.py`, `roboflow_tracker.py`
 - **History (the bug we must not repeat):** commit `a8bf8ea` added `vision.use_tracks` → the control loop read `/tracks`; `8335afb` ripped it out. Root cause: coasted (Kalman-predicted) boxes carry `score=0.0`, which collided with the conf gate (`min_score`/`ctrl_conf>0`) → `bbox_error()` returned `None` → `_present()` False → **drive neutral → AUV stopped** despite a good predicted box. Latent second mode: `_freshness()` keys off *message* age, but a predicted box arrives every frame (age≈0) → **full authority on a drifting phantom**. The fix made control read raw `/detections` only, occlusion handled by mission `fallback`.
-- **Re-enable design (Part B, `vision.coast_s`, default OFF):** the coast is now **additive and opt-in**, inverting both failure modes — (1) a live `/detections` box ALWAYS wins (`/tracks` is consulted only to fill an empty tick; coast never gates out or overrides a real box); (2) coast authority decays by **TRUE detection-age** via a separate `_coast_authority` curve dispatched by `_authority()` (a coasted box is fresh every tick, so applying `_freshness` would double-decay it — and a *live* box must NOT be coast-decayed); (3) conf-exempt **only for the locked `track_id`** (a predicted box of any other id is ignored — built outside the `min_score` path, only for `locked_id`). `coast_s=0` ⇒ byte-identical to the proven raw-`/detections` path.
-- **Timeout ladder (4 rungs, must stay ordered):** `_freshness` (0.4s, per-frame live staleness) < `vision.coast_s` (~0.8, coast window) < `vision.lost_grace_s` (1.0, → LOST → `fallback`) < tracker `max_predict`/`lost_track_buffer` in **wall-time** (the track must outlive the coast). The 4th rung bit us once: the Kalman smoother drops a track from `/tracks` after `max_predict_frames`, so `max_predict` (launch default was 10=0.5s, yaml 15=0.75s — both **below** `coast_s=0.8`) silently truncated the coast; raised to 30 (1.5s @20Hz). **Pool-gated:** validate with `coast_s=0` first (byte-identical), then `≈0.8` on the torpedo hole/gate; slalom last and cautiously (a coasted lateral box drifts fastest there).
+- **Re-enable design (Part B, `vision.coast_s`, default `0.8` s — see B45; this entry said "default OFF" for the whole life of the feature and was wrong):** the coast is now **additive and opt-in**, inverting both failure modes — (1) a live `/detections` box ALWAYS wins (`/tracks` is consulted only to fill an empty tick; coast never gates out or overrides a real box); (2) coast authority decays by **TRUE detection-age** via a separate `_coast_authority` curve dispatched by `_authority()` (a coasted box is fresh every tick, so applying `_freshness` would double-decay it — and a *live* box must NOT be coast-decayed); (3) conf-exempt **only for the locked `track_id`** (a predicted box of any other id is ignored — built outside the `min_score` path, only for `locked_id`). `coast_s=0` ⇒ byte-identical to the proven raw-`/detections` path.
+- **Timeout ladder (4 rungs, must stay ordered):** `_freshness` (0.4s, per-frame live staleness) < `vision.coast_s` (~0.8, coast window) < `vision.lost_grace_s` (1.0, → LOST → `fallback`) < tracker `max_predict`/`lost_track_buffer` in **wall-time** (the track must outlive the coast). The 4th rung bit us once: the Kalman smoother drops a track from `/tracks` after `max_predict_frames`, so `max_predict` (launch default was 10=0.5s, yaml 15=0.75s — both **below** `coast_s=0.8`) silently truncated the coast; raised to 30 (1.5s @20Hz). **Was written as pool-gated and shipped ON at `0.8` instead — see B45.** The operator states the value has been run in water; no measurement of it is recorded here. `coast_s=0` remains the byte-identical control arm for any A/B, and slalom is still the cautious case (a coasted lateral box drifts fastest there).
 
 ### D11. Fire could leave on a stale/coasted box; align declared on one frame at low FPS — **FIXED 2026-07-01 (completion audit)**
 - **Files:** `motion_vision.py` (`align_loop`), `Move.action`, `vision_tunables.py`.

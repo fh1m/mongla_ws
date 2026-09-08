@@ -89,7 +89,8 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 > **Two default layers — don't confuse them.** The column below is the **node's
 > own `declare_parameter` default** (what you get from a bare
 > `ros2 run duburi_manager start`). The operator-facing **`bringup.launch.py`
-> overrides some of these** for pool use (`mode:=pool`, `yaw_source:=dvl`) — so a
+> overrides some of these** for pool use (`mode:=pool` — and ONLY `mode`; verified
+> by extraction 2026-09-08, `yaw_source` is `mavlink_ahrs` in both) — so a
 > launched stack and a bare `ros2 run` can pick different profiles. `mode:=auto`
 > probes the environment (UDP 14550 busy → `pool`; Pixhawk USB → `desk`; else `sim`).
 
@@ -99,7 +100,7 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 | `mav_device`            | string | `''`            | Override the connection string (e.g. `/dev/ttyACM0`, `udpin:0.0.0.0:14560`); `''` = use the mode profile |
 | `smooth_yaw`            | bool   | `false`         | `true` → `yaw_glide` (smootherstep setpoint sweep)                           |
 | `smooth_translate`      | bool   | `false`         | `true` → `drive_*_eased` (trapezoid thrust + settle-only brake)              |
-| `yaw_source`            | string | `mavlink_ahrs`  | `mavlink_ahrs` \| `bno085` \| `bno085_dvl` \| `dvl` (bringup.launch default: `dvl`) |
+| `yaw_source`            | string | `mavlink_ahrs`  | `mavlink_ahrs` \| `bno085` \| `bno085_dvl` \| `dvl` (bringup.launch default: `mavlink_ahrs`, same as the node — this used to say `dvl` and was wrong; the DVL is not fitted) |
 | `bno085_port`           | string | `auto`          | `auto` = VID/PID scan (303a:1001); explicit path skips the scan              |
 | `bno085_baud`           | int    | `115200`        | BNO085 stream baud rate                                                      |
 | `payload_port`          | string | `auto`          | ESP32 payload (fire/drop) board; `auto` = VID/PID scan (1a86:7523)           |
