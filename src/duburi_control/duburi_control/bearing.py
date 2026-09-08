@@ -130,11 +130,24 @@ def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
         fx, fy, cx, cy = float(K[0]), float(K[4]), float(K[2]), float(K[5])
 
     if fx > 0.0 and fy > 0.0:
-        # CameraInfo.k is stated for the resolution it was CALIBRATED at. A
-        # node streaming 640x360 from a 1280x720 calibration must scale, and
-        # camera_node already does that before publishing -- but a caller may
-        # hand us a raw file, so scale defensively rather than silently
-        # producing bearings that are wrong by the resolution ratio.
+        # NO RESOLUTION SCALING HAPPENS HERE, AND NONE SHOULD (B16). This
+        # comment used to promise to "scale defensively", which was false --
+        # nothing scaled, and the function takes no calibration resolution to
+        # scale against. The defence is real but lives one layer up, where the
+        # information actually is:
+        #
+        #   camera_node._fill_calibration() owns the calibration FILE, so it
+        #   knows both the calibrated resolution and the streamed one, and
+        #   rescales fx/cx/fy/cy by the ratio before publishing CameraInfo.
+        #   ("Publishing the unscaled matrix would put the principal point off
+        #   the image and every derived angle would be wrong by 2x, silently.")
+        #
+        # By the time a bearing is computed, `K` and `width`/`height` have both
+        # come from the SAME CameraInfo message (VisionState._on_info reads them
+        # in one callback), so they cannot disagree. Re-scaling here against a
+        # resolution we would have to be told separately would add an argument
+        # to guard a caller that does not exist -- and a second place to get the
+        # ratio wrong. `test_bearing_resolution_invariant.py` pins both halves.
         xn, yn = (u - cx) / fx, (v - cy) / fy
         xu, yu = _undistort(xn, yn, D or ())
         ax, ay = math.atan(xu), math.atan(yu)

@@ -74,7 +74,28 @@ import numpy as np
 FIND = cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE
 CRIT = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 SUBPIX_WIN = (11, 11)
-N_WATER = 1.333  # sea/fresh water; a flat port refracts by Snell's law
+# Re-exported so existing readers of `solver.N_WATER` keep working. The value and
+# both Snell transforms now live in `duburi_vision.optics`, because the INVERSE
+# transform in this very file used to hardcode the literal instead (B22) -- so
+# forward and inverse read the index from two different places and stopped being
+# inverses the moment anyone changed it.
+try:
+    from ..optics import N_WATER, fov_air_to_water, fov_water_to_air  # noqa: E402
+except ImportError:                                                    # pragma: no cover
+    # ⛔ THIS FILE IS DELIBERATELY LOADABLE BY PATH (see guide._solver): a package
+    # import re-enters `duburi_vision/__init__.py` -> `preflight` -> `rclpy`, and
+    # the calibration tool dies on a dev box with no ROS. A relative import here
+    # is that same trap from the other side -- it broke three tests when this
+    # module first collapsed the refraction constant. `optics.py` has no
+    # dependencies at all (math only), so load it the same way the tool loads us.
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location('_duburi_optics', os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), os.pardir, 'optics.py'))
+    _optics = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_optics)
+    N_WATER = _optics.N_WATER
+    fov_air_to_water = _optics.fov_air_to_water
+    fov_water_to_air = _optics.fov_water_to_air
 
 
 # --------------------------------------------------------------------------
@@ -93,12 +114,7 @@ def fov_from_K(K: np.ndarray, w: int, h: int) -> dict:
     vfov = 2 * np.degrees(np.arctan(h / (2 * fy)))
     dfov = 2 * np.degrees(np.arctan(np.hypot(w, h) / (fx + fy)))
 
-    def refract(a):
-        # Snell through a flat port: the half-angle in water is
-        # asin(sin(half-angle in air) / n). This is why an 80 deg air lens is
-        # ~58 deg underwater -- the single biggest surprise for anyone sizing
-        # a search pattern off a datasheet.
-        return 2 * np.degrees(np.arcsin(min(1.0, np.sin(np.radians(a / 2)) / N_WATER)))
+    refract = fov_air_to_water   # air -> water; see duburi_vision.optics
 
     return {
         'hfov_air': hfov, 'vfov_air': vfov, 'dfov_air': dfov,
@@ -242,10 +258,10 @@ def fov_for_medium(v, medium):
     v = dict(v)
     hw, vw = v['hfov_air'], v['vfov_air']
     v['hfov_water'], v['vfov_water'] = hw, vw
-    v['hfov_air'] = 2 * math.degrees(math.asin(min(
-        1.0, 1.333 * math.sin(math.radians(hw / 2)))))
-    v['vfov_air'] = 2 * math.degrees(math.asin(min(
-        1.0, 1.333 * math.sin(math.radians(vw / 2)))))
+    # water -> air, the exact inverse of `refract` above. This used to hardcode
+    # 1.333 while the forward transform read N_WATER (B22).
+    v['hfov_air'] = fov_water_to_air(hw)
+    v['vfov_air'] = fov_water_to_air(vw)
     return v, ('DERIVED from the in-water measurement by inverse Snell, '
                'not measured in air')
 

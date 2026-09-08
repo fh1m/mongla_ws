@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 7 of 27 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
+> **STATUS: 12 of 28 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
 > the SROT-path batch — plus B25/B26 found while fixing them. Each landed with a
 > test verified to fail without the fix. The remaining open items are listed
 > below at their original severity; the ArduSub-path ones (B06, B07, B08, B12,
@@ -337,14 +337,30 @@ asserts it. Violated, the lock degrades silently into the relay it exists to
 prevent — the exact limit-cycle that the tapering fix (`ab2014f`) was written to
 remove.
 
-### B16 — `bearing.py` promises defensive scaling it does not implement
+### B16 — `bearing.py` promises defensive scaling it does not implement  ✅ RESOLVED 2026-09-08 — **as a DOC defect; the finding as written is partly RETRACTED**
 **`duburi_vision/bearing.py`**
 
 The comment promises to *"scale defensively rather than silently producing
 bearings that are wrong by the resolution ratio"*. The code never scales and
-takes no calibration-resolution parameter. A calibration captured at a different
-resolution than the live stream therefore yields bearings wrong by exactly that
-ratio — the failure the comment names.
+takes no calibration-resolution parameter.
+
+**The first half stands; the conclusion does NOT, and is retracted.** Reading the
+callsites shows the defence exists — one layer up, where the information actually
+is. `camera_node._fill_calibration` owns the calibration file, therefore knows
+both resolutions, and rescales `fx/cx/fy/cy` before publishing `CameraInfo`
+(*"Publishing the unscaled matrix would put the principal point off the image and
+every derived angle would be wrong by 2x, silently."*). And `VisionState._on_info`
+latches `k` and `width`/`height` from the **same** message, so the `K` a bearing is
+computed from always matches the size it is handed. A mismatch is unreachable
+through the only caller.
+
+So the defect is a **comment misattributing an implemented defence to the wrong
+file**, not a missing guard. Adding `calib_size` arguments would have taken an
+8-argument function to 10 in order to guard a caller that does not exist, and
+created a second place to apply the ratio — i.e. a second way to get it wrong.
+Fixed by correcting the comment to name where the defence lives, and pinning both
+halves plus the end-to-end invariant (a matched rescale must not change the
+bearing) in `test_bearing_resolution_invariant.py`.
 
 ### B21 — a preflight check that can silently vanish from the report  ✅ FIXED 2026-09-08
 **`duburi_manager/bringup_check.py:363`**
@@ -371,7 +387,7 @@ it right: the armed check emits on both branches, and the battery read treats
 Same family as B01 and B04: the analysis is right, the reporting of its absence
 is not.
 
-### B22 — the refractive index is hardcoded six times, twice inside the file that defines the constant
+### B22 — the refractive index is hardcoded six times, twice inside the file that defines the constant  ✅ FIXED 2026-09-08
 **`calibration/solver.py:77, 246, 248` · `distance/flow_math.py:115` · `distance/flow_node.py:209` · `tools/fov_calibrate.py:114`**
 
 `solver.py:77` declares the single source of truth —
@@ -393,6 +409,20 @@ like a plausible camera."*
 This is more than a DRY complaint because the quantity is **physical** and the
 two uses are **inverses**: the failure mode is not "one is stale" but "the round
 trip no longer closes."
+
+**FIX.** `duburi_vision/optics.py` now holds `N_WATER` and both Snell transforms
+as a pair; all six sites import them (`flow_math` could not import `solver` —
+that pulls `cv2` into a deliberately dependency-light module, which is part of
+how the literal got copied there). The transforms read `N_WATER` at **call** time,
+not as a default argument, because a default is bound once at import and would
+freeze the index — making the documented "change it for salt water" a silent
+no-op, and the defect untestable.
+
+⚠ **The obvious test does not work, and this is the point.** "air → water → air
+round-trips" **passes on the broken code**, because the hardcoded literal equals
+`N_WATER` today. Verified by re-injecting the bug: the 8 round-trip assertions at
+the shipped index all still passed. Only a round trip at a *different* index
+(1.34, salt) and an AST scan for numeric `1.333` caught it. `test_optics.py`.
 
 ---
 
@@ -430,7 +460,7 @@ offsets. Separately, `_checksum(buf[:size_header - 2])` uses an unvalidated
 `size_header`; below 2 the slice silently becomes a negative index rather than
 an error.
 
-### B23 — a QBUF failure escapes the v4l2 pump thread
+### B23 — a QBUF failure escapes the v4l2 pump thread  ✅ FIXED 2026-09-08 — **and there were TWO sites, not one**
 **`cameras/v4l2_mailbox.py:425`** — in the frame-skip inner loop the
 `try/except OSError` covers `select` and the `DQBUF`, but the re-queue of the
 *older* buffer sits outside it. An `OSError` there propagates out of
@@ -442,6 +472,19 @@ dead pump goes unhealthy within 2 s regardless of *why* it died — the freshnes
 clock does the work an exception handler would. Recorded because the mitigation
 is incidental and nothing logs the cause: the symptom is "camera went unhealthy"
 with no reason in any log.
+
+**FIXED — and the entry UNDERSTATED it.** Writing the test for the skip-loop site
+turned up a **second** unguarded `VIDIOC_QBUF`, the main-path re-queue after the
+payload copy. That one runs on **every frame**, not just when skipping, so it is
+the more exposed of the two. Both are now inside `except OSError`, both count
+`_consec_fail` (so the error cannot be caught and then hidden — worse than the
+crash it replaced) and both log the cause once. The payload is copied out of the
+mmap before the re-queue, so a failure costs one buffer slot, not the frame.
+
+The test asserts the invariant for the **whole function** — *every* `ioctl` in
+`_pump_loop` is lexically inside a handler catching `OSError` — rather than the
+one line, because the next ioctl added there has exactly the same hazard. That is
+what found the second site.
 
 ---
 
@@ -690,7 +733,7 @@ reporter degraded silently into one that cannot report, and the D16 signal it
 exists to carry (an aborted detector keeps every topic; only the *rate* changes)
 never fired on a live vehicle.
 
-### B27 — the ledger guard silently disables itself when a newer plan is written
+### B27 — the ledger guard silently disables itself when a newer plan is written  ✅ FIXED 2026-09-08
 `src/duburi_manager/test/test_ledger_claims.py` pins the carried-work ledger
 against the tree. `_ledger()` reads **"the most recently modified plan file"**,
 so the moment any new plan is written beside the workspace the guard switches to
@@ -705,9 +748,20 @@ This is B21's shape one level up — **a check that can vanish is worse than one
 that fails.** The tests were written to catch a stale ledger, and a stale ledger
 is exactly the condition under which someone writes a new plan.
 
-Not fixed here (it is a test-infrastructure change, not a vehicle defect). The
-fix is to pin the ledger by NAME rather than by mtime, or to fail rather than
-skip when the expected section is absent.
+**FIXED — and it was still skipping when this was picked up.** The newest plan
+was the branch-topology one, which has no ledger section, so all five assertions
+were inert.
+
+`_ledger()` now selects by **content** — the plan file that actually contains the
+marker — and only breaks ties among *those* by mtime, which is the original intent
+restricted to files that can answer the question. When no plan carries a ledger it
+**raises** instead of skipping, and the message says how to re-point it: a renamed
+or reformatted ledger is a finding about the guarded thing, not a reason to go
+quiet. The `_section()` skip is gone with it.
+
+Demonstrated under the exact trigger (touching the non-ledger plan so it is
+newest): mtime selection picks a file with no ledger, content selection finds the
+real one. **6 passed, 0 skipped**, where it was 5 skipped.
 
 ### B26 — and its tests were green, because the stub invented the attribute  ✅ FIXED (`6fada73`)
 `test_health._manager_stub` set `m.vision = SimpleNamespace(stats=...)` — an
@@ -780,6 +834,40 @@ completion, exactly as `STUNT`/`PATTERN`/`AUTOTUNE` already do. Also
 `computeDemands`'s header comment — *"Surge/sway (fwd/lat) are always pilot
 passthrough"* (`task_control_loop.cpp:150`) — is **false for AUTO and SURFACE**,
 which both overwrite them.
+
+### B29 — a test replaces a class for the WHOLE session, because its `finally` is gated on `None`  ✅ FIXED 2026-09-08
+
+**`duburi_vision/test/test_camera_profiles.py:118`** (found while fixing B23).
+
+```python
+orig = F._build_v4l2.__globals__.get('V4L2MailboxCamera')   # -> None, ALWAYS
+import duburi_vision.cameras.v4l2_mailbox as vm
+vm.V4L2MailboxCamera = _Spy
+try:
+    ...
+finally:
+    if orig is not None:          # never true -> THE SPY IS NEVER RESTORED
+        vm.V4L2MailboxCamera = orig
+```
+
+`factory` imports `V4L2MailboxCamera` **inside** `_build_v4l2`, so the name is not
+in the module's globals and `.get()` returns `None`. The restore branch therefore
+never runs, and `_Spy` — a two-method stub — stands in for the real camera class
+for **every test that runs afterwards in the session**. Verified directly:
+`'V4L2MailboxCamera' in F._build_v4l2.__globals__` is `False`.
+
+The two sibling tests in the same file (`:172`, `:189`) do it correctly, reading
+`orig = vm.V4L2MailboxCamera` from the module being patched. So this is one site
+out of three, which is why it never looked wrong on a skim.
+
+**Why it stayed invisible:** nothing downstream introspected the real class. The
+B23 pump-loop guards are the first tests that do, and they failed **only in a
+full-suite run** while passing in isolation — the signature of session pollution,
+and a genuinely confusing one to chase.
+
+**A `finally:` gated on a value that is always `None` is not cleanup.** The guard
+was presumably defensive; defensiveness is what disabled the restore. Fixed with
+`monkeypatch.setattr`, which owns the restore and cannot be gated away.
 
 ## 8. Provenance
 

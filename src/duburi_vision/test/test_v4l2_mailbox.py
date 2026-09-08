@@ -255,3 +255,79 @@ def test_skipping_to_the_newest_is_COUNTED():
     assert c.info()['skipped_to_newest'] == 0
     c._skipped = 3
     assert c.info()['skipped_to_newest'] == 3
+
+
+# --------------------------------------------------------------------------- #
+#  B23 -- an ioctl outside a try KILLS the pump thread                          #
+# --------------------------------------------------------------------------- #
+# `_pump_loop` is a bare `threading.Thread` target: an exception that escapes it
+# does not propagate anywhere a caller can see it. The thread simply stops and
+# the buffer it held is leaked. The only symptom is `is_healthy()` going False
+# 2 s later off its freshness clock -- "the camera went unhealthy", with no cause
+# in any log, which is the mitigation being mistaken for a handler.
+#
+# The re-queue of the older buffer inside the frame-skip loop sat outside the
+# try/except OSError that covered `select` and the DQBUF beside it. This asserts
+# the invariant for the WHOLE function rather than that one line, because the
+# next ioctl added here has exactly the same hazard.
+
+def test_every_ioctl_in_the_pump_thread_is_inside_an_OSError_handler():
+    import ast
+    import inspect
+    import textwrap
+
+    from duburi_vision.cameras import v4l2_mailbox
+
+    src = textwrap.dedent(inspect.getsource(v4l2_mailbox.V4L2MailboxCamera._pump_loop))
+    fn = ast.parse(src).body[0]
+
+    # Walk with a stack of the Try bodies we are lexically inside. A handler that
+    # catches OSError (or bare `except:`) protects the calls in its `try` body.
+    unguarded = []
+
+    def walk(node, guarded):
+        if isinstance(node, ast.Try):
+            catches_oserror = any(
+                h.type is None
+                or (isinstance(h.type, ast.Name) and h.type.id in ('OSError', 'Exception'))
+                or (isinstance(h.type, ast.Tuple)
+                    and any(isinstance(e, ast.Name) and e.id in ('OSError', 'Exception')
+                            for e in h.type.elts))
+                for h in node.handlers)
+            for child in node.body:
+                walk(child, guarded or catches_oserror)
+            # `else`/`finally`/handler bodies are NOT protected by this try.
+            for child in list(node.orelse) + list(node.finalbody):
+                walk(child, guarded)
+            for h in node.handlers:
+                for child in h.body:
+                    walk(child, guarded)
+            return
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == 'ioctl'
+                and not guarded):
+            unguarded.append(node.lineno)
+        for child in ast.iter_child_nodes(node):
+            walk(child, guarded)
+
+    for stmt in fn.body:
+        walk(stmt, False)
+
+    assert not unguarded, (
+        'ioctl in _pump_loop outside an OSError handler at relative line(s) '
+        f'{unguarded}: an OSError there escapes a bare Thread target, killing '
+        'the pump and leaking the buffer, with is_healthy() the only signal (B23)')
+
+
+def test_a_failed_requeue_is_counted_so_it_can_trip_is_healthy():
+    """Swallowing the error must not make the failure invisible too."""
+    import inspect
+    from duburi_vision.cameras import v4l2_mailbox
+
+    src = inspect.getsource(v4l2_mailbox.V4L2MailboxCamera._pump_loop)
+    skip = src.split('skipped_here = 0', 1)[1].split('if self._clock_monotonic', 1)[0]
+    assert 'VIDIOC_QBUF' in skip, 'the frame-skip re-queue moved; re-check this test'
+    assert '_consec_fail' in skip, (
+        'a failed re-queue must increment _consec_fail -- otherwise the error is '
+        'caught and then hidden, which is worse than the crash it replaced')

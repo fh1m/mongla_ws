@@ -25,6 +25,19 @@ Usage:
 import sys
 import numpy as np, cv2
 
+# The refractive index and both Snell transforms live in ONE place (B22).
+# tools/ runs from a source checkout without the package installed, so fall back
+# to the literal ONLY if that import fails -- and say so, rather than letting a
+# second silent copy of a physical constant exist.
+try:
+    from duburi_vision.optics import N_WATER, fov_air_to_water
+except ImportError:                                    # pragma: no cover
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                      '..', 'src', 'duburi_vision'))
+    from duburi_vision.optics import N_WATER, fov_air_to_water
+
+
 dev = int(sys.argv[1]); W = float(sys.argv[2]); D = float(sys.argv[3])
 
 if '--px' in sys.argv:
@@ -49,9 +62,9 @@ else:
 focal = p * D / W
 hfov = 2*np.degrees(np.arctan(Wpx/(2*focal)))
 vfov = 2*np.degrees(np.arctan(Hpx/(2*focal)))
-n = 1.333
-hw = 2*np.degrees(np.arcsin(min(1.0, np.sin(np.radians(hfov/2))/n)))
+n = N_WATER
+hw = fov_air_to_water(hfov)
 print(f"  object {W*100:.1f} cm at {D:.2f} m spans {p:.0f} px of {Wpx}")
 print(f"  focal   {focal:.1f} px")
 print(f"  HFOV    {hfov:.2f} deg   VFOV {vfov:.2f} deg   (in air)")
-print(f"  HFOV    {hw:.2f} deg              (underwater, flat port n=1.333)")
+print(f"  HFOV    {hw:.2f} deg              (underwater, flat port n={N_WATER})")

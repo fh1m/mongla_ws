@@ -274,6 +274,7 @@ class V4L2MailboxCamera(Camera):
         self._store_age_max = 0.0
         self._last_seq = None
         self._consec_fail = 0
+        self._qbuf_warned = False
         self._last_ok = time.monotonic()
         self._idx = 0
 
@@ -423,7 +424,29 @@ class V4L2MailboxCamera(Camera):
                 except OSError:
                     break
                 # Give the older buffer straight back, uncopied.
-                fcntl.ioctl(self._fd, VIDIOC_QBUF, b)
+                #
+                # B23: THIS RE-QUEUE USED TO SIT OUTSIDE THE try. `_pump_loop`
+                # is a bare Thread target, so an OSError here did not skip a
+                # frame -- it killed the pump thread and leaked the buffer. The
+                # only thing that noticed was `is_healthy()`'s 2 s freshness
+                # clock, which reports "camera went unhealthy" with no cause in
+                # any log. Absence of a reason, again, standing in for a reason.
+                #
+                # We adopt `nb` either way: it is already dequeued and in hand,
+                # so breaking out here would drop a frame we own. The OLD buffer
+                # is what is lost to the driver on failure, which costs one slot
+                # of the queue, not the stream.
+                try:
+                    fcntl.ioctl(self._fd, VIDIOC_QBUF, b)
+                except OSError as exc:
+                    self._consec_fail += 1
+                    if self._log and not self._qbuf_warned:
+                        self._qbuf_warned = True
+                        self._log.warning(
+                            f'[CAM  ] {self._device!r} VIDIOC_QBUF failed while '
+                            f'skipping to the newest frame ({exc}). One buffer '
+                            f'slot is lost; the pump continues. Repeated failures '
+                            f'will trip is_healthy() via _consec_fail.')
                 b = nb
                 self._skipped += 1
                 skipped_here += 1
@@ -444,7 +467,22 @@ class V4L2MailboxCamera(Camera):
             cap_t = b.timestamp.tv_sec + b.timestamp.tv_usec / 1e6
             seq = int(b.sequence)
             payload = bytes(self._maps[b.index][:b.bytesused])
-            fcntl.ioctl(self._fd, VIDIOC_QBUF, b)
+            # B23 (SECOND site, found by the test written for the first). This
+            # one is on the MAIN path -- it runs for every frame, not only when
+            # skipping -- so an OSError here killed the pump on an ordinary
+            # frame. The payload is already copied out of the mmap above, so the
+            # frame itself is safe to serve; only the buffer slot is lost.
+            try:
+                fcntl.ioctl(self._fd, VIDIOC_QBUF, b)
+            except OSError as exc:
+                self._consec_fail += 1
+                if self._log and not self._qbuf_warned:
+                    self._qbuf_warned = True
+                    self._log.warning(
+                        f'[CAM  ] {self._device!r} VIDIOC_QBUF failed returning '
+                        f'a buffer ({exc}). The frame is still served; one slot '
+                        f'is lost. Repeated failures trip is_healthy() via '
+                        f'_consec_fail.')
 
             if self._last_seq is not None and seq > self._last_seq + 1:
                 # The driver produced frames it could not store. Under this

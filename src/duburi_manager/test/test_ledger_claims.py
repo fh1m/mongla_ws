@@ -29,19 +29,47 @@ _WS = Path(__file__).resolve().parents[3]
 _PLANS = _WS.parent.parent / '.claude' / 'plans'
 
 
+_MARKER = '### Open engineering, not blocked'
+
+
 def _ledger() -> str:
-    """The most recently modified plan file — the live ledger."""
-    cands = sorted(_PLANS.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not cands:
-        pytest.skip('no plan file beside this workspace')
-    return cands[0].read_text(errors='ignore')
+    """The plan file that actually CONTAINS the ledger — not the newest one.
+
+    ⛔ B27. This used to take "the most recently modified plan file". Writing any
+    new plan beside the workspace therefore re-pointed the guard at a file with no
+    ledger section, every assertion `pytest.skip`ped, and the suite went from
+    `3 xfailed, 0 skipped` to `1 xfailed, 5 skipped` with nothing failing and
+    nothing warning. The guard silently stopped guarding — and a new plan is
+    written precisely when the ledger has gone stale, which is the one condition
+    these tests exist to catch. B21's shape one level up: **a check that can
+    vanish is worse than one that fails.**
+
+    Selecting by CONTENT is what makes it mtime-proof. When several plans carry a
+    ledger the newest of THOSE wins, which is the original intent restricted to
+    files that can actually answer the question.
+    """
+    if not _PLANS.is_dir():
+        pytest.skip('no .claude/plans beside this workspace (fresh clone)')
+    ledgers = [p for p in _PLANS.glob('*.md')
+               if _MARKER in p.read_text(errors='ignore')]
+    if not ledgers:
+        # FAIL, never skip. If the ledger was renamed, reformatted or deleted,
+        # that is a finding about the thing being guarded, not a reason to go
+        # quiet -- which is the whole defect this docstring describes.
+        raise AssertionError(
+            f'no plan file in {_PLANS} contains {_MARKER!r}, so the carried-work '
+            f'ledger cannot be checked against the tree. Either the ledger moved '
+            f'(point _PLANS/_MARKER at it) or the format changed (update _MARKER). '
+            f'Do NOT convert this back into a skip: the guard going quiet is B27.')
+    ledgers.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return ledgers[0].read_text(errors='ignore')
 
 
 def _section() -> str:
     t = _ledger()
-    i = t.find('### Open engineering, not blocked')
-    if i < 0:
-        pytest.skip('ledger has no "Open engineering" section')
+    i = t.find(_MARKER)
+    # _ledger() only returns text containing the marker, so this cannot be -1.
+    assert i >= 0, 'ledger selection returned a file without the marker'
     j = t.find('### Upstream', i)
     return t[i:j if j > 0 else len(t)]
 
