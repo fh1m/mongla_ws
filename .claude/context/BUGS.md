@@ -690,6 +690,25 @@ reporter degraded silently into one that cannot report, and the D16 signal it
 exists to carry (an aborted detector keeps every topic; only the *rate* changes)
 never fired on a live vehicle.
 
+### B27 — the ledger guard silently disables itself when a newer plan is written
+`src/duburi_manager/test/test_ledger_claims.py` pins the carried-work ledger
+against the tree. `_ledger()` reads **"the most recently modified plan file"**,
+so the moment any new plan is written beside the workspace the guard switches to
+that file, finds no `### Open engineering` section, and `pytest.skip`s — five
+assertions at once.
+
+Observed this session: the suite went from `3 xfailed, 0 skipped` to
+`1 xfailed, 5 skipped` purely because a new plan file was created. Nothing
+failed and nothing warned; the guard just stopped guarding.
+
+This is B21's shape one level up — **a check that can vanish is worse than one
+that fails.** The tests were written to catch a stale ledger, and a stale ledger
+is exactly the condition under which someone writes a new plan.
+
+Not fixed here (it is a test-infrastructure change, not a vehicle defect). The
+fix is to pin the ledger by NAME rather than by mtime, or to fail rather than
+skip when the expected section is absent.
+
 ### B26 — and its tests were green, because the stub invented the attribute  ✅ FIXED (`6fada73`)
 `test_health._manager_stub` set `m.vision = SimpleNamespace(stats=...)` — an
 attribute production does not have. Two D16 tests passed against a lookup the
