@@ -150,19 +150,41 @@ class PacketAccumulator:
             size_data   = (self._buf[4] & 0xFF) | ((self._buf[5] & 0xFF) << 8)
             total       = size_header + size_data
 
-            if total > self._MAX_PACKET:
-                # Bad sync byte; skip it and hunt for the next one
+            # NEVER ADVANCE THE STREAM ON AN UNVALIDATED LENGTH. Both defects
+            # this guard closes are the same mistake seen from opposite sides,
+            # because `total` comes from the very bytes that have not been
+            # checked yet:
+            #
+            #   too SMALL (B02) -- a 0xa5 with size_header=0 and size_data=0 gave
+            #     total=0, so `len(buf) < total` was False (not a partial packet)
+            #     and `del buf[:0]` removed NOTHING. The loop returned to the top
+            #     with a byte-identical buffer and spun for ever, on the DVL
+            #     reader thread, with no crash and no log. Twelve bytes of noise
+            #     were enough. A real packet is at least the 10-byte header.
+            #
+            #   too LARGE (B03) -- handled below, and the rule is the same one.
+            #
+            # A false sync byte is not a packet: drop exactly ONE byte and rescan
+            # from the next, which is what the _MAX_PACKET branch already did.
+            if total < 10 or total > self._MAX_PACKET:
                 del self._buf[:1]
                 continue
 
             if len(self._buf) < total:
                 break  # partial packet; wait for more data
 
-            pkt_bytes = bytearray(self._buf[:total])
-            del self._buf[:total]
+            # B03: VALIDATE BEFORE CONSUMING. This used to `del buf[:total]`
+            # first, so a spurious 0xa5 whose length field happened to be
+            # plausible swallowed up to _MAX_PACKET bytes -- including whatever
+            # real packets began inside that span. Measured: two valid AHRS
+            # packets fed behind one false sync, one recovered. Nothing logged;
+            # the lost packet was indistinguishable from one never sent.
+            p = parse_packet(bytearray(self._buf[:total]))
+            if p is None:
+                del self._buf[:1]      # not a packet -- resync by one byte
+                continue
 
-            p = parse_packet(pkt_bytes)
-            if p is not None:
-                packets.append(p)
+            del self._buf[:total]      # only now is `total` a trusted length
+            packets.append(p)
 
         return packets

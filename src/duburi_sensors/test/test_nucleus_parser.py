@@ -148,24 +148,18 @@ def test_accumulator_skips_leading_garbage():
 # pin the reproductions from the 2026-09-08 audit. They are xfail because this
 # was a find-only pass: the tests document the bugs, they do not fix them.
 
-@pytest.mark.xfail(reason='BUGS.md B02: zero-length packet spins feed() forever',
-                   run=False, strict=True)
 def test_b02_zero_length_packet_does_not_hang():
     """A 0xA5 with size_header=0 and size_data=0 makes total=0, so feed()
     deletes nothing and loops on a byte-identical buffer, forever.
 
-    run=False: this HANGS rather than failing, so pytest must not execute it
-    until the guard exists. Reproduce by hand with a timeout:
-        timeout 10 python3 -c "...feed(bytes([0xa5,0,0xb4,0x20,0,0,0,0,0,0]))"
-        -> exit 124
+    Before the fix this HUNG rather than failing (verified: `timeout 10` -> exit
+    124), which is why it was carried as xfail(run=False). It now returns.
     """
     evil = bytes([0xA5, 0x00, ID_BOTTOMTRACK, _FAMILY_NUCLEUS,
                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x22])
     assert PacketAccumulator().feed(evil) == []
 
 
-@pytest.mark.xfail(reason='BUGS.md B03: a false sync byte consumes the next real packet',
-                   strict=True)
 def test_b03_false_sync_does_not_eat_the_following_packet():
     """On a checksum failure the accumulator has already consumed `total`
     bytes, so a spurious 0xA5 with a plausible length field discards whatever
@@ -174,8 +168,11 @@ def test_b03_false_sync_does_not_eat_the_following_packet():
     Measured: 2 valid packets fed, 1 recovered.
     """
     good = bytes(_frame(ID_AHRS, _ahrs_data(1.0, 2.0, 123.0)))
-    # size_header=10, size_data=0x0040 -- plausible, but the checksums are junk
-    false_sync = bytes([_SYNC, _HDR, 0x99, _FAMILY_NUCLEUS, 0x40, 0x00]) + bytes(4)
+    # size_header=10, size_data=20 -- plausible, checksums junk. The claimed
+    # length must be <= what the buffer holds, or the accumulator simply STALLS
+    # waiting for more bytes and the packet is never eaten. Measured against the
+    # pre-fix feed(): this input recovered 1 of 2; the fix recovers 2 of 2.
+    false_sync = bytes([_SYNC, _HDR, 0x99, _FAMILY_NUCLEUS, 20, 0x00]) + bytes(4)
 
     out = PacketAccumulator().feed(false_sync + good + good)
 
