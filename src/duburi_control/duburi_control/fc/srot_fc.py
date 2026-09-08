@@ -1578,6 +1578,33 @@ class SrotFC(FlightController):
                 bad.append((n, v, 'turning the WRONG WAY'))
         return bad
 
+    def _sys_status_ext_bits(self):
+        """`(present, enabled, health)` from SYS_STATUS's extended bitfields, or None.
+
+        THE PADDING IS LOAD-BEARING and this is the only copy of it. MAVLink v2
+        truncates trailing zero bytes, so the payload is not its declared 43:
+        measured off the live board it arrives at 40, with `health_extended` cut
+        to a SINGLE byte. Unpacking four bytes at offset 39 without padding reads
+        past the end. A truncated field is zero by definition, which is what the
+        `ljust` restores.
+
+        Extracted so `sys_status_leak()` and `leak_state()` cannot drift apart --
+        a second hand-written copy of an offset table is how the ESC_STATUS(291)
+        trap happened.
+        """
+        msg = self._cache('SYS_STATUS')
+        if msg is None:
+            return None
+        try:
+            buf = bytes(msg.get_msgbuf())
+            payload = buf[10:10 + buf[1]]          # v2 header is 10 bytes
+            if len(payload) <= _SYS_STATUS_BASE_LEN:
+                return None                        # no extension bytes at all
+            payload = payload.ljust(_SYS_STATUS_EXT_END, b'\x00')
+            return struct.unpack_from('<III', payload, _SYS_STATUS_BASE_LEN)
+        except Exception:                          # noqa: BLE001
+            return None
+
     def sys_status_leak(self):
         """Leak from the SYS_STATUS extended health bits, or None if unreadable.
 
@@ -1607,25 +1634,46 @@ class SrotFC(FlightController):
         refusal, and reporting "no leak" for a vehicle that is not looking is the
         exact confusion this whole mechanism exists to remove.
         """
-        msg = self._cache('SYS_STATUS')
-        if msg is None:
+        bits = self._sys_status_ext_bits()
+        if bits is None:
             return None
-        try:
-            buf = bytes(msg.get_msgbuf())
-            payload = buf[10:10 + buf[1]]          # v2 header is 10 bytes
-            if len(payload) <= _SYS_STATUS_BASE_LEN:
-                return None                        # no extension bytes at all
-            payload = payload.ljust(_SYS_STATUS_EXT_END, b'\x00')
-            present, enabled, health = struct.unpack_from(
-                '<III', payload, _SYS_STATUS_BASE_LEN)
-        except Exception:                          # noqa: BLE001
-            return None
+        present, enabled, health = bits
         if not (present & sp.SYS_STATUS_SENSOR_LEAK):
             return None                            # board is not reporting a leak sensor
         if not (enabled & sp.SYS_STATUS_SENSOR_LEAK):
             return None                            # LEAK_EN = 0: nothing is watching
         # Health bit SET means healthy, i.e. dry. Clear means leak.
         return not bool(health & sp.SYS_STATUS_SENSOR_LEAK)
+
+    def leak_state(self):
+        """`(enabled, leaking)` -- the two leak facts, kept APART.
+
+        `sys_status_leak()` above answers one question ("are we taking on water?")
+        and correctly returns None for every reason it cannot: no SYS_STATUS, no
+        sensor, or `LEAK_EN = 0`. That is right for its callers and useless for a
+        health verdict, because it collapses "dry" and "nothing is watching" into
+        the same absence -- which is the exact confusion its own docstring says
+        the mechanism exists to remove.
+
+        `health_reporters.leak_sensor()` was written to render that distinction
+        (`LEAK_EN=0 -> FAILED, NOTHING IS WATCHING`) and needs the two signals
+        separately. It could not be wired to anything until this existed, which
+        is why it sat unregistered.
+
+        Returns:
+            (None, None)   -- no SYS_STATUS, or no leak sensor on the board
+            (False, None)  -- sensor present but LEAK_EN = 0: nothing is watching
+            (True,  bool)  -- enabled; True = leaking, False = dry
+        """
+        bits = self._sys_status_ext_bits()
+        if bits is None:
+            return (None, None)
+        present, enabled, health = bits
+        if not (present & sp.SYS_STATUS_SENSOR_LEAK):
+            return (None, None)                    # board reports no leak sensor
+        if not (enabled & sp.SYS_STATUS_SENSOR_LEAK):
+            return (False, None)                   # LEAK_EN = 0 -- the trap
+        return (True, not bool(health & sp.SYS_STATUS_SENSOR_LEAK))
 
     def telemetry(self) -> Telemetry:
         t = Telemetry()

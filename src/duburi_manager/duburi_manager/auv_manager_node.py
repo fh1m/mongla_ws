@@ -1215,6 +1215,49 @@ class AUVManagerNode(Node):
             getattr(fc.telemetry(), 'kill_switch', None)))
         self._health.register('detector', lambda: _hr.detector(
             self._detection_rate_hz()))
+        # ⛔ LEAK. Nine reporters were defined here and six were registered; this
+        # was one of the three that never ran, and it is the one written for a
+        # flooding hull. It returns FAILED for `LEAK_EN = 0` -- the state this
+        # board was MEASURED in -- because a disabled failsafe still reads dry,
+        # so the vehicle looks safe precisely when nothing is watching.
+        # It needed `fc.leak_state()`, which splits "enabled" from "leaking";
+        # `sys_status_leak()` collapses both into None and cannot express the trap.
+        self._health.register('leak', lambda: _hr.leak_sensor(
+            *(getattr(fc, 'leak_state', lambda: (None, None))())))
+        self._health.register('target_pose', lambda: _hr.target_pose(
+            (lambda vs: vs.target_pose() if vs is not None else None)(
+                self._live_vision_state())))
+        # `target_lock` stays UNREGISTERED, deliberately. It wants the ladder's
+        # decayed `authority` (0..1); `/lock` carries the rung name and a
+        # CONFIDENCE in class_id/score, which is a different quantity. Deriving
+        # one from the other would publish an invented number in a health line --
+        # the exact failure this board exists to catch. It needs a real accessor
+        # on VisionState first. Tracked as B01 in .claude/context/BUGS.md.
+
+    def _live_vision_state(self):
+        """A VisionState from the pool, or None before any vision goal has run.
+
+        ⛔ THIS EXISTS BECAUSE `self.vision` NEVER DID. `_detection_rate_hz`
+        read `getattr(self, 'vision', None)` and nothing on this class ever
+        assigns `self.vision` -- VisionStates live in the `_vision_states` pool,
+        keyed by camera. So the read always missed, the rate was always None,
+        and the `detector` reporter -- which IS registered -- could only ever
+        say UNKNOWN. The D16 signal it was built to carry (an aborted detector
+        keeps every topic alive; only the RATE changes) never fired once.
+
+        The defensive `getattr` is what hid it: a missing attribute returned a
+        plausible None instead of raising, so the reporter degraded silently
+        into a reporter that cannot report.
+
+        Preference order: the pool is usually one entry; when a mission has
+        touched both cameras, prefer 'forward' as the mission camera and fall
+        back to whatever is there. Absence stays None -- the reporters render
+        that as UNKNOWN, which is the honest answer before any goal has run.
+        """
+        pool = getattr(self, '_vision_states', None) or {}
+        if not pool:
+            return None
+        return pool.get('forward') or next(iter(pool.values()))
 
     def _detection_rate_hz(self):
         """Detections per second, or None if we are not subscribed at all.
@@ -1223,7 +1266,7 @@ class AUVManagerNode(Node):
         topic present; the rate is the only thing that changes, and nothing was
         watching it.
         """
-        vs = getattr(self, 'vision', None)
+        vs = self._live_vision_state()
         st = getattr(vs, 'stats', None) if vs else None
         if st is None:
             return None
