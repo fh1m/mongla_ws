@@ -175,6 +175,9 @@ class BNO085Source:
         if self._log:
             self._log.info(f'[SENS ] BNO085 reader started on {port} @ {baud}')
 
+        # B04: whether an Earth reference was ASKED FOR. If it was and we did not
+        # get one, `is_healthy()` must say so -- see there.
+        self._calibration_required = reference_yaw_provider is not None
         if reference_yaw_provider is not None:
             try:
                 self._calibrate(reference_yaw_provider, calibration_timeout_s)
@@ -281,6 +284,22 @@ class BNO085Source:
             pass
 
     def is_healthy(self) -> bool:
+        """Fresh data AND an Earth reference (B04).
+
+        This used to be `read_yaw() is not None`, and `read_yaw()` falls back to
+        the RAW boot-relative angle when calibration failed -- so a failed
+        calibration reported HEALTHY while every consumer (`HeadingLock`,
+        `motion_yaw._YawPID`, `heading_error`) treated a boot-relative number as
+        an absolute compass heading. `turn(90)` then went to 90 deg in a frame
+        nobody knows, with a fixed unknown bias in [0,360) that does not look
+        like noise and does not decay.
+
+        The guarded failure is the EXPECTED one -- "Pixhawk AHRS slow to warm",
+        i.e. a cold boot, i.e. pool day. Raw mode stays available for diagnostics;
+        it is just no longer allowed to call itself healthy.
+        """
+        if self._calibration_required and self._offset_deg is None:
+            return False
         return self.read_yaw() is not None
 
     def close(self) -> None:

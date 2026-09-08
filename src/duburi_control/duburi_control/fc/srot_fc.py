@@ -2252,6 +2252,36 @@ class SrotFC(FlightController):
         """Live pilot gain (NAMED_VALUE_FLOAT 'GAIN', 0.1..1.0), or None if unseen."""
         return self._named_value('GAIN')
 
+    def check_move_cruise_max(self, timeout: float = 3.0):
+        """Compare the BOARD's speed cap with the host's own clamp (B34).
+
+        `sanitize_speed` clamps every host-issued move to `sp.MOVE_CRUISE_MAX`, a
+        hard-coded copy of the firmware DEFAULT. The board's is a runtime param.
+        They agree out of the box, and the mismatch is silent in ONE direction:
+        RAISE the board's cap for a faster transit and every autonomous move is
+        still clamped by us, while a teleop move -- which does not pass through
+        `sanitize_speed` -- is not. The operator changes a speed limit, watches
+        nothing change, and has no log line to explain it.
+
+        Returns (ok, message). Never raises: a param that will not read is a
+        degraded report, not a failed bring-up.
+        """
+        board = self.get_param('MOVE_CRUISE_MAX', timeout=timeout)
+        if board is None:
+            return True, ('MOVE_CRUISE_MAX unread -- host clamp '
+                          f'{sp.MOVE_CRUISE_MAX:.2f} is the binding one')
+        board = float(board)
+        if abs(board - sp.MOVE_CRUISE_MAX) < 1e-3:
+            return True, f'MOVE_CRUISE_MAX {board:.2f} (host and board agree)'
+        if board > sp.MOVE_CRUISE_MAX:
+            return False, (
+                f'MOVE_CRUISE_MAX: board {board:.2f} > host clamp '
+                f'{sp.MOVE_CRUISE_MAX:.2f} -- autonomous moves stay capped at '
+                f'{sp.MOVE_CRUISE_MAX:.2f}. Raising the board param does NOT make '
+                f'them faster; edit srot_protocol.MOVE_CRUISE_MAX too.')
+        return True, (f'MOVE_CRUISE_MAX: board {board:.2f} < host clamp '
+                      f'{sp.MOVE_CRUISE_MAX:.2f} -- the board is the binding one')
+
     def read_depth_p(self, timeout: float = 3.0):
         """Cache the board's DEPTH_P for `check_depth_loop_settled`. None if unread.
 
