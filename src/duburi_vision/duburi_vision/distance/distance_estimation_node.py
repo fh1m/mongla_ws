@@ -44,6 +44,11 @@ _FEATURE_PARAMS = dict(maxCorners=120, qualityLevel=0.01, minDistance=8, blockSi
 _LK_PARAMS      = dict(winSize=(21, 21), maxLevel=3,
                        criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))
 _MIN_TRACKS     = 6      # below this -> re-seed corners, hold distance this frame
+# B10. How long a height reading stays usable after the last depth sample.
+# Depth arrives with /duburi/state (>=1 Hz heartbeat, faster on change), so 2.0 s
+# is several missed updates -- long enough not to gate on ordinary jitter, short
+# enough that a dead depth source stops scaling flow rather than scaling it wrong.
+HEIGHT_STALE_S  = 2.0
 _RESEED_EVERY   = 10     # frames between forced corner re-detections (tracks decay)
 
 
@@ -91,6 +96,13 @@ class DistanceEstimationNode(Node):
         self._depth_m: float | None = None
         self._yaw_deg: float | None = None
         self._last_height: float | None = None
+        # B10: the height latch needs a CLOCK. Without one it is unbounded --
+        # if depth stops arriving, flow keeps being scaled by the last known
+        # height for ever, and metres-per-pixel is directly proportional to it,
+        # so a hull that has since changed altitude integrates at the wrong
+        # scale with a plausible number and no warning. Mirrors the pattern
+        # bno085._fresh_raw_yaw already uses: past the bound, return None.
+        self._last_height_t: float | None = None
 
         # LK state.
         self._prev_gray = None
@@ -205,21 +217,47 @@ class DistanceEstimationNode(Node):
             height = height_above_floor(self._pool_depth, self._depth_m)
         if height is not None:
             self._last_height = height
-        self._acc.add(self._flow_ema, self._last_height or 0.0, self._f_px)
+            self._last_height_t = t
+        # B05: pass the height THROUGH, never `or 0.0`.
+        # `DistanceAccumulator.add` refuses a frame on `height_m is None`, on
+        # purpose. `or 0.0` made that test unreachable -- a None became 0.0, the
+        # guard passed, and execution reached `distance_m += proj * 0.0 / f_px`,
+        # which adds exactly zero. Those are NOT the same: the guard skips the
+        # frame ("we could not tell"), the coercion records it ("it did not
+        # move"). Real motion in that window was silently under-reported.
+        self._acc.add(self._flow_ema, self._fresh_height(t), self._f_px)
+
+    def _fresh_height(self, t: float) -> float | None:
+        """Last height if it is still trustworthy, else None (B10).
+
+        None is the honest answer and the accumulator is built to receive it --
+        it refuses the frame rather than integrating a wrong scale.
+        """
+        if self._last_height is None or self._last_height_t is None:
+            return None
+        if (t - self._last_height_t) > HEIGHT_STALE_S:
+            return None
+        return self._last_height
 
     # ── outputs ─────────────────────────────────────────────────────────────
     def _publish(self, dist: float, height, n_tracks: int) -> None:
         m = Float32(); m.data = float(dist)
         self._pub_dist.publish(m)
         dbg = Float32MultiArray()
-        dbg.data = [float(dist), float(height or 0.0), float(n_tracks),
+        # NaN, not 0.0: an absent height is not a height of zero. float('nan')
+        # survives the Float32MultiArray and every consumer that plots it shows
+        # a gap instead of a floor-level reading that never happened.
+        dbg.data = [float(dist),
+                    float(height) if height is not None else float('nan'),
+                    float(n_tracks),
                     1.0 if self._acc.active else 0.0]
         self._pub_debug.publish(dbg)
         now = time.monotonic()
         if now - self._last_log >= 1.0 and self._acc.active:
             self._last_log = now
             self.get_logger().info(
-                f'[DIST ] d={dist:+.3f}m  height={height or 0.0:.2f}m  '
+                f'[DIST ] d={dist:+.3f}m  '
+                f'height={f"{height:.2f}m" if height is not None else "--"}  '
                 f'tracks={n_tracks}')
 
 
