@@ -144,3 +144,65 @@ def test_prune_still_drops_a_track_the_backend_forgot():
     _node_pass(kal, [_TD(5, 1.0, 1.0, False)], 0.0)
     _node_pass(kal, [_TD(6, 2.0, 2.0, False)], 0.05)   # 5 absent -> pruned
     assert kal.is_expired(5) is False                  # gone, not expired
+
+
+# --------------------------------------------------------------------------- #
+#  B09 -- Q must be re-discretised with dt, exactly as F is
+#
+#  `_update_F` rewrote F[0,2]/F[1,3] for a variable frame interval and left
+#  Q as `np.eye(4) * process_noise`, built once. A constant Q is correct at
+#  exactly one dt. Measured intervals here are p50 32.5 ms / p95 48.4 ms with
+#  gaps to 2.4 s, and the position term scales as dt^4 -- so the filter was
+#  most over-confident exactly when detections were missing, which is the case
+#  the smoother exists to handle.
+# --------------------------------------------------------------------------- #
+import numpy as _np                                          # noqa: E402
+from duburi_vision.tracking.kalman import (                   # noqa: E402
+    _q_for_dt, _DT_REF_S, PerTrackKalman)
+
+
+def test_Q_grows_with_dt():
+    """The whole finding: a longer gap must mean MORE process noise."""
+    small = _q_for_dt(0.0325, 0.05)
+    large = _q_for_dt(0.0484, 0.05)
+    assert large[0, 0] > small[0, 0]
+    assert large[2, 2] > small[2, 2]
+    # position term follows dt^4
+    assert large[0, 0] / small[0, 0] == pytest.approx((0.0484 / 0.0325) ** 4, rel=1e-6)
+
+
+def test_Q_is_a_valid_covariance():
+    """Symmetric and positive-semidefinite, or the filter is not a filter."""
+    for dt in (1e-6, 0.0325, 0.5, 2.4):
+        Q = _q_for_dt(dt, 0.05)
+        assert _np.allclose(Q, Q.T), f'Q not symmetric at dt={dt}'
+        assert _np.all(_np.linalg.eigvalsh(Q) >= -1e-12), f'Q not PSD at dt={dt}'
+
+
+def test_a_zero_dt_does_not_zero_Q():
+    """dt=0 would make every term 0 -- a filter that trusts its model
+    infinitely. Clamped."""
+    # -1e-27 style eigenvalues are float noise on a near-singular matrix, not a
+    # non-PSD one -- same tolerance as the covariance test above.
+    assert _np.all(_np.linalg.eigvalsh(_q_for_dt(0.0, 0.05)) >= -1e-12)
+    assert _q_for_dt(0.0, 0.05)[2, 2] > 0.0
+
+
+def test_the_tuned_operating_point_is_preserved_at_the_reference_interval():
+    """B09 is a SCALING fix, not a re-tune.
+
+    `kalman_process_noise` (tracker.yaml: 0.05) was tuned against the old
+    `eye(4) * process_noise`. Substituting the WNA form naively moves the
+    operating point by ~1e6 at a typical interval. Anchoring sigma_a^2 at the
+    measured p50 keeps the velocity term identical there.
+    """
+    assert _q_for_dt(_DT_REF_S, 0.05)[2, 2] == pytest.approx(0.05, rel=1e-12)
+
+
+def test_the_filter_re_discretises_Q_when_dt_changes():
+    """Q must move when _update_F moves F -- that they diverged is the bug."""
+    k = PerTrackKalman(10.0, 20.0, _DT_REF_S, 0.05, 1.0)
+    q_before = k._kf.Q[0, 0]
+    k.step(11.0, 21.0, dt=0.2, predicted=False)      # a much longer interval
+    assert k._kf.F[0, 2] == pytest.approx(0.2)
+    assert k._kf.Q[0, 0] > q_before, 'F was re-discretised for the new dt and Q was not'

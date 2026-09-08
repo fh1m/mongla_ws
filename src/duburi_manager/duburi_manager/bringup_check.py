@@ -363,8 +363,15 @@ def _check_mavlink() -> list[tuple[str, str, str]]:
         try:
             mode = conn.flightmode
             out.append((PASS, 'flight mode', str(mode)))
-        except Exception:
-            pass
+        except Exception as exc:                    # noqa: BLE001
+            # B21: this used to `pass`, appending NO ROW AT ALL. In a checklist a
+            # check that can vanish is worse than one that fails -- a FAIL is
+            # read, an absent line is not, and the exit code was unchanged either
+            # way, so the gate passed with a check silently missing. The two
+            # neighbours here already emit on both branches (the armed check
+            # PASS/WARNs; the battery read treats 0/65535 as unknown).
+            out.append((WARN, 'flight mode',
+                        f'unreadable: {type(exc).__name__}'))
 
         # Battery from SYS_STATUS (voltage_battery in mV; 0/65535 = unknown).
         volts = None
