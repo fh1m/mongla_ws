@@ -970,7 +970,28 @@ class AUVManagerNode(Node):
         note_text = getattr(self.fc, 'note_statustext', None)
         _DEMUX = {'NAMED_VALUE_FLOAT': note, 'BATTERY_STATUS': note_batt,
                   'STATUSTEXT': note_text}
+        # ⛔ THE BODY IS GUARDED, AND THE THREAD'S DEATH IS OBSERVABLE (B40).
+        #
+        # This is a bare `threading.Thread` target and it is the ONLY thing
+        # draining the link. An exception anywhere below -- a recorder write, a
+        # demux callback, a malformed frame -- used to kill the thread outright.
+        # Nothing logged it and nothing noticed the thread was gone; what the
+        # operator saw was every reading going stale and `link_alive()` turning
+        # False three seconds later.
+        #
+        # That is the WORST available misdiagnosis: a host-side software fault
+        # presenting as a dead cable, at the pool, with the hull in the water.
+        # Someone would pull the USB-C and re-seat the board while the actual
+        # cause sat in this process.
+        #
+        # So: a fault here is logged, counted, and survivable, and the counters
+        # are published so the health board can say "the READER is unwell" rather
+        # than leaving "the LINK is dead" as the only available story.
+        self._reader_faults = 0
+        self._reader_last_fault = ''
+        consec = 0
         while True:
+          try:
             while True:
                 msg = self.master.recv_match(blocking=False)
                 if msg is None:
@@ -994,7 +1015,21 @@ class AUVManagerNode(Node):
             if text and text != self.last_statustext:
                 self.last_statustext = text
                 self.get_logger().info(f'[ARDUB] {text}')
-            time.sleep(0.005)   # 200 Hz drain
+            consec = 0
+          except Exception as exc:                    # noqa: BLE001 -- see above
+            self._reader_faults += 1
+            consec += 1
+            self._reader_last_fault = f'{type(exc).__name__}: {exc}'
+            # Log the first, then back off: a persistent fault at 200 Hz would
+            # bury the log it is trying to be found in.
+            if consec == 1 or consec % 200 == 0:
+                self.get_logger().error(
+                    f'[NET  ] !! MAVLink reader fault #{self._reader_faults} '
+                    f'({consec} consecutive): {self._reader_last_fault}. The link '
+                    f'may be FINE -- this is a host-side fault in the reader, not '
+                    f'a dead cable. Telemetry will look stale while it persists.')
+            time.sleep(0.05)                          # do not spin on a hard fault
+          time.sleep(0.005)   # 200 Hz drain
 
     # ================================================================== #
     #  Action Server callbacks                                            #
@@ -1207,6 +1242,14 @@ class AUVManagerNode(Node):
             return fn(name) if fn else None
 
         self._health.register('board_link', lambda: _hr.board_link(fc))
+        # Registered right beside board_link ON PURPOSE (B40): when the reader
+        # thread dies, board_link says "no heartbeat" and looks exactly like a
+        # dead cable. This is the line that names the real side.
+        self._health.register('mavlink_reader', lambda: _hr.mavlink_reader(
+            lambda: bool(getattr(self, 'reader_thread', None) is not None
+                         and self.reader_thread.is_alive()),
+            lambda: int(getattr(self, '_reader_faults', 0)),
+            lambda: str(getattr(self, '_reader_last_fault', ''))))
         self._health.register('barometer', lambda: _hr.barometer(named))
         self._health.register('heading_ref', lambda: _hr.heading_reference(named))
         self._health.register('thrusters', lambda: _hr.thrusters(

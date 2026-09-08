@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 21 of 38 fixed (2026-09-08).**
+> **STATUS: 22 of 39 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1481,6 +1481,43 @@ both the un-extended and the over-extended implementations.
 That is the second time this round a test checked the wrong quantity (B35's range
 check was the first). Assert the property you actually care about, not a
 consequence that has more than one cause.
+
+### B40 — the MAVLink reader could die silently and present as a dead cable  ⛔ HOST-SIDE  ✅ FIXED 2026-09-08
+
+**`auv_manager_node.reader_loop`.** Found by walking the srot ↔ Pi pipeline stage
+by stage and asking, for each, *"what detects this failing?"*
+
+`reader_loop` is a bare `threading.Thread` target and, by its own docstring, the
+**only place `recv_match()` is called** and *"the only thing draining the link"*.
+Its body had **no exception handling at all** — a recorder write, one of the three
+demux callbacks (`note_named_value` / `note_battery` / `note_statustext`), or a
+malformed frame could kill the thread outright.
+
+**The consequence is a misdiagnosis, which is worse than a crash.** With the
+thread gone, `master.messages` stops updating, every reading ages out, and
+`board_link` reports *"no heartbeat within the stale window"* ~3 s later. A
+host-side software fault therefore presents **identically to a dead cable** — at
+the pool, with the hull in the water. Someone pulls the USB-C and re-seats the
+board while the real cause sits in this process.
+
+**Fix, both halves:**
+1. The loop body is guarded. A fault is logged (first occurrence, then every
+   200th — a persistent fault at 200 Hz would bury the log it is trying to be
+   found in), counted, and survivable, with a back-off so it cannot spin.
+2. The thread's death is **observable**: a new `mavlink_reader` health reporter,
+   registered deliberately *next to* `board_link`, that says which side is at
+   fault — *"READER THREAD IS DEAD — this is a HOST fault, not the link. Do not go
+   looking at the cable."* Survived faults are DEGRADED (the telemetry they
+   interrupted was real); a probe that raises is UNKNOWN, because nothing is then
+   watching the watcher.
+
+This is **B23's shape** (an unguarded bare `Thread` body) at the most critical
+place in the stack, which is why it gets its own entry. B23's own note said the
+mitigation there was *incidental*; here there was none at all.
+
+**Verified by injection:** removing the guard fails the structural test;
+a raising demux callback in a loop of the same shape keeps running and still
+drains real messages; all four reporter states behave.
 
 ## 8. Provenance
 
