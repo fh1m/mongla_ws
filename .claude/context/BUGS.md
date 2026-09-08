@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 16 of 32 fixed (2026-09-08).**
+> **STATUS: 16 of 33 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1164,6 +1164,85 @@ docstring, bounded in practice, and moot on srot where `*_dist` is refused.
 | `duburi_dsl.py` | ✅ every `except Exception` is annotated with why it is best-effort (detector pause, HUD follow, graph read), and a missing detector **raises loudly** rather than degrading |
 | `vision_dsl.py` | ⛔ **B33**. `NaN` defaults and the `saw_target` guard are otherwise correct |
 | `cli.py`, `model_context.py` | ✅ |
+
+### B34 — raising the board's speed cap silently does nothing to autonomous moves
+
+**`srot_protocol.sanitize_speed` / `MOVE_CRUISE_MAX`.**
+
+`_speed_from_gain` clamps every host-issued move to `sp.MOVE_CRUISE_MAX = 0.80`,
+a **hard-coded copy of the firmware's DEFAULT**. The board's `MOVE_CRUISE_MAX` is
+a *runtime parameter* (`params.cpp:221`), and the host **never reads it** —
+verified: no `get_param('MOVE_CRUISE_MAX')` anywhere in `duburi_control` or
+`duburi_manager`.
+
+All three agree today (host 0.80, firmware `DEF_MOVE_CRUISE_MAX` 0.80, and the
+live board measured 0.80 on 2026-09-08), so nothing is wrong right now.
+
+**The failure is one-directional and silent.** Lower the board's param and the
+board clamps harder — safe, the host's 0.80 is simply moot. But **raise** it (for
+a faster transit) and every autonomous move is still capped at 0.80 by the host,
+while a Bondor/teleop move — which does not pass through `sanitize_speed` — is
+not. The operator changes a speed limit, watches the vehicle not go faster, and
+has nothing in any log to explain it.
+
+Same family as B31: a host-side constant standing in for a board-side tunable.
+Not fixed here because the right fix is a decision — read the param at connect
+(one more round-trip on a link we already round-trip on), or keep the host cap and
+say plainly in the log that it is the binding one. Recorded so the choice is made
+deliberately rather than discovered on a pool day.
+
+**Note on the existing test.** `test_srot_protocol.py:110` asserts
+`sanitize_speed(0.99) == sp.MOVE_CRUISE_MAX`, which is tautological with respect
+to the VALUE — it passes whichever number the constant holds. The drift test pins
+every discrete wire constant against the firmware headers but not the tunable
+floats, which is defensible (the board's clamp is authoritative) and is exactly
+why this gap is about *operator expectation*, not safety.
+
+## 7f. The audit lens, and what it covered (2026-09-08)
+
+Every defect this audit found by READING is one shape: **a written claim that is
+not true of the code.**
+
+| | the claim | the code |
+|---|---|---|
+| B11 | docstring: "BNO healthy **AND** DVL streaming" | returns only the BNO |
+| B16 | comment: "scale defensively" | never scales (the defence is a layer up) |
+| B25 | a health reporter | could never report |
+| B26 | a test stub | invented an attribute the real class lacks |
+| B30 | comment: the guard exists | it existed in a different file |
+| B32 | a test proving srot actuation | faked the component that was broken |
+| B33 | worked example: recover this way | inverted vs its own field list |
+| ESC PR #3 | call site reads as "buffer cap" | it is the timeout |
+
+So the lens is: **read the docstring, then check the body does exactly that** —
+and treat a comment as a claim to verify, never as evidence.
+
+**Mechanised.** Two tools now apply it across the whole tree:
+- `tools/claim_vs_code_audit.py` — flags docstrings that join two names with
+  "and" where the body touches only one (B11's shape), and claim-verbs
+  (clamp/scale/normalise/reject/verify) with no matching operation. 5 candidates,
+  4 false positives, 1 chain that produced **B34**.
+- `tools/defect_class_sweep.py` — sweeps the classes actually found here:
+  absence-coerced-to-zero (B05/B10/B25), blind silent `except`, unbounded `while`.
+
+**Read in full this round:** `duburi_sensors` (1,802), `duburi_planner` core
+(2,830), `srot-esc-flasher` (2,147). **Deep-read on the live srot path:**
+`vision_state.bbox_error` + `square_within`, `srot_connect`'s absence rendering,
+`motion_vision`'s freshness math, `motion_writers`, the Hengla handlers.
+
+**Verified by execution rather than by reading**, because a stated invariant is
+still a claim: `_fresh_bounds`'s four documented invariants hold across 121 input
+combinations including infinities and the early-return path that skips the final
+clamp — `full < zero` always, both caps respected, no ZeroDivision in
+`_freshness`, authority always in [0,1].
+
+⚠ **What is NOT line-by-line read**, stated so the next round does not inherit a
+false clean bill: `srot_fc.py` (2,683), `duburi.py` (1,568), `auv_manager_node.py`
+(1,854), `motion_vision.py` beyond the sections above, and most of
+`duburi_vision`'s large nodes (`detector_node`, `flow_node`, `guide`,
+`display_node`) — roughly 17k lines. Every one of them HAS been swept by both
+tools above and by `fc_surface_audit` / `srot_reachability`. That is coverage by
+mechanism, not by eye, and the difference is exactly what let B33 hide.
 
 ## 8. Provenance
 
