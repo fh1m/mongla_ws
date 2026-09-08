@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 17 of 34 fixed (2026-09-08).**
+> **STATUS: 18 of 35 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1349,6 +1349,52 @@ thing they existed to catch was broken. The discipline that works here is:
 inject the defect and watch the test fail. Every fix on this register from
 2026-09-08 onward was verified that way, and twice it caught a test that could
 not bite.
+
+### B36 — a failed `arm()` did not stop the mission; 16 of 16 missions discarded it  ✅ FIXED 2026-09-08
+
+**`duburi_planner/duburi_dsl.py`.** Found by applying **NASA JPL Power-of-10 rule
+7** to the tree — *"the return value of non-void functions must be checked by each
+calling function"* (Holzmann, *The Power of 10: Rules for Developing
+Safety-Critical Code*, IEEE Computer 39(6), 2006 —
+[spinroot.com/gerard/pdf/P10.pdf](https://spinroot.com/gerard/pdf/P10.pdf)).
+
+`DuburiMission._send()` does not raise. It logs the outcome, records
+`success=False` on the scoreboard, and returns. **Every one of the 16 missions
+that arms does `duburi.arm()` as a bare statement** — including
+`task_full_2026`, the full competition run, which arms and then executes all five
+task chunks.
+
+**Verified by execution**, not by reading:
+
+```
+arm() -> success=False   and it did NOT raise
+verbs sent AFTER the failed arm: ['set_depth', ...]
+```
+
+So a pre-arm refusal left the mission running its whole sequence **disarmed**: the
+board refuses every move (*"SROT_MOVE refused: arm first"*), the hull sits still,
+each verb logs its own failure, the run reports complete, and a pool slot is gone.
+Nothing is physically unsafe — and nothing stops.
+
+This is **J02's shape at the top of the stack** (the one call a step exists to
+make, failure swallowed) in the worst possible place, because arm is the
+precondition for everything after it.
+
+**Fix.** `arm()` now logs at ERROR with the board's refusal reason and raises
+`MoveFailed`. Raising is safe here: `mission.py`'s runner calls `_safe_shutdown`
+on both the success and unhandled-exception paths, so the vehicle is still
+released, stopped and disarmed. `arm(required=False)` preserves the old behaviour
+for a diagnostic that wants to observe a refusal and continue.
+
+**`disarm()` is deliberately NOT given the same treatment** — it is called from
+`_safe_shutdown`'s isolated steps, and raising there would abort the cleanup that
+exists to run after a failure. The asymmetry is a decision, and there is a test
+saying so.
+
+**Generalised:** `tools/unchecked_error_returns.py` finds every function that
+reports failure in its return value (`return False, ...` or `MoveResult(...)`) and
+every call site that discards it. 24 reporters, 5 discarded — the other four are
+`disarm`, `stop` and cleanup paths where discarding is correct and now documented.
 
 ## 8. Provenance
 

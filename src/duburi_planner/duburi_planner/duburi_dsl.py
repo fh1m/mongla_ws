@@ -151,6 +151,8 @@ from vision_msgs.msg import Detection2DArray
 from .model_context import ClassRef, ModelRegistry
 from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by DuburiMission
 
+from .client import MoveFailed          # arm() raises this on refusal
+
 
 def _format_outcome(cmd: str, result) -> str:
     return (f'  {cmd:<22s} final={result.final_value:+.3f} '
@@ -645,8 +647,37 @@ class DuburiMission:
     #  Power / mode                                                        #
     # ================================================================== #
 
-    def arm(self, *, timeout: float = 15.0):
-        return self._send('arm', timeout=timeout)
+    def arm(self, *, timeout: float = 15.0, required: bool = True):
+        """Arm the vehicle. RAISES on failure unless `required=False`.
+
+        ⛔ THIS IS THE ONE VERB WHERE CONTINUING AFTER FAILURE IS ALWAYS WRONG.
+        Every subsequent move is refused by the board ("SROT_MOVE refused: arm
+        first"), so a mission that arms unsuccessfully and carries on runs its
+        entire sequence disarmed: the hull sits still, every verb logs a failure,
+        the run ends "complete", and a pool slot is gone. Measured before this
+        change: 16 of 16 missions called `arm()` and discarded the result --
+        including `task_full_2026`, the full competition run.
+
+        That is NASA JPL Power-of-10 rule 7 (Holzmann, IEEE Computer 2006: "the
+        return value of non-void functions must be checked by each calling
+        function") and it is the same shape as J02 on the register -- the one
+        call a step exists to make, with its failure swallowed.
+
+        Raising is SAFE here: `mission.py`'s runner calls `_safe_shutdown` on
+        both the success and the unhandled-exception path, so the vehicle is
+        still released, stopped and disarmed.
+
+        `required=False` restores the old behaviour for a diagnostic that
+        genuinely wants to observe a refusal and keep going.
+        """
+        result = self._send('arm', timeout=timeout)
+        if required and not bool(getattr(result, 'success', False)):
+            reason = str(getattr(result, 'message', '')) or 'no reason given'
+            self.log.error(
+                f'[MISS ] ARM FAILED -- aborting instead of running the mission '
+                f'disarmed. Reason: {reason}')
+            raise MoveFailed(f'arm failed: {reason}')
+        return result
 
     def disarm(self, *, timeout: float = 20.0):
         return self._send('disarm', timeout=timeout)
