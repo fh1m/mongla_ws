@@ -68,8 +68,8 @@ from . import srot_changes as _schg                                        # noq
 from . import health as _health
 from . import health_reporters as _hr
 from .connection_config import (                                             # noqa: E402
-    DEFAULT_MODE, NETWORK, PROFILES, resolve_mode, resolve_profile,
-    resolve_srot_profile,
+    DEFAULT_FLIGHT_CONTROLLER, DEFAULT_MODE, NETWORK, PROFILES, resolve_mode,
+    resolve_profile, resolve_srot_profile,
 )
 from .dispatch_policy   import goal_acceptance                           # noqa: E402
 from .vision_state     import VisionState                                # noqa: E402
@@ -347,7 +347,7 @@ class AUVManagerNode(Node):
         #
         # Both directions still fail LOUDLY (no heartbeat) rather than silently.
         # Flipping it back is this one line, deliberately.
-        self.declare_parameter('flight_controller', 'srot')
+        self.declare_parameter('flight_controller', DEFAULT_FLIGHT_CONTROLLER)
         # allow_fw_behaviour_mismatch: proceed against firmware older than
         # srot_protocol.FW_BEHAVIOUR_REV_REQUIRED. OFF by default and it should stay
         # off. On pre-rev-2 firmware MOVE_STOP COASTS -- it applies zero braking thrust

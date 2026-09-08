@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 38 of 45 fixed (2026-09-08).**
+> **STATUS: 39 of 46 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1867,6 +1867,96 @@ timing-sensitive. The wall-clock-dependent files are the place to start —
 `test_style_verbs.py` (6 sleeps / 4 threads), `test_hailo_arbiter.py` (5).
 A flaky test on a vehicle stack is a real defect: it trains the operator to
 re-run instead of read.
+
+---
+
+### B47 — the preflight rebooted the flight controller it was checking  ⛔ CRITICAL, FIXED 2026-09-08
+
+The worst one this round, and it is B46's class a third time: **two tables
+describing one vehicle, and nothing comparing them.**
+
+Two facts collide on this hull:
+
+- The SROT board is a CH340 and enumerates as **`1a86:7523`** — byte for byte the
+  payload DevKit's VID/PID (`payload.py:39`). Measured on the vehicle, it is the
+  **only** such device present:
+  ```
+  /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 -> ../../ttyUSB0
+  /dev/ttyUSB0  vid=0x1a86 pid=0x7523  USB Serial
+  ```
+- **Opening that port reboots the board.** That is not inference — it is why
+  `fc/port_guard.py` exists, and its own text says so: *"On srot every open
+  reboots the flight controller … a second process touching this device
+  mid-mission is a silent disarm-and-reinit."*
+
+`bringup_check` section I auto-detected the payload board by VID/PID with an
+**explicitly empty** exclude set (`auto_detect_port(exclude=set())`), then
+**opened** what it found to "verify the serial link" — bypassing `PortGuard`
+entirely. Executed against the real hull:
+
+```
+bringup_check would treat this as the PAYLOAD board: /dev/ttyUSB0
+```
+
+That is the autopilot. So the tool CLAUDE.md tells the operator to run *"at the
+start of every session"* **reboots the flight controller, writes a stray byte at
+it, and reports `PASS: verified serial link on /dev/ttyUSB0`** — a green line
+naming the flight controller as a payload board. If the manager is already up,
+it does this to the device the manager holds.
+
+**Why it was reachable at all.** The section is behind an `if srot: … else:`
+split, and the srot branch skips it correctly. But the flag was
+`srot = '--srot' in argv` — **opt-IN**, defaulting to the pixhawk branch, and it
+stayed that way long after `flight_controller` defaulted to `srot`. So the bare
+`ros2 run duburi_manager bringup_check` — the exact command in the docs — took
+the **pixhawk** path on an **srot** vehicle. The gate was correct; the thing
+selecting which side of the gate to stand on was a hand-typed literal.
+
+**Fix, at the cause and then again at the edge.**
+
+1. `DEFAULT_FLIGHT_CONTROLLER` now lives once in `connection_config.py`. The
+   manager declares its parameter from it and `bringup_check` derives its branch
+   from it, so the tool and the stack cannot disagree again. `--srot` still forces
+   it on; **`--pixhawk`** forces it off for the preserved ArduSub configuration.
+   The import failure path defaults to `srot` — fail safe, not fail open.
+2. `_check_payload` resolves the flight-controller link via `find_srot_serial()`
+   and passes it in `exclude`. Belt to the braces: reaching that code now means
+   someone deliberately asked for the pixhawk path, and that is still not a
+   reason to let a preflight reboot the autopilot. When the only CH340 present
+   *is* the board, it now says so instead of opening it.
+
+Verified by execution on the vehicle, before and after:
+
+```
+default backend      : srot
+FC serial link       : /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+payload BEFORE fix   : /dev/ttyUSB0        <- the autopilot
+payload AFTER  fix   : None                <- honest WARN instead
+```
+
+(The by-id → `/dev/ttyUSB0` match works because `auto_detect_port` realpaths both
+sides; `test_the_exclude_survives_a_by_id_symlink` pins that, because if it ever
+stops the exclude silently misses and the probe opens the board again with the
+code still *looking* correct.)
+
+**Pinned by `test_preflight_never_opens_the_autopilot.py`** (7 tests): the
+backend may not go back to a hand-typed literal; the manager must declare from
+the constant; both overrides still work; the payload probe may never be handed an
+empty exclude; the real matcher run over a faked USB bus returns the board with
+`exclude=set()` and `None` with the board excluded; and the srot branch still
+skips the section entirely.
+
+Verified by injection with an assert-that-it-applied guard: backend back to
+opt-in → 2 failed; empty exclude → 1 failed; manager re-types its default → 2
+failed; restored → 7 passed.
+
+> **Two verified negatives from the same sweep, recorded so nobody re-walks them.**
+> The BNO085 discovery scan filters on `303a:1001` (Espressif) and **cannot**
+> enumerate the CH340 board — checked against the hardware's actual VID/PID table,
+> not the pattern list. And `PayloadDriver` is never constructed on the srot path:
+> `auv_manager_node` returns early with the MAVLink payload before reaching it
+> (`_wait_and_reconnect`'s unguarded `auto_detect_port()` is therefore not
+> reachable on this hull — it stays a latent hazard on the pixhawk branch only).
 
 ## 8. Provenance
 

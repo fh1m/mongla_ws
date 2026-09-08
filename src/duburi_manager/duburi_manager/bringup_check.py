@@ -455,10 +455,34 @@ def _check_payload() -> tuple[str, str]:
     except Exception as exc:  # noqa: BLE001
         return WARN, f'duburi_control.payload not importable: {exc}'
 
+    # B47: NEVER hand this probe the flight-controller link. The SROT board is a
+    # CH340 and enumerates as 1a86:7523 -- byte for byte the payload DevKit's
+    # VID/PID -- so on this hull an unfiltered scan returns the AUTOPILOT, and
+    # the verify step below OPENS it, which reboots it. The `exclude` parameter
+    # existed for exactly this and was being passed an empty set.
+    #
+    # This is belt to the braces of the backend default above: the srot branch
+    # skips this section entirely, so reaching here at all means someone asked
+    # for the pixhawk path. That is not a reason to let a preflight reboot the
+    # autopilot.
+    fc_exclude: set[str] = set()
     try:
-        port = PayloadDriver.auto_detect_port(exclude=set())
+        from .connection_config import find_srot_serial
+        _fc = find_srot_serial()
+        if _fc:
+            fc_exclude.add(_fc)
+    except Exception:                           # noqa: BLE001 -- advisory
+        pass
+
+    try:
+        port = PayloadDriver.auto_detect_port(exclude=fc_exclude)
     except Exception as exc:  # noqa: BLE001
         return WARN, f'auto-detect raised: {exc!r}'
+
+    if not port and fc_exclude:
+        return WARN, ('no payload board on USB bus -- the only CH340 present is '
+                      f'the flight controller ({sorted(fc_exclude)[0]}), which this '
+                      'check must not open (opening it reboots the board)')
 
     if not port:
         # Explain WHY -- board on the bus but no node (ch341/brltty), or absent.
@@ -1073,7 +1097,7 @@ def main(argv: list[str] | None = None) -> int:
     # `--help` used to fall through and run the FULL hardware probe -- an operator
     # asking what the flags are instead got a 12-section scan of the vehicle.
     if '-h' in argv or '--help' in argv:
-        print('usage: bringup_check [--srot] [--srot-device=<conn>] [--strict]\n'
+        print('usage: bringup_check [--srot|--pixhawk] [--srot-device=<conn>] [--strict]\n'
               '                     [--skip-mavlink]\n'
               '\n'
               '  --srot           SROT control board over direct USB serial (this\n'
@@ -1095,7 +1119,28 @@ def main(argv: list[str] | None = None) -> int:
     skip_mav = '--skip-mavlink' in argv
     # The SROT vehicle has no Pi, no BlueOS, no UDP and no Pixhawk: sections D/E/F
     # would report on infrastructure that is not supposed to exist.
-    srot = '--srot' in argv
+    #
+    # B47: this was `'--srot' in argv` -- opt-IN, defaulting to the pixhawk path
+    # long after `flight_controller` defaulted to srot. The bare
+    # `ros2 run duburi_manager bringup_check` that CLAUDE.md tells the operator to
+    # run "at the start of every session" therefore took the PIXHAWK branch on an
+    # SROT hull, and section I opened the flight controller believing it was the
+    # payload board (both enumerate as 1a86:7523; measured on the vehicle, the
+    # ONLY such device is the SROT board). Opening it reboots it.
+    #
+    # The default now comes from the same constant the manager declares, so the
+    # tool and the stack cannot disagree again. `--srot` still forces it on;
+    # `--pixhawk` forces it off for the preserved ArduSub configuration.
+    if '--srot' in argv:
+        srot = True
+    elif '--pixhawk' in argv:
+        srot = False
+    else:
+        try:
+            from .connection_config import DEFAULT_FLIGHT_CONTROLLER
+        except Exception:                       # noqa: BLE001 -- fail SAFE, not open
+            DEFAULT_FLIGHT_CONTROLLER = 'srot'
+        srot = (DEFAULT_FLIGHT_CONTROLLER == 'srot')
     # Transitional rig: board on the Pi, reaching us as UDP via a BlueOS bridge.
     srot_device = next((a.split('=', 1)[1] for a in argv
                         if a.startswith('--srot-device=')), '')

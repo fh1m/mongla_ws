@@ -96,6 +96,20 @@ PROFILES = {
 # Default: auto-detect so operators never need to pass -p mode:= at all.
 DEFAULT_MODE = 'auto'
 
+# The default flight-controller backend, in ONE place (B47).
+#
+# It used to be hand-typed in each tool, and `bringup_check` still said
+# "pixhawk" long after the vehicle became the SROT board. That is not a
+# cosmetic disagreement: on the pixhawk branch the preflight runs its CH340
+# payload probe, the SROT board enumerates as 1a86:7523 -- the SAME VID/PID as
+# the payload DevKit -- and the check OPENS it. Opening that port reboots the
+# flight controller (fc/port_guard.py has the measurements). A preflight tool
+# whose job is to make the vehicle safe was rebooting the autopilot and
+# reporting PASS.
+#
+# Anything that needs to know the backend without a live node reads this.
+DEFAULT_FLIGHT_CONTROLLER = 'srot'
+
 # ---------------------------------------------------------------------- #
 #  Serial auto-detection                                                  #
 # ---------------------------------------------------------------------- #
