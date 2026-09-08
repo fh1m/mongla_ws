@@ -177,3 +177,88 @@ def test_b03_false_sync_does_not_eat_the_following_packet():
     out = PacketAccumulator().feed(false_sync + good + good)
 
     assert len(out) == 2, f'false sync ate a real packet: recovered {len(out)}/2'
+
+
+# =========================================================================== #
+#  B14 -- the accumulator tests covered the ONE garbage case that cannot fail  #
+# =========================================================================== #
+# `test_accumulator_skips_leading_garbage` feeds b'\x00\x11\x22': no 0xa5 in it,
+# so it exercises only the find(0xa5) skip -- the easy path. Both real defects
+# (B02 spin-forever, B03 swallow-the-next-packet) need a 0xa5 INSIDE the garbage,
+# which is the only case where the unvalidated length field gets trusted. Three
+# green accumulator tests, none touching the rule they exist to protect.
+#
+# B20 additions here too: a header shorter than the 10-byte minimum used to make
+# `buf[:size_header - 2]` a NEGATIVE slice, silently checksumming a different
+# span; and a truncated payload was rejected only incidentally, by StructError.
+
+import struct as _struct
+from itertools import zip_longest as _zl
+
+from duburi_sensors.sources.nucleus_parser import (
+    ID_AHRS, ID_BOTTOMTRACK, PacketAccumulator, parse_packet,
+)
+
+
+def _b14_cs(data):
+    c = 0xb58c
+    for u, v in _zl(data[::2], data[1::2], fillvalue=0):
+        c = (c + (int(u) | (int(v) << 8))) & 0xFFFF
+    return c
+
+
+def _b14_frame(pkt_id, raw):
+    h = bytearray(10)
+    h[0], h[1], h[2], h[3] = 0xa5, 10, pkt_id, 0x20
+    h[4:6] = _struct.pack('<H', len(raw))
+    h[6:8] = _struct.pack('<H', _b14_cs(raw))
+    h[8:10] = _struct.pack('<H', _b14_cs(h[:8]))
+    return bytes(h + bytearray(raw))
+
+
+def _b14_ahrs(heading):
+    a = bytearray(20)
+    a[1] = 2
+    a[2:6] = _struct.pack('<f', 1.0)
+    a[6:10] = _struct.pack('<f', 2.0)
+    a[10:14] = _struct.pack('<f', heading)
+    return _b14_frame(ID_AHRS, bytes(a))
+
+
+def test_a_FALSE_sync_byte_does_not_eat_the_next_real_packet():
+    """B03's exact shape: 0xa5 inside garbage, with a plausible length field."""
+    acc = PacketAccumulator()
+    false_sync = bytes([0xa5, 60, 0x99, 0x20]) + bytes(6)     # claims 60+ bytes
+    got = acc.feed(false_sync + _b14_ahrs(123.0) + _b14_ahrs(45.0))
+    headings = [p['heading'] for p in got if p.get('id') == ID_AHRS]
+    assert headings == [pytest.approx(123.0), pytest.approx(45.0)], (
+        f'a false sync byte swallowed a real packet: got {headings}')
+
+
+def test_a_zero_length_false_sync_does_not_spin_forever():
+    """B02: size_header=0, size_data=0 -> total=0 -> `del buf[:0]` removed nothing."""
+    acc = PacketAccumulator()
+    got = acc.feed(bytes([0xa5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) + _b14_ahrs(77.0))
+    assert [p['heading'] for p in got if p.get('id') == ID_AHRS] == [pytest.approx(77.0)]
+
+
+def test_a_header_shorter_than_the_minimum_is_rejected():
+    """B20: size_header < 2 made `buf[:size_header - 2]` a negative slice."""
+    for size_header in (0, 1, 2, 9):
+        buf = bytearray(b'\xa5' + bytes([size_header]) + b'\xb4\x20' + bytes(30))
+        assert parse_packet(buf) is None, f'size_header={size_header} was accepted'
+
+
+def test_a_truncated_payload_is_rejected_by_a_length_check():
+    """B20: slicing never raises IndexError, so this was caught only by accident."""
+    assert parse_packet(bytearray(_frame(ID_BOTTOMTRACK, bytes(20)))) is None
+    assert parse_packet(bytearray(_frame(ID_AHRS, bytes([0, 250] + [0] * 18)))) is None
+
+
+def test_a_well_formed_packet_still_decodes():
+    """The guards must not have made the parser reject real data."""
+    raw = bytearray(108)
+    raw[96:100] = _struct.pack('<f', 1.25)
+    got = parse_packet(bytearray(_b14_frame(ID_BOTTOMTRACK, bytes(raw))))
+    assert got is not None and got['velocity_x'] == pytest.approx(1.25)
+    assert parse_packet(bytearray(_b14_ahrs(30.0)))['heading'] == pytest.approx(30.0)

@@ -56,11 +56,26 @@ class CompositeBnoDvlSource(YawSource):
         return self._bno.read_yaw()
 
     def is_healthy(self) -> bool:
-        return self._bno.is_healthy()
+        """BOTH sources, as the class docstring has always claimed (B11).
+
+        This returned only the BNO. A DVL that had died -- or never connected --
+        left the composite reporting healthy, so `*_dist` verbs ran against a
+        position integrator that was not integrating. `dvl_is_healthy()` stays
+        for callers that need the halves apart.
+        """
+        return bool(self._bno.is_healthy()) and bool(self._dvl.is_healthy())
 
     def close(self) -> None:
-        self._bno.close()
-        self._dvl.close()
+        """Close BOTH, even if the first raises (B19).
+
+        Without the try/finally an exception from the BNO -- a serial port
+        already gone, which is exactly when close() runs -- skipped the DVL
+        entirely, leaking its socket and reader thread.
+        """
+        try:
+            self._bno.close()
+        finally:
+            self._dvl.close()
 
     # ------------------------------------------------------------------
     #  DVL extensions (position from Nucleus DVL)

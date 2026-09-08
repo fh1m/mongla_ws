@@ -67,6 +67,14 @@ def parse_packet(buf: bytearray) -> dict | None:
     except (StructError, IndexError):
         return None
 
+    # B20: `size_header` is UNVALIDATED input. Below 2 the slice below becomes
+    # `buf[:negative]`, which silently checksums a different span of bytes
+    # instead of erroring -- a malformed header quietly validated against the
+    # wrong region. The header is 10 bytes by definition (sync..headerCheckSum),
+    # so anything smaller is not a header.
+    if size_header < 10:
+        return None
+
     if len(buf) < size_header + size_data:
         return None
 
@@ -84,6 +92,15 @@ def parse_packet(buf: bytearray) -> dict | None:
     if pkt_id not in (ID_BOTTOMTRACK, ID_AHRS):
         return {'id': pkt_id}
 
+    # B20: assert the length PRECONDITION for the documented field offsets
+    # rather than relying on `unpack` to raise. Slicing never raises IndexError
+    # (`raw[96:100]` on a short buffer returns a short slice), so the truncated
+    # case was caught only incidentally, by StructError, and returned a bare
+    # None indistinguishable from "a packet we do not decode".
+    _NEED = {ID_BOTTOMTRACK: 108, ID_AHRS: 2}
+    if len(raw) < _NEED[pkt_id]:
+        return None
+
     try:
         if pkt_id == ID_BOTTOMTRACK:
             status = unpack('<I', raw[12:16])[0]
@@ -100,6 +117,8 @@ def parse_packet(buf: bytearray) -> dict | None:
 
         if pkt_id == ID_AHRS:
             offset = raw[1]
+            if offset + 12 > len(raw):        # B20: the AHRS offset is data too
+                return None
             return {
                 'id': ID_AHRS,
                 'roll':    unpack('<f', raw[offset:     offset + 4])[0],
