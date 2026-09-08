@@ -35,6 +35,53 @@ from typing import Dict, Tuple
 import numpy as np
 
 
+# Reference frame interval for the process-noise scale. This is the MEASURED
+# p50 detection interval on this stack (32.5 ms; p95 48.4 ms, gaps to 2.4 s), not
+# a nominal camera rate -- the filter is driven by detections, not by frames.
+_DT_REF_S = 0.0325
+
+
+def _q_for_dt(dt: float, process_noise: float) -> "np.ndarray":
+    """Discrete process noise for a constant-velocity model at interval `dt`.
+
+    The standard white-noise-acceleration (Wiener) discretisation. Per axis the
+    2x2 block is
+
+        [[dt^4/4, dt^3/2],
+         [dt^3/2, dt^2  ]] * sigma_a^2
+
+    with the state ordered [x, y, vx, vy], so each axis's block is spread across
+    (0,2) and (1,3) rather than being contiguous.
+
+    WHY THE REFERENCE SCALING, which is the part worth reading. `Q` used to be
+    `np.eye(4) * process_noise` -- constant, therefore correct at exactly one dt.
+    Simply substituting the WNA form fixes the dt-dependence but also moves the
+    operating point by ~10^6 at a typical interval, because `process_noise` was
+    tuned (tracker.yaml: 0.05) against that identity matrix and means something
+    different here.
+
+    So sigma_a^2 is anchored: at `_DT_REF_S` the VELOCITY term reproduces the old
+    `process_noise` exactly, and everything else follows the correct dt law. That
+    makes this strictly a scaling correction rather than a silent re-tune -- the
+    filter behaves as it always did at the nominal rate and stops being
+    over-confident away from it, which is the whole defect.
+
+    `process_noise` therefore keeps its tuned VALUE and its role, but its units
+    are now an acceleration variance. Re-tuning against pool video is a genuine
+    follow-up; it is not a prerequisite for this fix being an improvement.
+    """
+    dt = max(float(dt), 1e-6)          # a zero interval would zero all of Q
+    sigma_a2 = float(process_noise) / (_DT_REF_S * _DT_REF_S)
+    dt2, dt3, dt4 = dt * dt, dt * dt * dt, dt * dt * dt * dt
+    pp, pv, vv = dt4 / 4.0, dt3 / 2.0, dt2
+    return np.array([
+        [pp, 0,  pv, 0 ],
+        [0,  pp, 0,  pv],
+        [pv, 0,  vv, 0 ],
+        [0,  pv, 0,  vv],
+    ], dtype=float) * sigma_a2
+
+
 class PerTrackKalman:
     """One constant-velocity Kalman filter for one track."""
 
@@ -65,7 +112,7 @@ class PerTrackKalman:
         ], dtype=float)
 
         self._kf.R  = np.eye(2) * measurement_noise
-        self._kf.Q  = np.eye(4) * process_noise
+        self._kf.Q  = _q_for_dt(dt, process_noise)
         self._kf.P  = np.eye(4) * 10.0  # initial uncertainty
 
         self._kf.x = np.array([[cx], [cy], [0.0], [0.0]], dtype=float)
@@ -100,9 +147,26 @@ class PerTrackKalman:
         return cx_hat, cy_hat
 
     def _update_F(self, dt: float) -> None:
+        """Re-discretise the model for this frame interval.
+
+        F AND Q. F alone was updated here; Q was built once as
+        `np.eye(4) * process_noise` and never moved again -- which makes it
+        correct at exactly one dt and wrong at every other. The author clearly
+        knew dt was variable, since that is what this method exists for; Q was
+        simply not carried through the same reasoning.
+
+        It matters because the error is not small and runs the wrong way.
+        Measured detection intervals on this stack are p50 32.5 ms / p95
+        48.4 ms, with gaps to 2.4 s. The position term of the true Q scales as
+        dt^4, so p50 -> p95 alone is (48.4/32.5)^4 = 4.9x, and a 2.4 s gap is
+        ~10^5. A fixed Q therefore leaves the filter OVER-CONFIDENT exactly when
+        detections are missing -- the case the smoother exists to handle -- so a
+        coasted box is trusted far more than it has earned.
+        """
         if abs(dt - self._last_dt) > 1e-4:
             self._kf.F[0, 2] = dt
             self._kf.F[1, 3] = dt
+            self._kf.Q = _q_for_dt(dt, self._process_noise)
             self._last_dt = dt
 
 
