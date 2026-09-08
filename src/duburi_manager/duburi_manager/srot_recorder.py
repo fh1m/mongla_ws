@@ -69,6 +69,9 @@ class SrotRecorder:
         self._q = collections.deque(maxlen=queue_max)
         self._lock = threading.Lock()
         self.dropped = 0
+        self.write_errors = 0          # B44: flushes that raised (disk full, etc)
+        self.last_write_error = ''
+        self._consec_write_fail = 0
         self.written = 0
         self._stop = threading.Event()
         self._fh = None
@@ -132,10 +135,42 @@ class SrotRecorder:
         self.written += len(batch)
 
     def _drain(self) -> None:
+        """Writer thread. A WRITE FAILURE MUST NOT KILL IT SILENTLY (B44).
+
+        This is a bare `threading.Thread` target and `_flush()` does real disk
+        I/O. A full card -- `OSError: [Errno 28] No space left on device`, the
+        ordinary end state of a Pi after a few pool sessions -- used to propagate
+        straight out of the thread. Recording then stopped with nothing logged,
+        and the operator found out when they went looking for the tlog after the
+        run that went wrong, which is exactly the run they needed it for.
+
+        Note `_flush()` swaps the queue out BEFORE writing, so a failing batch is
+        also lost. That is deliberate and stays: the alternative is holding a
+        growing batch against a disk that is not coming back, which turns a lost
+        log into a lost mission. What changes is that it is now COUNTED and SAID.
+        """
         while not self._stop.is_set():
-            self._flush()
+            self._safe_flush()
             self._stop.wait(_FLUSH_S)
-        self._flush()
+        self._safe_flush()
+
+    def _safe_flush(self) -> None:
+        try:
+            self._flush()
+            self._consec_write_fail = 0
+        except Exception as exc:                  # noqa: BLE001 -- see _drain
+            self.write_errors += 1
+            self._consec_write_fail = getattr(self, '_consec_write_fail', 0) + 1
+            self.last_write_error = f'{type(exc).__name__}: {exc}'
+            # First, then rarely: a full disk fails every flush, and at 1/_FLUSH_S
+            # that would bury the line it is trying to be found in.
+            if self._log is not None and (self._consec_write_fail == 1
+                                          or self._consec_write_fail % 60 == 0):
+                self._log.error(
+                    f'[REC  ] !! tlog write FAILED ({self.write_errors} total): '
+                    f'{self.last_write_error}. Recording is DEGRADED -- the '
+                    f'session log will be incomplete. Check free space on '
+                    f'{self.path}.')
 
 
 def run_dir() -> Path:
