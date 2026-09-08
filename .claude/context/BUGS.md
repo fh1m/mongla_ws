@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 14 of 29 fixed (2026-09-08).**
+> **STATUS: 15 of 31 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -965,6 +965,92 @@ evidence for "B18 is ArduSub-only" was
 at 10 lines, hiding all **10** `motion_vision.py` call sites. A truncated view
 presented as a complete one: the register's own recurring defect class, applied to
 the method used to maintain the register.
+
+### B31 — the vision arrival brake delivers 73 % of its command on srot ⚠ TUNING, NOT A CRASH
+
+**MEASURED ON THE BOARD 2026-09-08** (live, disarmed, read-only), not computed
+from defaults:
+
+| param | live value |
+|---|---|
+| `JS_GAIN_DEFAULT` | **1.0** (the manager's startup write persisted) |
+| `PILOT_EXPO` | **0.30** |
+| `PILOT_SPEED` | 1.0 |
+| `FRAME_REVERSE` | **1.0** (set on our hull, as CLAUDE.md says) |
+| `MOVE_BRAKE_GAIN` | 0.55 |
+
+Hengla shapes every pilot axis before the mixer
+(`task_control_loop.cpp:158-165`) and scales it at ingestion
+(`mav_commands.cpp:716-719`):
+
+```c
+fwd = ((1 - pe) * f + pe * f^3) * ps;        // computeDemands
+sp_forward = (x / 1000.0f) * gain;           // onManualControl
+```
+
+so with the live values above:
+
+| host commands | board applies | ratio |
+|---|---|---|
+| 30 % | **21.81 %** | ×0.727 |
+| 10 % | 7.03 % | ×0.703 |
+| 5 % | 3.50 % | ×0.701 |
+
+**Consequence.** `VISION_BRAKE_GAIN` and `VISION_BRAKE_CAP_PCT` were tuned on the
+ArduSub RC path. The same nominal brake on srot bleeds roughly **27 % less
+momentum**, and the deficit is worst exactly where it matters — the small-signal
+end, where the cubic term contributes almost nothing and the ratio floors at
+`1 - pe` = 0.70. So a standoff tuned on the pixhawk path will overshoot on srot,
+and re-tuning is a pool measurement, not an arithmetic correction.
+
+Not filed as a defect in either stack: the shaping is deliberate on the board
+(precise small-stick control) and the host is right not to pre-compensate blindly.
+Recorded because "the brake works on srot" (B30) and "the brake brakes as hard as
+it does on ArduSub" are different claims, and only the first is now true.
+
+**Verified while measuring, so it is not re-derived:** `FRAME_REVERSE` negates all
+six axes uniformly, once, immediately before the mixer
+(`task_control_loop.cpp:897-900`), and the host only *reports* it — never applies
+it. There is no double negation, and the brake's direction relative to the drive
+it opposes is preserved.
+
+### B32 — the srot vision test suite faked the component that was broken  ✅ FIXED 2026-09-08
+
+Recorded separately from B30 because it is the reason B30 survived a round of
+review, and the same mistake is available in every backend test we have.
+
+`test_srot_vision_actuation.py` was written to prove the vision loops actuate
+correctly on srot. Its `_FakeSrot` is scrupulous — it deliberately omits
+`send_rc_override`, so a loop that reaches for one raises, which its own docstring
+calls "the honest outcome". Then every test passes **`writers=_FakeWriters()`**.
+
+`make_writers` is where B30 lived. The suite stubbed out the component under
+suspicion, so it could not observe it. `_FakeWriters`'s docstring even says *"only
+the arrival brake (`_brake_axis`) writes through `writers.forward`/`.lateral`"* —
+the single real path was identified and then replaced with a double.
+
+**Fixed** by adding cases that run `align_loop` / `move_loop` with the **real**
+`SrotFC` (on a fake link) and the **real** `make_writers`. Nothing between the verb
+and the wire is doubled.
+
+⚠ **My first version of those tests did not bite** — 21 passed with B30
+re-injected — because `_brake_axis` self-gates below `VISION_BRAKE_MIN_PCT` and a
+static off-centre target never converges, so the brake was never reached. The
+fixed version drives a measured approach profile (hard off-centre for 8 frames to
+build the EMA past the 6 % floor, then a snap to centre) **and asserts it reached
+the writer**, so if a gain or deadband change stops the brake firing the test
+fails as "this no longer covers B30" instead of passing quietly. Verified: 2 fail
+with the srot branch removed.
+
+**Two guards now cover the whole class**, because finding B30 by accident is not a
+strategy:
+- `tools/fc_surface_audit.py` — finds every attribute LOADED off an fc-like object
+  anywhere (by parameter, by `self.<attr>`, by local alias, through closures), and
+  diffs it against each backend's real `dir()`. It is what would have printed
+  `send_rc_override` in `motion_writers` on day one.
+- `test_fc_surface_frozen.py` — freezes the resulting set of Pixhawk-only names
+  with a written reason each. A new one fails the suite at the moment it is
+  introduced (verified by injection) rather than in the water.
 
 ## 8. Provenance
 

@@ -309,3 +309,169 @@ def test_vision_align_SETS_the_mode_when_the_board_will_take_it():
         h.vision_align(camera='forward', target_class='gate', axes='lat,yaw')
     assert fc.set_calls == ['STABILIZE']
     assert fc.get_mode() == 'STABILIZE'
+
+
+# =========================================================================== #
+#  B30 -- THE LOOPS, END TO END, THROUGH THE **REAL** WRITERS                  #
+# =========================================================================== #
+# ⛔ WHY THIS BLOCK EXISTS, AND WHY THE TESTS ABOVE DID NOT CATCH B30.
+#
+# Everything above passes `writers=_FakeWriters()`. `_FakeSrot` is correctly
+# strict -- it deliberately lacks `send_rc_override` -- but the WRITERS were
+# doubled, and `make_writers` is exactly where the bug lived: it built every
+# Writers around `send_rc_override` / `send_rc_translation`, neither of which
+# SrotFC implements. The suite faked the component under suspicion, so it could
+# not observe it.
+#
+# `_FakeWriters`'s own docstring says "only the arrival brake (`_brake_axis`)
+# writes through `writers.forward`/`.lateral`" -- the single real path was known
+# and stubbed anyway.
+#
+# These tests therefore use the REAL `SrotFC` (on a fake MAVLink master) and the
+# REAL `make_writers`. Nothing between the verb and the wire is doubled, so a
+# method the backend lacks raises here exactly as it would on the vehicle.
+
+import pytest
+
+from duburi_control.fc.srot_fc import SrotFC
+from duburi_control.motion_writers import make_writers
+
+
+class _FakeMasterMav:
+    def __init__(self, sent):
+        self._sent = sent
+
+    def manual_control_send(self, target, x, y, z, r, buttons):
+        self._sent.append(('manual', x, y, z, r))
+
+    def heartbeat_send(self, *a, **kw):
+        self._sent.append(('heartbeat',))
+
+    def command_long_send(self, *a, **kw):
+        self._sent.append(('command_long',))
+
+
+class _FakeMaster:
+    def __init__(self, sent):
+        self.messages = {}
+        self.mav = _FakeMasterMav(sent)
+
+
+def _real_srot(sent):
+    """The REAL SrotFC -- its true method surface, on a fake link."""
+    return SrotFC(_FakeMaster(sent))
+
+
+def _run_align_real_writers(**kw):
+    """align_loop with a real SrotFC and real writers. Nothing doubled."""
+    sent = []
+    fc = _real_srot(sent)
+    defaults = dict(
+        pixhawk=fc, vision_state=_FakeVision(_sample(ex=0.6, ey=0.0)),
+        target_class='gate', axes={'yaw', 'lat'}, offsets={}, err_px=40.0,
+        duration=0.3, gain=30.0, align_stable_frames=3, lost_grace_s=0.1,
+        writers=make_writers(fc), log=_Log(), abort_fn=None)
+    defaults.update(kw)
+    align_loop(**defaults)
+    return fc, sent
+
+
+class _SpyWriters:
+    """The REAL srot writers, wrapped to record that they were actually touched.
+
+    Recording is the point. The brake is self-gating (`_brake_axis` returns early
+    below VISION_BRAKE_MIN_PCT), so a loop can call it and never reach the writer
+    -- which is how a first draft of these tests passed with B30 re-injected. A
+    test that cannot tell "the path was clean" from "the path was never taken"
+    is not a test, so every case below asserts it reached the writer.
+    """
+    def __init__(self, real):
+        self._real = real
+        self.forwards, self.laterals, self.neutrals = [], [], 0
+
+    def forward(self, pwm):
+        self.forwards.append(pwm); self._real.forward(pwm)
+
+    def lateral(self, pwm):
+        self.laterals.append(pwm); self._real.lateral(pwm)
+
+    def neutral(self):
+        self.neutrals += 1; self._real.neutral()
+
+    def depth_keepalive(self):
+        self._real.depth_keepalive()
+
+    @property
+    def touched(self):
+        return bool(self.forwards or self.laterals)
+
+
+# An approach that provably REACHES the arrival brake: hard off-centre long
+# enough to build the lateral EMA past VISION_BRAKE_MIN_PCT, then snap to centre
+# so the loop declares arrival while that momentum is still on the books. This is
+# the fast-approach case that failed on the vehicle; a gentle convergence exits
+# with ~0 EMA and is deliberately NOT kicked.
+_APPROACH = [_sample(ex=0.95)] * 8 + [_sample(ex=0.0)] * 12
+
+
+def test_align_reaches_the_arrival_brake_on_srot_through_REAL_writers():
+    """The B30 regression. Verified to fail with the srot writers branch removed."""
+    sent = []
+    fc = _real_srot(sent)
+    spy = _SpyWriters(make_writers(fc))
+    try:
+        align_loop(pixhawk=fc, vision_state=_FakeVision(list(_APPROACH)),
+                   target_class='gate', axes={'lat'}, offsets={}, err_px=40.0,
+                   duration=2.0, gain=100.0, align_stable_frames=3,
+                   lost_grace_s=0.5, writers=spy, log=_Log(), abort_fn=None)
+    except AttributeError as exc:
+        pytest.fail(f'align_loop reached a method SrotFC lacks (B30): {exc}')
+
+    # PRECONDITION, asserted rather than assumed: if the brake stopped firing
+    # (a gain, EMA-alpha or deadband change), this test silently stops covering
+    # B30. Fail loudly and re-tune _APPROACH instead.
+    assert spy.touched, (
+        'the arrival brake never reached the writer, so this test did NOT '
+        'exercise the B30 path -- retune _APPROACH above VISION_BRAKE_MIN_PCT')
+    assert sent, 'no wire traffic'
+    assert all(s[0] in ('manual', 'heartbeat', 'command_long') for s in sent)
+
+
+def test_the_brake_kick_leaves_as_MANUAL_CONTROL_not_an_RC_frame():
+    """Reaching the wire is not enough -- it must be the right message."""
+    sent = []
+    fc = _real_srot(sent)
+    spy = _SpyWriters(make_writers(fc))
+    align_loop(pixhawk=fc, vision_state=_FakeVision(list(_APPROACH)),
+               target_class='gate', axes={'lat'}, offsets={}, err_px=40.0,
+               duration=2.0, gain=100.0, align_stable_frames=3,
+               lost_grace_s=0.5, writers=spy, log=_Log(), abort_fn=None)
+    assert spy.touched, 'brake never fired; retune _APPROACH'
+    assert {s[0] for s in sent} <= {'manual', 'heartbeat', 'command_long'},         'srot must never emit an RC_CHANNELS_OVERRIDE frame'
+
+
+def test_move_runs_end_to_end_on_srot_through_real_writers():
+    sent = []
+    fc = _real_srot(sent)
+    try:
+        move_loop(pixhawk=fc, vision_state=_FakeVision(_sample(ex=0.0, h_frac=0.2)),
+                  target_class='gate', fwd_fill=60.0, mode='height',
+                  err_px=40.0, duration=0.3, gain=30.0, lost_grace_s=0.1,
+                  writers=make_writers(fc), log=_Log(), abort_fn=None)
+    except AttributeError as exc:
+        pytest.fail(f'move_loop reached a method SrotFC lacks (B30): {exc}')
+    assert sent
+
+
+def test_no_test_in_this_file_may_fake_the_writers_for_srot():
+    """A guard on the GUARD: faking make_writers is what hid B30 for a whole round.
+
+    Not a ban on `_FakeWriters` -- it is fine for the pixhawk-path tests above.
+    This asserts only that at least one srot path exercises the real builder, so
+    the backend-specific branch can never again be entirely stubbed out.
+    """
+    import inspect
+    src = inspect.getsource(sys.modules[__name__])
+    assert 'make_writers(fc)' in src, \
+        'no srot test exercises the real make_writers; that is precisely the ' \
+        'hole B30 went through'
