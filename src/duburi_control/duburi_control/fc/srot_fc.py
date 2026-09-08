@@ -99,6 +99,12 @@ def _finite(*vals) -> bool:
     return all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals)
 
 
+# A progressing move may refresh its silence window this many times over before
+# the absolute ceiling stops it. Bounds the worst case at a number an operator can
+# predict, without punishing a board that is merely slower than predicted.
+_STALL_HARD_MULT = 4.0
+
+
 def _ack_budget_s(verb: str, p1: float, p2: float, p5: float) -> float:
     """How long to wait for a terminal ACK before declaring a stall.
 
@@ -838,9 +844,32 @@ class SrotFC(FlightController):
                                     _ack_budget_s(verb, p1, p2, p5))
 
     def _relay_move_ack(self, verb, on_progress, abort_fn, budget) -> MoveResult:
-        deadline = time.monotonic() + budget
+        """Wait for the terminal ACK. A STALL IS SILENCE, not slowness (B39).
+
+        The MAVLink command protocol is explicit about this: *"The GCS should have
+        a much increased timeout after receiving an ACK with
+        MAV_RESULT_IN_PROGRESS"* (https://mavlink.io/en/services/command.html).
+        This used to arm ONE deadline before the loop and never extend it, so a
+        move that was demonstrably alive -- reporting rising progress every tick --
+        was declared stalled and BRAKED the moment it exceeded 2x its predicted
+        time. Braking a healthy manoeuvre mid-leg is worse than waiting: the leg is
+        lost and the mission carries on from somewhere unplanned.
+
+        Now `deadline` is a SILENCE window, refreshed by genuine progress, under an
+        absolute ceiling so a board that reports progress for ever still terminates.
+
+        ⛔ REFRESH ONLY ON *NEW* PROGRESS. `_cache()` returns the same COMMAND_ACK
+        object every poll until a new one lands, so refreshing on every sighting
+        would let ONE stale IN_PROGRESS hold the deadline open indefinitely --
+        turning the backstop into a hang. That is why the reset is inside the
+        `prog != last_prog` branch, and why the branch no longer depends on
+        `on_progress` being supplied.
+        """
+        started = time.monotonic()
+        deadline = started + budget
+        hard_deadline = started + budget * _STALL_HARD_MULT
         last_prog = -1.0
-        while time.monotonic() < deadline:
+        while time.monotonic() < min(deadline, hard_deadline):
             if abort_fn is not None and abort_fn():
                 self.stop_motion()       # real brake, then STOP -> board CANCELs the seq
                 return MoveResult(ABORTED, f'{verb}: aborted (braked to a stop)')
@@ -852,14 +881,30 @@ class SrotFC(FlightController):
                         on_progress(1.0)
                     return MoveResult(
                         code, self._terminal_reason(verb, code, ack.result))
-                if ack.result == sp.ACK_IN_PROGRESS and on_progress is not None:
+                if ack.result == sp.ACK_IN_PROGRESS:
                     prog = float(getattr(ack, 'progress', 0)) / 100.0
                     if prog != last_prog:
-                        on_progress(prog)
+                        # Genuine forward progress: the board is alive and working.
+                        # Refresh the silence window (capped by hard_deadline).
+                        deadline = time.monotonic() + budget
                         last_prog = prog
+                        if on_progress is not None:
+                            on_progress(prog)
             time.sleep(_POLL_S)
         # No terminal ACK inside the budget -> stall. Brake to be safe.
         self.stop_motion()
+        # WARN HERE, not only in the returned string. A stall is the commonest real
+        # failure on this link and it used to be reported ONLY as a MoveResult --
+        # visible only if whoever received it chose to surface it, and the DSL
+        # logged it at INFO alongside every success. An operator scrolling a pool
+        # log had nothing to catch the eye at the exact moment the vehicle stopped
+        # responding.
+        self._log_warn(
+            f'[SROT ] !! STALL: {verb} got no terminal ACK in {budget:.0f}s. The '
+            f'board accepted the command and never reported a result -- the hull '
+            f'has been braked. Two causes look IDENTICAL from here: a dead link, '
+            f'and a board refusing every AUTO move because the Bar30 is unhealthy. '
+            f'`ros2 run duburi_manager connect` tells them apart.')
         return MoveResult(TIMEOUT, f'{verb}: no terminal ACK within {budget:.0f}s (stall) -- the board took the '
                 f'command but never reported a terminal result. Check the link is '
                 f'alive (`ros2 run duburi_manager connect`) and that the board is '
