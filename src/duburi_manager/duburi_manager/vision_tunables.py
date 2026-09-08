@@ -76,8 +76,19 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # tracker's coasted (Kalman-predicted) box of the LOCKED target id for up to
     # coast_s after the real detection drops, at decaying authority, so a brief
     # occlusion doesn't lose a torpedo-hole lock or drift the hull off a pipe.
-    # MUST be < lost_grace_s and < the tracker buffer in wall-time. Opt-in,
-    # pool-validated before enabling -- see precision-alignment.md / BUGS.md.
+    # MUST be < lost_grace_s and < the tracker buffer in wall-time.
+    #
+    # B45: 0.8 is what SHIPS and what the hull has been flying. The operator
+    # states it was run in water; no measurement of it is recorded in this repo,
+    # so it is operator-confirmed, not a logged result. It used to be
+    # described everywhere as `0.0`/OFF/opt-in -- the spec default in COMMANDS,
+    # the register's D10 entry, CLAUDE.md, command-reference, client-and-dsl-api
+    # and precision-alignment all said so, and so did the comment that used to
+    # sit here. Since a runtime default WINS over the spec default in
+    # `fields_for`, the value that actually reached the loop was 0.8 and every
+    # one of those readers was wrong about what the hull does. The docs and the
+    # spec default now say 0.8, and the two tables are pinned together by
+    # test_vision_tunables_mirror_the_spec.py so they cannot drift again.
     'vision.coast_s':              0.8,
     # lock_s: consult the LADDER (`lock_node`: follower + XFeat anchor) as the
     # last rung before declaring loss. 0 = OFF (default) and off is exactly the

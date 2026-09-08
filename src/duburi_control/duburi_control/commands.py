@@ -309,7 +309,7 @@ COMMANDS = {
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0,
                      'lock_target': False, 'ctrl_conf': 0.0,
-                     'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.0,
+                     'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.8,
                      'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0,
                      'settle_px': 0.0, 'depth_step': 0.0,
                      'fire_pass_enabled': False, 'hold_heading': False,
@@ -343,7 +343,7 @@ COMMANDS = {
                      'brake_off': False, 'brake_gain': 0.0,
                      'hold_through_loss': False,
                      'kp_forward': 200.0, 'kp_lat': 60.0, 'lost_grace_s': 1.0,
-                     'range_gain_floor': 1.0, 'coast_s': 0.0},
+                     'range_gain_floor': 1.0, 'coast_s': 0.8},
     },
     'fire': {
         'help':     'Activate payload BOARD channel N (1..16) -- the same n as '
