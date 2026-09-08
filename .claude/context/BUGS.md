@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 13 of 29 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
+> **STATUS: 14 of 29 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
 > the SROT-path batch — plus B25/B26 found while fixing them. Each landed with a
 > test verified to fail without the fix. The remaining open items are listed
 > below at their original severity; the ArduSub-path ones (B06, B07, B08, B12,
@@ -435,7 +435,7 @@ a comment naming the crash it prevents* (`"cannot join thread before it is
 started"`, raised on every srot shutdown). Same codebase, same hazard, one
 guarded and one not.
 
-### B18 — `percent_to_pwm` truncates asymmetrically about neutral
+### B18 — `percent_to_pwm` truncates asymmetrically about neutral  ✅ FIXED 2026-09-08
 **`duburi_control/pixhawk.py`** — `int()` truncates toward zero, so `+0.1% →
 1500` and `−0.1% → 1499`. Endpoints and clamping are otherwise correct
 (verified). One LSB of dead-band bias on the negative side of every axis — below
@@ -453,6 +453,10 @@ so the one-LSB negative-side bias applies on the vehicle's live vision axes, not
 only on the preserved ArduSub path. Severity is unchanged (still below thruster
 resolution — and see B30 for what the *same* truncated grep was hiding, which was
 not benign). Classify with `tools/srot_reachability.py`, never by grep.
+
+**FIXED** once it was known to be on a live axis: `int()` -> `round()`, which is
+symmetric about 1500 (banker's rounding about an even number: 1499.5 and 1500.5
+both give 1500). Endpoints and the clamp are pinned unchanged by test.
 
 ### B19 — `CompositeBnoDvlSource.close()` leaks the second source
 **`composite_bno_dvl.py`** — `self._bno.close()` then `self._dvl.close()`, unsequenced.

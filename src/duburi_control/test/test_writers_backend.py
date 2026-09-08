@@ -107,3 +107,28 @@ def test_is_srot_has_exactly_one_definition():
     assert motion_vision._is_srot is motion_writers.is_srot
     assert is_srot(_srot_fc()) is True
     assert is_srot(SimpleNamespace(name='pixhawk')) is False
+
+
+# --------------------------------------------------------------------------- #
+#  B18 -- the rounding rule must not differ by sign                             #
+# --------------------------------------------------------------------------- #
+# Reachable on srot via vision_align -> align_loop -> percent_to_pwm, which is
+# why this stopped being a footnote. `int()` truncates toward zero: +0.1% gave
+# 1500 and -0.1% gave 1499.
+
+def test_percent_to_pwm_is_symmetric_about_neutral():
+    from duburi_control.pixhawk import Pixhawk
+    p2p = Pixhawk.percent_to_pwm
+    assert p2p(0) == 1500
+    for pct in (0.1, 0.3, 1.0, 7.5, 12.5, 33.3, 99.9, 100.0):
+        hi, lo = p2p(pct), p2p(-pct)
+        assert hi - 1500 == 1500 - lo, (
+            f'{pct:+}% -> {hi} but {-pct:+}% -> {lo}: rounding differs by sign')
+
+
+def test_percent_to_pwm_endpoints_and_clamp_are_unchanged():
+    """The fix must not move the band -- only the rounding."""
+    from duburi_control.pixhawk import Pixhawk
+    p2p = Pixhawk.percent_to_pwm
+    assert (p2p(100), p2p(-100)) == (1900, 1100)
+    assert (p2p(500), p2p(-500)) == (1900, 1100), 'clamp lost'

@@ -761,8 +761,23 @@ class Pixhawk:
 
     @staticmethod
     def percent_to_pwm(percent):
-        """Convert -100..100 percent to 1100..1900 us PWM. 0 -> 1500."""
-        return max(1100, min(1900, int(1500 + (percent / 100.0) * 400)))
+        """Convert -100..100 percent to 1100..1900 us PWM. 0 -> 1500.
+
+        `round`, NOT `int` (B18). `int()` truncates toward zero, so the rounding
+        rule differed by sign: +0.1% -> 1500 but -0.1% -> 1499, one LSB of
+        dead-band bias on the negative side of every axis.
+
+        It is one microsecond, below thruster resolution -- recorded as LOW and
+        left alone while it was believed to be ArduSub-only. It is NOT: the srot
+        vision path reaches it (`vision_align -> align_loop -> percent_to_pwm`),
+        which the reachability walk found after a truncated grep had said
+        otherwise. A rounding rule that differs by sign on a live axis is worth
+        the one-line fix rather than the footnote.
+
+        `round` is banker's rounding, which is symmetric about 1500 (an even
+        number): 1499.5 and 1500.5 both give 1500, 1498.5 and 1501.5 give 1498
+        and 1502. Symmetry about neutral is the property being fixed."""
+        return max(1100, min(1900, round(1500 + (percent / 100.0) * 400)))
 
     @staticmethod
     def heading_error(target, current):
