@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 39 of 46 fixed (2026-09-08).**
+> **STATUS: 40 of 47 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1957,6 +1957,61 @@ failed; restored → 7 passed.
 > `auv_manager_node` returns early with the MAVLink payload before reaching it
 > (`_wait_and_reconnect`'s unguarded `auto_detect_port()` is therefore not
 > reachable on this hull — it stays a latent hazard on the pixhawk branch only).
+
+---
+
+### B48 — an explicit device path bypassed every safeguard the auto-detect had  ✅ FIXED 2026-09-08
+
+B47 fixed the *route* by which the preflight came to open the flight controller.
+This is the **class** behind it, found by finishing the sweep that produced it:
+enumerate every serial/MAVLink open in the tree and ask which are guarded.
+
+```
+duburi_sensors/.../sensors_node.py     :55    guard=0
+duburi_sensors/.../sources/bno085.py   :142   guard=0   <- operator path
+duburi_sensors/.../sources/_discovery.py:67   guard=0   <- 303a:1001 only, cannot reach the board
+duburi_manager/.../srot_recorder.py    :26    guard=0   <- a DOCSTRING, not an open
+duburi_manager/.../bringup_check.py    :321   guard=0   <- udpin:, not a device
+duburi_manager/.../bringup_check.py    :982   guard=2
+duburi_manager/.../auv_manager_node.py :438   guard=1
+duburi_manager/.../srot_connect.py     :724   guard=1
+duburi_control/.../payload.py          :200   guard=0   <- operator path
+```
+
+Every VID/PID safeguard the codebase has protects only the **auto-detect**
+path. An explicit path skips all of it:
+
+```
+yaw_source:=bno085 -p bno085_port:=/dev/ttyUSB0
+```
+
+On this hull `/dev/ttyUSB0` is the SROT board, and opening it reboots it — under
+a running mission if the manager is up, with the board disarming and
+reinitialising and **nothing in the graph saying why**. `dtr=False`/`rts=False`
+prevent the esptool reset circuit; they do not prevent the reboot an open itself
+causes. One stale `sensors.yaml` line is enough.
+
+`PortGuard` already existed, and already carried the measurement in its own
+docstring. It simply was not on these two paths. Both now claim before opening
+and release on close; the import-failure path is a silent no-op rather than a
+refusal to start, and `is_serial` matches `^/dev/` so **the sim's PTY under
+`/tmp` is untouched** (checked, not assumed — `PortGuard(pty).acquire()` is
+`False`).
+
+**The test asserts ORDER, not presence.** A claim taken *after* the port is open
+is not a claim: the reboot has already happened. A test that greps for the word
+`PortGuard` passes on that arrangement — which is exactly the mistake B42 made,
+matching a comment's text position instead of the call order. Verified by
+injection: moving `acquire()` to the line after `open()` — leaving every string a
+grep would look for still present — fails
+`test_the_bno_claims_the_port_before_opening_it`; removing the release fails
+`test_both_release_the_claim_when_they_close`; restored → 5 passed. The
+"two openers, one device" property is exercised through the real `PortGuard`.
+
+**Left unguarded, deliberately:** `sensors_node`'s MAVLink open defaults to
+`udpin:` (not a device), and its module docstring already warns about pointing
+it at a live link; `_discovery` filters on `303a:1001` and cannot enumerate a
+CH340 — both are verified negatives, not oversights.
 
 ## 8. Provenance
 
