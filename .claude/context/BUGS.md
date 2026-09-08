@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 34 of 41 fixed (2026-09-08).**
+> **STATUS: 35 of 42 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -207,7 +207,7 @@ than *"we could not tell"*, so integrated distance under-reports silently, with
 no count of degenerate frames — while the sibling `HeightEstimator.add`
 immediately above takes the correct approach (`self._n_gated += 1; return None`).
 
-### B06 — a mid-command heading-lock timeout leaves Ch4 with no author
+### B06 — a mid-command heading-lock timeout leaves Ch4 with no author  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
 **`duburi_control/duburi.py:1362 _writers()` · `heading_lock` timeout path**
 
 `_writers()` samples `_lock_active()` **once**, at command dispatch, and the
@@ -236,7 +236,7 @@ So it is not "nothing writes Ch4" — the hull keeps yawing at a dead controller
 last command for up to three seconds. The fix must actively write `1500`;
 "releasing" it is exactly what does not work. Still deferred: ArduSub path.
 
-### B07 — `arc()` steers on a fabricated heading reference
+### B07 — `arc()` steers on a fabricated heading reference  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
 **`duburi_control/motion_forward.py:129`**
 
 ```python
@@ -250,7 +250,7 @@ reference. `motion_yaw._lock_to_target` uses the same PID but **does** guard
 with `STALE_HOLD_S`; `arc` has no stale guard. Same `or 0.0` idiom appears in
 `motion_writers.py` (B12), but there it only reaches a log line.
 
-### B08 — `prime_alt_hold` seeds the ramp from ungated telemetry, inverting its own purpose
+### B08 — `prime_alt_hold` seeds the ramp from ungated telemetry, inverting its own purpose  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
 **`duburi_control/motion_depth.py`**
 
 ```python
@@ -312,7 +312,7 @@ believes a green line covers the DVL. Separately, **nothing in the tree calls
 `dvl_is_healthy()` at all** — DVL streaming health is computed and never
 consulted.
 
-### B12 — heading fabricated as due-north in the writers/log path
+### B12 — heading fabricated as due-north in the writers/log path  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
 **`duburi_control/motion_writers.py`**
 
 `locked_heading = read_heading(pixhawk, yaw_source) or 0.0` — same idiom as B07
@@ -1635,6 +1635,29 @@ with `src.index('send_neutral')` — and the explanatory comment above the fix
 mentions `send_neutral` first, so it was comparing a comment against a call. Now
 it parses the AST and compares actual call order. Third time this audit that a
 test of mine measured the wrong quantity.
+
+### B43 — a board reboot aborted the command but left the board misconfigured  ✅ FIXED 2026-09-08
+
+**`auv_manager_node._publish_srot_telemetry`.** `check_for_reboot()` is wired and
+aborts the active command — and its own message says the board is *"disarmed and
+no longer configured"*, while **nothing reconfigured it**. The next verb then ran
+on a board holding its compiled defaults. Both losses are silent:
+
+| lost on reboot | consequence |
+|---|---|
+| `JS_GAIN_DEFAULT` → 0.5 | every `MANUAL_CONTROL` — every vision align, every arrival brake — at **half authority**. The hull just corrects more weakly. |
+| stream rates → defaults | ATTITUDE ~55 Hz → ~11 Hz, so the vision loop's freshness decay bleeds translational authority on a link that looks healthy. |
+
+A reboot is not exotic on this board: opening the serial port reboots it, so any
+second process touching the device causes one — and a brownout on a thruster
+current spike is the in-water version.
+
+`_reapply_srot_config()` re-pushes exactly the two things a reboot loses and that
+we set ourselves, and says plainly what was lost in the meantime. It deliberately
+does **not** re-run `check_behaviour_rev` / `check_yaw_reference`: those answers
+cannot change across a reboot of the same firmware, and their round-trips from a
+2 Hz tick would be link traffic for no information. A failed reconfigure is an
+ERROR naming the loss, not a swallow.
 
 ## 8. Provenance
 

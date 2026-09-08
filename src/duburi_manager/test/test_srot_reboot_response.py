@@ -77,6 +77,15 @@ class _Node:
     def _maybe_print_srot_block(self, tel):
         pass
 
+    def _reapply_srot_config(self):
+        """B43: a reboot must also RE-PUSH the config it cleared.
+
+        Recorded rather than stubbed to a no-op, so the tests below can assert
+        the reconfigure happened -- a double that silently absorbs the call is
+        how B32 hid a real defect.
+        """
+        self.reconfigured = getattr(self, 'reconfigured', 0) + 1
+
 
 def _tick(**kw):
     n = _Node(**kw)
@@ -120,3 +129,28 @@ def test_the_pixhawk_backend_is_left_alone():
     timer -- the tick is gated on the backend for that reason."""
     n = _tick(is_srot=False)
     assert n.fc.checks == 0
+
+
+def test_a_restart_also_reconfigures_the_board():
+    """B43: aborting the running command was only half the job.
+
+    After a reboot the board holds its COMPILED DEFAULTS -- JS_GAIN_DEFAULT back
+    to 0.5 (every MANUAL_CONTROL at half authority) and stream rates back to
+    defaults (ATTITUDE ~55 -> ~11 Hz, so the vision loop's freshness decay bleeds
+    authority). Both silent. The next verb ran on that board.
+    """
+    n = _tick(rebooted=True, command_active=True)
+    assert getattr(n, 'reconfigured', 0) == 1, \
+        'a detected reboot must re-push the config it cleared'
+
+
+def test_reconfigure_happens_even_with_no_command_running():
+    """The misconfiguration outlives the command; it is not conditional on one."""
+    n = _tick(rebooted=True, command_active=False)
+    assert getattr(n, 'reconfigured', 0) == 1
+
+
+def test_no_reboot_means_no_reconfigure():
+    """Re-pushing params every tick would be needless link traffic."""
+    n = _tick(rebooted=False, command_active=True)
+    assert getattr(n, 'reconfigured', 0) == 0
