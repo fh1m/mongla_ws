@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 18 of 35 fixed (2026-09-08).**
+> **STATUS: 19 of 36 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1395,6 +1395,34 @@ saying so.
 reports failure in its return value (`return False, ...` or `MoveResult(...)`) and
 every call site that discards it. 24 reporters, 5 discarded — the other four are
 `disarm`, `stop` and cleanup paths where discarding is correct and now documented.
+
+### B37 — error messages were accurate but not actionable  ✅ FIXED 2026-09-08
+
+Error paths are the least-executed code in the stack, and they run exactly when
+the operator can least afford to decode them. So they were **executed**, not
+read — each failure triggered for real and graded on three questions: does it say
+WHAT failed, WHY, and WHAT TO DO?
+
+Five of eight had no remedy. Two of those matter at the pool:
+
+| path | before | after |
+|---|---|---|
+| non-finite param | `non-finite duration: nan` | *"…a NaN here almost always comes from a VisionResult whose target was never seen — check `saw_target`"* |
+| **move stall** | `no terminal ACK within 8s (stall)` | names `connect` to test the link, **and** warns that an unhealthy-Bar30 `DEPTH_HOLD`/`AUTO` refusal presents identically |
+| unknown mode | `unknown SROT mode 'X'` | lists the valid modes |
+
+The stall one is the important one. It is the commonest real failure, and its two
+causes — a dead link and a board refusing every AUTO move because the Bar30 is
+unhealthy — are **indistinguishable from the host side**. That ambiguity is
+already documented in CLAUDE.md; it now appears where it is needed, in the message
+itself, rather than in a file nobody opens mid-run.
+
+Pinned by tests that assert the **remedy**, not the wording — rephrase freely,
+just do not drop the pointer that makes it useful at 2am.
+
+**Deliberately not "fixed":** `verb 'X' has no SROT_MOVE mapping` stays terse. It
+is a programming error, not an operator one, and the traceback already names the
+caller.
 
 ## 8. Provenance
 
