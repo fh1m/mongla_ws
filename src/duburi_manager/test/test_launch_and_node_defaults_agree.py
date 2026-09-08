@@ -45,11 +45,17 @@ def _node_defaults():
     src = open(_NODE).read()
     raw = dict(re.findall(
         r"declare_parameter\(\s*'([A-Za-z0-9_.]+)'\s*,\s*([^),\n]+)", src))
+    # A default may legitimately be a NAMED CONSTANT rather than a literal --
+    # that is the single-source-of-truth fix B47 made. Resolve those by IMPORTING
+    # the constant, never by re-typing its value here: a second copy of the number
+    # is the very thing this file exists to catch.
+    import importlib
+    cc = importlib.import_module('duburi_manager.connection_config')
     out = {}
     for k, v in raw.items():
         v = v.strip().strip("'\"")
-        if v == 'DEFAULT_MODE':          # connection_config.DEFAULT_MODE
-            v = 'auto'
+        if v.isupper() and hasattr(cc, v):
+            v = str(getattr(cc, v))
         out[k] = v
     return out
 
