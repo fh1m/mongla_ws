@@ -1052,6 +1052,29 @@ strategy:
   with a written reason each. A new one fails the suite at the moment it is
   introduced (verified by injection) rather than in the water.
 
+## 7d. Verified against primary sources (2026-09-08) — cite these, do not re-derive
+
+Every row was checked against the authority named, not against another one of our
+own documents. Where our stack and a published standard disagree, that is stated
+rather than smoothed over.
+
+| Claim | Verdict | Primary source |
+|---|---|---|
+| `MANUAL_CONTROL` x/y/r are ±1000 | ✅ ours matches | [mavlink.io common.html#MANUAL_CONTROL](https://mavlink.io/en/messages/common.html#MANUAL_CONTROL) — "normalized to the range [-1000,1000]", `int16_t`, `INT16_MAX` = invalid |
+| `MANUAL_CONTROL.z` is 0..1000, **500 neutral** | ⚠ **deviates from the spec, deliberately, and the whole fleet deviates together** | spec says `[-1000,1000]` / 0 neutral; ArduSub `joystick.cpp:61-63` (*"Scale 0-1000"*, `throttleBase = 1500-500*scale`) is where the convention comes from; Hengla `mav_commands.cpp:708,718` matches ArduSub; our `srot_protocol.unit_to_mc_z` and Bondor `useGamepad.ts:83` both match. **A spec-literal sender's `z=0` is FULL DESCENT here.** Filed upstream as srot-control-board **PR #16** (docs) |
+| Host→board unit conversion in the B30 fix | ✅ exact | Hengla `mav_commands.cpp:716-719`: `sp_forward=(x/1000)*gain`, `sp_throttle=((z-500)/500)*gain` — the inverse of what we send |
+| `FRAME_REVERSE` negates all six axes uniformly, once, before the mixer; host must NOT re-apply | ✅ confirmed, host only reports it | Hengla `task_control_loop.cpp:897-900` |
+| Pilot authority is **not** unity | ⚠ see B31 | `computeDemands` `task_control_loop.cpp:158-165` + live board params measured 2026-09-08 |
+| `RC_CHANNELS_OVERRIDE` 65535 on Ch1–8 = "ignore this field", not "release" | ✅ (B24) | ArduPilot `GCS_Common.cpp:4213-4218`; `RC_OVERRIDE_TIME` default 3.0 s in `RC_Channels_VarInfo.h:90` |
+| White-noise-acceleration Kalman `Q` discretisation | ✅ (B09) | standard `[[dt⁴/4, dt³/2],[dt³/2, dt²]]·σ_a²` |
+| Flat-port refraction `n = 1.333`, `asin(sin θ/n)` | ✅ (B22) | Snell's law; single definition now in `duburi_vision/optics.py` |
+
+⛔ **The one thing to carry forward from this table:** four independent
+components agreeing with each other is *not* the same as agreeing with the
+standard. On `MANUAL_CONTROL.z` our whole fleet is self-consistent and all four
+depart from the published spec together. That is fine — until something outside
+the fleet joins the link.
+
 ## 8. Provenance
 
 Scratch working notes for this audit ran to 41 numbered findings (`F001`–`F041`)
