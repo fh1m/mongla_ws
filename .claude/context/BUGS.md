@@ -705,7 +705,28 @@ is the Electron/TS app under `bondor/`), **ESC Flasher = `srot-esc-flasher`**.
 |---|---|---|
 | `srot-control-board` | ~13.3k lines first-party C++ (`src/control`, `src/tasks`, `src/comms`, `include/config.h`) | **PR #14 filed** — `wrapPi` non-terminating for a large finite input, 4 sites, with the fix. One suspected mixer defect measured and **withdrawn**. |
 | `srot-ground-station` | 5.5k lines TS/TSX under `bondor/` + 568 lines firmware | **PR #4 filed** — absent telemetry rendered as `0.00 m`; joystick disable sends no neutral; 2 minor. Findings-only, no code. |
-| `srot-esc-flasher` | 2.1k lines C++ (`src/esp32_4way`) | **No findings.** `Check_4Way` bounds verified: max read `buf[261]` against `serial_rx[300]`; the `uint8_t InBuff` underflow that yields 256 bytes is intentional and correct; the RX accumulator has an explicit bounds guard. |
+| `srot-esc-flasher` | 2.1k lines C++ (`src/esp32_4way`), **re-read line by line 2026-09-08** | **PR #3 filed** — `GetESC`'s overload lets the buffer cap be confused with the timeout, and that confusion has already cost one truncation bug in this very file. Fixed with a by-reference template so the compiler supplies the cap. ⚠ The earlier "no findings" was a **shallower read**: it verified the bounds (correctly) and stopped there. |
+
+**What the deeper ESC-flasher read found, and what it cleared.** The trap is that
+`GetESC(RX_Buf, 250)` sits directly under `uint8_t RX_Buf[250]` and reads as
+"cap = 250" when the `250` is the *timeout*; it is correct only because the
+default cap is coincidentally also 250. `4Way.cpp`'s own comment records the
+consequence when the two got out of step — *"the old 250-byte cap silently
+truncated it and corrupted every full-page read."* Two call sites were also
+capped **below** their buffers (`RX_Buf[300]`/`rx[300]` at 250); one of those was
+truncating a raw dump.
+
+Verified CORRECT and recorded so it is not re-audited: the bit-bang UART samples
+at **absolute offsets from the start edge**, so the 52 vs 52.083 µs rounding
+cannot accumulate (0.79 µs over 9.5 bits against ±26 µs of margin), and a write
+is exactly 1 start + 8 data + 1 stop bit-times; `RX_Buf[RX_Size-1]` is safe by the
+`RX_Size >= 9` short-circuit rather than by luck; `process_serial` bounds-checks
+after each write and before the next, so the last write lands at `sizeof-1`; and
+the two CRCs are correctly separated (`0xA001` reflected CRC-16 on the ESC link,
+xmodem on the 4-Way host frame). Two latent items left unfiled because neither is
+reachable today: `MSP_Check` returning `uint8_t` is the only thing keeping
+`serial_comm.cpp`'s `uint8_t b` write-back loop finite, and the MSP branch does
+not check frame completeness the way the 4-Way branch does.
 
 **A correction worth recording.** An earlier pass of this audit reported "zero
 findings touch the siblings". That was a statement about code that had not been
