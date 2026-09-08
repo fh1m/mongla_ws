@@ -117,3 +117,53 @@ def test_the_converters_are_monotonic_across_the_finite_band():
 def test_neutral_maps_to_the_firmware_neutral():
     assert sp.unit_to_mc(0.0) == 0
     assert sp.unit_to_mc_z(0.0) == 500      # fw: `const float z = ...; // 500 = neutral`
+
+
+# --------------------------------------------------------------------------- #
+#  B37 -- an error message must be ACTIONABLE, not merely accurate             #
+# --------------------------------------------------------------------------- #
+# Error paths are the least-executed code in the stack and they run exactly when
+# the operator can least afford to decode them. These were graded by executing
+# each path and asking three questions: does it say WHAT failed, WHY, and WHAT TO
+# DO? Five of eight had no remedy. The two that matter at the pool are the stall
+# (the most common real failure) and NaN (whose source is knowable), so those now
+# name the thing to check.
+#
+# Deliberately narrow: this pins the REMEDY, not the wording. Rephrase freely;
+# just do not drop the pointer that makes the message useful at 2am.
+
+def _reason(fn):
+    return fn()
+
+
+def test_a_non_finite_parameter_names_its_likely_source():
+    """NaN on this stack has one dominant source; say so instead of making them hunt."""
+    import sys
+    sys.path.insert(0, __file__.rsplit('/', 1)[0])
+    from test_srot_fc import _fc
+    r = _fc().move('move_forward', duration=float('nan'), gain=50)
+    assert 'saw_target' in r.reason, (
+        'a NaN parameter almost always comes from a VisionResult that never saw '
+        'its target -- the message must point there')
+
+
+def test_the_stall_message_says_what_to_check():
+    """A stall is the commonest pool failure and used to say only "(stall)"."""
+    import sys
+    sys.path.insert(0, __file__.rsplit('/', 1)[0])
+    from test_srot_fc import _fc
+    r = _fc().move('move_forward', duration=1.0, gain=50)
+    assert 'stall' in r.reason
+    assert 'connect' in r.reason, 'point at the tool that shows whether the link is alive'
+    assert 'Bar30' in r.reason or 'refusing' in r.reason, (
+        'an unhealthy-baro refusal presents identically to a dead link -- say so')
+
+
+def test_an_unknown_mode_lists_the_valid_ones():
+    import sys
+    sys.path.insert(0, __file__.rsplit('/', 1)[0])
+    from test_srot_fc import _fc
+    ok, reason = _fc().set_mode('NOT_A_MODE')
+    assert not ok
+    assert 'STABILIZE' in reason and 'DEPTH_HOLD' in reason, \
+        'listing the valid modes turns a dead end into a next step'

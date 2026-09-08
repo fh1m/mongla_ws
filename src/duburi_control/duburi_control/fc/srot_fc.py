@@ -639,7 +639,8 @@ class SrotFC(FlightController):
         depth sensor -> board falls back to STABILIZE + STATUSTEXT) is reported."""
         target = sp.mode_int(mode)
         if target is None:
-            return False, f"unknown SROT mode '{mode}'"
+            return False, (f"unknown SROT mode '{mode}' -- valid: "
+                       f"{', '.join(sorted(sp.MODE_INTS))}")
         self._command_long(
             mavutil.mavlink.MAV_CMD_DO_SET_MODE,
             p1=float(mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED),
@@ -859,7 +860,11 @@ class SrotFC(FlightController):
             time.sleep(_POLL_S)
         # No terminal ACK inside the budget -> stall. Brake to be safe.
         self.stop_motion()
-        return MoveResult(TIMEOUT, f'{verb}: no terminal ACK within {budget:.0f}s (stall)')
+        return MoveResult(TIMEOUT, f'{verb}: no terminal ACK within {budget:.0f}s (stall) -- the board took the '
+                f'command but never reported a terminal result. Check the link is '
+                f'alive (`ros2 run duburi_manager connect`) and that the board is '
+                f'not stuck in a refusing mode; a DEPTH_HOLD/AUTO refusal from an '
+                f'unhealthy Bar30 looks exactly like this')
 
     def _terminal_reason(self, verb, code, result=None) -> str:
         if code == SUCCEEDED:
@@ -2286,7 +2291,9 @@ def _speed_from_gain(kw) -> float:
     """
     gain = float(kw.get('gain', 0.0) or 0.0)
     if not math.isfinite(gain):
-        raise ValueError(f'non-finite gain: {gain}')
+        raise ValueError(
+            f'non-finite gain: {gain} -- a NaN gain usually means it was computed '
+            f'from a VisionResult that never saw its target (check saw_target)')
     return sp.sanitize_speed(gain / 100.0)
 
 
@@ -2323,7 +2330,10 @@ def _finite_param(name: str, value: float) -> float:
         # Keep the words "non-finite" -- `move()`'s catch-all uses them and
         # test_move_denied_on_nonfinite_param matches on them. This adds the
         # FIELD NAME without changing the contract callers already read.
-        raise ValueError(f'non-finite {name}: {v}')
+        raise ValueError(
+            f'non-finite {name}: {v} -- a NaN here almost always comes from a '
+            f'VisionResult whose target was never seen (x_px/y_px are NaN then; '
+            f'check saw_target before using them)')
     return v
 
 
