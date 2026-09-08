@@ -10,12 +10,33 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 14 of 29 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
-> the SROT-path batch — plus B25/B26 found while fixing them. Each landed with a
-> test verified to fail without the fix. The remaining open items are listed
-> below at their original severity; the ArduSub-path ones (B06, B07, B08, B12,
-> B13, B15, B17) are deliberately deferred, because the vehicle is the SROT
-> board running Hengla and that code is preserved on the `pixhawk` branch.
+> **STATUS: 14 of 29 fixed (2026-09-08).**
+> B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
+> B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
+> while fixing the others. Each landed with a test **verified to fail without the
+> fix**.
+>
+> **No open item is reachable on the live srot flight path.** That claim is
+> checked mechanically by `tools/srot_reachability.py`, which walks CALLS from the
+> real srot entry verbs — **not** by grep and not by which modules are imported.
+> Both of those gave wrong answers in the same pass (B12 false positive, B18 false
+> negative), and chasing the contradiction is what surfaced **B30**, a live
+> default-on `AttributeError` in the vision arrival brake. Re-run that tool before
+> ever writing "not on this path" in here.
+>
+> The remaining open items are ArduSub-path (B06, B07, B08, B12, B13, B15, B17,
+> J01 — preserved on the `pixhawk` branch), DVL (B04, B11, B14, B19, B20 — not
+> fitted), FSM (J02, J03 — never run), or docs-only (B24, whose doc half is done
+> and whose code half is B06).
+>
+> ⚠ **B28 is the one srot-path item still open, and only half of it is ours.** The
+> host guard is fixed and tested; the firmware fix is upstream PR
+> srot-control-board#15, source-verified but **not bench-demonstrated** — the board
+> refuses to arm without the thruster pack.
+>
+> ⚠ **J02 is inert only because J03 is true.** `SurfaceState` swallows the failure
+> of `set_depth(0.0)` and returns `SUCCEED` unconditionally — a failed ascent
+> reported as success. Fix it **before** the FSM is ever switched on for a run.
 
 ## How to read this
 
