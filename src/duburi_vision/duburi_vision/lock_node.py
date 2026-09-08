@@ -306,92 +306,110 @@ class LockNode(Node):
 
     # -- the ladder --------------------------------------------------------- #
     def _loop(self):
+        """The lock ladder. GUARDED (B44 class).
+
+        A bare Thread target running XFeat/LK on live frames. One malformed
+        frame or ONNX hiccup killed it, after which the ladder silently never
+        locked again while every node looked healthy. Faults are counted and
+        reported; the ladder degrades to "not locked", which consumers already
+        handle, instead of vanishing.
+        """
+        faults = 0
         while rclpy.ok():
-            if not self._fresh.wait(0.5):
-                continue
-            self._fresh.clear()
-            with self._lock:
-                gray = self._gray
-                header = self._header
-                det_header = self._det_header
-                det_box, det_conf, det_t = (self._det_box, self._det_conf,
-                                            self._det_t)
-            if gray is None:
-                continue
-            now = time.monotonic()
+            try:
+              if not self._fresh.wait(0.5):
+                  continue
+              self._fresh.clear()
+              with self._lock:
+                  gray = self._gray
+                  header = self._header
+                  det_header = self._det_header
+                  det_box, det_conf, det_t = (self._det_box, self._det_conf,
+                                              self._det_t)
+              if gray is None:
+                  continue
+              now = time.monotonic()
 
-            anchor_ran = False
-            fb = fc = None
-            if self._follower is not None:
-                if det_box is not None:
-                    # Reseed on every accepted detection: this is what keeps
-                    # the follower's drift bounded to a single gap.
-                    self._follower.reset(gray, det_box)
-                elif self._follower.active:
-                    r = self._follower.step(gray)
-                    if r.ok:
-                        fb, fc = r.xyxy, r.confidence
+              anchor_ran = False
+              fb = fc = None
+              if self._follower is not None:
+                  if det_box is not None:
+                      # Reseed on every accepted detection: this is what keeps
+                      # the follower's drift bounded to a single gap.
+                      self._follower.reset(gray, det_box)
+                  elif self._follower.active:
+                      r = self._follower.step(gray)
+                      if r.ok:
+                          fb, fc = r.xyxy, r.confidence
 
-            ab = ac = None
-            if self._anchor is not None:
-                if det_box is not None and not self._anchor.has_reference:
-                    self._anchor.snap(gray, roi=det_box)
-                elif (self._anchor.has_reference
-                      and now >= self._anchor_next):
-                    self._anchor_next = now + self._anchor_period
-                    self._anchor_pose = self._anchor.locate(gray)
-                    anchor_ran = True
-                    # The frame this pose was fitted to. The anchor runs at
-                    # 3 Hz while this loop runs at frame rate, so between
-                    # evaluations the pose below is REUSED -- up to 333 ms old
-                    # -- and publishing it under the current frame's stamp
-                    # would report a third of a second of staleness as ~18 ms.
-                    # That defeats the freshness machinery precisely on the
-                    # rung it exists to protect, and only on that rung, so it
-                    # looks correct whenever a detection is present.
-                    self._anchor_header = header
-                p = self._anchor_pose
-                if p is not None and p.ok and p.corners is not None:
-                    q = np.asarray(p.corners, np.float32)
-                    ab = (float(q[:, 0].min()), float(q[:, 1].min()),
-                          float(q[:, 0].max()), float(q[:, 1].max()))
-                    ac = p.confidence
+              ab = ac = None
+              if self._anchor is not None:
+                  if det_box is not None and not self._anchor.has_reference:
+                      self._anchor.snap(gray, roi=det_box)
+                  elif (self._anchor.has_reference
+                        and now >= self._anchor_next):
+                      self._anchor_next = now + self._anchor_period
+                      self._anchor_pose = self._anchor.locate(gray)
+                      anchor_ran = True
+                      # The frame this pose was fitted to. The anchor runs at
+                      # 3 Hz while this loop runs at frame rate, so between
+                      # evaluations the pose below is REUSED -- up to 333 ms old
+                      # -- and publishing it under the current frame's stamp
+                      # would report a third of a second of staleness as ~18 ms.
+                      # That defeats the freshness machinery precisely on the
+                      # rung it exists to protect, and only on that rung, so it
+                      # looks correct whenever a detection is present.
+                      self._anchor_header = header
+                  p = self._anchor_pose
+                  if p is not None and p.ok and p.corners is not None:
+                      q = np.asarray(p.corners, np.float32)
+                      ab = (float(q[:, 0].min()), float(q[:, 1].min()),
+                            float(q[:, 0].max()), float(q[:, 1].max()))
+                      ac = p.confidence
 
-            st = arbitrate(now=now, last_detection_t=det_t,
-                           detection=det_box, detection_conf=det_conf,
-                           follow=fb, follow_conf=fc or 0.0,
-                           anchor=ab, anchor_conf=ac or 0.0,
-                           full_s=self._full, zero_s=self._zero)
-            self._n_by_rung[st.rung] = self._n_by_rung.get(st.rung, 0) + 1
-            self._publish(st, header_for(st.rung, detection=det_header,
-                                         frame=header,
-                                         anchor=self._anchor_header))
-            # The pose rides the ANCHOR's header: it is derived from that
-            # frame's correspondences, not from whichever frame just arrived.
-            #
-            # Published only when the anchor actually RE-EVALUATED, or when its
-            # ok/not-ok state changed. The loop runs at frame rate and the
-            # anchor at `anchor_hz` (3), so publishing every tick sent ~32
-            # duplicates for every real evaluation -- measured at 96.5 Hz on
-            # the vehicle for a 3 Hz quantity. Each message now corresponds to
-            # one evaluation, which is also what makes its stamp meaningful.
-            if self._anchor is not None:
-                ok_now = bool(self._anchor_pose is not None
-                              and self._anchor_pose.ok)
-                # ...OR on a slow heartbeat. Without one this went SILENT:
-                # with no reference snapped the anchor never re-evaluates, so
-                # `anchor_ran` stays False and the state never changes, and
-                # after the first message nothing was published again. A
-                # consumer then cannot tell "no target" from "lock_node is not
-                # running", and the health board cannot age what it never sees.
-                # Absence of a TARGET is carried by `ok=False`, not by absence
-                # of the message.
-                due = (now - self._pose_pub_t) >= self._anchor_period
-                if anchor_ran or due or ok_now != self._pose_was_ok:
-                    self._pose_was_ok = ok_now
-                    self._pose_pub_t = now
-                    self._publish_pose(self._anchor_pose,
-                                       self._anchor_header or header)
+              st = arbitrate(now=now, last_detection_t=det_t,
+                             detection=det_box, detection_conf=det_conf,
+                             follow=fb, follow_conf=fc or 0.0,
+                             anchor=ab, anchor_conf=ac or 0.0,
+                             full_s=self._full, zero_s=self._zero)
+              self._n_by_rung[st.rung] = self._n_by_rung.get(st.rung, 0) + 1
+              self._publish(st, header_for(st.rung, detection=det_header,
+                                           frame=header,
+                                           anchor=self._anchor_header))
+              # The pose rides the ANCHOR's header: it is derived from that
+              # frame's correspondences, not from whichever frame just arrived.
+              #
+              # Published only when the anchor actually RE-EVALUATED, or when its
+              # ok/not-ok state changed. The loop runs at frame rate and the
+              # anchor at `anchor_hz` (3), so publishing every tick sent ~32
+              # duplicates for every real evaluation -- measured at 96.5 Hz on
+              # the vehicle for a 3 Hz quantity. Each message now corresponds to
+              # one evaluation, which is also what makes its stamp meaningful.
+              if self._anchor is not None:
+                  ok_now = bool(self._anchor_pose is not None
+                                and self._anchor_pose.ok)
+                  # ...OR on a slow heartbeat. Without one this went SILENT:
+                  # with no reference snapped the anchor never re-evaluates, so
+                  # `anchor_ran` stays False and the state never changes, and
+                  # after the first message nothing was published again. A
+                  # consumer then cannot tell "no target" from "lock_node is not
+                  # running", and the health board cannot age what it never sees.
+                  # Absence of a TARGET is carried by `ok=False`, not by absence
+                  # of the message.
+                  due = (now - self._pose_pub_t) >= self._anchor_period
+                  if anchor_ran or due or ok_now != self._pose_was_ok:
+                      self._pose_was_ok = ok_now
+                      self._pose_pub_t = now
+                      self._publish_pose(self._anchor_pose,
+                                         self._anchor_header or header)
+            except Exception as exc:        # noqa: BLE001 -- B44 class
+                faults += 1
+                if faults in (1, 50):
+                    self.get_logger().error(
+                        f'[LOCK ] ladder fault #{faults} (thread kept alive): '
+                        f'{type(exc).__name__}: {exc}. The lock reports NOT LOCKED '
+                        f'while this persists, which consumers already handle.')
+                time.sleep(0.05)
 
     def _publish(self, st, header):
         """`header` is the frame the WINNING RUNG observed, not the newest one.

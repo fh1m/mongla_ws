@@ -196,7 +196,17 @@ class FeedbackPump:
         self._thread.join(timeout=1.0)
 
     def _run(self):
+        """Stream action feedback while a verb runs.
+
+        GUARDED (B44 class). A bare Thread target: an exception here -- most
+        plausibly `publish_feedback()` on a goal that has just been cancelled, or
+        a vision provider raising mid-verb -- used to kill the pump outright. The
+        verb kept running, but the operator's live `err_x_px` convergence view
+        went dead with nothing said. Never fatal, so never allowed to be fatal.
+        """
+        fails = 0
         while not self._stop.is_set():
+          try:
             attitude = self._pixhawk.get_attitude()
             if attitude is not None:
                 if self._yaw_provider is not None:
@@ -216,7 +226,14 @@ class FeedbackPump:
                 feedback.status_line   = (
                     f'YAW:{yaw_str}  DEPTH:{attitude["depth"]:+.2f}m{vis_str}')
                 self._goal_handle.publish_feedback(feedback)
-            self._stop.wait(timeout=0.4)
+            fails = 0
+          except Exception:                    # noqa: BLE001 -- see the docstring
+            fails += 1
+            if fails in (1, 25):               # once, then once more if persistent
+                import traceback
+                print(f'[FBK  ] feedback pump fault #{fails} (verb continues): '
+                      f'{traceback.format_exc(limit=1).strip()}', file=sys.stderr)
+          self._stop.wait(timeout=0.4)
 
 
 def _kill_text(kill) -> str:

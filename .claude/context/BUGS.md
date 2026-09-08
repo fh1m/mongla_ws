@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 35 of 42 fixed (2026-09-08).**
+> **STATUS: 36 of 43 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1658,6 +1658,46 @@ does **not** re-run `check_behaviour_rev` / `check_yaw_reference`: those answers
 cannot change across a reboot of the same firmware, and their round-trips from a
 2 Hz tick would be link traffic for no information. A failed reconfigure is an
 ERROR naming the loss, not a swallow.
+
+### B44 — a full disk killed the tlog writer thread silently  ✅ FIXED 2026-09-08
+
+**`srot_recorder._drain` / `_flush`.** A bare `threading.Thread` target doing real
+disk I/O with no handler. `OSError: [Errno 28] No space left on device` — the
+ordinary end state of a Pi after a few pool sessions — propagated straight out of
+the thread. Recording stopped, nothing logged, and the operator found out when
+they went looking for the tlog **after the run that went wrong**, which is exactly
+the run they needed it for.
+
+Now counted, rate-limited (a full disk fails every flush; at `1/_FLUSH_S` that
+would bury the line it is trying to be found in), and reported as DEGRADED with
+the path to check. A recovered write clears the streak so a transient failure
+cannot permanently mute the next real one.
+
+`_flush()` still swaps the queue out *before* writing, so a failing batch is lost.
+That stays deliberate: the alternative is holding a growing batch against a disk
+that is not coming back, which turns a lost log into a lost mission. The change is
+that the loss is now stated.
+
+⛔ **THIS IS THE THIRD INSTANCE OF ONE SHAPE, AND THE REPETITION IS THE FINDING.**
+B23 (v4l2 pump), B40 (MAVLink reader), B44 (tlog writer): a bare `Thread` target
+whose body does I/O with no exception handler, dying silently and presenting as
+something else. `tools/race_audit.py` was extended to enumerate them — every
+`threading.Thread` target in the tree is now checked for a guarded body, so the
+fourth cannot be found by accident. It immediately found two more on live paths,
+both now guarded:
+
+- **`FeedbackPump._run`** (`auv_manager_node`) — streams `err_x_px` during a
+  verb, the live convergence view CLAUDE.md documents. `publish_feedback()` on a
+  goal that has just been cancelled raises, and the pump died mid-verb: the verb
+  kept running while the operator's view went dead, silently.
+- **`LockNode._loop`** — the XFeat/LK ladder on live frames. One malformed frame
+  or ONNX hiccup killed it, after which the ladder never locked again while every
+  node looked healthy.
+
+Three remain unguarded and are deliberately left: `xfeat_onnx.work` and
+`guide.restart` are off the mission path (anchor branch, calibration tool), and
+`srot_recorder._drain` is a detector false positive — its handler is one call
+down, in `_safe_flush`.
 
 ## 8. Provenance
 

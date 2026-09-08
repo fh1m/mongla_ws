@@ -35,3 +35,47 @@ for p in sorted(hits):
     print(p.replace('src/',''))
     for ln, cls, what, lk, line in sorted(set(hits[p])):
         print(f'   :{ln:5d} {cls:22s} {"lock-in-class" if lk else "NO LOCK IN CLASS"}  {line}')
+
+
+# --------------------------------------------------------------------------- #
+#  B23 / B40 / B44 -- unguarded bare Thread targets                            #
+# --------------------------------------------------------------------------- #
+# Three bugs of one shape: a `threading.Thread(target=...)` whose body does I/O
+# with no exception handler. Each died silently and presented as something else
+# (a dead camera, a dead cable, a missing log). Enumerated here so the fourth is
+# not found by accident.
+
+def thread_targets_without_a_handler():
+    import ast as _ast, pathlib as _pl
+    out = []
+    for f in sorted(_pl.Path('src').rglob('*.py')):
+        p = str(f)
+        if '/test' in p or '__pycache__' in p:
+            continue
+        try:
+            src = f.read_text(encoding='utf-8'); tree = _ast.parse(src)
+        except SyntaxError:
+            continue
+        targets = set()
+        for n in _ast.walk(tree):
+            if isinstance(n, _ast.Call) and 'Thread' in _ast.dump(n.func)[:80]:
+                for kw in n.keywords:
+                    if kw.arg == 'target':
+                        t = kw.value
+                        targets.add(t.attr if isinstance(t, _ast.Attribute)
+                                    else getattr(t, 'id', ''))
+        for fn in _ast.walk(tree):
+            if isinstance(fn, _ast.FunctionDef) and fn.name in targets:
+                guarded = any(isinstance(x, _ast.ExceptHandler) for x in _ast.walk(fn))
+                if not guarded:
+                    out.append((p.replace('src/', ''), fn.lineno, fn.name))
+    return out
+
+
+if __name__ == '__main__':
+    bad = thread_targets_without_a_handler()
+    print(f'\n=== bare Thread targets with NO exception handler: {len(bad)} ===')
+    for p, ln, name in bad:
+        print(f'   {p}:{ln}  {name}()')
+    if not bad:
+        print('   (none -- B23/B40/B44 class is clear)')
