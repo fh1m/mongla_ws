@@ -1572,6 +1572,36 @@ class AUVManagerNode(Node):
         self._publish_state(attitude, battery, mode, armed, yaw_deg)
         self._publish_srot_telemetry()
 
+    def _reapply_srot_config(self) -> None:
+        """Re-push the board configuration that a reboot cleared (B43).
+
+        Deliberately only the two things a reboot silently loses and that we set
+        ourselves. Not a full re-run of `_srot_preflight_reads`: the behaviour-rev
+        and yaw-reference CHECKS are diagnostics whose answers cannot change
+        across a reboot of the same firmware, and re-running their round-trips
+        from a 2 Hz telemetry tick would add link traffic for no information.
+        """
+        try:
+            for msg_id, hz in SROT_MESSAGE_RATES.items():
+                self.pixhawk.set_message_rate(msg_id, hz)
+            gain_ok = self.fc.set_default_gain()
+        except Exception as exc:                     # noqa: BLE001 -- best-effort
+            self.get_logger().error(
+                f'[SROT ] reconfigure after reboot FAILED: {exc!r}. The board is '
+                f'running compiled defaults: MANUAL_CONTROL at half authority and '
+                f'reduced stream rates.')
+            return
+        if gain_ok:
+            self.get_logger().warning(
+                '[SROT ] board restarted -- stream rates and JS_GAIN_DEFAULT '
+                're-applied. Anything commanded between the reboot and now ran at '
+                'half MANUAL_CONTROL authority.')
+        else:
+            self.get_logger().error(
+                '[SROT ] board restarted and JS_GAIN_DEFAULT could NOT be '
+                're-applied -- every MANUAL_CONTROL is at HALF authority until it '
+                'is. Vision alignment and the arrival brake will under-correct.')
+
     def _publish_srot_telemetry(self):
         """Surface the parts of SrotFC.telemetry() that nothing else reads.
 
@@ -1606,6 +1636,22 @@ class AUVManagerNode(Node):
                     '[ACT  ] aborting the active command -- the board restarted '
                     'under it, so it is disarmed and no longer configured')
                 self.duburi.request_abort()
+            # ...and RECONFIGURE it (B43). Aborting the running command was only
+            # half the job: the very next verb ran on a board still holding its
+            # COMPILED DEFAULTS, and both losses are silent.
+            #
+            #   JS_GAIN_DEFAULT reverts to 0.5, so every MANUAL_CONTROL -- i.e.
+            #   every vision align and every brake -- runs at HALF authority. The
+            #   hull just corrects more weakly; nothing reports it.
+            #
+            #   Stream rates revert to the compiled defaults, so ATTITUDE drops
+            #   ~55 Hz -> ~11 Hz. The vision loop's freshness decay then bleeds
+            #   translational authority away on a link that looks fine.
+            #
+            # Neither is visible in any log, and this comment's own predecessor
+            # already said the board was "no longer configured" while nothing
+            # acted on that.
+            self._reapply_srot_config()
 
         try:
             tel = self.fc.telemetry()
