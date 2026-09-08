@@ -2274,24 +2274,70 @@ class SrotFC(FlightController):
 #  Kept module-level + pure so it unit-tests without a live master.      #
 # ---------------------------------------------------------------------- #
 def _speed_from_gain(kw) -> float:
-    """Move.Goal.gain is a 0..100 % thrust cap -> SROT 0..1 speed (clamped to cruise)."""
-    return sp.sanitize_speed(float(kw.get('gain', 0.0) or 0.0) / 100.0)
+    """Move.Goal.gain is a 0..100 % thrust cap -> SROT 0..1 speed (clamped to cruise).
+
+    A NON-FINITE GAIN IS REFUSED, NOT COERCED. `sanitize_speed` maps NaN to 0.0,
+    which is the correct fail-safe for the STREAMING path (`manual()` cannot raise
+    once per 20 Hz tick, and zero means no motion). It is the wrong answer for a
+    ONE-SHOT verb: the board would accept a perfectly valid "move at speed 0",
+    the hull would not move, and the mission would carry on believing it had --
+    absence rendered as a number, which is the defect this register keeps finding.
+    A verb that cannot be executed should say so. (B35)
+    """
+    gain = float(kw.get('gain', 0.0) or 0.0)
+    if not math.isfinite(gain):
+        raise ValueError(f'non-finite gain: {gain}')
+    return sp.sanitize_speed(gain / 100.0)
 
 
 def _depth_to_dive(kw) -> float:
     """duburi set_depth target is NEGATIVE metres (below surface); SROT DIVE p2 is a
-    POSITIVE depth. Refuse a positive target (would be above the surface)."""
+    POSITIVE depth. Refuse a positive target (would be above the surface).
+
+    ⛔ THE NON-FINITE CHECK IS FIRST, AND IT IS NOT DECORATION (B35). `target > 0.0`
+    is False for NaN -- every comparison against NaN is -- so the one guard written
+    to reject a bad depth target used to ACCEPT NaN and emit it as p2. `-inf` got
+    through the same way and became `-(-inf)` = **+inf**: a request to dive to
+    infinite depth. Found by hammering the verb table, not by reading it.
+    """
     target = float(kw.get('target', 0.0) or 0.0)
+    if not math.isfinite(target):
+        raise ValueError(f'non-finite set_depth target: {target}')
     if target > 0.0:
         raise ValueError(f'set_depth target must be <=0 (below surface), got {target}')
     return -target
 
 
+def _finite_param(name: str, value: float) -> float:
+    """A wire parameter, or a ValueError NAMING the field that was not finite.
+
+    ⚠ THIS IS NOT WHAT STOPS NaN REACHING THE WIRE. `move()` already refuses the
+    whole frame via the `_finite(*vals)` predicate above -- and the board refuses
+    it again (fw `mav_commands.cpp:279-292`). Both of those say only
+    "non-finite parameter"; this says WHICH ONE, at the point where the field
+    still has a name. That is the entire value it adds, and B35's entry is
+    written to keep that honest.
+    """
+    v = float(value)
+    if not math.isfinite(v):
+        # Keep the words "non-finite" -- `move()`'s catch-all uses them and
+        # test_move_denied_on_nonfinite_param matches on them. This adds the
+        # FIELD NAME without changing the contract callers already read.
+        raise ValueError(f'non-finite {name}: {v}')
+    return v
+
+
 def _build_params(verb: str, kw: dict):
     """duburi verb + Move.Goal-ish kwargs -> (p1, p2, p3, p4, p5). Raises KeyError
-    for an unmapped verb, ValueError for a bad parameter. This is THE verb table."""
-    dur   = float(kw.get('duration', 0.0) or 0.0)
-    tmo   = float(kw.get('timeout', 0.0) or 0.0)
+    for an unmapped verb, ValueError for a bad parameter. This is THE verb table.
+
+    Every returned tuple is checked finite before it leaves (B35): a NaN reached
+    the wire from `duration`, `target` or `gain`, and NaN has a live source --
+    `VisionResult.x_px` is NaN when the target was never seen."""
+    # Validated at the boundary, so no per-verb branch below can forget it.
+    # `speed` needs no check: sanitize_speed maps NaN to 0.0 and clamps inf.
+    dur   = _finite_param('duration', kw.get('duration', 0.0) or 0.0)
+    tmo   = _finite_param('timeout',  kw.get('timeout', 0.0) or 0.0)
     speed = _speed_from_gain(kw)
     if verb == 'move_forward':
         return (sp.MOVE_FORWARD, dur, speed, 0.0, tmo)
@@ -2311,14 +2357,14 @@ def _build_params(verb: str, kw: dict):
     # heading as a rate would spin the hull. Deferred until a host-side heading->rate
     # arc lands; arc is excluded from MOVE_VERBS so it never routes here on SROT.
     if verb == 'yaw_left':
-        return (sp.MOVE_TURN, -abs(float(kw.get('target', 0.0) or 0.0)), 0.0,
+        return (sp.MOVE_TURN, -abs(_finite_param('target', kw.get('target', 0.0) or 0.0)), 0.0,
                 float(sp.TURN_RELATIVE), tmo)
     if verb == 'yaw_right':
-        return (sp.MOVE_TURN, abs(float(kw.get('target', 0.0) or 0.0)), 0.0,
+        return (sp.MOVE_TURN, abs(_finite_param('target', kw.get('target', 0.0) or 0.0)), 0.0,
                 float(sp.TURN_RELATIVE), tmo)
     if verb == 'turn':
         # duburi 'turn' is an ABSOLUTE heading -> needs MAG_YAW_REF=1 on the board.
-        return (sp.MOVE_TURN, float(kw.get('target', 0.0) or 0.0), 0.0,
+        return (sp.MOVE_TURN, _finite_param('target', kw.get('target', 0.0) or 0.0), 0.0,
                 float(sp.TURN_ABSOLUTE), tmo)
     if verb == 'set_depth':
         return (sp.MOVE_DIVE, _depth_to_dive(kw), 0.0, 0.0, tmo)
