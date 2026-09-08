@@ -72,8 +72,56 @@ class Writers:
     depth_keepalive: Callable[[], None]
 
 
+def is_srot(fc) -> bool:
+    """True when the actuation backend is the srot board rather than ArduSub.
+
+    Defined HERE, in the lower module, so `make_writers` can branch on it.
+    `motion_vision` imports it from here rather than keeping its own copy --
+    a second definition of "which backend am I on" is how a backend split
+    goes wrong in one file and not the other.
+    """
+    return getattr(fc, 'name', '') == 'srot'
+
+
 def make_writers(pixhawk, release_yaw=False):
-    """Build a `Writers` matching the current heading-lock state."""
+    """Build a `Writers` matching the backend and the current heading-lock state.
+
+    ⛔ THE SROT BRANCH IS NOT OPTIONAL (B30). Every Writers built here used to
+    close over `send_rc_override` / `send_rc_translation`, and **SrotFC
+    implements neither**. `writers.neutral` happened to be safe because it maps
+    to `send_neutral`, which SrotFC does have -- so the only paths that bit were
+    `writers.forward` / `writers.lateral`, which on this backend are reached
+    exactly once: `motion_vision._brake_axis`, the vision arrival brake, which is
+    ON BY DEFAULT (`brake=not bool(brake_off)`, `brake_off=False`).
+
+    Reproduced: `AttributeError: 'SrotFC' object has no attribute
+    'send_rc_override'` from a plain `vision_align(lat=0)` on arrival.
+
+    And it is INTERMITTENT, which is worse than always failing: `_brake_axis`
+    returns early when `abs(ema_pct) < VISION_BRAKE_MIN_PCT`, so a gently
+    converged lock never reaches the call and a fast snap-in does. The verb that
+    worked on the bench fails on the approach that actually has momentum.
+
+    The srot writers take the SAME pwm argument -- callers must not care which
+    backend they are on -- and convert back through the inverse of
+    `percent_to_pwm` (-100..100 -> 1100..1900) before handing units to
+    `manual()`. `manual()` writes all four axes in one frame, so a single-axis
+    write zeroes the others; that matches `_srot_drive` and is right for a brake
+    kick, whose caller goes neutral immediately after.
+    """
+    if is_srot(pixhawk):
+        def _pct(pwm):
+            return (float(pwm) - 1500.0) / 4.0        # inverse of percent_to_pwm
+        return Writers(
+            forward=lambda pwm: pixhawk.manual(
+                fwd=_pct(pwm) / 100.0, lat=0.0, up=0.0, yaw=0.0),
+            lateral=lambda pwm: pixhawk.manual(
+                fwd=0.0, lat=_pct(pwm) / 100.0, up=0.0, yaw=0.0),
+            neutral=pixhawk.send_neutral,
+            # The board owns depth in its own loop; there is no Ch3 to release
+            # and no FS_PILOT_INPUT to feed. A zero frame IS the keepalive.
+            depth_keepalive=pixhawk.send_neutral,
+        )
     if release_yaw:
         # Lock active: the lock owns Ch4 (its stream also feeds FS_PILOT). Leave
         # Ch4 released; keepalive overrides Ch5/Ch6 neutral, Ch3 released.
