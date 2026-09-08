@@ -167,8 +167,12 @@ class CameraNode(Node):
         self._min_period = (1.0 / rate) if pinned else 0.0
         self._last_pub = 0.0
 
+        # CUMULATIVE, never reset. Written ONLY by the capture thread; the
+        # health timer keeps its own high-water marks below (B41).
         self._sent    = 0
         self._dropped = 0
+        self._last_sent    = 0
+        self._last_dropped = 0
         self._last_log = time.monotonic()
         self.create_timer(2.0, self._log_health)
 
@@ -559,7 +563,12 @@ class CameraNode(Node):
     def _log_health(self):
         now = time.monotonic()
         elapsed = max(now - self._last_log, 1e-3)
-        hz = self._sent / elapsed
+        # Snapshot the cumulative counters ONCE, then work from the snapshot: two
+        # reads of a live counter can straddle an increment and disagree.
+        tot_sent, tot_dropped = self._sent, self._dropped
+        sent = tot_sent - self._last_sent
+        dropped = tot_dropped - self._last_dropped
+        hz = sent / elapsed
         healthy = self._cam.is_healthy()
         marker = 'OK ' if healthy else 'BAD'
         extra = ''
@@ -571,9 +580,20 @@ class CameraNode(Node):
             extra = f'  pos={cur}/{total} ({pct:.0f}%)  {paused}  {spd:.2f}×'
         self.get_logger().info(
             f"[CAM  ] {marker}  {self._cam_name}  pub={hz:5.1f}Hz  "
-            f"sent={self._sent}  dropped={self._dropped}{extra}")
-        self._sent = 0
-        self._dropped = 0
+            f"sent={sent}  dropped={dropped}{extra}")
+        # ⛔ DELTA, NOT RESET (B41). `_sent`/`_dropped` are incremented by the
+        # CAPTURE THREAD and this runs on a ROS timer thread. Read-then-zero is
+        # two operations: an increment landing between them was silently lost, so
+        # this line under-reported drops -- on the one readout an operator uses to
+        # decide whether the pipeline is healthy.
+        #
+        # Fixed by structure rather than by a lock: the counters are now
+        # CUMULATIVE and have exactly ONE writer (the capture thread), while this
+        # reader keeps its own high-water marks. Single-writer + private reader
+        # state needs no mutual exclusion at all, and costs nothing in the
+        # publish path. (A lock would also have worked; this is smaller, and it
+        # stays correct on a free-threaded build where `+=` is not atomic either.)
+        self._last_sent, self._last_dropped = tot_sent, tot_dropped
         self._last_log = now
 
     def shutdown(self):

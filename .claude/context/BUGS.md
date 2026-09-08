@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 22 of 39 fixed (2026-09-08).**
+> **STATUS: 23 of 40 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1518,6 +1518,84 @@ mitigation there was *incidental*; here there was none at all.
 **Verified by injection:** removing the guard fails the structural test;
 a raising demux callback in a loop of the same shape keeps running and still
 drains real messages; all four reporter states behave.
+
+### B41 — the camera health line under-counted frames (read-then-zero race)  ✅ FIXED 2026-09-08
+
+`CameraNode._sent`/`_dropped` are incremented by the **capture thread**;
+`_log_health` runs on a **ROS timer thread** and did:
+
+```python
+hz = self._sent / elapsed
+...  is_healthy(), format the line, get_logger().info(...)  ...
+self._sent = 0            # everything published in between is LOST
+```
+
+**The window is neither theoretical nor narrow.** Between the read and the reset
+the method probes the camera, builds a string and **logs** — and logging is I/O,
+which releases the GIL. Every frame published during that window vanished from the
+count.
+
+Measured (yield in the window, i.e. what the real logging call is):
+
+| scheme | published | counted | lost |
+|---|---|---|---|
+| read-then-zero | 83,719 | 114 | **99.86 %** |
+| delta | 137,667 | 137,667 | 0 |
+
+That readout is the line an operator uses to decide the pipeline is healthy, so
+under-reporting **drops** is precisely the wrong direction to be wrong in.
+
+**Fixed by structure, not by a lock:** counters are cumulative with exactly ONE
+writer (the capture thread); the reader keeps its own high-water marks. Single
+writer + private reader state needs no mutual exclusion, costs nothing in the
+publish path, and stays correct under PEP 703 where `+=` is not atomic either.
+
+⚠ **My first demonstration of this FAILED — LOST=0 for both schemes** — because it
+had no work inside the window. That made the test unrepresentative of the real
+`_log_health`, which does I/O there. Reported here because "I could not reproduce
+it" was the honest state for one iteration, and the fix would have looked
+unmotivated if I had stopped there.
+
+## 7h. Threading and the GIL — the analysis, with evidence
+
+The stack runs **~20 threads across 8 node processes**. Asked whether any should
+become processes to escape the GIL; the answer is **no**, and the reasons are
+worth recording so it is not re-litigated.
+
+**1. It is already multi-process.** `camera_node`, `detector_node`, `auv_manager`,
+`lock_node` and the rest are separate ROS 2 executables. Process isolation exists
+at the node boundary, which is where the expensive data already stops moving.
+
+**2. The GIL is not the constraint.** Every hot thread is blocked in a C
+extension or on I/O, all of which release it: V4L2 `ioctl`, Hailo/ONNX inference,
+OpenCV, `serial`/socket reads, `time.sleep`. Threads are the *correct* tool for
+that shape.
+
+**3. Converting would cost more than it saves.** A 640×480×3 frame is 921 kB;
+moving it between processes means pickling or shared memory per frame, on a Pi
+already measured as bandwidth-sensitive (`project_capture_publish_split`).
+
+**4. What the GIL genuinely does NOT protect — and where the real bugs are.**
+Per PEP 703, dict/list ops keep per-object locks even free-threaded, so
+`cache[k] = v` is safe. The hazards are **compound** operations: read-modify-write
+and check-then-act. Those were never atomic. `tools/race_audit.py` swept the tree
+for exactly that shape:
+
+- **`V4L2MailboxCamera`** — 8 counters flagged, **all clean**: every one has a
+  single writer (`_pump_loop`), and `_idx` is written only by `read()`. Single
+  writer needs no lock, and adding one to a 200 Hz pump would be cost for nothing.
+- **`CameraNode`** — a genuine race, **B41** above.
+- `Heartbeat`, `SrotRecorder`, `BNO085Source`, `NucleusDVLSource` — all already
+  hold a lock in the class.
+- `SrotFC._named_cache[name] = (value, time)` — written by the reader thread, read
+  by the action thread. A single dict store of an immutable tuple: safe under the
+  GIL **and** under PEP 703's per-object locks.
+
+**5. The one thread-safety rule this stack already gets right**, verified against
+the published warning that *"the mavlink_connection object is not thread safe"*:
+`auv_manager_node` is documented and enforced as **the only thread calling
+`recv_match()`**, and every write goes through `_tx_lock` because pymavlink shares
+one sequence counter.
 
 ## 8. Provenance
 
