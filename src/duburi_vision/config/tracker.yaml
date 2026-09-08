@@ -1,3 +1,27 @@
+# ============================================================================
+#  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
+#
+#  It is written in `--params-file` shape -- `tracker_node: / ros__parameters:`
+#  -- which is exactly what an operator would hand to `ros2 run ... --params-file`
+#  and reasonably expect to take effect. No launch file in this repo loads it.
+#  Editing a value here changes NOTHING, silently: the node comes up on its own
+#  `declare_parameter` default, publishes tracks, and logs no error. The only
+#  symptom is a number that does not move -- the same failure `cameras.yaml`
+#  already suffered once (see test_camera_profiles.py).
+#
+#  The values that actually run are the `declare_parameter` defaults in
+#  `duburi_vision/tracker_node.py`. To change one for real:
+#      ros2 param set /duburi_tracker <name> <value>       (live)
+#      ros2 run duburi_vision tracker_node --ros-args -p <name>:=<value>
+#      ros2 run ... --params-file <this file>              (then it IS loaded)
+#
+#  Values below that DISAGREE with what ships (node value in brackets):
+#      track_buffer 150 [60]      min_hits 3 [1]
+#      kalman_process_noise 0.05 [0.1]
+#      kalman_measurement_noise 2.0 [1.0]
+#  They are kept as the recorded tuning intent, NOT as a description of the
+#  running system. Do not read them as "what the vehicle does".
+# ============================================================================
 tracker_node:
   ros__parameters:
 

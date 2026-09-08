@@ -1,3 +1,15 @@
+# ============================================================================
+#  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
+#
+#  Nothing reads it. The values that run are the `declare_parameter` defaults in
+#  `duburi_vision/distance/distance_estimation_node.py`.
+#
+#  This matters more here than elsewhere: the note below says "the WHOLE scale
+#  rides on camera_focal_px". Calibrating and writing the result HERE changes no
+#  distance the vehicle computes. Set it with
+#  `ros2 param set /duburi_distance camera_focal_px <value>` or a launch arg,
+#  and record the calibration in `.claude/context/measured-bars.md`.
+# ============================================================================
 # duburi_vision -- downward optical-flow distance estimator defaults.
 #
 # DVL-free axis-locked odometry: LK flow on the downward camera, rotation-

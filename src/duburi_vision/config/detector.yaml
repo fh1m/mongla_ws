@@ -1,3 +1,18 @@
+# ============================================================================
+#  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
+#
+#  Nothing reads it; the only reference to its name in the tree is inside an
+#  error message. The values that run are the `declare_parameter` defaults in
+#  `duburi_vision/detector_node.py`, overridden by launch args.
+#
+#  Treat everything below as an operator crib sheet -- which models exist, what
+#  a sane conf is -- not as configuration. Setting `conf` here does nothing;
+#  use `ros2 param set /duburi_detector_<cam> conf 0.45` or the launch arg.
+#
+#  Disagrees with what ships (node value in brackets):
+#      model_path gate_flare_medium_100ep [yolov11n]
+#      conf 0.45 [0.35]        classes gate [person]
+# ============================================================================
 # duburi_vision -- detector defaults
 #
 # Available custom models (drop .pt in src/duburi_vision/models/ -- NO yaml needed):
