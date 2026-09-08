@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 15 of 31 fixed (2026-09-08).**
+> **STATUS: 16 of 32 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -1095,6 +1095,75 @@ components agreeing with each other is *not* the same as agreeing with the
 standard. On `MANUAL_CONTROL.z` our whole fleet is self-consistent and all four
 depart from the published spec together. That is fine — until something outside
 the fleet joins the link.
+
+### B33 — the DSL's own worked example teaches the recovery BACKWARDS  ✅ FIXED 2026-09-08
+
+**`duburi_planner/vision_dsl.py`, `VisionResult`'s docstring.** Found in the
+full-depth planner read.
+
+```python
+elif res.saw_target:            # tried, didn't fully centre
+    if res.x_px < -30: duburi.move_right(1)     # target LEFT  -> goes RIGHT
+    elif res.x_px > 30: duburi.move_left(1)     # target RIGHT -> goes LEFT
+```
+
+Both signs are inverted — against the docstring's **own** field list four lines
+below (*"+x = right"*), against `vision-results.md` §3 (*"`x_px > 0` … strafe
+**right**"*), and against the control law CLAUDE.md §6 states for the verb
+itself (*"+ex → Ch6 > 1500 → strafe RIGHT (no negation)"*).
+
+**Consequence.** A recovery copied as written drives **away** from the target,
+roughly doubling the residual instead of closing it — and it fires exactly when a
+verb has already struggled, so it converts a near-miss into a loss. This is the
+one convention CLAUDE.md singles out as a trap: *"Recovery sign matches `align`
+itself."*
+
+**Why it matters more than an ordinary comment error.** This is not narrative
+prose — it is the worked example on the class a mission author is holding, in the
+place they look first. `vision-results.md` has it right, but nobody reads the
+reference doc while the docstring is under the cursor.
+
+**Blast radius: none yet.** Grepped every mission and every FSM state — no
+`x_px`-driven recovery exists in the tree, so nothing has copied it. It was
+waiting for the first mission that did.
+
+Fixed, and `test_vision_result_sign_convention.py` now pins the docstring's signs
+against `vision-results.md` and against the "+x = right" field definition that
+makes them correct — two copies of a sign convention being exactly how these came
+to disagree. Verified: 2 of 3 fail with the inversion restored.
+
+## 7e. Full-depth read of planner + sensors (2026-09-08)
+
+Added because the earlier pass gave these two a **targeted two-class grep**
+(the B05 `or 0.0` idiom, J02-style swallowed failures) and reported them clean —
+which is the same shape as the ESC flasher's earlier "no findings": a statement
+about code that had not been opened. 4,632 lines read.
+
+**`duburi_sensors` (1,802 lines) — one finding, already on the register.**
+
+| File | Verdict |
+|---|---|
+| `mavlink_ahrs.py` | ✅ The only yaw source usable on srot. Staleness gate delegates to `get_attitude_age()` per the pipeline contract; `SrotFC.get_attitude()` returns `math.degrees(att.yaw) % 360.0`, so the [0,360) contract is honoured across the backend boundary |
+| `base.py` | ✅ contract is explicit about `None` meaning "no fresh sample" |
+| `factory.py` | ✅ clean dispatch; fail-loud on unknown name and on missing required kwargs |
+| `bno085.py` | ✅ **arithmetic verified**: exactly ONE negation at ingestion (`(-yaw) % 360`, ENU +CCW → NED +CW), `offset = (ref − raw) % 360`, `earth = (raw + offset) % 360`. Wrap-safe in both directions; Python's `%` yields [0,360) for a positive modulus. (B04 lives here and is unchanged) |
+| `nucleus_dvl.py` | ✅ integration guarded by `0 < dt < 0.5`, validity bits checked, integrator zeroed on reconnect |
+| `composite_bno_dvl.py` | confirms **B11** (docstring says "BNO **AND** DVL", code returns only BNO) and **B19** (`close()` does call both, but with no `try/finally`, so an exception in the first skips the second) |
+
+One caveat worth stating rather than filing: the DVL integrates in **body frame**
+without rotating by heading, so the sum is only a valid displacement while heading
+is held — which is what `heading_lock` does during `*_dist` moves. Honest in the
+docstring, bounded in practice, and moot on srot where `*_dist` is refused.
+
+**`duburi_planner` core (2,830 lines) — B33 above, nothing else.**
+
+| File | Verdict |
+|---|---|
+| `client.py` | ✅ `_result_deadline` is the P1 fix and is correct: `max(timeout, duration)` + margin, with the quick-verb value a **floor, not a ceiling**. Its `or 0.0` chain is the documented rosidl "0 == unset" convention falling back to the same `COMMANDS` registry the server enforces — not B05's shape |
+| `mission.py` | ✅ `_safe_shutdown` runs on **both** the success and exception paths, each step isolated by `_try_step` so a failed `stop()` cannot prevent `disarm()`; Ctrl-C has its own ordered path (cancel → stop → disarm). **The opposite discipline to J02**, which swallows and still returns `SUCCEED` |
+| `duburi_dsl.py` | ✅ every `except Exception` is annotated with why it is best-effort (detector pause, HUD follow, graph read), and a missing detector **raises loudly** rather than degrading |
+| `vision_dsl.py` | ⛔ **B33**. `NaN` defaults and the `saw_target` guard are otherwise correct |
+| `cli.py`, `model_context.py` | ✅ |
 
 ## 8. Provenance
 

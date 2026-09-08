@@ -82,8 +82,14 @@ class VisionResult:
         if res:                       # ALIGNED
             ...                        # proceed
         elif res.saw_target:          # tried, didn't fully centre
-            if res.x_px < -30: duburi.move_right(1)
-            elif res.x_px > 30: duburi.move_left(1)
+            # CHASE the target, do not flee it. +x = target ended RIGHT of
+            # centre, so the recovery strafes RIGHT -- the same direction the
+            # align was already driving. This example had the two swapped until
+            # 2026-09-08 (B33): copied as written it doubled the error on every
+            # recovery. The signs here must match `vision-results.md` section 3,
+            # and `test_vision_result_sign_convention.py` now pins them together.
+            if res.x_px > 30: duburi.move_right(1)
+            elif res.x_px < -30: duburi.move_left(1)
         else:                         # never saw the gate
             duburi.search()
 
