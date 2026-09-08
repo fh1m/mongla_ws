@@ -1471,3 +1471,146 @@ def test_the_guard_subtracts_the_previews_own_target():
     # 0.5 * (-0.15 - 0.10) = -0.125
     healthy.note_named_value(_nvf('DEPTH_CMD', _cmd(-0.15)))  # the real -0.15 m reading
     assert healthy.check_depth_loop_settled()[0] is True
+
+
+# --------------------------------------------------------------------------- #
+#  B28 -- MANUAL_CONTROL is DISCARDED in AUTO/SURFACE, and AUTO is where a      #
+#  completed SROT_MOVE leaves the board.                                        #
+# --------------------------------------------------------------------------- #
+# Firmware chain (Hengla is ground truth; every line read, not inferred):
+#   MAV_CMD_SROT_MOVE      -> c.mode = FlightMode::AUTO      mav_commands.cpp:352
+#   movement PH_DONE       -> PH_IDLE, mode UNTOUCHED        movement.cpp:236-241
+#   STUNT/PATTERN/AUTOTUNE -> restore STABILIZE              task_control_loop.cpp:865,874,855
+#   AUTO branch            -> fwd = md.fwd; lat = md.lat     task_control_loop.cpp:243
+#   SURFACE branch         -> fwd = 0; lat = 0;              task_control_loop.cpp:205
+# So the frame is thrown away with no error. These tests pin the host-side warning
+# that is the ONLY thing standing between that and a silent no-op.
+
+class _WarnLog:
+    def __init__(self):
+        self.warns = []
+    def info(self, m): pass
+    def debug(self, m): pass
+    def error(self, m): pass
+    def warning(self, m): self.warns.append(m)
+
+
+def _fc_in_mode(mode_name, log):
+    """A SrotFC whose cached vehicle HEARTBEAT reports `mode_name`."""
+    fc = SrotFC(_FakeMaster(), log)
+    custom = sp.MODE_INTS[mode_name]
+    fc._vehicle_hb = lambda: SimpleNamespace(custom_mode=custom, _timestamp=time.time())
+    return fc
+
+
+@pytest.mark.parametrize('mode', ['AUTO', 'SURFACE'])
+def test_manual_warns_when_the_board_would_discard_the_frame(mode):
+    """The board throws every axis away in these modes and reports nothing."""
+    log = _WarnLog()
+    fc = _fc_in_mode(mode, log)
+    fc.manual(0.5, 0.0, 0.0, 0.0)
+    assert log.warns, f'MANUAL_CONTROL in {mode} is discarded by the firmware, silently'
+    assert mode in log.warns[0]
+    assert 'DISCARD' in log.warns[0].upper()
+
+
+@pytest.mark.parametrize('mode', ['STABILIZE', 'DEPTH_HOLD', 'MANUAL', 'ACRO'])
+def test_manual_is_silent_in_modes_that_honour_the_frame(mode):
+    """DEPTH_HOLD is in here deliberately: it discards only HEAVE (the depth PID
+    owns it) while surge/sway/yaw pass through, so it is a legitimate driving
+    mode and warning on it would train the operator to ignore the warning."""
+    log = _WarnLog()
+    fc = _fc_in_mode(mode, log)
+    fc.manual(0.5, 0.0, 0.0, 0.0)
+    assert not log.warns, f'{mode} honours MANUAL_CONTROL; warning here is noise'
+
+
+def test_manual_warning_is_rate_limited_because_this_is_a_20hz_stream():
+    """Un-throttled, a lost vision leg would emit 20 log lines a second."""
+    log = _WarnLog()
+    fc = _fc_in_mode('AUTO', log)
+    for _ in range(40):
+        fc.manual(0.5, 0.0, 0.0, 0.0)
+    assert len(log.warns) == 1, f'expected one warning per period, got {len(log.warns)}'
+
+
+def test_manual_still_sends_the_frame_rather_than_raising():
+    """A hard failure on the 20 Hz servo path is worse than a wrong-mode frame."""
+    log = _WarnLog()
+    fc = _fc_in_mode('AUTO', log)
+    fc.manual(0.5, 0.0, 0.0, 0.0)
+    assert any(c[0] == 'manual' for c in fc.master.mav.sent), \
+        'the guard must warn, not swallow the send'
+
+
+# --------------------------------------------------------------------------- #
+#  The facade's FC surface, DERIVED rather than hand-typed                      #
+# --------------------------------------------------------------------------- #
+# `test_no_facade_mode_gate_is_reachable_on_srot` above pins the verbs someone
+# REMEMBERED to list in its `gated` set. That catches the removal direction (a verb
+# leaving UNSUPPORTED_VERBS without being ported) and nothing else: a NEW call to a
+# Pixhawk-only primitive, inside a verb nobody listed, sails straight through.
+#
+# This derives the surface from the source instead. It walks the facade for every
+# `self.pixhawk.<attr>` and asks the only question that matters on this backend:
+# does that attribute exist on SrotFC? If it does not, the verb that owns it must
+# be in a bucket that keeps it away from the board.
+#
+# `self.pixhawk` holds a SrotFC on the srot backend -- the attribute name is a
+# historical lie the HAL did not rename (BUGS.md), which is exactly why a human
+# reading these call sites does not notice the mismatch and a test must.
+
+import ast as _ast
+import pathlib as _pathlib
+
+
+def _facade_fc_calls():
+    """{attribute -> {enclosing method names}} for every `self.pixhawk.X` in the facade."""
+    root = _pathlib.Path(__file__).resolve().parents[1] / 'duburi_control'
+    found: dict = {}
+    for fname in ('duburi.py', 'vision_verbs.py'):
+        tree = _ast.parse((root / fname).read_text(encoding='utf-8'))
+        for fn in _ast.walk(tree):
+            if not isinstance(fn, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                continue
+            for node in _ast.walk(fn):
+                if (isinstance(node, _ast.Attribute)
+                        and isinstance(node.value, _ast.Attribute)
+                        and node.value.attr == 'pixhawk'
+                        and isinstance(node.value.value, _ast.Name)
+                        and node.value.value.id == 'self'):
+                    found.setdefault(node.attr, set()).add(fn.name)
+    return found
+
+
+def test_every_facade_fc_call_resolves_on_srot_or_its_verb_is_handled():
+    """A facade call that SrotFC lacks must belong to a verb the board never runs.
+
+    This is the ADD direction. Introduce `self.pixhawk.set_target_depth(...)` in a
+    fresh verb and this fails immediately, where the hand-typed `gated` set above
+    would stay green until someone remembered to add the verb name to it.
+    """
+    from duburi_control.fc.base import FlightController
+    from duburi_control.fc.srot_fc import MOVE_VERBS, UNSUPPORTED_VERBS
+
+    calls = _facade_fc_calls()
+    assert calls, 'found no self.pixhawk.* calls -- the AST walk broke, not the code'
+
+    ported = {'vision_align', 'vision_move'}
+    handled = MOVE_VERBS | UNSUPPORTED_VERBS | ported | {'surface'}
+
+    offenders = []
+    for attr, owners in sorted(calls.items()):
+        if hasattr(SrotFC, attr) or hasattr(FlightController, attr):
+            continue
+        # Only the methods that are themselves verbs can be reasoned about by
+        # bucket; a private helper is reached THROUGH a verb, so treat any
+        # unhandled owner as an offender.
+        unhandled = {o for o in owners if o not in handled}
+        if unhandled:
+            offenders.append((attr, sorted(unhandled)))
+
+    assert not offenders, (
+        'these facade calls do not exist on SrotFC and their verbs are not '
+        'collapsed/refused/ported, so they would AttributeError on the vehicle: '
+        + '; '.join(f'{a} (in {", ".join(o)})' for a, o in offenders))

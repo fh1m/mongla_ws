@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 7 of 26 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
+> **STATUS: 7 of 27 fixed (2026-09-08).** B01, B02, B03, B05, B09, B10, B21 —
 > the SROT-path batch — plus B25/B26 found while fixing them. Each landed with a
 > test verified to fail without the fix. The remaining open items are listed
 > below at their original severity; the ArduSub-path ones (B06, B07, B08, B12,
@@ -715,6 +715,71 @@ attribute production does not have. Two D16 tests passed against a lookup the
 real node could not perform. **A test fixture that manufactures production state
 can validate a path that does not exist.** The stub now mirrors the real
 `_vision_states` pool.
+
+### B28 — the board never leaves AUTO, so `MANUAL_CONTROL` is discarded after any move  ⛔ SROT-PATH
+
+**Verified in the Hengla source, end to end, 2026-09-08.** Not bench-verified: the
+board refuses to arm on the bench (`NO_STATE_CHANGE (timeout)` with no thruster
+pack fitted), so the armed move that would demonstrate it could not be run. The
+source chain is unambiguous and is quoted here so nobody re-derives it.
+
+Three of the four self-terminating flight modes restore `STABILIZE` when their
+state machine finishes. `AUTO` does not, and no other line does it for them:
+
+```c
+AUTOTUNE finished -> g_state.control.mode = FlightMode::STABILIZE;  task_control_loop.cpp:855
+STUNT    finished -> g_state.control.mode = FlightMode::STABILIZE;  :865
+PATTERN  finished -> g_state.control.mode = FlightMode::STABILIZE;  :874
+AUTO     finished -> (no such line exists)
+```
+
+`MAV_CMD_SROT_MOVE` sets `c.mode = FlightMode::AUTO` (`mav_commands.cpp:352`). On
+completion the loop publishes `mv_done_seq` and clears `mv_was_active`
+(`task_control_loop.cpp:945-949`) — and touches `c.mode` nowhere. So the board
+stays in `AUTO` indefinitely after every move.
+
+What `AUTO` then does with our pilot frame, all four axes:
+
+```c
+// computeDemands() computes fwd/lat as pilot passthrough at the top ...   :158-165
+// ... and the AUTO branch then OVERWRITES them:
+fwd = md.fwd; lat = md.lat;                                   // :243
+thr = depth::update(0, in.depth, dt, tgt);                    // :241  (sp_throttle ignored)
+attitude::stabilize(0, 0, md.yaw, ...);                       // :239  (sp_yaw ignored)
+```
+
+and after `PH_DONE` the phase is `PH_IDLE`, which returns a default-constructed
+`Demand` — `float fwd = 0, lat = 0, yaw = 0` (`movement.h:31`) — with
+`depth_target` still latched. **Therefore every axis of a `MANUAL_CONTROL` frame
+is discarded while the board sits in post-move AUTO, and nothing logs it.**
+
+The resulting state is *safe* (depth-hold + heading-hold + zero translation, i.e.
+station-keep). The defect is that it is **silent**: a host that streams `manual()`
+believing it is driving gets no error, no STATUSTEXT, and no motion.
+
+**Current exposure is bounded — verified by enumerating every caller.** There are
+exactly two `manual()` call sites outside tests:
+
+| caller | guarded? |
+|---|---|
+| `motion_vision._srot_drive` (`motion_vision.py:626`) | ✅ `vision_verbs._ensure_srot_vision_mode` sets **and verifies** `STABILIZE` first (`vision_verbs.py:120-137`) |
+| `SrotFC.send_neutral` (`srot_fc.py:1989`) | ⚠️ streams zeros, so the *effect* is benign — but its docstring asserts "STABILIZE holds", which is false after a move |
+
+So this is latent, not live. It becomes live the moment any third caller streams a
+non-zero `manual()` without a mode guard — and the thing that would have caught
+that is a comment, not a mechanism.
+
+**Fix landed (host side, zero extra wire traffic):** `SrotFC.manual()` reads the
+mode already present in the cached HEARTBEAT (`get_mode()`, `srot_fc.py:1855`) and
+warns, rate-limited, when it is a mode that discards the frame. No new messages are
+sent — this deliberately respects the split where the board owns the 500 Hz loops
+and the Pi sends the bare minimum.
+
+**Owed upstream (firmware):** `AUTO` should restore `STABILIZE` on movement
+completion, exactly as `STUNT`/`PATTERN`/`AUTOTUNE` already do. Also
+`computeDemands`'s header comment — *"Surge/sway (fwd/lat) are always pilot
+passthrough"* (`task_control_loop.cpp:150`) — is **false for AUTO and SURFACE**,
+which both overwrite them.
 
 ## 8. Provenance
 
