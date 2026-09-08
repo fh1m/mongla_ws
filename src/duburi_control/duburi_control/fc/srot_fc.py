@@ -207,6 +207,7 @@ class SrotFC(FlightController):
         self._last_vehicle_hb = None
         # (move_type, speed) of the last translation leg sent, for the abort brake.
         self._last_leg = None
+        self._last_mc_mode_warn = 0.0
         # Highest ATTITUDE.time_boot_ms seen, for the unplanned-reboot detector.
         # None until the first sample. See `check_for_reboot()`.
         self._peak_boot_ms = None
@@ -656,13 +657,60 @@ class SrotFC(FlightController):
     # ------------------------------------------------------------------ #
     #  Manual (the streamed servo primitive)                             #
     # ------------------------------------------------------------------ #
+
+    # Modes in which the firmware overwrites the pilot axes, so a MANUAL_CONTROL
+    # frame sent in them is discarded with no error. Derived from the mode switch
+    # in `task_control_loop.cpp:computeDemands` -- see `manual()` for the lines.
+    # DEPTH_HOLD is deliberately ABSENT: it discards only heave (the depth PID owns
+    # it) while surge/sway/yaw pass through, which is a legitimate driving mode.
+    _MANUAL_DISCARDING_MODES = frozenset({'AUTO', 'SURFACE'})
+    _MANUAL_WARN_PERIOD_S = 5.0   # 20 Hz stream: warn at most once per 100 frames
+
+    def _warn_if_mode_discards_manual(self) -> None:
+        """Warn (rate-limited) when the board is in a mode that throws this frame away."""
+        mode = self.get_mode()
+        if mode not in self._MANUAL_DISCARDING_MODES:
+            self._last_mc_mode_warn = 0.0
+            return
+        now = time.time()
+        if now - getattr(self, '_last_mc_mode_warn', 0.0) < self._MANUAL_WARN_PERIOD_S:
+            return
+        self._last_mc_mode_warn = now
+        self._log_warn(
+            f'[SROT ] !! MANUAL_CONTROL sent while the board is in {mode} -- the '
+            f'firmware DISCARDS every axis of it and reports nothing (B28). '
+            f'{"AUTO is where a completed SROT_MOVE leaves the board; " if mode == "AUTO" else ""}'
+            f'reach STABILIZE first (vision_verbs._ensure_srot_vision_mode does).')
+
     def manual(self, fwd: float, lat: float, up: float, yaw: float) -> None:
         """One MANUAL_CONTROL frame. x=fwd, y=lat(+starboard), z=heave(+up), r=yaw;
         all axes -1..1 (the board clamps; we clamp in srot_protocol). Buttons=0.
 
         A non-finite axis is coerced to neutral (0) rather than raising: this is the
         streamed 20 Hz servo primitive, so a single NaN from a vision loop must not
-        crash the send -- it degrades to 'hold' for that tick."""
+        crash the send -- it degrades to 'hold' for that tick.
+
+        THE MODE GUARD IS THE POINT, NOT DECORATION (B28). In `AUTO` and `SURFACE`
+        the firmware DISCARDS this frame -- every axis of it -- and says nothing:
+
+            AUTO     fwd = md.fwd; lat = md.lat        task_control_loop.cpp:243
+                     thr = depth::update(...)         :241   (sp_throttle ignored)
+                     attitude::stabilize(0,0,md.yaw)  :239   (sp_yaw ignored)
+            SURFACE  fwd = 0; lat = 0;                :205   and yaw/thr likewise
+
+        and `AUTO` is where the board is LEFT after every `SROT_MOVE`, because --
+        unlike STUNT, PATTERN and AUTOTUNE, which all restore STABILIZE when their
+        state machine ends (:865, :874, :855) -- nothing resets the mode when a
+        movement finishes. So "stream MANUAL_CONTROL after a move" is a silent
+        no-op, and the only thing that used to stand against it was a comment.
+
+        This costs NOTHING on the wire: the mode comes from the HEARTBEAT the link
+        already carries. It warns rather than raises -- this is the 20 Hz servo
+        path, and a hard failure here is worse than a wrong-mode frame.
+        Callers that genuinely need to drive must reach a MANUAL_CONTROL-honouring
+        mode first, as `vision_verbs._ensure_srot_vision_mode` does."""
+        self._warn_if_mode_discards_manual()
+
         def _safe(v):
             return v if isinstance(v, (int, float)) and math.isfinite(v) else 0.0
         x = sp.unit_to_mc(_safe(fwd))
@@ -1984,8 +2032,13 @@ class SrotFC(FlightController):
         self.send_gcs_heartbeat()
 
     def send_neutral(self):
-        """Safe idle: zero MANUAL_CONTROL with heave neutral (STABILIZE holds).
-        Only a defensive fallback on SROT -- stop/pause route through move()."""
+        """Safe idle: zero MANUAL_CONTROL with heave neutral.
+
+        NOT "STABILIZE holds", which is what this said until B28. After any
+        SROT_MOVE the board is still in AUTO, where this frame is discarded
+        outright -- benign here only because the frame is all zeros and AUTO's
+        own idle demand is also zero. Only a defensive fallback on SROT;
+        stop/pause route through move()."""
         self.manual(0.0, 0.0, 0.0, 0.0)
 
     def send_att_pos_mocap(self, yaw_deg):
