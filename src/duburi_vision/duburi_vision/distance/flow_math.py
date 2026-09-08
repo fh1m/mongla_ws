@@ -22,6 +22,8 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
+from ..optics import N_WATER
+
 
 def height_above_floor(pool_depth_m: float, depth_m: float) -> Optional[float]:
     """Metric camera height above the pool floor, or None if non-physical.
@@ -112,7 +114,7 @@ class RefractiveRectifier:
     __slots__ = ('fx', 'fy', 'cx', 'cy', 'n', 'f_ref', 'f_ref_y')
 
     def __init__(self, fx: float, fy: float, cx: float, cy: float,
-                 n: float = 1.333, f_ref: Optional[float] = None):
+                 n: float = N_WATER, f_ref: Optional[float] = None):
         self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
         self.n = float(n)
         # Default: the PARAXIAL water focal length, f_air * n. Chosen so the

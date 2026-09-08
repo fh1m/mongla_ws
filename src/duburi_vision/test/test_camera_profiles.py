@@ -95,7 +95,7 @@ def test_every_source_has_a_builder():
 # --------------------------------------------------------------------------- #
 #  A profile key that reaches nothing is worse than an absent one
 # --------------------------------------------------------------------------- #
-def test_device_path_in_a_profile_reaches_the_builder():
+def test_device_path_in_a_profile_reaches_the_builder(monkeypatch):
     """`device_path` was passed in by every profile that names one and landed
     in the builder's `**_`, ignored. All four such profiles therefore resolved
     to device index 0, and the operator's explicit launch arg was the only
@@ -115,16 +115,23 @@ def test_device_path_in_a_profile_reaches_the_builder():
         def info(self):
             return {}
 
-    orig = F._build_v4l2.__globals__.get('V4L2MailboxCamera')
+    # ⛔ THE RESTORE USED TO NEVER RUN, AND IT LEAKED INTO THE WHOLE SESSION.
+    # `orig` was read from `F._build_v4l2.__globals__`, but factory imports
+    # V4L2MailboxCamera INSIDE the builder, so the name is not in module globals
+    # and `.get()` returned None -- making `if orig is not None:` permanently
+    # False. The spy therefore replaced the real class for every test that ran
+    # afterwards. Nothing noticed until a test finally introspected the real
+    # class (the B23 pump-loop guards), which then failed only in a full-suite
+    # run and passed in isolation.
+    #
+    # A `finally:` gated on a value that is always None is not cleanup. Read the
+    # attribute from the module being patched -- which the two sibling tests
+    # below already do correctly -- and let monkeypatch own the restore.
     import duburi_vision.cameras.v4l2_mailbox as vm
-    vm.V4L2MailboxCamera = _Spy
-    try:
-        F.make_camera_from_profile(
-            {'source': 'v4l2', 'device_path': '/dev/duburi_cam_forward',
-             'width': 640, 'height': 360, 'fps': 60, 'name': 'f'})
-    finally:
-        if orig is not None:
-            vm.V4L2MailboxCamera = orig
+    monkeypatch.setattr(vm, 'V4L2MailboxCamera', _Spy)
+    F.make_camera_from_profile(
+        {'source': 'v4l2', 'device_path': '/dev/duburi_cam_forward',
+         'width': 640, 'height': 360, 'fps': 60, 'name': 'f'})
     assert seen.get('device') == '/dev/duburi_cam_forward', seen
 
 

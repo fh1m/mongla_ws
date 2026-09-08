@@ -19,6 +19,19 @@ Usage:
 import glob, json, os, sys, time
 import numpy as np, cv2
 
+# The refractive index and both Snell transforms live in ONE place (B22).
+# tools/ runs from a source checkout without the package installed, so fall back
+# to the literal ONLY if that import fails -- and say so, rather than letting a
+# second silent copy of a physical constant exist.
+try:
+    from duburi_vision.optics import N_WATER, fov_air_to_water
+except ImportError:                                    # pragma: no cover
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                      '..', 'src', 'duburi_vision'))
+    from duburi_vision.optics import N_WATER, fov_air_to_water
+
+
 # INNER corners. ⛔ THIS MUST MATCH THE BOARD AND `fov_solve.py`, which
 # defaults to 8x6 -- the grid the shipped downward calibration was actually
 # measured on (`pi_downward_1280x720.json: grid [8, 6]`). This file said 9x6,
@@ -111,9 +124,9 @@ def solve(outdir, square=0.025):
     vfov = 2 * np.degrees(np.arctan(h / (2 * fy)))
     dfov = 2 * np.degrees(np.arctan(np.hypot(w, h) / (2 * (fx + fy) / 2)))
     # Snell through a flat port: what this lens becomes UNDERWATER
-    n = 1.333
-    hfov_w = 2 * np.degrees(np.arcsin(min(1.0, np.sin(np.radians(hfov / 2)) / n)))
-    vfov_w = 2 * np.degrees(np.arcsin(min(1.0, np.sin(np.radians(vfov / 2)) / n)))
+    n = N_WATER
+    hfov_w = fov_air_to_water(hfov)
+    vfov_w = fov_air_to_water(vfov)
 
     print(f"\n  RMS reprojection error : {rms:.4f} px   "
           f"({'good' if rms < 0.5 else 'usable' if rms < 1.0 else 'POOR -- recapture'})")
@@ -122,7 +135,7 @@ def solve(outdir, square=0.025):
     print(f"  cx, cy                 : {cx:.2f}, {cy:.2f}  (frame centre {w/2:.0f},{h/2:.0f})")
     print(f"  distortion k1,k2,p1,p2,k3: {', '.join(f'{v:+.4f}' for v in D.ravel()[:5])}")
     print(f"\n  IN AIR    HFOV {hfov:6.2f} deg   VFOV {vfov:6.2f} deg   DFOV {dfov:6.2f} deg")
-    print(f"  UNDERWATER (flat port, n=1.333)")
+    print(f"  UNDERWATER (flat port, n={N_WATER})")
     print(f"            HFOV {hfov_w:6.2f} deg   VFOV {vfov_w:6.2f} deg"
           f"   <- {100*(1-hfov_w/hfov):.0f} % narrower")
 

@@ -66,6 +66,7 @@ from duburi_vision.distance.flow_math import (
     solve_planar_motion,
 )
 from duburi_vision.distance.flow_velocity import flow_velocity
+from duburi_vision.optics import N_WATER
 
 # Shi-Tomasi + LK. Bucketing is applied on top of goodFeaturesToTrack so the
 # corners are spread across the frame rather than clustered on the one bright
@@ -206,7 +207,7 @@ class FlowVelocityNode(Node):
         # than the whole error budget for a pool leg. Verified to recover the
         # true velocity to 0.000 % against forward-simulated port physics.
         self.declare_parameter('refractive_rectify', True)
-        self.declare_parameter('water_refractive_index', 1.333)
+        self.declare_parameter('water_refractive_index', N_WATER)
         self.declare_parameter('min_net_flow_px', 0.5)
         self.declare_parameter('max_dispersion_ratio', 5.0)
         self.declare_parameter('grid_buckets', 4)
