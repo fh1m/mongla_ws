@@ -1619,6 +1619,30 @@ Project-local Claude Code automations, versioned with the repo and shared with t
 | `new-mission`  | user-only | Scaffold a mission from the `detected()`-paradigm template |
 | `train-model`  | both      | YOLO11 fine-tune workflow for a new detection task |
 | `verify-docs`  | user-only | Run `doc-verifier` across a package, summarize API drift |
+| `geohot-guidelines` | **both (default)** | Radical-simplicity rules: complexity is the enemy, delete before you add, a wide interface is a design smell, never assert "it works" without looking at the value. See the standing rule below. |
+
+> **★ `geohot-guidelines` is ON BY DEFAULT for non-trivial work.** Invoke it as
+> `/geohot-guidelines`, but it also applies standing, without invocation, to any
+> refactor, review, or implementation that is more than a one-liner. The four
+> reflexes:
+>
+> 1. **Complexity is the enemy** — more capability at equal or lower complexity is
+>    the only real win. Adding a feature by adding a layer is a loss.
+> 2. **You have never refactored enough** — before touching a subsystem ask "can
+>    this not exist?". A negative diff is a good diff; LOC is debt, not output.
+>    *Fence:* prove it is dead by reading the callsites, and never delete a real
+>    invariant (arming, depth, leak, lifecycle) to "simplify" — that is a bug.
+> 3. **Wide interfaces mean the abstraction is wrong** — past ~4 arguments, fix
+>    the boundary; do not hide the width in a kwargs bag.
+> 4. **Understand the whole stack; nothing is magic** — print the real value and
+>    check it before stacking more on top. Never claim code "works" without
+>    having seen it work.
+>
+> This suits this codebase specifically: its recurring defect is a *plausible
+> number standing in for an absent measurement*, and rule 4 is the direct
+> antidote. Rule 2's fence matters here more than usual — this is a vehicle, and
+> several "simplifications" in `BUGS.md` are guards someone removed.
+> Unofficial; not affiliated with George Hotz.
 
 **Hooks** (`.claude/hooks/`, wired in `.claude/settings.json` via `$CLAUDE_PROJECT_DIR` so they work on any checkout):
 
