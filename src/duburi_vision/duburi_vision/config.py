@@ -52,19 +52,36 @@ CAMERA_PROFILES = {
     # the builder hardcoded MJPG, so a camera that is faster in another format
     # was unconfigurable.
     'pi_forward': {
-        # The FANTECH. A flat 15.00 Hz in every format, every resolution and
-        # every requested rate -- MJPG, YUYV, 640x360, 640x480, asking for 30,
-        # 90 or 210 all return 15.00. The descriptor advertises 30; the camera
-        # does not deliver it. So this is the CAMERA's ceiling, and the old
-        # ledger entry blaming a loose USB plug ("stuck at 7.50 Hz, needs a
-        # replug") is retracted -- a replug cannot move a limit this flat.
-        # 15 Hz is the detection rate on the forward camera until the hardware
-        # changes; nothing in software will raise it.
+        # The FANTECH.
+        #
+        # ⛔ RETRACTED 2026-09-09: "a flat 15.00 Hz ... this is the CAMERA's
+        # ceiling ... nothing in software will raise it." The 15 was THIS
+        # LINE, and the comment then defended it. Re-measured on the vehicle
+        # by counting DISTINCT header stamps -- a topic `hz` cannot tell a
+        # real frame from a republished one, which is how a self-imposed cap
+        # reads as a hardware limit:
+        #
+        #   requested 15 -> 14.63 Hz     requested 60 -> 30.18 Hz
+        #   requested 30 -> 28.03 Hz     requested 90 -> 30.18 Hz
+        #
+        # Identity checked against the calibration's recorded USB VID/PID and
+        # serial (1d6c:0103, YGR80PU1200F23081120) so this is the Fantech
+        # answering and not the Sonix -- the round-38 trap.
+        #
+        # End to end (camera+detector+tracker) it is worth ~2x of DETECTIONS,
+        # which is what the vision loop steers on, for ~6 points of one core:
+        #
+        #   fps 15 -> image 14.67 Hz, detections 14.67 Hz, CPU 95.5 % idle
+        #   fps 60 -> image 30.03 Hz, detections 27.11 Hz, CPU 89.3 % idle
+        #   (memory 683 vs 680 MB of 3983)
+        #
+        # 60 rather than 30 because the request saturates at the ceiling:
+        # asking 30 returns 28.03, asking 60 returns the full 30.18.
         'source':      'v4l2',
         'device_path': '/dev/duburi_cam_forward',
         'width':       640,
         'height':      360,
-        'fps':         15,
+        'fps':         60,
         'fourcc':      'MJPG',
         'frame_id':    'forward_cam',
     },

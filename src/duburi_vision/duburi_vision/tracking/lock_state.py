@@ -124,9 +124,31 @@ def arbitrate(*, now: float, last_detection_t: float,
     """
     age = float('inf') if last_detection_t <= 0 else max(0.0, now - last_detection_t)
 
-    if detection is not None and detection_conf >= min_rung_conf:
+    if (detection is not None and detection_conf >= min_rung_conf
+            and age <= full_s):
         # A live detection resets the clock: it IS the confirmation the decay
         # is counting time since.
+        #
+        # ⛔ `age <= full_s` IS LOad-BEARING, and its absence was measured on
+        # the vehicle. The caller hands in its LAST detection box, and it only
+        # clears that cache when a message arrives carrying no match --
+        # `lock_node._on_det` cannot run at all during a TOTAL detector
+        # outage, which is the exact case this ladder exists for. Without the
+        # age test this branch short-circuits before `age` is ever consulted,
+        # so a silent detector produced `rung=DETECTION, authority=1.0,
+        # age_s=0.0` INDEFINITELY: measured on the Pi, the label stayed
+        # `detection` through a 16 s pause while /lock kept publishing at
+        # 53.6 Hz.
+        #
+        # That is the module's own stated failure -- "the vehicle has a
+        # position" becoming "the vehicle saw the target" -- reached from the
+        # inside. With `vision.lock_s > 0` the control loop would have steered
+        # on a frozen box at full authority forever, and nothing would log a
+        # fault.
+        #
+        # Past `full_s` the box is not discarded: it falls through to the
+        # decay path below, where FOLLOW and ANCHOR outrank a stale detection
+        # and authority declines to LOST.
         return LockState(rung=Rung.DETECTION, xyxy=tuple(detection),
                          rung_conf=float(detection_conf), authority=1.0,
                          age_s=0.0)

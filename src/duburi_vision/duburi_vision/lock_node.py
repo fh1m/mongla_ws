@@ -127,6 +127,27 @@ class LockNode(Node):
         self._K = None
         self._target_w_m = float(
             self.declare_parameter('target_width_m', 0.0).value or 0.0)
+        # An explicit parameter WINS -- a measured prop beats a rulebook
+        # nominal, which is what SAUVC's +/- 5 % tolerance exists to allow for.
+        # Otherwise fall back to the committed table, keyed by the class we are
+        # locking onto. Without this the default is 0.0 and the 6-DoF branch
+        # publishes `ok=false, reason='target_width_m unset'` forever: the
+        # metric path has never once run on the vehicle.
+        if self._target_w_m <= 0.0 and self._cls:
+            from duburi_vision.target_geometry import width_for, describe
+            w = width_for(self._cls)
+            if w > 0.0:
+                self._target_w_m = w
+                d = describe(self._cls)
+                self.get_logger().info(
+                    f"[LOCK ] target width {w:.4f} m for {self._cls!r} "
+                    f"({d.get('boxes', '?')}; {d.get('source', 'no source')})")
+            else:
+                self.get_logger().warn(
+                    f'[LOCK ] no committed width for {self._cls!r}, and '
+                    f'target_width_m is unset -- the 6-DoF pose will refuse. '
+                    f'Add it to config/target_geometry.yaml or pass '
+                    f'target_width_m.')
         self._pub_pose = (
             self.create_publisher(TargetPose, f'{ns}/target_pose',
                                   _qos.DETECTIONS)
@@ -181,8 +202,21 @@ class LockNode(Node):
             import glob
             p = str(self.get_parameter('anchor_model').value).strip()
             if not p:
-                c = sorted(glob.glob(os.path.expanduser(
-                    '~/hailo_models/xfeat_*.onnx')))
+                # DUBURI_HEF_DIR FIRST, then the historical default. The
+                # detector already resolves its models that way
+                # (`detection/yolo.py`), and hardcoding one of the two paths
+                # here made the model directory a truth with two copies: point
+                # DUBURI_HEF_DIR somewhere else and the detector follows while
+                # the anchor silently does not, losing the rung with one WARN
+                # and no error.
+                roots = [d for d in (os.environ.get('DUBURI_HEF_DIR', '').strip(),
+                                     '~/hailo_models') if d]
+                c = []
+                for r in roots:
+                    c = sorted(glob.glob(os.path.join(
+                        os.path.expanduser(r), 'xfeat_*.onnx')))
+                    if c:
+                        break
                 p = c[0] if c else ''
             if not p:
                 raise FileNotFoundError('no xfeat_*.onnx found')

@@ -47,6 +47,7 @@ from duburi_vision import (
     make_camera, make_camera_from_profile,
     get_profile,
 )
+from duburi_vision.calibration.binding import calibration_for_profile
 from duburi_vision.cameras.discover import discover_cameras
 
 
@@ -248,6 +249,21 @@ class CameraNode(Node):
                     f"(profile asked {get_profile(profile_name).get('fps')}). "
                     f'Deliberate: a camera outrunning its detector spends CPU '
                     f'decoding frames the detector drops.')
+            # A profile's device_path names a udev symlink that exists on ONE
+            # host. `pi_forward` is the Pi box's Fantech; `forward` is the
+            # Jetson's Blue Robotics unit. Running the wrong one for the host
+            # otherwise fails inside the V4L2 open with no mention of the
+            # profile, which is the single most likely way to lose a pool
+            # session to a launch argument.
+            probe = device_path or profile.get('device')
+            if isinstance(probe, str) and probe.startswith('/dev/') \
+                    and not os.path.exists(probe):
+                self.get_logger().error(
+                    f'[CAM  ] profile {profile_name!r} wants {probe}, which does '
+                    f'not exist on this host. That device is a udev symlink '
+                    f'created per vehicle -- a Pi profile (pi_*) on the Jetson, '
+                    f'or the reverse, gives exactly this. Pass the profile for '
+                    f'the host you are on: bringup.launch.py camera_profile:=...')
             # device_path (by-path symlink) > int device override > profile default.
             if device_path:
                 profile['device'] = device_path
@@ -490,7 +506,24 @@ class CameraNode(Node):
         """
         path = str(self.get_parameter('calibration').value or '').strip()
         if not path:
-            return None
+            # Nothing passed: resolve from the profile, via each calibration's
+            # own `applies_to`. This is what makes `bringup.launch.py` (which
+            # goes through vision.launch.py and passes no calibration) publish
+            # a real K instead of zeros -- without a camera-to-file map in
+            # every launch file. See calibration/binding.py.
+            profile = str(self.get_parameter('profile').value or '').strip()
+            path = calibration_for_profile(profile)
+            if path:
+                self.get_logger().info(
+                    f"[CAM  ] calibration auto-bound from profile "
+                    f"{profile!r}: {os.path.basename(path)}")
+            else:
+                if profile:
+                    self.get_logger().warn(
+                        f"[CAM  ] no calibration declares applies_to "
+                        f"{profile!r}; publishing size-only CameraInfo (k=0). "
+                        f"Bearings fall back to an FOV or are refused.")
+                return None
         try:
             import json
             with open(os.path.expanduser(path)) as fh:

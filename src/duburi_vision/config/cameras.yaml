@@ -60,16 +60,38 @@ duburi_vision:
     # device_path, not device: an index is not port-stable and the two units
     # have already swapped across a reboot.
     pi_forward:
-      # The FANTECH -- forward, detection. 15.00 Hz is the CAMERA's ceiling:
-      # flat across MJPG/YUYV, 640x360/640x480, and requests of 30/90/210,
-      # while the descriptor advertises 30. The old ledger entry blaming a
-      # loose plug ("7.50 Hz, needs a replug") is RETRACTED; a replug cannot
-      # move a limit this flat. Nothing in software raises this.
+      # The FANTECH -- forward, detection.
+      #
+      # ⛔ "15.00 Hz is the CAMERA's ceiling ... Nothing in software raises
+      # this" IS RETRACTED. It was this profile's own `fps: 15` doing the
+      # capping, and the claim then justified keeping it. Re-measured
+      # 2026-09-09 on the vehicle, counting DISTINCT header stamps (a topic
+      # `hz` cannot tell a real frame from a republished one):
+      #
+      #   requested 15 -> 14.63 Hz    requested 60 -> 30.18 Hz
+      #   requested 30 -> 28.03 Hz    requested 90 -> 30.18 Hz
+      #
+      # Identity confirmed against the calibration's recorded USB VID/PID and
+      # serial (1d6c:0103, YGR80PU1200F23081120), so this is the Fantech and
+      # not the Sonix answering -- the round-38 trap.
+      #
+      # Through the full pipeline (camera+detector+tracker) the request is
+      # worth nearly 2x of DETECTIONS for ~6 points of one core:
+      #
+      #   fps 15 -> image 14.67 Hz, detections 14.67 Hz, CPU 95.5 % idle
+      #   fps 60 -> image 30.03 Hz, detections 27.11 Hz, CPU 89.3 % idle
+      #   (memory unchanged, 683 vs 680 MB)
+      #
+      # 60 rather than 30 because the request saturates at the hardware
+      # ceiling: asking 30 yields 28.03, asking 60 yields the full 30.18.
+      # Detection rate is what the 20 Hz vision loop steers on, and its
+      # translational command decays with sample age -- so this is the
+      # cheapest robustness we have.
       source:      v4l2
       device_path: /dev/duburi_cam_forward
       width:       640
       height:      360
-      fps:         15
+      fps:         60
       fourcc:      MJPG
       frame_id:    forward_cam
 

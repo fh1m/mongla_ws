@@ -72,6 +72,39 @@ _QUIET_ENV = {
 
 def generate_launch_description():
     args = [
+        # ROLE vs HARDWARE. `camera` is the ROLE -- it names the topics
+        # (/duburi/vision/<camera>/...) and the nodes (duburi_detector_<camera>)
+        # that 96 call sites and the DSL's own default bind to, so it must NOT
+        # change to describe different hardware. `profile` is the HARDWARE: the
+        # CAMERA_PROFILES entry (duburi_vision/config.py -- the LOADED copy;
+        # the YAML beside it is documentation) saying which device, at what
+        # resolution, in
+        # which pixel format, and (via its calibration's `applies_to`) with
+        # which intrinsics.
+        #
+        # They were the same value, so pointing the forward role at the Pi's
+        # Fantech meant renaming the role -- measured on the Pi, running the
+        # documented bringup gave 5.00 Hz and k=0, because the `forward`
+        # profile is the Jetson's Blue Robotics unit: no `fourcc: MJPG` (so
+        # YUYV, 3x slower) and no calibration declares it.
+        DeclareLaunchArgument('profile',       default_value='',
+                              description='Camera HARDWARE profile (CAMERA_PROFILES) '
+                                          '(pi_forward|pi_downward|forward|...). '
+                                          "Empty = same as `camera`. Set this to keep the "
+                                          'role name while changing which unit it opens.'),
+        # THE LOCK LADDER, on the launch bringup actually includes.
+        # It was wired into vision_pi.launch.py first -- which the docs and
+        # `bringup.launch.py` do not use -- so the capability would have been
+        # reachable only from the path a mission does not run. Same default
+        # (off) and same staging: `vision.lock_s` gates whether control reads
+        # it, and that stays 0.
+        DeclareLaunchArgument(
+            'lock', default_value='false',
+            description='Run the lock ladder (follower + XFeat anchor), '
+                        'publishing <ns>/lock. Costs ~23 % of the detection '
+                        'rate, measured. Control ignores it until '
+                        'vision.lock_s > 0 -- turn both on together.'),
+        DeclareLaunchArgument('lock_class', default_value=''),
         DeclareLaunchArgument('camera',        default_value='forward',
                               description='Camera profile (forward|downward|sim_front|laptop|...). '
                                           'Drives node names: duburi_detector_<camera>.'),
@@ -170,7 +203,8 @@ def generate_launch_description():
         "'video_file' if '", video_file, "' else ('ros_topic' if '", topic, "' else '')"])
     # A named profile only applies to a live webcam; file/topic sources skip it.
     profile_expr = PythonExpression([
-        "'' if ('", video_file, "' or '", topic, "') else '", cam, "'"])
+        "'' if ('", video_file, "' or '", topic, "') else ('",
+        LaunchConfiguration('profile'), "' or '", cam, "')"])
     video_file_mode = PythonExpression(["True if '", video_file, "' else False"])
 
     # Per-camera node names -- the single naming rule the DSL relies on.
@@ -272,6 +306,21 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('distance')),
     )
 
+    lock_node = Node(
+        package='duburi_vision', executable='lock_node',
+        name=['duburi_lock_', cam], output='screen',
+        parameters=[{
+            'camera':       cam,
+            'target_class': LaunchConfiguration('lock_class'),
+            'follow':       True,
+            # Asked for unconditionally: lock_node logs `anchor DISABLED ...
+            # the follower rung still runs` when no xfeat_*.onnx resolves, so
+            # a flag here would only disable a rung that self-disables.
+            'anchor':       True,
+        }],
+        condition=IfCondition(LaunchConfiguration('lock')),
+    )
+
     image_viewer = Node(
         package='duburi_vision', executable='vision_display',
         name='duburi_image_view', output='screen', additional_env=_QUIET_ENV,
@@ -290,6 +339,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription(
-        args + [camera_node, detector_node, tracker_node, depth_node,
+        args + [camera_node, detector_node, tracker_node, lock_node, depth_node,
                 distance_node, image_viewer, shutdown_on_viewer_exit]
     )

@@ -153,8 +153,31 @@ def generate_launch_description():
         #
         # The 1.8x gap is worth carrying: `ros2 topic hz` UNDER-REPORTS on a
         # loaded Pi, so every rate quoted from it is a floor, not a figure.
-        DeclareLaunchArgument('fwd_frame_rate', default_value='49.0'),
-        DeclareLaunchArgument('dwn_frame_rate', default_value='15.0'),
+        # ⛔ THESE SIZE THE COAST WINDOW, AND BOTH WERE STALE.
+        # `tracker_node` converts its `max_predict_s` (1.5 s) into FRAMES as
+        # ceil(max_predict_s * frame_rate), and that frame count is the
+        # outermost rung of the coast ladder
+        # (_freshness 0.4 < vision.coast_s 0.8 < lost_grace_s 1.0 < THIS).
+        # Under-estimating frame_rate shortens the outer rung until it falls
+        # BELOW an inner one, and the coast then truncates early -- a target
+        # dropped mid-lock, while the tracker still publishes and looks
+        # healthy. The node's own comment records this happening once already,
+        # "made live by perception getting 5x faster".
+        #
+        # It went stale again on 2026-09-09 when pi_forward's fps went 15->60.
+        # Measured live on the vehicle with the full vision_pi stack up, off
+        # the node's own rate check:
+        #
+        #     forward  detections 30 Hz  (arg said 49 -- over, harmless)
+        #     downward detections 32 Hz  (arg said 15 -- UNDER, and 1.5*15/32
+        #                                 = 0.70 s of coast against a 0.8 s
+        #                                 vision.coast_s: truncating)
+        #
+        # Set to the measured rates, so max_predict_s means 1.5 s of real
+        # time. `frame_rate_warn_ratio` (1.5) still catches the next drift at
+        # runtime -- that warning is what surfaced this.
+        DeclareLaunchArgument('fwd_frame_rate', default_value='30.0'),
+        DeclareLaunchArgument('dwn_frame_rate', default_value='32.0'),
         # ⛔ THESE WERE THE WRONG WAY ROUND, and both halves were live.
         # The only calibration we hold declares itself, in its own metadata,
         # as `pi_test_global_shutter (Microdia USB)` -- USB vendor 0c45,
@@ -193,6 +216,34 @@ def generate_launch_description():
         # OFF by default because it needs `pool_depth_m`, which it REFUSES to
         # guess: height is a clean multiplier on every velocity it emits.
         DeclareLaunchArgument('flow', default_value='false'),
+        # THE LOCK LADDER. Built, measured, and in no launch file until now --
+        # so the follower and XFeat anchor had never run in a mission. It
+        # publishes `<ns>/lock`, NEVER `/detections`: a followed or anchored
+        # box on the detector's topic is indistinguishable from something the
+        # detector saw, and every consumer including the HUD would report a
+        # detection that never happened.
+        #
+        # ⛔ STARTING IT DOES NOT STEER THE VEHICLE. The control loop consults
+        # the ladder only when `vision.lock_s > 0`, and that stays 0. This
+        # publishes the evidence so it can be watched on the deck before
+        # anything acts on it -- the same staging the firmware vision uplink
+        # uses (echo the numbers, confirm they match, THEN actuate).
+        # DEFAULT OFF, DELIBERATELY. Measured A/B on the vehicle: the ladder
+        # costs 23 % of the forward detection rate (30.23 -> 23.14 Hz) and
+        # 30 % of the downward (42.71 -> 29.82). `vision.lock_s` is 0, so the
+        # control loop does not read `/lock` -- paying a quarter of perception
+        # for evidence nothing consumes is the wrong trade. Turn BOTH on
+        # together: `lock:=true` plus `vision.lock_s > 0`, once the deck has
+        # watched /lock and the rungs agree with what the operator sees.
+        DeclareLaunchArgument(
+            'lock', default_value='false',
+            description='Run the lock ladder (follower + XFeat anchor) on the '
+                        'forward camera, publishing <ns>/lock. Control ignores '
+                        'it until vision.lock_s > 0.'),
+        DeclareLaunchArgument(
+            'lock_class', default_value='',
+            description='Class the ladder locks onto. Empty = whatever the '
+                        'detector is publishing.'),
         DeclareLaunchArgument(
             'pool_depth_m', default_value='nan',
             description='Water depth in metres. REQUIRED with flow:=true -- '
@@ -343,6 +394,20 @@ def generate_launch_description():
                  'calibration':  LaunchConfiguration('dwn_calibration'),
              }],
              condition=IfCondition(LaunchConfiguration('flow'))),
+        Node(package='duburi_vision', executable='lock_node',
+             name='duburi_lock_forward', output='screen',
+             parameters=[{
+                 'camera':       'forward',
+                 'target_class': LaunchConfiguration('lock_class'),
+                 'follow':       True,
+                 # The anchor rung is asked for unconditionally and DEGRADES
+                 # BY ITSELF: lock_node logs `anchor DISABLED ... the follower
+                 # rung still runs` when no xfeat_*.onnx resolves. A second
+                 # launch flag for it would only be a way to disable a rung
+                 # that already disables itself.
+                 'anchor':       True,
+             }],
+             condition=IfCondition(LaunchConfiguration('lock'))),
         Node(package='duburi_vision', executable='vision_display',
              name='duburi_display', output='screen',
              parameters=[{'camera': 'forward'}],
