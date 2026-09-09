@@ -30,6 +30,7 @@ does anything. Three ways to satisfy that, all honest:
 Deliberately NOT "mirror every value in both places": a second copy of a number
 is the disease, not the cure. This checks the one property that matters.
 """
+import ast
 import os
 import re
 from pathlib import Path
@@ -44,6 +45,54 @@ def _config_yamls():
 
 def _launch_sources():
     return sorted(_ROOT.glob('duburi_*/launch/*.py'))
+
+
+def _package_sources():
+    """Python that could read a config directly, not via a launch parameter."""
+    return sorted(_ROOT.glob('duburi_*/duburi_*/**/*.py'))
+
+
+def _source_string_literals():
+    """Non-docstring string constants in package source, as a SET of whole values.
+
+    The original premise here was "loaded == named in a launch file". That is
+    true of every ROS-parameter config and FALSE of a config a module opens
+    itself: `target_geometry.py` resolves `target_geometry.yaml` out of the
+    installed share directory at call time, so the file is loaded and would
+    have been forced to carry a NOT-LOADED marker that is a lie.
+
+    Two wider premises were tried and BOTH were too loose, each verified by
+    injection rather than by reading:
+
+    * "the name appears anywhere in package source" -- satisfied by a COMMENT in
+      an unrelated file that merely mentions the filename.
+    * "the name appears in any non-docstring string literal" -- satisfied by a
+      LOG MESSAGE in `lock_node.py` that names the file in a sentence.
+
+    What actually loads a file is a literal that IS the filename, passed to
+    open()/os.path.join(). So collect whole-literal matches only. A prose string
+    containing the name is not equal to it.
+    """
+    out = set()
+    for path in _package_sources():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:                       # pragma: no cover
+            continue
+        docstrings = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.ClassDef,
+                                 ast.FunctionDef, ast.AsyncFunctionDef)):
+                body = getattr(node, 'body', None)
+                if (body and isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, ast.Constant)
+                        and isinstance(body[0].value.value, str)):
+                    docstrings.add(id(body[0].value))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and id(node) not in docstrings):
+                out.add(node.value)
+    return out
 
 
 def test_there_are_config_yamls_to_check():
@@ -74,9 +123,12 @@ def test_every_unloaded_config_says_so_in_its_first_lines():
     """The rule. An inert file must announce that it is inert."""
     unloaded = []
     launches = ' '.join(p.read_text() for p in _launch_sources())
+    sources = _source_string_literals()
     for y in _config_yamls():
         if y.name in launches:
             continue                              # a launch loads it
+        if y.name in sources:
+            continue                              # a module opens it by name
         head = '\n'.join(y.read_text().splitlines()[:30])
         if _MARK in head:
             continue                              # says it is inert

@@ -83,3 +83,112 @@ SEARCH_YAW_STEP_DEG   = 20      # yaw step per sweep look
 # ── Style roll ────────────────────────────────────────────────────────────────
 STYLE_ROLL_HEADROOM_M = 0.4     # depth below surface for ACRO roll clearance
 STYLE_ROLL_GAIN       = 60      # roll speed gain
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SAUVC 2026 — everything above this line is RoboSub. Kept in one file so the
+#  operator edits one file at the pool, but the two competitions share NO
+#  constant: a SAUVC pool is 25x16 m with a SLOPING 1.6/1.2 m floor and a
+#  different rulebook, so a value tuned for one is wrong for the other.
+#  Source for every number below: https://sauvc.org/rulebook/ (fetched
+#  2026-09-09) and sim/.../spec/sauvc.yaml, which cites the same rulebook.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Run budget ────────────────────────────────────────────────────────────────
+# "Each team is given 15 minutes to complete the tasks." That 900 s covers ALL
+# attempts AND setup, and the bonus is `(900 - RUN_TIME) * 0.03` once at least
+# two tasks are done -- so a 300 s run is worth 18 bonus points, MORE than the
+# 15-point Navigation task itself. Elapsed time is a scored resource, not slack.
+# ⛔ The bonus needs TWO tasks. As shipped, `sauvc_navigation.run()` surfaces and
+# disarms at the end, so a navigation-only run scores 20 (15 + 5 surfacing) and
+# earns NO timing bonus. Chaining navigation into target acquisition on one dive
+# is what makes the 18 points real, and that combinator does not exist yet.
+SAUVC_RUN_BUDGET_S      = 900.0
+# Navigation is one of the tasks; spending a third of the run on it is the
+# ceiling, not the plan. test_sauvc_navigation.py asserts the mission's own
+# `duration=` values sum under this.
+SAUVC_NAV_BUDGET_S      = 300.0
+
+# ── Depths (negative = below surface) ─────────────────────────────────────────
+# The SAUVC floor SLOPES: 1.6 m at the pool centre rising to 1.2 m at both ends.
+# Every depth here is checked against the SHALLOW end (1.2 m), not the centre,
+# because a setpoint that clears the centre still grounds at the ends -- and
+# "touching the bottom of the pool or wall" is -5 points PER OCCURRENCE, the
+# harshest penalty in the rulebook.
+SAUVC_MAX_DEPTH_M       = -1.0   # floor guard: 0.2 m of water under the hull at
+                                 # the SHALLOWEST point in the pool. No SAUVC
+                                 # setpoint may go deeper (guard test pins this).
+SAUVC_SEARCH_DEPTH_M    = -0.6   # transit/search depth while the gate is not yet
+                                 # located -- shallow, so a heading error that
+                                 # walks us to a pool end cannot ground us.
+# The Navigation gate is "150cm wide and 100cm tall", standing ON the bottom
+# "approximately 16m away from the starting zone". At 16 m along a 25 m pool the
+# floor interpolates to about 1.49 m, so the opening runs from the floor up to
+# roughly 0.49 m below the surface and its centre is near 1.0 m.
+# We pass ABOVE that centre deliberately: touching the gate costs -2, touching
+# the bottom costs -5, so the asymmetry says bias high. -0.85 m leaves ~0.36 m
+# under the top bar and ~0.64 m over the floor.
+SAUVC_GATE_PASS_DEPTH_M = -0.85
+
+# ── Vision tuning ─────────────────────────────────────────────────────────────
+SAUVC_ALIGN_ERR_PX      = 40     # "centred" tolerance on the gate
+SAUVC_ALIGN_GAIN        = 30     # max % thrust while centring
+SAUVC_APPROACH_GAIN     = 40     # max % thrust on the transit; higher than the
+                                 # RoboSub 35 because the timing bonus pays for it
+                                 # and the gate opening is 1.5 m wide, not a hole.
+# Pass-through commit: vision.move(fwd=None) drives until the gate LEAVES the
+# frame and then keeps driving for this long to physically clear it. The default
+# is 2.0 s; 4.0 s here because failing to pass forfeits the mandatory task and
+# with it every other point in the run, while clipping the gate costs only -2.
+SAUVC_GATE_COMMIT_S     = 4.0
+
+# ── Phase budgets (seconds) — these are what the guard test sums ──────────────
+SAUVC_GATE_ALIGN_S      = 60.0   # centre on the gate, creeping forward to find it
+SAUVC_GATE_MOVE_S       = 90.0   # ~16 m of transit plus the commit window
+
+# ── Blind transit: the Selector[precise, always_act] terminal branch ──────────
+# Navigation is MANDATORY and gates every other task, so a perception miss must
+# not zero the run. If the gate is never locked, dead-reckon the leg the rulebook
+# itself gives us: "approximately 16m away from the starting zone".
+SAUVC_BLIND_TRANSIT_ENABLED = True
+SAUVC_BLIND_TRANSIT_S       = 45.0  # ⚠ UNMEASURED on this hull. 16 m at ~0.35 m/s.
+                                    # Measure a timed straight leg in the pool and
+                                    # correct this before trusting the blind branch.
+SAUVC_BLIND_GAIN            = 40
+
+# ── Pre-arm ───────────────────────────────────────────────────────────────────
+SAUVC_TETHER_PAUSE_S    = 10.0   # window to pull the tether before thrusters arm
+
+# ── SAUVC Task 2: Target Acquisition (drop a ball into a drum) ────────────────
+# "There are 4 colored drums in the arena. One of the drums, chosen at random,
+#  will be blue in color, while the rest are red in color." -- "60cm in diameter
+#  and 30cm in depth."  Blue 30 pts, red-with-pinger 50, other red 10.
+#
+# ⛔ WE TARGET THE BLUE DRUM, AND ONLY THE BLUE DRUM. The 50-point drum is
+# identified ACOUSTICALLY ("RJE International Pinger Model No. ULB-362B/45 kHz");
+# the rulebook describes no visual marking at all, and no hydrophone is fitted to
+# this vehicle. The `drum_red_pinger` class exists in sauvc_sim.yaml only because
+# the SIMULATOR paints a yellow band on that drum -- an artifact with no real-
+# world counterpart (see target_geometry.yaml). Steering on it would put the ball
+# in a 10-point drum while believing it scored 50. Blue is the one drum a camera
+# can actually tell apart, so blue is the target.
+SAUVC_DRUM_CLASS         = 'drum_blue'
+SAUVC_DRUM_HOVER_DEPTH_M = -0.7   # hover height for the drop. Drums stand on the
+                                  # floor and are 0.30 m deep, so their mouths are
+                                  # ~0.25 m off the bottom; this keeps the hull
+                                  # inside SAUVC_MAX_DEPTH_M with the mouth in
+                                  # clear view of the downward camera.
+SAUVC_DRUM_CENTRE_ERR_PX = 30     # how tightly to centre over the 0.60 m mouth
+SAUVC_DRUM_ALIGN_S       = 60.0   # budget for the downward centring
+SAUVC_DRUM_SETTLE_S      = 3.0    # settle over the drum before releasing
+SAUVC_DRUM_DESCEND_FILL  = 0      # 0 = OFF: hold the hover depth. A fill-driven
+                                  # descent needs the DOWNWARD camera's in-water
+                                  # FOV, which is not measured on this hull -- a
+                                  # guessed FOV here descends by an unknown amount
+                                  # toward a -5 bottom touch. Measure first.
+SAUVC_DRUM_DEPTH_CEILING_M = -0.4 # surface guard on the downward align
+SAUVC_DROPPER_CHANNEL    = 3      # 3 = dropper_1, 4 = dropper_2
+
+# ⛔ Task 3 (Target Reacquisition, 60 pts) is NOT implemented and has no config
+# here. "The AUV has to hold on to the ball till the end of attempt" -- that needs
+# a gripper or a retaining mechanism this vehicle does not carry. Recording the
+# absence so it is not mistaken for an oversight.
