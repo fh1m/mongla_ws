@@ -214,11 +214,17 @@ def _scoped_names(tree: ast.AST) -> set[str]:
         if not (isinstance(node, ast.Call)
                 and getattr(node.func, 'id', '') == 'GroupAction'):
             continue
-        scoped = any(kw.arg == 'scoped'
-                     and isinstance(kw.value, ast.Constant)
-                     and kw.value.value is True
-                     for kw in node.keywords)
-        if scoped and node.args:
+        # BOTH flags. `scoped=True` isolates writes made inside the group but
+        # still FORWARDS the parent's configurations in, so it does not stop a
+        # leak on its own -- measured on the vehicle: the detector still died
+        # with the scope in place. `forwarding=False` is what blocks it.
+        def _flag(name, want):
+            return any(kw.arg == name
+                       and isinstance(kw.value, ast.Constant)
+                       and kw.value.value is want
+                       for kw in node.keywords)
+
+        if _flag('scoped', True) and _flag('forwarding', False) and node.args:
             out |= {n.id for n in ast.walk(node.args[0]) if isinstance(n, ast.Name)}
     return out
 
@@ -273,6 +279,8 @@ def test_an_include_that_can_leak_a_configuration_is_scoped(src, target, keys):
         f'{src.name}: could not find the variable holding the include of {target}')
     assert include_var in _scoped_names(tree), (
         f'{src.name} can leak {sorted(leak)} into {target} but its include '
-        f'({include_var}) is not inside GroupAction([...], scoped=True). '
-        f'Launch configurations are inherited, so omitting a name from '
-        f'launch_arguments does NOT keep the parent value out of the child.')
+        f'({include_var}) is not inside '
+        f'GroupAction([...], scoped=True, forwarding=False). Launch '
+        f'configurations are inherited, so omitting a name from '
+        f'launch_arguments does NOT keep the parent value out of the child -- '
+        f'and scoped=True alone does not either, it only isolates writes.')

@@ -340,7 +340,13 @@ def generate_launch_description():
 
     return LaunchDescription(args + [
         manager_node,
-        GroupAction([vision_pi_launch], scoped=True),
-        GroupAction([vision_launch], scoped=True),
+        # forwarding=False is the load-bearing half. `scoped=True` alone
+        # isolates writes made INSIDE the group; the parent's configurations
+        # are still forwarded IN, so `vision:=true` still reached vision_pi's
+        # `vision` and still killed detector_dual_node -- measured, on the
+        # vehicle, AFTER adding the scope. Only forwarding=False stops the
+        # inheritance, which is why every argument above is passed explicitly.
+        GroupAction([vision_pi_launch], scoped=True, forwarding=False),
+        GroupAction([vision_launch], scoped=True, forwarding=False),
         foxglove_node,
     ])
