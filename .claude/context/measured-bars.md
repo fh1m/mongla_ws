@@ -2023,6 +2023,25 @@ introduced no stalls. Cost: CPU idle 95.5 % → 89.3 %, memory unchanged
 the `forward` (Jetson) profile, which declares no `fourcc` and negotiates
 YUYV.
 
+**Superseded 2026-09-09 — that measurement was of the WRONG STACK.** `bringup`
+included `vision.launch.py` (single camera, no calibration wired), so the
+425.61 above is a generic focal, not this vehicle's. `bringup` now defaults to
+`vision_stack:=pi`. Measured through the documented command
+(`bringup.launch.py vision:=true`) on the Pi:
+
+| | forward | downward |
+|---|---|---|
+| detections | **30.026 Hz** | **37.610 Hz** |
+| calibration | `pi_forward_1280x720.json` fx **851.2** HFOV **73.9°** | `pi_downward_1280x720.json` fx **1027.9** HFOV **63.8°** |
+| model | `gate_rescue_repair.hef` 640×640, 3 classes | `bin_fire_blood.hef` 640×640, 2 classes |
+| `conf` | 0.15 | 0.15 |
+
+`conf` through bringup was **0.30** before this — a CUDA-path number, double the
+top of the bar in §1, on the one path operators are told to run. Both models are
+resident at once and the chip logs `has taken the activation 20 times --
+another detector is competing for the chip`: that is the 2-group SRAM ceiling,
+still open.
+
 ## SAUVC constants — DERIVED FROM THE RULEBOOK, and two that are NOT measured (2026-09-09)
 
 Rounds 5 and 6 added the first SAUVC missions. Most of their numbers are
