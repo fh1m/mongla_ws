@@ -635,6 +635,64 @@ def _check_jetson_power() -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
+# L2. Raspberry Pi power / throttling
+# --------------------------------------------------------------------------- #
+# `vcgencmd get_throttled` is a bitmask. The LOW half is "happening RIGHT NOW",
+# the HIGH half is "has happened since boot" -- and the sticky half is the one
+# that matters at a preflight, because a brown-out that already cost you frames
+# clears itself the moment the load drops. Bit meanings are the firmware's:
+_THROTTLE_BITS = {
+    0:  ('under-voltage', True),
+    1:  ('ARM frequency capped', True),
+    2:  ('currently throttled', True),
+    3:  ('soft temperature limit', False),
+    16: ('under-voltage HAS OCCURRED', True),
+    17: ('ARM frequency cap HAS OCCURRED', True),
+    18: ('throttling HAS OCCURRED', True),
+    19: ('soft temperature limit HAS OCCURRED', False),
+}
+
+
+def _throttled_verdict(raw: int) -> tuple[str, str]:
+    """Grade a `get_throttled` bitmask. Pure, so it is testable without a Pi.
+
+    ⛔ A CLEAN READING IS NOT A CERTIFICATE. The load that matters -- eight
+    thrusters drawing while both cameras and the Hailo run -- cannot be applied
+    on a bench, and the sticky bits only record what has ALREADY happened. This
+    reports; it does not clear the hull for water.
+    """
+    if raw == 0:
+        return PASS, ('0x0 -- no under-voltage or throttling since boot. NOTE: '
+                      'the thrusters were not drawing; this is not a load test')
+    now = [n for b, (n, _) in _THROTTLE_BITS.items() if b < 16 and raw >> b & 1]
+    past = [n for b, (n, _) in _THROTTLE_BITS.items() if b >= 16 and raw >> b & 1]
+    serious = any(sev for b, (_, sev) in _THROTTLE_BITS.items() if raw >> b & 1)
+    what = '; '.join(now + past) or f'unknown bits in {raw:#x}'
+    if now:
+        return FAIL, (f'{raw:#x} ACTIVE NOW: {what} -- the PSU or the cable '
+                      f'cannot hold 5 V under this load. Fix before water: a '
+                      f'brown-out mid-run costs the run')
+    return (WARN if serious else PASS), (
+        f'{raw:#x} since boot: {what} -- not happening now, but it HAS. '
+        f'Suspect the supply or the USB-C cable under load')
+
+
+def _check_pi_power() -> tuple[str, str]:
+    try:
+        out = subprocess.run(['vcgencmd', 'get_throttled'], capture_output=True,
+                             text=True, timeout=3).stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return PASS, 'not a Raspberry Pi (vcgencmd absent) -- skipped'
+    if '=' not in out:
+        return WARN, f'could not parse `vcgencmd get_throttled` output: {out[:60]!r}'
+    try:
+        raw = int(out.split('=', 1)[1].strip(), 0)
+    except ValueError:
+        return WARN, f'non-numeric throttle value: {out[:60]!r}'
+    return _throttled_verdict(raw)
+
+
+# --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
 # A still bench barometer is stable to well under 1 mbar; this is deliberately loose
@@ -1305,6 +1363,14 @@ def main(argv: list[str] | None = None) -> int:
     section('L. Jetson power mode (vision FPS)')
     st, det = _check_jetson_power()
     emit(st, 'GPU power mode', det)
+
+    # ---- L2. Pi power ---------------------------------------------- #
+    # The vehicle is a Pi, so section L above always PASSes as "not a Jetson"
+    # and the companion had NO power check at all. An under-voltage that has
+    # already occurred is invisible without this.
+    section('L2. Raspberry Pi power (under-voltage / throttling)')
+    st, det = _check_pi_power()
+    emit(st, 'pi throttling', det)
 
     # ---- resolved mode + launch hint ------------------------------- #
     section('Manager startup hint')
