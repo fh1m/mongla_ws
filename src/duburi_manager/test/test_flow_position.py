@@ -61,7 +61,19 @@ def _src(**kw):
     return s, node, inner
 
 
-def _feed(node, vx, vy, sigma=0.01, quality=200):
+def _feed(node, vx, vy, sigma=0.01, quality=200, stamp_wall=None):
+    """Deliver one velocity fix.
+
+    `stamp_wall` is the WALL-clock capture instant `flow_node` puts in the
+    header (it stamps the capture-interval MIDPOINT). Defaults to "now", which
+    is what a healthy live pipeline looks like. Pass `stamp_wall=0.0` for an
+    unstamped publisher.
+
+    ⛔ This helper did NOT set a stamp at all until the timing fix, so every
+    test here ran the fallback branch and none of them could see which clock
+    the integrator used. A harness that cannot observe the property under test
+    passes identically before and after the fix.
+    """
     q = UInt8()
     q.data = quality
     node.subs['/duburi/vision/downward/flow_quality'](q)
@@ -69,6 +81,9 @@ def _feed(node, vx, vy, sigma=0.01, quality=200):
     m.twist.twist.linear.x = float(vx)
     m.twist.twist.linear.y = float(vy)
     m.twist.covariance[0] = float(sigma) ** 2
+    t = time.time() if stamp_wall is None else float(stamp_wall)
+    m.header.stamp.sec = int(t)
+    m.header.stamp.nanosec = int((t - int(t)) * 1e9)
     node.subs['/duburi/vision/downward/velocity'](m)
 
 
@@ -199,3 +214,44 @@ def test_status_counts_zero_quality_intervals():
     _feed(node, 0.2, 0.0, quality=0)
     _feed(node, 0.2, 0.0, quality=180)
     assert s.status()['n_zero_quality'] == 1
+
+
+# --------------------------------------------------------------------------- #
+#  WHICH CLOCK the position integrates on
+# --------------------------------------------------------------------------- #
+def test_dt_comes_from_the_capture_stamp_not_arrival_time():
+    """The discriminating test for the timing fix.
+
+    Two fixes whose CAPTURE stamps are 1.0 s apart, delivered back to back in
+    real time. Integrating on arrival time gives a dt of microseconds and so
+    essentially zero displacement; integrating on the stamp gives ~1 s of
+    travel at the commanded speed.
+
+    `flow_node` stamps the capture-interval MIDPOINT because flow measures an
+    AVERAGE velocity over an interval, and with an adaptive baseline reaching
+    0.75 s that correction is worth up to 375 ms. Reading a local clock here
+    discarded it.
+    """
+    s, node, _ = _src()
+    # Both stamps must be INSIDE fix_stale_s of now, or reset_position()
+    # rightly refuses -- staleness is measured from the capture instant, which
+    # is the same fix under test.
+    t0 = time.time() - 0.5
+    _feed(node, 0.5, 0.0, stamp_wall=t0)
+    s.reset_position()
+    _feed(node, 0.5, 0.0, stamp_wall=t0 + 0.5)
+    x, _y = s.get_position()
+    assert x > 0.15, (
+        f'travelled {x:.3f} m over a 0.5 s stamped interval at 0.5 m/s -- '
+        'the integrator is using arrival time, not the capture stamp')
+    assert s.status()['n_stamp_fallback'] == 0
+
+
+def test_an_unstamped_publisher_falls_back_loudly_and_is_counted():
+    """Fail safe, not fail silent. A publisher that stamps nothing still has
+    to work -- arrival time is the honest answer there -- but it must be
+    visible in `status()` rather than silently degrading every distance."""
+    s, node, _ = _src()
+    _feed(node, 0.2, 0.0, stamp_wall=0.0)
+    _feed(node, 0.2, 0.0, stamp_wall=0.0)
+    assert s.status()['n_stamp_fallback'] == 2

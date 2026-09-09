@@ -24,7 +24,7 @@ pytest.importorskip('cv_bridge')
 
 from rclpy.parameter import Parameter                      # noqa: E402
 
-from duburi_vision.distance.flow_node import (             # noqa: E402
+from duburi_vision.flow.flow_node import (             # noqa: E402
     _F_AIR_PX, _F_WATER_PX, _GYRO_GAIN_DEFAULT, FlowVelocityNode,
 )
 
@@ -161,7 +161,7 @@ class TestGyroGainDefault:
         coupling about the LENS is S = -1.058 / -0.830, and the node cancels
         at g = -S. Deleting these would mean re-running the tilt calibration
         to learn something already known."""
-        from duburi_vision.distance.flow_node import _GYRO_GAIN_LENS_PIVOT
+        from duburi_vision.flow.flow_node import _GYRO_GAIN_LENS_PIVOT
         assert _GYRO_GAIN_LENS_PIVOT == pytest.approx((1.058, 0.830))
 
     def test_the_bench_gain_is_still_settable(self):
@@ -190,7 +190,7 @@ class TestQualityConvention:
     def test_a_real_but_poor_fix_never_reports_zero(self):
         """0 is reserved. A weak fix has to be distinguishable from no fix, or
         a consumer gating on `quality > 0` silently drops good-enough data."""
-        from duburi_vision.distance.flow_velocity import FlowVelocity
+        from duburi_vision.flow.flow_velocity import FlowVelocity
         n = _make(pool_depth_m=4.0)
         try:
             worst = FlowVelocity(ok=True, vx=0.0, vy=0.0, rot_fraction=0.79,
@@ -202,7 +202,7 @@ class TestQualityConvention:
             n.destroy_node()
 
     def test_a_clean_fix_scores_higher_than_a_marginal_one(self):
-        from duburi_vision.distance.flow_velocity import FlowVelocity
+        from duburi_vision.flow.flow_velocity import FlowVelocity
         n = _make(pool_depth_m=4.0)
         try:
             good = FlowVelocity(ok=True, vx=0.2, vy=0.0, rot_fraction=0.02,

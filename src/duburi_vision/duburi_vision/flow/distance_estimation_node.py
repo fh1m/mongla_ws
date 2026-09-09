@@ -34,7 +34,7 @@ from geometry_msgs.msg import Vector3Stamped
 from rclpy.qos import QoSDurabilityPolicy
 
 from duburi_interfaces.msg import DuburiState
-from duburi_vision.distance.flow_math import (
+from duburi_vision.flow.flow_math import (
     DistanceAccumulator, height_above_floor, rotation_flow_px, robust_flow,
     interp_rate,
 )

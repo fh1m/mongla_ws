@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from duburi_vision.distance.flow_velocity import (          # noqa: E402
+from duburi_vision.flow.flow_velocity import (          # noqa: E402
     MIN_NET_FLOW_PX, ROT_FRACTION_MAX, flow_velocity)
 
 F = 513.9          # the vehicle's forward camera at 640x360
@@ -150,7 +150,7 @@ def test_dispersion_is_OPTIONAL_so_existing_callers_are_unchanged():
 # --------------------------------------------------------------------------- #
 def test_flow_dispersion_is_small_for_a_COHERENT_translation():
     import numpy as np
-    from duburi_vision.distance.flow_math import flow_dispersion
+    from duburi_vision.flow.flow_math import flow_dispersion
     p0 = np.random.default_rng(0).uniform(0, 300, (40, 2))
     p1 = p0 + np.array([4.0, -2.0])                 # every point moves alike
     st = np.ones(40)
@@ -159,7 +159,7 @@ def test_flow_dispersion_is_small_for_a_COHERENT_translation():
 
 def test_flow_dispersion_is_LARGE_for_scattered_motion():
     import numpy as np
-    from duburi_vision.distance.flow_math import flow_dispersion
+    from duburi_vision.flow.flow_math import flow_dispersion
     rng = np.random.default_rng(1)
     p0 = rng.uniform(0, 300, (40, 2))
     p1 = p0 + rng.normal(0, 6.0, (40, 2))           # no common motion
@@ -170,7 +170,7 @@ def test_flow_dispersion_returns_NONE_not_ZERO_when_unmeasurable():
     """0.0 would read as PERFECT coherence and sail through the gate. Absence
     must be absence -- the same rule the health surface is built on."""
     import numpy as np
-    from duburi_vision.distance.flow_math import flow_dispersion
+    from duburi_vision.flow.flow_math import flow_dispersion
     assert flow_dispersion(None, None, None) is None
     p = np.zeros((2, 2))
     assert flow_dispersion(p, p, np.ones(2)) is None
@@ -181,7 +181,7 @@ def test_the_coherence_gate_PASSES_realistic_motion():
     dispersion/magnitude ratio p90 of ~3.8, and a gate that rejects those
     silently deletes displacement from the integral -- 60 % of a 50 cm slide
     when this was 0.5."""
-    from duburi_vision.distance.flow_velocity import MAX_DISPERSION_RATIO
+    from duburi_vision.flow.flow_velocity import MAX_DISPERSION_RATIO
     assert MAX_DISPERSION_RATIO >= 3.8
     dx, dy = _render(vx=0.4, h=0.5)
     mag = math.hypot(dx, dy)

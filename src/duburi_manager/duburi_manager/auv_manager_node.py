@@ -278,6 +278,11 @@ class AUVManagerNode(Node):
         self.declare_parameter('smooth_yaw',       False)
         self.declare_parameter('smooth_translate', False)
         self.declare_parameter('yaw_source',           'mavlink_ahrs')
+        # Position for the *_dist verbs. 'none' = no position source, which is
+        # what a hull with no DVL has had until now: those verbs REFUSE.
+        # 'flow' wraps the yaw source with the bottom camera's flow-derived
+        # position. Default stays 'none' -- see _setup_yaw_source.
+        self.declare_parameter('position_source',      'none')
         self.declare_parameter('bno085_port',          'auto')
         self.declare_parameter('bno085_baud',          115200)
         self.declare_parameter('payload_port',         'auto')
@@ -370,6 +375,8 @@ class AUVManagerNode(Node):
         self._smooth_yaw    = bool(self.get_parameter('smooth_yaw').value)
         self._smooth_tr     = bool(self.get_parameter('smooth_translate').value)
         self._yaw_src_name  = str(self.get_parameter('yaw_source').value)
+        self._pos_src_name  = str(
+            self.get_parameter('position_source').value).strip().lower()
         self._bno_port      = str(self.get_parameter('bno085_port').value)
         self._bno_baud      = int(self.get_parameter('bno085_baud').value)
         self._payload_port  = str(self.get_parameter('payload_port').value)
@@ -592,6 +599,61 @@ class AUVManagerNode(Node):
         (self.get_logger().info if yr_ok else self.get_logger().warning)(
             f'[SROT ] {yr_reason}')
 
+    # Heading sources whose yaw we trust enough to rotate a velocity by. The
+    # hull compass is not one of them: `mavlink_ahrs` on the aluminium hull is
+    # the source §6 of CLAUDE.md calls untrusted, and flow position rotates
+    # body velocity into the latched frame, so heading error becomes CROSS-TRACK
+    # position error directly -- 5 deg over 1 m is 8.7 cm, and the return-leg
+    # measurements say cross-track drift already dominates.
+    _POSITION_TRUSTED_YAW = ('bno085', 'bno085_dvl', 'dvl_bno', 'dvl',
+                             'nucleus_dvl', 'bno085_sim_dvl', 'sim_dvl')
+
+    def _wrap_position_source(self) -> None:
+        """Optionally give the yaw source a position, from the bottom camera.
+
+        `drive_forward_dist` / `drive_lateral_dist` duck-type on
+        `get_position`/`reset_position`, which ONLY the Nortek sources provide
+        -- and the Nortek is not fitted. So on this hull those verbs have been
+        dead. `FlowPositionSource` supplies exactly that contract from
+        `flow_node`, without the motion layer changing at all, which matters
+        because those files carry the runaway guards added after measuring
+        11.3 m of travel on a 1.0 m command.
+
+        OFF BY DEFAULT. In-water accuracy is unvalidated (dry bench: 103.4 % of
+        truth, +-7 % height uncertainty), so an operator opts in per run. The
+        capability is that the verbs are runnable AND refuse honestly; it is
+        not that they are trustworthy.
+        """
+        name = self._pos_src_name
+        if name in ('', 'none', 'off', 'false'):
+            return
+        if name != 'flow':
+            self.get_logger().error(
+                f"[FLOWP] position_source={name!r} is unknown. Known: "
+                f"'none' (default), 'flow'. Leaving the *_dist verbs without "
+                f"a position source.")
+            return
+        if hasattr(self.yaw_source, 'get_position'):
+            self.get_logger().info(
+                f'[FLOWP] position_source:=flow ignored -- '
+                f'{self.yaw_source.name!r} already supplies a position.')
+            return
+        if self._yaw_src_name not in self._POSITION_TRUSTED_YAW:
+            self.get_logger().warning(
+                f'[FLOWP] position_source:=flow with yaw_source='
+                f'{self._yaw_src_name!r}. Flow gives velocity in the BODY '
+                f'frame and this rotates it by that heading, so heading error '
+                f'lands directly in cross-track position (5 deg over 1 m is '
+                f'8.7 cm). Prefer a BNO-backed heading for distance moves.')
+        try:
+            from duburi_manager.flow_position import FlowPositionSource
+            self.yaw_source = FlowPositionSource(
+                self, self.yaw_source, camera='downward')
+        except Exception as exc:      # noqa: BLE001 -- never block startup
+            self.get_logger().error(
+                f'[FLOWP] could not attach flow position ({exc}); the *_dist '
+                f'verbs stay refused.')
+
     def _setup_yaw_source(self) -> None:
         """Instantiate yaw source, print startup banner, start DVL auto-connect."""
         _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
@@ -621,6 +683,8 @@ class AUVManagerNode(Node):
             self.get_logger().fatal(
                 f'[SENS ] yaw_source={self._yaw_src_name!r} failed to init: {exc}')
             raise
+
+        self._wrap_position_source()
 
         # Duck-typed: only BNO085Source has read_pitch/read_roll.
         self._bno_mocap_active: bool = hasattr(self.yaw_source, 'read_pitch')
@@ -823,7 +887,7 @@ class AUVManagerNode(Node):
         # Board-clock -> host-clock mapping for the IMU stamp. See
         # _imu_rates_tick: the board's own interval has sd 0.00 ms where
         # arrival has sd 6.67, so the sender's clock is the better time base.
-        from duburi_vision.distance.flow_timing import ClockMap
+        from duburi_vision.flow.flow_timing import ClockMap
         self._imu_clock = ClockMap(window_s=20.0, min_pairs=40)
         self._imu_clock_fit_t = 0.0
         self._imu_clock_ok = False

@@ -24,7 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from duburi_vision.distance.flow_math import DistanceAccumulator   # noqa: E402
+from duburi_vision.flow.flow_math import DistanceAccumulator   # noqa: E402
 
 
 def _active_acc():
@@ -78,7 +78,7 @@ def test_a_real_height_integrates_proportionally():
 # --------------------------------------------------------------------------- #
 def test_the_height_latch_expires():
     """`_fresh_height` returns the height while fresh and None once stale."""
-    from duburi_vision.distance import distance_estimation_node as dn
+    from duburi_vision.flow import distance_estimation_node as dn
 
     class _Stub:
         _last_height = 0.9
@@ -93,7 +93,7 @@ def test_the_height_latch_expires():
 
 
 def test_a_height_that_never_arrived_is_None_not_zero():
-    from duburi_vision.distance import distance_estimation_node as dn
+    from duburi_vision.flow import distance_estimation_node as dn
 
     class _Stub:
         _last_height = None

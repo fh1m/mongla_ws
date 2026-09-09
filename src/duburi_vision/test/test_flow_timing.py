@@ -14,7 +14,7 @@ import math
 import numpy as np
 import pytest
 
-from duburi_vision.distance.flow_timing import (
+from duburi_vision.flow.flow_timing import (
     ClockMap, TimeOffset, exposure_offset_s, interval_midpoint,
 )
 

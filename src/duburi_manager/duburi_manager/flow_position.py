@@ -45,6 +45,8 @@ from geometry_msgs.msg import TwistWithCovarianceStamped
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import UInt8
 
+from duburi_vision.stamps import capture_monotonic
+
 from .estimator.nav_estimator import NavEstimator
 
 # Refuse to ARM a distance move if the last velocity fix is older than this.
@@ -79,6 +81,8 @@ class FlowPositionSource:
         self._last_quality = 0
         self._n_fix = 0
         self._n_zero_quality = 0
+        self._n_stamp_fallback = 0
+        self._warned_stamp = False
         # Heading at the last reset_position(). The DVL contract is
         # "body-frame position since last reset", and NavEstimator integrates
         # in a LOCAL frame, so the two differ by exactly this rotation. Without
@@ -126,13 +130,34 @@ class FlowPositionSource:
         # that away -- which is the whole reason it is computed.
         var = float(msg.twist.covariance[0])
         sigma = math.sqrt(var) if var > 0.0 else 0.05
-        now = time.monotonic()
+        # ⛔ WHEN THIS VELOCITY HAPPENED, NOT WHEN IT ARRIVED. `flow_node`
+        # stamps at the CAPTURE-INTERVAL MIDPOINT -- flow gives an average
+        # velocity over an interval, so it belongs at the middle, and with an
+        # adaptive baseline reaching 0.75 s that correction is worth up to
+        # 375 ms. Reading `time.monotonic()` here threw all of that away and
+        # replaced it with host arrival jitter, measured at 30.85 ms p2p
+        # against 0.000 ms of board jitter.
+        #
+        # This is the FIFTH instance of the defect `duburi_vision.stamps`
+        # exists to stop (camera_node, vision_state, srot_replay, lock_node),
+        # and the worst placed: dt here multiplies velocity into POSITION, so
+        # the error integrates instead of decaying. Every one of those flatters
+        # -- a too-small age reads as fresher than earned.
+        t, why = capture_monotonic(msg.header)
+        if why:
+            self._n_stamp_fallback += 1
+            if not self._warned_stamp:
+                self._warned_stamp = True
+                self._log.warning(
+                    f'[FLOWP] velocity stamp unusable ({why}) -- integrating '
+                    f'on ARRIVAL time. Position now carries host scheduling '
+                    f'jitter; treat distances as indicative only.')
         yaw = self._yaw_rad()
         with self._lock:
-            self._nav.predict(now, yaw)
+            self._nav.predict(t, yaw)
             if self._nav.update_velocity(vx, vy, sigma):
                 self._n_fix += 1
-                self._last_fix_t = now
+                self._last_fix_t = t
 
     # ── the DVL contract ────────────────────────────────────────────────────
     def get_position(self) -> Tuple[float, float]:
@@ -202,12 +227,14 @@ class FlowPositionSource:
             st = self._nav.state()
             q, last = self._last_quality, self._last_fix_t
             zero = self._n_zero_quality
+            stamp_fb = self._n_stamp_fallback
         return {
             'quality': q,
             'fix_age_s': (time.monotonic() - last) if last else float('inf'),
             'n_fixes': st.n_fixes,
             'n_rejected': st.n_rejected,
             'n_zero_quality': zero,
+            'n_stamp_fallback': stamp_fb,
             'pos_sigma_m': st.pos_sigma,
             'vel_sigma_ms': st.vel_sigma,
             'speed_ms': st.speed,
