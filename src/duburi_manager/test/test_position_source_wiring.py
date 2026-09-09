@@ -99,8 +99,14 @@ class _Inner:
     """A yaw source with NO position -- the premise of the whole fold."""
     name = 'bno085'
 
+    def __init__(self):
+        self.closed = False
+
     def read_yaw(self):
         return 0.0
+
+    def close(self):
+        self.closed = True
 
 
 class _FakeNode:
@@ -164,3 +170,18 @@ def test_an_untrusted_heading_warns_because_it_becomes_cross_track_error():
 def test_a_trusted_heading_does_not_warn():
     node = _wrap(_FakeNode(pos='flow', yaw='bno085'))
     assert 'cross-track' not in node._log.text()
+
+
+def test_closing_the_wrapper_also_closes_the_source_it_wraps():
+    """`close` is the ONE method that exists on both, so `__getattr__` never
+    fires for it and delegation does not happen by default.
+
+    The manager shuts down with `node.yaw_source.close()`, which after wrapping
+    lands on the wrapper. Without an explicit inner call the BNO085's serial
+    port (or a DVL's TCP session) is left open, and nothing reports it.
+    """
+    node = _wrap(_FakeNode(pos='flow'))
+    inner = node.yaw_source._inner
+    assert not inner.closed
+    node.yaw_source.close()
+    assert inner.closed, 'the wrapper closed itself and orphaned the real source'

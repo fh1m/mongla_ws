@@ -241,9 +241,25 @@ class FlowPositionSource:
         }
 
     def close(self) -> None:
+        """Close our subscriptions AND the source we wrap.
+
+        ⛔ `close` is the one method that exists on BOTH this wrapper and the
+        inner source, so `__getattr__` never fires for it -- delegation works
+        everywhere else precisely because those attributes are absent here.
+        The manager shuts down with `node.yaw_source.close()`, which after
+        wrapping reaches this method, so without the explicit call below the
+        real source is never closed: a BNO085 leaves its serial port open, a
+        Nortek leaves its TCP session open, and nothing reports either.
+        """
         for sub in (getattr(self, '_sub_vel', None), getattr(self, '_sub_q', None)):
             if sub is not None:
                 try:
                     self._node.destroy_subscription(sub)
                 except Exception:
                     pass
+        inner_close = getattr(self._inner, 'close', None)
+        if callable(inner_close):
+            try:
+                inner_close()
+            except Exception as exc:      # noqa: BLE001 -- shutdown is best-effort
+                self._log.warning(f'[FLOWP] inner source close() failed: {exc}')
