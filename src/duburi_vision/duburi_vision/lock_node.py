@@ -33,6 +33,8 @@ import time
 
 import cv2
 import numpy as np
+
+from duburi_vision.optics import RefractiveRectifier
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
@@ -148,6 +150,25 @@ class LockNode(Node):
                     f'target_width_m is unset -- the 6-DoF pose will refuse. '
                     f'Add it to config/target_geometry.yaml or pass '
                     f'target_width_m.')
+        # MEDIUM. A flat port is not a pinhole: the ray from a point at water
+        # angle tw leaves at air angle ta with sin(ta) = n*sin(tw), so the
+        # effective focal length grows with field angle -- 10.6 % centre to
+        # corner on this camera, and the pose path was reading the AIR K with
+        # raw pixels. Ray-traced against the shipped model, the error at the
+        # frame corner is +34 px at 0.3 m and +46 px at 2 m. Default 'water'
+        # matches `flow_node`'s `flow_medium`, and the choice is LOGGED at
+        # startup because it silently rescales every range this node publishes.
+        #
+        # Placed AFTER the width lookup on purpose: `test_target_geometry`
+        # asserts `width_for(self._cls)` lands within 1500 chars of
+        # `target_width_m`, and splitting that block pushed it out of range.
+        self._medium = str(
+            self.declare_parameter('medium', 'water').value or 'water').lower()
+        if self._medium not in ('water', 'air'):
+            raise ValueError(
+                f"medium must be 'water' or 'air', got {self._medium!r}")
+        self._rect = None
+        self._K_rect = None
         self._pub_pose = (
             self.create_publisher(TargetPose, f'{ns}/target_pose',
                                   _qos.DETECTIONS)
@@ -255,6 +276,32 @@ class LockNode(Node):
                             [0.0, k[4] * sy, k[5] * sy],
                             [0.0, 0.0, 1.0]], np.float64)
 
+        # ⛔ THE RECTIFIED POINTS NEED THE RECTIFIED K. `rectify` re-projects
+        # each ray through `f_ref`, which defaults to `fx * n` -- so a point at
+        # water angle tw lands at radius `f_ref * tan(tw)`, a true pinhole of
+        # focal `f_ref`. Feeding those points to PnP with the AIR K would leave
+        # a clean 1/n scale error: every range 33 % short, with a plausible
+        # number and no warning. Same class as the fx!=fy aspect defect the
+        # rectifier's own docstring records.
+        if self._medium == 'water':
+            fx, fy = float(self._K[0][0]), float(self._K[1][1])
+            cx, cy = float(self._K[0][2]), float(self._K[1][2])
+            self._rect = RefractiveRectifier(fx, fy, cx, cy)
+            self._K_rect = np.array(
+                [[self._rect.f_ref, 0.0, cx],
+                 [0.0, self._rect.f_ref_y, cy],
+                 [0.0, 0.0, 1.0]], np.float64)
+            self.get_logger().info(
+                f'[LOCK ] medium=water: flat-port rectification ON, '
+                f'f_air={fx:.1f} -> f_ref={self._rect.f_ref:.1f} px '
+                f'(centre f_eff {self._rect.local_focal_px(0.0):.1f}, '
+                f'corner {self._rect.local_focal_px(min(cx, cy)):.1f})')
+        else:
+            self._rect, self._K_rect = None, self._K
+            self.get_logger().info(
+                '[LOCK ] medium=air: no refraction correction (identity). '
+                'Ranges are only valid OUT of water.')
+
     def _publish_pose(self, pose, header):
         """6-DoF from the anchor's inliers, when calibrated and sized.
 
@@ -280,7 +327,14 @@ class LockNode(Node):
         roi = self._anchor.reference_roi
         wh = ((roi[2] - roi[0], roi[3] - roi[1]) if roi
               else (self._anchor._be.w, self._anchor._be.h))
-        tp = target_pose(pose.ref_pts, pose.live_pts, self._K,
+        # Both point sets come from the SAME camera, so both are rectified --
+        # rectifying only the live side would compare water geometry against
+        # air geometry and put the whole error into the pose.
+        ref_pts, live_pts = pose.ref_pts, pose.live_pts
+        if self._rect is not None:
+            ref_pts = self._rect.rectify(ref_pts)
+            live_pts = self._rect.rectify(live_pts)
+        tp = target_pose(ref_pts, live_pts, self._K_rect,
                          width_m=self._target_w_m, ref_size_px=wh)
         m.ok = bool(tp.ok)
         m.reason = tp.reason
