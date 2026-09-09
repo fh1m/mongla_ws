@@ -165,3 +165,138 @@ def test_every_tool_naming_a_calibration_names_one_that_EXISTS():
         'tools name calibration files that do not exist:\n  ' +
         '\n  '.join(missing) +
         f'\navailable: {sorted(p.name for p in _CAL_DIR.glob("*.json"))}')
+
+
+# --------------------------------------------------------------------------
+# The binding must hold for EVERY launch, not just vision_pi.
+#
+# Everything above guards `vision_pi.launch.py`, which wires calibrations by
+# hand. `vision.launch.py` -- the one `bringup.launch.py` includes, i.e. the
+# one an operator is actually told to run -- wired NOTHING, so `camera_node`
+# published CameraInfo with k all zero on the mission path and no test here
+# could see it, because this file names one launch file.
+#
+# The fix was NOT to copy the wiring into the second launch (that makes three
+# copies of the camera-to-file map and leaves the fourth to be found later).
+# `camera_node` resolves its own calibration from its `profile` via each
+# file's own `applies_to`. These guard that derivation.
+# --------------------------------------------------------------------------
+
+def _load_binding():
+    """Import binding.py BY PATH.
+
+    Not `from duburi_vision...` -- see the module docstring: an import in a
+    worktree resolves against the main workspace's stale install/ tree, which
+    is how the CLAHE retraction nearly went the wrong way. By path, the thing
+    under test is the source in this tree and nothing else.
+    """
+    import importlib.util
+    src = _PKG / 'duburi_vision' / 'calibration' / 'binding.py'
+    assert src.is_file(), f'{src} is missing -- did the resolver move?'
+    spec = importlib.util.spec_from_file_location('_binding_under_test', src)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_every_calibration_resolves_back_from_the_profile_it_CLAIMS():
+    """Round-trip. A file that declares `applies_to: [X]` must be what the
+    resolver returns for X -- otherwise the declaration is decorative and the
+    camera silently gets no calibration, which is the state this whole file
+    exists to prevent."""
+    resolve = _load_binding().calibration_for_profile
+    for f in _calib_files():
+        for profile in json.loads(f.read_text())['applies_to']:
+            got = resolve(profile)
+            assert got, (
+                f'{f.name} declares applies_to {profile!r} but the resolver '
+                f'returns nothing for it, so that camera comes up with k=0.')
+            assert pathlib.Path(got).name == f.name, (
+                f'profile {profile!r} resolves to {pathlib.Path(got).name}, '
+                f'not {f.name} -- two files claim one camera.')
+
+
+def test_a_profile_nobody_calibrated_resolves_to_EMPTY_not_a_guess():
+    """`forward` and `pi_forward` are DIFFERENT PHYSICAL CAMERAS (Blue
+    Robotics on the Jetson vs the Fantech on the Pi). Name similarity must
+    never bind one to the other's intrinsics: a wrong calibration is worse
+    than none, because it yields confident bearings wrong by a fixed factor
+    with nothing logging a fault."""
+    resolve = _load_binding().calibration_for_profile
+    for profile in ('forward', 'downward', 'laptop', 'sim_front', ''):
+        assert resolve(profile) == '', (
+            f'{profile!r} resolved to a calibration. No file declares it, so '
+            f'this can only be a name-similarity guess -- the round-38 defect '
+            f'in a new costume.')
+
+
+def test_applies_to_names_a_camera_profile_THAT_EXISTS():
+    """An `applies_to` naming no real profile binds to nothing, forever, and
+    reads as correct. Guards a typo the resolver cannot detect."""
+    cams = _PKG / 'config' / 'cameras.yaml'
+    if not cams.is_file():
+        pytest.skip('cameras.yaml not present')
+    text = cams.read_text()
+    declared = set(re.findall(r'^\s{4}([a-z_][a-z0-9_]*):\s*$', text, re.M))
+    declared |= set(re.findall(r'^\s{4}([a-z_][a-z0-9_]*):\s*\{', text, re.M))
+    assert declared, 'parsed no camera profiles -- has cameras.yaml changed?'
+    for f in _calib_files():
+        for profile in json.loads(f.read_text())['applies_to']:
+            assert profile in declared, (
+                f'{f.name} declares applies_to {profile!r}, which is not a '
+                f'camera profile in cameras.yaml. It will bind to nothing '
+                f'forever. Known: {sorted(declared)}')
+
+
+def test_camera_node_ACTUALLY_calls_the_resolver_when_unset():
+    """The resolver existing is not the same as it being reached -- that gap
+    is precisely how the four prior 'config reaches nothing' defects in this
+    package happened. Read camera_node's source and prove the wiring."""
+    src = (_PKG / 'duburi_vision' / 'camera_node.py').read_text()
+    assert 'calibration_for_profile' in src, (
+        'camera_node does not call calibration_for_profile, so an unset '
+        '`calibration` param still publishes k=0 on the bringup path.')
+    body = src[src.index('def _load_calibration'):]
+    body = body[:body.index('def _fill_calibration')]
+    assert 'calibration_for_profile' in body, (
+        'calibration_for_profile is imported but not used inside '
+        '_load_calibration -- the resolution never happens.')
+    assert "get_parameter('profile')" in body, (
+        '_load_calibration must resolve from the PROFILE; anything else is a '
+        'second copy of the camera-to-file map.')
+
+
+def test_no_profile_is_claimed_by_TWO_calibrations():
+    """`applies_to` is a list and the resolver returns the first match in
+    sorted order. Two files claiming one camera would leave the round-trip
+    test above passing for whichever sorts first, while the other is silently
+    shadowed -- the resolver would be picking a lens alphabetically."""
+    owner = {}
+    for f in _calib_files():
+        for profile in json.loads(f.read_text())['applies_to']:
+            assert profile not in owner, (
+                f'both {owner[profile]} and {f.name} declare applies_to '
+                f'{profile!r}. The resolver takes the first in sorted order, '
+                f'so which lens that camera gets is decided by filename.')
+            owner[profile] = f.name
+
+
+def test_setup_py_INSTALLS_the_calibrations_into_the_share_dir():
+    """The branch the vehicle actually uses.
+
+    `binding._candidate_dirs()` tries the installed share dir first and the
+    source tree second. On the Pi, resolution was measured going through the
+    share dir (install/duburi_vision/share/...). The source-tree fallback
+    exists for tests and for a `--symlink-install` tree -- it does NOT exist
+    on a clean deploy. So if setup.py ever stops installing these files, the
+    share dir is empty, the fallback is absent, and every camera comes up
+    with k=0 again with only a WARN.
+    """
+    setup = _PKG / 'setup.py'
+    src = setup.read_text()
+    assert 'config/calibration' in src, (
+        'setup.py does not install config/calibration -- on a clean deploy '
+        'the share dir is empty and no calibration resolves.')
+    assert re.search(r"glob\(\s*'config/calibration/\*\.json'\s*\)", src), (
+        'setup.py names config/calibration but does not glob its *.json. '
+        'The calibrations would not reach the installed share dir.')

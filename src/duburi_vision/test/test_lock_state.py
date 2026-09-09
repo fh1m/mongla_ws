@@ -31,15 +31,55 @@ OTHER = (200.0, 200.0, 260.0, 260.0)
 #  Priority
 # --------------------------------------------------------------------------- #
 def test_a_live_detection_wins_and_RESETS_the_clock():
-    """A detection is the confirmation the decay counts time since, so it must
-    restore full authority however old the previous lock was."""
-    s = arbitrate(now=100.0, last_detection_t=1.0,
+    """A detection is the confirmation the decay counts time since, so it
+    restores full authority -- when its CLOCK says it is live.
+
+    ⛔ PREMISE CORRECTED 2026-09-09. This used to read "however old the
+    previous lock was" and passed `last_detection_t=1.0` with `now=100.0` --
+    a 99 s old clock alongside a present box. Those two inputs are
+    inconsistent for the real caller, which sets `_det_box` and `_det_t`
+    together, EXCEPT in one case: `lock_node._on_det` clears its cached box
+    only when a message arrives carrying no match, so during a TOTAL detector
+    outage the callback never runs and the stale box persists with its old
+    clock. That is precisely the case the ladder exists for, and the old
+    assertion demanded the wrong answer for it -- measured on the Pi as
+    `rung=detection, authority=1.0` held across a 16 s detector pause.
+    """
+    s = arbitrate(now=100.0, last_detection_t=99.9,
                   detection=BOX, detection_conf=0.9,
                   follow=OTHER, follow_conf=0.9)
     assert s.rung is Rung.DETECTION
     assert s.xyxy == BOX
     assert s.authority == 1.0
     assert s.age_s == 0.0
+
+
+def test_a_STALE_cached_detection_does_not_masquerade_as_live():
+    """The defect itself. A box whose clock is past `full_s` must fall through
+    to the decay path, where a follower that IS current outranks it."""
+    s = arbitrate(now=100.0, last_detection_t=1.0,      # 99 s of silence
+                  detection=BOX, detection_conf=0.9,
+                  follow=OTHER, follow_conf=0.9,
+                  full_s=0.7, zero_s=2.5)
+    assert s.rung is not Rung.DETECTION, (
+        'a detection box 99 s old was reported as a live detection at full '
+        'authority -- "the vehicle has a position" became "the vehicle saw '
+        'the target"')
+    assert s.rung is Rung.LOST, (
+        'past zero_s every rung is out of authority, so LOST is the only '
+        'honest answer')
+
+
+def test_a_stale_detection_yields_to_a_follower_INSIDE_the_horizon():
+    """Between full_s and zero_s the ladder still has something to say, and
+    the current rung must outrank the frozen one."""
+    s = arbitrate(now=100.0, last_detection_t=98.8,     # 1.2 s: past full_s
+                  detection=BOX, detection_conf=0.9,
+                  follow=OTHER, follow_conf=0.9,
+                  full_s=0.7, zero_s=2.5)
+    assert s.rung is Rung.FOLLOW
+    assert s.xyxy == OTHER
+    assert 0.0 < s.authority < 1.0
 
 
 def test_follow_is_preferred_to_anchor():

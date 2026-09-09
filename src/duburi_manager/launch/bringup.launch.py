@@ -121,7 +121,29 @@ def generate_launch_description():
         DeclareLaunchArgument('vision',     default_value='false',
                               description='Start camera + detector alongside manager'),
         DeclareLaunchArgument('camera',     default_value='forward',
-                              description='Camera profile name (forward|downward|laptop)'),
+                              description='Camera ROLE -- names the topics and nodes '
+                                          '(forward|downward). Change `camera_profile`, '
+                                          'not this, to point a role at other hardware.'),
+        # ⛔ THIS DEFAULT MUST AGREE WITH `flight_controller` ABOVE.
+        # `flight_controller` defaults to srot, i.e. the default vehicle on
+        # main is the SROT board + Pi box -- but `camera` defaulted to the
+        # Jetson's Blue Robotics profile, and the two were never reconciled.
+        # Measured on the Pi running the documented bringup line: 5.00 Hz and
+        # CameraInfo.k all zero, because the `forward` profile carries no
+        # `fourcc: MJPG` (YUYV is 3x slower on this unit) and no calibration
+        # declares it. Both are silent -- the frame rate looks like "vision is
+        # slow" and the zero K only bites when the srot vision uplink is
+        # switched on.
+        #
+        # The role is NOT renamed: /duburi/vision/forward/... and
+        # duburi_detector_forward are what 96 call sites and the DSL's own
+        # `camera='forward'` default bind to. Only the hardware moves.
+        # On the Jetson, pass camera_profile:=forward.
+        DeclareLaunchArgument('camera_profile', default_value='pi_forward',
+                              description='Camera HARDWARE profile (CAMERA_PROFILES in '
+                                          'duburi_vision/config.py -- the loaded copy). '
+                                          'Default pi_forward matches flight_controller:=srot '
+                                          '(Pi box). On the Jetson pass forward.'),
         DeclareLaunchArgument('model',      default_value='gate_flare_medium_100ep',
                               description='Single-model: gate_flare_medium_100ep|gate_nano_100ep|gate_medium_100ep|flare_medium_100ep'
                                           '|yolov11n (ROBOSUB-tested pretrained, sim/bench)|yolo26_nano_pretrained'),
@@ -195,6 +217,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(vision_launch_path),
         launch_arguments={
             'camera':        LaunchConfiguration('camera'),
+            'profile':       LaunchConfiguration('camera_profile'),
             'model':         LaunchConfiguration('model'),
             'models':        LaunchConfiguration('models'),
             'active_model':  LaunchConfiguration('active_model'),
