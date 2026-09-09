@@ -272,9 +272,15 @@ class LockNode(Node):
             return
         sx = self._anchor._be.w / float(msg.width or 1)
         sy = self._anchor._be.h / float(msg.height or 1)
-        self._K = np.array([[k[0] * sx, 0.0, k[2] * sx],
-                            [0.0, k[4] * sy, k[5] * sy],
-                            [0.0, 0.0, 1.0]], np.float64)
+        K = np.array([[k[0] * sx, 0.0, k[2] * sx],
+                      [0.0, k[4] * sy, k[5] * sy],
+                      [0.0, 0.0, 1.0]], np.float64)
+        # CameraInfo arrives with EVERY FRAME, so rebuilding here would
+        # reallocate the rectifier and re-log at camera rate. Only a genuine
+        # change of intrinsics is an event; anything else is the same K again.
+        if self._K is not None and np.array_equal(K, self._K):
+            return
+        self._K = K
 
         # ⛔ THE RECTIFIED POINTS NEED THE RECTIFIED K. `rectify` re-projects
         # each ray through `f_ref`, which defaults to `fx * n` -- so a point at

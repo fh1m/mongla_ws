@@ -183,3 +183,20 @@ def test_lock_node_pairs_the_rectified_points_with_the_rectified_K():
     assert 'target_pose(ref_pts, live_pts, self._K_rect' in src, (
         'rectified points must be solved with the RECTIFIED K')
     assert "self.declare_parameter('medium', 'water')" in src
+
+
+def test_camera_info_does_not_rebuild_the_rectifier_every_frame():
+    """`CameraInfo` is published with every frame. Rebuilding the rectifier and
+    logging on each one costs an allocation at camera rate and buries the log --
+    measured on the vehicle: the medium line printed once per frame.
+
+    Only a genuine change of intrinsics is an event.
+    """
+    src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
+           / 'lock_node.py').read_text()
+    i = src.index('def _on_info')
+    body = src[i:i + 2200]
+    assert 'np.array_equal(K, self._K)' in body, (
+        '_on_info rebuilds the rectifier for every CameraInfo message')
+    assert body.index('np.array_equal') < body.index('RefractiveRectifier('), (
+        'the unchanged-K early return must come BEFORE the rebuild')
