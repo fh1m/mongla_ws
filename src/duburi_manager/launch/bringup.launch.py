@@ -5,10 +5,17 @@ One-command pool-day bringup (defaults: pool mode, DVL auto-connect):
     # Control only (no vision):
     ros2 launch duburi_manager bringup.launch.py
 
-    # With vision + gate+flare model (forward camera):
+    # With vision -- BOTH cameras, measured calibration, Hailo models:
     ros2 launch duburi_manager bringup.launch.py vision:=true
 
-    # Full pool day (BNO085 heading + DVL distance, gate+flare model, no viewer):
+    # ...and the downward-camera velocity path (still default-off, unvalidated):
+    ros2 launch duburi_manager bringup.launch.py vision:=true flow:=true
+
+    # Single camera on a dev box / CUDA .pt (what this file used to do ALWAYS):
+    ros2 launch duburi_manager bringup.launch.py vision:=true \\
+        vision_stack:=generic model:=gate_flare_medium_100ep conf:=0.35
+
+    # Full pool day (BNO085 heading + DVL distance, both cameras, no viewer):
     ros2 launch duburi_manager bringup.launch.py vision:=true \\
         yaw_source:=bno085_dvl viewer:=false
 
@@ -39,6 +46,7 @@ Run the gate+flare mission:
 from launch                     import LaunchDescription
 from launch.actions             import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions          import IfCondition
+from launch.substitutions       import PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions       import LaunchConfiguration
 from launch_ros.actions         import Node
@@ -120,6 +128,34 @@ def generate_launch_description():
                               description='Auto-connect DVL at startup (true|false)'),
         DeclareLaunchArgument('vision',     default_value='false',
                               description='Start camera + detector alongside manager'),
+        # WHICH vision stack. `pi` is the VEHICLE path: vision_pi.launch.py runs
+        # BOTH cameras through detector_dual_node, wires the measured calibration
+        # JSONs by name, and can start flow_node. `generic` is the single-camera
+        # dev/CUDA path (vision.launch.py) this file used to include
+        # unconditionally -- which meant the documented pool-day command brought
+        # up one camera, no calibration, and a model that is not on the vehicle.
+        DeclareLaunchArgument('vision_stack', default_value='pi',
+                              choices=['pi', 'generic'],
+                              description='pi = both cameras + calibration '
+                                          '(vision_pi.launch.py, the vehicle); '
+                                          'generic = single camera, no calibration '
+                                          '(vision.launch.py, dev/CUDA).'),
+        DeclareLaunchArgument('fwd_model',   default_value='gate_rescue_repair',
+                              description='vision_stack:=pi -- forward-camera model stem.'),
+        DeclareLaunchArgument('dwn_model',   default_value='bin_fire_blood',
+                              description='vision_stack:=pi -- downward-camera model stem.'),
+        DeclareLaunchArgument('fwd_classes', default_value='',
+                              description='vision_stack:=pi -- forward class allowlist '
+                                          '(empty = the model sidecar\'s full set).'),
+        DeclareLaunchArgument('dwn_classes', default_value='',
+                              description='vision_stack:=pi -- downward class allowlist.'),
+        DeclareLaunchArgument('flow',        default_value='false',
+                              description='vision_stack:=pi -- start flow_node '
+                                          '(downward-camera velocity). Pairs with the '
+                                          'manager\'s position_source:=flow.'),
+        DeclareLaunchArgument('lock',        default_value='false',
+                              description='vision_stack:=pi -- start lock_node '
+                                          '(follower + XFeat anchor continuity ladder).'),
         DeclareLaunchArgument('camera',     default_value='forward',
                               description='Camera ROLE -- names the topics and nodes '
                                           '(forward|downward). Change `camera_profile`, '
@@ -154,7 +190,15 @@ def generate_launch_description():
                               description='Registry key to start with (requires models:="..." to be set)'),
         DeclareLaunchArgument('classes',    default_value='gate',
                               description='CSV class names for detector'),
-        DeclareLaunchArgument('conf',       default_value='0.30'),
+        # 0.15 is the Hailo INT8 operating point, and the TOP of the measured
+        # bar (`measured-bars.md`: 0.08 <= conf <= 0.15; above 0.15 loses the
+        # cross-venue gate). It was 0.30 here -- a CUDA-path number, shipped on
+        # the path that never ran. On `vision_stack:=generic` (a .pt on CUDA)
+        # pass conf:=0.35 explicitly.
+        DeclareLaunchArgument('conf',       default_value='0.15',
+                              description='Detector confidence floor. 0.15 = Hailo '
+                                          'INT8 operating point; pass 0.35 for the '
+                                          'generic CUDA stack.'),
         DeclareLaunchArgument('imgsz',      default_value='640',
                               description='Inference square size. NOTE: a TensorRT .engine bakes '
                                           'imgsz at export -- this only re-scales the .pt fallback. '
@@ -213,6 +257,35 @@ def generate_launch_description():
         get_package_share_directory('duburi_vision'),
         'launch', 'vision.launch.py')
 
+    vision_pi_launch_path = os.path.join(
+        get_package_share_directory('duburi_vision'),
+        'launch', 'vision_pi.launch.py')
+
+    # `vision` is a BOOLEAN here and a PROFILE STRING ('fast') inside
+    # vision_pi.launch.py. Passing it through would set the vehicle's vision
+    # profile to the literal 'true'. Same name, different type -- so it is
+    # deliberately NOT in the dict below.
+    _stack_is = lambda want: IfCondition(PythonExpression([
+        "'", LaunchConfiguration('vision'), "'.lower() in ('true','1') and '",
+        LaunchConfiguration('vision_stack'), "' == '", want, "'"]))
+
+    vision_pi_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(vision_pi_launch_path),
+        launch_arguments={
+            'fwd_model':     LaunchConfiguration('fwd_model'),
+            'dwn_model':     LaunchConfiguration('dwn_model'),
+            'fwd_classes':   LaunchConfiguration('fwd_classes'),
+            'dwn_classes':   LaunchConfiguration('dwn_classes'),
+            'conf':          LaunchConfiguration('conf'),
+            'imgsz':         LaunchConfiguration('imgsz'),
+            'max_det':       LaunchConfiguration('max_det'),
+            'viewer':        LaunchConfiguration('viewer'),
+            'flow':          LaunchConfiguration('flow'),
+            'lock':          LaunchConfiguration('lock'),
+        }.items(),
+        condition=_stack_is('pi'),
+    )
+
     vision_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(vision_launch_path),
         launch_arguments={
@@ -227,7 +300,7 @@ def generate_launch_description():
             'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
         }.items(),
-        condition=IfCondition(LaunchConfiguration('vision')),
+        condition=_stack_is('generic'),
     )
 
     # Foxglove telemetry bridge -- opt-in, off the mission path (pure viz). Auto-
@@ -253,4 +326,5 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('foxglove')),
     )
 
-    return LaunchDescription(args + [manager_node, vision_launch, foxglove_node])
+    return LaunchDescription(
+        args + [manager_node, vision_pi_launch, vision_launch, foxglove_node])
