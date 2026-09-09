@@ -196,7 +196,29 @@ class HeadingLock:
         self._target_deg  = float(target_deg) % 360.0
 
         self._stop_event  = threading.Event()
-        self._suspended   = threading.Event()
+        # J01: a COUNTER, not a boolean Event -- reentrant, exactly as
+        # `Heartbeat.pause/resume` already is one module over. A boolean makes
+        # nesting lossy: an inner resume cancels an outer suspend. That was
+        # recorded as "latent, not live" on the reasoning that Duburi.lock
+        # serialises verbs so two scoped blocks cannot nest. REPRODUCED as LIVE
+        # (2026-09-08), because the collision is not scoped-vs-scoped:
+        #
+        #   1. `lock_heading` while DISARMED latches a suspend that is
+        #      DELIBERATELY unpaired (duburi.py "Suspend BEFORE start so the
+        #      daemon never emits a single Ch4 write before the first armed
+        #      command -- no thruster kick while surface holders steady the
+        #      hull"), and sets _lock_deferred.
+        #   2. `pause` is in _LOCK_PASSIVE_VERBS, so the deferred-activation
+        #      hook does NOT clear that latch -- but pause's BODY uses the
+        #      scoped `_suspend_heading_lock()`.
+        #   3. Its `finally` sees is_suspended and calls resume(), CLEARING a
+        #      latch it never owned.
+        #
+        # The lock then streams Ch4 while disarmed -- the exact kick the latch
+        # exists to prevent -- with nothing logged. A counter makes step 3
+        # decrement to 1 and stay suspended, which is the intended semantics.
+        self._suspend_count = 0
+        self._suspend_lock  = threading.Lock()
         # Active heading deadband (deg). Widened to LOCK_HOLD_DEADBAND_DEG for a
         # terminal fire-lock via set_hold_mode(True) so the lock holds steady
         # instead of chasing sub-degree noise; restored on set_hold_mode(False).
@@ -247,12 +269,19 @@ class HeadingLock:
         self._log.info(f'[LOCK ] retarget -> {new:.1f}deg')
 
     def suspend(self):
-        """Pause streaming (used while yaw_left/yaw_right/arc runs)."""
-        self._suspended.set()
+        """Pause streaming (used while yaw_left/yaw_right/arc runs).
+
+        Reentrant: nests correctly with the deferred-lock latch. See the
+        counter's rationale where it is declared.
+        """
+        with self._suspend_lock:
+            self._suspend_count += 1
 
     def resume(self):
-        """Resume streaming after a suspension."""
-        self._suspended.clear()
+        """Undo ONE suspension. Streaming resumes when the last one is undone."""
+        with self._suspend_lock:
+            if self._suspend_count > 0:          # underflow guard, as Heartbeat
+                self._suspend_count -= 1
 
     def set_hold_mode(self, on: bool):
         """Widen (on) / restore (off) the heading deadband for a fire-window hold.
@@ -272,7 +301,8 @@ class HeadingLock:
 
     @property
     def is_suspended(self) -> bool:
-        return self._suspended.is_set()
+        with self._suspend_lock:
+            return self._suspend_count > 0
 
     # ------------------------------------------------------------------ #
     #  Thread body                                                       #
@@ -296,7 +326,7 @@ class HeadingLock:
                 self._fire_on_exit()
                 break
 
-            if self._suspended.is_set():
+            if self.is_suspended:
                 self._stop_event.wait(timeout=period)
                 continue
 

@@ -10,7 +10,7 @@
 > (`6db956a`). Scope: controls, vision, planner, sensors, managers, plus the
 > three sibling repos.
 >
-> **STATUS: 41 of 48 fixed (2026-09-08).**
+> **STATUS: 42 of 48 fixed (2026-09-08).**
 > B01, B02, B03, B05, B09, B10, B21 (the first SROT-path batch) · B16, B22, B23,
 > B27 (vision/tooling) · B18, B30 (the srot vision axes) · B25, B26, B29 — found
 > while fixing the others. Each landed with a test **verified to fail without the
@@ -534,19 +534,59 @@ and the MAVLink TX path is fully serialised (verified by AST: `srot_fc.py` 7
 sends, `pixhawk.py` 13 sends, **0 unguarded** — every one inside
 `with self._tx_lock`).
 
-### J01 — two suspension primitives, different semantics
+### J01 — two suspension primitives, different semantics  ✅ FIXED 2026-09-08 — **and it was LIVE, not latent; my own classification is RETRACTED**
 `Heartbeat.pause/resume` is **reentrant and counter-based** (`_hold_count` under
 `_hold_lock`, with an underflow guard and a "reentrant via a counter" banner).
 `HeadingLock.suspend/resume` is a **boolean `threading.Event`** — nesting is
 lossy, an inner resume cancels an outer suspend.
 
-Latent, not live: every `with self._suspend_heading_lock()` sits inside a verb
-body and `Duburi.lock` serialises verbs, so the block cannot nest (verified — no
-self-call of `pause()`/`stop()` in `duburi.py`). Recorded because the safety of
-the boolean rests on an invariant held in a *different file*, while the sibling
-primitive one module over already pays for the counter. The next verb that
-composes two suspending verbs reopens it with no error and no log. Violates
-*"clear interfaces"*.
+~~Latent, not live~~ — **RETRACTED. It was live, and reachable in three
+operator steps.** The original reasoning (every scoped block sits in a verb body,
+`Duburi.lock` serialises verbs, so two scoped blocks cannot nest) is *correct* and
+the conclusion drawn from it is *wrong*, because **the collision is not
+scoped-vs-scoped**. It is a **latched** suspension against a **scoped** one:
+
+1. `lock_heading` while **DISARMED** latches a suspend that is *deliberately
+   unpaired* (`duburi.py:1044`), and sets `_lock_deferred`. Its own comment says
+   why: *"Suspend BEFORE start so the daemon never emits a single Ch4 write
+   before the first armed command — no thruster kick while surface holders
+   steady the hull."*
+2. `pause` is in `_LOCK_PASSIVE_VERBS`, so `_activate_deferred_lock` **does not
+   clear that latch** — but `pause`'s *body* uses the scoped
+   `_suspend_heading_lock()`.
+3. Its `finally` reads `if lock.is_suspended: lock.resume()` — sees the **latch**
+   and clears a suspension it never owned.
+
+The lock then streams **Ch4 at 50 Hz on a disarmed hull**, which is precisely the
+kick the latch exists to prevent, with nothing logged. Reproduced by executing
+the sequence against the real `HeadingLock`:
+
+```
+1. lock_heading while DISARMED -> latched suspend    is_suspended = True
+2. `pause` (lock-passive) runs its scoped block ...  is_suspended = False
+REPRODUCED: a scoped block cleared a latch it never owned.
+```
+
+**Reading the code supports the "latent" reading; only executing it does not.**
+That is the whole lesson of this entry — the register carried a *verified-sounding*
+"latent" for a defect three operator commands away.
+
+**Fixed by DRY-ing to the primitive that already solved it.**
+`HeadingLock.suspend/resume` is now a counter under a lock with an underflow
+guard — byte-for-byte the shape of `Heartbeat.pause/resume` one module over, which
+had carried the correct implementation and a banner explaining it the whole time.
+Step 3 now decrements 2→1 and the latch survives; the deferred-activation hook's
+single `resume()` still releases it.
+
+Verified after the fix, same probe: latch survives a scoped `pause` block,
+survives three levels of nesting, releases on the deferred hook, and five stray
+`resume()` calls cannot drive the count negative and make the next `suspend()` a
+no-op.
+
+`test_heading_lock_suspension_nests.py` pins it, including a **cross-primitive**
+test that the two cannot diverge again, and an 8-thread × 200-cycle race check
+(`count += 1` is not atomic under either interpreter). Verified by injection:
+restoring the boolean semantics fails 3 of the 6, including the regression itself.
 
 ### J02 — `SurfaceState` swallows the failure of the one call it exists to make  ✅ FIXED 2026-09-08
 `duburi_planner/state_machines/states/navigation.py`
