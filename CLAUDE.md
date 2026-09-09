@@ -1352,6 +1352,10 @@ ros2 launch duburi_vision mission_web.launch.py  # ★ mission console: 2-cam st
 ```bash
 source scripts/pool_session.sh gate_am         # SOURCE in every terminal — pins DUBURI_RUN_DIR + ROS_LOG_DIR (one folder/run)
 ros2 launch duburi_manager bringup.launch.py mode:=pool yaw_source:=bno085 vision:=true foxglove:=true  # vehicle + vision + Foxglove (ws://<ip>:8765)
+# ^ vision:=true now starts the VEHICLE stack (vision_pi.launch.py): BOTH cameras,
+#   the measured calibration JSONs, Hailo .hef at conf 0.15. Add flow:=true for the
+#   downward velocity path. vision_stack:=generic is the old single-camera CUDA path.
+#   viewer defaults to FALSE -- the vehicle is headless (Qt aborts there).
 scripts/pool_record.sh record gate_am          # rosbag (MCAP) a run → the pinned folder (replay offline to tune)
 scripts/pool_record.sh replay <bag-dir>        # play a recorded run back (Foxglove/vision_display against it)
 scripts/pool_record.sh list                    # list recorded runs + recent scorecards
