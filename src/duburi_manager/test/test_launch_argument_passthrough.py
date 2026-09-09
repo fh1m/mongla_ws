@@ -207,46 +207,27 @@ def test_every_include_built_is_actually_returned(src):
         f'is constructed and silently never launched.')
 
 
-def _scoped_names(tree: ast.AST) -> set[str]:
-    """Names wrapped in a `GroupAction([...], scoped=True)`."""
-    out: set[str] = set()
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.Call)
-                and getattr(node.func, 'id', '') == 'GroupAction'):
-            continue
-        # BOTH flags. `scoped=True` isolates writes made inside the group but
-        # still FORWARDS the parent's configurations in, so it does not stop a
-        # leak on its own -- measured on the vehicle: the detector still died
-        # with the scope in place. `forwarding=False` is what blocks it.
-        def _flag(name, want):
-            return any(kw.arg == name
-                       and isinstance(kw.value, ast.Constant)
-                       and kw.value.value is want
-                       for kw in node.keywords)
-
-        if _flag('scoped', True) and _flag('forwarding', False) and node.args:
-            out |= {n.id for n in ast.walk(node.args[0]) if isinstance(n, ast.Name)}
-    return out
-
-
 @pytest.mark.parametrize('src,target,keys', _CASES,
                          ids=[f'{s.name}->{t or "?"}' for s, t, _ in _CASES])
-def test_an_include_that_can_leak_a_configuration_is_scoped(src, target, keys):
-    """`IncludeLaunchDescription` does NOT scope launch configurations.
+def test_no_shared_argument_is_left_to_be_inherited(src, target, keys):
+    """A name declared by BOTH launches must be passed explicitly.
 
-    Every `name:=value` passed to the parent leaks into the child and overrides
-    the child's default for any argument of the same name -- so leaving a name
-    out of `launch_arguments` does NOT keep it out. A shared name that is not
-    explicitly passed is therefore an override nobody wrote.
+    `IncludeLaunchDescription` FORWARDS every launch configuration into the
+    child, so a shared name that is not in `launch_arguments` silently takes
+    the parent's value instead of the child's default. Leaving it out does not
+    keep it out.
 
-    MEASURED on the vehicle: bringup's boolean `vision:=true` leaked into
+    MEASURED on the vehicle: bringup's boolean `vision:=true` reached
     vision_pi's `vision`, which is a profile STRING, and detector_dual_node
     died with `InvalidParameterTypeException ... 'True' of type 'BOOL',
-    expecting type 'STRING': vision_profile`. CLAUDE.md records the same defect
-    silently disabling sim vision for a season.
+    expecting type 'STRING': vision_profile`.
 
-    A shared name that IS passed explicitly is harmless -- the value is the
-    same by either route -- so only the unpassed ones need the scope.
+    The remedy is to pass it -- a passed value beats an inherited one -- under
+    a distinct parent name when the meanings differ (`vision_profile` here).
+    This guard deliberately does NOT ask for `GroupAction(forwarding=False)`:
+    that does stop the inheritance, and it also hides the values the include's
+    own condition and passthrough dict need, so nothing launches at all. Also
+    measured, on the run after.
     """
     if keys is None:
         pytest.skip('key set unreadable -- covered by the parser self-check')
@@ -254,33 +235,9 @@ def test_an_include_that_can_leak_a_configuration_is_scoped(src, target, keys):
     if len(hits) != 1:
         pytest.skip(f'target {target!r} not resolvable in-tree')
 
-    leak = (_declared(src) & _declared(hits[0])) - keys
-    if not leak:
-        return  # nothing can leak; a scope would be decoration
-
-    tree = ast.parse(src.read_text())
-    include_var = None
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Assign) and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and isinstance(node.value, ast.Call)
-                and getattr(node.value.func, 'id', '') == 'IncludeLaunchDescription'
-                and any(isinstance(c, ast.Constant) and c.value == target
-                        or isinstance(c, ast.Name)
-                        for c in ast.walk(node.value))):
-            for sub in ast.walk(node.value):
-                if isinstance(sub, ast.Constant) and sub.value == target:
-                    include_var = node.targets[0].id
-                elif (isinstance(sub, ast.Name)
-                      and _launch_path_vars(tree).get(sub.id) == target):
-                    include_var = node.targets[0].id
-
-    assert include_var is not None, (
-        f'{src.name}: could not find the variable holding the include of {target}')
-    assert include_var in _scoped_names(tree), (
-        f'{src.name} can leak {sorted(leak)} into {target} but its include '
-        f'({include_var}) is not inside '
-        f'GroupAction([...], scoped=True, forwarding=False). Launch '
-        f'configurations are inherited, so omitting a name from '
-        f'launch_arguments does NOT keep the parent value out of the child -- '
-        f'and scoped=True alone does not either, it only isolates writes.')
+    leak = sorted((_declared(src) & _declared(hits[0])) - keys)
+    assert not leak, (
+        f'{src.name} and {target} both declare {leak}, and {src.name} does not '
+        f'pass it. Launch configurations are INHERITED, so the parent value '
+        f'silently replaces the target default. Pass it explicitly (under a '
+        f'distinct name here if the two meanings differ).')
