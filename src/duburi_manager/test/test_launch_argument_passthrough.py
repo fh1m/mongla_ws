@@ -205,3 +205,74 @@ def test_every_include_built_is_actually_returned(src):
     assert not orphans, (
         f'{src.name} builds {sorted(orphans)} and never uses it -- the include '
         f'is constructed and silently never launched.')
+
+
+def _scoped_names(tree: ast.AST) -> set[str]:
+    """Names wrapped in a `GroupAction([...], scoped=True)`."""
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and getattr(node.func, 'id', '') == 'GroupAction'):
+            continue
+        scoped = any(kw.arg == 'scoped'
+                     and isinstance(kw.value, ast.Constant)
+                     and kw.value.value is True
+                     for kw in node.keywords)
+        if scoped and node.args:
+            out |= {n.id for n in ast.walk(node.args[0]) if isinstance(n, ast.Name)}
+    return out
+
+
+@pytest.mark.parametrize('src,target,keys', _CASES,
+                         ids=[f'{s.name}->{t or "?"}' for s, t, _ in _CASES])
+def test_an_include_that_can_leak_a_configuration_is_scoped(src, target, keys):
+    """`IncludeLaunchDescription` does NOT scope launch configurations.
+
+    Every `name:=value` passed to the parent leaks into the child and overrides
+    the child's default for any argument of the same name -- so leaving a name
+    out of `launch_arguments` does NOT keep it out. A shared name that is not
+    explicitly passed is therefore an override nobody wrote.
+
+    MEASURED on the vehicle: bringup's boolean `vision:=true` leaked into
+    vision_pi's `vision`, which is a profile STRING, and detector_dual_node
+    died with `InvalidParameterTypeException ... 'True' of type 'BOOL',
+    expecting type 'STRING': vision_profile`. CLAUDE.md records the same defect
+    silently disabling sim vision for a season.
+
+    A shared name that IS passed explicitly is harmless -- the value is the
+    same by either route -- so only the unpassed ones need the scope.
+    """
+    if keys is None:
+        pytest.skip('key set unreadable -- covered by the parser self-check')
+    hits = [p for p in _launch_files() if p.name == target]
+    if len(hits) != 1:
+        pytest.skip(f'target {target!r} not resolvable in-tree')
+
+    leak = (_declared(src) & _declared(hits[0])) - keys
+    if not leak:
+        return  # nothing can leak; a scope would be decoration
+
+    tree = ast.parse(src.read_text())
+    include_var = None
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Call)
+                and getattr(node.value.func, 'id', '') == 'IncludeLaunchDescription'
+                and any(isinstance(c, ast.Constant) and c.value == target
+                        or isinstance(c, ast.Name)
+                        for c in ast.walk(node.value))):
+            for sub in ast.walk(node.value):
+                if isinstance(sub, ast.Constant) and sub.value == target:
+                    include_var = node.targets[0].id
+                elif (isinstance(sub, ast.Name)
+                      and _launch_path_vars(tree).get(sub.id) == target):
+                    include_var = node.targets[0].id
+
+    assert include_var is not None, (
+        f'{src.name}: could not find the variable holding the include of {target}')
+    assert include_var in _scoped_names(tree), (
+        f'{src.name} can leak {sorted(leak)} into {target} but its include '
+        f'({include_var}) is not inside GroupAction([...], scoped=True). '
+        f'Launch configurations are inherited, so omitting a name from '
+        f'launch_arguments does NOT keep the parent value out of the child.')

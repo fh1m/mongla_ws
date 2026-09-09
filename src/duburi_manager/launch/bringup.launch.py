@@ -44,7 +44,8 @@ Run the gate+flare mission:
 """
 
 from launch                     import LaunchDescription
-from launch.actions             import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions             import (DeclareLaunchArgument, GroupAction,
+                                        IncludeLaunchDescription)
 from launch.conditions          import IfCondition
 from launch.substitutions       import PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -207,7 +208,10 @@ def generate_launch_description():
         DeclareLaunchArgument('max_det',    default_value='100',
                               description='Post-NMS detection cap (runtime; lower toward ~10 if NMS '
                                           'is the FPS bottleneck on busy frames).'),
-        DeclareLaunchArgument('viewer',     default_value='true',
+        # The vehicle is HEADLESS -- vision_display aborts there with 'no Qt
+        # platform plugin could be initialized' (exit -6), measured on the Pi.
+        # Pass viewer:=true only where there is a display.
+        DeclareLaunchArgument('viewer',     default_value='false',
                               description='Open vision_display (OpenCV viewer) alongside vision pipeline'),
         DeclareLaunchArgument('foxglove',   default_value='false',
                               description='Start foxglove_bridge (WebSocket telemetry on foxglove_port). '
@@ -261,10 +265,18 @@ def generate_launch_description():
         get_package_share_directory('duburi_vision'),
         'launch', 'vision_pi.launch.py')
 
-    # `vision` is a BOOLEAN here and a PROFILE STRING ('fast') inside
-    # vision_pi.launch.py. Passing it through would set the vehicle's vision
-    # profile to the literal 'true'. Same name, different type -- so it is
-    # deliberately NOT in the dict below.
+    # ⛔ SCOPED, and the scope is load-bearing. `IncludeLaunchDescription` does
+    # NOT scope launch configurations: every `name:=value` given to this file
+    # leaks into the included one and overrides its default for any argument of
+    # the same name. `vision` is a BOOLEAN here and a PROFILE STRING ('fast')
+    # inside vision_pi, so `vision:=true` set `vision_profile` to the literal
+    # 'true' and detector_dual_node died at startup with
+    #   InvalidParameterTypeException: ... to 'True' of type 'BOOL',
+    #   expecting type 'STRING': vision_profile
+    # -- MEASURED on the vehicle, not reasoned about. Leaving the name out of
+    # the dict below is necessary and NOT sufficient; only the scope stops it.
+    # Same defect CLAUDE.md records for the sim, where it silently started
+    # nothing for a season.
     _stack_is = lambda want: IfCondition(PythonExpression([
         "'", LaunchConfiguration('vision'), "'.lower() in ('true','1') and '",
         LaunchConfiguration('vision_stack'), "' == '", want, "'"]))
@@ -326,5 +338,9 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('foxglove')),
     )
 
-    return LaunchDescription(
-        args + [manager_node, vision_pi_launch, vision_launch, foxglove_node])
+    return LaunchDescription(args + [
+        manager_node,
+        GroupAction([vision_pi_launch], scoped=True),
+        GroupAction([vision_launch], scoped=True),
+        foxglove_node,
+    ])
