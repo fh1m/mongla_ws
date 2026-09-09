@@ -1,4 +1,4 @@
-"""The lock ladder must be LAUNCHED, and must not steer until asked.
+"""The lock ladder must be LAUNCHED, and must not FABRICATE when it steers.
 
 ⛔ WHY THIS FILE EXISTS. `lock_node` -- the follower + XFeat anchor ladder --
 was built, measured (its own `anchor_hz` comment carries a Pi table, and the
@@ -13,9 +13,10 @@ Two halves, and they fail in opposite directions:
     nothing asks for it.
   * WIRED AND CONSUMED AT ONCE -- the control loop would start steering on
     followed and anchored boxes the moment the launch changed, with no deck
-    measurement in between. `vision.lock_s` gates that, and it stays 0: the
-    ladder publishes evidence first, exactly as the firmware vision uplink is
-    staged (echo the numbers, confirm they match, THEN actuate).
+    measurement in between. `vision.lock_s` gated that until measured: the
+    ladder published evidence first, exactly as the firmware vision uplink is
+    staged (echo the numbers, confirm they match, THEN actuate). That staging
+    COMPLETED on 2026-09-10: the deck watch ran, and both defaults are now on.
 
 Text-level: no ROS runtime, no camera.
 """
@@ -69,19 +70,38 @@ def test_the_ladder_can_be_turned_off_without_editing_the_launch():
         'produced four times.')
 
 
-def test_control_does_NOT_consume_the_ladder_by_default():
-    """The staging gate. `vision.lock_s` > 0 makes `bbox_error()` answer from
-    the ladder instead of live detections; until the ladder is watched on the
-    deck it must stay 0, so wiring the node changes what is PUBLISHED and
-    nothing about what is STEERED."""
+def test_control_consumes_the_ladder_and_it_still_cannot_fabricate():
+    """The staging gate, now PASSED -- and the property that let it pass.
+
+    `vision.lock_s` > 0 makes `bbox_error()` answer from the ladder when no
+    live detection is present. That was held at 0 until the ladder was watched
+    on the deck; it was watched on 2026-09-10 (185 detection / 63 follow /
+    0 anchor over 60 s, and never a box the detector had not seen).
+
+    What makes consuming it acceptable is not the measurement alone: the node
+    CANNOT fabricate. It publishes nothing once its own authority reaches
+    zero, so an absent message is the loss being declared on schedule rather
+    than hidden. Both halves are asserted here, because raising the default
+    without the second one would be a fallback that invents a target.
+    """
     src = _TUNABLES.read_text()
     m = re.search(r"'vision\.lock_s':\s*([0-9.]+)", src)
     assert m, "vision.lock_s is gone from vision_tunables"
-    assert float(m.group(1)) == 0.0, (
-        f'vision.lock_s defaults to {m.group(1)}, not 0. That makes the '
-        f'control loop steer on followed/anchored boxes by default, which is '
-        f'a vehicle-behaviour change that no deck measurement has cleared. '
-        f'Raise it deliberately, per mission, after watching /lock.')
+    assert float(m.group(1)) > 0.0, (
+        'the ladder is wired and published but never consulted -- the '
+        'capability is dead weight again')
+
+    node = (_PKG / 'duburi_vision' / 'lock_node.py').read_text()
+    assert 'have_target' in node, (
+        'lock_node no longer gates its published boxes on having a target, so '
+        'the ladder could emit a box with nothing behind it')
+    vs = (_PKG.parents[0] / 'duburi_manager' / 'duburi_manager'
+          / 'vision_state.py').read_text()
+    i = vs.index('def _lock_sample')
+    body = vs[i:i + 1500]
+    assert 'score <= 0.0' in body and 'return None' in body, (
+        'the consumer no longer drops a zero-score ladder sample, so a decayed '
+        'rung would steer the hull')
 
 
 def test_the_ladder_publishes_lock_NOT_detections():

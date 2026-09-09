@@ -194,7 +194,7 @@ def generate_launch_description():
                               description='vision_stack:=pi, lock:=true -- the '
                                           'class the ladder follows. Empty = any '
                                           'class, and no 6-DoF pose.'),
-        DeclareLaunchArgument('lock',        default_value='false',
+        DeclareLaunchArgument('lock',        default_value='true',
                               description='vision_stack:=pi -- start lock_node '
                                           '(follower + XFeat anchor continuity ladder).'),
         DeclareLaunchArgument('camera',     default_value='forward',

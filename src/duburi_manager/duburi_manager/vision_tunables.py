@@ -91,13 +91,16 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # test_vision_tunables_mirror_the_spec.py so they cannot drift again.
     'vision.coast_s':              0.8,
     # lock_s: consult the LADDER (`lock_node`: follower + XFeat anchor) as the
-    # last rung before declaring loss. 0 = OFF (default) and off is exactly the
-    # previous behaviour. It cannot fabricate: `lock_node` publishes nothing
+    # last rung before declaring loss. 0 = OFF. ON by default since the deck
+    # watch of 2026-09-10: 60 s on the vehicle with a live target gave
+    # 185 detection / 63 follow / 0 anchor and ZERO boxes the detector had
+    # not seen -- the follower bridged 25 % of ticks, which is the gap band
+    # (`measured-bars.md` p50 0.155 s) that `coast_s` alone leaves open. It cannot fabricate: `lock_node` publishes nothing
     # once its own authority reaches zero, so an absent message is the loss
     # being declared on schedule rather than hidden. The value is a FLAG, not a
     # horizon -- the horizon lives in the node, derived from the measured gap
     # distribution (full authority to 0.70 s, zero at 2.50 s).
-    'vision.lock_s':               0.0,
+    'vision.lock_s':               1.0,
     # --- downward-camera / depth-bound tunables (moved off per-align kwargs) ---
     # surge_sign: polarity of the DOWNWARD Ch5 SURGE axis (image-Y -> fore/aft) for
     # the bottom-cam mount. This hull needs -1 (a target AHEAD must drive FORWARD);

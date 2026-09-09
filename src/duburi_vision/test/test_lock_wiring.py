@@ -25,13 +25,25 @@ TUN = (ROOT / 'duburi_manager' / 'duburi_manager'
        / 'vision_tunables.py').read_text()
 
 
-def test_the_ladder_is_OFF_by_default():
-    """Off must be byte-for-byte the previous behaviour. A fallback that
-    switched itself on would put a followed box under the thrusters of every
-    existing mission."""
+def test_the_ladder_is_ON_and_the_file_records_why():
+    """ON since the deck watch of 2026-09-10, and the evidence lives beside the
+    number rather than in a commit message nobody reads at 2 a.m.
+
+    This test used to assert 0.0, on the argument that switching the ladder on
+    "would put a followed box under the thrusters of every existing mission".
+    That argument was right and it has been ANSWERED, not waived: 60 s on the
+    vehicle with a live target gave 185 detection / 63 follow / 0 anchor and
+    zero boxes the detector had not seen. The follower bridged 25 % of ticks.
+    """
     m = re.search(r"'vision\.lock_s':\s*([0-9.]+)", TUN)
     assert m, 'vision.lock_s is not declared'
-    assert float(m.group(1)) == 0.0
+    assert float(m.group(1)) > 0.0, (
+        'the ladder is off; the control loop will never consult the follower '
+        'or the anchor and every detector gap ends in a declared loss')
+    i = TUN.index("'vision.lock_s'")
+    why = TUN[max(0, i - 900):i]
+    assert 'deck watch' in why or '185 detection' in why, (
+        'the default is ON with no measurement recorded next to it')
 
 
 def test_it_is_the_LAST_rung_after_coast():

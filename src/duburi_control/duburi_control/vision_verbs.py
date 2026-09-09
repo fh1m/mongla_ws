@@ -157,6 +157,7 @@ class VisionVerbs:
                      lost_grace_s=0.0, align_stable_frames=0.0,
                      lock_target=False, ctrl_conf=0.0,
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
+                     lock_s=0.0,
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
                      settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
                      hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
@@ -305,6 +306,14 @@ class VisionVerbs:
                         range_gain_floor=float(range_gain_floor) or 1.0,
                         ki_lat=float(ki_lat),
                         coast_s=float(coast_s),
+                        # ⛔ WITHOUT THIS LINE THE LADDER IS UNREACHABLE.
+                        # `align_loop` has accepted `lock_s` since the ladder
+                        # was built and NO caller ever passed it, so it kept its
+                        # 0.0 default and `bbox_error` never consulted the
+                        # follower or the anchor. The deck param, the launch
+                        # wiring, the action doc and the staging note all
+                        # described a capability that could not be switched on.
+                        lock_s=float(lock_s),
                         fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)
                         fwd_mode=str(mode) or 'area',
                         kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
@@ -411,7 +420,7 @@ class VisionVerbs:
                     brake_off=False, brake_gain=0.0,
                     hold_through_loss=False,
                     kp_forward=0.0, kp_lat=0.0, lost_grace_s=0.0,
-                    range_gain_floor=0.0, coast_s=0.0):
+                    range_gain_floor=0.0, coast_s=0.0, lock_s=0.0):
         """Drive forward until ``target_class`` fills ``fwd_fill`` % of the frame.
 
         ``mode`` is the fill metric (area/width/height). ``maintain_on``
@@ -478,6 +487,9 @@ class VisionVerbs:
                 release_yaw=True,
                 range_gain_floor=float(range_gain_floor) or 1.0,
                 coast_s=float(coast_s),
+                # The ladder, same as align -- `move_loop` took `lock_s` and
+                # nobody passed it either.
+                lock_s=float(lock_s),
                 report_fn=self.report_vision,
                 writers=self._writers(), log=self.log,
                 abort_fn=self._abort_fn)

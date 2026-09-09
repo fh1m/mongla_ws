@@ -1169,6 +1169,54 @@ class DuburiMission:
             self._set_detector_param(node, 'model_conf', f'{model}={float(conf)}')
             self.log.info(f"[DSL  ] {node} conf[{model!r}] → {float(conf):.3f}")
 
+    def lock_class(self, target: str = '', *, camera: str | None = None,
+                   timeout: float = 2.0) -> bool:
+        """Aim the continuity ladder MID-MISSION. Returns True if it took.
+
+        The ladder (`lock_node`: follower + XFeat anchor) normally aims itself
+        at whatever `set_classes` last told the detector, via the latched
+        `classes_filter`. Use this only to PIN it somewhere else -- e.g. hold
+        the gate while the detector is already hunting the next prop::
+
+            duburi.lock_class('gate')        # pin
+            duburi.lock_class('')            # release; follow the mission again
+
+        Unlike the detector helpers this does NOT abort when the node is
+        missing. The ladder is a fallback rung: a mission must run without it,
+        and a hard failure here would turn an enhancement into a dependency.
+        A clear warning is logged instead, and False returned.
+        """
+        node = f'/duburi_lock_{camera or self.camera}'
+        ros_node = self.client.node
+        cli = ros_node.create_client(SetParameters, f'{node}/set_parameters')
+        try:
+            if not cli.wait_for_service(timeout_sec=timeout):
+                self.log.warning(
+                    f'[DSL  ] {node} not on the graph -- the ladder is not '
+                    f'running, so it cannot be aimed at {target!r}. The '
+                    f'mission continues on live detections. Start it with '
+                    f'`lock:=true` on the vision launch.')
+                return False
+            from rcl_interfaces.msg import Parameter as _P, ParameterValue as _PV
+            from rcl_interfaces.msg import ParameterType as _PT
+            req = SetParameters.Request(parameters=[_P(
+                name='target_class',
+                value=_PV(type=_PT.PARAMETER_STRING,
+                          string_value=str(target).strip()))])
+            fut = cli.call_async(req)
+            rclpy.spin_until_future_complete(ros_node, fut, timeout_sec=timeout)
+            res = fut.result()
+            ok = bool(res and res.results and res.results[0].successful)
+            if ok:
+                self.log.info(
+                    f"[DSL  ] {node} target_class -> {target!r}"
+                    + ('' if target else '  (released; follows the mission)'))
+            else:
+                self.log.warning(f'[DSL  ] {node} refused target_class {target!r}')
+            return ok
+        finally:
+            ros_node.destroy_client(cli)
+
     # Manager node that owns the vision.* tunables (declares/re-snapshots them).
     _MANAGER_NODE = '/duburi_manager'
 
