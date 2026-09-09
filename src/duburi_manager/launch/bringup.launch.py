@@ -8,8 +8,11 @@ One-command pool-day bringup (defaults: pool mode, DVL auto-connect):
     # With vision -- BOTH cameras, measured calibration, Hailo models:
     ros2 launch duburi_manager bringup.launch.py vision:=true
 
-    # ...and the downward-camera velocity path (still default-off, unvalidated):
-    ros2 launch duburi_manager bringup.launch.py vision:=true flow:=true
+    # ...and the downward-camera velocity path (still default-off, unvalidated).
+    # pool_depth_m is REQUIRED -- without it flow_node refuses and publishes
+    # quality 0, deliberately, rather than guessing the scale:
+    ros2 launch duburi_manager bringup.launch.py vision:=true flow:=true \\
+        pool_depth_m:=1.2
 
     # Single camera on a dev box / CUDA .pt (what this file used to do ALWAYS):
     ros2 launch duburi_manager bringup.launch.py vision:=true \\
@@ -167,6 +170,21 @@ def generate_launch_description():
                               description='vision_stack:=pi -- start flow_node '
                                           '(downward-camera velocity). Pairs with the '
                                           'manager\'s position_source:=flow.'),
+        # flow_node REFUSES to publish velocity until it is told the height to
+        # the floor -- "a default here would turn an unknown SCALE into a
+        # confident wrong speed". So `flow:=true` alone yields quality 0 and
+        # nothing else; these two are what make the path usable, and they are
+        # exposed here because bringup is where `flow:=true` is offered.
+        DeclareLaunchArgument('pool_depth_m', default_value='nan',
+                              description='flow:=true -- metres from the DOWNWARD '
+                                          'camera to the floor. Required: without '
+                                          'it flow_node publishes quality 0 and '
+                                          'refuses, by design.'),
+        DeclareLaunchArgument('flow_medium',  default_value='water',
+                              choices=['water', 'air'],
+                              description='flow:=true -- refraction medium for the '
+                                          'flow focal length. `air` for a bench '
+                                          'run, or the scale is off by ~1.33.'),
         DeclareLaunchArgument('lock',        default_value='false',
                               description='vision_stack:=pi -- start lock_node '
                                           '(follower + XFeat anchor continuity ladder).'),
@@ -307,6 +325,8 @@ def generate_launch_description():
             'viewer':        LaunchConfiguration('viewer'),
             'vision':        LaunchConfiguration('vision_profile'),
             'flow':          LaunchConfiguration('flow'),
+            'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
+            'flow_medium':   LaunchConfiguration('flow_medium'),
             'lock':          LaunchConfiguration('lock'),
         }.items(),
         condition=_stack_is('pi'),
@@ -326,6 +346,7 @@ def generate_launch_description():
             'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
             'lock':          LaunchConfiguration('lock'),
+            'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
         }.items(),
         condition=_stack_is('generic'),
     )
