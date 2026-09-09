@@ -2042,6 +2042,40 @@ resident at once and the chip logs `has taken the activation 20 times --
 another detector is competing for the chip`: that is the 2-group SRAM ceiling,
 still open.
 
+## Flat-port refraction in the METRIC POSE path (2026-09-09)
+
+`lock_node` fed raw pixels and the in-air `K` into `target_pose`. Ray-traced a
+0.30 m square through 6 mm of acrylic (n_glass 1.49, n_water 1.333, d0 15 mm)
+and solved for its range — the trace is not the model under test, so this cannot
+pass by sharing the model's approximation.
+
+| Z | air `K` (was shipped) | rectified (now) | bar |
+|---|---|---|---|
+| 0.5 m | 0.353 m (**−29.5 %**) | 0.506 m (+1.2 %) | on-axis error **< 3 %** |
+| 1.0 m | 0.741 m (**−25.9 %**) | 1.005 m (+0.5 %) | — |
+| 2.0 m | 1.497 m (**−25.1 %**) | 2.004 m (+0.2 %) | — |
+
+Pixel error of the shipped "scale f by n" model vs the ray trace, downward
+camera (`fx = 1027.9`):
+
+| field | Z=0.3 m | Z=1.0 m | Z=2.0 m |
+|---|---|---|---|
+| 8.0° | −1.5 px | −0.0 px | +0.3 px |
+| 16.0° | +0.4 | +3.7 | +4.4 |
+| 23.9° | +10.2 | +15.9 | +17.2 |
+| 31.9° (corner) | **+34.0** | **+43.8** | **+46.0** |
+
+With the exact central map the corner residual falls to −14.2 / −4.4 / **−2.2 px**.
+**~90 % of the error is the central Snell mapping, not port geometry**: d0 from
+5 mm to 30 mm moves the corner by only ~4 px of ~46. That is the measured reason
+Pinax's LUT is NOT ported — it buys the remaining non-central term, needs a
+millimetre-accurate `d0` we have never measured, and assumes a fixed scene
+distance (arXiv 2403.08640).
+
+**Pairing bar:** rectified points MUST be solved with `f_ref = fx·n`, not `fx`.
+Pairing them with the air `K` is a clean 1/n error — every range 25 % short,
+plausible, unwarned. Guarded in `test_refraction_in_the_pose_path.py`.
+
 ## SAUVC constants — DERIVED FROM THE RULEBOOK, and two that are NOT measured (2026-09-09)
 
 Rounds 5 and 6 added the first SAUVC missions. Most of their numbers are
