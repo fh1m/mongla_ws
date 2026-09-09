@@ -141,6 +141,19 @@ def generate_launch_description():
                                           '(vision_pi.launch.py, the vehicle); '
                                           'generic = single camera, no calibration '
                                           '(vision.launch.py, dev/CUDA).'),
+        # vision_pi's own `vision` argument is its PROFILE ('fast'|...), while
+        # `vision` HERE is the boolean that decides whether vision starts at
+        # all. Launch forwards configurations into an include, so `vision:=true`
+        # arrived as the profile and killed detector_dual_node with
+        #   InvalidParameterTypeException ... 'True' of type 'BOOL',
+        #   expecting type 'STRING': vision_profile
+        # Exposing it under a distinct name and passing it explicitly is what
+        # actually fixes that -- the passed value wins over the inherited one.
+        DeclareLaunchArgument('vision_profile', default_value='fast',
+                              description="vision_stack:=pi -- vision_pi's own "
+                                          "profile argument (its `vision:=`). "
+                                          "Renamed here because `vision` is this "
+                                          "file's boolean on/off switch."),
         DeclareLaunchArgument('fwd_model',   default_value='gate_rescue_repair',
                               description='vision_stack:=pi -- forward-camera model stem.'),
         DeclareLaunchArgument('dwn_model',   default_value='bin_fire_blood',
@@ -292,6 +305,7 @@ def generate_launch_description():
             'imgsz':         LaunchConfiguration('imgsz'),
             'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
+            'vision':        LaunchConfiguration('vision_profile'),
             'flow':          LaunchConfiguration('flow'),
             'lock':          LaunchConfiguration('lock'),
         }.items(),
@@ -311,6 +325,7 @@ def generate_launch_description():
             'imgsz':         LaunchConfiguration('imgsz'),
             'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
+            'lock':          LaunchConfiguration('lock'),
         }.items(),
         condition=_stack_is('generic'),
     )
@@ -340,13 +355,13 @@ def generate_launch_description():
 
     return LaunchDescription(args + [
         manager_node,
-        # forwarding=False is the load-bearing half. `scoped=True` alone
-        # isolates writes made INSIDE the group; the parent's configurations
-        # are still forwarded IN, so `vision:=true` still reached vision_pi's
-        # `vision` and still killed detector_dual_node -- measured, on the
-        # vehicle, AFTER adding the scope. Only forwarding=False stops the
-        # inheritance, which is why every argument above is passed explicitly.
-        GroupAction([vision_pi_launch], scoped=True, forwarding=False),
-        GroupAction([vision_launch], scoped=True, forwarding=False),
+        # scoped=True keeps anything set INSIDE from escaping. It does not stop
+        # the parent leaking IN -- and `forwarding=False`, which does, also
+        # hides `vision`, `fwd_model` and friends from the condition and the
+        # passthrough dict itself, so nothing launched at all (measured). The
+        # leak is therefore fixed where it belongs: at the boundary, by giving
+        # the colliding name a valid value instead of an inherited one.
+        GroupAction([vision_pi_launch], scoped=True),
+        GroupAction([vision_launch], scoped=True),
         foxglove_node,
     ])
