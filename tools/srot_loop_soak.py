@@ -33,6 +33,15 @@ conn=mavutil.mavlink_connection('/dev/ttyUSB0',baud=115200,
 conn.wait_heartbeat(timeout=10)
 fc=SrotFC(conn,log=None)
 fc.set_message_rate(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE,50)
+# B28: REFUSE TO MEASURE INTO A BOARD THAT DISCARDS THE COMMAND.
+# `SROT_MOVE` leaves the board latched in AUTO, and in AUTO the firmware
+# throws away every axis of MANUAL_CONTROL and reports nothing. A sweep run
+# in that state drives zero thrust and still prints a full set of numbers --
+# a plausible measurement standing in for an absent one, which is this
+# project's signature defect. Reuse the verb path's own verified set-mode
+# rather than a second copy of it.
+from duburi_control.vision_verbs import _require_srot_vision_mode
+_require_srot_vision_mode(fc, None, 'srot_loop_soak')
 det=make_detector(model_path='yolov11n',conf=0.35,class_allowlist=['person'],
                   device='cuda:0',iou=0.5,imgsz=640,half=True,max_det=20)
 cap=cv2.VideoCapture(0,cv2.CAP_V4L2)

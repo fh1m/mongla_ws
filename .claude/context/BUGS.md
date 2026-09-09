@@ -909,17 +909,41 @@ The resulting state is *safe* (depth-hold + heading-hold + zero translation, i.e
 station-keep). The defect is that it is **silent**: a host that streams `manual()`
 believing it is driving gets no error, no STATUSTEXT, and no motion.
 
-**Current exposure is bounded — verified by enumerating every caller.** There are
-exactly two `manual()` call sites outside tests:
+**⚠ THE CALLER ENUMERATION BELOW WAS WRONG — corrected 2026-09-09.** It claimed
+"exactly two `manual()` call sites outside tests". Re-counted without truncation:
+**eight**. The missing six, and the one that matters:
 
-| caller | guarded? |
+| caller | note |
 |---|---|
-| `motion_vision._srot_drive` (`motion_vision.py:626`) | ✅ `vision_verbs._ensure_srot_vision_mode` sets **and verifies** `STABILIZE` first (`vision_verbs.py:120-137`) |
-| `SrotFC.send_neutral` (`srot_fc.py:1989`) | ⚠️ streams zeros, so the *effect* is benign — but its docstring asserts "STABILIZE holds", which is false after a move |
+| `motion_vision._srot_drive` (`motion_vision.py:626`) | vision path; `vision_verbs._require_srot_vision_mode` sets **and verifies** `STABILIZE` first |
+| `SrotFC.send_neutral` (`srot_fc.py:2092`) | streams zeros — effect benign |
+| **`motion_writers.make_writers` srot branch ×2** (`:116`, `:118`) | **the live forward/lateral writers.** A non-zero `manual()` with no mode guard of its own |
+| `tools/srot_console.py:183` | bench; sets a mode |
+| `tools/srot_vision_bench.py:240` | bench; sets a mode |
+| **`tools/srot_loop_sweep.py:151`**, **`tools/srot_loop_soak.py:58`** | **measurement tools with NO mode handling at all** |
 
-So this is latent, not live. It becomes live the moment any third caller streams a
-non-zero `manual()` without a mode guard — and the thing that would have caught
-that is a comment, not a mechanism.
+So the entry's own stated trigger — *"it becomes live the moment any third caller
+streams a non-zero `manual()` without a mode guard"* — **was already met** by
+`motion_writers`, and the register said the opposite.
+
+**What actually bounds it is the fix, not the caller count.** The host-side guard
+was placed inside `SrotFC.manual()` itself (`srot_fc.py:719`), i.e. at the
+chokepoint, so **all eight callers are covered** — verified by execution: driving
+`make_writers(...).forward(1700)` against a board reporting `AUTO` emits
+`[SROT ] !! MANUAL_CONTROL sent while the board is in AUTO …`. Putting the guard
+at the primitive rather than at each caller is what made a wrong caller list
+harmless. That was luck as much as design, and the list is corrected so the next
+reader does not act on it.
+
+**Two consequences fixed 2026-09-09:**
+- `srot_loop_sweep` and `srot_loop_soak` — the two tools whose *output is a
+  measurement* — had no mode handling. Run after any move verb they drive zero
+  thrust and still print a full result set: a plausible number standing in for an
+  absent measurement, this project's signature defect. Both now call
+  `_require_srot_vision_mode` at start-up and refuse rather than measure.
+- The function was cited here and in two `srot_fc.py` comments as
+  `_ensure_srot_vision_mode`. **No such name exists** — it is
+  `_require_srot_vision_mode`. All three references corrected.
 
 **Fix landed (host side, zero extra wire traffic):** `SrotFC.manual()` reads the
 mode already present in the cached HEARTBEAT (`get_mode()`, `srot_fc.py:1855`) and
