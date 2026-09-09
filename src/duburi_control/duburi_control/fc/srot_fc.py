@@ -687,7 +687,7 @@ class SrotFC(FlightController):
             f'[SROT ] !! MANUAL_CONTROL sent while the board is in {mode} -- the '
             f'firmware DISCARDS every axis of it and reports nothing (B28). '
             f'{"AUTO is where a completed SROT_MOVE leaves the board; " if mode == "AUTO" else ""}'
-            f'reach STABILIZE first (vision_verbs._ensure_srot_vision_mode does).')
+            f'reach STABILIZE first (vision_verbs._require_srot_vision_mode does).')
 
     def manual(self, fwd: float, lat: float, up: float, yaw: float) -> None:
         """One MANUAL_CONTROL frame. x=fwd, y=lat(+starboard), z=heave(+up), r=yaw;
@@ -715,7 +715,7 @@ class SrotFC(FlightController):
         already carries. It warns rather than raises -- this is the 20 Hz servo
         path, and a hard failure here is worse than a wrong-mode frame.
         Callers that genuinely need to drive must reach a MANUAL_CONTROL-honouring
-        mode first, as `vision_verbs._ensure_srot_vision_mode` does."""
+        mode first, as `vision_verbs._require_srot_vision_mode` does."""
         self._warn_if_mode_discards_manual()
 
         def _safe(v):
