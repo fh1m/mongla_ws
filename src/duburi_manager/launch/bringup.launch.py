@@ -185,6 +185,15 @@ def generate_launch_description():
                               description='flow:=true -- refraction medium for the '
                                           'flow focal length. `air` for a bench '
                                           'run, or the scale is off by ~1.33.'),
+        # An empty lock_class means the ladder follows ANY detected class and
+        # `/target_pose` refuses with 'target_width_m unset', because the
+        # committed geometry table is keyed by class. `lock:=true` without this
+        # is a ladder you switched on and cannot aim -- measured on the vehicle:
+        # "[LOCK ] no committed width for 'person'... the 6-DoF pose will refuse".
+        DeclareLaunchArgument('lock_class',  default_value='',
+                              description='vision_stack:=pi, lock:=true -- the '
+                                          'class the ladder follows. Empty = any '
+                                          'class, and no 6-DoF pose.'),
         DeclareLaunchArgument('lock',        default_value='false',
                               description='vision_stack:=pi -- start lock_node '
                                           '(follower + XFeat anchor continuity ladder).'),
@@ -324,6 +333,7 @@ def generate_launch_description():
             'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
             'vision':        LaunchConfiguration('vision_profile'),
+            'lock_class':    LaunchConfiguration('lock_class'),
             'flow':          LaunchConfiguration('flow'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
             'flow_medium':   LaunchConfiguration('flow_medium'),
@@ -346,6 +356,7 @@ def generate_launch_description():
             'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
             'lock':          LaunchConfiguration('lock'),
+            'lock_class':    LaunchConfiguration('lock_class'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
         }.items(),
         condition=_stack_is('generic'),
