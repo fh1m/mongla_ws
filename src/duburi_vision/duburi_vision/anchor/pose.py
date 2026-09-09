@@ -251,6 +251,22 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
 
     yaw, pitch, roll = _angles(rvec)
     rng = float(np.linalg.norm(tvec))
+
+    # ⛔ NON-FINITE IS A REFUSAL -- the same guard `geometry.py` calls
+    # load-bearing rather than defensive, applied at the other end of the same
+    # pipeline. MEASURED 2026-09-10: a refraction-rectified 0.30 m square at
+    # 1.0 m and 0.35 m off-axis comes back from solvePnP as ok with
+    # range=nan, reproj=nan, yaw=nan. Every downstream comparison against NaN
+    # is silently False, so `range_m < tol` reads as OUT of tolerance while
+    # `abs(yaw) < tol` reads as out too -- and a caller that tests the other
+    # way round gets "in tolerance" from an answer that does not exist.
+    # `lock_node` nan-guards reproj and ambiguity but publishes range raw.
+    if not all(math.isfinite(v) for v in (yaw, pitch, roll, rng, best_rms)):
+        return TargetPose(ok=False, n_points=len(ref), ambiguity=ratio,
+                          yaw_spread_deg=yaw_spread,
+                          pitch_spread_deg=pitch_spread,
+                          reason='non-finite pose')
+
     return TargetPose(ok=True, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll,
                       range_m=rng, reproj_px=float(best_rms), ambiguity=ratio,
                       yaw_spread_deg=yaw_spread, pitch_spread_deg=pitch_spread,
