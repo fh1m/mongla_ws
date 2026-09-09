@@ -55,17 +55,17 @@ from std_msgs.msg import Float32, Float32MultiArray, String, UInt8
 from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
 from duburi_interfaces.msg import DuburiState
-from duburi_vision.distance.flow_timing import (
+from duburi_vision.flow.flow_timing import (
     TimeOffset, exposure_offset_s, interval_midpoint,
 )
-from duburi_vision.distance.flow_math import (
+from duburi_vision.flow.flow_math import (
     DistanceAccumulator, HeightFromDivergence, Intrinsics, detect_corners,
     flow_dispersion, forward_backward_error,
     RefractiveRectifier, height_above_floor, integrate_rate, interp_rate,
     robust_flow,
     solve_planar_motion,
 )
-from duburi_vision.distance.flow_velocity import flow_velocity
+from duburi_vision.flow.flow_velocity import flow_velocity
 from duburi_vision.optics import N_WATER
 
 # Shi-Tomasi + LK. Bucketing is applied on top of goodFeaturesToTrack so the

@@ -6,7 +6,7 @@ import pathlib
 import numpy as np
 import pytest
 
-from duburi_vision.distance.flow_math import (
+from duburi_vision.flow.flow_math import (
     height_above_floor, rotation_flow_px, axis_unit, project, robust_flow,
     interp_rate, integrate_rate, solve_planar_motion, DistanceAccumulator,
     HeightFromDivergence, Intrinsics,
@@ -441,7 +441,7 @@ class TestRefractiveRectifier:
     FX, FY, CX, CY, N = 513.94, 516.93, 308.7, 186.5, 1.333
 
     def _rec(self):
-        from duburi_vision.distance.flow_math import RefractiveRectifier
+        from duburi_vision.flow.flow_math import RefractiveRectifier
         return RefractiveRectifier(self.FX, self.FY, self.CX, self.CY, n=self.N)
 
     def test_the_principal_point_is_a_FIXED_POINT(self):
@@ -488,7 +488,7 @@ class TestRefractiveRectifier:
         """n is a physical constant, not a tuning knob -- but if someone sets
         it wrong the failure must be a clean scale error, not a shape change,
         because a scale error is what the pool tape can catch."""
-        from duburi_vision.distance.flow_math import RefractiveRectifier
+        from duburi_vision.flow.flow_math import RefractiveRectifier
         a = self._rec()
         b = RefractiveRectifier(self.FX, self.FY, self.CX, self.CY, n=1.0)
         # n = 1 is "no water": the rectifier must reduce to the identity.

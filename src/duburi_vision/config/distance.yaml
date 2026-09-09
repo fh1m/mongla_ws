@@ -2,7 +2,7 @@
 #  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
 #
 #  Nothing reads it. The values that run are the `declare_parameter` defaults in
-#  `duburi_vision/distance/distance_estimation_node.py`.
+#  `duburi_vision/flow/distance_estimation_node.py`.
 #
 #  This matters more here than elsewhere: the note below says "the WHOLE scale
 #  rides on camera_focal_px". Calibrating and writing the result HERE changes no

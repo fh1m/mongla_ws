@@ -3,7 +3,7 @@
 Mirrors VisionState's role: a manager-process ROS resource injected into the
 `Duburi` facade (as `distance_provider`) so the control package stays rclpy-free.
 The heavy optical-flow integration runs in
-`duburi_vision.distance_estimation_node`; this just:
+`duburi_vision.flow.distance_estimation_node`; this just:
   * subscribes /duburi/vision/<cam>/distance_traveled  (running metres, cached)
   * publishes /duburi/vision/<cam>/distance_control     (LATCHED String:
     'start_axial' | 'start_lateral' | 'stop')

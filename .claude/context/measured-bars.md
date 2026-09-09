@@ -1976,3 +1976,135 @@ drift with no gyro available, because absence of a stillness check is not
 evidence of stillness.
 
 **An environmental assumption is a measurement you have not taken.**
+
+---
+
+## Forward camera rate — `pi_forward.fps` 15 → 60 (2026-09-09)
+
+**Bar: the forward camera must not be capped below its measured ceiling.**
+`CAMERA_PROFILES['pi_forward']['fps'] >= 30`, pinned by
+`test_camera_profiles.py::test_the_pi_profiles_carry_the_MEASURED_rate` and
+`test_camera_profiles_yaml_matches_code.py`.
+
+**What was wrong.** `config.py` said the Fantech is *"a flat 15.00 Hz in every
+format… this is the CAMERA's ceiling… nothing in software will raise it"*, and
+a test asserted 15 was "the MEASURED rate". The 15 was the config line itself;
+each artefact defended the other.
+
+**How it was measured.** Counting DISTINCT `header.stamp` values, not
+`ros2 topic hz` — a topic rate cannot separate a real frame from a republished
+one, which is precisely how a self-imposed cap reads as hardware.
+
+| requested fps | true capture |
+|---|---|
+| 15 | 14.63 Hz |
+| 30 | 28.03 Hz |
+| 60 | **30.18 Hz** |
+| 90 | 30.18 Hz |
+
+Identity confirmed against the calibration's USB VID/PID and serial
+(1d6c:0103, YGR80PU1200F23081120) — the Fantech answering, not the Sonix.
+
+**The bar that justifies the change** is not frame rate but *staleness*: the
+20 Hz vision loop decays its translational command by `sample.age_s`, so the
+detection-to-detection gap is what it consumes.
+
+| profile fps | mean gap | p95 | max |
+|---|---|---|---|
+| 15 | 68.1 ms | 69.3 ms | 71.5 ms |
+| 60 | **33.3 ms** | 36.2 ms | **37.7 ms** |
+
+Worst-case staleness halves and the tail stays tight — the higher rate
+introduced no stalls. Cost: CPU idle 95.5 % → 89.3 %, memory unchanged
+(683 vs 680 MB of 3983).
+
+**End to end through bringup defaults:** image 5.00 → 29.93 Hz, detections
+5.00 → 29.12 Hz, and `CameraInfo.k[0]` 0.0 → 425.61. The 5.00 Hz baseline was
+the `forward` (Jetson) profile, which declares no `fourcc` and negotiates
+YUYV.
+
+## SAUVC constants — DERIVED FROM THE RULEBOOK, and two that are NOT measured (2026-09-09)
+
+Rounds 5 and 6 added the first SAUVC missions. Most of their numbers are
+**rulebook arithmetic**, not measurements, and they are listed here so nobody
+later mistakes a derivation for a bar.
+
+**Derived (safe to cite, with the derivation):**
+
+| constant | value | derivation |
+|---|---|---|
+| `SAUVC_MAX_DEPTH_M` | −1.0 m | floor is 1.2 m at the pool ENDS (1.6 m only at centre); 0.2 m clearance |
+| `SAUVC_GATE_PASS_DEPTH_M` | −0.85 m | floor ≈1.49 m at the 16 m mark, 1.00 m gate on it → opening 0.49–1.49 m; biased high because a gate touch is −2 and a bottom touch is −5 |
+| `SAUVC_DRUM_HOVER_DEPTH_M` | −0.7 m | drum mouth is 0.30 m off the floor → 0.90 m down at the shallow end |
+| `SAUVC_NAV_BUDGET_S` | 300 s | `(900 − RUN_TIME) × 0.03` → 18 bonus points at 300 s, more than the 15-point task. ⛔ The bonus needs **two** tasks completed, and `sauvc_navigation.run()` surfaces and disarms, so navigation alone scores 20 with **no** bonus — the 18 becomes earnable only with the Round 7 combinator. Mission budgets currently sum to **255 s of 300**. |
+
+**⛔ NOT measured — do not treat these as bars:**
+
+1. **`SAUVC_BLIND_TRANSIT_S = 45`.** The dead-reckoned gate leg. 16 m (the
+   rulebook's own distance) at an assumed ~0.35 m/s. **This hull's straight-line
+   speed at gain 40 has never been timed.** Measure a timed straight leg against
+   a tape and correct it before trusting the blind branch.
+
+2. **The DOWNWARD camera's in-water FOV.** Unknown, which is why
+   `SAUVC_DRUM_DESCEND_FILL` ships at `0` (descent OFF) and a guard test fails if
+   it is raised. A fill-to-depth map built on a guessed FOV dives an unknown
+   distance toward a −5 bottom touch. The forward camera was measured
+   (§ "Camera FOV measured + verified", 63.8° air / 46.7° water); the downward
+   one was not, and they are different cameras.
+
+**And one finding that closes a scoring question rather than opening it:**
+`drum_red_pinger` (50 points) is identified **acoustically** — "RJE
+International Pinger Model No. ULB-362B/45 kHz" — with **no visual marking in
+the rulebook at all**. Our detector separates the class only because the
+simulator paints a yellow emissive band on that model. No hydrophone is fitted,
+so **every red drum is worth 10** and no mission may steer on that class;
+`test_sauvc_target_acquisition.py` sweeps every SAUVC mission to enforce it.
+
+## §28. Phase correlation DELETED — the low-texture regime does not exist on real water (2026-09-09)
+
+`flow_math.phase_correlate_motion` (Fourier-Mellin, ~100 lines + a log-polar
+helper) was built as the low-texture fallback for the bottom-camera DVL, on the
+argument that Lucas-Kanade needs corners and a real floor stops providing them.
+It had **zero callers and zero tests** and is now removed. The evidence is kept
+here because the code carried it and the code is gone.
+
+### Why it was already not shipped — its own bench, against LK
+
+| case | LK err | LK pts | PHASE err | LK ms | PC ms |
+|---|---|---|---|---|---|
+| translation 8 px | 0.014 | 171 | 0.012 | 12.1 | 84.8 |
+| translation 3 px | 0.008 | 175 | 0.013 | 11.1 | 79.1 |
+| translation 0.5 px | 0.015 | 177 | 0.057 | 11.1 | 78.4 |
+| trans 8 px + rot 2° | 0.019 | 165 | **6.029** | 11.8 | 82.1 |
+| pure rotation 2° | 0.007 | 168 | **6.001** | 11.7 | 78.4 |
+| blur+noise, trans 8 px | 0.011 | 182 | 0.021 | — | — |
+
+Seven times slower, and **translational phase correlation has no rotation
+term**, so 2° of yaw injects 6 px of phantom translation. The log-polar stage
+recovers the rotation but does not correct the translation for it.
+
+### The new number that closed it — REAL downward footage
+
+Its docstring left one honest opening: *"a frame yielding under 8 corners cannot
+support a 4-DOF fit, and this needs none. It should be reached for on evidence
+of that regime, never on the assumption of it."* That evidence was never taken.
+Taken now, against `heading_down_test_vid.mp4` — real downward camera, 640×480,
+29.96 fps, **898 frame pairs** — through the shipped `detect_corners` +
+`calcOpticalFlowPyrLK` (win 31) + `solve_planar_motion` path:
+
+| quantity | min | p05 | median | max |
+|---|---|---|---|---|
+| corners detected | **185** | 192 | 192 | 192 |
+| LK tracked | 184 | 190 | 192 | 192 |
+| RANSAC inliers | 37 | 71 | 100 | 145 |
+
+**Frames below the 8-corner threshold: 0 of 898 (0.00 %). Solver refusals:
+0 of 898.** The worst frame in the clip carries 185 corners — 23× the
+threshold, not marginal.
+
+⚠ **Scope, stated so it is not overclaimed:** one clip, one environment, real
+water but not a competition pool floor. If a venue floor is ever measured to
+push `solve_planar_motion` into its `only N tracked points, need min_points`
+refusal, that refusal is the trigger to reconsider — and the reconsideration
+must start from the bench table above, which says the replacement is 7× slower
+and breaks under rotation.
