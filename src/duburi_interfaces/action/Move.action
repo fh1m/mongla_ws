@@ -91,6 +91,13 @@ float32 coast_s            # vision_align/move: gap-bridging coast window (s). >
                            #   to coast_s after a detection drops, at decaying authority -- a brief
                            #   occlusion keeps the lock instead of stopping. A live detection always
                            #   overrides. 0 = OFF (use vision.coast_s). MUST be < lost_grace_s.
+float32 lock_s             # vision_align/move: consult the LOCK LADDER (lock_node: follower +
+                           #   XFeat anchor) as the LAST rung, after coast, before declaring
+                           #   loss. >0 = ON. It cannot fabricate: lock_node publishes nothing
+                           #   once its own authority reaches zero, so an absent message is the
+                           #   loss being declared on schedule. The value is a FLAG, not a
+                           #   horizon -- the horizon lives in the node (full authority 0.70 s,
+                           #   zero at 2.50 s). 0 = use vision.lock_s.
 float32 depth_step         # vision_align: per-UPDATE depth-setpoint resolution (m). Depth moves the
                            #   ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update and FREEZES
                            #   inside the deadband, so ArduSub settles between steps (no z-wobble).

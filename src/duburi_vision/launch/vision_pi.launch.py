@@ -245,6 +245,11 @@ def generate_launch_description():
             description='Class the ladder locks onto. Empty = whatever the '
                         'detector is publishing.'),
         DeclareLaunchArgument(
+            'dwn_lock_class', default_value='',
+            description='Class the DOWNWARD ladder follows. Empty = any '
+                        'class, and no 6-DoF pose (the geometry table is '
+                        'keyed by class).'),
+        DeclareLaunchArgument(
             'pool_depth_m', default_value='nan',
             description='Water depth in metres. REQUIRED with flow:=true -- '
                         'the node refuses to publish velocity without it.'),
@@ -378,6 +383,33 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('tracking')),
         )
 
+    def ladder(camera_name: str, class_arg: str) -> Node:
+        """The continuity ladder, PER CAMERA.
+
+        It used to exist only for `forward`, hard-coded. Every downward task --
+        the bin drop, the dropper alignment -- therefore steered with no
+        gap-bridging at all, while the forward camera had three rungs. Nothing
+        reported that; the capability was simply absent on one half of the
+        vehicle, which is the same shape as the ladder itself being in no
+        launch file.
+        """
+        return Node(
+            package='duburi_vision', executable='lock_node',
+            name=f'duburi_lock_{camera_name}', output='screen',
+            parameters=[{
+                'camera':       camera_name,
+                'target_class': LaunchConfiguration(class_arg),
+                'follow':       True,
+                # The anchor rung is asked for unconditionally and DEGRADES
+                # BY ITSELF: lock_node logs `anchor DISABLED ... the follower
+                # rung still runs` when no xfeat_*.onnx resolves. A second
+                # launch flag for it would only be a way to disable a rung
+                # that already disables itself.
+                'anchor':       True,
+            }],
+            condition=IfCondition(LaunchConfiguration('lock')),
+        )
+
     return LaunchDescription(args + [
         detectors,
         tracker('forward',  'fwd_frame_rate'),
@@ -394,20 +426,8 @@ def generate_launch_description():
                  'calibration':  LaunchConfiguration('dwn_calibration'),
              }],
              condition=IfCondition(LaunchConfiguration('flow'))),
-        Node(package='duburi_vision', executable='lock_node',
-             name='duburi_lock_forward', output='screen',
-             parameters=[{
-                 'camera':       'forward',
-                 'target_class': LaunchConfiguration('lock_class'),
-                 'follow':       True,
-                 # The anchor rung is asked for unconditionally and DEGRADES
-                 # BY ITSELF: lock_node logs `anchor DISABLED ... the follower
-                 # rung still runs` when no xfeat_*.onnx resolves. A second
-                 # launch flag for it would only be a way to disable a rung
-                 # that already disables itself.
-                 'anchor':       True,
-             }],
-             condition=IfCondition(LaunchConfiguration('lock'))),
+        ladder('forward',  'lock_class'),
+        ladder('downward', 'dwn_lock_class'),
         Node(package='duburi_vision', executable='vision_display',
              name='duburi_display', output='screen',
              parameters=[{'camera': 'forward'}],

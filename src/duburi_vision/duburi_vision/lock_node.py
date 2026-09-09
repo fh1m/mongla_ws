@@ -49,6 +49,8 @@ except ImportError:                    # message not built in this workspace
     # nothing else -- the follower and anchor rungs still publish `/lock`.
     TargetPose = None
 
+from std_msgs.msg import String
+
 from duburi_vision import qos as _qos
 from duburi_vision.stamps import capture_monotonic
 from duburi_vision.detection.detector import Detection
@@ -129,7 +131,11 @@ class LockNode(Node):
 
         cam = str(self.get_parameter('camera').value)
         ns = f'/duburi/vision/{cam}'
-        self._cls = str(self.get_parameter('target_class').value).strip()
+        # AN EXPLICIT target_class WINS and freezes the aim. Anything else and
+        # the ladder aims ITSELF at whatever the mission told the detector to
+        # look for -- see `_on_classes_filter`.
+        self._cls_pinned = str(self.get_parameter('target_class').value).strip()
+        self._cls = self._cls_pinned
         self._full = float(self.get_parameter('full_authority_s').value)
         self._zero = float(self.get_parameter('zero_authority_s').value)
 
@@ -234,7 +240,23 @@ class LockNode(Node):
                                  self._on_det, _qos.DETECTIONS)
         self.create_subscription(Image, f'{ns}/image_raw',
                                  self._on_img, _qos.IMAGE)
+        # SELF-AIMING. `lock_class` is a LAUNCH argument, so a mission that
+        # switches target mid-run (gate -> rescue -> red_pipe, which the DSL
+        # does on every vision verb via `set_classes`) left the ladder still
+        # following the FIRST class -- silently, and only on the rung that is
+        # supposed to save the lock. At the pool that reads as "the ladder is
+        # broken" when it is merely aimed somewhere else.
+        #
+        # `classes_filter` is LATCHED, so this also works when the ladder
+        # starts after the detector has already been told what to look for.
+        self.create_subscription(String, f'{ns}/classes_filter',
+                                 self._on_classes_filter, _qos.LATCHED)
         threading.Thread(target=self._loop, daemon=True).start()
+        # LIVE, like the detector and the tracker. The ladder was aimable only
+        # at launch, so a mission could not point it at the object it was about
+        # to steer on -- it had to be relaunched. `target_class` and
+        # `publish_hz` now take effect on the next tick.
+        self.add_on_set_parameters_callback(self._on_param_change)
         self.create_timer(5.0, self._log_health)
         self._n_by_rung = {r: 0 for r in Rung}
 
@@ -385,6 +407,78 @@ class LockNode(Node):
             m.pitch_spread_deg = float(tp.pitch_spread_deg)
             m.off_axis_deg = float(tp.off_axis_deg)
         self._pub_pose.publish(m)
+
+    def _on_param_change(self, params):
+        """Aim (or un-aim) the ladder while a mission is running.
+
+        `target_class` non-empty PINS the aim, exactly as the launch argument
+        does. Setting it back to '' releases the pin and the ladder resumes
+        following `classes_filter` -- so a mission can take manual control of
+        one leg and hand it back, without a relaunch.
+        """
+        from rcl_interfaces.msg import SetParametersResult
+        for prm in params:
+            if prm.name == 'target_class':
+                new = str(prm.value or '').strip()
+                if new == self._cls_pinned:
+                    continue
+                self._cls_pinned = new
+                if new:
+                    self._cls = new
+                    self._retarget_width()
+                    self.get_logger().info(
+                        f'[LOCK ] target_class pinned to {new!r}')
+                else:
+                    self.get_logger().info(
+                        '[LOCK ] target_class released -- following '
+                        'classes_filter again')
+            elif prm.name == 'publish_hz':
+                hz = float(prm.value or 0.0)
+                if hz < 0.0:
+                    return SetParametersResult(
+                        successful=False,
+                        reason='publish_hz must be >= 0 (0 = no limit)')
+                self._pub_min_dt = (1.0 / hz) if hz > 0.0 else 0.0
+                self.get_logger().info(
+                    f'[LOCK ] publish_hz {"unlimited" if hz <= 0 else hz}')
+        return SetParametersResult(successful=True)
+
+    def _on_classes_filter(self, msg):
+        """Follow the mission's current target class.
+
+        Only when the filter names EXACTLY ONE class. An empty or multi-class
+        filter is not an aim -- steering the ladder at one of several would be
+        a guess, and the ladder's whole value is that it does not guess.
+        """
+        if self._cls_pinned:
+            return                        # operator pinned it; do not fight
+        names = [n.strip() for n in str(msg.data).split(',') if n.strip()]
+        if len(names) != 1 or names[0] == self._cls:
+            return
+        self._cls = names[0]
+        self._retarget_width()
+        self.get_logger().info(
+            f'[LOCK ] following {self._cls!r} (from classes_filter)')
+
+    def _retarget_width(self):
+        """Re-resolve the committed width for the class we now follow.
+
+        Without this the 6-DoF pose keeps the FIRST class's width and reports a
+        confident range for the wrong object -- worse than refusing. An
+        explicit `target_width_m` still wins, exactly as at startup.
+        """
+        if float(self.get_parameter('target_width_m').value or 0.0) > 0.0:
+            return
+        try:
+            from duburi_vision.target_geometry import width_for
+        except ImportError:
+            return
+        w = width_for(self._cls) if self._cls else 0.0
+        self._target_w_m = float(w or 0.0)
+        if self._target_w_m <= 0.0:
+            self.get_logger().warn(
+                f'[LOCK ] no committed width for {self._cls!r} -- the 6-DoF '
+                f'pose will refuse while this class is the target.')
 
     def _on_det(self, msg):
         best = None
