@@ -103,6 +103,26 @@ class LockNode(Node):
         # long-horizon rung, called on when the follower has already given up,
         # and the p99 gap it exists to cover is 2.418 s. 3 Hz samples that
         # seven times over.
+        # PUBLISH RATE -- OFF BY DEFAULT, and the default is the point.
+        #
+        # The ladder tracks on every camera frame (LK wants the smallest
+        # inter-frame motion) and publishes on every frame: MEASURED 132.4 Hz
+        # on the vehicle against detections at 30.5 Hz.
+        #
+        # ⛔ THAT IS NOT WASTE, and an earlier version of this comment said it
+        # was. The reasoning "nobody samples above 20-50 Hz" describes the
+        # HOST loop, which is a limitation of the un-ported vision uplink --
+        # not the architecture. THE CONTROL LOOP IS 500 Hz ON THE SROT BOARD.
+        # Once LANDING_TARGET ingest lands the board closes the visual loop at
+        # that rate and wants bearings as fresh and as often as we can send
+        # them, so capping this publisher would throttle the exact stream the
+        # uplink exists to feed.
+        #
+        # The knob stays for a CPU-bound bench (the ladder costs 16 points of
+        # idle: 53.4 % -> 37.4 %), but 0 = publish every frame is the default
+        # and the design intent. A RUNG CHANGE is never delayed even when a
+        # limit is set -- that transition is the information.
+        self.declare_parameter('publish_hz', 0.0)
         self.declare_parameter('anchor_hz', 3.0)
         self.declare_parameter('full_authority_s', FULL_AUTHORITY_S)
         self.declare_parameter('zero_authority_s', ZERO_AUTHORITY_S)
@@ -169,6 +189,9 @@ class LockNode(Node):
                 f"medium must be 'water' or 'air', got {self._medium!r}")
         self._rect = None
         self._K_rect = None
+        self._pub_min_dt = 0.0
+        self._last_pub_t = 0.0
+        self._last_pub_rung = None
         self._pub_pose = (
             self.create_publisher(TargetPose, f'{ns}/target_pose',
                                   _qos.DETECTIONS)
@@ -192,6 +215,12 @@ class LockNode(Node):
         self._anchor_next = 0.0
         self._anchor_period = 1.0 / max(
             float(self.get_parameter('anchor_hz').value), 0.5)
+        # Read it, or the parameter is decoration -- the "declared and unread"
+        # defect this package has produced four times. `/target_pose` already
+        # got this treatment (see the note at the anchor publish: 96.5 Hz for a
+        # 3 Hz quantity); this is the same fix for `/lock`.
+        _phz = float(self.get_parameter('publish_hz').value)
+        self._pub_min_dt = (1.0 / _phz) if _phz > 0.0 else 0.0
         if bool(self.get_parameter('anchor').value):
             self._build_anchor()
 
@@ -513,6 +542,18 @@ class LockNode(Node):
         from whichever frame it last finished. One shared stamp would make all
         three claim the freshest of them.
         """
+        # Rate limit when one is configured, EXCEPT on a rung change. Default
+        # is no limit: the board-side loop is 500 Hz and wants every frame.
+        rung = st.rung.value if st.have_target else None
+        if self._pub_min_dt > 0.0 and rung == self._last_pub_rung:
+            now = time.monotonic()
+            if now - self._last_pub_t < self._pub_min_dt:
+                return
+            self._last_pub_t = now
+        else:
+            self._last_pub_t = time.monotonic()
+        self._last_pub_rung = rung
+
         dets = []
         if st.have_target:
             x1, y1, x2, y2 = st.xyxy
