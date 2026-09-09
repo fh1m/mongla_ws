@@ -64,7 +64,19 @@ POS_SIGMA_MAX_M = 0.50
 class FlowPositionSource:
     """Wrap a yaw source; add flow-derived position. Delegates the rest."""
 
-    name = 'flow'
+    @property
+    def name(self) -> str:
+        """Report BOTH sources, because the wrap hides the heading one.
+
+        `_setup_yaw_source` wraps at line 687 and prints the startup banner at
+        695, so a bare 'flow' here renames the operator's one statement of
+        which HEADING sensor is live -- and the banner's `_yaw_src_name`
+        branches would then decorate 'flow' with the BNO port or the DVL
+        host. `name` is the second attribute (after `close`) that exists on
+        both sides of the wrapper, so `__getattr__` never fires for it.
+        """
+        inner = getattr(self._inner, 'name', '?')
+        return f'{inner}+flow'
 
     def __init__(self, node, inner, camera: str = 'downward',
                  fix_stale_s: float = FIX_STALE_S,

@@ -185,3 +185,17 @@ def test_closing_the_wrapper_also_closes_the_source_it_wraps():
     assert not inner.closed
     node.yaw_source.close()
     assert inner.closed, 'the wrapper closed itself and orphaned the real source'
+
+
+def test_the_wrapped_name_still_says_which_heading_sensor_is_live():
+    """The manager wraps BEFORE it prints the startup banner, and the banner
+    is the operator's one statement of which heading source is running.
+
+    `name` is defined on the wrapper, so `__getattr__` never forwards it --
+    the same reason `close` needed an explicit call. A bare 'flow' would make
+    the banner report the position source as if it were the heading source,
+    and `_yaw_src_name`'s branches would then append the BNO port or the DVL
+    host to it.
+    """
+    node = _wrap(_FakeNode(pos='flow', yaw='bno085'))
+    assert node.yaw_source.name == 'bno085+flow'
