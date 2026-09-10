@@ -301,6 +301,15 @@ class AUVManagerNode(Node):
         self.declare_parameter('vision_uplink_camera', '')
         self.declare_parameter('vision_uplink_class', '')
         self.declare_parameter('vision_uplink_hz', 25.0)
+        # MEDIUM for the uplink bearing. A flat port refracts, so the pinhole
+        # model recovers the angle INSIDE the housing and the vehicle needs the
+        # angle in the water: `sin(air) = n * sin(water)`. Uncorrected, every
+        # bearing on this wire is ~33 % too large off-axis and +10.14 deg at the
+        # frame edge on our measured forward lens -- and this module exists to
+        # give control gains UNITS, so wrong units defeat its whole purpose.
+        # 'water' is the default because that is where the vehicle operates;
+        # 'air' is the exact identity, for a bench run.
+        self.declare_parameter('vision_uplink_medium', 'water')
         # payload_channels: OPTIONAL per-instance labels, "<board_channel>:<name>",
         # e.g. "9:torpedo_1, 10:torpedo_2, 11:dropper_1".
         #
@@ -1483,9 +1492,13 @@ class AUVManagerNode(Node):
             return
         w, h = vstate.image_size()
         K, D = vstate.calibration()
+        # ⛔ The index comes from `duburi_vision.optics`, which exists to be
+        # "the ONE place the water refractive index lives" (B22). `bearing.py`
+        # lives in duburi_control, which must NOT depend on duburi_vision -- so
+        # the caller supplies it rather than the library holding a second copy.
         b = bearing_from_normalised(
             sample.ex, sample.ey, sample.w_frac, sample.h_frac,
-            width=w, height=h, K=K, D=D)
+            width=w, height=h, K=K, D=D, n_medium=self._uplink_n())
         if b is None:
             # No calibration and no FOV: refuse rather than invent a bearing.
             # An uncalibrated guess on this wire is a confident wrong heading.
@@ -1967,6 +1980,26 @@ class AUVManagerNode(Node):
             stamp.nanosec = int((bs[0] - sec) * 1e9)
             return stamp
         return self.get_clock().now().to_msg()
+
+    def _uplink_n(self) -> float:
+        """Refractive index for the uplink bearing, from the ONE source of it.
+
+        Refuses an unknown medium rather than defaulting: silently picking a
+        medium here is picking a 33 % bearing error, and the failure would look
+        like a mis-tuned gain rather than a units bug.
+        """
+        med = str(self.get_parameter('vision_uplink_medium').value or '').strip().lower()
+        if med == 'air':
+            return 1.0
+        if med != 'water':
+            if not getattr(self, '_uplink_medium_warned', False):
+                self._uplink_medium_warned = True
+                self.get_logger().error(
+                    f'[VIS  ] vision_uplink_medium={med!r} is not water|air -- '
+                    f'refusing to guess. Falling back to WATER, which is where '
+                    f'the vehicle is; fix the parameter.')
+        from duburi_vision.optics import N_WATER
+        return float(N_WATER)
 
     def _publish_state(self, attitude, battery, mode, armed, yaw_deg):
         if attitude is None and battery is None:

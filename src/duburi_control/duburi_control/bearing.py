@@ -105,12 +105,44 @@ def _undistort(xn: float, yn: float, dist: Sequence[float],
     return x, y
 
 
+def _refract(angle_rad: float, n: float) -> float:
+    """In-air ray angle -> the TRUE direction to the object, through a flat port.
+
+    ⛔ WITHOUT THIS EVERY BEARING IS ~n TIMES TOO LARGE. A flat port refracts:
+    a ray arriving from water angle `tw` reaches the sensor at air angle `ta`
+    with `sin(ta) = n * sin(tw)`. The pinhole model recovers `ta` -- the angle
+    INSIDE the housing -- and the vehicle needs `tw`.
+
+    MEASURED on `pi_forward_1280x720.json` (fx 851.2, cx 675.4):
+
+        px from cx   air (ta)   true (tw)     error
+             100      6.70 deg   5.02 deg    +1.68 deg  (+33.4 %)
+             300     19.41       14.44       +4.97       (+34.5 %)
+             640     36.94       26.80      +10.14       (+37.8 %)
+
+    Near the axis `sin x ~ x`, so the error is not a subtle edge effect -- it is
+    essentially the refractive index applied to the whole angular scale. This
+    module exists to give control gains UNITS; an uncorrected bearing gives them
+    the wrong units by 33 %, and the srot board closing a 500 Hz loop on it would
+    over-steer by that much everywhere off-axis.
+
+    `n = 1.0` is the exact identity (air / a bench run).
+    """
+    if n <= 1.0 or angle_rad == 0.0:
+        return angle_rad
+    s = math.sin(angle_rad) / n
+    if s > 1.0 or s < -1.0:          # unreachable for n > 1; refuse, do not clamp
+        return angle_rad
+    return math.asin(s)
+
+
 def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
                         *, width: int, height: int,
                         K: Optional[Sequence[float]] = None,
                         D: Optional[Sequence[float]] = None,
                         hfov_rad: float = 0.0,
-                        vfov_rad: float = 0.0) -> Optional[Bearing]:
+                        vfov_rad: float = 0.0,
+                        n_medium: float = 1.0) -> Optional[Bearing]:
     """Convert a bounding box in PIXELS to a bearing.
 
     `u, v` are the box centre; `w_px, h_px` its size. `K` is the 9-element row-
@@ -150,7 +182,8 @@ def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
         # ratio wrong. `test_bearing_resolution_invariant.py` pins both halves.
         xn, yn = (u - cx) / fx, (v - cy) / fy
         xu, yu = _undistort(xn, yn, D or ())
-        ax, ay = math.atan(xu), math.atan(yu)
+        ax = _refract(math.atan(xu), n_medium)
+        ay = _refract(math.atan(yu), n_medium)
         # Angular size from the box EDGES, not `atan(w/fx)`. The naive form
         # implicitly measures a box centred on the optical axis, so an
         # off-centre target reports a size that shrinks with eccentricity --
@@ -160,9 +193,16 @@ def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
         x2, _ = _undistort((u + w_px / 2 - cx) / fx, yn, D or ())
         _, y1 = _undistort(xn, (v - h_px / 2 - cy) / fy, D or ())
         _, y2 = _undistort(xn, (v + h_px / 2 - cy) / fy, D or ())
+        # The SIZE is refracted per EDGE and then differenced. Refracting the
+        # difference instead would be wrong for an off-centre box: the two
+        # edges sit at different field angles, so they compress by different
+        # amounts -- which is the same eccentricity error the edge-based form
+        # above exists to avoid, reintroduced one step later.
         return Bearing(ax, ay,
-                       abs(math.atan(x2) - math.atan(x1)),
-                       abs(math.atan(y2) - math.atan(y1)),
+                       abs(_refract(math.atan(x2), n_medium)
+                           - _refract(math.atan(x1), n_medium)),
+                       abs(_refract(math.atan(y2), n_medium)
+                           - _refract(math.atan(y1), n_medium)),
                        calibrated=True)
 
     if hfov_rad > 0.0 and vfov_rad > 0.0:
@@ -171,9 +211,15 @@ def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
         # (26 px off => 1.264 deg of bias at ex=0).
         ex = (u - width / 2.0) / (width / 2.0)
         ey = (v - height / 2.0) / (height / 2.0)
-        return Bearing(ex * hfov_rad / 2.0, ey * vfov_rad / 2.0,
-                       (w_px / width) * hfov_rad,
-                       (h_px / height) * vfov_rad,
+        # The fallback is a worse angle, but it is still an angle: leaving it
+        # unrefracted would make "no calibration" silently mean "and also 33 %
+        # off in the other direction", which is not a fallback, it is a second
+        # unrelated error.
+        fx_ang, fy_ang = _refract(ex * hfov_rad / 2.0, n_medium), \
+            _refract(ey * vfov_rad / 2.0, n_medium)
+        return Bearing(fx_ang, fy_ang,
+                       (w_px / width) * hfov_rad / max(n_medium, 1.0),
+                       (h_px / height) * vfov_rad / max(n_medium, 1.0),
                        calibrated=False)
 
     return None
@@ -184,7 +230,8 @@ def bearing_from_normalised(ex: float, ey: float, w_frac: float, h_frac: float,
                             K: Optional[Sequence[float]] = None,
                             D: Optional[Sequence[float]] = None,
                             hfov_rad: float = 0.0,
-                            vfov_rad: float = 0.0) -> Optional[Bearing]:
+                            vfov_rad: float = 0.0,
+                            n_medium: float = 1.0) -> Optional[Bearing]:
     """Same, from the normalised form `VisionState.Sample` already carries.
 
     `ex`/`ey` are -1..+1 from frame centre; `w_frac`/`h_frac` are 0..1 of the
@@ -197,7 +244,8 @@ def bearing_from_normalised(ex: float, ey: float, w_frac: float, h_frac: float,
     v = (ey + 1.0) * height / 2.0
     return bearing_from_pixels(u, v, w_frac * width, h_frac * height,
                                width=width, height=height, K=K, D=D,
-                               hfov_rad=hfov_rad, vfov_rad=vfov_rad)
+                               hfov_rad=hfov_rad, vfov_rad=vfov_rad,
+                               n_medium=n_medium)
 
 
 class BearingFilter:
