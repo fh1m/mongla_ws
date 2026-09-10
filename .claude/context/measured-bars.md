@@ -2042,6 +2042,29 @@ resident at once and the chip logs `has taken the activation 20 times --
 another detector is competing for the chip`: that is the 2-group SRAM ceiling,
 still open.
 
+## The UPLINK bearing is a WATER bearing (2026-09-10)
+
+`bearing.py` computed the ray angle inside the housing. A flat port refracts:
+`sin(air) = n*sin(water)`. Measured on `pi_forward_1280x720.json`
+(fx 851.2, cx 675.4):
+
+| px from cx | air (was sent) | true water | error |
+|---|---|---|---|
+| 100 | 6.70° | 5.02° | **+1.68° (+33.4 %)** |
+| 300 | 19.41° | 14.44° | **+4.97° (+34.5 %)** |
+| 640 | 36.94° | 26.80° | **+10.14° (+37.8 %)** |
+
+**Bar: ~33 % everywhere off-axis, not an edge effect** — near the axis
+`sin x ~ x`, so it is the refractive index applied to the whole angular scale.
+For scale, the same code already warns about the 2.5° linear approximation and
+the 1.264° off-axis principal point.
+
+* `n_medium = 1.0` is the **exact** identity (bench/air).
+* angular **size refracts per EDGE then differences** — refracting the
+  difference reintroduces the eccentricity error the edge form avoids.
+* the index lives in `duburi_vision.optics` and is passed IN;
+  `duburi_control` must not depend on `duburi_vision`.
+
 ## The companion link and the board clock (2026-09-10)
 
 **Link utilisation.** Read-only probe: open the port, send nothing, count bytes.
