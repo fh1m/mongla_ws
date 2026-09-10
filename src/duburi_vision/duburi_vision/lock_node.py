@@ -42,12 +42,13 @@ from sensor_msgs.msg import CameraInfo, Image
 from vision_msgs.msg import Detection2DArray
 
 try:                                   # noqa: SIM105
-    from duburi_interfaces.msg import TargetPose
+    from duburi_interfaces.msg import TargetCorrespondences
 except ImportError:                    # message not built in this workspace
-    # The LADDER must survive it. A pose is an addition to what this node does,
-    # not a precondition, so an unbuilt interface costs the 6-DoF topic and
-    # nothing else -- the follower and anchor rungs still publish `/lock`.
-    TargetPose = None
+    # The LADDER must survive it. Correspondences are an addition to what this
+    # node does, not a precondition, so an unbuilt interface costs the 6-DoF
+    # path and nothing else -- the follower and anchor rungs still publish
+    # `/lock`, which is what the control loop steers on.
+    TargetCorrespondences = None
 
 from std_msgs.msg import String
 
@@ -130,6 +131,7 @@ class LockNode(Node):
         self.declare_parameter('zero_authority_s', ZERO_AUTHORITY_S)
 
         cam = str(self.get_parameter('camera').value)
+        self._cam = cam
         ns = f'/duburi/vision/{cam}'
         # AN EXPLICIT target_class WINS and freezes the aim. Anything else and
         # the ladder aims ITSELF at whatever the mission told the detector to
@@ -189,7 +191,8 @@ class LockNode(Node):
         # corner on this camera, and the pose path was reading the AIR K with
         # raw pixels. Ray-traced against the shipped model, the error at the
         # frame corner is +34 px at 0.3 m and +46 px at 2 m. Default 'water'
-        # matches `flow_node`'s `flow_medium`, and the choice is LOGGED at
+        # matches `flow_node` and `pnp_node` -- one `medium:=` launch
+        # argument feeds all three -- and the choice is LOGGED at
         # startup because it silently rescales every range this node publishes.
         #
         # Placed AFTER the width lookup on purpose: `test_target_geometry`
@@ -205,14 +208,17 @@ class LockNode(Node):
         self._pub_min_dt = 0.0
         self._last_pub_t = 0.0
         self._last_pub_rung = None
-        self._pub_pose = (
-            self.create_publisher(TargetPose, f'{ns}/target_pose',
-                                  _qos.DETECTIONS)
-            if TargetPose is not None else None)
-        if TargetPose is None:
+        # Evidence, not a pose: `pnp_node` subscribes to this and publishes
+        # `{ns}/target_pose`. Solving here as well would put two publishers on
+        # one claim, which is the defect this split exists to remove.
+        self._pub_corr = (
+            self.create_publisher(TargetCorrespondences,
+                                  f'{ns}/correspondences', _qos.DETECTIONS)
+            if TargetCorrespondences is not None else None)
+        if TargetCorrespondences is None:
             self.get_logger().warn(
-                '[LOCK ] duburi_interfaces/TargetPose not built -- the 6-DoF '
-                'target pose will not be published (the ladder is unaffected). '
+                '[LOCK ] duburi_interfaces/TargetCorrespondences not built -- '
+                'no 6-DoF pose will be published (the ladder is unaffected). '
                 'Rebuild duburi_interfaces to enable it.')
         self.create_subscription(CameraInfo, f'{ns}/camera_info',
                                  self._on_info, 10)
@@ -377,54 +383,64 @@ class LockNode(Node):
         self._rect, self._K_rect, note = rectifier_for(self._K, self._medium)
         self.get_logger().info(f'[LOCK ] {note}')
 
-    def _publish_pose(self, pose, header):
-        """6-DoF from the anchor's inliers, when calibrated and sized.
+    def _publish_correspondences(self, pose, header):
+        """The anchor's inliers as EVIDENCE, for `pnp_node` to solve.
 
-        Published on its OWN topic, never folded into `/lock`: the ladder's box
-        is what the control loop steers on, and a pose is a different claim
-        with a different failure mode. Absence of this message means no pose --
-        there is no "invalid" flag to misread.
+        This node used to solve the pose here. It no longer does, and the split
+        is the point: a pose is a lossy summary of the points it was fitted to,
+        so publishing only the pose made a missed shot unexplainable -- bad
+        evidence and a bad solve look identical afterwards. Correspondences on
+        a bag are re-solvable with a different gate, months later.
+
+        ⛔ THE OBJECT SIDE IS RECTIFIED HERE; THE IMAGE SIDE IS NOT. Object
+        points are reference PIXELS scaled to metres, so they must go through
+        the flat-port map or the object model itself is distorted -- that is
+        this node's business, because this node owns the patch. The live pixels
+        are sent RAW and marked `OPTICS_RAW`, because rectifying the image side
+        is the SOLVER's business and doing it in both places is how the two
+        would come to disagree. The message states which, so neither has to
+        guess and nothing can apply the map twice.
         """
-        if self._pub_pose is None:
+        if self._pub_corr is None or pose is None or not pose.ok:
             return
-        from duburi_vision.anchor.pose import target_pose
-        m = TargetPose()
-        if header is not None:
-            m.header = header
-        if (self._K is None or self._target_w_m <= 0.0 or pose is None
-                or not pose.ok):
-            m.ok = False
-            m.reason = ('no camera_info' if self._K is None else
-                        'target_width_m unset' if self._target_w_m <= 0.0
-                        else 'no anchor')
-            self._pub_pose.publish(m)
-            return
+        if self._K is None or self._target_w_m <= 0.0:
+            return          # `_report_geometry_problems` already said why
         roi = self._anchor.reference_roi
         wh = ((roi[2] - roi[0], roi[3] - roi[1]) if roi
               else (self._anchor._be.w, self._anchor._be.h))
-        # Both point sets come from the SAME camera, so both are rectified --
-        # rectifying only the live side would compare water geometry against
-        # air geometry and put the whole error into the pose.
-        ref_pts, live_pts = pose.ref_pts, pose.live_pts
+        w_px, h_px = float(wh[0]), float(wh[1])
+        if w_px <= 0 or h_px <= 0:
+            return
+        ref_pts = pose.ref_pts
         if self._rect is not None:
             ref_pts = self._rect.rectify(ref_pts)
-            live_pts = self._rect.rectify(live_pts)
-        tp = target_pose(ref_pts, live_pts, self._K_rect,
-                         width_m=self._target_w_m, ref_size_px=wh)
-        m.ok = bool(tp.ok)
-        m.reason = tp.reason
-        m.n_points = int(min(tp.n_points, 65535))
-        m.reproj_px = float(tp.reproj_px if tp.reproj_px == tp.reproj_px else 0.0)
-        m.ambiguity = float(tp.ambiguity if tp.ambiguity == tp.ambiguity else 0.0)
-        if tp.ok:
-            m.yaw_deg, m.pitch_deg, m.roll_deg = (float(tp.yaw_deg),
-                                                  float(tp.pitch_deg),
-                                                  float(tp.roll_deg))
-            m.range_m = float(tp.range_m)
-            m.yaw_spread_deg = float(tp.yaw_spread_deg)
-            m.pitch_spread_deg = float(tp.pitch_spread_deg)
-            m.off_axis_deg = float(tp.off_axis_deg)
-        self._pub_pose.publish(m)
+        ref = np.asarray(ref_pts, np.float64).reshape(-1, 2)
+        live = np.asarray(pose.live_pts, np.float64).reshape(-1, 2)
+        if len(ref) < 4 or len(ref) != len(live):
+            return
+
+        # Reference pixels -> object-plane metres, origin at the patch centre.
+        # The patch is planar BY CONSTRUCTION (one snapped view), so z = 0.
+        m_per_px = float(self._target_w_m) / w_px
+        obj = np.zeros((len(ref), 3), np.float64)
+        obj[:, 0] = (ref[:, 0] - w_px * 0.5) * m_per_px
+        obj[:, 1] = (ref[:, 1] - h_px * 0.5) * m_per_px
+
+        m = TargetCorrespondences()
+        if header is not None:
+            m.header = header
+        m.camera = self._cam
+        m.target_label = self._cls or ''
+        m.source = 'anchor'
+        m.optics = TargetCorrespondences.OPTICS_RAW
+        # The anchor matches in its BACKEND's pixels, not the camera's full
+        # frame. Saying so is what lets the solver scale K instead of silently
+        # scaling every angle and range it recovers.
+        m.image_width = int(self._anchor._be.w)
+        m.image_height = int(self._anchor._be.h)
+        m.object_points = obj.reshape(-1).tolist()
+        m.image_points = live.reshape(-1).tolist()
+        self._pub_corr.publish(m)
 
     def _on_param_change(self, params):
         """Aim (or un-aim) the ladder while a mission is running.
@@ -635,8 +651,8 @@ class LockNode(Node):
                   if anchor_ran or due or ok_now != self._pose_was_ok:
                       self._pose_was_ok = ok_now
                       self._pose_pub_t = now
-                      self._publish_pose(self._anchor_pose,
-                                         self._anchor_header or header)
+                      self._publish_correspondences(
+                          self._anchor_pose, self._anchor_header or header)
             except Exception as exc:        # noqa: BLE001 -- B44 class
                 faults += 1
                 if faults in (1, 50):

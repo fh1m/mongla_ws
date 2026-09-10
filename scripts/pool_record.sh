@@ -22,8 +22,13 @@ RUN_DIR="${DUBURI_RUN_DIR:-$HOME/duburi_runs}"
 # Debug allowlist -- what you actually need to review a run. Raw image_raw and
 # camera_info are EXCLUDED by default (bandwidth + disk); image_debug carries the
 # detection overlay and is enough for most review. Add them with --full.
-ALLOW_DEBUG='^/duburi/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|image_debug|vis_range.*)|vision/[^/]+/distance.*)$'
-ALLOW_FULL='^/duburi/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|image_debug|image_raw|camera_info|vis_range.*)|vision/[^/]+/distance.*)$'
+# `correspondences` is the EVIDENCE a 6-DoF pose was solved from, and it is
+# recorded on purpose: a pose alone is a lossy summary, so a bag without it
+# can never separate a bad solve from bad evidence. Replay into `pnp_node`
+# with a different `max_reproj_px` and the shot is re-solvable. ~8 kB per
+# message at the anchor's 3 Hz, which is nothing beside image_debug.
+ALLOW_DEBUG='^/duburi/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|vis_range.*)|vision/[^/]+/distance.*)$'
+ALLOW_FULL='^/duburi/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|image_raw|camera_info|vis_range.*)|vision/[^/]+/distance.*)$'
 
 usage() { sed -n '2,20p' "$0"; exit "${1:-0}"; }
 

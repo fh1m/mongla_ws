@@ -254,9 +254,13 @@ def generate_launch_description():
             description='Water depth in metres. REQUIRED with flow:=true -- '
                         'the node refuses to publish velocity without it.'),
         DeclareLaunchArgument(
-            'flow_medium', default_value='water',
-            description="'water' engages the flat-port rectification; use "
-                        "'air' for a dry bench run."),
+            'medium', default_value='water',
+            description="The medium the VEHICLE is in. 'water' engages the "
+                        "flat-port rectification in flow_node, lock_node AND "
+                        "pnp_node; 'air' for a dry bench run. Was "
+                        "'flow_medium' when only the flow node read it -- one "
+                        "value, so one argument, or the three drift apart and "
+                        "each reports a plausible number."),
         # 0 = the profile's own rate (210), AND THAT REVERSES THE 60 THIS
         # SHIPPED WITH LAST ROUND. The cap was measured correctly and is now
         # wrong, because the mailbox changed what a captured frame costs.
@@ -406,6 +410,29 @@ def generate_launch_description():
                 # launch flag for it would only be a way to disable a rung
                 # that already disables itself.
                 'anchor':       True,
+                # lock_node still rectifies its OBJECT points (reference
+                # pixels scaled to metres); pnp_node rectifies the image side.
+                # Two nodes, one value, one launch argument.
+                'medium':       LaunchConfiguration('medium'),
+            }],
+            condition=IfCondition(LaunchConfiguration('lock')),
+        )
+
+    def solver(camera_name: str) -> Node:
+        """The PnP solver, PER CAMERA -- started with the ladder that feeds it.
+
+        Gated on the SAME `lock` condition on purpose. `lock_node` publishes
+        correspondences and no longer solves, so a ladder without its solver
+        would leave `target_pose` silent while every node looked healthy --
+        the capability-present-but-unreachable failure this stack keeps
+        hitting.
+        """
+        return Node(
+            package='duburi_vision', executable='pnp_node',
+            name=f'duburi_pnp_{camera_name}', output='screen',
+            parameters=[{
+                'camera': camera_name,
+                'medium': LaunchConfiguration('medium'),
             }],
             condition=IfCondition(LaunchConfiguration('lock')),
         )
@@ -418,7 +445,7 @@ def generate_launch_description():
              name='duburi_flow_velocity', output='screen',
              parameters=[{
                  'camera':       'downward',
-                 'medium':       LaunchConfiguration('flow_medium'),
+                 'medium':       LaunchConfiguration('medium'),
                  'pool_depth_m': ParameterValue(
                      LaunchConfiguration('pool_depth_m'), value_type=float),
                  # The SAME calibration the downward camera_node gets. Passing
@@ -428,6 +455,8 @@ def generate_launch_description():
              condition=IfCondition(LaunchConfiguration('flow'))),
         ladder('forward',  'lock_class'),
         ladder('downward', 'dwn_lock_class'),
+        solver('forward'),
+        solver('downward'),
         Node(package='duburi_vision', executable='vision_display',
              name='duburi_display', output='screen',
              parameters=[{'camera': 'forward'}],

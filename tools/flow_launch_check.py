@@ -25,7 +25,7 @@ responsive can tell a slow hand from a still rig. Press, slide, press.
 
 Terminal A:
     ros2 launch duburi_vision vision_pi.launch.py \
-        flow:=true flow_medium:=air pool_depth_m:=<height_m> forward:=false
+        flow:=true medium:=air pool_depth_m:=<height_m> forward:=false
 Terminal B:
     python3 tools/flow_launch_check.py --height <height_m> --truth-cm 30
 """

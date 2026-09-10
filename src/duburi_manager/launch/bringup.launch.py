@@ -180,10 +180,11 @@ def generate_launch_description():
                                           'camera to the floor. Required: without '
                                           'it flow_node publishes quality 0 and '
                                           'refuses, by design.'),
-        DeclareLaunchArgument('flow_medium',  default_value='water',
+        DeclareLaunchArgument('medium',  default_value='water',
                               choices=['water', 'air'],
-                              description='flow:=true -- refraction medium for the '
-                                          'flow focal length. `air` for a bench '
+                              description='The medium the VEHICLE is in. Read by '
+                                          'flow_node, lock_node AND pnp_node -- '
+                                          'one value, one argument. `air` for a bench '
                                           'run, or the scale is off by ~1.33.'),
         # An empty lock_class means the ladder follows ANY detected class and
         # `/target_pose` refuses with 'target_width_m unset', because the
@@ -336,7 +337,7 @@ def generate_launch_description():
             'lock_class':    LaunchConfiguration('lock_class'),
             'flow':          LaunchConfiguration('flow'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
-            'flow_medium':   LaunchConfiguration('flow_medium'),
+            'medium':        LaunchConfiguration('medium'),
             'lock':          LaunchConfiguration('lock'),
         }.items(),
         condition=_stack_is('pi'),
