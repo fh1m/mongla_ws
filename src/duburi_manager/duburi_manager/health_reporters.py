@@ -118,6 +118,55 @@ def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health
         ok('leak', 'enabled and dry')
 
 
+def allocator(sat) -> Health:
+    """Grade the thrust allocator's per-group scale-down (srot-control-board#20).
+
+    `sat` is `fc.allocator_saturation()` -- `(horizontal, vertical)`, each the
+    DELIVERED fraction of that group's demand, or None when unseen.
+
+    ⛔ WHY THIS IS WORTH A LINE. `mixer::mix()` scales a group down uniformly
+    when the mix exceeds unity, and then discards the factor. Downstream, a
+    vehicle that is not turning looks the same whether the water is pushing
+    back or the allocator quietly binned a third of the yaw command. Worse, the
+    board's PIDs cannot see it either -- their anti-windup keys on each PID's
+    own clamp, so an axis inside its clamp but scaled to 0.667 keeps
+    integrating against a limit it cannot observe.
+
+    ⛔ ABSENT IS UNKNOWN, NOT OK. Until #20 merges these names never arrive,
+    and reporting OK would assert the one thing we cannot see. Same rule as the
+    thruster reporter: a silent allocator and a saturating one are
+    indistinguishable, so say so.
+
+    DEGRADED, never FAILED. Saturation is a legitimate state -- a hard
+    manoeuvre is allowed to ask for more than the hull has. It is worth
+    surfacing, not worth refusing to fly over.
+    """
+    h, v = (sat if sat is not None else (None, None))
+    if h is None and v is None:
+        return unknown('allocator', 'MIX_SAT_* absent (firmware PR #20)')
+    parts, worst = [], 1.0
+    for name, val in (('horiz', h), ('vert', v)):
+        if val is None:
+            parts.append(f'{name} ?')
+            continue
+        parts.append(f'{name} {val:.2f}')
+        worst = min(worst, float(val))
+    detail = ', '.join(parts)
+    # A saturating group is a POSITIVE finding and outranks an unseen one --
+    # what we did observe is true regardless of what we did not.
+    if worst < 0.98:
+        return degraded('allocator',
+                        f'SATURATED -- {(1.0 - worst) * 100:.0f} % of a group\'s '
+                        f'demand discarded ({detail}). The axis is not achieving '
+                        f'its command and the board\'s PID cannot see that.')
+    # ⛔ ONE GROUP READING CLEAN DOES NOT CLEAR THE OTHER. Reporting OK here
+    # would assert that the vertical stack is delivering when we never heard
+    # from it -- the same false-OK the thruster reporter exists to avoid.
+    if h is None or v is None:
+        return unknown('allocator', f'only half the allocator is visible ({detail})')
+    return ok('allocator', f'no saturation ({detail})')
+
+
 def thrusters(health) -> Health:
     """Grade the DRIVER's own presence verdict. Never a message count.
 

@@ -1363,6 +1363,13 @@ class AUVManagerNode(Node):
             lambda: str(getattr(self, '_reader_last_fault', ''))))
         self._health.register('barometer', lambda: _hr.barometer(named))
         self._health.register('heading_ref', lambda: _hr.heading_reference(named))
+        # Thrust-allocator saturation. Reads UNKNOWN until srot-control-board#20
+        # merges -- `mixer::mix()` computes the per-group scale-down and drops
+        # it, so today a saturating allocator and a quiet one are the same from
+        # here. Registered NOW so the day the names appear the line is already
+        # watching, rather than the capability arriving with no consumer.
+        self._health.register('allocator', lambda: _hr.allocator(
+            getattr(fc, 'allocator_saturation', lambda: None)()))
         self._health.register('thrusters', lambda: _hr.thrusters(
             getattr(fc, 'thruster_health', lambda: None)()))
         self._health.register('thruster_power', lambda: _hr.thruster_power(
