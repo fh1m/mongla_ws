@@ -161,9 +161,14 @@ class LockNode(Node):
         # locking onto. Without this the default is 0.0 and the 6-DoF branch
         # publishes `ok=false, reason='target_width_m unset'` forever: the
         # metric path has never once run on the vehicle.
+        # Ungated on purpose: what the table IGNORED must be reported whether
+        # or not this node needs a lookup. Inside the `if` below it would stay
+        # silent exactly when `target_width_m` was passed explicitly -- which is
+        # the case where a broken override matters most, because the operator
+        # believes the file is doing something.
+        self._report_geometry_problems()
         if self._target_w_m <= 0.0 and self._cls:
             from duburi_vision.target_geometry import width_for, describe
-            self._report_geometry_problems()
             w = width_for(self._cls)
             if w > 0.0:
                 self._target_w_m = w
