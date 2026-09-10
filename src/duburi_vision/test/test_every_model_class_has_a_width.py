@@ -33,51 +33,121 @@ _NOT_COMPETITION = ('yolov11n', 'sauvc_sim', 'sim_sauvc_v1')
 
 
 def _geometry():
+    """A fresh view of the table.
+
+    `_CACHE`, `_ERRORS` and `_REJECTED` are all module-global and all three
+    survive between tests: the broken-override test below leaves an entry in
+    `_ERRORS`, which then read as 'the COMMITTED table failed to parse' in a
+    later test. Clear all three, not just the cache.
+    """
     import duburi_vision.target_geometry as tg
     tg._CACHE.clear()
+    del tg._ERRORS[:]
+    del tg._REJECTED[:]
     return tg
 
 
-def _competition_sidecars():
+def _shipped_classes():
+    """Every class a competition model emits -- ON DISK **OR** TRACKED IN GIT.
+
+    On-disk alone is not enough, and that hole is live right now: the two
+    sidecars carrying the classes a pool run actually steers on --
+    `slalom_red_pipe` (`red_pipe`) and `torpedo_blood_hole` (`torpedo`, `blood`,
+    `hole`) -- are deleted from the working tree while still tracked. A census
+    that only listed `models/*.yaml` could never fail on them, which is the same
+    shape of blind spot as keying the table by rulebook names: the guard would
+    be green about precisely the classes nobody had checked.
+    """
     out = {}
-    for fn in sorted(os.listdir(_MODELS)):
-        stem, ext = os.path.splitext(fn)
-        if ext != '.yaml' or stem in _NOT_COMPETITION:
+    for stem, text in _sidecar_texts().items():
+        if stem in _NOT_COMPETITION:
             continue
-        with open(os.path.join(_MODELS, fn)) as fh:
-            names = (yaml.safe_load(fh) or {}).get('names') or {}
+        names = (yaml.safe_load(text) or {}).get('names') or {}
         if names:
             out[stem] = [str(v).strip() for v in names.values()]
     return out
 
 
+def _sidecar_texts():
+    texts = {}
+    for fn in sorted(os.listdir(_MODELS)):
+        stem, ext = os.path.splitext(fn)
+        if ext == '.yaml':
+            with open(os.path.join(_MODELS, fn)) as fh:
+                texts[stem] = fh.read()
+    for stem, text in _tracked_sidecars().items():
+        texts.setdefault(stem, text)
+    return texts
+
+
+def _tracked_sidecars():
+    """Sidecars git still tracks, including ones deleted from the working tree."""
+    import subprocess
+    root = os.path.dirname(os.path.dirname(_PKG))
+    rel = 'src/duburi_vision/models'
+    try:
+        listed = subprocess.run(
+            ['git', '-C', root, 'ls-files', rel + '/*.yaml'],
+            capture_output=True, text=True, timeout=20)
+        if listed.returncode != 0:
+            return {}
+        out = {}
+        for path in listed.stdout.split():
+            got = subprocess.run(['git', '-C', root, 'show', 'HEAD:' + path],
+                                 capture_output=True, text=True, timeout=20)
+            if got.returncode == 0:
+                out[os.path.splitext(os.path.basename(path))[0]] = got.stdout
+        return out
+    except Exception:
+        return {}          # no git (an install tree): fall back to disk alone
+
+
 def test_the_models_we_ship_are_actually_being_read():
     """A guard over an empty set passes forever."""
-    sidecars = _competition_sidecars()
+    sidecars = _shipped_classes()
     assert sidecars, 'no competition model sidecars found in %s' % _MODELS
     flat = [c for classes in sidecars.values() for c in classes]
     assert len(flat) >= 5, flat
 
 
 def test_every_shipped_model_class_has_a_width():
+    """Every emitted class resolves, or the TABLE says why it cannot.
+
+    `no_published_dimension: true` is the one accepted answer for a zero, and it
+    lives in the YAML beside the class rather than in a list here -- so the
+    reason travels with the number, and adding a class cannot be waved through
+    by editing the test.
+    """
     tg = _geometry()
     missing = []
-    for stem, classes in _competition_sidecars().items():
+    for stem, classes in _shipped_classes().items():
         for cls in classes:
-            if tg.width_for(cls) <= 0.0:
-                missing.append('%s -> %s' % (stem, cls))
+            if tg.width_for(cls) > 0.0:
+                continue
+            if tg.describe(cls).get('no_published_dimension') is True:
+                continue
+            missing.append('%s -> %s' % (stem, cls))
     assert not missing, (
         'these classes the detector emits resolve to NO width, so their pose, '
         'range, tool-aim and obliquity gate cannot compute: %s' % missing)
 
 
 def test_a_width_is_plausible_for_a_pool_prop():
-    """A typo of 3.0 for 0.3 is invisible until the hull stops 10x too early."""
+    """A typo of 3.0 for 0.3 is invisible until the hull stops 10x too early.
+
+    The band is the module's own, not a second copy: a guard that disagreed
+    with the code would either pass what the loader rejects or reject what it
+    accepts. The first draft of this test hardcoded 0.05 and would have failed
+    the 0.0334 m slalom pipe the loader is required to accept.
+    """
     tg = _geometry()
-    for stem, classes in _competition_sidecars().items():
+    for stem, classes in _shipped_classes().items():
         for cls in classes:
             w = tg.width_for(cls)
-            assert 0.05 <= w <= 5.0, '%s -> %s = %s m' % (stem, cls, w)
+            if w == 0.0:
+                continue                 # covered by the resolve test above
+            assert tg._MIN_WIDTH_M <= w <= tg._MAX_WIDTH_M, (
+                '%s -> %s = %s m' % (stem, cls, w))
 
 
 def test_our_pool_prop_size_overrides_the_handbook(monkeypatch):
@@ -148,3 +218,60 @@ def test_simulator_sourced_numbers_are_marked_as_such():
     assert entry.get('unquoted') is True, (
         'a width taken from the simulator arena spec must be flagged, so it is '
         'never mistaken for a rulebook figure: %s' % entry)
+
+
+def test_the_committed_table_parses():
+    """A stray indent made EVERY class resolve to 0.0, and nothing said so.
+
+    `_read` swallows a parse error on purpose, so one bad file cannot hide a
+    good one -- but that means a broken committed table degrades to an empty
+    dict, which is indistinguishable from 'this class is not listed'. It
+    happened while writing this round's own change. Two guards: the file must
+    parse, and the failure must be REPORTABLE rather than only survivable.
+    """
+    tg = _geometry()
+    assert not tg.load_errors(), tg.load_errors()
+    assert tg._load(), 'the committed target table loaded EMPTY'
+
+
+def test_a_parse_failure_is_reported_not_just_survived(monkeypatch):
+    tg = _geometry()
+    stock = tg.width_for('gate')
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            fh.write('gate:\n  width_m: 1.82\n   boxes: bad indent\n')
+        monkeypatch.setenv('DUBURI_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        del tg._ERRORS[:]
+        assert tg.width_for('gate') == pytest.approx(stock)   # survived
+        assert any(path in p for p, _ in tg.load_errors())     # and reported
+    tg._CACHE.clear()
+    del tg._ERRORS[:]
+
+
+def test_an_implausible_override_is_reported_not_just_dropped(monkeypatch):
+    """A silently-dropped override looks exactly like one that was never read."""
+    tg = _geometry()
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': 182}}, fh)     # cm typed as m
+        monkeypatch.setenv('DUBURI_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        del tg._REJECTED[:]
+        assert tg.width_for('gate') != pytest.approx(182.0)
+        assert [n for n, _, _ in tg.rejected_overrides()] == ['gate']
+    tg._CACHE.clear()
+    del tg._REJECTED[:]
+
+
+def test_a_one_inch_pipe_is_an_acceptable_target():
+    """The smallest thing we steer on must survive the plausibility floor.
+
+    The first draft floored at 0.05 m and would have rejected the 0.0334 m
+    slalom pipe -- the constant now carries that measurement as its reason.
+    """
+    tg = _geometry()
+    assert tg._MIN_WIDTH_M <= 0.0334
+    assert tg.width_for('red_pipe') == pytest.approx(0.0334)

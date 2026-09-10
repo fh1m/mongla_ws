@@ -163,6 +163,7 @@ class LockNode(Node):
         # metric path has never once run on the vehicle.
         if self._target_w_m <= 0.0 and self._cls:
             from duburi_vision.target_geometry import width_for, describe
+            self._report_geometry_problems()
             w = width_for(self._cls)
             if w > 0.0:
                 self._target_w_m = w
@@ -265,6 +266,29 @@ class LockNode(Node):
             f'[LOCK ] {cam}: follow={self._follower is not None} '
             f'anchor={self._anchor is not None} '
             f'authority {self._full:.2f}->{self._zero:.2f}s  -> {ns}/lock')
+
+
+    def _report_geometry_problems(self):
+        """Say what the target table IGNORED, before saying what it used.
+
+        A dropped override and an override that was never read look identical
+        from the deck, and a table that failed to parse reads as 'no committed
+        width' for every class at once -- which is exactly how a stray indent
+        in the committed YAML presented while this was being written.
+
+        Out of line on purpose: `test_target_geometry` asserts the width lookup
+        and its assignment stay within one window of source, and inlining this
+        pushed them apart.
+        """
+        from duburi_vision.target_geometry import load_errors, rejected_overrides
+        for path, err in load_errors():
+            self.get_logger().error(
+                f'[LOCK ] target geometry {path} FAILED TO PARSE ({err}) -- '
+                f'widths from it are MISSING, not zero')
+        for name, w_bad, origin in rejected_overrides():
+            self.get_logger().warn(
+                f'[LOCK ] IGNORED override {name}={w_bad} m from {origin}: '
+                f'outside the plausible band, likely cm typed as m')
 
     def _build_anchor(self):
         """Optional by design: a missing ONNX must cost the anchor rung, not
