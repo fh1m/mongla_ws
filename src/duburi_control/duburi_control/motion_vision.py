@@ -716,6 +716,8 @@ def align_loop(*,
                fire_pass: bool = False,
                fire_max_tilt_deg: float = 0.0,
                tilt_gate_fn=None,
+               standoff_max_tilt_deg: float = 0.0,
+               obliquity_fn=None,
                report_fn=None,
                writers=None,
                log=None,
@@ -941,6 +943,7 @@ def align_loop(*,
     depth_ctrl  = 0.0    # depth axis error carried from axis-calc into the 5 Hz step
     depth_epx   = 0.0
     last_err_px = float('inf')
+    standoff_held = False
     last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
     prev_worst: Optional[float] = None   # settle gate: worst error last NEW frame (for |Δworst|)
     last_frame_at = float('-inf')        # arrival time of the last COUNTED detection frame
@@ -1190,6 +1193,46 @@ def align_loop(*,
                 # trips once the range is satisfied too. Same _fill law as move_loop.
                 last_fill = _fill(sample, fwd_mode)   # reported in Outcome.fill
                 fwd_err = float(fwd_fill) - last_fill
+                # ⛔ AN OBLIQUE TARGET READS AS FURTHER AWAY, SO THE HULL CLOSES IN.
+                # `_fill('area')` is sqrt(w*h) -- Corke & Hutchinson's sqrt(area)
+                # Z-axis feature (IEEE T-RA 17(4) 2001), chosen there because it is
+                # scalar, rotation-invariant, and "has the dimension of length ...
+                # thus a similar magnitude control gain" as the pixel features. The
+                # SAME paper states its validity bound: it works "when the target
+                # normal is within +/-35 deg of the camera's optical axis", and
+                # past that "its area will appear diminished, due to perspective,
+                # which causes the camera to initially approach the target."
+                #
+                # Approaching is the dangerous direction -- past the intended
+                # standoff into whatever we were standing off FROM.
+                # `fire_max_tilt_deg` already holds the SHOT for obliquity;
+                # nothing held the APPROACH, so the hull could arrive too close
+                # and then correctly refuse to fire.
+                #
+                # FAIL DIRECTION IS THE OPPOSITE OF THE FIRING GATE, deliberately.
+                # `square_within` treats "no pose" as not-square because for a
+                # shot both mean don't. Here "no pose" is the ORDINARY case (a
+                # pose needs lock_node, a calibration and a committed width), so
+                # treating it as oblique would disable forward drive on every
+                # mission without one -- a guard that breaks what it guards. Only
+                # a pose that is PRESENT and says too oblique holds.
+                if standoff_max_tilt_deg > 0.0 and fwd_err > FWD_BAND:
+                    try:
+                        obl = obliquity_fn() if obliquity_fn else None
+                    except Exception as exc:                       # noqa: BLE001
+                        log.error(f'[VIS  ] obliquity_fn raised {exc!r} -- '
+                                  f'treating as unknown; standoff unguarded')
+                        obl = None
+                    if obl is not None and obl > float(standoff_max_tilt_deg):
+                        if not standoff_held:
+                            standoff_held = True
+                            log.warning(
+                                f'[VIS  ] standoff HELD: target face {obl:.0f} deg '
+                                f'off-normal (> {standoff_max_tilt_deg:.0f}). '
+                                f'sqrt(area) under-reads at this obliquity, so '
+                                f'closing would drive PAST the standoff. Square '
+                                f'up first.')
+                        fwd_err = 0.0
                 if fwd_err <= FWD_BAND:
                     fwd_pct = 0.0
                     in_band.append(True)

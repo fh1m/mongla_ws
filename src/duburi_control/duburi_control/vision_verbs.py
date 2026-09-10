@@ -158,6 +158,7 @@ class VisionVerbs:
                      lock_target=False, ctrl_conf=0.0,
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
                      lock_s=0.0,
+                     standoff_max_tilt_deg=0.0,
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
                      settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
                      hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
@@ -323,6 +324,11 @@ class VisionVerbs:
                         # and a downward align must not be gated on what the
                         # forward camera can see.
                         tilt_gate_fn=getattr(vstate, 'square_within', None),
+                        # The APPROACH guard. Distinct from `square_within`
+                        # above: that folds "no pose" into "not square", which
+                        # is right for a shot and wrong for an approach.
+                        standoff_max_tilt_deg=float(standoff_max_tilt_deg),
+                        obliquity_fn=getattr(vstate, 'obliquity_deg', None),
                         depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
                         downward=is_downward,
                         # SIGN-ONLY: coerce to exactly +1/-1 (rosidl-0 -> +1) so it can
