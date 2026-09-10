@@ -890,6 +890,8 @@ class AUVManagerNode(Node):
         from duburi_vision.flow.flow_timing import ClockMap
         self._imu_clock = ClockMap(window_s=20.0, min_pairs=40)
         self._imu_clock_fit_t = 0.0
+        # (mapped board time, monotonic instant it was computed) or None.
+        self._board_stamp = None
         self._imu_clock_ok = False
         self._imu_clock_warned = False
 
@@ -1534,7 +1536,7 @@ class AUVManagerNode(Node):
             return
         yaw_deg, _ = self._effective_yaw_deg(attitude)
         msg = DuburiState()
-        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.stamp    = self._state_stamp()
         msg.header.frame_id = 'duburi'
         msg.armed           = self._fast_armed
         msg.mode            = self._fast_mode
@@ -1587,6 +1589,15 @@ class AUVManagerNode(Node):
                 self._imu_clock.fit()
             if self._imu_clock.ready:
                 stamp_s = self._imu_clock.to_host(board_s)
+                # Share it with `/duburi/state`, which carries the SAME board
+                # sample (yaw, depth) and was stamped on host publish time.
+                # ⛔ CACHED HERE, INSIDE the ready branch, and not after the
+                # fallback below: past that point `stamp_s` may be the ARRIVAL
+                # time, and caching that as a board stamp would relabel the
+                # jitter instead of removing it -- the same lie in a better
+                # disguise. Paired with its own monotonic instant so a stale
+                # mapping cannot be applied to a fresh state message.
+                self._board_stamp = (stamp_s, time.monotonic())
             elif not self._imu_clock_warned:
                 self._imu_clock_warned = True
                 self.get_logger().info(
@@ -1929,11 +1940,39 @@ class AUVManagerNode(Node):
             self.get_logger().info('[RC   ] all neutral')
             self.prev_rc = None
 
+    # A board sample older than this is not the state we are publishing, so
+    # fall back rather than stamp a fresh message with a stale capture time.
+    # 0.2 s is 10 ATTITUDE periods at the pinned 50 Hz -- loose enough that an
+    # ordinary scheduling hiccup does not flip the source back and forth.
+    _BOARD_STAMP_MAX_AGE_S = 0.2
+
+    def _state_stamp(self):
+        """Board capture time for `/duburi/state`, or host time if unmapped.
+
+        `/duburi/state` carries yaw and depth, which ORIGINATE ON THE BOARD and
+        were stamped with the instant the host got round to publishing. The
+        board's own interval has sd 0.00 ms where arrival has sd 6.67 and p2p
+        35.12 -- so the stamp described the transport, not the measurement.
+
+        `flow_node` reads depth from this topic and differences it over time
+        (`_vz_down`), which put that jitter straight into a vertical speed.
+        `ClockMap` is already fitted here for `/duburi/imu_rates`; this is the
+        same mapping applied to the other stream that needs it.
+        """
+        bs = self._board_stamp
+        if bs is not None and (time.monotonic() - bs[1]) <= self._BOARD_STAMP_MAX_AGE_S:
+            sec = int(bs[0])
+            stamp = self.get_clock().now().to_msg()
+            stamp.sec = sec
+            stamp.nanosec = int((bs[0] - sec) * 1e9)
+            return stamp
+        return self.get_clock().now().to_msg()
+
     def _publish_state(self, attitude, battery, mode, armed, yaw_deg):
         if attitude is None and battery is None:
             return
         msg = DuburiState()
-        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.stamp    = self._state_stamp()
         msg.header.frame_id = 'duburi'
         msg.armed           = bool(armed)
         msg.mode            = mode if mode else ''

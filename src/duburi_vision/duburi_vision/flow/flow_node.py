@@ -67,6 +67,7 @@ from duburi_vision.flow.flow_math import (
 )
 from duburi_vision.flow.flow_velocity import flow_velocity
 from duburi_vision.optics import N_WATER
+from duburi_vision.stamps import capture_monotonic
 
 # Shi-Tomasi + LK. Bucketing is applied on top of goodFeaturesToTrack so the
 # corners are spread across the frame rather than clustered on the one bright
@@ -357,6 +358,7 @@ class FlowVelocityNode(Node):
         # Height measured by the CAMERA, checked against the barometer path.
         self._h_optical = HeightFromDivergence()
         self._depth_hist = deque(maxlen=16)
+        self._state_stamp_warned = False
         self._n_h_warn = 0
 
         ns = f'/duburi/vision/{cam}'
@@ -461,9 +463,30 @@ class FlowVelocityNode(Node):
         self._yaw_rate_buf.append((t, float(msg.vector.z)))
 
     def _on_state(self, msg: DuburiState) -> None:
+        """Depth, stamped when it was MEASURED rather than when it arrived.
+
+        ⛔ THE SIXTH INSTANCE, in the package that owns the fix. `stamps.py`
+        records four prior cases of "the clock was read at the wrong place";
+        `flow_position` integrating on arrival time was the fifth. This is the
+        same defect on the depth series: `_vz_down` differences these instants,
+        so the host's transport jitter (sd 6.67 ms, p2p 35.12 ms, all of it
+        USB/UART scheduling) went straight into a vertical speed.
+
+        The manager now stamps `/duburi/state` from the board's own clock, so
+        the honest instant is on the message. `capture_monotonic` maps it into
+        this process's monotonic domain and says so when it cannot.
+        """
+        t, why = capture_monotonic(msg.header)
+        if why and not self._state_stamp_warned:
+            self._state_stamp_warned = True
+            self.get_logger().warning(
+                f'[FLOW ] depth stamps fall back to arrival time ({why}). '
+                f'vz is then differenced over arrival instants and carries the '
+                f'transport jitter, which reads as vertical motion that is not '
+                f'happening.')
         if not np.isnan(msg.depth_m):
             self._depth_m = float(msg.depth_m)
-            self._depth_hist.append((time.monotonic(), self._depth_m))
+            self._depth_hist.append((t, self._depth_m))
         if not np.isnan(msg.yaw_deg):
             self._yaw_deg = float(msg.yaw_deg)
 
