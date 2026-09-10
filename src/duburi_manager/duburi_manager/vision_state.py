@@ -356,6 +356,42 @@ class VisionState:
                                             float(m.pitch_spread_deg))
         return worst <= float(tol_deg)
 
+    def tool_offset_px(self, tool: str, max_age_s: float = 1.0):
+        """Signed (du, dv) px that puts the target on TOOL's axis, or None.
+
+        ⛔ THE MISS EQUALS THE OFFSET AT EVERY RANGE. An align centres the
+        target on the CAMERA axis; a tool mounted elsewhere acts along a
+        PARALLEL axis, so the error does not shrink as the hull closes in. A
+        10 cm offset misses a 4.75 cm-radius torpedo opening from 1 m and from
+        3 m alike -- with a perfectly centred box and a clean fire gate, which
+        is why nothing ever reported it.
+
+        The correction is the opposite of a constant: `du = fx*x/Z`, LARGE up
+        close, so it needs a live range. That comes from `target_pose`, which
+        is metric only since the flat-port refraction fix.
+
+        None when it cannot be computed -- no such tool, no calibration, or no
+        pose. The caller then aims the camera exactly as before and warns.
+        Guessing a correction would move the aim point with false confidence,
+        which is worse than a known-absent one.
+
+        This lives here, not in `duburi_control`, because the geometry table is
+        in `duburi_vision` and control must not depend on it -- the same rule
+        that keeps the refractive index out of `bearing.py`.
+        """
+        try:
+            from duburi_vision.tool_geometry import pixel_offset
+        except ImportError:
+            return None
+        K, _D = self.calibration()
+        if not K or len(K) < 6 or not (K[0] > 0.0 and K[4] > 0.0):
+            return None
+        m = self.target_pose(max_age_s)
+        if m is None or not getattr(m, 'ok', False):
+            return None
+        return pixel_offset(tool, fx=float(K[0]), fy=float(K[4]),
+                            range_m=float(m.range_m))
+
     def obliquity_deg(self, max_age_s: float = 1.0):
         """Worst-case angle between the target's face and our axis, or None.
 

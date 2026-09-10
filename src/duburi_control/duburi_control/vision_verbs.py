@@ -146,6 +146,51 @@ class VisionVerbs:
     # ================================================================== #
     #  vision_align -- centre on lat / yaw / depth at a pixel offset      #
     # ================================================================== #
+    _tool_warned = None
+
+    def _warn_tool_geometry(self, tool, vstate):
+        """One line, once per tool, when the aim correction cannot be trusted.
+
+        Three distinguishable states, and collapsing them would hide the one
+        that matters:
+          * no tool named        -> silent. Aiming the camera is a legitimate
+                                    choice and the historical default.
+          * tool UNMEASURED      -> WARN. It reads as zero and will miss by the
+                                    real offset, invisibly.
+          * measured but no pose -> WARN. The correction is range-dependent and
+                                    there is no range, so it cannot be applied.
+        """
+        if not tool:
+            return
+        if self._tool_warned is None:
+            self._tool_warned = set()
+        if tool in self._tool_warned:
+            return
+        self._tool_warned.add(tool)
+        try:
+            from duburi_vision.tool_geometry import is_measured, known_tools
+        except ImportError:
+            return
+        if tool not in known_tools():
+            self.log.error(
+                f'[VIS  ] tool {tool!r} is not in tool_geometry.yaml '
+                f'(known: {known_tools()}). Aiming the CAMERA.')
+            return
+        if not is_measured(tool):
+            self.log.warning(
+                f'[VIS  ] tool {tool!r} is UNMEASURED -- its offset reads as '
+                f'zero, so this aims the CAMERA. The round leaves a parallel '
+                f'axis, so the miss equals the real offset AT EVERY RANGE and '
+                f'closing in does not help. Measure it into '
+                f'config/tool_geometry.yaml.')
+            return
+        if getattr(vstate, 'tool_offset_px', None) and vstate.tool_offset_px(tool) is None:
+            self.log.warning(
+                f'[VIS  ] tool {tool!r} is measured but there is no live '
+                f'target_pose, so the range-dependent aim correction cannot be '
+                f'computed. Aiming the CAMERA. (lock_node + a calibration + a '
+                f'committed target width are what produce a pose.)')
+
     def vision_align(self, camera, target_class, axes,
                      offset_lat=0.0, offset_yaw=0.0, offset_depth=0.0,
                      err_px=40.0, duration=20.0, gain=30.0,
@@ -159,6 +204,7 @@ class VisionVerbs:
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
                      lock_s=0.0,
                      standoff_max_tilt_deg=0.0,
+                     tool='',
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
                      settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
                      hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
@@ -284,6 +330,12 @@ class VisionVerbs:
                 self._set_lock_hold(True)
             try:
                 with self._suspend_heading_lock() if touches_yaw else nullcontext():
+                    # ⛔ SAY IT BEFORE THE SHOT, NOT AFTER. An unmeasured tool reads as
+                    # ZERO offset -- byte-identical to aiming the camera, which is what
+                    # every mission has always done, and therefore silent. But it is
+                    # exactly the case that misses: the geometry says the round leaves a
+                    # parallel axis and the miss equals the offset at every range.
+                    self._warn_tool_geometry(tool, vstate)
                     outcome = align_loop(
                         pixhawk=self.pixhawk, vision_state=vstate,
                         target_class=target_class, axes=axis_set, offsets=offsets,
@@ -329,6 +381,13 @@ class VisionVerbs:
                         # is right for a shot and wrong for an approach.
                         standoff_max_tilt_deg=float(standoff_max_tilt_deg),
                         obliquity_fn=getattr(vstate, 'obliquity_deg', None),
+                        # Aim the TOOL. Resolved by the manager, which is the
+                        # layer allowed to import duburi_vision -- the geometry
+                        # table lives there and duburi_control must not depend
+                        # on it (same rule as the refractive index).
+                        tool_offset_fn=((lambda: vstate.tool_offset_px(tool))
+                                        if tool and hasattr(vstate, 'tool_offset_px')
+                                        else None),
                         depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
                         downward=is_downward,
                         # SIGN-ONLY: coerce to exactly +1/-1 (rosidl-0 -> +1) so it can

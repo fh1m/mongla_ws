@@ -1,0 +1,107 @@
+# WHERE EACH TOOL IS, relative to the camera that aims it.
+#
+# ⛔ THE DEFECT THIS EXISTS FOR. Every vision align centres the TARGET ON THE
+# CAMERA AXIS and then fires a device mounted somewhere else. The round leaves
+# the LAUNCHER's axis, and the two axes are parallel, so:
+#
+#     THE MISS EQUALS THE OFFSET, AT EVERY RANGE.
+#
+# It does not shrink as you close in -- a 10 cm offset misses a 4.75 cm-radius
+# torpedo opening from 1 m and from 3 m alike. Nothing in the stack knew any
+# tool was anywhere but the optical centre, so this was invisible: a perfectly
+# centred box, a clean fire gate, and a shot that could not have gone in.
+#
+# ⛔ HOW THE NUMBERS ARE DEFINED, because a sign error here is worse than no
+# entry at all. Offsets are the tool's position IN THE CAMERA'S OPTICAL FRAME,
+# in METRES, measured from the camera's optical centre with the hull upright:
+#
+#     x  +RIGHT   as the camera sees it
+#     y  +DOWN    as the camera sees it (image-Y convention, NOT world-up)
+#     z  +FORWARD along the optical axis (rarely matters; see below)
+#
+# So a launcher mounted 12 cm BELOW and 4 cm RIGHT of the forward camera is
+# `x: 0.04, y: 0.12, z: 0.0`.
+#
+# ⛔ z IS NOT A LEVER ARM. Because the axes are parallel, only x and y move the
+# aim point; z changes the range at which the round starts, not where it goes.
+# It is carried so the geometry is complete and so a future non-parallel mount
+# has somewhere to live -- it is NOT currently applied.
+#
+# ⛔ HOW THE CORRECTION USES THEM, and why it needs a range. To put the target
+# on the TOOL axis rather than the camera axis, the target must sit at image
+#
+#     u = cx + fx * x / Z      v = cy + fy * y / Z
+#
+# where Z is the range to the target. THE CORRECTION IS RANGE-DEPENDENT: it is
+# a large pixel shift up close and a small one far away. Z comes from
+# `lock_node`'s `target_pose` (metric since the flat-port refraction fix). With
+# no pose there is no range, the correction cannot be computed, and the stack
+# aims the camera as it always did -- but says so, loudly, because that is
+# exactly the shot that will miss.
+#
+# ⛔ MEASURE THESE. Every entry below is `unmeasured: true` and reads as ZERO
+# OFFSET, which is byte-for-byte today's behaviour. That is deliberate: a
+# guessed offset is worse than a known-absent one, because it moves the aim
+# point with false confidence. Measuring is a tape-measure job on the hull:
+# camera optical centre (the lens front element, near enough at these
+# tolerances) to the tool's bore centre, hull upright, in millimetres.
+#
+# Until then the vehicle behaves as before and every fire through an unmeasured
+# tool warns.
+
+tools:
+
+  # The forward camera itself. The identity entry -- an align that names no
+  # tool aims this, which is what the whole stack did implicitly.
+  camera_forward:
+    camera: forward
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    unmeasured: false          # an offset of zero FROM ITSELF is exact
+    note: >
+      The identity. Naming it explicitly means "aim the camera" is a choice a
+      mission can state rather than a default nobody noticed.
+
+  camera_downward:
+    camera: downward
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    unmeasured: false
+    note: The identity for the downward camera.
+
+  torpedo:
+    camera: forward
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    unmeasured: true
+    note: >
+      Slingshot launcher on a linear rail (vehicle-spec.md "Payload actuators").
+      UNMEASURED. Mounted below and to one side of the forward camera on this
+      hull; the sign convention above is what to fill in. Until measured this
+      reads as zero and a fire through it warns.
+
+  dropper:
+    camera: downward
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    unmeasured: true
+    note: >
+      Solenoid marker dropper, aimed by the DOWNWARD camera. UNMEASURED. The
+      marker leaves vertically, so for this tool x/y are the horizontal offset
+      from the downward camera's optical centre -- and a bin is a large target,
+      so this one is the least punishing of the three to leave at zero.
+
+  grabber:
+    camera: forward
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    unmeasured: true
+    note: >
+      Aluminium grabber, current-sensed. UNMEASURED. Included because the
+      octagon task aligns to grasp, and a grabber that closes 15 cm off-centre
+      fails the same way a launcher misses.

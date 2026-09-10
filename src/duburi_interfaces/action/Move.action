@@ -137,6 +137,16 @@ float32 fire_max_tilt_deg  # vision_align: HOLD the payload shot unless the targ
                            # unset target_width_m all HOLD the shot, because for a firing
                            # gate the fail-safe direction is do not fire.
                            #   of the water. 0 = default (_MIN_DEPTH_M, -0.2 m). Bin mission sets ~ -0.4.
+string  tool               # vision_align: WHICH TOOL is being aimed, from config/tool_geometry.yaml
+                           #   ('torpedo', 'dropper', 'grabber', 'camera_forward', ...).
+                           #   ⛔ The align centres the target on the CAMERA axis. A tool mounted
+                           #   elsewhere fires along a PARALLEL axis, so the miss EQUALS THE OFFSET
+                           #   AT EVERY RANGE -- it does not shrink as you close in. A 10 cm offset
+                           #   misses a 4.75 cm-radius torpedo opening from 1 m and from 3 m alike,
+                           #   with a perfectly centred box and a clean fire gate.
+                           #   The correction is range-dependent (du = fx*x/Z), so it needs a live
+                           #   target_pose. '' = aim the camera, which is what the stack always did.
+                           #   An UNMEASURED tool warns and aims the camera rather than guessing.
 float32 standoff_max_tilt_deg  # vision_align: HOLD THE APPROACH while the target's face is more
                            #   than this many degrees off-normal. The standoff feature is
                            #   sqrt(area) -- Corke & Hutchinson, IEEE T-RA 17(4) 2001 -- which that
