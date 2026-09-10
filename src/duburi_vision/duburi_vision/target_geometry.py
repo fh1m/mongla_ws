@@ -160,6 +160,18 @@ def _is_entry(value):
 
 
 def _put(table, group, name, entry, origin):
+    """Install one override, DISPLACING the shipped entry of the same label.
+
+    ⛔ Not merely adding it. A flat override lands in its own group, and
+    `width_for` searches every group and REFUSES when two disagree -- so
+    overriding a shipped class from a flat file would have made that class
+    resolve to 0.0, silently turning off the prop the operator was trying to
+    correct. Found by running it on the vehicle, not by reading it: `hole`
+    took the override's 0.095 while `describe` still reported the handbook as
+    its source, because the committed entry was still there and matched first.
+    One label means one entry, in one place, whichever file it came from.
+    """
+
     try:
         w = float(entry.get('width_m'))
     except (TypeError, ValueError):
@@ -172,7 +184,11 @@ def _put(table, group, name, entry, origin):
     merged = dict(entry)
     merged['width_m'] = w
     merged['overridden'] = True
+    merged['override_from'] = origin
     merged.setdefault('source', 'operator override: %s' % origin)
+    for g in list(table):
+        if g != group:
+            table[g].pop(name, None)
     table.setdefault(group, {})[name] = merged
 
 

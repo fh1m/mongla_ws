@@ -275,3 +275,33 @@ def test_a_one_inch_pipe_is_an_acceptable_target():
     tg = _geometry()
     assert tg._MIN_WIDTH_M <= 0.0334
     assert tg.width_for('red_pipe') == pytest.approx(0.0334)
+
+
+def test_an_override_displaces_the_shipped_entry_it_replaces(monkeypatch):
+    """Found on the vehicle: the width changed but the PROVENANCE did not.
+
+    A flat override lands in its own group while the shipped entry stays in
+    `robosub`, and `width_for` searches every group and refuses when two
+    disagree -- so overriding a shipped class from a flat file would have made
+    it resolve to 0.0, turning off the very prop the operator was correcting.
+    `describe` matched the shipped entry first and reported the handbook as the
+    source of a number the handbook never gave.
+    """
+    tg = _geometry()
+    assert tg.width_for('gate') == pytest.approx(3.0)
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': 1.82, 'boxes': 'whole-gate',
+                                     'source': 'our pool prop, tape-measured'}}, fh)
+        monkeypatch.setenv('DUBURI_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        assert tg.width_for('gate') == pytest.approx(1.82)   # not 0.0
+        d_ = tg.describe('gate')
+        assert d_.get('overridden') is True
+        assert d_.get('source') == 'our pool prop, tape-measured'
+        assert path in d_.get('override_from', '')
+        # and the shipped entry is gone, not shadowed: exactly one survives
+        table = tg._load()
+        assert sum('gate' in g for g in table.values()) == 1
+    tg._CACHE.clear()
