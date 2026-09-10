@@ -130,6 +130,18 @@ float32 fire_max_tilt_deg  # vision_align: HOLD the payload shot unless the targ
                            # unset target_width_m all HOLD the shot, because for a firing
                            # gate the fail-safe direction is do not fire.
                            #   of the water. 0 = default (_MIN_DEPTH_M, -0.2 m). Bin mission sets ~ -0.4.
+float32 standoff_max_tilt_deg  # vision_align: HOLD THE APPROACH while the target's face is more
+                           #   than this many degrees off-normal. The standoff feature is
+                           #   sqrt(area) -- Corke & Hutchinson, IEEE T-RA 17(4) 2001 -- which that
+                           #   paper bounds to "within +/-35 deg of the camera's optical axis";
+                           #   past it the area "will appear diminished, due to perspective, which
+                           #   causes the camera to initially approach the target". Approaching is
+                           #   the dangerous direction: past the standoff into whatever we were
+                           #   standing off FROM. 0 (default) = no gate, byte-identical to before.
+                           #   ⛔ NO POSE MEANS UNGUARDED -- the OPPOSITE of fire_max_tilt_deg, and
+                           #   deliberate: a pose needs lock_node + a calibration + a committed
+                           #   width, so "no pose" is the ordinary case and failing closed would
+                           #   disable forward drive on every mission without one.
 float32 fire_gap           # vision_align: seconds BETWEEN channels when firing a LIST (fire=[1,4]) -- the
                            #   solenoid launcher misfires if two go together. 0 = back-to-back (single-shot
                            #   unaffected). ~1.0 for the dual torpedo/dropper drop.

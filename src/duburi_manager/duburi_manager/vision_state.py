@@ -356,6 +356,25 @@ class VisionState:
                                             float(m.pitch_spread_deg))
         return worst <= float(tol_deg)
 
+    def obliquity_deg(self, max_age_s: float = 1.0):
+        """Worst-case angle between the target's face and our axis, or None.
+
+        The honest primitive under `square_within`, which collapses "no pose"
+        and "not square" into one False. That collapse is correct for a FIRING
+        gate -- both mean do-not-fire -- and WRONG for anything whose fail-safe
+        runs the other way, so callers that need to tell them apart get the
+        number and decide for themselves.
+
+        WORST of the flip branches, for the same reason `square_within` uses it:
+        both are legitimate answers to a planar pose, and reading the point
+        estimate alone believes the lucky one.
+        """
+        m = self.target_pose(max_age_s)
+        if m is None:
+            return None
+        return float(m.off_axis_deg) + max(float(m.yaw_spread_deg),
+                                           float(m.pitch_spread_deg))
+
     def _lock_sample(self, image_width: float, image_height: float):
         """A Sample from the ladder, or None.
 

@@ -297,7 +297,8 @@ COMMANDS = {
                      'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat',
                      'coast_s', 'lock_s', 'fwd_fill', 'mode', 'kp_forward', 'settle_px',
                      'depth_step', 'fire_pass_enabled', 'hold_heading',
-                     'surge_sign', 'max_depth_m', 'depth_ceiling_m', 'fire_gap'],
+                     'surge_sign', 'max_depth_m', 'depth_ceiling_m', 'fire_gap',
+                     'standoff_max_tilt_deg'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
@@ -314,7 +315,8 @@ COMMANDS = {
                      'settle_px': 0.0, 'depth_step': 0.0,
                      'fire_pass_enabled': False, 'hold_heading': False,
                      'surge_sign': 0.0, 'max_depth_m': 0.0,
-                     'depth_ceiling_m': 0.0, 'fire_gap': 0.0},
+                     'depth_ceiling_m': 0.0, 'fire_gap': 0.0,
+                     'standoff_max_tilt_deg': 0.0},
     },
     'vision_move': {
         'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '
