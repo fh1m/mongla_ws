@@ -15,7 +15,9 @@ pipeline and imported by nothing else. These tests pin (a) that there is now
 exactly ONE copy of it, (b) that the rectified points are paired with the
 RECTIFIED `K`, and (c) the accuracy actually recovered.
 """
+import contextlib
 import math
+import types
 import sys
 from pathlib import Path
 
@@ -26,6 +28,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from duburi_vision.anchor.pose import target_pose            # noqa: E402
 from duburi_vision.optics import N_WATER, RefractiveRectifier  # noqa: E402
+
+
+@contextlib.contextmanager
+def _node(medium='water'):
+    """A LockNode with no ROS graph.
+
+    Shuts down exactly the rclpy context it started: the context is
+    process-global, so leaving it initialised makes another test file's own
+    `rclpy.init()` raise and errors every test in it.
+    """
+    import rclpy
+    from rclpy.parameter import Parameter
+    from duburi_vision.lock_node import LockNode
+    started = not rclpy.ok()
+    if started:
+        rclpy.init()
+    node = LockNode(parameter_overrides=[Parameter('medium', value=medium)])
+    try:
+        yield node
+    finally:
+        node.destroy_node()
+        if started:
+            rclpy.shutdown()
 
 # The measured downward camera (`pi_downward_1280x720.json`).
 FX, FY, CX, CY = 1027.9, 1033.9, 617.3, 373.0
@@ -191,12 +216,38 @@ def test_camera_info_does_not_rebuild_the_rectifier_every_frame():
     measured on the vehicle: the medium line printed once per frame.
 
     Only a genuine change of intrinsics is an event.
+
+    DRIVEN, not read off the source. The first version of this guard asserted
+    that the literal `RefractiveRectifier(` appeared after the early return in
+    `_on_info`. That broke the moment the pair-building moved into
+    `optics.rectifier_for` -- where it belongs, so that `lock_node` and
+    `pnp_node` cannot disagree about what optics a point set is in -- even
+    though the behaviour it was protecting was untouched. A text guard fails on
+    a refactor and passes on a regression it cannot see.
     """
-    src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
-           / 'lock_node.py').read_text()
-    i = src.index('def _on_info')
-    body = src[i:i + 2200]
-    assert 'np.array_equal(K, self._K)' in body, (
-        '_on_info rebuilds the rectifier for every CameraInfo message')
-    assert body.index('np.array_equal') < body.index('RefractiveRectifier('), (
-        'the unchanged-K early return must come BEFORE the rebuild')
+    pytest.importorskip('rclpy')
+    import numpy as np
+    from sensor_msgs.msg import CameraInfo
+    with _node() as node:
+        # The anchor is off by default and `_on_info` returns early without
+        # one, because K is scaled to the BACKEND's resolution. The stub
+        # supplies only that resolution -- it stands in for two numbers, not
+        # for the thing under test, which is the rectifier lifecycle.
+        node._anchor = types.SimpleNamespace(
+            _be=types.SimpleNamespace(w=320, h=240))
+        info = CameraInfo()
+        info.width, info.height = 640, 480
+        info.k = [500.0, 0.0, 320.0, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0]
+        node._on_info(info)
+        first = node._rect
+        assert first is not None, 'water medium built no rectifier'
+        node._on_info(info)
+        assert node._rect is first, (
+            'an identical CameraInfo rebuilt the rectifier -- CameraInfo '
+            'arrives with every frame, so this allocates at camera rate and '
+            'buries the medium log line')
+        info.k = [640.0, 0.0, 320.0, 0.0, 640.0, 240.0, 0.0, 0.0, 1.0]
+        node._on_info(info)
+        assert node._rect is not first, (
+            'genuinely new intrinsics must rebuild the rectifier')
+        assert not np.array_equal(node._K_rect, np.eye(3))

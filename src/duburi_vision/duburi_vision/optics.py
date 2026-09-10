@@ -174,3 +174,36 @@ class RefractiveRectifier:
         ta = math.atan(r_px / self.fx)
         tw = math.asin(min(1.0, math.sin(ta) / self.n))
         return r_px / math.tan(tw)
+
+
+def rectifier_for(K, medium: str):
+    """The rectifier for a camera matrix, and THE K that goes with it.
+
+    Returns `(rect, K_rect, note)`. `rect` is None in air, where the map is the
+    identity. `note` is a one-line description a node can log, so every
+    consumer says the same thing about the same optics.
+
+    ⛔ THE RECTIFIED POINTS NEED THE RECTIFIED K, and that pairing is the whole
+    reason this returns both instead of just the rectifier. `rectify`
+    re-projects each ray through `f_ref` (which defaults to `fx * n`), so a
+    point at water angle tw lands at radius `f_ref * tan(tw)` -- a true pinhole
+    of focal `f_ref`. Feeding those points to PnP with the AIR K leaves a clean
+    1/n scale error: every range 33 % short, a plausible number, no warning.
+    Two nodes each building this pair by hand is how the two would drift apart.
+    """
+    import numpy as np
+    K = np.asarray(K, float)
+    fx, fy = float(K[0][0]), float(K[1][1])
+    cx, cy = float(K[0][2]), float(K[1][2])
+    if str(medium).lower() != 'water':
+        return None, K, ('medium=air: no refraction correction (identity). '
+                         'Ranges are only valid OUT of water.')
+    rect = RefractiveRectifier(fx, fy, cx, cy)
+    K_rect = np.array([[rect.f_ref, 0.0, cx],
+                       [0.0, rect.f_ref_y, cy],
+                       [0.0, 0.0, 1.0]], float)
+    return rect, K_rect, (
+        f'medium=water: flat-port rectification ON, f_air={fx:.1f} -> '
+        f'f_ref={rect.f_ref:.1f} px (centre f_eff '
+        f'{rect.local_focal_px(0.0):.1f}, corner '
+        f'{rect.local_focal_px(min(cx, cy)):.1f})')

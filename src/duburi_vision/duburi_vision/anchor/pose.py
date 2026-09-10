@@ -159,9 +159,18 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
     needs, and the reason the answer is metric. `K` must be the camera matrix at
     the resolution the points are in.
 
+    ★ THIS IS THE PATCH ADAPTER, NOT THE SOLVER. All it does is turn a snapped
+    reference patch into object points in metres and hand them to `solve_pnp`.
+    Any other evidence source that can state where its points are ON THE TARGET
+    -- a board layout, a set of opening centres, a segmentation contour --
+    calls `solve_pnp` directly with its own object points and gets the identical
+    IPPE-interval / SQPnP-point-estimate / iterative-polish treatment. That is
+    the whole reason the solve was extracted: one solver, many kinds of
+    evidence, and a recorded correspondence set can be re-solved off a bag long
+    after the run.
+
     Refuses -- with a reason -- rather than returning a pose it cannot defend.
     """
-    import cv2
     ref = np.asarray(ref_pts, np.float64).reshape(-1, 2)
     live = np.asarray(live_pts, np.float64).reshape(-1, 2)
     if len(ref) < 4 or len(ref) != len(live):
@@ -176,16 +185,46 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
     obj = np.zeros((len(ref), 3), np.float64)
     obj[:, 0] = (ref[:, 0] - w_px * 0.5) * m_per_px
     obj[:, 1] = (ref[:, 1] - h_px * 0.5) * m_per_px
+    return solve_pnp(obj, live, K, dist=dist, ambiguity_max=ambiguity_max,
+                     max_reproj_px=max_reproj_px)
+
+
+def solve_pnp(obj_pts, img_pts, K, *, dist=None,
+              ambiguity_max: float = AMBIGUITY_MAX,
+              max_reproj_px: float = MAX_REPROJ_PX) -> TargetPose:
+    """6-DoF pose from 2D-3D correspondences. THE solver; there is one.
+
+    `obj_pts` are (N,3) points in the TARGET's own frame, in METRES -- that is
+    what makes the answer metric and what lets a caller use a published board
+    layout instead of a snapped patch. `img_pts` are the matching (N,2) pixels
+    in the frame `K` describes. Coplanar object points get IPPE's two branches
+    and therefore the flip INTERVAL; a non-coplanar set does not, and its
+    spreads are reported as 0.0 because there is genuinely no second branch.
+
+    ⛔ PIXELS AND `K` MUST BE IN THE SAME OPTICS. Underwater, a flat port is not
+    a pinhole, so points either both go through `optics.RefractiveRectifier`
+    with the rectified `K`, or neither does. Rectifying one side compares water
+    geometry against air geometry and puts the entire error into the pose,
+    quietly. `lock_node` rectifies both sets before calling; a correspondence
+    publisher must say which it sent, which is why the message carries it.
+
+    Refuses -- with a reason -- rather than returning a pose it cannot defend.
+    """
+    import cv2
+    obj = np.asarray(obj_pts, np.float64).reshape(-1, 3)
+    live = np.asarray(img_pts, np.float64).reshape(-1, 2)
+    if len(obj) < 4 or len(obj) != len(live):
+        return TargetPose(ok=False, n_points=len(obj), reason='too few points')
 
     D = np.zeros((1, 5)) if dist is None else np.asarray(dist, np.float64)
     try:
         n, rvecs, tvecs, errs = cv2.solvePnPGeneric(
             obj, live, np.asarray(K, np.float64), D, flags=cv2.SOLVEPNP_IPPE)
     except cv2.error as exc:
-        return TargetPose(ok=False, n_points=len(ref),
+        return TargetPose(ok=False, n_points=len(obj),
                           reason=f'solvePnP: {exc.err if hasattr(exc, "err") else exc}')
     if not n:
-        return TargetPose(ok=False, n_points=len(ref), reason='no solution')
+        return TargetPose(ok=False, n_points=len(obj), reason='no solution')
 
     e = [float(x) for x in np.asarray(errs).ravel()] or [float('nan')]
     best = 0
@@ -196,7 +235,7 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
     yaw_spread = (abs(angs[0][0] - angs[1][0]) if n > 1 else 0.0)
     pitch_spread = (abs(angs[0][1] - angs[1][1]) if n > 1 else 0.0)
     if e[0] > max_reproj_px:
-        return TargetPose(ok=False, n_points=len(ref), reproj_px=e[0],
+        return TargetPose(ok=False, n_points=len(obj), reproj_px=e[0],
                           ambiguity=ratio, yaw_spread_deg=yaw_spread,
                           pitch_spread_deg=pitch_spread,
                           reason='reprojection too large')
@@ -262,7 +301,7 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
     # way round gets "in tolerance" from an answer that does not exist.
     # `lock_node` nan-guards reproj and ambiguity but publishes range raw.
     if not all(math.isfinite(v) for v in (yaw, pitch, roll, rng, best_rms)):
-        return TargetPose(ok=False, n_points=len(ref), ambiguity=ratio,
+        return TargetPose(ok=False, n_points=len(obj), ambiguity=ratio,
                           yaw_spread_deg=yaw_spread,
                           pitch_spread_deg=pitch_spread,
                           reason='non-finite pose')
@@ -270,7 +309,7 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
     return TargetPose(ok=True, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll,
                       range_m=rng, reproj_px=float(best_rms), ambiguity=ratio,
                       yaw_spread_deg=yaw_spread, pitch_spread_deg=pitch_spread,
-                      n_points=len(ref))
+                      n_points=len(obj))
 
 
 def _angles(rvec):
