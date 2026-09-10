@@ -174,8 +174,9 @@ class LockNode(Node):
                 self.get_logger().warn(
                     f'[LOCK ] no committed width for {self._cls!r}, and '
                     f'target_width_m is unset -- the 6-DoF pose will refuse. '
-                    f'Add it to config/target_geometry.yaml or pass '
-                    f'target_width_m.')
+                    f'Fix on the deck without a rebuild: put the width in '
+                    f'~/.duburi/target_geometry.yaml (or set '
+                    f'DUBURI_TARGET_GEOMETRY), or pass target_width_m.')
         # MEDIUM. A flat port is not a pinhole: the ray from a point at water
         # angle tw leaves at air angle ta with sin(ta) = n*sin(tw), so the
         # effective focal length grows with field angle -- 10.6 % centre to

@@ -29,6 +29,37 @@
 # competition prop and that number wins over the rulebook's nominal, which is
 # what the SAUVC tolerance (+/- 5 %) exists to allow for.
 #
+# ★ OUR POOL IS NOT THE VENUE, SO THESE ARE DEFAULTS, NOT HARDCODINGS.
+# We practise against props we built, and ours are not the handbook's sizes. A
+# range is `m_per_px = width_m / w_px`, so a home-cut gate 40 % narrower than
+# the venue's makes every range 40 % wrong -- in whichever direction, silently.
+# Override per class, WITHOUT editing this file and WITHOUT a colcon build:
+#
+#     ~/.duburi/target_geometry.yaml          picked up with no env var
+#     DUBURI_TARGET_GEOMETRY=~/my_props.yaml  a file, or a directory holding
+#                                             target_geometry.yaml
+#
+# Same nesting, same keys; merged OVER this table PER CLASS, so overriding one
+# prop inherits the rest rather than zeroing them:
+#
+#     robosub:
+#       gate:
+#         width_m: 1.82
+#         boxes: whole-gate
+#         source: "our pool prop, tape-measured 2026-09-10"
+#
+# `lock_node` logs which width it used and where it came from, and an override
+# is stamped `overridden: true`, so a surprising range is one log line away.
+# A malformed override file is IGNORED rather than obeyed -- failing to the
+# handbook is recoverable, failing to 0.0 stops the mission with no reason.
+#
+# ⛔ AND THE DEFAULTS COME FROM THE ORGANISERS, NEVER FROM OUR SIMULATOR.
+# RoboSub: the team handbook (robonation.gitbook.io). SAUVC: sauvc.org/rulebook.
+# Two SAUVC entries are read off a rulebook FIGURE rather than quoted prose and
+# carry `unquoted: true` for exactly that reason -- pinned by
+# test_every_model_class_has_a_width.py. A simulator prop's size is our own
+# guess wearing a number's clothes; it never sources an entry here.
+#
 # ⛔ WHO LOADS THIS. No launch file does. `duburi_vision/target_geometry.py`
 # opens it directly out of the installed share directory at call time, and
 # `lock_node` calls `width_for()` when `target_width_m` is unset. So editing it
@@ -157,11 +188,88 @@ robosub:
     boxes: whole-crate
     source: "RoboSub 2026 handbook, bins task"
 
+  # ------------------------------------------------------------------ #
+  #  THE SYMBOLS OUR REAL MODELS EMIT.                                    #
+  #                                                                       #
+  #  ⛔ The table was keyed by RULEBOOK PROP names while the detectors    #
+  #  emit MODEL CLASS names, and the two had never been compared. Of the  #
+  #  five classes the two competition models actually produce             #
+  #  (gate_rescue_repair -> gate/rescue/repair, bin_fire_blood ->         #
+  #  blood/fire), only `gate` resolved. The other four returned 0.0, so   #
+  #  `lock_node` published `ok=false, reason='target_width_m unset'` for  #
+  #  them -- no width, no pose, no RANGE, and therefore no tool-aim       #
+  #  correction and no standoff obliquity gate either. Ironically only    #
+  #  the SIM model's classes were covered, because that is what round 4   #
+  #  built the table from.                                                #
+  #                                                                       #
+  #  `test_every_shipped_model_class_has_a_width` now compares this file  #
+  #  against the model sidecars, so a new model cannot arrive uncovered.  #
+  # ------------------------------------------------------------------ #
+
+  rescue:
+    # The gate's "Search & Rescue" symbol. NOT the gate: a model that boxes
+    # the symbol must be scaled by the symbol, or every range is out by 10x.
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: 'Search & Rescue symbol, 12 in x 12 in (305 mm x 305 mm)'"
+
+  repair:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: 'Survey & Repair symbol, 12 in x 12 in (305 mm x 305 mm)'"
+
+  fire:
+    # A BIN role symbol, not the crate. `bin` above is the 0.335 m crate; this
+    # is the 305 mm placard printed on it. Using the crate width for a symbol
+    # box would report the bin ~10 % further away than it is.
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: bin role symbols, 12 in x 12 in (305 mm x 305 mm)"
+
+  blood:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: bin role symbols, 12 in x 12 in (305 mm x 305 mm)"
+
+  # The Octagon / "Return Home" role indicators, which `octagon.pt` emits as
+  # `sos` (Search & Rescue: pill + adhesive bandage) and `survey` (Survey &
+  # Repair: nut-and-bolt + electrical plug). Same 305 mm placard as every other
+  # role image on the course -- NOT the 2.7 m octagon and NOT the 0.6 m table,
+  # either of which would put the hull metres off.
+  sos:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: hanging images and role indicators, 12 in x 12 in (305 mm x 305 mm)"
+
+  survey:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: hanging images and role indicators, 12 in x 12 in (305 mm x 305 mm)"
+
+  octagon:
+    # The floating structure itself, if a model is ever trained to box it.
+    width_m: 2.7
+    boxes: whole-octagon
+    source: "RoboSub 2025/26 handbook 3.2: '9 ft (2.7 m) diameter octagon floats on the surface'"
+
+  resupply_table:
+    width_m: 0.6096
+    boxes: whole-table
+    source: "RoboSub 2025/26 handbook 3.2: resupply table, 2 ft x 2 ft (0.6 m x 0.6 m)"
+
   torpedo_board:
-    # The printed board's usable face. Openings are laid out from this by
-    # `prop_library.torpedo_layout()`; a shot is aimed at an OPENING, not the
-    # board, so a hole-class model needs its own entry rather than this one.
-    width_m: 0.52
+    # ⛔ THIS WAS 0.52 AND `boxes: whole-board`, WHICH CONTRADICTED ITSELF.
+    # 0.52 is the printed board's USABLE FACE, taken from our own sim arena
+    # spec -- not from the handbook, and not what a whole-board box measures.
+    # The handbook is explicit: "2 ft x 2 ft (0.6m x 0.6m)". A detector boxing
+    # the board sees the board, so the whole-board figure is the right one;
+    # 0.52 made every range read ~13 % SHORT (m_per_px = width_m / w_px), i.e.
+    # the hull believed it was closer than it was.
+    #
+    # ⚠ IF a model is ever trained to box only the printed artwork rather than
+    # the board, this must go back to 0.52 AND `boxes` must say so. The two
+    # fields have to agree -- that disagreement is what hid this.
+    width_m: 0.6096
     boxes: whole-board
-    source: "sim arena spec, packed from the handbook's slot order"
+    source: "RoboSub 2025/26 handbook 3.2: 'Deploy' board, 2 ft x 2 ft (0.6 m x 0.6 m)"
     unquoted: true
