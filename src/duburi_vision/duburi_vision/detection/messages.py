@@ -116,12 +116,48 @@ def array_to_detections(array: Detection2DArray) -> list:
             score      = float(getattr(hyp, 'score', 0.0))
 
         out.append(_Detection(
-            class_id=0,           # integer class_id not preserved; use 0
+            class_id=class_index(class_name),
             class_name=class_name,
             score=score,
             xyxy=(x1, y1, x2, y2),
         ))
     return out
+
+
+_CLASS_INDEX: dict = {}
+
+
+def class_index(class_name: str) -> int:
+    """A stable integer for a class LABEL. Never 0 for everything.
+
+    ⛔ WHAT THIS FIXES, MEASURED. `array_to_detections` used to hard-code
+    `class_id=0` with the note "integer class_id not preserved". It is not a
+    cosmetic loss. Round-tripping `blood`(3) and `fire`(7) returns
+    `blood`(0) and `fire`(0), and `tracking/*.py::_name_from(cid, dets)`
+    resolves a class id back to a name by finding the FIRST detection carrying
+    it -- so with both in frame every track resolves to `'blood'`, whichever
+    one it actually is. Those are the bin task's two classes. The trackers also
+    receive one single class for everything, so class-aware association cannot
+    keep two different objects apart.
+
+    ⛔ AND WHY THIS IS NOT "PUT THE ORIGINAL INTEGER ON THE WIRE". A detector's
+    integer index is a property of WHICHEVER MODEL produced it -- `gate` is 0
+    in `gate_rescue_repair` and something else in the next model -- so the
+    integer is only meaningful alongside the model that minted it, which the
+    message does not carry. `srot_protocol.py` records the same conclusion for
+    the same reason. The LABEL is the identity that survives a model switch, so
+    the integer is derived from it here instead.
+
+    First-seen order, process-local. That is all any consumer needs: the
+    trackers want two different classes to differ and the same class to match
+    within a run, and `_name_from` maps back through this same table. It is
+    deliberately NOT a hash -- a hash is stable across processes but can
+    collide, and a collision here silently merges two classes.
+    """
+    name = str(class_name)
+    if name not in _CLASS_INDEX:
+        _CLASS_INDEX[name] = len(_CLASS_INDEX)
+    return _CLASS_INDEX[name]
 
 
 def _msg_bbox_center(bbox):
