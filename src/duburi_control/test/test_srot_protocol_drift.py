@@ -651,3 +651,53 @@ def test_depth_p_default_matches_the_firmware():
     assert m, 'DEF_DEPTH_P not found in include/config.h'
     assert float(m.group(1)) == sp.DEPTH_P_DEFAULT, (
         f'firmware DEF_DEPTH_P is {m.group(1)}, we assume {sp.DEPTH_P_DEFAULT}')
+
+
+def test_the_companion_link_baud_matches_the_firmware():
+    """Baud is a WIRE constant, and the two sides must move together.
+
+    ⛔ THE FAILURE IS A DEAD LINK WITH NO ERROR. Opening the port at a baud the
+    board is not using does not raise: `pymavlink` connects, the UART clocks in
+    garbage, and every frame fails its CRC. The symptom is `BAD_DATA` and a
+    vehicle that never heartbeats -- which reads as a broken cable, a dead
+    board, or a firmware crash, and is none of them.
+
+    That makes 0.6 (115200 -> 1 Mbaud) a change nobody can land unilaterally.
+    This pin is what turns "we forgot the other side" from a pool-day mystery
+    into a red test: the day the firmware PR merges, this fails until
+    `SROT_BAUD` follows, and if we bumped first it fails the same way.
+
+    The link is a REAL UART -- `board = esp32doit-devkit-v1` is a classic ESP32
+    with no native USB, so the CH340 clocks it and baud genuinely bounds wire
+    time (a 74-byte frame is 6.4 ms at 115200, 0.8 ms at 1 Mbaud).
+    """
+    from duburi_manager.connection_config import SROT_BAUD
+
+    cfg = _read('include', 'config.h')
+    fw = _define(cfg, 'MAVLINK_BAUD')
+    assert fw is not None, 'MAVLINK_BAUD not found in the firmware config.h'
+    assert SROT_BAUD == fw, (
+        f'host SROT_BAUD={SROT_BAUD} but firmware MAVLINK_BAUD={fw}. The port '
+        f'opens either way and every frame fails CRC -- BAD_DATA, no heartbeat, '
+        f'no exception. Change both sides in the same session, or the vehicle '
+        f'is silently mute.')
+
+
+def test_the_serial_transport_is_still_a_real_uart():
+    """The premise under the baud pin, asserted rather than remembered.
+
+    If the board ever moves to a chip with native USB (or MAVLINK_SERIAL is
+    pointed at a USB CDC), baud stops meaning anything on the wire and the
+    change above stops being worth making. That would be a silent change of
+    premise, so it is pinned here beside the number it justifies.
+    """
+    ini = _read('platformio.ini')
+    m = re.search(r'^\s*board\s*=\s*(\S+)', ini, re.M)
+    assert m, 'no `board =` in platformio.ini'
+    assert m.group(1) == 'esp32doit-devkit-v1', (
+        f'the board is now {m.group(1)!r}. If it has native USB the CH340 is '
+        f'out of the path and MAVLINK_BAUD no longer bounds wire time -- '
+        f're-derive the 0.6 argument before acting on it.')
+    cfg = _read('include', 'config.h')
+    assert re.search(r'#define\s+MAVLINK_SERIAL\s+Serial\b', cfg), (
+        'MAVLINK_SERIAL is no longer UART0 (`Serial`) -- the transport changed')
