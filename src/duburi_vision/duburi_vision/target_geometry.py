@@ -18,24 +18,39 @@ not the handbook's sizes -- a home-cut gate is a different width from a RoboSub
 gate, and a range computed from the handbook number against our prop is wrong by
 exactly that ratio. So the committed table is a DEFAULT, never a hardcoding:
 
-    DUBURI_TARGET_GEOMETRY=~/my_props.yaml        (a file, or a directory
+    DUBURI_TARGET_GEOMETRY=~/my_targets.yaml      (a file, or a directory
                                                    holding target_geometry.yaml)
     ~/.duburi/target_geometry.yaml                (picked up with no env var)
 
-Either file is merged OVER the committed table, per class, so you override the
-one prop you re-cut and inherit the rest. Same nesting, same keys:
+★ THIS IS A TARGET LIBRARY, NOT A COMPETITION TABLE. The competition groupings
+below are only where the shipped defaults happen to be SOURCED from; they are
+not what the capability is for. The vehicle's actual claim is: name any label,
+state how wide the thing you box is, and the hull can reach it metrically from
+one camera. So an override file needs no competition key at all --
 
-    robosub:
-      gate:
-        width_m: 1.82
-        boxes: whole-gate
-        source: "our pool prop, tape-measured 2026-09-10"
+    red_pipe:
+      width_m: 0.0334
+      boxes: single-pipe
+      source: "our pool prop, calipered 2026-09-10"
 
-`describe()` returns whichever entry won, so a log line says which number the
-vehicle actually used and where it came from. An override with no `source:` is
-still honoured -- refusing a measured number over missing paperwork would be the
-worse failure -- but `overridden: true` is stamped on it so the provenance of a
-surprising range is one lookup away.
+-- a flat `label: {width_m: ...}` mapping is read as its own group. Train a
+model on a new object, add one line here, and every metric consumer (range,
+6-DoF pose, tool aim, the standoff obliquity gate) works on it with no code
+change. Nested-by-competition also still works, for overriding a shipped entry
+in place.
+
+Merging is PER LABEL, so overriding the one prop you re-cut inherits the rest
+rather than zeroing them. `describe()` returns whichever entry won, so a log
+line says which number the vehicle used and where it came from. An override
+with no `source:` is still honoured -- refusing a measured number over missing
+paperwork would be the worse failure -- but `overridden: true` is stamped on it
+so the provenance of a surprising range is one lookup away.
+
+⛔ AN OVERRIDE IS READ ONCE PER PROCESS. `_CACHE` fills on the first lookup and
+`lock_node` captures the width into `self._target_w_m` at construction, so
+editing the file or exporting the env var takes effect at the NEXT NODE START --
+same shape of boundary as the committed file needing a colcon build, and stated
+here for the same reason. Restart the node; do not expect a live re-read.
 
 ⛔ AND: the committed defaults come from the ORGANISERS' documents, never from
 our simulator. The two SAUVC entries taken from the sim arena spec carry
@@ -64,14 +79,32 @@ def _load():
 
 
 def _read(path):
+    """Parse one table, RECORDING any failure instead of only surviving it.
+
+    Swallowing the exception is right -- a malformed file must not hide a good
+    one -- but swallowing it SILENTLY is how a stray indent in the committed
+    YAML made every class resolve to 0.0 with nothing logged. That happened
+    during this very change and looked exactly like an unrelated regression:
+    the table is not a file the vehicle can afford to lose quietly.
+    """
     if not os.path.isfile(path):
         return {}
     import yaml
     try:
         with open(path) as fh:
             return yaml.safe_load(fh) or {}
-    except Exception:
-        return {}                 # a malformed file must not hide a good one
+    except Exception as exc:
+        _ERRORS.append((path, str(exc).splitlines()[0] if str(exc) else repr(exc)))
+        return {}
+
+
+_ERRORS = []
+
+
+def load_errors():
+    """Files that failed to parse, so a node can say so instead of reading 0.0."""
+    _load()
+    return list(_ERRORS)
 
 
 def _override_paths():
@@ -85,24 +118,75 @@ def _override_paths():
     return paths
 
 
+# A width outside this band is a unit error, not a target. The floor is 1 cm
+# because the SMALLEST thing we already steer on is a 1 in PVC slalom pipe at
+# 0.0334 m -- a 5 cm floor was the first draft and it rejected that pipe, which
+# is the whole reason this constant carries its measurement. The ceiling is 5 m,
+# wider than either pool is deep.
+#
+# What this catches: `width_m: 182` for a 1.82 m gate, the classic centimetre
+# slip, which would otherwise put every range off by 100x with nothing logging
+# a fault. What it CANNOT catch, said plainly rather than left to be
+# discovered: `3.34` for `0.0334` lands inside the band and reads as a plausible
+# 3.34 m object. A range bound cannot check a unit; only the `source:` line and
+# the logged width can. Read the `[LOCK ] target width` line on the deck.
+_MIN_WIDTH_M = 0.01
+_MAX_WIDTH_M = 5.0
+
+
 def _merge(table, extra, origin):
-    """Per-CLASS merge, not per-file.
+    """Per-LABEL merge, accepting flat `label:` or nested `group: {label:}`.
+
+    Flat is the general case: name any object, give its width, done. Nested
+    exists so a shipped entry can be overridden in place under its own group.
 
     A whole-file replace would mean overriding one prop silently deletes every
-    other -- the class you did not re-cut would resolve to 0.0 and the pose path
+    other -- the label you did not re-cut would resolve to 0.0 and the pose path
     would refuse, on a pool day, for a prop you never touched.
     """
-    for comp, entries in (extra or {}).items():
-        if not isinstance(entries, dict):
+    for key, value in (extra or {}).items():
+        if not isinstance(value, dict):
             continue
-        dst = table.setdefault(comp, {})
-        for name, entry in entries.items():
-            if not isinstance(entry, dict) or not entry.get('width_m'):
-                continue
-            merged = dict(entry)
-            merged['overridden'] = True
-            merged.setdefault('source', 'operator override: %s' % origin)
-            dst[name] = merged
+        if _is_entry(value):                    # flat: this IS a target
+            _put(table, 'custom', key, value, origin)
+        else:                                   # nested: a group of targets
+            for name, entry in value.items():
+                if isinstance(entry, dict):
+                    _put(table, key, name, entry, origin)
+
+
+def _is_entry(value):
+    return 'width_m' in value
+
+
+def _put(table, group, name, entry, origin):
+    try:
+        w = float(entry.get('width_m'))
+    except (TypeError, ValueError):
+        return
+    if not (_MIN_WIDTH_M <= w <= _MAX_WIDTH_M):
+        # Ignored, not obeyed -- same choice as a malformed file. Falling back
+        # to a sourced default is recoverable; a 100x range error is not.
+        _REJECTED.append((name, w, origin))
+        return
+    merged = dict(entry)
+    merged['width_m'] = w
+    merged['overridden'] = True
+    merged.setdefault('source', 'operator override: %s' % origin)
+    table.setdefault(group, {})[name] = merged
+
+
+_REJECTED = []
+
+
+def rejected_overrides():
+    """Overrides ignored for an implausible width, so a node can log them.
+
+    A silently-dropped override looks exactly like an override that was never
+    read, which is the single most confusing failure this file could have.
+    """
+    _load()
+    return list(_REJECTED)
 
 
 def _candidate_dirs():

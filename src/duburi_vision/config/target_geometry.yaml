@@ -257,7 +257,36 @@ robosub:
     boxes: whole-table
     source: "RoboSub 2025/26 handbook 3.2: resupply table, 2 ft x 2 ft (0.6 m x 0.6 m)"
 
-  torpedo_board:
+  red_pipe:
+    # What `slalom_red_pipe.pt` emits. Same object as `slalom` above, under the
+    # name the DETECTOR uses -- which is the entire defect this round fixed, so
+    # both names are spelled out rather than left to be inferred.
+    #
+    # ⛔ It is the PIPE DIAMETER, not the gap between pipes. The header's
+    # pole-diameter warning is about exactly this class: boxing one pipe and
+    # scaling by the span would make every slalom range wrong by ~10x, in the
+    # flattering direction, with nothing logging a fault.
+    width_m: 0.0334
+    boxes: single-pipe
+    source: "RoboSub 2026 handbook (1 in nominal PVC = 33.4 mm OD)"
+
+  hole:
+    # ⛔ NO WIDTH, DELIBERATELY. `torpedo_blood_hole.pt` emits `hole`, and the
+    # handbook dimensions the BOARD (2 ft x 2 ft) but NOT its two opening sizes.
+    # We have no organiser figure, and this file does not invent one: a guessed
+    # width here would silently rescale every range on the one shot where the
+    # hull must be still.
+    #
+    # What this costs, stated so nobody 'fixes' it: only the 6-DoF metric pose.
+    # The standoff shot rides `align(fwd=)`, which servos on ANGULAR SIZE -- a
+    # ratio of pixels to a commanded fill -- so it needs no absolute width and
+    # is unaffected. Measure our own opening with a tape and put it in
+    # ~/.duburi/target_geometry.yaml to turn the metric path on for our pool.
+    no_published_dimension: true
+    boxes: single-opening
+    source: "RoboSub 2025/26 handbook 3.2: the board is dimensioned, its openings are not"
+
+  torpedo_board: &torpedo_board
     # ⛔ THIS WAS 0.52 AND `boxes: whole-board`, WHICH CONTRADICTED ITSELF.
     # 0.52 is the printed board's USABLE FACE, taken from our own sim arena
     # spec -- not from the handbook, and not what a whole-board box measures.
@@ -272,4 +301,10 @@ robosub:
     width_m: 0.6096
     boxes: whole-board
     source: "RoboSub 2025/26 handbook 3.2: 'Deploy' board, 2 ft x 2 ft (0.6 m x 0.6 m)"
-    unquoted: true
+    # `unquoted: true` was here while the width was the sim's 0.52. The number
+    # is now a handbook quotation, so the flag goes with the number it described.
+
+  # The name `torpedo_blood_hole.pt` emits for the same board. Aliased, not
+  # retyped: two copies of one number is how `torpedo_board` came to hold the
+  # sim's 0.52 while claiming to box the whole board.
+  torpedo: *torpedo_board

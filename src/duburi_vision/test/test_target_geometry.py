@@ -48,10 +48,22 @@ def test_every_entry_states_a_positive_width_and_its_SOURCE():
         for name, e in props.items():
             assert isinstance(e, dict), f'{comp}.{name} is not a mapping'
             w = e.get('width_m')
+            if e.get('no_published_dimension') is True:
+                # The one accepted way to have no width: the organisers never
+                # published one. `hole` is the case -- the handbook dimensions
+                # the torpedo board and not its openings. The entry still has
+                # to say what it boxes and cite the document that omits it, so
+                # the gap is a recorded fact rather than a missing line, and
+                # `align(fwd=)` (angular size, a ratio) is unaffected either way.
+                assert w is None, (
+                    f'{comp}.{name} claims no published dimension AND states '
+                    f'width_m={w!r}. Pick one.')
+                continue
             assert isinstance(w, (int, float)) and w > 0, (
                 f'{comp}.{name} has width_m={w!r}. A non-positive width makes '
                 f'target_pose refuse, which is the state this table exists to '
-                f'end.')
+                f'end. If the organisers never published one, say so with '
+                f'`no_published_dimension: true`.')
             assert e.get('source'), (
                 f'{comp}.{name} states {w} m with no source. An unsourced '
                 f'dimension cannot be re-checked against a rulebook revision.')
