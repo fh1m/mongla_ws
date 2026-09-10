@@ -197,11 +197,33 @@ def _shared_device():
     Not released on close() either: releasing it while a second detector still
     holds a network group configured on it is how you turn a clean shutdown
     into a segfault, and the process is about to exit anyway.
+
+    ⛔ THE CREATION IS LOCKED, AND THAT IS NOT DEFENSIVE. `detector_node` builds
+    a registry in a `ThreadPoolExecutor`, so two detectors are constructed
+    GENUINELY CONCURRENTLY. Unlocked, both threads saw `_DEVICE is None` and
+    both called `VDevice()` -- and the note above this function already records
+    what a second VDevice does. Measured on the vehicle: sequential
+    construction of `gate_rescue_repair` and `bin_fire_blood` gives OK/OK,
+    while the same two in parallel HANG -- no exception, no core dump, the
+    process simply never finishes loading. An earlier run of the same launch
+    instead reported `HAILO_OUT_OF_PHYSICAL_DEVICES` and dropped one model, so
+    the race has two faces and one of them looks like a model that failed to
+    compile.
+
+    Consequence, stated because it is the whole point: two models CAN be
+    resident on one VDevice and take turns -- that is what the block above
+    measured at 98.2 Hz -- and this race is what stopped any registry launch
+    from getting there.
     """
     global _DEVICE
-    if _DEVICE is None:
-        from hailo_platform import VDevice
-        _DEVICE = VDevice()
+    if _DEVICE is not None:
+        return _DEVICE
+    with _DEVICE_LOCK:
+        # Re-checked inside: the thread that waited here must see the device
+        # the winner made, not make a second one.
+        if _DEVICE is None:
+            from hailo_platform import VDevice
+            _DEVICE = VDevice()
     return _DEVICE
 
 
