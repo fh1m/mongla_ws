@@ -390,3 +390,78 @@ def test_the_no_env_var_path_is_the_one_the_deck_warning_names(monkeypatch):
         assert tg.width_for('gate') == pytest.approx(1.82)
         assert tg.width_for('rescue') == pytest.approx(0.305)
     tg._CACHE.clear()
+
+
+def test_an_edited_override_applies_without_a_restart(monkeypatch):
+    """The moment you discover a width is wrong is the moment the vehicle is
+    in the water. A correction that silently does not apply until a restart is
+    worse than no correction, because the operator believes it did."""
+    tg = _geometry()
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': 1.82}}, fh)
+        monkeypatch.setenv('DUBURI_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        assert tg.width_for('gate') == pytest.approx(1.82)
+        with open(path, 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': 2.44}}, fh)
+        assert tg.width_for('gate') == pytest.approx(2.44), (
+            'the edit did not take -- an override read once per process needs '
+            'a node restart, which is exactly when nobody can do one')
+    tg._CACHE.clear()
+
+
+def test_deleting_an_override_returns_to_the_committed_default(monkeypatch):
+    """Absent is a state too, and it can be reached by an operator undoing a
+    change. Falling back to the handbook is the recoverable direction."""
+    tg = _geometry()
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': 1.82}}, fh)
+        monkeypatch.setenv('DUBURI_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        assert tg.width_for('gate') == pytest.approx(1.82)
+        os.remove(path)
+        assert tg.width_for('gate') == pytest.approx(3.0)
+    tg._CACHE.clear()
+
+
+def test_an_unchanged_file_is_not_re_read(monkeypatch):
+    """Change-reactive, not poll-and-parse. Re-parsing YAML on every lookup
+    would put a file read on the path a class switch takes."""
+    tg = _geometry()
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': 1.82}}, fh)
+        monkeypatch.setenv('DUBURI_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        tg.width_for('gate')
+        reads = []
+        real = tg._read
+        monkeypatch.setattr(tg, '_read', lambda p: (reads.append(p), real(p))[1])
+        for _ in range(10):
+            tg.width_for('gate')
+        assert reads == [], f'{len(reads)} re-reads with nothing changed'
+    tg._CACHE.clear()
+
+
+def test_an_edit_inside_one_timestamp_tick_is_still_caught(monkeypatch):
+    """Two writes in the same filesystem tick differ in SIZE, and a rushed
+    pool-day correction is exactly the edit that lands inside one tick."""
+    tg = _geometry()
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            fh.write('gate: {width_m: 1.82}\n')
+        monkeypatch.setenv('DUBURI_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        assert tg.width_for('gate') == pytest.approx(1.82)
+        st = os.stat(path)
+        with open(path, 'w') as fh:
+            fh.write('gate: {width_m: 2.4400}\n')      # a different LENGTH
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))   # same mtime
+        assert tg.width_for('gate') == pytest.approx(2.44)
+    tg._CACHE.clear()

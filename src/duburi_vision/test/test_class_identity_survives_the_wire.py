@@ -16,6 +16,23 @@ from duburi_vision.detection.messages import (array_to_detections, class_index,
                                               detections_to_array)
 
 
+@pytest.fixture(autouse=True)
+def _fresh_registry():
+    """`_CLASS_INDEX` is module-global and never cleared.
+
+    Without this, `test_it_is_a_registry_and_not_a_hash` leaves 20 entries in
+    it and every later test sees a registry seeded by whatever ran first --
+    the same leakage shape as the loader's `_ERRORS`/`_REJECTED` lists. The
+    assertions here survive it, because first-seen order is stable within a
+    run, but making the index depend on test ORDER is how a real defect gets
+    masked later.
+    """
+    from duburi_vision.detection import messages
+    messages._CLASS_INDEX.clear()
+    yield
+    messages._CLASS_INDEX.clear()
+
+
 def _round_trip(dets):
     return array_to_detections(detections_to_array(dets, Header()))
 

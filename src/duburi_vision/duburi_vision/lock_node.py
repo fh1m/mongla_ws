@@ -24,6 +24,7 @@ The heavy rungs run on a WORKER THREAD off the subscription callbacks: the
 anchor is 33 ms at 320x240 and blocking a callback with it would back the
 executor up behind the very frames it is meant to bridge.
 """
+import collections
 import os
 
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
@@ -145,6 +146,8 @@ class LockNode(Node):
         self._lock = threading.Lock()
         self._gray = None
         self._header = None
+        self._recent = collections.deque(maxlen=4)
+        self._snap_skew_warned = False
         self._det_header = None
         self._anchor_header = None
         self._stamp_warned = False
@@ -345,7 +348,39 @@ class LockNode(Node):
         with self._lock:
             self._gray = g
             self._header = msg.header
+            # A SHORT HISTORY, so a detection can be paired with the frame it
+            # was actually computed on. See `_frame_for`. Four frames at the
+            # anchor backend's resolution is ~300 kB; the detector's own
+            # capture->arrival latency is 32 ms median / 48 p95, which is one
+            # to two frames, so four is the p95 with headroom and no more.
+            self._recent.append((_stamp_key(msg.header), g))
         self._fresh.set()
+
+    def _frame_for(self, det_header):
+        """The frame a detection was computed on, not merely the newest one.
+
+        ⛔ WHAT THIS FIXES. `snap` defines the anchor's reference patch, and
+        that patch IS the object model: its width is taken to be the target's
+        true width, so every later range is scaled by it. It was snapped from
+        the CURRENT frame using the LAST detection's box, with nothing
+        comparing the two stamps -- and the detector's box is 32 ms median /
+        48 p95 behind the frame in hand. On a moving hull that box no longer
+        bounds the target in the frame it is applied to, so the reference patch
+        clips the target or swallows background, and the error is baked into
+        the model for the whole lock.
+
+        Matching the stamp removes the error rather than bounding it, which is
+        affordable HERE and only here: snapping happens once, so waiting for
+        the right frame costs nothing, while the steering rungs must act on
+        whatever they have and use freshness decay instead.
+        """
+        key = _stamp_key(det_header)
+        if key is None:
+            return None
+        for k, g in self._recent:
+            if k == key:
+                return g
+        return None
 
     def _on_info(self, msg):
         """K, scaled to the anchor backend's resolution.
@@ -596,7 +631,26 @@ class LockNode(Node):
               ab = ac = None
               if self._anchor is not None:
                   if det_box is not None and not self._anchor.has_reference:
-                      self._anchor.snap(gray, roi=det_box)
+                      # THE FRAME THE BOX BELONGS TO, not merely the newest.
+                      # This patch becomes the object model, so pairing it with
+                      # the wrong frame scales every range that follows.
+                      snap_gray = self._frame_for(det_header)
+                      if snap_gray is None:
+                          # The matching frame has aged out of the ring, or a
+                          # stamp is missing. Snapping anyway would bake in the
+                          # skew silently; waiting costs one detection, because
+                          # the next one arrives with its frame still in hand.
+                          if not self._snap_skew_warned:
+                              self._snap_skew_warned = True
+                              self.get_logger().warn(
+                                  '[LOCK ] anchor snap deferred: no frame '
+                                  'matching the detection stamp. Check '
+                                  'use_sim_time and the detector latency -- '
+                                  'the reference patch defines the object '
+                                  'model, so it is not snapped against a '
+                                  'frame it does not belong to.')
+                      else:
+                          self._anchor.snap(snap_gray, roi=det_box)
                   elif (self._anchor.has_reference
                         and now >= self._anchor_next):
                       self._anchor_next = now + self._anchor_period
@@ -700,6 +754,22 @@ class LockNode(Node):
         for r in Rung:
             n[r] = 0
 
+
+
+def _stamp_key(header):
+    """A hashable identity for a header stamp, or None when it carries none.
+
+    Compared as (sec, nanosec) integers rather than a float: a float seconds
+    value loses nanosecond resolution at ROS epoch magnitudes, so two different
+    frames can compare equal -- which would silently pair the wrong ones, the
+    exact failure this exists to prevent.
+    """
+    if header is None:
+        return None
+    st = header.stamp
+    if st.sec == 0 and st.nanosec == 0:
+        return None
+    return (int(st.sec), int(st.nanosec))
 
 def main():
     rclpy.init()
