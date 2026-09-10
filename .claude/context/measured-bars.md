@@ -2042,6 +2042,26 @@ resident at once and the chip logs `has taken the activation 20 times --
 another detector is competing for the chip`: that is the 2-group SRAM ceiling,
 still open.
 
+## The standoff feature and its validity bound (2026-09-10)
+
+`_fill('area')` = `sqrt(w_frac*h_frac)` is **Corke & Hutchinson's sqrt(area)
+Z-axis feature** (IEEE T-RA 17(4) 2001, p.512) -- already correct, now pinned.
+Three reasons it is that and not raw area: scalar; **rotation invariant**
+(decouples roll from Z); and it "has the dimension of length ... thus a similar
+magnitude control gain" as the pixel features.
+
+⚠ **Dropping the sqrt makes the feature ~1/Z^2 instead of ~1/Z** and squares the
+loop gain across an approach -- calm at 3 m, unstable at 1 m.
+
+**Bar (theirs, not ours): valid while the target normal is within ±35° of the
+optical axis.** Past it the area under-reads and a one-sided forward term drives
+CLOSER, past the standoff. Guarded by `standoff_max_tilt_deg` (0 = off).
+
+⛔ Its fail direction is the OPPOSITE of `fire_max_tilt_deg`: **no pose =
+unguarded**, not blocked. A pose needs lock_node + calibration + a committed
+width, so "no pose" is the ordinary case and failing closed would disable
+forward drive on every mission without one.
+
 ## The UPLINK bearing is a WATER bearing (2026-09-10)
 
 `bearing.py` computed the ray angle inside the housing. A flat port refracts:
