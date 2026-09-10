@@ -717,6 +717,7 @@ def align_loop(*,
                fire_max_tilt_deg: float = 0.0,
                tilt_gate_fn=None,
                standoff_max_tilt_deg: float = 0.0,
+               tool_offset_fn=None,
                obliquity_fn=None,
                report_fn=None,
                writers=None,
@@ -1108,8 +1109,30 @@ def align_loop(*,
             in_band = []
             worst   = 0.0
 
+            # ⛔ AIM THE TOOL, NOT THE CAMERA. The two axes are parallel, so an
+            # uncorrected offset misses by the offset itself AT EVERY RANGE --
+            # it does not shrink as the hull closes in. The correction is the
+            # opposite of a constant: `du = fx*x/Z`, so it is LARGE up close.
+            # Resolved once per tick because Z moves.
+            #
+            # None means it could not be computed (no tool named, no
+            # calibration, or no range) -- then this is exactly the previous
+            # behaviour, aiming the camera, which is what every mission has
+            # always done. The caller warns; refusing here would break every
+            # align that has no pose.
+            tool_du = tool_dv = 0.0
+            if tool_offset_fn is not None:
+                try:
+                    _to = tool_offset_fn()
+                except Exception as exc:                      # noqa: BLE001
+                    log.error(f'[VIS  ] tool_offset_fn raised {exc!r} -- '
+                              f'aiming the camera')
+                    _to = None
+                if _to is not None:
+                    tool_du, tool_dv = float(_to[0]), float(_to[1])
+
             if 'lat' in axes:
-                ctrl = sample.ex - offsets.get('lat', 0.0) / half_w
+                ctrl = sample.ex - (offsets.get('lat', 0.0) + tool_du) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
                 p_lat = ctrl * kp_lat * rgain
@@ -1125,7 +1148,7 @@ def align_loop(*,
                 in_band.append(epx <= eff_err)
 
             if 'yaw' in axes:
-                ctrl = sample.ex - offsets.get('yaw', 0.0) / half_w
+                ctrl = sample.ex - (offsets.get('yaw', 0.0) + tool_du) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
                 # Polarity: un-negated, same as the lateral axis (ex > 0 ->
@@ -1159,14 +1182,14 @@ def align_loop(*,
                 # hull drives forward when the bin is ahead and BACK when behind --
                 # the one-sided fwd/fill law can't back up and would never centre.
                 # surge_sign flips polarity for the physical mount (verify disarmed).
-                ctrl = sample.ey - offsets.get('depth', 0.0) / half_h
+                ctrl = sample.ey - (offsets.get('depth', 0.0) + tool_dv) / half_h
                 epx  = abs(ctrl) * half_h
                 worst = max(worst, epx)
                 p_surge = ctrl * kp_lat * rgain
                 fwd_pct = _clamp(p_surge, -g_fwd, g_fwd) * surge_sign
                 in_band.append(epx <= eff_err)
             elif use_vdepth:
-                ctrl = sample.ey - offsets.get('depth', 0.0) / half_h
+                ctrl = sample.ey - (offsets.get('depth', 0.0) + tool_dv) / half_h
                 epx  = abs(ctrl) * half_h
                 worst = max(worst, epx)
                 # Carry the depth error into the 5 Hz setpoint step below (do NOT
