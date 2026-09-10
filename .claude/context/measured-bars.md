@@ -2042,6 +2042,45 @@ resident at once and the chip logs `has taken the activation 20 times --
 another detector is competing for the chip`: that is the 2-group SRAM ceiling,
 still open.
 
+## The companion link and the board clock (2026-09-10)
+
+**Link utilisation.** Read-only probe: open the port, send nothing, count bytes.
+Hull idle, disarmed, nothing commanded.
+
+| quantity | measured | bar |
+|---|---|---|
+| inbound bytes | 5969 B/s of 11520 (115200 8N1) | — |
+| **inbound utilisation** | **51.8 %** at idle | this is why 0.6 exists |
+| headroom | 5551 B/s ~= **93 LANDING_TARGET/s** | under what a 500 Hz consumer needs |
+| at 1 Mbaud | same telemetry = 6.0 %; 74 B frame 6.4 ms -> 0.8 ms | firmware PR #17 |
+
+⚠ **Baud is a TWO-SIDED constant.** Changing it on one side does not raise — the
+port opens, the UART clocks in noise, every frame fails CRC, and the symptom is
+`BAD_DATA` with no heartbeat. Host pins `SROT_BAUD` against the firmware's
+`MAVLINK_BAUD` by parsing the header, failing in both directions
+(`test_srot_protocol_drift.py`).
+
+**Board vs host clock**, ATTITUDE at the pinned 50 Hz:
+
+| clock | interval | sd | p2p |
+|---|---|---|---|
+| board (`time_boot_ms`) | 20.00 ms | **0.00 ms** | — |
+| host arrival | 20.00 ms | **6.67 ms** | **35.12 ms** |
+
+All of that jitter is transport. `ClockMap` fit on the vehicle:
+`ready=True pairs=102 skew=-39ppm **resid=0.36 ms**`.
+
+**Bar: any stream carrying a BOARD measurement is stamped on the board clock.**
+`/duburi/imu_rates` already was; `/duburi/state` (yaw, depth) was not, and
+`flow_node` differenced those arrival instants into a vertical speed. Both fixed.
+A board sample older than **0.2 s** (10 periods at 50 Hz) is refused rather than
+applied to a fresh message.
+
+**Pi power.** `vcgencmd get_throttled` = **0x0** across a 12 h uptime spanning
+dual-camera + Hailo load. The map's `0x50000` is stale. ⚠ A clean reading is
+**not a load test** — the thrusters were not drawing, and the sticky bits only
+record what has already happened. Graded by `bringup_check` section L2.
+
 ## Flat-port refraction in the METRIC POSE path (2026-09-09)
 
 `lock_node` fed raw pixels and the in-air `K` into `target_pose`. Ray-traced a
