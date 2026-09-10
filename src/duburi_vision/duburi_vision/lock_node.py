@@ -370,24 +370,12 @@ class LockNode(Node):
         # a clean 1/n scale error: every range 33 % short, with a plausible
         # number and no warning. Same class as the fx!=fy aspect defect the
         # rectifier's own docstring records.
-        if self._medium == 'water':
-            fx, fy = float(self._K[0][0]), float(self._K[1][1])
-            cx, cy = float(self._K[0][2]), float(self._K[1][2])
-            self._rect = RefractiveRectifier(fx, fy, cx, cy)
-            self._K_rect = np.array(
-                [[self._rect.f_ref, 0.0, cx],
-                 [0.0, self._rect.f_ref_y, cy],
-                 [0.0, 0.0, 1.0]], np.float64)
-            self.get_logger().info(
-                f'[LOCK ] medium=water: flat-port rectification ON, '
-                f'f_air={fx:.1f} -> f_ref={self._rect.f_ref:.1f} px '
-                f'(centre f_eff {self._rect.local_focal_px(0.0):.1f}, '
-                f'corner {self._rect.local_focal_px(min(cx, cy)):.1f})')
-        else:
-            self._rect, self._K_rect = None, self._K
-            self.get_logger().info(
-                '[LOCK ] medium=air: no refraction correction (identity). '
-                'Ranges are only valid OUT of water.')
+        # One place builds the (rectifier, matching K) pair -- see
+        # `optics.rectifier_for`. `pnp_node` reads the same helper, so the two
+        # cannot disagree about what optics a point set is in.
+        from duburi_vision.optics import rectifier_for
+        self._rect, self._K_rect, note = rectifier_for(self._K, self._medium)
+        self.get_logger().info(f'[LOCK ] {note}')
 
     def _publish_pose(self, pose, header):
         """6-DoF from the anchor's inliers, when calibrated and sized.

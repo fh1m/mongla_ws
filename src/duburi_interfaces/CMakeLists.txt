@@ -10,6 +10,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/Move.action"
   "msg/DuburiState.msg"
   "msg/TargetPose.msg"
+  "msg/TargetCorrespondences.msg"
   DEPENDENCIES action_msgs std_msgs
 )
 
