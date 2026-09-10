@@ -2042,6 +2042,51 @@ resident at once and the chip logs `has taken the activation 20 times --
 another detector is competing for the chip`: that is the 2-group SRAM ceiling,
 still open.
 
+## Tool aim, and the Ruckig feasibility numbers (2026-09-10)
+
+### The tool is not at the camera's optical centre
+
+An align centres the target on the CAMERA axis; a tool acts along a PARALLEL
+axis. **The miss equals the offset, at every range** -- it does not shrink as
+the hull closes in.
+
+| offset | angular err @1.0 m | @1.5 m | @2.5 m | miss at any range |
+|---|---|---|---|---|
+| 5 cm | 2.9° | 1.9° | 1.1° | **5 cm** |
+| 10 cm | 5.7° | 3.8° | 2.3° | **10 cm** |
+| 20 cm | 11.3° | 7.6° | 4.6° | **20 cm** |
+
+A torpedo opening is r = 4.75 cm (small) / 7.0 cm (large), so a 10 cm offset
+**always** misses. The correction is `du = fx*x/Z` -- **range-dependent, LARGE
+up close**: 68.7 px at 1.5 m vs 128.7 px at 0.8 m for the same mount.
+
+⚠ **Every tool in `tool_geometry.yaml` ships `unmeasured: true`, reading as
+zero** = today's behaviour. The numbers do not exist in the repo. Measuring is
+a tape-measure job: camera optical centre to tool bore centre, hull upright, mm.
+
+### Ruckig on the ESP32 -- MEASURED, and it reverses "port Ruckig"
+
+Built for `esp32doit-devkit-v1`, `-O2`, `gnu++17`:
+
+| quantity | measured |
+|---|---|
+| Flash (marginal) | **+416,088 B (406 KiB)** |
+| Static RAM | **+10,324 B** |
+| allocations in `update()` | **0** over 999 ticks (instrumented `operator new`) |
+| Hengla rev 14 baseline | 935,429 B = **29.7 %** of the 3 MB partition |
+| with Ruckig | **43.0 %** -- it fits |
+
+⛔ **But Ruckig is `double` and the Xtensa LX6 FPU is single-precision only.**
+From `xtensa-esp32-elf-nm` on a hot-path object: the complete libgcc soft-double
+set (`__adddf3 __subdf3 __muldf3 __divdf3 __eqdf2 __nedf2 __ltdf2 __ledf2
+__gtdf2 __gedf2`) and **zero** `*sf*` hardware helpers. **The paper's 19.8 µs
+for 7 DoF is a desktop number and does not transfer.**
+
+**Bar: any on-board shaping must be `float`.** Recommended ArduPilot
+`AP_Math/SCurve` instead (float, fixed 23-segment table, MCU-proven incl. an
+ESP32 port). Not measured: on-target µs -- that needs a flashed board and ours
+is flying the vehicle.
+
 ## The standoff feature and its validity bound (2026-09-10)
 
 `_fill('area')` = `sqrt(w_frac*h_frac)` is **Corke & Hutchinson's sqrt(area)
