@@ -2252,6 +2252,21 @@ class SrotFC(FlightController):
         """Live pilot gain (NAMED_VALUE_FLOAT 'GAIN', 0.1..1.0), or None if unseen."""
         return self._named_value('GAIN')
 
+    # ------------------------------------------------------------------ #
+    #  Thrust-allocator saturation (srot-control-board#20)                 #
+    # ------------------------------------------------------------------ #
+    #  1.0 = the group is delivering the demand. Below 1.0 the mixer scaled
+    #  that group down and the axis is NOT achieving what the controller asked
+    #  for. `mixer::mix()` computes this per group and drops it, so until #20
+    #  merges these read None -- which is UNKNOWN, not OK. A saturating
+    #  allocator and a silent one are indistinguishable from here, and that is
+    #  exactly the state #20 exists to end.
+    ALLOCATOR_SAT_NAMES = ('MIX_SAT_H', 'MIX_SAT_V')
+
+    def allocator_saturation(self):
+        """(horizontal, vertical) delivered fraction, each 0..1 or None."""
+        return tuple(self._named_value(n) for n in self.ALLOCATOR_SAT_NAMES)
+
     def check_move_cruise_max(self, timeout: float = 3.0):
         """Compare the BOARD's speed cap with the host's own clamp (B34).
 
