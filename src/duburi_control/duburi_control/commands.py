@@ -360,8 +360,14 @@ COMMANDS = {
 
 
 # Field names that carry a string instead of a float (everything else is float).
+# ⛔ THIS MIRRORS THE TYPES IN Move.action AND MUST NOT DRIFT FROM IT. The CLI
+# builds `--flags` from this: a `string` field missing here is typed as a FLOAT
+# and the flag becomes unusable -- `--tool torpedo` died with
+# "invalid _float_or_head value: 'torpedo'", which only running it revealed,
+# because every static check passes when the field merely EXISTS everywhere.
+# `test_field_types_match_the_action` pins the two together.
 STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
-                 'fire_channels', 'phase')
+                 'fire_channels', 'phase', 'tool')
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'lock_target',
