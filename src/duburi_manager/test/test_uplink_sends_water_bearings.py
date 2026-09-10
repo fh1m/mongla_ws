@@ -98,3 +98,39 @@ def test_the_index_is_not_copied_into_duburi_control():
     assert 'duburi_vision' not in pkg, (
         'duburi_control now depends on duburi_vision -- the dependency runs the '
         'other way, which is why the caller supplies the index')
+
+
+# --------------------------------------------------------------------------
+#  Aimable while the mission runs
+# --------------------------------------------------------------------------
+
+def test_the_uplink_timer_is_created_UNCONDITIONALLY():
+    """It used to be created only if `vision_uplink_camera` was set AT STARTUP.
+
+    MEASURED on the vehicle 2026-09-10: `ros2 param set /duburi_manager
+    vision_uplink_camera downward` reported success, the parameter read back
+    correctly -- and not one uplink tick ever ran, because the timer did not
+    exist and never would. A mission could not turn the uplink on without a
+    relaunch, and nothing said so.
+
+    Same shape as `vision.lock_s`: declared, documented, mapped, dead.
+    """
+    i = _SRC.index('LANDING_TARGET uplink armed')
+    setup = _SRC[max(0, i - 1200):i]
+    assert 'if self._is_srot:' in setup, 'the srot gate is gone'
+    assert "if uplink_cam and self._is_srot:" not in _SRC, (
+        'the timer is gated on the camera being set at startup again -- setting '
+        'it mid-mission will silently do nothing')
+    # the tick must still refuse an empty camera, or an idle timer sends garbage
+    j = _SRC.index('def _vision_uplink_tick')
+    assert 'if not cam:' in _SRC[j:j + 1400], (
+        'the tick no longer early-returns on an empty camera, so an armed but '
+        'unaimed uplink would run')
+
+
+def test_a_change_of_uplink_camera_is_ANNOUNCED():
+    """Otherwise the operator sets a parameter, gets a success, and has nothing
+    distinguishing 'sending now' from the startup-only bug this replaced."""
+    j = _SRC.index('def _vision_uplink_tick')
+    body = _SRC[j:j + 1400]
+    assert '_uplink_cam_logged' in body and 'uplink camera ->' in body
