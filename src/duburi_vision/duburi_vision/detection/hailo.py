@@ -521,9 +521,22 @@ class HailoDetector(Detector):
         # CPU, no detections, and an image topic starved to 1.6 Hz. It was
         # invisible in the single-detector profiler because that never swaps.
         #
-        # Two configured groups are resident at once here, which is exactly
-        # what the blocking path did (one `VDevice.configure` per detector in
-        # __init__) and is known to fit.
+        # ⛔ THE CEILING IS AT LEAST THREE GROUPS, NOT TWO -- MEASURED
+        # 2026-09-11, correcting what this comment used to assert. It said
+        # "two configured groups are resident at once here ... and is known to
+        # fit", which was true of what we ran and was never the limit. On this
+        # Hailo-8, `yolov8n_seg` + `gate_rescue_repair` + `bin_fire_blood` all
+        # configure together: three groups, no SRAM error. So a segmentation
+        # model can live BESIDE both detectors rather than evicting one, and
+        # any plan that assumed a two-group budget was solving a constraint
+        # that is not there. The SRAM_MEMORY_FULL failure below is real and
+        # was caused by configuring on every swap, which is a leak, not by a
+        # two-group ceiling.
+        #
+        # Not measured, and therefore not claimed: where the ceiling actually
+        # is, and what a fourth group or a multi-context model costs. The
+        # HEFs differ in that too -- `yolov8n_seg` is Single Context while
+        # `yolov11n_seg` needs three contexts for the same task.
         if self._cim is None:
             self._cim = self._model.configure()
             self._cim.__enter__()
