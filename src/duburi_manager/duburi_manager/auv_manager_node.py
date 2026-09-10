@@ -947,13 +947,26 @@ class AUVManagerNode(Node):
         # rotation-comp is ~1:1 with the signal, so publish at full rate.
         self.create_timer(0.02, self._imu_rates_tick, callback_group=self.fast_group)
 
-        uplink_cam = str(self.get_parameter('vision_uplink_camera').value).strip()
-        if uplink_cam and self._is_srot:
+        # ⛔ THE TIMER IS UNCONDITIONAL, and that is the fix. It used to be
+        # created only if `vision_uplink_camera` was already set AT STARTUP, so
+        # `ros2 param set ... vision_uplink_camera downward` mid-run reported
+        # success and did nothing -- the timer did not exist and never would.
+        # Measured on the vehicle: the parameter took, and not one uplink tick
+        # ever ran. That is the same shape as `vision.lock_s`, which was
+        # declared, documented, mapped and never passed.
+        #
+        # The tick already early-returns on an empty camera, so an idle timer
+        # costs one comparison at `vision_uplink_hz`. A mission can now aim the
+        # uplink the way it aims everything else, without a relaunch.
+        if self._is_srot:
             hz = max(1.0, float(self.get_parameter('vision_uplink_hz').value))
+            self._uplink_cam_logged = None
             self.create_timer(1.0 / hz, self._vision_uplink_tick,
                               callback_group=self.timer_group)
+            cam0 = str(self.get_parameter('vision_uplink_camera').value).strip()
             self.get_logger().info(
-                f'[VIS  ] LANDING_TARGET uplink: {uplink_cam} @ {hz:.0f} Hz '
+                f'[VIS  ] LANDING_TARGET uplink armed @ {hz:.0f} Hz, '
+                f'camera={cam0 or "(none -- idle until set)"} '
                 f'(the board does not consume msgid 149 yet -- producer only)')
 
         # BNO->EKF3 mocap injection is an ArduSub/BlueOS feature; SROT fuses the
@@ -1481,6 +1494,14 @@ class AUVManagerNode(Node):
         last-good value.
         """
         cam = str(self.get_parameter('vision_uplink_camera').value).strip()
+        # Say so ON CHANGE. Without this the operator sets the parameter, gets
+        # a success, and has nothing telling them whether anything started --
+        # which is indistinguishable from the startup-only bug this replaced.
+        if cam != getattr(self, '_uplink_cam_logged', None):
+            self._uplink_cam_logged = cam
+            self.get_logger().info(
+                f'[VIS  ] uplink camera -> {cam!r}' if cam else
+                '[VIS  ] uplink idle (vision_uplink_camera cleared)')
         if not cam:
             return
         vstate = self._vision_state_for(cam)
