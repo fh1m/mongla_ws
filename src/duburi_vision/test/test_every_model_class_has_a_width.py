@@ -15,6 +15,7 @@ shipped model sidecars and demand each one resolve.
 Also pinned here: an operator's own prop sizes override the committed defaults,
 because our pool props are not the venue's props.
 """
+import contextlib
 import os
 import tempfile
 
@@ -304,4 +305,88 @@ def test_an_override_displaces_the_shipped_entry_it_replaces(monkeypatch):
         # and the shipped entry is gone, not shadowed: exactly one survives
         table = tg._load()
         assert sum('gate' in g for g in table.values()) == 1
+    tg._CACHE.clear()
+
+
+@contextlib.contextmanager
+def _lock_node():
+    """A LockNode with no ROS graph, for driving its class-change paths.
+
+    ⛔ rclpy CONTEXT IS PROCESS-GLOBAL, so leaving it initialised breaks other
+    files. The first draft called `rclpy.init()` and only destroyed the node;
+    `test_flow_node`'s module fixture then called `rclpy.init()` again and ALL
+    31 of its tests errored -- a file this round never touched, which passed
+    perfectly on its own. Shut down exactly what we started, and only that.
+    """
+    import rclpy
+    from duburi_vision.lock_node import LockNode
+    started = not rclpy.ok()
+    if started:
+        rclpy.init()
+    node = LockNode()
+    try:
+        yield node
+    finally:
+        node.destroy_node()
+        if started:
+            rclpy.shutdown()
+
+
+def test_the_width_FOLLOWS_the_class_through_a_whole_mission():
+    """Seven classes, one node -- the width must re-resolve on every switch.
+
+    A pool run locks gate -> rescue -> red_pipe -> torpedo -> blood -> fire,
+    switching the detector's class as it goes. If the width were captured once
+    at construction, every leg after the first would scale its range by the
+    FIRST prop's width: a 3.0 m gate applied to a 0.0334 m pipe is a 90x range
+    error that publishes a confident number and logs nothing.
+
+    Driven, not read. `test_lock_node_ACTUALLY_consults_the_table` asserts the
+    lookup and the assignment sit close together in the source, which proves
+    adjacency and says nothing about whether the width tracks the class.
+    """
+    pytest.importorskip('rclpy')
+    from std_msgs.msg import String
+    with _lock_node() as node:
+        expect = [('gate', 3.0), ('rescue', 0.305), ('red_pipe', 0.0334),
+                  ('torpedo', 0.6096), ('blood', 0.305), ('fire', 0.305)]
+        seen = []
+        for cls, _ in expect:
+            node._on_classes_filter(String(data=cls))
+            seen.append((cls, node._target_w_m))
+        assert seen == [(c, pytest.approx(w)) for c, w in expect], seen
+
+
+def test_a_class_with_no_width_does_not_inherit_the_previous_one():
+    """`hole` has no published dimension, and must not reuse `blood`'s 0.305."""
+    pytest.importorskip('rclpy')
+    from std_msgs.msg import String
+    with _lock_node() as node:
+        node._on_classes_filter(String(data='blood'))
+        assert node._target_w_m == pytest.approx(0.305)
+        node._on_classes_filter(String(data='hole'))
+        assert node._target_w_m == 0.0, (
+            'the pose must REFUSE for a class with no width, not carry the '
+            'previous class\'s width into a confident wrong range')
+
+
+def test_the_no_env_var_path_is_the_one_the_deck_warning_names(monkeypatch):
+    """`~/.duburi/target_geometry.yaml` had never once been exercised.
+
+    Every other override test goes through DUBURI_TARGET_GEOMETRY, and the
+    vehicle check did too -- while the warning `lock_node` prints on the deck
+    tells the operator to use this path. An untested path in a message we hand
+    the operator under pressure is the same defect class as a knob wired to
+    nothing.
+    """
+    tg = _geometry()
+    monkeypatch.delenv('DUBURI_TARGET_GEOMETRY', raising=False)
+    with tempfile.TemporaryDirectory() as home:
+        os.makedirs(os.path.join(home, '.duburi'))
+        with open(os.path.join(home, '.duburi', 'target_geometry.yaml'), 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': 1.82}}, fh)
+        monkeypatch.setenv('HOME', home)
+        tg._CACHE.clear()
+        assert tg.width_for('gate') == pytest.approx(1.82)
+        assert tg.width_for('rescue') == pytest.approx(0.305)
     tg._CACHE.clear()
