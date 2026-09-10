@@ -443,7 +443,7 @@ class DetectorNode(Node):
                     half=half, max_det=max_det, allowlist=allowlist),
                 daemon=True).start()
 
-        from vision_msgs.msg import Detection2DArray
+        from vision_msgs.msg import Detection2DArray, VisionInfo
         from std_msgs.msg import String
         self._bridge       = CvBridge()
         # Depth 1 BEST_EFFORT: the publisher's mailbox is only a mailbox if
@@ -499,6 +499,22 @@ class DetectorNode(Node):
         # why the console polls `get_parameters` for `classes` instead.
         self._pub_classes  = self.create_publisher(
             String, f'{ns_out}/classes_filter', qos.LATCHED)
+        # ⛔ WHICH MODEL PRODUCED THE DETECTIONS YOU ARE HOLDING. A mission
+        # switches the detector mid-run -- gate, then rescue, then red_pipe --
+        # and a consumer acting on a box that a PREVIOUS model produced is
+        # steering at the wrong thing while everything looks healthy. Nothing
+        # said which model any message came from, and the console polls a
+        # PARAMETER at 1 Hz, which cannot answer that about a message.
+        #
+        # `database_version` is bumped on every switch, so a consumer compares
+        # it across two reads and knows a switch happened in between rather
+        # than guessing. This is `vision_msgs`' own mechanism for it -- an
+        # invented topic would be a second answer to a solved question.
+        # LATCHED: a late joiner must still learn the model, same reason as
+        # the allowlist beside it.
+        self._pub_vinfo = self.create_publisher(
+            VisionInfo, f'{ns_out}/vision_info', qos.LATCHED)
+        self._model_epoch = 0
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)
         if self._publish_dbg:
             self._pub_dbg = self.create_publisher(
@@ -567,6 +583,10 @@ class DetectorNode(Node):
         # Publish initial classes so display_node picks up the configured list
         # on connect (even before any param change fires).
         self._publish_classes(classes_param)
+        # Epoch 1 at startup, so a consumer that joins late has a model
+        # name and a baseline to compare against, rather than silence
+        # until the first switch.
+        self._publish_vision_info()
 
     def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, max_det, allowlist):
         """Background thread: load the detector, then go live. Node subscribes before this runs."""
@@ -612,6 +632,24 @@ class DetectorNode(Node):
         if getattr(self, '_pending_model_conf', ''):
             self._apply_model_conf(self._pending_model_conf)
         self.get_logger().info("[DET  ] model ready — inference active")
+
+    def _publish_vision_info(self) -> None:
+        """Say which model is live, and bump the epoch so a switch is visible.
+
+        `database_location` is the model STEM, which is this stack's model
+        identity everywhere else (`set_model`, `ClassRef`, the `.engine`
+        sidecar) -- a second naming scheme here would be a third answer to
+        "which model is that".
+        """
+        from vision_msgs.msg import VisionInfo
+        m = VisionInfo()
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.method = 'yolo'
+        m.database_location = str(self._active_name or
+                                  self._single_model_name or '')
+        self._model_epoch += 1
+        m.database_version = int(self._model_epoch)
+        self._pub_vinfo.publish(m)
 
     def _publish_classes(self, classes_str: str) -> None:
         """Publish the current classes filter so display_node can light up active classes."""
@@ -992,6 +1030,7 @@ class DetectorNode(Node):
                                 f"{sorted(self._stem_to_key)}"))
                 self._det = self._registry[key]
                 self._active_name = key
+                self._publish_vision_info()
                 self.get_logger().info(
                     f"[DET  ] active_model → {key!r}"
                     + (f" (via stem {name!r})" if key != name else ""))
