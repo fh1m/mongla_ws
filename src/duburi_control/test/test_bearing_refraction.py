@@ -125,3 +125,76 @@ def test_the_normalised_entry_point_forwards_the_medium():
     b = bearing_from_normalised(0.6, 0.0, 0.05, 0.05, width=w, height=h,
                                 K=K, n_medium=N)
     assert abs(b.angle_x) < abs(a.angle_x), 'n_medium is dropped on this path'
+
+
+# --------------------------------------------------------------------------
+#  ⛔ THE INDEPENDENT CHECK. Everything above compares the implementation with
+#  `asin(sin(ta)/N)` -- THE SAME EXPRESSION THE IMPLEMENTATION USES. Those tests
+#  are self-consistent: they pin the arithmetic, and they would ALL still pass
+#  if the correction ran in the wrong direction (multiplying by n instead of
+#  dividing), which would make every bearing 33 % too SMALL instead of too
+#  large. That is the exact "a passing test that checks nothing" failure this
+#  repo keeps paying for.
+#
+#  Ground truth below is PURE GEOMETRY -- atan2(X, Z) of a known point in the
+#  water -- reached through a ray trace that shares no code with bearing.py.
+# --------------------------------------------------------------------------
+
+_NG, _DG, _D0 = 1.49, 0.006, 0.015
+
+
+def _ray_trace_to_pixel(X, Z, fx, cx):
+    """TRUE image column of a water point at (X, 0, Z). Independent of the model."""
+    lo, hi = 0.0, abs(X) + _D0 + 1.0
+    for _ in range(200):
+        h = 0.5 * (lo + hi)
+        ta = math.atan2(h, _D0)
+        tg = math.asin(min(1.0, math.sin(ta) / _NG))
+        tw = math.asin(min(1.0, math.sin(ta) / N))
+        hit = h + _DG * math.tan(tg) + (Z - _D0 - _DG) * math.tan(tw)
+        lo, hi = (h, hi) if hit < abs(X) else (lo, h)
+    return cx + math.copysign(fx * h / _D0, X)
+
+
+@pytest.mark.parametrize('X,Z', [(0.05, 1.0), (0.20, 1.0), (0.05, 2.0),
+                                 (0.20, 2.0), (0.50, 2.0), (0.90, 2.0)])
+def test_the_corrected_bearing_matches_PURE_GEOMETRY(X, Z):
+    """The one test that could catch an inverted correction."""
+    K, d = _K()
+    fx, cx, cy = K[0], K[2], K[5]
+    w, h = d['image_width'], d['image_height']
+    u = _ray_trace_to_pixel(X, Z, fx, cx)
+    assert 0 <= u < w, 'probe point left the frame -- adjust the case'
+
+    truth = math.degrees(math.atan2(X, Z))
+    got = math.degrees(bearing_from_pixels(u, cy, 30, 30, width=w, height=h,
+                                           K=K, n_medium=N).angle_x)
+    # 0.1 deg covers the NON-CENTRAL residual the central model omits
+    # (measured worst 0.065 deg over these cases); it does NOT cover a sign or
+    # scale error, which is the point.
+    assert abs(got - truth) < 0.1, f'{got:.3f} vs true {truth:.3f}'
+
+
+def test_the_correction_REDUCES_the_error_it_claims_to_fix():
+    """Direction, stated as an inequality rather than a formula.
+
+    A correction applied the wrong way makes the error LARGER than doing
+    nothing. Measured here: worst 0.065 deg corrected vs 8.84 deg uncorrected.
+    """
+    K, d = _K()
+    fx, cx, cy = K[0], K[2], K[5]
+    w, h = d['image_width'], d['image_height']
+    worst_corr = worst_raw = 0.0
+    for X, Z in ((0.2, 1.0), (0.5, 2.0), (0.9, 2.0)):
+        u = _ray_trace_to_pixel(X, Z, fx, cx)
+        truth = math.degrees(math.atan2(X, Z))
+        corr = math.degrees(bearing_from_pixels(u, cy, 30, 30, width=w, height=h,
+                                                K=K, n_medium=N).angle_x)
+        raw = math.degrees(bearing_from_pixels(u, cy, 30, 30, width=w, height=h,
+                                               K=K, n_medium=1.0).angle_x)
+        worst_corr = max(worst_corr, abs(corr - truth))
+        worst_raw = max(worst_raw, abs(raw - truth))
+    assert worst_corr < 0.1 < worst_raw
+    assert worst_raw / max(worst_corr, 1e-9) > 20, (
+        f'the correction only improved things {worst_raw / worst_corr:.1f}x -- '
+        f'expected ~100x; suspect a sign or a scale error')

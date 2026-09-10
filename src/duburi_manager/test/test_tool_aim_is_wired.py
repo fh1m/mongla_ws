@@ -88,3 +88,80 @@ def test_the_warning_is_once_per_tool_not_per_call():
     i = _VV.index('def _warn_tool_geometry')
     body = _VV[i:i + 2200]
     assert '_tool_warned' in body and 'add(tool)' in body
+
+
+# --------------------------------------------------------------------------
+#  Behavioural. The live path cannot be reached on this hull: `vision_align`
+#  refuses while disarmed (correctly), and with no thrusters fitted the board
+#  refuses to arm -- so the warning is provably unreachable on the bench.
+#  Verified live 2026-09-10: "vision_align: AUV is disarmed -- call arm() first".
+#  Driving the real method against a fake is what closes that gap.
+# --------------------------------------------------------------------------
+import sys as _sys
+import types as _types
+
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'duburi_control'))
+from duburi_control.vision_verbs import VisionVerbs      # noqa: E402
+
+
+class _Log:
+    def __init__(self): self.warns, self.errors = [], []
+    def warning(self, m): self.warns.append(m)
+    def warn(self, m): self.warns.append(m)
+    def error(self, m): self.errors.append(m)
+    def info(self, m): pass
+
+
+class _Self:
+    _tool_warned = None
+    def __init__(self): self.log = _Log()
+
+
+class _VState:
+    def __init__(self, px=None): self._px = px
+    def tool_offset_px(self, tool): return self._px
+
+
+def _warn(fake, tool, vstate=None):
+    VisionVerbs._warn_tool_geometry(fake, tool, vstate or _VState())
+    return fake.log
+
+
+def test_no_tool_named_is_silent():
+    """Aiming the camera is the historical default and a legitimate choice."""
+    log = _warn(_Self(), '')
+    assert not log.warns and not log.errors
+
+
+def test_an_unmeasured_tool_warns_and_says_the_miss_does_not_shrink():
+    log = _warn(_Self(), 'torpedo')
+    assert log.warns, 'an unmeasured tool did not warn'
+    m = log.warns[0]
+    assert 'UNMEASURED' in m and 'EVERY RANGE' in m.upper()
+
+
+def test_an_unknown_tool_is_an_ERROR_and_lists_what_is_known():
+    log = _warn(_Self(), 'no_such_tool')
+    assert log.errors, 'an unknown tool did not error'
+    assert 'tool_geometry.yaml' in log.errors[0]
+    assert 'torpedo' in log.errors[0], 'the error should name the known tools'
+
+
+def test_a_MEASURED_tool_with_no_pose_still_warns():
+    """The correction is range-dependent, so a measured offset with no range
+    cannot be applied -- and that is exactly a shot that will miss."""
+    fake = _Self()
+    log = _warn(fake, 'camera_forward', _VState(px=None))
+    assert any('no live' in w for w in log.warns), log.warns
+
+
+def test_a_measured_tool_WITH_a_pose_is_silent():
+    log = _warn(_Self(), 'camera_forward', _VState(px=(0.0, 0.0)))
+    assert not log.warns and not log.errors
+
+
+def test_it_warns_once_per_tool_not_once_per_call():
+    fake = _Self()
+    for _ in range(5):
+        _warn(fake, 'torpedo')
+    assert len(fake.log.warns) == 1, f'warned {len(fake.log.warns)} times'
