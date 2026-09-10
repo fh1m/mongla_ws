@@ -46,11 +46,25 @@ with no `source:` is still honoured -- refusing a measured number over missing
 paperwork would be the worse failure -- but `overridden: true` is stamped on it
 so the provenance of a surprising range is one lookup away.
 
-⛔ AN OVERRIDE IS READ ONCE PER PROCESS. `_CACHE` fills on the first lookup and
-`lock_node` captures the width into `self._target_w_m` at construction, so
-editing the file or exporting the env var takes effect at the NEXT NODE START --
-same shape of boundary as the committed file needing a colcon build, and stated
-here for the same reason. Restart the node; do not expect a live re-read.
+★ AN EDITED OVERRIDE IS PICKED UP LIVE. The override files are stat'd on each
+lookup and re-read when their mtime or size changes, so correcting a prop width
+mid-session does NOT need a node restart -- which matters because the moment
+you discover the number is wrong is the moment you are standing at the pool
+with the vehicle in the water. Staleness here is not a performance question:
+a correction that silently does not apply is worse than no correction, because
+the operator believes it did.
+
+⛔ WHAT STILL NEEDS AN EVENT. `lock_node` captures the width into
+`self._target_w_m`, and it re-resolves on every target-class change
+(`_retarget_width`), not on a timer. So an edit lands at the next class switch
+-- or immediately, by re-pinning `target_class`:
+
+    ros2 param set /duburi_lock_forward target_class ''
+    ros2 param set /duburi_lock_forward target_class gate
+
+The committed table inside the package is a different matter: it is read from
+the INSTALLED share, so editing the source copy still needs a colcon build.
+That is what the override files are for.
 
 ⛔ AND: the committed defaults come from the ORGANISERS' documents, never from
 our simulator. The two SAUVC entries taken from the sim arena spec carry
@@ -63,8 +77,17 @@ _CACHE = {}
 
 
 def _load():
-    if _CACHE:
+    # Called FIRST and unconditionally: it records the stamps as well as
+    # comparing them. Behind `_CACHE and ...` Python short-circuits it away on
+    # the very load that should establish the baseline, so the next lookup saw
+    # an empty `_STAMPS`, called it "changed", and re-read the whole table
+    # once for nothing.
+    changed = _overrides_changed()
+    if _CACHE and not changed:
         return _CACHE
+    _CACHE.clear()
+    del _ERRORS[:]
+    del _REJECTED[:]
     table = {}
     for d in _candidate_dirs():
         p = os.path.join(d, 'target_geometry.yaml')
@@ -76,6 +99,33 @@ def _load():
         _merge(table, _read(p), p)
     _CACHE.update(table)
     return _CACHE
+
+
+
+_STAMPS: dict = {}
+
+
+def _overrides_changed() -> bool:
+    """Has an operator edited an override since we last read it?
+
+    Stat only -- two files, ~1 us -- and compared on (mtime_ns, size) rather
+    than mtime alone, because an edit that lands inside the same filesystem
+    timestamp tick is exactly the rushed pool-day correction this exists to
+    catch. Called per lookup, and lookups happen on a target-class change, not
+    per frame.
+    """
+    now = {}
+    for path in _override_paths():
+        try:
+            st = os.stat(path)
+            now[path] = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            now[path] = None        # absent is a state, and it can change
+    if now == _STAMPS:
+        return False
+    _STAMPS.clear()
+    _STAMPS.update(now)
+    return True
 
 
 def _read(path):
