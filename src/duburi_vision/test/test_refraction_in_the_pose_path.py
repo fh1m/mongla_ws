@@ -198,15 +198,200 @@ def test_a_non_finite_solution_is_refused_not_published():
         assert tp.reason, 'a refusal must say why'
 
 
-def test_lock_node_pairs_the_rectified_points_with_the_rectified_K():
-    """Source-level, deliberately: the failure is a MISPAIRING, and a live
-    rclpy fixture would test the harness rather than which K reaches PnP."""
+@contextlib.contextmanager
+def _pnp(medium='water', **params):
+    import rclpy
+    from rclpy.parameter import Parameter
+    from duburi_vision.pnp_node import PnPNode
+    started = not rclpy.ok()
+    if started:
+        rclpy.init()
+    overrides = [Parameter('medium', value=medium)]
+    overrides += [Parameter(k, value=v) for k, v in params.items()]
+    node = PnPNode(parameter_overrides=overrides)
+    try:
+        yield node
+    finally:
+        node.destroy_node()
+        if started:
+            rclpy.shutdown()
+
+
+def _corr_msg(obj_m, img_px, **kw):
+    from duburi_interfaces.msg import TargetCorrespondences as TC
+    m = TC()
+    m.camera = kw.get('camera', 'forward')
+    m.target_label = 'gate'
+    m.source = 'test'
+    m.optics = kw.get('optics', TC.OPTICS_RAW)
+    m.image_width = kw.get('image_width', 0)
+    m.image_height = kw.get('image_height', 0)
+    obj = np.asarray(obj_m, np.float64).reshape(-1, 3)
+    m.object_points = obj.reshape(-1).tolist()
+    m.image_points = np.asarray(img_px, np.float64).reshape(-1).tolist()
+    return m
+
+
+def _feed_info(node, w=None, h=None):
+    from sensor_msgs.msg import CameraInfo
+    info = CameraInfo()
+    info.width = int(w or (CX * 2))
+    info.height = int(h or (CY * 2))
+    info.k = [FX, 0.0, CX, 0.0, FY, CY, 0.0, 0.0, 1.0]
+    node._on_info(info)
+
+
+def _square_obj_and_img(width_m, Z):
+    """A planar square: object points in METRES, image points ray-traced."""
+    w = width_m / 2.0
+    corners = [(-w, -w), (w, -w), (w, w), (-w, w)]
+    obj = np.array([[x, y, 0.0] for x, y in corners], np.float64)
+    img = np.array([_project_flat_port(x, y, Z) for x, y in corners],
+                   np.float64)
+    return obj, img
+
+
+@pytest.mark.parametrize('Z', [0.6, 1.0, 2.0])
+def test_the_pose_survives_the_node_boundary_and_recovers_the_range(Z):
+    """END TO END across the split, in metres -- the check the old one was not.
+
+    This replaced a source-text assertion that `target_pose(ref_pts, live_pts,
+    self._K_rect` appeared in `lock_node.py`. That guard was protecting the
+    highest-consequence property of this whole item -- rectified pixels must be
+    solved against the RECTIFIED K, or every range is a clean 1/n short with a
+    plausible number and no warning -- and it could only ever prove that a line
+    of source had not been retyped. Moving the solve into `pnp_node` broke it
+    while changing nothing it cared about.
+
+    So: ray-trace a square of known width through the flat port at a known
+    range, hand the correspondences to the node exactly as `lock_node` sends
+    them (raw pixels, `OPTICS_RAW`), and require the published range back in
+    METRES. Nothing here can pass by sharing the rectifier's own approximation:
+    the projection is an independent Snell bisection.
+    """
+    pytest.importorskip('rclpy')
+    got = []
+    with _pnp() as node:
+        node._pub.publish = got.append
+        _feed_info(node)
+        obj, img = _square_obj_and_img(0.30, Z)
+        node._on_corr(_corr_msg(obj, img))
+    assert len(got) == 1, 'the node published nothing'
+    tp = got[0]
+    assert tp.ok, tp.reason
+    assert abs(tp.range_m - Z) < 0.02 * Z, (
+        f'range {tp.range_m:.4f} m for a true {Z} m -- the rectified points '
+        f'are not being solved against the rectified K')
+
+
+def test_the_air_K_would_have_been_caught_by_that_test():
+    """The negative control: prove the check above can FAIL.
+
+    A test that only ever sees the right answer cannot distinguish a correct
+    pipeline from a broken one. Solving the same water pixels as if the camera
+    were in air must read short by roughly the refractive index.
+    """
+    pytest.importorskip('rclpy')
+    got = []
+    with _pnp(medium='air') as node:
+        node._pub.publish = got.append
+        _feed_info(node)
+        obj, img = _square_obj_and_img(0.30, 1.0)
+        node._on_corr(_corr_msg(obj, img))
+    tp = got[0]
+    assert tp.ok, tp.reason
+    assert tp.range_m < 0.85, (
+        f'air optics on water pixels read {tp.range_m:.4f} m for a true 1.0 m '
+        f'-- expected roughly 1/n short; if this passes at ~1.0 the water '
+        f'path above is not testing anything')
+
+
+def test_a_reduced_resolution_producer_is_not_silently_scaled():
+    """The anchor matches in its BACKEND's pixels; CameraInfo is the full frame.
+
+    Solving reduced pixels against a full-resolution K scales every recovered
+    angle and range with no error and a plausible number -- the trap
+    `lock_node._on_info` already documented, now living across a topic. The
+    producer states its own frame; this proves the solver uses it.
+    """
+    pytest.importorskip('rclpy')
+    obj, img_full = _square_obj_and_img(0.30, 1.0)
+    half = img_full * 0.5                      # the same view at half scale
+
+    def solve(**kw):
+        got = []
+        with _pnp() as node:
+            node._pub.publish = got.append
+            _feed_info(node)
+            node._on_corr(_corr_msg(obj, half, **kw))
+        return got[0]
+
+    stated = solve(image_width=int(CX), image_height=int(CY))
+    assert stated.ok, stated.reason
+    assert abs(stated.range_m - 1.0) < 0.03, (
+        f'declared half-resolution recovered {stated.range_m:.4f} m')
+    silent = solve()                           # image_width 0 = "full frame"
+    assert silent.range_m > 1.5, (
+        f'half-resolution pixels solved as full frame gave {silent.range_m:.4f} '
+        f'm -- if this is near 1.0 the scaling is not being applied at all')
+
+
+def test_unset_optics_is_refused_rather_than_assumed():
+    """There is no safe default. Guessing wrong is a 33 % range error."""
+    pytest.importorskip('rclpy')
+    from duburi_interfaces.msg import TargetCorrespondences as TC
+    got = []
+    with _pnp() as node:
+        node._pub.publish = got.append
+        _feed_info(node)
+        obj, img = _square_obj_and_img(0.30, 1.0)
+        node._on_corr(_corr_msg(obj, img, optics=TC.OPTICS_UNSET))
+    assert got[0].ok is False
+    assert 'optics' in got[0].reason
+
+
+def test_already_rectified_points_are_not_rectified_twice():
+    """`OPTICS_RECTIFIED` means the producer did it. Doing it again is the same
+    class of error as not doing it at all, in the other direction."""
+    pytest.importorskip('rclpy')
+    from duburi_interfaces.msg import TargetCorrespondences as TC
+    rect, _ = _rect_and_K()
+    obj, img = _square_obj_and_img(0.30, 1.0)
+    pre = np.asarray(rect.rectify(img), np.float64).reshape(-1, 2)
+    got = []
+    with _pnp() as node:
+        node._pub.publish = got.append
+        _feed_info(node)
+        node._on_corr(_corr_msg(obj, pre, optics=TC.OPTICS_RECTIFIED))
+    tp = got[0]
+    assert tp.ok, tp.reason
+    assert abs(tp.range_m - 1.0) < 0.02, (
+        f'pre-rectified points recovered {tp.range_m:.4f} m -- the map was '
+        f'applied twice')
+
+
+def test_a_crossed_camera_is_refused():
+    """The two cameras' udev names were bound backwards once and nothing
+    noticed. A correspondence set names its camera; a mismatch is not solved."""
+    pytest.importorskip('rclpy')
+    got = []
+    with _pnp() as node:
+        node._pub.publish = got.append
+        _feed_info(node)
+        obj, img = _square_obj_and_img(0.30, 1.0)
+        node._on_corr(_corr_msg(obj, img, camera='downward'))
+    assert got[0].ok is False
+    assert 'downward' in got[0].reason
+
+
+def test_lock_node_publishes_evidence_and_no_longer_solves():
+    """Two publishers of one claim is the defect this split removes."""
     src = (Path(__file__).resolve().parents[1] / 'duburi_vision'
            / 'lock_node.py').read_text()
-    assert 'self._rect.rectify(ref_pts)' in src.replace('\n', ' ') or \
-           'rect.rectify(ref_pts)' in src, 'ref points are not rectified'
-    assert 'target_pose(ref_pts, live_pts, self._K_rect' in src, (
-        'rectified points must be solved with the RECTIFIED K')
+    assert 'TargetCorrespondences' in src
+    assert 'target_pose(' not in src, (
+        'lock_node solves a pose again -- `pnp_node` is the solver, and two '
+        'publishers of one claim is exactly what this split removed')
     assert "self.declare_parameter('medium', 'water')" in src
 
 

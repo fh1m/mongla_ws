@@ -32,6 +32,15 @@ uint8 OPTICS_RAW=1          # straight off the camera; the solver rectifies
 uint8 OPTICS_RECTIFIED=2    # publisher already applied RefractiveRectifier
 uint8 optics
 
+# ⛔ WHICH PIXEL FRAME `image_points` ARE IN. A producer may work at a reduced
+# resolution -- the anchor matches in its backend's 320x240, not the camera's
+# full frame -- and CameraInfo describes the FULL frame. Solving reduced pixels
+# against a full-resolution K scales every recovered angle and range, silently,
+# with a plausible number and no error. So the producer states its own frame
+# and the solver scales K to match. Zero means "same as CameraInfo".
+uint32 image_width
+uint32 image_height
+
 # Points on the TARGET's own frame, in METRES, flat: [x0,y0,z0, x1,y1,z1, ...].
 # Metres and target-frame together are what make the answer metric and what let
 # a caller use a published layout instead of a snapped patch. A planar target
