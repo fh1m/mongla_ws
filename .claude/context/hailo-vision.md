@@ -953,9 +953,36 @@ deliberately never releases the VDevice.
 
 **Correctness is verified against ultralytics, not reasoned about.** The same
 image through `yolov8n-seg.pt` on the dev box and through the HEF on the chip:
-**6 detections of 6**, same classes, boxes within INT8 noise (≈2–5 px), mask
-areas within 0.2 %. A transposed DFL read or a swapped letterbox pad produces
-boxes that are plausible and wrong, and nothing raises.
+**6 detections of 6**, same classes, boxes within INT8 noise (≈2–5 px). A
+transposed DFL read or a swapped letterbox pad produces boxes that are
+plausible and wrong, and nothing raises.
+
+⚠ **Two different area comparisons, and an earlier note here conflated them.**
+It said "mask areas within 0.2 %", which was the before/after of the
+sigmoid/dequant fold — 10833 → 10846 and 88972 → 88927 px, i.e. the
+optimisation changes essentially nothing. That is true and it is not a
+comparison with ultralytics. Reconciled properly, every mask lifted to a
+full-frame layer and resampled to ultralytics' own 640×480 canvas:
+
+| detection | ultralytics | ours (Hailo INT8) | delta |
+|---|---|---|---|
+| person, middle | 12299 | 10862 | −11.7 % |
+| person, right | 7722 | 6342 | −17.9 % |
+| person, left | 18279 | 17483 | −4.4 % |
+| bus | 91437 | 88959 | −2.7 % |
+| person, far left | 4375 | 4055 | −7.3 % |
+| skateboard | 925 | 819 | −11.5 % |
+
+**Our masks are systematically 3–18 % TIGHTER**, which is INT8 on the
+coefficient and prototype heads, not a decode error — the same direction as
+the INT8 score loss this file already records. Mask PLACEMENT is verified by
+rendering: `_tint_mask` drawn over `bus.jpg` puts the tint on the people, the
+bus and the skateboard with no visible offset, which is what proves the
+proto-crop → letterbox-undo → box-anchor chain rather than any unit test.
+
+⚠ **If the masks are ever used for metric work, this bias is a scale error of
+up to ~18 % in area, i.e. ~9 % in linear extent.** Take geometry from the box
+or from a contour with its own gate, not from raw mask area.
 
 **Where the host time went next, and it was preprocessing.** With the decode
 at 0.93 ms and the chip at 6.28 ms, boxes-only still measured 9.66 ms end to
@@ -966,6 +993,13 @@ passes for a border that never changes. `_letterbox_into_bound` paints the bars
 once per source-frame SIZE and lets `cv2.resize` write into the buffer's
 interior ROI. Measured 2.054 → 1.265 ms, and it lifts the DETECTION path too,
 which is where the 85.4 → 95.3 Hz in the table above comes from.
+
+**The range crop does not defeat this.** `rangecrop.apply()` hands `infer()` a
+VIEW of a different size, which invalidates `_pad_geometry` — but the crop is a
+fixed FRACTION of the frame, so there are exactly two shapes, full and cropped,
+and the geometry flips only when the crop's hysteresis toggles. Repaints are
+per-toggle, not per-frame. A crop of genuinely varying size would silently
+return this path to the old cost while producing correct output.
 
 ⛔ The bars must be repainted when the frame shape changes. Only the interior
 is written, so otherwise a differently-shaped frame is framed by the previous
