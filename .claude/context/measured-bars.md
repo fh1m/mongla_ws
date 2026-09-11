@@ -2370,3 +2370,79 @@ that matters, because a pixel-identical translated copy matches trivially.
 the mechanism works, not a statistic, and the COCO head is not our head. The
 gate on using it for association is one clip with two instances of the SAME
 prop visible together for ≥100 frames.
+
+## Flow front-end: three estimators against TRUTH (2026-09-11, vehicle)
+
+Round 1 compared a cheap estimator against `solve_planar_motion` and measured
+AGREEMENT, which cannot rank two estimates. Here a real downward frame is
+warped by a KNOWN (dx, dy, θ, scale), so all three are scored against truth on
+the same 25 frames per case.
+
+Median error, worst case in the swept range (shift 30 px, rotate 15°, zoom ×1.20):
+
+| estimator | translation | angle | scale | cost/pair, Pi | returns |
+|---|---|---|---|---|---|
+| **LK + RANSAC similarity (shipped)** | **0.006–0.40 px** | **0.002–0.05°** | **≤0.001** | 12.34 ms | dx dy yaw scale |
+| Fourier-Mellin, grid 128 | 0.15–9.5 px | 0.02–2.1° | 0.001–0.04 | 16.87 ms | dx dy yaw scale |
+| Fourier-Mellin, grid 256 | as above | as above | as above | 48.30 ms | dx dy yaw scale |
+| grey 160×160 phase correlation | 0.4–0.8 px shift only; **10.5 px at 5°, 13.8 px at ×1.05** | — | — | 2.86 ms | dx dy only |
+
+⛔ **Fourier-Mellin is BOTH slower and less accurate than what ships.** The
+idea was that rotation and scale are a translation in the log-polar magnitude
+spectrum, so one cheap estimator could replace the whole fit. It works — and
+at 16.87 ms against 12.34 ms it costs more for 10–30× the error. **Closed.**
+
+⛔ **RETRACTS round 1's side result.** That round reported grey-160 phase
+correlation as agreeing with the flow fit "to ~1.4 px at 7.6× cheaper" and
+framed it as a candidate front-end. Against truth the shipped fit is accurate
+to **0.01 px**, so that 1.4 px was the phase correlation's OWN error, not a
+mutual disagreement — and it returns no rotation and no scale, which is what
+the flow node uses. It is ~40× less accurate, not comparably accurate.
+
+**And the shipped estimator is vindicated with a number**: sub-0.4 px and
+sub-0.05° through 15° of image rotation and 20 % of zoom.
+
+⚠ Synthetic warps are the EASY case — no new content entering frame, no
+illumination change, no motion blur, no parallax off a non-planar floor. Read
+these as a RANKING and as proof that the rotation/scale stages work, not as
+the error either estimator achieves on consecutive real frames.
+
+### Method note: three of my own sign/axis bugs, each with a plausible table
+
+Every one produced a full table of believable numbers rather than an error.
+1. `getRotationMatrix2D(+a)` builds `[[c, s], [-s, c]]`, so the estimator's
+   `atan2(M[1,0], M[0,0])` returns **−a**. Signature: the reported angle error
+   was exactly 2× the command at every angle (2.0 at 1°, 10.0 at 5°, 30.0 at 15°).
+2. `cv2.warpPolar` puts log-radius on **x** and angle on **y**; reading them
+   swapped made Fourier-Mellin recover zero rotation and unit scale for every
+   pair. Signature: sweeping the grid size 128→1024 left the error flat at
+   exactly the commanded value — an estimator returning nothing, not one
+   returning something imprecise.
+3. `phaseCorrelate(a, b)` reports the shift taking **B onto A**. Signature:
+   recovered scale was exactly 1/s (error 0.097 for a commanded 1.05).
+
+## Do contours cost the pipeline anything? (2026-09-11, vehicle)
+
+Live A/B through the real launch, `contours:=true` twice and `false` once:
+
+| arm | detections rate | frame age at infer-start |
+|---|---|---|
+| contours on | 15.129 Hz / 15.091 Hz | 8.9 / 9.3 ms |
+| contours off | 15.127 Hz | 8.6 ms |
+
+**No measurable rate cost**, and the two ON arms differ from each other by
+more than they differ from OFF. In-process cost, against a ~10.5 ms frame:
+
+| detections | build | + message | % of frame |
+|---|---|---|---|
+| 1 box | 0.025 ms | 0.075 ms | 0.7 % |
+| 3 boxes | 0.071 ms | 0.185 ms | 1.8 % |
+| 1 mask | 0.103 ms | 0.171 ms | 1.6 % |
+| 3 masks | 0.297 ms | 0.464 ms | 4.4 % |
+| 8 masks | 0.779 ms | 1.210 ms | 11.5 % |
+
+`publish()` itself is 0.023 ms and a 3-mask message is 114 uint16 points.
+⚠ The bench runs at 15 Hz (camera-limited), so the live A/B has headroom that
+would mask a sub-millisecond cost — the in-process column is the honest figure
+at the chip's 95 Hz. Eight masks is the only row worth watching; `contours:=false`
+turns the topic off.
