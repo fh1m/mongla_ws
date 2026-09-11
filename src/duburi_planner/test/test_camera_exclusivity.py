@@ -81,17 +81,20 @@ def test_absent_counterpart_is_skipped_without_pause_call():
 def _pump_fake(live=None):
     m = MagicMock()
     m._live_camera = live
-    m._det_warm = set()
-    m._det_cache = {}
-    m._PUMP_WARM_S = 0.0
-    m._PUMP_COLD_S = 0.0          # deadline already passed -> no spin loop
-    m._PUMP_SLICE_S = 0.0
+    m._resume_probed = set()
+    m._det_cache = {}      # no frames yet -> the probe is the only evidence
+    m._DISCOVERY_SETTLE_S = 0.0
+    m._detector_present.return_value = True
     return m
+
+
+def _resume(fake, camera):
+    DuburiMission._resume_default_detector(fake, camera)
 
 
 def test_the_first_query_resumes_the_camera_it_reads():
     fake = _pump_fake(live=None)
-    DuburiMission._pump_detections(fake, 'forward')
+    _resume(fake, 'forward')
     fake._activate_camera.assert_called_once_with('forward')
 
 
@@ -100,13 +103,13 @@ def test_a_later_query_on_the_other_camera_does_not_switch():
     # Switching here would cost the 1.5 s settle on EVERY iteration of a
     # mission that polls both cameras. `use_camera` is the way to switch.
     fake = _pump_fake(live='forward')
-    DuburiMission._pump_detections(fake, 'downward')
+    _resume(fake, 'downward')
     fake._activate_camera.assert_not_called()
 
 
 def test_a_repeat_query_on_the_live_camera_does_not_re_activate():
     fake = _pump_fake(live='forward')
-    DuburiMission._pump_detections(fake, 'forward')
+    _resume(fake, 'forward')
     fake._activate_camera.assert_not_called()
 
 
@@ -116,7 +119,7 @@ def test_a_query_with_no_detector_node_never_activates():
     # wait_for_service before the pump's freshness window even opens.
     fake = _pump_fake(live=None)
     fake._detector_present.return_value = False
-    DuburiMission._pump_detections(fake, 'forward')
+    _resume(fake, 'forward')
     fake._activate_camera.assert_not_called()
 
 
@@ -154,3 +157,23 @@ def test_presence_gives_up_at_the_budget():
     with patch('duburi_planner.duburi_dsl.rclpy.spin_once'):
         got = DuburiMission._detector_present(fake, 'forward', settle=0.05)
     assert got is False
+
+
+def test_the_probe_runs_once_per_camera():
+    # The settle is not free; a repeat probe cannot learn anything new inside
+    # one mission, and paying it per query would make a search loop crawl.
+    fake = _pump_fake(live=None)
+    fake._detector_present.return_value = False
+    _resume(fake, 'forward')
+    _resume(fake, 'forward')
+    assert fake._detector_present.call_count == 1
+
+
+def test_frames_in_hand_beat_the_probe():
+    # A cache entry IS the detector, alive and publishing. Probing anyway would
+    # spend the settle inside a query whose recency window is shorter than it.
+    fake = _pump_fake(live=None)
+    fake._det_cache = {'forward': (1.0, [])}
+    _resume(fake, 'forward')
+    fake._detector_present.assert_not_called()
+    fake._activate_camera.assert_not_called()
