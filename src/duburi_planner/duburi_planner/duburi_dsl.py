@@ -954,6 +954,53 @@ class DuburiMission:
     # an absent one is a quiet no-op, so single-camera runs are unaffected.
     _KNOWN_CAMERAS = ('forward', 'downward')
 
+    def use_course(self, name: str):
+        """Load the prop priors for a course. Returns the `Course`.
+
+        The prior half of perceive-then-move: dead-reckon to roughly where a
+        prop should be and let perception take the last few metres. A mission
+        that searches for every prop from scratch spends its run turning.
+
+        Deck-first search (`DUBURI_COURSE_DIR`, then `~/.duburi/courses`, then
+        the package), so a course re-measured at the venue beats one committed
+        months earlier without a rebuild. Unmeasured props are named in the log
+        rather than left to be discovered by driving to them::
+
+            duburi.use_course('robosub26')
+            duburi.anchor_on('gate')          # the course supplies the bearing
+        """
+        from duburi_planner.course_map import load_course
+
+        course = self._course = load_course(name)
+        unmeasured = course.unmeasured()
+        self.log.info(f'[CRSE ] {course.name} loaded from {course.source} '
+                      f'({len(course.props)} props)')
+        if unmeasured:
+            self.log.warning(
+                f'[CRSE ] NOT measured for this pool: {", ".join(unmeasured)}. '
+                f'Those props refuse a dead-reckon and the mission must search '
+                f'for them.')
+        return course
+
+    def anchor_on(self, prop: str, *, camera: str | None = None,
+                  timeout: float = 6.0):
+        """Anchor the heading on a course prop, taking its bearing from the map.
+
+        ⛔ ONE NUMBER, ONE PLACE. A prop's face bearing is what an absolute
+        heading needs AND what approaching it from the front needs. Passing it
+        by hand at each call site is how the two come to disagree, so this
+        reads it from the loaded course and refuses if it was never measured --
+        a guessed bearing writes a wrong heading zero, and every later turn
+        inherits it.
+        """
+        course = getattr(self, '_course', None)
+        if course is None:
+            raise RuntimeError(
+                'anchor_on() needs a course: call use_course(<name>) first')
+        bearing = course.bearing_of(prop)      # raises when unmeasured
+        return self.anchor_heading(bearing_deg=bearing, camera=camera,
+                                   timeout=timeout)
+
     def anchor_heading(self, *, bearing_deg: float, camera: str | None = None,
                        timeout: float = 6.0) -> object:
         """Re-zero the heading against a prop whose world bearing is known.
