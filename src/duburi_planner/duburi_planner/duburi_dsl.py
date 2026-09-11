@@ -367,6 +367,9 @@ class DuburiMission:
         # resume. Probing is not free (DDS discovery settle), and a repeat
         # probe cannot tell us anything new inside one mission.
         self._resume_probed: set[str] = set()
+        # camera -> is its detector on the graph. Cached: a detector that
+        # is up stays up, and one that never came up will not appear.
+        self._camera_available: dict[str, bool] = {}
         self._active_cam_pub = None   # lazily-created latched String publisher (HUD follow)
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
@@ -892,6 +895,45 @@ class DuburiMission:
     # (both detectors inferring from t=0 -> the concurrent-inference OOM). Pausing
     # an absent one is a quiet no-op, so single-camera runs are unaffected.
     _KNOWN_CAMERAS = ('forward', 'downward')
+
+    def camera_available(self, name: str | None = None) -> bool:
+        """Is ``name``'s detector actually on the graph? Cached per camera.
+
+        THE BRANCH A MISSION NEEDS BEFORE IT COMMITS TO AN EYE. A camera that
+        fails to open no longer kills the vision stack -- the other camera keeps
+        running and that camera's detector is simply absent (see
+        `detector_dual_node`). That is the right behaviour for the vehicle and
+        it hands the mission a decision: a bin task that steers on `downward`
+        must SKIP rather than drive blind, and it can only skip if it can ask.
+
+        Without this the mission has two bad options. Call the vision verb and
+        `_ensure_detector` aborts the whole run over one dead camera -- losing
+        every later task with it. Or do not call it, and the mission cannot
+        tell "camera dead" from "target not in view".
+
+        Use it as the fallback selector the task trees are built from::
+
+            if duburi.camera_available('downward'):
+                duburi.vision.align('fire', camera='downward', lat=0, fwd=0)
+                duburi.fire(3)
+            else:
+                duburi.log('downward camera absent -- skipping the bin drop')
+
+        Cheap after the first call per camera: the answer is cached, because a
+        detector that is up stays up for the run and one that never came up is
+        not going to appear mid-mission.
+        """
+        cam = str(name or self.camera).strip().lower()
+        if cam in self._camera_available:
+            return self._camera_available[cam]
+        ok = self._detector_present(cam, settle=self._DISCOVERY_SETTLE_S)
+        self._camera_available[cam] = ok
+        if not ok:
+            self.log.warning(
+                f'[CAM  ] {cam} detector is NOT on the graph. A task that '
+                f'steers on {cam} will find nothing -- branch on '
+                f'camera_available({cam!r}) rather than calling a vision verb.')
+        return ok
 
     def use_camera(self, name: str) -> None:
         """Switch the sticky camera for all subsequent vision verbs AND make it the

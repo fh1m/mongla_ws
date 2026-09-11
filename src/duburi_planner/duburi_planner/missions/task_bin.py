@@ -48,6 +48,18 @@ def run(duburi, log=None):
         duburi.turn(BIN_HEADING_DEG)
     duburi.set_depth(BIN_DEPTH_M, timeout=30)
 
+    # ⛔ THE EYE THIS TASK NEEDS MAY NOT BE THERE. A camera that fails to open
+    # no longer takes the vision stack down with it -- the other camera keeps
+    # running and this one's detector is simply absent. Calling a vision verb
+    # anyway makes `_ensure_detector` abort the WHOLE run over one dead camera,
+    # taking every later task with it. Skip this task instead and let the rest
+    # of the mission score.
+    if not duburi.camera_available('downward'):
+        if log:
+            log('[bin_task] downward camera absent — SKIPPING the bin drop. '
+                'Every other task in the run still scores.')
+        return
+
     # Point everything at the downward camera. use_camera() auto-switches the live
     # detector (pauses forward, resumes downward) + flips the HUD; set the model +
     # classes for the bin task on that node.
