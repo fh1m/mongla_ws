@@ -1029,6 +1029,125 @@ class DuburiMission:
             self.log.warning(f'[FIX  ] no position fix: {got.reason}')
         return got
 
+    def focal_px(self, width_px: float = 640.0) -> float:
+        """In-water focal length, DERIVED from the measured field of view.
+
+        `fx = (W/2) / tan(HFOV/2)`. Not a second calibration constant: the FOV
+        was measured (46.7 deg in water, +/- 0.7) and this is the same number
+        in the units the pinhole relation wants. At 640 px wide it gives
+        741 px, which is what the flow node independently reports as its water
+        focal -- two derivations of one measurement agreeing.
+        """
+        import math as _math
+        return (float(width_px) / 2.0) / _math.tan(
+            _math.radians(self.HFOV_WATER_DEG / 2.0))
+
+    def standoff_for_prop(self, prop_class: str, *, visibility_m: float | None = None,
+                          width_px: float = 640.0) -> float:
+        """How close we must be for `prop_class` to be comfortably detectable.
+
+        Arithmetic, not a habit: a prop of known width projects to a box of
+        `f * w / Z` pixels, the detector was MEASURED to fall off a cliff at
+        about 10 px of box width, and the answer is clamped by how far the
+        water lets us see. Which term binds depends on the prop -- pixels for a
+        slalom pipe at 1.7 m, water for a gate whose pixel-limited range is
+        154 m.
+        """
+        from duburi_vision.acquire import VISIBILITY_M, standoff_for
+        from duburi_vision.target_geometry import width_for
+
+        w = width_for(str(prop_class))
+        if w <= 0.0:
+            return float(visibility_m if visibility_m is not None else VISIBILITY_M)
+        return standoff_for(
+            w, self.focal_px(width_px),
+            visibility_m=(VISIBILITY_M if visibility_m is None else visibility_m))
+
+    def acquire(self, prop: str, *, camera: str | None = None,
+                visibility_m: float | None = None,
+                stale_after: float = 1.0, max_legs: int = 8):
+        """Get the prop ON CAMERA: approach to a computed standoff, then search.
+
+        ⛔ THE DEAD ZONE THIS CLOSES. `goto_prop` stops short by design, and an
+        ARBITRARY standoff can leave the hull where the prop is present and
+        undetectable -- too far for the box to survive the detector, with the
+        mission unable to tell "not there" from "too far to see". So the
+        standoff is computed from the prop's committed width, the measured
+        detector floor and the water, and only then does a search make sense.
+
+        ⛔ AND THE SEARCH IS A RACE, WHICH IS THEIR IDIOM AND NOT A TIMEOUT.
+        Each leg is run in short segments with a detection check between them,
+        so the moment the prop appears the leg is abandoned mid-flight. A
+        search that completes its pattern before looking has already swum past
+        the answer.
+
+        The pattern is an expanding square sized from the error we actually
+        carry -- the fix residual plus what a heading error throws a leg of
+        this length off its line -- so a confident fix searches a small box and
+        a shaky one searches a big one, with nobody choosing a number. Legs are
+        closed with the distance verb, never timed.
+
+        Returns an `Attempt`: `branch` says whether the approach alone found
+        it, which leg did, or that the pattern ran out.
+        """
+        from duburi_planner.resilience import Attempt
+        from duburi_vision.acquire import expanding_box, search_radius_m, total_path_m
+
+        cls = str(prop)
+        course = getattr(self, '_course', None)
+        detect_class = cls
+        if course is not None and cls in course.props:
+            detect_class = course.props[cls].detect_class or cls
+
+        standoff = self.standoff_for_prop(detect_class, visibility_m=visibility_m)
+        self.log.info(f'[ACQ  ] {cls!r}: computed standoff {standoff:.2f} m '
+                      f'(class {detect_class!r})')
+
+        leg = self.goto_prop(cls, standoff_m=standoff)
+        if self.detected(detect_class, camera=camera, stale_after=stale_after):
+            self.log.info(f'[ACQ  ] {cls!r} on camera after the approach')
+            return Attempt(f'acquire:{cls}', True, branch='approach')
+
+        residual = 0.0
+        fix = self.fix_position()
+        if fix.ok:
+            residual = float(fix.residual_m)
+        reach = search_radius_m(residual, standoff)
+        legs = expanding_box(max(0.5, reach / 2.0), reach_m=reach * 2.0,
+                             max_legs=max_legs)
+        self.log.warning(
+            f'[ACQ  ] {cls!r} not visible at the standoff. Searching an '
+            f'expanding box: reach {reach:.1f} m, {len(legs)} legs, '
+            f'{total_path_m(legs):.1f} m of swimming.')
+
+        for l in legs:
+            self.yaw_right(l.turn_deg)
+            if self._run_watching(l.run_m, detect_class, camera, stale_after):
+                self.log.info(f'[ACQ  ] {cls!r} found on search leg {l.index}')
+                return Attempt(f'acquire:{cls}', True, branch=f'leg{l.index}')
+        return Attempt(f'acquire:{cls}', False, tries=len(legs),
+                       error=f'{cls!r} not found within {reach * 2.0:.1f} m of '
+                             f'the prior. It is not where the map says.')
+
+    def _run_watching(self, metres: float, detect_class: str,
+                      camera: str | None, stale_after: float,
+                      segment_m: float = 0.5) -> bool:
+        """Run `metres`, checking for the class between short segments.
+
+        The imperative form of their `Parallel(SuccessOnOne)[motion, seen]`:
+        a detection abandons the leg mid-flight instead of after it. Segment
+        length is the granularity of that preemption, and shorter is not free
+        -- each segment is a separate closed-loop command.
+        """
+        remaining = float(metres)
+        while remaining > 1e-3:
+            step = min(float(segment_m), remaining)
+            self.move_forward_dist(step)
+            remaining -= step
+            if self.detected(detect_class, camera=camera, stale_after=stale_after):
+                return True
+        return False
+
     def goto_prop(self, prop: str, *, standoff_m: float = 2.0,
                   gain: float = 50.0, max_leg_m: float = 12.0):
         """Dead-reckon to within `standoff_m` of a prop, then hand to perception.
