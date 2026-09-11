@@ -18,7 +18,7 @@ from rclpy.node import Node
 
 from duburi_interfaces.msg import DuburiState, TargetPose
 
-from duburi_vision.pose_cluster import (
+from duburi_localization.pose_cluster import (
     CLUSTER_TOL_DEG, MIN_POSES, WINDOW_S, PoseCluster, PoseSample,
 )
 from duburi_vision.stamps import capture_monotonic

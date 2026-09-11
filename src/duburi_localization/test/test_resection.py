@@ -12,7 +12,7 @@ import math
 
 import pytest
 
-from duburi_vision.resection import (
+from duburi_localization.resection import (
     Fix, circumcircle, fix_from_bearings, on_danger_circle,
 )
 

@@ -998,7 +998,7 @@ class DuburiMission:
         refused rather than reported with a big residual, because two nearly
         parallel sight lines still cross, just far away and wrongly.
         """
-        from duburi_vision.resection import Fix, fix_from_bearings
+        from duburi_localization.resection import Fix, fix_from_bearings
 
         course = getattr(self, '_course', None)
         if course is None:
@@ -1172,8 +1172,8 @@ class DuburiMission:
         Returns the `Attempt` of the leg, or a refusal naming the missing part.
         """
         from duburi_planner.resilience import Attempt
-        from duburi_vision.resection import _wrap180
-        from duburi_planner.course_map import bearing_to, range_to
+        from duburi_localization.resection import _wrap180
+        from duburi_localization.course_map import bearing_to, range_to
         import math as _math
 
         course = getattr(self, '_course', None)
@@ -1234,7 +1234,7 @@ class DuburiMission:
             duburi.use_course('robosub26')
             duburi.anchor_on('gate')          # the course supplies the bearing
         """
-        from duburi_planner.course_map import load_course
+        from duburi_localization.course_map import load_course
 
         course = self._course = load_course(name)
         unmeasured = course.unmeasured()
@@ -1292,12 +1292,12 @@ class DuburiMission:
         reason rather than a number, and does NOT change what `turn()` means --
         a mission opts in by converting explicitly.
         """
-        from duburi_vision.heading_anchor import anchor_from
+        from duburi_localization.heading_anchor import anchor_from
 
         cam = str(camera or self.camera).strip().lower()
         fused = self._wait_fused_pose(cam, timeout=timeout)
         if fused is None:
-            from duburi_vision.heading_anchor import Anchor
+            from duburi_localization.heading_anchor import Anchor
             return Anchor(False, reason=f'no fused pose on {cam} within '
                                         f'{timeout:.0f}s')
         got = anchor_from(fused, self.head(), float(bearing_deg))
@@ -1319,7 +1319,7 @@ class DuburiMission:
         changing what every existing `turn()` means would be far more dangerous
         than making the conversion explicit.
         """
-        from duburi_vision.heading_anchor import apply_offset
+        from duburi_localization.heading_anchor import apply_offset
         return apply_offset(self.head(), getattr(self, '_heading_offset', None))
 
     def absolute_to_relative(self, absolute_deg: float) -> float:
@@ -1358,7 +1358,7 @@ class DuburiMission:
             rclpy.spin_once(self.client.node, timeout_sec=0.05)
             msg = self._fused_pose.get(camera)
             if msg is not None and msg.ok:
-                from duburi_vision.pose_cluster import Fused
+                from duburi_localization.pose_cluster import Fused
                 return Fused(decided=True, yaw_deg=float(msg.yaw_deg),
                              range_m=float(msg.range_m),
                              support=int(msg.n_points),

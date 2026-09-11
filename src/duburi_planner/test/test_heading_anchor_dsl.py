@@ -11,8 +11,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from duburi_planner.duburi_dsl import DuburiMission
-from duburi_vision.heading_anchor import Anchor
-from duburi_vision.pose_cluster import Fused
+from duburi_localization.heading_anchor import Anchor
+from duburi_localization.pose_cluster import Fused
 
 
 def _fake(head=30.0, fused=None, offset=None):

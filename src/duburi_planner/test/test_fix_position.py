@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from duburi_planner.course_map import Course, Prop
+from duburi_localization.course_map import Course, Prop
 from duburi_planner.duburi_dsl import DuburiMission
 
 

@@ -14,9 +14,11 @@ from __future__ import annotations
 import ast
 import pathlib
 
-_VISION = pathlib.Path(__file__).resolve().parents[1]
-_NODE = _VISION / 'duburi_vision' / 'pnp_node.py'
-_LAUNCH = _VISION / 'launch' / 'vision_pi.launch.py'
+# The node moved to this package (it produces a POSE); the launch that starts
+# it still lives with the vision stack, so the two paths differ on purpose.
+_HERE = pathlib.Path(__file__).resolve().parents[1]
+_NODE = _HERE / 'duburi_localization' / 'pnp_node.py'
+_LAUNCH = (_HERE.parent / 'duburi_vision' / 'launch' / 'vision_pi.launch.py')
 
 
 def test_the_node_suffixes_its_topic_with_the_variant():

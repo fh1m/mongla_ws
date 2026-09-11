@@ -11,7 +11,7 @@ import pathlib
 
 import pytest
 
-from duburi_planner.course_map import (
+from duburi_localization.course_map import (
     Course, Prop, bearing_to, load_course, range_to,
 )
 
@@ -99,7 +99,7 @@ def test_a_missing_course_says_where_it_looked():
 
 
 def test_an_unset_value_never_becomes_zero():
-    from duburi_planner.course_map import _opt_float
+    from duburi_localization.course_map import _opt_float
     assert _opt_float(None) is None
     assert _opt_float('') is None
     assert _opt_float(float('nan')) is None

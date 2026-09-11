@@ -461,7 +461,7 @@ def generate_launch_description():
         hitting.
         """
         return Node(
-            package='duburi_vision', executable='pnp_node',
+            package='duburi_localization', executable='pnp_node',
             name=f'duburi_pnp_{camera_name}', output='screen',
             parameters=[{
                 'camera': camera_name,
@@ -485,7 +485,7 @@ def generate_launch_description():
         evidence.
         """
         return Node(
-            package='duburi_vision', executable='pnp_node',
+            package='duburi_localization', executable='pnp_node',
             name=f'duburi_pnp_near_{camera_name}', output='screen',
             parameters=[{
                 'camera':        camera_name,
@@ -506,7 +506,7 @@ def generate_launch_description():
         becomes visible.
         """
         return Node(
-            package='duburi_vision', executable='pose_fuse_node',
+            package='duburi_localization', executable='pose_fuse_node',
             name=f'duburi_pose_fuse_{camera_name}', output='screen',
             parameters=[{'camera': camera_name}],
             condition=IfCondition(LaunchConfiguration('lock')),
