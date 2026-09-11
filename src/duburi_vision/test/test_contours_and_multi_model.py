@@ -259,3 +259,28 @@ class TestASecondaryModelCannotTearDownThePrimary:
         n, _D = self._node(monkeypatch, lambda _f: [])
         del n._extra
         assert n._merge_extra(object(), ['a']) == ['a']
+
+
+def test_the_STARTUP_path_splits_the_csv_too(monkeypatch):
+    """⛔ A knob wired to nothing, caught by reading rather than by a test.
+
+    The live parameter handler split `active_model` on commas from the first
+    draft; the STARTUP path did not, because the patch that was supposed to
+    add it aborted before writing the file. Everything still looked right --
+    the DSL sent a CSV, the launch argument existed and was forwarded, the
+    param handler understood it -- and a launch that asked for two models
+    would resolve the whole string `'a,b'` as one key, fail to find it, and
+    fall back to ONE model with an error nobody reads at boot.
+
+    So this asserts the two paths use the SAME splitter, which is the only
+    property that keeps a launch argument and a mid-mission switch meaning the
+    same thing.
+    """
+    import inspect
+    import duburi_vision.detector_node as D
+    src = inspect.getsource(D.DetectorNode.__init__)
+    assert '_split_active(active_model)' in src, (
+        'startup does not split active_model; a CSV from the launch would '
+        'resolve as a single key and silently load one model')
+    assert 'self._set_extra(extra_names)' in src, (
+        'startup splits the CSV and then never uses the secondary names')
