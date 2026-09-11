@@ -255,6 +255,24 @@ def _parse_detections(msg) -> list:
     return out
 
 
+class _DetView:
+    """A cached record `(cls, cx, cy, w, h, score)` seen as a Detection.
+
+    `duburi_vision.identity` works on anything with `class_name`, `score` and
+    `xyxy`, so the adapter lives here rather than changing either side: the
+    cache stays a plain tuple (copied eagerly off the C++ buffer) and the
+    geometry module stays free of the DSL's storage choices.
+    """
+
+    __slots__ = ('class_name', 'score', 'xyxy')
+
+    def __init__(self, rec):
+        cls, cx, cy, w, h, score = rec
+        self.class_name = cls
+        self.score = float(score)
+        self.xyxy = (cx - w * 0.5, cy - h * 0.5, cx + w * 0.5, cy + h * 0.5)
+
+
 def _eval_detected(records: list, needle: str) -> bool:
     """True iff any record matches ``needle`` (case-insensitive)."""
     n = str(needle).strip().lower()
@@ -677,6 +695,44 @@ class DuburiMission:
         """
         label, _ = self._where_eval(target_class, camera, stale_after, band)
         return label
+
+    def side_on(self, symbol: str, *, structure: str = 'gate',
+                camera: str | None = None, stale_after: float = 1.0) -> str:
+        """Which side OF THE STRUCTURE the symbol is on: left/right/centre.
+
+        ⛔ NOT `where()`, AND THE DIFFERENCE DECIDES THE GATE. `where()` answers
+        "left or right of the FRAME", which is where the camera is pointing.
+        The gate's divider is a property of the gate, so a hull sitting off to
+        one side reads a correctly-placed placard as the wrong side and flies
+        under the wrong half -- with the detector, the pose and the control loop
+        all working. This measures against the structure's own midline, so it
+        survives being off-axis::
+
+            if duburi.side_on('rescue') == 'left':
+                duburi.move_left(1.2)
+            duburi.vision.move('gate', fwd=None)      # pass through
+
+        Returns ``'unknown'`` when the structure is not visible or the symbol
+        is not on it -- two states a mission branches differently on, so check
+        `detected(structure)` to tell them apart. Geometry comes from the
+        structure and identity from the symbol, never the reverse: a placard is
+        occluded from oblique angles and makes a poor geometric object.
+        """
+        cam = self._resolve_camera(camera) if hasattr(self, '_resolve_camera') \
+            else (camera or self.camera)
+        self._pump_detections(cam)
+        records = self._records(cam, stale_after)
+        if not records:
+            return 'unknown'
+        from duburi_vision.identity import identify, pick_structure
+
+        dets = [_DetView(r) for r in records]
+        struct = pick_structure(dets, structure)
+        if struct is None:
+            return 'unknown'
+        want = str(symbol).strip().lower()
+        got = identify(struct, [d for d in dets if d.class_name == want])
+        return got.side if got.label else 'unknown'
 
     def where_offset(self, target_class, *,
                      camera: str | None = None,

@@ -111,3 +111,46 @@ def test_set_node_writes_to_the_resolved_node():
 def test_set_node_refuses_an_empty_call():
     with pytest.raises(ValueError):
         DuburiMission.set_node(_node_fake(), 'tracker')
+
+
+# --- side_on: the gate's divider, not the frame centre ----------------------
+
+
+def _rec(cls, cx, cy, w, h, score=0.9):
+    return (cls, float(cx), float(cy), float(w), float(h), float(score))
+
+
+def _side_fake(records, camera='forward'):
+    m = MagicMock()
+    m.camera = camera
+    m._resolve_camera = lambda c: c or camera
+    m._records.return_value = records
+    return m
+
+
+def test_side_on_measures_against_the_structure():
+    # Gate spans 200..600 (midline 400); placard at 250 is on its LEFT half.
+    recs = [_rec('gate', 400, 250, 400, 300), _rec('rescue', 250, 170, 40, 40)]
+    assert DuburiMission.side_on(_side_fake(recs), 'rescue') == 'left'
+
+
+def test_side_on_survives_an_off_axis_hull():
+    # The gate sits left in the image (0..400, midline 200). The placard at 300
+    # is on the gate's RIGHT -- but LEFT of a 640-wide frame's centre, which is
+    # what where() would have said.
+    recs = [_rec('gate', 200, 250, 400, 300), _rec('repair', 300, 170, 40, 40)]
+    assert DuburiMission.side_on(_side_fake(recs), 'repair') == 'right'
+
+
+def test_side_on_is_unknown_without_the_structure():
+    recs = [_rec('rescue', 250, 170, 40, 40)]
+    assert DuburiMission.side_on(_side_fake(recs), 'rescue') == 'unknown'
+
+
+def test_side_on_is_unknown_when_the_symbol_is_not_on_the_structure():
+    recs = [_rec('gate', 400, 250, 400, 300), _rec('rescue', 900, 170, 40, 40)]
+    assert DuburiMission.side_on(_side_fake(recs), 'rescue') == 'unknown'
+
+
+def test_side_on_with_no_frame_is_unknown():
+    assert DuburiMission.side_on(_side_fake([]), 'rescue') == 'unknown'
