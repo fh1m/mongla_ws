@@ -364,6 +364,7 @@ class HailoDetector(Detector):
         self._swaps = 0
         self._pipe = None
         self._activation = None
+        self._pad_geometry = None
         self._nms_classes = len(self._names)
         self._nms_warned = False
         self._ready = True
@@ -485,6 +486,52 @@ class HailoDetector(Detector):
         return bool(self._ready)
 
     # ------------------------------------------------------------------ #
+    #  Preprocessing, straight into the bound buffer
+    # ------------------------------------------------------------------ #
+    def _letterbox_into_bound(self, frame_bgr: np.ndarray):
+        """Letterbox `frame_bgr` DIRECTLY into the buffer the chip reads.
+
+        Same pixels as `letterbox()`, three quarters of the work. The shipped
+        path allocated a fresh 640x640x3 canvas, memset all 1.23 MB of it to
+        114, resized into the middle, then copied the whole thing into the
+        bound buffer -- two full-frame passes per inference for a border that
+        never changes.
+
+        The bars only depend on the SOURCE FRAME SIZE, so they are painted
+        once and repainted only when that changes; `cv2.resize` then writes
+        its output into the buffer's interior ROI with no intermediate at all.
+        Measured on the vehicle, 810x1080 source:
+
+            full canvas + memset + copy   2.054 ms
+            ROI assign into bound buffer  1.656 ms
+            cv2.resize(dst=ROI)           1.265 ms
+
+        0.79 ms per frame, on the detection path as well as the seg one. That
+        matters because after the quantised-domain decode, preprocessing is
+        where the host time actually goes: 9.66 ms end to end against 6.28 ms
+        of chip and 0.93 ms of decode.
+
+        ⛔ REPAINTING THE BARS IS NOT OPTIONAL. Only the interior is written
+        each frame, so a frame of a different shape would otherwise be
+        surrounded by the PREVIOUS geometry's image data instead of grey --
+        a border of stale pixels the detector is free to find objects in.
+        """
+        h, w = frame_bgr.shape[:2]
+        geom = self._pad_geometry
+        if geom is None or geom[0] != h or geom[1] != w:
+            s = min(self._size / h, self._size / w)
+            nh, nw = int(round(h * s)), int(round(w * s))
+            px, py = (self._size - nw) // 2, (self._size - nh) // 2
+            geom = (h, w, s, nw, nh, px, py)
+            self._pad_geometry = geom
+            self._in_buf[...] = 114
+        _h, _w, s, nw, nh, px, py = geom
+        import cv2
+        cv2.resize(frame_bgr, (nw, nh), dst=self._in_buf[py:py + nh, px:px + nw],
+                   interpolation=cv2.INTER_LINEAR)
+        return s, px, py
+
+    # ------------------------------------------------------------------ #
     #  Output shape -- the ONE thing a seg HEF does differently
     # ------------------------------------------------------------------ #
     # A detection HEF has a single HAILO_NMS output; a seg HEF has ten raw
@@ -584,6 +631,8 @@ class HailoDetector(Detector):
             # so a fresh allocation per frame would be 640x640x3 of churn
             # inside the hot loop, plus a rebind.
             self._in_buf = np.zeros((self._size, self._size, 3), np.uint8)
+            # A fresh buffer has no bars; force the next frame to paint them.
+            self._pad_geometry = None
             self._bindings = self._cim.create_bindings()
             self._bindings.input().set_buffer(self._in_buf)
             self._bind_outputs()
@@ -625,7 +674,6 @@ class HailoDetector(Detector):
         if not self._ready or frame_bgr is None:
             return []
         h, w = frame_bgr.shape[:2]
-        buf, scale, pad_x, pad_y = letterbox(frame_bgr, self._size)
         # The lock spans acquire AND infer. See `_acquire_locked`.
         #
         # It still spans the wait, and that is deliberate: the chip runs one
@@ -638,6 +686,10 @@ class HailoDetector(Detector):
         # camera's capture pump, an rclpy executor -- runs freely during the
         # ~10 ms this is waiting, where the blocking API froze all of them.
         if self._blocking:
+            # The diagnostic path keeps the original canvas: it has no bound
+            # buffer to write into, and it exists to be byte-comparable with
+            # history rather than fast.
+            buf, scale, pad_x, pad_y = letterbox(frame_bgr, self._size)
             with _DEVICE_LOCK:
                 res = self._acquire_locked().infer(
                     {self._in_name: np.expand_dims(buf, 0)})
@@ -647,9 +699,9 @@ class HailoDetector(Detector):
                                              pad_x, pad_y)
         with _DEVICE_LOCK:
             cim = self._acquire_locked()
-            # Copy into the bound buffer rather than rebinding a new array:
-            # the binding is set up once in `_acquire_locked`.
-            self._in_buf[...] = buf
+            # Letterboxed straight into the bound buffer -- the binding is set
+            # up once in `_acquire_locked` and never rebound.
+            scale, pad_x, pad_y = self._letterbox_into_bound(frame_bgr)
             cim.wait_for_async_ready(timeout_ms=_ASYNC_READY_MS)
             job = cim.run_async([self._bindings])
             job.wait(_ASYNC_WAIT_MS)
@@ -952,10 +1004,9 @@ class HailoSegDetector(HailoDetector):
         from .seg_decode import decode
 
         h, w = frame_bgr.shape[:2]
-        buf, scale, pad_x, pad_y = letterbox(frame_bgr, self._size)
         with _DEVICE_LOCK:
             cim = self._acquire_locked()
-            self._in_buf[...] = buf
+            scale, pad_x, pad_y = self._letterbox_into_bound(frame_bgr)
             cim.wait_for_async_ready(timeout_ms=_ASYNC_READY_MS)
             cim.run_async([self._bindings]).wait(_ASYNC_WAIT_MS)
             # Decode INSIDE the lock, unlike the detection path, because the
