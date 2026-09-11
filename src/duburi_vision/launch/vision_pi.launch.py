@@ -94,6 +94,18 @@ def generate_launch_description():
         # filter and the published vision_info. Empty means the registry's
         # first entry, which is what shipped before this existed.
         #
+        # ⛔ REQUIRES A REGISTRY. `*_active` selects FROM `*_models`, so both
+        # must be given and every name must appear in the registry:
+        #
+        #     fwd_models:=gate_rescue_repair,yolov8n_seg \
+        #     fwd_active:=gate_rescue_repair,yolov8n_seg
+        #
+        # A single-model launch (`fwd_model:=`) has no registry to select from
+        # and the node REFUSES any `active_model` that is not the loaded stem.
+        # Verified on the vehicle: the registry form brings up both models on
+        # the forward camera beside the downward detector -- three network
+        # groups resident -- and logs the cost warning.
+        #
         # ⚠ Not free. The accelerator runs one graph at a time and each
         # handover costs ~4 ms, so two models is the SUM plus the swaps --
         # measured 37.5 Hz for a pair against 95 Hz for one.
