@@ -11,6 +11,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DuburiState.msg"
   "msg/TargetPose.msg"
   "msg/TargetCorrespondences.msg"
+  "msg/TargetContours.msg"
   DEPENDENCIES action_msgs std_msgs
 )
 

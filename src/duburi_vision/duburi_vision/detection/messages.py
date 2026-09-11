@@ -160,9 +160,65 @@ def class_index(class_name: str) -> int:
     return _CLASS_INDEX[name]
 
 
+def remint_class_ids(detections):
+    """Re-derive every in-process `class_id` from its LABEL. Returns the list.
+
+    Needed only when detections from TWO models are merged. Each model numbers
+    its own classes from zero, so `gate`(0) from one and `person`(0) from the
+    other are the same integer in one list -- the debug palette gives them one
+    colour, and anything that groups by the integer merges two classes with no
+    error anywhere. `class_index` is the same label->id table the wire
+    round-trip already uses, so a merged id agrees with what a subscriber will
+    mint for the same label.
+
+    Not applied on the single-model path: there the integers are the model's
+    own and are already consistent with its `class_names()`.
+    """
+    for d in detections:
+        d.class_id = class_index(d.class_name or str(d.class_id))
+    return detections
+
+
 def _msg_bbox_center(bbox):
     """Extract (cx, cy) from vision_msgs BoundingBox2D (Humble vs Iron+)."""
     centre = bbox.center
     if hasattr(centre, 'position'):
         return float(centre.position.x), float(centre.position.y)
     return float(centre.x), float(centre.y)
+
+
+def detections_to_contours(detections, header, *, camera: str,
+                           width: int, height: int):
+    """Detections -> `duburi_interfaces/TargetContours`.
+
+    Imported lazily so this module keeps working in a workspace where
+    `duburi_interfaces` is not built -- the detection path must not stop
+    because an optional evidence topic cannot be constructed.
+
+    Every detection contributes exactly one contour, whether or not it carries
+    a mask: a box becomes its four corners. That is what makes the message the
+    same for a detector and a segmentation model, and it means a consumer can
+    count on `len(class_name)` matching the detection array on the same stamp.
+    """
+    from duburi_interfaces.msg import TargetContours
+
+    from .contours import contour_for, flatten, polygon_area_px
+
+    msg = TargetContours()
+    msg.header = header
+    msg.camera = str(camera)
+    msg.image_width = int(width)
+    msg.image_height = int(height)
+
+    polys = []
+    for d in detections:
+        pts, angle = contour_for(d)
+        polys.append(pts)
+        msg.class_name.append(str(d.class_name or d.class_id))
+        msg.score.append(float(d.score))
+        msg.angle_deg.append(int(angle))
+        msg.area_px.append(int(round(polygon_area_px(pts))))
+    offset, points = flatten(polys, width=width, height=height)
+    msg.offset = offset
+    msg.points = points
+    return msg

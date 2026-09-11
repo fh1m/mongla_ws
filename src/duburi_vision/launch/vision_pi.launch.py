@@ -87,6 +87,18 @@ def generate_launch_description():
         DeclareLaunchArgument('dwn_model',   default_value='bin_fire_blood'),
         DeclareLaunchArgument('fwd_models',  default_value=''),
         DeclareLaunchArgument('dwn_models',  default_value=''),
+        # Which of `*_models` is live. A COMMA-SEPARATED value runs several on
+        # every frame -- `fwd_active:=gate_rescue_repair,gate_seg` gives
+        # detection and segmentation merged into one detection array and one
+        # contour message. The first name stays "the" model: it owns the class
+        # filter and the published vision_info. Empty means the registry's
+        # first entry, which is what shipped before this existed.
+        #
+        # ⚠ Not free. The accelerator runs one graph at a time and each
+        # handover costs ~4 ms, so two models is the SUM plus the swaps --
+        # measured 37.5 Hz for a pair against 95 Hz for one.
+        DeclareLaunchArgument('fwd_active',  default_value=''),
+        DeclareLaunchArgument('dwn_active',  default_value=''),
         DeclareLaunchArgument('fwd_classes', default_value=''),
         DeclareLaunchArgument('dwn_classes', default_value=''),
         DeclareLaunchArgument(
@@ -339,6 +351,8 @@ def generate_launch_description():
             'dwn_model_path': LaunchConfiguration('dwn_model'),
             'fwd_models':     LaunchConfiguration('fwd_models'),
             'dwn_models':     LaunchConfiguration('dwn_models'),
+            'fwd_active_model': LaunchConfiguration('fwd_active'),
+            'dwn_active_model': LaunchConfiguration('dwn_active'),
             'fwd_classes':    LaunchConfiguration('fwd_classes'),
             'dwn_classes':    LaunchConfiguration('dwn_classes'),
             'fwd_conf':       LaunchConfiguration('conf'),

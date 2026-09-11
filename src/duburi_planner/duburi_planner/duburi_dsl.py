@@ -1085,9 +1085,9 @@ class DuburiMission:
         if not res.successful:
             raise RuntimeError(f'set {node}.{name}={value!r} rejected: {res.reason}')
 
-    def set_model(self, name: str, *,
+    def set_model(self, name, *,
                   camera: str | None = None, node: str | None = None) -> None:
-        """Switch active detector model by stem or registry key (hot, no restart).
+        """Switch the active detector model, or run SEVERAL at once.
 
         ``name`` is the model **stem** (e.g. ``'gate_rescue_repair'``) or a
         registry key. Works on BOTH launch styles: a single-model launch
@@ -1095,7 +1095,32 @@ class DuburiMission:
         rejects any *other* name; a registry launch (``models:=``) accepts the
         key OR the stem. Targets ``/duburi_detector_<camera>`` (camera defaults to
         the mission's). Raises if the node is absent or the switch is rejected.
+
+        **Pass a list or a comma-separated string to run more than one model on
+        every frame** -- a detector and a segmentation model together, say::
+
+            duburi.use('gate_rescue_repair')                  # detection only
+            duburi.use('gate_seg')                            # segmentation only
+            duburi.use(['gate_rescue_repair', 'gate_seg'])    # both, merged
+
+        The FIRST name stays "the" model: it owns the class filter, the
+        published `vision_info`, and the alignment line. The rest only
+        contribute detections, which arrive merged in the same
+        `Detection2DArray` and outlined in the same `TargetContours`.
+
+        ⚠ Two models is not free and is not a default. The accelerator runs one
+        graph at a time and each handover costs ~4 ms, so the frame rate is the
+        sum plus the swaps -- measured 37.5 Hz for a pair against 95 Hz for one
+        model. Ask for both when a task needs both, not for the whole mission.
+
+        Why a widened argument rather than a new verb: the node takes ONE
+        `active_model` parameter, and one `SetParameters` call changes the whole
+        selection atomically. A separate "extra models" verb would need two
+        calls, and between them a frame would be detected with a pair nobody
+        asked for.
         """
+        if isinstance(name, (list, tuple)):
+            name = ','.join(str(n).strip() for n in name if str(n).strip())
         node = self._detector_node(camera, node)
         try:
             self._set_detector_param(node, 'active_model', str(name))
