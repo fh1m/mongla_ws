@@ -1939,6 +1939,14 @@ class SrotFC(FlightController):
         vhud = self._cache('VFR_HUD')
         if vhud is not None and self._baro_healthy() is not False:
             depth = float(vhud.alt)
+        # The SAME gate as depth above, on the other sensor. NaN, not a dropped
+        # dict: depth is independent of the IMU and is frequently healthy while
+        # the BNO is not, so blanking the whole reading would trade one silent
+        # failure for another. `DuburiState.msg` documents NaN as the absence
+        # sentinel for exactly this.
+        if self._ahrs_healthy() is False:
+            return {'yaw': math.nan, 'roll': math.nan,
+                    'pitch': math.nan, 'depth': depth}
         return {
             'yaw':   math.degrees(att.yaw) % 360.0,
             'roll':  math.degrees(att.roll),
@@ -1988,6 +1996,40 @@ class SrotFC(FlightController):
             return None
         bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
         return bool(int(getattr(msg, 'onboard_control_sensors_health', 0)) & bit)
+
+    def _ahrs_healthy(self):
+        """True / False / None (never reported) for the BNO085 behind ATTITUDE.
+
+        The exact tri-state shape as `_baro_healthy`, and for the same reason: a
+        board that has not sent SYS_STATUS yet has not said the IMU is bad.
+
+        ⛔ MEASURED ON THE VEHICLE 2026-09-11, which is why this exists. After a
+        bad boot the board reported `present=0x80203c0b health=0x2408` -- 3D_GYRO
+        (0x01) and 3D_ACCEL (0x02) present and NOT healthy -- with MAGACC 0.0,
+        COMP_SEEN 0.0, YAW_REF 0.0, and it kept streaming ATTITUDE at 10 Hz with
+        roll/pitch/yaw AND all three rates EXACTLY 0.0. `SCALED_IMU2` was zero in
+        every field including accel, which the firmware packs as `s.lx + s.grx`
+        (mav_stream.cpp:230) -- so at rest a live sensor owes ~1000 mG on one
+        axis and zero is the sensor, not the encoding.
+
+        A confident 0.0 is the worst possible failure here: `_effective_yaw_deg`
+        would publish heading 0.0, `heading_lock` would close its 50 Hz Ch4 loop
+        on it, and `turn` would believe it was already pointing north. Nothing
+        anywhere logged a fault, because nothing asked.
+
+        This is the barometer gate's twin. That half was fixed when a failing
+        Bar30 saturated the depth PID; the attitude half was left open, in this
+        same file, against the same bitfield.
+        """
+        msg = self._cache('SYS_STATUS')
+        if msg is None:
+            return None
+        health = int(getattr(msg, 'onboard_control_sensors_health', 0))
+        bits = (mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_GYRO
+                | mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_ACCEL)
+        # BOTH must be healthy. The attitude solution is a fusion of the two, so
+        # either one failing makes the quaternion untrustworthy.
+        return (health & bits) == bits
 
     def _drain_battery(self):
         """Fold the currently-cached BATTERY_STATUS in, once per message object.
@@ -2063,6 +2105,11 @@ class SrotFC(FlightController):
         att = self._cache('ATTITUDE')
         if att is None:
             return None
+        # ABSENCE, not zeros. A dead BNO streams exact 0.0 rates (measured), and
+        # the flow node de-rotates by `f*omega*dt` -- so a zero rate is not a
+        # harmless neutral, it is a claim that the hull did not turn.
+        if self._ahrs_healthy() is False:
+            return None
         age = time.time() - getattr(att, '_timestamp', 0.0) if getattr(att, '_timestamp', 0.0) else 0.0
         boot = getattr(att, 'time_boot_ms', None)
         return {'roll_rate': float(getattr(att, 'rollspeed', 0.0)),
@@ -2071,6 +2118,47 @@ class SrotFC(FlightController):
                 'age_s': age,
                 'board_ms': None if boot is None else int(boot),
                 'host_recv_s': float(getattr(att, '_timestamp', 0.0)) or None}
+
+    def get_imu(self):
+        """Full 6-DoF inertial sample from SCALED_IMU2, or None.
+
+        {'gyro': (x,y,z) rad/s, 'accel': (x,y,z) m/s^2 INCLUDING gravity,
+         'board_ms': int|None, 'host_recv_s': float|None}
+
+        ⛔ THIS DATA WAS ALREADY ON THE WIRE AND ENTIRELY THROWN AWAY. The board
+        streams SCALED_IMU2 at 50 Hz (60 messages in 6 s, measured) and this
+        stack read exactly ONE field off it -- `temperature`, for the water-temp
+        readout. Accel and gyro were decoded by pymavlink and discarded every
+        single frame. Same shape as the ESC RPM finding: the sensor is paid for
+        in bandwidth and never spent.
+
+        The firmware packs accel as `(s.lx + s.grx) / 9.80665 * 1000` in mg and
+        gyro as `s.gx * 1000` in mrad/s (mav_stream.cpp:230-240), so accel
+        carries gravity and a level hull at rest owes ~1000 mg on one axis.
+        Exact zero on all six is the dead-sensor signature, not a neutral
+        reading -- which is why this shares `_ahrs_healthy` with the attitude
+        path rather than trusting the numbers.
+
+        `board_ms` is the board's own capture time, the jitter-free base
+        `flow_timing.ClockMap` maps onto host time. None when absent, never 0.
+        """
+        imu = self._cache('SCALED_IMU2')
+        if imu is None:
+            return None
+        if self._ahrs_healthy() is False:
+            return None
+        boot = getattr(imu, 'time_boot_ms', None)
+        g = 9.80665 / 1000.0          # mg -> m/s^2
+        return {
+            'gyro': (float(imu.xgyro) * 1e-3,
+                     float(imu.ygyro) * 1e-3,
+                     float(imu.zgyro) * 1e-3),
+            'accel': (float(imu.xacc) * g,
+                      float(imu.yacc) * g,
+                      float(imu.zacc) * g),
+            'board_ms': None if boot is None else int(boot),
+            'host_recv_s': float(getattr(imu, '_timestamp', 0.0)) or None,
+        }
 
     def heartbeat_age(self):
         hb = self._vehicle_hb()

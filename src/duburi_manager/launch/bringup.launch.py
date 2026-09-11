@@ -166,6 +166,12 @@ def generate_launch_description():
                                           '(empty = the model sidecar\'s full set).'),
         DeclareLaunchArgument('dwn_classes', default_value='',
                               description='vision_stack:=pi -- downward class allowlist.'),
+        DeclareLaunchArgument('localization', default_value='true',
+                              description='Run the invariant filter (duburi_'
+                                          'localization). Read-only: it '
+                                          'publishes /duburi/odom and commands '
+                                          'nothing, so it is on by default. '
+                                          'Set false to take it off the graph.'),
         DeclareLaunchArgument('flow',        default_value='false',
                               description='vision_stack:=pi -- start flow_node '
                                           '(downward-camera velocity). Pairs with the '
@@ -379,6 +385,23 @@ def generate_launch_description():
         condition=_stack_is('generic'),
     )
 
+    # The outer half of the localization split: the board owns the 500 Hz
+    # attitude loop, this owns pool-frame position. Lives beside the manager
+    # rather than in the vision launch because its inputs are the manager's
+    # (/duburi/imu, /duburi/state) and it must run with vision:=false too.
+    localization_node = Node(
+        package='duburi_localization',
+        executable='localization_node',
+        name='duburi_localization',
+        output='screen',
+        ros_arguments=['--log-level', 'warn',
+                       '--log-level', 'duburi_localization:=info'],
+        parameters=[{
+            'flow_camera': 'downward',
+        }],
+        condition=IfCondition(LaunchConfiguration('localization')),
+    )
+
     # Foxglove telemetry bridge -- opt-in, off the mission path (pure viz). Auto-
     # exposes every topic over a WebSocket the Foxglove desktop app renders (our
     # detections/images/state are standard vision_msgs/sensor_msgs). use_compression
@@ -404,6 +427,7 @@ def generate_launch_description():
 
     return LaunchDescription(args + [
         manager_node,
+        localization_node,
         # scoped=True keeps anything set INSIDE from escaping. It does not stop
         # the parent leaking IN -- and `forwarding=False`, which does, also
         # hides `vision`, `fwd_model` and friends from the condition and the
