@@ -45,8 +45,9 @@ def test_the_filter_is_actually_constructed_by_the_node():
     is what a refactor does when it moves logic out and forgets to move it in."""
     src = (PKG / 'duburi_localization' / 'localization_node.py').read_text()
     assert 'RIEKF()' in src
-    for method in ('predict', 'update_depth', 'update_body_velocity',
-                   'update_position'):
+    for method in ('predict', 'update_depth', 'update_body_velocity_xy',
+                   'update_position', 'update_attitude',
+                   'update_zero_velocity'):
         assert f'.{method}(' in src, f'{method} has no caller in the node'
 
 
@@ -83,3 +84,24 @@ def test_the_manager_publishes_the_imu_the_filter_predicts_on():
     fc = (ROOT / 'src' / 'duburi_control' / 'duburi_control' / 'fc'
           / 'srot_fc.py').read_text()
     assert 'def get_imu(self)' in fc
+
+
+def test_the_single_prop_fix_exists_and_is_wired():
+    """`fix_position()` needs TWO props 12 degrees apart; one prop of known
+    width at a surveyed position pins the hull on its own. That is the
+    difference between localising when the course cooperates and localising
+    whenever anything is in view."""
+    dsl = (ROOT / 'src' / 'duburi_planner' / 'duburi_planner'
+           / 'duburi_dsl.py').read_text()
+    assert 'def fix_from_prop(self' in dsl
+    assert 'def range_to(self' in dsl
+    # The fix must carry its own sigma: pose error from a planar target grows
+    # with the SQUARE of range, so one constant cannot serve near and far.
+    assert 'sigma=sigma' in dsl
+
+
+def test_the_filter_reports_what_it_rejected():
+    """A filter silently discarding measurements looks exactly like one that
+    is merely drifting."""
+    src = (PKG / 'duburi_localization' / 'localization_node.py').read_text()
+    assert 'rejected' in src and 'lockout_breaks' in src

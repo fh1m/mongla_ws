@@ -33,7 +33,10 @@ returns None in that state, no message is published, and this node coasts.
 from __future__ import annotations
 
 import math
+import time
+from collections import deque
 
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
@@ -55,6 +58,19 @@ MAX_PREDICT_DT_S = 0.25
 # Below this the step is numerically pointless and only amplifies stamp noise.
 MIN_PREDICT_DT_S = 1e-4
 
+# ZUPT stationarity, measured rather than assumed. The board's gyro reads
+# 9, -11, -3 mrad/s on a still bench (measured 2026-09-11), so 0.02 rad/s is
+# roughly twice the observed noise floor -- tight enough to exclude a slow
+# yaw, loose enough not to be tripped by the sensor itself.
+STILL_GYRO_RAD_S = 0.02
+# Peak-to-peak of |specific force| over the window. Gravity is included in the
+# reading, so a tilted hull shows a large CONSTANT; only variation is motion.
+STILL_ACCEL_SPREAD = 0.25          # m/s^2
+STILL_WINDOW = 50                  # 1.0 s at the board's 50 Hz
+# Flow newer than this means the camera is already reporting velocity, so a
+# ZUPT would add nothing and could only conflict with it.
+FLOW_FRESH_S = 1.0
+
 
 def _stamp_s(header) -> float:
     return float(header.stamp.sec) + float(header.stamp.nanosec) * 1e-9
@@ -70,14 +86,24 @@ class LocalizationNode(Node):
         # Counters, published in the diagnostic line. Which channel is feeding
         # the filter is the first question when a pose looks wrong, and a rate
         # of zero on one input is invisible in the pose itself.
-        self._n = {'imu': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
-                   'gap': 0}
+        self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
+                   'fix': 0, 'zupt': 0, 'gap': 0}
+        self._still: deque = deque(maxlen=STILL_WINDOW)
+        self._last_flow_t = 0.0
 
         cam = str(self.declare_parameter('flow_camera', 'downward').value)
         self._flow_sigma = float(self.declare_parameter('flow_sigma', 0.05).value)
         self._depth_sigma = float(self.declare_parameter('depth_sigma', 0.02).value)
         self._yaw_sigma_deg = float(self.declare_parameter('yaw_sigma_deg', 2.0).value)
         self._fix_sigma = float(self.declare_parameter('fix_sigma', 0.5).value)
+        # The BNO's datasheet drift, not a tuning guess: under 0.01 deg/min at
+        # rest, measured on this board over 8 minutes. Loose enough that a
+        # manoeuvre's transient does not fight the filter, tight enough that
+        # attitude is effectively pinned to the board.
+        self._attitude_sigma_deg = float(
+            self.declare_parameter('attitude_sigma_deg', 0.5).value)
+        self._zupt_sigma = float(self.declare_parameter('zupt_sigma', 0.01).value)
+        self._zupt_enabled = bool(self.declare_parameter('zupt', True).value)
         # Off by default. The board's yaw is already a fused 500 Hz solution and
         # feeding it back in as a measurement makes this filter agree with it by
         # construction -- which looks like convergence and measures nothing.
@@ -137,6 +163,38 @@ class LocalizationNode(Node):
             dt)
         self._n['imu'] += 1
 
+        # ⛔ THE SPLIT, ENFORCED HERE. The board owns attitude; without this
+        # line the companion propagates its own and DIVERGES -- measured on
+        # the vehicle before it was added: 7.1e6 m of position in 35 s. An
+        # unaided inertial attitude error grows through the gravity coupling
+        # (A[3:6,0:3] = skew(GRAVITY)), the accelerometer's gravity component
+        # then leaks into horizontal acceleration, and the depth update's gain
+        # pumps the result into x and y through the cross terms. Nothing in
+        # the filter is wrong; it was simply being asked to estimate something
+        # it had no information about.
+        #
+        # `orientation_covariance[0] < 0` is the ROS "no data" convention, and
+        # a backend that cannot supply attitude must not be given a fabricated
+        # one -- it would be better to diverge visibly than to converge to a
+        # number nobody measured.
+        if msg.orientation_covariance[0] >= 0.0:
+            self._filter.update_attitude(
+                _R_from_quat(msg.orientation.w, msg.orientation.x,
+                             msg.orientation.y, msg.orientation.z),
+                sigma_deg=self._attitude_sigma_deg)
+            self._n['att'] += 1
+
+        # Stationarity evidence for the ZUPT, kept per sample. |a| rather than
+        # the vector, because the gravity component is what makes the raw axes
+        # attitude-dependent while its magnitude is not.
+        a = msg.linear_acceleration
+        w = msg.angular_velocity
+        self._still.append((
+            max(abs(w.x), abs(w.y), abs(w.z)),
+            math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z)))
+        if self._zupt_enabled:
+            self._maybe_zupt()
+
     def _on_state(self, msg: DuburiState) -> None:
         depth = float(msg.depth_m)
         if not math.isnan(depth):
@@ -151,19 +209,85 @@ class LocalizationNode(Node):
             self._n['yaw'] += 1
 
     def _on_flow(self, msg: TwistWithCovarianceStamped) -> None:
+        """Downward optical flow: the DVL we do not have.
+
+        ⛔ X AND Y ONLY. A bottom-looking camera cannot see vertical velocity,
+        and the flow node says so by marking `covariance[14]` as -1.0 -- the
+        ROS convention for an unobserved component. Its `linear.z` is 0.0
+        because nothing ever set it, and feeding that to a 3-D update asserts
+        at full confidence that the hull is not moving vertically, which
+        fights the depth channel on every dive.
+
+        The variances are the flow node's own, computed per sample from the
+        standard error of the mean over its RANSAC inliers. A textured floor
+        and a bare one do not deserve equal weight, and the constant sigma
+        this used to pass threw that distinction away.
+        """
         v = msg.twist.twist.linear
-        if math.isnan(v.x) or math.isnan(v.y) or math.isnan(v.z):
+        if math.isnan(v.x) or math.isnan(v.y):
             return
-        # The EXACT update: body-frame velocity is the one measurement whose
-        # innovation is left-invariant, so it needs no approximation. This is
-        # the reason the filter is right-invariant at all -- see inekf.py.
-        self._filter.update_body_velocity((v.x, v.y, v.z),
-                                          sigma=self._flow_sigma)
+        var_x = float(msg.twist.covariance[0])
+        var_y = float(msg.twist.covariance[7])
+        # A non-positive variance is the "no data" marker, not a confident
+        # zero. Falling back to the parameter keeps a publisher that does not
+        # fill covariance usable instead of silently un-weighting it.
+        floor = self._flow_sigma ** 2
+        if not (var_x > 0.0) or not math.isfinite(var_x):
+            var_x = floor
+        if not (var_y > 0.0) or not math.isfinite(var_y):
+            var_y = floor
+        self._filter.update_body_velocity_xy(v.x, v.y,
+                                             max(var_x, 1e-6),
+                                             max(var_y, 1e-6))
         self._n['flow'] += 1
+        self._last_flow_t = time.monotonic()
+
+    def _maybe_zupt(self) -> None:
+        """Stand still and the filter learns from it -- but only if it IS still.
+
+        ZUPT turns a stationary interval into a direct observation of the
+        velocity error that has accumulated, which keeps inertial growth
+        linear rather than quadratic. It matters exactly when flow is absent:
+        with flow running, a still hull already measures zero and this adds
+        nothing.
+
+        ⛔ THE CALLER OWNS THE STATIONARITY TEST, and getting it wrong is how a
+        ZUPT ruins a filter -- declaring "still" during a slow constant-speed
+        transit deletes real motion. So stillness is MEASURED, never assumed
+        and never taken from mission intent: the hull station-keeping against
+        a current is commanded still and is not. The board reports its own
+        gyro and accelerometer at 50 Hz, which is the same reasoning that let
+        us measure bench stillness rather than assume it.
+        """
+        if len(self._still) < self._still.maxlen:
+            return
+        if time.monotonic() - self._last_flow_t < FLOW_FRESH_S:
+            return                      # flow is live; it already says zero
+        gyro = [g for g, _ in self._still]
+        acc = [a for _, a in self._still]
+        if max(gyro) > STILL_GYRO_RAD_S:
+            return
+        # The SPREAD of specific force, not its magnitude -- gravity is in
+        # there and a tilted hull reads a large constant. Variation is motion.
+        if (max(acc) - min(acc)) > STILL_ACCEL_SPREAD:
+            return
+        self._filter.update_zero_velocity(sigma=self._zupt_sigma)
+        self._n['zupt'] += 1
+        self._still.clear()
 
     def _on_fix(self, msg: PointStamped) -> None:
-        self._filter.update_position((msg.point.x, msg.point.y),
-                                     sigma=self._fix_sigma)
+        """A pool-frame position, from `fix_position()` or `fix_from_prop()`.
+
+        `point.z` carries the sigma the producer derived (range-dependent for
+        a single-prop fix, because pose error from a planar target grows with
+        the square of range). <= 0 means the producer had none, and the node's
+        parameter stands in -- absence, not a silent zero, which here would
+        mean infinite confidence.
+        """
+        sigma = float(msg.point.z)
+        if not (sigma > 0.0) or not math.isfinite(sigma):
+            sigma = self._fix_sigma
+        self._filter.update_position((msg.point.x, msg.point.y), sigma=sigma)
         self._n['fix'] += 1
 
     # ---- output ---------------------------------------------------------
@@ -196,11 +320,31 @@ class LocalizationNode(Node):
     def _diagnose(self) -> None:
         n = self._n
         self.get_logger().info(
-            f"[LOCAL] imu={n['imu']} flow={n['flow']} depth={n['depth']} "
-            f"yaw={n['yaw']} fix={n['fix']} gaps={n['gap']} | "
+            f"[LOCAL] imu={n['imu']} att={n['att']} flow={n['flow']} "
+            f"zupt={n['zupt']} depth={n['depth']} "
+            f"yaw={n['yaw']} fix={n['fix']} gaps={n['gap']} "
+            f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} | "
             f"yaw={self._filter.X.yaw_deg():+.1f} deg "
             f"p=({self._filter.X.p[0]:+.2f},{self._filter.X.p[1]:+.2f},"
             f"{self._filter.X.p[2]:+.2f}) m")
+
+
+def _R_from_quat(w, x, y, z):
+    """Rotation matrix from (w, x, y, z), normalised on the way in.
+
+    The normalisation is not defensive tidiness: a quaternion that arrives
+    slightly off unit length produces a matrix with determinant != 1, and
+    `so3_log` of that is not a rotation vector. The filter would take the
+    resulting garbage as a real innovation.
+    """
+    n = math.sqrt(w * w + x * x + y * y + z * z)
+    if n == 0.0:
+        return np.eye(3)
+    w, x, y, z = w / n, x / n, y / n, z / n
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
 
 
 def _quat_from_R(R):

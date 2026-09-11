@@ -2149,7 +2149,14 @@ class SrotFC(FlightController):
             return None
         boot = getattr(imu, 'time_boot_ms', None)
         g = 9.80665 / 1000.0          # mg -> m/s^2
+        # The board's OWN fused attitude, carried alongside the raw axes.
+        # ATTITUDE and SCALED_IMU2 are packed from one `Snap` in one firmware
+        # tick, so this is the same instant and needs no second stamp.
+        att = self._cache('ATTITUDE')
+        rpy = None if att is None else (float(att.roll), float(att.pitch),
+                                        float(att.yaw))
         return {
+            'rpy': rpy,
             'gyro': (float(imu.xgyro) * 1e-3,
                      float(imu.ygyro) * 1e-3,
                      float(imu.zgyro) * 1e-3),
