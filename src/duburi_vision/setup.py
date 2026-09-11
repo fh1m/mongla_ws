@@ -39,6 +39,7 @@ setup(
             'tracker_node        = duburi_vision.tracker_node:main',
             'lock_node           = duburi_vision.lock_node:main',
             'pnp_node            = duburi_vision.pnp_node:main',
+            'pose_fuse_node      = duburi_vision.pose_fuse_node:main',
             'vision_node         = duburi_vision.vision_node:main',
             'vision_check        = duburi_vision.utils.check_pipeline:main',
             'water_check         = duburi_vision.utils.water_check:main',

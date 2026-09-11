@@ -470,6 +470,22 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('lock')),
         )
 
+    def pose_fuse(camera_name):
+        """Fuse the solver's per-frame poses into one answer with its support.
+
+        Same `lock` gate as the solver that feeds it, for the same reason: a
+        fuser with no pose stream publishes nothing while looking healthy.
+        Publishes BESIDE `/target_pose`, never over it -- comparing an
+        estimator against its own fused output is how a regression in either
+        becomes visible.
+        """
+        return Node(
+            package='duburi_vision', executable='pose_fuse_node',
+            name=f'duburi_pose_fuse_{camera_name}', output='screen',
+            parameters=[{'camera': camera_name}],
+            condition=IfCondition(LaunchConfiguration('lock')),
+        )
+
     return LaunchDescription(args + [
         detectors,
         tracker('forward',  'fwd_frame_rate'),
@@ -490,6 +506,8 @@ def generate_launch_description():
         ladder('downward', 'dwn_lock_class'),
         solver('forward'),
         solver('downward'),
+        pose_fuse('forward'),
+        pose_fuse('downward'),
         Node(package='duburi_vision', executable='vision_display',
              name='duburi_display', output='screen',
              parameters=[{'camera': 'forward'}],
