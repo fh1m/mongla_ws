@@ -57,10 +57,26 @@ class PnPNode(Node):
         self._max_reproj_px = float(
             self.declare_parameter('max_reproj_px', MAX_REPROJ_PX).value)
 
+        # ⛔ REDUNDANCY IS CHEAPER THAN PICKING THE RIGHT NUMBER. A
+        # reprojection gate that is tight enough to reject a bad solve at 3 m
+        # also rejects a good one at 0.4 m, where the board fills the frame and
+        # a few pixels of contour error are ordinary. BumblebeeAS run exactly
+        # this pair on slalom -- a normal estimator and a `_near` variant at
+        # max_reprojection_error 100.0 against 10.0 -- and let the consumer
+        # choose, instead of tuning one threshold and losing the other regime.
+        #
+        # A variant publishes to its OWN topic. Merging them here would destroy
+        # the thing that makes redundancy useful: a consumer cannot prefer one
+        # estimator over another if both arrive on the same topic, and a
+        # disagreement between them is evidence rather than noise.
+        variant = str(self.declare_parameter('variant', '').value or '').strip()
+        topic = f'{ns}/target_pose' + (f'_{variant}' if variant else '')
+        self._variant = variant
+
         self._info = None
         self._K_full = None
         self._cache = {}            # (w,h) -> (rect, K_rect)
-        self._pub = self.create_publisher(TargetPose, f'{ns}/target_pose', 10)
+        self._pub = self.create_publisher(TargetPose, topic, 10)
         self.create_subscription(CameraInfo, f'{ns}/camera_info',
                                  self._on_info, 10)
         self.create_subscription(TargetCorrespondences, f'{ns}/correspondences',
@@ -68,7 +84,7 @@ class PnPNode(Node):
         self.get_logger().info(
             f'[PNP  ] {cam}: medium={self._medium} '
             f'reproj<={self._max_reproj_px:.1f}px  {ns}/correspondences -> '
-            f'{ns}/target_pose')
+            f'{topic}')
 
     def _on_info(self, msg):
         k = list(msg.k)
