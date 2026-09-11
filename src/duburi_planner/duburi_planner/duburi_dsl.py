@@ -954,6 +954,81 @@ class DuburiMission:
     # an absent one is a quiet no-op, so single-camera runs are unaffected.
     _KNOWN_CAMERAS = ('forward', 'downward')
 
+    # Measured on this vehicle: 63.8 deg in air, 46.7 deg through the flat
+    # port in water, +/- 0.7. The WATER figure is the default because that is
+    # where the vehicle works, and a bearing computed with the air number would
+    # be 37 % too wide -- every fix stretched, no fault logged.
+    HFOV_WATER_DEG = 46.7
+
+    def bearing_to(self, prop_class: str, *, camera: str | None = None,
+                   hfov_deg: float | None = None) -> float | None:
+        """Bearing from the hull to a visible prop, in WORLD terms. None if unseen.
+
+        Pixel offset to angle, then relative to absolute through the anchored
+        heading. Uses `where_offset`, which is the bbox centre as a fraction of
+        half the frame, so this is the small-angle pinhole reading of a
+        calibrated lens rather than a full unprojection through K. Good to
+        about a degree near the centre and worse at the edge, which is fine for
+        a resection whose geometry gate wants 12 deg of separation.
+
+        Unanchored, the number returned is relative to boot, so a fix built
+        from it is in a rotated frame. `fix_position` says so rather than
+        letting the frames silently mix.
+        """
+        off = self.where_offset(prop_class, camera=camera)
+        if off is None:
+            return None
+        half = float(hfov_deg if hfov_deg is not None else self.HFOV_WATER_DEG) / 2.0
+        return (self.absolute_heading() + float(off) * half) % 360.0
+
+    def fix_position(self, *, props: list | None = None,
+                     camera: str | None = None) -> object:
+        """Where we are in the pool, from bearings to props we can see.
+
+        ⛔ THE COURSE IS THE LANDMARK FIELD. A team that could not localise
+        underwater added obstacles to their pool to make features, and wrote
+        the approach off because a venue will not let you. That is backwards:
+        the competition course is the densest set of surveyed, known-size,
+        already-detected objects we will ever operate in. The thing they had to
+        fake is what the venue hands us.
+
+        Needs a loaded course for the positions, two visible props whose
+        positions were measured, and enough angle between them. Returns a
+        `Fix` whose `ok` is False with a stated reason -- a thin geometry is
+        refused rather than reported with a big residual, because two nearly
+        parallel sight lines still cross, just far away and wrongly.
+        """
+        from duburi_vision.resection import Fix, fix_from_bearings
+
+        course = getattr(self, '_course', None)
+        if course is None:
+            return Fix(False, reason='no course loaded: call use_course(<name>)')
+        if getattr(self, '_heading_offset', None) is None:
+            return Fix(False, reason='heading is not anchored, so bearings are '
+                                     'relative to boot and a fix would be in a '
+                                     'rotated frame. anchor_on(<prop>) first.')
+        positions, sightings = {}, {}
+        for name, prop in course.props.items():
+            if props is not None and name not in props:
+                continue
+            if not prop.has_position:
+                continue
+            cls = prop.detect_class or name
+            bearing = self.bearing_to(cls, camera=camera)
+            if bearing is None:
+                continue
+            positions[name] = (float(prop.x_m), float(prop.y_m))
+            sightings[name] = bearing
+        got = fix_from_bearings(sightings, positions)
+        if got.ok:
+            self.log.info(
+                f'[FIX  ] pool position ({got.x_m:+.2f}, {got.y_m:+.2f}) m from '
+                f'{got.used} props, residual {got.residual_m:.3f} m, '
+                f'spread {got.separation_deg:.0f} deg')
+        else:
+            self.log.warning(f'[FIX  ] no position fix: {got.reason}')
+        return got
+
     def use_course(self, name: str):
         """Load the prop priors for a course. Returns the `Course`.
 
