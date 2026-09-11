@@ -424,7 +424,11 @@ class DetectorNode(Node):
                     "[DET  ] ALL registry models failed to load — no pipeline")
                 raise RuntimeError(f"empty detector registry (all failed: {errors})")
 
-            # Registry is non-empty from here. active_model may be a KEY or a STEM.
+            # Registry is non-empty from here. active_model may be a KEY or a
+            # STEM, and may name SEVERAL, comma-separated -- the same form the
+            # live parameter takes, so a launch argument and a mid-mission
+            # switch cannot mean different things.
+            active_model, extra_names = _split_active(active_model)
             active_key = self._resolve_model_key(active_model) if active_model else None
             if active_key is not None:
                 self._det: Detector = self._registry[active_key]
@@ -441,6 +445,9 @@ class DetectorNode(Node):
                         f"[DET  ] active_model={active_model!r} NOT loaded "
                         f"(failed or absent) — falling back to {first!r}. "
                         f"loaded: {list(self._registry)}")
+            # AFTER the primary is settled: `_set_extra` skips a name that is
+            # already the primary, and it can only know that once it is chosen.
+            self._set_extra(extra_names)
 
         else:
             # Single-model mode: load async so ROS subscriber starts immediately.

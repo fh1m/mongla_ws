@@ -2351,13 +2351,18 @@ warp of a real frame — a tracker cannot supply it, because a tracker's own
 associations are what is under test. Rank-1 = does the true match score highest
 among all same-class candidates.
 
+**The primary evidence is the cosine gap**: within-object **0.93–0.98**
+against across-object **0.65–0.82**, on every row.
+
 | displacement | rank-1 IoU | rank-1 coefficients |
 |---|---|---|
 | 4–60 px | 1.00 | 1.00 |
 | 120 px | 0.50 | **1.00** |
 | 200 px | 0.50 | **1.00** |
 
-Within-object cosine 0.93–0.98, across-object 0.65–0.82, and the gap survives
+⚠ With 2–4 same-class candidates per row, **chance is 0.50** — the same value
+IoU scores when it fails. Read the rank-1 column as beating a coin flip, not a
+strong baseline. The gap survives
 +5° rotation, ×1.15 scale, ×0.85 exposure, noise and JPEG 70 — the control
 that matters, because a pixel-identical translated copy matches trivially.
 
