@@ -12,7 +12,7 @@ import math
 import pytest
 
 from duburi_vision.pose_cluster import (
-    Fused, PoseCluster, PoseSample, _circular_median, _wrap180,
+    Fused, PoseCluster, PoseSample, _circular_median, _wrap180, slope_of,
 )
 
 
@@ -133,3 +133,92 @@ def test_spread_reports_the_width_of_the_winning_cluster():
     out = _feed(PoseCluster(min_poses=4), [10.0, 12.0, 8.0, 10.0, 11.0]).fuse()
     assert out.decided
     assert 0.0 <= out.spread_deg <= 3.0
+
+
+# --- ego-motion: the branch that MOVES right, not the one seen most ---------
+#
+# The two planar-PnP branches are mirror images about the viewing ray and each
+# frame mirrors afresh, so under a hull rotation of dpsi the true branch's pose
+# yaw moves -dpsi and the false one +dpsi. That is unit-free and does not care
+# which branch the detector reported more often -- which is exactly the case
+# that defeats "take the largest cluster".
+
+
+def _sweep(true_yaw0, hull_yaws, *, mirrored=False, t0=0.0):
+    """Frames of ONE branch through a hull rotation, as geometry dictates."""
+    out = []
+    psi0 = hull_yaws[0]
+    for i, psi in enumerate(hull_yaws):
+        true_yaw = true_yaw0 - (psi - psi0)          # board fixed in the world
+        yaw = -true_yaw if mirrored else true_yaw
+        out.append(PoseSample(t=t0 + i * 0.1, yaw_deg=yaw, vehicle_yaw_deg=psi))
+    return out
+
+
+def test_the_minority_branch_wins_when_it_moves_correctly():
+    # THE DECISIVE CASE. Seven frames of the mirrored branch, four of the true
+    # one. Counting picks the wrong answer with a clear majority; the slope
+    # picks the right one.
+    hull = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+    c = PoseCluster(min_poses=4)
+    for s in _sweep(25.0, hull, mirrored=True):
+        c.add(s)
+    for s in _sweep(25.0, hull[:4], mirrored=False, t0=1.0):
+        c.add(s)
+    out = c.fuse()
+    assert out.decided
+    assert out.rule == 'egomotion', 'counting must not be what decided this'
+    assert out.slope < 0, f'the winning branch must slope -1, got {out.slope}'
+    assert out.support == 4 and out.rival == 7, 'the MINORITY won, on evidence'
+    assert out.yaw_deg > 0, 'the true branch was at +25, the mirror at -25'
+
+
+def test_the_measured_slopes_are_minus_one_and_plus_one():
+    # The prediction is exact, so test the number and not just its sign.
+    hull = [0.0, 3.0, 6.0, 9.0, 12.0, 15.0]
+    true_slope, exc = slope_of(_sweep(20.0, hull))
+    false_slope, _ = slope_of(_sweep(20.0, hull, mirrored=True))
+    assert abs(true_slope - (-1.0)) < 1e-6
+    assert abs(false_slope - (+1.0)) < 1e-6
+    assert exc == pytest.approx(15.0)
+
+
+def test_a_station_keeping_hull_cannot_use_the_test():
+    # dpsi ~ 0: the regression would divide by nothing and return a confident
+    # number built from noise. It must decline and fall back to counting.
+    hull = [10.0, 10.1, 10.0, 9.9, 10.0, 10.1]
+    slope, exc = slope_of(_sweep(18.0, hull))
+    assert math.isnan(slope)
+    assert exc < 4.0
+
+
+def test_it_falls_back_to_support_without_a_heading_stream():
+    # No vehicle_yaw_deg at all -- an older bag, or the state topic down.
+    out = _feed(PoseCluster(min_poses=4), [30.0] * 6 + [-30.0] * 2).fuse()
+    assert out.decided and out.rule == 'support'
+    assert math.isnan(out.slope)
+
+
+def test_two_clusters_sloping_the_same_way_are_not_a_mirror_pair():
+    # Two different objects, not the fork. The mirror test says nothing here
+    # and must not be used to prefer one.
+    hull = [0.0, 3.0, 6.0, 9.0, 12.0]
+    c = PoseCluster(min_poses=3)
+    for s in _sweep(30.0, hull):
+        c.add(s)
+    for s in _sweep(-60.0, hull, t0=2.0):     # also slopes -1
+        c.add(s)
+    out = c.fuse()
+    assert out.rule == 'support'
+
+
+def test_the_rule_that_decided_is_always_reported():
+    # An operator reading a fused pose must be able to tell WHICH test produced
+    # it -- the two have very different failure modes.
+    hull = [0.0, 4.0, 8.0, 12.0, 16.0]
+    c = PoseCluster(min_poses=3)
+    for s in _sweep(22.0, hull):
+        c.add(s)
+    for s in _sweep(22.0, hull, mirrored=True, t0=3.0):
+        c.add(s)
+    assert c.fuse().rule in ('egomotion', 'support')

@@ -16,7 +16,7 @@ from __future__ import annotations
 import rclpy
 from rclpy.node import Node
 
-from duburi_interfaces.msg import TargetPose
+from duburi_interfaces.msg import DuburiState, TargetPose
 
 from duburi_vision.pose_cluster import (
     CLUSTER_TOL_DEG, MIN_POSES, WINDOW_S, PoseCluster, PoseSample,
@@ -41,10 +41,24 @@ class PoseFuseNode(Node):
         )
         self._pub = self.create_publisher(TargetPose, f'{ns}/target_pose_fused', 10)
         self.create_subscription(TargetPose, f'{ns}/target_pose', self._on_pose, 10)
+        # The hull's own heading, which is what turns counting into evidence:
+        # the true branch's pose yaw moves OPPOSITE the hull's and the mirrored
+        # one moves with it. `/duburi/state` publishes on change plus a ~1 Hz
+        # heartbeat, so the freshest value is held rather than interpolated --
+        # a pose is stamped at capture and the heading nearest it is the honest
+        # pairing until this stack has real time-synced pairing.
+        self._yaw_deg = None
+        self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
         self.get_logger().info(
             f'[FUSE ] {cam}: {ns}/target_pose -> {ns}/target_pose_fused '
             f'(window {self._cluster.window_s:.0f}s, '
             f'min {self._cluster.min_poses} agreeing)')
+
+    def _on_state(self, msg: DuburiState) -> None:
+        yaw = float(getattr(msg, 'yaw_deg', float('nan')))
+        # NaN is this stack's "missing numeric" convention, and feeding one in
+        # would poison the regression with a silent NaN slope.
+        self._yaw_deg = None if yaw != yaw else yaw
 
     def _on_pose(self, msg: TargetPose) -> None:
         # A pose the solver already disowned carries no vote. Publishing the
@@ -55,7 +69,7 @@ class PoseFuseNode(Node):
         self._cluster.add(PoseSample(
             t=t, yaw_deg=float(msg.yaw_deg), range_m=float(msg.range_m),
             ambiguity=float(msg.ambiguity), reproj_px=float(msg.reproj_px),
-            n_points=int(msg.n_points)))
+            n_points=int(msg.n_points), vehicle_yaw_deg=self._yaw_deg))
 
         out = TargetPose()
         out.header = msg.header
@@ -70,6 +84,10 @@ class PoseFuseNode(Node):
             # the width of the answer, now across frames instead of branches.
             out.n_points = int(fused.support)
             out.yaw_spread_deg = float(fused.spread_deg)
+            # WHICH test decided is not decoration: 'egomotion' survives a
+            # detector that reports the wrong branch more often, 'support' does
+            # not, and an operator reading a pose needs to know which they have.
+            out.reason = fused.rule
         else:
             out.reason = fused.reason
         self._pub.publish(out)
