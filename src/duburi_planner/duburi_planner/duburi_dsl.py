@@ -490,6 +490,21 @@ class DuburiMission:
         frame within one frame period; a stalled or just-subscribed pipeline
         times out and the caller reads no (or stale) data -> correctly absent.
         """
+        # ⛔ A QUERY IS THE FIRST PERCEPTION CALL IN MOST MISSIONS, and nothing
+        # had resumed a detector by then. `_activate_camera` is reached only
+        # from `use_camera` and the vision verbs, so `while not detected('gate')`
+        # against a launch that starts both detectors paused polls a detector
+        # that will never infer: an empty cache, forever, no error, no timeout
+        # -- the mission just searches and never finds. That is the whole reason
+        # `vision_pi.launch.py` shipped `paused:=false` against its own
+        # description, which cost ~60 Hz to chip contention instead.
+        #
+        # Resume on the FIRST query only. A later query naming the OTHER camera
+        # must NOT switch: a mission polling both would pay the 1.5 s
+        # `_CAM_SWITCH_SETTLE_S` every iteration, and a query is not a statement
+        # about which camera the mission steers on. `use_camera` still is.
+        if self._live_camera is None:
+            self._activate_camera(camera)
         node = self.client.node
         start = _time.monotonic()
         budget = self._PUMP_WARM_S if camera in self._det_warm else self._PUMP_COLD_S
