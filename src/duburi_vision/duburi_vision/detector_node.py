@@ -60,7 +60,7 @@ _INFER_FAIL_REBUILD = 15
 _INFER_FAIL_EXIT = 45
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
-from typing import Dict, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional
 
 import rclpy
 from rclpy.node import Node
@@ -110,6 +110,24 @@ def _is_unset(name, value) -> bool:
     if isinstance(s, str):
         return str(value).strip().lower() == s
     return value == s
+
+
+def _split_active(spec: str):
+    """`active_model` -> (primary, [secondaries]).
+
+    ONE param, not two, and comma-separated rather than a second
+    `extra_models` key. Two params cannot be set atomically, so a mission
+    switching from `a` to `b,c` would pass through a tick where the primary is
+    already `b` while the secondary list still says the old model -- a frame
+    detected with the wrong pair, and nothing would log it. A single CSV
+    changes the whole selection in one `SetParameters` call.
+
+    No comma is byte-for-byte the behaviour that shipped before this existed.
+    """
+    parts = [p.strip() for p in str(spec or '').split(',') if p.strip()]
+    if not parts:
+        return '', []
+    return parts[0], parts[1:]
 
 
 def _parse_models_param(s: str) -> Dict[str, str]:
@@ -494,6 +512,18 @@ class DetectorNode(Node):
                 _DIRECT_FALLBACK_S, self._check_direct_feed)
         self._pub_det      = self.create_publisher(
             Detection2DArray, f'{ns_out}/detections', qos.DETECTIONS)
+        # OUTLINES, on the same stamp as the detections beside them. Built for
+        # every detection, box or mask alike -- see TargetContours.msg for why
+        # the two are one message. Optional: a workspace without
+        # duburi_interfaces built keeps detecting.
+        self._pub_contours = None
+        try:
+            from duburi_interfaces.msg import TargetContours
+            self._pub_contours = self.create_publisher(
+                TargetContours, f'{ns_out}/contours', qos.DETECTIONS)
+        except Exception as exc:                            # noqa: BLE001
+            self.get_logger().warning(
+                f'[DET  ] no {ns_out}/contours topic: {exc!r}')
         # LATCHED: the HUD and the console both join AFTER the detector and
         # must still learn the allowlist. This topic being VOLATILE is exactly
         # why the console polls `get_parameters` for `classes` instead.
@@ -588,6 +618,72 @@ class DetectorNode(Node):
         # until the first switch.
         self._publish_vision_info()
 
+    # ------------------------------------------------------------------ #
+    #  Running more than one model on the same frame
+    # ------------------------------------------------------------------ #
+    def _set_extra(self, names) -> List[str]:
+        """Resolve the SECONDARY models -- the ones run beside the primary.
+
+        ⛔ WHY A SECONDARY LIST AND NOT A PLURAL `self._det`. Everything that
+        makes a model "the" model -- the class allowlist, `vision_info`, the
+        alignment line, the debug overlay's model tag -- is written against a
+        single active detector in eighteen places. Pluralising that would turn
+        a wiring change into a rewrite of the node's identity handling, and
+        every one of those eighteen would then have to decide what "the model"
+        means when there are two. The primary keeps its meaning; the extras
+        only contribute detections.
+
+        A key that does not resolve is dropped with a LOUD error rather than
+        refused, for the same reason the registry tolerates a model whose
+        weights are missing: losing the second model must not cost the run.
+        """
+        self._extra = []
+        self._extra_names = []
+        for name in names:
+            key = self._resolve_model_key(name)
+            if key is None or self._registry.get(key) is None:
+                self.get_logger().error(
+                    f"[DET  ] active_model names {name!r} as a second model "
+                    f"and it is not loaded -- running without it. keys="
+                    f"{sorted(self._registry)}")
+                continue
+            if key == self._active_name:
+                continue           # naming the primary twice is not two models
+            self._extra.append(self._registry[key])
+            self._extra_names.append(key)
+        if self._extra_names:
+            self.get_logger().warning(
+                f"[DET  ] running {1 + len(self._extra_names)} models on every "
+                f"frame: {self._active_name!r} + {self._extra_names}. The chip "
+                f"runs one graph at a time and each handover costs ~4 ms, so "
+                f"the frame rate is the SUM plus the swaps -- measured 37.5 Hz "
+                f"per pair against 95 Hz for one. Deliberate, not free.")
+        return self._extra_names
+
+    def _merge_extra(self, frame, detections: list) -> list:
+        """Run each secondary model on the same frame and merge the results.
+
+        ⛔ CLASS IDS ARE REMINTED FROM LABELS WHEN MODELS ARE MERGED, and only
+        then. Two models each number their own classes from zero, so
+        `gate`(0) from one and `person`(0) from the other collide in-process --
+        the debug palette gives them one colour and any consumer that keys on
+        the integer merges two classes. `class_index` is the same label->id
+        table the wire round-trip already uses, so the merged ids agree with
+        what a subscriber will mint. The single-model path does not go through
+        here and is byte-identical to before.
+        """
+        if not self._extra:
+            return detections
+        from .detection.messages import remint_class_ids
+        out = list(detections)
+        for det in self._extra:
+            try:
+                out.extend(det.infer(frame))
+            except Exception as exc:                        # noqa: BLE001
+                self.get_logger().warning(
+                    f"[DET  ] secondary model failed on this frame: {exc!r}")
+        return remint_class_ids(out)
+
     def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, max_det, allowlist):
         """Background thread: load the detector, then go live. Node subscribes before this runs."""
         # Kept so a recovery can rebuild through THIS path rather than a second
@@ -645,8 +741,13 @@ class DetectorNode(Node):
         m = VisionInfo()
         m.header.stamp = self.get_clock().now().to_msg()
         m.method = 'yolo'
-        m.database_location = str(self._active_name or
-                                  self._single_model_name or '')
+        # Every model that is actually running, primary first. A consumer
+        # attributing a detection to "the model" when two are live would
+        # attribute half of them to the wrong one, so the field names both --
+        # the same comma form `active_model` accepts.
+        names = [str(self._active_name or self._single_model_name or '')]
+        names += list(getattr(self, '_extra_names', []) or [])
+        m.database_location = ','.join(n for n in names if n)
         self._model_epoch += 1
         m.database_version = int(self._model_epoch)
         self._pub_vinfo.publish(m)
@@ -860,6 +961,7 @@ class DetectorNode(Node):
                 infer_frame, crop_state = self._crop.apply(frame)
             try:
                 detections = det.infer(infer_frame)
+                detections = self._merge_extra(infer_frame, detections)
                 self._infer_fails = 0
             except Exception as exc:
                 self._on_infer_failure(exc)
@@ -905,6 +1007,22 @@ class DetectorNode(Node):
                 self._pub_det.publish(det_msg)
             except Exception:
                 return  # node being destroyed; exit thread cleanly
+
+            if self._pub_contours is not None and detections:
+                # Built from the SAME list on the SAME header, so a consumer
+                # can pair them by stamp and index without a second lookup.
+                try:
+                    from duburi_vision.detection.messages import (
+                        detections_to_contours)
+                    h, w = frame.shape[:2]
+                    self._pub_contours.publish(detections_to_contours(
+                        detections, header, camera=self._cam_name,
+                        width=w, height=h))
+                except Exception as exc:                    # noqa: BLE001
+                    # An outline is evidence, not control. Losing it must never
+                    # cost the detection that is steering the vehicle.
+                    self.get_logger().warning(
+                        f'[DET  ] contour publish failed: {exc!r}', once=True)
 
             # Skip the overlay render + encode + publish entirely when no one is
             # subscribed to image_debug (autonomous runs with viewer:=false). This
@@ -1021,6 +1139,7 @@ class DetectorNode(Node):
                                 f"{self._single_model_name!r}; cannot switch to "
                                 f"{name!r} live -- relaunch with model:={name} (or "
                                 f"models:=... for hot switching)"))
+                name, extra_names = _split_active(name)
                 key = self._resolve_model_key(name)
                 if key is None:
                     return SetParametersResult(
@@ -1030,10 +1149,12 @@ class DetectorNode(Node):
                                 f"{sorted(self._stem_to_key)}"))
                 self._det = self._registry[key]
                 self._active_name = key
+                self._set_extra(extra_names)
                 self._publish_vision_info()
                 self.get_logger().info(
                     f"[DET  ] active_model → {key!r}"
-                    + (f" (via stem {name!r})" if key != name else ""))
+                    + (f" (via stem {name!r})" if key != name else "")
+                    + (f" + {self._extra_names}" if self._extra_names else ""))
 
             elif p.name == 'paused':
                 state = 'paused' if p.value else 'resumed'
