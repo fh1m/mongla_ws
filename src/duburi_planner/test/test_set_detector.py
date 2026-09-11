@@ -154,3 +154,36 @@ def test_side_on_is_unknown_when_the_symbol_is_not_on_the_structure():
 
 def test_side_on_with_no_frame_is_unknown():
     assert DuburiMission.side_on(_side_fake([]), 'rescue') == 'unknown'
+
+
+# --- a duplicate node name makes a parameter write a coin flip --------------
+
+
+def _graph(names):
+    m = MagicMock()
+    m.client.node.get_node_names.return_value = names
+    return m
+
+
+def test_a_duplicated_node_name_refuses_the_write():
+    fake = _graph(['duburi_tracker_forward'] * 10 + ['duburi_manager'])
+    with pytest.raises(RuntimeError) as exc:
+        DuburiMission._refuse_duplicate_node(fake, '/duburi_tracker_forward')
+    assert '10 nodes' in str(exc.value)
+
+
+def test_a_single_node_is_fine():
+    fake = _graph(['duburi_tracker_forward', 'duburi_manager'])
+    DuburiMission._refuse_duplicate_node(fake, '/duburi_tracker_forward')
+
+
+def test_an_unreadable_graph_does_not_block_a_legitimate_write():
+    fake = MagicMock()
+    fake.client.node.get_node_names.side_effect = RuntimeError('discovery hiccup')
+    DuburiMission._refuse_duplicate_node(fake, '/duburi_tracker_forward')
+
+
+def test_the_leading_slash_is_not_what_makes_them_different():
+    fake = _graph(['/duburi_tracker_forward', 'duburi_tracker_forward'])
+    with pytest.raises(RuntimeError):
+        DuburiMission._refuse_duplicate_node(fake, 'duburi_tracker_forward')
