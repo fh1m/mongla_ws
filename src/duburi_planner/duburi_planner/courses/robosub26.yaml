@@ -1,0 +1,57 @@
+# RoboSub 2026 course prior — WHERE the props are, not what they look like.
+#
+# ⛔ EVERY POSITION HERE IS UNSET, AND THAT IS THE SHIPPED STATE.
+# We have not measured a RoboSub pool. A course file with plausible-looking
+# coordinates would dead-reckon the vehicle to a place nobody measured, and it
+# would do it confidently -- the exact defect class this stack keeps finding.
+# So the file ships with the STRUCTURE and none of the numbers: the loader
+# refuses for any prop whose position is unset, and a mission falls back to
+# searching, which is what it does today anyway.
+#
+# Fill these in at the venue, WITHOUT a colcon build:
+#
+#     ~/.duburi/courses/robosub26.yaml      picked up with no env var
+#     DUBURI_COURSE_DIR=~/my_courses        a directory of course files
+#
+# Deck first, package last: a course re-measured at the venue must beat one
+# committed months earlier.
+#
+# ⛔ FRAME, STATED ONCE. +x runs along the course and is bearing 0. +y is to
+# the right of it and is bearing 90. `depth_m` is NEGATIVE below the surface,
+# matching every other depth in this stack. `bearing_deg` is the compass
+# direction the prop's FACE points -- the same number `anchor_heading()` needs,
+# which is why it lives here and not in two places.
+
+course: robosub26
+frame: "pool: +x along the course (bearing 0), +y to its right (bearing 90)"
+
+props:
+  gate:
+    detect_class: gate
+    measured: false
+    note: "RoboSub 2026 gate. Bearing is the direction the gate FACE points,
+           i.e. the way a vehicle passes through it. Set it and the gate
+           becomes this course's heading reference."
+
+  slalom:
+    detect_class: red_pipe
+    measured: false
+    note: "Three pipe layers. The prior gets us into detection range; the
+           offset transit is perception's job."
+
+  bin:
+    detect_class: bin
+    measured: false
+    note: "Downward camera task. depth_m is the transit depth, not the drop
+           depth -- the descent is a vision axis."
+
+  torpedo:
+    detect_class: torpedo
+    measured: false
+    note: "Board face bearing matters twice here: to approach from the front,
+           and because a board with a known face is a heading anchor after the
+           shot -- which is how BumblebeeAS re-zero their yaw."
+
+  octagon:
+    detect_class: octagon
+    measured: false
