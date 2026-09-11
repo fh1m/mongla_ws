@@ -897,3 +897,73 @@ returns nothing posts a beautiful frame rate otherwise.
 interoperate — and worse than "unsupported", a Jazzy `ros2 topic list` can drive
 a Humble subscriber out of memory (`ros2/rmw_fastrtps#797`). Deliberately left
 open until the numbers justified going further. They now do.
+---
+
+## Segmentation: the decode never leaves the quantised domain
+
+*Measured on the vehicle 2026-09-11, HailoRT 4.24, HAILO8, `yolov8n_seg`
+640×640. Code: `duburi_vision/detection/seg_decode.py` and
+`HailoSegDetector`.*
+
+A public Model Zoo `*_seg.hef` has **no on-chip NMS and no post-process at
+all**. Ten uint8 tensors come off the chip — per scale a 64-channel DFL box
+head, an 80-channel class head and a 32-channel mask-coefficient head, plus one
+160×160×32 prototype — and the host does everything. Measured with a
+conventional decode that cost **31.5 ms** against **6.28 ms** of inference, and
+the conclusion drawn from it was that segmentation is host-bound and needs a
+3-class model for CPU reasons.
+
+**That conclusion is overturned.** Two thresholds in the decode commute with
+the quantisation, so neither tensor ever has to become float:
+
+* The class heads come off at **zp = 0, scale = 0.00392157 = 1/255**. That is
+  not arbitrary — it means the sigmoid is baked into the graph and the byte IS
+  the confidence. Dequantisation is affine with a positive scale, hence
+  monotone, hence `dequant(u8) >= conf` and `u8 >= ceil(conf·255)` select the
+  **same cells, exactly**. 672,000 float conversions deleted, bit-exact.
+* A mask is `sigmoid(proto · coeff) >= 0.5`, i.e. `proto · coeff >= 0`, and the
+  dot product is **linear**, so the zero point folds into the threshold:
+  `u8 · c >= zp · Σc`. The 160×160×32 prototype never becomes float and the
+  exp is never computed.
+
+| host decode | 80 classes | 3 classes (gated) |
+|---|---|---|
+| boxes only | **0.93 ms** | **0.62 ms** |
+| with masks, **6 detections** | **2.98 ms** | 2.68 ms |
+
+⚠ **Class gating now buys 0.3 ms, not 26.** A model trained on our classes is
+still wanted — for **accuracy**, because a COCO head will never fire on a gate
+or a bin — but the CPU argument for it is gone. Do not repeat it to the team.
+
+End to end through `make_detector`, bus.jpg, on the vehicle:
+
+| arrangement | rate |
+|---|---|
+| seg alone, with masks | 77.1 Hz |
+| seg alone, boxes only | 103.5 Hz |
+| `gate_rescue_repair` alone | 85.4 Hz |
+| both alternating every frame | 32.6 Hz per pair |
+| `gate_rescue_repair` **after** the swaps | 85.4 Hz |
+
+The last row is the one that answers "does segmentation slow the pipeline
+down": **no.** A resident, swapping seg model leaves the detection path at the
+rate it had alone. Three groups configure together and the process exits **0**
+— checked as an exit status, not as a print before exit, because `close()`
+deliberately never releases the VDevice.
+
+**Correctness is verified against ultralytics, not reasoned about.** The same
+image through `yolov8n-seg.pt` on the dev box and through the HEF on the chip:
+**6 detections of 6**, same classes, boxes within INT8 noise (≈2–5 px), mask
+areas within 0.2 %. A transposed DFL read or a swapped letterbox pad produces
+boxes that are plausible and wrong, and nothing raises.
+
+**Where the host time goes now.** Boxes-only is 9.66 ms end to end against
+6.28 ms of chip and 0.93 ms of decode. The remaining ~2.4 ms is **letterbox and
+buffer copy** — preprocessing, not decode. That is the next thing to attack, if
+anything needs attacking.
+
+**Routing.** `emits_raw_heads()` decides which backend loads a `.hef` by
+**output count** — one output means the NMS ran on-chip, more than one means a
+raw head. Not by file name: a name convention puts the two decodes one typo
+apart, and an NMS decode of a raw head reads convolution activations as box
+coordinates without raising.

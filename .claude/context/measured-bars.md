@@ -2288,3 +2288,34 @@ push `solve_planar_motion` into its `only N tracked points, need min_points`
 refusal, that refusal is the trigger to reconsider — and the reconsideration
 must start from the bench table above, which says the replacement is 7× slower
 and breaks under rotation.
+
+---
+
+## Hailo segmentation decode (2026-09-11, vehicle, `yolov8n_seg` 640×640)
+
+| quantity | measured | conditions | bar |
+|---|---|---|---|
+| chip inference | 6.28 ms | HAILO8, HailoRT 4.24, Single Context | — |
+| host decode, boxes only | **0.93 ms** | 80 classes, no gating | — |
+| host decode, boxes only | 0.62 ms | gated to 3 classes | — |
+| host decode, with masks | **2.98 ms** | **6 detections**, 80 classes | — |
+| end to end, with masks | 12.7 ms (77.1 Hz) | 6 detections, incl. letterbox | ≥ 30 Hz |
+| end to end, boxes only | 9.66 ms (103.5 Hz) | 80 classes | ≥ 30 Hz |
+| detection path, seg resident | **85.4 Hz** | identical to seg-absent | no regression |
+
+⚠ **Mask cost is LINEAR in detection count and the figures above are SIX
+detections.** Measured on the same frame: 1 detection 10.2 ms end to end,
+6 detections 12.5 ms, i.e. ≈0.45 ms per mask on this image. `max_det` defaults
+to 100, so a cluttered scene costs proportionally more. Never quote 2.98 ms
+without the count.
+
+**Why these are so far below the earlier 31.5 ms:** the decode is done in the
+quantised domain. The class head is already a probability (zp 0, scale 1/255)
+and both the class threshold and the mask threshold commute with the affine
+dequantisation, so the comparison is exact on raw bytes. Reasoning and
+injection-verified tests: `detection/seg_decode.py`,
+`test/test_seg_decode.py`, `.claude/context/hailo-vision.md`.
+
+**Retracted by this measurement:** "80 COCO classes cost 58× what 3 do, so the
+seg model must be ours for CPU reasons." Gating buys 0.3 ms. The accuracy
+argument for our own classes stands; the CPU one does not.

@@ -30,6 +30,14 @@ _MODELS = os.path.join(_PKG, 'models')
 # checkpoint (80 classes of person/car/dog); the `*sim*` stems are simulator
 # models, and the whole point of the sim-vs-handbook rule is that we do not
 # take prop sizes from the simulator.
+#
+# ⛔ THIS LIST IS A LEGACY FALLBACK, NOT THE MECHANISM. A stem named here is
+# excused by editing the TEST, which is the exact move the census exists to
+# prevent -- `no_published_dimension` lives beside the number for that reason.
+# The mechanism is `competition: false` in the sidecar itself: the exclusion
+# then travels with the model and a new model cannot be waved through from
+# here. The three stems below keep their entry because two of them are
+# deliberately untracked files this repo does not edit.
 _NOT_COMPETITION = ('yolov11n', 'sauvc_sim', 'sim_sauvc_v1')
 
 
@@ -63,7 +71,10 @@ def _shipped_classes():
     for stem, text in _sidecar_texts().items():
         if stem in _NOT_COMPETITION:
             continue
-        names = (yaml.safe_load(text) or {}).get('names') or {}
+        data = yaml.safe_load(text) or {}
+        if data.get('competition') is False:
+            continue
+        names = data.get('names') or {}
         if names:
             out[stem] = [str(v).strip() for v in names.values()]
     return out
