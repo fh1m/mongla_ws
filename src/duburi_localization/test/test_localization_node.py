@@ -15,6 +15,14 @@ from duburi_localization import localization_node as ln
 from duburi_localization.inekf import RIEKF, State
 
 
+class _NullLogger:
+    def info(self, *_a, **_k):
+        pass
+
+    def warning(self, *_a, **_k):
+        pass
+
+
 class _Stamp:
     def __init__(self, t):
         self.sec = int(t)
@@ -57,6 +65,10 @@ def _node():
     obj._zupt_enabled = True
     obj._still = deque(maxlen=ln.STILL_WINDOW)
     obj._last_flow_t = 0.0
+    obj._attitude_seeded = False
+    # The node genuinely logs on the seed path; give the stub a sink rather
+    # than removing the log, which is operator-facing.
+    obj.get_logger = lambda: _NullLogger()
     obj._flow_sigma = 0.05
     obj._depth_sigma = 0.02
     obj._yaw_sigma_deg = 2.0
@@ -373,3 +385,41 @@ def test_a_missing_flow_covariance_falls_back_not_to_zero():
     n._on_flow(t)
     assert n._n['flow'] == 1
     assert np.all(np.isfinite(n._filter.P))
+
+
+def test_the_first_attitude_is_ADOPTED_not_corrected_into():
+    """An estimator with no prior information should take the first
+    measurement, not argue with it.
+
+    Measured on the vehicle: starting at identity against a hull at -168.3 deg
+    cost 345 rejected measurements, one gate-lockout break, and 0.9 m of
+    position error laid down during the transient -- which never goes away,
+    because nothing observes horizontal position until a fix arrives.
+    """
+    n = _node()
+    n._filter.rejected = 0
+    R_true = _R_pitch(0.0)
+    yaw = math.radians(-168.3)
+    R_true = np.array([[math.cos(yaw), -math.sin(yaw), 0.0],
+                       [math.sin(yaw), math.cos(yaw), 0.0],
+                       [0.0, 0.0, 1.0]])
+    qw, qx, qy, qz = ln._quat_from_R(R_true)
+    a_body = R_true.T @ np.array([0.0, 0.0, 9.80665])
+
+    def sample(tt):
+        m = _Imu(tt, accel=tuple(a_body))
+        m.orientation.w, m.orientation.x = qw, qx
+        m.orientation.y, m.orientation.z = qy, qz
+        return m
+
+    t = 100.0
+    n._on_imu(sample(t))
+    t += 0.02
+    n._on_imu(sample(t))
+    # One step in, the filter already holds the hull's real heading.
+    assert n._filter.X.yaw_deg() == pytest.approx(-168.3, abs=0.5)
+    for _ in range(500):
+        t += 0.02
+        n._on_imu(sample(t))
+    assert n._filter.rejected == 0, f'{n._filter.rejected} rejects from a seed'
+    assert np.linalg.norm(n._filter.X.p[:2]) < 0.05

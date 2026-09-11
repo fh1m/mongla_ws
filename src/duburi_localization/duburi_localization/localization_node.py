@@ -90,6 +90,7 @@ class LocalizationNode(Node):
                    'fix': 0, 'zupt': 0, 'gap': 0}
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
+        self._attitude_seeded = False
 
         cam = str(self.declare_parameter('flow_camera', 'downward').value)
         self._flow_sigma = float(self.declare_parameter('flow_sigma', 0.05).value)
@@ -178,10 +179,27 @@ class LocalizationNode(Node):
         # one -- it would be better to diverge visibly than to converge to a
         # number nobody measured.
         if msg.orientation_covariance[0] >= 0.0:
+            R_meas = _R_from_quat(msg.orientation.w, msg.orientation.x,
+                                  msg.orientation.y, msg.orientation.z)
+            if not self._attitude_seeded:
+                # ⛔ THE FIRST ATTITUDE IS AN INITIALISATION, NOT A CORRECTION.
+                # The filter starts at identity; the board starts wherever the
+                # hull is pointing. Measured on the vehicle at -168.3 deg of
+                # yaw, correcting into that from identity produced 345
+                # rejected measurements, one gate-lockout break, and 0.9 m of
+                # position error laid down during the transient -- error that
+                # never goes away, because nothing observes horizontal
+                # position until a fix arrives.
+                #
+                # An estimator with no prior information should ADOPT the
+                # first measurement, not argue with it.
+                self._attitude_seeded = True
+                self._filter.X.R = R_meas
+                self.get_logger().info(
+                    f'[LOCAL] seeded attitude from the board: '
+                    f'yaw {self._filter.X.yaw_deg():+.1f} deg')
             self._filter.update_attitude(
-                _R_from_quat(msg.orientation.w, msg.orientation.x,
-                             msg.orientation.y, msg.orientation.z),
-                sigma_deg=self._attitude_sigma_deg)
+                R_meas, sigma_deg=self._attitude_sigma_deg)
             self._n['att'] += 1
 
         # Stationarity evidence for the ZUPT, kept per sample. |a| rather than
