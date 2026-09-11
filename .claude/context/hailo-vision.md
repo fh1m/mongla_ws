@@ -1039,11 +1039,28 @@ refusal and not a bug.
 
 From the DSL it is the same value widened: `duburi.use(['a', 'b'])`.
 
-⚠ **A non-interactive `ssh` session on this Pi cannot see ROS topics.**
-`ros2 topic hz` reports "does not appear to be published yet" for
-`camera_info` and `image_raw` as well as for `detections` and `contours`,
-while the node logs 492 live detections — so it is DDS discovery in that
-session, not the pipeline, and it is not specific to anything added here. Live
-topic checks need an interactive session or a node started from the same
-shell; in-process verification and the launch log are what a remote session
-can actually establish.
+**Verified LIVE on the topic**, not only in process:
+
+    /duburi/vision/forward/detections   14.99 Hz
+    /duburi/vision/forward/contours     15.09 Hz
+
+and a plain `rclpy` subscriber reads a real message — `camera='forward'`,
+`640x360`, one `repair` contour, 4 points, `angle_deg = -1` because a
+detection model carries no orientation — with the `offset` N+1 invariant and
+the in-frame bounds holding on the wire.
+
+⛔ **RETRACTED: an earlier version of this note claimed "a non-interactive ssh
+session on this Pi cannot see ROS topics".** That was written from ONE failed
+check and it is false — the rates above were taken from exactly such a
+session. The real trap is narrower and worth knowing, because it looks
+identical to a dead topic:
+
+* `ros2 topic hz` works on any topic, because it subscribes RAW and never
+  needs the message type.
+* `ros2 topic echo` needs to resolve the type through the CLI daemon, and on a
+  freshly-added custom message it can answer **"does not appear to be
+  published yet / Could not determine the type"** about a topic publishing at
+  15 Hz. `ros2 daemon stop` and `ros2 topic list -t` clear the cache.
+
+So a silent `echo` is not evidence of a silent publisher. Check `hz` first, and
+confirm contents with an `rclpy` subscriber rather than the CLI.
