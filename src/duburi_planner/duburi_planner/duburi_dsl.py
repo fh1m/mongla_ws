@@ -1324,6 +1324,7 @@ class DuburiMission:
         'tracker':  'duburi_tracker_{cam}',
         'lock':     'duburi_lock_{cam}',
         'pnp':      'duburi_pnp_{cam}',
+        'posefuse': 'duburi_pose_fuse_{cam}',
         'flow':     'duburi_flow_velocity',      # one node, not per camera
         'manager':  'duburi_manager',            # ditto
     }
