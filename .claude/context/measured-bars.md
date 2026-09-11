@@ -2324,3 +2324,22 @@ injection-verified tests: `detection/seg_decode.py`,
 **Retracted by this measurement:** "80 COCO classes cost 58× what 3 do, so the
 seg model must be ours for CPU reasons." Gating buys 0.3 ms. The accuracy
 argument for our own classes stands; the CPU one does not.
+
+## Dense-field motion estimation (2026-09-11, vehicle, 300 pairs)
+
+`heading_down_test_vid.mp4`, real downward camera, against the shipped
+Shi-Tomasi + LK + `solve_planar_motion` RANSAC similarity fit on identical
+frame pairs. Agreement with that path, not with ground truth.
+
+| field + estimator | 2-D median error | wall cost / pair |
+|---|---|---|
+| Hailo mask prototype, 32-ch L2, phaseCorrelate | 1.034 px | 14.75 ms (6.28 on chip) |
+| **plain grey at 160×160, phaseCorrelate** | 1.413 px | **1.551 ms** |
+| reference: LK + RANSAC similarity | — | 11.89 ms |
+
+**The prototype-as-free-descriptor hypothesis is disproved by its own
+control**: 0.38 px better for 9.5× the wall time. ⚠ Phase correlation is
+TRANSLATION ONLY and this clip has median |image rotation| 0.270°, max 0.970°
+— the rotation limitation is untested, not cleared. Do not treat the 1.551 ms
+figure as a replacement for the similarity fit, which also returns yaw rate
+and scale rate.
