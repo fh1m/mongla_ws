@@ -251,6 +251,23 @@ def _kill_text(kill) -> str:
     return 'ENGAGED' if kill else 'clear'
 
 
+def _quat_from_rpy(roll: float, pitch: float, yaw: float):
+    """(w, x, y, z) from intrinsic Z-Y-X Euler angles in radians.
+
+    ATTITUDE is MAVLink's aerospace convention and this is its standard
+    conversion. Written out rather than pulled from tf_transformations, which
+    is not a dependency of this package and would be a new one for nine lines
+    of trigonometry.
+    """
+    cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
+    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+    return (cr * cp * cy + sr * sp * sy,
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy)
+
+
 class AUVManagerNode(Node):
     def __init__(self):
         super().__init__('duburi_manager')
@@ -1700,10 +1717,30 @@ class AUVManagerNode(Node):
         msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z = imu['gyro']
         (msg.linear_acceleration.x, msg.linear_acceleration.y,
          msg.linear_acceleration.z) = imu['accel']
-        # -1 in element 0 is the ROS convention for "this field carries no
-        # data". The board sends no orientation covariance and inventing one
-        # would let a consumer weight it.
-        msg.orientation_covariance[0] = -1.0
+        # THE BOARD'S OWN ATTITUDE, and this is the whole point of the split.
+        # It fuses the BNO085 at 500 Hz with the sensor on its own I2C bus and
+        # holds heading to under 0.01 deg/min at rest (measured). Propagating
+        # attitude again on the companion, from a gyro arriving at 50 Hz over a
+        # serial link with nothing aiding it, is strictly worse -- and measured
+        # on the vehicle it DIVERGED: an unaided inertial solution grows
+        # through the gravity coupling, and the depth update's gain then pumps
+        # that error into x and y. 7.1e6 m in 35 s.
+        #
+        # So the board owns attitude and the companion owns position. -1 in
+        # element 0 stays the ROS "no data" convention for a board that cannot
+        # supply it; the variance is the BNO's datasheet drift, not a guess
+        # dressed as one.
+        rpy = imu.get('rpy')
+        if rpy is None:
+            msg.orientation_covariance[0] = -1.0
+        else:
+            qw, qx, qy, qz = _quat_from_rpy(*rpy)
+            msg.orientation.w, msg.orientation.x = qw, qx
+            msg.orientation.y, msg.orientation.z = qy, qz
+            var = math.radians(0.5) ** 2
+            msg.orientation_covariance[0] = var
+            msg.orientation_covariance[4] = var
+            msg.orientation_covariance[8] = var
         self.imu_publisher.publish(msg)
 
     def _effective_yaw_deg(self, attitude):

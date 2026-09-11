@@ -10,13 +10,28 @@ anyway. Potokar et al., RA-L 2021, show it directly for underwater navigation
 with our sensor set: IMU plus body-frame velocity, with depth as a singleton
 measurement.
 
-⛔ THE ONE DESIGN DECISION, TAKEN DELIBERATELY: RIGHT-INVARIANT. The invariance
-must match the measurement model. Of our five sources, three are body-frame --
-flow velocity, learned velocity, camera bearings -- and two are world-frame:
-depth and the landmark heading anchor. Three of five body-frame means
-right-invariant, and depth and heading are then "imperfect" measurements whose
-log-linearity is approximate. That is a known, accepted approximation, not an
-oversight.
+⛔ HANDEDNESS: RIGHT-INVARIANT -- AND THE ORIGINAL REASON WRITTEN HERE WAS
+WRONG, so it is corrected rather than quietly deleted. This paragraph used to
+argue "three of our five measurements are body-frame, therefore right-
+invariant". The convention runs the other way: a BODY-frame observation (DVL
+or flow velocity) is the exact one for the LEFT-invariant form, and a
+WORLD-frame observation (GPS, a pool position fix) is exact for the RIGHT.
+
+What actually settles it is that the distinction matters less than the
+argument assumed. Recent work shows the left and right IEKF are the same
+algorithm when the error reset is applied consistently, so handedness is not
+the performance decision it is often presented as. What this filter does keep
+is the property that pays: the correction is injected on the LEFT
+(`dX * X`, see `_inject`), biases are carried additively OUTSIDE the
+exponential, and `A[3:6,0:3] = skew(GRAVITY)` couples attitude error into
+velocity error. All three match RossHartley/invariant-ekf, the reference C++
+implementation, line for line.
+
+So: every measurement here except the exact body-velocity form is "imperfect"
+in the strict sense, which is a known and accepted approximation -- Potokar et
+al. say the same of depth as a singleton. It is not an oversight, and it is
+also not the carefully-reasoned frame-counting decision this file used to
+claim.
 
 ⛔ AND THE TRAP THE LITERATURE NAMES. Autonomous error propagation survives ONLY
 IF VELOCITY IS HELD IN THE WORLD FRAME. Store body velocity instead and
@@ -113,6 +128,28 @@ class State:
                      self.bg.copy(), self.ba.copy())
 
 
+# Chi-square 99th percentile by degrees of freedom. Only the dimensions this
+# filter actually uses are listed, so a new measurement of an unlisted width
+# raises a KeyError instead of silently picking a wrong threshold.
+CHI2_99 = {1: 6.635, 2: 9.210, 3: 11.345}
+
+# ⛔ THE GATE'S OWN FAILURE MODE, and it is worse than no gate.
+# A filter that has become CONFIDENTLY WRONG rejects every measurement that
+# disagrees with it -- and the more wrong it is, the larger the innovation and
+# the more certain the rejection. It locks itself out of the one channel that
+# could correct it and goes on publishing a tight covariance around a false
+# position, for ever, with no error anywhere.
+#
+# So persistent disagreement is evidence about the FILTER, not the sensor. On
+# a run of consecutive rejections the estimate stops being trusted: the gate
+# is bypassed once and the covariance inflated, which lets the measurement
+# back in and widens the gate for what follows. Five is roughly a second of
+# our slowest channel -- long enough that noise does not trip it, short enough
+# that a lockout does not survive a manoeuvre.
+REJECT_STREAK_LIMIT = 5
+REJECT_INFLATION = 4.0
+
+
 class RIEKF:
     """Right-invariant EKF. Predict on IMU, update on what the vehicle can see.
 
@@ -137,6 +174,12 @@ class RIEKF:
             np.full(3, sigma_gyro ** 2), np.full(3, sigma_accel ** 2),
             np.zeros(3),
             np.full(3, sigma_gyro_bias ** 2), np.full(3, sigma_accel_bias ** 2)]))
+        # Published, because a filter that silently discards half its
+        # measurements looks identical to one that is merely drifting.
+        self.accepted = 0
+        self.rejected = 0
+        self.reject_streak = 0
+        self.lockout_breaks = 0
 
     # ── propagation ──────────────────────────────────────────────────────────
     def predict(self, gyro, accel, dt: float) -> None:
@@ -183,7 +226,7 @@ class RIEKF:
         return Q
 
     # ── updates ──────────────────────────────────────────────────────────────
-    def update_body_velocity(self, v_body, sigma: float = 0.05) -> None:
+    def update_body_velocity(self, v_body, sigma: float = 0.05) -> bool:
         """The flow DVL: velocity measured in the BODY frame.
 
         Right-invariant and exact for this filter, which is why the handedness
@@ -194,9 +237,48 @@ class RIEKF:
         H[:, 3:6] = self.X.R.T
         H[:, 0:3] = self.X.R.T @ skew(self.X.v)
         y = z - self.X.R.T @ self.X.v
-        self._apply(H, y, np.eye(3) * (sigma ** 2))
+        return self._apply(H, y, np.eye(3) * (sigma ** 2))
 
-    def update_depth(self, depth_m: float, sigma: float = 0.02) -> None:
+    def update_body_velocity_xy(self, vx: float, vy: float,
+                                var_x: float, var_y: float) -> bool:
+        """Downward optical flow: body x and y ONLY.
+
+        ⛔ A BOTTOM-LOOKING CAMERA CANNOT MEASURE VERTICAL VELOCITY, and the
+        flow node says so -- it marks `twist.covariance[14]` as -1.0, the ROS
+        convention for an unobserved component. Passing its `linear.z` (which
+        is 0.0, because nothing set it) into the 3-D update states that the
+        vehicle is not moving vertically, at full confidence, and that fights
+        the depth channel on every dive.
+
+        The variances are the flow node's OWN, derived per sample from the
+        standard error of the mean over its RANSAC inliers -- a textured floor
+        and a bare one do not deserve the same weight, and a constant sigma
+        here would throw that away.
+        """
+        H = np.zeros((2, self.DIM))
+        R_T = self.X.R.T
+        H[:, 3:6] = R_T[:2, :]
+        H[:, 0:3] = (R_T @ skew(self.X.v))[:2, :]
+        y = np.array([vx, vy]) - (R_T @ self.X.v)[:2]
+        return self._apply(H, y, np.diag([var_x, var_y]))
+
+    def update_zero_velocity(self, sigma: float = 0.02) -> bool:
+        """ZUPT: the vehicle is stationary, so body velocity is exactly zero.
+
+        Cheap and strong. With no aiding, velocity error integrates into
+        position without bound; a stationary interval turns that into a direct
+        observation of the accumulated error, and the standard result is that
+        it keeps INS error growth linear instead of quadratic.
+
+        This is worth having precisely when flow is NOT available -- flow
+        already measures zero when the hull is still. The caller owns the
+        stationarity test, because getting that wrong is how a ZUPT ruins a
+        filter: declaring "still" during a slow constant-velocity transit
+        removes real motion.
+        """
+        return self.update_body_velocity((0.0, 0.0, 0.0), sigma=sigma)
+
+    def update_depth(self, depth_m: float, sigma: float = 0.02) -> bool:
         """Bar30 depth: world z, NEGATIVE below the surface in this stack.
 
         ⚠ An IMPERFECT measurement for a right-invariant filter -- world-frame,
@@ -206,9 +288,9 @@ class RIEKF:
         H = np.zeros((1, self.DIM))
         H[0, 8] = 1.0
         y = np.array([float(depth_m) - self.X.p[2]])
-        self._apply(H, y, np.array([[sigma ** 2]]))
+        return self._apply(H, y, np.array([[sigma ** 2]]))
 
-    def update_yaw(self, yaw_deg: float, sigma_deg: float = 2.0) -> None:
+    def update_yaw(self, yaw_deg: float, sigma_deg: float = 2.0) -> bool:
         """The landmark heading anchor: an absolute world yaw.
 
         ⚠ Also imperfect, and worth more than it looks: it is the only source
@@ -217,10 +299,10 @@ class RIEKF:
         err = math.radians(_wrap180(float(yaw_deg) - self.X.yaw_deg()))
         H = np.zeros((1, self.DIM))
         H[0, 2] = 1.0
-        self._apply(H, np.array([err]),
-                    np.array([[math.radians(sigma_deg) ** 2]]))
+        return self._apply(H, np.array([err]),
+                           np.array([[math.radians(sigma_deg) ** 2]]))
 
-    def update_position(self, xy, sigma: float = 0.5) -> None:
+    def update_position(self, xy, sigma: float = 0.5) -> bool:
         """A pool fix from prop resection: world x and y.
 
         ⚠ Imperfect, like depth. This is the measurement that bounds the
@@ -231,9 +313,9 @@ class RIEKF:
         H = np.zeros((2, self.DIM))
         H[0, 6] = 1.0
         H[1, 7] = 1.0
-        self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
+        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
 
-    def update_attitude(self, R_meas, sigma_deg: float = 1.0) -> None:
+    def update_attitude(self, R_meas, sigma_deg: float = 1.0) -> bool:
         """Consume the BNO's own fused attitude instead of propagating to it.
 
         Offered because the BNO fuses in hardware and does it well (drift under
@@ -244,13 +326,62 @@ class RIEKF:
         err = so3_log(R_meas @ self.X.R.T)
         H = np.zeros((3, self.DIM))
         H[:, 0:3] = np.eye(3)
-        self._apply(H, err, np.eye(3) * (math.radians(sigma_deg) ** 2))
+        return self._apply(H, err, np.eye(3) * (math.radians(sigma_deg) ** 2))
 
     # ── the correction itself ────────────────────────────────────────────────
-    def _apply(self, H, y, R_noise) -> None:
+    def _apply(self, H, y, R_noise) -> bool:
+        """One correction. Returns False if the measurement was REJECTED.
+
+        ⛔ THE GATE IS NOT OPTIONAL FOR A VISION-FED FILTER. Every measurement
+        here except depth comes from a detector, and a detector's failure mode
+        is not noise -- it is a confident answer about the wrong object. One
+        mirrored PnP branch or one mislabelled prop is a metre-scale
+        innovation, and an ungated filter takes it at full gain.
+
+        NIS (normalised innovation squared) is `y' S^-1 y`, chi-square
+        distributed with `dim(y)` degrees of freedom when the filter is
+        consistent. Rejecting above the 99th percentile is the standard
+        ellipsoidal validation gate.
+
+        ⚠ AND THE CAVEAT, because it is easy to fool yourself with this:
+        gating TRUNCATES the innovation distribution, so post-gate NIS
+        statistics are contracted by a factor gamma(tau, m) < 1 that depends
+        only on the threshold and the dimension. A gated filter therefore
+        looks OVERCONFIDENT when you measure its consistency after the gate,
+        and an adaptive scheme that reacts to that will tighten the gate and
+        shrink the noise until it believes nothing. So: never tune R from
+        post-gate innovations. The gate is a guard, not a statistic.
+        """
+        y = np.asarray(y, dtype=float).reshape(-1)
         S = H @ self.P @ H.T + R_noise
-        K = self.P @ H.T @ np.linalg.inv(S)
-        dx = K @ np.asarray(y, dtype=float).reshape(-1)
+        try:
+            S_inv = np.linalg.inv(S)
+        except np.linalg.LinAlgError:
+            return False
+        nis = float(y @ S_inv @ y)
+        if not math.isfinite(nis):
+            self.rejected += 1
+            return False
+        if nis > CHI2_99[len(y)]:
+            self.reject_streak += 1
+            if self.reject_streak < REJECT_STREAK_LIMIT:
+                self.rejected += 1
+                return False
+            # Believe the world instead of the estimate. Inflate FIRST, then
+            # recompute the gain from the widened covariance -- accepting on
+            # the old tight P would apply a small correction to a large error
+            # and leave the filter just as stuck next time.
+            self.lockout_breaks += 1
+            self.reject_streak = 0
+            self.P = self.P * REJECT_INFLATION
+            S = H @ self.P @ H.T + R_noise
+            try:
+                S_inv = np.linalg.inv(S)
+            except np.linalg.LinAlgError:
+                return False
+        self.reject_streak = 0
+        K = self.P @ H.T @ S_inv
+        dx = K @ y
         self._inject(dx)
         I_KH = np.eye(self.DIM) - K @ H
         # Joseph form, for numerical robustness under a suboptimal gain.
@@ -262,6 +393,8 @@ class RIEKF:
         # evidence the short form was tried and found wanting.
         self.P = I_KH @ self.P @ I_KH.T + K @ R_noise @ K.T
         self.P = 0.5 * (self.P + self.P.T)
+        self.accepted += 1
+        return True
 
     def _inject(self, dx) -> None:
         """Apply the error state to the group, on the LEFT.

@@ -1075,7 +1075,107 @@ class DuburiMission:
                                       1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
         return (float(p.x), float(p.y), float(p.z), yaw)
 
-    def _publish_fix(self, x_m: float, y_m: float) -> None:
+    def range_to(self, prop_class: str, *, camera: str | None = None,
+                 stale_after: float = 1.0):
+        """Metres to a visible prop of known width, or None. Also its sigma.
+
+        Returns `(range_m, sigma_m)`. The pinhole relation `Z = f W / w` needs
+        nothing but the prop's real width and its box width in pixels, both of
+        which we already have -- `target_geometry` is the measured width table
+        and the detector gives the box.
+
+        ⛔ THE SIGMA IS DERIVED, NOT CHOSEN. Differentiating gives
+        `dZ/dw = -Z^2 / (f W)`, so range error grows with the SQUARE of range:
+        one pixel of box-width noise is 6 mm at 1 m and 15 cm at 5 m for a gate.
+        A constant sigma would tell the filter a far reading is as good as a
+        near one, which is the single most common way a landmark fix poisons a
+        position estimate. This matches the published analytical models for
+        planar-marker pose variance, which are functions of range and angle.
+        """
+        from duburi_vision.target_geometry import width_for
+
+        if isinstance(prop_class, ClassRef):
+            prop_class = prop_class.class_name
+        real_w = width_for(str(prop_class))
+        if real_w <= 0.0:
+            return None
+        cam = camera or self.camera
+        self._subscribe_detections(cam)
+        self._pump_detections(cam)
+        target = str(prop_class).strip().lower()
+        boxes = [r for r in self._records(cam, stale_after) if r[0] == target]
+        if not boxes:
+            return None
+        # The LARGEST box, not the most confident -- size is what the range is
+        # read off, and a small confident box is a worse range than a large
+        # doubtful one. Same rule as `identity.pick_structure`.
+        w_px = max(float(r[3]) for r in boxes)
+        if w_px <= 0.0:
+            return None
+        img_w = self._img_size.get(cam, (0.0, 0.0))[0] or 640.0
+        f_px = self.focal_px(img_w)
+        z = f_px * real_w / w_px
+        # One pixel of box-width noise, which is optimistic for a YOLO box and
+        # stated as such rather than padded with an invented factor.
+        sigma = (z * z) * 1.0 / (f_px * real_w)
+        return (z, sigma)
+
+    def fix_from_prop(self, prop: str, *, camera: str | None = None):
+        """Pool position from ONE surveyed prop: range and bearing together.
+
+        ⛔ THIS IS THE DVL WE DO NOT HAVE. `fix_position()` needs TWO props
+        with 12 degrees between them, because bearings alone cannot fix a
+        range -- and two props are visible together far less often than one.
+        Adding the range collapses that requirement: a single prop of known
+        width at a surveyed position pins the hull completely.
+
+        Everything it needs already existed separately and was never combined:
+        the surveyed position from the course map, the absolute bearing from
+        the anchored heading, and the range from the width table. The
+        arithmetic is one line; the capability is the difference between
+        localising when the course cooperates and localising whenever anything
+        is in view.
+
+        Returns a `Fix`. Publishes to the filter on success, with the
+        range-derived sigma rather than a constant.
+        """
+        import math as _m
+        from duburi_localization.resection import Fix
+
+        course = getattr(self, '_course', None)
+        if course is None:
+            return Fix(False, reason='no course loaded: call use_course(<name>)')
+        if getattr(self, '_heading_offset', None) is None:
+            return Fix(False, reason='heading is not anchored, so the bearing '
+                                     'is relative to boot and the fix would be '
+                                     'in a rotated frame. anchor_on(<prop>) first.')
+        p = course.props.get(prop)
+        if p is None:
+            return Fix(False, reason=f'{prop!r} is not in course {course.name!r}')
+        if not p.has_position:
+            return Fix(False, reason=f'{prop!r} has no measured position; a '
+                                     f'prop we cannot place cannot place us')
+        cls = p.detect_class or prop
+        bearing = self.bearing_to(cls, camera=camera)
+        if bearing is None:
+            return Fix(False, reason=f'{cls!r} is not visible right now')
+        got = self.range_to(cls, camera=camera)
+        if got is None:
+            return Fix(False, reason=f'no width for {cls!r}, so no range')
+        rng, sigma = got
+        # The hull sits one range BACK along the bearing from the prop.
+        rad = _m.radians(bearing)
+        x = float(p.x_m) - rng * _m.cos(rad)
+        y = float(p.y_m) - rng * _m.sin(rad)
+        self._publish_fix(x, y, sigma=sigma)
+        self.log.info(
+            f'[FIX  ] pool position ({x:+.2f}, {y:+.2f}) m from {prop!r} at '
+            f'{rng:.2f} m bearing {bearing:.0f} deg (sigma {sigma:.2f} m)')
+        return Fix(True, x_m=x, y_m=y, used=1, residual_m=0.0,
+                   separation_deg=0.0)
+
+    def _publish_fix(self, x_m: float, y_m: float,
+                     sigma: float | None = None) -> None:
         """Hand a resected pool position to the invariant filter.
 
         A topic rather than a direct call, because the filter runs in its own
@@ -1092,6 +1192,12 @@ class DuburiMission:
             m.header.frame_id = 'pool'
             m.point.x = float(x_m)
             m.point.y = float(y_m)
+            # z carries the sigma. PointStamped has no covariance field and
+            # inventing a message type for one float is worse than documenting
+            # this; the filter reads it back the same way. <= 0 means "use the
+            # node's default", so a caller that has no sigma is not forced to
+            # invent one.
+            m.point.z = float(sigma if sigma is not None else 0.0)
             self._fix_pub.publish(m)
         except Exception as exc:            # noqa: BLE001 -- best-effort
             self.log.warning(f'[FIX  ] fix not published to the filter: {exc}')
