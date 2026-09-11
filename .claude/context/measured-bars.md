@@ -2507,3 +2507,64 @@ surfaces (`vision` single-camera, `mission_web` console, `video` replay).
 `test_paused_default_is_one_truth.py` freezes that table and fails on a new
 launch that declares `paused` without a stated reason. All three guards
 injection-verified.
+
+## The stack over the real frame archive (2026-09-11, vehicle, 200 frames)
+
+Two sets of 100 real 640x480 frames (`~/hailo_bench/frames`, `~/hailo_bench/eval`).
+**No control data**, so this is a census and a smoke test, not a score.
+
+| | frames | eval |
+|---|---|---|
+| corners seeded (median) | 200 | 200 |
+| tracks surviving LK (median) | 199 | 134 |
+| robust flow, px/pair (median) | 5.87 | 15.05 |
+| pairs below the 6-track floor | **0 / 99** | **0 / 99** |
+
+**The flow front end would not have refused once on either set.** That matters
+because it is the exact failure another team reported as their showstopper
+(below). ⚠ These are bench frames, not a pool floor -- the texture that
+defeats optical flow is a repeating tile pattern under water, and this archive
+does not contain one. The number says our front end is healthy on this
+texture, not that it is healthy on the venue's.
+
+Detection, same frames: `gate_rescue_repair` found **nothing in 200 frames**
+and `yolov8n_seg` found 4 `person` at conf 0.21-0.28. The archive is
+bench/calibration footage with no props in it, so the detector result is a
+statement about the data. What it does prove is that the whole path runs on
+real imagery: the 4 detections carried masks, and the contour stage produced
+15-20 point polygons from them rather than box corners.
+
+One number worth keeping: on real frames the **80-class segmentation model
+infers FASTER than the 3-class detector** -- 6.9 ms median against 9.2 ms.
+Consistent with the earlier retraction that class count is not the cost.
+
+## Scouting: nemo_auv (2026-09-11) -- ADOPT NOTHING, KEEP THE FAILURES
+
+`ishani-narwankar/nemo_auv`, a 10-week AUV waypoint-navigation project, read in
+full because the headline is a capability we want.
+
+**What actually runs is not waypoint navigation.** Depth hold, manual control
+and waypoint navigation are each marked "coming soon" in the repository.
+What exists is an ORB-SLAM2 port to ROS 2 Iron plus in-air and in-water camera
+calibration files. Ask what runs before admiring what exists.
+
+**Their three measured failures are the valuable part, and two are ours:**
+* pool tiles are a repeating texture that obscures features;
+* monocular SLAM needs a long initialisation in feature-sparse scenes;
+* map generation fails in darker water.
+
+They fixed it by **adding physical obstacles to the pool** -- available in
+practice, never at a venue.
+
+**Decision: do not adopt ORB-SLAM2, and this strengthens the standing "no
+generic SLAM" line rather than challenging it.** A capable person spent ten
+weeks and monocular SLAM did not reach waypoints underwater. BumblebeeAS, who
+win, reach the same capability without SLAM at all: odometry plus a per-course
+prior map, dead-reckoned to roughly where a prop should be, with perception
+taking over at the end -- and they shipped plain waypoints past the slalom,
+the task where perception was hardest.
+
+Their one transferable practice: they calibrate in air AND in water
+separately. We derive water from air analytically through Snell in `optics.py`,
+which is cheaper and testable without a pool. Their empirical version is the
+cross-check if we ever get a calibration session in water.
