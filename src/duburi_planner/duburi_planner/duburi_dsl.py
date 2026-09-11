@@ -388,6 +388,8 @@ class DuburiMission:
         # camera -> is its detector on the graph. Cached: a detector that
         # is up stays up, and one that never came up will not appear.
         self._camera_available: dict[str, bool] = {}
+        # None until a landmark anchors the heading. Never assumed.
+        self._heading_offset: float | None = None
         self._active_cam_pub = None   # lazily-created latched String publisher (HUD follow)
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
@@ -951,6 +953,106 @@ class DuburiMission:
     # (both detectors inferring from t=0 -> the concurrent-inference OOM). Pausing
     # an absent one is a quiet no-op, so single-camera runs are unaffected.
     _KNOWN_CAMERAS = ('forward', 'downward')
+
+    def anchor_heading(self, *, bearing_deg: float, camera: str | None = None,
+                       timeout: float = 6.0) -> object:
+        """Re-zero the heading against a prop whose world bearing is known.
+
+        ⛔ WHAT THIS BUYS. The BNO is deliberately magnetometer-free, so its yaw
+        is relative to wherever the board booted: drift under 0.01 deg/min, and
+        an arbitrary zero. Every mission that says `turn(90)` means 90 from
+        boot, so a hull powered on at a different angle flies a different course
+        from the same file. A prop the rulebook fixes the orientation of is a
+        heading reference already in the pool.
+
+        `bearing_deg` is the compass bearing the prop's FACE points along, which
+        is per-COURSE knowledge -- where this gate was installed -- and not a
+        property of the class, so it is passed in rather than read from the
+        committed geometry table::
+
+            a = duburi.anchor_heading(bearing_deg=270)   # gate faces west
+            if a.ok:
+                duburi.turn(duburi.absolute_to_relative(90))   # true east
+
+        Consumes the FUSED pose, never a raw one: the planar flip would write a
+        heading wrong by twice the off-axis angle, and every later turn would
+        inherit it. Returns an `Anchor` whose `ok` is False with a stated
+        reason rather than a number, and does NOT change what `turn()` means --
+        a mission opts in by converting explicitly.
+        """
+        from duburi_vision.heading_anchor import anchor_from
+
+        cam = str(camera or self.camera).strip().lower()
+        fused = self._wait_fused_pose(cam, timeout=timeout)
+        if fused is None:
+            from duburi_vision.heading_anchor import Anchor
+            return Anchor(False, reason=f'no fused pose on {cam} within '
+                                        f'{timeout:.0f}s')
+        got = anchor_from(fused, self.head(), float(bearing_deg))
+        if got.ok:
+            self._heading_offset = got.offset_deg
+            self.log.info(
+                f'[ANCH ] heading anchored: relative {self.head():.1f} is truly '
+                f'{got.absolute_deg:.1f} (offset {got.offset_deg:+.1f}, '
+                f'{got.support} frames, rule={got.rule})')
+        else:
+            self.log.warning(f'[ANCH ] heading NOT anchored: {got.reason}')
+        return got
+
+    def absolute_heading(self) -> float:
+        """The hull's heading in WORLD terms, or the relative one if unanchored.
+
+        Passing through unanchored is deliberate: a mission written against
+        boot-relative headings keeps working exactly as before, and silently
+        changing what every existing `turn()` means would be far more dangerous
+        than making the conversion explicit.
+        """
+        from duburi_vision.heading_anchor import apply_offset
+        return apply_offset(self.head(), getattr(self, '_heading_offset', None))
+
+    def absolute_to_relative(self, absolute_deg: float) -> float:
+        """A WORLD heading -> the number to hand `turn()`.
+
+        `turn()` speaks the hull's own relative frame and this does not change
+        that. Unanchored, it is the identity -- so a mission can be written in
+        world headings and still run on a hull that never saw its landmark,
+        just without the correction.
+        """
+        off = getattr(self, '_heading_offset', None)
+        if off is None or off != off:
+            return float(absolute_deg)
+        return float(absolute_deg) - float(off)
+
+    def _wait_fused_pose(self, camera: str, *, timeout: float):
+        """Latest DECIDED fused pose for `camera`, or None.
+
+        Subscribes lazily: a mission that never anchors pays nothing, and a
+        stack launched without `lock:=true` has no such topic to subscribe to.
+        """
+        from duburi_interfaces.msg import TargetPose
+
+        subs = getattr(self, '_fused_subs', None)
+        if subs is None:
+            subs = self._fused_subs = {}
+            self._fused_pose = {}
+        if camera not in subs:
+            topic = f'/duburi/vision/{camera}/target_pose_fused'
+            subs[camera] = self.client.node.create_subscription(
+                TargetPose, topic,
+                lambda msg, c=camera: self._fused_pose.__setitem__(c, msg), 10)
+            self.log.info(f'[ANCH ] listening on {topic}')
+        deadline = _time.monotonic() + float(timeout)
+        while _time.monotonic() < deadline:
+            rclpy.spin_once(self.client.node, timeout_sec=0.05)
+            msg = self._fused_pose.get(camera)
+            if msg is not None and msg.ok:
+                from duburi_vision.pose_cluster import Fused
+                return Fused(decided=True, yaw_deg=float(msg.yaw_deg),
+                             range_m=float(msg.range_m),
+                             support=int(msg.n_points),
+                             spread_deg=float(msg.yaw_spread_deg),
+                             rule=str(msg.reason))
+        return None
 
     def camera_available(self, name: str | None = None) -> bool:
         """Is ``name``'s detector actually on the graph? Cached per camera.
