@@ -54,13 +54,31 @@ MIN_POSES = 4
 
 @dataclass(frozen=True)
 class PoseSample:
-    """One frame's answer. `t` is the CAPTURE instant, never arrival."""
+    """One frame's answer. `t` is the CAPTURE instant, never arrival.
+
+    `vehicle_yaw_deg` is the hull's own heading at that instant. Optional: with
+    it the fuser can tell the two branches apart by HOW THEY MOVE, which works
+    where counting does not (see `slope_of`). Without it, counting is all there
+    is and the fuser says so.
+    """
     t: float
     yaw_deg: float
     range_m: float = 0.0
     ambiguity: float = 0.0      # best/second reprojection error; ->1 = a coin flip
     reproj_px: float = 0.0
     n_points: int = 0
+    vehicle_yaw_deg: Optional[float] = None
+
+
+# The hull must actually TURN before ego-motion can separate the branches. A
+# station-keeping vehicle gives dpsi ~ 0, the regression divides by nothing and
+# returns a confident slope from noise -- the exact failure this fuser exists to
+# refuse. Degrees of heading excursion required inside the window.
+MIN_YAW_EXCURSION_DEG = 4.0
+
+# The true branch's slope is -1 and the false branch's is +1, so anything
+# inside this band of zero is not evidence either way.
+SLOPE_DEADBAND = 0.25
 
 
 @dataclass(frozen=True)
@@ -72,6 +90,8 @@ class Fused:
     considered: int = 0         # frames that passed the gates
     spread_deg: float = float('nan')   # MAD of the winning cluster
     rival: int = 0              # frames in the NEXT largest cluster
+    rule: str = ''              # 'egomotion' | 'support' -- WHICH test decided
+    slope: float = float('nan') # d(pose yaw)/d(hull yaw) of the winner
     reason: str = ''
 
 
@@ -109,6 +129,58 @@ def _circular_median(angles: list[float]) -> float:
         return float('nan')
     ref = angles[0]
     return _wrap180(ref + _median([_wrap180(a - ref) for a in angles]))
+
+
+
+def slope_of(members: list) -> tuple:
+    """d(pose yaw) / d(hull yaw) over a cluster, and the hull's excursion.
+
+    ⛔ THE DISCRIMINANT, AND WHY IT BEATS COUNTING. The two planar-PnP branches
+    are mirror images about the viewing ray, and each frame's solver mirrors
+    afresh. So when the hull yaws by dpsi, the TRUE branch's pose yaw moves by
+    -dpsi (the board is fixed in the world; turning the camera sweeps it the
+    other way) while the FALSE branch, being the mirror, moves by +dpsi.
+
+        true  branch:  d(pose yaw) / d(hull yaw) = -1
+        false branch:  d(pose yaw) / d(hull yaw) = +1
+
+    That is unit-free, needs no calibration, and does not care which branch the
+    detector happens to report more often -- which is the case that defeats
+    "take the largest cluster". A biased corner detector, or a few frames from a
+    slightly different viewpoint, can hand the majority to the wrong branch; it
+    cannot make that branch move the right way under the hull's own rotation.
+
+    The literature resolves this ambiguity with multi-view rotation averaging
+    (Jin et al., arXiv:1909.11888) or by locating the second minimum
+    analytically (Schweighofer & Pinz, TPAMI 2006). Both are about the geometry
+    of the target. This uses something we already have and they did not assume:
+    a heading source good to under 0.01 deg/min, on a hull that is turning
+    anyway.
+
+    Returns `(slope, excursion_deg)`. `slope` is NaN when the hull did not turn
+    enough for the question to mean anything -- a station-keeping vehicle gives
+    dpsi ~ 0, and a regression on that returns a confident number built from
+    noise.
+    """
+    pairs = [(m.vehicle_yaw_deg, m.yaw_deg) for m in members
+             if m.vehicle_yaw_deg is not None]
+    if len(pairs) < 3:
+        return float('nan'), 0.0
+    # Unwrap both series about their first sample so a pass through +/-180 does
+    # not inject a 360 deg step into a regression that reads slope.
+    psi0, th0 = pairs[0]
+    xs = [_wrap180(p - psi0) for p, _ in pairs]
+    ys = [_wrap180(t - th0) for _, t in pairs]
+    excursion = max(xs) - min(xs)
+    if excursion < MIN_YAW_EXCURSION_DEG:
+        return float('nan'), excursion
+    mx = sum(xs) / len(xs)
+    my = sum(ys) / len(ys)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx <= 1e-9:
+        return float('nan'), excursion
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    return sxy / sxx, excursion
 
 
 class PoseCluster:
@@ -155,12 +227,36 @@ class PoseCluster:
 
         clusters = self._cluster([s.yaw_deg for s in kept])
         groups = sorted(clusters, key=len, reverse=True)
+
+        # ⛔ COUNTING IS THE FALLBACK, NOT THE RULE. Ask first how each cluster
+        # MOVES under the hull's own rotation: the true branch slopes -1
+        # against hull yaw and the mirrored one +1, whichever the detector
+        # reported more often. Counting cannot see that, so a biased corner
+        # detector hands the majority -- and the answer -- to the wrong branch.
+        rule = 'support'
+        slope = float('nan')
+        if len(groups) > 1:
+            scored = []
+            for g in groups:
+                sl, exc = slope_of([kept[i] for i in g])
+                if sl == sl and abs(sl) > SLOPE_DEADBAND:   # not NaN, not flat
+                    scored.append((sl, g))
+            # Only decide this way when the branches actually DISAGREE about
+            # direction. Two clusters sloping the same way are not a mirror
+            # pair; they are two different things, and the mirror test says
+            # nothing about which to believe.
+            if len(scored) >= 2 and min(sl for sl, _ in scored) < 0 < max(
+                    sl for sl, _ in scored):
+                sl, g = min(scored, key=lambda sg: sg[0])   # most negative
+                groups = [g] + [h for h in groups if h is not g]
+                rule, slope = 'egomotion', sl
+
         best = groups[0]
         rival = len(groups[1]) if len(groups) > 1 else 0
         support = len(best)
         if support < self.min_poses:
             return Fused(False, considered=len(kept), support=support,
-                         rival=rival,
+                         rival=rival, rule=rule, slope=slope,
                          reason=f'largest cluster has {support} poses, '
                                 f'needs {self.min_poses}')
 
@@ -177,6 +273,8 @@ class PoseCluster:
             considered=len(kept),
             spread_deg=spread,
             rival=rival,
+            rule=rule,
+            slope=slope,
             reason='')
 
     def _cluster(self, yaws: list[float]) -> list[list[int]]:
