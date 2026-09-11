@@ -2399,8 +2399,16 @@ to **0.01 px**, so that 1.4 px was the phase correlation's OWN error, not a
 mutual disagreement — and it returns no rotation and no scale, which is what
 the flow node uses. It is ~40× less accurate, not comparably accurate.
 
-**And the shipped estimator is vindicated with a number**: sub-0.4 px and
-sub-0.05° through 15° of image rotation and 20 % of zoom.
+**And the shipped estimator is vindicated**: sub-0.4 px and sub-0.05° through
+15° of image rotation and 20 % of zoom, where both challengers fail.
+
+⛔ **DO NOT QUOTE 0.006 px AS LK's ACCURACY.** `warpAffine` resamples the SAME
+pixels that LK then tracks, so the correspondence is noise-free by
+construction — no new content entering frame, no motion blur, no parallax off
+a non-planar floor, no illumination change. That figure measures the absence
+of independent noise in the test, not the error the estimator achieves on
+consecutive real frames. The table RANKS the three and proves each stage
+works; it does not give any of them a field accuracy.
 
 ⚠ Synthetic warps are the EASY case — no new content entering frame, no
 illumination change, no motion blur, no parallax off a non-planar floor. Read
@@ -2430,19 +2438,26 @@ Live A/B through the real launch, `contours:=true` twice and `false` once:
 | contours on | 15.129 Hz / 15.091 Hz | 8.9 / 9.3 ms |
 | contours off | 15.127 Hz | 8.6 ms |
 
-**No measurable rate cost**, and the two ON arms differ from each other by
-more than they differ from OFF. In-process cost, against a ~10.5 ms frame:
+The parameter works (0 contour topics when off) and nothing regressed.
 
-| detections | build | + message | % of frame |
-|---|---|---|---|
-| 1 box | 0.025 ms | 0.075 ms | 0.7 % |
-| 3 boxes | 0.071 ms | 0.185 ms | 1.8 % |
-| 1 mask | 0.103 ms | 0.171 ms | 1.6 % |
-| 3 masks | 0.297 ms | 0.464 ms | 4.4 % |
-| 8 masks | 0.779 ms | 1.210 ms | 11.5 % |
+⚠ **THAT A/B PROVES LESS THAN IT LOOKS.** All three arms sat at 15.09–15.13 Hz
+because the bench camera caps there — a **66 ms** frame period against a
+1.21 ms worst case. There was ~55 ms of slack, so the run could not have
+detected a 50 ms cost, never mind a sub-millisecond one. It shows the switch
+works and nothing broke; the in-process column below carries the verdict.
+
+| detections | build | + message | % of 10.5 ms (one model) | % of 26.74 ms (two) |
+|---|---|---|---|---|
+| 1 box | 0.025 ms | 0.075 ms | 0.7 % | 0.3 % |
+| 3 boxes | 0.071 ms | 0.185 ms | 1.8 % | 0.7 % |
+| 1 mask | 0.103 ms | 0.171 ms | 1.6 % | 0.6 % |
+| 3 masks | 0.297 ms | 0.464 ms | 4.4 % | 1.7 % |
+| 8 masks | 0.779 ms | 1.210 ms | 11.5 % | **4.5 %** |
+
+⛔ **Read the right budget.** 10.5 ms is the DETECTOR-ALONE frame. Masks only
+exist when a segmentation model is loaded, and the merged two-model frame is
+**26.74 ms** — so the mask rows should be read against that column. Quoting
+11.5 % for eight masks is pessimistic by 2.5x.
 
 `publish()` itself is 0.023 ms and a 3-mask message is 114 uint16 points.
-⚠ The bench runs at 15 Hz (camera-limited), so the live A/B has headroom that
-would mask a sub-millisecond cost — the in-process column is the honest figure
-at the chip's 95 Hz. Eight masks is the only row worth watching; `contours:=false`
-turns the topic off.
+`contours:=false` turns the topic off if an operator wants it gone.
