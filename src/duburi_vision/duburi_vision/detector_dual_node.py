@@ -84,7 +84,8 @@ from .detector_node import DetectorNode
 # ones an operator sets globally (max_det, debug_image_hz, paused).
 _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
                'model_conf', 'image_topic')
-_SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_debug_image',
+_SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_contours',
+           'publish_debug_image',
            'debug_image_hz', 'alignment_deadband', 'paused',
            'preprocess', 'preprocess_clip', 'vision_profile',
            'range_crop')
@@ -120,7 +121,8 @@ _DEFAULTS = {
     # raised back.
     'conf': 0.15, 'model_conf': '', 'image_topic': '',
     'device': 'cuda:0', 'half': True, 'iou': 0.5, 'imgsz': 640,
-    'max_det': 100, 'publish_debug_image': True, 'debug_image_hz': 5.0,
+    'max_det': 100, 'publish_contours': True,
+    'publish_debug_image': True, 'debug_image_hz': 5.0,
     'alignment_deadband': 0.05, 'paused': False,
     # Underwater contrast enhancement -- see detection/preprocess.py.
     # Off by default: 3.78 ms on the Pi is a real trade.
