@@ -2461,3 +2461,49 @@ exist when a segmentation model is loaded, and the merged two-model frame is
 
 `publish()` itself is 0.023 ms and a 3-mask message is 114 uint16 points.
 `contours:=false` turns the topic off if an operator wants it gone.
+
+## The mission launch ran BOTH detectors (2026-09-11, vehicle)
+
+Live dual-detector run, `fwd_models:=gate_rescue_repair,yolov8n_seg`,
+`fwd_active:=yolov8n_seg`, downward on `bin_fire_blood`:
+
+```
+[HAILO] yolov8n_seg.hef has taken the activation 20 times -- another detector
+        is competing for the chip. Each swap costs ~4 ms
+```
+
+| configuration | rate |
+|---|---|
+| one resident model, steering one camera | 95.3 Hz |
+| two models alternating | 37.5 Hz per pair |
+
+**The cause was a launch argument contradicting its own description.**
+`vision_pi.launch.py` — the launch `bringup.launch.py` includes for a mission —
+declared `paused` with `default_value='false'` and a description reading
+*"Start both detectors paused ... leaving BOTH live makes them compete for the
+chip (~35 Hz each instead of ~98)."* Both halves were written in the same
+commit (`ba44858`), so it was never a deliberate flip. `vision_dual.launch.py`
+said `true` all along, and `test_camera_exclusivity.py` calls `paused:=false`
+"a stray launch" — three files agreeing against the one that runs on the hull.
+
+⛔ **AND THE DEFAULT COULD NOT SIMPLY BE FLIPPED**, which is the part worth
+keeping. Every query — `detected()`, `wait_for()`, `where()`,
+`where_offset()` — funnels through `_pump_detections`, and none of them reached
+`_activate_camera`; only `use_camera` and the vision verbs did. So against a
+launch that starts both paused, `while not duburi.detected('gate')` polls a
+detector that will never infer: an empty cache, forever, no error and no
+timeout. The mission searches and never finds. Flipping the default alone would
+have traded a 60 Hz loss for a mission that hangs.
+
+Fixed at the query instead: `_pump_detections` activates the camera it reads on
+the FIRST query only. A later query naming the OTHER camera must not switch —
+a mission polling both would pay `_CAM_SWITCH_SETTLE_S` (1.5 s) every
+iteration, and a query is not a statement about which camera the mission steers
+on. `use_camera` still is.
+
+Bar: `paused` defaults `true` on the three mission-path launches
+(`vision_pi`, `vision_dual`, `bringup`) and `false` on the three operator
+surfaces (`vision` single-camera, `mission_web` console, `video` replay).
+`test_paused_default_is_one_truth.py` freezes that table and fails on a new
+launch that declares `paused` without a stated reason. All three guards
+injection-verified.
