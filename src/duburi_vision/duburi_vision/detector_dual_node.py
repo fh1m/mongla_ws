@@ -177,6 +177,7 @@ def main():
     rclpy.init()
     launcher = _Launcher()
     nodes = [launcher]
+    live: list[str] = []
     try:
         for cam, camera in (('fwd', 'forward'), ('dwn', 'downward')):
             # Built SEQUENTIALLY on purpose. The second one configures a second
@@ -185,17 +186,52 @@ def main():
             det = DetectorNode(
                 f'duburi_detector_{camera}',
                 parameter_overrides=launcher.overrides(cam, camera))
-            nodes.append(det)
             # The detector FIRST, so the camera never submits to a half-built
             # sink. `frame_sink=det` is the whole composition -- one Python
             # reference where a topic used to be.
-            nodes.append(CameraNode(
-                f'duburi_camera_{camera}',
-                parameter_overrides=launcher.camera_overrides(cam, camera),
-                frame_sink=det))
+            #
+            # ⛔ ONE ABSENT CAMERA USED TO KILL BOTH. CameraNode raises after
+            # its five open retries, and the raise walked straight out of this
+            # loop: an unplugged downward USB took the FORWARD detector down
+            # with it, and the process exited 1. Measured on the vehicle --
+            # `/dev/duburi_cam_downward` gone after a reboot, and the whole
+            # vision stack refused to start on a hull whose forward camera was
+            # working perfectly.
+            #
+            # A missing camera is a DEGRADED vehicle, not a broken one. Keep
+            # the eye that works; the detector for the dead one is dropped too,
+            # so nothing subscribes to a topic that will never carry frames.
+            try:
+                cam_node = CameraNode(
+                    f'duburi_camera_{camera}',
+                    parameter_overrides=launcher.camera_overrides(cam, camera),
+                    frame_sink=det)
+            except Exception as exc:      # noqa: BLE001 -- any open failure
+                det.destroy_node()
+                launcher.get_logger().error(
+                    f'[COMP ] {camera} camera did NOT come up: {exc}')
+                launcher.get_logger().error(
+                    f'[COMP ] running WITHOUT {camera}. No '
+                    f'/duburi/vision/{camera}/* topics this session -- a '
+                    f'mission that steers on {camera} will find nothing.')
+                continue
+            nodes.append(det)
+            nodes.append(cam_node)
+            live.append(camera)
             launcher.get_logger().info(
                 f'[COMP ] {camera}: camera -> detector DIRECT '
                 f'(no topic in the control path)')
+        # Every camera absent is a real failure: there is no vehicle to run.
+        # Degrading to zero eyes silently is how a dead stack looks healthy.
+        if not live:
+            launcher.get_logger().error(
+                '[COMP ] NO camera came up. Nothing to detect on -- exiting '
+                'rather than idling as a healthy-looking node.')
+            raise SystemExit(1)
+        if len(live) == 1:
+            launcher.get_logger().warning(
+                f'[COMP ] DEGRADED: {live[0]} only. The chip is uncontended, '
+                f'so this camera runs at full rate.')
         ex = MultiThreadedExecutor()
         for n in nodes:
             ex.add_node(n)
