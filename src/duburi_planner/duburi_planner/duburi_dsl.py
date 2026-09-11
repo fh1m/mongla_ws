@@ -1303,6 +1303,35 @@ class DuburiMission:
             self._set_detector_param(node, 'model_conf', f'{model}={float(conf)}')
             self.log.info(f"[DSL  ] {node} conf[{model!r}] → {float(conf):.3f}")
 
+    def set_detector(self, *, camera: str | None = None,
+                     node: str | None = None, **params) -> None:
+        """Set ANY detector parameter live. The escape hatch, not a shortcut.
+
+        ``set_model`` / ``set_conf`` / ``set_classes`` exist because they do
+        more than write a value -- they resolve a registry name, scope a
+        threshold to one model, validate a class against the loaded allowlist.
+        Everything else the detector node declares is reachable here without a
+        new DSL method per knob, so a parameter added to the node is usable
+        from a mission the same day::
+
+            duburi.set_detector(masks=False)             # boxes only on transit
+            duburi.set_detector(masks=True)              # outlines at the board
+            duburi.set_detector(publish_contours=False)  # silence the topic
+            duburi.set_detector(max_det=10, iou=0.5)     # several at once
+
+        Order within one call is not guaranteed; make two calls if one setting
+        must land before another. Raises on a rejected or undeclared parameter
+        -- a silent no-op here would be a mission believing it had changed
+        something. That is deliberately the opposite of best-effort: these are
+        the knobs a task's behaviour depends on.
+        """
+        if not params:
+            raise ValueError('set_detector() needs at least one parameter')
+        target = self._detector_node(camera, node)
+        for name, value in params.items():
+            self._set_detector_param(target, name, value)
+            self.log.info(f'[DSL  ] {target} {name} → {value!r}')
+
     def lock_class(self, target: str = '', *, camera: str | None = None,
                    timeout: float = 2.0) -> bool:
         """Aim the continuity ladder MID-MISSION. Returns True if it took.

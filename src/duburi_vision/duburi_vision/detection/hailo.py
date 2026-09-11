@@ -892,6 +892,20 @@ class HailoSegDetector(HailoDetector):
         # by then `infer` must be able to run.
         self._iou = float(iou)
         self._want_masks = bool(masks)
+
+    def set_masks(self, want: bool) -> None:
+        """Turn mask decoding on or off between frames.
+
+        Masks are the dominant host cost once the class head is gated: measured
+        on the vehicle at 640x640 with 80 classes, decode goes 0.93 ms boxes-only
+        to 2.98 ms with masks, and end to end 113.3 Hz to 85.2 Hz. A transit leg
+        that only needs a bearing should not pay for outlines; a torpedo board
+        approach, where the contour IS the geometry, should.
+
+        Read on the next frame -- there is no state to rebuild, which is why
+        this can be a live parameter rather than a relaunch.
+        """
+        self._want_masks = bool(want)
         self._layout = None
         self._heads: list = []
         self._proto_name = ''
