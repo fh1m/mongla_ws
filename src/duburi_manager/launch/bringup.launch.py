@@ -371,6 +371,10 @@ def generate_launch_description():
             'lock':          LaunchConfiguration('lock'),
             'lock_class':    LaunchConfiguration('lock_class'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
+            # Forwarded EXPLICITLY: both launches declare `paused`, so leaving
+            # it out does not keep it out -- an include inherits every parent
+            # name:=value. One detector, resumed by the first query or verb.
+            'paused':        LaunchConfiguration('paused'),
         }.items(),
         condition=_stack_is('generic'),
     )
