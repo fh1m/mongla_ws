@@ -470,6 +470,32 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('lock')),
         )
 
+    def solver_near(camera_name: str) -> Node:
+        """The SAME solver with the gate opened up, on its own topic.
+
+        A reprojection gate tight enough to reject a bad solve at 3 m also
+        rejects a good one at 0.4 m, where the board fills the frame and a few
+        pixels of contour error are ordinary -- so the close-in regime, which is
+        the one a torpedo shot happens in, is exactly where the tuned number
+        costs the most. BumblebeeAS run this pair on slalom rather than picking
+        a number: normal, and a `_near` variant at 100.0 against 10.0.
+
+        Publishes `/target_pose_near`. A consumer choosing between them is the
+        point; merging them would make a disagreement into noise instead of
+        evidence.
+        """
+        return Node(
+            package='duburi_vision', executable='pnp_node',
+            name=f'duburi_pnp_near_{camera_name}', output='screen',
+            parameters=[{
+                'camera':        camera_name,
+                'medium':        LaunchConfiguration('medium'),
+                'variant':       'near',
+                'max_reproj_px': 100.0,
+            }],
+            condition=IfCondition(LaunchConfiguration('lock')),
+        )
+
     def pose_fuse(camera_name):
         """Fuse the solver's per-frame poses into one answer with its support.
 
@@ -506,6 +532,8 @@ def generate_launch_description():
         ladder('downward', 'dwn_lock_class'),
         solver('forward'),
         solver('downward'),
+        solver_near('forward'),
+        solver_near('downward'),
         pose_fuse('forward'),
         pose_fuse('downward'),
         Node(package='duburi_vision', executable='vision_display',
