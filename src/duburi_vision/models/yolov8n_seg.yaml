@@ -8,6 +8,15 @@
 # This is a STOCK model: it finds people and buses, not gates and bins. It
 # is here so the segmentation path can be exercised end to end before a
 # model trained on our classes exists.
+# NOT a competition model. `competition: false` excuses these 80 COCO classes
+# from the class-width census (`test_every_model_class_has_a_width.py`): the
+# census demands that every class a shipped model emits resolves to a real
+# width, because a class with no width silently loses its range, its tool-aim
+# correction and its obliquity gate. A zebra has no handbook width and never
+# will. The exclusion lives HERE rather than in the test so that it travels
+# with the model.
+competition: false
+
 names:
   0: person
   1: bicycle

@@ -328,6 +328,37 @@ _CLASS_PALETTE = [
 ]
 
 
+def _tint_mask(out, d, col, x1, y1) -> None:
+    """Shade the instance mask, when the backend produced one.
+
+    This is the ONLY consumer of `Detection.mask` today, and that is
+    deliberate: the geometry consumer that wants it (pose from a mask rather
+    than from a box) wants a CONTOUR, not a bitmap, and choosing a wire format
+    for a consumer that does not exist yet would be choosing it blind. Drawing
+    it is what proves at the pool that the masks are real rather than a
+    plausible array -- a mask that is shifted, transposed or off by the
+    letterbox pads looks perfect in every unit test and obviously wrong here.
+
+    Blended inside the box ROI only, so the cost scales with the detection and
+    not with the frame.
+    """
+    mask = getattr(d, 'mask', None)
+    if mask is None:
+        return
+    h, w = out.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    mh, mw = mask.shape[:2]
+    mh, mw = min(mh, h - y1), min(mw, w - x1)
+    if mh <= 0 or mw <= 0:
+        return
+    roi = out[y1:y1 + mh, x1:x1 + mw]
+    sel = mask[:mh, :mw] > 0
+    if not sel.any():
+        return
+    tint = np.array(col, np.float32)
+    roi[sel] = (roi[sel] * 0.55 + tint * 0.45).astype(np.uint8)
+
+
 def _draw_boxes_fast(out, detections, sf) -> None:
     """Direct cv2 box + corner + centre-dot draw for every detection.
 
@@ -343,6 +374,7 @@ def _draw_boxes_fast(out, detections, sf) -> None:
     for d in detections:
         col = _CLASS_PALETTE[int(d.class_id) % len(_CLASS_PALETTE)]
         x1, y1, x2, y2 = (int(v) for v in d.xyxy)
+        _tint_mask(out, d, col, x1, y1)
         cv2.rectangle(out, (x1, y1), (x2, y2), col, box_th, cv2.LINE_AA)
         _draw_corners(out, x1, y1, x2, y2, (255, 255, 255),
                       length=cor_ln, thickness=cor_th)
