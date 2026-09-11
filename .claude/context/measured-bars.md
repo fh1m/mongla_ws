@@ -2568,3 +2568,49 @@ Their one transferable practice: they calibrate in air AND in water
 separately. We derive water from air analytically through Snell in `optics.py`,
 which is cheaper and testable without a pool. Their empirical version is the
 cross-check if we ever get a calibration session in water.
+
+## The detector's floor, and where the standoff should be (2026-09-11, vehicle)
+
+Shrink a frame with a real detection until the class drops out: an object at
+scale s looks s times smaller, i.e. 1/s times further away. `yolov8n_seg` on
+the Hailo-8 at conf 0.20, four real `person` detections:
+
+| frame | full-scale box | smallest box still detected |
+|---|---|---|
+| e0005 | 10x16 px | **10.1 px** |
+| e0016 | 10x15 px | **10.3 px** |
+| e0069 | 9x12 px | **9.3 px** |
+| e0072 | 11x16 px | **11.4 px** |
+
+**It is a cliff, not a fade.** One scale step below, every one was gone, and
+all four survivors sat at conf 0.21-0.28 against a 0.20 threshold. So ~10 px of
+box width is the physical floor and detecting AT it is a coin toss, which is
+why a standoff aims at 4x that.
+
+⚠ Measured on `person` with a COCO model. Each competition model needs its own
+run; the METHOD is the deliverable, not the constant.
+
+**What it implies, and the second number is the surprise.** A prop of width `w`
+makes a box of `f*w/Z` px, so at the measured in-water focal (741 px at 640
+wide, derived from the 46.7 deg FOV and independently reported by `flow_node`):
+
+| prop | width | pixel-limited range | standoff at 6 m visibility |
+|---|---|---|---|
+| gate | 3.000 m | 154 m | 6.00 m (water binds) |
+| torpedo board | 0.600 m | 30.8 m | 6.00 m (water binds) |
+| bin | 0.335 m | 17.2 m | 4.30 m (pixels bind) |
+| slalom pipe | 0.033 m | **1.7 m** | 0.80 m (pixels bind) |
+
+★ **A slalom pipe is detectable from 1.7 m and no further, whatever the water
+does.** No prior map can put a hull "in detection range" of one from across the
+pool: you arrive nearly on top of it or you do not see it at all. That is very
+likely why the team that wins dead-reckons past the slalom rather than
+perceiving their way through it, and it is a mission-design fact rather than a
+tuning problem.
+
+★ **And for anything large the detector is not what runs out first, the water
+is.** A standoff chosen from optics alone parks a gate approach 38 m out. The
+crossover between the two regimes is computable per prop, which is why
+`standoff_for` takes the minimum of the two and a visibility figure that is
+NOT ours to assume. 6 m is an optimistic competition-pool default; measure it
+at the venue and override it.
