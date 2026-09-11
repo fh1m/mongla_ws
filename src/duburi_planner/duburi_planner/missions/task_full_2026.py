@@ -17,6 +17,7 @@ import importlib.util
 from pathlib import Path
 
 from duburi_planner.missions.competition_config import GATE_SEARCH_DEPTH_M
+from duburi_planner.resilience import never_fails
 
 
 def _chunk(name: str):
@@ -65,6 +66,14 @@ def run(duburi, log=None):
             log(f'[MISSION] ABORT: {exc}')
         raise
     finally:
-        duburi.release_heading()
-        duburi.stop()
+        # ⛔ CLEANUP RAN AS ONE BLOCK, SO THE FIRST FAILURE ATE THE REST.
+        # `release_heading()` raising meant `stop()` and `disarm()` never ran,
+        # and the exception that surfaced was the cleanup's rather than the
+        # mission's. Contain each step so one cannot cost the others.
+        never_fails(duburi.release_heading, log=log, name='release_heading')
+        never_fails(duburi.stop, log=log, name='stop')
+        # ⛔ DISARM IS DELIBERATELY NOT CONTAINED. Every other step here is
+        # tidying; this one is the safety path, and a failed disarm that
+        # reported success is the single failure this stack cannot tolerate.
+        # It raises, loudly, even from a finally.
         duburi.disarm()
